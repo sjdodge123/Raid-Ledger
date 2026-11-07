@@ -132,20 +132,23 @@ describe('AddonSnapshotFactSource enchantsReported (ROK-1915)', () => {
   });
 });
 
+const charRow = {
+  id: 'c1',
+  level: 60,
+  class: 'Priest',
+  race: 'Human',
+  role: 'dps',
+  roleOverride: 'healer',
+  itemLevel: 66,
+  professions: { primary: [], secondary: [], syncedAt: T.toISOString() },
+  armoryProfessions: null,
+  lastSyncedAt: T,
+  externalId: null,
+  addonGuid: 'Player-1-abc',
+};
+
 describe('CharacterRowFactSource', () => {
-  const row = {
-    id: 'c1',
-    level: 60,
-    class: 'Priest',
-    race: 'Human',
-    role: 'dps',
-    roleOverride: 'healer',
-    itemLevel: 66,
-    professions: { primary: [], secondary: [], syncedAt: T.toISOString() },
-    lastSyncedAt: T,
-    externalId: null,
-    addonGuid: 'Player-1-abc',
-  };
+  const row = charRow;
 
   it('loads 2000 characters in ONE query', async () => {
     db.where.mockResolvedValue([]);
@@ -203,5 +206,58 @@ describe('AddonSnapshotFactSource — ilvl precision (ROK-1915)', () => {
       source: 'addon',
       asOf: T,
     });
+  });
+});
+
+// ROK-2107 D6/F4: the hand entry wins per MANUAL_PROFESSIONS_WIN; the Armory
+// copy (blizzard, asOf lastSyncedAt) shows when there is no hand entry.
+describe('professions provenance (ROK-2107)', () => {
+  const MANUAL = { primary: [], secondary: [], syncedAt: T.toISOString() };
+  const ARMORY = {
+    primary: [],
+    secondary: [],
+    syncedAt: '2026-11-01T00:00:00.000Z',
+  };
+  const armoryRow = { ...charRow, externalId: '123', addonGuid: null };
+  const load = async (r: object) => {
+    db.where.mockResolvedValue([r]);
+    return (await new CharacterRowFactSource(db as never).load([ref(1)])).get(
+      'm1',
+    );
+  };
+
+  it('both set: emits the manual entry (switch on)', async () => {
+    const got = await load({
+      ...armoryRow,
+      professions: MANUAL,
+      armoryProfessions: ARMORY,
+    });
+    expect(got?.professions).toEqual({
+      value: MANUAL,
+      source: 'manual',
+      asOf: null,
+    });
+  });
+
+  it('Armory only: emits the Armory copy as blizzard, asOf lastSyncedAt', async () => {
+    const got = await load({
+      ...armoryRow,
+      professions: null,
+      armoryProfessions: ARMORY,
+    });
+    expect(got?.professions).toEqual({
+      value: ARMORY,
+      source: 'blizzard',
+      asOf: T,
+    });
+  });
+
+  it('ignores armory_professions on a row no longer Armory-linked', async () => {
+    const got = await load({
+      ...charRow,
+      professions: null,
+      armoryProfessions: ARMORY,
+    });
+    expect(got).not.toHaveProperty('professions');
   });
 });

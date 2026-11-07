@@ -1,3 +1,4 @@
+import { MANUAL_PROFESSIONS_WIN } from '../../../characters/characters-professions.helpers';
 import {
   FIELD_PRECEDENCE,
   FRESH_WINDOW_MS,
@@ -40,8 +41,13 @@ describe('FIELD_PRECEDENCE table', () => {
     });
   });
 
-  it('never sources professions from blizzard', () => {
-    expect(FIELD_PRECEDENCE.professions.blizzardAllowed).toBe(false);
+  // ROK-2107 product decision: Blizzard now answers professions (Armory sync
+  // writes armory_professions); the override is the shared switch.
+  it('lets blizzard answer professions, override driven by MANUAL_PROFESSIONS_WIN', () => {
+    expect(FIELD_PRECEDENCE.professions).toEqual({
+      manualOverride: MANUAL_PROFESSIONS_WIN,
+      blizzardAllowed: true,
+    });
   });
 });
 
@@ -78,7 +84,7 @@ describe('resolveField — rule 1: manual override', () => {
 
 describe('resolveField — rule 2: fresh blizzard', () => {
   const blizzardFields = WOW_FACT_FIELDS.filter(
-    (f) => !FIELD_PRECEDENCE[f].manualOverride && f !== 'professions',
+    (f) => !FIELD_PRECEDENCE[f].manualOverride,
   );
 
   it.each(blizzardFields)(
@@ -107,10 +113,11 @@ describe('resolveField — rule 2: fresh blizzard', () => {
     expect(got?.source).toBe('addon');
   });
 
-  it('professions: a fresh blizzard value is dropped entirely', () => {
+  it('professions: a fresh blizzard value wins when no manual value exists', () => {
+    const bz = fact('blizzard', 'bz', ago(HOUR));
     expect(
-      resolveField('professions', [fact('blizzard', 'bz', NOW)], NOW, true),
-    ).toBeNull();
+      resolveField('professions', [fact('addon', 'ad', NOW), bz], NOW, true),
+    ).toEqual(bz);
   });
 });
 
@@ -253,5 +260,44 @@ describe('resolveField — blizzardFresh off (no registered Blizzard seam)', () 
     ];
     expect(resolveFacts(perSource, NOW, false).level?.source).toBe('addon');
     expect(resolveFacts(perSource, NOW, true).level?.source).toBe('blizzard');
+  });
+});
+
+describe('professions with MANUAL_PROFESSIONS_WIN flipped off (ROK-2107 F0)', () => {
+  const HELPERS = '../../../characters/characters-professions.helpers';
+  let flipped: typeof resolveField | null = null;
+
+  beforeAll(() => {
+    jest.isolateModules(() => {
+      jest.doMock(HELPERS, () => ({
+        ...jest.requireActual<object>(HELPERS),
+        MANUAL_PROFESSIONS_WIN: false,
+      }));
+      // requireActual skips a mock of fact-precedence itself, but its own
+      // import of HELPERS resolves through the doMock above.
+      flipped = jest.requireActual<{ resolveField: typeof resolveField }>(
+        './fact-precedence',
+      ).resolveField;
+    });
+  });
+
+  afterAll(() => jest.dontMock(HELPERS));
+
+  it('a fresh blizzard value beats a manual entry', () => {
+    if (!flipped) throw new Error('isolated fact-precedence did not load');
+    const bz = fact('blizzard', 'bz', ago(HOUR));
+    const got = flipped(
+      'professions',
+      [fact('manual', 'mine', null), bz],
+      NOW,
+      true,
+    );
+    expect(got).toEqual(bz);
+  });
+
+  it('the manual entry is still the fallback when nothing else is known', () => {
+    if (!flipped) throw new Error('isolated fact-precedence did not load');
+    const manual = fact('manual', 'mine', null);
+    expect(flipped('professions', [manual], NOW, true)).toEqual(manual);
   });
 });
