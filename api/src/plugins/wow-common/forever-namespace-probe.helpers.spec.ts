@@ -264,8 +264,13 @@ describe('runProbe matches + concurrency', () => {
         status: 404,
       },
     ]);
+    // ROK-2103: the stub answers every static-classicforever URL 200, so the
+    // three static journal / class indexes add their shapes too.
     expect(Object.keys(run.shapes).sort()).toEqual([
       'classicforever:us:connected-realm',
+      'classicforever:us:journal-expansion',
+      'classicforever:us:journal-instance',
+      'classicforever:us:playable-class',
       'classicforever:us:realm',
     ]);
     expect(run.shapes['classicforever:us:realm']).toMatchObject({
@@ -320,5 +325,64 @@ describe('runProbe concurrency', () => {
     });
     expect(run.cells).toHaveLength(24);
     expect(peak).toBe(4);
+  });
+});
+
+describe('runProbe static journal indexes (ROK-2103)', () => {
+  /** Skyborne under `forever` races only; journal tiers 200; the rest 404. */
+  function journalFetch(calls: string[]): ProbeFetch {
+    return (url) => {
+      calls.push(url);
+      if (url.includes('/playable-race/index?namespace=static-forever-'))
+        return Promise.resolve(reply(200, { races: [{ name: 'Skyborne' }] }));
+      if (url.includes('/journal-expansion/index'))
+        return Promise.resolve(
+          reply(200, { tiers: [{ id: 1, name: 'Forever' }] }),
+        );
+      return Promise.resolve(reply(404));
+    };
+  }
+  const staticCalls = (calls: string[]): string[] =>
+    calls.filter((u) => /journal-|playable-class/.test(u));
+
+  it('probes the three static indexes once per matched target', async () => {
+    const calls: string[] = [];
+    const run = await runProbe({
+      fetchFn: journalFetch(calls),
+      token: 't',
+      candidates: ['forever', 'classic'],
+      regions: ['us'],
+      characterPath: null,
+      guildPath: null,
+    });
+    expect(staticCalls(calls)).toHaveLength(3);
+    expect(
+      staticCalls(calls).every((u) => u.includes('static-forever-us')),
+    ).toBe(true);
+    const cells = run.cells.filter((c) => /journal|class/.test(c.endpoint));
+    expect(cells.map((c) => [c.endpoint, c.status])).toEqual([
+      ['journal-expansion', 200],
+      ['journal-instance', 404],
+      ['playable-class', 404],
+    ]);
+    expect(run.shapes['forever:us:journal-expansion']).toEqual({
+      topLevelKeys: ['tiers'],
+      entryCount: 1,
+      sample: [],
+      names: ['Forever'],
+    });
+  });
+
+  it('probes no static index when nothing matched', async () => {
+    const calls: string[] = [];
+    await runProbe({
+      fetchFn: journalFetch(calls),
+      token: 't',
+      candidates: ['classic'],
+      regions: ['us'],
+      characterPath: null,
+      guildPath: null,
+    });
+    expect(staticCalls(calls)).toEqual([]);
   });
 });

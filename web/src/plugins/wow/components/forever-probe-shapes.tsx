@@ -2,14 +2,22 @@
  * ROK-2102: the Forever probe's anonymised response shapes — one line per
  * `<prefix>:<region>:<endpoint>` key with its top-level keys and entry count.
  * The stored `sample` is never rendered. Collapsed by default; hidden when
- * the run recorded no shapes.
+ * the run recorded no shapes. ROK-2103: a static journal / class index shape
+ * also carries public entry `names`, listed in a nested collapsible.
  */
 import type { JSX } from 'react';
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
+import { ForeverProbeShapeNames } from './forever-probe-shape-names';
 
 interface ProbeShape {
     topLevelKeys: string[];
     entryCount: number;
+    names?: string[];
+}
+
+/** True when `value` is absent or a string array. */
+function isOptionalStringArray(value: unknown): value is string[] | undefined {
+    return value === undefined || (Array.isArray(value) && value.every((v) => typeof v === 'string'));
 }
 
 /** Narrows one stored shape value; anything malformed is skipped rather than rendered. */
@@ -20,7 +28,8 @@ function isProbeShape(value: unknown): value is ProbeShape {
     return (
         Array.isArray(keys) &&
         keys.every((k) => typeof k === 'string') &&
-        typeof count === 'number'
+        typeof count === 'number' &&
+        isOptionalStringArray(Reflect.get(value, 'names'))
     );
 }
 
@@ -56,6 +65,7 @@ export function ForeverProbeShapes({
                         <code className="text-foreground">{key}</code>:{' '}
                         {shape.topLevelKeys.join(', ')} (entries:{' '}
                         {shape.entryCount})
+                        <ForeverProbeShapeNames shapeKey={key} names={shape.names ?? []} />
                     </li>
                 ))}
             </ul>
