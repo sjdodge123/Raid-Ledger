@@ -27,7 +27,7 @@ function renderList(onUpdate = vi.fn(), isUpdating = false) {
 }
 
 describe('ChannelBindingList lifecycle cell (ROK-1433 W7)', () => {
-    it('shows the cell on the auto channel's group only', () => {
+    it('shows the cell on the auto channel group only', () => {
         const { auto, manual } = renderList();
         expect(within(auto).getByTestId('binding-lifecycle-cell')).toBeInTheDocument();
         expect(within(auto).getByText(/^Archived [A-Z][a-z]{2} \d{1,2}$/)).toHaveAttribute('data-tone', 'neutral');
