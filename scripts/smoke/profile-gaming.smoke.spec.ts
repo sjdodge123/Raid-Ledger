@@ -24,6 +24,18 @@ const WOW_FOREVER = 'World of Warcraft: Forever';
 const WOW_SUPPORTED = 'World of Warcraft';
 const ARMORY_UNAVAILABLE_NOTE = 'Armory import for WoW Forever is turned off on this server — add the character manually.';
 
+/** CI has no Blizzard keys: answer the status read with Blizzard configured (page-local) so the Armory tab mounts its form. */
+async function forceBlizzardConfigured(page: Page) {
+    await page.route((url) => url.pathname.endsWith('/system/status'), async (route) => {
+        const response = await route.fetch();
+        const body = (await response.json()) as Record<string, unknown>;
+        await route.fulfill({
+            response,
+            json: { ...body, blizzardConfigured: true },
+        });
+    });
+}
+
 /** Answer the capability read with the Forever kill switch OFF (page-local; the env setting is untouched). */
 async function forceForeverArmoryKillSwitch(page: Page) {
     await page.route((url) => url.pathname.endsWith('/blizzard/capabilities'), async (route) => {
@@ -47,6 +59,7 @@ async function openAddCharacterForGame(page: Page, gameName: string) {
 }
 
 async function expectForeverArmoryEnabledByDefault(page: Page) {
+    await forceBlizzardConfigured(page);
     const dialog = await openAddCharacterForGame(page, WOW_FOREVER);
     const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
     await expect(armoryTab).toBeVisible();

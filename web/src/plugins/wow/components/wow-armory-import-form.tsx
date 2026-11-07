@@ -7,6 +7,8 @@ import type { WowGameVariant, WowForeverSelectableRuleset } from '@raid-ledger/c
 import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import type { WowRegion, BlizzardCharacterPreviewDto } from '@raid-ledger/contract';
 import { useImportWowCharacter } from '../hooks/use-wow-mutations';
+import { useArmoryCapabilities } from '../hooks/use-armory-capabilities';
+import { isArmoryImportSupported, ARMORY_UNAVAILABLE_NOTE } from '../lib/armory-import';
 import { previewWowCharacter } from '../api-client';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
@@ -164,6 +166,9 @@ export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, de
     const state = useImportFormState(isMain, defaultRealm, defaultRegion);
     const { showSkipWarning, setShowSkipWarning, warningShownRef } = useSkipWarningValidator(state.formStateRef, onRegisterValidator);
     const handlers = useImportFormHandlers(state, gameVariant, onSuccess, warningShownRef, setShowSkipWarning);
+    // The form owns the Armory gate (ROK-1722): kill switch on, or caps still loading, = no search fields.
+    const { data: caps } = useArmoryCapabilities();
+    if (!isArmoryImportSupported(gameVariant, caps)) return <p className="text-xs text-muted text-center">{ARMORY_UNAVAILABLE_NOTE}</p>;
     const showSearch = state.formState !== 'preview' && state.formState !== 'importing' && state.formState !== 'done';
     const showPreview = (state.formState === 'preview' || state.formState === 'importing') && state.previewData;
 
@@ -258,3 +263,4 @@ function SearchFields({ fields, formState, error, onSearch }: {
         </>
     );
 }
+
