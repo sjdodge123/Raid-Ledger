@@ -8,7 +8,7 @@
  */
 import type { SettingKey } from '../../drizzle/schema/app-settings';
 
-/** Admin-set Forever namespace prefix. Absent = the `classicforever` default. */
+/** Admin-set Forever namespace prefix. Absent = the `forever` default (ROK-2102). */
 export const WOW_FOREVER_NAMESPACE_PREFIX_KEY =
   'wow_forever_namespace_prefix' as SettingKey;
 
