@@ -258,6 +258,12 @@ describe('GET /plugins/wow/roster-claim/candidates — cap (ROK-2128)', () => {
         0,
       );
       expect(total).toBe(1000);
+      // Codex P2: `q` filters BEFORE the cap — the 1001st row is findable.
+      const found = await list(`${foreverId}&q=big%201000`);
+      expect(found.body.truncated).toBe(false);
+      expect(guildOf(found, bigId)?.candidates.map((c) => c.name)).toEqual([
+        'Big 1000',
+      ]);
     } finally {
       await testApp.db.delete(schema.guilds).where(eq(schema.guilds.id, bigId));
     }

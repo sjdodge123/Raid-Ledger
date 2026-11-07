@@ -65,9 +65,9 @@ export class RosterClaimService {
     if (!parsed.success) {
       throw new BadRequestException('gameId must be a positive integer');
     }
-    const { gameId } = parsed.data;
+    const { gameId, q } = parsed.data;
     if (!(await this.isForever(gameId))) return EMPTY;
-    const rows = await loadCandidates(this.db, gameId);
+    const rows = await loadCandidates(this.db, gameId, q);
     const truncated = rows.length > MAX_ROSTER_CLAIM_CANDIDATES;
     const kept = rows.slice(0, MAX_ROSTER_CLAIM_CANDIDATES);
     return { guilds: groupByGuild(kept), truncated };

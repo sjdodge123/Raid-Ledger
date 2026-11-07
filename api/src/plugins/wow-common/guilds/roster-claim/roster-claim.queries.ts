@@ -1,7 +1,8 @@
-import { and, asc, eq, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { MAX_ROSTER_CLAIM_CANDIDATES } from '@raid-ledger/contract';
 import * as schema from '../../../../drizzle/schema';
+import { escapeLikePattern } from '../../../../common/search.util';
 import { inLatestSnapshot } from '../guild-membership.helpers';
 
 /**
@@ -70,7 +71,11 @@ export function isClaimableGuild(gameId: number): SQL | undefined {
 export async function loadCandidates(
   db: Db,
   gameId: number,
+  q?: string,
 ): Promise<CandidateRow[]> {
+  const byName = q
+    ? ilike(guildMembers.characterName, `%${escapeLikePattern(q)}%`)
+    : undefined;
   return db
     .select({
       guildId: guilds.id,
@@ -84,7 +89,7 @@ export async function loadCandidates(
     })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .where(and(isClaimableGuild(gameId), isRowUnclaimed()))
+    .where(and(isClaimableGuild(gameId), isRowUnclaimed(), byName))
     .orderBy(asc(guilds.name), asc(guilds.id), asc(guildMembers.characterName))
     .limit(MAX_ROSTER_CLAIM_CANDIDATES + 1);
 }
