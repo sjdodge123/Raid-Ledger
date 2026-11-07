@@ -327,3 +327,52 @@ describe('fetchCharacterProfessions — realmless Forever (ROK-2102)', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+/** Fetch a payload of primaries only (tier-only shape) and return the result. */
+async function fetchPrimaries(primaries: unknown[]) {
+  mockFetchOnce(200, { primaries, secondaries: [] });
+  return fetchCharacterProfessions('Ana', 'Y', 'us', null, 't', fakeLogger);
+}
+
+function tier(id: number, name: string, skill: number, max: number) {
+  return { tier: { id, name }, skill_points: skill, max_skill_points: max };
+}
+
+describe('fetchCharacterProfessions — tier-only header (Forever 0/0 fix)', () => {
+  it('takes the header from the single tier when top-level skill is absent', async () => {
+    const result = await fetchPrimaries([
+      {
+        profession: { id: 186, name: 'Mining' },
+        tiers: [tier(186, 'Mining', 95, 150)],
+      },
+    ]);
+    const mining = at(result?.primary ?? [], 0);
+    expect(mining.skillLevel).toBe(95);
+    expect(mining.maxSkillLevel).toBe(150);
+  });
+
+  it('uses the tier with the highest max when there are several', async () => {
+    const result = await fetchPrimaries([
+      {
+        profession: { id: 197, name: 'Tailoring' },
+        tiers: [
+          tier(2823, 'Dragon Isles Tailoring', 40, 100),
+          tier(2540, 'Classic Tailoring', 300, 300),
+          tier(2831, 'Khaz Algar Tailoring', 12, 100),
+        ],
+      },
+    ]);
+    const tailoring = at(result?.primary ?? [], 0);
+    expect(tailoring.skillLevel).toBe(300);
+    expect(tailoring.maxSkillLevel).toBe(300);
+  });
+
+  it('keeps 0/0 when there are neither top-level values nor tiers', async () => {
+    const result = await fetchPrimaries([
+      { profession: { id: 186, name: 'Mining' }, tiers: [] },
+    ]);
+    const mining = at(result?.primary ?? [], 0);
+    expect(mining.skillLevel).toBe(0);
+    expect(mining.maxSkillLevel).toBe(0);
+  });
+});

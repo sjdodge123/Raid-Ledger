@@ -68,16 +68,34 @@ function mapProfessionTier(raw: RawProfessionTier): ExternalProfessionTier {
   };
 }
 
-/** Map a raw entry (primary or secondary) into the normalized shape. */
+/** The tier with the highest max skill (the single tier when there is one). */
+function headlineTier(
+  tiers: ExternalProfessionTier[],
+): ExternalProfessionTier | undefined {
+  return tiers.reduce<ExternalProfessionTier | undefined>(
+    (best, t) =>
+      best === undefined || t.maxSkillLevel > best.maxSkillLevel ? t : best,
+    undefined,
+  );
+}
+
+/**
+ * Map a raw entry (primary or secondary) into the normalized shape.
+ * Blizzard's profile `/professions` carries skill only inside `tiers[]`, so
+ * when the top-level values are absent the header comes from the headline
+ * tier instead of defaulting to 0/0 (FOREVER-CHARPANEL-AUDIT §3).
+ */
 function mapProfessionEntry(raw: RawProfessionEntry): ExternalProfessionEntry {
   const name = raw.profession?.name ?? '';
+  const tiers = (raw.tiers ?? []).map(mapProfessionTier);
+  const headline = headlineTier(tiers);
   return {
     id: raw.profession?.id ?? 0,
     name,
     slug: slugify(name),
-    skillLevel: raw.skill_points ?? 0,
-    maxSkillLevel: raw.max_skill_points ?? 0,
-    tiers: (raw.tiers ?? []).map(mapProfessionTier),
+    skillLevel: raw.skill_points ?? headline?.skillLevel ?? 0,
+    maxSkillLevel: raw.max_skill_points ?? headline?.maxSkillLevel ?? 0,
+    tiers,
   };
 }
 
