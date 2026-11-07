@@ -3,6 +3,7 @@ import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { parseProfessions } from '../../../characters/characters-professions.helpers';
 import { armoryGear } from './blizzard-gear.helpers';
 import { distinctIds, fact, fanOut, toRole } from './fact-source.helpers';
 import type {
@@ -28,6 +29,7 @@ interface ForeverArmoryRow {
   role: string | null;
   itemLevel: number | null;
   equipment: unknown;
+  armoryProfessions: unknown;
   lastSyncedAt: Date | null;
 }
 
@@ -55,6 +57,8 @@ export function toForeverCandidates(row: ForeverArmoryRow): WowFactCandidates {
     out.gear = fact(gear, SRC, row.lastSyncedAt);
     out.enchantsReported = fact(false, SRC, row.lastSyncedAt);
   }
+  const prof = parseProfessions(row.armoryProfessions);
+  if (prof) out.professions = fact(prof, SRC, row.lastSyncedAt);
   return out;
 }
 
@@ -63,7 +67,8 @@ export function toForeverCandidates(row: ForeverArmoryRow): WowFactCandidates {
  * reads what the Armory sync (nightly sync + manual refresh, ROK-1722)
  * persisted on Armory-linked Forever rows (F3: `game_variant='wow_forever'`,
  * `external_id` set, realm null, synced at least once) and never calls
- * Blizzard. Never answers professions (F11), quests or lockouts.
+ * Blizzard. Answers professions from `armory_professions` (ROK-2107,
+ * superseding F11); never quests or lockouts.
  */
 @Injectable()
 export class BlizzardForeverFactSource implements WowFactSource {
@@ -77,6 +82,7 @@ export class BlizzardForeverFactSource implements WowFactSource {
     'ilvl',
     'gear',
     'enchantsReported',
+    'professions',
   ];
 
   constructor(
@@ -111,6 +117,7 @@ export class BlizzardForeverFactSource implements WowFactSource {
         role: c.role,
         itemLevel: c.itemLevel,
         equipment: c.equipment,
+        armoryProfessions: c.armoryProfessions,
         lastSyncedAt: c.lastSyncedAt,
       })
       .from(c)

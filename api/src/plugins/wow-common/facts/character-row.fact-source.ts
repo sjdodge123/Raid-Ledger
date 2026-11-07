@@ -1,10 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  CharacterProfessionsSchema,
-  type HubFactSource,
-} from '@raid-ledger/contract';
+import type { HubFactSource } from '@raid-ledger/contract';
+import { effectiveProfessions } from '../../../characters/characters-professions.helpers';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { distinctIds, fact, fanOut, toRole } from './fact-source.helpers';
@@ -28,6 +26,7 @@ interface CharRow {
   roleOverride: string | null;
   itemLevel: number | null;
   professions: unknown;
+  armoryProfessions: unknown;
   lastSyncedAt: Date | null;
   externalId: string | null;
   addonGuid: string | null;
@@ -39,15 +38,28 @@ function rowOrigin(row: CharRow): HubFactSource {
   return row.addonGuid ? 'addon' : 'manual';
 }
 
-/** The user-editable facts: roleOverride and professions are `manual` (asOf
- * unknown — a hand edit has no capture time; lastSyncedAt is the Armory sync). */
+/**
+ * Professions per the ROK-2107 switch: the hand entry is `manual` (asOf
+ * unknown — a hand edit has no capture time); the Armory copy is `blizzard`,
+ * asOf lastSyncedAt, only on an Armory-linked row (D6/F4 — so Armory
+ * professions still show while the Blizzard source is off; when it is live
+ * `dropShadowedBlizzard` removes this copy).
+ */
+function professionsFact(row: CharRow, out: WowFactCandidates): void {
+  const armory = row.externalId ? row.armoryProfessions : null;
+  const { value, source } = effectiveProfessions(row.professions, armory);
+  if (!value || !source) return;
+  const asOf = source === 'manual' ? null : row.lastSyncedAt;
+  out.professions = fact(value, source, asOf);
+}
+
+/** The user-editable facts: roleOverride is `manual`, professions per switch. */
 function editableFacts(row: CharRow, out: WowFactCandidates): void {
   const override = toRole(row.roleOverride);
   const synced = toRole(row.role);
   if (override) out.role = fact(override, 'manual', null);
   else if (synced) out.role = fact(synced, rowOrigin(row), row.lastSyncedAt);
-  const prof = CharacterProfessionsSchema.safeParse(row.professions);
-  if (prof.success) out.professions = fact(prof.data, 'manual', null);
+  professionsFact(row, out);
 }
 
 /** One `characters` row as facts; asOf = lastSyncedAt. */
@@ -65,7 +77,7 @@ function toCandidates(row: CharRow): WowFactCandidates {
 
 /**
  * ROK-1910 — facts from the linked `characters` rows: role/roleOverride,
- * professions (manual on classic — no Armory endpoint), level/class/race/ilvl.
+ * professions (manual hand entry or the Armory copy, ROK-2107), level/class/race/ilvl.
  */
 @Injectable()
 export class CharacterRowFactSource implements WowFactSource {
@@ -100,6 +112,7 @@ export class CharacterRowFactSource implements WowFactSource {
         roleOverride: c.roleOverride,
         itemLevel: c.itemLevel,
         professions: c.professions,
+        armoryProfessions: c.armoryProfessions,
         lastSyncedAt: c.lastSyncedAt,
         externalId: c.externalId,
         addonGuid: c.addonGuid,
