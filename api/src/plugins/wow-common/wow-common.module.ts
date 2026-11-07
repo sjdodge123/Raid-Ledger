@@ -58,6 +58,7 @@ import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
 import { RosterFactSource } from './facts/roster.fact-source';
 import { AddonSnapshotFactSource } from './facts/addon-snapshot.fact-source';
 import { CharacterRowFactSource } from './facts/character-row.fact-source';
+import { BlizzardForeverFactSource } from './facts/blizzard-forever.fact-source';
 import { WowFactsService } from './facts/wow-facts.service';
 import { RosterInsightsCache } from './guilds/roster-insights/roster-insights.cache';
 import { RosterInsightsService } from './guilds/roster-insights/roster-insights.service';
@@ -132,6 +133,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     RosterFactSource,
     AddonSnapshotFactSource,
     CharacterRowFactSource,
+    BlizzardForeverFactSource,
     WowFactsService,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
     RosterInsightsCache,

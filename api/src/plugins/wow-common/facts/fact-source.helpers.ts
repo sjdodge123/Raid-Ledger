@@ -9,7 +9,13 @@ import type {
   HubFactSource,
 } from '@raid-ledger/contract';
 import { CLASSIC_TALENT_TREE_ROLES } from '../blizzard.constants';
-import type { Fact, RosterCharRef, RosterKey } from './wow-fact.types';
+import {
+  WOW_FACT_FIELDS,
+  type Fact,
+  type RosterCharRef,
+  type RosterKey,
+  type WowFactCandidates,
+} from './wow-fact.types';
 
 /** Shirt (4) and tabard (19) carry no item level that matters. */
 const COSMETIC_SLOTS = new Set([4, 19]);
@@ -115,4 +121,22 @@ export function talentRoleHint(
   )?.[1];
   if (treeName === undefined || classRoles === undefined) return null;
   return classRoles[treeName] ?? null;
+}
+
+/**
+ * ROK-1920 (F6) — drop a row source's blizzard-labelled facts for every field
+ * the Blizzard source itself answered for the same roster row: while the
+ * seam is live the Blizzard source owns those values.
+ * @returns the row candidates unchanged when the Blizzard source has none.
+ */
+export function dropShadowedBlizzard(
+  row: WowFactCandidates,
+  blizzard: WowFactCandidates | undefined,
+): WowFactCandidates {
+  if (!blizzard) return row;
+  const out: WowFactCandidates = { ...row };
+  for (const f of WOW_FACT_FIELDS) {
+    if (blizzard[f] && out[f]?.source === 'blizzard') delete out[f];
+  }
+  return out;
 }
