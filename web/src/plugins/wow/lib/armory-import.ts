@@ -1,13 +1,13 @@
 /**
- * ROK-1636: which WoW variants the Blizzard Armory can import from.
+ * Which WoW variants the Blizzard Armory can import from.
  *
- * Blizzard has no WoW: Forever profile API yet (the namespace answers 403), so
- * both Armory entry points (the Add Character tabs and the inline import) ask
+ * Both Armory entry points (the Add Character tabs and the inline import) ask
  * this one helper. The static default lives in wow-variant-config.ts
- * (ROK-1726); ROK-1717 layers the admin-set runtime capability
- * (`GET /blizzard/capabilities`) on top, so turning Forever Armory import on
- * needs no deploy. Fails CLOSED (D6): while the capability is loading or the
- * call failed (`caps` undefined), Forever stays unsupported.
+ * (ROK-1726). WoW: Forever is supported through the realmless profile route
+ * (ROK-1722) unless the admin switches it off: the runtime capability
+ * (`GET /blizzard/capabilities`, ROK-1717) is the kill switch. Fails CLOSED
+ * (D6): while the capability is loading or the call failed (`caps`
+ * undefined), Forever stays unsupported.
  */
 import type { BlizzardCapabilitiesDto } from '@raid-ledger/contract';
 import { WOW_FOREVER_LABEL } from './wow-era';
@@ -18,15 +18,18 @@ export type ArmoryCapabilities = BlizzardCapabilitiesDto | null | undefined;
 
 /** Short muted note shown wherever the Armory tab is unavailable. */
 export const ARMORY_UNAVAILABLE_NOTE =
-    "Armory import isn't available for WoW Forever yet — add the character manually.";
+    'Armory import for WoW Forever is turned off on this server — add the character manually.';
 
 /**
  * True when the Armory can import characters for this variant. Unknown/absent = retail = supported.
- * A variant the static table marks unsupported is supported only when the runtime capability says so.
+ * WoW: Forever also needs the runtime capability on: an admin's `false` is the kill switch, and a
+ * capability still loading (or failed) fails closed.
  */
 export function isArmoryImportSupported(variant: string | null | undefined, caps: ArmoryCapabilities): boolean {
-    if (!variant || (getWowVariantIntegrations(variant)?.armoryImport ?? true)) return true;
-    return normalizeWowVariant(variant) === 'wow_forever' && caps?.armoryImport.wow_forever === true;
+    if (!variant) return true;
+    const staticOn = getWowVariantIntegrations(variant)?.armoryImport ?? true;
+    if (normalizeWowVariant(variant) !== 'wow_forever') return staticOn;
+    return staticOn && caps?.armoryImport.wow_forever === true;
 }
 
 const ALL_CLASSIC_VARIANTS = [

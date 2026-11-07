@@ -116,6 +116,10 @@ export const ForeverProbeEndpointSchema = z.enum([
     'profile-quests',
     'profile-media',
     'guild-roster',
+    // ROK-2103: static-namespace journal + class indexes per matched target.
+    'journal-expansion',
+    'journal-instance',
+    'playable-class',
 ]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 
@@ -146,6 +150,17 @@ export const ForeverProbeFoundSchema = z.object({ prefix: z.string(), at: z.stri
 export type ForeverProbeFoundDto = z.infer<typeof ForeverProbeFoundSchema>;
 
 /** Latest probe run, as stored and as the admin panel shows it. */
+/**
+ * ROK-2103: a static-index shape — keys-only plus the entries' public names
+ * (journal tiers, journal instances, classes). Never ids, hrefs or a sample.
+ */
+export const ForeverProbeNamedShapeSchema = z.object({
+    topLevelKeys: z.array(z.string()),
+    entryCount: z.number().int().nonnegative(),
+    names: z.array(z.string().max(120)).max(200),
+});
+export type ForeverProbeNamedShapeDto = z.infer<typeof ForeverProbeNamedShapeSchema>;
+
 export const ForeverProbeResultSchema = z.object({
     ranAt: z.string(),
     durationMs: z.number().int().nonnegative(),

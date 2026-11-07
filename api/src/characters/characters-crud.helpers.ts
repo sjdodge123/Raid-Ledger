@@ -9,7 +9,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, asc, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, isNotNull, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { CharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
@@ -20,6 +20,7 @@ import {
 } from './characters-sync.helpers';
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
+import type { ExternalImportPolicy } from '../plugins/plugin-host/character-external-import.types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -71,21 +72,44 @@ export function enforceCooldown(lastSyncedAt: string | null): void {
   }
 }
 
-/** Prepare refresh parameters and validate. */
+/** Thrown when a row has no realm and no provider-owned realmless variant. */
+function noRealm(): never {
+  throw new NotFoundException(
+    'Character has no realm — cannot refresh from external source',
+  );
+}
+
+/**
+ * Variant a refresh runs under. A realmless row (ruleset set) is owned by the
+ * identity provider that declares a realmless variant (ROK-1722), so the
+ * request's 'retail' default is never stamped onto it.
+ */
+function refreshVariant(
+  character: CharacterDto,
+  dto: RefreshCharacterDto,
+  policy: ExternalImportPolicy,
+): string {
+  if (character.realm) return character.gameVariant ?? dto.gameVariant;
+  if (!character.ruleset) return noRealm();
+  return policy.realmlessVariant ?? noRealm();
+}
+
+/**
+ * Prepare refresh parameters and validate.
+ * @param policy external-import policy from the identity providers; its gate
+ *   may refuse the variant (e.g. a plugin kill switch).
+ */
 export function prepareRefresh(
   character: CharacterDto,
   dto: RefreshCharacterDto,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
+  policy: ExternalImportPolicy,
 ): { region: string; gameVariant: string; adapter: CharacterSyncAdapter } {
-  if (!character.realm)
-    throw new NotFoundException(
-      'Character has no realm — cannot refresh from external source',
-    );
+  if (!character.realm && !character.ruleset) noRealm();
   enforceCooldown(character.lastSyncedAt);
   const region = character.region ?? dto.region;
-  const gameVariant =
-    (character.gameVariant as RefreshCharacterDto['gameVariant']) ??
-    dto.gameVariant;
+  const gameVariant = refreshVariant(character, dto, policy);
+  policy.assertAllowed(gameVariant);
   const adapter = findAdapter(gameVariant);
   if (!adapter)
     throw new NotFoundException(
@@ -131,23 +155,21 @@ export async function findOneOwned(
   return mapCharacterToDto(character);
 }
 
-/** Sync all externally-linked characters. */
+/**
+ * Sync all externally-linked characters.
+ * @param policy external-import policy: rows it excludes from the bulk sync
+ *   are left out entirely (counted neither synced nor failed).
+ */
 export async function syncAllCharacters(
   db: Db,
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
   logger: Logger,
+  policy: ExternalImportPolicy,
 ): Promise<{ synced: number; failed: number }> {
-  const externalCharacters = await db
-    .select()
-    .from(schema.characters)
-    .where(
-      and(
-        isNotNull(schema.characters.region),
-        isNotNull(schema.characters.gameVariant),
-        // ROK-1721: realm-less characters have no Armory path yet
-        isNotNull(schema.characters.realm),
-      ),
-    );
+  const linked = await findSyncableCharacters(db);
+  const externalCharacters = linked.filter((c) =>
+    policy.includeInBulkSync(c.gameVariant),
+  );
   let synced = 0;
   let failed = 0;
   for (const char of externalCharacters) {
@@ -157,6 +179,28 @@ export async function syncAllCharacters(
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return { synced, failed };
+}
+
+/** Armory-linked rows the nightly sync may refresh. */
+async function findSyncableCharacters(
+  db: Db,
+): Promise<(typeof schema.characters.$inferSelect)[]> {
+  return db
+    .select()
+    .from(schema.characters)
+    .where(
+      and(
+        isNotNull(schema.characters.region),
+        // ROK-1722: Armory-linked rows only (game_variant set). A manual
+        // realmless row keeps game_variant NULL and stays out; an imported
+        // one (realm NULL, ruleset set) syncs by region + name.
+        isNotNull(schema.characters.gameVariant),
+        or(
+          isNotNull(schema.characters.realm),
+          isNotNull(schema.characters.ruleset),
+        ),
+      ),
+    );
 }
 
 /** Sync a single external character. */
@@ -196,8 +240,9 @@ async function performCharacterSync(
   findAdapter: (variant?: string) => CharacterSyncAdapter | undefined,
   logger: Logger,
 ): Promise<'synced' | 'skipped'> {
-  const adapter = findAdapter(char.gameVariant as string);
-  if (!adapter) {
+  const adapter = findAdapter(char.gameVariant ?? undefined);
+  const region = char.region;
+  if (!adapter || !region) {
     logger.debug(
       `No adapter for character ${char.id} (gameId: ${char.gameId}), skipping`,
     );
@@ -207,8 +252,8 @@ async function performCharacterSync(
   const { profile, talents, equipment, professions } = await fetchFullProfile(
     adapter,
     char.name,
-    char.realm!,
-    char.region!,
+    char.realm,
+    region,
     nsPrefix,
   );
   await db

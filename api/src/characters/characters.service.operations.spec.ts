@@ -5,6 +5,9 @@ import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
+import { SettingsService } from '../settings/settings.service';
+import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
+import { WowForeverIdentityProvider } from '../plugins/wow-common/wow-forever-identity.provider';
 
 /** Single `.from().where().limit()` select returning `rows`. */
 function selectOnce(rows: unknown[]) {
@@ -172,6 +175,10 @@ describe('CharactersService — operations', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
         {
+          provide: SettingsService,
+          useValue: { get: jest.fn().mockResolvedValue(null) },
+        },
+        {
           provide: EnrichmentsService,
           useValue: {
             getEnrichmentsForEntity: jest.fn().mockResolvedValue([]),
@@ -316,11 +323,12 @@ describe('CharactersService — operations', () => {
     // never silently fall back to retail data.
     describe('wow_forever variant (ROK-1563)', () => {
       it('accepts wow_forever as a gameVariant on the import DTO (AC1)', () => {
+        // ROK-1722: a Forever body is realmless with a ruleset.
         const parsed = ImportWowCharacterSchema.parse({
-          name: 'Thrall',
-          realm: 'area-52',
+          name: 'Thrall Forever',
           region: 'us',
           gameVariant: 'wow_forever',
+          ruleset: 'pvp',
         });
         expect(parsed.gameVariant).toBe('wow_forever');
       });
@@ -354,22 +362,57 @@ describe('CharactersService — operations', () => {
 
         await expect(
           service.importExternal(1, {
-            name: 'Thrall',
-            realm: 'area-52',
+            name: 'Thrall Forever',
+            realm: null,
             region: 'us',
             gameVariant: 'wow_forever',
             isMain: false,
+            ruleset: 'normal',
           }),
         ).rejects.toThrow(NotFoundException);
         // No retail fallback: the Forever namespace prefix was the one used.
         expect(mockAdapter.fetchProfile).toHaveBeenCalledWith(
-          'Thrall',
-          'area-52',
+          'Thrall Forever',
+          null,
           'us',
           'classicforever',
         );
         expect(mockDb.transaction).not.toHaveBeenCalled();
       });
+    });
+
+    it('403s a Forever import while the Armory kill switch is off (ROK-1722)', async () => {
+      const settings = { get: jest.fn().mockResolvedValue('false') };
+      const identity = new WowForeverIdentityProvider(settings);
+      const registry = {
+        getAdaptersForExtensionPoint: jest.fn((point: string) =>
+          point === EXTENSION_POINTS.CHARACTER_IDENTITY
+            ? new Map([['world-of-warcraft-forever', identity]])
+            : new Map(),
+        ),
+        isActive: jest.fn().mockReturnValue(true),
+      };
+      const off = new CharactersService(
+        mockDb as never,
+        registry as never,
+        {} as never,
+      );
+      await expect(
+        off.importExternal(1, {
+          name: 'Thrall Forever',
+          realm: null,
+          region: 'us',
+          gameVariant: 'wow_forever',
+          isMain: false,
+          ruleset: 'normal',
+        }),
+      ).rejects.toThrow(
+        new ForbiddenException('Armory import for WoW: Forever is turned off'),
+      );
+      expect(registry.getAdaptersForExtensionPoint).not.toHaveBeenCalledWith(
+        EXTENSION_POINTS.CHARACTER_SYNC,
+      );
+      expect(mockDb.transaction).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when no adapter found', async () => {
@@ -384,6 +427,7 @@ describe('CharactersService — operations', () => {
           region: 'us',
           gameVariant: 'retail',
           isMain: false,
+          ruleset: null,
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -487,6 +531,7 @@ describe('CharactersService — operations', () => {
         region: 'us',
         gameVariant: 'retail',
         isMain: false,
+        ruleset: null,
       });
 
       expect(result.itemLevel).toBe(500);

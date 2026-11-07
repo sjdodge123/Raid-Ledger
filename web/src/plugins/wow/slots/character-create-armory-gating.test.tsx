@@ -1,6 +1,7 @@
 /**
- * ROK-1636: Blizzard has no WoW Forever profile API yet, so both Armory entry
- * points must disable "Import from Armory" for wow_forever and keep Manual.
+ * ROK-1636 / ROK-1717 / ROK-1722: both Armory entry points disable "Import from
+ * Armory" for wow_forever while the runtime capability is loading or the admin
+ * turned it off (the kill switch), and keep Manual.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { at } from '../../../test/defined';

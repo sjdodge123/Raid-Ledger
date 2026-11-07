@@ -30,6 +30,7 @@ import {
   isWowheadResolverEnabled,
   setWowheadResolverEnabled,
 } from './wowhead-item/wowhead-resolver.settings';
+import { isForeverArmoryImportEnabled } from './forever-armory-switch';
 
 /** The default prefix or the stored alias: both persist as an absent key. */
 function isDefaultPrefix(prefix: string): boolean {
@@ -80,9 +81,10 @@ export class ForeverConfigService implements OnModuleInit {
   }
 
   /**
-   * Validate + persist the config, then announce it. The default prefix and a
-   * disabled flag are stored as an absent key; saving the `classicforever`
-   * alias also reads as "reset to the `forever` default" (ROK-2102).
+   * Validate + persist the config, then announce it. The default prefix and an
+   * enabled Armory flag are stored as an absent key; a disabled flag as 'false'
+   * (ROK-1722). Saving the `classicforever` alias also reads as "reset to the
+   * `forever` default" (ROK-2102).
    * @throws BadRequestException when the body fails the contract schema.
    */
   async updateConfig(
@@ -100,7 +102,7 @@ export class ForeverConfigService implements OnModuleInit {
     );
     await this.writeOrDelete(
       WOW_FOREVER_ARMORY_IMPORT_KEY,
-      armoryImportEnabled ? 'true' : null,
+      armoryImportEnabled ? null : 'false',
     );
     if (wowheadResolverEnabled !== undefined) {
       await setWowheadResolverEnabled(this.settings, wowheadResolverEnabled);
@@ -134,8 +136,9 @@ export class ForeverConfigService implements OnModuleInit {
     };
   }
 
-  private async isArmoryImportEnabled(): Promise<boolean> {
-    return (await this.settings.get(WOW_FOREVER_ARMORY_IMPORT_KEY)) === 'true';
+  /** ROK-1722: on by default — absent (or legacy 'true') = on, 'false' = off. */
+  async isArmoryImportEnabled(): Promise<boolean> {
+    return isForeverArmoryImportEnabled(this.settings);
   }
 
   private async writeOrDelete(

@@ -791,6 +791,8 @@ function describeProfessionSync() {
       avatarUrl: null,
       renderUrl: null,
       profileUrl: null,
+      externalId: null,
+      rulesetRaw: null,
     });
     jest
       .spyOn(blizzard, 'fetchCharacterSpecializations')
