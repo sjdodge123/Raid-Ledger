@@ -73,10 +73,10 @@ export function summariseStaticShape(
   endpoint: ForeverProbeEndpoint,
   body: unknown,
 ): NamedShapeSummary {
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { topLevelKeys: [], entryCount: 0, sample: [], names: [] };
   }
-  const rec = body as Record<string, unknown>;
+  const rec: Record<string, unknown> = Object.fromEntries(Object.entries(body));
   const list = entryList(endpoint, rec);
   const names: string[] = [];
   for (const entry of list) {
