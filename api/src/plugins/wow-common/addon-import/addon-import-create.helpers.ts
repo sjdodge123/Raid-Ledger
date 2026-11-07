@@ -15,7 +15,10 @@ import {
   resolveExportName,
   titleCaseClass,
 } from './addon-import.binding-name';
-import { AddonImportError } from './addon-import.errors';
+import {
+  AddonImportError,
+  type AddonImportRulesetDetail,
+} from './addon-import.errors';
 import type { AddonImportTx } from './addon-import-apply.types';
 import type { ImportTarget } from './addon-import.target';
 
@@ -86,8 +89,22 @@ export function createRuleset(
 ): WowForeverSelectableRuleset {
   assertCreatable(who);
   const ruleset = who.ruleset ?? picked ?? fallback;
-  if (!ruleset) throw new AddonImportError('RULESET_REQUIRED');
+  if (!ruleset) {
+    throw new AddonImportError('RULESET_REQUIRED', undefined, {
+      detail: rulesetDetail(who),
+    });
+  }
   return ruleset;
+}
+
+/** ROK-2100 B.2: who the refused create was for (blank realm → null). */
+function rulesetDetail(who: AddonWho): AddonImportRulesetDetail {
+  const realm = who.raw.realmName?.trim() ?? '';
+  return {
+    characterName: resolveExportName(who),
+    realmName: realm === '' ? null : realm,
+    guid: who.guid,
+  };
 }
 
 /**

@@ -61,6 +61,7 @@ interface WarningsProps {
 const INFERENCE_SOURCE: Record<AddonImportRulesetInferenceDto['source'], string> = {
     'realm-map': 'Inferred from the realm list your admin maintains — not from the export.',
     blizzard: 'Inferred from Blizzard\'s realm data.',
+    'realm-name': 'Inferred from the realm\'s name — check it before importing.',
 };
 
 type RulesetWarningProps = Omit<WarningsProps, 'result'> & { warning: AddonImportWarning; inference: AddonImportRulesetInferenceDto | undefined };

@@ -107,7 +107,10 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
     recordSections: jest.fn().mockResolvedValue(undefined),
   };
   const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
-  const realmRulesets = { inferForPaste: jest.fn().mockResolvedValue(null) };
+  const realmRulesets = {
+    inferForPaste: jest.fn().mockResolvedValue(null),
+    resolveForPaste: jest.fn().mockResolvedValue(null),
+  };
   const insightsCache = {
     invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
   };
