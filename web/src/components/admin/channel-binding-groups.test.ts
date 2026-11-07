@@ -25,10 +25,18 @@ describe('groupBindingsByChannel', () => {
         expect(groupBindingsByChannel([])).toEqual([]);
     });
 
-    it('collects a channel\'s scattered bindings into one group, in API order', () => {
+    it('collects a channel\'s scattered bindings into one group, sorted by game name', () => {
         const groups = groupBindingsByChannel([WOW_FOREVER, GENERAL, WOW_BCC]);
         expect(groups.map((g) => g.channelName)).toEqual(['general', 'wow']);
-        expect(ids(at(groups, 1).bindings)).toEqual(['wow-f', 'wow-b']);
+        expect(ids(at(groups, 1).bindings)).toEqual(['wow-b', 'wow-f']);
+    });
+
+    it('sorts rows inside a group by purpose, then game name, then id', () => {
+        const lobby = b({ id: 'lobby', channelId: 'wow-t', bindingPurpose: 'general-lobby', gameName: 'Aaa' });
+        const dupeB = b({ id: 'z-dupe', channelId: 'wow-t', gameName: 'BCC Anniversary' });
+        const noGame = b({ id: 'no-game', channelId: 'wow-t', gameName: null });
+        const [group] = groupBindingsByChannel([lobby, WOW_FOREVER, dupeB, WOW_BCC, noGame]);
+        expect(ids(group?.bindings ?? [])).toEqual(['no-game', 'wow-b', 'z-dupe', 'wow-f', 'lobby']);
     });
 
     it('keeps a single-binding channel as a group of one', () => {
@@ -56,6 +64,13 @@ describe('groupBindingsByChannel', () => {
         expect(group?.lifecycleBinding?.id).toBe('auto');
         const [manual] = groupBindingsByChannel([GENERAL]);
         expect(manual?.lifecycleBinding).toBeNull();
+    });
+
+    it('takes the pinned auto-managed binding when only a later one is pinned', () => {
+        const first = b({ id: 'auto-1', channelId: 'wow-t', gameName: 'Aaa', autoManaged: true, pinned: false });
+        const second = b({ id: 'auto-2', channelId: 'wow-t', gameName: 'Zzz', autoManaged: true, pinned: true });
+        const [group] = groupBindingsByChannel([first, second]);
+        expect(group?.lifecycleBinding?.id).toBe('auto-2');
     });
 
     it('flags multi-monitor only for two or more voice-monitor bindings', () => {

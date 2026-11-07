@@ -31,14 +31,14 @@ function renderList(bindings: ChannelBindingDto[]): HTMLElement[] {
 }
 
 describe('ChannelBindingList grouped by channel (ROK-2106)', () => {
-    it('puts a channel\'s scattered bindings in one group, adjacent, ordered by channel name', () => {
+    it('puts a channel\'s scattered bindings in one group, adjacent, sorted by game name inside', () => {
         const groups = renderList([WOW_F, GENERAL, WOW_B]);
         expect(groups.map((g) => within(g).getByTestId('channel-binding-group-name').textContent)).toEqual(['#general', '#wow']);
         const wowRows = within(at(groups, 1)).getAllByTestId('channel-binding-row');
         expect(wowRows.map((r) => r.textContent)).toEqual([
-            expect.stringContaining('WoW: Forever'), expect.stringContaining('BCC Anniversary'),
+            expect.stringContaining('BCC Anniversary'), expect.stringContaining('WoW: Forever'),
         ]);
-        expect(within(at(groups, 1)).getByLabelText('2 bindings')).toHaveTextContent('2');
+        expect(within(at(groups, 1)).getByTestId('channel-binding-group-count')).toHaveTextContent(/^2 bindings$/);
         expect(within(at(groups, 0)).getAllByTestId('channel-binding-row')).toHaveLength(1);
     });
 
