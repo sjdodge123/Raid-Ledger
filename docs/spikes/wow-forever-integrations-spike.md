@@ -203,3 +203,25 @@ The addon exports `C_Traits` data (`configId`, `nodes`, optional `importString`)
 - Q2: **Yes** — server-side Wowhead tooltip-endpoint resolver (Forever → Classic fallback), ≤1 req/s, long cache, admin kill switch; item modal shows "Forever data not yet on Wowhead — showing Classic" on fallback (no tooltip hint).
 - Q4: newest snapshot wins (addon vs Armory), source + date always shown. Q5: web-only `wow-variant-config.ts`. Q6: talents v1 = names + calc link, no embed. Q8: no Raider.IO/WCL work until they announce Forever; foreverlogs.gg link-out only (ROK-1725).
 - Q7: log the three pre-existing defects in TECH-DEBT-BACKLOG.md (Lead appends with the next batch commit).
+
+## Addendum 2026-11-07 — live profile sub-resources (ROK-2108 evidence)
+
+Probe run 2026-11-07T03:48:39Z on fleet env `rok-2108` (branch `feat/rok-2108-forever-probe-ext`, settings-bundle Blizzard keys, Character path `rok-androl`, level-14 warrior, created 11-05): 143 checks in 13.0 s; namespace `forever` found in us/eu/kr/tw. Keys only — no values were recorded.
+
+| Endpoint (forever/us) | Status | Top-level keys | Arrays → length: first-element keys |
+|---|---|---|---|
+| `specializations` | 200 | `_links, character, specialization_groups` | `specialization_groups` → 1: `is_active, specializations` (two levels recorded; matches the Classic shape `blizzard-spec.helpers.ts` already parses) |
+| `encounters/raids` | 200 | `_links, character` | none — empty |
+| `encounters/dungeons` | 200 | `_links` | none — empty |
+| `reputations` | 200 | `_links, character, reputations` | `reputations` → 5: `faction, standing` |
+| `achievements` | 200 | `_links, total_quantity, total_points, achievements, character, statistics` | `achievements` → 10: `id, achievement, criteria` |
+| `statistics` | 200 | ~60 flat Classic-style stat keys (spirit, defense, resistances, hit, expertise…) | none |
+| `quests/completed` | 200 | `_links, character, quests` | `quests` → 153: `key, name, id` |
+| `ruleset/<id>` (us/eu/kr/tw) | 200 | `_links, id, name, auctions, status` | none |
+| realmless guild summary | not run | — | guild path blank (the operator's Forever guild slug is unknown) |
+| `profile` / `equipment` / `media` / `professions` / `quests` | 200 | as ROK-2102 | character resolves on **us only** (404 in eu/kr/tw) |
+| `journal-expansion` / `journal-instance` | 200 | `_links` | 0 entries (ROK-2103) |
+| `playable-class` / `ruleset` index | 200 | — | 9 classes; rulesets us 4 · eu 4 · kr 2 · tw 2 |
+| `realm` / `connected-realm` | 404 | — | — |
+
+What this unblocks: quest progress from `quests/completed` (ids present — ROK-1927 attunements data side), talents from `specializations` (same two-level shape as Classic; the existing parser can be reused — verify its inner keys on the first real sync), reputations and achievements (both populated). Not viable from the API: raid/dungeon progression (`encounters/*` empty on this character — re-check on a raider before filing), the static journal (empty), realm index (404). The guild summary needs a Forever guild slug in the probe config (prod admin card → Guild path) to be probed by the hourly run.

@@ -210,6 +210,11 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
  * API doesn't serve … for this game version yet" (blizzard-upstream-error.ts).
  * Mapping the variant to `null` instead would silently read RETAIL data,
  * which is strictly worse — never do it.
+ *
+ * Since the API went live (~2026-11-05) Forever characters are realmless:
+ * profiles resolve at `/profile/wow/character/{name}-{surname}` under
+ * `profile-forever-{region}` (ROK-2102) — the realm-index / `{realm}/{name}`
+ * 404s ROK-1636 saw are the Classic route, not a missing namespace.
  */
 export const WOW_FOREVER_NAMESPACE_PREFIX = FOREVER_NAMESPACE_ALIAS;
 
