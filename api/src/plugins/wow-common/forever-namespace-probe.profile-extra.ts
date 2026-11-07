@@ -7,6 +7,7 @@
  */
 import type { ForeverProbeEndpoint } from '@raid-ledger/contract';
 import {
+  encodePath,
   probeQuery,
   profileRoot,
   type ProbeTarget,
@@ -63,10 +64,7 @@ export function buildGuildSummaryUrl(
   target: ProbeTarget,
 ): ProbeUrl {
   const { prefix, region } = target;
-  const slug = guildPath
-    .split('/')
-    .map((s) => encodeURIComponent(s.trim().toLowerCase()))
-    .join('/');
+  const slug = encodePath(guildPath);
   const base = `https://${region}.api.blizzard.com/data/wow/guild`;
   return {
     endpoint: 'guild-summary',

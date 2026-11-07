@@ -44,7 +44,7 @@ export function probeQuery(
 }
 
 /** Lowercase + encode each segment of a 1- or 2-segment path. */
-function encodePath(path: string): string {
+export function encodePath(path: string): string {
   return path
     .split('/')
     .map((s) => encodeURIComponent(s.trim().toLowerCase()))

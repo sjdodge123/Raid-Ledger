@@ -137,40 +137,40 @@ describe('summariseDeepKeys', () => {
   });
 });
 
-describe('runProbe — ROK-2108 follow-ups', () => {
-  const reply = (status: number, body: unknown = null) => ({
-    status,
-    json: () => Promise.resolve(body),
-  });
-  const fetchFor =
-    (calls: string[], profileStatus: number): ProbeFetch =>
-    (url) => {
-      calls.push(url);
-      if (url.includes('/ruleset/index?namespace=dynamic-forever-us'))
-        return Promise.resolve(
-          reply(200, { rulesets: [{ id: 4, name: 'PvP' }] }),
-        );
-      if (url.includes('/ruleset/4?'))
-        return Promise.resolve(
-          reply(200, { id: 4, realms: [{ slug: 's', id: 1 }] }),
-        );
-      if (url.includes('/data/wow/guild/raid-ledger?'))
-        return Promise.resolve(reply(200, { name: 'Raid Ledger', crest: {} }));
-      if (url === `${CHAR}${PNS}`)
-        return Promise.resolve(reply(profileStatus, { id: 9 }));
-      if (url.startsWith(CHAR))
-        return Promise.resolve(reply(200, { secret: 'x' }));
-      return Promise.resolve(reply(404));
-    };
-  const input = (fetchFn: ProbeFetch) => ({
-    fetchFn,
-    token: 't',
-    candidates: ['forever'],
-    regions: ['us'],
-    characterPath: 'rok-androl',
-    guildPath: 'raid-ledger',
-  });
+const reply = (status: number, body: unknown = null) => ({
+  status,
+  json: () => Promise.resolve(body),
+});
+const fetchFor =
+  (calls: string[], profileStatus: number): ProbeFetch =>
+  (url) => {
+    calls.push(url);
+    if (url.includes('/ruleset/index?namespace=dynamic-forever-us'))
+      return Promise.resolve(
+        reply(200, { rulesets: [{ id: 4, name: 'PvP' }] }),
+      );
+    if (url.includes('/ruleset/4?'))
+      return Promise.resolve(
+        reply(200, { id: 4, realms: [{ slug: 's', id: 1 }] }),
+      );
+    if (url.includes('/data/wow/guild/raid-ledger?'))
+      return Promise.resolve(reply(200, { name: 'Raid Ledger', crest: {} }));
+    if (url === `${CHAR}${PNS}`)
+      return Promise.resolve(reply(profileStatus, { id: 9 }));
+    if (url.startsWith(CHAR))
+      return Promise.resolve(reply(200, { secret: 'x' }));
+    return Promise.resolve(reply(404));
+  };
+const input = (fetchFn: ProbeFetch) => ({
+  fetchFn,
+  token: 't',
+  candidates: ['forever'],
+  regions: ['us'],
+  characterPath: 'rok-androl',
+  guildPath: 'raid-ledger',
+});
 
+describe('runProbe — ROK-2108 follow-ups', () => {
   it('probes guild summary, ruleset detail and the extras with deep-keys shapes', async () => {
     const calls: string[] = [];
     const run = await runProbe(input(fetchFor(calls, 200)));
@@ -195,5 +195,49 @@ describe('runProbe — ROK-2108 follow-ups', () => {
     const run = await runProbe(input(fetchFor(calls, 404)));
     expect(calls.some((u) => u.includes('/specializations'))).toBe(false);
     expect(run.cells.map((c) => c.endpoint)).toContain('guild-summary');
+  });
+
+  it('records a 403 / 404 on the new endpoints without a shape and keeps the other extras', async () => {
+    const failing = new Map<string, number>([
+      [`${CHAR}/achievements${PNS}`, 403],
+      [`${CHAR}/statistics${PNS}`, 404],
+      [`${API}/data/wow/guild/raid-ledger${PNS}`, 404],
+      [`${API}/data/wow/ruleset/4${DNS}`, 403],
+    ]);
+    const base = fetchFor([], 200);
+    const fetchFn: ProbeFetch = (url, init) => {
+      const status = failing.get(url);
+      return status === undefined
+        ? base(url, init)
+        : Promise.resolve(reply(status));
+    };
+    const run = await runProbe(input(fetchFn));
+    const statusOf = (endpoint: string) =>
+      run.cells.find((c) => c.endpoint === endpoint)?.status;
+    expect(statusOf('profile-achievements')).toBe(403);
+    expect(statusOf('profile-statistics')).toBe(404);
+    expect(statusOf('guild-summary')).toBe(404);
+    expect(statusOf('ruleset-detail')).toBe(403);
+    for (const endpoint of [
+      'profile-achievements',
+      'profile-statistics',
+      'guild-summary',
+      'ruleset-detail',
+    ]) {
+      expect(run.shapes[`forever:us:${endpoint}`]).toBeUndefined();
+    }
+    for (const endpoint of [
+      'profile-specializations',
+      'profile-encounters-raids',
+      'profile-encounters-dungeons',
+      'profile-reputations',
+      'profile-quests-completed',
+    ]) {
+      expect(statusOf(endpoint)).toBe(200);
+      expect(run.shapes[`forever:us:${endpoint}`]).toMatchObject({
+        topLevelKeys: ['secret'],
+        arrayKeys: {},
+      });
+    }
   });
 });
