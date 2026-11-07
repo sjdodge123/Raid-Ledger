@@ -4,6 +4,7 @@ import { getWowheadTalentCalcUrl, getWowheadTalentCalcEmbedUrl } from '../lib/wo
 import { buildWowheadTalentString } from '../lib/classic-talent-positions';
 import { FOREVER_ADDON_HINT_TALENTS, getWowVariantIntegrations } from '../lib/wow-variant-config';
 import { ForeverTalentDisplay } from './forever-talent-display';
+import { classicToForeverList } from '../lib/forever-classic-fallback';
 
 /** Retail talent data shape from Blizzard API */
 interface RetailTalents {
@@ -207,6 +208,8 @@ export function TalentDisplay({ talents, isArmoryImported, characterClass, gameV
     if (isRetailTalents(talents)) return <RetailTalentDisplay talents={talents} />;
     if (talents.format === 'forever') return <ForeverTalentDisplay talents={talents} characterClass={characterClass} />;
     if (isClassicTalents(talents)) {
+        // AC8: Forever never renders the Classic trees, even when the server could not convert.
+        if (getWowVariantIntegrations(gameVariant)?.talentCalc === 'foreverTraits') return <ForeverTalentDisplay talents={classicToForeverList(talents)} characterClass={characterClass} />;
         const { embedUrl, talentCalcUrl } = resolveClassicUrls(characterClass, talents, gameVariant);
         return <ClassicTalentDisplay talents={talents} wowheadUrl={talentCalcUrl} embedUrl={embedUrl} />;
     }

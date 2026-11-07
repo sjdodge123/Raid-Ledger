@@ -68,6 +68,29 @@ describe('placeArmoryTalents — unplaced stays a list', () => {
     });
 });
 
+describe('placeArmoryTalents — TBC table guards (review MAJOR)', () => {
+    it('keeps the list when a ranked talent sits past vanilla row 6 (TBC rows h/i)', () => {
+        // "Wrath of Cenarius" is 'h2' in the TBC table: row 7, which no vanilla/Forever tree has.
+        const input = armory([{ nodeId: 30, rank: 5, name: 'Wrath of Cenarius', tree: 0 }], ['Balance', 'Feral', 'Restoration']);
+        expect(placeArmoryTalents(input, 'Druid')).toBe(input);
+    });
+
+    it('keeps the list when two ranked talents land on the same cell', () => {
+        const input = armory([...ARMS_FURY, { nodeId: 16, rank: 2, name: 'Improved Heroic Strike', tree: 0 }]);
+        expect(placeArmoryTalents(input, 'Warrior')).toBe(input);
+    });
+
+    it('falls the whole payload back to the list — no partial grid — when any one talent is rejected', () => {
+        // Ferocity ('a2') alone would place; Force of Nature ('i2', row 8) rejects the whole payload.
+        const druidish = placeArmoryTalents(armory([
+            { nodeId: 20, rank: 5, name: 'Ferocity', tree: 1 },
+            { nodeId: 31, rank: 1, name: 'Force of Nature', tree: 0 },
+        ], ['Balance', 'Feral', 'Restoration']), 'Druid');
+        expect(druidish.layout).toBe('list');
+        expect(druidish.nodes.every((n) => n.row === undefined && n.col === undefined)).toBe(true);
+    });
+});
+
 describe('tree order from trees[].name (F3)', () => {
     it('uses Blizzard tree names to pick the known tree for each index', () => {
         // Blizzard sent Fury first: index 0 is "Fury", so Cruelty under tree 0 places.
