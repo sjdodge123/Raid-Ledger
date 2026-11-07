@@ -68,3 +68,16 @@ export function armoryGear(raw: unknown): AddonSnapshotGearItem[] | null {
   });
   return gear.length > 0 ? gear : null;
 }
+
+/**
+ * When the stored Armory equipment was itself fetched (its `syncedAt`).
+ * A sync whose equipment call fails keeps the prior gear but still bumps
+ * `lastSyncedAt`, so gear facts must be dated from this (ROK-2130).
+ * @returns null when the value does not parse.
+ */
+export function armoryGearSyncedAt(raw: unknown): Date | null {
+  const parsed = CharacterEquipmentSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const at = new Date(parsed.data.syncedAt);
+  return Number.isNaN(at.getTime()) ? null : at;
+}

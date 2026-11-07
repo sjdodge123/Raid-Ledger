@@ -4,6 +4,7 @@ import type {
     ProfessionEntryDto,
 } from '@raid-ledger/contract';
 import { getProfessionIconUrl } from '../lib/profession-icons';
+import { effectiveProfessionSkill } from '../lib/profession-skill';
 
 /**
  * Inline pills showing one badge per profession (primary first, then
@@ -39,14 +40,15 @@ export function ProfessionBadges({
 
 function ProfessionPill({ entry }: { entry: ProfessionEntryDto }) {
     const iconUrl = getProfessionIconUrl(entry.slug);
-    const title = `${entry.name} ${entry.skillLevel}/${entry.maxSkillLevel}`;
+    const { skillLevel, maxSkillLevel } = effectiveProfessionSkill(entry);
+    const title = `${entry.name} ${skillLevel}/${maxSkillLevel}`;
     if (!iconUrl) {
-        return <span title={title}>{entry.name} {entry.skillLevel}</span>;
+        return <span title={title}>{entry.name} {skillLevel}</span>;
     }
     return (
         <span className="inline-flex items-center gap-1" title={title}>
             <img src={iconUrl} alt={entry.name} width={16} height={16} loading="lazy" decoding="async" className="w-4 h-4" />
-            {entry.skillLevel}
+            {skillLevel}
         </span>
     );
 }

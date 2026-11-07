@@ -153,3 +153,29 @@ describe.each<[string, { gameVariant?: string }]>([
     expect(got).not.toHaveProperty('renderUrl');
   });
 });
+
+const GEAR = {
+  equippedItemLevel: 64,
+  items: [],
+  syncedAt: '2026-11-07T00:00:00.000Z',
+};
+
+describe('applyOptionalSyncFields — equipment keep-prior (Forever charpanel)', () => {
+  it('omits equipment when the adapter returned null (failed fetch keeps stored gear)', () => {
+    const record = applyOptionalSyncFields(
+      {},
+      { professions: null, armoryQuests: null, equipment: null, talents: null },
+    );
+    expect(record).not.toHaveProperty('equipment');
+  });
+
+  it('writes the equipment payload when the fetch succeeded', () => {
+    const fields = buildSyncUpdateFieldsFromSync(PROFILE, {
+      professions: null,
+      armoryQuests: null,
+      equipment: GEAR,
+      talents: null,
+    });
+    expect(fields).toHaveProperty('equipment', GEAR);
+  });
+});

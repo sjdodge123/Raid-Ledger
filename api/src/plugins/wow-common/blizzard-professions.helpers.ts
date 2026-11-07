@@ -68,16 +68,44 @@ function mapProfessionTier(raw: RawProfessionTier): ExternalProfessionTier {
   };
 }
 
-/** Map a raw entry (primary or secondary) into the normalized shape. */
+/**
+ * The tier with the highest max skill (the single tier when there is one).
+ * Deliberate: on retail a multi-expansion entry headlines its highest-cap
+ * tier (often Classic 300/300); the tier list still shows each expansion.
+ * Mirrors `headlineTier` in web `plugins/wow/lib/profession-skill.ts` — keep
+ * both in step.
+ */
+function headlineTier(
+  tiers: ExternalProfessionTier[],
+): ExternalProfessionTier | undefined {
+  return tiers.reduce<ExternalProfessionTier | undefined>(
+    (best, t) =>
+      best === undefined || t.maxSkillLevel > best.maxSkillLevel ? t : best,
+    undefined,
+  );
+}
+
+/**
+ * Map a raw entry (primary or secondary) into the normalized shape.
+ * Blizzard's profile `/professions` carries skill only inside `tiers[]`, so
+ * when the top-level values are absent the header comes from the headline
+ * tier instead of defaulting to 0/0 (FOREVER-CHARPANEL-AUDIT §3). The tier
+ * is used only when BOTH top-level values are absent, so a header never mixes
+ * a top-level value with a tier value.
+ */
 function mapProfessionEntry(raw: RawProfessionEntry): ExternalProfessionEntry {
   const name = raw.profession?.name ?? '';
+  const tiers = (raw.tiers ?? []).map(mapProfessionTier);
+  const tierOnly =
+    raw.skill_points === undefined && raw.max_skill_points === undefined;
+  const headline = tierOnly ? headlineTier(tiers) : undefined;
   return {
     id: raw.profession?.id ?? 0,
     name,
     slug: slugify(name),
-    skillLevel: raw.skill_points ?? 0,
-    maxSkillLevel: raw.max_skill_points ?? 0,
-    tiers: (raw.tiers ?? []).map(mapProfessionTier),
+    skillLevel: raw.skill_points ?? headline?.skillLevel ?? 0,
+    maxSkillLevel: raw.max_skill_points ?? headline?.maxSkillLevel ?? 0,
+    tiers,
   };
 }
 

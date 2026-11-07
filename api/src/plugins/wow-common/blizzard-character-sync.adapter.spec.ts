@@ -155,7 +155,7 @@ describe('BlizzardCharacterSyncAdapter — fetchEquipment', () => {
     expect(result).toBe(mockEquipment);
   });
 
-  it('should return empty equipment when BlizzardService returns null', async () => {
+  it('returns null (not an empty item list) when BlizzardService fails, so the stored gear is kept', async () => {
     mockBlizzardService.fetchCharacterEquipment.mockResolvedValue(null);
     const result = await adapter.fetchEquipment(
       'Thrall',
@@ -163,8 +163,7 @@ describe('BlizzardCharacterSyncAdapter — fetchEquipment', () => {
       'us',
       'classic1x',
     );
-    expect(result.equippedItemLevel).toBeNull();
-    expect(result.items).toEqual([]);
+    expect(result).toBeNull();
   });
 });
 
