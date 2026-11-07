@@ -18,6 +18,7 @@ const BASE = `${API}/admin/plugins/blizzard/bnet-account-probe`;
 const REDIRECT = 'https://slot-1.gamernight.net/api/plugins/blizzard/bnet-account-probe/callback';
 const AUTHORIZE = 'https://oauth.battle.net/authorize?response_type=code&scope=wow.profile';
 const SECRET = 'Thrall-Secretrealm';
+const BATTLETAG = 'Thrall#1234';
 
 function makeResult(overrides: Partial<BnetProbeResult> = {}): BnetProbeResult {
     return {
@@ -42,6 +43,11 @@ function makeResult(overrides: Partial<BnetProbeResult> = {}): BnetProbeResult {
             { namespace: 'profile-classic-us', status: null, error: 'timeout', summary: null },
         ],
         idParity: { checked: 7, matched: 6, mismatched: 0, notFound: 1, errors: 0, viaHref: 5, viaName: 2 },
+        userinfo: {
+            attempts: [{ path: '/userinfo', status: 404, error: null }, { path: '/oauth/userinfo', status: 200, error: null }],
+            answeredPath: '/oauth/userinfo', keys: ['battletag', 'id', 'sub'],
+            idType: 'number', subType: 'string', battletagType: 'string', idEqualsSub: true, errorCode: null,
+        },
         error: null,
         ...overrides,
     };
@@ -157,13 +163,36 @@ describe('BnetAccountProbeSection — last result, keys only (AC15)', () => {
         expect(within(parity).getByText(/checked 7 · matched 6 · mismatched 0 · not found 1 · errors 0/)).toBeInTheDocument();
     });
 
+    it('renders the OpenID userinfo key names and types (ruling 2026-11-07)', async () => {
+        state = { redirectUri: REDIRECT, result: makeResult() };
+        renderWithProviders(<BnetAccountProbeSection />);
+        const info = await screen.findByRole('list', { name: 'OpenID userinfo' });
+        expect(within(info).getByText('/userinfo HTTP 404 → /oauth/userinfo HTTP 200')).toBeInTheDocument();
+        expect(within(info).getByText('battletag, id, sub')).toBeInTheDocument();
+        expect(within(info).getByText('id number · sub string · battletag string')).toBeInTheDocument();
+        expect(within(info).getByText('yes')).toBeInTheDocument();
+    });
+
+    it('a run recorded before the userinfo ruling renders without the userinfo block', async () => {
+        const legacy = makeResult();
+        delete legacy.userinfo;
+        state = { redirectUri: REDIRECT, result: legacy };
+        renderWithProviders(<BnetAccountProbeSection />);
+        await screen.findByRole('list', { name: 'Token response' });
+        expect(screen.queryByRole('list', { name: 'OpenID userinfo' })).toBeNull();
+    });
+
     it('never renders a value smuggled in beside the keys-only fields', async () => {
         const result = makeResult();
-        const smuggled = { ...result, characterName: SECRET, namespaces: result.namespaces.map((n) => ({ ...n, realm: SECRET })) };
+        const smuggled = {
+            ...result, characterName: SECRET, namespaces: result.namespaces.map((n) => ({ ...n, realm: SECRET })),
+            userinfo: { ...result.userinfo, battletag: BATTLETAG, sub: BATTLETAG },
+        };
         server.use(http.get(BASE, () => HttpResponse.json({ redirectUri: REDIRECT, result: smuggled, token: SECRET })));
         renderWithProviders(<BnetAccountProbeSection />);
         await screen.findByRole('list', { name: 'Account summary by namespace' });
         expect(document.body.textContent ?? '').not.toContain(SECRET);
+        expect(document.body.textContent ?? '').not.toContain(BATTLETAG);
     });
 
     it('shows the run error and no token block when the run ended before a token existed', async () => {

@@ -1,6 +1,6 @@
 /**
  * ROK-2129 spike: the Battle.net account probe's last run, keys only — token
- * response key names + booleans, one row per `/profile/user/wow` namespace
+ * response key names + booleans, the OpenID userinfo key names and types, one row per `/profile/user/wow` namespace
  * with its status, counts and key unions, and the ID-parity counts. Every
  * field is rendered explicitly from the contract shape, so nothing outside it
  * (a name, realm or token) can reach the screen.
@@ -12,6 +12,7 @@ import type {
     BnetProbeNamespaceResult,
     BnetProbeResult,
     BnetProbeTokenSummary,
+    BnetProbeUserinfoSummary,
 } from '@raid-ledger/contract';
 
 /** `1 account` / `7 characters`. */
@@ -103,6 +104,28 @@ function ParityRows({ parity }: { parity: BnetProbeIdParity }): JSX.Element {
     );
 }
 
+function attemptsLine(info: BnetProbeUserinfoSummary): string {
+    return info.attempts.map((a) => `${a.path} ${a.status === null ? (a.error ?? 'no response') : `HTTP ${a.status}`}`).join(' → ');
+}
+
+function idEqualsSubLine(value: boolean | null): string {
+    return value === null ? '—' : yesNo(value);
+}
+
+/** OpenID userinfo (ruling 2026-11-07): key names and JSON types only, never a BattleTag, id or sub. */
+function UserinfoRows({ info }: { info: BnetProbeUserinfoSummary }): JSX.Element {
+    return (
+        <ul aria-label="OpenID userinfo" className="space-y-0.5">
+            <Row label="Userinfo calls" value={attemptsLine(info)} />
+            <Row label="Answered by" value={info.answeredPath ?? 'none'} />
+            <Row label="Userinfo keys" value={list(info.keys)} />
+            <Row label="Field types" value={`id ${info.idType} · sub ${info.subType} · battletag ${info.battletagType}`} />
+            <Row label="id equals sub" value={idEqualsSubLine(info.idEqualsSub)} />
+            {info.errorCode && <Row label="Error code" value={info.errorCode} />}
+        </ul>
+    );
+}
+
 /** The latest Battle.net probe run, keys and counts only; a placeholder line before the first run. */
 export function BnetAccountProbeResult({ result }: { result: BnetProbeResult | null }): JSX.Element {
     if (!result) return <p className="text-sm text-muted">The probe has not run yet.</p>;
@@ -113,6 +136,7 @@ export function BnetAccountProbeResult({ result }: { result: BnetProbeResult | n
                 {result.error && <> · <span className="font-medium text-danger">ended with: {result.error}</span></>}
             </p>
             {result.token && <TokenRows token={result.token} />}
+            {result.userinfo && <UserinfoRows info={result.userinfo} />}
             {result.namespaces.length > 0 && <NamespaceRows namespaces={result.namespaces} />}
             {result.idParity && <ParityRows parity={result.idParity} />}
         </div>
