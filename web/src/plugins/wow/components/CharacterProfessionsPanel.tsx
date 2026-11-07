@@ -34,11 +34,15 @@ export function CharacterProfessionsPanel({
     const hasData = hasProfessionData(professions);
     if (!hasData && !isOwner) return null;
     const openEdit = () => setIsEditing(true);
+    // ROK-2107 review r3 — Blizzard wins: a hand entry is not served while the
+    // Armory has professions, so the Edit control is hidden for an Armory value.
+    const armorySynced = hasData && source === 'blizzard';
     return (
         <>
             <section aria-labelledby={headingId} className="bg-panel border border-edge rounded-lg p-6">
-                <PanelHeader headingId={headingId} showEdit={isOwner && hasData} onEdit={openEdit}
+                <PanelHeader headingId={headingId} showEdit={isOwner && hasData && !armorySynced} onEdit={openEdit}
                     source={hasData ? source ?? null : null} />
+                {isOwner && armorySynced && <ArmorySyncedNote />}
                 {hasData ? <ProfessionsBody professions={professions} /> : <AddProfessionsCta onAdd={openEdit} />}
             </section>
             {/* Mounted only while editing: the drafts are useState initialisers, so
@@ -60,7 +64,7 @@ interface PanelHeaderProps {
 
 const SOURCE_TITLE = {
     blizzard: 'Synced from the Blizzard Armory',
-    manual: 'Entered by hand; the Armory sync does not change it',
+    manual: 'Entered by hand; shown until the Armory reports professions',
 } as const;
 
 /** "Armory" / "Manual" — the hub widget's per-member source copy, capitalised. */
@@ -83,6 +87,14 @@ function PanelHeader({ headingId, showEdit, onEdit, source }: PanelHeaderProps) 
                 </button>
             )}
         </div>
+    );
+}
+
+function ArmorySyncedNote() {
+    return (
+        <p className="-mt-2 mb-4 text-xs text-muted">
+            Synced from the Armory — hand entry applies only when the Armory has no professions.
+        </p>
     );
 }
 

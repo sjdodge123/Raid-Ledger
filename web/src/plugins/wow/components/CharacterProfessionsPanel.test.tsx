@@ -5,7 +5,7 @@
  *   • non-owner + no data  → render nothing
  *   • non-owner + has data → render the panel (read-only)
  *   • owner    + no data   → render an "Add Professions" CTA card
- *   • owner    + has data  → render the panel + an "Edit" affordance
+ *   • owner    + has data  → render the panel + an "Edit" affordance (Armory-sourced: a note instead, ROK-2107)
  *
  * The real EditProfessionsModal renders here (its data hooks are mocked) so
  * the ROK-1655 Discard → reopen round trip is exercised end to end.
@@ -173,10 +173,31 @@ describe('CharacterProfessionsPanel — professions source pill (ROK-2107 AC8)',
         expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
     });
 
-    it('keeps the manual Edit flow on an Armory-sourced value', async () => {
-        const user = userEvent.setup();
+});
+
+describe('CharacterProfessionsPanel — Armory-synced hides manual Edit (ROK-2107 review r3)', () => {
+    const NOTE = /Synced from the Armory — hand entry applies only when the Armory has no professions\./;
+
+    it('owner + source blizzard → no Edit button, the Armory note instead', () => {
         render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} source="blizzard" />);
-        await user.click(screen.getByRole('button', { name: /^edit$/i }));
-        expect(screen.getByRole('dialog', { name: 'Edit Professions' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^edit$/i })).toBeNull();
+        expect(screen.getByText(NOTE)).toBeInTheDocument();
+    });
+
+    it('owner + source manual → Edit button present, no Armory note', () => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} source="manual" />);
+        expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument();
+        expect(screen.queryByText(NOTE)).toBeNull();
+    });
+
+    it('owner + no professions (source blizzard) → the Add Professions entry point stays', () => {
+        render(<CharacterProfessionsPanel professions={null} isOwner characterId="c1" gameId={1} source="blizzard" />);
+        expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
+        expect(screen.queryByText(NOTE)).toBeNull();
+    });
+
+    it('non-owner + source blizzard → no note', () => {
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" gameId={1} source="blizzard" />);
+        expect(screen.queryByText(NOTE)).toBeNull();
     });
 });
