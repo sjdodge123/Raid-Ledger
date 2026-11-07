@@ -22,8 +22,12 @@ export interface GuidAuditEntry {
   name: string;
   gameId: number;
   region: string | null;
-  /** ROK-2128: how the GUID was claimed — `roster_pick` = self-asserted from the guild roster (FLAG 3). */
-  via?: 'roster_pick';
+  /**
+   * ROK-2128: how the GUID was claimed — `roster_pick` = self-asserted from
+   * the guild roster (FLAG 3); `admin_reassign` = an admin Change owner moved
+   * the GUID-linked row to a new owner (a fresh link for ROK-1794 grants).
+   */
+  via?: 'roster_pick' | 'admin_reassign';
 }
 
 export async function logGuidAudit(

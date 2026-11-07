@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm';
 import * as schema from '../../../../drizzle/schema';
+import { ALL_WOW_GAME_SLUGS } from '../../manifest';
 import { autoPromoteAfterDelete } from '../../../../characters/characters-crud.helpers';
 import type { AddonImportTx } from '../../addon-import/addon-import-apply.types';
+import { logGuidAudit } from '../../addon-import/addon-import.guid-audit';
 import {
   lockAddonGuid,
   lockClaimName,
@@ -22,7 +24,7 @@ import {
  * shared helpers the widened ROK-1756 unlink reuses. Lock order matches the
  * claim and LedgerLink applies: GUID lock (1) → name lock (3) → row lock.
  */
-const { characters, users, eventSignups, events, activityLog } = schema;
+const { characters, users, eventSignups, events, activityLog, games } = schema;
 
 export type CharacterRow = typeof characters.$inferSelect;
 
@@ -50,9 +52,17 @@ export async function rosterOriginOf(
     .orderBy(desc(activityLog.id))
     .limit(1);
   if (!row) return null;
-  const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
-  return { guildId: num(meta.guildId), memberId: num(meta.memberId) };
+  return {
+    guildId: metaNumber(row.metadata, 'guildId'),
+    memberId: metaNumber(row.metadata, 'memberId'),
+  };
+}
+
+/** A numeric jsonb metadata field, or null when absent / not a number. */
+function metaNumber(meta: unknown, key: string): number | null {
+  if (typeof meta !== 'object' || meta === null || !(key in meta)) return null;
+  const value: unknown = Reflect.get(meta, key);
+  return typeof value === 'number' ? value : null;
 }
 
 /**
@@ -80,14 +90,21 @@ export async function lockCharacter(
   return locked;
 }
 
-/** Read a character or 404. */
+/**
+ * Read a WoW character or 404 — this is the WoW plugin's route, so another
+ * game's character (Valheim has its own Change owner) is not found here.
+ */
 export async function readCharacter(
   tx: AddonImportTx,
   id: string,
 ): Promise<CharacterRow> {
-  const [row] = await tx.select().from(characters).where(eq(characters.id, id));
-  if (!row) throw new NotFoundException('Character not found');
-  return row;
+  const [hit] = await tx
+    .select({ row: characters })
+    .from(characters)
+    .innerJoin(games, eq(games.id, characters.gameId))
+    .where(and(eq(characters.id, id), inArray(games.slug, ALL_WOW_GAME_SLUGS)));
+  if (!hit) throw new NotFoundException('Character not found');
+  return hit.row;
 }
 
 /** Target must exist, be active, differ from the owner and not hold the name. */
@@ -192,17 +209,40 @@ export async function reassignWithin(
     .set({ userId: args.toUserId, isMain, updatedAt: new Date() })
     .where(eq(characters.id, row.id));
   await autoPromoteAfterDelete(tx, row.userId, row.gameId, args.logger);
+  await auditReassign(tx, row, args);
+  return { row, toUserId: args.toUserId, toName };
+}
+
+/**
+ * D7 `admin_reassigned` audit. A GUID-linked row also gets a fresh
+ * `addon_guid_claimed` (`via:'admin_reassign'`) for the new owner: the move
+ * keeps `created_at`, so without it `hasConfirmedMemberGrant` would honour a
+ * ROK-1794 member grant staff made for the OLD owner's link (review 1 MAJOR).
+ */
+async function auditReassign(
+  tx: AddonImportTx,
+  row: CharacterRow,
+  args: ReassignArgs,
+): Promise<void> {
   const origin = await rosterOriginOf(tx, row.id);
+  const base = { actorId: args.adminId, characterId: row.id, name: row.name };
   await logCharacterClaimAudit(tx, {
+    ...base,
     action: 'admin_reassigned',
     ownerId: args.toUserId,
-    actorId: args.adminId,
-    characterId: row.id,
-    name: row.name,
     guildId: origin?.guildId ?? null,
     memberId: origin?.memberId ?? null,
     fromUserId: row.userId,
     toUserId: args.toUserId,
   });
-  return { row, toUserId: args.toUserId, toName };
+  if (!row.addonGuid) return;
+  await logGuidAudit(tx, {
+    ...base,
+    action: 'addon_guid_claimed',
+    ownerId: args.toUserId,
+    guid: row.addonGuid,
+    gameId: row.gameId,
+    region: row.region,
+    via: 'admin_reassign',
+  });
 }
