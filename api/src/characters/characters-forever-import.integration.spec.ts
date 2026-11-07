@@ -4,6 +4,7 @@
  * invented fixtures in `plugins/wow-common/testing/fixtures/blizzard-forever/`.
  */
 import { readFileSync } from 'node:fs';
+import type { AddonCharSnapshotData } from '@raid-ledger/contract';
 import { join } from 'node:path';
 import * as bcrypt from 'bcrypt';
 import { and, eq } from 'drizzle-orm';
@@ -39,6 +40,7 @@ const ROUTES: Record<string, string> = {
   [`${CHAR}/character-media${NS}`]: 'media.json',
   [`${CHAR}/equipment${NS}`]: 'equipment.json',
   [`${CHAR}/professions${NS}`]: 'professions.json',
+  [`${CHAR}/specializations${NS}`]: 'specializations.json',
 };
 
 const json = (body: unknown, status = 200): Response =>
@@ -384,5 +386,99 @@ describe('Forever Armory kill switch off (ROK-1722)', () => {
       .from(schema.characters)
       .where(eq(schema.characters.id, id));
     expect(row?.level).toBe(1);
+  });
+});
+
+describe('Forever Blizzard talents on the character page (ROK-2110)', () => {
+  it('GET /characters/:id renders the stored Blizzard talents as the Forever DTO', async () => {
+    const { token } = await memberToken('forevertalents');
+    const created = await importAs(token);
+    expect(created.status).toBe(201);
+    const res = await testApp.request
+      .get(`/characters/${String(created.body.id)}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.talents).toMatchObject({
+      format: 'forever',
+      source: 'blizzard',
+      layout: 'grid',
+      trees: [
+        { index: 0, spent: 8, name: 'Arms' },
+        { index: 1, spent: 2, name: 'Fury' },
+      ],
+    });
+  });
+});
+
+const SYNCED = new Date('2026-06-01T00:00:00.000Z');
+const ADDON: AddonCharSnapshotData = {
+  gear: [],
+  lockouts: [],
+  talents: { nodes: [{ nodeId: 9001, rank: 2, name: 'Addon Talent' }] },
+};
+
+/** An imported Forever character with a pinned sync time and a `char` snapshot captured at `capturedAt`. */
+async function seedWithSnapshot(username: string, capturedAt: Date) {
+  const { token } = await memberToken(username);
+  const created = await importAs(token);
+  expect(created.status).toBe(201);
+  const id = String(created.body.id);
+  await testApp.db
+    .update(schema.characters)
+    .set({ lastSyncedAt: SYNCED })
+    .where(eq(schema.characters.id, id));
+  await testApp.db.insert(schema.characterAddonSnapshots).values({
+    characterId: id,
+    section: 'char',
+    schema: 2,
+    data: ADDON,
+    capturedAt,
+    payloadSha256: 'c'.repeat(64),
+  });
+  return testApp.request
+    .get(`/characters/${id}`)
+    .set('Authorization', `Bearer ${token}`);
+}
+
+describe('Forever talents newest-wins against the real snapshot query (ROK-2110 D4)', () => {
+  it('newest wins against the real snapshot query: an addon capture newer than the sync serves the addon nodes', async () => {
+    const captured = new Date('2026-07-01T00:00:00.000Z');
+    const res = await seedWithSnapshot('forevernewestaddon', captured);
+    expect(res.status).toBe(200);
+    expect(res.body.talents).toMatchObject({
+      format: 'forever',
+      source: 'addon',
+      syncedAt: captured.toISOString(),
+    });
+    expect(res.body.talents.nodes).toEqual([
+      expect.objectContaining({ nodeId: 9001, rank: 2, name: 'Addon Talent' }),
+    ]);
+  });
+
+  it('newest wins against the real snapshot query: a Blizzard sync newer than the capture serves the Blizzard nodes', async () => {
+    const res = await seedWithSnapshot(
+      'forevernewestblizz',
+      new Date('2026-05-01T00:00:00.000Z'),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.talents).toMatchObject({
+      format: 'forever',
+      source: 'blizzard',
+      syncedAt: SYNCED.toISOString(),
+    });
+    const nodes: unknown[] = res.body.talents.nodes;
+    expect(nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          nodeId: 124,
+          rank: 3,
+          name: 'Improved Heroic Strike',
+          tree: 0,
+          row: 0,
+          col: 0,
+        }),
+      ]),
+    );
+    expect(nodes).not.toContainEqual(expect.objectContaining({ nodeId: 9001 }));
   });
 });

@@ -8,8 +8,10 @@ import {
   specToRole,
   inferClassicSpec,
 } from './blizzard-character.helpers';
+import { FOREVER_NAMESPACE_ALIAS } from './forever-namespace.resolver';
+import { logForeverSpecKeysOnce } from './blizzard-spec-keys.log';
 
-type Logger = { debug: (msg: string) => void };
+type Logger = { debug: (msg: string) => void; log: (msg: string) => void };
 
 /** No-spec fallback result. */
 export const NO_SPEC: InferredSpecialization = {
@@ -25,9 +27,12 @@ export function extractClassicTrees(data: Record<string, unknown>): Array<{
   talents?: Array<Record<string, unknown>>;
 }> {
   const specGroups = data.specialization_groups as
-    Array<{ specializations?: unknown[] }> | undefined;
+    Array<{ is_active?: boolean; specializations?: unknown[] }> | undefined;
+  // ROK-2110 D9: prefer the active group (dual spec), else group 0.
+  const group =
+    specGroups?.find((g) => g?.is_active === true) ?? specGroups?.[0];
   return ((data.specializations as unknown[] | undefined) ??
-    specGroups?.[0]?.specializations ??
+    group?.specializations ??
     []) as Array<{
     specialization_name?: string;
     spent_points?: number;
@@ -105,6 +110,17 @@ export function buildRetailSpecResult(
   };
 }
 
+/** ROK-2110 D8: keys-only log of the Forever response shape, once. */
+function noteForeverSpecKeys(
+  data: Record<string, unknown>,
+  apiNamespacePrefix: string | null,
+  logger: Logger,
+): void {
+  if (apiNamespacePrefix === FOREVER_NAMESPACE_ALIAS) {
+    logForeverSpecKeysOnce(data, logger);
+  }
+}
+
 /** Fetch character specializations from the Blizzard API. */
 export async function fetchCharacterSpecializations(
   name: string,
@@ -128,6 +144,7 @@ export async function fetchCharacterSpecializations(
     });
     if (!res.ok) return NO_SPEC;
     const data = (await res.json()) as Record<string, unknown>;
+    noteForeverSpecKeys(data, apiNamespacePrefix, logger);
     return parseSpecData(data, characterClass);
   } catch (err) {
     logger.debug(`Failed to fetch specializations: ${err}`);

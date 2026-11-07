@@ -1,0 +1,66 @@
+{
+  "_note": "UNVERIFIED shape — hand-built in the Classic Era specializations shape; replace with an anonymised recorded response (ROK-2110 F7)",
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever/specializations?namespace=profile-forever-us"
+    }
+  },
+  "specialization_groups": [
+    {
+      "is_active": false,
+      "specializations": [
+        {
+          "specialization_name": "Protection",
+          "spent_points": 5,
+          "talents": [
+            {
+              "talent": { "name": "Shield Specialization", "id": 1601 },
+              "spell_tooltip": { "spell": { "name": "Shield Specialization", "id": 12298 } },
+              "talent_rank": 5,
+              "tier_index": 0,
+              "column_index": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "is_active": true,
+      "specializations": [
+        {
+          "specialization_name": "Arms",
+          "spent_points": 8,
+          "talents": [
+            {
+              "talent": { "name": "Improved Heroic Strike", "id": 124 },
+              "spell_tooltip": { "spell": { "name": "Improved Heroic Strike", "id": 12282 } },
+              "talent_rank": 3,
+              "tier_index": 0,
+              "column_index": 0
+            },
+            {
+              "talent": { "name": "Deflection", "id": 130 },
+              "spell_tooltip": { "spell": { "name": "Deflection", "id": 16462 } },
+              "talent_rank": 5,
+              "tier_index": 0,
+              "column_index": 1
+            }
+          ]
+        },
+        {
+          "specialization_name": "Fury",
+          "spent_points": 2,
+          "talents": [
+            {
+              "talent": { "name": "Cruelty", "id": 157 },
+              "spell_tooltip": { "spell": { "name": "Cruelty", "id": 12320 } },
+              "talent_rank": 2,
+              "tier_index": 1,
+              "column_index": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
