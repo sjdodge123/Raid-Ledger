@@ -6,7 +6,9 @@
  * DTO (`format: 'forever', source: 'blizzard'`). Pure; stored data untouched.
  *
  * Rulings: missing rank → 0 (F8); no maxRanks (F9); nodeId = talent id, else
- * spellId, else dropped from the nodes but still counted in the tree's spent.
+ * spellId. A talent with neither identifier is DROPPED from `nodes` but its
+ * rank is still counted in `trees[].spent`, so `trees[].spent` is the
+ * authoritative points total — consumers must not re-sum `nodes` for it.
  */
 import {
   ForeverTalentsSchema,

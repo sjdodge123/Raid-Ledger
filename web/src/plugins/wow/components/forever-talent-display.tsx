@@ -51,6 +51,16 @@ function ForeverTalentList({ talents, points }: { talents: ForeverTalentsDto; po
 }
 
 /**
+ * Σ points for the header and list summary. The tree totals win when present:
+ * the Blizzard converter drops a talent with no id/spellId from `nodes` but
+ * keeps its rank in `trees[].spent`, so re-summing nodes would under-count.
+ */
+function totalPoints(talents: ForeverTalentsDto): number {
+    if (talents.trees.length > 0) return talents.trees.reduce((sum, t) => sum + t.spent, 0);
+    return talents.nodes.reduce((sum, n) => sum + n.rank, 0);
+}
+
+/**
  * WoW: Forever talents (ROK-1744; Blizzard source ROK-2110). Header (Σ rank,
  * source line, plain Forever calc link — hard-coded `wow_forever`, D7; no build
  * string, no iframe), then the positioned grid or the list/summary fallback.
@@ -58,7 +68,7 @@ function ForeverTalentList({ talents, points }: { talents: ForeverTalentsDto; po
  */
 export function ForeverTalentDisplay({ talents: raw, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
     const talents = placeArmoryTalents(raw, characterClass);
-    const points = talents.nodes.reduce((sum, n) => sum + n.rank, 0);
+    const points = totalPoints(talents);
     const href = characterClass ? getWowheadTalentCalcUrl(characterClass, 'wow_forever') : null;
     return (
         <div className="space-y-4">

@@ -4,6 +4,7 @@
  * rejected) still arrives as `format: 'classic'`. Forever characters never
  * render through the Classic tree display, so this maps that payload to a
  * Blizzard-sourced Forever `list` DTO for `ForeverTalentDisplay`. Pure.
+ * A missing rank is 0 (not learned), mirroring the api converter (F8).
  */
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 
@@ -20,7 +21,7 @@ function toNodes(talents: ClassicTalentsLike): ForeverTalentNodeDto[] {
     return talents.trees.slice(0, 3).flatMap((tree, t) =>
         tree.talents.map((talent, i) => ({
             nodeId: talent.id ?? talent.spellId ?? (t + 1) * 1000 + i + 1,
-            rank: talent.rank ?? 1,
+            rank: talent.rank ?? 0,
             name: talent.name.slice(0, 64),
             tree: t,
         })),

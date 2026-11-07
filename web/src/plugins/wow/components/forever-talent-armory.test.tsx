@@ -75,3 +75,21 @@ describe('TalentDisplay — Forever never hits the Classic renderer (AC8)', () =
         expect(screen.queryByText('No talent data')).toBeNull();
     });
 });
+
+describe('ForeverTalentDisplay — points come from the tree totals', () => {
+    it('header shows the tree total when the converter dropped an id-less node', () => {
+        const value = dto('blizzard', [{ nodeId: 99, rank: 2, name: 'Forever Only Talent', tree: 0 }]);
+        const trees = value.trees.map((t) => (t.index === 0 ? { ...t, spent: 6 } : t));
+        renderTalents({ ...value, trees });
+        expect(screen.getByText('6 points')).toBeInTheDocument();
+        expect(screen.queryByText('2 points')).toBeNull();
+    });
+
+    it('list summary uses the tree total when every node was dropped', () => {
+        const value = dto('blizzard', []);
+        const trees = value.trees.map((t) => (t.index === 1 ? { ...t, spent: 5 } : t));
+        renderTalents({ ...value, trees });
+        expect(screen.getAllByText('5 points').length).toBeGreaterThan(0);
+        expect(screen.getByText('5 points in 0 talents')).toBeInTheDocument();
+    });
+});
