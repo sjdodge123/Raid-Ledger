@@ -188,6 +188,22 @@ const lastAudit = async () => {
   return nonEmpty(rows, 'roster audit')[0].metadata;
 };
 
+/** The columns a sync must never touch on an existing row (review MINOR 12). */
+async function untouchedCols(ids: readonly number[]) {
+  return (await allRows())
+    .filter((r) => ids.includes(r.id))
+    .sort((a, b) => a.id - b.id)
+    .map((r) => ({
+      id: r.id,
+      guid: r.guid,
+      publicNote: r.publicNote,
+      onlineAtExport: r.onlineAtExport,
+      lastOnlineDays: r.lastOnlineDays,
+      capturedByUserId: r.capturedByUserId,
+      source: r.source,
+    }));
+}
+
 /** API view of the 5-member seed minus Member4, plus a newcomer. */
 const fourPlusOne = () => [
   apiMember('Ana'),
@@ -219,8 +235,12 @@ afterEach(async () => {
 describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
   it('(1) 4 of 5 + 1 new → 5 live, 1 not live, 0 deleted, no deactivation', async () => {
     const { guild } = await seedGuild(addonRoster(5));
+    const ids = (await allRows()).map((r) => r.id);
+    expect(ids).toHaveLength(5);
+    const before = await untouchedCols(ids);
     stubRoster(fourPlusOne());
     expect((await sync(guild.id)).status).toBe('ok');
+    expect(await untouchedCols(ids)).toEqual(before);
     expect(await liveNames(guild.id)).toEqual(
       ['Ana', 'Member1', 'Member2', 'Member3', 'Newbie'].sort(),
     );
@@ -349,5 +369,18 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
       .from(schema.notifications)
       .where(eq(schema.notifications.title, ROSTER_FLAG_TITLE));
     expect(flags).toEqual([]);
+  });
+
+  it('(10) empty 200 → skipped_empty, live set and last_snapshot_at unchanged, no audit', async () => {
+    const { guild } = await seedGuild(addonRoster(5));
+    const live = await liveNames(guild.id);
+    const audits = await auditCount();
+    stubRoster([]);
+    expect(await sync(guild.id)).toEqual({ status: 'skipped_empty' });
+    expect(await liveNames(guild.id)).toEqual(live);
+    const stored = await guildRow(guild.id);
+    expect(stored.blizzardRosterStatus).toBe('skipped_empty');
+    expect(stored.lastSnapshotAt).toEqual(guild.lastSnapshotAt);
+    expect(await auditCount()).toBe(audits);
   });
 });
