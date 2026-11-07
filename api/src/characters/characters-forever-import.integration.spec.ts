@@ -39,6 +39,7 @@ const ROUTES: Record<string, string> = {
   [`${CHAR}/character-media${NS}`]: 'media.json',
   [`${CHAR}/equipment${NS}`]: 'equipment.json',
   [`${CHAR}/professions${NS}`]: 'professions.json',
+  [`${CHAR}/specializations${NS}`]: 'specializations.json',
 };
 
 const json = (body: unknown, status = 200): Response =>
@@ -384,5 +385,26 @@ describe('Forever Armory kill switch off (ROK-1722)', () => {
       .from(schema.characters)
       .where(eq(schema.characters.id, id));
     expect(row?.level).toBe(1);
+  });
+});
+
+describe('Forever Blizzard talents on the character page (ROK-2110)', () => {
+  it('GET /characters/:id renders the stored Blizzard talents as the Forever DTO', async () => {
+    const { token } = await memberToken('forevertalents');
+    const created = await importAs(token);
+    expect(created.status).toBe(201);
+    const res = await testApp.request
+      .get(`/characters/${String(created.body.id)}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.talents).toMatchObject({
+      format: 'forever',
+      source: 'blizzard',
+      layout: 'grid',
+      trees: [
+        { index: 0, spent: 8, name: 'Arms' },
+        { index: 1, spent: 2, name: 'Fury' },
+      ],
+    });
   });
 });
