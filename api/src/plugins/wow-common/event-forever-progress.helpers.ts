@@ -99,7 +99,12 @@ export function buildMembers(
     const eff = sources.get(s.characterId);
     if (!eff) return [];
     const capturedAt = eff.capturedAt.toISOString();
-    const snapshot = { quests: eff.quests, capturedAt, source: eff.source };
+    const snapshot: AddonQuestSnapshot = {
+      quests: eff.quests,
+      capturedAt,
+      source: eff.source,
+      inProgressAsOf: eff.inProgressAsOf?.toISOString(),
+    };
     return [{ ...s, snapshot }];
   });
 }

@@ -68,6 +68,7 @@ function signupProgress(
             quests,
             capturedAt: snap.capturedAt.toISOString(),
             source: snap.source,
+            inProgressAsOf: snap.inProgressAsOf?.toISOString(),
           },
           input.quests.knownIds,
           s.userId,
