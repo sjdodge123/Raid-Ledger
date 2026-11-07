@@ -118,26 +118,50 @@ describe('google.helpers (adversarial)', () => {
       );
     });
 
-    it('passes API key as query parameter', async () => {
+    // ROK-2117: a `?key=` URL lands verbatim in Sentry's fetch breadcrumbs,
+    // so the key travels only in the documented `x-goog-api-key` header.
+    it('sends the API key in the x-goog-api-key header', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: jest.fn().mockResolvedValue({}),
       });
       await fetchGemini('my-api-key', '/v1beta/models');
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('key=my-api-key'),
-        expect.any(Object),
-      );
+      const [url, options] = (global.fetch as jest.Mock).mock.calls[0] as [
+        string,
+        RequestInit & { headers: Record<string, string> },
+      ];
+      expect(options.headers['x-goog-api-key']).toBe('my-api-key');
+      expect(options.headers['Content-Type']).toBe('application/json');
+      expect(url).not.toContain('key=');
+      expect(url).not.toContain('my-api-key');
     });
 
-    it('appends key param correctly when path has no query', async () => {
+    it('leaves the request URL exactly the base plus the path', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: jest.fn().mockResolvedValue({}),
       });
-      await fetchGemini('k', '/v1beta/models');
+      await fetchGemini('k', '/v1beta/models?pageSize=50');
       const url = (global.fetch as jest.Mock).mock.calls[0][0] as string;
-      expect(url).toContain('?key=k');
+      expect(url).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/models?pageSize=50',
+      );
+    });
+
+    it('POSTs the JSON body with the key header', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({}),
+      });
+      await fetchGemini('k', '/v1beta/models/m:generateContent', { a: 1 });
+      const [url, options] = (global.fetch as jest.Mock).mock.calls[0] as [
+        string,
+        RequestInit & { headers: Record<string, string> },
+      ];
+      expect(options.method).toBe('POST');
+      expect(options.body).toBe('{"a":1}');
+      expect(options.headers['x-goog-api-key']).toBe('k');
+      expect(url).not.toContain('key=');
     });
   });
 
