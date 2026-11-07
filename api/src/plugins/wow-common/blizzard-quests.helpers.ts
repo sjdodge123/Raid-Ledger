@@ -94,9 +94,18 @@ async function requestCompleted(
     logger.warn(`Quests fetch failed for ${characterPath}: ${res.status}`);
     return null;
   }
-  const parsed = parseCompletedQuests(await res.json());
+  const body: unknown = await res.json();
+  const parsed = parseCompletedQuests(body);
   if (parsed === null) {
-    logger.warn(`Quests body for ${characterPath} had no quests array`);
+    // An empty completed list is a normal outcome (new character); only a
+    // missing/unparseable `quests` array is worth a warning.
+    if (RawCompletedSchema.safeParse(body).success) {
+      logger.debug?.(
+        `Quests list for ${characterPath} is empty — leaving prior value`,
+      );
+    } else {
+      logger.warn(`Quests body for ${characterPath} had no quests array`);
+    }
   }
   return parsed;
 }

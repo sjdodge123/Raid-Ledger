@@ -10,7 +10,10 @@ import { REWARD_TO_EQUIP_SLOT, formatGold } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
-/** The viewer's chain state for this quest + its quest data date: addon snapshot or Armory list (ROK-1748, ROK-2109). */
+/**
+ * The viewer's chain state for this quest + its quest data date: addon
+ * snapshot or Armory list (ROK-1748, ROK-2109).
+ */
 export interface QuestCardPrereqs { state: QuestPrereqState; asOf: string | null }
 
 interface QuestCardProps {
