@@ -54,8 +54,15 @@ export type CharacterQuestInstanceGroup = z.infer<typeof CharacterQuestInstanceG
 
 /** GET /plugins/wow/characters/:id/quests body (when shown). */
 export const CharacterQuestsDtoSchema = z.object({
-    source: z.literal('addon'),
+    /** Where the completed list came from: LedgerLink or the Armory sync (ROK-2109). */
+    source: z.enum(['addon', 'blizzard']),
+    /** Capture time of the winning completed list. */
     syncedAt: z.string().datetime(),
+    /**
+     * ROK-2109: capture time of the in-progress log (always the addon's);
+     * null when only Armory data exists (no quest log). Absent on old bodies.
+     */
+    inProgressSyncedAt: z.string().datetime().nullable().optional(),
     inProgress: z.array(CharacterQuestLogEntrySchema),
     completedKnown: z.array(CharacterQuestInstanceGroupSchema),
     counts: z.object({
