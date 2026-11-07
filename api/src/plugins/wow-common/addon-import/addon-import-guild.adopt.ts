@@ -12,6 +12,30 @@ import type { AddonApplyContext } from './addon-import-apply.types';
  * GUID-less row of the same lower(name) (newest `last_seen_at` first).
  */
 
+/**
+ * Review r2 NIT — the ONE rule for "may this incoming GUID adopt a GUID-less
+ * row": only when no stored row of the guild (live or not) has it. Shared by
+ * {@link pickAdoptions} and the roster guard so their counts cannot drift.
+ */
+export function isAdoptableGuid(
+  stored: ReadonlySet<string>,
+  guid: string,
+): boolean {
+  return !stored.has(guid);
+}
+
+/** Every GUID a guild stores (live or not). */
+export async function storedGuids(
+  tx: AddonApplyContext['tx'],
+  guildId: number,
+): Promise<Set<string>> {
+  const rows = await tx
+    .select({ guid: guildMembers.guid })
+    .from(guildMembers)
+    .where(eq(guildMembers.guildId, guildId));
+  return new Set(rows.flatMap((r) => (r.guid === null ? [] : [r.guid])));
+}
+
 /** The stored columns adoption reads. */
 export interface AdoptableRow {
   id: number;
@@ -61,7 +85,7 @@ export function pickAdoptions(
   const byName = guidlessByName(rows);
   const out: Adoption[] = [];
   for (const m of members) {
-    if (known.has(m.guid)) continue;
+    if (!isAdoptableGuid(known, m.guid)) continue;
     const row = byName.get(key(m.name))?.shift();
     if (row === undefined) continue;
     known.add(m.guid);

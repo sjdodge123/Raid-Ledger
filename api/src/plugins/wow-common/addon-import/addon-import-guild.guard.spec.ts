@@ -1,3 +1,4 @@
+import { isAdoptableGuid } from './addon-import-guild.adopt';
 /**
  * ROK-1794 — the pure halves of the guild-snapshot guard. The DB-backed rules
  * (exporter on the roster, flagged wholesale change, audit row) are proven in
@@ -131,6 +132,23 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
     expect(m.counted.map((r) => r.id)).toEqual([1, 3, 4]);
     expect(m.gone.map((r) => r.id)).toEqual([4]);
     expect(m.added).toBe(1);
+  });
+
+  it('by GUID with names: a GUID a NOT-live row stores adopts nothing, like pickAdoptions (r2 NIT)', () => {
+    const rows = [row(1, 'g1'), row(3, null, 'Blizz')];
+    const presence = {
+      by: 'guid' as const,
+      guids: new Set(['g1', 'g7']),
+      names: new Map([
+        ['g1', 'm1'],
+        ['g7', 'blizz'],
+      ]),
+    };
+    const m = rosterMovement(rows, presence, new Set(['g1', 'g7']));
+    expect(m.gone.map((r) => r.id)).toEqual([3]);
+    expect(m.added).toBe(1);
+    const adoptable = (g: string) => isAdoptableGuid(new Set(['g1', 'g7']), g);
+    expect(adoptable('g7')).toBe(false);
   });
 
   it('by GUID with names: one incoming name keeps at most one GUID-less row', () => {

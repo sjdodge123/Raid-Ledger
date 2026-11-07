@@ -3,6 +3,7 @@
  * against a real database with a stubbed `BlizzardService`: 200 summary,
  * concurrent second call 409, kill switch off 403, no slug 404. Fleet-only.
  */
+import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
@@ -161,5 +162,34 @@ describe('POST /plugins/wow/guilds/:id/blizzard-roster/sync (ROK-1928 C3)', () =
     fetchSpy.mockRejectedValue(new Error('upstream 503'));
     const res = await post(id);
     expect(res.status).toBe(502);
+    expect(JSON.stringify(res.body)).not.toContain('upstream 503');
+  });
+
+  it('403 for a signed-in member who is not a guild editor', async () => {
+    const id = await insertGuild('ye-olde-guild');
+    const email = `member${Date.now()}@test.local`;
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: 'mem',
+          role: 'member',
+        })
+        .returning(),
+      'member',
+    );
+    const passwordHash = await bcrypt.hash('TestPassword123!', 4);
+    await testApp.db
+      .insert(schema.localCredentials)
+      .values({ email, passwordHash, userId: user.id });
+    const auth = await testApp.request
+      .post('/auth/local')
+      .send({ email, password: 'TestPassword123!' });
+    const res = await testApp.request
+      .post(syncUrl(id))
+      .set('Authorization', `Bearer ${String(auth.body.access_token)}`);
+    expect(res.status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

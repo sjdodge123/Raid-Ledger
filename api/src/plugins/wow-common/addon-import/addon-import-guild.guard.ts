@@ -5,7 +5,12 @@ import * as schema from '../../../drizzle/schema';
 import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
 import { lockGuildName } from './addon-import.locks';
-import { adoptionKey, matchGuidlessRows } from './addon-import-guild.adopt';
+import {
+  adoptionKey,
+  isAdoptableGuid,
+  matchGuidlessRows,
+  storedGuids,
+} from './addon-import-guild.adopt';
 import {
   fromUnix,
   type AddonApplyContext,
@@ -168,12 +173,15 @@ export interface RosterMovement {
 /**
  * Pure. By id, every live row counts and a member matched to a not-live row
  * counts as added. By GUID, see {@link movementByGuid}.
+ * @param stored - Every GUID the guild stores (live or not); only GUIDs
+ *   outside it may adopt a GUID-less row. Defaults to the live GUIDs.
  */
 export function rosterMovement(
   live: LiveRosterRow[],
   presence: RosterPresence,
+  stored?: ReadonlySet<string>,
 ): RosterMovement {
-  if (presence.by === 'guid') return movementByGuid(live, presence);
+  if (presence.by === 'guid') return movementByGuid(live, presence, stored);
   const kept = live.filter((r) => presence.ids.has(r.id)).length;
   const gone = live.filter((r) => !presence.ids.has(r.id));
   return { counted: live, gone, added: presence.members - kept };
@@ -188,9 +196,10 @@ export function rosterMovement(
 function movementByGuid(
   live: LiveRosterRow[],
   presence: Extract<RosterPresence, { by: 'guid' }>,
+  stored?: ReadonlySet<string>,
 ): RosterMovement {
   const withGuid = live.filter((r) => r.guid !== null);
-  const liveGuids = new Set(withGuid.map((r) => r.guid));
+  const liveGuids = new Set(withGuid.flatMap((r) => r.guid ?? []));
   const fresh = [...presence.guids].filter((g) => !liveGuids.has(g));
   const gone = withGuid.filter(
     (r) => r.guid !== null && !presence.guids.has(r.guid),
@@ -199,7 +208,10 @@ function movementByGuid(
   if (names === undefined) {
     return { counted: withGuid, gone, added: fresh.length };
   }
-  const freshKeys = fresh.flatMap((g) => names.get(g) ?? []);
+  const known = stored ?? liveGuids;
+  const freshKeys = fresh
+    .filter((g) => isAdoptableGuid(known, g))
+    .flatMap((g) => names.get(g) ?? []);
   const m = matchGuidlessRows(
     live.filter((r) => r.guid === null),
     freshKeys,
@@ -298,7 +310,9 @@ async function measureRosterChange(
   countRemovals: boolean,
 ): Promise<RosterCheck> {
   const { guildId } = input;
-  const m = rosterMovement(await liveRoster(tx, guildId), input.presence);
+  const liveRows = await liveRoster(tx, guildId);
+  const stored = await storedGuids(tx, guildId);
+  const m = rosterMovement(liveRows, input.presence, stored);
   const gone = countRemovals ? m.gone : [];
   const delta = { removed: gone.length, added: m.added };
   const dropsEditor = gone.some((r) => r.grantId !== null);
