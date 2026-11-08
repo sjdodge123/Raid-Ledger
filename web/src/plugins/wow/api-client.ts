@@ -23,6 +23,7 @@ import type {
     WowForeverRealmRulesetsDto,
     GuildIngameText,
     PutGuildIngameText,
+    IngameTextFieldKey,
 } from '@raid-ledger/contract';
 import {
     GuildIngameTextSchema,
@@ -249,4 +250,20 @@ export async function fetchGuildIngameText(guildId: number): Promise<GuildIngame
  */
 export async function putGuildIngameText(guildId: number, body: PutGuildIngameText): Promise<GuildIngameText> {
     return fetchApi(guildIngameTextPath(guildId), { method: 'PUT', body: JSON.stringify(body) }, GuildIngameTextSchema);
+}
+
+/** ROK-2137 — what an editor does with a "Changed in game" field. */
+export type GuildGameTextAction = 'adopt' | 'push';
+
+/**
+ * ROK-2137 — editors act on a "Changed in game" field: `adopt` copies the
+ * in-game text into the hub, `push` keeps the hub text. Both return the full
+ * DTO; a field the game never reported is a 409 (`NO_GAME_REPORT`).
+ */
+export async function postGuildIngameGameAction(
+    guildId: number,
+    field: IngameTextFieldKey,
+    action: GuildGameTextAction,
+): Promise<GuildIngameText> {
+    return fetchApi(`${guildIngameTextPath(guildId)}/${field}/${action}`, { method: 'POST' }, GuildIngameTextSchema);
 }

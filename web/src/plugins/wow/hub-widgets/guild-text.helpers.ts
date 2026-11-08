@@ -30,6 +30,19 @@ export const WARNING_COPY: Record<IngameTextWarning, string> = {
 
 export const CONTROL_CHAR_COPY = 'Remove tabs and other invisible characters — the game box can’t take them.';
 
+/** ROK-2137 — the editor-only "Changed in game" notice copy. */
+export const GAME_NOTICE_COPY = {
+    heading: 'Changed in game',
+    empty: 'The in-game box is empty.',
+    adopt: 'Use in-game text',
+    keep: 'Keep hub text',
+    keptHint: 'Hub text kept — use Copy for in-game to put it back in the game.',
+    showAll: 'Show all',
+    showLess: 'Show less',
+    adoptError: 'Could not use the in-game text',
+    keepError: 'Could not keep the hub text',
+} as const;
+
 export const FIELD_KEYS: readonly IngameTextFieldKey[] = ['motd', 'info'];
 
 export interface GuildTextDraft { motd: string; info: string }
