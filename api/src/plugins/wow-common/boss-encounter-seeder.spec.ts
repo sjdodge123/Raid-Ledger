@@ -64,8 +64,8 @@ async function setupEach() {
 
   // Mock for select().from() — returns boss rows for loot FK resolution
   const mockFrom = jest.fn().mockResolvedValue([
-    { id: 1, name: 'Ragnaros', expansion: 'classic' },
-    { id: 2, name: 'Lucifron', expansion: 'classic' },
+    { id: 1, instanceId: 409, name: 'Ragnaros', expansion: 'classic' },
+    { id: 2, instanceId: 409, name: 'Lucifron', expansion: 'classic' },
   ]);
 
   mockDb = {
