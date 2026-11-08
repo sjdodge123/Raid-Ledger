@@ -15,7 +15,8 @@ import type {
   AddonApplyContext,
   AddonSectionOutcome,
 } from './addon-import-apply.types';
-import { applyChar, previewChar } from './addon-import-char.apply';
+import { previewChar } from './addon-import-char.apply';
+import { applyCharThenMailworthy } from './addon-import-char.mailworthy';
 import { applyGuild, previewGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
 
@@ -110,7 +111,9 @@ export function runSection(
 ): Promise<AnyOutcome> {
   const { payload, pages } = decoded;
   if (payload.section === 'char') {
-    return dryRun ? previewChar(ctx, payload) : applyChar(ctx, payload);
+    return dryRun
+      ? previewChar(ctx, payload)
+      : applyCharThenMailworthy(ctx, payload);
   }
   if (payload.section === 'guild') {
     return dryRun
