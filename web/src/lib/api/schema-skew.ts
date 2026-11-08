@@ -8,6 +8,12 @@
  * problem, the payload is a superset of what this bundle understands: drop
  * those keys and accept the rest. Any other issue (wrong type, missing field)
  * is a real shape error and still throws — the schemas themselves stay strict.
+ *
+ * Unions: a `z.discriminatedUnion`, and a plain `z.union` where only ONE
+ * branch fails solely on unknown keys, both surface plain `unrecognized_keys`
+ * issues and recover. A plain `z.union` where two or more branches fail only
+ * on extra/optional keys reports `invalid_union` instead; that is not
+ * stripped and throws exactly as before (fails safe).
  */
 import type { z } from 'zod';
 import { toast } from 'sonner';
@@ -21,7 +27,14 @@ export const VERSION_SKEW_NOTICE = 'A new version of Raid Ledger is available.';
 export const VERSION_SKEW_ACTION = 'Reload';
 const VERSION_SKEW_TOAST_ID = 'app-version-skew';
 
+const SKEW_MESSAGE = 'Response carried fields this bundle does not know';
+
 let noticeShown = false;
+
+/** Test-only: re-arm the once-per-page-load notice. */
+export function resetVersionSkewNoticeForTests(): void {
+    noticeShown = false;
+}
 
 function isUnrecognizedKeys(issue: ZodIssue): issue is UnrecognizedKeysIssue {
     return issue.code === 'unrecognized_keys';
@@ -58,23 +71,38 @@ export function stripUnrecognizedKeys(data: unknown, issues: readonly ZodIssue[]
     return copy;
 }
 
+/** `a.0.b` + `c` → `a[].b.c`: one entry per field, not one per array row. */
+function keyPath(path: readonly PropertyKey[], key: string): string {
+    return [...path, key]
+        .map((seg) => (typeof seg === 'number' ? '[]' : String(seg)))
+        .join('.')
+        .replaceAll('.[]', '[]');
+}
+
+function skewedKeys(issues: readonly ZodIssue[]): string[] {
+    const keys = issues.flatMap((issue) =>
+        isUnrecognizedKeys(issue) ? issue.keys.map((k) => keyPath(issue.path, k)) : [],
+    );
+    return [...new Set(keys)].sort();
+}
+
 /**
- * Records the skew as a Sentry breadcrumb (context for any later error — not
- * an event of its own) and, once per page load, offers a reload via the
- * shared `sonner` toast so the tab picks up the new bundle.
+ * Records the skew as a Sentry breadcrumb on every call and, once per page
+ * load, as a warning-level Sentry message (endpoint + key paths, never
+ * values — a same-version server leaking a field stays visible) plus a
+ * `sonner` toast offering a reload so the tab picks up the new bundle.
  */
 export function reportVersionSkew(endpoint: string, issues: readonly ZodIssue[]): void {
-    const keys = issues.flatMap((issue) =>
-        isUnrecognizedKeys(issue) ? issue.keys.map((k) => [...issue.path, k].join('.')) : [],
-    );
+    const keys = skewedKeys(issues);
     Sentry.addBreadcrumb({
         category: 'schema-skew',
         level: 'warning',
-        message: 'Response carried fields this bundle does not know',
+        message: SKEW_MESSAGE,
         data: { endpoint, keys },
     });
     if (noticeShown) return;
     noticeShown = true;
+    Sentry.captureMessage(SKEW_MESSAGE, { level: 'warning', extra: { endpoint, keys } });
     toast.info(VERSION_SKEW_NOTICE, {
         id: VERSION_SKEW_TOAST_ID,
         duration: Infinity,

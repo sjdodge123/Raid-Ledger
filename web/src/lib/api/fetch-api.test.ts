@@ -5,12 +5,14 @@ import { z } from 'zod';
 import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
+import { resetVersionSkewNoticeForTests } from './schema-skew';
 import { AUTH_METHOD_KEY } from './auth-storage-keys';
 import { errorBodyOf, httpStatusOf, isConflictError } from './api-error';
 import { setAccessToken, getAccessToken } from './access-token-store';
 
 const captureExceptionMock = vi.fn();
 const addBreadcrumbMock = vi.fn();
+const captureMessageMock = vi.fn();
 const toastInfoMock = vi.fn();
 
 // Mutable stored access token so tests can exercise the ROK-1409 pre-flight
@@ -21,6 +23,7 @@ vi.mock('../../sentry', () => ({
     Sentry: {
         captureException: (...args: unknown[]) => captureExceptionMock(...args),
         addBreadcrumb: (...args: unknown[]) => addBreadcrumbMock(...args),
+        captureMessage: (...args: unknown[]) => captureMessageMock(...args),
     },
 }));
 
@@ -135,7 +138,9 @@ describe('fetchApi — version skew tolerance (ROK-2116)', () => {
     beforeEach(() => {
         captureExceptionMock.mockClear();
         addBreadcrumbMock.mockClear();
+        captureMessageMock.mockClear();
         toastInfoMock.mockClear();
+        resetVersionSkewNoticeForTests();
     });
 
     it('resolves with the parsed data when the only issues are keys this bundle does not know, and notices once', async () => {
@@ -161,6 +166,14 @@ describe('fetchApi — version skew tolerance (ROK-2116)', () => {
             }),
         );
         expect(toastInfoMock).toHaveBeenCalledTimes(1);
+        expect(captureMessageMock).toHaveBeenCalledTimes(1);
+        expect(captureMessageMock).toHaveBeenCalledWith(
+            'Response carried fields this bundle does not know',
+            expect.objectContaining({
+                level: 'warning',
+                extra: { endpoint: '/guilds/mine', keys: ['crest', 'guild.motd'] },
+            }),
+        );
         const [message, opts] = at(toastInfoMock.mock.calls, 0);
         expect(message).toBe('A new version of Raid Ledger is available.');
         expect((opts as { action: { label: string } }).action.label).toBe('Reload');
@@ -177,6 +190,7 @@ describe('fetchApi — version skew tolerance (ROK-2116)', () => {
         );
         expect(captureExceptionMock).toHaveBeenCalledTimes(1);
         expect(toastInfoMock).not.toHaveBeenCalled();
+        expect(captureMessageMock).not.toHaveBeenCalled();
     });
 });
 

@@ -713,7 +713,7 @@ tint. The token banners and the neutral panel flip with the theme. Keep body cop
 ### 4.8 Toasts
 
 **DO** — `sonner`'s `toast.success` / `toast.error` for the result of an action the user took;
-`CopyButton`'s `copyWithToast` is the reference. **DON'T** toast what the UI already shows, or use a toast
+`CopyButton`'s `copyWithToast` is the reference. `toast.info` only for the system version-skew notice below. **DON'T** toast what the UI already shows, or use a toast
 for an error the user must act on — that needs inline text beside the control.
 
 **One system toast (ROK-2116):** when an open tab's bundle is older than the API (a response carries
