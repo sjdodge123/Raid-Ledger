@@ -145,6 +145,8 @@ export const ForeverProbeCellSchema = z.object({
     endpoint: ForeverProbeEndpointSchema,
     status: z.number().int().nullable(),
     error: z.string().optional(),
+    /** ROK-2143: which id a per-id endpoint probed (the shape key, e.g. `quest:378`). */
+    target: z.string().optional(),
 });
 export type ForeverProbeCellDto = z.infer<typeof ForeverProbeCellSchema>;
 
@@ -193,15 +195,25 @@ export type ForeverProbeDeepKeysShapeDto = z.infer<typeof ForeverProbeDeepKeysSh
  * ROK-2143: a values shape for public static game data (quests, quest areas,
  * items) — flattened leaf paths (`rewards.experience`,
  * `rewards.items[0].item.name`) to their values. Links/hrefs are dropped,
- * localized names collapse to `en_US`. Never used for profile data.
+ * localized names collapse to `en_US`. Never used for profile data. Keeps at
+ * most 120 values; `entryCount` counts every leaf, so it can exceed the kept count.
  */
+/** ROK-2143: most flattened leaf values one values shape keeps. */
+export const FOREVER_PROBE_MAX_VALUE_ENTRIES = 120;
+
 export const ForeverProbeValuesShapeSchema = z.object({
     topLevelKeys: z.array(z.string()),
     entryCount: z.number().int().nonnegative(),
-    values: z.record(
-        z.string(),
-        z.union([z.string().max(200), z.number(), z.boolean(), z.null()]),
-    ),
+    values: z
+        .record(
+            z.string(),
+            z.union([z.string().max(200), z.number(), z.boolean(), z.null()]),
+        )
+        .refine((v) => Object.keys(v).length <= FOREVER_PROBE_MAX_VALUE_ENTRIES, {
+            message: `At most ${FOREVER_PROBE_MAX_VALUE_ENTRIES} values`,
+        }),
+    /** True when nesting past the depth limit was dropped (counted in `entryCount`, not kept). */
+    truncated: z.boolean().optional(),
 });
 export type ForeverProbeValuesShapeDto = z.infer<typeof ForeverProbeValuesShapeSchema>;
 
