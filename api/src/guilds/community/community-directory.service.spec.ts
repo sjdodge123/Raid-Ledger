@@ -76,6 +76,7 @@ describe('CommunityDirectoryService.list', () => {
     expect(listMock).toHaveBeenCalledWith(expect.anything(), 9, QUERY, {
       kinds: ['wow_guild', 'game_server', 'game_community'],
       memberIds: [4, 5],
+      visitorIds: [],
       staff: false,
     });
     expect(page.kinds).toEqual(['wow_guild', 'game_server', 'game_community']);
@@ -89,6 +90,7 @@ describe('CommunityDirectoryService.list', () => {
     expect(scope).toEqual({
       kinds: ['game_server'],
       memberIds: [],
+      visitorIds: [],
       staff: true,
     });
     expect(page.kinds).toEqual(['game_server', 'game_community']);
@@ -126,6 +128,7 @@ describe('CommunityDirectoryService.byGame (ROK-1883)', () => {
       {
         kinds: ['wow_guild', 'game_server', 'game_community'],
         memberIds: [3],
+        visitorIds: [],
         staff: false,
       },
       { joinedFirst: true },
@@ -151,6 +154,7 @@ describe('CommunityDirectoryService.byGame (ROK-1883)', () => {
     expect(listMock.mock.calls[0]?.[3]).toEqual({
       kinds: ['game_community'],
       memberIds: [],
+      visitorIds: [],
       staff: true,
     });
   });

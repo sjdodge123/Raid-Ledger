@@ -7,7 +7,8 @@ import * as schema from '../../drizzle/schema';
  * ROK-1875 D8/D9 — which hubs `GET /hubs` (and, since ROK-1883, the game
  * page's `GET /hubs/by-game/:gameId`) may list for a viewer, per kind.
  * Membership for non-community kinds arrives as an id list from the hub-kind
- * adapters (core never imports plugin predicates — ROK-1733 boundary).
+ * adapters (core never imports plugin predicates — ROK-1733 boundary); so do
+ * the hubs a kind shows to non-members (ROK-2132 `visitorIds`).
  */
 
 const g = schema.guilds;
@@ -24,6 +25,12 @@ export interface DirectoryScope {
   kinds: GuildKind[];
   /** Hub ids the viewer belongs to, unioned over every live adapter. */
   memberIds: number[];
+  /**
+   * ROK-2132 Ruling 2: non-community hub ids listed to this viewer as a
+   * non-member (adapter `visitorVisibleGroupIds`, e.g. claimable Forever
+   * guilds). Never counted as joined.
+   */
+  visitorIds: number[];
   /** Admin / operator (`isStaff`): sees hidden hubs, flagged `hidden`. */
   staff: boolean;
 }
@@ -44,7 +51,8 @@ function kindBranch(kind: GuildKind, scope: DirectoryScope): SQL | undefined {
     return and(eq(g.kind, kind), eq(g.status, 'active'), notHidden);
   }
   if (kind === 'game_server') return and(eq(g.kind, kind), notHidden);
-  const gate = scope.staff ? undefined : idIn(scope.memberIds);
+  const listed = [...new Set([...scope.memberIds, ...scope.visitorIds])];
+  const gate = scope.staff ? undefined : idIn(listed);
   return and(eq(g.kind, kind), notHidden, gate);
 }
 
