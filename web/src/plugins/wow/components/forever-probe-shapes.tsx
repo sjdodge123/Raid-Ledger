@@ -64,7 +64,7 @@ function shapeEntries(shapes: Record<string, unknown>): ShapeEntry[] {
     return out;
 }
 
-/** Collapsed list of the probe's response shapes (top-level keys only); null when there are none. */
+/** Collapsed list of the probe's response shapes (keys; values for public quest + item data); null when there are none. */
 export function ForeverProbeShapes({
     shapes,
 }: {
@@ -74,7 +74,7 @@ export function ForeverProbeShapes({
     if (entries.length === 0) return null;
     return (
         <ScrollCollapsible
-            title="Response shapes (top-level keys only)"
+            title="Response shapes (keys; values for quest + item data)"
             className="text-sm"
         >
             <ul
