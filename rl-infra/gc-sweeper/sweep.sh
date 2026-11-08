@@ -875,6 +875,31 @@ docker image prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker volume prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 
+# 3a. ROK-2111 — interval disk retention. The ladder below only fires at
+# RL_DISK_PRUNE_PCT, so between alarms the host silted up with stopped
+# containers, unused images and runner /tmp + npm caches. Every
+# RL_DISK_RETENTION_INTERVAL_HOURS (6) regardless of used%: stopped containers
+# > 24h (never rl.role=env/runner/infra, never the rl-infra compose project),
+# unused images > 48h (never one a container or env row references), and
+# /tmp + npm cache on runners with no claim/task/admission entry (never
+# /root/.cache). Runs here because only the sweeper has the raw docker socket —
+# the proxies refuse /containers/prune. RL_DISK_RETENTION_DRY_RUN defaults to
+# 1 (report only). Best-effort: the lib always returns 0 with a JSON summary.
+DISK_RETENTION_LIB="${DISK_RETENTION_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_disk_retention.sh}"
+if [[ -r "$DISK_RETENTION_LIB" ]]; then
+    # shellcheck disable=SC1090
+    source "$DISK_RETENTION_LIB"
+    _dr_err=$(mktemp)
+    DISK_RETENTION_RESULT=$(disk_retention::sweep 2>"$_dr_err" || echo '{}')
+    while IFS= read -r _dr_line; do log "retention: $_dr_line"; done < "$_dr_err"
+    rm -f "$_dr_err"
+    if [[ "$(jq -r '.skipped // empty' <<<"$DISK_RETENTION_RESULT" 2>/dev/null)" != "interval" ]]; then
+        audit disk_retention "$DISK_RETENTION_RESULT"
+    fi
+else
+    log "retention: library not found at $DISK_RETENTION_LIB — skipping interval retention"
+fi
+
 # 3b. ROK-1568 — host disk pressure ladder.
 # The scoped prune above only touches `rl.role=env` objects, which is exactly
 # the disk the fleet does NOT leak. On 2026-09-14 the host hit 98% (240G/245G)
@@ -903,7 +928,7 @@ fi
 # 3b'. 2026-10-26 — registry GC. rl-registry was never garbage-collected (424
 # rl-allinone tags, 134 GB, builds starved of disk). Deletes rl-allinone tags
 # that back no container/env, are older than RL_REGISTRY_RETENTION_HOURS (48)
-# and are not among the newest RL_REGISTRY_KEEP_N (5), then runs `registry
+# and are not among the newest RL_REGISTRY_KEEP_N (15), then runs `registry
 # garbage-collect` in rl-registry, all while holding a `registry_gc` entry in
 # admission.json (no image build is admitted meanwhile — ROK-2018).
 # Interval-gated (RL_REGISTRY_GC_INTERVAL_HOURS, 6); forced when the disk

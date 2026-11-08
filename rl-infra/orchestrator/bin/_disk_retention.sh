@@ -102,7 +102,7 @@ disk_retention::_image_rung() {
     prot=$(disk_retention::_protected_refs "$cj") || return 1
     ids=$(disk_retention::_docker image ls -q --no-trunc 2>/dev/null) || return 1
     [[ -z "$ids" ]] && { echo '{"candidates":[],"removed":0,"bytes":0}'; return 0; }
-    # shellcheck disable=SC2086
+    # shellcheck disable=SC2046
     ij=$(disk_retention::_docker image inspect $(sort -u <<<"$ids") 2>/dev/null | jq -ce 'arrays' 2>/dev/null) || return 1
     cut=$(disk_retention::_cutoff "$RL_DISK_RETENTION_IMAGE_AGE_HOURS")
     doomed=$(jq -c --argjson cut "$cut" --argjson prot "$prot" "$DISK_RETENTION_JQ_EPOCH"'
