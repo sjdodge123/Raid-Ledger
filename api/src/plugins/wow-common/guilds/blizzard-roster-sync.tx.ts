@@ -19,6 +19,12 @@ import {
   rosterUpdatePatch,
   type ExistingRosterRow,
 } from './blizzard-roster-sync.helpers';
+import {
+  identityMismatch,
+  planJunkMerges,
+  withMergesApplied,
+} from './blizzard-roster-sync.identity';
+import { writeJunkMerges } from './blizzard-roster-sync.repair';
 
 /**
  * ROK-1928 §B2 steps 4–10 — apply one fetched Forever roster inside ONE
@@ -49,6 +55,11 @@ export interface RosterApplyResult {
    * (Codex P2-2) — the roster belongs to the old slug, nothing written.
    */
   superseded: boolean;
+  /**
+   * ROK-2139 safety guard: why the roster was refused (it paired fewer than
+   * half of the GUID roster) — nothing written. Null otherwise.
+   */
+  mismatch: string | null;
   updated: number;
   inserted: number;
   flag: RosterFlag | null;
@@ -185,10 +196,30 @@ async function slugStillCurrent(
   return row?.guildSlug === slug;
 }
 
-const NOTHING_WRITTEN = { updated: 0, inserted: 0, flag: null, warnings: [] };
+const NOTHING_WRITTEN = {
+  mismatch: null,
+  updated: 0,
+  inserted: 0,
+  flag: null,
+  warnings: [],
+};
+
+/** ROK-2139 — merge plan, rows as they will be, match, and guard verdict. */
+function planApply(
+  loaded: readonly ExistingRosterRow[],
+  members: readonly ForeverGuildMember[],
+) {
+  const merges = planJunkMerges(loaded);
+  const existing = withMergesApplied(loaded, merges);
+  const match = matchRosterMembers(existing, members);
+  const ids = new Set(match.matched.map((m) => m.existingId));
+  return { merges, existing, match, mismatch: identityMismatch(existing, ids) };
+}
 
 /**
- * Steps 4–10. The caller has already ruled out 404 / error / empty.
+ * Steps 4–10. The caller has already ruled out 404 / error / empty. Junk
+ * rows from an earlier sync are merged first; a roster that pairs fewer than
+ * half of the GUID roster writes nothing and returns `mismatch` (ROK-2139).
  * @param tx - The sync transaction.
  * @param guild - The Forever guild being synced.
  * @param slug - The Blizzard slug the roster was fetched for; a different
@@ -207,8 +238,12 @@ export async function applyForeverRoster(
   if (!(await slugStillCurrent(tx, guild.id, slug))) {
     return { stale: false, superseded: true, ...NOTHING_WRITTEN };
   }
-  const existing = await loadExisting(tx, guild.id);
-  const match = matchRosterMembers(existing, members);
+  const plan = planApply(await loadExisting(tx, guild.id), members);
+  const { existing, match, mismatch } = plan;
+  if (mismatch !== null) {
+    return { stale: false, superseded: false, ...NOTHING_WRITTEN, mismatch };
+  }
+  await writeJunkMerges(tx, guild.id, plan.merges);
   const { delta, flag } = await measure(tx, guild.id, match, members.length);
   if (!(await stampGuild(tx, guild.id, members.length, now))) {
     return { stale: true, superseded: false, ...NOTHING_WRITTEN };
@@ -229,6 +264,7 @@ function appliedResult(
   return {
     stale: false,
     superseded: false,
+    mismatch: null,
     updated: match.matched.length,
     inserted: match.unmatched.length,
     flag,

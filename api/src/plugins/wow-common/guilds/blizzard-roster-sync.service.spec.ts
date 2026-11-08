@@ -47,6 +47,7 @@ const ROSTER = {
 const applied = (over: Partial<RosterApplyResult>): RosterApplyResult => ({
   stale: false,
   superseded: false,
+  mismatch: null,
   updated: 1,
   inserted: 0,
   flag: null,
@@ -56,12 +57,20 @@ const applied = (over: Partial<RosterApplyResult>): RosterApplyResult => ({
 
 let service: BlizzardRosterSyncService;
 let order: string[];
+let statusWrites: unknown[];
 const invalidateGuild = jest.fn((id: number) => order.push(`invalidate:${id}`));
 
 beforeEach(async () => {
   order = [];
+  statusWrites = [];
   invalidateGuild.mockClear();
   const db = {
+    update: jest.fn(() => ({
+      set: jest.fn((values: unknown) => {
+        statusWrites.push(values);
+        return { where: jest.fn().mockResolvedValue(undefined) };
+      }),
+    })),
     transaction: jest.fn(async (fn: (tx: string) => Promise<unknown>) => {
       const out = await fn('tx');
       order.push('commit');
@@ -122,6 +131,21 @@ describe('BlizzardRosterSyncService post-apply wiring', () => {
     expect(await service.syncForeverGuildRoster(GUILD.id)).toEqual({
       status: 'stale',
     });
+    expect(invalidateGuild).not.toHaveBeenCalled();
+  });
+
+  it('ROK-2139: a mismatch apply reports the reason, writes status error, invalidates nothing', async () => {
+    const reason = 'matched only 0 of 11';
+    jest
+      .mocked(applyForeverRoster)
+      .mockResolvedValue(applied({ mismatch: reason, updated: 0 }));
+    expect(await service.syncForeverGuildRoster(GUILD.id)).toEqual({
+      status: 'mismatch',
+      reason,
+    });
+    expect(statusWrites).toEqual([
+      expect.objectContaining({ blizzardRosterStatus: 'error' }),
+    ]);
     expect(invalidateGuild).not.toHaveBeenCalled();
   });
 });
