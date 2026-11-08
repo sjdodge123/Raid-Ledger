@@ -12,16 +12,18 @@ import {
   findHubGuild,
   toGuildSummary,
 } from '../../../../guilds/guild-core.queries';
+import { HUB_NOT_FOUND } from '../../../../guilds/hub-hidden.helpers';
 import { isForeverGame } from '../../wow-forever-identity.helpers';
 import { isClaimableGuild } from '../roster-claim/roster-claim.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /**
- * One 404 for every refusal (unknown, hidden, archived, non-Forever), so the
- * route cannot probe which ids are WoW guilds beyond what `/hubs` lists.
+ * One 404 for every refusal (unknown, hidden, archived, non-Forever) — the
+ * same body `HubVisibleGuard` sends — so the route cannot probe which ids are
+ * WoW guilds beyond what `/hubs` lists.
  */
-const NOT_FOUND = 'Guild not found';
+const NOT_FOUND = HUB_NOT_FOUND;
 
 /**
  * ROK-2132 (Ruling 7) — the join gate's read: the Ruling 1 facts of a
