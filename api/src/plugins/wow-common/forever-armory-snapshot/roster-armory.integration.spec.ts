@@ -23,6 +23,7 @@ import { BlizzardService } from '../blizzard.service';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
 import { BlizzardRosterSyncJob } from '../guilds/blizzard-roster-sync.job';
 import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
+import { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
 import { RosterArmoryService } from './roster-armory.service';
 
 const HOUR = 60 * 60 * 1000;
@@ -179,9 +180,13 @@ async function seedSnapshot(
   guildMemberId: number,
   over: Partial<ArmoryInsert> = {},
 ): Promise<void> {
-  await testApp.db
-    .insert(schema.guildMemberArmory)
-    .values({ guildMemberId, blizzardCharacterId: 9001, level: 60, ...over });
+  await testApp.db.insert(schema.guildMemberArmory).values({
+    guildMemberId,
+    blizzardCharacterId: 9001,
+    level: 60,
+    rosterLevel: 60,
+    ...over,
+  });
 }
 
 const armRow = async (memberId: number) =>
@@ -220,7 +225,6 @@ beforeAll(async () => {
   testApp = await getTestApp();
   adapter = testApp.app.get(BlizzardCharacterSyncAdapter);
   settings = testApp.app.get(SettingsService);
-  service = testApp.app.get(RosterArmoryService);
 });
 
 beforeEach(async () => {
@@ -228,6 +232,14 @@ beforeEach(async () => {
   profileIds = new Map([['Ana Forever', '9001']]);
   jest.spyOn(settings, 'isBlizzardConfigured').mockResolvedValue(true);
   stubAdapter();
+  // No 500 ms spacing between fetches: the 150-member cap run stays fast.
+  service = new RosterArmoryService(
+    testApp.db,
+    settings,
+    adapter,
+    testApp.app.get(RosterInsightsCache),
+    () => Promise.resolve(),
+  );
 });
 
 afterEach(async () => {
@@ -255,6 +267,7 @@ describe('a successful pass (AC-1)', () => {
     expect(row).toMatchObject({
       blizzardCharacterId: 9001,
       level: 60,
+      rosterLevel: 60,
       class: 'Paladin',
       race: 'Human',
       spec: 'Holy',
@@ -489,6 +502,7 @@ describe('cap and due rules (AC-7)', () => {
         guildMemberId: m.id,
         blizzardCharacterId: m.bid,
         level: 60,
+        rosterLevel: 60,
         syncedAt: new Date(now - 25 * HOUR - k * 60_000),
       })),
     );
@@ -503,7 +517,7 @@ describe('cap and due rules (AC-7)', () => {
     expect(fetchedNames()).toEqual(expected);
   });
 
-  it('fresh at the same level is not due; a level change, stale age or elapsed retry is', async () => {
+  it('fresh at the same roster level is not due (even if Blizzard lags); a roster level change, stale age or elapsed retry is', async () => {
     const hub = await insertGuild();
     const recent = new Date(Date.now() - HOUR);
     const add = async (
@@ -519,7 +533,19 @@ describe('cap and due rules (AC-7)', () => {
       await seedSnapshot(id, { blizzardCharacterId: bid, ...snap });
     };
     await add('Fresh Forever', 9201, { syncedAt: recent, level: 60 });
-    await add('Dinged Forever', 9202, { syncedAt: recent, level: 59 });
+    // Blizzard still reports 59 but the roster level it was synced at is
+    // unchanged: not due (no re-fetch loop while the Armory lags).
+    await add('Lagging Forever', 9206, {
+      syncedAt: recent,
+      level: 59,
+      rosterLevel: 60,
+    });
+    // The roster moved 59 → 60 since the last sync: due.
+    await add('Dinged Forever', 9202, {
+      syncedAt: recent,
+      level: 59,
+      rosterLevel: 59,
+    });
     await add('Stale Forever', 9203, {
       syncedAt: new Date(Date.now() - 25 * HOUR),
       level: 60,
