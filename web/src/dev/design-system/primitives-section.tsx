@@ -21,6 +21,7 @@ import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-hel
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
+import { RowCapDemo } from './row-cap-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
 
 const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
@@ -187,6 +188,7 @@ export function PrimitivesSection(): JSX.Element {
                 <InputStates />
                 <EmptyAndLoading />
                 <TabRowDemo />
+                <RowCapDemo />
                 <HubRowBitsDemo />
             </StateGrid>
         </Section>

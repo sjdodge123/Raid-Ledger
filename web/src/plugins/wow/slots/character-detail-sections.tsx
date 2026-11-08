@@ -128,6 +128,8 @@ type SectionPanels = Record<'equipment' | 'talents' | 'quests' | 'professions' |
  * empty, and only a non-empty sidebar widens the page (character-detail-page.tsx).
  * Below lg both columns are `display: contents`, so their panels join one stack and
  * `order` moves Quests (then Guild recommends) after the sidebar's reference panels.
+ * Layout A is for every WoW variant, not only Forever (Lead ruling on review MINOR-5): a
+ * variant without the sidebar panels gets the plain stack via the empty-sidebar hide.
  * Quests and Guild recommends are wrapped for that order; `empty:hidden` keeps a
  * wrapper whose panel renders null from leaving a gap. The other panels stay unwrapped.
  */
