@@ -73,12 +73,13 @@ export async function findLinkedMemberRows(
 
 /**
  * ROK-1815: whether any of the viewer's live rows is rank 0 (the GM) in the
- * latest snapshot — the hero's "Guild Master" label. Display only.
+ * latest snapshot — the hero's "Guild Master" label. Display only. ROK-2115
+ * Ruling 1: only a GUID-linked row counts, the same rule as `holdsTopRank`.
  */
 export function holdsGuildMasterRank(
-  rows: Pick<LinkedMemberRow, 'rankIndex'>[],
+  rows: Pick<LinkedMemberRow, 'rankIndex' | 'via'>[],
 ): boolean {
-  return rows.some((r) => r.rankIndex === 0);
+  return rows.some((r) => r.via === 'guid' && r.rankIndex === 0);
 }
 
 /** SQL predicate shared by every linked-member read: active + latest snapshot. */
