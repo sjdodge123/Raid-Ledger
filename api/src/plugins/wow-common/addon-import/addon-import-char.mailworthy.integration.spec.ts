@@ -6,6 +6,7 @@
 import * as bcrypt from 'bcrypt';
 import { asc, eq } from 'drizzle-orm';
 import type {
+  AddonCharExport,
   AddonMailworthy,
   AddonMailworthyGiver,
 } from '@raid-ledger/contract';
@@ -114,6 +115,20 @@ async function importString(s: string, dryRun = false): Promise<number> {
 
 const importBlock = (block: AddonMailworthy, dryRun = false) =>
   importString(buildImportString(buildCharMailworthyPayload(block)), dryRun);
+
+/** Apply a char export; the 200 body's status + summary.mailworthy (Q8). */
+async function importOutcome(payload: AddonCharExport) {
+  const res = await testApp.request
+    .post(`/plugins/wow/characters/${charId}/addon-import`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({ importString: buildImportString(payload), dryRun: false });
+  expect(res.status).toBe(200);
+  const body = res.body as {
+    status: string;
+    summary: { mailworthy?: unknown };
+  };
+  return { status: body.status, mailworthy: body.summary.mailworthy };
+}
 
 async function guildId(): Promise<number> {
   const [g] = nonEmpty(await testApp.db.select().from(schema.guilds), 'guild');
@@ -366,5 +381,84 @@ describe('ROK-2148 — Mailworthy template and peers', () => {
     const m4 = rows.find((p) => p.nameKey === 'member4');
     expect(m4?.lastSeenAt.toISOString()).toBe(later.toISOString());
     expect(rows.some((p) => p.nameKey === 'oldie')).toBe(false);
+  });
+});
+
+describe('ROK-2148 — Mailworthy on a stale char export (T17)', () => {
+  it('a char export older than the stored snapshot still updates givers', async () => {
+    const newer = buildCharPayload({ exportedAt: FIXTURE_EXPORTED_AT + 600 });
+    expect((await importOutcome(newer)).status).toBe('applied');
+    const at = MAILWORTHY_GENERATED_AT;
+    await seedGiver('Ana Forever', 'self', at - 86_400, at - 86_400);
+    const res = await importOutcome(
+      buildCharMailworthyPayload(block([giver({})])),
+    );
+    expect(res.status).toBe('stale');
+    const [row] = await giverRows();
+    expect([row?.itemsAllTime, row?.asOf.toISOString()]).toEqual([10, iso(at)]);
+    expect(res.mailworthy).toMatchObject({ status: 'applied', givers: 1 });
+  });
+});
+
+describe('ROK-2148 Q8 — the char summary reports the Mailworthy block', () => {
+  it('applied: givers / rejected / peers / template counts', async () => {
+    const res = await importOutcome(buildCharMailworthyPayload());
+    expect(res.mailworthy).toEqual({
+      status: 'applied',
+      givers: 3,
+      giversRejected: 0,
+      peers: 6,
+      template: 'stored',
+    });
+  });
+
+  it('applied with a rejected giver and no template', async () => {
+    const two = block([giver({}), giver({ characterName: 'Stranger' })]);
+    const res = await importOutcome(buildCharMailworthyPayload(two));
+    expect(res.mailworthy).toEqual({
+      status: 'applied',
+      givers: 1,
+      giversRejected: 1,
+      peers: 1,
+      template: 'none',
+    });
+  });
+
+  it('skipped: every giver off the roster', async () => {
+    const off = block([giver({ characterName: 'Stranger' })]);
+    const res = await importOutcome(buildCharMailworthyPayload(off));
+    expect(res.mailworthy).toEqual({
+      status: 'skipped',
+      reason: 'givers_rejected',
+    });
+  });
+
+  it('skipped: exporter not on the latest roster', async () => {
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ guid: 'Player-4395-FFFFFFFF' })
+      .where(eq(schema.guildMembers.guid, buildMember(0xabcdef0).guid));
+    const res = await importOutcome(buildCharMailworthyPayload());
+    expect(res.mailworthy).toEqual({
+      status: 'skipped',
+      reason: 'not_on_roster',
+    });
+  });
+
+  it('skipped: the export names a guild Raid Ledger does not have', async () => {
+    const p = buildCharMailworthyPayload();
+    const res = await importOutcome({
+      ...p,
+      who: { ...p.who, guildName: 'Nowhere Guild' },
+    });
+    expect(res.mailworthy).toEqual({
+      status: 'skipped',
+      reason: 'guild_unresolved',
+    });
+  });
+
+  it('absent when the export carries no block', async () => {
+    const res = await importOutcome(buildCharPayload());
+    expect(res.mailworthy).toBeUndefined();
   });
 });
