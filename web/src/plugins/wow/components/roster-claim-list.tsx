@@ -89,8 +89,8 @@ function NotListedHint({ armoryAvailable, onSwitchTab }: Pick<RosterClaimListPro
     return (
         <p className="text-xs text-muted">
             Not listed?{' '}
-            {armoryAvailable && <><button type="button" className={link} onClick={() => onSwitchTab('import')}>Import from Armory</button>{' or '}</>}
-            <button type="button" className={link} onClick={() => onSwitchTab('manual')}>{armoryAvailable ? 'add it manually' : 'Add it manually'}</button>.
+            {armoryAvailable && <><Button variant="bare" className={link} onClick={() => onSwitchTab('import')}>Import from Armory</Button>{' or '}</>}
+            <Button variant="bare" className={link} onClick={() => onSwitchTab('manual')}>{armoryAvailable ? 'add it manually' : 'Add it manually'}</Button>.
         </p>
     );
 }

@@ -17,6 +17,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { isPhoneLayout } from './helpers';
+import { rosterCandidatesSettled, selectAddMethod } from './add-character-method';
 
 const WOW_FOREVER = 'World of Warcraft: Forever';
 const DRAFT_NAME = 'Dirtyclose';
@@ -81,7 +82,11 @@ async function expectPrimaryOnScreen(dialog: Locator): Promise<void> {
 /** Open the modal, pick the game by keyboard and type a Name: a dirty draft. */
 async function openDirtyDraft(page: Page, checkFooter = false): Promise<AddCharacter> {
     const ac = await openAddCharacter(page);
+    const candidates = rosterCandidatesSettled(page);
     await pickByKeyboard(page, ac.game, WOW_FOREVER);
+    // ROK-2128: the dialog may open on "Guild roster" (other specs leave unlinked Forever members) — pick Manual.
+    await candidates;
+    await selectAddMethod(ac.dialog, 'Manual');
     if (checkFooter) await expectPrimaryOnScreen(ac.dialog);
     await ac.name.fill(DRAFT_NAME);
     await expect(ac.name).toHaveValue(DRAFT_NAME);

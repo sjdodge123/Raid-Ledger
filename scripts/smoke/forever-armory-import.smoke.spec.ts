@@ -12,6 +12,11 @@
  */
 import type { Locator, Page, Request } from "@playwright/test";
 import { test, expect } from "./base";
+import {
+  addMethodButton,
+  rosterCandidatesSettled,
+  selectAddMethod,
+} from "./add-character-method";
 
 const GAME_NAME = "World of Warcraft: Forever";
 const PREVIEW_PATH = "/blizzard/character-preview";
@@ -79,20 +84,23 @@ async function openForeverArmory(page: Page): Promise<ArmoryForm> {
   await game.click();
   await game.pressSequentially(GAME_NAME, { delay: 20 });
   await settled;
+  const candidates = rosterCandidatesSettled(page);
   await page
     .getByRole("listbox")
     .getByRole("option", { name: GAME_NAME, exact: true })
     .click();
   await expect(game).toHaveValue(GAME_NAME);
+  await candidates;
 
-  const tab = dialog.getByRole("button", { name: "Import from Armory" });
+  // ROK-2128: scoped to the method group — the "Guild roster" list has its own "Import from Armory" link.
+  const tab = addMethodButton(dialog, "Import from Armory");
   await expect(
     tab,
     "Armory import is on by default for Forever",
   ).not.toHaveAttribute("aria-disabled", "true", {
     timeout: 15_000,
   });
-  await tab.click();
+  await selectAddMethod(dialog, "Import from Armory");
   const block = dialog.getByTestId("forever-identity-fields");
   return {
     dialog,
