@@ -55,7 +55,8 @@ export function readCharacterPrefill(state: unknown): CharacterPrefill | null {
     return p as CharacterPrefill;
 }
 
-export type CharacterPortraitSize = 'sm' | 'md' | 'lg';
+/** `sm` 32px, `md` 40px, `phone` 72px (the phone character header hero, ROK-2140), `lg` 80px. */
+export type CharacterPortraitSize = 'sm' | 'md' | 'phone' | 'lg';
 
 /** Any character-ish shape (CharacterDto fits): what a plugin needs to pick a character's portrait. */
 export interface CharacterPortraitSubject {

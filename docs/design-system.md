@@ -354,6 +354,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `role-badge.tsx` → `RoleBadge` | Admin (amber) / Operator (emerald); member renders nothing | Showing a user's role | `role`, `className` |
 | `status-chip.tsx` → `StatusChip`, `StatusChipTone` (ROK-1776) | The read-only §4.21 status chip: `rounded-full border text-xs font-mono` with the token tone map (success / warning / danger on their `/10` fill + `/30` border, neutral `bg-panel border-edge text-muted`), `data-tone` on the span. Extracted from the Pelican admin state chip so admin and member surfaces share one copy of the classes. Not interactive. | Showing a live or checked state — the Pelican servers table, the event page's `GameServerStatusChip`. A tappable chip is §4.20; a filter toggle §4.3 | `tone`, `title` (required — colour is never the only signal), `children`, `className`, `size` (`sm` default `px-2 py-0.5 text-xs`; `md` `px-2.5 py-1 text-sm` for touch-sized rows — the phone "Your hubs" sheet) |
 | `menu-keys.ts` → `onMenuKeyDown`, `useFocusFirstItem`, `menuItems` (ROK-1618; moved from `lineups/cycle-4/scheduling-menu-keys.ts` in ROK-1875) | The §4.14 dropdown keyboard model for any `role="menu"` popover: the first enabled `[role="menuitem"]` takes focus on open, ArrowDown/ArrowUp wrap, Home/End jump. Esc / Tab / outside-press closing stays with the caller (it owns the open state and the trigger to return focus to). | Every `role="menu"` popover — `SchedulingManageDropdown`, `SchedulingTimeMenu`, the calendar-sync menus, the community member menu, the header Hubs menu. Do not copy the traversal | `onMenuKeyDown(e)` on the menu's `onKeyDown`; `useFocusFirstItem(menuRef, open)` |
+| `action-menu.tsx` → `ActionMenuList`, `ActionMenuItem` (+ `use-menu-dismiss.ts` → `useMenuDismiss`) (ROK-2140, extracted from `UserManagementRow.tsx`) | The §4.11 row action menu: `role="menu"` of `<Button role="menuitem" variant="ghost" size="sm" fullWidth>` rows (`destructive-soft` for a destructive item, no per-item hue), label span widened so icon + text pack left. `placement="popover"` floats it under a `relative` trigger wrapper (`bg-panel border-edge rounded-lg shadow-lg p-1`); `placement="inline"` lays the same rows out in place — the body of a phone "More" `BottomSheet`. Esc / outside-click dismissal comes from `useMenuDismiss`; it has no arrow-key traversal (that is §4.14 `menu-keys.ts`). Demo: "ActionMenuList — placement inline" on `/dev/design-system`. | A ⋯ row/overflow menu of 2–5 actions (admin user rows, the character header's admin actions) — desktop popover, phone sheet body | `items` (`{ key, icon, label, destructive?, onClick }[]`), `placement`, `label` |
 | `loading-spinner.tsx` → `LoadingSpinner` | Full-page spinner | `Suspense` fallback for lazy routes | — |
 | `infinite-scroll-sentinel.tsx` → `InfiniteScrollSentinel` | IntersectionObserver "load more" sentinel | Paginated grids | see file |
 | `pull-to-refresh.tsx` → `PullToRefresh` | Mobile pull-to-refresh wrapper | Mobile list pages | `onRefresh`, `children` |
@@ -908,8 +909,19 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   centres its label and has no tailwind-merge, so a `justify-start` override is unreliable; left-align by
   widening the label span instead: `className="[&>[data-button-label]]:w-full"` (the span's own
   `inline-flex` then packs icon + text from the left). Reference:
-  `components/admin/UserManagementRow.tsx::ActionMenuList`. That menu dismisses on Esc and outside click
+  `components/ui/action-menu.tsx::ActionMenuList` (extracted from `UserManagementRow.tsx` in ROK-2140;
+  `placement="inline"` lays the same rows out inside a `BottomSheet` body — the phone form of a ⋯ menu, as on
+  the character page's "More" sheet), dismissed by `components/ui/use-menu-dismiss.ts`. That menu dismisses on Esc and outside click
   only; the §4.14 dropdown (`SchedulingManageDropdown`) is the one with full arrow/Home/End menu keys.
+
+- **Action tiles** (ROK-2140, Option B of the character header): below `sm` a row of 2–3 equal actions is a
+  `grid grid-flow-col auto-cols-fr gap-2` of `Button variant="secondary" size="sm" fullWidth` with
+  `ACTION_TILE_CLASS` (`components/shared/character-header-layout.tsx`) — a 60px tile, 20px icon stacked over a
+  `text-xs` label; overflow actions go behind a "More" tile that opens a `BottomSheet` of `ActionMenuList` rows.
+  Its stat strip is `StatTile` (`bg-surface rounded-lg`, bold value over a muted label) from the same file; a
+  coloured value takes a token (`text-busy` for item level, `text-warning` for level), never a raw hue. The
+  hero portrait is 72px through the portrait seam's `phone` size (`CharacterPortraitSize`), 80px (`lg`) at ≥ `sm`.
+  Demo: "Action tiles" + "StatTile strip" in the Primitives section of `/dev/design-system`.
 
 **Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
 `<button>` outside `components/ui` and `dev` at `form-primitives.baseline.json`. The list only shrinks: a new
