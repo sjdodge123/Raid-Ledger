@@ -6,10 +6,9 @@ import * as rosterSync from './guilds/blizzard-roster-sync.registration';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
-import { GuildContentController } from './guilds/guild-content.controller';
+import * as guildContent from './guilds/guild-content.registration';
 import { GuildBlizzardRosterController } from './guilds/guild-blizzard-roster.controller';
 import { GuildBlizzardRosterService } from './guilds/guild-blizzard-roster.service';
-import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
@@ -93,7 +92,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     AddonImportAdminController,
     CharacterQuestsController,
     GuildsController,
-    GuildContentController,
+    ...guildContent.CONTROLLERS,
     GuildBlizzardRosterController,
     ...rosterSync.CONTROLLERS,
   ],
@@ -130,7 +129,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     CharacterQuestsService,
     GuildPageService,
     GuildRaidsService,
-    GuildAddonsService,
+    ...guildContent.PROVIDERS,
     GuildBlizzardRosterService,
     ...rosterSync.PROVIDERS,
     WowHubKindAdapter,
