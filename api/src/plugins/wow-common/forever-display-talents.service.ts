@@ -1,10 +1,12 @@
 /**
  * ROK-1744: read-path resolver for WoW: Forever talents. Builds the displayed
  * `ForeverTalentsDto` from the character's LedgerLink `char` snapshot.
- * ROK-2110: when the stored Blizzard talents win (no snapshot, empty
- * snapshot, or synced at/after the capture — D4 newest-wins) they are
- * converted to the same DTO (`source: 'blizzard'`). Read-only on
- * `characters`; `undefined` means "keep the stored talents".
+ * ROK-2110: stored Blizzard talents are converted to the same DTO
+ * (`source: 'blizzard'`). ROK-2138 D9: whenever they convert they win,
+ * whatever the dates; the addon talents only fill the gap when there are no
+ * (convertible) Blizzard talents. Blizzard-only for now — the addon's
+ * maxRanks / node positions are not merged onto the Blizzard nodes (OQ-3).
+ * Read-only on `characters`; `undefined` means "keep the stored talents".
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -17,7 +19,6 @@ import { snapshotToForeverTalents } from './forever-talents.adapter';
 import { blizzardToForeverTalents } from './forever-blizzard-talents.adapter';
 import {
   originsDeviate,
-  storedTalentsAreNewer,
   talentOrigins,
   toNodeInputs,
 } from './forever-display-talents.helpers';
@@ -41,19 +42,16 @@ export class ForeverDisplayTalentsService {
     row: DisplayTalentsRow,
   ): Promise<ForeverTalentsDto | undefined> {
     if (row.gameVariant && row.gameVariant !== FOREVER_VARIANT) return;
-    const blizzard =
-      row.gameVariant === FOREVER_VARIANT
-        ? blizzardToForeverTalents(row.talents, row.lastSyncedAt)
-        : undefined;
-    const snapshot = await loadForeverCharSnapshot(this.db, row.id);
-    if (!snapshot) return blizzard;
-    const { capturedAt } = snapshot;
-    if (storedTalentsAreNewer(row.talents, row.lastSyncedAt, capturedAt)) {
-      return blizzard;
+    if (row.gameVariant === FOREVER_VARIANT) {
+      const blizzard = blizzardToForeverTalents(row.talents, row.lastSyncedAt);
+      if (blizzard) return blizzard;
     }
+    const snapshot = await loadForeverCharSnapshot(this.db, row.id);
+    if (!snapshot) return undefined;
+    const { capturedAt } = snapshot;
     const talents = snapshot.data.talents;
     const nodes = toNodeInputs(talents?.nodes);
-    if (nodes.length === 0) return blizzard;
+    if (nodes.length === 0) return undefined;
     this.warnOnOriginDeviation(row.id, nodes);
     return snapshotToForeverTalents({
       capturedAt: capturedAt.toISOString(),
