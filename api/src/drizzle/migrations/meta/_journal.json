@@ -1996,6 +1996,13 @@
       "when": 1794103205837,
       "tag": "0285_guild_profiles_ingame_text",
       "breakpoints": true
+    },
+    {
+      "idx": 286,
+      "version": "7",
+      "when": 1794126839645,
+      "tag": "0286_games_igdb_itad_pair_merge",
+      "breakpoints": true
     }
   ]
 }
