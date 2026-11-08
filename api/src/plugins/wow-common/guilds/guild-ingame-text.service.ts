@@ -19,6 +19,16 @@ import {
   toIngameTextDto,
 } from './guild-ingame-text.helpers';
 import {
+  adoptPutBody,
+  gameFieldOf,
+  parseIngameFieldKey,
+  toGameTextDto,
+} from './guild-ingame-game-text.helpers';
+import {
+  acknowledgeGameText,
+  findGameText,
+} from './guild-ingame-game-text.queries';
+import {
   findIngameText,
   lockIngameText,
   writeIngameText,
@@ -78,6 +88,48 @@ export class GuildIngameTextService {
     return response;
   }
 
+  /**
+   * ROK-2137 Adopt (editors, behind `GuildEditorGuard`): copy the field's
+   * last in-game report into the hub text through `save` — same validation,
+   * per-field 409 and attribution. 409 when the field was never reported.
+   */
+  async adopt(
+    actor: GuildActor,
+    guildId: number,
+    rawField: string,
+  ): Promise<GuildIngameText> {
+    const field = parseIngameFieldKey(rawField);
+    await this.assertWowGuild(guildId);
+    const [game, hub] = await Promise.all([
+      findGameText(this.db, guildId),
+      findIngameText(this.db, guildId),
+    ]);
+    const report = gameFieldOf(game, field);
+    if (report.reportedAt === null) throw noReport();
+    const text = field === 'motd' ? hub?.motd : hub?.info;
+    const stamp = field === 'motd' ? hub?.motdUpdatedAt : hub?.infoUpdatedAt;
+    const token = text == null ? null : (stamp ?? null);
+    return this.save(actor, guildId, adoptPutBody(field, report.text, token));
+  }
+
+  /**
+   * ROK-2137 Push (editors): the hub text wins — acknowledge the field's
+   * current report so the banner hides until a newer report differs again.
+   */
+  async push(
+    actor: GuildActor,
+    guildId: number,
+    rawField: string,
+  ): Promise<GuildIngameText> {
+    const field = parseIngameFieldKey(rawField);
+    await this.assertWowGuild(guildId);
+    if (!(await acknowledgeGameText(this.db, guildId, field))) {
+      throw noReport();
+    }
+    return this.respond(actor, guildId);
+  }
+
+  /** The DTO; editors also get the `game` block (ROK-2137), others never. */
   private async respond(
     actor: GuildActor,
     guildId: number,
@@ -86,7 +138,11 @@ export class GuildIngameTextService {
       findIngameText(this.db, guildId),
       this.access.canEdit(actor, guildId),
     ]);
-    return toIngameTextDto(guildId, row, canEdit);
+    const dto = toIngameTextDto(guildId, row, canEdit);
+    if (!canEdit) return dto;
+    const hub = { motd: row?.motd ?? null, info: row?.info ?? null };
+    const game = toGameTextDto(await findGameText(this.db, guildId), hub);
+    return { ...dto, game };
   }
 
   private async assertWowGuild(guildId: number): Promise<void> {
@@ -94,4 +150,12 @@ export class GuildIngameTextService {
       throw new NotFoundException('Guild not found');
     }
   }
+}
+
+/** Adopt/Push on a field the game never reported. */
+function noReport(): ConflictException {
+  return new ConflictException({
+    message: 'No in-game report for this field yet',
+    code: 'NO_GAME_REPORT',
+  });
 }
