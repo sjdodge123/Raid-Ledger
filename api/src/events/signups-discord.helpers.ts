@@ -68,6 +68,11 @@ export async function fetchExistingDiscordSignup(
   return existing;
 }
 
+/**
+ * Find the active guest signup (`user_id` NULL) an unlinked Discord user may
+ * cancel. A signup owned by an RL user is never reachable by Discord id alone
+ * (ROK-2097) — linked Discord users cancel through `SignupsService.cancel`.
+ */
 export async function findActiveAnonymousSignup(
   db: Tx,
   eventId: number,
@@ -81,6 +86,7 @@ export async function findActiveAnonymousSignup(
       and(
         eq(schema.eventSignups.eventId, eventId),
         eq(schema.eventSignups.discordUserId, discordUserId),
+        cancelH.unclaimedOrOwnedBy(),
         ne(schema.eventSignups.status, 'roached_out'),
         ne(schema.eventSignups.status, 'declined'),
         ne(schema.eventSignups.status, 'departed'),

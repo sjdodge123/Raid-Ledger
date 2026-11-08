@@ -9,7 +9,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and, ne, or, isNull, type SQL } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
 import { determineCancelStatus } from './signups-roster.helpers';
@@ -103,6 +103,19 @@ export async function findActiveSignupForCancel(
   return signup;
 }
 
+/**
+ * Ownership filter for a signup resolved by Discord id (ROK-2097).
+ * A Discord-only guest signup (`user_id` NULL) always matches; a signup owned
+ * by an RL user matches only when that user is the caller. With no caller
+ * (an unlinked Discord user), only guest signups match — so a Discord id that
+ * was re-linked or unlinked can never reach the previous owner's signup.
+ */
+export function unclaimedOrOwnedBy(callerUserId?: number): SQL | undefined {
+  const unclaimed = isNull(schema.eventSignups.userId);
+  if (callerUserId === undefined) return unclaimed;
+  return or(unclaimed, eq(schema.eventSignups.userId, callerUserId));
+}
+
 async function findUnclaimedAnonymousSignup(
   db: Tx,
   eventId: number,
@@ -121,6 +134,7 @@ async function findUnclaimedAnonymousSignup(
       and(
         eq(schema.eventSignups.eventId, eventId),
         eq(schema.eventSignups.discordUserId, user.discordId),
+        unclaimedOrOwnedBy(userId),
         ne(schema.eventSignups.status, 'roached_out'),
         ne(schema.eventSignups.status, 'declined'),
         ne(schema.eventSignups.status, 'departed'),
