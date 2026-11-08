@@ -148,7 +148,7 @@ describe('handleExistingSignup — pending-confirmation heal', () => {
 });
 
 describe('handleExistingSignup — row the Discord id may not manage (ROK-2097)', () => {
-  it('replies not-signed-up instead of reactivating another account\'s row', async () => {
+  it("replies not-signed-up instead of reactivating another account's row", async () => {
     const deps = createMockDeps();
     const db = deps.db as unknown as { select: jest.Mock };
     // findLinkedUser: the clicker's Discord id is linked to nobody.

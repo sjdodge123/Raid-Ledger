@@ -3,9 +3,12 @@
  * signup (`user_id` NULL) or a signup owned by the RL user it is linked to —
  * never a signup owned by another account (after an unlink or re-link).
  */
-import { eq, and, or, isNull, type SQL } from 'drizzle-orm';
+import { eq, and, or, isNull, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
+
+/** Fail-closed fallback: an ownership guard that matches no row. */
+const NONE: SQL = sql`false`;
 
 /**
  * Ownership filter for a signup resolved by Discord id (ROK-2097).
@@ -14,10 +17,10 @@ import type { Tx } from './signups.service.types';
  * (an unlinked Discord user), only guest signups match — so a Discord id that
  * was re-linked or unlinked can never reach the previous owner's signup.
  */
-export function unclaimedOrOwnedBy(callerUserId?: number): SQL | undefined {
+export function unclaimedOrOwnedBy(callerUserId?: number): SQL {
   const unclaimed = isNull(schema.eventSignups.userId);
   if (callerUserId === undefined) return unclaimed;
-  return or(unclaimed, eq(schema.eventSignups.userId, callerUserId));
+  return or(unclaimed, eq(schema.eventSignups.userId, callerUserId)) ?? NONE;
 }
 
 /**
@@ -28,14 +31,16 @@ export function unclaimedOrOwnedBy(callerUserId?: number): SQL | undefined {
 export async function discordManagedSignupCondition(
   db: Tx,
   discordUserId: string,
-): Promise<SQL | undefined> {
+): Promise<SQL> {
   const [linked] = await db
     .select({ id: schema.users.id })
     .from(schema.users)
     .where(eq(schema.users.discordId, discordUserId))
     .limit(1);
-  return and(
-    eq(schema.eventSignups.discordUserId, discordUserId),
-    unclaimedOrOwnedBy(linked?.id),
+  return (
+    and(
+      eq(schema.eventSignups.discordUserId, discordUserId),
+      unclaimedOrOwnedBy(linked?.id),
+    ) ?? NONE
   );
 }

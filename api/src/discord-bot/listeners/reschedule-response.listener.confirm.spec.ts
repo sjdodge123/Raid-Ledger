@@ -290,7 +290,9 @@ function buttonRoutingTests() {
 
   it('defers reply for valid confirm interaction', async () => {
     mockDb.limit.mockResolvedValueOnce([mockEvent]);
-    mockDb.limit.mockResolvedValueOnce([]);
+    mockDb.limit.mockResolvedValueOnce([]); // findLinkedUserByDiscordId
+    mockDb.limit.mockResolvedValueOnce([mockSignup]); // updateUnlinkedSignup
+    mockDb.limit.mockResolvedValueOnce([]); // ensureRosterAssignment
     mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
     const interaction = makeButtonInteraction(
       `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
@@ -298,6 +300,9 @@ function buttonRoutingTests() {
     await listener['handleButtonInteraction'](interaction);
     expect(interaction.deferReply).toHaveBeenCalledWith({
       flags: MessageFlags.Ephemeral,
+    });
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: "You're confirmed for **Mythic Raid Night**.",
     });
   });
 

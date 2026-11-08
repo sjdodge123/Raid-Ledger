@@ -263,11 +263,9 @@ export async function findSignupByIdentifier(
     conditions.push(eq(schema.eventSignups.userId, identifier.userId));
   else if (identifier.discordUserId) {
     // ROK-2097: never a row owned by an account the Discord id left.
-    const owned = await discordManagedSignupCondition(
-      db,
-      identifier.discordUserId,
+    conditions.push(
+      await discordManagedSignupCondition(db, identifier.discordUserId),
     );
-    if (owned) conditions.push(owned);
   } else
     throw new BadRequestException(
       'Either userId or discordUserId must be provided',
