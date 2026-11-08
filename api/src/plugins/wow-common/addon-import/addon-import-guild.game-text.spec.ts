@@ -2,12 +2,31 @@
  * ROK-2137 — which `game_*` columns one LedgerLink guild report writes.
  * Absent = no opinion (no column), '' = a reported empty box (NULL text).
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import type { AddonGuildExport } from '@raid-ledger/contract';
+import { guildProfiles, guilds } from '../../../drizzle/schema';
+import { createDrizzleMock } from '../../../common/testing/drizzle-mock';
+import type { AddonImportTx, RosterFlag } from './addon-import-apply.types';
+import { applyGuild } from './addon-import-guild.apply';
+import { checkRosterReplace } from './addon-import-guild.guard';
 import {
   changedNotOlder,
   conflictSet,
   gameTextReport,
 } from './addon-import-guild.game-text';
+
+jest.mock('./addon-import-guild.guard', () => ({
+  ...jest.requireActual<object>('./addon-import-guild.guard'),
+  lockGuildImport: jest.fn().mockResolvedValue(undefined),
+  checkRosterReplace: jest.fn(),
+  auditRosterReplaced: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('./addon-import-guild.members', () => ({
+  ...jest.requireActual<object>('./addon-import-guild.members'),
+  upsertMembersLoggingDings: jest.fn().mockResolvedValue(0),
+}));
 
 const AT = new Date('2026-11-08T12:00:00.000Z');
 
@@ -83,5 +102,57 @@ describe('changedNotOlder (per-field conflict CASE)', () => {
     expect(render('gameMotdReportedBy')).toContain(
       'THEN excluded."game_motd_reported_by"',
     );
+  });
+});
+
+describe('applyGuild — flagged roster replacement (review r1)', () => {
+  const FIXTURES = join(
+    __dirname,
+    '../../../../../packages/contract/ledgerlink/v1/fixtures',
+  );
+  const payload = (): AddonGuildExport => {
+    const raw = readFileSync(join(FIXTURES, 'guild-1-page.json'), 'utf8');
+    const p = (JSON.parse(raw) as { payload: AddonGuildExport }).payload;
+    return { ...p, data: { ...p.data, motd: 'Hijacked', infoText: 'Spam' } };
+  };
+  const FLAG: RosterFlag = {
+    guildId: 7,
+    removed: 40,
+    added: 0,
+    live: 50,
+    dropsEditor: false,
+  };
+
+  async function run(flag: RosterFlag | null) {
+    jest.mocked(checkRosterReplace).mockResolvedValue({
+      delta: { removed: flag?.removed ?? 0, added: 0 },
+      flag,
+    });
+    const db = createDrizzleMock();
+    db.where.mockResolvedValueOnce([{ id: 7, lastSnapshotAt: null }]);
+    db.returning.mockResolvedValueOnce([{ id: 7 }]);
+    const ctx = {
+      tx: db as unknown as AddonImportTx,
+      userId: 7,
+      characterId: '00000000-0000-0000-0000-000000000001',
+      gameId: 3,
+      region: 'us' as const,
+      sha256: 'a'.repeat(64),
+    };
+    const outcome = await applyGuild(ctx, payload(), 1);
+    const tables: unknown[] = db.insert.mock.calls.map((c: unknown[]) => c[0]);
+    return { outcome, tables };
+  }
+
+  it('writes no game_* text when the replacement is flagged', async () => {
+    const { outcome, tables } = await run(FLAG);
+    expect(outcome.rosterFlag).toEqual(FLAG);
+    expect(tables).toContain(guilds);
+    expect(tables).not.toContain(guildProfiles);
+  });
+
+  it('control: an unflagged import does write the reported text', async () => {
+    const { tables } = await run(null);
+    expect(tables).toContain(guildProfiles);
   });
 });
