@@ -236,7 +236,16 @@ export async function applyGuild(
     payload,
     seenAt,
   );
-  await applyGuildGameText(ctx, guildId, payload.data, seenAt);
+  // A flagged wholesale roster replacement is suspect: keep the stored report.
+  if (!flag) {
+    await applyGuildGameText(
+      ctx,
+      guildId,
+      payload.data,
+      seenAt,
+      payload.who.fullName,
+    );
+  }
   const members = payload.data.members.length;
   await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {
