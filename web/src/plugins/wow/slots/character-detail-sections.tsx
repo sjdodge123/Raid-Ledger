@@ -14,14 +14,11 @@
  * ROK-2146 (layout A): at >= lg a main column (Equipment, Talents, Quests) and
  * a 320px sidebar (Professions, Saved instances, Guild recommends); below lg one
  * stack in the order Equipment, Talents, Professions, Saved instances, Quests,
- * Guild recommends. The DOM order follows the layout so reading and tab order
- * match what is on screen. Panels are never wrapped, so one that renders null
- * leaves no gap.
+ * Guild recommends. ONE tree at every width, laid out in CSS only, so crossing lg
+ * (resize, tablet rotate) never remounts a panel or drops its state (Codex P2).
  */
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
-import { useMediaQuery } from '../../../hooks/use-media-query';
-import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations, professionsPillSource } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
@@ -103,7 +100,6 @@ export function CharacterDetailSections({
     isOwner, characterId, gameId,
 }: CharacterDetailSectionsProps) {
     useWowheadTooltips(equipment ? [equipment] : []);
-    const wide = useMediaQuery(DESKTOP_MQ);
     const { data: character } = useCharacterDetail(characterId);
     const { variant, isResolving } = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
     const portrait = renderSlotPortrait(character, variant, renderUrl);
@@ -122,37 +118,36 @@ export function CharacterDetailSections({
         lockouts: <CharacterLockoutsSection lockouts={character?.lockouts} />,
         addons: <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>,
     };
-    return wide ? <SidebarLayout panels={panels} /> : <StackLayout panels={panels} />;
+    return <SectionsLayout panels={panels} />;
 }
 
 type SectionPanels = Record<'equipment' | 'talents' | 'quests' | 'professions' | 'lockouts' | 'addons', ReactNode>;
 
 /**
- * >= lg: main column + 320px sidebar. `data-sections-layout="sidebar"` also
- * widens the page container (character-detail-page.tsx); an empty sidebar
- * (every panel null) is hidden so the main column takes the full width.
+ * >= lg: main column + 320px sidebar; the sidebar hides when every panel in it is
+ * empty, and only a non-empty sidebar widens the page (character-detail-page.tsx).
+ * Below lg both columns are `display: contents`, so their panels join one stack and
+ * `order` moves Quests (then Guild recommends) after the sidebar's reference panels.
+ * Quests and Guild recommends are wrapped for that order; `empty:hidden` keeps a
+ * wrapper whose panel renders null from leaving a gap. The other panels stay unwrapped.
  */
-function SidebarLayout({ panels }: { panels: SectionPanels }) {
+function SectionsLayout({ panels }: { panels: SectionPanels }) {
     return (
-        <div data-sections-layout="sidebar" className="flex items-start gap-6">
-            <div data-sections-column="main" className="flex min-w-0 flex-1 flex-col gap-6">
-                {panels.equipment}{panels.talents}{panels.quests}
+        <div data-sections-layout="sidebar" className="flex flex-col gap-6 lg:flex-row lg:items-start">
+            <div data-sections-column="main" className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
+                {panels.equipment}{panels.talents}
+                <div data-sections-slot="quests" className={`${SLOT_WRAPPER} max-lg:order-1`}>{panels.quests}</div>
             </div>
-            <aside data-sections-column="sidebar" className="flex w-80 shrink-0 flex-col gap-6 empty:hidden">
-                {panels.professions}{panels.lockouts}{panels.addons}
+            <aside data-sections-column="sidebar"
+                className="contents lg:flex lg:w-80 lg:shrink-0 lg:flex-col lg:gap-6 lg:[&:not(:has(>:not(:empty)))]:hidden">
+                {panels.professions}{panels.lockouts}
+                <div data-sections-slot="addons" className={`${SLOT_WRAPPER} max-lg:order-2`}>{panels.addons}</div>
             </aside>
         </div>
     );
 }
 
-/** Below lg: one stack, the reference panels before the long Quests list. */
-function StackLayout({ panels }: { panels: SectionPanels }) {
-    return (
-        <div data-sections-layout="stack" className="flex flex-col gap-6">
-            {panels.equipment}{panels.talents}{panels.professions}{panels.lockouts}{panels.quests}{panels.addons}
-        </div>
-    );
-}
+const SLOT_WRAPPER = 'flex flex-col gap-6 empty:hidden';
 
 type PortraitCharacter = { race: string | null; gender?: string | null | undefined; class: string | null; name: string };
 

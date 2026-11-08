@@ -5,7 +5,7 @@
  * empty states and Wowhead links from it.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -232,62 +232,104 @@ describe('CharacterDetailSections — professions source (ROK-2107 AC8)', () => 
     });
 });
 
-/** ROK-2146 ruling 3 (layout A): main + 320px sidebar at >= lg, one stack below it. */
+/** ROK-2146 ruling 3 (layout A): main + 320px sidebar at >= lg, one stack below it — one tree, CSS only. */
+const LAYOUT_QUESTS = {
+    source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z', inProgress: [], completedKnown: [],
+    counts: { completedKnown: 0, knownTotal: 3, completedTotal: 5, inProgress: 0 },
+};
+const LAYOUT_LOCKOUTS: CharacterLockoutsDto = {
+    source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z',
+    instances: [{
+        name: 'Molten Core', instanceId: 409, difficultyId: 9, difficulty: '40 Player',
+        resetAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), killed: 4, total: 10,
+    }],
+};
+/** A matchMedia whose lg answer can flip, firing its change listeners like a resize/rotate. */
+function setViewport(desktop: boolean): (next: boolean) => void {
+    let matches = desktop;
+    const listeners = new Set<() => void>();
+    Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: vi.fn((query: string) => ({
+            get matches() { return query === '(min-width: 1024px)' ? matches : false; }, media: query, onchange: null,
+            addListener: (cb: () => void) => listeners.add(cb), removeListener: (cb: () => void) => listeners.delete(cb),
+            addEventListener: (_: string, cb: () => void) => listeners.add(cb), removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
+            dispatchEvent: () => false,
+        })),
+    });
+    return (next) => { matches = next; act(() => { listeners.forEach((cb) => cb()); }); };
+}
+async function renderForever(lockouts: CharacterLockoutsDto | null = LAYOUT_LOCKOUTS) {
+    server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => HttpResponse.json({ quests: LAYOUT_QUESTS })));
+    const container = renderSections({ gameVariant: 'wow_forever', equipment: EQUIPMENT, ...(lockouts ? { lockouts } : {}) });
+    await screen.findByRole('heading', { name: 'Quests' });
+    await screen.findByRole('heading', { name: 'Guild recommends' });
+    return container;
+}
+function must<T>(value: T | null | undefined, label: string): T {
+    if (value === null || value === undefined) throw new Error(`missing: ${label}`);
+    return value;
+}
+const headings = (el: Element) => Array.from(el.querySelectorAll('h2')).map((h) => h.textContent);
+/** The order below lg: `display: contents` columns flatten, then `max-lg:order-N` sorts (stable). */
+function stackOrder(layout: Element): (string | null)[] {
+    const items = Array.from(layout.children).flatMap((c) => (c.classList.contains('contents') ? Array.from(c.children) : [c]));
+    const order = (el: Element) => Number(/(?:^|\s)max-lg:order-(\d+)/.exec(el.className)?.[1] ?? 0);
+    return items.map((el, i) => ({ el, i })).sort((a, b) => order(a.el) - order(b.el) || a.i - b.i).flatMap(({ el }) => (el.tagName === 'H2' ? [el.textContent] : headings(el)));
+}
+
 describe('CharacterDetailSections — layout A', () => {
     const originalMatchMedia = window.matchMedia;
-    afterEach(() => { window.matchMedia = originalMatchMedia; addonsCard.show = true; });
-    const QUESTS = {
-        source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z', inProgress: [], completedKnown: [],
-        counts: { completedKnown: 0, knownTotal: 3, completedTotal: 5, inProgress: 0 },
-    };
-    const LOCKOUTS: CharacterLockoutsDto = {
-        source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z',
-        instances: [{
-            name: 'Molten Core', instanceId: 409, difficultyId: 9, difficulty: '40 Player',
-            resetAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), killed: 4, total: 10,
-        }],
-    };
-    function setDesktop(matches: boolean) {
-        window.matchMedia = ((query: string) => ({
-            matches: query === '(min-width: 1024px)' ? matches : false, media: query, onchange: null,
-            addListener: () => undefined, removeListener: () => undefined,
-            addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
-        })) as unknown as typeof window.matchMedia;
-    }
-    async function renderForever(desktop: boolean, lockouts: CharacterLockoutsDto | null = LOCKOUTS) {
-        setDesktop(desktop);
-        server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => HttpResponse.json({ quests: QUESTS })));
-        const container = renderSections({ gameVariant: 'wow_forever', equipment: EQUIPMENT, ...(lockouts ? { lockouts } : {}) });
-        await screen.findByRole('heading', { name: 'Quests' });
-        await screen.findByRole('heading', { name: 'Guild recommends' });
-        return container;
-    }
-    const headings = (el: Element) => Array.from(el.querySelectorAll('h2')).map((h) => h.textContent);
-
+    afterEach(() => {
+        Object.defineProperty(window, 'matchMedia', { writable: true, value: originalMatchMedia });
+        addonsCard.show = true;
+    });
     it('>= lg: main column holds Equipment, Talents, Quests; the sidebar Professions, Saved instances, Guild recommends', async () => {
-        const container = await renderForever(true);
-        const layout = container.querySelector('[data-sections-layout]');
-        expect(layout?.getAttribute('data-sections-layout'), 'desktop layout').toBe('sidebar');
-        const main = container.querySelector('[data-sections-column="main"]');
-        const sidebar = container.querySelector('[data-sections-column="sidebar"]');
-        expect(main, 'main column').not.toBeNull();
-        expect(sidebar?.tagName, 'sidebar is an <aside>').toBe('ASIDE');
-        expect(headings(main!)).toEqual(['Equipment', 'Talents', 'Quests']);
-        expect(headings(sidebar!)).toEqual(['Professions', 'Saved instances', 'Guild recommends']);
-        expect(within(sidebar as HTMLElement).queryByRole('heading', { name: 'Quests' })).toBeNull();
+        setViewport(true);
+        const container = await renderForever();
+        const main = must(container.querySelector('[data-sections-column="main"]'), 'main column');
+        const sidebar = must(container.querySelector('[data-sections-column="sidebar"]'), 'sidebar');
+        expect(sidebar.tagName, 'sidebar is an <aside>').toBe('ASIDE');
+        expect(headings(main)).toEqual(['Equipment', 'Talents', 'Quests']);
+        expect(headings(sidebar)).toEqual(['Professions', 'Saved instances', 'Guild recommends']);
+        expect(main.className.split(' '), 'main is a column only at lg').toEqual(expect.arrayContaining(['contents', 'lg:flex', 'lg:flex-1']));
+        expect(sidebar.className.split(' '), 'sidebar is 320px only at lg').toEqual(expect.arrayContaining(['contents', 'lg:flex', 'lg:w-80']));
     });
 
     it('below lg: one stack — Equipment, Talents, Professions, Saved instances, Quests, Guild recommends', async () => {
-        const container = await renderForever(false);
+        setViewport(false);
+        const container = await renderForever();
+        const layout = must(container.querySelector('[data-sections-layout]'), 'layout');
+        expect(layout.className.split(' '), 'a column stack, a row at lg').toEqual(expect.arrayContaining(['flex', 'flex-col', 'lg:flex-row']));
+        expect(stackOrder(layout)).toEqual(['Equipment', 'Talents', 'Professions', 'Saved instances', 'Quests', 'Guild recommends']);
+    });
+
+    it('crossing lg (resize, tablet rotate) keeps every panel mounted — no tree swap', async () => {
+        const flip = setViewport(true);
+        const container = await renderForever();
+        const professions = screen.getByRole('heading', { name: 'Professions' });
         const layout = container.querySelector('[data-sections-layout]');
-        expect(layout?.getAttribute('data-sections-layout'), 'phone/tablet layout').toBe('stack');
-        expect(container.querySelector('[data-sections-column]'), 'no columns below lg').toBeNull();
-        expect(headings(layout!)).toEqual(['Equipment', 'Talents', 'Professions', 'Saved instances', 'Quests', 'Guild recommends']);
+        flip(false);
+        expect(professions.isConnected, 'Professions panel survives lg → below lg').toBe(true);
+        expect(screen.getByRole('heading', { name: 'Professions' }), 'same DOM node, not a remount').toBe(professions);
+        expect(container.querySelector('[data-sections-layout]'), 'same layout node').toBe(layout);
     });
 
     it('a panel that renders null leaves no empty wrapper behind', async () => {
-        const container = await renderForever(true, null);
-        const sidebar = container.querySelector('[data-sections-column="sidebar"]')!;
+        setViewport(true);
+        const container = await renderForever(null);
+        const sidebar = must(container.querySelector('[data-sections-column="sidebar"]'), 'sidebar');
         expect(Array.from(sidebar.children).map((c) => c.textContent)).toEqual(['Professions', 'Guild recommends']);
+    });
+
+    it('a wrapper whose panel renders null is hidden (empty:hidden), so it leaves no gap', async () => {
+        setViewport(true);
+        addonsCard.show = false;
+        server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => HttpResponse.json({ quests: LAYOUT_QUESTS })));
+        const container = renderSections({ gameVariant: 'wow_forever', equipment: EQUIPMENT, lockouts: LAYOUT_LOCKOUTS });
+        await screen.findByRole('heading', { name: 'Quests' });
+        const addons = must(container.querySelector('[data-sections-slot="addons"]'), 'addons wrapper');
+        expect(addons.childElementCount, 'Guild recommends rendered nothing').toBe(0);
+        expect(addons.className.split(' ')).toContain('empty:hidden');
     });
 });
