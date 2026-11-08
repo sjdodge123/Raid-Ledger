@@ -131,6 +131,11 @@ describe('Signup cancel ownership — re-linked Discord id (AC1)', () => {
       .update(schema.users)
       .set({ discordId: 'local:unlinked@t.local' })
       .where(eq(schema.users.discordId, RELINKED_DISCORD_ID));
+    // The Decline button's pre-read still sees the row, so it reaches the
+    // cancel — which must report not-found (the handler's not-found reply).
+    expect(
+      await service().findByDiscordUser(eventId, RELINKED_DISCORD_ID),
+    ).not.toBeNull();
     await expect(
       service().cancelByDiscordUser(eventId, RELINKED_DISCORD_ID),
     ).rejects.toBeInstanceOf(NotFoundException);

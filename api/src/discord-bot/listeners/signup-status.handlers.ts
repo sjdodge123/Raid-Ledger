@@ -1,4 +1,5 @@
 import type { ButtonInteraction } from 'discord.js';
+import { NotFoundException } from '@nestjs/common';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
@@ -142,7 +143,7 @@ export async function handleDecline(
   );
 
   if (existingSignup) {
-    await deps.signupsService.cancelByDiscordUser(eventId, discordUserId);
+    if (!(await cancelOrReplyNotFound(interaction, eventId, deps))) return;
   } else {
     await createDeclinedSignup(interaction, eventId, deps);
   }
@@ -152,6 +153,32 @@ export async function handleDecline(
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
+}
+
+/** Reply when a Decline finds no signup this Discord user may cancel. */
+export const DECLINE_NOT_FOUND_REPLY = "You're not signed up for this event.";
+
+/**
+ * Cancel the clicker's signup. A signup the Discord id can see but does not
+ * own (ROK-2097: re-linked or unlinked account) is not-found — reply so,
+ * instead of letting the dispatcher answer "Something went wrong".
+ */
+async function cancelOrReplyNotFound(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<boolean> {
+  try {
+    await deps.signupsService.cancelByDiscordUser(eventId, interaction.user.id);
+    return true;
+  } catch (error) {
+    if (!(error instanceof NotFoundException)) throw error;
+    await interaction.editReply({
+      content: DECLINE_NOT_FOUND_REPLY,
+      embeds: [],
+    });
+    return false;
+  }
 }
 
 async function createDeclinedSignup(
