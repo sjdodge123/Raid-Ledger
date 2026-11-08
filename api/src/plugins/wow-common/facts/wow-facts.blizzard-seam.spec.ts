@@ -75,7 +75,7 @@ function build(o: Opts) {
 }
 
 const resolve = async (service: WowFactsService) =>
-  (await service.resolveFacts([REF], NOW)).facts.get('m1');
+  (await service.resolveFacts([REF])).facts.get('m1');
 
 afterEach(() => setForeverNamespacePrefix(null));
 
@@ -108,7 +108,7 @@ describe('WowFactsService — Blizzard Forever seam liveness', () => {
       });
       const ids = (await service.activeSources()).map((s) => s.id);
       expect(ids.includes('blizzard')).toBe(consulted);
-      await service.resolveFacts([REF], NOW);
+      await service.resolveFacts([REF]);
       expect(blizzard.load).toHaveBeenCalledTimes(consulted ? 1 : 0);
     },
   );
@@ -167,7 +167,7 @@ describe('WowFactsService — live seam shadows only answered fields (F6)', () =
   });
 });
 
-describe('WowFactsService — live seam freshness vs addon', () => {
+describe('WowFactsService — live seam: Blizzard wins regardless of age (ROK-2138)', () => {
   const addon58: WowFactCandidates = {
     level: { value: 58, source: 'addon', asOf: ago(10 * MIN) },
   };
@@ -181,7 +181,7 @@ describe('WowFactsService — live seam freshness vs addon', () => {
     expect((await resolve(service))?.level?.value).toBe(60);
   });
 
-  it('a stale (25h) blizzard value loses to the addon', async () => {
+  it('a 25h-old blizzard value still beats the newer addon', async () => {
     const { service } = build({
       prefix: 'forever',
       blizzard: {
@@ -189,7 +189,42 @@ describe('WowFactsService — live seam freshness vs addon', () => {
       },
       addon: addon58,
     });
-    expect((await resolve(service))?.level).toEqual(addon58.level);
+    expect((await resolve(service))?.level).toEqual({
+      value: 60,
+      source: 'blizzard',
+      asOf: ago(25 * HOUR),
+    });
+  });
+
+  it("AC6: a 10-day-old Armory row beats today's snapshot on level/class/ilvl/gear/role; lockouts stay the addon's", async () => {
+    const old = ago(240 * HOUR);
+    const gear = [{ slot: 1, itemId: 12640, ilvl: 63, bonusIds: [] }];
+    const { service } = build({
+      prefix: 'forever',
+      blizzard: {
+        level: { value: 60, source: 'blizzard', asOf: old },
+        class: { value: 'Warrior', source: 'blizzard', asOf: old },
+        ilvl: { value: 63, source: 'blizzard', asOf: old },
+        gear: { value: gear, source: 'blizzard', asOf: old },
+        role: { value: 'tank', source: 'blizzard', asOf: old },
+      },
+      addon: {
+        level: { value: 58, source: 'addon', asOf: NOW },
+        class: { value: 'Mage', source: 'addon', asOf: NOW },
+        ilvl: { value: 70, source: 'addon', asOf: NOW },
+        gear: { value: [], source: 'addon', asOf: NOW },
+        lockouts: { value: [], source: 'addon', asOf: NOW },
+      },
+    });
+    const got = await resolve(service);
+    for (const f of ['level', 'class', 'ilvl', 'gear'] as const) {
+      expect(got?.[f]?.source).toBe('blizzard');
+    }
+    expect(got?.level?.value).toBe(60);
+    expect(got?.gear?.value).toEqual(gear);
+    // The row's manual roleOverride still beats the Blizzard role (AC4).
+    expect(got?.role).toEqual(ROW.role);
+    expect(got?.lockouts?.source).toBe('addon');
   });
 });
 

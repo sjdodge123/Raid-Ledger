@@ -1,19 +1,22 @@
 /**
  * ROK-1910 — the per-field fact precedence rule (plan ROK-1905 §2.3). Pure:
- * no I/O, no clock reads (the caller passes `now`).
+ * no I/O, no clock reads.
  *
  * 1. A `manual` value wins for the fields a user can edit (roleOverride; and
  *    professions only if `MANUAL_PROFESSIONS_WIN` is flipped back on — the
  *    ROK-2107 ruling F0 of 2026-11-07 has Blizzard win, manual as fallback).
- * 2. Otherwise, only while the REGISTERED Blizzard seam is live
- *    (`blizzardFresh`), a `blizzard` value fresher than {@link FRESH_WINDOW_MS}
- *    wins. With the seam off, blizzard-labelled facts (e.g. an Armory-synced
- *    `characters` row) compete on newest `asOf` only — a stale-in-reality row
- *    stamped at sync time must not beat a newer addon snapshot.
- * 3. Otherwise the newest `asOf` among addon, roster and blizzard wins (an
- *    unknown `asOf` sorts last). A `manual` value of a non-editable field is
- *    only the fallback after that.
+ * 2. Otherwise any `blizzard` value wins, REGARDLESS OF AGE (ROK-2138 ruling
+ *    2026-11-08: the official Blizzard API is the primary source; LedgerLink
+ *    only fills gaps). The newest of several blizzard values wins. This holds
+ *    whether or not the Blizzard seam is live (OQ-1): a stored Armory value
+ *    is still Blizzard data when the kill switch stops new calls.
+ * 3. Otherwise the newest `asOf` among addon and roster wins (an unknown
+ *    `asOf` sorts last) — the gap-fill. A `manual` value of a non-editable
+ *    field is only the fallback after that.
  * 4. Otherwise the fact is unknown (`null`).
+ *
+ * "Has a value" is the source's job: a fact source emits no blizzard
+ * candidate for an empty Blizzard value (e.g. zero equipped items, E1).
  */
 import { MANUAL_PROFESSIONS_WIN } from '../../../characters/characters-professions.helpers';
 import {
@@ -23,9 +26,6 @@ import {
   type WowFactField,
   type WowFactValues,
 } from './wow-fact.types';
-
-/** How long a Blizzard value outranks a newer addon/roster value. */
-export const FRESH_WINDOW_MS = 24 * 3600 * 1000;
 
 /** One row of the precedence table. */
 export interface FieldPrecedence {
@@ -73,21 +73,13 @@ function newest<T>(facts: Fact<T>[]): Fact<T> | null {
   return best;
 }
 
-/** Is this blizzard value inside the fresh window? */
-function isFresh(f: Fact<unknown>, now: Date): boolean {
-  return f.asOf !== null && now.getTime() - f.asOf.getTime() <= FRESH_WINDOW_MS;
-}
-
 /**
  * Pick the winning fact for one field.
- * @param blizzardFresh the registered Blizzard seam is live; enables rule 2.
  * @returns the winner, or null when no source knows the field.
  */
 export function resolveField<T>(
   field: WowFactField,
   candidates: Fact<T>[],
-  now: Date,
-  blizzardFresh: boolean,
 ): Fact<T> | null {
   const rule = FIELD_PRECEDENCE[field];
   const allowed = candidates.filter(
@@ -96,10 +88,8 @@ export function resolveField<T>(
   const manual = allowed.filter((c) => c.source === 'manual');
   const others = allowed.filter((c) => c.source !== 'manual');
   if (rule.manualOverride && manual.length > 0) return newest(manual);
-  const fresh = blizzardFresh
-    ? others.filter((c) => c.source === 'blizzard' && isFresh(c, now))
-    : [];
-  if (fresh.length > 0) return newest(fresh);
+  const blizzard = others.filter((c) => c.source === 'blizzard');
+  if (blizzard.length > 0) return newest(blizzard);
   return newest(others) ?? newest(manual);
 }
 
@@ -107,29 +97,22 @@ export function resolveField<T>(
 function resolveOne<F extends WowFactField>(
   field: F,
   perSource: WowFactCandidates[],
-  now: Date,
-  blizzardFresh: boolean,
 ): Fact<WowFactValues[F]> | null {
   const candidates: Fact<WowFactValues[F]>[] = [];
   for (const c of perSource) {
     const f = c[field];
     if (f) candidates.push(f);
   }
-  return resolveField(field, candidates, now, blizzardFresh);
+  return resolveField(field, candidates);
 }
 
 /**
  * Resolve every field of one roster row.
  * @param perSource what each source knows about the row.
- * @param blizzardFresh the registered Blizzard seam is live (see rule 2).
  */
-export function resolveFacts(
-  perSource: WowFactCandidates[],
-  now: Date,
-  blizzardFresh: boolean,
-): ResolvedWowFacts {
+export function resolveFacts(perSource: WowFactCandidates[]): ResolvedWowFacts {
   const r = <F extends WowFactField>(f: F): Fact<WowFactValues[F]> | null =>
-    resolveOne(f, perSource, now, blizzardFresh);
+    resolveOne(f, perSource);
   return {
     level: r('level'),
     class: r('class'),

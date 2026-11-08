@@ -1,9 +1,10 @@
 /**
  * ROK-1920 — the Blizzard Forever fact source against a real DB: only an
  * Armory-linked, synced, realmless `wow_forever` row is served; while the
- * seam is live (effective prefix `forever`, Armory switch on) its fresh
- * level/class/ilvl/gear win over a newer LedgerLink snapshot, and the switch
- * turns it off again. Professions/quests/lockouts never come from Blizzard.
+ * seam is live (effective prefix `forever`, Armory switch on) its
+ * level/class/ilvl/gear win over a newer LedgerLink snapshot regardless of
+ * age (ROK-2138), and the switch turns the source off again — the stored
+ * row's blizzard-labelled facts still win, the snapshot fills the gaps. Professions/quests/lockouts never come from Blizzard.
  */
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -192,8 +193,8 @@ describe('BlizzardForeverFactSource.load (real DB)', () => {
 });
 
 describe('WowFactsService.resolveFacts — Blizzard Forever seam (real DB)', () => {
-  it('live: fresh blizzard level/class/ilvl/gear win over the newer snapshot', async () => {
-    const got = (await facts.resolveFacts(refs(), NOW)).facts.get('armory');
+  it('live: blizzard level/class/ilvl/gear win over the newer snapshot', async () => {
+    const got = (await facts.resolveFacts(refs())).facts.get('armory');
     expect(got?.level).toEqual({ value: 60, source: 'blizzard', asOf: SYNCED });
     expect(got?.class).toEqual({
       value: 'Warrior',
@@ -218,7 +219,7 @@ describe('WowFactsService.resolveFacts — Blizzard Forever seam (real DB)', () 
   });
 
   it('live: the manual Forever row gets nothing blizzard-sourced', async () => {
-    const got = (await facts.resolveFacts(refs(), NOW)).facts.get('manual');
+    const got = (await facts.resolveFacts(refs())).facts.get('manual');
     const sources = Object.values(got ?? {}).map((f) => f?.source);
     expect(sources).not.toContain('blizzard');
     expect(got?.ilvl).toEqual({ value: 76, source: 'addon', asOf: CAPTURED });
@@ -226,10 +227,11 @@ describe('WowFactsService.resolveFacts — Blizzard Forever seam (real DB)', () 
     expect(got?.professions?.source).toBe('manual');
   });
 
-  it('switch off: the blizzard gear/ilvl are gone and the snapshot wins', async () => {
+  // ROK-2138 OQ-1: the source stops, but the row's stored ilvl is still Blizzard data.
+  it('switch off: the row keeps the blizzard ilvl; the snapshot fills the gear', async () => {
     await settings.set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'false');
-    const got = (await facts.resolveFacts(refs(), NOW)).facts.get('armory');
-    expect(got?.ilvl).toEqual({ value: 76, source: 'addon', asOf: CAPTURED });
+    const got = (await facts.resolveFacts(refs())).facts.get('armory');
+    expect(got?.ilvl).toEqual({ value: 64, source: 'blizzard', asOf: SYNCED });
     expect(got?.gear?.source).toBe('addon');
   });
 });

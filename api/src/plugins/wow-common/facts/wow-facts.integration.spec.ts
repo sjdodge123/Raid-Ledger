@@ -142,14 +142,14 @@ beforeAll(async () => {
 
 describe('WowFactsService.resolveForGuild (real DB)', () => {
   it('covers every roster row, linked or not', async () => {
-    const got = await facts.resolveForGuild(guildId, NOW);
+    const got = await facts.resolveForGuild(guildId);
     expect([...got.facts.keys()].sort()).toEqual(
       [`m${memberIds.linked}`, `m${memberIds.unlinked}`].sort(),
     );
   });
 
   it('resolves an unlinked row from the roster alone', async () => {
-    const got = (await facts.resolveForGuild(guildId, NOW)).facts.get(
+    const got = (await facts.resolveForGuild(guildId)).facts.get(
       `m${memberIds.unlinked}`,
     );
     expect(got?.level).toEqual({ value: 41, source: 'roster', asOf: SNAP });
@@ -164,7 +164,7 @@ describe('WowFactsService.resolveForGuild (real DB)', () => {
   });
 
   it('resolves the linked row: manual role, addon gear/quests/lockouts, roster level', async () => {
-    const got = (await facts.resolveForGuild(guildId, NOW)).facts.get(
+    const got = (await facts.resolveForGuild(guildId)).facts.get(
       `m${memberIds.linked}`,
     );
     expect(got?.role).toEqual({
@@ -229,22 +229,24 @@ describe('WowFactsService.resolveFacts — CharacterRow Armory row (real DB)', (
     testApp.app.get(SettingsService).set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'true'),
   );
 
-  it('a recent blizzard-labelled row loses to a newer addon snapshot while the Armory switch is off', async () => {
+  // ROK-2138 OQ-1/AC7: a stored Armory value still wins with the kill switch off.
+  it('a blizzard-labelled row beats a newer addon snapshot while the Armory switch is off', async () => {
     // Since #1979 the alias and a null prefix both resolve to `forever`; only the kill switch turns the seam off.
     await testApp.app
       .get(SettingsService)
       .set(WOW_FOREVER_ARMORY_IMPORT_KEY, 'false');
     const characterId = await seedArmoryCharacter();
-    const got = await facts.resolveFacts(
-      [{ key: 'armory', memberId: null, characterId }],
-      NOW,
-    );
+    const got = await facts.resolveFacts([
+      { key: 'armory', memberId: null, characterId },
+    ]);
     expect(got.truncated).toBe(false);
     expect(got.facts.get('armory')?.ilvl).toEqual({
-      value: 73,
-      source: 'addon',
-      asOf: new Date(NOW.getTime() - 3600 * 1000),
+      value: 61,
+      source: 'blizzard',
+      asOf: new Date(NOW.getTime() - 2 * 3600 * 1000),
     });
+    // Gap-fill: the row has no gear, so the snapshot's gear stands.
+    expect(got.facts.get('armory')?.gear?.source).toBe('addon');
     expect(got.facts.get('armory')?.class?.source).toBe('blizzard');
   });
 });
@@ -319,7 +321,7 @@ describe('WowFactsService.resolveFacts — professions provenance (ROK-2107, rea
   };
   const refOf = (key: Key) => ({ key, memberId: null, characterId: ids[key] });
   const resolve = async (key: Key) =>
-    (await facts.resolveFacts([refOf(key)], NOW)).facts.get(key)?.professions;
+    (await facts.resolveFacts([refOf(key)])).facts.get(key)?.professions;
   const manualFact = { value: MANUAL_PROFS, source: 'manual', asOf: null };
   const armoryFact = {
     value: ARMORY_PROFS,

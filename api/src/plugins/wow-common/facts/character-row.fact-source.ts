@@ -32,7 +32,13 @@ interface CharRow {
   addonGuid: string | null;
 }
 
-/** Where the row's synced columns came from: Armory, addon, or hand entry. */
+/**
+ * Where the row's synced columns came from: Armory, addon, or hand entry.
+ * An `external_id` row is Armory data → `blizzard`, which wins regardless of
+ * age even while the Blizzard source is off (ROK-2138 OQ-1). That is only
+ * correct while the addon import does not write class/level/race into an
+ * Armory-linked row (ROK-2138 D7, the addon-import binding).
+ */
 function rowOrigin(row: CharRow): HubFactSource {
   if (row.externalId) return 'blizzard';
   return row.addonGuid ? 'addon' : 'manual';
