@@ -9,11 +9,12 @@ describe('guildAddonFlavorForSlug (ROK-2114)', () => {
         ['world-of-warcraft-classic-season-of-discovery', 'classic'],
         ['world-of-warcraft-burning-crusade-classic-anniversary-edition', 'classic'],
         ['world-of-warcraft-cataclysm-classic', 'classic'],
+        ['world-of-warcraft-wrath-of-the-lich-king', 'classic'],
     ] as const)('%s → %s', (slug, flavor) => {
         expect(guildAddonFlavorForSlug(slug)).toBe(flavor);
     });
 
-    it.each([undefined, null, '', 'valheim', 'world-of-warcraft-wrath-of-the-lich-king', 'world-of-warcraft-some-future-expansion'])(
+    it.each([undefined, null, '', 'valheim', 'world-of-warcraft-some-future-expansion'])(
         'an unknown or ambiguous slug (%s) has no flavor, so the panel keeps All / Any flavor',
         (slug) => {
             expect(guildAddonFlavorForSlug(slug)).toBeNull();

@@ -12,12 +12,15 @@ import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 
 const RETAIL_SLUG = 'world-of-warcraft';
 const WOW_PREFIX = 'world-of-warcraft-';
+/** Classic-era slugs whose name lacks "classic" (migration 0091 uses this one for Wrath Classic). */
+const CLASSIC_SLUGS: ReadonlySet<string> = new Set(['world-of-warcraft-wrath-of-the-lich-king']);
 
 /** The addon flavor a hub's game slug implies, or `null` when it is unknown or ambiguous. */
 export function guildAddonFlavorForSlug(slug: string | null | undefined): GuildAddonFlavor | null {
     if (!slug) return null;
     if (slug === WOW_FOREVER_GAME_SLUG) return 'forever';
     if (slug === RETAIL_SLUG) return 'retail';
+    if (CLASSIC_SLUGS.has(slug)) return 'classic';
     if (slug.startsWith(WOW_PREFIX) && slug.split('-').includes('classic')) return 'classic';
     return null;
 }
