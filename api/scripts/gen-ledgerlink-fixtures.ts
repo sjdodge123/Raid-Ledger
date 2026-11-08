@@ -17,6 +17,7 @@ import { deflateSync } from 'node:zlib';
 import {
   ADDON_IMPORT_MAX_BYTES,
   ADDON_QUESTS_COMPLETED_MAX,
+  COMPANION_WOW_LEDGERLINK_EXPORT_MAX,
   type AddonImportErrorCode,
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
@@ -38,6 +39,13 @@ import {
   buildForeverQuestsTruncatedPayload,
   buildForeverTalentsPayload,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.forever';
+import {
+  buildCharMailworthyPayload,
+  buildCharMailworthyRuleCapPayload,
+  buildCharMailworthyTemplateOnlyPayload,
+  buildCharMailworthyTooManyRulesPayload,
+  buildMailworthyWorstCaseBlock,
+} from '../src/plugins/wow-common/addon-import/testing/addon-fixture.mailworthy';
 import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
 
 const OUT = join(__dirname, '../../packages/contract/ledgerlink/v1/fixtures');
@@ -105,6 +113,9 @@ const VALID: Record<string, () => string> = {
     buildImportString(buildForeverQuestsLogOnlyPayload()),
   'char-forever-talents-named': () =>
     buildImportString(buildForeverTalentsPayload()),
+  'char-mailworthy': () => buildImportString(buildCharMailworthyPayload()),
+  'char-mailworthy-template-only': () =>
+    buildImportString(buildCharMailworthyTemplateOnlyPayload()),
   'guild-1-page': () => guildPaste(40),
   'guild-3-pages': () => guildPaste(600),
   'guild-8-pages-2000-members': () => guildPaste(2000),
@@ -170,6 +181,14 @@ function mixed11Tokens(): string {
 
 const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
   'unknown-key-officer-note': ['INVALID_PAYLOAD', officerNote],
+  'char-mailworthy-rule-cap': [
+    'INVALID_PAYLOAD',
+    () => buildImportString(buildCharMailworthyRuleCapPayload()),
+  ],
+  'char-mailworthy-too-many-rules': [
+    'INVALID_PAYLOAD',
+    () => buildImportString(buildCharMailworthyTooManyRulesPayload()),
+  ],
   'ruleset-misspelled': [
     'INVALID_PAYLOAD',
     () =>
@@ -286,8 +305,25 @@ function assertWorstCasePasteFits(): void {
   console.log(`worst-case combined paste: ${bytes} B`);
 }
 
+/** ROK-2148 §A.4: a max-quests char carrying a max Mailworthy block fits. */
+function assertWorstCaseMailworthyCharFits(): void {
+  const char = buildForeverQuestsPayload();
+  const mailworthy = buildMailworthyWorstCaseBlock();
+  const paste = buildImportString({
+    ...char,
+    data: { ...char.data, mailworthy },
+  });
+  const bytes = Buffer.byteLength(paste, 'utf8');
+  if (bytes > COMPANION_WOW_LEDGERLINK_EXPORT_MAX)
+    throw new Error(
+      `worst-case Mailworthy char is ${bytes} B > ${COMPANION_WOW_LEDGERLINK_EXPORT_MAX}`,
+    );
+  console.log(`worst-case Mailworthy char string: ${bytes} B`);
+}
+
 function main(): void {
   assertWorstCasePasteFits();
+  assertWorstCaseMailworthyCharFits();
   mkdirSync(join(OUT, 'invalid'), { recursive: true });
   for (const [name, build] of Object.entries(VALID)) {
     const paste = build();

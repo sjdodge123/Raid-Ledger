@@ -16,6 +16,7 @@ import {
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { buildMailworthyBlock } from './testing/addon-fixture.mailworthy';
 import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
 import {
   TALENT_COL_STEP,
@@ -63,6 +64,8 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
       'char-forever-quests-log-only',
       'char-forever-quests-truncated',
       'char-forever-talents-named',
+      'char-mailworthy',
+      'char-mailworthy-template-only',
       'char-normal',
       'char-null-ruleset-no-guild',
       'char-roleplaying',
@@ -99,6 +102,8 @@ describe('LedgerLink v1 golden fixtures — invalid', () => {
         'mixed-11-tokens',
         'gender-unknown-value',
         'quests-completed-over-cap',
+        'char-mailworthy-rule-cap',
+        'char-mailworthy-too-many-rules',
       ]),
     );
   });
@@ -132,6 +137,20 @@ function contractSlot(n: PositionedNode, origins: number[]) {
     col: Math.round((n.posX - origin) / TALENT_COL_STEP),
   };
 }
+
+describe('char-mailworthy — the block survives decode (ROK-2148)', () => {
+  it('carries the Mailworthy block beside the frozen snapshot data', () => {
+    const decoded = decodeImportPaste(read(FIXTURES, 'char-mailworthy.txt'));
+    const payload = decoded.sections.char?.payload;
+    expect(payload?.mailworthy).toEqual(buildMailworthyBlock());
+    expect(payload?.data).not.toHaveProperty('mailworthy');
+  });
+
+  it('a char export without the block decodes without the key', () => {
+    const decoded = decodeImportPaste(read(FIXTURES, 'char-normal.txt'));
+    expect(decoded.sections.char?.payload).not.toHaveProperty('mailworthy');
+  });
+});
 
 describe('char-forever-talents-named — hints follow CONTRACT §3 (ROK-1758)', () => {
   it('every tree/row/col hint equals the rule applied to its own posX/posY', () => {
