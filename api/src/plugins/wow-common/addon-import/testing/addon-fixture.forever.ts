@@ -161,3 +161,13 @@ export function buildForeverQuestsTruncatedPayload(): AddonCharExport {
   const quests = { ...buildQuests(3), completedTruncated: true };
   return foreverChar('female', { quests });
 }
+
+/**
+ * ROK-2125: `data.quests` with the quest log only — no `completed` key, the
+ * shape LedgerLink sends once it stops shipping the completed list (absent =
+ * "no opinion"; the Armory `quests/completed` sync supplies it).
+ */
+export function buildForeverQuestsLogOnlyPayload(): AddonCharExport {
+  const { inProgress } = buildQuests(0);
+  return foreverChar('female', { quests: { inProgress } });
+}
