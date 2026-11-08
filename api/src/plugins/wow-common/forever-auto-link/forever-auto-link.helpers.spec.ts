@@ -15,7 +15,9 @@ import {
   backoffDelay,
   classifyAutoLinkError,
   isAutoLinkCandidate,
+  isAutoLinkCandidateShape,
   nextRetryAt,
+  retryAtFor,
   stopsAutoLinkRun,
   type AutoLinkCandidateRow,
 } from './forever-auto-link.helpers';
@@ -101,6 +103,32 @@ describe('stopsAutoLinkRun', () => {
     expect(stopsAutoLinkRun('upstream')).toBe(true);
     expect(stopsAutoLinkRun('not_found')).toBe(false);
     expect(stopsAutoLinkRun('external_id_conflict')).toBe(false);
+    expect(stopsAutoLinkRun('invalid_name')).toBe(false);
+  });
+});
+
+describe('retryAtFor (review round 1)', () => {
+  const now = new Date('2026-11-08T00:00:00.000Z');
+  it('backs an invalid name off the full 24 h, whatever the count', () => {
+    expect(retryAtFor('invalid_name', 1, now).getTime()).toBe(
+      now.getTime() + AUTOLINK_MAX_BACKOFF_MS,
+    );
+  });
+  it('uses the exponential backoff for every other kind', () => {
+    expect(retryAtFor('not_found', 2, now)).toEqual(nextRetryAt(2, now));
+    expect(retryAtFor('upstream', 1, now)).toEqual(nextRetryAt(1, now));
+  });
+});
+
+describe('isAutoLinkCandidateShape (review round 1)', () => {
+  it('ignores the name so the service can back a bad name off', () => {
+    expect(isAutoLinkCandidateShape(row({ name: 'Ana F0rever' }), 7)).toBe(
+      true,
+    );
+    expect(isAutoLinkCandidate(row({ name: 'Ana F0rever' }), 7)).toBe(false);
+  });
+  it('accepts an accented two-part name', () => {
+    expect(isAutoLinkCandidate(row({ name: 'Zoë Forêt' }), 7)).toBe(true);
   });
 });
 

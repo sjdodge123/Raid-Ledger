@@ -11,12 +11,13 @@ import type * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { BlizzardCharacterSyncAdapter } from '../blizzard-character-sync.adapter';
 import { isForeverArmoryImportEnabled } from '../forever-armory-switch';
+import { isForeverTwoPartName } from '../forever-character-slug';
 import * as apply from './forever-auto-link.apply';
 import {
   AUTOLINK_CAP,
   AUTOLINK_SPACING_MS,
   classifyAutoLinkError,
-  isAutoLinkCandidate,
+  isAutoLinkCandidateShape,
   stopsAutoLinkRun,
   type AutoLinkErrorKind,
 } from './forever-auto-link.helpers';
@@ -118,16 +119,27 @@ export class ForeverAutoLinkService {
   ): Promise<AutoLinkOutcome> {
     const now = new Date();
     const target = await apply.loadAutoLinkTarget(this.db, characterId);
-    if (!target || !isAutoLinkCandidate(target.row, gameId)) return 'skipped';
-    if (target.state && target.state.retryAt > now) return 'skipped';
-    return this.fetchAndLink(target, now);
+    if (!target) return 'skipped';
+    const { row, state } = target;
+    if (!isAutoLinkCandidateShape(row, gameId)) return 'skipped';
+    if (state && state.retryAt > now) return 'skipped';
+    if (!isForeverTwoPartName(row.name)) {
+      const failures = (state?.failures ?? 0) + 1;
+      const kind = 'invalid_name';
+      await apply.recordAutoLinkFailure(this.db, row.id, failures, kind, now);
+      return kind;
+    }
+    // Atomic claim: a concurrent nudge / job attempt on this row skips.
+    const prior = await apply.claimAutoLinkAttempt(this.db, row.id, now);
+    if (prior === null) return 'skipped';
+    return this.fetchAndLink(row, prior + 1, now);
   }
 
   private async fetchAndLink(
-    { row, state }: apply.AutoLinkTarget,
+    row: apply.RegionedCharacter,
+    failures: number,
     now: Date,
   ): Promise<AutoLinkOutcome> {
-    const failures = (state?.failures ?? 0) + 1;
     let fetched: Awaited<ReturnType<typeof apply.fetchForeverProfile>>;
     try {
       fetched = await apply.fetchForeverProfile(this.db, this.adapter, row);
@@ -149,7 +161,7 @@ export class ForeverAutoLinkService {
 
   /** OQ-5: another row already holds the Blizzard id → warn, don't link. */
   private async externalIdConflict(
-    row: apply.AutoLinkCharacter,
+    row: apply.RegionedCharacter,
     fetched: Awaited<ReturnType<typeof apply.fetchForeverProfile>>,
   ): Promise<boolean> {
     const externalId = fetched.profile.externalId;
@@ -167,6 +179,7 @@ function isErrorKind(outcome: AutoLinkOutcome): outcome is AutoLinkErrorKind {
   return (
     outcome === 'not_found' ||
     outcome === 'upstream' ||
-    outcome === 'external_id_conflict'
+    outcome === 'external_id_conflict' ||
+    outcome === 'invalid_name'
   );
 }

@@ -6,7 +6,8 @@
  * the addon (`addon_guid` set) that is NOT Armory-linked yet (`game_variant`
  * NULL), realmless with a ruleset + region, and not known to be below level
  * 10 (Blizzard 404s those), with a two-part "First Surname" name (the only
- * shape the realmless route can address — anything else 400s forever).
+ * shape the realmless route can address — anything else 400s forever). The
+ * SQL name clause is a locale-free superset; the JS rule decides.
  * Candidates and the twice-daily bulk-sync rows
  * (`game_variant IS NOT NULL`) are disjoint by construction.
  */
@@ -42,7 +43,14 @@ export const AUTOLINK_MAX_BACKOFF_MS = 24 * AUTOLINK_BASE_BACKOFF_MS;
 
 /** Why an attempt failed — stored in `last_error`. */
 export type AutoLinkErrorKind =
-  'not_found' | 'upstream' | 'external_id_conflict';
+  'not_found' | 'upstream' | 'external_id_conflict' | 'invalid_name';
+
+/**
+ * How long a claimed attempt holds its state row (`retry_at` pushed this far
+ * ahead) so an import nudge and the hourly job never fetch the same
+ * character at once. A crashed attempt is retried once the lease lapses.
+ */
+export const AUTOLINK_CLAIM_LEASE_MS = 15 * 60 * 1000;
 
 /** The `characters` columns candidacy depends on. */
 export type AutoLinkCandidateRow = Pick<
@@ -77,13 +85,29 @@ export function nextRetryAt(failures: number, now: Date): Date {
 }
 
 /**
+ * Retry time for a failure of `kind`. A name the realmless route can never
+ * address (`invalid_name`, no Blizzard call made) waits the full 24 h so it
+ * cannot hold its place at the head of the job queue.
+ */
+export function retryAtFor(
+  kind: AutoLinkErrorKind,
+  failures: number,
+  now: Date,
+): Date {
+  if (kind === 'invalid_name') {
+    return new Date(now.getTime() + AUTOLINK_MAX_BACKOFF_MS);
+  }
+  return nextRetryAt(failures, now);
+}
+
+/**
  * Classify a thrown fetch error. Only a `NotFoundException` (the realmless
  * 404 — level < 10, never logged out, or hidden) is `not_found`; anything
  * else (502 from a 429/5xx, network, token) is `upstream`.
  */
 export function classifyAutoLinkError(
   err: unknown,
-): Exclude<AutoLinkErrorKind, 'external_id_conflict'> {
+): 'not_found' | 'upstream' {
   return err instanceof NotFoundException ? 'not_found' : 'upstream';
 }
 
@@ -92,11 +116,15 @@ export function stopsAutoLinkRun(kind: AutoLinkErrorKind): boolean {
   return kind === 'upstream';
 }
 
-/** In-memory twin of `autoLinkCandidateWhere` for a re-read row. */
-export function isAutoLinkCandidate(
-  row: AutoLinkCandidateRow,
+/**
+ * Every candidacy clause except the name rule (the SQL name filter is only a
+ * prefilter, so the service checks the name separately and backs a
+ * non-two-part name off). Narrows `region` to a string.
+ */
+export function isAutoLinkCandidateShape<T extends AutoLinkCandidateRow>(
+  row: T,
   foreverGameId: number,
-): boolean {
+): row is T & { region: string } {
   return (
     row.gameId === foreverGameId &&
     row.addonGuid !== null &&
@@ -104,7 +132,17 @@ export function isAutoLinkCandidate(
     row.ruleset !== null &&
     row.realm === null &&
     row.region !== null &&
-    (row.level === null || row.level >= AUTOLINK_MIN_LEVEL) &&
+    (row.level === null || row.level >= AUTOLINK_MIN_LEVEL)
+  );
+}
+
+/** In-memory twin of `autoLinkCandidateWhere` with the real name rule. */
+export function isAutoLinkCandidate(
+  row: AutoLinkCandidateRow,
+  foreverGameId: number,
+): boolean {
+  return (
+    isAutoLinkCandidateShape(row, foreverGameId) &&
     isForeverTwoPartName(row.name)
   );
 }

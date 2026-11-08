@@ -1,5 +1,6 @@
 import {
   buildForeverCharacterSlug,
+  FOREVER_NAME_SQL_PATTERN,
   isForeverTwoPartName,
 } from './forever-character-slug';
 
@@ -54,7 +55,26 @@ describe('isForeverTwoPartName (ROK-2124)', () => {
     ['Thrall', false],
     ['Ana Of Forever', false],
     ['Ana  Forever', false],
+    ['Zoë Forêt', true],
+    ['Ægir Ølstad', true],
+    ['Zoë F0rêt', false],
   ])('%j → %s', (name, expected) => {
     expect(isForeverTwoPartName(name)).toBe(expected);
   });
+});
+
+describe('FOREVER_NAME_SQL_PATTERN (ROK-2124 review)', () => {
+  const sqlTwin = new RegExp(FOREVER_NAME_SQL_PATTERN);
+
+  it('uses no locale-dependent character class', () => {
+    expect(FOREVER_NAME_SQL_PATTERN).not.toMatch(/\[\[:/);
+  });
+
+  it.each(['Ana Forever', 'Zoë Forêt', 'Ægir Ølstad', 'İlse Forever'])(
+    'admits every name the JS rule accepts: %j',
+    (name) => {
+      expect(isForeverTwoPartName(name)).toBe(true);
+      expect(sqlTwin.test(name.trim())).toBe(true);
+    },
+  );
 });

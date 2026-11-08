@@ -56,6 +56,7 @@ beforeEach(() => {
   m.fetchForeverProfile.mockResolvedValue(fetched);
   m.findExternalIdHolder.mockResolvedValue(null);
   m.applyAutoLink.mockResolvedValue(true);
+  m.claimAutoLinkAttempt.mockResolvedValue(0);
 });
 
 describe('ForeverAutoLinkService.attempt', () => {
@@ -81,6 +82,7 @@ describe('ForeverAutoLinkService.attempt', () => {
   it('counts on from the stored failures', async () => {
     const state = { failures: 3, retryAt: new Date(0) };
     m.loadAutoLinkTarget.mockResolvedValue({ row: char(), state } as never);
+    m.claimAutoLinkAttempt.mockResolvedValue(3);
     m.fetchForeverProfile.mockRejectedValue(new BadGatewayException('429'));
     await expect(service.attempt('c-1')).resolves.toBe('upstream');
     expect(m.recordAutoLinkFailure).toHaveBeenCalledWith(
@@ -105,6 +107,42 @@ describe('ForeverAutoLinkService.attempt', () => {
     await expect(service.attempt('c-1')).resolves.toBe('skipped');
     expect(m.fetchForeverProfile).not.toHaveBeenCalled();
     expect(m.recordAutoLinkFailure).not.toHaveBeenCalled();
+  });
+});
+
+describe('ForeverAutoLinkService.attempt — review round 1', () => {
+  it('another attempt holds the claim → skipped, no Blizzard call', async () => {
+    m.claimAutoLinkAttempt.mockResolvedValue(null);
+    await expect(service.attempt('c-1')).resolves.toBe('skipped');
+    expect(m.claimAutoLinkAttempt).toHaveBeenCalledWith(
+      {},
+      'c-1',
+      expect.any(Date),
+    );
+    expect(m.fetchForeverProfile).not.toHaveBeenCalled();
+    expect(m.recordAutoLinkFailure).not.toHaveBeenCalled();
+  });
+
+  it('a name the JS rule rejects → invalid_name backoff, no claim, no call', async () => {
+    const row = char({ name: 'Thrall F0rever' });
+    m.loadAutoLinkTarget.mockResolvedValue({ row, state: null });
+    await expect(service.attempt('c-1')).resolves.toBe('invalid_name');
+    expect(m.recordAutoLinkFailure).toHaveBeenCalledWith(
+      {},
+      'c-1',
+      1,
+      'invalid_name',
+      expect.any(Date),
+    );
+    expect(m.claimAutoLinkAttempt).not.toHaveBeenCalled();
+    expect(m.fetchForeverProfile).not.toHaveBeenCalled();
+  });
+
+  it('an accented two-part name is attempted', async () => {
+    const row = char({ name: 'Zoë Forêt' });
+    m.loadAutoLinkTarget.mockResolvedValue({ row, state: null });
+    await expect(service.attempt('c-1')).resolves.toBe('linked');
+    expect(m.fetchForeverProfile).toHaveBeenCalledTimes(1);
   });
 });
 
