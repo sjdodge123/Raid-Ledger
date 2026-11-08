@@ -130,6 +130,11 @@ export const ForeverProbeEndpointSchema = z.enum([
     'profile-quests-completed',
     'guild-summary',
     'ruleset-detail',
+    // ROK-2143: static quest + item data (does Forever serve classic quests?).
+    'quest-index',
+    'quest-area',
+    'quest',
+    'item',
 ]);
 export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
 
@@ -183,6 +188,22 @@ export const ForeverProbeDeepKeysShapeSchema = z.object({
     arrayLengths: z.record(z.string(), z.number().int().nonnegative()),
 });
 export type ForeverProbeDeepKeysShapeDto = z.infer<typeof ForeverProbeDeepKeysShapeSchema>;
+
+/**
+ * ROK-2143: a values shape for public static game data (quests, quest areas,
+ * items) — flattened leaf paths (`rewards.experience`,
+ * `rewards.items[0].item.name`) to their values. Links/hrefs are dropped,
+ * localized names collapse to `en_US`. Never used for profile data.
+ */
+export const ForeverProbeValuesShapeSchema = z.object({
+    topLevelKeys: z.array(z.string()),
+    entryCount: z.number().int().nonnegative(),
+    values: z.record(
+        z.string(),
+        z.union([z.string().max(200), z.number(), z.boolean(), z.null()]),
+    ),
+});
+export type ForeverProbeValuesShapeDto = z.infer<typeof ForeverProbeValuesShapeSchema>;
 
 export const ForeverProbeResultSchema = z.object({
     ranAt: z.string(),
