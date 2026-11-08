@@ -257,7 +257,7 @@ describe('review round 2 (ROK-2124)', () => {
   it('invalid_name / skipped rows spend neither the pause nor a cap slot', async () => {
     const ids = ['bad-0', 'ok-0', 'bad-1', 'held', ...range(60, 'ok-x')];
     m.listDueCandidateIds.mockResolvedValue(ids);
-    m.loadAutoLinkTarget.mockImplementation((id: string) =>
+    m.loadAutoLinkTarget.mockImplementation((_db, id: string) =>
       Promise.resolve({
         row: char({ id, name: id.startsWith('bad') ? 'Bad N4me' : 'Ok Name' }),
         state: null,

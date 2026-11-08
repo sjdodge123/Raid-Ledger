@@ -5,7 +5,6 @@
  * multi-candidate run never waits 500 ms between attempts.
  */
 import { BadGatewayException, NotFoundException } from '@nestjs/common';
-import type { CharacterEquipmentDto } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
@@ -13,7 +12,10 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { CharactersService } from '../../../characters/characters.service';
 import { SettingsService } from '../../../settings/settings.service';
-import type { ExternalCharacterProfile } from '../../plugin-host/extension-types';
+import type {
+  ExternalCharacterEquipment,
+  ExternalCharacterProfile,
+} from '../../plugin-host/extension-types';
 import { BlizzardCharacterSyncAdapter } from '../blizzard-character-sync.adapter';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
 import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
@@ -24,6 +26,24 @@ import {
 } from './forever-auto-link.apply';
 
 const HOUR = 60 * 60 * 1000;
+/** AC-1 non-null Armory payloads (typed — no `as` casts). */
+const equipment: ExternalCharacterEquipment = {
+  equippedItemLevel: 51,
+  items: [
+    {
+      slot: 'HEAD',
+      name: 'Test Helm',
+      itemId: 1,
+      quality: 'RARE',
+      itemLevel: 51,
+      itemSubclass: null,
+    },
+  ],
+  syncedAt: '2026-11-08T00:00:00.000Z',
+};
+const professions = { primary: [], secondary: [], syncedAt: 'now' };
+const quests = { fetchedAt: '2026-11-08T00:00:00Z', completed: [1, 2] };
+
 type CharInsert = typeof schema.characters.$inferInsert;
 
 let testApp: TestApp;
@@ -353,22 +373,6 @@ describe('review round 1 — names, concurrency, rename (ROK-2124)', () => {
 describe('missing AC coverage (review round 1)', () => {
   it('AC-1: the Armory columns are written from a non-null payload', async () => {
     const id = await seedChar();
-    const equipment: CharacterEquipmentDto = {
-      equippedItemLevel: 51,
-      items: [
-        {
-          slot: 'HEAD',
-          name: 'Test Helm',
-          itemId: 1,
-          quality: 'RARE',
-          itemLevel: 51,
-          itemSubclass: null,
-        },
-      ],
-      syncedAt: '2026-11-08T00:00:00.000Z',
-    };
-    const professions = { primary: [], secondary: [], syncedAt: 'now' };
-    const quests = { fetchedAt: '2026-11-08T00:00:00Z', completed: [1, 2] };
     fetchProfile.mockResolvedValue(profile({ class: 'Paladin' }));
     jest.spyOn(adapter, 'fetchSpecialization').mockResolvedValue({
       spec: 'Holy',
