@@ -96,24 +96,22 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     );
   }
 
+  /**
+   * Thin pass-through, null included: a failed fetch must not become an empty
+   * item list, or the sync would overwrite the stored gear. The orchestrator
+   * omits the `equipment` key on null (same keep-prior rule as professions).
+   */
   async fetchEquipment(
     name: string,
     realm: string | null,
     region: string,
     gameVariant?: string,
-  ): Promise<ExternalCharacterEquipment> {
-    const result = await this.blizzardService.fetchCharacterEquipment(
+  ): Promise<ExternalCharacterEquipment | null> {
+    return this.blizzardService.fetchCharacterEquipment(
       name,
       realm,
       region,
       gameVariant ?? null,
-    );
-    return (
-      result ?? {
-        equippedItemLevel: null,
-        items: [],
-        syncedAt: new Date().toISOString(),
-      }
     );
   }
 

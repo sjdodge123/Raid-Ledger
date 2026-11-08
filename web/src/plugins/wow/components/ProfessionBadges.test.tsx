@@ -115,3 +115,18 @@ describe('ProfessionBadges — icon loading (ROK-1159)', () => {
         expect(icon).toHaveAttribute('decoding', 'async');
     });
 });
+
+describe('ProfessionBadges — tier-only Armory rows (Forever 0/0 fix)', () => {
+    it('shows the tier skill when the stored header is 0/0', () => {
+        const tierOnly: CharacterProfessionsDto = {
+            primary: [
+                { id: 186, name: 'Mining', slug: 'mining', skillLevel: 0, maxSkillLevel: 0, tiers: [{ id: 186, name: 'Mining', skillLevel: 95, maxSkillLevel: 150 }] },
+            ],
+            secondary: [],
+            syncedAt: '2026-11-07T00:00:00.000Z',
+        };
+        render(<ProfessionBadges professions={tierOnly} />);
+        const pill = screen.getByTitle('Mining 95/150');
+        expect(pill).toHaveTextContent('95');
+    });
+});
