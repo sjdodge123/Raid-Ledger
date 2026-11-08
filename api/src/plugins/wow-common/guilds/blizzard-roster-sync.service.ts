@@ -31,7 +31,9 @@ export type RosterSyncResult =
         | 'stale'
         | 'superseded';
     }
-  | { status: 'ok'; updated: number; inserted: number };
+  | { status: 'ok'; updated: number; inserted: number }
+  /** ROK-2139 guard: nothing written, status `error`, `reason` for staff. */
+  | { status: 'mismatch'; reason: string };
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -59,7 +61,8 @@ export class BlizzardRosterSyncService {
    * @param guildId - `guilds.id`.
    * @returns `skipped` (not a Forever guild with a slug), `disabled` (kill
    *   switch off), `not_found`, `skipped_empty`, `stale`, `superseded`
-   *   (slug changed mid-fetch) or `ok`.
+   *   (slug changed mid-fetch), `mismatch` (ROK-2139 guard refused the
+   *   roster; nothing written, status `error`) or `ok`.
    * @throws whatever the fetch or apply threw, after recording `error`.
    */
   async syncForeverGuildRoster(guildId: number): Promise<RosterSyncResult> {
@@ -108,6 +111,7 @@ export class BlizzardRosterSyncService {
     if (res.superseded) return { status: 'superseded' };
     // A newer snapshot already stored → nothing written, no status (MINOR 15).
     if (res.stale) return { status: 'stale' };
+    if (res.mismatch !== null) return this.recordMismatch(guild, res.mismatch);
     // After the commit, never inside the tx (Codex P2-3).
     this.insightsCache.invalidateGuild(guild.id);
     await this.flagIfNeeded(res);
@@ -156,6 +160,24 @@ export class BlizzardRosterSyncService {
         `Could not record roster sync error for ${guild.id}: ${m}`,
       );
     }
+  }
+
+  /** ROK-2139 — a refused roster: status `error`, logged and in Sentry. */
+  private async recordMismatch(
+    guild: SyncGuild,
+    reason: string,
+  ): Promise<RosterSyncResult> {
+    this.logger.warn(
+      `Forever roster sync refused for guild ${guild.id}: ${reason}`,
+    );
+    Sentry.captureMessage('Forever roster sync identity mismatch', {
+      level: 'warning',
+      tags: { guildId: String(guild.id), region: guild.region },
+      // One issue per guild, not a fresh one every 6h cron run (review m4).
+      fingerprint: ['forever-roster-identity-mismatch', String(guild.id)],
+    });
+    await this.writeStatus(guild.id, 'error');
+    return { status: 'mismatch', reason };
   }
 
   /** Post-commit staff flag for a wholesale change (never throws). */

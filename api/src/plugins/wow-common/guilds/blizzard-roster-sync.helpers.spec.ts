@@ -33,6 +33,7 @@ function row(over: Partial<ExistingRosterRow> = {}): ExistingRosterRow {
     guid: 'Player-1-0001',
     blizzardCharacterId: null,
     characterName: 'Ana Example',
+    className: null,
     level: 58,
     rankIndex: 0,
     rankName: 'Guild Master',
