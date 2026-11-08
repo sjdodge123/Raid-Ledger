@@ -11,9 +11,14 @@ import {
   type ProbeTarget,
 } from './forever-namespace-probe.forever';
 import type { ProbeUrl, ShapeSummary } from './forever-namespace-probe.helpers';
+import { isValuesEndpoint } from './forever-namespace-probe.quest-data';
+import {
+  flattenValues,
+  type ValuesShapeSummary,
+} from './forever-namespace-probe.values';
 import {
   isDeepKeysEndpoint,
-  summariseDeepKeys,
+  summariseDeepKeysFor,
 } from './forever-namespace-probe.profile-extra';
 
 /** Static index endpoint → its `data/wow` path. */
@@ -28,6 +33,8 @@ const LIST_KEY: Partial<Record<ForeverProbeEndpoint, string>> = {
   'journal-expansion': 'tiers',
   'journal-instance': 'instances',
   'playable-class': 'classes',
+  // ROK-2143: the quest index lists link groups; names stay empty if so.
+  'quest-index': 'categories',
 };
 
 /** Names kept per shape (public game data, evidence only). */
@@ -37,6 +44,10 @@ const MAX_NAME_LENGTH = 120;
 
 /** A shape summary that may also list public entry names. */
 export type NamedShapeSummary = ShapeSummary & { names?: string[] };
+
+/** Any custom shape: named, keys-only, deep-keys or values (ROK-2143). */
+export type CustomShapeSummary = NamedShapeSummary &
+  Partial<Pick<ValuesShapeSummary, 'values'>>;
 
 /** The three static index URLs for one matched (prefix, region). */
 export function buildStaticUrls(target: ProbeTarget): ProbeUrl[] {
@@ -102,16 +113,20 @@ export function hasCustomShape(endpoint: ForeverProbeEndpoint): boolean {
   return (
     isKeysOnlyEndpoint(endpoint) ||
     isStaticEndpoint(endpoint) ||
-    isDeepKeysEndpoint(endpoint)
+    isDeepKeysEndpoint(endpoint) ||
+    isValuesEndpoint(endpoint)
   );
 }
 
-/** The keys-only, deep-keys (ROK-2108) or static named shape for an endpoint {@link hasCustomShape} accepts. */
+/** The keys-only, deep-keys (ROK-2108), values (ROK-2143) or static named shape for an endpoint {@link hasCustomShape} accepts. */
 export function summariseCustomShape(
   endpoint: ForeverProbeEndpoint,
   body: unknown,
-): NamedShapeSummary {
+): CustomShapeSummary {
   if (isStaticEndpoint(endpoint)) return summariseStaticShape(endpoint, body);
-  if (isDeepKeysEndpoint(endpoint)) return summariseDeepKeys(body); // ROK-2108
+  // ROK-2143: public static quest / item data records values.
+  if (isValuesEndpoint(endpoint)) return flattenValues(body);
+  // ROK-2108; profile-quests one level deeper (ROK-2126).
+  if (isDeepKeysEndpoint(endpoint)) return summariseDeepKeysFor(endpoint, body);
   return summariseKeys(body);
 }

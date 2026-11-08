@@ -67,8 +67,15 @@ describe('ItadForm — setup instructions and API key', () => {
         expect(link).toBeInTheDocument();
         expect(link).toHaveAttribute(
             'href',
-            'https://isthereanydeal.com/dev/app/',
+            'https://isthereanydeal.com/apps/my/',
         );
+    });
+
+    it('step 3 matches the ITAD register-an-app flow', () => {
+        render(<ItadForm />);
+        expect(
+            screen.getByText('Register an app; the API key is generated for you. Copy it.'),
+        ).toBeInTheDocument();
     });
 
     it('renders API key input field', () => {

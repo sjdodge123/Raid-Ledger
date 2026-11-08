@@ -1,4 +1,4 @@
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { RosterBuilder } from './RosterBuilder';
@@ -41,15 +41,17 @@ function assignFirstSlot(playerPool: RosterAssignmentResponse[]) {
 describe('RosterBuilder — generic slot toast (ROK-487)', () => {
     beforeEach(() => { vi.clearAllMocks(); });
 
-    it('says "slot N" when assigning a player to a generic player slot', () => {
+    it('says "slot N" when assigning a player to a generic player slot', async () => {
         assignFirstSlot([makeGenericPlayer(1, 'Alice')]);
-        expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
+        // ROK-2141: the success toast fires once the roster save resolves.
+        await waitFor(() => expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
             expect.stringMatching(/slot\s+1/i),
-        );
+        ));
     });
 
-    it('does NOT say "player N" when assigning to a generic player slot', () => {
+    it('does NOT say "player N" when assigning to a generic player slot', async () => {
         assignFirstSlot([makeGenericPlayer(2, 'Bob')]);
+        await waitFor(() => expect(vi.mocked(toast.success)).toHaveBeenCalled());
         const calls = vi.mocked(toast.success).mock.calls;
         const assignCall = calls.find((c) => typeof c[0] === 'string' && (c[0] as string).includes('Bob'));
         expect(assignCall).toBeDefined();
@@ -60,7 +62,7 @@ describe('RosterBuilder — generic slot toast (ROK-487)', () => {
 describe('RosterBuilder — MMO slot toast (ROK-487)', () => {
     beforeEach(() => { vi.clearAllMocks(); });
 
-    it('says "role N" when assigning to an MMO tank slot', () => {
+    it('says "role N" when assigning to an MMO tank slot', async () => {
         const tankPlayer = makeGenericPlayer(3, 'Charlie');
         renderWithRouter(
             <RosterBuilder pool={[tankPlayer]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
@@ -70,6 +72,7 @@ describe('RosterBuilder — MMO slot toast (ROK-487)', () => {
         const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
         expect(modalAssignBtn).toBeTruthy();
         fireEvent.click(modalAssignBtn!);
+        await waitFor(() => expect(vi.mocked(toast.success)).toHaveBeenCalled());
         const calls = vi.mocked(toast.success).mock.calls;
         const assignCall = calls.find((c) => typeof c[0] === 'string' && (c[0] as string).includes('Charlie'));
         expect(assignCall).toBeDefined();

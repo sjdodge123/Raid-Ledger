@@ -2,8 +2,10 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
+  Post,
   Put,
   Request,
   UseGuards,
@@ -50,5 +52,31 @@ export class GuildIngameTextController {
     @Body() body: unknown,
   ): Promise<GuildIngameText> {
     return this.ingameText.save(req.user, id, body);
+  }
+
+  /** ROK-2137 — copy the field's last in-game report into the hub text. */
+  @Post(':field/adopt')
+  @HttpCode(200)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  adopt(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('field') field: string,
+    @Body() body: unknown,
+  ): Promise<GuildIngameText> {
+    return this.ingameText.adopt(req.user, id, field, body);
+  }
+
+  /** ROK-2137 — keep the hub text; hide the banner until a newer report. */
+  @Post(':field/push')
+  @HttpCode(200)
+  @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
+  push(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('field') field: string,
+    @Body() body: unknown,
+  ): Promise<GuildIngameText> {
+    return this.ingameText.push(req.user, id, field, body);
   }
 }

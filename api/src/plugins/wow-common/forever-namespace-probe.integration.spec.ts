@@ -115,8 +115,9 @@ describe('POST /admin/plugins/blizzard/forever-probe/run (ROK-1716)', () => {
       .set(auth(adminToken));
     expect(run.status).toBe(200);
     expect(run.body.status).toBe('ok');
-    // ROK-2103: + the 3 static journal / class indexes for the one match.
-    expect(run.body.cells).toHaveLength(7 * 4 * 4 + 3);
+    // ROK-2103: + the 3 static journal / class indexes for the one match;
+    // ROK-2143: + quest index, 1 quest area, 4 quests and 3 items.
+    expect(run.body.cells).toHaveLength(7 * 4 * 4 + 3 + 9);
     expect(run.body.matches).toEqual([
       {
         prefix: 'classicforever',

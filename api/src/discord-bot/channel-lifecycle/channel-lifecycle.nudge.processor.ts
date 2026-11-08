@@ -10,6 +10,7 @@ import * as Sentry from '@sentry/nestjs';
 import type { ReconcileResultDto } from '@raid-ledger/contract';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
+import { isChannelGoneItem } from './channel-lifecycle.errors';
 import {
   CHANNEL_LIFECYCLE_NUDGE_QUEUE,
   type GameActivityNudgeJobData,
@@ -31,10 +32,20 @@ export function isFinalAttempt(
 /** The reconcile result fields the nudge checks. */
 type NudgeResult = Pick<ReconcileResultDto, 'stoppedReason' | 'items'>;
 
+/** True when the result holds the nudged game's gone-channel item (ROK-2118). */
+export function nudgedChannelGone(
+  result: NudgeResult,
+  gameId: number,
+): boolean {
+  return result.items.some((i) => i.gameId === gameId && isChannelGoneItem(i));
+}
+
 /**
  * Why a resolved reconcile did NOT settle the nudged game (Codex r3 P2), or
  * null. A `disabled` stop is the intended no-op; any other stop, or a
- * failed/deferred item for the game, is retried by BullMQ.
+ * failed/deferred item for the game, is retried by BullMQ. A channel deleted
+ * in Discord is settled: D9 cleanup already ran, a retry would change nothing
+ * (ROK-2118).
  */
 export function nudgeShortfall(
   result: NudgeResult,
@@ -45,7 +56,8 @@ export function nudgeShortfall(
   const bad = result.items.find(
     (i) =>
       i.gameId === gameId &&
-      (i.outcome === 'failed' || i.outcome === 'deferred'),
+      (i.outcome === 'failed' || i.outcome === 'deferred') &&
+      !isChannelGoneItem(i),
   );
   return bad ? `game ${gameId} ${bad.outcome}: ${bad.detail ?? ''}` : null;
 }
@@ -87,10 +99,7 @@ export class ChannelLifecycleNudgeProcessor
         trigger: 'nudge',
         gameIds: [gameId],
       });
-      const shortfall = nudgeShortfall(result, gameId);
-      if (shortfall !== null) {
-        throw new Error(`Nudge for game ${gameId}: ${shortfall}`);
-      }
+      this.settleOrThrow(result, gameId);
     } catch (err) {
       if (err instanceof ConflictException) {
         this.logger.debug(`Nudge for game ${gameId} skipped: reconcile busy`);
@@ -108,6 +117,19 @@ export class ChannelLifecycleNudgeProcessor
         });
       }
       throw err;
+    }
+  }
+
+  /** Throw (→ BullMQ retry) unless the reconcile settled the nudged game. */
+  private settleOrThrow(result: NudgeResult, gameId: number): void {
+    const shortfall = nudgeShortfall(result, gameId);
+    if (shortfall !== null) {
+      throw new Error(`Nudge for game ${gameId}: ${shortfall}`);
+    }
+    if (nudgedChannelGone(result, gameId)) {
+      this.logger.log(
+        `Nudge for game ${gameId}: channel was deleted in Discord; unbound and suppressed`,
+      );
     }
   }
 }

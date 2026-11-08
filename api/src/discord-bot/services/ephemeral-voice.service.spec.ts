@@ -4,6 +4,8 @@
  * ordering (architect constraint #1).
  */
 import { Test } from '@nestjs/testing';
+import * as Sentry from '@sentry/node';
+import { DiscordAPIError } from 'discord.js';
 import { EphemeralVoiceService } from './ephemeral-voice.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -351,7 +353,7 @@ describe('enforceJoinGuard — private-event voice join-guard (ROK-1386)', () =>
       .mockResolvedValue([rosterRow({ userDiscordId: 'allowed' })]);
     const disconnectSpy = jest
       .spyOn(discordOps, 'disconnectMember')
-      .mockResolvedValue(true);
+      .mockResolvedValue('disconnected');
     await service.enforceJoinGuard('ch-1', 'intruder');
     expect(disconnectSpy).toHaveBeenCalledWith(guild, 'intruder');
   });
@@ -366,7 +368,7 @@ describe('enforceJoinGuard — private-event voice join-guard (ROK-1386)', () =>
       .mockResolvedValue([rosterRow({ userDiscordId: 'allowed' })]);
     const disconnectSpy = jest
       .spyOn(discordOps, 'disconnectMember')
-      .mockResolvedValue(false);
+      .mockResolvedValue('not-in-voice');
     await service.enforceJoinGuard('ch-1', 'allowed');
     expect(disconnectSpy).not.toHaveBeenCalled();
   });
@@ -378,7 +380,7 @@ describe('enforceJoinGuard — private-event voice join-guard (ROK-1386)', () =>
       .mockResolvedValue(privateEv);
     const disconnectSpy = jest
       .spyOn(discordOps, 'disconnectMember')
-      .mockResolvedValue(true);
+      .mockResolvedValue('disconnected');
     // 'bot-id' is what the mocked getClientId() returns in build().
     await service.enforceJoinGuard('ch-1', 'bot-id');
     expect(disconnectSpy).not.toHaveBeenCalled();
@@ -391,8 +393,41 @@ describe('enforceJoinGuard — private-event voice join-guard (ROK-1386)', () =>
       .mockResolvedValue({ ...row, privateVoice: null });
     const disconnectSpy = jest
       .spyOn(discordOps, 'disconnectMember')
-      .mockResolvedValue(true);
+      .mockResolvedValue('disconnected');
     await service.enforceJoinGuard('ch-1', 'whoever');
     expect(disconnectSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('enforceJoinGuard — expected refusals stay out of Sentry (ROK-2119)', () => {
+  const privateEv = {
+    ...row,
+    privateVoice: true,
+    ephemeralVoiceChannelId: 'ch-1',
+  };
+  const access = Object.assign(
+    Object.create(DiscordAPIError.prototype) as DiscordAPIError,
+    { code: 50013, message: 'Missing Permissions' },
+  );
+
+  async function guardWith(err: unknown): Promise<void> {
+    const { service } = await build(0);
+    jest
+      .spyOn(dbHelpers, 'findEventByEphemeralChannel')
+      .mockResolvedValue(privateEv);
+    jest.spyOn(dbHelpers, 'fetchRosterSignupRows').mockResolvedValue([]);
+    jest.spyOn(discordOps, 'disconnectMember').mockRejectedValue(err);
+    (Sentry.captureException as jest.Mock).mockClear();
+    await service.enforceJoinGuard('ch-1', 'intruder');
+  }
+
+  it('a 50013 from the disconnect is not sent to Sentry', async () => {
+    await guardWith(access);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('a generic disconnect error is still captured', async () => {
+    await guardWith(new Error('boom'));
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 });

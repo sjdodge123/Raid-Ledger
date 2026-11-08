@@ -8,6 +8,7 @@ import {
     ADDON_QUESTS_COMPLETED_MAX,
     ADDON_QUESTS_IN_PROGRESS_MAX,
 } from './wow-addon-import.schema.js';
+import { WOW_GUILD_INFO_MAX, WOW_GUILD_MOTD_MAX } from './guild-ingame-text.schema.js';
 
 // ============================================================
 // WoW: Forever addon export payload (ROK-1724)
@@ -213,6 +214,9 @@ export const AddonGuildDataSchema = z.object({
     snapshotAt: unixSeconds,
     canViewOfficerNote: z.literal(false),
     members: z.array(AddonGuildMemberSchema).max(2000),
+    /** ROK-2137: in-game MOTD / Guild Information, verbatim ('' = empty box). Absent = no opinion. */
+    motd: z.string().max(WOW_GUILD_MOTD_MAX).optional(),
+    infoText: z.string().max(WOW_GUILD_INFO_MAX).optional(),
 }).strict();
 export type AddonGuildData = z.infer<typeof AddonGuildDataSchema>;
 

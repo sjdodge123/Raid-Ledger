@@ -1996,6 +1996,13 @@
       "when": 1794103205837,
       "tag": "0285_guild_profiles_ingame_text",
       "breakpoints": true
+    },
+    {
+      "idx": 286,
+      "version": "7",
+      "when": 1794126590260,
+      "tag": "0286_guild_profiles_game_reported_text",
+      "breakpoints": true
     }
   ]
 }

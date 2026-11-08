@@ -18,6 +18,7 @@ import {
 } from './forever-namespace-probe.forever';
 import * as staticProbe from './forever-namespace-probe.static';
 import * as extraProbe from './forever-namespace-probe.profile-extra';
+import * as questData from './forever-namespace-probe.quest-data';
 
 /**
  * Candidate prefixes. `forever` (the confirmed prefix, ROK-2102) comes first so
@@ -81,6 +82,8 @@ export interface ProbeOutcome {
 export interface ProbeUrl {
   endpoint: ForeverProbeEndpoint;
   url: string;
+  /** Shape key suffix when one endpoint is probed per id (ROK-2143), e.g. `quest:378`. */
+  shapeKey?: string;
 }
 
 /** Shape summary of a 200 index body (D6). */
@@ -248,6 +251,7 @@ function toCell(task: ProbeTask, out: ProbeOutcome): ForeverProbeCellDto {
     status: out.status,
   };
   if (out.error !== undefined) cell.error = out.error;
+  if (task.shapeKey !== undefined) cell.target = task.shapeKey;
   return cell;
 }
 
@@ -256,7 +260,7 @@ function collect(run: ProbeRun, task: ProbeTask, out: ProbeOutcome): void {
   run.cells.push(toCell(task, out));
   if (out.status !== 200) return;
   const { prefix, region, endpoint } = task;
-  const key = `${prefix}:${region}:${endpoint}`;
+  const key = `${prefix}:${region}:${task.shapeKey ?? endpoint}`;
   if (endpoint === 'playable-race') {
     const raceName = hasSkyborne(out.body);
     if (raceName)
@@ -298,7 +302,7 @@ function makePhase(
   };
 }
 
-/** Static indexes (ROK-2103) + guild summary and ruleset detail (ROK-2108). */
+/** Static indexes (ROK-2103), quest + item data (ROK-2143) + guild summary and ruleset detail (ROK-2108). */
 function matchExtraUrls(
   t: ProbeTarget,
   input: RunProbeInput,
@@ -306,6 +310,7 @@ function matchExtraUrls(
 ): ProbeUrl[] {
   return [
     ...staticProbe.buildStaticUrls(t),
+    ...questData.buildQuestDataUrls(t),
     ...extraProbe.buildMatchExtraUrls(t, input.guildPath, run.shapes),
   ];
 }

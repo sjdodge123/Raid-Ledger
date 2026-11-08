@@ -19,6 +19,8 @@ import { buildSshArgs } from '../exec.js';
 const execFileAsync = promisify(execFile);
 const RUN_ON_VM_TIMEOUT_MS = 600_000;
 const LADDER_LIB = '/srv/rl-infra/orchestrator/bin/_disk_pressure.sh';
+/** The orchestrator's admission ledger on the VM host (compose `./state:/state`). */
+export const ADMISSION_FILE = '/srv/rl-infra/state/admission.json';
 const SYSTEM_DF_MARKER = 'RL_SYSTEM_DF:';
 
 export const TOOL_NAME = 'rl_fleet_prune';
@@ -103,6 +105,12 @@ export function buildRemoteScript(dryRun: boolean): string {
     'set -u',
     `export DOCKER_HOST=${VM_DOCKER_HOST}`,
     'export RL_DISK_PRUNE_PCT=0',
+    // ROK-2111: the ladder's builder rung reads the admission ledger to skip
+    // while a build runs. Over ssh no state dir is set, so it would resolve
+    // /state/admission.json (the sweeper's in-container path), find nothing and
+    // skip the rung as ledger_unreadable. Point it at the host path compose
+    // bind-mounts as /state (`./state:/state` under /srv/rl-infra).
+    `export RL_ADMISSION_FILE=${ADMISSION_FILE}`,
     `export RL_DISK_PRUNE_DRY_RUN=${dry}`,
     `source ${LADDER_LIB}`,
     'disk_pressure::guard',

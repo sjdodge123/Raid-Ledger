@@ -512,6 +512,27 @@ while read -r bslot bparent; do
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
 done <<<"$BORROW_ROWS"
 
+# 0c. ROK-2111 review r2 — orphaned disk-retention reservations. The runner
+# rung (step 3a) reserves an idle slot as agent `gc-sweeper:disk-retention`
+# for its clean and restores the row after. A sweeper SIGKILLed mid-clean
+# (docker stop, OOM, VM reboot) or a failed restore leaves that row claimed
+# with no heartbeat, and §1 would then reap it as a dead claim with branch ""
+# — destroying the unpinned env(s) on an idle slot. The sweeper is
+# single-threaded, so such a row at cycle start is always orphaned: restore
+# it from state/disk-retention-reserve-<slot>.json (else reset it to
+# unclaimed) BEFORE §1, never reaping. §1/§1b'/§1d also skip that agent id.
+DISK_RETENTION_LIB="${DISK_RETENTION_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_disk_retention.sh}"
+DISK_RETENTION_AGENT="gc-sweeper:disk-retention"
+if [[ -r "$DISK_RETENTION_LIB" ]]; then
+    # shellcheck disable=SC1090
+    source "$DISK_RETENTION_LIB"
+    _dr_restored=$(disk_retention::recover_orphans 2>/dev/null || true)
+    for _dr_slot in $_dr_restored; do
+        log "retention: restored orphaned reservation on slot $_dr_slot (no envs reaped)"
+        audit disk_retention_reservation_restored "$(jq -nc --argjson slot "$_dr_slot" '{slot:$slot}')"
+    done
+fi
+
 # 1. Dead claims (heartbeat older than timeout).
 # ROK-1331 M5a — fix pre-existing missing-close-paren in the M1 jq (the
 # `((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | ... | tostring)`
@@ -519,8 +540,8 @@ done <<<"$BORROW_ROWS"
 # `and (...)` wrapping closes properly. Without it jq emits a compile error
 # that the `2>/dev/null || true` guard silently swallows — the dead-claim
 # reaper has been a no-op since M1 landed.
-DEAD_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$CLAIM_HEARTBEAT_TIMEOUT_SECONDS" \
-    '.[] | select(.claimed == true and .last_heartbeat != null and (.borrowed_for // null) == null
+DEAD_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$CLAIM_HEARTBEAT_TIMEOUT_SECONDS" --arg dra "$DISK_RETENTION_AGENT" \
+    '.[] | select(.claimed == true and .last_heartbeat != null and (.borrowed_for // null) == null and (.agent_id // "") != $dra
         and ((($cutoff - ($tol|tonumber)) | tostring) > (.last_heartbeat | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 
@@ -567,10 +588,10 @@ done
 # below). Legacy rows from before M5a (or rows manually wiped) keep the
 # 8h fallback. Without this gate, M5a claims older than 8h would be
 # reaped despite still being within their 24h lease.
-HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AGE_SECONDS" \
+HOARDED_SLOTS=$(jq -r --argjson cutoff "$NOW_EPOCH" --argjson tol "$MAX_CLAIM_AGE_SECONDS" --arg dra "$DISK_RETENTION_AGENT" \
     '.[] | select(.claimed == true and (.keep_alive // false) == false and .started_at != null
         and (.borrowed_for // null) == null
-        and (.expires_at == null)
+        and (.expires_at == null) and (.agent_id // "") != $dra
         and ((($cutoff - ($tol|tonumber)) | tostring) > (.started_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 for slot in $HOARDED_SLOTS; do
@@ -591,8 +612,8 @@ done
 # idle" — the next claim/release path inherits or destroys the envs when
 # someone arrives.
 LEASE_QUEUE_DIR="${LEASE_QUEUE_DIR:-${STATE_DIR}/lease-queue}"
-EXPIRED_SLOTS=$(jq -r --argjson now "$NOW_EPOCH" \
-    '.[] | select(.claimed == true and .expires_at != null and (.borrowed_for // null) == null
+EXPIRED_SLOTS=$(jq -r --argjson now "$NOW_EPOCH" --arg dra "$DISK_RETENTION_AGENT" \
+    '.[] | select(.claimed == true and .expires_at != null and (.borrowed_for // null) == null and (.agent_id // "") != $dra
         and (($now | tostring) > (.expires_at | sub("Z$";"") | sub("\\.[0-9]+$";"") | strptime("%Y-%m-%dT%H:%M:%S") | mktime | tostring))
     ) | .slot' "$CLAIMS" 2>/dev/null || true)
 for slot in $EXPIRED_SLOTS; do
@@ -875,6 +896,29 @@ docker image prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker volume prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 
+# 3a. ROK-2111 — interval disk retention. The ladder below only fires at
+# RL_DISK_PRUNE_PCT, so between alarms the host silted up with stopped
+# containers, unused images and runner /tmp + npm caches. Every
+# RL_DISK_RETENTION_INTERVAL_HOURS (6) regardless of used%: stopped containers
+# > 24h (never rl.role=env/runner/infra, never the rl-infra compose project),
+# unused images > 48h (never one a container or env row references), and
+# /tmp + npm cache on runners with no claim/task/admission entry (never
+# /root/.cache). Runs here because only the sweeper has the raw docker socket —
+# the proxies refuse /containers/prune. RL_DISK_RETENTION_DRY_RUN defaults to
+# 1 (report only). Best-effort: the lib always returns 0 with a JSON summary.
+# DISK_RETENTION_LIB is resolved (and the lib sourced) at step 0c above.
+if [[ -r "$DISK_RETENTION_LIB" ]]; then
+    _dr_err=$(mktemp)
+    DISK_RETENTION_RESULT=$(disk_retention::sweep 2>"$_dr_err" || echo '{}')
+    while IFS= read -r _dr_line; do log "retention: $_dr_line"; done < "$_dr_err"
+    rm -f "$_dr_err"
+    if [[ "$(jq -r '.skipped // empty' <<<"$DISK_RETENTION_RESULT" 2>/dev/null)" != "interval" ]]; then
+        audit disk_retention "$DISK_RETENTION_RESULT"
+    fi
+else
+    log "retention: library not found at $DISK_RETENTION_LIB — skipping interval retention"
+fi
+
 # 3b. ROK-1568 — host disk pressure ladder.
 # The scoped prune above only touches `rl.role=env` objects, which is exactly
 # the disk the fleet does NOT leak. On 2026-09-14 the host hit 98% (240G/245G)
@@ -903,7 +947,7 @@ fi
 # 3b'. 2026-10-26 — registry GC. rl-registry was never garbage-collected (424
 # rl-allinone tags, 134 GB, builds starved of disk). Deletes rl-allinone tags
 # that back no container/env, are older than RL_REGISTRY_RETENTION_HOURS (48)
-# and are not among the newest RL_REGISTRY_KEEP_N (5), then runs `registry
+# and are not among the newest RL_REGISTRY_KEEP_N (15), then runs `registry
 # garbage-collect` in rl-registry, all while holding a `registry_gc` entry in
 # admission.json (no image build is admitted meanwhile — ROK-2018).
 # Interval-gated (RL_REGISTRY_GC_INTERVAL_HOURS, 6); forced when the disk

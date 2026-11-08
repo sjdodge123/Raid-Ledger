@@ -45,6 +45,23 @@ function ingameTextConstraints(table: {
   ];
 }
 
+/** ROK-2137: the text reported from the game obeys the same in-game caps. */
+function gameTextConstraints(table: {
+  gameMotd: AnyPgColumn;
+  gameInfo: AnyPgColumn;
+}) {
+  return [
+    check(
+      'guild_profiles_game_motd_length',
+      sql`char_length(${table.gameMotd}) <= 255`,
+    ),
+    check(
+      'guild_profiles_game_info_length',
+      sql`char_length(${table.gameInfo}) <= 499`,
+    ),
+  ];
+}
+
 /**
  * ROK-1786 (S2 of ROK-1781): one editable profile per guild — the GM post,
  * rules and links. Plugin-owned. Later stories (S4 Discord mirror, S5
@@ -137,6 +154,32 @@ export const guildProfiles = pgTable(
       () => users.id,
       { onDelete: 'set null' },
     ),
+    /**
+     * ROK-2137 (P1): the text LedgerLink last REPORTED from the game (never
+     * the hub's own text above). `*_reported_at` = the export's snapshot
+     * instant; set + NULL text = the in-game box was reported empty. Only
+     * a report not older than the stored one lands. `*_acknowledged_at` =
+     * an officer chose Push (keep the hub text); a NEWER report differing
+     * again re-raises "Changed in game".
+     */
+    gameMotd: text('game_motd'),
+    gameMotdReportedAt: timestamp('game_motd_reported_at', {
+      withTimezone: true,
+    }),
+    /** ROK-2137 — the exporting character's name (`who.fullName`); null when unknown. */
+    gameMotdReportedBy: varchar('game_motd_reported_by', { length: 100 }),
+    gameMotdAcknowledgedAt: timestamp('game_motd_acknowledged_at', {
+      withTimezone: true,
+    }),
+    gameInfo: text('game_info'),
+    gameInfoReportedAt: timestamp('game_info_reported_at', {
+      withTimezone: true,
+    }),
+    /** ROK-2137 — the exporting character's name (`who.fullName`); null when unknown. */
+    gameInfoReportedBy: varchar('game_info_reported_by', { length: 100 }),
+    gameInfoAcknowledgedAt: timestamp('game_info_acknowledged_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -166,6 +209,7 @@ export const guildProfiles = pgTable(
       table.mediaChannelSetBy,
     ),
     ...ingameTextConstraints(table),
+    ...gameTextConstraints(table),
   ],
 );
 

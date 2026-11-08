@@ -26,6 +26,9 @@
 #   A-k  rl status survives a missing/corrupt disk-pressure.json
 #   A-l  the builder rung uses the proxy-allowed legacy /build/prune route
 #   A-m  a failing rung is logged and the ladder keeps walking
+#   B-*  ROK-2111: the builder rung is skipped while the admission ledger holds
+#        an image build or a heavy/medium task (or is unreadable), unless used%
+#        is at/above RL_DISK_BUILDER_FORCE_PCT; a caller's own key is excluded
 
 set -uo pipefail
 
@@ -85,9 +88,18 @@ _setup_ladder() {
     export RL_DISK_PRUNE_PCT=80
     export RL_DISK_TARGET_PCT=65
     export RL_DISK_PRUNE_DRY_RUN=0
-    unset RL_DISK_ROOT 2>/dev/null || true
+    unset RL_DISK_ROOT RL_DISK_BUILDER_FORCE_PCT RL_DISK_LADDER_SELF_KEYS RL_ADMISSION_HELD 2>/dev/null || true
+    # ROK-2111: the builder rung reads the admission ledger and SKIPS when it
+    # is unreadable, so every scenario starts from an idle (empty) ledger.
+    export RL_ADMISSION_FILE="$RL_STATE_DIR/admission.json"
+    _ledger '[]'
     # shellcheck disable=SC1090
     source "$LIB"
+}
+
+# Write the admission ledger with the given heavy_running array.
+_ledger() {
+    jq -nc --argjson r "$1" '{heavy_running: $r, heavy_waiting: []}' > "$RL_ADMISSION_FILE"
 }
 
 _docker_calls() {
@@ -434,6 +446,152 @@ test_failed_rung_log_does_not_corrupt_stdout_json() {
     test_teardown
 }
 
+# ── ROK-2111: builder-prune build guard ─────────────────────────────────────
+# `docker builder prune -af` under a running `docker build` deletes the cache
+# the build is writing and kills it mid-step. The gc-sweeper's 15-minute ladder
+# and a build's own disk admission (force_ladder) both walked into that.
+
+# Run guard with a capturing log(); echoes the guard JSON. $1 = log file.
+_guard_logged() {
+    local logged="$1"
+    ( log() { echo "$*" >> "$logged"; }; disk_pressure::guard 2>/dev/null )
+}
+
+# Assert the builder rung was skipped for $1 and the ladder went on to rung 2.
+_assert_builder_skipped() {
+    local out="$1" reason="$2" logged="$3"
+    assert_eq "$(grep -c 'builder prune' "$DOCKER_LOG" | tr -d ' ')" "0" "builder prune must NOT run ($reason)"
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].rung')" "builder_prune" "rung 1 is still recorded"
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].skipped // "none"')" "$reason" "rung 1 records why it was skipped"
+    assert_eq "$(echo "$out" | jq -r '.rungs[1].rung')" "image_prune" "the ladder continues to image_prune"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "builder_prune skipped ($reason)" "the skip is logged with its reason"
+}
+
+test_builder_skipped_while_image_build_runs() {
+    CURRENT_TEST_NAME="B-a: builder rung skipped while an image build holds the ledger"
+    _setup_ladder 92 60
+    _ledger '[{"key":"build-pr1-77","kind":"image_build","weight":"medium"}]'
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(_guard_logged "$logged")
+    _assert_builder_skipped "$out" "build_running" "$logged"
+    assert_contains "$(cat "$logged")" "build-pr1-77" "the log names the entry that blocked the rung"
+    assert_eq "$(echo "$out" | jq -r '.after_pct')" "60" "the remaining rungs still relieve the disk"
+    test_teardown
+}
+
+test_builder_skipped_while_heavy_or_medium_task_runs() {
+    CURRENT_TEST_NAME="B-b: builder rung skipped while a heavy or medium validate-ci task runs"
+    local w out logged
+    for w in heavy medium; do
+        _setup_ladder 92 60
+        _ledger "[{\"key\":\"local-vci-1\",\"kind\":\"task\",\"weight\":\"$w\"}]"
+        logged="$RL_STATE_DIR/log.txt"
+        out=$(_guard_logged "$logged")
+        _assert_builder_skipped "$out" "build_running" "$logged"
+        test_teardown
+    done
+    # A legacy entry (no weight/kind) counts as heavy, like _ADMISSION_JQ_DEFS.
+    _setup_ladder 92 60
+    _ledger '[{"key":"legacy-1"}]'
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    _assert_builder_skipped "$out" "build_running" "$RL_STATE_DIR/log.txt"
+    test_teardown
+}
+
+test_builder_runs_with_light_or_gc_entries_only() {
+    CURRENT_TEST_NAME="B-c: registry_gc does not block the builder rung; a light task does (review r1)"
+    _setup_ladder 92 60
+    _ledger '[{"key":"gc","kind":"registry_gc","weight":"light"}]'
+    local out
+    out=$(disk_pressure::guard 2>/dev/null)
+    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "builder prune runs beside the registry sweep"
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].skipped // "none"')" "none" "rung 1 is not marked skipped"
+    test_teardown
+    _setup_ladder 92 60
+    _ledger '[{"key":"t-light","kind":"task","weight":"light"},{"key":"gc","kind":"registry_gc","weight":"light"}]'
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    _assert_builder_skipped "$out" "build_running" "$RL_STATE_DIR/log.txt"
+    assert_eq "$(echo "$out" | jq -c '.rungs[0].blocked_by')" '["t-light"]' "a light task (it may run a docker build) blocks the builder rung"
+    test_teardown
+}
+
+test_builder_skipped_when_ledger_unreadable() {
+    CURRENT_TEST_NAME="B-d: an unreadable or missing ledger skips the builder rung (fail safe)"
+    _setup_ladder 92 60
+    echo 'not json{' > "$RL_ADMISSION_FILE"
+    local out
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    _assert_builder_skipped "$out" "ledger_unreadable" "$RL_STATE_DIR/log.txt"
+    test_teardown
+    _setup_ladder 92 60
+    rm -f "$RL_ADMISSION_FILE"
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    _assert_builder_skipped "$out" "ledger_unreadable" "$RL_STATE_DIR/log.txt"
+    test_teardown
+}
+
+test_builder_ceiling_overrides_the_guard() {
+    CURRENT_TEST_NAME="B-e: at/above RL_DISK_BUILDER_FORCE_PCT (default 95) the builder rung runs anyway"
+    _setup_ladder 96 60
+    _ledger '[{"key":"build-pr1-77","kind":"image_build","weight":"medium"}]'
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(_guard_logged "$logged")
+    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "default ceiling 95: 96% forces the prune"
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].forced // false')" "true" "the rung records that the ceiling forced it"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "builder_prune forced" "the override is logged"
+    test_teardown
+    # The knob is honoured: ceiling 90 forces at 92%, an unreadable ledger too.
+    _setup_ladder 92 60
+    echo 'garbage' > "$RL_ADMISSION_FILE"
+    out=$(RL_DISK_BUILDER_FORCE_PCT=90; disk_pressure::guard 2>/dev/null)
+    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "RL_DISK_BUILDER_FORCE_PCT=90 forces at 92%"
+    test_teardown
+}
+
+test_builder_runs_with_no_tasks() {
+    CURRENT_TEST_NAME="B-f: an idle ledger lets the builder rung run"
+    _setup_ladder 92 60
+    local out
+    out=$(disk_pressure::guard 2>/dev/null)
+    assert_eq "$(_docker_calls)" "1" "only the builder rung runs on an idle ledger"
+    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "builder prune ran"
+    test_teardown
+}
+
+test_builder_guard_excludes_own_key() {
+    CURRENT_TEST_NAME="B-g: the caller's own ledger entry does not block its own ladder"
+    _setup_ladder 92 60
+    _ledger '[{"key":"build-pr1-77","kind":"image_build","weight":"medium"}]'
+    ( RL_DISK_LADDER_SELF_KEYS="local-x build-pr1-77"; disk_pressure::guard >/dev/null 2>&1 )
+    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "own key excluded → builder prune runs"
+    test_teardown
+}
+
+# B-h: the build's own disk admission (_admission.sh acquire_disk →
+# force_ladder) walks the same guarded ladder, passing its own keys.
+test_acquire_disk_force_ladder_honours_guard() {
+    CURRENT_TEST_NAME="B-h: acquire_disk's force_ladder skips the builder rung under another build"
+    local adm="$TEST_DIR/../bin/_admission.sh" calls
+    for other in no yes; do
+        _setup_ladder 92 92 92 92
+        if [[ "$other" == "yes" ]]; then
+            _ledger '[{"key":"build-me-1","kind":"image_build"},{"key":"local-vci-9","kind":"task","weight":"heavy"}]'
+        else
+            _ledger '[{"key":"build-me-1","kind":"image_build"},{"key":"gc","kind":"registry_gc","weight":"light"}]'
+        fi
+        ( source "$adm" 2>/dev/null; source "$LIB"
+          RL_ADMISSION_HELD="build-me-1" RL_BUILD_MIN_FREE_GB=1000 RL_BUILD_DISK_WAIT_S=0
+          admission::acquire_disk "local-task-1" "" "" >/dev/null 2>&1 )
+        calls=$(grep -c "builder prune" "$DOCKER_LOG" | tr -d ' ')
+        if [[ "$other" == "yes" ]]; then
+            assert_eq "$calls" "0" "another heavy task running → force_ladder must skip builder prune"
+        else
+            assert_eq "$calls" "1" "only its own entry → force_ladder runs builder prune"
+        fi
+        test_teardown
+    done
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -448,5 +606,13 @@ run_test "a-k-status-tolerates-state-file" test_status_tolerates_missing_or_garb
 run_test "a-l-builder-legacy-route" test_builder_rung_uses_the_proxy_allowed_route
 run_test "a-m-failed-rung-logged" test_failed_rung_is_logged_and_ladder_continues
 run_test "a-n-log-stays-off-stdout" test_failed_rung_log_does_not_corrupt_stdout_json
+run_test "b-a-build-running-skips-builder" test_builder_skipped_while_image_build_runs
+run_test "b-b-heavy-medium-task-skips-builder" test_builder_skipped_while_heavy_or_medium_task_runs
+run_test "b-c-light-only-runs-builder" test_builder_runs_with_light_or_gc_entries_only
+run_test "b-d-unreadable-ledger-skips" test_builder_skipped_when_ledger_unreadable
+run_test "b-e-ceiling-forces-builder" test_builder_ceiling_overrides_the_guard
+run_test "b-f-idle-ledger-runs-builder" test_builder_runs_with_no_tasks
+run_test "b-g-own-key-excluded" test_builder_guard_excludes_own_key
+run_test "b-h-acquire-disk-honours-guard" test_acquire_disk_force_ladder_honours_guard
 
 print_test_summary

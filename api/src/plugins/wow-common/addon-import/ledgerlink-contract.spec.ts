@@ -70,6 +70,7 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
       'guild-1-page',
       'guild-3-pages',
       'guild-8-pages-2000-members',
+      'guild-ingame-text',
       'mixed-char-guild3-raid-shuffled',
       'mixed-char-raid',
       'raid',

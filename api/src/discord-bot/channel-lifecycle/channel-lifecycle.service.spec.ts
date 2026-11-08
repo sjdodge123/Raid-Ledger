@@ -9,7 +9,10 @@ import type { ChannelLifecycleSettingsDto } from '@raid-ledger/contract';
 import * as ops from './channel-lifecycle.discord-ops';
 import * as resolver from './hub-link.resolver';
 import * as hubQueries from './hub-channel-link.queries';
-import { CreateCapacityError } from './channel-lifecycle.errors';
+import {
+  CHANNEL_GONE_DETAIL,
+  CreateCapacityError,
+} from './channel-lifecycle.errors';
 import { PERMISSION_ERROR_TEXT } from './channel-lifecycle.run';
 import * as queries from './game-activity.queries';
 import * as store from './channel-lifecycle.store';
@@ -408,7 +411,7 @@ describe('error policy (D9/D14)', () => {
     });
     expect(res.items[0]).toMatchObject({
       outcome: 'failed',
-      detail: 'channel deleted in Discord',
+      detail: CHANNEL_GONE_DETAIL,
     });
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });

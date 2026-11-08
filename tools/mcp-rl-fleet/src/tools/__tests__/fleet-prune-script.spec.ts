@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { must } from './must.js';
-import { buildRemoteCommand, buildRemoteScript } from '../fleet-prune.js';
+import { ADMISSION_FILE, buildRemoteCommand, buildRemoteScript } from '../fleet-prune.js';
 
 const parseCheck = (script: string): void => {
   const dir = mkdtempSync(join(tmpdir(), 'rl-prune-script-'));
@@ -44,5 +44,15 @@ describe('rl_fleet_prune remote script', () => {
     const decoded = Buffer.from(must(m?.[1], 'the base64 payload'), 'base64').toString('utf8');
     expect(decoded).toBe(buildRemoteScript(true));
     expect(decoded).toContain("docker system df --format '{{json .}}'");
+  });
+
+  // ROK-2111: without a ledger path the builder rung reads /state/admission.json
+  // (absent on the host) and is always skipped as ledger_unreadable.
+  it.each([false, true])('points the ladder at the host admission ledger before sourcing it (dry_run=%s)', (dryRun) => {
+    const script = buildRemoteScript(dryRun);
+    expect(ADMISSION_FILE).toBe('/srv/rl-infra/state/admission.json');
+    const exportAt = script.indexOf(`export RL_ADMISSION_FILE=${ADMISSION_FILE}`);
+    expect(exportAt).toBeGreaterThan(-1);
+    expect(exportAt).toBeLessThan(script.indexOf('source '));
   });
 });
