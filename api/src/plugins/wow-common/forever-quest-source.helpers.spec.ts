@@ -138,22 +138,6 @@ describe('effectiveQuests — absent vs empty addon completed list (ROK-2125)', 
     },
   );
 
-  it('absent + no Armory list: the log stays visible; the completed list is flagged unknown, never "none done"', () => {
-    const expected = {
-      quests: { completed: [], completedTruncated: true, inProgress: LOG },
-      capturedAt: T1,
-      source: 'addon',
-      inProgressAsOf: T1,
-    };
-    expect(effectiveQuests(logOnly(T1), null)).toEqual(expected);
-    expect(effectiveQuests(logOnly(T1), { completed: 'x' })).toEqual(expected);
-  });
-
-  it('absent + no Armory list + an empty log: nothing to show → null', () => {
-    const emptyLog = { data: { quests: { inProgress: [] } }, capturedAt: T1 };
-    expect(effectiveQuests(emptyLog, null)).toBeNull();
-  });
-
   it.each([
     ['newer', T0, T1],
     ['older', T1, T0],
@@ -180,5 +164,23 @@ describe('effectiveQuests — absent vs empty addon completed list (ROK-2125)', 
     expect(effectiveQuests(addon([4], T1), null)?.quests.completed).toEqual([
       4,
     ]);
+  });
+});
+
+describe('effectiveQuests — log-only with no Armory list (ROK-2125 review r1)', () => {
+  it('absent + no Armory list: the log stays visible; the completed list is flagged unknown, never "none done"', () => {
+    const expected = {
+      quests: { completed: [], completedTruncated: true, inProgress: LOG },
+      capturedAt: T1,
+      source: 'addon',
+      inProgressAsOf: T1,
+    };
+    expect(effectiveQuests(logOnly(T1), null)).toEqual(expected);
+    expect(effectiveQuests(logOnly(T1), { completed: 'x' })).toEqual(expected);
+  });
+
+  it('absent + no Armory list + an empty log: nothing to show → null', () => {
+    const emptyLog = { data: { quests: { inProgress: [] } }, capturedAt: T1 };
+    expect(effectiveQuests(emptyLog, null)).toBeNull();
   });
 });

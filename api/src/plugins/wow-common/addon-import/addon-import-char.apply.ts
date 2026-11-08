@@ -12,7 +12,10 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
-import { carryStoredCompletedQuests } from './addon-import-char.quests-carry';
+import {
+  carriedCompletedDataSql,
+  needsCompletedCarry,
+} from './addon-import-char.quests-carry';
 
 /** ROK-1724 §4.3 Apply — section `char`: one snapshot row per character. */
 
@@ -25,8 +28,6 @@ export type CharWriteDecision = 'noop' | 'stale' | 'write';
 export interface StoredCharSnapshot {
   payloadSha256: string;
   capturedAt: Date;
-  /** The stored `data` jsonb (ROK-2125: source of a carried completed list). */
-  data?: unknown;
 }
 
 export function buildCharSummary(
@@ -67,7 +68,6 @@ async function loadStored(
     .select({
       payloadSha256: characterAddonSnapshots.payloadSha256,
       capturedAt: characterAddonSnapshots.capturedAt,
-      data: characterAddonSnapshots.data,
     })
     .from(characterAddonSnapshots)
     .where(
@@ -109,7 +109,9 @@ export function decideLostRace(
  * Upsert the snapshot unless noop/stale. Writes only the importer's char.
  * The pre-read is advisory; the conflict update re-checks atomically
  * (`setWhere`: not older, different sha) so an older export racing a newer
- * one can never overwrite it. No row back = nothing written.
+ * one can never overwrite it. No row back = nothing written. A log-only
+ * import carries the stored completed list inside that same update
+ * (ROK-2125, {@link carriedCompletedDataSql}).
  */
 export async function applyChar(
   ctx: AddonApplyContext,
@@ -119,33 +121,34 @@ export async function applyChar(
   const stored = await loadStored(ctx);
   const decision = decideCharWrite(stored, ctx.sha256, payload.exportedAt);
   if (decision !== 'write') return { status: decision, summary };
-  const data = carryStoredCompletedQuests(payload.data, stored?.data);
-  if (await upsertChar(ctx, payload, data)) {
+  if (await upsertChar(ctx, payload)) {
     return { status: 'applied', summary };
   }
   return { status: decideLostRace(await loadStored(ctx), ctx.sha256), summary };
 }
 
-/** True when a row was inserted or updated; `data` is what gets stored. */
+/** True when a row was inserted or updated. */
 async function upsertChar(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
-  data: AddonCharSnapshotData,
 ): Promise<boolean> {
   const values = {
     schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
-    data,
+    data: payload.data,
     capturedAt: fromUnix(payload.exportedAt),
     importedAt: new Date(),
     payloadSha256: ctx.sha256,
   };
   const t = characterAddonSnapshots;
+  const set = needsCompletedCarry(payload.data)
+    ? { ...values, data: carriedCompletedDataSql(t.data) }
+    : values;
   const rows = await ctx.tx
     .insert(t)
     .values({ characterId: ctx.characterId, section: 'char', ...values })
     .onConflictDoUpdate({
       target: [t.characterId, t.section],
-      set: values,
+      set,
       // `excluded` = the incoming row: not older, and a different export.
       setWhere: sql`${t.capturedAt} <= excluded.captured_at AND ${t.payloadSha256} <> excluded.payload_sha256`,
     })
