@@ -16,9 +16,15 @@ import '../slots/quest-prep-panel.css';
  * "2 completed · 377 known · via addon · 1 Oct 2026 · 120 quests total" (R-5);
  * "via Armory · <date>" when the Armory list won (ROK-2109). The date is the
  * winning completed list's `syncedAt` — `inProgressSyncedAt` dates only the log.
+ * ROK-2145: with no completed quests (a log-only export and no Armory sync, or a
+ * synced list that is genuinely empty — the API cannot tell them apart) the line
+ * says none are recorded yet instead of "0 completed … 0 quests total".
  */
 function questsSummaryLine(quests: CharacterQuestsDto): string {
     const { completedKnown, knownTotal, completedTotal } = quests.counts;
+    if (completedTotal === 0) {
+        return `No completed quests recorded yet · ${formatSourceLine(quests.source, quests.syncedAt)}`;
+    }
     return `${completedKnown} completed · ${knownTotal} known · ${formatSourceLine(quests.source, quests.syncedAt)} · ${plural(completedTotal, 'quest')} total`;
 }
 

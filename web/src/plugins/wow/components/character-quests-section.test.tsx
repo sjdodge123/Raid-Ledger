@@ -103,6 +103,13 @@ describe('CharacterQuestsSection — summary + quest log', () => {
         expect(screen.getByText('1 completed · 377 known · via addon · 1 Oct 2026 · 1 quest total')).toBeInTheDocument();
     });
 
+    it('says no completed quests are recorded yet instead of "0 quests total" when the completed list is empty — log-only or synced-empty, same DTO (ROK-2145)', async () => {
+        body = { quests: makeQuests({ completedKnown: [], counts: { completedKnown: 0, knownTotal: 377, completedTotal: 0, inProgress: 2 } }) };
+        await renderLoaded();
+        expect(screen.getByText('No completed quests recorded yet · via addon · 1 Oct 2026')).toBeInTheDocument();
+        expect(screen.queryByText(/quests total/)).not.toBeInTheDocument();
+    });
+
     it('shows counts, source, date and the total completed', async () => {
         await renderLoaded();
         expect(screen.getByText('2 completed · 377 known · via addon · 1 Oct 2026 · 120 quests total')).toBeInTheDocument();
