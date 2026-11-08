@@ -266,6 +266,12 @@ describe('ROK-2125 review r1 — carried list: Armory ordering and truncation fl
       completed: [456, 463, 470],
       completedTruncated: true,
     });
+  });
+
+  // Own case (not a 2nd member in the one above): a Forever character name has
+  // one owner across all players (ROK-1721 idx_characters_ruleset_identity),
+  // and the fixture GUID pins to one character — afterEach truncates between.
+  it('an incoming truncation flag is ignored when the stored list is carried (review r1)', async () => {
     const stray = buildForeverQuestsLogOnlyPayload();
     const strayQuests = {
       inProgress: buildQuests(0).inProgress,
@@ -275,10 +281,10 @@ describe('ROK-2125 review r1 — carried list: Armory ordering and truncation fl
       ...stray,
       data: { ...stray.data, quests: strayQuests },
     };
-    const { token: t2, charId: c2 } = await memberWithChar('logonly6');
-    await importPaste(t2, c2, fixture('char-forever-quests'));
-    await importPaste(t2, c2, exportAfter(strayFlag, 1200));
-    const kept = (await storedSnapshot(c2)).quests;
+    const { token, charId } = await memberWithChar('logonly6');
+    await importPaste(token, charId, fixture('char-forever-quests'));
+    await importPaste(token, charId, exportAfter(strayFlag, 1200));
+    const kept = (await storedSnapshot(charId)).quests;
     expect(kept?.completed).toHaveLength(10_000);
     expect(kept?.completedTruncated).toBeUndefined();
   });
