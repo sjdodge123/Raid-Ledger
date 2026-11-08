@@ -20,6 +20,11 @@
  *  T3 Editor: the 255 / 499 caps hold with the shared `n/max` counter; `|`
  *     warns without blocking; a control character blocks Save; a dirty Cancel
  *     asks to discard and nothing is saved.
+ *  T4 Editor (ROK-2137): an in-game report seeded through
+ *     `POST /admin/test/wow/seed-guild-game-text` raises "Changed in game";
+ *     "Use in-game text" makes it the hub text, and after a reseed of the
+ *     other field "Keep hub text" clears the notice, keeps the hub text and
+ *     shows the Copy-for-in-game hint.
  *
  * The clipboard is a recording stub (headless clipboards vary by project —
  * valheim-link-token precedent): it records exactly what `copyWithToast`
@@ -41,6 +46,9 @@ const INFO = 'Loot: council for Molten Core.\nBe kind in guild chat.\n  Indented
 const COPY_LABEL = 'Copy for in-game';
 const CONTROL_CHAR_COPY = 'Remove tabs and other invisible characters';
 const COPIED_ATTR = 'guildTextCopied';
+const GAME_MOTD = 'Raid moved to Thursday 8 server time';
+const GAME_INFO = 'Loot: open roll for Onyxia.\nNew officers: ask in guild chat.';
+const KEPT_HINT = 'Hub text kept — use Copy for in-game to put it back in the game.';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -51,11 +59,17 @@ interface SeededGuild {
 
 interface IngameField { text: string; updatedAt: string; updatedBy: string | null }
 
+interface GameReport { gameText: string; gameReportedAt: string; changedInGame: boolean }
+
 interface IngameText {
     motd: IngameField | null;
     info: IngameField | null;
     viewer: { canEdit: boolean };
+    /** ROK-2137 — editors only. */
+    game?: { motd: GameReport | null; info: GameReport | null };
 }
+
+type Field = 'motd' | 'info';
 
 let gameAvailable = false;
 
@@ -155,6 +169,28 @@ async function setRawValue(input: Locator, value: string): Promise<void> {
 async function expectExactText(locator: Locator, expected: string, label: string): Promise<void> {
     await expect(locator, label).toHaveText(expected, { timeout: 15_000 });
     expect(await locator.textContent(), `${label} — exact, line breaks included`).toBe(expected);
+}
+
+/** ROK-2137 fixture: store an in-game report (as a LedgerLink export would) and clear its Push ack. */
+async function seedGameText(token: string, guildId: number, text: Partial<Record<Field, string>>): Promise<void> {
+    const body = (await apiPost(token, '/admin/test/wow/seed-guild-game-text', { guildId, ...text })) as
+        { guildId?: number } | null;
+    if (body?.guildId !== guildId) throw new Error(`[forever-guild-text] seed-guild-game-text: ${JSON.stringify(body)}`);
+}
+
+/** Polls the editor's view of one field: hub text + the game block's changedInGame. */
+async function expectFieldState(jwt: string, guildId: number, field: Field, want: { text: string; changed: boolean }, message: string): Promise<void> {
+    await expect.poll(async () => {
+        const t = await textOf(jwt, guildId);
+        return { text: t[field]?.text ?? null, changed: t.game?.[field]?.changedInGame ?? null };
+    }, { message }).toEqual(want);
+}
+
+function gameAction(page: Page, guildId: number, field: Field, action: 'adopt' | 'push'): Promise<Response> {
+    return page.waitForResponse(
+        (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith(`${textPath(guildId)}/${field}/${action}`),
+        { timeout: 20_000 },
+    );
 }
 
 async function copyAndRead(page: Page, field: 'motd' | 'info', expected: string): Promise<void> {
@@ -286,6 +322,50 @@ test.describe('WoW: Forever hub "Guild message" card (ROK-2136)', () => {
             await expect(motdInput, 'discarding closes the editor').toBeHidden({ timeout: 15_000 });
             const after = await textOf(jwt, guild.guildId);
             expect({ motd: after.motd, info: after.info }, 'nothing was saved').toEqual({ motd: null, info: null });
+        } finally {
+            await removeUsers(admin, guild);
+        }
+    });
+
+    test('T4 editor: Changed in game → Use in-game text adopts it; a newer report → Keep hub text keeps the hub text with the Copy hint', async ({ page }, testInfo) => {
+        const admin = await getAdminToken();
+        const guild = await seedGuild(admin, testInfo);
+        const gid = guild.guildId;
+        try {
+            const put = (await apiPut(admin, textPath(gid), {
+                motd: MOTD, info: INFO, baseMotdUpdatedAt: null, baseInfoUpdatedAt: null,
+            })) as Partial<IngameText> | null;
+            expect(put?.info?.text, `admin PUT ${textPath(gid)}: ${JSON.stringify(put)}`).toBe(INFO);
+            await seedGameText(admin, gid, { motd: GAME_MOTD });
+
+            const jwt = await signInOnboardedMember(page, guild.users.officer.userId);
+            await expectFieldState(jwt, gid, 'motd', { text: MOTD, changed: true }, 'the seeded MOTD report differs from the hub text');
+            await openOverview(page, gid);
+            const motdNotice = card(page).getByTestId('guild-text-motd-game');
+            await expect(motdNotice, 'the editor sees the MOTD notice').toContainText('Changed in game', { timeout: 15_000 });
+            await expect(card(page).getByTestId('guild-text-info-game'), 'the unreported Info has no notice').toHaveCount(0);
+
+            const adopted = gameAction(page, gid, 'motd', 'adopt');
+            await card(page).getByTestId('guild-text-motd-adopt').click();
+            expect((await adopted).status(), 'POST …/motd/adopt').toBe(200);
+            await expectExactText(card(page).getByTestId('guild-text-motd-text'), GAME_MOTD, 'Use in-game text makes it the hub MOTD');
+            await expect(motdNotice, 'the MOTD notice is gone after Use in-game text').toHaveCount(0);
+            await expectFieldState(jwt, gid, 'motd', { text: GAME_MOTD, changed: false }, 'Adopt stored the in-game MOTD as the hub text');
+
+            await seedGameText(admin, gid, { info: GAME_INFO });
+            await expectFieldState(jwt, gid, 'info', { text: INFO, changed: true }, 'the newer Info report differs from the hub text');
+            await openOverview(page, gid);
+            const infoNotice = card(page).getByTestId('guild-text-info-game');
+            await expect(infoNotice, 'the editor sees the Info notice').toContainText('Changed in game', { timeout: 15_000 });
+
+            const kept = gameAction(page, gid, 'info', 'push');
+            await card(page).getByTestId('guild-text-info-keep').click();
+            expect((await kept).status(), 'POST …/info/push').toBe(200);
+            await expect(card(page).getByTestId('guild-text-info-kept'), 'Keep hub text shows the Copy hint')
+                .toHaveText(KEPT_HINT, { timeout: 15_000 });
+            await expect(infoNotice, 'the Info notice is gone after Keep hub text').toHaveCount(0);
+            await expectExactText(card(page).getByTestId('guild-text-info-text'), INFO, 'Keep hub text leaves the hub Info unchanged');
+            await expectFieldState(jwt, gid, 'info', { text: INFO, changed: false }, 'Push acknowledged the report; the hub Info is unchanged');
         } finally {
             await removeUsers(admin, guild);
         }
