@@ -17,13 +17,21 @@ interface DialogBannerProps {
     tone: DialogBannerTone;
     /** e.g. `session-note-conflict` / `guild-text-error`. */
     testId: string;
+    /**
+     * Default `alert` (a 409 / failed save the user just caused). A persistent
+     * notice that is already there on load passes `status` so it is not
+     * announced as an interruption (ROK-2137).
+     */
+    role?: 'alert' | 'status';
+    /** Default `mb-4` (above a dialog's fields); `''` inside a card's own flow. */
+    spacing?: string;
     children: ReactNode;
 }
 
-export function DialogBanner({ tone, testId, children }: DialogBannerProps): JSX.Element {
+export function DialogBanner({ tone, testId, role = 'alert', spacing = 'mb-4', children }: DialogBannerProps): JSX.Element {
     return (
-        <div role="alert" data-testid={testId}
-            className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${TONE_CLASS[tone]}`}>
+        <div role={role} data-testid={testId}
+            className={`${spacing} flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${TONE_CLASS[tone]}`}>
             {children}
         </div>
     );

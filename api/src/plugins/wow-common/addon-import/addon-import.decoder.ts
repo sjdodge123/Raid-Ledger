@@ -21,7 +21,11 @@ import {
   parsePaste,
   type AddonSectionGroup,
 } from './addon-import.paste';
-import { sanitizeStrings, toCharSnapshotData } from './addon-import.sanitize';
+import {
+  sanitizeGuildExport,
+  sanitizeStrings,
+  toCharSnapshotData,
+} from './addon-import.sanitize';
 
 /** Char export with `data` already in the frozen snapshot shape. */
 export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
@@ -149,7 +153,7 @@ function finalize(pages: AddonExport[]): DecodedAddonExport {
   const [first] = pages;
   if (!first) throw new AddonImportError('BAD_HEADER');
   if (first.section === 'guild') {
-    return sanitizeStrings(mergeGuildPages(pages as AddonGuildExport[]));
+    return sanitizeGuildExport(mergeGuildPages(pages as AddonGuildExport[]));
   }
   if (first.section === 'raid') return sanitizeStrings(first);
   const { data, ...envelope } = first;

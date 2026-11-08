@@ -106,6 +106,7 @@ and may recompute the grid with this rule without a wire change.
 - `name` 1–64, `rawRealm?` ≤ 64, `snapshotAt` (unix s)
 - `canViewOfficerNote`: must be the literal **`false`**
 - `members[]` ≤ 2000: `{ guid, name ≤ 100, rankIndex 0–255, rank ≤ 64, level 1–100, class, online: boolean, lastOnlineDays?, note? ≤ 256 (public note, only when the player opted in) }`
+- `motd?` ≤ 255 and `infoText?` ≤ 499 (UTF-16 units): the in-game guild Message of the Day (`C_GuildInfo.GetMOTD()`) and Guild Information (`C_GuildInfo.GetInfoText()`), verbatim. `""` = the in-game box is empty; **absent = no opinion** (the server keeps what it stored). On a paged roster the server reads them from page 1. Officer-only text is never sent (fixture `guild-ingame-text`, ROK-2137, additive).
 
 **`raid`** — `data`:
 - `pulls[]` ≤ 200: `{ encounterId, name ≤ 128, difficultyId, groupSize 1–40, instanceId?, startAt, endAt (unix s), success: boolean, roster[] ≤ 40 GUIDs, rosterNames[] ≤ 40 }`
