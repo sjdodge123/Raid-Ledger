@@ -14,7 +14,9 @@ vi.mock('../lib/api-client', () => ({
     adminRemoveUserFromEvent: vi.fn(),
 }));
 
-import { useRoster, rosterKey } from './use-roster';
+import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import { useRoster, rosterKey, buildRosterUpdate } from './use-roster';
+import { makePlayer } from '../components/roster/RosterBuilder.test-helpers';
 
 function createWrapper() {
     const queryClient = new QueryClient({
@@ -116,5 +118,17 @@ describe('rosterKey (ROK-914)', () => {
         expect(key[1]).toBe(5);
         expect(key[2]).toBe('roster');
         expect(key[3]).toBe('assignments');
+    });
+});
+
+describe('buildRosterUpdate — anonymous signups (ROK-2141)', () => {
+    it('keeps an assignment with userId 0 and sends its signupId', () => {
+        const anon: RosterAssignmentResponse = { ...makePlayer(77, null, 'AnonPlayer'), userId: 0, slot: 'player', position: 2 };
+        const linked: RosterAssignmentResponse = { ...makePlayer(78, null, 'Linked'), userId: 5, slot: 'player', position: 1 };
+        const dto = buildRosterUpdate([], [anon, linked]);
+        expect(dto.assignments).toEqual([
+            expect.objectContaining({ userId: 0, signupId: 77, slot: 'player', position: 2 }),
+            expect.objectContaining({ userId: 5, signupId: 78, slot: 'player', position: 1 }),
+        ]);
     });
 });
