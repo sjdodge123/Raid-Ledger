@@ -36,17 +36,8 @@ export function recordOwner(owners: KeyOwners, id: number, keys: OwnedKeys) {
   if (keys.steamAppId != null) owners.steam.set(keys.steamAppId, id);
 }
 
-/** ONE SELECT for the rows holding any incoming igdb_id, slug or steam id. */
-export async function loadKeyOwners(
-  db: PostgresJsDatabase<typeof schema>,
-  rows: GameRow[],
-): Promise<KeyOwners> {
-  const owners: KeyOwners = {
-    igdb: new Map(),
-    slug: new Map(),
-    steam: new Map(),
-  };
-  if (rows.length === 0) return owners;
+/** OR-able conditions matching any row holding an incoming key. */
+function keyOwnerConds(rows: GameRow[]): SQL[] {
   const steamIds = rows.flatMap((r) =>
     r.steamAppId == null ? [] : [r.steamAppId],
   );
@@ -62,6 +53,20 @@ export async function loadKeyOwners(
   ];
   if (steamIds.length > 0)
     conds.push(inArray(schema.games.steamAppId, steamIds));
+  return conds;
+}
+
+/** ONE SELECT for the rows holding any incoming igdb_id, slug or steam id. */
+export async function loadKeyOwners(
+  db: PostgresJsDatabase<typeof schema>,
+  rows: GameRow[],
+): Promise<KeyOwners> {
+  const owners: KeyOwners = {
+    igdb: new Map(),
+    slug: new Map(),
+    steam: new Map(),
+  };
+  if (rows.length === 0) return owners;
   const found = await db
     .select({
       id: schema.games.id,
@@ -70,7 +75,7 @@ export async function loadKeyOwners(
       steamAppId: schema.games.steamAppId,
     })
     .from(schema.games)
-    .where(or(...conds));
+    .where(or(...keyOwnerConds(rows)));
   for (const f of found) recordOwner(owners, f.id, f);
   return owners;
 }
@@ -117,28 +122,41 @@ export function classifyMerge(
 }
 
 /**
+ * Guard one insert row: `null` = drop it (slug clash), otherwise the row to
+ * insert (steam id stripped on a steam clash). `landing` = the existing igdb
+ * owner it will upsert onto, or a negative placeholder for a fresh insert.
+ */
+function guardOne(row: GameRow, owners: KeyOwners): GameRow | null {
+  const existing = owners.igdb.get(row.igdbId);
+  const landing = existing ?? -row.igdbId;
+  const dup = existing ?? `igdb:${row.igdbId}`;
+  const slugOwner = owners.slug.get(row.slug);
+  if (slugOwner != null && slugOwner !== landing) {
+    reportDuplicatePair(slugOwner, dup, 'slug');
+    return null;
+  }
+  const steamOwner =
+    row.steamAppId == null ? undefined : owners.steam.get(row.steamAppId);
+  if (steamOwner == null || steamOwner === landing) return row;
+  reportDuplicatePair(steamOwner, dup, 'steam_app_id');
+  return { ...row, steamAppId: null, steamAppIdSource: null };
+}
+
+/**
  * Drop insert rows whose slug a row other than their igdb_id owner holds, and
  * strip a steam id held elsewhere, so the batch INSERT ... ON CONFLICT
  * (igdb_id) cannot violate games_slug_unique / games_steam_app_id_unique.
+ * Each kept row's keys are recorded (a fresh insert under the placeholder id
+ * `-igdbId`), so two rows in ONE batch can't claim the same slug / steam id.
  */
 export function guardInsertRows(rows: GameRow[], owners: KeyOwners): GameRow[] {
   const kept: GameRow[] = [];
   for (const row of rows) {
-    const landing = owners.igdb.get(row.igdbId) ?? null;
-    const dup = landing ?? `igdb:${row.igdbId}`;
-    const slugOwner = owners.slug.get(row.slug);
-    if (slugOwner != null && slugOwner !== landing) {
-      reportDuplicatePair(slugOwner, dup, 'slug');
-      continue;
-    }
-    const steamOwner =
-      row.steamAppId == null ? undefined : owners.steam.get(row.steamAppId);
-    if (steamOwner != null && steamOwner !== landing) {
-      reportDuplicatePair(steamOwner, dup, 'steam_app_id');
-      kept.push({ ...row, steamAppId: null, steamAppIdSource: null });
-      continue;
-    }
-    kept.push(row);
+    const guarded = guardOne(row, owners);
+    if (guarded == null) continue;
+    const landing = owners.igdb.get(row.igdbId) ?? -row.igdbId;
+    recordOwner(owners, landing, guarded);
+    kept.push(guarded);
   }
   return kept;
 }
