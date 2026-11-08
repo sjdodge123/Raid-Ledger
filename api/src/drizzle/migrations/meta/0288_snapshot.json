@@ -1,5 +1,5 @@
 {
-  "id": "1e09dc01-537e-484b-9166-ba7a81f50727",
+  "id": "25899562-6752-4667-98dd-fabcbd58f239",
   "prevId": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "version": "7",
   "dialect": "postgresql",
@@ -2011,9 +2011,9 @@
               "nulls": "last"
             },
             {
-              "expression": "region",
-              "isExpression": false,
+              "expression": "lower(\"region\")",
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             },
             {
@@ -12129,9 +12129,9 @@
               "nulls": "last"
             },
             {
-              "expression": "blizzard_character_id",
-              "isExpression": false,
+              "expression": "(\"blizzard_character_id\"::text)",
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],

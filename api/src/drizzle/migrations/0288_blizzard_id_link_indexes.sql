@@ -1,2 +1,2 @@
-CREATE INDEX "idx_characters_game_region_external_id" ON "characters" USING btree ("game_id","region","external_id") WHERE "characters"."external_id" IS NOT NULL;--> statement-breakpoint
-CREATE INDEX "idx_guild_members_guild_blizzard_id" ON "guild_members" USING btree ("guild_id","blizzard_character_id") WHERE "guild_members"."blizzard_character_id" IS NOT NULL;
+CREATE INDEX "idx_characters_game_region_external_id" ON "characters" USING btree ("game_id",lower("region"),"external_id") WHERE "characters"."external_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_guild_members_guild_blizzard_id" ON "guild_members" USING btree ("guild_id",("blizzard_character_id"::text)) WHERE "guild_members"."blizzard_character_id" IS NOT NULL;
