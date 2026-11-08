@@ -1,7 +1,8 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
+import { claimableGuildBase } from './roster-claim/roster-claim.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -10,9 +11,7 @@ type Db = PostgresJsDatabase<typeof schema>;
  * non-member — every claimable WoW: Forever guild (active, not hidden, not
  * archived: the ROK-2128 pick-list audience). Retail / Classic guilds have no
  * roster-claim path, so they stay members-only.
- *
- * TODO(L1): reuse exported isClaimableGuild (roster-claim.queries.ts) — this
- * repeats its rule over every Forever game instead of one `gameId`.
+ * Same rule as the pick list (`claimableGuildBase`), over every Forever game.
  */
 export async function findClaimableForeverGuildIds(db: Db): Promise<number[]> {
   const g = schema.guilds;
@@ -21,13 +20,7 @@ export async function findClaimableForeverGuildIds(db: Db): Promise<number[]> {
     .from(g)
     .innerJoin(schema.games, eq(schema.games.id, g.gameId))
     .where(
-      and(
-        eq(schema.games.slug, WOW_FOREVER_GAME_SLUG),
-        eq(g.kind, 'wow_guild'),
-        eq(g.status, 'active'),
-        isNull(g.hiddenAt),
-        isNull(g.archivedAt),
-      ),
+      and(eq(schema.games.slug, WOW_FOREVER_GAME_SLUG), claimableGuildBase()),
     );
   return rows.map((r) => r.id);
 }

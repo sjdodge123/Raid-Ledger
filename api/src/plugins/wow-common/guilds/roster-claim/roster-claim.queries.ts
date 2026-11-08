@@ -70,6 +70,17 @@ export function isClaimableGuild(
   return and(
     eq(guilds.gameId, gameId),
     guildId === undefined ? undefined : eq(guilds.id, guildId),
+    claimableGuildBase(),
+  );
+}
+
+/**
+ * The game-independent half of `isClaimableGuild` — also the ROK-2132
+ * directory rule (`findClaimableForeverGuildIds`), so the pick list and the
+ * `/hubs` visitor audience can never drift apart.
+ */
+export function claimableGuildBase(): SQL | undefined {
+  return and(
     eq(guilds.kind, 'wow_guild'),
     eq(guilds.status, 'active'),
     isNull(guilds.hiddenAt),
