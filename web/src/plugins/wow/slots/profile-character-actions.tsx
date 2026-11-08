@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useRefreshCharacterFromArmory } from '../hooks/use-wow-mutations';
 import { safeHttpUrl } from '../../../lib/safe-http-url';
+import { Button } from '../../../components/ui/button';
+import { ACTION_TILE_CLASS, type CharacterHeaderLayout } from '../../../components/shared/character-header-layout';
 
 interface ProfileCharacterActionsProps {
     characterId: string;
@@ -8,6 +10,8 @@ interface ProfileCharacterActionsProps {
     region: string | null;
     gameVariant: string | null;
     profileUrl: string | null;
+    /** ROK-2140: set by the character header — a labelled "Sync" Button (tile on phones); absent = the compact icon (profile card). */
+    layout?: CharacterHeaderLayout | undefined;
 }
 
 function useRefreshCooldown(lastSyncedAt: string | null) {
@@ -46,8 +50,8 @@ function RefreshIcon({ isPending }: { isPending: boolean }) {
     );
 }
 
-function RefreshButton({ characterId, region, gameVariant, cooldownRemaining }: {
-    characterId: string; region: string | null; gameVariant: string | null; cooldownRemaining: number;
+function RefreshButton({ characterId, region, gameVariant, cooldownRemaining, layout }: {
+    characterId: string; region: string | null; gameVariant: string | null; cooldownRemaining: number; layout?: CharacterHeaderLayout | undefined;
 }) {
     const refreshMutation = useRefreshCharacterFromArmory();
     function handleRefresh() {
@@ -60,12 +64,28 @@ function RefreshButton({ characterId, region, gameVariant, cooldownRemaining }: 
             },
         });
     }
+    const disabled = refreshMutation.isPending || cooldownRemaining > 0;
+    const title = cooldownRemaining > 0 ? formatCooldown(cooldownRemaining) : 'Sync from Armory';
+    if (layout) return <SyncButton layout={layout} disabled={disabled} title={title} isPending={refreshMutation.isPending} onClick={handleRefresh} />;
     return (
-        <button onClick={handleRefresh} disabled={refreshMutation.isPending || cooldownRemaining > 0}
+        <button onClick={handleRefresh} disabled={disabled}
             className="px-2 py-1.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-950/50 disabled:text-muted disabled:hover:bg-transparent rounded transition-colors"
             title={cooldownRemaining > 0 ? formatCooldown(cooldownRemaining) : 'Refresh from Armory'}>
             <RefreshIcon isPending={refreshMutation.isPending} />
         </button>
+    );
+}
+
+/** ROK-2140: the character header's labelled "Sync" — a tile on phones, a secondary Button at ≥ sm. */
+function SyncButton({ layout, disabled, title, isPending, onClick }: {
+    layout: CharacterHeaderLayout; disabled: boolean; title: string; isPending: boolean; onClick: () => void;
+}) {
+    const phone = layout === 'phone';
+    return (
+        <Button variant="secondary" size="sm" fullWidth={phone} className={phone ? ACTION_TILE_CLASS : ''} disabled={disabled} title={title} onClick={onClick}>
+            <RefreshIcon isPending={isPending} />
+            Sync
+        </Button>
     );
 }
 
@@ -82,17 +102,17 @@ function ArmoryLink({ profileUrl }: { profileUrl: string }) {
 }
 
 /**
- * "Refresh from Armory" button + external armory link for character profile/detail pages.
+ * "Sync" (refresh from Armory) button + external armory link for character profile/detail pages.
  * Includes cooldown timer to prevent API spam.
  */
 export function ProfileCharacterActions({
-    characterId, lastSyncedAt, region, gameVariant, profileUrl,
+    characterId, lastSyncedAt, region, gameVariant, profileUrl, layout,
 }: ProfileCharacterActionsProps) {
     const cooldownRemaining = useRefreshCooldown(lastSyncedAt);
     const armoryUrl = safeHttpUrl(profileUrl);
     return (
         <>
-            {!!lastSyncedAt && <RefreshButton characterId={characterId} region={region} gameVariant={gameVariant} cooldownRemaining={cooldownRemaining} />}
+            {!!lastSyncedAt && <RefreshButton characterId={characterId} region={region} gameVariant={gameVariant} cooldownRemaining={cooldownRemaining} layout={layout} />}
             {armoryUrl && <ArmoryLink profileUrl={armoryUrl} />}
         </>
     );

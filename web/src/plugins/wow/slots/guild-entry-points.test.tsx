@@ -175,7 +175,7 @@ describe('generic slots', () => {
         ['components/layout/more-drawer.tsx', '<PluginSlot name="nav:drawer-top" context={{ onClose }} />'],
         ['pages/players-page.tsx', '<PluginSlot name="players:header-cards" />'],
         ['pages/game-detail-page.tsx', '<PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />'],
-        ['pages/character-detail-page.tsx', 'name="character-detail:header-badges" context={{ characterId: character.id,'],
+        ['pages/character-detail-header.tsx', 'name="character-detail:header-badges" context={{ characterId: character.id,'],
     ])('%s hosts its slot', (file, snippet) => {
         const src = readFileSync(resolve(__dirname, '../../..', file), 'utf8');
         expect(src.includes(snippet), `${file} is missing: ${snippet}`).toBe(true);

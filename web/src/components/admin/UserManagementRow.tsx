@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { RoleBadge } from '../ui/role-badge';
 import { Button } from '../ui/button';
+import { ActionMenuList, useMenuDismiss, type ActionMenuItem } from '../ui/action-menu';
 import { Select } from '../ui/select';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { UserRole, UserManagementDto } from '@raid-ledger/contract';
@@ -97,7 +98,7 @@ export interface RowHandlers {
     onUnban: (t: ModerationTarget) => void;
 }
 /** `destructive` items render `destructive-soft`; the rest `ghost` (ruling 10 — no per-item hue). */
-interface MenuItemSpec { key: string; icon: JSX.Element; label: string; destructive?: boolean; onClick: () => void; }
+type MenuItemSpec = ActionMenuItem;
 
 /** Build the ordered menu items for a row's current moderation state. */
 function buildMenuItems(s: RowState, bound: Record<keyof RowHandlers, () => void>): MenuItemSpec[] {
@@ -127,40 +128,6 @@ function buildMenuItems(s: RowState, bound: Record<keyof RowHandlers, () => void
         { key: 'ban', icon: BanIcon, label: 'Ban user', destructive: true, onClick: bound.onBan },
         remove,
     ];
-}
-
-/**
- * Button centres its label (`justify-center`, no tailwind-merge), so a menu row
- * stretches the label span to the full width instead: its own `inline-flex`
- * then packs icon + text from the left.
- */
-const MENU_ITEM_LEFT = '[&>[data-button-label]]:w-full';
-
-/** The open menu: ghost rows, destructive-soft for Kick / Ban / Remove (ruling 10). */
-function ActionMenuList({ items }: { items: MenuItemSpec[] }) {
-    return (
-        <div role="menu" className="absolute right-0 top-full mt-1 z-10 min-w-[12rem] bg-panel border border-edge rounded-lg shadow-lg p-1 flex flex-col gap-1">
-            {items.map((it) => (
-                <Button key={it.key} role="menuitem" variant={it.destructive ? 'destructive-soft' : 'ghost'} size="sm" fullWidth
-                    className={MENU_ITEM_LEFT} onClick={it.onClick}>
-                    {it.icon}{it.label}
-                </Button>
-            ))}
-        </div>
-    );
-}
-
-function useMenuDismiss(open: boolean, close: () => void) {
-    const rootRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        if (!open) return;
-        const onClick = (e: MouseEvent) => { if (!rootRef.current?.contains(e.target as Node)) close(); };
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-        document.addEventListener('mousedown', onClick);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
-    }, [open, close]);
-    return rootRef;
 }
 
 function UserActionMenu({ target, state, handlers, isCurrentUser, isPending }: {

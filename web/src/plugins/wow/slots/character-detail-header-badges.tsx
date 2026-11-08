@@ -1,8 +1,11 @@
+import { Fragment, type JSX, type ReactNode } from 'react';
+import { StatTile, type CharacterHeaderLayout } from '../../../components/shared/character-header-layout';
 import { CharacterGuildBadge } from './character-guild-badge';
 
+/** ROK-1815 faction tokens: they remap per scheme, so the pill reads in both colour families (ROK-2140). */
 const FACTION_STYLES: Record<string, string> = {
-    alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    horde: 'bg-red-500/20 text-red-400 border-red-500/30',
+    alliance: 'bg-faction-alliance/10 text-faction-alliance border-faction-alliance/30',
+    horde: 'bg-faction-horde/10 text-faction-horde border-faction-horde/30',
 };
 
 interface CharacterDetailHeaderBadgesProps {
@@ -13,7 +16,14 @@ interface CharacterDetailHeaderBadgesProps {
     equippedItemLevel: number | null;
     lastSyncedAt: string | null;
     profileUrl: string | null;
+    /** ROK-2140: core's level, shown as a stat tile on phones. */
+    level?: number | null | undefined;
+    /** ROK-2140: which half core is asking for; absent = both. */
+    part?: 'chips' | 'stats' | undefined;
+    layout?: CharacterHeaderLayout | undefined;
 }
+
+type StatProps = Pick<CharacterDetailHeaderBadgesProps, 'itemLevel' | 'equippedItemLevel' | 'lastSyncedAt' | 'level'>;
 
 function FactionBadge({ faction }: { faction: string }) {
     return (
@@ -35,29 +45,51 @@ function ArmoryLinkBadge({ profileUrl }: { profileUrl: string }) {
     );
 }
 
-export function CharacterDetailHeaderBadges({
-    characterId, faction, itemLevel, equippedItemLevel, lastSyncedAt, profileUrl,
-}: CharacterDetailHeaderBadgesProps) {
+/** Faction + guild chips (+ the Armory link-out). */
+function BadgeChips({ characterId, faction, profileUrl }: Pick<CharacterDetailHeaderBadgesProps, 'characterId' | 'faction' | 'profileUrl'>): JSX.Element {
     return (
         <>
             {faction && <FactionBadge faction={faction} />}
             {characterId && <CharacterGuildBadge characterId={characterId} />}
-            {itemLevel && (
-                <div className="text-sm">
-                    <span className="text-muted">Item Level </span>
-                    <span className="text-purple-400 font-semibold text-lg">{itemLevel}</span>
-                </div>
-            )}
-            {equippedItemLevel && equippedItemLevel !== itemLevel && (
-                <div className="text-sm">
-                    <span className="text-muted">Equipped </span>
-                    <span className="text-purple-300 font-semibold">{equippedItemLevel}</span>
-                </div>
-            )}
             {profileUrl && <ArmoryLinkBadge profileUrl={profileUrl} />}
-            {lastSyncedAt && <span className="text-xs text-muted">Updated {timeAgo(lastSyncedAt)}</span>}
         </>
     );
+}
+
+/** ≥ sm: ONE text size for item level, equipped and updated, separated only between present parts (ROK-2140). */
+function StatLine({ itemLevel, equippedItemLevel, lastSyncedAt }: StatProps): JSX.Element | null {
+    const parts: Array<[string, ReactNode]> = [];
+    if (itemLevel) parts.push(['ilvl', <>Item Level <span className="text-purple-400 font-semibold">{itemLevel}</span></>]);
+    if (equippedItemLevel && equippedItemLevel !== itemLevel) parts.push(['eq', <>Equipped <span className="text-purple-300 font-semibold">{equippedItemLevel}</span></>]);
+    if (lastSyncedAt) parts.push(['upd', <>Updated {timeAgo(lastSyncedAt)}</>]);
+    if (parts.length === 0) return null;
+    return (
+        <div data-testid="character-stat-line" className="mt-1.5 text-sm text-muted">
+            {parts.map(([key, node], i) => <Fragment key={key}>{i > 0 && ' · '}{node}</Fragment>)}
+        </div>
+    );
+}
+
+/** Below sm: the Option B stat strip — Item Level, Level, Updated tiles. */
+function StatTiles({ itemLevel, level, lastSyncedAt }: StatProps): JSX.Element {
+    return (
+        <>
+            {itemLevel ? <StatTile value={itemLevel} label="Item Level" valueClassName="text-purple-400" /> : null}
+            {level ? <StatTile value={level} label="Level" valueClassName="text-amber-400" /> : null}
+            {lastSyncedAt ? <StatTile value={timeAgo(lastSyncedAt).replace(/ ago$/, '')} label="Updated" /> : null}
+        </>
+    );
+}
+
+/**
+ * WoW filler for `character-detail:header-badges`. Core renders it twice —
+ * `part="chips"` beside the name and `part="stats"` as the stat line (≥ sm) or
+ * stat tiles (phone); with no `part` it renders both (legacy callers).
+ */
+export function CharacterDetailHeaderBadges(props: CharacterDetailHeaderBadgesProps): JSX.Element | null {
+    if (props.part === 'chips') return <BadgeChips {...props} />;
+    if (props.part === 'stats') return props.layout === 'phone' ? <StatTiles {...props} /> : <StatLine {...props} />;
+    return <><BadgeChips {...props} /><StatLine {...props} /></>;
 }
 
 function timeAgo(dateString: string): string {
