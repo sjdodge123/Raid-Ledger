@@ -449,7 +449,6 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
       .update(schema.games)
       .set({
         hasRoles: true,
-        enabled: false,
         maxCharactersPerUser: 3,
         colorHex: '#123456',
       })
@@ -466,7 +465,7 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
       colorHex: k?.colorHex,
     }).toEqual({
       hasRoles: true,
-      enabled: false,
+      enabled: true,
       maxCharactersPerUser: 3,
       colorHex: '#123456',
     });
@@ -495,6 +494,24 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
     );
     expect(left.get(keep)?.colorHex).toBe('#111111');
     expect(left.get(dup)?.colorHex).toBe('#222222');
+  }, 60_000);
+
+  it('skips the pair when only `enabled` differs (disabled twin)', async () => {
+    const [keep, dup] = await seedTwinPair(
+      testApp,
+      'Rok2120 Ash Ford',
+      99120075,
+    );
+    const g = schema.games;
+    await testApp.db.update(g).set({ enabled: false }).where(eq(g.id, dup));
+    await runMigration(testApp);
+
+    const left = await identities(testApp, [keep, dup]);
+    expect([...left.keys()].sort((a, b) => a - b)).toEqual(
+      [keep, dup].sort((a, b) => a - b),
+    );
+    expect(left.get(keep)?.enabled).toBe(true);
+    expect(left.get(dup)?.enabled).toBe(false);
   }, 60_000);
 
   it('keeps the dup’s Steam playtime on the keeper’s colliding interest', async () => {

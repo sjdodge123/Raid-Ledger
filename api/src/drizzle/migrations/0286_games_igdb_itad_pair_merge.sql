@@ -25,7 +25,8 @@
 --      color_hex, has_roles, has_specs, enabled, max_characters_per_user,
 --      api_namespace_prefix): when BOTH rows hold a non-default value and the
 --      values differ, the pair is SKIPPED (RL120 -> 'pair skipped' NOTICE; an
---      admin decides). Otherwise step 6 copies the dup's non-default value onto
+--      admin decides). `enabled` skips the pair on ANY difference (like
+--      `hidden`). Otherwise step 6 copies the dup's non-default value onto
 --      a keeper still on the default, so deleting the dup loses no config.
 --   1. game_activity_rollups: additive merge of colliding periods (0140 1a).
 --   2. characters: demote the dup's main where the keeper already has one for
@@ -176,8 +177,11 @@ BEGIN
                ('api_namespace_prefix', k.api_namespace_prefix, d.api_namespace_prefix, NULL)
              ) AS c(col, kv, dv, def)
        WHERE k.id = p.keeper_id AND d.id = p.dup_id
-         AND c.kv IS DISTINCT FROM c.def AND c.dv IS DISTINCT FROM c.def
-         AND c.kv IS DISTINCT FROM c.dv;
+         AND c.kv IS DISTINCT FROM c.dv
+         -- `enabled` is a moderation flag like `hidden`: any difference skips
+         -- (a disabled twin was most likely switched off as the duplicate).
+         AND (c.col = 'enabled'
+              OR (c.kv IS DISTINCT FROM c.def AND c.dv IS DISTINCT FROM c.def));
       IF conflict IS NOT NULL THEN
         RAISE EXCEPTION 'registry config conflicts (%)', conflict USING ERRCODE = 'RL120';
       END IF;
@@ -309,7 +313,7 @@ BEGIN
         color_hex = COALESCE(k.color_hex, dup_row.color_hex),
         has_roles = k.has_roles OR dup_row.has_roles,
         has_specs = k.has_specs OR dup_row.has_specs,
-        enabled = k.enabled AND dup_row.enabled,
+        -- enabled: step 0 skipped any pair where it differs.
         max_characters_per_user = CASE WHEN k.max_characters_per_user = 10
           THEN dup_row.max_characters_per_user ELSE k.max_characters_per_user END,
         api_namespace_prefix = COALESCE(k.api_namespace_prefix, dup_row.api_namespace_prefix)
