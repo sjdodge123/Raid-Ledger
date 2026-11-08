@@ -74,7 +74,8 @@ export type GuildIngameText = z.infer<typeof GuildIngameTextSchema>;
  * (null when unset). An omitted field is untouched and never conflict-checked,
  * so editing only Info never 409s on a concurrent MOTD change; a sent field
  * whose base mismatches is a 409 (D6). `''` (after `normaliseIngameText`)
- * clears the field.
+ * clears the field. A body carrying only base tokens (no `motd`/`info`) is a
+ * 200 no-op: nothing is checked, stamped or written.
  */
 export const PutGuildIngameTextSchema = z
   .object({

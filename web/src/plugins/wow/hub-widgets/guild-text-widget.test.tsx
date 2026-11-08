@@ -148,6 +148,19 @@ describe('GuildTextWidget, editor (AC12/AC15)', () => {
         unmount();
         expect(useGuildTextDialog.getState().guildId).toBeNull();
     });
+
+    it('keeps the open editor and its draft when a refetch turns the empty card into the set card', async () => {
+        serve(buildGuildIngameText(null, null, true));
+        const { queryClient } = renderWithProviders(<Card />);
+        fireEvent.click(await screen.findByTestId('guild-text-add'));
+        fireEvent.change(await screen.findByTestId('guild-text-input-info'), { target: { value: 'My unsaved draft' } });
+        serve(buildGuildIngameText(buildIngameField({ text: MOTD }), buildIngameField({ text: INFO }), true));
+        await queryClient.invalidateQueries({ queryKey: guildIngameTextKey(5) });
+        // The card swapped hint → body (the refetch landed); a remounted editor would now hold INFO, not the draft.
+        expect(await screen.findByTestId('guild-text-info-text')).toHaveTextContent('Loot: EPGP');
+        expect(screen.queryByTestId('guild-text-hint')).toBeNull();
+        expect(screen.getByTestId('guild-text-input-info')).toHaveValue('My unsaved draft');
+    });
 });
 
 describe('Copy for in-game (AC14)', () => {

@@ -230,6 +230,17 @@ describe('PUT ingame-text — rejections', () => {
     expect(JSON.stringify(res.body)).toContain('info');
   });
 
+  it('a sent field without its base token is 400 and creates no profile row', async () => {
+    const res = await put('admin', { info: 'x' });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('baseInfoUpdatedAt');
+    const rows = await testApp.db
+      .select({ id: schema.guildProfiles.guildId })
+      .from(schema.guildProfiles)
+      .where(eq(schema.guildProfiles.guildId, guildId));
+    expect(rows).toHaveLength(0);
+  });
+
   it('a non-wow_guild hub is 404 for a write', async () => {
     expect((await put('admin', body({ motd: 'x' }), communityId)).status).toBe(
       404,
@@ -318,6 +329,18 @@ describe('PUT ingame-text — no stray profile rows', () => {
 
   it('the first real change creates the row', async () => {
     expect((await put('deleg', body({ info: 'First' }))).status).toBe(200);
+    expect(await profileRows()).toHaveLength(1);
+  });
+
+  it('two concurrent first-ever saves: one 200, one 409, exactly one row', async () => {
+    const [a, b] = await Promise.all([
+      put('admin', { info: 'Admin first', baseInfoUpdatedAt: null }),
+      put('deleg', { info: 'Editor first', baseInfoUpdatedAt: null }),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    const winner = a.status === 200 ? a : b;
+    const loser = a.status === 200 ? b : a;
+    expect(loser.body.ingameText.info).toEqual(winner.body.info);
     expect(await profileRows()).toHaveLength(1);
   });
 });
