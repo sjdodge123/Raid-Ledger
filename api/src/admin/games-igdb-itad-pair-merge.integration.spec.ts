@@ -6,8 +6,11 @@
  * duplicate shapes found in prod plus FK children, executes the migration file
  * verbatim, and asserts keepers kept, dups gone, children repointed (keeper
  * wins on unique collisions), identity keys moved, look-alikes untouched, and
- * that a second run is a no-op. A collision on a NON-leaf child table skips
- * the whole pair; a leaf child (game_interests) loses its colliding row.
+ * that a second run is a no-op. A collision on any table outside the
+ * migration's delete allowlist (characters, discord_game_roles,
+ * channel_lifecycle_suppressions, ...) skips the whole pair; an allowlisted
+ * leaf link table (game_interests) loses its colliding row. Template
+ * `config.gameId` is rewritten too.
  *
  * The file is resolved by SUFFIX, never by number — a renumber orphaned a
  * hardcoded-path spec on 2026-11-07.
@@ -334,6 +337,106 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
     ]);
   }, 60_000);
 
+  it('rewrites event_templates.config gameId dup -> keeper (number and string forms)', async () => {
+    const s = await seedScenario(testApp);
+    await seedTemplate(testApp, 'Rok2120 tpl num', { gameId: s.d1 });
+    await seedTemplate(testApp, 'Rok2120 tpl str', { gameId: String(s.d1) });
+    await seedTemplate(testApp, 'Rok2120 tpl other', { gameId: s.k2 });
+    await runMigration(testApp);
+
+    expect(await templateGameId(testApp, 'Rok2120 tpl num')).toBe(s.k1);
+    expect(await templateGameId(testApp, 'Rok2120 tpl str')).toBe(String(s.k1));
+    expect(await templateGameId(testApp, 'Rok2120 tpl other')).toBe(s.k2);
+  }, 60_000);
+
+  it('skips the WHOLE pair on a discord_game_roles collision and rolls back steps 1-2', async () => {
+    const s = await seedScenario(testApp);
+    const [keep, dup] = await seedTwinPair(
+      testApp,
+      'Rok2120 Rune Gate',
+      99120040,
+    );
+    await testApp.db.insert(schema.discordGameRoles).values([
+      { gameId: keep, roleId: 'rok2120-role-keep' },
+      { gameId: dup, roleId: 'rok2120-role-dup' },
+    ]);
+    const userId = testApp.seed.adminUser.id;
+    await testApp.db.insert(schema.characters).values([
+      { userId, gameId: keep, name: 'Rune Keep', realm: 'R1', isMain: true },
+      { userId, gameId: dup, name: 'Rune Dup', realm: 'R1', isMain: true },
+    ]);
+    const week = { userId, period: 'week', periodStart: '2026-06-01' };
+    await testApp.db.insert(schema.gameActivityRollups).values([
+      { ...week, gameId: keep, totalSeconds: 100 },
+      { ...week, gameId: dup, totalSeconds: 50 },
+    ]);
+    await runMigration(testApp);
+
+    const rows = await identities(testApp, [keep, dup, s.d1]);
+    expect(rows.has(s.d1)).toBe(false); // other pairs still merged
+    expect(rows.get(dup)).toMatchObject({ steamAppId: 99120040 });
+    const roles = await testApp.db
+      .select({ gameId: schema.discordGameRoles.gameId })
+      .from(schema.discordGameRoles)
+      .where(inArray(schema.discordGameRoles.gameId, [keep, dup]));
+    expect(roles.map((r) => r.gameId).sort((a, b) => a - b)).toEqual(
+      [keep, dup].sort((a, b) => a - b),
+    );
+    const r = schema.gameActivityRollups;
+    const totals = await testApp.db
+      .select({ gameId: r.gameId, totalSeconds: r.totalSeconds })
+      .from(r)
+      .where(inArray(r.gameId, [keep, dup]));
+    expect(totals.sort((a, b) => a.gameId - b.gameId)).toEqual(
+      [
+        { gameId: keep, totalSeconds: 100 },
+        { gameId: dup, totalSeconds: 50 },
+      ].sort((a, b) => a.gameId - b.gameId),
+    );
+    const mains = await testApp.db
+      .select({
+        name: schema.characters.name,
+        isMain: schema.characters.isMain,
+      })
+      .from(schema.characters)
+      .where(inArray(schema.characters.gameId, [keep, dup]));
+    expect(mains.sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+      { name: 'Rune Dup', isMain: true },
+      { name: 'Rune Keep', isMain: true },
+    ]);
+  }, 60_000);
+
+  it('skips the pair on a LEAF but non-allowlisted collision (channel_lifecycle_suppressions)', async () => {
+    await seedScenario(testApp);
+    const [keep, dup] = await seedTwinPair(
+      testApp,
+      'Rok2120 Ash Hold',
+      99120050,
+    );
+    await testApp.db.insert(schema.channelLifecycleSuppressions).values([
+      { guildId: 'rok2120-guild', gameId: keep, reason: 'deleted' },
+      { guildId: 'rok2120-guild', gameId: dup, reason: 'unbound' },
+    ]);
+    await runMigration(testApp);
+
+    expect(
+      [...(await identities(testApp, [keep, dup])).keys()].sort(
+        (a, b) => a - b,
+      ),
+    ).toEqual([keep, dup].sort((a, b) => a - b));
+    const sup = schema.channelLifecycleSuppressions;
+    const kept = await testApp.db
+      .select({ gameId: sup.gameId, reason: sup.reason })
+      .from(sup)
+      .where(eq(sup.guildId, 'rok2120-guild'));
+    expect(kept.sort((a, b) => a.gameId - b.gameId)).toEqual(
+      [
+        { gameId: keep, reason: 'deleted' },
+        { gameId: dup, reason: 'unbound' },
+      ].sort((a, b) => a.gameId - b.gameId),
+    );
+  }, 60_000);
+
   it('is a no-op on a second run (zero pairs left)', async () => {
     const s = await seedScenario(testApp);
     await runMigration(testApp);
@@ -395,4 +498,47 @@ async function suggestionIds(
     .where(eq(d.name, name));
   if (!row) throw new Error(`suggestion ${name} missing`);
   return row.ids;
+}
+
+/** IGDB keeper + Steam-first dup sharing `name`; returns [keeper, dup]. */
+async function seedTwinPair(
+  testApp: TestApp,
+  name: string,
+  extId: number,
+): Promise<[number, number]> {
+  const slug = name.toLowerCase().replace(/\s+/g, '-');
+  const ids = await seedGames(testApp, [
+    { name, slug, igdbId: extId },
+    { name, slug: `${slug}-2`, steamAppId: extId },
+  ]);
+  return [at(ids, 0), at(ids, 1)];
+}
+
+/** An event template owned by the admin with the given config. */
+async function seedTemplate(
+  testApp: TestApp,
+  name: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  await testApp.db.insert(schema.eventTemplates).values({
+    userId: testApp.seed.adminUser.id,
+    name,
+    config,
+  });
+}
+
+/** config->'gameId' of the template named `name`, as stored (number or string). */
+async function templateGameId(
+  testApp: TestApp,
+  name: string,
+): Promise<unknown> {
+  const t = schema.eventTemplates;
+  const [row] = await testApp.db
+    .select({ config: t.config })
+    .from(t)
+    .where(eq(t.name, name));
+  if (!row) throw new Error(`template ${name} missing`);
+  const cfg: unknown = row.config;
+  if (typeof cfg !== 'object' || cfg === null) throw new Error('bad config');
+  return 'gameId' in cfg ? cfg.gameId : undefined;
 }
