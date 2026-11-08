@@ -8,8 +8,13 @@ import * as schema from '../../drizzle/schema';
 import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
-  pruneStaleClassicBosses,
+  PRUNED_EXPANSION,
+  findStaleClassicBossIds,
+  findStaleClassicLootIds,
+  pruneClassicRows,
   type BossKeyRow,
+  type LootKeyRow,
+  type LootWantedKey,
 } from './boss-encounter-prune.helpers';
 
 const BATCH_SIZE = 100;
@@ -59,20 +64,43 @@ export class BossEncounterSeeder {
    * quality, drop rate, item level, icon URL, and other corrections in the JSON
    * files are applied to existing rows on restart.
    *
-   * ROK-2142: after the upsert, classic boss rows no longer in the JSON (and
-   * their loot) are deleted — see `boss-encounter-prune.helpers.ts`.
+   * ROK-2142: after the upsert, classic boss rows and classic loot rows no
+   * longer in the JSON are deleted in one transaction — see
+   * `boss-encounter-prune.helpers.ts` (scope + truncated-file floor).
    */
   async seed(): Promise<{ bossesInserted: number; lootInserted: number }> {
     const bossPath = join(__dirname, 'data', 'boss-encounter-data.json');
     const bosses = JSON.parse(await readFile(bossPath, 'utf-8')) as BossEntry[];
     const bossesInserted = await this.seedBossEncounters(bosses);
     const rows: BossKeyRow[] = await this.db.select().from(wowClassicBosses);
-    const pruned = await pruneStaleClassicBosses(this.db, rows, bosses);
-    if (pruned.size > 0)
-      this.logger.log(`Pruned ${pruned.size} stale classic boss encounters`);
-    const live = rows.filter((r) => !pruned.has(r.id));
-    const lootInserted = await this.seedLootItems(this.buildBossLookup(live));
-    return { bossesInserted, lootInserted };
+    const warn = (m: string): void => this.logger.warn(m);
+    const staleBossIds = findStaleClassicBossIds(rows, bosses, warn);
+    const stale = new Set(staleBossIds);
+    const live = rows.filter((r) => !stale.has(r.id));
+    const loot = await this.seedLootItems(this.buildBossLookup(live));
+    const classicBossIds = new Set(
+      live.filter((r) => r.expansion === PRUNED_EXPANSION).map((r) => r.id),
+    );
+    const lootRows: LootKeyRow[] = await this.db
+      .select()
+      .from(wowClassicBossLoot);
+    const staleLootIds = findStaleClassicLootIds(
+      lootRows,
+      loot.wanted,
+      classicBossIds,
+      warn,
+    );
+    await pruneClassicRows(this.db, staleBossIds, staleLootIds);
+    this.logPrune(staleBossIds.length, staleLootIds.length);
+    return { bossesInserted, lootInserted: loot.inserted };
+  }
+
+  /** Log what the stale-row prune removed (silent when nothing). */
+  private logPrune(bosses: number, loot: number): void {
+    if (bosses + loot === 0) return;
+    this.logger.log(
+      `Pruned ${bosses} stale classic boss encounters and ${loot} stale classic loot rows`,
+    );
   }
 
   /** Upsert a batch of boss encounters. */
@@ -114,10 +142,13 @@ export class BossEncounterSeeder {
     return inserted;
   }
 
-  /** Seed loot items from bundled JSON data. */
+  /**
+   * Seed loot items from bundled JSON data. Returns the upsert count and the
+   * (bossId, itemId) keys the JSON wants, for the stale-loot prune.
+   */
   private async seedLootItems(
     bossLookup: Map<string, number>,
-  ): Promise<number> {
+  ): Promise<{ inserted: number; wanted: LootWantedKey[] }> {
     const lootPath = join(__dirname, 'data', 'boss-loot-data.json');
     const lootEntries = JSON.parse(
       await readFile(lootPath, 'utf-8'),
@@ -132,7 +163,7 @@ export class BossEncounterSeeder {
       inserted += result;
     }
     this.logger.log(`Seeded ${inserted}/${lootEntries.length} loot items`);
-    return inserted;
+    return { inserted, wanted: lootToInsert };
   }
 
   /** Build boss name+expansion → DB id lookup map. */

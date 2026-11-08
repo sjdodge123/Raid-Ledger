@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { wowClassicBossLoot } from '../../drizzle/schema';
+import * as pruneHelpers from './boss-encounter-prune.helpers';
 
 // Mock fs/promises so the test never reads real data files (avoids CI worker OOM)
 const fakeBosses = [
@@ -46,11 +48,23 @@ jest.mock('fs/promises', () => ({
   }),
 }));
 
+const storedBosses = [
+  { id: 1, instanceId: 409, name: 'Ragnaros', expansion: 'classic' },
+  { id: 2, instanceId: 409, name: 'Lucifron', expansion: 'classic' },
+];
+
+const storedLoot = [
+  { id: 10, bossId: 1, itemId: 17182, expansion: 'classic' },
+  // Retail leftover on a KEPT boss — no longer in boss-loot-data.json.
+  { id: 11, bossId: 2, itemId: 151403, expansion: 'classic' },
+];
+
 let seeder: BossEncounterSeeder;
 let mockDb: {
   insert: jest.Mock;
   delete: jest.Mock;
   select: jest.Mock;
+  transaction: jest.Mock;
 };
 
 async function setupEach() {
@@ -62,16 +76,19 @@ async function setupEach() {
     .fn()
     .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
 
-  // Mock for select().from() — returns boss rows for loot FK resolution
-  const mockFrom = jest.fn().mockResolvedValue([
-    { id: 1, instanceId: 409, name: 'Ragnaros', expansion: 'classic' },
-    { id: 2, instanceId: 409, name: 'Lucifron', expansion: 'classic' },
-  ]);
+  // Mock for select().from() — boss rows for loot FK resolution, and the
+  // stored loot rows for the stale-loot prune (ROK-2142 review r1).
+  const mockFrom = jest
+    .fn()
+    .mockImplementation((table: unknown) =>
+      Promise.resolve(table === wowClassicBossLoot ? storedLoot : storedBosses),
+    );
 
   mockDb = {
     insert: jest.fn().mockReturnValue({ values: mockValues }),
     delete: jest.fn().mockResolvedValue(undefined),
     select: jest.fn().mockReturnValue({ from: mockFrom }),
+    transaction: jest.fn().mockResolvedValue(undefined),
   };
 
   const module: TestingModule = await Test.createTestingModule({
@@ -100,8 +117,15 @@ describe('BossEncounterSeeder', () => {
     it('should resolve boss FKs for loot insertion', async () => {
       await seeder.seed();
 
-      // select() called once to build the boss lookup map
-      expect(mockDb.select).toHaveBeenCalledTimes(1);
+      // select() for the boss lookup map, then for the stored loot rows
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
+    });
+
+    it('prunes classic loot rows no longer in the JSON on kept bosses (review r1)', async () => {
+      const prune = jest.spyOn(pruneHelpers, 'pruneClassicRows');
+      await seeder.seed();
+      expect(prune).toHaveBeenCalledWith(mockDb, [], [11]);
+      prune.mockRestore();
     });
   });
 
