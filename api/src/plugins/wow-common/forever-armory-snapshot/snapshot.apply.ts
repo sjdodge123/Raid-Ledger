@@ -9,6 +9,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { WOW_FOREVER_VARIANT } from '../forever-armory-switch';
 import { characterLink } from '../guilds/guild-link.predicates';
+import { ownerIsActive } from '../guilds/guild-roster.helpers';
 import {
   nextRetryAt,
   snapshotToCharacterColumns,
@@ -155,6 +156,9 @@ export async function applySnapshotToCharacter(
  * `characterLink()` join — GUID, else Blizzard id since ROK-2115) — the
  * twice-daily character sync refreshes that id and the members list / facts
  * read it through the link, so the roster pass skips the member (D2, L3).
+ * Only an ACTIVE owner's character counts (`ownerIsActive`, as the roster
+ * read): a deactivated owner's character never links, so it must not starve
+ * the member of its own snapshot (ROK-2115 Codex r2 P2).
  * Use inside a query that selects from `guild_members` joined to `guilds`
  * and does NOT also join `characters` (the sub-select names it unaliased).
  */
@@ -166,5 +170,6 @@ export function memberOwnedByCharacterSync(): SQL {
     where ${c.gameVariant} = ${WOW_FOREVER_VARIANT}
       and ${c.externalId} = ${m.blizzardCharacterId}::text
       and ${characterLink()}
+      and ${ownerIsActive()}
   )`;
 }

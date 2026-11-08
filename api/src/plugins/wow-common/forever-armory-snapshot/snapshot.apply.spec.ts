@@ -191,6 +191,13 @@ describe('memberOwnedByCharacterSync', () => {
     );
   });
 
+  it('counts only an ACTIVE owner, as the roster read (ROK-2115 Codex r2 P2)', () => {
+    const text = dialect.sqlToQuery(memberOwnedByCharacterSync()).sql;
+    expect(text).toContain(
+      '"users"."id" = "characters"."user_id" and "users"."deactivated_at" is null',
+    );
+  });
+
   it('owns the member only through THE roster link (characterLink: GUID arm or Blizzard-id arm, ROK-2115)', () => {
     const text = dialect.sqlToQuery(memberOwnedByCharacterSync()).sql;
     expect(text).toContain(
