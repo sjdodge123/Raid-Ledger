@@ -57,7 +57,7 @@ function mockUnlink(status: number, body: Record<string, unknown>) {
     return calls;
 }
 
-describe('CharacterDetailAdminActions (ROK-1756)', () => {
+describe('CharacterDetailAdminActions — who sees Unlink (ROK-1756)', () => {
     beforeEach(() => { activateWowPlugin(); vi.mocked(toast.success).mockClear(); vi.mocked(toast.error).mockClear(); });
 
     it('shows Unlink character to an admin on an addon-linked character', async () => {
@@ -82,6 +82,11 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
         expect(screen.queryByRole('button', MENU)).toBeNull();
         expect(screen.queryByRole('menuitem', OWNER_BUTTON)).toBeNull();
     });
+
+});
+
+describe('CharacterDetailAdminActions — the Unlink flow (ROK-1756)', () => {
+    beforeEach(() => { activateWowPlugin(); vi.mocked(toast.success).mockClear(); vi.mocked(toast.error).mockClear(); });
 
     it('asks for confirmation before calling the API, then deletes, toasts and navigates away', async () => {
         detail.role = 'admin'; setCharacter(true);
@@ -217,7 +222,7 @@ describe('CharacterChangeOwner (ROK-2128)', () => {
         const user = userEvent.setup();
         renderPage();
         await openMenu(user);
-    await user.click(screen.getByRole('menuitem', OWNER_BUTTON));
+        await user.click(screen.getByRole('menuitem', OWNER_BUTTON));
         await user.click(await screen.findByRole('button', { name: 'Unlink' }));
         expect(await screen.findByRole('button', { name: 'Delete character' })).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Assign' })).toBeNull());
