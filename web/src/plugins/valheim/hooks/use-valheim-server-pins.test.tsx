@@ -81,9 +81,17 @@ describe('useValheimServerPins (S19)', () => {
     });
 
     it('a body off the contract shape is an error, never drawn', async () => {
-        server.use(recordingHandler([], { ...BODY, steamId: '7656' }));
+        server.use(recordingHandler([], { ...BODY, truncated: 'no' }));
         const { result } = renderHook(() => useValheimServerPins(args(), true), { wrapper: wrapperFor() });
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.data).toBeUndefined();
+    });
+
+    it('a key the contract does not carry is dropped, never drawn (ROK-2116)', async () => {
+        server.use(recordingHandler([], { ...BODY, steamId: '7656' }));
+        const { result } = renderHook(() => useValheimServerPins(args(), true), { wrapper: wrapperFor() });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(result.current.data).toEqual(BODY);
+        expect(result.current.data).not.toHaveProperty('steamId');
     });
 });
