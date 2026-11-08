@@ -26,29 +26,57 @@
 --      that user (idx_one_main_per_game) — demote, never delete.
 --   3. games_dedup_audit: delete rows naming the dup (a regenerable snapshot;
 --      its canonical_game_id FK has no ON DELETE and would block step 7).
---   4. EVERY single-column FK to games(id), discovered from pg_constraint at
---      run time (so tables added after 0140 are covered automatically), is
---      repointed dup -> keeper. On a unique collision the statement is retried
---      row by row. A row that still collides is DELETED (keeper wins) ONLY when
---      its table is a LEAF — no FK anywhere references that table (computed
---      from pg_constraint at run time), so the delete cannot cascade into or
---      null out anything else. Every such delete RAISEs a NOTICE carrying the
---      deleted row as jsonb (no silent deletes). A collision on a NON-leaf table
---      (characters, guilds, ... — anything another table points at) SKIPS THE
---      WHOLE PAIR instead.
---   5. jsonb game-id arrays (community_lineups.tie_game_ids,
---      community_lineup_tiebreakers.tied_game_ids,
---      discovery_category_suggestions.candidate_game_ids): dup -> keeper,
---      de-duplicated, original order kept.
+--   4. EVERY FK to games(id), discovered from pg_constraint at run time (only
+--      constraints whose referenced table is games AND referenced column is
+--      games.id), is repointed dup -> keeper. Tables added after 0140 are
+--      covered automatically. A multi-column FK to games, or one targeting any
+--      other games column, makes the migration RAISE before any write (fail
+--      loudly rather than guess). On a unique collision the statement is
+--      retried row by row. A row that still collides is DELETED (keeper wins)
+--      ONLY when its table is on the DELETE ALLOWLIST below AND is a LEAF (no FK
+--      anywhere references it, checked at run time, so the delete cannot cascade
+--      or null out anything). Every such delete RAISEs a NOTICE carrying the
+--      deleted row as jsonb. A collision on ANY other table SKIPS THE WHOLE PAIR
+--      (characters, guilds, lineup entries/votes, and one-row-per-game config
+--      such as discord_game_roles or channel_lifecycle_suppressions, leaf or not).
+--
+--      DELETE ALLOWLIST (per-user link/interest facts or derived caches, where the
+--      keeper's colliding row already states the same thing):
+--        * game_interests (user, game, source): want-to-play / Steam library /
+--          wishlist link. Same user+source on the keeper is the same fact.
+--        * game_interest_suppressions (user, game): "don't suggest this game".
+--        * game_notification_mutes (user, game): "mute this game".
+--        * game_activity_rollups (user, game, period, start): step 1 has already
+--          ADDED the dup's seconds into the keeper's row, so the dup's row is
+--          redundant.
+--        * game_taste_vectors (game): derived cache, recomputed by the daily
+--          taste-vector cron from the (now repointed) signals.
+--   5. jsonb game ids rewritten dup -> keeper:
+--      * arrays (de-duplicated, original order kept): community_lineups.
+--        tie_game_ids, community_lineup_tiebreakers.tied_game_ids,
+--        discovery_category_suggestions.candidate_game_ids;
+--      * scalar: event_templates.config->'gameId' (user-authored; a template on
+--        a deleted id would prefill a dead game and fail the events FK). Matched
+--        in number or string form; the stored form is kept.
+--
+--      DELIBERATELY LEFT pointing at old ids (history, snapshots or caches; not
+--      repointed, so do not assume full jsonb coverage):
+--        * notifications.payload: sent-notification history.
+--        * activity_log.metadata: audit history; rewriting it would falsify it.
+--        * lineup_ai_suggestions.payload: AI cache, regenerated on demand.
+--        * player_intensity_snapshots.game_breakdown and
+--          community_insights_snapshots.*: point-in-time snapshots, rebuilt.
+--        * player_co_play.games_played: rebuilt (delete+insert) by its job.
+--        * games_dedup_audit: regenerated every boot (see step 3).
 --   6. Identity: the dup's steam_app_id / itad_game_id are cleared first, then
 --      copied onto the keeper where the keeper's is NULL (with the steam source
 --      and the ITAD price/boxart/tags that belong to that ITAD id), plus
 --      cover_url / twitch_game_id fallbacks.
 --   7. DELETE the dup row. Every FK was repointed in step 4, so no cascade
---      fires; a multi-column FK we did not handle raises foreign_key_violation.
+--      fires (multi-column / non-id FKs were refused up front).
 --
 -- PAIR ISOLATION: each pair runs in its own sub-block (a plpgsql savepoint).
--- A non-leaf collision, or any unique/exclusion/foreign-key violation left over,
+-- A collision outside the allowlist, or any unique/exclusion/FK violation left over,
 -- rolls back THAT pair's steps 1-7 only and RAISEs
 -- 'ROK-2120 pair skipped keep=% dup=% reason=%'; the other pairs still merge.
 -- A leaf-delete NOTICE already emitted for a skipped pair announces a delete
@@ -72,7 +100,17 @@ DECLARE
   gone jsonb;
   merged integer := 0;
   skipped integer := 0;
+  games_id_attnum smallint;
 BEGIN
+  SELECT attnum INTO games_id_attnum FROM pg_attribute
+   WHERE attrelid = 'public.games'::regclass AND attname = 'id';
+  -- Refuse (before any write) any FK to games that is not single-column on id:
+  -- step 4 could not repoint it and step 7 would cascade/null/break it.
+  IF EXISTS (SELECT 1 FROM pg_constraint
+              WHERE contype = 'f' AND confrelid = 'public.games'::regclass
+                AND confkey <> ARRAY[games_id_attnum]) THEN
+    RAISE EXCEPTION 'ROK-2120: a multi-column or non-id FK references games; refusing to merge';
+  END IF;
   FOR p IN
     WITH norm AS (
       SELECT g.id, g.igdb_id, g.steam_app_id, g.itad_game_id, g.hidden,
@@ -131,16 +169,23 @@ BEGIN
       DELETE FROM games_dedup_audit
        WHERE canonical_game_id = p.dup_id OR p.dup_id = ANY(dup_game_ids);
 
-      -- 4. Repoint every single-column FK to games(id); leaf-only deletes.
+      -- 4. Repoint every FK to games(id); allowlisted-leaf-only deletes.
       FOR fk IN
         SELECT c.conrelid::regclass AS tbl, a.attname AS col,
-               NOT EXISTS (SELECT 1 FROM pg_constraint x
-                            WHERE x.contype = 'f'
-                              AND x.confrelid = c.conrelid) AS is_leaf
+               c.conrelid IN (
+                 SELECT to_regclass('public.' || t) FROM unnest(ARRAY[
+                   'game_interests', 'game_interest_suppressions',
+                   'game_notification_mutes', 'game_activity_rollups',
+                   'game_taste_vectors']) AS t
+               )
+               AND NOT EXISTS (SELECT 1 FROM pg_constraint x
+                                WHERE x.contype = 'f'
+                                  AND x.confrelid = c.conrelid) AS droppable
           FROM pg_constraint c
           JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
          WHERE c.contype = 'f' AND c.confrelid = 'public.games'::regclass
            AND array_length(c.conkey, 1) = 1
+           AND c.confkey = ARRAY[games_id_attnum]
            AND c.conrelid <> 'public.games_dedup_audit'::regclass
          ORDER BY c.conrelid::regclass::text, a.attname
       LOOP
@@ -155,8 +200,8 @@ BEGIN
               EXECUTE format('UPDATE %s SET %I = $1 WHERE ctid = $2', fk.tbl, fk.col)
                 USING p.keeper_id, r.t;
             EXCEPTION WHEN unique_violation OR exclusion_violation THEN
-              IF NOT fk.is_leaf THEN
-                RAISE EXCEPTION 'non-leaf %.% row collides with the keeper',
+              IF NOT fk.droppable THEN
+                RAISE EXCEPTION '%.% row collides with the keeper (not an allowlisted leaf)',
                   fk.tbl, fk.col USING ERRCODE = 'RL120';
               END IF;
               EXECUTE format(
@@ -169,7 +214,7 @@ BEGIN
         END;
       END LOOP;
 
-      -- 5. jsonb game-id arrays.
+      -- 5. jsonb game ids: arrays, then the event-template scalar.
       FOR jc IN
         SELECT * FROM (VALUES
           ('community_lineups', 'tie_game_ids'),
@@ -190,6 +235,11 @@ BEGIN
           jc.tbl, jc.col, jc.col, jc.col, jc.col)
           USING p.keeper_id, p.dup_id;
       END LOOP;
+      UPDATE event_templates
+         SET config = jsonb_set(config, '{gameId}',
+               CASE WHEN jsonb_typeof(config->'gameId') = 'string'
+                    THEN to_jsonb(p.keeper_id::text) ELSE to_jsonb(p.keeper_id) END)
+       WHERE config->'gameId' IN (to_jsonb(p.dup_id), to_jsonb(p.dup_id::text));
 
       -- 6. Identity: clear the dup's unique keys, then fill the keeper's gaps.
       SELECT g.* INTO dup_row FROM games g WHERE g.id = p.dup_id;
