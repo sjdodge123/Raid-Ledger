@@ -8,8 +8,10 @@ import {
   applyOptionalSyncFields,
   buildSyncUpdateFields,
   buildSyncUpdateFieldsFromSync,
+  fetchFullProfile,
   type EnrichedProfile,
 } from './characters-sync.helpers';
+import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 
 const PAYLOAD = {
   primary: [],
@@ -177,5 +179,38 @@ describe('applyOptionalSyncFields — equipment keep-prior (Forever charpanel)',
       talents: null,
     });
     expect(fields).toHaveProperty('equipment', GEAR);
+  });
+});
+
+describe('fetchFullProfile — quests option (ROK-2133)', () => {
+  function adapterWithQuests(fetchQuests: jest.Mock): CharacterSyncAdapter {
+    return {
+      gameSlugs: [],
+      resolveGameSlugs: () => [],
+      fetchProfile: jest.fn().mockResolvedValue({ ...PROFILE }),
+      fetchSpecialization: jest
+        .fn()
+        .mockResolvedValue({ spec: null, role: null }),
+      fetchEquipment: jest.fn().mockResolvedValue(null),
+      fetchQuests,
+    };
+  }
+
+  it('fetches completed quests by default (existing callers unchanged)', async () => {
+    const fetchQuests = jest.fn().mockResolvedValue({ questIds: [5] });
+    const adapter = adapterWithQuests(fetchQuests);
+    const out = await fetchFullProfile(adapter, 'Ana', null, 'us', null);
+    expect(fetchQuests).toHaveBeenCalledTimes(1);
+    expect(out.armoryQuests).toEqual({ questIds: [5] });
+  });
+
+  it('skips the quests call with { quests: false } and returns null', async () => {
+    const fetchQuests = jest.fn().mockResolvedValue({ questIds: [5] });
+    const adapter = adapterWithQuests(fetchQuests);
+    const out = await fetchFullProfile(adapter, 'Ana', null, 'us', null, {
+      quests: false,
+    });
+    expect(fetchQuests).not.toHaveBeenCalled();
+    expect(out.armoryQuests).toBeNull();
   });
 });

@@ -25,6 +25,7 @@ import {
   type RosterSyncResult,
 } from './blizzard-roster-sync.service';
 import { isForeverGuildHub } from './guild-slug.helpers';
+import { RosterArmoryService } from '../forever-armory-snapshot/roster-armory.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -67,6 +68,7 @@ export class BlizzardRosterSyncJob {
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly sync: BlizzardRosterSyncService,
     private readonly settings: SettingsService,
+    private readonly rosterArmory: RosterArmoryService,
   ) {}
 
   /**
@@ -160,12 +162,26 @@ export class BlizzardRosterSyncJob {
     if (res.status === 'mismatch')
       throw new UnprocessableEntityException(res.reason);
     // `stale` (newer snapshot already stored) is a 200 with members 0.
+    if (res.status === 'ok') this.fireArmoryPass(guildId);
     const after = await this.readGuild(guildId);
     return {
       status: res.status,
       syncedAt: after?.blizzardRosterSyncedAt?.toISOString() ?? null,
       members: res.status === 'ok' ? res.updated + res.inserted : 0,
     };
+  }
+
+  /**
+   * ROK-2133 AC-13: one roster Armory pass for the guild, fire-and-forget —
+   * never delays or fails the Sync now response.
+   */
+  private fireArmoryPass(guildId: number): void {
+    this.rosterArmory.runForGuild(guildId).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.warn(
+        `Roster Armory pass for guild ${guildId} failed: ${msg}`,
+      );
+    });
   }
 
   /** The guild's kind, game and slug columns, or null when missing. */
