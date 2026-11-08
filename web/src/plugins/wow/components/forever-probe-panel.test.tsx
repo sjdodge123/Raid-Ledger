@@ -308,7 +308,7 @@ describe('ForeverProbePanel — Forever API paths + ruleset signal (ROK-2102)', 
         };
         renderWithProviders(<ForeverProbePanel />);
         expect(
-            await screen.findByText(/response shapes \(top-level keys only\)/i),
+            await screen.findByText(/response shapes \(keys; values for quest \+ item data\)/i),
         ).toBeInTheDocument();
         const list = screen.getByRole('list', {
             name: /response shapes/i,

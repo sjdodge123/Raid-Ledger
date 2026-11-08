@@ -14,9 +14,12 @@ export type RosterRole = z.infer<typeof RosterRoleSchema>;
  * Single roster assignment in a request.
  */
 export const RosterAssignmentSchema = z.object({
-    /** User ID to assign to the slot */
-    userId: z.number().int().positive(),
-    /** Optional signup ID (derived from userId if not provided) */
+    /**
+     * User ID to assign to the slot. 0 = an anonymous Discord signup with no
+     * linked user (ROK-2141) — `signupId` then identifies the row.
+     */
+    userId: z.number().int().nonnegative(),
+    /** Signup ID — the server keys roster writes on it (derived from userId if not provided) */
     signupId: z.number().int().positive().optional(),
     /** Role slot (tank, healer, dps, flex) - null for non-role events */
     slot: RosterRoleSchema.nullable(),

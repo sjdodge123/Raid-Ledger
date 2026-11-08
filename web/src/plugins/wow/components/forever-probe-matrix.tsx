@@ -3,7 +3,7 @@
  * status chip per probed endpoint (realm, connected-realm, playable-race,
  * profile, ROK-2102's ruleset / profile-family / guild-roster, and ROK-2103's
  * static journal tiers / instances / classes, ROK-2108's keys-only profile
- * extras / guild summary / ruleset detail), labelled
+ * extras / guild summary / ruleset detail, ROK-2143's quest / item data), labelled
  * short in the legend. Matches are listed above the matrix: a ruleset-index
  * signal reads "ruleset index", a Skyborne one its race name. Collapsed by default; the table scrolls inside its own container
  * so a phone never gets page overflow. Table styling follows the admin logs /
@@ -19,6 +19,7 @@ const ENDPOINT_ORDER: readonly ForeverProbeEndpoint[] = [
     'journal-expansion', 'journal-instance', 'playable-class',
     'ruleset-detail', 'profile-specializations', 'profile-encounters-raids', 'profile-encounters-dungeons',
     'profile-reputations', 'profile-achievements', 'profile-statistics', 'profile-quests-completed', 'guild-summary',
+    'quest-index', 'quest-area', 'quest', 'item',
 ];
 /** Legend label per endpoint — the ROK-2102 additions get short names so the legend stays one line. */
 const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
@@ -30,6 +31,8 @@ const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
     'ruleset-detail': 'ruleset detail', 'profile-specializations': 'specs', 'profile-encounters-raids': 'raids',
     'profile-encounters-dungeons': 'dungeons', 'profile-reputations': 'reps', 'profile-achievements': 'achievements',
     'profile-statistics': 'stats', 'profile-quests-completed': 'quests done', 'guild-summary': 'guild summary',
+    // ROK-2143: static quest + item data (one chip per probed id, labelled `<id>:<status>`).
+    'quest-index': 'quest index', 'quest-area': 'quest area', quest: 'quest (per id)', item: 'item (per id)',
 };
 const REGION_ORDER: readonly string[] = ['us', 'eu', 'kr', 'tw'];
 const TH = 'text-left px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider';
@@ -60,9 +63,16 @@ function cellsFor(cells: readonly ForeverProbeCellDto[], prefix: string, region:
         .sort((a, b) => ENDPOINT_ORDER.indexOf(a.endpoint) - ENDPOINT_ORDER.indexOf(b.endpoint));
 }
 
+/** A chip's identity: the probed id's shape key (`quest:378`) for per-id endpoints, else the endpoint. */
+function chipId(cell: ForeverProbeCellDto): string {
+    return cell.target ?? cell.endpoint;
+}
+
 function StatusChip({ cell }: { cell: ForeverProbeCellDto }): JSX.Element {
-    const label = cell.status === null ? 'err' : String(cell.status);
-    const title = `${cell.endpoint}: ${cell.status ?? cell.error ?? 'error'}`;
+    const status = cell.status === null ? 'err' : String(cell.status);
+    const id = cell.target?.split(':').pop();
+    const label = id === undefined ? status : `${id}:${status}`;
+    const title = `${chipId(cell)}: ${cell.status ?? cell.error ?? 'error'}`;
     return (
         <span title={title} className={`inline-flex px-1.5 py-0.5 text-xs font-medium font-mono rounded-full border ${TONE_CLS[probeStatusTone(cell.status)]}`}>
             {label}
@@ -77,7 +87,7 @@ function MatrixRow({ prefix, regions, cells }: { prefix: string; regions: string
             {regions.map((region) => (
                 <td key={region} className="px-3 py-2">
                     <div className="flex gap-1">
-                        {cellsFor(cells, prefix, region).map((cell) => <StatusChip key={cell.endpoint} cell={cell} />)}
+                        {cellsFor(cells, prefix, region).map((cell) => <StatusChip key={chipId(cell)} cell={cell} />)}
                     </div>
                 </td>
             ))}

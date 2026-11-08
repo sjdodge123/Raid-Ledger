@@ -33,6 +33,7 @@ import {
   wrapImportBytes,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
 import {
+  buildForeverQuestsLogOnlyPayload,
   buildForeverQuestsPayload,
   buildForeverQuestsTruncatedPayload,
   buildForeverTalentsPayload,
@@ -100,6 +101,8 @@ const VALID: Record<string, () => string> = {
   'char-forever-quests': () => buildImportString(buildForeverQuestsPayload()),
   'char-forever-quests-truncated': () =>
     buildImportString(buildForeverQuestsTruncatedPayload()),
+  'char-forever-quests-log-only': () =>
+    buildImportString(buildForeverQuestsLogOnlyPayload()),
   'char-forever-talents-named': () =>
     buildImportString(buildForeverTalentsPayload()),
   'guild-1-page': () => guildPaste(40),

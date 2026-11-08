@@ -12,6 +12,10 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
+import {
+  carriedCompletedDataSql,
+  needsCompletedCarry,
+} from './addon-import-char.quests-carry';
 
 /** ROK-1724 §4.3 Apply — section `char`: one snapshot row per character. */
 
@@ -105,20 +109,21 @@ export function decideLostRace(
  * Upsert the snapshot unless noop/stale. Writes only the importer's char.
  * The pre-read is advisory; the conflict update re-checks atomically
  * (`setWhere`: not older, different sha) so an older export racing a newer
- * one can never overwrite it. No row back = nothing written.
+ * one can never overwrite it. No row back = nothing written. A log-only
+ * import carries the stored completed list inside that same update
+ * (ROK-2125, {@link carriedCompletedDataSql}).
  */
 export async function applyChar(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
 ): Promise<CharOutcome> {
   const summary = buildCharSummary(payload.data);
-  const decision = decideCharWrite(
-    await loadStored(ctx),
-    ctx.sha256,
-    payload.exportedAt,
-  );
+  const stored = await loadStored(ctx);
+  const decision = decideCharWrite(stored, ctx.sha256, payload.exportedAt);
   if (decision !== 'write') return { status: decision, summary };
-  if (await upsertChar(ctx, payload)) return { status: 'applied', summary };
+  if (await upsertChar(ctx, payload)) {
+    return { status: 'applied', summary };
+  }
   return { status: decideLostRace(await loadStored(ctx), ctx.sha256), summary };
 }
 
@@ -135,12 +140,15 @@ async function upsertChar(
     payloadSha256: ctx.sha256,
   };
   const t = characterAddonSnapshots;
+  const set = needsCompletedCarry(payload.data)
+    ? { ...values, data: carriedCompletedDataSql(t.data) }
+    : values;
   const rows = await ctx.tx
     .insert(t)
     .values({ characterId: ctx.characterId, section: 'char', ...values })
     .onConflictDoUpdate({
       target: [t.characterId, t.section],
-      set: values,
+      set,
       // `excluded` = the incoming row: not older, and a different export.
       setWhere: sql`${t.capturedAt} <= excluded.captured_at AND ${t.payloadSha256} <> excluded.payload_sha256`,
     })

@@ -217,6 +217,19 @@ describe('runProbe', () => {
   });
 });
 
+/** ROK-2143 quest / item shape keys for `classicforever:us`, sorted. */
+const QUEST_ITEM_KEYS: readonly string[] = [
+  'item:3562',
+  'item:6087',
+  'item:6505',
+  'quest-area:717',
+  'quest-index',
+  'quest:1486',
+  'quest:166',
+  'quest:378',
+  'quest:914',
+].map((k) => `classicforever:us:${k}`);
+
 describe('runProbe matches + concurrency', () => {
   /** Skyborne under classicforever; a Human-only 200 under the classic control. */
   function skyFetch(calls: string[]): ProbeFetch {
@@ -265,12 +278,15 @@ describe('runProbe matches + concurrency', () => {
       },
     ]);
     // ROK-2103: the stub answers every static-classicforever URL 200, so the
-    // three static journal / class indexes add their shapes too.
+    // three static journal / class indexes add their shapes too — and
+    // ROK-2143's quest index, quest area, quests and items, one key per id.
     expect(Object.keys(run.shapes).sort()).toEqual([
       'classicforever:us:connected-realm',
+      ...QUEST_ITEM_KEYS.slice(0, 3),
       'classicforever:us:journal-expansion',
       'classicforever:us:journal-instance',
       'classicforever:us:playable-class',
+      ...QUEST_ITEM_KEYS.slice(3),
       'classicforever:us:realm',
     ]);
     expect(run.shapes['classicforever:us:realm']).toMatchObject({
@@ -384,5 +400,65 @@ describe('runProbe static journal indexes (ROK-2103)', () => {
       guildPath: null,
     });
     expect(staticCalls(calls)).toEqual([]);
+  });
+});
+
+describe('runProbe quest + item data (ROK-2143)', () => {
+  /** Skyborne under `forever`; quest 378 answers with rewards; the rest 404. */
+  function questFetch(calls: string[]): ProbeFetch {
+    return (url) => {
+      calls.push(url);
+      if (url.includes('/playable-race/index?namespace=static-forever-'))
+        return Promise.resolve(reply(200, { races: [{ name: 'Skyborne' }] }));
+      if (url.includes('/quest/378?'))
+        return Promise.resolve(
+          reply(200, {
+            id: 378,
+            _links: { self: { href: 'https://x' } },
+            rewards: { experience: 315, items: [{ item: { id: 3562 } }] },
+          }),
+        );
+      return Promise.resolve(reply(404));
+    };
+  }
+
+  it('probes quest/item URLs in the static namespace and stores quest values per id', async () => {
+    const calls: string[] = [];
+    const run = await runProbe({
+      fetchFn: questFetch(calls),
+      token: 't',
+      candidates: ['forever'],
+      regions: ['us'],
+      characterPath: null,
+      guildPath: null,
+    });
+    const questCalls = calls.filter((u) => /\/(quest|item)\//.test(u));
+    expect(questCalls).toHaveLength(9);
+    expect(questCalls.every((u) => u.includes('static-forever-us'))).toBe(true);
+    expect(run.shapes['forever:us:quest:378']).toEqual({
+      topLevelKeys: ['_links', 'id', 'rewards'],
+      entryCount: 3,
+      sample: [],
+      values: {
+        id: 378,
+        'rewards.experience': 315,
+        'rewards.items[0].item.id': 3562,
+      },
+    });
+    expect(run.shapes['forever:us:quest:166']).toBeUndefined();
+    const targets = run.cells
+      .filter((c) => /quest|item/.test(c.endpoint))
+      .map((c) => [c.endpoint, c.target]);
+    expect(targets).toEqual([
+      ['quest-index', undefined],
+      ['quest-area', 'quest-area:717'],
+      ['quest', 'quest:378'],
+      ['quest', 'quest:166'],
+      ['quest', 'quest:914'],
+      ['quest', 'quest:1486'],
+      ['item', 'item:3562'],
+      ['item', 'item:6087'],
+      ['item', 'item:6505'],
+    ]);
   });
 });
