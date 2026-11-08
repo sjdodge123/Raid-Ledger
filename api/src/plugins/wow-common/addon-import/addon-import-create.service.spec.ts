@@ -14,6 +14,7 @@ import type { CharactersService } from '../../../characters/characters.service';
 import { RULESET_IDENTITY_INDEX } from '../../../characters/characters-unique-keys.helpers';
 import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import type { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
+import type { ForeverAutoLinkService } from '../forever-auto-link/forever-auto-link.service';
 import type { AddonImportAuditService } from './addon-import.audit';
 import { HARDCORE_CREATE_MESSAGE } from './addon-import-create.helpers';
 import { NIL_CHARACTER_ID } from './addon-import-create.apply';
@@ -114,6 +115,7 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
   const insightsCache = {
     invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
   };
+  const autoLink = { attempt: jest.fn().mockResolvedValue('linked') };
   const service = new AddonImportCreateService(
     db as unknown as PostgresJsDatabase<typeof schema>,
     characters as unknown as CharactersService,
@@ -121,8 +123,9 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
     itemMeta as unknown as WowItemMetaService,
     realmRulesets as unknown as ForeverRealmRulesetsService,
     insightsCache as unknown as RosterInsightsCache,
+    autoLink as unknown as ForeverAutoLinkService,
   );
-  return { service, tx, characters, audit, itemMeta, insightsCache };
+  return { service, tx, characters, audit, itemMeta, insightsCache, autoLink };
 }
 
 const body = (dryRun: boolean, extra: object = {}) => ({
@@ -400,6 +403,30 @@ describe('roster-insights invalidation on the create route (ROK-1913)', () => {
     const s = setup(who());
     await s.service.importNew(1, body(true));
     expect(s.insightsCache.invalidateForCharacter).not.toHaveBeenCalled();
+  });
+});
+
+describe('Forever Armory auto-link nudge on the create route (ROK-2124)', () => {
+  it('a CREATE apply nudges the auto-link with the NEW character id', async () => {
+    const s = setup(who());
+    await s.service.importNew(1, body(false));
+    expect(s.autoLink.attempt).toHaveBeenCalledTimes(1);
+    expect(s.autoLink.attempt).toHaveBeenCalledWith(NEW_ID);
+  });
+
+  it('an UPDATE apply nudges the auto-link with the updated character id', async () => {
+    const s = setup(who(), {
+      action: 'update',
+      character: loaded(OWN_ID, 'normal'),
+    });
+    await s.service.importNew(1, body(false));
+    expect(s.autoLink.attempt).toHaveBeenCalledWith(OWN_ID);
+  });
+
+  it('a dry run never nudges the auto-link', async () => {
+    const s = setup(who());
+    await s.service.importNew(1, body(true));
+    expect(s.autoLink.attempt).not.toHaveBeenCalled();
   });
 });
 

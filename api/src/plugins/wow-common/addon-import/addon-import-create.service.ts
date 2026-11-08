@@ -46,6 +46,8 @@ import {
 import { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
 import { flagIfRosterChanged } from './addon-import-guild.flag';
 import { readRaidPullScope } from './addon-import-raid.scope';
+import { ForeverAutoLinkService } from '../forever-auto-link/forever-auto-link.service';
+import { nudgeAutoLink } from './addon-import.autolink-nudge';
 import type { PullScope } from '../guilds/roster-insights/roster-insights.pull-scope';
 
 /**
@@ -68,6 +70,7 @@ export class AddonImportCreateService {
     private readonly itemMeta: WowItemMetaService,
     private readonly realmRulesets: ForeverRealmRulesetsService,
     private readonly insightsCache: RosterInsightsCache,
+    private readonly autoLink: ForeverAutoLinkService,
   ) {}
 
   async importNew(
@@ -143,6 +146,8 @@ export class AddonImportCreateService {
     characterId: string | null,
     pullScope: PullScope | undefined,
   ): Promise<void> {
+    // ROK-2124: try the Forever Armory auto-link now (fire-and-forget).
+    nudgeAutoLink(this.autoLink, characterId, this.logger);
     return invalidateRosterInsights(
       this.insightsCache,
       characterId,
