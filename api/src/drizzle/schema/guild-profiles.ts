@@ -166,6 +166,8 @@ export const guildProfiles = pgTable(
     gameMotdReportedAt: timestamp('game_motd_reported_at', {
       withTimezone: true,
     }),
+    /** ROK-2137 — the exporting character's name (`who.fullName`); null when unknown. */
+    gameMotdReportedBy: varchar('game_motd_reported_by', { length: 100 }),
     gameMotdAcknowledgedAt: timestamp('game_motd_acknowledged_at', {
       withTimezone: true,
     }),
@@ -173,6 +175,8 @@ export const guildProfiles = pgTable(
     gameInfoReportedAt: timestamp('game_info_reported_at', {
       withTimezone: true,
     }),
+    /** ROK-2137 — the exporting character's name (`who.fullName`); null when unknown. */
+    gameInfoReportedBy: varchar('game_info_reported_by', { length: 100 }),
     gameInfoAcknowledgedAt: timestamp('game_info_acknowledged_at', {
       withTimezone: true,
     }),

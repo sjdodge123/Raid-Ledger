@@ -12605,6 +12605,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "game_motd_reported_by": {
+          "name": "game_motd_reported_by",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "game_motd_acknowledged_at": {
           "name": "game_motd_acknowledged_at",
           "type": "timestamp with time zone",
@@ -12620,6 +12626,12 @@
         "game_info_reported_at": {
           "name": "game_info_reported_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "game_info_reported_by": {
+          "name": "game_info_reported_by",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
