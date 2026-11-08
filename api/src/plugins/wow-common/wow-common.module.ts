@@ -38,6 +38,7 @@ import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import * as addonImport from './addon-import/addon-import.registration';
 import * as foreverAutoLink from './forever-auto-link/forever-auto-link.registration';
+import * as rosterArmory from './forever-armory-snapshot/roster-armory.registration';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
@@ -105,6 +106,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     ...addonImport.PROVIDERS,
     // ROK-2124: Forever Armory auto-link (import nudge + hourly job).
     ...foreverAutoLink.PROVIDERS,
+    // ROK-2133: roster Armory pass (hourly job + Sync now follow-up).
+    ...rosterArmory.PROVIDERS,
     WowItemMetaService,
     // Empty partial ⇒ real defaults; the integration TestApp overrides it.
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },

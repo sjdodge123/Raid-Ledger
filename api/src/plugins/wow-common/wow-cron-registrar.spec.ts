@@ -7,6 +7,7 @@ import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { at } from '../../common/testing/narrow';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
+import { RosterArmoryService } from './forever-armory-snapshot/roster-armory.service';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
@@ -15,6 +16,7 @@ let mockProbe: { run: jest.Mock; runIfInLaunchWindow: jest.Mock };
 let mockItemMeta: { retryDue: jest.Mock };
 let mockRosterJob: { run: jest.Mock };
 let mockAutoLink: { runDue: jest.Mock };
+let mockRosterArmory: { runDue: jest.Mock };
 
 async function setupEach() {
   mockCharactersService = {
@@ -27,6 +29,7 @@ async function setupEach() {
   mockItemMeta = { retryDue: jest.fn().mockResolvedValue(0) };
   mockRosterJob = { run: jest.fn().mockResolvedValue(null) };
   mockAutoLink = { runDue: jest.fn().mockResolvedValue(null) };
+  mockRosterArmory = { runDue: jest.fn().mockResolvedValue(null) };
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -37,6 +40,7 @@ async function setupEach() {
       { provide: WowItemMetaService, useValue: mockItemMeta },
       { provide: BlizzardRosterSyncJob, useValue: mockRosterJob },
       { provide: ForeverAutoLinkService, useValue: mockAutoLink },
+      { provide: RosterArmoryService, useValue: mockRosterArmory },
     ],
   }).compile();
 
@@ -69,7 +73,7 @@ describe('WowCronRegistrar — getCronJobs', () => {
 
   it('should return cron jobs for character sync and boss data refresh', () => {
     const jobs = registrar.getCronJobs();
-    expect(jobs).toHaveLength(7);
+    expect(jobs).toHaveLength(8);
     expect(jobs[0]?.name).toBe('character-auto-sync');
     expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
     expect(typeof at(jobs, 0).handler).toBe('function');
@@ -108,6 +112,14 @@ describe('WowCronRegistrar — getCronJobs', () => {
     expect(job?.cronExpression).toBe('0 40 * * * *');
     await expect(job?.handler()).resolves.toBeUndefined();
     expect(mockAutoLink.runDue).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers the hourly Forever roster Armory pass (ROK-2133 D3)', async () => {
+    const job = registrar.getCronJobs()[7];
+    expect(job?.name).toBe('forever-roster-armory');
+    expect(job?.cronExpression).toBe('0 50 * * * *');
+    await expect(job?.handler()).resolves.toBeUndefined();
+    expect(mockRosterArmory.runDue).toHaveBeenCalledTimes(1);
   });
 });
 

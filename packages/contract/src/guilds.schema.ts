@@ -220,6 +220,14 @@ export const GuildMemberRowSchema = z
     isViewer: z.literal(true).optional(),
     /** ROK-1173 — linked character's `characters.avatar_url`; omitted when none. */
     avatarUrl: z.string().nullable().optional(),
+    /**
+     * ROK-2133 (Q10) — the member's Armory item level, spec and role: the
+     * linked character's synced columns, else the roster Armory snapshot.
+     * Omitted when neither has them (additive).
+     */
+    itemLevel: z.number().int().nonnegative().optional(),
+    spec: z.string().max(50).optional(),
+    role: CharacterRoleSchema.optional(),
   })
   .strict();
 export type GuildMemberRow = z.infer<typeof GuildMemberRowSchema>;

@@ -1,7 +1,8 @@
 /**
  * ROK-2128 — Add character → "Guild roster": the unclaimed rows of every
  * visible WoW: Forever guild, grouped per guild, each claimed in one click.
- * Rows show name, class and level only (FLAG 2); one Ruleset select above the
+ * Rows show name, class and level only (FLAG 2) — plus the Armory spec and
+ * item level when the roster snapshot has them (ROK-2133); one Ruleset select above the
  * list is defaulted from the user's other Forever character (FLAG 4).
  */
 import { useMemo, useState, type JSX } from 'react';
@@ -55,7 +56,7 @@ function CandidateRow({ c, pending, busy, onClaim }: {
             <ClassBadge cls={c.class} />
             <div className="flex-1 min-w-0">
                 <p className="text-foreground font-medium truncate">{c.name}</p>
-                <p className="text-xs text-muted">{rosterMetaLine(c)}</p>
+                <p className="text-xs text-muted truncate">{rosterMetaLine(c)}</p>
             </div>
             <Button variant="secondary" size="sm" aria-label={`Claim ${c.name}`} loading={pending} loadingLabel="Claiming…"
                 disabled={busy && !pending} onClick={onClaim}>

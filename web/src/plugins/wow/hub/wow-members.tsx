@@ -14,6 +14,7 @@ import { CharRoleBadge, RoleSummary } from './role-bits';
 import { rankLabel } from './wow-guild.helpers';
 import { ProfessionBadges } from '../components/ProfessionBadges';
 import { classDotClass, useRowProfessions } from './wow-member-professions';
+import { armoryMetaParts } from '../lib/armory-meta';
 
 function memberFacts(m: HubMemberRow): string {
     return [m.level === null ? null : `Lv ${m.level}`, m.class].filter(Boolean).join(' ');
@@ -37,13 +38,19 @@ export function NameCell({ row }: { row: HubMemberRow }): JSX.Element {
     );
 }
 
-/** AC12: a small decorative class dot; the class text keeps its token colour. */
+/**
+ * AC12: a small decorative class dot; the class text keeps its token colour.
+ * ROK-2133: the Armory spec + item level follow when the row has them, and
+ * truncate first so a narrow row never overflows.
+ */
 export function FactsCell({ row }: { row: HubMemberRow }): JSX.Element {
     const dot = classDotClass(row.class);
+    const armory = armoryMetaParts(row).join(' · ');
     return (
-        <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted">
+        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 whitespace-nowrap text-xs text-muted">
             {dot && <span aria-hidden="true" data-testid="guild-member-class-dot" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}
-            {memberFacts(row)}
+            <span className="shrink-0">{memberFacts(row)}</span>
+            {armory && <span data-testid="guild-member-armory" className="min-w-0 truncate">· {armory}</span>}
         </span>
     );
 }

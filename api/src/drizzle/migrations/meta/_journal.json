@@ -2003,6 +2003,13 @@
       "when": 1794126590260,
       "tag": "0286_guild_profiles_game_reported_text",
       "breakpoints": true
+    },
+    {
+      "idx": 287,
+      "version": "7",
+      "when": 1794159577924,
+      "tag": "0287_guild_member_armory",
+      "breakpoints": true
     }
   ]
 }

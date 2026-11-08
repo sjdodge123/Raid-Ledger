@@ -4,6 +4,11 @@ import { MAX_ROSTER_CLAIM_CANDIDATES } from '@raid-ledger/contract';
 import * as schema from '../../../../drizzle/schema';
 import { escapeLikePattern } from '../../../../common/search.util';
 import { inLatestSnapshot } from '../guild-membership.helpers';
+import {
+  memberSnapshotJoin,
+  snapshotArmoryColumns,
+  type ArmoryFieldsRow,
+} from '../roster-armory-fields';
 
 /**
  * ROK-2128 — the roster-claim reads. "Claimed" is DERIVED (D2), never a
@@ -17,10 +22,13 @@ import { inLatestSnapshot } from '../guild-membership.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { guilds, guildMembers } = schema;
+const { guilds, guildMembers, guildMemberArmory } = schema;
 
-/** One unclaimed roster row with its guild, as the list endpoint reads it. */
-export interface CandidateRow {
+/**
+ * One unclaimed roster row with its guild, as the list endpoint reads it;
+ * ROK-2133 `armory*` = the member's verified snapshot (optional for fixtures).
+ */
+export interface CandidateRow extends ArmoryFieldsRow {
   guildId: number;
   guildName: string;
   region: string;
@@ -86,9 +94,11 @@ export async function loadCandidates(
       class: guildMembers.class,
       level: guildMembers.level,
       source: guildMembers.source,
+      ...snapshotArmoryColumns,
     })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .leftJoin(guildMemberArmory, memberSnapshotJoin())
     .where(and(isClaimableGuild(gameId), isRowUnclaimed(), byName))
     .orderBy(asc(guilds.name), asc(guilds.id), asc(guildMembers.characterName))
     .limit(MAX_ROSTER_CLAIM_CANDIDATES + 1);
