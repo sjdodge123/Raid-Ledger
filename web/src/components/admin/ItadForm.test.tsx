@@ -67,7 +67,7 @@ describe('ItadForm — setup instructions and API key', () => {
         expect(link).toBeInTheDocument();
         expect(link).toHaveAttribute(
             'href',
-            'https://isthereanydeal.com/dev/app/',
+            'https://isthereanydeal.com/apps/my/',
         );
     });
 
