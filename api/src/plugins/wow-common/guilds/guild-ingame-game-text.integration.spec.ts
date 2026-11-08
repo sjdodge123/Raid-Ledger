@@ -399,3 +399,51 @@ describe('review r1 — Adopt / Push check what the editor saw', () => {
     },
   );
 });
+
+describe('review r2 — a same-second export with different text', () => {
+  const ingest = (motd: string, at: Date, by: string) =>
+    applyGuildGameText({ tx: testApp.db }, guildId, { motd }, at, by);
+
+  async function storedMotdAck(): Promise<Date | null> {
+    const rows = await testApp.db
+      .select({ ack: schema.guildProfiles.gameMotdAcknowledgedAt })
+      .from(schema.guildProfiles)
+      .where(eq(schema.guildProfiles.guildId, guildId));
+    return nonEmpty(rows, 'profile row')[0].ack;
+  }
+
+  it('moves the stamp past the old one and clears the Push acknowledgement', async () => {
+    await setHub('Raid at 8');
+    await ingest('Raid at 9', T1, 'Thrall');
+    expect((await post('deleg', '/motd/push')).status).toBe(200);
+    await ingest('Raid at 10', T1, 'Jaina');
+    const motd = (await get('deleg')).body.game.motd as {
+      gameReportedAt: string;
+    };
+    expect(motd).toMatchObject({
+      gameText: 'Raid at 10',
+      gameReportedBy: 'Jaina',
+      changedInGame: true,
+    });
+    expect(new Date(motd.gameReportedAt).getTime()).toBeGreaterThan(
+      T1.getTime(),
+    );
+    expect(await storedMotdAck()).toBeNull();
+  });
+
+  it.each(['/motd/adopt', '/motd/push'])(
+    '%s on the old stamp is then a 409; the hub text is untouched',
+    async (suffix) => {
+      await setHub('Raid at 8');
+      await ingest('Raid at 9', T1, 'Thrall');
+      await ingest('Raid at 10', T1, 'Jaina');
+      const res = await post('deleg', suffix, guildId, {
+        baseUpdatedAt: SNAP.toISOString(),
+        gameReportedAt: T1.toISOString(),
+      });
+      expect(res.status).toBe(409);
+      expect(res.body.message).toBe('Guild text changed in game');
+      expect(res.body.ingameText.motd.text).toBe('Raid at 8');
+    },
+  );
+});

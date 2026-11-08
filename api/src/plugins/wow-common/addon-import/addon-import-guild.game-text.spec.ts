@@ -88,14 +88,26 @@ describe('changedNotOlder (per-field conflict CASE)', () => {
     expect(q).toContain('"game_motd_reported_at" IS NULL OR (');
     expect(q).toContain('<= excluded."game_motd_reported_at"');
     expect(q).toContain('"game_motd" IS DISTINCT FROM excluded."game_motd")');
-    expect(q).toContain('THEN excluded."game_motd_reported_at"');
+    expect(q).toContain('THEN GREATEST(excluded."game_motd_reported_at", ');
     expect(q).toMatch(/ELSE "(guild_profiles"\.")?game_motd_reported_at" END$/);
+  });
+
+  it('review r2 — a move strictly advances the stamp and clears the acknowledgement', () => {
+    expect(render('gameMotdReportedAt')).toMatch(
+      /GREATEST\(excluded\."game_motd_reported_at", "(guild_profiles"\.")?game_motd_reported_at" \+ interval '1 millisecond'\)/,
+    );
+    const ack = render('gameMotdAcknowledgedAt');
+    expect(ack).toContain(' THEN NULL ELSE ');
+    expect(ack).toMatch(
+      /ELSE "(guild_profiles"\.")?game_motd_acknowledged_at" END$/,
+    );
   });
 
   it('guards text, stamp and reporter of only the fields the report carries', () => {
     const set = conflictSet(gameTextReport({ motd: 'Hi' }, AT, 'Thrall'));
     expect(Object.keys(set).sort()).toEqual([
       'gameMotd',
+      'gameMotdAcknowledgedAt',
       'gameMotdReportedAt',
       'gameMotdReportedBy',
     ]);
