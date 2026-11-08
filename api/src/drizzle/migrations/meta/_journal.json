@@ -1982,6 +1982,13 @@
       "when": 1794043835172,
       "tag": "0283_characters_armory_quests",
       "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "7",
+      "when": 1794098997429,
+      "tag": "0284_wow_forever_armory_autolink",
+      "breakpoints": true
     }
   ]
 }
