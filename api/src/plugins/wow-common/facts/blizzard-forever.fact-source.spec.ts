@@ -112,6 +112,23 @@ describe('toForeverCandidates', () => {
       'role',
     );
   });
+});
+
+describe('toForeverCandidates — gear', () => {
+  // ROK-2130: a failed equipment fetch keeps the prior gear but bumps
+  // lastSyncedAt, so the gear facts must carry the gear's own syncedAt.
+  it('dates gear and enchantsReported from equipment.syncedAt, not lastSyncedAt', () => {
+    const gearAt = '2026-11-03T09:00:00.000Z';
+    const got = toForeverCandidates(
+      row('c1', {
+        equipment: { ...EQUIPMENT, syncedAt: gearAt },
+        lastSyncedAt: SYNCED,
+      }),
+    );
+    expect(got.gear?.asOf).toEqual(new Date(gearAt));
+    expect(got.enchantsReported?.asOf).toEqual(new Date(gearAt));
+    expect(got.level?.asOf).toEqual(SYNCED);
+  });
 
   it('emits no gear and no enchantsReported when the equipment does not map', () => {
     for (const equipment of [null, { ...EQUIPMENT, source: 'addon' }]) {

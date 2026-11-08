@@ -74,12 +74,13 @@ export interface CharacterSyncAdapter {
     characterClass: string,
     gameVariant?: string,
   ): Promise<ExternalInferredSpecialization>;
+  /** `null` = the fetch failed; leave the stored `equipment` alone. */
   fetchEquipment(
     name: string,
     realm: string | null,
     region: string,
     gameVariant?: string,
-  ): Promise<ExternalCharacterEquipment>;
+  ): Promise<ExternalCharacterEquipment | null>;
   fetchProfessions?(
     name: string,
     realm: string | null,

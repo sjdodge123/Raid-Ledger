@@ -126,6 +126,10 @@ export interface OptionalSyncFields {
    * snapshot table is never touched by a sync.
    */
   armoryQuests: ExternalCharacterQuests | null;
+  /**
+   * The Blizzard equipment payload. `null` = the fetch failed — the key is
+   * omitted so the stored gear is kept rather than wiped.
+   */
   equipment: unknown;
   talents: unknown;
 }
@@ -135,7 +139,8 @@ export interface OptionalSyncFields {
  * spread so each new optional column is added here once instead of at every
  * call site.
  *
- * `equipment` and `talents` are always applied; the Blizzard professions go to
+ * `talents` is always applied; `equipment` only when non-null (a failed
+ * equipment fetch keeps the stored gear). The Blizzard professions go to
  * `armoryProfessions` only when non-null (a null means "leave the prior value
  * alone"). No `professions` key is ever emitted: that column is user-entered
  * (ROK-2107). The Blizzard quest ids go to `armoryQuests` the same way
@@ -147,7 +152,7 @@ export function applyOptionalSyncFields(
 ): Record<string, unknown> {
   return {
     ...record,
-    equipment,
+    ...(equipment !== null ? { equipment } : {}),
     talents,
     ...(professions !== null ? { armoryProfessions: professions } : {}),
     ...(armoryQuests !== null ? { armoryQuests } : {}),
