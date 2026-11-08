@@ -104,6 +104,15 @@ describe('decodeImportString — canonical sections', () => {
     expect(out.payload.who.fullName).toBe('Ana Forever');
   });
 
+  it('accepts surrounding whitespace and hashes deterministically', () => {
+    const s = buildImportString(buildCharPayload());
+    expect(decodeImportString(`\n  ${s}  \n`).sha256).toBe(
+      decodeImportString(s).sha256,
+    );
+  });
+});
+
+describe('decodeImportString — guild in-game text (ROK-2137)', () => {
   it('keeps the guild motd / infoText verbatim — newlines and colour codes (ROK-2137)', () => {
     const base = buildGuildPayload([
       buildMember(1, { name: '|cff00ff00Member1|r' }),
@@ -125,13 +134,6 @@ describe('decodeImportString — canonical sections', () => {
     if (out.payload.section !== 'guild') throw new Error('expected guild');
     expect('motd' in out.payload.data).toBe(false);
     expect('infoText' in out.payload.data).toBe(false);
-  });
-
-  it('accepts surrounding whitespace and hashes deterministically', () => {
-    const s = buildImportString(buildCharPayload());
-    expect(decodeImportString(`\n  ${s}  \n`).sha256).toBe(
-      decodeImportString(s).sha256,
-    );
   });
 });
 
