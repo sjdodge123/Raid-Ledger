@@ -28,7 +28,7 @@
 #   RL_REGISTRY_REPO              rl-allinone
 #   RL_REGISTRY_CONTAINER         rl-registry
 #   RL_REGISTRY_RETENTION_HOURS   48   only tags older than this are deleted
-#   RL_REGISTRY_KEEP_N            5    always keep the newest N tags
+#   RL_REGISTRY_KEEP_N            15   always keep the newest N tags (ROK-2111: was 5)
 #   RL_REGISTRY_GC_INTERVAL_HOURS 6    sweeper cadence (forced under disk pressure)
 #   RL_REGISTRY_GC_STATE_FILE     $STATE_DIR/registry-gc.json
 #   RL_REGISTRY_GC_DRY_RUN        1    report, delete nothing (sweeper AND
@@ -43,7 +43,7 @@ RL_REGISTRY_URL="${RL_REGISTRY_URL:-http://127.0.0.1:5000}"
 RL_REGISTRY_REPO="${RL_REGISTRY_REPO:-rl-allinone}"
 RL_REGISTRY_CONTAINER="${RL_REGISTRY_CONTAINER:-rl-registry}"
 RL_REGISTRY_RETENTION_HOURS="${RL_REGISTRY_RETENTION_HOURS:-48}"
-RL_REGISTRY_KEEP_N="${RL_REGISTRY_KEEP_N:-5}"
+RL_REGISTRY_KEEP_N="${RL_REGISTRY_KEEP_N:-15}"
 RL_REGISTRY_GC_INTERVAL_HOURS="${RL_REGISTRY_GC_INTERVAL_HOURS:-6}"
 RL_REGISTRY_GC_STATE_FILE="${RL_REGISTRY_GC_STATE_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/registry-gc.json}"
 RL_REGISTRY_GC_DRY_RUN="${RL_REGISTRY_GC_DRY_RUN:-1}"

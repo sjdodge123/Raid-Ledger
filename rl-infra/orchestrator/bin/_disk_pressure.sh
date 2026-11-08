@@ -27,6 +27,12 @@
 #   RL_DISK_STATE_FILE      $STATE_DIR/disk-pressure.json
 #   RL_DISK_PRUNE_DRY_RUN   0      1 = list the rungs, invoke no docker
 #                                  (DRY_RUN=1 is honoured as an alias)
+#   RL_DISK_BUILDER_FORCE_PCT 95   ROK-2111: run builder_prune at/above this
+#                                  used% even while a build is running
+#   RL_ADMISSION_FILE       $RL_STATE_DIR|$STATE_DIR/admission.json — the
+#                                  ledger the builder guard reads (at call time)
+#   RL_DISK_LADDER_SELF_KEYS ""    space-separated ledger keys of the CALLER,
+#                                  ignored by the guard (set by acquire_disk)
 
 RL_DISK_PRUNE_PCT="${RL_DISK_PRUNE_PCT:-80}"
 RL_DISK_TARGET_PCT="${RL_DISK_TARGET_PCT:-65}"
@@ -34,6 +40,7 @@ RL_IMAGE_PRUNE_AGE="${RL_IMAGE_PRUNE_AGE:-48h}"
 RL_DISK_ROOT="${RL_DISK_ROOT:-/}"
 RL_DISK_STATE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/disk-pressure.json}"
 RL_DISK_PRUNE_DRY_RUN="${RL_DISK_PRUNE_DRY_RUN:-${DRY_RUN:-0}}"
+RL_DISK_BUILDER_FORCE_PCT="${RL_DISK_BUILDER_FORCE_PCT:-95}"
 
 # Used percentage of RL_DISK_ROOT as a bare integer. GNU `--output` first (the
 # VM), POSIX `df -P` second (macOS test runners / BusyBox). Echoes nothing
@@ -133,12 +140,59 @@ disk_pressure::_audit() {
 disk_pressure::_log_failure() {
     local rung="$1" outcome="$2" msg
     msg="disk ladder: ${rung} failed (exit $(jq -r '.exit_code' <<<"$outcome")): $(jq -r '.stderr' <<<"$outcome")"
+    disk_pressure::_log "$msg"
+}
+
+# One line to the sweeper's log() when sourced by it, stderr elsewhere. Always
+# to stderr: _walk returns its rung JSON on stdout (see _log_failure).
+disk_pressure::_log() {
     if declare -F log >/dev/null 2>&1; then
-        log "$msg" >&2
+        log "$1" >&2
     else
-        echo "[disk-pressure] $msg" >&2
+        echo "[disk-pressure] $1" >&2
     fi
     return 0
+}
+
+# ROK-2111 — `docker builder prune -af` deletes the BuildKit cache a running
+# `docker build` is writing, killing the build mid-step. Echo the keys of the
+# admission-ledger entries that make the builder rung unsafe: any image build
+# and any task of ANY weight — validate-ci runs builds, and a light task can
+# run a `docker build` too (ROK-2111 review r1). Only registry_gc (the
+# sweeper's own registry sweep, no build) is harmless. The caller's own keys (RL_DISK_LADDER_SELF_KEYS)
+# are ignored — a build's own disk admission runs before it builds anything.
+# Returns 2 when the ledger is missing or unreadable.
+disk_pressure::build_busy_keys() {
+    local ledger="${RL_ADMISSION_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/admission.json}"
+    [[ -r "$ledger" ]] || return 2
+    jq -er --arg self "${RL_DISK_LADDER_SELF_KEYS:-}" '
+        ($self | split(" ") | map(select(length > 0))) as $mine
+        | [ (.heavy_running // [])[]
+            | select((.key // "") as $k | ($mine | index($k)) == null)
+            | select((.kind // "task") != "registry_gc")
+            | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
+}
+
+# Decide the builder rung at used% $1. Echoes a JSON fragment merged into the
+# rung record: {} = run, {forced:true} = run over the ceiling despite a build,
+# {skipped:<reason>} = do not run. Logs every non-plain outcome.
+disk_pressure::_builder_gate() {
+    local pct="$1" keys rc=0 reason
+    keys=$(disk_pressure::build_busy_keys) || rc=$?
+    if (( rc != 0 )); then
+        reason="ledger_unreadable"
+    elif [[ -n "$keys" ]]; then
+        reason="build_running"
+    else
+        echo '{}'; return 0
+    fi
+    if (( pct >= RL_DISK_BUILDER_FORCE_PCT )); then
+        disk_pressure::_log "disk ladder: builder_prune forced at ${pct}% >= RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}% despite ${reason}${keys:+ (${keys})}"
+        echo '{"forced":true}'; return 0
+    fi
+    disk_pressure::_log "disk ladder: builder_prune skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%"
+    jq -nc --arg r "$reason" --arg k "$keys" \
+        '{skipped:$r} + (if $k == "" then {} else {blocked_by:($k | split(" "))} end)'
 }
 
 # Atomic state write, mirroring sweep.sh's mutate(): tmpfile in the SAME
@@ -157,16 +211,28 @@ disk_pressure::_write_state() {
 }
 
 # Walk the ladder from $1 (the already-observed used%). Echoes the rung array.
+# ROK-2111: the builder rung passes _builder_gate first — both callers (the
+# sweeper's guard and a build's own admission via force_ladder) walk here.
 disk_pressure::_walk() {
-    local before="$1" rungs='[]' rung after
+    local before="$1" rungs='[]' rung after gate
     for rung in $(disk_pressure::rungs); do
+        gate='{}'
+        if [[ "$rung" == "builder_prune" ]]; then
+            gate=$(disk_pressure::_builder_gate "$before")
+            [[ -n "$gate" ]] || gate='{"skipped":"guard_error"}'   # fail safe
+        fi
+        if [[ "$(jq -r '.skipped // empty' <<<"$gate")" != "" ]]; then
+            rungs=$(jq -c --arg r "$rung" --argjson b "$before" --argjson g "$gate" \
+                '. + [({rung:$r, before_pct:$b, after_pct:$b} + $g)]' <<<"$rungs")
+            continue
+        fi
         if [[ "$RL_DISK_PRUNE_DRY_RUN" == "1" ]]; then
-            rungs=$(jq -c --arg r "$rung" --arg c "$(disk_pressure::rung_cmd "$rung")" \
-                '. + [{rung:$r, command:$c, would_run:true}]' <<<"$rungs")
+            rungs=$(jq -c --arg r "$rung" --arg c "$(disk_pressure::rung_cmd "$rung")" --argjson g "$gate" \
+                '. + [({rung:$r, command:$c, would_run:true} + $g)]' <<<"$rungs")
             continue
         fi
         local outcome
-        outcome=$(disk_pressure::_run_rung "$rung")
+        outcome=$(jq -c --argjson g "$gate" '. + $g' <<<"$(disk_pressure::_run_rung "$rung")")
         after=$(disk_pressure::used_pct)
         [[ -z "$after" ]] && after="$before"
         rungs=$(jq -c --arg r "$rung" --argjson o "$outcome" \
