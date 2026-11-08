@@ -263,6 +263,11 @@ describe('roster-insights professions — stored 0/0 Armory rows (ROK-2130)', ()
     expect(skillOf([stored])).toEqual([180, 225]);
   });
 
+  it('a 0/75 header is explicit (a fresh profession), never replaced by a tier', () => {
+    const stored = crafter(0, 75, [{ skillLevel: 150, maxSkillLevel: 150 }]);
+    expect(skillOf([stored])).toEqual([0, 75]);
+  });
+
   it('a 0/0 header with no tiers stays 0/0', () => {
     expect(skillOf([crafter(0, 0, [])])).toEqual([0, 0]);
   });
