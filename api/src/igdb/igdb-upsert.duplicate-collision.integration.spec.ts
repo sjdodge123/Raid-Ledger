@@ -14,7 +14,8 @@ import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { upsertGamesFromApi } from './igdb-upsert.helpers';
+import { upsertGamesFromApi, upsertSingleGameRow } from './igdb-upsert.helpers';
+import { mapApiGameToDbRow } from './igdb.mappers';
 import { enrichSyncedGamesWithItad } from './igdb-sync.helpers';
 import type { IgdbApiGame } from './igdb.constants';
 import { nonEmpty } from '../common/testing/narrow';
@@ -24,6 +25,8 @@ const IGDB_OTHER = 9_212_002;
 const IGDB_NAMED = 9_212_003;
 const STEAM_TWIN = 9_212_501;
 const STEAM_ITAD = 9_212_601;
+const IGDB_SINGLE = 9_212_004;
+const STEAM_SINGLE = 9_212_502;
 
 let testApp: TestApp;
 
@@ -111,6 +114,42 @@ describe('refresh batch with an unmerged IGDB/ITAD twin pair (ROK-2120)', () => 
 
     expect((await readGame(other)).summary).toBe(`refreshed ${IGDB_OTHER}`);
     expect((await readGame(owner)).summary).toBe(`refreshed ${IGDB_OWNED}`);
+    expect((await readGame(itadCopy)).igdbId).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      `IGDB duplicate pair skipped: keep=${owner} dup=${itadCopy} key=igdb_id`,
+    );
+    // The steam id the twin holds is stripped, never written onto the owner.
+    expect(warn).toHaveBeenCalledWith(
+      `IGDB duplicate pair skipped: keep=${itadCopy} dup=${owner} key=steam_app_id`,
+    );
+    expect((await readGame(owner)).steamAppId).toBeNull();
+    expect((await readGame(itadCopy)).steamAppId).toBe(STEAM_TWIN);
+  });
+
+  it('single-row upsert reroutes onto the igdb owner instead of the steam twin', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    const owner = await seedGame({
+      name: 'ROK-2120 Solo Title',
+      slug: 'rok-2120-solo-title',
+      igdbId: IGDB_SINGLE,
+    });
+    const itadCopy = await seedGame({
+      name: 'ROK-2120 Solo Title (Steam)',
+      slug: 'rok-2120-solo-title-steam',
+      steamAppId: STEAM_SINGLE,
+    });
+    const row = mapApiGameToDbRow(
+      igdbGame(
+        IGDB_SINGLE,
+        'ROK-2120 Solo Title',
+        'rok-2120-solo-title',
+        STEAM_SINGLE,
+      ),
+    );
+
+    await upsertSingleGameRow(testApp.db, row);
+
+    expect((await readGame(owner)).summary).toBe(`refreshed ${IGDB_SINGLE}`);
     expect((await readGame(itadCopy)).igdbId).toBeNull();
     expect(warn).toHaveBeenCalledWith(
       `IGDB duplicate pair skipped: keep=${owner} dup=${itadCopy} key=igdb_id`,

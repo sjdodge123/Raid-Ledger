@@ -411,6 +411,36 @@ describe('reEnrichGamesWithIgdb', () => {
       expect(mockDb.updateSet).not.toHaveBeenCalledWith(
         expect.objectContaining({ igdbId: 888 }),
       );
+      expect(mockDb.updateSet).toHaveBeenCalledWith({
+        igdbEnrichmentStatus: 'pending',
+        igdbEnrichmentRetryCount: 1,
+      });
+    });
+
+    it('exhausts the row once the clash has used the last retry', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      const candidates = [
+        { id: 41, steamAppId: 5152, igdbEnrichmentRetryCount: 2 },
+      ];
+      const mockDb = createReenrichMockDb(candidates);
+      mockDb.selectWhere.mockReset();
+      mockDb.selectWhere
+        .mockResolvedValueOnce(candidates)
+        .mockResolvedValueOnce([{ id: 9 }]);
+      const mockQueryIgdb = jest
+        .fn<Promise<IgdbApiGame[]>, [string]>()
+        .mockResolvedValue([makeIgdbApiGame({ id: 889 })]);
+
+      const result = await reEnrichGamesWithIgdb(
+        mockDb as never,
+        mockQueryIgdb,
+      );
+
+      expect(result.exhausted).toBe(1);
+      expect(mockDb.updateSet).toHaveBeenCalledWith({
+        igdbEnrichmentStatus: 'not_found',
+        igdbEnrichmentRetryCount: 3,
+      });
     });
   });
 });

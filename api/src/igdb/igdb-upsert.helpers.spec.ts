@@ -9,6 +9,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { withMockTransaction } from '../common/testing/drizzle-mock';
 import { mapApiGameToDbRow } from './igdb.mappers';
+import { at } from '../common/testing/narrow';
 import type { IgdbApiGame } from './igdb.constants';
 
 /** Minimal mock DB that tracks insert/update calls for upsertSingleGameRow. */
@@ -404,10 +405,10 @@ describe('upsertGamesFromApi — unique-key collisions (ROK-2120)', () => {
     expect(warn).toHaveBeenCalledWith(
       'IGDB duplicate pair skipped: keep=77 dup=55 key=steam_app_id',
     );
-    const inserted = valuesMock.mock.calls[0]?.[0] as Array<{
+    const inserted: Array<{
       igdbId: number;
       steamAppId: number | null;
-    }>;
+    }> = at(at(valuesMock.mock.calls, 0), 0);
     expect(inserted.map((r) => [r.igdbId, r.steamAppId])).toEqual([
       [100, null],
       [200, null],
@@ -432,7 +433,9 @@ describe('upsertGamesFromApi — unique-key collisions (ROK-2120)', () => {
     expect(warn).toHaveBeenCalledWith(
       'IGDB duplicate pair skipped: keep=91 dup=igdb:100 key=slug',
     );
-    const inserted = valuesMock.mock.calls[0]?.[0] as Array<{ igdbId: number }>;
+    const inserted: Array<{
+      igdbId: number;
+    }> = at(at(valuesMock.mock.calls, 0), 0);
     expect(inserted.map((r) => r.igdbId)).toEqual([200]);
   });
 
