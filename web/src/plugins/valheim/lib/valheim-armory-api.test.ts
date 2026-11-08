@@ -81,12 +81,23 @@ describe('valheim armory fetchers', () => {
         server.use(
             valheimCharacterHandler({
                 ...valheimCharacterDetail(),
-                steamId: '765',
+                id: 'twelve',
             }),
         );
         await expect(fetchValheimCharacter(12)).rejects.toBeInstanceOf(
             SchemaValidationError,
         );
+    });
+    it('drops a key the contract does not carry (ROK-2116 skew strip)', async () => {
+        server.use(
+            valheimCharacterHandler({
+                ...valheimCharacterDetail(),
+                steamId: '765',
+            }),
+        );
+        const detail = await fetchValheimCharacter(12);
+        expect(detail).toEqual(valheimCharacterDetail());
+        expect(detail).not.toHaveProperty('steamId');
     });
     it('marks a 404 as not-found', async () => {
         server.use(valheimCharacterHandler(null));
