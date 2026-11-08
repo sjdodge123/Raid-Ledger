@@ -9,6 +9,7 @@ import {
   index,
   check,
   uniqueIndex,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type {
@@ -18,6 +19,31 @@ import type {
 } from '@raid-ledger/contract';
 import { guilds } from './guilds';
 import { users } from './users';
+
+/** ROK-2136: in-game text caps (char_length <= the UTF-16 Zod cap, D3) + FK indexes. */
+function ingameTextConstraints(table: {
+  ingameMotd: AnyPgColumn;
+  ingameInfo: AnyPgColumn;
+  ingameMotdUpdatedBy: AnyPgColumn;
+  ingameInfoUpdatedBy: AnyPgColumn;
+}) {
+  return [
+    check(
+      'guild_profiles_ingame_motd_length',
+      sql`char_length(${table.ingameMotd}) <= 255`,
+    ),
+    check(
+      'guild_profiles_ingame_info_length',
+      sql`char_length(${table.ingameInfo}) <= 499`,
+    ),
+    index('idx_guild_profiles_ingame_motd_updated_by').on(
+      table.ingameMotdUpdatedBy,
+    ),
+    index('idx_guild_profiles_ingame_info_updated_by').on(
+      table.ingameInfoUpdatedBy,
+    ),
+  ];
+}
 
 /**
  * ROK-1786 (S2 of ROK-1781): one editable profile per guild — the GM post,
@@ -89,6 +115,28 @@ export const guildProfiles = pgTable(
     mediaChannelSetAt: timestamp('media_channel_set_at', {
       withTimezone: true,
     }),
+    /**
+     * ROK-2136 (D1): the WoW: Forever guild Message of the Day and Guild
+     * Information, copied into the in-game boxes. Per-field timestamps drive
+     * the per-field 409 (D6) and ROK-2137's drift compare. NULL = never set
+     * or cleared. Caps mirror WOW_GUILD_MOTD_MAX / WOW_GUILD_INFO_MAX.
+     */
+    ingameMotd: text('ingame_motd'),
+    ingameMotdUpdatedAt: timestamp('ingame_motd_updated_at', {
+      withTimezone: true,
+    }),
+    ingameMotdUpdatedBy: integer('ingame_motd_updated_by').references(
+      () => users.id,
+      { onDelete: 'set null' },
+    ),
+    ingameInfo: text('ingame_info'),
+    ingameInfoUpdatedAt: timestamp('ingame_info_updated_at', {
+      withTimezone: true,
+    }),
+    ingameInfoUpdatedBy: integer('ingame_info_updated_by').references(
+      () => users.id,
+      { onDelete: 'set null' },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -117,6 +165,7 @@ export const guildProfiles = pgTable(
     index('idx_guild_profiles_media_channel_set_by').on(
       table.mediaChannelSetBy,
     ),
+    ...ingameTextConstraints(table),
   ],
 );
 

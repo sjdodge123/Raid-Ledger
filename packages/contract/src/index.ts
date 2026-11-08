@@ -308,6 +308,8 @@ export * from './discord-join-post.schema.js';
 export * from './guild-content.schema.js';
 export * from './hub-posts.schema.js';
 export * from './hub-session-note.schema.js';
+// WoW: Forever guild MOTD + Guild Information (ROK-2136).
+export * from './guild-ingame-text.schema.js';
 export * from './hub-taggable.schema.js';
 export * from './hub-post-markdown.js';
 export * from './guild-discord.schema.js';

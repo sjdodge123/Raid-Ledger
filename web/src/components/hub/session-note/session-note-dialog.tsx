@@ -14,6 +14,7 @@ import type { HubSessionNote, HubSessionNoteResponse } from '@raid-ledger/contra
 import { Modal } from '../../ui/modal';
 import { BottomSheet } from '../../ui/bottom-sheet';
 import { Button } from '../../ui/button';
+import { DialogBanner } from '../../ui/dialog-banner';
 import { DiscardChangesConfirm, type DiscardCopy } from '../../ui/discard-changes-confirm';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useDirtyCloseGuard, type DirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
@@ -34,16 +35,6 @@ function NoteOverlay({ guard, onClose, footer, children }: OverlayProps): JSX.El
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const shared = { isOpen: true, title: DIALOG_TITLE, onClose, closeGuard: guard, footer, children };
     return isDesktop ? <Modal {...shared} maxWidth="max-w-lg" /> : <BottomSheet {...shared} maxHeight="85vh" />;
-}
-
-function Banner({ tone, children }: { tone: 'warning' | 'danger'; children: ReactNode }): JSX.Element {
-    const hue = tone === 'warning' ? 'border-warning/30 bg-warning/10 text-warning' : 'border-danger/30 bg-danger/10 text-danger';
-    return (
-        <div role="alert" data-testid={`session-note-${tone === 'warning' ? 'conflict' : 'error'}`}
-            className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${hue}`}>
-            {children}
-        </div>
-    );
 }
 
 /** Draft + base note + the save/clear mutations; `loadTheirs` rebases the draft on a 409's note. */
@@ -114,12 +105,12 @@ function SessionNoteEditor({ guildId, data, onClose }: EditorProps): JSX.Element
         <NoteOverlay guard={guard} onClose={onClose}
             footer={<DialogFooter editor={editor} onCancel={guard.requestClose} onSave={save} onClear={() => setConfirm('clear')} />}>
             {conflict !== null && (
-                <Banner tone="warning">
+                <DialogBanner tone="warning" testId="session-note-conflict">
                     <span>{CONFLICT_COPY}</span>
                     <Button variant="warning-soft" size="sm" data-testid="session-note-load-theirs" onClick={load}>Load their version</Button>
-                </Banner>
+                </DialogBanner>
             )}
-            {failed && <Banner tone="danger">Couldn&apos;t save the note. Try again.</Banner>}
+            {failed && <DialogBanner tone="danger" testId="session-note-error">Couldn&apos;t save the note. Try again.</DialogBanner>}
             <SessionNoteForm draft={editor.draft} onChange={editor.setDraft} pinned={editor.base?.clearAfter ?? null} nextEvent={data.nextEvent} />
             <DiscardChangesConfirm isOpen={confirm !== null} onKeep={() => setConfirm(null)} onDiscard={onConfirm}
                 copy={confirm === 'clear' ? CLEAR_COPY : LOAD_COPY}
