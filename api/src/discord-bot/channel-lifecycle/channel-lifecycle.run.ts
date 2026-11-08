@@ -12,6 +12,7 @@ import { refreshTopicAfterCommit } from './channel-lifecycle.topic-refresh';
 import { staleLinkDetail } from './channel-lifecycle.decide';
 import { lockLifecycleBinding } from './channel-lifecycle.store.queries';
 import {
+  CHANNEL_GONE_DETAIL,
   ChannelGoneError,
   CreateCapacityError,
   LifecyclePermissionError,
@@ -78,7 +79,7 @@ async function handleGone(
     await ctx.bindings.unbindById(binding.id, { db: ctx.db });
     await unlinkAutoHubsForChannel(ctx.db, binding.channelId);
   }
-  return { outcome: 'failed', detail: 'channel deleted in Discord' };
+  return { outcome: 'failed', detail: CHANNEL_GONE_DETAIL };
 }
 
 /** Map one game's thrown error onto an outcome (D14). */

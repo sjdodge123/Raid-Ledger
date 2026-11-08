@@ -112,6 +112,31 @@ describe('decodeImportString — canonical sections', () => {
   });
 });
 
+describe('decodeImportString — guild in-game text (ROK-2137)', () => {
+  it('keeps the guild motd / infoText verbatim — newlines and colour codes (ROK-2137)', () => {
+    const base = buildGuildPayload([
+      buildMember(1, { name: '|cff00ff00Member1|r' }),
+    ]);
+    const motd = 'Raid 20:00 - |cffff8000Molten Core|r. Bring ||fire||!';
+    const infoText = 'Line one.\nLine two |Hitem:1|h[x]|h.\n\tLine three.';
+    const out = decodeImportString(
+      buildImportString({ ...base, data: { ...base.data, motd, infoText } }),
+    );
+    if (out.payload.section !== 'guild') throw new Error('expected guild');
+    expect(out.payload.data.motd).toBe(motd);
+    expect(out.payload.data.infoText).toBe(infoText);
+    // Every other display string is still stripped.
+    expect(out.payload.data.members[0]?.name).toBe('Member1');
+  });
+
+  it('leaves absent guild motd / infoText absent', () => {
+    const out = decodeImportString(buildImportString(buildGuildPayload()));
+    if (out.payload.section !== 'guild') throw new Error('expected guild');
+    expect('motd' in out.payload.data).toBe(false);
+    expect('infoText' in out.payload.data).toBe(false);
+  });
+});
+
 describe('decodeImportString — paged guild strings', () => {
   const members = Array.from({ length: 9 }, (_, i) => buildMember(i + 1));
   const payload = buildGuildPayload(members);

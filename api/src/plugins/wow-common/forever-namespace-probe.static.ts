@@ -13,7 +13,7 @@ import {
 import type { ProbeUrl, ShapeSummary } from './forever-namespace-probe.helpers';
 import {
   isDeepKeysEndpoint,
-  summariseDeepKeys,
+  summariseDeepKeysFor,
 } from './forever-namespace-probe.profile-extra';
 
 /** Static index endpoint → its `data/wow` path. */
@@ -112,6 +112,7 @@ export function summariseCustomShape(
   body: unknown,
 ): NamedShapeSummary {
   if (isStaticEndpoint(endpoint)) return summariseStaticShape(endpoint, body);
-  if (isDeepKeysEndpoint(endpoint)) return summariseDeepKeys(body); // ROK-2108
+  // ROK-2108; profile-quests one level deeper (ROK-2126).
+  if (isDeepKeysEndpoint(endpoint)) return summariseDeepKeysFor(endpoint, body);
   return summariseKeys(body);
 }

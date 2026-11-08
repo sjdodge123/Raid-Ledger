@@ -25,7 +25,7 @@ const motdEditor = alias(schema.users, 'ingame_motd_editor');
 const infoEditor = alias(schema.users, 'ingame_info_editor');
 
 /** `timestamptz` → `YYYY-MM-DDTHH:MI:SS.USZ` (null stays null). */
-const utcText = (col: AnyColumn) =>
+export const utcText = (col: AnyColumn) =>
   sql<
     string | null
   >`to_char(${col} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;

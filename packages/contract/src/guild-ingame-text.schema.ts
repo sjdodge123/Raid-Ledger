@@ -32,6 +32,17 @@ export function hasIngameControlChars(text: string): boolean {
   return CONTROL_CHAR_RE.test(text);
 }
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_GLOBAL_RE = /[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+
+/**
+ * ROK-2137 — drop every character `hasIngameControlChars` rejects (same
+ * rule), so text the game reported can always be adopted through the save.
+ */
+export function stripIngameControlChars(text: string): string {
+  return text.replace(CONTROL_CHAR_GLOBAL_RE, '');
+}
+
 const putText = (max: number) =>
   z
     .string()
@@ -56,6 +67,54 @@ const storedField = (max: number) =>
     .strict()
     .nullable();
 
+/** The field keys in route order — `POST …/ingame-text/:field/adopt|push`. */
+export const INGAME_TEXT_FIELD_KEYS = ['motd', 'info'] as const;
+
+/**
+ * ROK-2137 — what the game last reported for one field (LedgerLink export).
+ * `gameText` `''` = the in-game box was reported empty. `changedInGame` = the
+ * report differs from the hub text and was not pushed over (acknowledged)
+ * since it arrived.
+ */
+export const GuildIngameGameReportSchema = z
+  .object({
+    gameText: z.string(),
+    gameReportedAt: isoDate,
+    /** The exporting character's name; omitted when the report carried none. */
+    gameReportedBy: z.string().min(1).max(100).optional(),
+    changedInGame: z.boolean(),
+  })
+  .strict();
+export type GuildIngameGameReport = z.infer<typeof GuildIngameGameReportSchema>;
+
+const gameReport = (max: number) =>
+  GuildIngameGameReportSchema.extend({ gameText: z.string().max(max) })
+    .strict()
+    .nullable();
+
+/** Per field: the last in-game report, null when never reported. */
+export const GuildIngameGameTextSchema = z
+  .object({
+    motd: gameReport(WOW_GUILD_MOTD_MAX),
+    info: gameReport(WOW_GUILD_INFO_MAX),
+  })
+  .strict();
+export type GuildIngameGameText = z.infer<typeof GuildIngameGameTextSchema>;
+
+/**
+ * ROK-2137 — `POST …/ingame-text/:field/adopt|push` body: what the editor saw.
+ * `gameReportedAt` must still be the stored report (else 409 with the fresh
+ * `ingameText`); Adopt also sends the field's hub `updatedAt` (null = unset)
+ * as the ROK-2136 save's per-field conflict token. Push ignores it.
+ */
+export const GuildIngameGameActionSchema = z
+  .object({
+    baseUpdatedAt: isoDate.nullable(),
+    gameReportedAt: isoDate,
+  })
+  .strict();
+export type GuildIngameGameAction = z.infer<typeof GuildIngameGameActionSchema>;
+
 /** `GET /plugins/wow/guilds/:id/ingame-text` (and the PUT/409 response body). */
 export const GuildIngameTextSchema = z
   .object({
@@ -64,6 +123,8 @@ export const GuildIngameTextSchema = z
     info: storedField(WOW_GUILD_INFO_MAX),
     /** Same idiom as `HubSessionNoteResponse.viewer`, minus `canTick`. */
     viewer: z.object({ canEdit: z.boolean() }).strict(),
+    /** ROK-2137 — editors only (`viewer.canEdit`); omitted for everyone else. */
+    game: GuildIngameGameTextSchema.optional(),
   })
   .strict();
 export type GuildIngameText = z.infer<typeof GuildIngameTextSchema>;

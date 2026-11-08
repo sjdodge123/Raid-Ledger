@@ -16,12 +16,14 @@ export interface ProbeTarget {
   region: string;
 }
 
-/** Endpoints whose shapes carry top-level keys only (anonymised evidence). */
+/**
+ * Endpoints whose shapes carry top-level keys only (anonymised evidence).
+ * `profile-quests` moved to the nested deep-keys shape (ROK-2126).
+ */
 const KEYS_ONLY_ENDPOINTS: ReadonlySet<ForeverProbeEndpoint> = new Set([
   'profile',
   'profile-equipment',
   'profile-professions',
-  'profile-quests',
   'profile-media',
   'guild-roster',
 ]);

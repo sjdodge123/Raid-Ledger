@@ -1,0 +1,72 @@
+{
+  "pages": 1,
+  "payload": {
+    "schema": 1,
+    "addonVersion": "0.1.0",
+    "client": {
+      "interface": 11507,
+      "build": "1.15.7",
+      "locale": "enUS",
+      "region": 1
+    },
+    "exportedAt": 1790000000,
+    "who": {
+      "guid": "Player-4395-0ABCDEF0",
+      "fullName": "Ana Forever",
+      "raw": {
+        "getUnitName": "Ana Forever",
+        "unitName": [
+          "Ana Forever",
+          null
+        ]
+      },
+      "ruleset": "normal",
+      "class": "PALADIN",
+      "race": "Human",
+      "level": 60,
+      "faction": "Alliance",
+      "guildName": "Night Shift"
+    },
+    "section": "guild",
+    "data": {
+      "name": "Night Shift",
+      "snapshotAt": 1790000000,
+      "canViewOfficerNote": false,
+      "members": [
+        {
+          "guid": "Player-4395-0ABCDEF0",
+          "name": "Ana Forever",
+          "rankIndex": 3,
+          "rank": "Raider",
+          "level": 60,
+          "class": "PALADIN",
+          "online": false,
+          "lastOnlineDays": 2
+        },
+        {
+          "guid": "Player-4395-00000001",
+          "name": "Member1",
+          "rankIndex": 3,
+          "rank": "Raider",
+          "level": 60,
+          "class": "MAGE",
+          "online": false,
+          "lastOnlineDays": 2,
+          "note": "Main tank"
+        },
+        {
+          "guid": "Player-4395-00000002",
+          "name": "Member2",
+          "rankIndex": 3,
+          "rank": "Raider",
+          "level": 60,
+          "class": "MAGE",
+          "online": false,
+          "lastOnlineDays": 2
+        }
+      ],
+      "motd": "Raid Thursday 20:00 server time - |cffff8000Molten Core|r. Bring fire resist!",
+      "infoText": "Night Shift is a casual Forever guild.\nRaids: Thu + Sun 20:00.\nLoot: loot council, see the hub."
+    }
+  }
+}

@@ -28,6 +28,33 @@ export const MISSING_ACCESS = 50001;
 /** Discord "Missing Permissions" — e.g. no Manage Channels / Manage Roles. */
 export const MISSING_PERMISSIONS = 50013;
 
+/** Discord codes meaning the bot lacks access or a permission (50001 / 50013). */
+export const DISCORD_ACCESS_CODES: ReadonlySet<number | string> = new Set([
+  MISSING_ACCESS,
+  MISSING_PERMISSIONS,
+]);
+
+/** True when `err` is a `DiscordAPIError` for missing access/permission. */
+export function isDiscordAccessError(err: unknown): boolean {
+  return err instanceof DiscordAPIError && DISCORD_ACCESS_CODES.has(err.code);
+}
+
+/**
+ * Detail of the `failed` item a hand-deleted channel produces once D9 cleanup
+ * (suppress + unbind + unlink hubs) has run. It is the machine-readable marker
+ * consumers key on: the item is reported as failed, yet nothing is left to
+ * retry (ROK-2118). The contract `outcome` enum is deliberately unchanged.
+ */
+export const CHANNEL_GONE_DETAIL = 'channel deleted in Discord';
+
+/** True when a reconcile item is a gone channel whose cleanup already ran. */
+export function isChannelGoneItem(item: {
+  outcome: string;
+  detail: string | null;
+}): boolean {
+  return item.outcome === 'failed' && item.detail === CHANNEL_GONE_DETAIL;
+}
+
 /** Discord "Maximum number of guild channels reached (500)". */
 export const MAX_GUILD_CHANNELS = 30013;
 

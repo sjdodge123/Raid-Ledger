@@ -2,15 +2,13 @@
  * Character detail page smoke tests — header info, metadata badges, sections.
  *
  * ROK-905: Verify the character detail page renders correctly at both
- * desktop and mobile viewports.  Uses the same API-driven character
- * lookup pattern as characters.smoke.spec.ts.
+ * desktop and mobile viewports. ROK-2112: the character is seeded per
+ * project + worker + run via `POST /admin/test/wow/seed-guild`.
  */
+import type { TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { resolveApiUrl } from './target';
-import { readTokenFromStorageState } from './storage-state';
+import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
 import { defined } from './defined';
-
-const API_BASE = resolveApiUrl();
 
 interface SeedCharacter {
     id: string;
@@ -38,143 +36,151 @@ interface SeedCharacter {
     gameVariant?: string | null;
 }
 
-/**
- * ROK-2107 — the source pill shows only for variants the Blizzard sync fills
- * (retail, Forever) or a Blizzard-sourced row; Classic / variant-less rows
- * (every seeded character today) show none. Mirrors `professionsPillSource`.
- */
-function expectedProfessionsPill(c: SeedCharacter): 'Armory' | 'Manual' | null {
-    if (c.professionsSource === 'blizzard') return 'Armory';
-    const armoryVariant =
-        c.gameVariant === 'retail' || c.gameVariant === 'wow_forever';
-    return armoryVariant && c.professionsSource === 'manual' ? 'Manual' : null;
+/** Seeded GM's Armory professions (ROK-2107): one primary, distinctive skill. */
+const SEED_PROFESSIONS = {
+    primary: [
+        {
+            id: 164,
+            name: 'Blacksmithing',
+            slug: 'blacksmithing',
+            skillLevel: 275,
+            maxSkillLevel: 300,
+            tiers: [],
+        },
+    ],
+    secondary: [],
+    syncedAt: new Date().toISOString(),
+};
+
+interface SeededGuild {
+    users: Record<string, { userId: number; characterId: string | null }>;
+}
+
+/** A guild name unique to this project, worker and run (fixture: 3-48 chars). */
+function guildName(testInfo: TestInfo): string {
+    const project = testInfo.project.name.replace(/[^A-Za-z0-9 _-]/g, '-');
+    return `Chardetail ${project} w${testInfo.workerIndex} ${Date.now()}`;
 }
 
 /**
- * Find a seeded character with class/race/level data via the API.
- * Returns the first character that has non-null metadata fields.
+ * ROK-2112 — seed our own character instead of hunting the shared seed (which
+ * has none with class + level or professions after reset-to-seed, so every
+ * test used to skip). `seed-guild` gives the GM a level-60 Warrior with
+ * Armory professions; the detail page is public, so admin views it directly.
+ * A missing seed throws — it never skips.
  */
-async function findCharacterWithMetadata(
+async function seedCharacter(
     token: string,
-): Promise<SeedCharacter | null> {
-    const res = await fetch(`${API_BASE}/users/me/characters`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-
-    const { data } = (await res.json()) as {
-        data: Array<SeedCharacter>;
-    };
-
-    return data.find((c) => c.class && c.level) ?? null;
+    testInfo: TestInfo,
+): Promise<{ guild: SeededGuild; character: SeedCharacter }> {
+    const guild = (await apiPost(token, '/admin/test/wow/seed-guild', {
+        name: guildName(testInfo),
+        armoryProfessions: SEED_PROFESSIONS,
+    })) as Partial<SeededGuild>;
+    const users = guild.users;
+    const characterId = users?.['gm']?.characterId;
+    if (!users || typeof characterId !== 'string') {
+        throw new Error(`[character-detail] seed-guild: ${JSON.stringify(guild)}`);
+    }
+    const character = (await apiGet(
+        token,
+        `/characters/${characterId}`,
+    )) as SeedCharacter | null;
+    if (!character || !character.class || !character.level) {
+        throw new Error(
+            `[character-detail] seeded character lacks class/level: ${JSON.stringify(character)}`,
+        );
+    }
+    return { guild: { users }, character };
 }
 
-/**
- * ROK-1130 — find a seeded WoW character whose `professions` JSONB is
- * populated (non-null + has at least one primary). Used by the
- * professions-panel smoke test below.
- */
-async function findCharacterWithProfessions(
-    token: string,
-): Promise<SeedCharacter | null> {
-    const res = await fetch(`${API_BASE}/users/me/characters`, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return null;
-
-    const { data } = (await res.json()) as {
-        data: Array<SeedCharacter>;
-    };
-
-    const withProfs = data.filter(
-        (c) =>
-            c.professions != null &&
-            c.professions.primary &&
-            c.professions.primary.length > 0,
-    );
-    // ROK-2107 — prefer a retail / Forever character (the pill shows there).
-    return (
-        withProfs.find((c) => expectedProfessionsPill(c) !== null) ??
-        withProfs[0] ??
-        null
-    );
+async function removeUsers(token: string, guild: SeededGuild): Promise<void> {
+    for (const user of Object.values(guild.users)) {
+        await apiDelete(token, `/users/${user.userId}`).catch(() => undefined);
+    }
 }
 
 test.describe('Character detail page', () => {
-    let character: SeedCharacter | null = null;
+    let seeded: { guild: SeededGuild; character: SeedCharacter } | null =
+        null;
 
-    test.beforeAll(async () => {
-        const token = readTokenFromStorageState();
-        if (token) {
-            character = await findCharacterWithMetadata(token);
-        }
+    test.beforeAll(async ({}, testInfo) => {
+        seeded = await seedCharacter(await getAdminToken(), testInfo);
     });
 
-    test('renders character name and metadata', async ({ page }) => {
-        test.skip(!character, 'No character with metadata in seed data');
+    // Removes only the seeded users. The seeded guild, roster, raids and editor
+    // grant stay behind on purpose: the next reset-to-seed clears them.
+    test.afterAll(async () => {
+        if (seeded) await removeUsers(await getAdminToken(), seeded.guild);
+    });
 
-        await page.goto(`/characters/${character!.id}`);
+    /** The seeded character; fails the test (never skips) when absent. */
+    function seededCharacter(): SeedCharacter {
+        return defined(seeded?.character, 'seeded character');
+    }
+
+    test('renders character name and metadata', async ({ page }) => {
+        const character = seededCharacter();
+        await page.goto(`/characters/${character.id}`);
 
         // Character name appears as h1 heading
         await expect(
-            page.getByRole('heading', { name: character!.name, level: 1 }),
+            page.getByRole('heading', { name: character.name, level: 1 }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Class and race visible in the meta line (use .first() since spec/class
         // text may also appear in the talents section further down the page)
-        if (character!.class) {
+        if (character.class) {
             await expect(
-                page.getByText(character!.class, { exact: true }).first(),
+                page.getByText(character.class, { exact: true }).first(),
             ).toBeVisible({ timeout: 5_000 });
         }
-        if (character!.race) {
+        if (character.race) {
             await expect(
-                page.getByText(character!.race, { exact: true }).first(),
+                page.getByText(character.race, { exact: true }).first(),
             ).toBeVisible({ timeout: 5_000 });
         }
-        if (character!.spec) {
+        if (character.spec) {
             await expect(
-                page.getByText(character!.spec, { exact: true }).first(),
+                page.getByText(character.spec, { exact: true }).first(),
             ).toBeVisible({ timeout: 5_000 });
         }
     });
 
-    test('displays level and item level', async ({ page }) => {
-        test.skip(!character, 'No character with metadata in seed data');
-
-        await page.goto(`/characters/${character!.id}`);
+    test('displays level (item level only when the character has one)', async ({ page }) => {
+        const character = seededCharacter();
+        await page.goto(`/characters/${character.id}`);
 
         // Wait for the page to load
         await expect(
-            page.getByRole('heading', { name: character!.name, level: 1 }),
+            page.getByRole('heading', { name: character.name, level: 1 }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Level is displayed as "Level N"
-        if (character!.level) {
+        if (character.level) {
             await expect(
-                page.getByText(`Level ${character!.level}`),
+                page.getByText(`Level ${character.level}`),
             ).toBeVisible({ timeout: 5_000 });
         }
 
         // Item level is displayed as "Item Level" followed by the number
-        if (character!.itemLevel) {
+        if (character.itemLevel) {
             await expect(page.getByText('Item Level')).toBeVisible({
                 timeout: 5_000,
             });
             await expect(
-                page.getByText(String(character!.itemLevel)),
+                page.getByText(String(character.itemLevel)),
             ).toBeVisible({ timeout: 5_000 });
         }
     });
 
     test('renders equipment and talents sections', async ({ page }) => {
-        test.skip(!character, 'No character with metadata in seed data');
-
-        await page.goto(`/characters/${character!.id}`);
+        const character = seededCharacter();
+        await page.goto(`/characters/${character.id}`);
 
         // Wait for page load
         await expect(
-            page.getByRole('heading', { name: character!.name, level: 1 }),
+            page.getByRole('heading', { name: character.name, level: 1 }),
         ).toBeVisible({ timeout: 15_000 });
 
         // Equipment section heading
@@ -189,12 +195,11 @@ test.describe('Character detail page', () => {
     });
 
     test('back button is visible', async ({ page }) => {
-        test.skip(!character, 'No character with metadata in seed data');
-
-        await page.goto(`/characters/${character!.id}`);
+        const character = seededCharacter();
+        await page.goto(`/characters/${character.id}`);
 
         await expect(
-            page.getByRole('heading', { name: character!.name, level: 1 }),
+            page.getByRole('heading', { name: character.name, level: 1 }),
         ).toBeVisible({ timeout: 15_000 });
 
         // The back button contains "Back" text
@@ -205,22 +210,13 @@ test.describe('Character detail page', () => {
 
     /**
      * ROK-1130 (AC #13) — Professions panel renders when a synced WoW
-     * character has a non-null `professions` blob. Runs on both desktop
+     * character has a non-null `professions` blob (seeded, ROK-2112). Runs on both desktop
      * and mobile projects (inherits from playwright.config.ts).
      */
     test('renders professions panel for a synced WoW character', async ({
         page,
     }) => {
-        const token = readTokenFromStorageState();
-        test.skip(!token, 'No admin token in storage state');
-
-        const profChar = await findCharacterWithProfessions(token!);
-        test.skip(
-            !profChar,
-            'No seeded WoW character with non-null professions',
-        );
-
-        const char = defined(profChar ?? undefined, 'profChar');
+        const char = seededCharacter();
         await page.goto(`/characters/${char.id}`);
 
         // Heading
@@ -237,23 +233,16 @@ test.describe('Character detail page', () => {
         ).toBeVisible({ timeout: 10_000 });
 
         // ROK-2107 (AC8) — the source pill names where the shown professions
-        // came from, for retail / Forever only; Classic shows no pill.
+        // came from. The seed writes `armory_professions` on a synced row, so
+        // the DTO reports `blizzard` and the panel shows the "Armory" pill.
         expect(
-            ['manual', 'blizzard'],
-            'the character DTO must report a professions source',
-        ).toContain(char.professionsSource);
+            char.professionsSource,
+            'seeded armoryProfessions must surface as a blizzard source',
+        ).toBe('blizzard');
         const region = page.getByRole('region', { name: 'Professions' });
-        const expectedPill = expectedProfessionsPill(char);
-        if (expectedPill) {
-            await expect(
-                region.getByText(expectedPill, { exact: true }),
-            ).toBeVisible({ timeout: 5_000 });
-        } else {
-            await expect(
-                region.getByText(/^(Armory|Manual)$/),
-                `no source pill for gameVariant ${char.gameVariant ?? 'null'}`,
-            ).toHaveCount(0);
-        }
+        await expect(region.getByText('Armory', { exact: true })).toBeVisible({
+            timeout: 5_000,
+        });
 
         // First primary profession name + its skill text render
         const firstPrimary = defined(

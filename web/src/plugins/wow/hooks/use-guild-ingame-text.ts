@@ -8,8 +8,12 @@
  * microseconds for the next `base*UpdatedAt` — never re-format it via `Date`.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { GuildIngameText, PutGuildIngameText } from '@raid-ledger/contract';
+import type { GuildIngameGameAction, GuildIngameText, IngameTextFieldKey, PutGuildIngameText } from '@raid-ledger/contract';
+import type { GuildGameTextAction } from '../api-client';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
+
+/** Adopt/Push plus what the editor saw (review r1: the server 409s on a stale one). */
+export interface GuildGameActionInput { action: GuildGameTextAction; seen: GuildIngameGameAction }
 
 export const guildIngameTextKey = (guildId: number) => ['wow-guild-ingame-text', guildId] as const;
 
@@ -35,6 +39,17 @@ export function useGuildTextVisible({ page }: HubWidgetCtx): boolean {
     const { data } = useQuery(guildIngameTextQuery(page.guild.id));
     if (data === undefined) return false;
     return data.motd !== null || data.info !== null || data.viewer.canEdit;
+}
+
+/** ROK-2137 — editors: Adopt (use the in-game text) or Push (keep the hub text) on one field. */
+export function useGuildIngameGameAction(guildId: number, field: IngameTextFieldKey) {
+    const client = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ action, seen }: GuildGameActionInput): Promise<GuildIngameText> =>
+            (await import('../api-client')).postGuildIngameGameAction(guildId, field, action, seen),
+        // The response is the full DTO: store it, so the card updates without a refetch flash.
+        onSuccess: (data) => client.setQueryData(guildIngameTextKey(guildId), data),
+    });
 }
 
 /** Editors: save both fields. The 409 body (`ingameText`) is read by the dialog. */

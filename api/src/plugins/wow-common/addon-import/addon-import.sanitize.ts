@@ -1,5 +1,6 @@
 import {
   AddonCharSnapshotDataSchema,
+  type AddonGuildExport,
   type AddonCharData,
   type AddonCharSnapshotData,
   type AddonSnapshotGearItem,
@@ -33,6 +34,25 @@ export function sanitizeStrings<T>(value: T): T {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) out[k] = sanitizeStrings(v);
   return out as T;
+}
+
+/**
+ * ROK-2137 — sanitise a guild export, but keep `data.motd` / `data.infoText`
+ * VERBATIM (LedgerLink v1 CHANGELOG 2026-11-08: colour codes and newlines
+ * kept). They are text the hub stores and copies back in game, not display
+ * strings; ingest strips only the control characters the hub's save rejects.
+ */
+export function sanitizeGuildExport(guild: AddonGuildExport): AddonGuildExport {
+  const sanitized = sanitizeStrings(guild);
+  const { motd, infoText } = guild.data;
+  return {
+    ...sanitized,
+    data: {
+      ...sanitized.data,
+      ...(motd !== undefined ? { motd } : {}),
+      ...(infoText !== undefined ? { infoText } : {}),
+    },
+  };
 }
 
 const INT4_MAX = 2_147_483_647;
