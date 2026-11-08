@@ -206,21 +206,29 @@ disk_retention::_slot_busy() {
 # flock(1) or fail: the reservation is only safe under the real serializer.
 disk_retention::_lock_dir() { echo "${RL_LOCK_DIR:-${LOCK_DIR:-$(disk_retention::_state_dir)/locks}}"; }
 
+# Slot $1's original claims row, kept under the state dir (not $TMPDIR) so it
+# survives a sweeper recreate/OOM/reboot for recover_orphans to restore.
+disk_retention::_save_file() { echo "$(disk_retention::_state_dir)/disk-retention-reserve-$1.json"; }
+
 # Reserve idle slot $1 (exit 0) the way _borrow.sh claims one: queue lock,
 # then claims lock (the STRICT order in _state.sh); refuse when the slot is
-# busy as seen INSIDE the locks; else flip its claims row to claimed by
-# $DISK_RETENTION_AGENT_ID. The original row is saved to $2 for the restore.
+# busy as seen INSIDE the locks; else persist the original row, then flip it
+# to claimed by $DISK_RETENTION_AGENT_ID. Each lock waits at most 30 s
+# (lease::advance can hold the queue lock through an env-destroy): refusing
+# only means this runner is not cleaned this cycle.
 disk_retention::_reserve() {
-    local slot="$1" save="$2" sd claims ld qlock
+    local slot="$1" save sd claims ld qlock
     sd=$(disk_retention::_state_dir); claims="${RL_CLAIMS_FILE:-$sd/claims.json}"; ld=$(disk_retention::_lock_dir)
+    save=$(disk_retention::_save_file "$slot")
     command -v flock >/dev/null 2>&1 || { disk_retention::_log "flock missing — runner rung refuses to reserve"; return 1; }
     mkdir -p "$ld" 2>/dev/null; qlock="$ld/$slot.json.lock"
     (
-        flock -x 201 || exit 1
+        flock -w 30 -x 201 || exit 1
         (
-            flock -x 200 || exit 1
+            flock -w 30 -x 200 || exit 1
             disk_retention::_slot_busy "$slot" && exit 1
-            jq -ce --argjson s "$slot" 'first(.[] | select(.slot == $s and .claimed != true))' "$claims" > "$save" 2>/dev/null || exit 1
+            jq -ce --argjson s "$slot" 'first(.[] | select(.slot == $s and .claimed != true))' "$claims" > "$save.tmp" 2>/dev/null \
+                && mv -f "$save.tmp" "$save" || { rm -f "$save.tmp"; exit 1; }
             local tmp now; tmp=$(mktemp "$claims.XXXXXX") || exit 1; now=$(date -u +%FT%TZ)
             jq --argjson s "$slot" --arg a "$DISK_RETENTION_AGENT_ID" --arg t "$now" \
                 'map(if .slot == $s and .claimed != true
@@ -232,24 +240,64 @@ disk_retention::_reserve() {
     ) 201>"$qlock"
 }
 
-# Restore slot $1's saved row ($2) — only while the row is still ours.
-disk_retention::_unreserve() {
-    local slot="$1" save="$2" sd claims ld adv
+# Restore slot $1's row from its save file — only while the row is still
+# ours (a row someone else holds is never overwritten). No valid save file →
+# reset the row to unclaimed. Never reaps an env and never runs lease-advance
+# (an env-destroying binary that has no /srv/rl-infra paths in the sweeper
+# container): a claimant queued meanwhile picks the slot up on its next queue
+# wake or wait timeout, exactly as after a §1 reaper release (TDB:1101).
+# The save file is removed only after a successful restore.
+disk_retention::_restore() {
+    local slot="$1" save sd claims ld row
     sd=$(disk_retention::_state_dir); claims="${RL_CLAIMS_FILE:-$sd/claims.json}"; ld=$(disk_retention::_lock_dir)
+    save=$(disk_retention::_save_file "$slot"); mkdir -p "$ld" 2>/dev/null
+    row=$(jq -ce --argjson s "$slot" 'select(type == "object" and .slot == $s)' "$save" 2>/dev/null) || row=null
     (
-        flock -x 200 || exit 1
+        flock -w 30 -x 200 || exit 1
         local tmp; tmp=$(mktemp "$claims.XXXXXX") || exit 1
-        jq --argjson s "$slot" --arg a "$DISK_RETENTION_AGENT_ID" --slurpfile row "$save" \
-            'map(if .slot == $s and .agent_id == $a then $row[0] else . end)' "$claims" > "$tmp" \
-            && mv "$tmp" "$claims" || { rm -f "$tmp"; exit 1; }
+        jq --argjson s "$slot" --arg a "$DISK_RETENTION_AGENT_ID" --argjson row "$row" '
+            map(if .slot == $s and .agent_id == $a
+                then ($row // (. + {claimed:false, agent_id:null, branch:null, started_at:null,
+                                    last_heartbeat:null, expires_at:null, keep_alive:false, extends_count:0}))
+                else . end)' "$claims" > "$tmp" && mv "$tmp" "$claims" || { rm -f "$tmp"; exit 1; }
         chmod 664 "$claims" 2>/dev/null || true
-    ) 200>"$ld/$(basename "$claims").lock" || disk_retention::_log "slot $slot reservation restore failed — the stale-claim reaper frees it"
+    ) 200>"$ld/$(basename "$claims").lock" || return 1
     rm -f "$save"
-    # A claim that landed meanwhile was enqueued: hand the slot on like release.
-    adv="${DISK_RETENTION_LEASE_ADVANCE:-$(dirname "${BASH_SOURCE[0]}")/lease-advance}"
-    if [[ -x "$adv" ]] && ! jq -e 'length == 0' "${LEASE_QUEUE_DIR:-$sd/lease-queue}/$slot.json" >/dev/null 2>&1; then
-        RL_STATE_DIR="$sd" "$adv" --slot "$slot" >/dev/null 2>&1 || disk_retention::_log "lease-advance slot $slot failed"
-    fi
+}
+
+# Cycle-start recovery (sweep.sh calls it BEFORE the §1 reapers). The sweeper
+# is single-threaded, so a row still held by $DISK_RETENTION_AGENT_ID now was
+# orphaned — the sweeper was SIGKILLed mid-clean (docker stop, OOM, reboot)
+# or a restore failed. Restore it from its save file (else reset it to
+# unclaimed), never reaping. Echoes each restored slot.
+disk_retention::recover_orphans() {
+    local sd claims slots slot f
+    sd=$(disk_retention::_state_dir); claims="${RL_CLAIMS_FILE:-$sd/claims.json}"
+    slots=$(jq -r --arg a "$DISK_RETENTION_AGENT_ID" '.[]? | select(.agent_id == $a) | .slot' "$claims" 2>/dev/null) || return 0
+    for slot in $slots; do
+        [[ "$slot" =~ ^[0-9]+$ ]] || continue
+        if disk_retention::_restore "$slot"; then
+            disk_retention::_log "slot $slot: orphaned reservation restored"; echo "$slot"
+        else
+            disk_retention::_log "slot $slot: orphaned reservation restore failed — retried next cycle"
+        fi
+    done
+    # A save file with no reservation (killed between the save and the flip).
+    for f in "$sd"/disk-retention-reserve-*.json; do
+        [[ -f "$f" ]] || continue
+        slot="${f##*-reserve-}"; slot="${slot%.json}"
+        [[ " $slots " == *" $slot "* ]] || rm -f "$f"
+    done
+    return 0
+}
+
+# EXIT trap of the runner rung (it runs in the _rung command-substitution
+# subshell): restore a reservation a TERM/INT/error left behind. SIGKILL
+# skips it — recover_orphans covers that on the next cycle.
+disk_retention::_on_exit() {
+    [[ -n "${DISK_RETENTION_RESERVED:-}" ]] || return 0
+    disk_retention::_restore "$DISK_RETENTION_RESERVED" || disk_retention::_log "slot $DISK_RETENTION_RESERVED reservation restore failed — next sweep recovers it"
+    DISK_RETENTION_RESERVED=""
 }
 
 # Echoes "<KB before> <KB after>" from inside the runner. Args: tmp root
@@ -266,7 +314,11 @@ NPMC=\$(npm config get cache 2>/dev/null || echo /root/.npm)
 du_kb() { du -sk "\$R" "\$NPMC" 2>/dev/null | awk '{s+=\$1} END {print s+0}'; }
 b=\$(du_kb)
 INUSE=\$(for l in "\$P"/[0-9]*/fd/* "\$P"/[0-9]*/cwd; do readlink "\$l" 2>/dev/null; done | sort -u)
-keep() { [ -n "\$INUSE" ] && printf '%s\n' "\$INUSE" | grep -qxF -- "\$1"; }
+CWDS=\$(for l in "\$P"/[0-9]*/cwd; do readlink "\$l" 2>/dev/null; done | sort -u)
+keep() {
+  [ -n "\$INUSE" ] && printf '%s\n' "\$INUSE" | grep -qxF -- "\$1" && return 0
+  [ -n "\$CWDS" ] && printf '%s\n' "\$CWDS" | awk -v f="\$1" -v r="\$R" 'index(\$0, r "/") == 1 && index(f, \$0 "/") == 1 { k = 1 } END { exit !k }'
+}
 skip='( -name tmux-* -o -name *.sock -o -name *.lock -o -name *.pid -o -name runner-heartbeat -o -type s -o -type p -o -type c -o -type b )'
 set -f
 find "\$R" -xdev -mindepth 1 \$skip -prune -o -type f -mmin +\$M -print | while IFS= read -r f; do keep "\$f" || rm -f -- "\$f"; done
@@ -279,7 +331,9 @@ SCRIPT
 
 # Rung 3 — idle-runner caches. Echoes {idle, busy, cleaned, bytes}.
 disk_retention::_runner_rung() {
-    local names n slot idle=() busy=() cleaned=() bytes=0 out b a save
+    local names n slot idle=() busy=() cleaned=() bytes=0 out b a
+    DISK_RETENTION_RESERVED=""
+    trap 'disk_retention::_on_exit' EXIT; trap 'exit 143' TERM INT HUP
     names=$(disk_retention::_docker ps --filter label=rl.role=runner --format '{{.Names}}' 2>/dev/null) || return 1
     for n in $names; do
         [[ "$n" =~ ^rl-runner-([0-9]+)$ ]] || continue
@@ -287,19 +341,20 @@ disk_retention::_runner_rung() {
         if disk_retention::_slot_busy "$slot"; then busy+=("$slot"); continue; fi
         idle+=("$slot")
         [[ "$RL_DISK_RETENTION_DRY_RUN" == "1" ]] && continue
-        save=$(mktemp "${TMPDIR:-/tmp}/rl-retention-row.XXXXXX") || continue
         # Reserve under the claims flock (re-checked inside): a claim landing
         # mid-clean now finds the slot taken instead of racing the find.
-        if ! disk_retention::_reserve "$slot" "$save"; then
-            rm -f "$save"; disk_retention::_log "runner $n became busy — not cleaned"; continue
+        if ! disk_retention::_reserve "$slot"; then
+            rm -f "$(disk_retention::_save_file "$slot")"; disk_retention::_log "runner $n became busy — not cleaned"; continue
         fi
+        DISK_RETENTION_RESERVED="$slot"
         out=$(disk_retention::_docker exec "$n" sh -c "$(disk_retention::_runner_script)" 2>/dev/null) || out=""
-        disk_retention::_unreserve "$slot" "$save"
+        disk_retention::_on_exit
         [[ -n "$out" ]] || { disk_retention::_log "runner $n clean failed"; continue; }
         cleaned+=("$slot")
         read -r b a <<<"$out"
         [[ "${b:-}" =~ ^[0-9]+$ && "${a:-}" =~ ^[0-9]+$ ]] && (( b > a )) && bytes=$(( bytes + (b - a) * 1024 ))
     done
+    trap - EXIT TERM INT HUP
     jq -nc --arg i "${idle[*]:-}" --arg b "${busy[*]:-}" --arg c "${cleaned[*]:-}" --argjson by "$bytes" '
         def nums: split(" ") | map(select(length > 0) | tonumber) | sort;
         {idle:($i|nums), busy:($b|nums), cleaned:($c|nums), bytes:$by}'

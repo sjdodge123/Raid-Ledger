@@ -34,6 +34,15 @@
 #   R-n  the runner slot is reserved in claims.json for the clean, then the
 #        original row restored; a queued claimant keeps it busy (MAJOR)
 #   R-o  the image rung is skipped while any task (light included) runs
+#   review r2:
+#   R-p  the restore never runs lease-advance (MAJOR-1); exec failure still
+#        restores; a row taken over meanwhile is not overwritten; the
+#        in-lock re-check refuses (MINOR-2)
+#   R-q  recover_orphans restores a leftover reservation from its save file
+#        (else resets it) and drops stray save files (MAJOR-2)
+#   R-r  sweep.sh restores an orphaned reservation before §1 — the unstamped
+#        env on that slot is kept (MAJOR-2)
+#   R-s  §1/§1b' never reap a row held by gc-sweeper:disk-retention (MAJOR-2)
 
 set -uo pipefail
 
@@ -66,17 +75,23 @@ case "$*" in
     "container inspect"*) cat "$DOCKER_FIX/containers.json" ;;
     "image ls"*) cat "$DOCKER_FIX/image_ids" ;;
     "image inspect"*) cat "$DOCKER_FIX/images.json" ;;
-    "exec "*) cp "$STATE_DIR/claims.json" "$DOCKER_FIX/claims_at_exec"; echo "1000 200" ;;
+    "ps "*"rl.slot="*) echo "keepslug keepcid001" ;;
+    "exec "*) cp "$STATE_DIR/claims.json" "$DOCKER_FIX/claims_at_exec"
+        [[ -n "${DOCKER_EXEC_HOOK:-}" ]] && sh -c "$DOCKER_EXEC_HOOK"
+        [[ -n "${DOCKER_EXEC_FAIL:-}" ]] && exit 1
+        echo "1000 200" ;;
     *) echo ok ;;
 esac
 STUB
     chmod +x "$BIN/docker"
-    printf '#!/bin/sh\nexit 0\n' > "$BIN/flock"; chmod +x "$BIN/flock"   # macOS has no flock(1)
+    # macOS has no flock(1); FLOCK_HOOK plays a claim landing inside the lock.
+    printf '#!/bin/sh\n[ -n "$FLOCK_HOOK" ] && sh -c "$FLOCK_HOOK"\nexit 0\n' > "$BIN/flock"; chmod +x "$BIN/flock"
     export PATH="$BIN:$PATH"
     export STATE_DIR="$TMP_STATE" TASKS_DIR="$TMP_STATE/tasks"
     export RL_DISK_RETENTION_DRY_RUN=0 RL_DISK_RETENTION_INTERVAL_HOURS=0
-    export DISK_RETENTION_LEASE_ADVANCE="$TMP_STATE/no-lease-advance"
-    unset RL_DISK_RETENTION_STATE_FILE RL_ADMISSION_FILE RL_ENVS_FILE RL_CLAIMS_FILE DOCKER_FAIL DOCKER_RM_FAIL RL_LOCK_DIR LOCK_DIR LEASE_QUEUE_DIR
+    unset RL_DISK_RETENTION_STATE_FILE RL_ADMISSION_FILE RL_ENVS_FILE RL_CLAIMS_FILE DOCKER_FAIL DOCKER_RM_FAIL RL_LOCK_DIR LOCK_DIR LEASE_QUEUE_DIR \
+        DOCKER_EXEC_HOOK DOCKER_EXEC_FAIL FLOCK_HOOK
+    rm -rf "$TMP_STATE/lease-queue" "$TMP_STATE"/disk-retention-reserve-*.json "$TMP_STATE/audit.log" "$FIX/claims_at_exec"
     echo '[]' > "$TMP_STATE/claims.json"
     echo '[]' > "$TMP_STATE/env-registry.json"
     echo '{"heavy_running":[]}' > "$TMP_STATE/admission.json"
@@ -200,9 +215,9 @@ test_interval_gate() {
 test_sweep_wiring() {
     local l3 lr l3b
     l3=$(grep -n '^# 3\. Scoped prune' "$SWEEP_SCRIPT" | cut -d: -f1)
-    lr=$(grep -n '_disk_retention\.sh' "$SWEEP_SCRIPT" | head -1 | cut -d: -f1)
+    lr=$(grep -n 'disk_retention::sweep 2>' "$SWEEP_SCRIPT" | head -1 | cut -d: -f1)
     l3b=$(grep -n '^# 3b\. ROK-1568' "$SWEEP_SCRIPT" | cut -d: -f1)
-    assert_neq "${lr:-}" "" "R-g sweep.sh references _disk_retention.sh"
+    assert_neq "${lr:-}" "" "R-g sweep.sh calls disk_retention::sweep"
     assert_eq "$(( ${lr:-0} > ${l3:-0} && ${lr:-0} < ${l3b:-0} ))" "1" "R-g retention runs after step 3 and before 3b"
     assert_contains "$(cat "$SWEEP_SCRIPT")" 'disk_retention::sweep' "R-g sweep.sh calls disk_retention::sweep"
 }
@@ -223,7 +238,8 @@ test_runner_script_keeps_live_paths() {
     for f in old.log tmux-0/default runner-heartbeat busy.log app.lock cachedir/blob; do echo x > "$R/$f"; done
     python3 -c "import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])" "$R/live.sock2" 2>/dev/null
     echo y > "$R/young.log"
-    ln -s "$R/busy.log" "$P/42/fd/3"; ln -s "$R/workdir" "$P/42/cwd"
+    mkdir -p "$P/43"; echo x > "$R/workdir/inner.log"
+    ln -s "$R/busy.log" "$P/42/fd/3"; ln -s "$R/workdir" "$P/42/cwd"; ln -s "$R" "$P/43/cwd"
     find "$R" -mindepth 1 ! -name young.log -exec touch -h -t 202601010000 {} +
     out=$(RL_DISK_RETENTION_TMP_AGE_MINUTES=60 sh -c "$(disk_retention::_runner_script "$R" "$P")" 2>&1)
     assert_file_not_exists "$R/old.log" "R-i an old regular file is deleted"
@@ -234,6 +250,7 @@ test_runner_script_keeps_live_paths() {
     assert_file_exists "$R/app.lock" "R-i a *.lock file is kept"
     assert_file_exists "$R/young.log" "R-i a young file is kept"
     assert_eq "$([[ -d "$R/workdir" ]] && echo kept)" "kept" "R-i a process's cwd is kept even when empty"
+    assert_file_exists "$R/workdir/inner.log" "R-i an old file inside a process's cwd is kept (review r2 MINOR-3)"
     if [[ -S "$R/live.sock2" ]]; then
         assert_eq "$([[ -S "$R/live.sock2" ]] && echo kept)" "kept" "R-i a unix socket is never deleted"
     fi
@@ -334,6 +351,86 @@ test_image_rung_build_guard() {
     assert_eq "$(jq -c '[.images.skipped, .images.blocked_by]' <<<"$RESULT")" '["build_running",["t-light"]]' "R-o skip reason recorded"
 }
 
+_iso_ago() { date -u -d "now - $1 seconds" +%FT%TZ 2>/dev/null || date -u -v-"$1"S +%FT%TZ; }
+_slot2() { jq -c '.[] | select(.slot == 2)' "$TMP_STATE/claims.json"; }
+_reserved_row() { # heartbeat/start 9h old: §1 and §1b' would both fire on a normal row
+    jq -nc --arg t "$(_iso_ago 32400)" '{slot:2, claimed:true, agent_id:"gc-sweeper:disk-retention", branch:"rok-1-keep",
+        started_at:$t, last_heartbeat:$t, expires_at:null, keep_alive:false, extends_count:0}'
+}
+
+# R-p (review r2 MAJOR-1 + MINOR-2): restore paths of the reservation.
+test_reservation_restore_paths() {
+    local row='{"slot":2,"claimed":false,"branch":"rok-1-keep","agent_id":null}' copy
+    _setup; echo rl-runner-2 > "$FIX/runners"; echo "[$row]" > "$TMP_STATE/claims.json"
+    copy="$TMP_STATE/libcopy"; mkdir -p "$copy"; cp "$LIB" "$copy/"
+    printf '#!/bin/sh\necho called >> %q\n' "$TMP_STATE/lease-advance.log" > "$copy/lease-advance"; chmod +x "$copy/lease-advance"
+    mkdir -p "$TMP_STATE/lease-queue"
+    export DOCKER_EXEC_HOOK="echo '[{\"agent_id\":\"a1\"}]' > '$TMP_STATE/lease-queue/2.json'"
+    LIB="$copy/_disk_retention.sh" _run
+    assert_file_not_exists "$TMP_STATE/lease-advance.log" "R-p lease-advance is never run, even with a claimant queued mid-clean"
+    assert_eq "$(_slot2)" "$(jq -c . <<<"$row")" "R-p the original row is restored with a claimant queued"
+    assert_file_not_exists "$TMP_STATE/disk-retention-reserve-2.json" "R-p the save file is dropped after the restore"
+    _setup; echo rl-runner-2 > "$FIX/runners"; echo "[$row]" > "$TMP_STATE/claims.json"
+    export DOCKER_EXEC_FAIL=1; _run
+    assert_eq "$(grep -c 'docker exec' <<<"$DLOG")" "1" "R-p (exec-failure case) the runner was exec'd"
+    assert_eq "$(_slot2)" "$(jq -c . <<<"$row")" "R-p a failed exec still restores the row"
+    assert_eq "$(jq -c '.runners.cleaned' <<<"$RESULT")" '[]' "R-p a failed exec is not reported cleaned"
+    _setup; echo rl-runner-2 > "$FIX/runners"; echo "[$row]" > "$TMP_STATE/claims.json"
+    export DOCKER_EXEC_HOOK="jq -c 'map(.agent_id = \"other\")' '$TMP_STATE/claims.json' > '$TMP_STATE/c.tmp' && mv '$TMP_STATE/c.tmp' '$TMP_STATE/claims.json'"
+    _run
+    assert_eq "$(grep -c 'docker exec' <<<"$DLOG")" "1" "R-p (takeover case) the runner was exec'd"
+    assert_eq "$(_slot2 | jq -r .agent_id)" "other" "R-p a row taken over meanwhile is not overwritten"
+    _setup; echo rl-runner-2 > "$FIX/runners"; echo "[$row]" > "$TMP_STATE/claims.json"; mkdir -p "$TMP_STATE/lease-queue"
+    export FLOCK_HOOK="echo '[{\"agent_id\":\"a1\"}]' > '$TMP_STATE/lease-queue/2.json'"
+    _run; unset FLOCK_HOOK
+    assert_eq "$(grep -c 'docker exec' <<<"$DLOG")" "0" "R-p busy as seen inside the lock -> refused, not exec'd"
+    assert_eq "$(_slot2)" "$(jq -c . <<<"$row")" "R-p a refused reservation leaves the row untouched"
+    assert_file_not_exists "$TMP_STATE/disk-retention-reserve-2.json" "R-p a refused reservation leaves no save file"
+}
+
+# R-q (review r2 MAJOR-2): cycle-start recovery in the lib.
+test_recover_orphans() {
+    local orig='{"slot":2,"claimed":false,"branch":"rok-1-keep","agent_id":null}' out
+    _setup; source "$LIB"
+    jq -n --argjson r "$(_reserved_row)" '[{slot:1, claimed:true, agent_id:"owner"}, $r, ($r | .slot = 3)]' > "$TMP_STATE/claims.json"
+    echo "$orig" > "$TMP_STATE/disk-retention-reserve-2.json"
+    echo '{"slot":4,"claimed":false}' > "$TMP_STATE/disk-retention-reserve-4.json"
+    out=$(disk_retention::recover_orphans 2>/dev/null)
+    assert_eq "$(tr '\n' ' ' <<<"$out")" "2 3 " "R-q both orphaned reservations restored"
+    assert_eq "$(_slot2)" "$(jq -c . <<<"$orig")" "R-q slot 2 restored from its save file (branch kept)"
+    assert_eq "$(jq -c '.[] | select(.slot == 3) | [.claimed, .agent_id, .branch]' "$TMP_STATE/claims.json")" '[false,null,null]' \
+        "R-q slot 3 (no save file) reset to unclaimed"
+    assert_eq "$(jq -c '.[] | select(.slot == 1) | .agent_id' "$TMP_STATE/claims.json")" '"owner"' "R-q other rows untouched"
+    assert_file_not_exists "$TMP_STATE/disk-retention-reserve-2.json" "R-q the used save file is removed"
+    assert_file_not_exists "$TMP_STATE/disk-retention-reserve-4.json" "R-q a stray save file with no reservation is removed"
+}
+
+_sweep_sh() {
+    echo '[]' > "$TMP_STATE/queue.json"
+    PATH="$BIN:$PATH" STATE_DIR="$TMP_STATE" RL_STATE_DIR="$TMP_STATE" TASKS_DIR="$TMP_STATE/tasks" \
+        CLAIM_HEARTBEAT_TIMEOUT_SECONDS=120 RL_DISK_RETENTION_DRY_RUN=1 DISK_RETENTION_LIB="$1" \
+        bash "$SWEEP_SCRIPT" >"$TMP_STATE/sweep.out" 2>&1 || true
+    DLOG=$(cat "$DOCKER_LOG")
+}
+
+# R-r (review r2 MAJOR-2): the next sweep restores the orphan before §1.
+test_sweep_restores_orphan_before_reapers() {
+    local orig='{"slot":2,"claimed":false,"branch":"rok-1-keep","agent_id":null}'
+    _setup; echo "[$(_reserved_row)]" > "$TMP_STATE/claims.json"; echo "$orig" > "$TMP_STATE/disk-retention-reserve-2.json"
+    _sweep_sh "$LIB"
+    assert_eq "$(_slot2)" "$(jq -c . <<<"$orig")" "R-r the orphaned reservation is restored, not reaped"
+    assert_eq "$(grep -E '^docker (rm|volume|container rm)' <<<"$DLOG" | grep -c keep)" "0" "R-r the slot's unstamped env is not destroyed"
+    assert_contains "$(cat "$TMP_STATE/audit.log" 2>/dev/null)" "disk_retention_reservation_restored" "R-r restore audited"
+}
+
+# R-s (review r2 MAJOR-2 belt and braces): reapers skip the sweeper's agent id.
+test_reapers_skip_sweeper_agent() {
+    _setup; echo "[$(_reserved_row)]" > "$TMP_STATE/claims.json"
+    _sweep_sh "$TMP_STATE/no-such-lib.sh"
+    assert_eq "$(_slot2 | jq -c '[.claimed, .agent_id]')" '[true,"gc-sweeper:disk-retention"]' "R-s §1/§1b' leave the sweeper's row alone"
+    assert_eq "$(grep -E '^docker (rm|volume|container rm)' <<<"$DLOG" | grep -c keep)" "0" "R-s no env reaped for the sweeper's row"
+}
+
 run_test "R-a container rung" test_container_rung
 run_test "R-b image rung" test_image_rung
 run_test "R-c idle-runner rung" test_idle_runner_rung
@@ -349,4 +446,8 @@ run_test "R-l digest + base images protected" test_digest_and_base_images_protec
 run_test "R-m failed removals not counted" test_failed_removals_not_counted
 run_test "R-n runner slot reserved" test_runner_slot_reserved_then_restored
 run_test "R-o image rung build guard" test_image_rung_build_guard
+run_test "R-p reservation restore paths" test_reservation_restore_paths
+run_test "R-q recover orphaned reservations" test_recover_orphans
+run_test "R-r sweep restores orphan before reapers" test_sweep_restores_orphan_before_reapers
+run_test "R-s reapers skip the sweeper agent" test_reapers_skip_sweeper_agent
 print_test_summary
