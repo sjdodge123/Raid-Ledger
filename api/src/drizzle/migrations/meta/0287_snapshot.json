@@ -1,5 +1,5 @@
 {
-  "id": "d0c3f0a0-1d94-4089-bebb-23ed150b1b56",
+  "id": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "prevId": "80e635fe-08dc-4e4a-8c9b-a40a88b5c204",
   "version": "7",
   "dialect": "postgresql",
@@ -12144,6 +12144,12 @@
         },
         "level": {
           "name": "level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roster_level": {
+          "name": "roster_level",
           "type": "integer",
           "primaryKey": false,
           "notNull": false

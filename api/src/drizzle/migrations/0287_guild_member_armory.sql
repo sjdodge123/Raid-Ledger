@@ -2,6 +2,7 @@ CREATE TABLE "guild_member_armory" (
 	"guild_member_id" integer PRIMARY KEY NOT NULL,
 	"blizzard_character_id" bigint,
 	"level" integer,
+	"roster_level" integer,
 	"class" varchar(50),
 	"race" varchar(50),
 	"spec" varchar(50),

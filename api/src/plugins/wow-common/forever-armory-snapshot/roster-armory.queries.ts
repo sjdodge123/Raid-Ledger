@@ -29,6 +29,8 @@ export interface DueRosterMember {
   blizzardCharacterId: number;
   characterName: string;
   region: string;
+  /** `guild_members.level` now (≥ 10 by the due filter). */
+  rosterLevel: number;
 }
 
 /** Due-query scope: the Forever game, the cap, optionally one guild. */
@@ -43,15 +45,16 @@ const gm = schema.guildMembers;
 const arm = schema.guildMemberArmory;
 
 /**
- * Not synced, synced more than 24 h ago, or the roster level moved since —
- * and not backing off. A member with no snapshot row is due.
+ * Not synced, synced more than 24 h ago, or the roster level moved since the
+ * last sync (vs the stored `roster_level`, never Blizzard's `level`) — and
+ * not backing off. A member with no snapshot row is due.
  */
 function isDue(now: Date): SQL | undefined {
   const staleBefore = new Date(now.getTime() - RESYNC_AFTER_MS);
   const stale = or(
     sql`${arm.syncedAt} IS NULL`,
     lt(arm.syncedAt, staleBefore),
-    sql`${arm.level} IS DISTINCT FROM ${gm.level}`,
+    sql`${arm.rosterLevel} IS DISTINCT FROM ${gm.level}`,
   );
   const notBackingOff = or(
     sql`${arm.retryAt} IS NULL`,
@@ -88,6 +91,7 @@ export async function listDueRosterMembers(
       blizzardCharacterId: gm.blizzardCharacterId,
       characterName: gm.characterName,
       region: schema.guilds.region,
+      rosterLevel: gm.level,
     })
     .from(gm)
     .innerJoin(schema.guilds, eq(schema.guilds.id, gm.guildId))
@@ -95,9 +99,9 @@ export async function listDueRosterMembers(
     .where(dueWhere(q))
     .orderBy(sql`${arm.syncedAt} ASC NULLS FIRST`, asc(gm.id))
     .limit(q.limit);
-  return rows.flatMap((r) =>
-    r.blizzardCharacterId === null
+  return rows.flatMap(({ blizzardCharacterId, rosterLevel, ...r }) =>
+    blizzardCharacterId === null || rosterLevel === null
       ? []
-      : [{ ...r, blizzardCharacterId: r.blizzardCharacterId }],
+      : [{ ...r, blizzardCharacterId, rosterLevel }],
   );
 }

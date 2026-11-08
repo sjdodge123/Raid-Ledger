@@ -29,6 +29,13 @@ export const guildMemberArmory = pgTable(
     /** Blizzard id the last stored snapshot was verified against. */
     blizzardCharacterId: bigint('blizzard_character_id', { mode: 'number' }),
     level: integer('level'),
+    /**
+     * The ROSTER level (`guild_members.level`) seen at the last successful
+     * sync. The due rule compares the roster against this, never against
+     * Blizzard's `level`, so an Armory that lags the roster (it updates on
+     * logout) cannot re-queue the member every hour.
+     */
+    rosterLevel: integer('roster_level'),
     class: varchar('class', { length: 50 }),
     race: varchar('race', { length: 50 }),
     spec: varchar('spec', { length: 50 }),

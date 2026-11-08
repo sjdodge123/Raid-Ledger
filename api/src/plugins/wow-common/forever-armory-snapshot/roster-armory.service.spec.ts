@@ -20,7 +20,11 @@ import {
   MAX_MEMBERS_PER_RUN,
   type MemberArmorySnapshot,
 } from './snapshot.helpers';
-import { RosterArmoryService } from './roster-armory.service';
+import {
+  ROSTER_ARMORY_WAIT,
+  RosterArmoryService,
+} from './roster-armory.service';
+import { AUTOLINK_SPACING_MS } from '../forever-auto-link/forever-auto-link.helpers';
 
 jest.mock('../forever-auto-link/forever-auto-link.apply', () => ({
   findForeverGameId: jest.fn(),
@@ -45,6 +49,7 @@ const gameIdOf = jest.mocked(findForeverGameId);
 let service: RosterArmoryService;
 let settings: { get: jest.Mock; isBlizzardConfigured: jest.Mock };
 let cache: { invalidateGuild: jest.Mock };
+let wait: jest.Mock;
 
 function member(id: number, blizzId: number, guildId = 1): DueRosterMember {
   return {
@@ -53,6 +58,7 @@ function member(id: number, blizzId: number, guildId = 1): DueRosterMember {
     blizzardCharacterId: blizzId,
     characterName: `Char${id}-Realm`,
     region: 'us',
+    rosterLevel: 40,
   };
 }
 
@@ -95,6 +101,7 @@ beforeEach(async () => {
     isBlizzardConfigured: jest.fn().mockResolvedValue(true),
   };
   cache = { invalidateGuild: jest.fn() };
+  wait = jest.fn().mockResolvedValue(undefined);
   const mod = await Test.createTestingModule({
     providers: [
       RosterArmoryService,
@@ -102,6 +109,7 @@ beforeEach(async () => {
       { provide: SettingsService, useValue: settings },
       { provide: BlizzardCharacterSyncAdapter, useValue: {} },
       { provide: RosterInsightsCache, useValue: cache },
+      { provide: ROSTER_ARMORY_WAIT, useValue: wait },
     ],
   }).compile();
   service = mod.get(RosterArmoryService);
@@ -165,8 +173,7 @@ describe('RosterArmoryService.runDue — the pass (AC-1, AC-7)', () => {
     );
     expect(writeSnap).toHaveBeenCalledWith(
       {},
-      1,
-      101,
+      { memberId: 1, blizzardId: 101, rosterLevel: 40 },
       snap(101),
       expect.any(Date),
     );
@@ -179,8 +186,44 @@ describe('RosterArmoryService.runDue — the pass (AC-1, AC-7)', () => {
     fetchEchoesRosterId(rows);
     await service.runDue();
     expect(fetchSnap).toHaveBeenCalledTimes(1);
-    expect(writeSnap.mock.calls.map((c) => c[1])).toEqual([1, 2]);
+    expect(writeSnap.mock.calls.map((c) => c[1].memberId)).toEqual([1, 2]);
     expect(cache.invalidateGuild.mock.calls.map((c) => c[0])).toEqual([7, 8]);
+  });
+});
+
+describe('RosterArmoryService.runDue — spacing (ruled Q6)', () => {
+  it('waits 500 ms between member fetches, never before the first or after the last', async () => {
+    const rows = [member(1, 101), member(2, 102), member(3, 103)];
+    listDue.mockResolvedValue(rows);
+    const events: string[] = [];
+    fetchSnap.mockImplementation((_db, _adapter, target) => {
+      events.push(`fetch:${target.name}`);
+      const row = rows.find((r) => r.characterName === target.name);
+      return Promise.resolve({
+        ok: true,
+        snapshot: snap(row?.blizzardCharacterId ?? null),
+      });
+    });
+    wait.mockImplementation((ms: number) => {
+      events.push(`wait:${ms}`);
+      return Promise.resolve();
+    });
+    await service.runDue();
+    expect(events).toEqual([
+      'fetch:Char1-Realm',
+      `wait:${AUTOLINK_SPACING_MS}`,
+      'fetch:Char2-Realm',
+      `wait:${AUTOLINK_SPACING_MS}`,
+      'fetch:Char3-Realm',
+    ]);
+  });
+
+  it('members sharing a Blizzard id cost one fetch and no pause', async () => {
+    const rows = [member(1, 101, 7), member(2, 101, 8)];
+    listDue.mockResolvedValue(rows);
+    fetchEchoesRosterId(rows);
+    await service.runDue();
+    expect(wait).not.toHaveBeenCalled();
   });
 });
 
@@ -212,7 +255,7 @@ describe('RosterArmoryService.runDue — failures (AC-3..5)', () => {
       'not_found',
       expect.any(Date),
     );
-    expect(writeSnap.mock.calls.map((c) => c[1])).toEqual([2]);
+    expect(writeSnap.mock.calls.map((c) => c[1].memberId)).toEqual([2]);
   });
 
   it('an upstream error backs that member off and stops the run', async () => {
@@ -226,7 +269,7 @@ describe('RosterArmoryService.runDue — failures (AC-3..5)', () => {
     expect(recordFail.mock.calls.map((c) => [c[1], c[2]])).toEqual([
       [2, 'upstream'],
     ]);
-    expect(writeSnap.mock.calls.map((c) => c[1])).toEqual([1]);
+    expect(writeSnap.mock.calls.map((c) => c[1].memberId)).toEqual([1]);
   });
 
   it('skips an overlapping run (own re-entry guard)', async () => {

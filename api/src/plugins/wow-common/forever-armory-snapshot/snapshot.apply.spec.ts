@@ -39,6 +39,9 @@ const SNAPSHOT: MemberArmorySnapshot = {
   syncedAt: SYNCED,
 };
 
+/** The roster says 41 while Blizzard's profile still says 42/older. */
+const TARGET = { memberId: 9, blizzardId: 12345, rosterLevel: 41 };
+
 const dialect = new PgDialect();
 const render = (q: unknown): string => dialect.sqlToQuery(q as SQL).sql;
 
@@ -56,12 +59,13 @@ function firstArg(fn: jest.Mock): unknown {
 describe('writeMemberSnapshot', () => {
   it('upserts the verified snapshot and clears the failure state', async () => {
     const { mock, db } = setup();
-    await writeMemberSnapshot(db, 9, 12345, SNAPSHOT, NOW);
+    await writeMemberSnapshot(db, TARGET, SNAPSHOT, NOW);
     expect(mock.insert).toHaveBeenCalledWith(schema.guildMemberArmory);
     const reset = { failures: 0, retryAt: null, lastError: null };
     const data = {
       ...SNAPSHOT,
       blizzardCharacterId: 12345,
+      rosterLevel: 41,
       lastAttemptAt: NOW,
     };
     expect(mock.values).toHaveBeenCalledWith({
@@ -77,8 +81,7 @@ describe('writeMemberSnapshot', () => {
     const { mock, db } = setup();
     await writeMemberSnapshot(
       db,
-      9,
-      12345,
+      TARGET,
       { ...SNAPSHOT, syncedAt: null },
       NOW,
     );

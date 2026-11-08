@@ -4,7 +4,7 @@
  * one snapshot per member. `runDue` is the hourly job; `runForGuild` the
  * pass a manual roster "Sync now" fires for one guild.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type * as schema from '../../../drizzle/schema';
@@ -12,6 +12,7 @@ import { SettingsService } from '../../../settings/settings.service';
 import { BlizzardCharacterSyncAdapter } from '../blizzard-character-sync.adapter';
 import { isForeverArmoryImportEnabled } from '../forever-armory-switch';
 import { findForeverGameId } from '../forever-auto-link/forever-auto-link.apply';
+import { AUTOLINK_SPACING_MS } from '../forever-auto-link/forever-auto-link.helpers';
 import { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
 import {
   listDueRosterMembers,
@@ -30,6 +31,13 @@ import {
 } from './snapshot.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type WaitFn = (ms: number) => Promise<void>;
+
+/** Injection token for the pause between member fetches (tests stub it). */
+export const ROSTER_ARMORY_WAIT = Symbol('ROSTER_ARMORY_WAIT');
+
+const defaultWait: WaitFn = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /** One pass's outcome counts per Blizzard id fetched (absent key = 0). */
 export type RosterArmoryTally = Partial<
@@ -43,13 +51,17 @@ type IdGroup = [DueRosterMember, ...DueRosterMember[]];
 export class RosterArmoryService {
   private readonly logger = new Logger(RosterArmoryService.name);
   private running = false;
+  private readonly wait: WaitFn;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly settings: SettingsService,
     private readonly adapter: BlizzardCharacterSyncAdapter,
     private readonly insightsCache: RosterInsightsCache,
-  ) {}
+    @Optional() @Inject(ROSTER_ARMORY_WAIT) wait?: WaitFn,
+  ) {
+    this.wait = wait ?? defaultWait;
+  }
 
   /**
    * Hourly job: ≤ {@link MAX_MEMBERS_PER_RUN} due members of every claimable
@@ -102,7 +114,11 @@ export class RosterArmoryService {
     return tally;
   }
 
-  /** Sequential; an upstream error ends the run. Touched guilds re-read. */
+  /**
+   * Sequential, one Blizzard fetch per group spaced {@link AUTOLINK_SPACING_MS}
+   * (no pause before the first or after the last); an upstream error ends the
+   * run. Touched guilds re-read.
+   */
   private async processAll(
     groups: IdGroup[],
     gameId: number,
@@ -110,7 +126,8 @@ export class RosterArmoryService {
   ): Promise<RosterArmoryTally> {
     const tally: RosterArmoryTally = {};
     const touched = new Set<number>();
-    for (const group of groups) {
+    for (const [i, group] of groups.entries()) {
+      if (i > 0) await this.wait(AUTOLINK_SPACING_MS);
       const outcome = await this.processGroup(group, gameId, now);
       tally[outcome] = (tally[outcome] ?? 0) + 1;
       if (outcome === 'written') group.forEach((m) => touched.add(m.guildId));
@@ -131,8 +148,12 @@ export class RosterArmoryService {
       if (!res.ok)
         await recordMemberFailure(this.db, m.memberId, res.kind, now);
       else {
-        const id = m.blizzardCharacterId;
-        await writeMemberSnapshot(this.db, m.memberId, id, res.snapshot, now);
+        const target = {
+          memberId: m.memberId,
+          blizzardId: m.blizzardCharacterId,
+          rosterLevel: m.rosterLevel,
+        };
+        await writeMemberSnapshot(this.db, target, res.snapshot, now);
       }
     }
     return res.ok ? 'written' : res.kind;

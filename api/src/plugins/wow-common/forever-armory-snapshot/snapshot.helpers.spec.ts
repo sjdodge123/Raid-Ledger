@@ -24,7 +24,7 @@ function ago(ms: number): Date {
 }
 
 function state(over: Partial<MemberDueState> = {}): MemberDueState {
-  return { level: 40, syncedAt: ago(HOUR), retryAt: null, ...over };
+  return { rosterLevel: 40, syncedAt: ago(HOUR), retryAt: null, ...over };
 }
 
 describe('constants', () => {
@@ -43,7 +43,7 @@ describe('isMemberDue', () => {
   });
 
   it('is due when a snapshot row exists but never succeeded', () => {
-    const snapshot = state({ syncedAt: null, level: null });
+    const snapshot = state({ syncedAt: null, rosterLevel: null });
     expect(isMemberDue({ snapshot, rosterLevel: 40, now: NOW })).toBe(true);
   });
 
@@ -57,9 +57,22 @@ describe('isMemberDue', () => {
     expect(isMemberDue({ snapshot, rosterLevel: 40, now: NOW })).toBe(true);
   });
 
-  it('is due when the roster level differs from the snapshot (a ding)', () => {
-    const snapshot = state({ level: 40 });
+  it('is due when the roster level moved since the last sync (a real ding)', () => {
+    const snapshot = state({ rosterLevel: 40 });
     expect(isMemberDue({ snapshot, rosterLevel: 41, now: NOW })).toBe(true);
+  });
+
+  it('is NOT due after a sync when only Blizzard lags the roster level', () => {
+    // Synced an hour ago while the roster said 40; Blizzard's profile said
+    // 39 (Armory updates on logout). Only the roster level seen at that sync
+    // counts, so the lag never re-queues the member before the 24 h refresh.
+    const snapshot = { ...state({ rosterLevel: 40 }), level: 39 };
+    expect(isMemberDue({ snapshot, rosterLevel: 40, now: NOW })).toBe(false);
+  });
+
+  it('is due when the snapshot predates roster-level tracking (null)', () => {
+    const snapshot = state({ rosterLevel: null });
+    expect(isMemberDue({ snapshot, rosterLevel: 40, now: NOW })).toBe(true);
   });
 
   it('is never due below level 10 or with an unknown roster level', () => {

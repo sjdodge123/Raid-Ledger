@@ -17,21 +17,32 @@ import {
 
 type Db = PostgresJsDatabase<typeof schema>;
 
+/** Which member a verified snapshot is written to, and its roster state. */
+export interface MemberSnapshotTarget {
+  memberId: number;
+  /** The roster's Blizzard id the fetched profile was verified against. */
+  blizzardId: number;
+  /** The roster level now — stored as `roster_level` for the due rule. */
+  rosterLevel: number;
+}
+
 /**
  * Store a snapshot whose fetched id was verified against the roster's
- * `blizzardId`, and reset the member's failures / backoff.
+ * `blizzardId`, record the roster level seen at this sync, and reset the
+ * member's failures / backoff.
  */
 export async function writeMemberSnapshot(
   db: Db,
-  memberId: number,
-  blizzardId: number,
+  target: MemberSnapshotTarget,
   snapshot: MemberArmorySnapshot,
   now: Date,
 ): Promise<void> {
   const t = schema.guildMemberArmory;
+  const { memberId, blizzardId, rosterLevel } = target;
   const set = {
     ...snapshot,
     blizzardCharacterId: blizzardId,
+    rosterLevel,
     syncedAt: snapshot.syncedAt ?? now,
     lastAttemptAt: now,
     failures: 0,

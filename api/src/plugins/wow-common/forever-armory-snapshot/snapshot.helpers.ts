@@ -41,8 +41,14 @@ export type MemberArmorySnapshot = Pick<
   | 'syncedAt'
 >;
 
-/** The snapshot-row columns the due rule reads. */
-export type MemberDueState = Pick<ArmoryRow, 'level' | 'syncedAt' | 'retryAt'>;
+/**
+ * The snapshot-row columns the due rule reads. Blizzard's `level` is
+ * deliberately absent: a ding is the roster level moving since the last sync.
+ */
+export type MemberDueState = Pick<
+  ArmoryRow,
+  'rosterLevel' | 'syncedAt' | 'retryAt'
+>;
 
 /** Input to {@link isMemberDue}; `snapshot` is null when no row exists. */
 export interface MemberDueInput {
@@ -72,7 +78,9 @@ export type SnapshotCharacterColumns = Pick<
 /**
  * Whether a roster member is due a fetch: roster level known and ≥ 10, its
  * backoff (`retry_at`) elapsed, and either never synced, synced more than
- * 24 h ago, or the roster level differs from the snapshot's (a ding).
+ * 24 h ago, or the roster level differs from the roster level stored at the
+ * last sync (a ding). Blizzard's own level is never compared, so an Armory
+ * lagging the roster cannot keep the member due.
  */
 export function isMemberDue(input: MemberDueInput): boolean {
   const { snapshot, rosterLevel, now } = input;
@@ -83,7 +91,7 @@ export function isMemberDue(input: MemberDueInput): boolean {
   if (now.getTime() - snapshot.syncedAt.getTime() > RESYNC_AFTER_MS) {
     return true;
   }
-  return snapshot.level !== rosterLevel;
+  return snapshot.rosterLevel !== rosterLevel;
 }
 
 /**
