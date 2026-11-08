@@ -21,6 +21,12 @@
 --     KEEPER = the lower id.
 --
 -- PER PAIR, in order:
+--   0. Registry config (the ROK-400 per-game config columns short_name,
+--      color_hex, has_roles, has_specs, enabled, max_characters_per_user,
+--      api_namespace_prefix): when BOTH rows hold a non-default value and the
+--      values differ, the pair is SKIPPED (RL120 -> 'pair skipped' NOTICE; an
+--      admin decides). Otherwise step 6 copies the dup's non-default value onto
+--      a keeper still on the default, so deleting the dup loses no config.
 --   1. game_activity_rollups: additive merge of colliding periods (0140 1a).
 --   2. characters: demote the dup's main where the keeper already has one for
 --      that user (idx_one_main_per_game) — demote, never delete.
@@ -44,6 +50,11 @@
 --      keeper's colliding row already states the same thing):
 --        * game_interests (user, game, source): want-to-play / Steam library /
 --          wishlist link. Same user+source on the keeper is the same fact.
+--          Before step 4 the dup's Steam playtime is folded into the keeper's
+--          colliding row with GREATEST (playtime_forever / playtime_2weeks are
+--          Steam's per-account snapshots of the SAME app, not additive, so a
+--          sum would double-count), last_synced_at = GREATEST, created_at =
+--          LEAST; the dup row is then redundant and deleted losslessly.
 --        * game_interest_suppressions (user, game): "don't suggest this game".
 --        * game_notification_mutes (user, game): "mute this game".
 --        * game_activity_rollups (user, game, period, start): step 1 has already
@@ -71,7 +82,7 @@
 --   6. Identity: the dup's steam_app_id / itad_game_id are cleared first, then
 --      copied onto the keeper where the keeper's is NULL (with the steam source
 --      and the ITAD price/boxart/tags that belong to that ITAD id), plus
---      cover_url / twitch_game_id fallbacks.
+--      cover_url / twitch_game_id fallbacks, plus the step-0 registry config.
 --   7. DELETE the dup row. Every FK was repointed in step 4, so no cascade
 --      fires (multi-column / non-id FKs were refused up front).
 --
@@ -98,6 +109,7 @@ DECLARE
   jc record;
   dup_row games%ROWTYPE;
   gone jsonb;
+  conflict text;
   merged integer := 0;
   skipped integer := 0;
   games_id_attnum smallint;
@@ -150,6 +162,26 @@ BEGIN
      ORDER BY 1, 2
   LOOP
     BEGIN
+      -- 0. Registry config: both non-default and different -> skip the pair.
+      SELECT string_agg(c.col, ', ') INTO conflict
+        FROM games k, games d,
+             LATERAL (VALUES
+               ('short_name', k.short_name::text, d.short_name::text, NULL::text),
+               ('color_hex', k.color_hex::text, d.color_hex::text, NULL),
+               ('has_roles', k.has_roles::text, d.has_roles::text, 'false'),
+               ('has_specs', k.has_specs::text, d.has_specs::text, 'false'),
+               ('enabled', k.enabled::text, d.enabled::text, 'true'),
+               ('max_characters_per_user', k.max_characters_per_user::text,
+                d.max_characters_per_user::text, '10'),
+               ('api_namespace_prefix', k.api_namespace_prefix, d.api_namespace_prefix, NULL)
+             ) AS c(col, kv, dv, def)
+       WHERE k.id = p.keeper_id AND d.id = p.dup_id
+         AND c.kv IS DISTINCT FROM c.def AND c.dv IS DISTINCT FROM c.def
+         AND c.kv IS DISTINCT FROM c.dv;
+      IF conflict IS NOT NULL THEN
+        RAISE EXCEPTION 'registry config conflicts (%)', conflict USING ERRCODE = 'RL120';
+      END IF;
+
       -- 1. Additive rollup merge (the colliding dup rows are dropped in step 4).
       UPDATE game_activity_rollups w
          SET total_seconds = w.total_seconds + l.total_seconds
@@ -164,6 +196,17 @@ BEGIN
          AND EXISTS (SELECT 1 FROM characters w
                       WHERE w.game_id = p.keeper_id AND w.user_id = l.user_id
                         AND w.is_main = true);
+
+      -- 2b. Fold the dup's Steam playtime into the keeper's colliding interest
+      --     (same user+source) so step 4's leaf delete loses nothing.
+      UPDATE game_interests w SET
+        playtime_forever = GREATEST(w.playtime_forever, l.playtime_forever),
+        playtime_2weeks = GREATEST(w.playtime_2weeks, l.playtime_2weeks),
+        last_synced_at = GREATEST(w.last_synced_at, l.last_synced_at),
+        created_at = LEAST(w.created_at, l.created_at)
+        FROM game_interests l
+       WHERE w.game_id = p.keeper_id AND l.game_id = p.dup_id
+         AND l.user_id = w.user_id AND l.source = w.source;
 
       -- 3. Stale dedup-audit rows naming the dup.
       DELETE FROM games_dedup_audit
@@ -200,7 +243,7 @@ BEGIN
               EXECUTE format('UPDATE %s SET %I = $1 WHERE ctid = $2', fk.tbl, fk.col)
                 USING p.keeper_id, r.t;
             EXCEPTION WHEN unique_violation OR exclusion_violation THEN
-              IF NOT fk.droppable THEN
+              IF fk.droppable IS NOT TRUE THEN  -- NULL (unresolved allowlist) = refuse
                 RAISE EXCEPTION '%.% row collides with the keeper (not an allowlisted leaf)',
                   fk.tbl, fk.col USING ERRCODE = 'RL120';
               END IF;
@@ -259,7 +302,17 @@ BEGIN
         itad_lowest_cut = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_lowest_cut ELSE k.itad_lowest_cut END,
         itad_price_updated_at = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_price_updated_at ELSE k.itad_price_updated_at END,
         cover_url = COALESCE(k.cover_url, dup_row.cover_url),
-        twitch_game_id = COALESCE(k.twitch_game_id, dup_row.twitch_game_id)
+        twitch_game_id = COALESCE(k.twitch_game_id, dup_row.twitch_game_id),
+        -- Registry config (step 0 ruled out a conflict): a keeper still on
+        -- the default takes the dup's value.
+        short_name = COALESCE(k.short_name, dup_row.short_name),
+        color_hex = COALESCE(k.color_hex, dup_row.color_hex),
+        has_roles = k.has_roles OR dup_row.has_roles,
+        has_specs = k.has_specs OR dup_row.has_specs,
+        enabled = k.enabled AND dup_row.enabled,
+        max_characters_per_user = CASE WHEN k.max_characters_per_user = 10
+          THEN dup_row.max_characters_per_user ELSE k.max_characters_per_user END,
+        api_namespace_prefix = COALESCE(k.api_namespace_prefix, dup_row.api_namespace_prefix)
        WHERE k.id = p.keeper_id;
 
       -- 7. Drop the dup.
