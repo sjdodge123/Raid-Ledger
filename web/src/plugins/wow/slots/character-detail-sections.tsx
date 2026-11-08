@@ -11,9 +11,17 @@
  * whose ruleset is null; while the registry is still loading, neutral
  * panels render instead of variant-specific copy. ROK-1743: Forever saved
  * instances (`character.lockouts`, addon snapshot) render after Quests.
+ * ROK-2146 (layout A): at >= lg a main column (Equipment, Talents, Quests) and
+ * a 320px sidebar (Professions, Saved instances, Guild recommends); below lg one
+ * stack in the order Equipment, Talents, Professions, Saved instances, Quests,
+ * Guild recommends. The DOM order follows the layout so reading and tab order
+ * match what is on screen. Panels are never wrapped, so one that renders null
+ * leaves no gap.
  */
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
+import { useMediaQuery } from '../../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations, professionsPillSource } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
@@ -95,29 +103,54 @@ export function CharacterDetailSections({
     isOwner, characterId, gameId,
 }: CharacterDetailSectionsProps) {
     useWowheadTooltips(equipment ? [equipment] : []);
+    const wide = useMediaQuery(DESKTOP_MQ);
     const { data: character } = useCharacterDetail(characterId);
     const { variant, isResolving } = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
     const portrait = renderSlotPortrait(character, variant, renderUrl);
 
+    const panels: SectionPanels = {
+        equipment: isResolving ? <VariantPendingSections /> : equipment ? (
+            <EquipmentWithItems equipment={equipment} gameVariant={variant}
+                renderUrl={renderUrl} portrait={portrait} isArmoryImported={isArmoryImported} />
+        ) : <EquipmentEmptyState isArmoryImported={isArmoryImported} gameVariant={variant} />,
+        talents: isResolving ? null : <TalentSection talents={talents} isArmoryImported={isArmoryImported}
+            characterClass={characterClass} gameVariant={variant} />,
+        quests: <CharacterQuestsSection characterId={characterId} variant={variant} />,
+        professions: <CharacterProfessionsPanel professions={professions}
+            isOwner={isOwner} characterId={characterId} gameId={gameId}
+            source={professionsPillSource(variant, character?.professionsSource)} />,
+        lockouts: <CharacterLockoutsSection lockouts={character?.lockouts} />,
+        addons: <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>,
+    };
+    return wide ? <SidebarLayout panels={panels} /> : <StackLayout panels={panels} />;
+}
+
+type SectionPanels = Record<'equipment' | 'talents' | 'quests' | 'professions' | 'lockouts' | 'addons', ReactNode>;
+
+/**
+ * >= lg: main column + 320px sidebar. `data-sections-layout="sidebar"` also
+ * widens the page container (character-detail-page.tsx); an empty sidebar
+ * (every panel null) is hidden so the main column takes the full width.
+ */
+function SidebarLayout({ panels }: { panels: SectionPanels }) {
     return (
-        <>
-            {isResolving ? (
-                <VariantPendingSections />
-            ) : equipment ? (
-                <EquipmentWithItems equipment={equipment} gameVariant={variant}
-                    renderUrl={renderUrl} portrait={portrait} isArmoryImported={isArmoryImported} />
-            ) : (
-                <EquipmentEmptyState isArmoryImported={isArmoryImported} gameVariant={variant} />
-            )}
-            {!isResolving && <TalentSection talents={talents} isArmoryImported={isArmoryImported}
-                characterClass={characterClass} gameVariant={variant} />}
-            <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>
-            <CharacterQuestsSection characterId={characterId} variant={variant} />
-            <CharacterLockoutsSection lockouts={character?.lockouts} />
-            <CharacterProfessionsPanel professions={professions}
-                isOwner={isOwner} characterId={characterId} gameId={gameId}
-                source={professionsPillSource(variant, character?.professionsSource)} />
-        </>
+        <div data-sections-layout="sidebar" className="flex items-start gap-6">
+            <div data-sections-column="main" className="flex min-w-0 flex-1 flex-col gap-6">
+                {panels.equipment}{panels.talents}{panels.quests}
+            </div>
+            <aside data-sections-column="sidebar" className="flex w-80 shrink-0 flex-col gap-6 empty:hidden">
+                {panels.professions}{panels.lockouts}{panels.addons}
+            </aside>
+        </div>
+    );
+}
+
+/** Below lg: one stack, the reference panels before the long Quests list. */
+function StackLayout({ panels }: { panels: SectionPanels }) {
+    return (
+        <div data-sections-layout="stack" className="flex flex-col gap-6">
+            {panels.equipment}{panels.talents}{panels.professions}{panels.lockouts}{panels.quests}{panels.addons}
+        </div>
     );
 }
 

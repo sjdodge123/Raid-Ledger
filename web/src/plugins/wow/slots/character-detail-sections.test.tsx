@@ -254,7 +254,7 @@ describe('CharacterDetailSections — layout A', () => {
             addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
         })) as unknown as typeof window.matchMedia;
     }
-    async function renderForever(desktop: boolean, lockouts: CharacterLockoutsDto | undefined = LOCKOUTS) {
+    async function renderForever(desktop: boolean, lockouts: CharacterLockoutsDto | null = LOCKOUTS) {
         setDesktop(desktop);
         server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => HttpResponse.json({ quests: QUESTS })));
         const container = renderSections({ gameVariant: 'wow_forever', equipment: EQUIPMENT, ...(lockouts ? { lockouts } : {}) });
@@ -286,7 +286,7 @@ describe('CharacterDetailSections — layout A', () => {
     });
 
     it('a panel that renders null leaves no empty wrapper behind', async () => {
-        const container = await renderForever(true, undefined);
+        const container = await renderForever(true, null);
         const sidebar = container.querySelector('[data-sections-column="sidebar"]')!;
         expect(Array.from(sidebar.children).map((c) => c.textContent)).toEqual(['Professions', 'Guild recommends']);
     });
