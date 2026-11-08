@@ -181,8 +181,14 @@ export class SignupsService {
   async findByDiscordUser(
     eventId: number,
     discordUserId: string,
+    opts: discordH.FindByDiscordUserOptions = {},
   ): Promise<SignupResponseDto | null> {
-    return discordH.findByDiscordUserFlow(this.db, eventId, discordUserId);
+    return discordH.findByDiscordUserFlow(
+      this.db,
+      eventId,
+      discordUserId,
+      opts,
+    );
   }
 
   async cancelByDiscordUser(

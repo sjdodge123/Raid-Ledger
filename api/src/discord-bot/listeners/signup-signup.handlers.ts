@@ -15,6 +15,7 @@ import {
   type Reactivation,
 } from './signup-reactivation.helpers';
 import { signupTimeSuffix } from './signup-event-time.helpers';
+import { runOrReplyNotSignedUp } from './signup-not-found.helpers';
 import { loadGameContext } from './signup-signup-context.helpers';
 import type { GameContext } from './signup-signup-context.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
@@ -36,12 +37,12 @@ export async function handleExistingSignup(
   deps: SignupInteractionDeps,
 ): Promise<void> {
   const linkedUser = await findLinkedUser(interaction.user.id, deps);
-  const reactivation = await reactivateIfNeeded(
-    eventId,
-    existingSignup,
-    linkedUser,
-    deps,
+  // ROK-2097: a row this Discord id may see but not manage is not-found.
+  const reactivated = await runOrReplyNotSignedUp(interaction, () =>
+    reactivateIfNeeded(eventId, existingSignup, linkedUser, deps),
   );
+  if (!reactivated.ok) return;
+  const reactivation = reactivated.value;
   if (!linkedUser) {
     await interaction.editReply({ content: alreadySignedUpMessage() });
     return;

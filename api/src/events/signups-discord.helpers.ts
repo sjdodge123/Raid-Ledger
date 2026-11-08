@@ -12,6 +12,7 @@ import type {
 import type { Tx, EventRow } from './signups.service.types';
 import * as cancelH from './signups-cancel.helpers';
 import * as rosterH from './signups-roster.helpers';
+import { unclaimedOrOwnedBy } from './signups-ownership.helpers';
 import {
   resolveGenericSlotRole,
   findNextPosition,
@@ -86,7 +87,7 @@ export async function findActiveAnonymousSignup(
       and(
         eq(schema.eventSignups.eventId, eventId),
         eq(schema.eventSignups.discordUserId, discordUserId),
-        cancelH.unclaimedOrOwnedBy(),
+        unclaimedOrOwnedBy(),
         ne(schema.eventSignups.status, 'roached_out'),
         ne(schema.eventSignups.status, 'declined'),
         ne(schema.eventSignups.status, 'departed'),
@@ -172,10 +173,23 @@ export async function allocateGenericDiscordSlot(
   });
 }
 
+/** Options for {@link findByDiscordUserFlow}. */
+export interface FindByDiscordUserOptions {
+  /**
+   * ROK-2097: an unlinked Discord id sees only guest rows, never a row owned
+   * by an account it was unlinked from. Off by default: Sign Up / Decline
+   * still need to SEE such a row, or they would insert a guest row that
+   * collides with it on (event_id, discord_user_id); their writes are guarded
+   * in `findSignupByIdentifier` / `cancelByDiscordUser` instead.
+   */
+  managedOnly?: boolean;
+}
+
 export async function findByDiscordUserFlow(
   db: Tx,
   eventId: number,
   discordUserId: string,
+  opts: FindByDiscordUserOptions = {},
 ): Promise<SignupResponseDto | null> {
   const linkedUser = await findLinkedUser(db, discordUserId);
   if (linkedUser) {
@@ -202,6 +216,7 @@ export async function findByDiscordUserFlow(
       and(
         eq(schema.eventSignups.eventId, eventId),
         eq(schema.eventSignups.discordUserId, discordUserId),
+        opts.managedOnly ? unclaimedOrOwnedBy() : undefined,
       ),
     )
     .limit(1);

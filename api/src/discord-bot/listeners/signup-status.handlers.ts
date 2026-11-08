@@ -1,5 +1,4 @@
 import type { ButtonInteraction } from 'discord.js';
-import { NotFoundException } from '@nestjs/common';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
@@ -15,6 +14,10 @@ import {
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
 import { offerSeriesDeclineChoice } from './series-signup-decline.handlers';
+import {
+  NOT_SIGNED_UP_REPLY,
+  runOrReplyNotSignedUp,
+} from './signup-not-found.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -56,14 +59,13 @@ async function replyExistingTentative(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const slot = await markExistingTentative(
-    interaction,
-    eventId,
-    existingSignup,
-    deps,
+  // ROK-2097: a row this Discord id may see but not manage is not-found.
+  const marked = await runOrReplyNotSignedUp(interaction, () =>
+    markExistingTentative(interaction, eventId, existingSignup, deps),
   );
+  if (!marked.ok) return;
   await interaction.editReply({
-    content: `You're marked as **tentative**.${benchSuffix(slot)}`,
+    content: `You're marked as **tentative**.${benchSuffix(marked.value)}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
@@ -156,7 +158,7 @@ export async function handleDecline(
 }
 
 /** Reply when a Decline finds no signup this Discord user may cancel. */
-export const DECLINE_NOT_FOUND_REPLY = "You're not signed up for this event.";
+export const DECLINE_NOT_FOUND_REPLY = NOT_SIGNED_UP_REPLY;
 
 /**
  * Cancel the clicker's signup. A signup the Discord id can see but does not
@@ -168,17 +170,10 @@ async function cancelOrReplyNotFound(
   eventId: number,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
-  try {
-    await deps.signupsService.cancelByDiscordUser(eventId, interaction.user.id);
-    return true;
-  } catch (error) {
-    if (!(error instanceof NotFoundException)) throw error;
-    await interaction.editReply({
-      content: DECLINE_NOT_FOUND_REPLY,
-      embeds: [],
-    });
-    return false;
-  }
+  const result = await runOrReplyNotSignedUp(interaction, () =>
+    deps.signupsService.cancelByDiscordUser(eventId, interaction.user.id),
+  );
+  return result.ok;
 }
 
 async function createDeclinedSignup(

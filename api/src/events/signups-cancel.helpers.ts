@@ -9,10 +9,14 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and, ne, or, isNull, type SQL } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
 import { determineCancelStatus } from './signups-roster.helpers';
+import {
+  discordManagedSignupCondition,
+  unclaimedOrOwnedBy,
+} from './signups-ownership.helpers';
 import { defined } from '../common/defined.helpers';
 
 export async function fetchEventOrThrow(db: Tx, eventId: number) {
@@ -101,19 +105,6 @@ export async function findActiveSignupForCancel(
       `Signup not found for user ${userId} on event ${eventId}`,
     );
   return signup;
-}
-
-/**
- * Ownership filter for a signup resolved by Discord id (ROK-2097).
- * A Discord-only guest signup (`user_id` NULL) always matches; a signup owned
- * by an RL user matches only when that user is the caller. With no caller
- * (an unlinked Discord user), only guest signups match — so a Discord id that
- * was re-linked or unlinked can never reach the previous owner's signup.
- */
-export function unclaimedOrOwnedBy(callerUserId?: number): SQL | undefined {
-  const unclaimed = isNull(schema.eventSignups.userId);
-  if (callerUserId === undefined) return unclaimed;
-  return or(unclaimed, eq(schema.eventSignups.userId, callerUserId));
 }
 
 async function findUnclaimedAnonymousSignup(
@@ -270,11 +261,14 @@ export async function findSignupByIdentifier(
   const conditions = [eq(schema.eventSignups.eventId, eventId)];
   if (identifier.userId)
     conditions.push(eq(schema.eventSignups.userId, identifier.userId));
-  else if (identifier.discordUserId)
-    conditions.push(
-      eq(schema.eventSignups.discordUserId, identifier.discordUserId),
+  else if (identifier.discordUserId) {
+    // ROK-2097: never a row owned by an account the Discord id left.
+    const owned = await discordManagedSignupCondition(
+      db,
+      identifier.discordUserId,
     );
-  else
+    if (owned) conditions.push(owned);
+  } else
     throw new BadRequestException(
       'Either userId or discordUserId must be provided',
     );

@@ -3,7 +3,7 @@
  */
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
-import { unclaimedOrOwnedBy } from './signups-cancel.helpers';
+import { unclaimedOrOwnedBy } from './signups-ownership.helpers';
 
 function render(clause: SQL | undefined): { sql: string; params: unknown[] } {
   if (!clause) throw new Error('expected an ownership clause, got undefined');
