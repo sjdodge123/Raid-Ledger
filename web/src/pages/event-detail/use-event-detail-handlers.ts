@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { copyWithToast } from '../../lib/clipboard';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../../hooks/use-signups';
-import { useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate } from '../../hooks/use-roster';
+import { useQueryClient } from '@tanstack/react-query';
+import { useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate, invalidateRosterQueries } from '../../hooks/use-roster';
+import { findUnsendableAssignments, findUnsavedAssignments, describeUnsavedAssignments } from '../../hooks/roster-save-verify';
 import { useUpdateAutoUnbench } from '../../hooks/use-auto-unbench';
 import { useCreatePug, useDeletePug, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
 import { useDeleteEvent, useDeleteSeries, useCancelSeries } from '../../hooks/use-events';
@@ -106,7 +108,13 @@ function usePugHandlers(eventId: number, pugs: PugSlotResponseDto[]) {
     return { pugs, handleGenerateInviteLink, handleRemovePug, handleRegeneratePugLink };
 }
 
+/** Error toast for a roster save the server did not honour exactly (ROK-2141); the refetch shows the true roster. */
+function reportUnsaved(entries: RosterAssignmentResponse[]): void {
+    toast.error('Roster not saved', { description: describeUnsavedAssignments(entries) });
+}
+
 function useRosterHandlers(eventId: number, canManageRoster: boolean, signupHandlers: ReturnType<typeof useSignupHandlers>) {
+    const queryClient = useQueryClient();
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
 
@@ -116,12 +124,21 @@ function useRosterHandlers(eventId: number, canManageRoster: boolean, signupHand
         catch (err) { toast.error('Failed to leave slot', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [selfUnassign, signupHandlers.signup]);
 
-    /** Saves the roster; resolves `true` once the PATCH succeeds, `false` after showing an error toast (ROK-2141). */
+    /**
+     * Saves the roster; resolves `true` only when the server's roster holds every sent assignment as sent.
+     * Otherwise it shows an error toast naming the players and resolves `false` (ROK-2141).
+     */
     const handleRosterChange = useCallback(async (pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[], characterIdMap?: Map<number, string>): Promise<boolean> => {
         if (!canManageRoster) { toast.error('Permission denied', { description: 'Only the event creator, admin, or operator can update the roster.' }); return false; }
-        try { await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments, characterIdMap)); return true; }
-        catch (err) { toast.error('Failed to update roster', { description: err instanceof Error ? err.message : 'Please try again.' }); return false; }
-    }, [canManageRoster, updateRoster]);
+        const unsendable = findUnsendableAssignments(assignments);
+        if (unsendable.length > 0) { reportUnsaved(unsendable); invalidateRosterQueries(queryClient, eventId); return false; }
+        try {
+            const saved = await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments, characterIdMap));
+            const unsaved = findUnsavedAssignments(assignments, saved);
+            if (unsaved.length > 0) { reportUnsaved(unsaved); return false; }
+            return true;
+        } catch (err) { toast.error('Failed to update roster', { description: err instanceof Error ? err.message : 'Please try again.' }); return false; }
+    }, [canManageRoster, updateRoster, queryClient, eventId]);
 
     return { handleSelfRemove, handleRosterChange };
 }

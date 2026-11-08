@@ -54,8 +54,11 @@ vi.mock('../../lib/toast', () => ({
     toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { useEventDetailHandlers } from './use-event-detail-handlers';
 import { at } from '../../test/defined';
+import { toast } from '../../lib/toast';
+import { makePlayer } from '../../components/roster/RosterBuilder.test-helpers';
 
 // ---- Helpers ----------------------------------------------------------------
 
@@ -275,6 +278,51 @@ describe('handleSlotClick — ROK-548 preferredRoles filtering', () => {
             });
 
             expect(mockSignupForEvent).not.toHaveBeenCalled();
+        });
+    });
+});
+
+// ---- ROK-2141: the roster save guard ----------------------------------------
+
+function seated(id: number, name: string, slot: RosterRole, position: number): RosterAssignmentResponse {
+    return { ...makePlayer(id, null, name), slot, position };
+}
+
+describe('handleRosterChange — ROK-2141 save guard', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('resolves true with no error toast when the server saved exactly what was sent', async () => {
+        const sent = [seated(1, 'Anon', 'dps', 1), seated(2, 'Tanky', 'tank', 1)];
+        mockUpdateRoster.mockResolvedValue({ eventId: EVENT_ID, pool: [], assignments: sent, slots: {} });
+        const { result } = renderHandlers({ canManageRoster: true });
+        let saved: boolean | undefined;
+        await act(async () => { saved = await result.current.handleRosterChange([], sent); });
+        expect(saved).toBe(true);
+        expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('resolves false with an error toast naming the player the server dropped', async () => {
+        const sent = [seated(1, 'Anon', 'dps', 1), seated(2, 'Tanky', 'tank', 1)];
+        mockUpdateRoster.mockResolvedValue({ eventId: EVENT_ID, pool: [], assignments: [at(sent, 1)], slots: {} });
+        const { result } = renderHandlers({ canManageRoster: true });
+        let saved: boolean | undefined;
+        await act(async () => { saved = await result.current.handleRosterChange([], sent); });
+        expect(saved).toBe(false);
+        expect(toast.error).toHaveBeenCalledWith('Roster not saved', {
+            description: "Couldn't save Anon to dps 1 — the roster was not updated as shown",
+        });
+        expect(toast.success).not.toHaveBeenCalled();
+    });
+
+    it('refuses to send an entry with no signupId and reports it as an error', async () => {
+        const sent = [seated(1, 'Fine', 'dps', 1), { ...seated(3, 'Ghost', 'dps', 2), signupId: 0 }];
+        const { result } = renderHandlers({ canManageRoster: true });
+        let saved: boolean | undefined;
+        await act(async () => { saved = await result.current.handleRosterChange([], sent); });
+        expect(saved).toBe(false);
+        expect(mockUpdateRoster).not.toHaveBeenCalled();
+        expect(toast.error).toHaveBeenCalledWith('Roster not saved', {
+            description: "Couldn't save Ghost to dps 2 — the roster was not updated as shown",
         });
     });
 });
