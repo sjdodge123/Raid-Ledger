@@ -79,12 +79,7 @@ describe('writeMemberSnapshot', () => {
 
   it('stamps syncedAt with now when the snapshot carries none', async () => {
     const { mock, db } = setup();
-    await writeMemberSnapshot(
-      db,
-      TARGET,
-      { ...SNAPSHOT, syncedAt: null },
-      NOW,
-    );
+    await writeMemberSnapshot(db, TARGET, { ...SNAPSHOT, syncedAt: null }, NOW);
     expect(mock.values).toHaveBeenCalledWith(
       expect.objectContaining({ syncedAt: NOW }),
     );

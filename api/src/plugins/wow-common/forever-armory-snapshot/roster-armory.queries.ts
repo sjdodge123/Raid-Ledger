@@ -8,7 +8,9 @@ import {
   eq,
   gte,
   isNotNull,
+  isNull,
   lt,
+  lte,
   not,
   or,
   sql,
@@ -52,14 +54,13 @@ const arm = schema.guildMemberArmory;
 function isDue(now: Date): SQL | undefined {
   const staleBefore = new Date(now.getTime() - RESYNC_AFTER_MS);
   const stale = or(
-    sql`${arm.syncedAt} IS NULL`,
+    isNull(arm.syncedAt),
     lt(arm.syncedAt, staleBefore),
     sql`${arm.rosterLevel} IS DISTINCT FROM ${gm.level}`,
   );
-  const notBackingOff = or(
-    sql`${arm.retryAt} IS NULL`,
-    sql`${arm.retryAt} <= ${now}`,
-  );
+  // Typed comparators, never a raw Date inside sql`` — postgres.js cannot
+  // bind a Date there ("The string argument must be of type string…").
+  const notBackingOff = or(isNull(arm.retryAt), lte(arm.retryAt, now));
   return and(stale, notBackingOff);
 }
 
