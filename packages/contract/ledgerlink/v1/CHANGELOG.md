@@ -10,14 +10,18 @@ Newest first. Every entry states **additive** or **breaking** (see
   guild — `generatedAt`, the guild template `{ rev, author, rules[] ≤ 8 of
   { professionSkillLineId, recipientName } }` (per-unit caps are never sent),
   `peers[] ≤ 1000 { name, lastSeenAt }` (guild members whose Mailworthy said
-  hello in the last 60 days) and `givers[] ≤ 50 { characterName,
-  itemsAllTime, countingSince, days[] ≤ 35 { day, items } }` — guild-rule
-  item units sent per character of the exporter's account, per UTC day.
-  Every object is `.strict()`; names ≤ 48.
+  hello in the last 60 days) and `givers[] ≤ 200 { characterName,
+  itemsAllTime, countingSince, asOf, days[] ≤ 35 { day, items } }` —
+  guild-rule item units sent per character, per UTC day, for the
+  exporter's account AND guildmates whose totals Mailworthy shared in the
+  guild hellos (operator ruling 2026-11-08). `asOf` (required, unix
+  seconds, `≤ generatedAt`) = when the giver's own client computed them.
+  `template.rules` may be `[]` (template published with no rules). Every
+  object is `.strict()`; names ≤ 48.
 - Semantics: an absent block, template, `peers` or `givers` = no opinion;
   nothing stored is cleared. Account-wide data exported by several alts is
-  deduped server-side (template by `rev`, peers by name, givers by sending
-  character + `generatedAt`). Item counts are stack units of guild-rule mail
+  deduped server-side (template by `rev`, peers by name, givers by guild +
+  sending character, newest `asOf`, tie → newer `generatedAt`). Item counts are stack units of guild-rule mail
   only; mail to one of the sender's own characters never counts.
 - The decoded fixture view carries the block as `payload.mailworthy`, beside
   the frozen snapshot `payload.data` (it is guild-level data, never stored in
