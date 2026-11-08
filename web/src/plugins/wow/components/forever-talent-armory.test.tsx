@@ -4,7 +4,7 @@
  * trees when possible, and never through the Classic renderer.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { TalentDisplay } from './talent-display';
 
@@ -49,9 +49,10 @@ describe('ForeverTalentDisplay — Armory placement (AC7)', () => {
         expect(screen.queryByText('Learned talents')).toBeNull();
     });
 
-    it('heads the grid with Blizzard tree names when sent', () => {
+    it('heads the grid in class order when Blizzard sends its trees out of order (ROK-2113 T1)', () => {
         renderTalents(dto('blizzard', [{ nodeId: 12, rank: 5, name: 'Cruelty', tree: 0 }], undefined, ['Fury', 'Arms', 'Protection']));
-        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Fury', 'Arms', 'Protection']);
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Arms', 'Fury', 'Protection']);
+        expect(screen.getByTestId('forever-tree-spent-1')).toHaveTextContent('5');
     });
 
     it('never places an addon list payload', () => {
@@ -135,5 +136,47 @@ describe('ForeverTalentDisplay — points come from the tree totals', () => {
         renderTalents({ ...value, trees });
         expect(screen.getAllByText('5 points').length).toBeGreaterThan(0);
         expect(screen.getByText('5 points in 0 talents')).toBeInTheDocument();
+    });
+});
+
+/** Rok Androl's real Armory import (fleet T1): Blizzard returned only the Protection tree. */
+const PROT: ForeverTalentNodeDto[] = [
+    { nodeId: 50, rank: 5, name: 'Shield Specialization', tree: 0 },
+    { nodeId: 51, rank: 2, name: 'Anticipation', tree: 0 },
+    { nodeId: 52, rank: 3, name: 'Toughness', tree: 0 },
+    { nodeId: 53, rank: 1, name: 'Improved Bloodrage', tree: 0 },
+    { nodeId: 54, rank: 1, name: 'Forever Only A', tree: 0 },
+    { nodeId: 55, rank: 1, name: 'Forever Only B', tree: 0 },
+];
+
+function treeHeadings(): (string | null)[] {
+    return screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent).filter((t) => t !== 'Other talents');
+}
+
+/** The sub-tree column holding `forever-tree-spent-<index>`. */
+function column(index: number): HTMLElement {
+    const col = screen.getByTestId(`forever-tree-spent-${index}`).parentElement?.parentElement;
+    if (!col) throw new Error(`column ${index} not rendered`);
+    return col;
+}
+
+function expectProtectionInThirdColumn(): void {
+    expect(treeHeadings(), 'one Protection tree must head column 3, Arms/Fury the first two, no duplicate').toEqual(['Arms', 'Fury', 'Protection']);
+    expect([0, 1, 2].map((i) => screen.getByTestId(`forever-tree-spent-${i}`).textContent)).toEqual(['0', '0', '13']);
+    expect(within(column(2)).getAllByTestId('forever-talent-cell')).toHaveLength(4);
+    expect(within(column(0)).queryAllByTestId('forever-talent-cell')).toHaveLength(0);
+    expect(screen.getByTestId('forever-other-talents-2')).toHaveTextContent(/Forever Only A 1.*Forever Only B 1/);
+}
+
+describe('ForeverTalentDisplay — Armory trees map to class columns by name (ROK-2113 T1)', () => {
+    it('a converted payload with only "Protection" renders Arms 0 | Fury 0 | Protection 13', () => {
+        renderTalents({ format: 'forever', source: 'blizzard', syncedAt: '2026-11-08T09:00:00.000Z', layout: 'list', trees: [{ index: 0, spent: 13, name: 'Protection' }], nodes: PROT });
+        expectProtectionInThirdColumn();
+    });
+
+    it('an unconverted classic payload with only "Protection" renders the same columns', () => {
+        const talents = PROT.map(({ nodeId, rank, name }) => ({ id: nodeId, rank, name: name ?? '' }));
+        render(<TalentDisplay talents={{ format: 'classic', trees: [{ name: 'Protection', spentPoints: 13, talents }] }} isArmoryImported characterClass="Warrior" gameVariant="wow_forever" />);
+        expectProtectionInThirdColumn();
     });
 });

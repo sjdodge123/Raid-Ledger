@@ -113,16 +113,52 @@ describe('placeArmoryTalents — TBC table guards (review MAJOR)', () => {
 });
 
 describe('tree order from trees[].name (F3)', () => {
-    it('uses Blizzard tree names to pick the known tree for each index', () => {
-        // Blizzard sent Fury first: index 0 is "Fury", so Cruelty under tree 0 places.
+    it('moves each Blizzard tree to its class column by name (ROK-2113 T1)', () => {
+        // Blizzard sent Fury first: its talents belong in column 1, never column 0.
         const out = placeArmoryTalents(armory([{ nodeId: 12, rank: 5, name: 'Cruelty', tree: 0 }], ['Fury', 'Arms', 'Protection']), 'Warrior');
         expect(out.layout).toBe('grid');
-        expect(byId(out, 12)).toMatchObject({ tree: 0, row: 0, col: 2 });
+        expect(byId(out, 12)).toMatchObject({ tree: 1, row: 0, col: 2 });
+        expect(armoryTreeNames(out, 'Warrior')).toEqual(['Arms', 'Fury', 'Protection']);
     });
 
     it('falls back to the class table, then "Tree N", when names are missing', () => {
-        expect(armoryTreeNames(armory([], ['Fury']), 'Warrior')).toEqual(['Fury', 'Fury', 'Protection']);
+        expect(armoryTreeNames(armory([], ['Fury']), 'Warrior'), 'a lone "Fury" sits in column 1, no duplicate header').toEqual(['Arms', 'Fury', 'Protection']);
         expect(armoryTreeNames(armory([]), 'Warrior')).toEqual(['Arms', 'Fury', 'Protection']);
         expect(armoryTreeNames(armory([]), null)).toEqual(['Tree 1', 'Tree 2', 'Tree 3']);
+    });
+});
+
+function single(trees: ForeverTalentsDto['trees'], nodes: ForeverTalentNodeDto[]): ForeverTalentsDto {
+    return { format: 'forever', source: 'blizzard', syncedAt: '2026-11-08T09:00:00.000Z', layout: 'list', trees, nodes };
+}
+
+describe('Armory trees map to class columns by name, not array position (ROK-2113 T1)', () => {
+    const prot = [{ nodeId: 50, rank: 5, name: 'Shield Specialization', tree: 0 }, { nodeId: 51, rank: 2, name: 'Forever Only', tree: 0 }];
+
+    it('a lone "Protection" tree lands in column 2: Arms | Fury | Protection', () => {
+        const out = placeArmoryTalents(single([{ index: 0, spent: 7, name: 'Protection' }], prot), 'Warrior');
+        expect(armoryTreeNames(out, 'Warrior'), 'Protection must not be numbered by its array position').toEqual(['Arms', 'Fury', 'Protection']);
+        expect(out.trees).toEqual([{ index: 2, spent: 7, name: 'Protection' }]);
+        expect(byId(out, 50)).toMatchObject({ tree: 2, row: 1, col: 1 });
+        expect(byId(out, 51)).toEqual({ nodeId: 51, rank: 2, name: 'Forever Only', tree: 2 });
+    });
+
+    it('trees returned out of class order each move to their own column', () => {
+        const out = placeArmoryTalents(single(
+            [{ index: 0, spent: 5, name: 'protection' }, { index: 1, spent: 3, name: 'Arms' }],
+            [{ nodeId: 50, rank: 5, name: 'Shield Specialization', tree: 0 }, { nodeId: 10, rank: 3, name: 'Improved Heroic Strike', tree: 1 }],
+        ), 'Warrior');
+        expect(out.trees.map((t) => [t.index, t.spent])).toEqual([[0, 3], [2, 5]]);
+        expect([byId(out, 50)?.tree, byId(out, 10)?.tree]).toEqual([2, 0]);
+    });
+
+    it('matches Blizzard\'s "Feral Combat" to the druid Feral column', () => {
+        expect(armoryTreeNames(single([{ index: 0, spent: 5, name: 'Feral Combat' }], []), 'Druid')).toEqual(['Balance', 'Feral Combat', 'Restoration']);
+    });
+
+    it('an unknown tree name keeps today\'s positional behaviour and still lists its talents', () => {
+        const input = single([{ index: 0, spent: 2, name: 'Gladiator' }], [{ nodeId: 51, rank: 2, name: 'Forever Only', tree: 0 }]);
+        expect(placeArmoryTalents(input, 'Warrior')).toBe(input);
+        expect(armoryTreeNames(input, 'Warrior')).toEqual(['Gladiator', 'Fury', 'Protection']);
     });
 });
