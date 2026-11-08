@@ -182,8 +182,8 @@ test.describe('WoW: Forever hub "Guild message" card (ROK-2136)', () => {
             await installCopyRecorder(page);
             const jwt = await signInOnboardedMember(page, guild.users.officer.userId);
             const before = await textOf(jwt, guild.guildId);
-            expect(before, 'a fresh guild has no in-game text and the officer (delegated editor rank) can edit')
-                .toEqual({ guildId: guild.guildId, motd: null, info: null, viewer: { canEdit: true } });
+            expect(before, 'a fresh guild has no in-game text, no in-game report (ROK-2137 editor-only game block), and the officer (delegated editor rank) can edit')
+                .toEqual({ guildId: guild.guildId, motd: null, info: null, viewer: { canEdit: true }, game: { motd: null, info: null } });
 
             await openOverview(page, guild.guildId);
             const motdInput = await openEditorFromHint(page);
