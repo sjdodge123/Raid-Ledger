@@ -34,6 +34,8 @@ export interface RosterClaimListProps {
     armoryAvailable: boolean;
     onClaimed: () => void;
     onSwitchTab: (tab: 'manual' | 'import') => void;
+    /** ROK-2132 Ruling 6: start narrowed to this guild ("Showing X only · Show all guilds"). */
+    guildId?: number | undefined;
 }
 
 function ClassBadge({ cls }: { cls: string | null }): JSX.Element {
@@ -66,16 +68,18 @@ function CandidateRow({ c, pending, busy, onClaim }: {
     );
 }
 
-function GuildSection({ guild, pendingId, onClaim }: {
-    guild: RosterClaimGuildDto; pendingId: number | null; onClaim: (c: RosterClaimCandidateDto) => void;
+function GuildSection({ guild, pendingId, onClaim, showHeader }: {
+    guild: RosterClaimGuildDto; pendingId: number | null; onClaim: (c: RosterClaimCandidateDto) => void; showHeader: boolean;
 }): JSX.Element {
     const n = guild.candidates.length;
     return (
-        <section className="space-y-1.5">
-            <div className="flex justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                <h3 className="truncate">{guild.guildName}</h3>
-                <span className="flex-none">{n} unclaimed</span>
-            </div>
+        <section className="space-y-1.5" aria-label={guild.guildName}>
+            {showHeader && (
+                <div className="flex justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                    <h3 className="truncate">{guild.guildName}</h3>
+                    <span className="flex-none">{n} unclaimed</span>
+                </div>
+            )}
             <ul className="rounded-lg border border-edge overflow-hidden">
                 {guild.candidates.map((c) => (
                     <CandidateRow key={c.memberId} c={c} pending={pendingId === c.memberId} busy={pendingId !== null} onClaim={() => onClaim(c)} />
@@ -92,6 +96,16 @@ function NotListedHint({ armoryAvailable, onSwitchTab }: Pick<RosterClaimListPro
             Not listed?{' '}
             {armoryAvailable && <><Button variant="bare" className={link} onClick={() => onSwitchTab('import')}>Import from Armory</Button>{' or '}</>}
             <Button variant="bare" className={link} onClick={() => onSwitchTab('manual')}>{armoryAvailable ? 'add it manually' : 'Add it manually'}</Button>.
+        </p>
+    );
+}
+
+/** ROK-2132 Ruling 6 — the one-guild filter line; "Show all guilds" clears it. */
+function GuildFilterNote({ guildName, onShowAll }: { guildName: string; onShowAll: () => void }): JSX.Element {
+    return (
+        <p className="text-xs text-muted">
+            Showing <span className="font-semibold text-foreground">{guildName}</span> only ·{' '}
+            <Button variant="bare" className="underline text-success hover:text-foreground" onClick={onShowAll}>Show all guilds</Button>
         </p>
     );
 }
@@ -129,21 +143,43 @@ function useClaimHandler(gameId: number, existing: CharacterDto[], ruleset: WowF
     return { onClaim, pendingId: claim.isPending ? claim.variables?.memberId ?? null : null };
 }
 
-/** The "Guild roster" body of the Add character dialog (WoW: Forever only). */
-export function RosterClaimList({ gameId, existingCharacters, armoryAvailable, onClaimed, onSwitchTab }: RosterClaimListProps): JSX.Element {
-    const [query, setQuery] = useState('');
+/**
+ * The candidate list, narrowed by name and (ROK-2132) to one guild until "Show all guilds".
+ * The guild filter is also applied locally, so a server that ignores `guildId` still shows one guild.
+ */
+function useRosterCandidatesView(gameId: number, guildId: number | undefined, query: string) {
+    const [guildFilter, setGuildFilter] = useState(guildId);
     // Codex P2: the server filters by name BEFORE its 1000-row cap; the local filter narrows while typing.
-    const { data, isLoading } = useRosterClaimCandidates(gameId, true, useDebouncedValue(query, 300));
+    const { data, isLoading } = useRosterClaimCandidates(gameId, true, useDebouncedValue(query, 300), guildFilter);
+    const visible = useMemo(() => {
+        const guilds = filterRosterGuilds(data?.guilds ?? [], query);
+        return guildFilter === undefined ? guilds : guilds.filter((g) => g.guildId === guildFilter);
+    }, [data, query, guildFilter]);
+    const filteredGuildName = guildFilter === undefined ? null
+        : data?.guilds.find((g) => g.guildId === guildFilter)?.guildName ?? 'this guild';
+    return { data, isLoading, visible, filteredGuildName, showAllGuilds: () => setGuildFilter(undefined) };
+}
+
+function emptyMessage(query: string, filteredGuildName: string | null): string {
+    const term = query.trim();
+    if (!term && filteredGuildName) return `No unclaimed characters in ${filteredGuildName}.`;
+    return `No unclaimed character matches “${term}”.`;
+}
+
+/** The "Guild roster" body of the Add character dialog (WoW: Forever only). */
+export function RosterClaimList({ gameId, existingCharacters, armoryAvailable, onClaimed, onSwitchTab, guildId }: RosterClaimListProps): JSX.Element {
+    const [query, setQuery] = useState('');
+    const { data, isLoading, visible, filteredGuildName, showAllGuilds } = useRosterCandidatesView(gameId, guildId, query);
     const [ruleset, setRuleset] = useState<WowForeverSelectableRuleset>(() => defaultClaimRuleset(existingCharacters));
-    const visible = useMemo(() => filterRosterGuilds(data?.guilds ?? [], query), [data, query]);
     const { onClaim, pendingId } = useClaimHandler(gameId, existingCharacters, ruleset, onClaimed);
     return (
         <div className="flex flex-col gap-3 min-h-0">
             <RulesetSelect value={ruleset} onChange={setRuleset} />
             <SearchInput label="Search guild roster" placeholder="Search guild roster" value={query} onChange={setQuery} />
+            {filteredGuildName && <GuildFilterNote guildName={filteredGuildName} onShowAll={showAllGuilds} />}
             {isLoading ? <LoadingRows /> : countCandidates(visible) === 0
-                ? <ModalEmptyState message={`No unclaimed character matches “${query.trim()}”.`} />
-                : visible.map((g) => <GuildSection key={g.guildId} guild={g} pendingId={pendingId} onClaim={onClaim} />)}
+                ? <ModalEmptyState message={emptyMessage(query, filteredGuildName)} />
+                : visible.map((g) => <GuildSection key={g.guildId} guild={g} pendingId={pendingId} onClaim={onClaim} showHeader={!filteredGuildName} />)}
             {data?.truncated && <p className="text-xs text-muted">Showing the first 1000 — search to narrow.</p>}
             <NotListedHint armoryAvailable={armoryAvailable} onSwitchTab={onSwitchTab} />
         </div>
