@@ -173,6 +173,10 @@ export const GuildMemberPresenceSchema = z
 export type GuildMemberPresence = z.infer<typeof GuildMemberPresenceSchema>;
 
 /** One roster row. Unlinked rows have `characterId: null` and no role. */
+/** ROK-2128 (FLAG 3) — how a roster row's RL link was made (staff-only). */
+export const GuildMemberLinkViaSchema = z.enum(['roster_pick', 'import']);
+export type GuildMemberLinkVia = z.infer<typeof GuildMemberLinkViaSchema>;
+
 export const GuildMemberRowSchema = z
   .object({
     memberId: id,
@@ -195,7 +199,16 @@ export const GuildMemberRowSchema = z
      * for every other viewer.
      */
     linkedAccount: z
-      .object({ username: z.string(), linkedSince: isoDate })
+      .object({
+        username: z.string(),
+        linkedSince: isoDate,
+        /**
+         * ROK-2128 (FLAG 3) — how the link was made: `roster_pick` when the
+         * player claimed the row from the guild roster pick list (a
+         * self-asserted link), `import` otherwise. Optional (additive).
+         */
+        linkVia: GuildMemberLinkViaSchema.optional(),
+      })
       .strict()
       .optional(),
     /**
