@@ -184,19 +184,7 @@ async function auditClaim(
       via: 'roster_pick',
     });
   }
-  await logExternalIdLinked(
-    tx,
-    {
-      actorId: row.userId,
-      ownerId: row.userId,
-      characterId: row.id,
-      externalId: row.externalId,
-      gameId: m.gameId,
-      region: m.region,
-      via: 'roster_pick',
-    },
-    null,
-  );
+  await auditBlizzardLink(tx, m, row);
   await logCharacterClaimAudit(tx, {
     ...base,
     action: 'roster_claimed',
@@ -206,4 +194,22 @@ async function auditClaim(
     fromUserId: null,
     toUserId: row.userId,
   });
+}
+
+/** ROK-2115: a Blizzard-sourced row's id is a fresh link for the claimer. */
+async function auditBlizzardLink(
+  tx: AddonImportTx,
+  m: ClaimMember,
+  row: CharacterRow,
+): Promise<void> {
+  const link = {
+    actorId: row.userId,
+    ownerId: row.userId,
+    characterId: row.id,
+    externalId: row.externalId,
+    gameId: m.gameId,
+    region: m.region,
+    via: 'roster_pick' as const,
+  };
+  await logExternalIdLinked(tx, link, null);
 }

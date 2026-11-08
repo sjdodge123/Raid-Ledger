@@ -135,12 +135,10 @@ export async function mergeForeverRow(
     })
     .where(eq(schema.characters.id, existing.id))
     .returning();
-  const row = defined(merged, 'merged Forever character row');
-  await auditImportLink(tx, existing, row.externalId);
   logger.log(
     `User ${existing.userId} merged Forever import into character ${existing.id} (${existing.name})`,
   );
-  return mapCharacterToDto(row);
+  return mapCharacterToDto(defined(merged, 'merged Forever character row'));
 }
 
 /** ROK-2115: a re-import that set or changed the Blizzard id — a fresh link. */
@@ -181,5 +179,7 @@ export async function mergeIntoOwnForeverRow(
   const args = { userId, gameId, name, region: dto.region };
   const own = await claimForeverIdentity(tx, args);
   if (!own) return undefined;
-  return mergeForeverRow(tx, own, profile, dto, sync, logger);
+  const merged = await mergeForeverRow(tx, own, profile, dto, sync, logger);
+  await auditImportLink(tx, own, merged.externalId ?? null);
+  return merged;
 }

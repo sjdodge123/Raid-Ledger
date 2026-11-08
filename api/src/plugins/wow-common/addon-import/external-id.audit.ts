@@ -14,10 +14,7 @@ export const EXTERNAL_ID_LINKED_ACTION = 'external_id_linked';
 /** Where the id was set: an Armory (re-)import merge, ROK-2124's auto-link,
  * a ROK-2128 roster pick, or an admin Change owner (a fresh owner's link). */
 export type ExternalIdLinkVia =
-  | 'armory_import'
-  | 'auto_link'
-  | 'roster_pick'
-  | 'admin_reassign';
+  'armory_import' | 'auto_link' | 'roster_pick' | 'admin_reassign';
 
 export interface ExternalIdLinkEntry {
   /** Null for a background job (auto-link). */
