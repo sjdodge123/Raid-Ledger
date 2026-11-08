@@ -73,7 +73,9 @@ const excluded = (column: GameTextColumn): SQL =>
 
 /**
  * The report moves when nothing was reported yet, or when the stored report
- * is not newer AND the reported text changed. Compared against `excluded`,
+ * is not newer AND the reported text changed. The stored stamp is compared
+ * at second precision: a same-second move bumps it by 1 ms (see movedValue),
+ * and a third same-second export must still win (review r3). Compared against `excluded`,
  * never a bound JS Date (drizzle's postgres.js driver does not serialize a
  * Date inside raw `sql`).
  */
@@ -81,7 +83,7 @@ function reportMoves(field: Field): SQL {
   const stamp: GameTextColumn = `game${field}ReportedAt`;
   const text: GameTextColumn = `game${field}`;
   const stored = guildProfiles[stamp];
-  return sql`${stored} IS NULL OR (${stored} <= ${excluded(stamp)} AND ${guildProfiles[text]} IS DISTINCT FROM ${excluded(text)})`;
+  return sql`${stored} IS NULL OR (date_trunc('second', ${stored}) <= ${excluded(stamp)} AND ${guildProfiles[text]} IS DISTINCT FROM ${excluded(text)})`;
 }
 
 /**
