@@ -54,10 +54,10 @@ const logger = (): { warn: jest.Mock } => ({ warn: jest.fn() });
 beforeEach(() => clearJoinGuardWarnings());
 
 describe('disconnectMember pre-check (ROK-2119)', () => {
-  it('skips a member above the bot in the role hierarchy', async () => {
+  it('still disconnects a member above the bot in the role hierarchy', async () => {
     const { guild, member } = makeGuild({ manageable: false });
-    await expect(disconnectMember(guild, 'm1')).resolves.toBe('unmanageable');
-    expect(member.voice.disconnect).not.toHaveBeenCalled();
+    await expect(disconnectMember(guild, 'm1')).resolves.toBe('disconnected');
+    expect(member.voice.disconnect).toHaveBeenCalledTimes(1);
   });
 
   it('skips when the bot lacks Move Members on the channel', async () => {
@@ -75,7 +75,7 @@ describe('disconnectMember pre-check (ROK-2119)', () => {
 
 describe('guardDisconnect (ROK-2119)', () => {
   it('warns once per event+member for an unmanageable member', async () => {
-    const { guild } = makeGuild({ manageable: false });
+    const { guild } = makeGuild({ canMove: false });
     const log = logger();
     await guardDisconnect(guild, 7, 'm1', log);
     await guardDisconnect(guild, 7, 'm1', log);

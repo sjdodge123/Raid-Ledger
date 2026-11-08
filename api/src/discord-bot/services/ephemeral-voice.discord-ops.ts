@@ -116,12 +116,13 @@ export async function applyPrivateVoiceOverwrites(
 export type DisconnectResult = 'disconnected' | 'not-in-voice' | 'unmanageable';
 
 /**
- * ROK-2119: true when the bot may disconnect `member` — it outranks them in
- * the role hierarchy and holds Move Members on their voice channel. An
- * uncached bot member is not knowable here: try, and classify any refusal.
+ * ROK-2119: true when the bot holds Move Members on the member's voice
+ * channel. Deliberately NOT `member.manageable`: role hierarchy gates role,
+ * nickname and kick edits, not voice moves, so a higher-ranked intruder is
+ * still disconnected; if Discord refuses anyway, guardDisconnect classifies
+ * the 50013 as expected. An uncached bot member is not knowable here: try.
  */
 export function botCanMoveMember(guild: Guild, member: GuildMember): boolean {
-  if (!member.manageable) return false;
   const me = guild.members.me;
   if (!me) return true;
   const perms = member.voice.channel?.permissionsFor(me) ?? me.permissions;
