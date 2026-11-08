@@ -10,6 +10,10 @@ import {
 } from './igdb.constants';
 import { delay } from './igdb-api.helpers';
 import { upsertGamesFromApi } from './igdb-upsert.helpers';
+import {
+  findOtherItadIdOwner,
+  reportDuplicatePair,
+} from './games-key-owner.helpers';
 import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 
 const logger = new Logger('IgdbSyncHelpers');
@@ -153,7 +157,8 @@ export async function enrichSyncedGamesWithItad(
       const itadGame = await lookupBySteamAppId(game.steamAppId!);
       if (!itadGame) continue;
       const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
-      await updateGameWithItadData(db, game.id, itadGame, info);
+      const written = await updateGameWithItadData(db, game.id, itadGame, info);
+      if (!written) continue;
       onGameChanged?.(game.id);
       enriched++;
     } catch (err) {
@@ -183,13 +188,22 @@ async function fetchInfoGracefully(
   }
 }
 
-/** Persist ITAD metadata to a game row. */
+/**
+ * Persist ITAD metadata to a game row. Returns false (no write) when another
+ * row already holds this itad_game_id — ROK-2120: the pair is reported for the
+ * dedup sweep instead of violating games_itad_game_id_unique.
+ */
 async function updateGameWithItadData(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   itadGame: ItadGame,
   info: ItadEnrichInfo,
-): Promise<void> {
+): Promise<boolean> {
+  const owner = await findOtherItadIdOwner(db, itadGame.id, gameId);
+  if (owner != null) {
+    reportDuplicatePair(owner, gameId, 'itad_game_id');
+    return false;
+  }
   const values: Record<string, unknown> = {
     itadGameId: itadGame.id,
     itadBoxartUrl: itadGame.assets?.boxart ?? null,
@@ -199,4 +213,5 @@ async function updateGameWithItadData(
     values.earlyAccess = info.earlyAccess;
   }
   await db.update(schema.games).set(values).where(eq(schema.games.id, gameId));
+  return true;
 }

@@ -6,6 +6,7 @@ import {
   upsertGamesFromApi,
   backfillMissingCovers,
 } from './igdb-upsert.helpers';
+import { Logger } from '@nestjs/common';
 import { withMockTransaction } from '../common/testing/drizzle-mock';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
@@ -86,7 +87,7 @@ describe('upsertSingleGameRow', () => {
 // ============================================================================
 
 interface SelectCall {
-  type: 'banned' | 'steamMerge' | 'nameMerge' | 'finalFetch';
+  type: 'banned' | 'steamMerge' | 'nameMerge' | 'keyOwners' | 'finalFetch';
   result: unknown[];
 }
 
@@ -182,6 +183,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
       { type: 'banned', result: [] }, // no banned games
       // no steamMerge SELECT — none of these rows have steamAppId
       { type: 'nameMerge', result: [] }, // ROK-1113 normalized-name pre-check
+      { type: 'keyOwners', result: [] }, // ROK-2120 unique-key owner pre-check
       { type: 'finalFetch', result: [] },
     ]);
     const apiGames = [
@@ -228,13 +230,15 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
       { type: 'banned', result: [] },
       { type: 'steamMerge', result: [] }, // single batched steam merge pre-check
       { type: 'nameMerge', result: [] }, // ROK-1113 normalized-name pre-check
+      { type: 'keyOwners', result: [] }, // ROK-2120 unique-key owner pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
     await upsertGamesFromApi(db as never, apiGamesWithSteam);
 
-    // banned (1) + steam-merge (1) + name-merge (1) + final-fetch (1) = 4
-    expect(calls.selectCount).toBe(4);
+    // banned (1) + steam-merge (1) + name-merge (1) + key-owners (1, ROK-2120)
+    // + final-fetch (1) = 5
+    expect(calls.selectCount).toBe(5);
   });
 
   it('skips the steam merge SELECT entirely when no rows have steamAppId', async () => {
@@ -245,13 +249,15 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     const { db, calls } = createBatchUpsertMockDb([
       { type: 'banned', result: [] },
       { type: 'nameMerge', result: [] }, // ROK-1113 normalized-name pre-check
+      { type: 'keyOwners', result: [] }, // ROK-2120 unique-key owner pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
     await upsertGamesFromApi(db as never, apiGames);
 
-    // banned (1) + name-merge (1) + final-fetch (1) = 3 (no steam merge SELECT)
-    expect(calls.selectCount).toBe(3);
+    // banned (1) + name-merge (1) + key-owners (1, ROK-2120) + final-fetch (1)
+    // = 4 (no steam merge SELECT)
+    expect(calls.selectCount).toBe(4);
   });
 
   it('handles mixed new and existing (via steamAppId) games — merges existing, inserts new', async () => {
@@ -277,6 +283,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
       { type: 'banned', result: [] },
       { type: 'steamMerge', result: [{ id: 77, steamAppId: 2000 }] },
       { type: 'nameMerge', result: [] }, // ROK-1113 — no name matches
+      { type: 'keyOwners', result: [] }, // ROK-2120 unique-key owner pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
@@ -296,6 +303,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     const { db, calls, valuesMock } = createBatchUpsertMockDb([
       { type: 'banned', result: [{ igdbId: 50 }] }, // igdb=50 is banned
       { type: 'nameMerge', result: [] }, // ROK-1113
+      { type: 'keyOwners', result: [] }, // ROK-2120 unique-key owner pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
@@ -333,6 +341,7 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     const { db, onConflictMock } = createBatchUpsertMockDb([
       { type: 'banned', result: [] },
       { type: 'nameMerge', result: [] }, // ROK-1113
+      { type: 'keyOwners', result: [] }, // ROK-2120 unique-key owner pre-check
       { type: 'finalFetch', result: [] },
     ]);
 
@@ -350,6 +359,103 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     // The first-row values must NOT appear as literal JS strings in the set
     expect(setObj.name).not.toBe('Row A');
     expect(setObj.slug).not.toBe('row-a');
+  });
+});
+
+describe('upsertGamesFromApi — unique-key collisions (ROK-2120)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const apiGames: IgdbApiGame[] = [
+    { id: 100, slug: 'p-100', name: 'Pure IGDB' },
+    {
+      id: 200,
+      slug: 's-200',
+      name: 'Existing ITAD',
+      external_games: [{ category: 1, uid: '2000' }],
+    },
+  ];
+
+  it('skips a steamAppId merge whose igdb_id another row owns and reports the pair', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    // Row 77 is the ITAD copy (steam 2000, no igdb id); row 55 is the
+    // IGDB-first twin that already holds igdb_id 200.
+    const { db, calls, valuesMock } = createBatchUpsertMockDb([
+      { type: 'banned', result: [] },
+      { type: 'steamMerge', result: [{ id: 77, steamAppId: 2000 }] },
+      { type: 'nameMerge', result: [] },
+      {
+        type: 'keyOwners',
+        result: [
+          { id: 77, igdbId: null, slug: 'itad-200', steamAppId: 2000 },
+          { id: 55, igdbId: 200, slug: 'igdb-200', steamAppId: null },
+        ],
+      },
+      { type: 'finalFetch', result: [] },
+    ]);
+
+    await upsertGamesFromApi(db as never, apiGames);
+
+    expect(calls.updateCount).toBe(0);
+    expect(warn).toHaveBeenCalledWith(
+      'IGDB duplicate pair skipped: keep=55 dup=77 key=igdb_id',
+    );
+    // The row is rerouted to the ON CONFLICT (igdb_id) insert so twin 55
+    // still refreshes — minus the steam id row 77 holds.
+    expect(warn).toHaveBeenCalledWith(
+      'IGDB duplicate pair skipped: keep=77 dup=55 key=steam_app_id',
+    );
+    const inserted = valuesMock.mock.calls[0]?.[0] as Array<{
+      igdbId: number;
+      steamAppId: number | null;
+    }>;
+    expect(inserted.map((r) => [r.igdbId, r.steamAppId])).toEqual([
+      [100, null],
+      [200, null],
+    ]);
+  });
+
+  it('drops an insert row whose slug another game holds instead of violating games_slug_unique', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const { db, valuesMock } = createBatchUpsertMockDb([
+      { type: 'banned', result: [] },
+      { type: 'steamMerge', result: [] },
+      { type: 'nameMerge', result: [] },
+      {
+        type: 'keyOwners',
+        result: [{ id: 91, igdbId: null, slug: 'p-100', steamAppId: null }],
+      },
+      { type: 'finalFetch', result: [] },
+    ]);
+
+    await upsertGamesFromApi(db as never, apiGames);
+
+    expect(warn).toHaveBeenCalledWith(
+      'IGDB duplicate pair skipped: keep=91 dup=igdb:100 key=slug',
+    );
+    const inserted = valuesMock.mock.calls[0]?.[0] as Array<{ igdbId: number }>;
+    expect(inserted.map((r) => r.igdbId)).toEqual([200]);
+  });
+
+  it('names the real merge reason in the merge log (steamAppId)', async () => {
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    const { db } = createBatchUpsertMockDb([
+      { type: 'banned', result: [] },
+      { type: 'steamMerge', result: [{ id: 77, steamAppId: 2000 }] },
+      { type: 'nameMerge', result: [] },
+      { type: 'keyOwners', result: [] },
+      { type: 'finalFetch', result: [] },
+    ]);
+
+    await upsertGamesFromApi(db as never, apiGames);
+
+    expect(log.mock.calls.map((c) => c[0])).toEqual(
+      expect.arrayContaining([
+        'Merged IGDB 200 into existing game 77 by steamAppId',
+      ]),
+    );
+    expect(log).not.toHaveBeenCalledWith(
+      expect.stringContaining('by normalized name'),
+    );
   });
 });
 
