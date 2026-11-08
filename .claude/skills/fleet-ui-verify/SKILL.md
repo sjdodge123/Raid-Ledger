@@ -50,6 +50,10 @@ Anything missing → do not guess a user or an object; mark the affected steps `
    on `document.documentElement.dataset.scheme`. Restore the user's mode (usually **Auto**) when done.
 5. **Screenshot every asserted state** (`browser_take_screenshot`) into the brief's directory, named
    `<step>-<viewport>-<dark|light>.png`. Use `browser_snapshot` for text/structure assertions.
+   When the brief names a **brief-media** directory (overnight morning brief), also record the
+   story's main flow as 4–10 frames at desktop `default-dark` (`flow-01.png`…) and build `flow.gif`
+   with the `ffmpeg` command in `.claude/skills/overnight/SKILL.md` (Phase B, "Screens for the
+   morning brief"); list the GIF path in the reply.
 6. **iPad / tablet-specific steps** (sheets, safe areas, viewport units, Safari behaviour) also run in
    the **iOS Simulator** when `mcp__Claude_Code_iOS_Simulator__control` is available: `attach` on an
    iPad device, `open_url` with its **own** freshly minted sign-in link (Safari is a separate browser; the link
