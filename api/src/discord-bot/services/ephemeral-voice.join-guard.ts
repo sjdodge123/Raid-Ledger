@@ -62,7 +62,12 @@ export async function guardDisconnect(
     return res;
   } catch (err) {
     if (!isDiscordAccessError(err)) throw err;
-    warnOnce(logger, eventId, memberId, `Discord refused (code ${err.code})`);
+    warnOnce(
+      logger,
+      eventId,
+      memberId,
+      'Discord refused it (missing access or permission)',
+    );
     return 'unmanageable';
   }
 }

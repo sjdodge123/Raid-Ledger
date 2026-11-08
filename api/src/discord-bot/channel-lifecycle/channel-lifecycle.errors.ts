@@ -35,7 +35,7 @@ export const DISCORD_ACCESS_CODES: ReadonlySet<number | string> = new Set([
 ]);
 
 /** True when `err` is a `DiscordAPIError` for missing access/permission. */
-export function isDiscordAccessError(err: unknown): err is DiscordAPIError {
+export function isDiscordAccessError(err: unknown): boolean {
   return err instanceof DiscordAPIError && DISCORD_ACCESS_CODES.has(err.code);
 }
 
