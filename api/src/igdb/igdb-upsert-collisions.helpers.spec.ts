@@ -7,8 +7,11 @@
 import { mapApiGameToDbRow } from './igdb.mappers';
 import {
   guardInsertRows,
+  recordOwner,
   type KeyOwners,
 } from './igdb-upsert-collisions.helpers';
+import { SEED_OWNED_GAME_SLUGS } from '../games-lookup/seed-owned-games.helpers';
+import { at } from '../common/testing/narrow';
 
 jest.mock('./games-key-owner.helpers', () => ({
   reportDuplicatePair: jest.fn(),
@@ -55,5 +58,26 @@ describe('guardInsertRows — in-batch key claims', () => {
     const kept = guardInsertRows([row(701, 'owned', 888)], owners);
     expect(kept).toHaveLength(1);
     expect(kept[0]?.steamAppId).toBe(888);
+  });
+});
+
+describe('recordOwner — replaced keys are released (ROK-2120 r3)', () => {
+  it('moves a merged row from its old slug to the new one', () => {
+    const owners = noOwners();
+    owners.slug.set('old-slug', 77);
+    recordOwner(owners, 77, {
+      igdbId: 200,
+      slug: 'new-slug',
+      steamAppId: null,
+    });
+    expect([...owners.slug]).toEqual([['new-slug', 77]]);
+  });
+
+  it('keeps a seed-owned slug (the SET clause never overwrites it)', () => {
+    const seed = at(SEED_OWNED_GAME_SLUGS, 0);
+    const owners = noOwners();
+    owners.slug.set(seed, 9);
+    recordOwner(owners, 9, { igdbId: 1, slug: 'incoming', steamAppId: null });
+    expect([...owners.slug]).toEqual([[seed, 9]]);
   });
 });

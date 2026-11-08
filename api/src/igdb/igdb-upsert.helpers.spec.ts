@@ -462,6 +462,43 @@ describe('upsertGamesFromApi — unique-key collisions (ROK-2120)', () => {
   });
 });
 
+describe('upsertGamesFromApi — key ownership after a merge (ROK-2120 r3)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('frees the merged row’s old slug so a new game using it in the same batch is inserted', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    // Row 77 (ITAD copy, slug `old-slug`) merges with IGDB 200 by steam id
+    // and takes slug `new-slug`; NEW game 300 uses the freed `old-slug`.
+    const { db, valuesMock } = createBatchUpsertMockDb([
+      { type: 'banned', result: [] },
+      { type: 'steamMerge', result: [{ id: 77, steamAppId: 2000 }] },
+      { type: 'nameMerge', result: [] },
+      {
+        type: 'keyOwners',
+        result: [{ id: 77, igdbId: null, slug: 'old-slug', steamAppId: 2000 }],
+      },
+      { type: 'finalFetch', result: [] },
+    ]);
+
+    await upsertGamesFromApi(db as never, [
+      {
+        id: 200,
+        slug: 'new-slug',
+        name: 'Merged Game',
+        external_games: [{ category: 1, uid: '2000' }],
+      },
+      { id: 300, slug: 'old-slug', name: 'Other Game' },
+    ]);
+
+    // Before the fix the stale `old-slug -> 77` claim dropped 300: [] here.
+    const batches: Array<Array<{ igdbId: number }>> = valuesMock.mock.calls.map(
+      (c) => c[0],
+    );
+    expect(batches.flat().map((r) => r.igdbId)).toEqual([300]);
+  });
+});
+
 describe('backfillMissingCovers (IGDB 500-id query cap)', () => {
   /** Mock DB: select().from().where() → the missing-cover rows; update().set().where() → ok. */
   function createBackfillMockDb(rows: { igdbId: number | null }[]) {

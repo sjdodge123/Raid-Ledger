@@ -13,6 +13,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { mapApiGameToDbRow } from './igdb.mappers';
 import { reportDuplicatePair } from './games-key-owner.helpers';
+import { SEED_OWNED_GAME_SLUGS } from '../games-lookup/seed-owned-games.helpers';
 
 type GameRow = ReturnType<typeof mapApiGameToDbRow>;
 
@@ -29,11 +30,39 @@ interface OwnedKeys {
   steamAppId: number | null;
 }
 
-/** Record `id` as the holder of every non-null key in `keys`. */
+/** Drop every claim `id` holds in `map` (a row has ONE value per column). */
+function releaseHeld<K>(map: Map<K, number>, id: number): void {
+  for (const [key, owner] of map) if (owner === id) map.delete(key);
+}
+
+/** True when `id` is known to hold a seed-owned slug (writes keep it). */
+function holdsSeedSlug(owners: KeyOwners, id: number): boolean {
+  for (const [slug, owner] of owners.slug) {
+    if (owner === id && SEED_OWNED_GAME_SLUGS.includes(slug)) return true;
+  }
+  return false;
+}
+
+/**
+ * Record `id` as the holder of every non-null key in `keys` — the values a
+ * write just put on that row. A key the write REPLACED is released (r3: a
+ * merge that moves row A from slug `old` to `new` frees `old` for a new row
+ * in the same batch). Mirrors the SET clauses: a null steam id keeps the
+ * stored one (COALESCE), and a seed-owned slug is never overwritten.
+ */
 export function recordOwner(owners: KeyOwners, id: number, keys: OwnedKeys) {
-  if (keys.igdbId != null) owners.igdb.set(keys.igdbId, id);
-  if (keys.slug != null) owners.slug.set(keys.slug, id);
-  if (keys.steamAppId != null) owners.steam.set(keys.steamAppId, id);
+  if (keys.igdbId != null) {
+    releaseHeld(owners.igdb, id);
+    owners.igdb.set(keys.igdbId, id);
+  }
+  if (keys.slug != null && !holdsSeedSlug(owners, id)) {
+    releaseHeld(owners.slug, id);
+    owners.slug.set(keys.slug, id);
+  }
+  if (keys.steamAppId != null) {
+    releaseHeld(owners.steam, id);
+    owners.steam.set(keys.steamAppId, id);
+  }
 }
 
 /** OR-able conditions matching any row holding an incoming key. */
