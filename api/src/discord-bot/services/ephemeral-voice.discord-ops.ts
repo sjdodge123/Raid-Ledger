@@ -1,6 +1,8 @@
 import {
   ChannelType,
   OverwriteType,
+  PermissionFlagsBits,
+  type GuildMember,
   type PermissionOverwriteManager,
   type OverwriteResolvable,
 } from 'discord.js';
@@ -110,24 +112,42 @@ export async function applyPrivateVoiceOverwrites(
   }
 }
 
+/** Outcome of a join-guard disconnect (ROK-2119). */
+export type DisconnectResult = 'disconnected' | 'not-in-voice' | 'unmanageable';
+
+/**
+ * ROK-2119: true when the bot may disconnect `member` — it outranks them in
+ * the role hierarchy and holds Move Members on their voice channel. An
+ * uncached bot member is not knowable here: try, and classify any refusal.
+ */
+export function botCanMoveMember(guild: Guild, member: GuildMember): boolean {
+  if (!member.manageable) return false;
+  const me = guild.members.me;
+  if (!me) return true;
+  const perms = member.voice.channel?.permissionsFor(me) ?? me.permissions;
+  return perms.has(PermissionFlagsBits.MoveMembers);
+}
+
 /**
  * ROK-1386 join-guard: forcibly disconnect a member from voice. Used when a
  * non-allow-listed member joins a private ephemeral channel. Force-fetches the
- * member when not cached. Returns false (no-op) when the member is gone or not
- * in voice. Instrumented like every other Discord call.
+ * member when not cached. No-op when the member is gone or not in voice, and
+ * (ROK-2119) when the bot cannot move them. Instrumented like every other
+ * Discord call.
  */
 export async function disconnectMember(
   guild: Guild,
   discordUserId: string,
-): Promise<boolean> {
+): Promise<DisconnectResult> {
   const member =
     guild.members.cache.get(discordUserId) ??
     (await guild.members.fetch(discordUserId).catch(() => null));
-  if (!member?.voice?.channelId) return false;
+  if (!member?.voice?.channelId) return 'not-in-voice';
+  if (!botCanMoveMember(guild, member)) return 'unmanageable';
   await timedDiscordCall('ephemeral.guard.disconnect', () =>
     member.voice.disconnect('Private event: not on the roster allow-list'),
   );
-  return true;
+  return 'disconnected';
 }
 
 /** Delete a voice channel. No-op (returns false) if it's already gone. */

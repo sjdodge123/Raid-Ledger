@@ -14,11 +14,11 @@ import {
   buildScheduledEventNameWithTime,
 } from './scheduled-event.helpers';
 import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
+import { guardDisconnect } from './ephemeral-voice.join-guard';
 import {
   applyPrivateVoiceOverwrites,
   createVoiceChannel,
   deleteVoiceChannel,
-  disconnectMember,
   getChannelMemberCountFresh,
   getEphemeralChannelName,
   renameVoiceChannel,
@@ -258,7 +258,7 @@ export class EphemeralVoiceService {
     try {
       const allowed = await this.resolveAllowedIds(ev.id);
       if (allowed.has(discordUserId)) return;
-      await disconnectMember(guild, discordUserId);
+      await guardDisconnect(guild, ev.id, discordUserId, this.logger);
     } catch (err) {
       this.captureError('join-guard', ev.id, err);
     }

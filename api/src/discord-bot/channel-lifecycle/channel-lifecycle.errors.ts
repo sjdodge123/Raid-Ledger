@@ -28,6 +28,17 @@ export const MISSING_ACCESS = 50001;
 /** Discord "Missing Permissions" — e.g. no Manage Channels / Manage Roles. */
 export const MISSING_PERMISSIONS = 50013;
 
+/** Discord codes meaning the bot lacks access or a permission (50001 / 50013). */
+export const DISCORD_ACCESS_CODES: ReadonlySet<number | string> = new Set([
+  MISSING_ACCESS,
+  MISSING_PERMISSIONS,
+]);
+
+/** True when `err` is a `DiscordAPIError` for missing access/permission. */
+export function isDiscordAccessError(err: unknown): err is DiscordAPIError {
+  return err instanceof DiscordAPIError && DISCORD_ACCESS_CODES.has(err.code);
+}
+
 /**
  * Detail of the `failed` item a hand-deleted channel produces once D9 cleanup
  * (suppress + unbind + unlink hubs) has run. It is the machine-readable marker
