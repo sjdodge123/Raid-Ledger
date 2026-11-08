@@ -716,6 +716,11 @@ tint. The token banners and the neutral panel flip with the theme. Keep body cop
 `CopyButton`'s `copyWithToast` is the reference. **DON'T** toast what the UI already shows, or use a toast
 for an error the user must act on — that needs inline text beside the control.
 
+**One system toast (ROK-2116):** when an open tab's bundle is older than the API (a response carries
+fields the bundle's schemas don't know), `lib/api/schema-skew.ts` shows `toast.info` "A new version of
+Raid Ledger is available." with a "Reload" action, once per page load (fixed toast id, no auto-dismiss).
+Reuse it for any "your bundle is stale" signal rather than adding a banner.
+
 ### 4.9 Page header and back navigation
 
 **DO** — `pages/events/EventsPageHeader.tsx` is the reference shape: `mb-8 flex flex-col sm:flex-row
