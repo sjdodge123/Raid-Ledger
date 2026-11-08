@@ -8,7 +8,10 @@ import {
   timestamp,
   index,
   unique,
+  check,
+  text,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type {
   GuildMailworthyStoredDays,
   GuildMailworthyStoredRules,
@@ -81,6 +84,9 @@ export const guildMailworthyPeers = pgTable(
   ],
 );
 
+/** Who vouches for a giver row (D5 amended 2026-11-08). */
+export type GuildMailworthyGiverSource = 'self' | 'relayed';
+
 /** Per sending character: self-reported contribution counts. */
 export const guildMailworthyGivers = pgTable(
   'guild_mailworthy_givers',
@@ -104,6 +110,12 @@ export const guildMailworthyGivers = pgTable(
     asOf: timestamp('as_of', { withTimezone: true }).notNull(),
     /** Export `generatedAt` of the winning row — breaks an `as_of` tie. */
     generatedAt: timestamp('generated_at', { withTimezone: true }).notNull(),
+    /**
+     * D5 amended: `self` = the exporter or a character owned by the
+     * importing user; `relayed` = anything else. `self` is never
+     * overwritten by `relayed`; `self` always replaces `relayed`.
+     */
+    source: text('source').$type<GuildMailworthyGiverSource>().notNull(),
     reportedByUserId: integer('reported_by_user_id').references(
       () => users.id,
       { onDelete: 'set null' },
@@ -119,6 +131,10 @@ export const guildMailworthyGivers = pgTable(
     ),
     // ROK-1157: FK backing index.
     index('idx_guild_mailworthy_givers_reported_by').on(table.reportedByUserId),
+    check(
+      'chk_guild_mailworthy_givers_source',
+      sql`${table.source} IN ('self', 'relayed')`,
+    ),
   ],
 );
 

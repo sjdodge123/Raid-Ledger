@@ -1,5 +1,5 @@
 {
-  "id": "c6daa3aa-d1a3-4047-a80f-fba9a4e93344",
+  "id": "7817494d-568d-4e21-a7a9-028f9292ad57",
   "prevId": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "version": "7",
   "dialect": "postgresql",
@@ -12357,6 +12357,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
         "reported_by_user_id": {
           "name": "reported_by_user_id",
           "type": "integer",
@@ -12428,7 +12434,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "chk_guild_mailworthy_givers_source": {
+          "name": "chk_guild_mailworthy_givers_source",
+          "value": "\"guild_mailworthy_givers\".\"source\" IN ('self', 'relayed')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.guild_mailworthy_peers": {
