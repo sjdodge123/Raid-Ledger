@@ -2,8 +2,16 @@
  * Tests for ROK-548: buildUpdateSet must filter non-MMO roles from
  * preferredRoles and only wrap slotRole when it is an MMO role.
  */
-import { buildUpdateSet } from './reschedule-roster.handlers';
-import type { ReconfirmOptions } from './reschedule-response.helpers';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import type { ButtonInteraction } from 'discord.js';
+import { buildUpdateSet, reconfirmSignup } from './reschedule-roster.handlers';
+import type {
+  EventRow,
+  ReconfirmOptions,
+  RescheduleDeps,
+} from './reschedule-response.helpers';
+import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
 describe('buildUpdateSet — ROK-548 preferredRoles filtering', () => {
   describe('preferredRoles array filtering', () => {
@@ -109,5 +117,41 @@ describe('buildUpdateSet — ROK-548 preferredRoles filtering', () => {
       // preferredRoles branch fires first, slotRole ignored
       expect(result.preferredRoles).toEqual(['healer', 'dps']);
     });
+  });
+});
+
+describe('reconfirmSignup — unlinked Discord id (ROK-2097)', () => {
+  function setup() {
+    const db = createDrizzleMock();
+    const deps = {
+      db,
+      activityLog: { log: jest.fn().mockResolvedValue(undefined) },
+      logger: { warn: jest.fn(), error: jest.fn(), log: jest.fn() },
+    } as unknown as RescheduleDeps;
+    const interaction = {
+      user: { id: 'discord-d' },
+    } as unknown as ButtonInteraction;
+    const event = { id: 42 } as unknown as EventRow;
+    return { db, deps, interaction, event };
+  }
+
+  it('looks up guest rows only — never a row owned by an account the id left', async () => {
+    const { db, deps, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([]);
+    await reconfirmSignup(deps, interaction, event);
+    const clause = (db.where.mock.calls[0] as [SQL] | undefined)?.[0];
+    if (!clause) throw new Error('expected a WHERE clause, got none');
+    const { sql, params } = new PgDialect().sqlToQuery(clause);
+    expect(sql).toBe(
+      '("event_signups"."event_id" = $1 and "event_signups"."discord_user_id" = $2 and "event_signups"."user_id" is null)',
+    );
+    expect(params).toEqual([42, 'discord-d']);
+  });
+
+  it('writes nothing when no guest row matches (owner row filtered out)', async () => {
+    const { db, deps, interaction, event } = setup();
+    db.limit.mockResolvedValueOnce([]);
+    await reconfirmSignup(deps, interaction, event);
+    expect(db.update).not.toHaveBeenCalled();
   });
 });
