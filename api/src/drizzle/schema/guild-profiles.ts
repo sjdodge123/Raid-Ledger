@@ -26,8 +26,19 @@ function ingameTextConstraints(table: {
   ingameInfo: AnyPgColumn;
   ingameMotdUpdatedBy: AnyPgColumn;
   ingameInfoUpdatedBy: AnyPgColumn;
+  gameMotd: AnyPgColumn;
+  gameInfo: AnyPgColumn;
 }) {
   return [
+    // ROK-2137: the reported in-game text obeys the same in-game caps.
+    check(
+      'guild_profiles_game_motd_length',
+      sql`char_length(${table.gameMotd}) <= 255`,
+    ),
+    check(
+      'guild_profiles_game_info_length',
+      sql`char_length(${table.gameInfo}) <= 499`,
+    ),
     check(
       'guild_profiles_ingame_motd_length',
       sql`char_length(${table.ingameMotd}) <= 255`,
@@ -137,6 +148,28 @@ export const guildProfiles = pgTable(
       () => users.id,
       { onDelete: 'set null' },
     ),
+    /**
+     * ROK-2137 (P1): the text LedgerLink last REPORTED from the game (never
+     * the hub's own text above). `*_reported_at` = the export's snapshot
+     * instant; set + NULL text = the in-game box was reported empty. Only
+     * a report not older than the stored one lands. `*_acknowledged_at` =
+     * an officer chose Push (keep the hub text); a NEWER report differing
+     * again re-raises "Changed in game".
+     */
+    gameMotd: text('game_motd'),
+    gameMotdReportedAt: timestamp('game_motd_reported_at', {
+      withTimezone: true,
+    }),
+    gameMotdAcknowledgedAt: timestamp('game_motd_acknowledged_at', {
+      withTimezone: true,
+    }),
+    gameInfo: text('game_info'),
+    gameInfoReportedAt: timestamp('game_info_reported_at', {
+      withTimezone: true,
+    }),
+    gameInfoAcknowledgedAt: timestamp('game_info_acknowledged_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
