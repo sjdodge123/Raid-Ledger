@@ -27,6 +27,7 @@ import {
   isForeverGame,
   rethrowForeverViolation,
 } from '../../wow-forever-identity.helpers';
+import { armoryDtoFields } from '../roster-armory-fields';
 import { copyMemberArmory } from './roster-claim.armory-copy';
 import { loadCandidates, type CandidateRow } from './roster-claim.queries';
 import {
@@ -174,5 +175,6 @@ function toCandidate(row: CandidateRow): RosterClaimCandidateDto {
     class: row.class,
     level: row.level,
     source: row.source === 'blizzard' ? 'blizzard' : 'addon_import',
+    ...armoryDtoFields(row),
   };
 }
