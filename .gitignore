@@ -28,9 +28,13 @@ _bmad-output/
 !.claude/skills/
 !.claude/agents/
 planning-artifacts/
+# a worktree's planning-artifacts is a symlink to the main checkout (scripts/git-hooks/post-checkout)
+/planning-artifacts
 implementation-artifacts/
 scripts/*
 !scripts/deploy_prod.sh
+!scripts/install-git-hooks.sh
+!scripts/git-hooks/
 !scripts/deploy_dev.sh
 !scripts/env-lock.sh
 !scripts/fix-migration-order.sh

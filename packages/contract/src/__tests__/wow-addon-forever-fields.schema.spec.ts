@@ -70,6 +70,15 @@ describe('ROK-1742 — new fields accepted', () => {
         expect(ok(withData((d) => ({ ...d, quests: { ...quests, completedTruncated } })))).toBe(true);
     });
 
+    it('accepts quests without completed — log only (ROK-2125, additive v1)', () => {
+        expect(ok(withData((d) => ({ ...d, quests: { inProgress: quests.inProgress } })))).toBe(true);
+        expect(ok(withData((d) => ({ ...d, quests: { inProgress: [] } })))).toBe(true);
+    });
+
+    it('still accepts an explicitly empty completed list (ROK-2125)', () => {
+        expect(ok(withData((d) => ({ ...d, quests: { ...quests, completed: [] } })))).toBe(true);
+    });
+
     it('pins the ruled caps (Lead rulings 2026-10-09)', () => {
         expect([ADDON_QUESTS_COMPLETED_MAX, ADDON_QUESTS_IN_PROGRESS_MAX, ADDON_QUEST_OBJECTIVES_MAX]).toEqual([10_000, 35, 10]);
     });
@@ -89,6 +98,9 @@ describe('ROK-1742 — new fields rejected', () => {
         ['an unknown key on an objective', (d) => ({ ...d, quests: { ...quests, inProgress: [{ questId: 1, objectives: [{ ...objective, type: 'monster' }] }] } })],
         ['a non-boolean completedTruncated', (d) => ({ ...d, quests: { ...quests, completedTruncated: 'yes' } })],
         ['quests without inProgress', (d) => ({ ...d, quests: { completed: [] } })],
+        ['a non-array completed (ROK-2125)', (d) => ({ ...d, quests: { ...quests, completed: 'none' } })],
+        ['a null completed (ROK-2125)', (d) => ({ ...d, quests: { ...quests, completed: null } })],
+        ['a non-integer completed id (ROK-2125)', (d) => ({ ...d, quests: { ...quests, completed: [1.5] } })],
         ['an objective text of 129 chars', (d) => ({ ...d, quests: { ...quests, inProgress: [{ questId: 1, objectives: [{ ...objective, text: 'x'.repeat(129) }] }] } })],
         ['tree 3', (d) => ({ ...d, talents: { nodes: [{ ...node, tree: 3 }] } })],
         ['row 10', (d) => ({ ...d, talents: { nodes: [{ ...node, row: 10 }] } })],

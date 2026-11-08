@@ -67,6 +67,18 @@ export const EXPANSION_KEY: Record<string, string> = {
   Cataclysm: 'cata',
 };
 
+/**
+ * ROK-2142: drop `classic` instances before any write. The retail journal's
+ * vanilla instances carry modern encounter lists (Hogger, Lord Overheat…)
+ * and retail loot; the curated `boss-encounter-data.json` /
+ * `boss-loot-data.json` are the only source for classic rows.
+ */
+export function refreshableInstances<T extends { expansion: string }>(
+  instances: readonly T[],
+): T[] {
+  return instances.filter((i) => i.expansion !== 'classic');
+}
+
 export interface JournalInstance {
   id: number;
   name: string;

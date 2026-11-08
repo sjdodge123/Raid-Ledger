@@ -109,7 +109,13 @@ describe('DungeonQuestSeeder', () => {
     });
 
     it('appends forever rows to the same upsert', async () => {
-      const row = { ...classicData[0], questId: 999001, expansion: 'forever' };
+      // ROK-2142: an id off the inside allowlist is always seeded as outside.
+      const row = {
+        ...classicData[0],
+        questId: 999001,
+        expansion: 'forever',
+        startsInsideDungeon: false,
+      };
       fsPromises.readFile.mockImplementation(
         (p: string, enc: BufferEncoding) =>
           String(p).endsWith('forever-dungeon-quest-data.json')

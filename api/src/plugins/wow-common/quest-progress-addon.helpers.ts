@@ -163,16 +163,16 @@ export function fillFromAddon(
 /**
  * Highest completed id of a truncated snapshot (ROK-1758). The addon keeps the
  * lowest ids when it truncates, so anything above this is unknown, not undone.
- * @returns undefined when the list is complete (or empty).
+ * An EMPTY truncated list is "completed list unknown" (ROK-2125: a log-only
+ * import with no Armory list) — cut to its first 0 ids, so every id is unknown.
+ * @returns undefined when the list is complete.
  */
 export function truncationCutoff(quests: {
   completed: number[];
   completedTruncated?: boolean | undefined;
 }): number | undefined {
-  if (!quests.completedTruncated || quests.completed.length === 0) {
-    return undefined;
-  }
-  return quests.completed.reduce((max, id) => (id > max ? id : max));
+  if (!quests.completedTruncated) return undefined;
+  return quests.completed.reduce((max, id) => (id > max ? id : max), 0);
 }
 
 /**

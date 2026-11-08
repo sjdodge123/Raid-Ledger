@@ -13,6 +13,7 @@ import {
   type JournalEncounter,
   upsertBoss,
   processLootItem,
+  refreshableInstances,
 } from './boss-data-refresh.helpers';
 
 /**
@@ -57,7 +58,7 @@ export class BossDataRefreshService {
     bosses: number;
     loot: number;
   }> {
-    const instances = await this.fetchAllInstanceIds();
+    const instances = refreshableInstances(await this.fetchAllInstanceIds());
     this.logger.log(`Found ${instances.length} instances to refresh`);
     let totalBosses = 0,
       totalLoot = 0;
@@ -74,7 +75,11 @@ export class BossDataRefreshService {
     return { bosses: totalBosses, loot: totalLoot };
   }
 
-  /** Fetch TBC instance IDs from the Blizzard journal. */
+  /**
+   * Fetch TBC instance IDs from the Blizzard journal. A tier with no
+   * EXPANSION_KEY mapping is skipped — never defaulted to `classic`
+   * (ROK-2142: classic rows come only from the curated seed JSON).
+   */
   private async fetchAllInstanceIds(): Promise<
     Array<{ id: number; expansion: string }>
   > {
@@ -97,7 +102,8 @@ export class BossDataRefreshService {
         `${BASE_URL}/data/wow/journal-expansion/${tier.id}?namespace=${NAMESPACE}&locale=en_US`,
       );
       if (!detail || !targetExpansions.has(detail.name)) continue;
-      const expansion = EXPANSION_KEY[detail.name] || 'classic';
+      const expansion = EXPANSION_KEY[detail.name];
+      if (!expansion) continue;
       for (const d of detail.dungeons || [])
         result.push({ id: d.id, expansion });
       for (const r of detail.raids || []) result.push({ id: r.id, expansion });

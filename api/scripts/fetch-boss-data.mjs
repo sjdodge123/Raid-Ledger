@@ -159,12 +159,12 @@ const EXPANSION_MAP = {
 // --- Sub-instance parent mapping ---
 const SUB_INSTANCE_PARENTS = {
   // Dire Maul variants
-  230: 230,   // DM:East — standalone journal entry
-  1276: 1276, // DM:West — standalone journal entry
-  1277: 1277, // DM:North — standalone journal entry
+  230: 230,   // DM:West (Capital Gardens) — standalone journal entry
+  1276: 1276, // DM:East (Warpwood Quarter) — standalone journal entry
+  1277: 1277, // DM:North (Gordok Commons) — standalone journal entry
   // Stratholme variants
-  236: 236,   // Strat:Live — standalone
-  1292: 1292, // Strat:UD — standalone
+  236: 236,   // Strat:Live (Main Gate) — standalone
+  1292: 1292, // Strat:UD (Service Entrance) — standalone
   // Maraudon sub-instances
   23201: 232,
   23202: 232,
