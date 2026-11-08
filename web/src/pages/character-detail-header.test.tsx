@@ -4,7 +4,7 @@
  * ≥ sm keeps the desktop row with a "⋯" admin menu and a labelled Sync.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
@@ -12,8 +12,18 @@ import { activateWowPlugin } from '../test/activate-wow-plugin';
 import { renderWithProviders } from '../test/render-helpers';
 import { CharacterDetailPage } from './character-detail-page';
 
-const state = vi.hoisted(() => ({ phone: false, role: 'admin', userId: 5 }));
-vi.mock('../hooks/use-media-query', () => ({ useMediaQuery: () => state.phone }));
+const state = vi.hoisted(() => ({ phone: false, role: 'admin', userId: 5, listeners: new Set<() => void>() }));
+// A subscribable stand-in for the media query, so a test can cross the breakpoint mid-render.
+vi.mock('../hooks/use-media-query', async () => {
+    const { useSyncExternalStore } = await import('react');
+    const subscribe = (cb: () => void): (() => void) => { state.listeners.add(cb); return () => { state.listeners.delete(cb); }; };
+    return { useMediaQuery: () => useSyncExternalStore(subscribe, () => state.phone) };
+});
+
+/** Flip the mocked viewport across the 640px breakpoint and notify subscribers. */
+function crossBreakpoint(phone: boolean): void {
+    act(() => { state.phone = phone; state.listeners.forEach((cb) => cb()); });
+}
 vi.mock('../hooks/use-character-detail', () => ({
     useCharacterDetail: () => ({ data: CHARACTER, isLoading: false, error: null }),
 }));
@@ -119,5 +129,23 @@ describe('character header at ≥ sm (ROK-2140 shared fixes)', () => {
         await user.click(trigger);
         const menu = screen.getByRole('menu');
         expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Change owner', 'Unlink character']);
+    });
+});
+
+describe('crossing the 640px breakpoint (ROK-2140 Codex P2)', () => {
+    beforeEach(() => { activateWowPlugin(); state.role = 'admin'; state.userId = 5; });
+
+    it.each([
+        ['phone → desktop', true],
+        ['desktop → phone', false],
+    ])('keeps an open import dialog and its pasted string (%s)', async (_label, startPhone) => {
+        state.phone = startPhone;
+        const user = userEvent.setup();
+        renderPage();
+        await user.click(screen.getByRole('button', { name: 'Import string' }));
+        await user.type(await screen.findByLabelText(/Export string/), 'RL1-pasted');
+        crossBreakpoint(!startPhone);
+        expect(screen.getByTestId(startPhone ? 'character-header-desktop' : 'character-header-phone')).toBeInTheDocument();
+        expect(screen.queryByLabelText(/Export string/)).toHaveValue('RL1-pasted');
     });
 });

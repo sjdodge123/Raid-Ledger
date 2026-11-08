@@ -75,7 +75,7 @@ function PhoneMeta({ character }: { character: CharacterDto }): JSX.Element | nu
 
 const ACTION_ROW: Record<CharacterHeaderLayout, string> = {
     phone: 'mt-4 grid grid-flow-col auto-cols-fr gap-2 empty:hidden',
-    desktop: 'mt-3 flex flex-wrap items-center gap-2 empty:hidden',
+    desktop: 'col-start-2 mt-3 flex flex-wrap items-center gap-2 empty:hidden',
 };
 
 function HeaderActions({ character, isOwner, isArmoryImported, isAdminViewer, layout }: HeaderProps & { layout: CharacterHeaderLayout }): JSX.Element {
@@ -90,11 +90,12 @@ function HeaderActions({ character, isOwner, isArmoryImported, isAdminViewer, la
     );
 }
 
-function PhoneHeader(props: HeaderProps): JSX.Element {
+/** Phone hero (Option B): everything above the action row. */
+function PhoneHero(props: HeaderProps): JSX.Element {
     const { character } = props;
     const levelTile = character.level ? <StatTile value={character.level} label="Level" valueClassName="text-warning" /> : null;
     return (
-        <div data-testid="character-header-phone" className="bg-panel border border-edge rounded-lg p-4 text-center">
+        <>
             <div className="mt-1 mb-2.5 flex justify-center"><Portrait character={character} size="phone" sizeClass="w-[72px] h-[72px]" /></div>
             <h1 className="text-xl font-bold text-foreground">{character.name}</h1>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2 empty:hidden">
@@ -105,34 +106,46 @@ function PhoneHeader(props: HeaderProps): JSX.Element {
             </div>
             <PhoneMeta character={character} />
             <div className="mt-2.5 flex items-center justify-center gap-3 empty:hidden"><CharacterRoleBadge character={character} isOwner={props.isOwner} /></div>
-            <HeaderActions {...props} layout="phone" />
-        </div>
+        </>
     );
 }
 
-function DesktopHeader(props: HeaderProps): JSX.Element {
+/** Desktop hero: the portrait (spanning both grid rows) and the info column; the action row sits under the info column. */
+function DesktopHero(props: HeaderProps): JSX.Element {
     const { character } = props;
     return (
-        <div data-testid="character-header-desktop" className="bg-panel border border-edge rounded-lg p-6">
-            <div className="flex items-start gap-4">
-                <Portrait character={character} size="lg" sizeClass="w-20 h-20" />
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <h1 className="text-2xl font-bold text-foreground">{character.name}</h1>
-                        <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'chips', layout: 'desktop' }} />
-                        <CharacterRoleBadge character={character} isOwner={props.isOwner} />
-                    </div>
-                    <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'stats', layout: 'desktop' }} />
-                    <DesktopMeta character={character} />
-                    <HeaderActions {...props} layout="desktop" />
+        <>
+            <div className="row-span-2"><Portrait character={character} size="lg" sizeClass="w-20 h-20" /></div>
+            <div className="min-w-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <h1 className="text-2xl font-bold text-foreground">{character.name}</h1>
+                    <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'chips', layout: 'desktop' }} />
+                    <CharacterRoleBadge character={character} isOwner={props.isOwner} />
                 </div>
+                <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'stats', layout: 'desktop' }} />
+                <DesktopMeta character={character} />
             </div>
-        </div>
+        </>
     );
 }
 
-/** The character header: Option B below `sm`, the desktop row at ≥ `sm` (ROK-2140). */
+const SHELL: Record<CharacterHeaderLayout, string> = {
+    phone: 'bg-panel border border-edge rounded-lg p-4 text-center',
+    desktop: 'bg-panel border border-edge rounded-lg p-6 grid grid-cols-[auto_minmax(0,1fr)] grid-rows-[auto_1fr] items-start gap-x-4',
+};
+
+/**
+ * The character header: Option B below `sm`, the desktop row at ≥ `sm` (ROK-2140).
+ * Only the hero swaps across the breakpoint; the shell and the action row keep
+ * their tree position, so a stateful action (an open import dialog with a pasted
+ * string) stays mounted when a phone rotates past 640px.
+ */
 export function CharacterHeader(props: HeaderProps): JSX.Element {
-    const isPhone = useMediaQuery(PHONE_MQ);
-    return isPhone ? <PhoneHeader {...props} /> : <DesktopHeader {...props} />;
+    const layout: CharacterHeaderLayout = useMediaQuery(PHONE_MQ) ? 'phone' : 'desktop';
+    return (
+        <div data-testid={`character-header-${layout}`} className={SHELL[layout]}>
+            {layout === 'phone' ? <PhoneHero {...props} /> : <DesktopHero {...props} />}
+            <HeaderActions {...props} layout={layout} />
+        </div>
+    );
 }
