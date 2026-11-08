@@ -4,9 +4,11 @@
  * keyed on signupId; an anonymous entry carries userId 0.
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { eq } from 'drizzle-orm';
 import {
   truncateAllTables,
   loginAsAdmin,
+  waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { nonEmpty } from '../common/testing/narrow';
@@ -121,6 +123,72 @@ async function testMismatchedUserIdRejected() {
   );
 }
 
+async function getSignup(signupId: number) {
+  const [row] = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.id, signupId));
+  return row;
+}
+
+/** Anonymous signup flips pending -> confirmed; only the linked member is notified. */
+async function testAnonConfirmedAndNotNotified() {
+  const eventId = await createMmoEvent(testApp, adminToken);
+  const anon = await anonSignup(eventId, '900000000000000005');
+  const { userId } = await createMemberAndLogin(
+    testApp,
+    'notifiedmember',
+    'notifiedmember@test.local',
+  );
+  const member = await signupViaDb(testApp, eventId, userId);
+  const res = await patchRoster(eventId, [
+    { userId: 0, signupId: anon.id, slot: 'dps', position: 1 },
+    { userId, signupId: member.id, slot: 'tank', position: 1 },
+  ]);
+  expect(res.status).toBe(200);
+  expect((await getSignup(anon.id))?.confirmationStatus).toBe('confirmed');
+  // Positive control: the linked member's new-assignment notification lands.
+  await waitFor(async () => {
+    const rows = await testApp.db.select().from(schema.notifications);
+    expect(rows.length).toBeGreaterThan(0);
+  });
+  const rows = await testApp.db.select().from(schema.notifications);
+  expect(rows.map((r) => r.userId)).toEqual(rows.map(() => userId));
+}
+
+async function testDuplicateSignupIdRejected() {
+  const eventId = await createMmoEvent(testApp, adminToken);
+  const anon = await anonSignup(eventId, '900000000000000006');
+  const res = await patchRoster(eventId, [
+    { userId: 0, signupId: anon.id, slot: 'dps', position: 1 },
+    { userId: 0, signupId: anon.id, slot: 'tank', position: 1 },
+  ]);
+  expect(res.status).toBe(400);
+  expect(String(res.body.message)).toContain(
+    `Signup ${anon.id} appears more than once in the roster`,
+  );
+  expect(await getSignupAssignment(testApp, anon.id)).toBeUndefined();
+}
+
+async function testCharacterOnAnonRejected() {
+  const eventId = await createMmoEvent(testApp, adminToken);
+  const anon = await anonSignup(eventId, '900000000000000007');
+  const res = await patchRoster(eventId, [
+    {
+      userId: 0,
+      signupId: anon.id,
+      slot: 'dps',
+      position: 1,
+      characterId: '11111111-1111-4111-8111-111111111111',
+    },
+  ]);
+  expect(res.status).toBe(400);
+  expect(String(res.body.message)).toContain(
+    `Signup ${anon.id} is anonymous and cannot be given a character`,
+  );
+  expect((await getSignup(anon.id))?.characterId).toBeNull();
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
@@ -140,4 +208,10 @@ describe('PATCH /events/:id/roster — anonymous signups (ROK-2141)', () => {
     testForeignSignupIdRejected());
   it('rejects a userId that does not own the given signupId', () =>
     testMismatchedUserIdRejected());
+  it('confirms a pending anonymous signup and notifies only linked users', () =>
+    testAnonConfirmedAndNotNotified());
+  it('rejects a signupId sent twice with a 400, saving nothing', () =>
+    testDuplicateSignupIdRejected());
+  it('rejects a characterId on an anonymous signup with a 400', () =>
+    testCharacterOnAnonRejected());
 });

@@ -35,7 +35,8 @@ interface BenchPromotionCanceller {
 /**
  * Resolve each assignment to one of the event's signups: by `signupId` when
  * given (its owner must match a non-zero `userId`), else by `userId`.
- * Throws 400 on a signup outside the event or a user/signup mismatch.
+ * Throws 400 on a signup outside the event, a user/signup mismatch, a signup
+ * listed twice, or a character override on an anonymous signup.
  */
 export async function validateRosterAssignments(
   db: Tx,
@@ -51,7 +52,33 @@ export async function validateRosterAssignments(
   const resolved = assignments.map((a) =>
     resolveAssignment(a, signupById, signupByUserId),
   );
+  assertHonourable(resolved, signupById);
   return { signupByUserId, signupById, assignments: resolved };
+}
+
+/**
+ * Reject a payload the write could only honour partially (ROK-2141): a signup
+ * listed twice, or a character override on an anonymous signup (it has no
+ * user, so no character of its own). 400 instead of a 500 or a silent skip.
+ */
+function assertHonourable(
+  assignments: ResolvedAssignment[],
+  signupById: Map<number, SignupRow>,
+): void {
+  const seen = new Set<number>();
+  for (const a of assignments) {
+    if (seen.has(a.signupId)) {
+      throw new BadRequestException(
+        `Signup ${a.signupId} appears more than once in the roster`,
+      );
+    }
+    seen.add(a.signupId);
+    if (a.characterId && signupById.get(a.signupId)?.userId == null) {
+      throw new BadRequestException(
+        `Signup ${a.signupId} is anonymous and cannot be given a character`,
+      );
+    }
+  }
 }
 
 function resolveAssignment(
