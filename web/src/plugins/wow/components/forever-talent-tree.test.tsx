@@ -34,24 +34,32 @@ function dto(nodes: ForeverTalentNodeDto[]): ForeverTalentsDto {
     return { format: 'forever', source: 'addon', syncedAt: '2026-11-08T12:00:00.000Z', layout: 'list', trees: [], nodes };
 }
 
-function renderWarrior(nodes = ROK) {
-    return render(<TalentDisplay talents={dto(nodes)} isArmoryImported={false} characterClass="Warrior" gameVariant={null} />);
+/** Renders and waits for the tree to draw (53 warrior talents), so later asserts fail on their own message. */
+async function renderWarrior(nodes = ROK) {
+    render(<TalentDisplay talents={dto(nodes)} isArmoryImported={false} characterClass="Warrior" gameVariant={null} />);
+    await screen.findAllByTestId('forever-talent');
+}
+
+/** The talent link whose accessible name starts with `name` (any rank), so a wrong rank fails the name assert. */
+function talent(name: string): HTMLElement {
+    return screen.getByRole('link', { name: new RegExp(`^${name} \\d+ of \\d+$`) });
 }
 
 beforeEach(() => { loadTable.mockReset(); loadTable.mockResolvedValue(warrior()); });
 
 describe('ForeverTalentTree', () => {
     it('draws every talent of all three trees with an accessible rank name', async () => {
-        renderWarrior();
-        expect(await screen.findByRole('link', { name: 'Shield Specialization 5 of 5' })).toBeInTheDocument();
+        await renderWarrior();
         expect(screen.getAllByTestId('forever-talent')).toHaveLength(53);
-        expect(screen.getByRole('link', { name: 'Mortal Strike 0 of 1' })).toBeInTheDocument();
+        expect(talent('Shield Specialization'), 'joined by spellId 12298').toHaveAccessibleName('Shield Specialization 5 of 5');
+        expect(talent('Mortal Strike')).toHaveAccessibleName('Mortal Strike 0 of 1');
     });
 
     it('marks spent talents and greys unspent ones, each with an x/y badge', async () => {
-        renderWarrior();
-        const spent = await screen.findByRole('link', { name: 'Last Stand 1 of 1' });
-        const unspent = screen.getByRole('link', { name: 'Iron Will 0 of 5' });
+        await renderWarrior();
+        const spent = talent('Last Stand');
+        const unspent = talent('Iron Will');
+        expect(spent, 'Last Stand joined by name in Protection').toHaveAccessibleName('Last Stand 1 of 1');
         expect(spent).toHaveAttribute('data-spent', 'true');
         expect(unspent).toHaveAttribute('data-spent', 'false');
         expect(within(spent).getByText('1/1')).toBeInTheDocument();
@@ -60,23 +68,22 @@ describe('ForeverTalentTree', () => {
     });
 
     it('hooks each talent to the Forever Wowhead tooltip and the zamimg icon', async () => {
-        renderWarrior();
-        const link = await screen.findByRole('link', { name: 'Shield Specialization 5 of 5' });
+        await renderWarrior();
+        const link = talent('Shield Specialization');
         expect(link).toHaveAttribute('data-wowhead', 'spell=12298&domain=forever');
         expect(link.querySelector('img')).toHaveAttribute('src', 'https://wow.zamimg.com/images/wow/icons/medium/inv_shield_06.jpg');
     });
 
     it('draws prerequisite arrows, lit when the dependent talent is spent', async () => {
-        renderWarrior([{ nodeId: 1, rank: 1, spellId: 1310316 }]);
-        await screen.findByRole('link', { name: 'Master of Defense 1 of 2' });
+        await renderWarrior([{ nodeId: 1, rank: 1, spellId: 1310316 }]);
+        expect(talent('Master of Defense')).toHaveAccessibleName('Master of Defense 1 of 2');
         const arrows = screen.getAllByTestId('forever-talent-arrow');
         expect(arrows).toHaveLength(8);
         expect(arrows.filter((a) => a.dataset.spent === 'true')).toHaveLength(1);
     });
 
     it('heads each tree with its name and points', async () => {
-        renderWarrior();
-        await screen.findByRole('link', { name: 'Last Stand 1 of 1' });
+        await renderWarrior();
         expect(screen.getByTestId('forever-tree-spent-2')).toHaveTextContent('8');
         expect(screen.getByRole('heading', { name: 'Protection' })).toBeInTheDocument();
     });
@@ -85,8 +92,8 @@ describe('ForeverTalentTree', () => {
 
 describe('ForeverTalentTree — tabs, other talents, label, fallback', () => {
     it('opens the phone tree tabs on the tree with the most points', async () => {
-        renderWarrior();
-        const tabs = await screen.findByRole('radiogroup', { name: 'Talent tree' });
+        await renderWarrior();
+        const tabs = screen.getByRole('radiogroup', { name: 'Talent tree' });
         expect(within(tabs).getByRole('radio', { name: /Protection/ })).toBeChecked();
         expect(screen.getByTestId('forever-tree-0').className).toContain('hidden md:block');
         expect(screen.getByTestId('forever-tree-2').className).not.toContain('hidden');
@@ -95,20 +102,45 @@ describe('ForeverTalentTree — tabs, other talents, label, fallback', () => {
     });
 
     it('lists an unmatched ranked node under "Other talents"', async () => {
-        renderWarrior();
-        const other = await screen.findByTestId('forever-other-talents-none');
+        await renderWarrior();
+        const other = screen.getByTestId('forever-other-talents-none');
         expect(within(other).getByText('Mystery Talent 1')).toBeInTheDocument();
     });
 
     it('labels the button "Open Wowhead calculator" with the bare Forever calc URL', async () => {
-        renderWarrior();
-        expect(await screen.findByRole('link', { name: 'Open Wowhead calculator' })).toHaveAttribute('href', 'https://www.wowhead.com/forever/talent-calc/warrior');
+        await renderWarrior();
+        const calc = screen.getByTestId('forever-talents-source').parentElement?.querySelector('a');
+        expect(calc, 'calc link in the header').toHaveAccessibleName('Open Wowhead calculator');
+        expect(calc).toHaveAttribute('href', 'https://www.wowhead.com/forever/talent-calc/warrior');
     });
 
     it('keeps the old grid/pills when the class has no table', async () => {
         loadTable.mockResolvedValue(null);
-        renderWarrior();
+        render(<TalentDisplay talents={dto(ROK)} isArmoryImported={false} characterClass="Warrior" gameVariant={null} />);
         expect(await screen.findByText('Learned talents')).toBeInTheDocument();
         expect(screen.queryByTestId('forever-talent')).toBeNull();
+    });
+});
+
+/** Review MAJOR-1: the shipped path is align → join → tree, so a Blizzard payload in Armory order must land on Protection. */
+describe('ForeverTalentTree — Blizzard trees in Armory order', () => {
+    const PROT_ONLY: ForeverTalentsDto = {
+        format: 'forever', source: 'blizzard', syncedAt: '2026-11-08T09:00:00.000Z', layout: 'list',
+        trees: [{ index: 0, spent: 13, name: 'Protection' }],
+        nodes: [
+            { nodeId: 50, rank: 5, maxRanks: 5, spellId: 12298, tree: 0 },
+            { nodeId: 51, rank: 1, maxRanks: 1, name: 'Last Stand', tree: 0 },
+        ],
+    };
+
+    it('puts the 13 points, the phone tab and a name-only talent on Protection', async () => {
+        render(<TalentDisplay talents={PROT_ONLY} isArmoryImported characterClass="Warrior" gameVariant="wow_forever" />);
+        await screen.findAllByTestId('forever-talent');
+        expect(screen.getByTestId('forever-tree-spent-2'), 'Protection carries the Armory 13').toHaveTextContent(/^13$/);
+        expect(screen.getByTestId('forever-tree-spent-0'), 'Arms must not carry Protection\'s 13').toHaveTextContent(/^0$/);
+        expect(screen.getByTestId('forever-tree-spent-1')).toHaveTextContent(/^0$/);
+        expect(within(screen.getByRole('radiogroup', { name: 'Talent tree' })).getByRole('radio', { name: /Protection/ }), 'phone opens on Protection').toBeChecked();
+        expect(talent('Last Stand'), 'name-only node joined in Protection').toHaveAccessibleName('Last Stand 1 of 1');
+        expect(screen.getByTestId('forever-tree-2')).toContainElement(talent('Last Stand'));
     });
 });
