@@ -2,6 +2,7 @@ import type {
   HubFactSource,
   WowRosterInsightsDto,
 } from '@raid-ledger/contract';
+import { effectiveProfessionSkill } from '../../blizzard-professions.helpers';
 import type { Fact } from '../../facts/wow-fact.types';
 import {
   FOREVER_LEVEL_CAP,
@@ -76,11 +77,13 @@ export function computeProfessions(rows: readonly InsightRow[]): Profession[] {
     if (!fact || row.characterId === null) continue;
     for (const p of [...fact.value.primary, ...fact.value.secondary]) {
       const entry = byName.get(p.name) ?? { name: p.name, members: [] };
+      // Pre-ROK-2130 Armory rows store 0/0 with the real pair in `tiers[]`.
+      const skill = effectiveProfessionSkill(p);
       entry.members.push({
         characterId: row.characterId,
         name: row.name,
-        skill: p.skillLevel,
-        maxSkill: p.maxSkillLevel,
+        skill: skill.skillLevel,
+        maxSkill: skill.maxSkillLevel,
         source: fact.source,
       });
       byName.set(p.name, entry);
