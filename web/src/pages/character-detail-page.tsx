@@ -212,8 +212,10 @@ export function CharacterDetailPage() {
     const isOwner = !!(user && user.id === character.userId);
     const isArmoryImported = !!character.lastSyncedAt;
 
+    // ROK-2146: the page widens only while a plugin slot renders a sidebar
+    // layout (the WoW sections slot at >= lg); every other character keeps max-w-5xl.
     return (
-        <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+        <div className="max-w-5xl has-[[data-sections-layout=sidebar]]:max-w-7xl mx-auto px-4 py-8 space-y-6">
             <button onClick={() => navigate(-1)} className="text-sm text-muted hover:text-foreground transition-colors inline-flex items-center gap-1">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg> Back
             </button>

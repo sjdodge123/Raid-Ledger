@@ -7,7 +7,8 @@ import { Fragment, useId } from 'react';
 import type { CharacterCompletedQuest, CharacterQuestInstanceGroup } from '@raid-ledger/contract';
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
 import { getWowheadQuestUrl } from '../lib/wowhead-urls';
-import { ShowAllToggle, useRowCap } from './show-all-toggle';
+import { ShowAllToggle } from './show-all-toggle';
+import { useRowCap } from '../hooks/use-row-cap';
 
 /**
  * Chain line: each step success (done) or warning (still needed), plus sr-only

@@ -6,7 +6,8 @@
 import { useId } from 'react';
 import type { CharacterQuestLogEntry, CharacterQuestObjective } from '@raid-ledger/contract';
 import { getWowheadQuestUrl } from '../lib/wowhead-urls';
-import { ShowAllToggle, useRowCap } from './show-all-toggle';
+import { ShowAllToggle } from './show-all-toggle';
+import { useRowCap } from '../hooks/use-row-cap';
 
 /** One objective row: success when done (check glyph + sr-only "done"), warning when open. */
 function ObjectiveRow({ objective }: { objective: CharacterQuestObjective }) {
