@@ -436,7 +436,6 @@
                 }
               },
               "required": [
-                "completed",
                 "inProgress"
               ],
               "additionalProperties": false
