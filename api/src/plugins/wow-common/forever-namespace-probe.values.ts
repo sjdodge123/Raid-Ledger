@@ -6,10 +6,11 @@
  * object collapses to its `en_US` string. Never used for profile endpoints.
  * Pure — no NestJS imports (the CI canary reaches this through the helpers).
  */
+import { FOREVER_PROBE_MAX_VALUE_ENTRIES } from '@raid-ledger/contract';
 import type { ShapeSummary } from './forever-namespace-probe.helpers';
 
-/** Leaf values kept per shape (matches the contract's intent, ~120). */
-export const MAX_VALUE_ENTRIES = 120;
+/** Leaf values kept per shape (the contract enforces the same cap). */
+export const MAX_VALUE_ENTRIES = FOREVER_PROBE_MAX_VALUE_ENTRIES;
 /** Longest string value kept (matches the contract's per-value cap). */
 export const MAX_VALUE_LENGTH = 200;
 /** Deepest nesting walked — Blizzard bodies are a handful of levels deep. */
@@ -23,12 +24,15 @@ export type ProbeLeaf = string | number | boolean | null;
 /** A shape summary carrying flattened leaf values. */
 export type ValuesShapeSummary = ShapeSummary & {
   values: Record<string, ProbeLeaf>;
+  /** Set when nesting past MAX_DEPTH was dropped (each dropped node counts once). */
+  truncated?: true;
 };
 
 interface Walk {
   values: Record<string, ProbeLeaf>;
   kept: number;
   count: number;
+  truncated: boolean;
 }
 
 /** Record one leaf: always counted, kept while under the cap. */
@@ -62,7 +66,12 @@ function walkNode(
     return addLeaf(walk, path, node);
   if (typeof node === 'number' || typeof node === 'boolean')
     return addLeaf(walk, path, node);
-  if (typeof node !== 'object' || depth > MAX_DEPTH) return;
+  if (typeof node !== 'object') return;
+  if (depth > MAX_DEPTH) {
+    walk.count += 1;
+    walk.truncated = true;
+    return;
+  }
   if (Array.isArray(node)) {
     node.forEach((v: unknown, i) =>
       walkNode(walk, v, `${path}[${i}]`, depth + 1),
@@ -82,13 +91,14 @@ export function flattenValues(body: unknown): ValuesShapeSummary {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return { topLevelKeys: [], entryCount: 0, sample: [], values: {} };
   }
-  const walk: Walk = { values: {}, kept: 0, count: 0 };
+  const walk: Walk = { values: {}, kept: 0, count: 0, truncated: false };
   walkNode(walk, body, '', 0);
-  const topLevelKeys = Object.keys(body).sort();
-  return {
-    topLevelKeys,
+  const summary: ValuesShapeSummary = {
+    topLevelKeys: Object.keys(body).sort(),
     entryCount: walk.count,
     sample: [],
     values: walk.values,
   };
+  if (walk.truncated) summary.truncated = true;
+  return summary;
 }

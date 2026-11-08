@@ -446,5 +446,19 @@ describe('runProbe quest + item data (ROK-2143)', () => {
       },
     });
     expect(run.shapes['forever:us:quest:166']).toBeUndefined();
+    const targets = run.cells
+      .filter((c) => /quest|item/.test(c.endpoint))
+      .map((c) => [c.endpoint, c.target]);
+    expect(targets).toEqual([
+      ['quest-index', undefined],
+      ['quest-area', 'quest-area:717'],
+      ['quest', 'quest:378'],
+      ['quest', 'quest:166'],
+      ['quest', 'quest:914'],
+      ['quest', 'quest:1486'],
+      ['item', 'item:3562'],
+      ['item', 'item:6087'],
+      ['item', 'item:6505'],
+    ]);
   });
 });

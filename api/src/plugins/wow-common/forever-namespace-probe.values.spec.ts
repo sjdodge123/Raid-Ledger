@@ -2,6 +2,7 @@
  * ROK-2143 — value-flattening summary for public static quest / item data,
  * and the per-target quest + item probe URLs.
  */
+import { ForeverProbeEndpointSchema } from '@raid-ledger/contract';
 import {
   MAX_VALUE_ENTRIES,
   MAX_VALUE_LENGTH,
@@ -12,6 +13,7 @@ import {
   PROBE_QUEST_AREA_ID,
   PROBE_QUEST_IDS,
   buildQuestDataUrls,
+  isValuesEndpoint,
 } from './forever-namespace-probe.quest-data';
 
 describe('flattenValues', () => {
@@ -80,6 +82,16 @@ describe('flattenValues filtering + limits', () => {
     expect(shape.values.description).toBe('x'.repeat(MAX_VALUE_LENGTH));
   });
 
+  it('counts and flags nesting dropped past the depth limit', () => {
+    let deep: unknown = { leaf: 1 };
+    for (let i = 0; i < 15; i += 1) deep = { n: deep };
+    const shape = flattenValues({ id: 7, deep });
+    expect(shape.values).toEqual({ id: 7 });
+    expect(shape.entryCount).toBe(2);
+    expect(shape.truncated).toBe(true);
+    expect(flattenValues({ id: 7 })).not.toHaveProperty('truncated');
+  });
+
   it('returns an empty shape for a non-object body', () => {
     const empty = { topLevelKeys: [], entryCount: 0, sample: [], values: {} };
     expect(flattenValues(null)).toEqual(empty);
@@ -126,5 +138,18 @@ describe('buildQuestDataUrls', () => {
     expect(PROBE_QUEST_AREA_ID).toBe(717);
     expect(PROBE_QUEST_IDS).toEqual([378, 166, 914, 1486]);
     expect(PROBE_ITEM_IDS).toEqual([3562, 6087, 6505]);
+  });
+});
+
+describe('values privacy guard (ROK-2143)', () => {
+  it('records values for exactly quest-area, quest and item — never profile or guild data', () => {
+    const valued = ForeverProbeEndpointSchema.options.filter(isValuesEndpoint);
+    expect(valued.sort()).toEqual(['item', 'quest', 'quest-area']);
+  });
+
+  it('builds every quest + item URL in the public static namespace', () => {
+    const urls = buildQuestDataUrls({ prefix: 'classicforever', region: 'eu' });
+    const off = urls.filter((u) => !u.url.includes('namespace=static-'));
+    expect(off).toEqual([]);
   });
 });

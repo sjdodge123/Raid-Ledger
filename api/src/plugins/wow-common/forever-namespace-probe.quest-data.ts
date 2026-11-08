@@ -14,10 +14,10 @@ import type { ProbeUrl } from './forever-namespace-probe.helpers';
 export const PROBE_QUEST_AREA_ID = 717;
 
 /**
- * Classic dungeon quests with reward items and a prerequisite (except 1486):
- * 378 The Fury Runs Deep (Stockade, prev 303), 166 The Defias Brotherhood
- * (Deadmines, prev 155), 914 Leaders of the Fang (Wailing Caverns, prev 1490),
- * 1486 Deviate Hides (Wailing Caverns, no prerequisite — a control).
+ * Classic dungeon quests, all with reward items: 378 The Fury Runs Deep
+ * (Stockade, prev 303), 166 The Defias Brotherhood (Deadmines, prev 155),
+ * 914 Leaders of the Fang (Wailing Caverns, prev 1490), and 1486 Deviate Hides
+ * (Wailing Caverns, rewards 6480 / 918) — the one without a prerequisite, as a control.
  */
 export const PROBE_QUEST_IDS: readonly number[] = [378, 166, 914, 1486];
 

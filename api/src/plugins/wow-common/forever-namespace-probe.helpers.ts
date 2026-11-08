@@ -251,6 +251,7 @@ function toCell(task: ProbeTask, out: ProbeOutcome): ForeverProbeCellDto {
     status: out.status,
   };
   if (out.error !== undefined) cell.error = out.error;
+  if (task.shapeKey !== undefined) cell.target = task.shapeKey;
   return cell;
 }
 
