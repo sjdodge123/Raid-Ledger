@@ -11,14 +11,33 @@ interface RosterSlotConfig {
     color: string;
 }
 
+/** `false` (or a rejection) means the save failed; anything else counts as saved. */
+export type RosterChangeResult = boolean | void;
+
 interface UseRosterActionsArgs {
     pool: RosterAssignmentResponse[];
     assignments: RosterAssignmentResponse[];
-    onRosterChange: (pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[], charMap?: Map<number, string>) => void;
+    onRosterChange: (pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[], charMap?: Map<number, string>) => RosterChangeResult | Promise<RosterChangeResult>;
     roleSlots: RosterSlotConfig[];
     getSlotCount: (role: RosterRole) => number;
     isGenericGame: boolean;
     announce: (msg: string) => void;
+}
+
+/**
+ * Runs a roster save and toasts/announces `msg` only once it has succeeded (ROK-2141).
+ * A rejection gets an error toast; a `false` result means the caller already reported it.
+ */
+async function saveThenAnnounce(
+    save: () => RosterChangeResult | Promise<RosterChangeResult>, msg: string, announce: (msg: string) => void,
+): Promise<void> {
+    try {
+        if ((await save()) === false) return;
+    } catch (err) {
+        toast.error('Failed to update roster', { description: err instanceof Error ? err.message : 'Please try again.' });
+        return;
+    }
+    toast.success(msg); announce(msg);
 }
 
 function formatSlotLabel(role: RosterRole, position: number) {
@@ -75,20 +94,22 @@ function useRosterActionsState(): RosterActionsState {
 
 function makeAssignHandler(args: UseRosterActionsArgs, state: RosterActionsState) {
     return (signupId: number, selection?: { characterId?: string; role?: RosterRole }) => {
-        if (!state.assignmentTarget) return;
+        const target = state.assignmentTarget;
+        if (!target) return;
         const sourceItem = args.pool.find(p => p.signupId === signupId);
         if (!sourceItem) return;
         const newPool = args.pool.filter(p => p.signupId !== signupId);
         let newAssignments = [...args.assignments];
-        if (state.assignmentTarget.occupant) {
-            newAssignments = newAssignments.filter(a => a.signupId !== state.assignmentTarget!.occupant!.signupId);
-            newPool.push({ ...state.assignmentTarget.occupant, slot: null, position: 0 });
+        const occupant = target.occupant;
+        if (occupant) {
+            newAssignments = newAssignments.filter(a => a.signupId !== occupant.signupId);
+            newPool.push({ ...occupant, slot: null, position: 0 });
         }
-        newAssignments.push({ ...sourceItem, slot: state.assignmentTarget.role, position: state.assignmentTarget.position, isOverride: sourceItem.character?.role !== state.assignmentTarget.role });
+        newAssignments.push({ ...sourceItem, slot: target.role, position: target.position, isOverride: sourceItem.character?.role !== target.role });
         const charMap = selection?.characterId ? new Map([[signupId, selection.characterId]]) : undefined;
-        args.onRosterChange(newPool, newAssignments, charMap);
-        const msg = `${sourceItem.username} assigned to ${formatSlotLabel(state.assignmentTarget.role, state.assignmentTarget.position)}`;
-        toast.success(msg); args.announce(msg); state.setAssignmentTarget(null);
+        const msg = `${sourceItem.username} assigned to ${formatSlotLabel(target.role, target.position)}`;
+        state.setAssignmentTarget(null);
+        void saveThenAnnounce(() => args.onRosterChange(newPool, newAssignments, charMap), msg, args.announce);
     };
 }
 
@@ -98,9 +119,9 @@ function makeAssignToSlotHandler(args: UseRosterActionsArgs, state: RosterAction
         if (!sourceItem) return;
         const newAssignments = [...args.assignments, { ...sourceItem, slot: role, position, isOverride: sourceItem.character?.role !== role }];
         const charMap = selection?.characterId ? new Map([[signupId, selection.characterId]]) : undefined;
-        args.onRosterChange(args.pool.filter(p => p.signupId !== signupId), newAssignments, charMap);
         const msg = `${sourceItem.username} assigned to ${formatSlotLabel(role, position)}`;
-        toast.success(msg); args.announce(msg); state.setBrowseAll(false);
+        state.setBrowseAll(false);
+        void saveThenAnnounce(() => args.onRosterChange(args.pool.filter(p => p.signupId !== signupId), newAssignments, charMap), msg, args.announce);
     };
 }
 
@@ -111,23 +132,20 @@ function makeBulkHandlers(args: UseRosterActionsArgs, state: RosterActionsState)
         state.setAutoFillPreview(result);
     };
     const handleAutoFillConfirm = () => {
-        if (!state.autoFillPreview) return;
-        state.setIsBulkUpdating(true);
-        try {
-            args.onRosterChange(state.autoFillPreview.newPool, state.autoFillPreview.newAssignments);
-            const msg = `Auto-filled ${state.autoFillPreview.totalFilled} players`;
-            toast.success(msg); args.announce(msg);
-        } finally { state.setAutoFillPreview(null); state.setIsBulkUpdating(false); }
+        const preview = state.autoFillPreview;
+        if (!preview) return;
+        state.setIsBulkUpdating(true); state.setAutoFillPreview(null);
+        const msg = `Auto-filled ${preview.totalFilled} players`;
+        void saveThenAnnounce(() => args.onRosterChange(preview.newPool, preview.newAssignments), msg, args.announce)
+            .finally(() => state.setIsBulkUpdating(false));
     };
     const handleClearAllClick = () => {
-        if (state.clearPending) {
-            state.setClearPending(false); state.setIsBulkUpdating(true);
-            try {
-                args.onRosterChange([...args.pool, ...args.assignments.map(a => ({ ...a, slot: null, position: 0 }))], []);
-                const msg = `Roster cleared — ${args.assignments.length} players moved to pool`;
-                toast.success(msg); args.announce(msg);
-            } finally { state.setIsBulkUpdating(false); }
-        } else { state.setClearPending(true); }
+        if (!state.clearPending) { state.setClearPending(true); return; }
+        state.setClearPending(false); state.setIsBulkUpdating(true);
+        const msg = `Roster cleared — ${args.assignments.length} players moved to pool`;
+        const newPool = [...args.pool, ...args.assignments.map(a => ({ ...a, slot: null, position: 0 }))];
+        void saveThenAnnounce(() => args.onRosterChange(newPool, []), msg, args.announce)
+            .finally(() => state.setIsBulkUpdating(false));
     };
     return { handleAutoFillClick, handleAutoFillConfirm, handleClearAllClick };
 }
@@ -143,17 +161,17 @@ export function useRosterActions(args: UseRosterActionsArgs) {
     const handleRemoveFromSlot = (signupId: number) => {
         const sourceItem = args.assignments.find(a => a.signupId === signupId);
         if (!sourceItem) return;
-        args.onRosterChange([...args.pool, { ...sourceItem, slot: null, position: 0 }], args.assignments.filter(a => a.signupId !== signupId));
         const msg = `${sourceItem.username} moved to unassigned`;
-        toast.success(msg); args.announce(msg); state.setAssignmentTarget(null);
+        state.setAssignmentTarget(null);
+        void saveThenAnnounce(() => args.onRosterChange([...args.pool, { ...sourceItem, slot: null, position: 0 }], args.assignments.filter(a => a.signupId !== signupId)), msg, args.announce);
     };
 
     const handleReassignToSlot = (fromSignupId: number, toRole: RosterRole, toPosition: number) => {
         const sourcePlayer = args.assignments.find(a => a.signupId === fromSignupId);
         if (!sourcePlayer) return;
         const { updated, msg } = buildReassignment(args.assignments, fromSignupId, sourcePlayer, toRole, toPosition);
-        toast.success(msg); args.announce(msg);
-        args.onRosterChange(args.pool, updated); state.setAssignmentTarget(null);
+        state.setAssignmentTarget(null);
+        void saveThenAnnounce(() => args.onRosterChange(args.pool, updated), msg, args.announce);
     };
 
     const bulk = makeBulkHandlers(args, state);
