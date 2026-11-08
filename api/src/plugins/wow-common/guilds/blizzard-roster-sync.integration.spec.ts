@@ -26,7 +26,10 @@ import { pinExportClock } from '../addon-import/testing/pin-export-clock';
 import type { ForeverGuildMember } from '../blizzard-forever-guild.helpers';
 import { BlizzardService } from '../blizzard.service';
 import { BlizzardRosterSyncService } from './blizzard-roster-sync.service';
-import { inLatestSnapshot } from './guild-membership.helpers';
+import {
+  findLinkedMemberRows,
+  inLatestSnapshot,
+} from './guild-membership.helpers';
 
 /**
  * Spy on the live CJS module, NOT `jest.mock`: `setupFilesAfterEnv` loads
@@ -216,6 +219,51 @@ const fourPlusOne = () => [
   apiMember('Member3'),
   apiMember('Newbie'),
 ];
+
+/** ROK-2139: LedgerLink stores Forever "Name Surname"; Blizzard sends "Name". */
+const FOREVER_NAMES = ['Ana Forever', 'Rok Androl', 'Hip Smith', 'Zed Quill'];
+const foreverRoster = (): AddonGuildMember[] =>
+  FOREVER_NAMES.map((name, i) =>
+    buildMember(i === 0 ? 0xabcdef0 : i, { name }),
+  );
+const blizzardRoster = (): ForeverGuildMember[] =>
+  FOREVER_NAMES.map((n, i) => ({
+    ...apiMember(n.split(' ')[0] ?? n),
+    blizzardId: 900 + i,
+  }));
+
+/** The importer's hub links to the guild (GUID in the latest snapshot). */
+async function linkCount(who: Who, guildId: number): Promise<number> {
+  const [c] = nonEmpty(
+    await testApp.db
+      .select({ userId: schema.characters.userId })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, who.charId)),
+    'importer character',
+  );
+  return (await findLinkedMemberRows(testApp.db, c.userId, guildId)).length;
+}
+
+/** Replay the pre-fix bug: GUID-less first-name rows + a moved snapshot. */
+async function seedJunk(guildId: number): Promise<Date> {
+  const t = new Date((FIXTURE_EXPORTED_AT + 60) * 1000);
+  await testApp.db.insert(schema.guildMembers).values(
+    blizzardRoster().map((m) => ({
+      guildId,
+      guid: null,
+      blizzardCharacterId: m.blizzardId,
+      characterName: m.name,
+      level: 59,
+      source: 'blizzard',
+      lastSeenAt: t,
+    })),
+  );
+  await testApp.db
+    .update(schema.guilds)
+    .set({ lastSnapshotAt: t })
+    .where(eq(schema.guilds.id, guildId));
+  return t;
+}
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -431,5 +479,160 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     expect(stored.blizzardRosterSyncedAt).toBeNull();
     expect(stored.lastSnapshotAt).toEqual(guild.lastSnapshotAt);
     expect(await auditCount()).toBe(audits);
+  });
+
+  it('(13) ROK-2139: "Rok Androl" rows pair with Blizzard "Rok" — updated in place, hub link survives', async () => {
+    const { who, guild } = await seedGuild(foreverRoster());
+    expect(await linkCount(who, guild.id)).toBe(1);
+    stubRoster(blizzardRoster());
+    expect(await sync(guild.id)).toEqual({
+      status: 'ok',
+      updated: 4,
+      inserted: 0,
+    });
+    expect(await liveNames(guild.id)).toEqual([...FOREVER_NAMES].sort());
+    const rows = await allRows();
+    expect(rows.map((r) => [r.characterName, r.guid !== null])).toEqual(
+      expect.arrayContaining(FOREVER_NAMES.map((n) => [n, true])),
+    );
+    expect(rows.map((r) => r.blizzardCharacterId).sort()).toEqual([
+      900, 901, 902, 903,
+    ]);
+    expect(await linkCount(who, guild.id)).toBe(1);
+  });
+
+  it('(14) ROK-2139: a roster pairing <50% of the GUID rows writes nothing, status error with a reason', async () => {
+    const { who, guild } = await seedGuild(foreverRoster());
+    const audits = await auditCount();
+    stubRoster(['Xan', 'Yul', 'Wex', 'Vor'].map((n) => apiMember(n)));
+    expect(await sync(guild.id)).toEqual({
+      status: 'mismatch',
+      reason: expect.stringContaining('matched only 0 of 4 LedgerLink members'),
+    });
+    expect(await allRows()).toHaveLength(4);
+    const stored = await guildRow(guild.id);
+    expect(stored.lastSnapshotAt).toEqual(guild.lastSnapshotAt);
+    expect(stored.blizzardRosterStatus).toBe('error');
+    expect(stored.blizzardRosterSyncedAt).toBeNull();
+    expect(await auditCount()).toBe(audits);
+    expect(await linkCount(who, guild.id)).toBe(1);
+  });
+
+  it('(15) ROK-2139: junk rows from the old sync merge into their GUID twins; a re-sync is idempotent', async () => {
+    const { who, guild } = await seedGuild(foreverRoster());
+    await seedJunk(guild.id);
+    expect(await linkCount(who, guild.id)).toBe(0);
+    const rokJunk = nonEmpty(
+      (await allRows()).filter((r) => r.characterName === 'Rok'),
+      'junk Rok',
+    )[0];
+    await testApp.db.insert(schema.guildMemberLevelEvents).values({
+      guildId: guild.id,
+      guildMemberId: rokJunk.id,
+      fromLevel: 58,
+      toLevel: 59,
+      occurredAt: new Date((FIXTURE_EXPORTED_AT + 30) * 1000),
+    });
+    stubRoster(blizzardRoster());
+    const expected = { status: 'ok', updated: 4, inserted: 0 };
+    expect(await sync(guild.id)).toEqual(expected);
+    const snapshot = async () =>
+      (await allRows())
+        .map((r) => [
+          r.id,
+          r.characterName,
+          r.guid !== null,
+          r.blizzardCharacterId,
+        ])
+        .sort((a, b) => Number(a[0]) - Number(b[0]));
+    const after = await snapshot();
+    expect(after.map((r) => r.slice(1))).toEqual(
+      FOREVER_NAMES.map((n, i) => [n, true, 900 + i]),
+    );
+    expect(await linkCount(who, guild.id)).toBe(1);
+    const rokId = after.find((r) => r[1] === 'Rok Androl')?.[0];
+    const dings = await testApp.db.select().from(schema.guildMemberLevelEvents);
+    expect(
+      dings.filter((d) => d.fromLevel === 58).map((d) => d.guildMemberId),
+    ).toEqual([rokId]);
+    expect(await sync(guild.id)).toEqual(expected);
+    expect(await snapshot()).toEqual(after);
+    expect(await linkCount(who, guild.id)).toBe(1);
+  });
+
+  it('(16) ROK-2139: the junk merge keeps one ding per level and re-points editor grants (Codex P2a/P2c)', async () => {
+    const { guild } = await seedGuild(foreverRoster());
+    await seedJunk(guild.id);
+    const rows = await allRows();
+    const idOf = (name: string): number =>
+      nonEmpty(
+        rows.filter((r) => r.characterName === name),
+        name,
+      )[0].id;
+    const at = new Date((FIXTURE_EXPORTED_AT + 30) * 1000);
+    const ding = (guildMemberId: number, fromLevel: number) => ({
+      guildId: guild.id,
+      guildMemberId,
+      fromLevel,
+      toLevel: fromLevel + 1,
+      occurredAt: at,
+    });
+    await testApp.db
+      .insert(schema.guildMemberLevelEvents)
+      .values([
+        ding(idOf('Rok Androl'), 58),
+        ding(idOf('Rok'), 58),
+        ding(idOf('Rok'), 57),
+      ]);
+    const grant = (guildMemberId: number) => ({
+      guildId: guild.id,
+      kind: 'member',
+      guildMemberId,
+    });
+    await testApp.db
+      .insert(schema.guildEditors)
+      .values([
+        grant(idOf('Rok Androl')),
+        grant(idOf('Rok')),
+        grant(idOf('Hip')),
+      ]);
+    stubRoster(blizzardRoster());
+    await expect(sync(guild.id)).resolves.toEqual({
+      status: 'ok',
+      updated: 4,
+      inserted: 0,
+    });
+    const rok = idOf('Rok Androl');
+    const dings = await testApp.db.select().from(schema.guildMemberLevelEvents);
+    expect(
+      dings
+        .map((d) => [d.guildMemberId, d.toLevel])
+        .sort((a, b) => Number(a[1]) - Number(b[1])),
+    ).toEqual([
+      [rok, 58],
+      [rok, 59],
+    ]);
+    const grants = await testApp.db.select().from(schema.guildEditors);
+    expect(grants.map((g) => g.guildMemberId).sort()).toEqual(
+      [rok, idOf('Hip Smith')].sort(),
+    );
+  });
+
+  it('(17) ROK-2139: a stale sync writes no junk repair either (Codex P2b)', async () => {
+    const { guild } = await seedGuild(foreverRoster());
+    await seedJunk(guild.id);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ lastSnapshotAt: new Date('2099-01-01T00:00:00Z') })
+      .where(eq(schema.guilds.id, guild.id));
+    const state = async () =>
+      (await allRows())
+        .map((r) => [r.id, r.guid, r.blizzardCharacterId])
+        .sort((a, b) => Number(a[0]) - Number(b[0]));
+    const before = await state();
+    expect(before).toHaveLength(8);
+    stubRoster(blizzardRoster());
+    expect(await sync(guild.id)).toEqual({ status: 'stale' });
+    expect(await state()).toEqual(before);
   });
 });

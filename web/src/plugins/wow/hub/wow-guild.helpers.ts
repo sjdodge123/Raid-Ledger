@@ -54,6 +54,16 @@ export function isUnlinkedRow(m: GuildMemberRow): boolean {
 }
 
 /**
+ * "linked to aldren since 14 Oct 2026", plus "· picked from roster" when the
+ * player claimed the row from the guild roster pick list (ROK-2128 FLAG 3) —
+ * a self-asserted link staff should weigh before granting on it.
+ */
+function linkedLabel(a: NonNullable<GuildMemberRow['linkedAccount']>): string {
+    const label = `linked to ${a.username} since ${dateLabel(a.linkedSince)}`;
+    return a.linkVia === 'roster_pick' ? `${label} · picked from roster` : label;
+}
+
+/**
  * The editor picker's option text, naming the linked RL account (staff-only
  * `linkedAccount`) so a grant is never made on the roster name alone:
  * "Aldren — Guild Master · linked to aldren since 14 Oct 2026". A non-staff
@@ -61,6 +71,6 @@ export function isUnlinkedRow(m: GuildMemberRow): boolean {
  */
 export function memberOptionLabel(m: GuildMemberRow): string {
     const base = `${m.name} — ${rankLabel(m)}`;
-    if (m.linkedAccount) return `${base} · linked to ${m.linkedAccount.username} since ${dateLabel(m.linkedAccount.linkedSince)}`;
+    if (m.linkedAccount) return `${base} · ${linkedLabel(m.linkedAccount)}`;
     return isUnlinkedRow(m) ? `${base} · not linked to an account` : base;
 }

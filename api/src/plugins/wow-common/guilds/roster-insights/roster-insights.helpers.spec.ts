@@ -214,3 +214,61 @@ describe('roster-insights professions + freshness', () => {
     });
   });
 });
+
+describe('roster-insights professions — stored 0/0 Armory rows (ROK-2130)', () => {
+  /** One linked row holding a single Alchemy entry with the given skill. */
+  function crafter(
+    skillLevel: number,
+    maxSkillLevel: number,
+    tiers: { skillLevel: number; maxSkillLevel: number }[],
+  ): InsightRow {
+    const r = row('crafter', { userId: 1 });
+    const entry = {
+      id: 1,
+      name: 'Alchemy',
+      slug: 'alchemy',
+      skillLevel,
+      maxSkillLevel,
+      tiers: tiers.map((t, i) => ({ id: i + 1, name: `Tier ${i}`, ...t })),
+    };
+    const value = {
+      primary: [entry],
+      secondary: [],
+      syncedAt: AS_OF.toISOString(),
+    };
+    return {
+      ...r,
+      facts: {
+        ...EMPTY,
+        professions: { value, source: 'blizzard', asOf: AS_OF },
+      },
+    };
+  }
+
+  function skillOf(rows: InsightRow[]): [number, number] {
+    const member = computeProfessions(rows)[0]?.members[0];
+    return [member?.skill ?? -1, member?.maxSkill ?? -1];
+  }
+
+  it('a stored 0/0 Armory header falls back to the headline tier (ROK-2130 rule)', () => {
+    const stored = crafter(0, 0, [
+      { skillLevel: 120, maxSkillLevel: 150 },
+      { skillLevel: 225, maxSkillLevel: 300 },
+    ]);
+    expect(skillOf([stored])).toEqual([225, 300]);
+  });
+
+  it('an explicit header is kept as is, never mixed with a tier', () => {
+    const stored = crafter(180, 225, [{ skillLevel: 300, maxSkillLevel: 300 }]);
+    expect(skillOf([stored])).toEqual([180, 225]);
+  });
+
+  it('a 0/75 header is explicit (a fresh profession), never replaced by a tier', () => {
+    const stored = crafter(0, 75, [{ skillLevel: 150, maxSkillLevel: 150 }]);
+    expect(skillOf([stored])).toEqual([0, 75]);
+  });
+
+  it('a 0/0 header with no tiers stays 0/0', () => {
+    expect(skillOf([crafter(0, 0, [])])).toEqual([0, 0]);
+  });
+});
