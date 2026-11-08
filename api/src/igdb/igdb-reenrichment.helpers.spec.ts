@@ -68,6 +68,7 @@ function makeIgdbApiGame(
 }
 
 afterEach(() => {
+  jest.restoreAllMocks();
   jest.clearAllMocks();
 });
 
@@ -347,7 +348,12 @@ describe('reEnrichGamesWithIgdb', () => {
     it('logs "IGDB re-enrichment failed" and bumps igdb_enrichment_retry_count when the UPDATE rejects', async () => {
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       const candidates = [
-        { id: 31, name: 'Dup Game', steamAppId: 4242, igdbEnrichmentRetryCount: 1 },
+        {
+          id: 31,
+          name: 'Dup Game',
+          steamAppId: 4242,
+          igdbEnrichmentRetryCount: 1,
+        },
       ];
       const mockDb = createReenrichMockDb(candidates);
       mockDb.updateWhere.mockRejectedValueOnce(
@@ -357,7 +363,10 @@ describe('reEnrichGamesWithIgdb', () => {
         .fn<Promise<IgdbApiGame[]>, [string]>()
         .mockResolvedValue([makeIgdbApiGame({ id: 777 })]);
 
-      const result = await reEnrichGamesWithIgdb(mockDb as never, mockQueryIgdb);
+      const result = await reEnrichGamesWithIgdb(
+        mockDb as never,
+        mockQueryIgdb,
+      );
 
       expect(result.failed).toBe(1);
       expect(mockDb.updateSet).toHaveBeenLastCalledWith({
@@ -374,7 +383,12 @@ describe('reEnrichGamesWithIgdb', () => {
     it('reports the duplicate pair and never writes the colliding igdb_id', async () => {
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       const candidates = [
-        { id: 40, name: 'Itad Copy', steamAppId: 5151, igdbEnrichmentRetryCount: 0 },
+        {
+          id: 40,
+          name: 'Itad Copy',
+          steamAppId: 5151,
+          igdbEnrichmentRetryCount: 0,
+        },
       ];
       const mockDb = createReenrichMockDb(candidates);
       mockDb.selectWhere.mockReset();
@@ -385,7 +399,10 @@ describe('reEnrichGamesWithIgdb', () => {
         .fn<Promise<IgdbApiGame[]>, [string]>()
         .mockResolvedValue([makeIgdbApiGame({ id: 888 })]);
 
-      const result = await reEnrichGamesWithIgdb(mockDb as never, mockQueryIgdb);
+      const result = await reEnrichGamesWithIgdb(
+        mockDb as never,
+        mockQueryIgdb,
+      );
 
       expect(result.enriched).toBe(0);
       expect(warn).toHaveBeenCalledWith(
