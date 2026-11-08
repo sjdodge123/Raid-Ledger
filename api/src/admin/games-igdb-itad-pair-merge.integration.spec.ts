@@ -9,7 +9,9 @@
  * that a second run is a no-op. A collision on any table outside the
  * migration's delete allowlist (characters, discord_game_roles,
  * channel_lifecycle_suppressions, ...) skips the whole pair; an allowlisted
- * leaf link table (game_interests) loses its colliding row. Template
+ * leaf link table (game_interests) loses its colliding row (Steam playtime folded
+ * onto the keeper first). Registry config is copied onto a default keeper; a
+ * two-sided config conflict skips the pair. Template
  * `config.gameId` is rewritten too.
  *
  * The file is resolved by SUFFIX, never by number — a renumber orphaned a
@@ -435,6 +437,100 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
         { gameId: dup, reason: 'unbound' },
       ].sort((a, b) => a.gameId - b.gameId),
     );
+  }, 60_000);
+
+  it('copies the dup’s non-default registry config onto a default keeper', async () => {
+    const [keep, dup] = await seedTwinPair(
+      testApp,
+      'Rok2120 Rune Gate',
+      99120060,
+    );
+    await testApp.db
+      .update(schema.games)
+      .set({
+        hasRoles: true,
+        enabled: false,
+        maxCharactersPerUser: 3,
+        colorHex: '#123456',
+      })
+      .where(eq(schema.games.id, dup));
+    await runMigration(testApp);
+
+    const left = await identities(testApp, [keep, dup]);
+    expect([...left.keys()]).toEqual([keep]);
+    const k = left.get(keep);
+    expect({
+      hasRoles: k?.hasRoles,
+      enabled: k?.enabled,
+      maxCharactersPerUser: k?.maxCharactersPerUser,
+      colorHex: k?.colorHex,
+    }).toEqual({
+      hasRoles: true,
+      enabled: false,
+      maxCharactersPerUser: 3,
+      colorHex: '#123456',
+    });
+  }, 60_000);
+
+  it('skips the pair when both rows hold different non-default config', async () => {
+    const [keep, dup] = await seedTwinPair(
+      testApp,
+      'Rok2120 Moss Fen',
+      99120070,
+    );
+    const g = schema.games;
+    await testApp.db
+      .update(g)
+      .set({ colorHex: '#111111' })
+      .where(eq(g.id, keep));
+    await testApp.db
+      .update(g)
+      .set({ colorHex: '#222222' })
+      .where(eq(g.id, dup));
+    await runMigration(testApp);
+
+    const left = await identities(testApp, [keep, dup]);
+    expect([...left.keys()].sort((a, b) => a - b)).toEqual(
+      [keep, dup].sort((a, b) => a - b),
+    );
+    expect(left.get(keep)?.colorHex).toBe('#111111');
+    expect(left.get(dup)?.colorHex).toBe('#222222');
+  }, 60_000);
+
+  it('keeps the dup’s Steam playtime on the keeper’s colliding interest', async () => {
+    const [keep, dup] = await seedTwinPair(
+      testApp,
+      'Rok2120 Glass Mere',
+      99120080,
+    );
+    const userId = testApp.seed.adminUser.id;
+    const synced = new Date('2026-11-01T00:00:00Z');
+    const gi = schema.gameInterests;
+    await testApp.db.insert(gi).values([
+      { userId, gameId: keep, source: 'steam_library' },
+      {
+        userId,
+        gameId: dup,
+        source: 'steam_library',
+        playtimeForever: 500,
+        playtime2weeks: 20,
+        lastSyncedAt: synced,
+      },
+    ]);
+    await runMigration(testApp);
+
+    const rows = await testApp.db
+      .select({
+        gameId: gi.gameId,
+        forever: gi.playtimeForever,
+        twoWeeks: gi.playtime2weeks,
+        synced: gi.lastSyncedAt,
+      })
+      .from(gi)
+      .where(and(eq(gi.userId, userId), inArray(gi.gameId, [keep, dup])));
+    expect(rows).toEqual([
+      { gameId: keep, forever: 500, twoWeeks: 20, synced },
+    ]);
   }, 60_000);
 
   it('is a no-op on a second run (zero pairs left)', async () => {
