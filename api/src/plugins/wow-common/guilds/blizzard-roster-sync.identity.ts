@@ -70,6 +70,21 @@ export function latestGuidBatch(
 }
 
 /**
+ * {@link latestGuidBatch}, or nothing when that batch is not in the guild's
+ * latest snapshot — every member a snapshot keeps is stamped with its time
+ * (`inLatestSnapshot`: `last_seen_at >= guilds.last_snapshot_at`), so a GUID
+ * batch older than the newest stamped row has departed (ROK-2139 Codex P2).
+ * @param existing - Stored members of the guild.
+ */
+export function currentGuidBatch(
+  existing: readonly ExistingRosterRow[],
+): ExistingRosterRow[] {
+  const batch = latestGuidBatch(existing);
+  const newest = Math.max(...existing.map(seenMs));
+  return batch.filter((r) => seenMs(r) === newest);
+}
+
+/**
  * True unless both classes are known and differ (case-insensitive).
  * @param a - A stored or mapped class name, or null.
  * @param b - Another class name, or null.
@@ -137,11 +152,28 @@ interface JunkTwins {
   byFirst: Map<string, ExistingRosterRow>;
   /** How many junk rows share each first name. */
   junkCounts: Map<string, number>;
+  /** The incoming roster by Blizzard id (ROK-2139 Codex P1). */
+  liveById: Map<number, ForeverGuildMember>;
+  /** How many incoming members share each first name. */
+  rosterCounts: Map<string, number>;
+}
+
+/**
+ * True when the incoming roster still lists the junk row's Blizzard id under
+ * the same first name, and that first name once only — so the member the
+ * matcher pairs with the twin is this id, never another (Codex P1).
+ */
+function junkIdIsLive(junk: JunkRow, key: string, twins: JunkTwins): boolean {
+  const live = twins.liveById.get(junk.blizzardCharacterId);
+  if (live === undefined || firstNameKey(live.name) !== key) return false;
+  return twins.rosterCounts.get(key) === 1;
 }
 
 /**
  * The GUID twin of one junk row: same Blizzard id, else a unique first name
- * in the newest GUID batch with a compatible class and no Blizzard id.
+ * in the newest GUID batch with a compatible class and no Blizzard id —
+ * only while the incoming roster still lists the junk row's id under that
+ * first name ({@link junkIdIsLive}).
  */
 function junkTarget(
   junk: JunkRow,
@@ -153,9 +185,19 @@ function junkTarget(
   if (byId !== undefined) return byId;
   const key = firstNameKey(junk.characterName);
   if (twins.junkCounts.get(key) !== 1) return undefined;
+  if (!junkIdIsLive(junk, key, twins)) return undefined;
   const hit = twins.byFirst.get(key);
   if (hit === undefined || hit.blizzardCharacterId !== null) return undefined;
   return sameClass(hit.className, junk.className) ? hit : undefined;
+}
+
+function liveMembersById(
+  incoming: readonly ForeverGuildMember[],
+): Map<number, ForeverGuildMember> {
+  const byId = new Map<number, ForeverGuildMember>();
+  for (const m of incoming)
+    if (m.blizzardId !== null) byId.set(m.blizzardId, m);
+  return byId;
 }
 
 /**
@@ -163,9 +205,11 @@ function junkTarget(
  * with the GUID row of the same character. Each target is used once.
  * Idempotent: once merged, no junk row is left to plan.
  * @param existing - Stored members of the guild.
+ * @param incoming - Mapped API roster members of this sync.
  */
 export function planJunkMerges(
   existing: readonly ExistingRosterRow[],
+  incoming: readonly ForeverGuildMember[],
 ): JunkMerge[] {
   const junk = existing.filter(isJunk);
   const twins: JunkTwins = {
@@ -174,6 +218,8 @@ export function planJunkMerges(
       firstNameKey(r.characterName),
     ),
     junkCounts: countByKey(junk, (r) => firstNameKey(r.characterName)),
+    liveById: liveMembersById(incoming),
+    rosterCounts: countByKey(incoming, (m) => firstNameKey(m.name)),
   };
   const used = new Set<number>();
   const out: JunkMerge[] = [];
@@ -190,9 +236,16 @@ export function planJunkMerges(
   return out;
 }
 
+/** The higher known level of a merged pair — the newer observation. */
+function newerLevel(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  return b === null ? a : Math.max(a, b);
+}
+
 /**
  * The stored rows as they will be once the merges are written: junk rows
- * gone, targets carrying the Blizzard id.
+ * gone, targets carrying the Blizzard id and the higher level of the pair,
+ * so a ding is logged from the newer level (ROK-2139 Codex P3).
  * @param existing - Stored members of the guild.
  * @param merges - From {@link planJunkMerges}.
  */
@@ -200,21 +253,27 @@ export function withMergesApplied(
   existing: readonly ExistingRosterRow[],
   merges: readonly JunkMerge[],
 ): ExistingRosterRow[] {
+  const rowById = new Map(existing.map((r) => [r.id, r]));
+  const byTarget = new Map(merges.map((m) => [m.targetId, m]));
   const junkIds = new Set(merges.map((m) => m.junkId));
-  const ids = new Map(merges.map((m) => [m.targetId, m.blizzardCharacterId]));
   return existing
     .filter((r) => !junkIds.has(r.id))
     .map((r) => {
-      const blizzardCharacterId = ids.get(r.id);
-      return blizzardCharacterId === undefined
-        ? r
-        : { ...r, blizzardCharacterId };
+      const merge = byTarget.get(r.id);
+      if (merge === undefined) return r;
+      const junkLevel = rowById.get(merge.junkId)?.level ?? null;
+      return {
+        ...r,
+        blizzardCharacterId: merge.blizzardCharacterId,
+        level: newerLevel(r.level, junkLevel),
+      };
     });
 }
 
 /**
  * Safety guard: the reason to refuse a sync that REPLACES the GUID roster
  * (few current GUID rows matched while as many members arrived unmatched),
+ * or null when no GUID batch is current ({@link currentGuidBatch}),
  * or null when the sync may write. A shrink is allowed: the candidates are
  * the members that matched a current GUID row or matched nothing, and the
  * sync is refused only when `hits * 2 < min(current GUID rows, candidates)`.
@@ -227,7 +286,7 @@ export function identityMismatch(
   matchedIds: ReadonlySet<number>,
   unmatched: number,
 ): string | null {
-  const ref = latestGuidBatch(existing);
+  const ref = currentGuidBatch(existing);
   if (ref.length === 0) return null;
   const hits = ref.filter((r) => matchedIds.has(r.id)).length;
   if (hits * 2 >= Math.min(ref.length, hits + unmatched)) return null;

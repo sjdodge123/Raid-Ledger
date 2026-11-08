@@ -9,6 +9,7 @@ import {
   matchRosterMembers,
   type ExistingRosterRow,
 } from './blizzard-roster-sync.helpers';
+import { levelUpsById } from '../addon-import/addon-import-guild.dings';
 import {
   firstNameKey,
   identityMismatch,
@@ -48,6 +49,9 @@ const junk = (name: string, blizzardId: number) =>
     blizzardCharacterId: blizzardId,
     lastSeenAt: SYNC_T,
   });
+
+/** The incoming roster that still lists Blizzard id 900 as "Rok". */
+const ROK_900 = [api('Rok', 900)];
 
 const pairs = (res: ReturnType<typeof matchRosterMembers>) =>
   res.matched.map((m) => [m.existingId, m.member.name]);
@@ -138,7 +142,7 @@ describe('planJunkMerges — repair rows an earlier sync inserted', () => {
   it('merges a junk "Rok" into GUID row "Rok Androl" by first name', () => {
     const rok = row({ characterName: 'Rok Androl' });
     const j = junk('Rok', 900);
-    expect(planJunkMerges([rok, j])).toEqual([
+    expect(planJunkMerges([rok, j], ROK_900)).toEqual([
       { junkId: j.id, targetId: rok.id, blizzardCharacterId: 900 },
     ]);
   });
@@ -147,7 +151,7 @@ describe('planJunkMerges — repair rows an earlier sync inserted', () => {
     const named = row({ characterName: 'Rok Androl' });
     const bound = row({ characterName: 'Kor Other', blizzardCharacterId: 900 });
     const j = junk('Rok', 900);
-    expect(planJunkMerges([named, bound, j])).toEqual([
+    expect(planJunkMerges([named, bound, j], ROK_900)).toEqual([
       { junkId: j.id, targetId: bound.id, blizzardCharacterId: 900 },
     ]);
   });
@@ -155,24 +159,26 @@ describe('planJunkMerges — repair rows an earlier sync inserted', () => {
   it('M1: never merges into a departed GUID row by first name', () => {
     const departed = row({ characterName: 'Rok Androl', lastSeenAt: OLD_T });
     const current = row({ characterName: 'Hip Smith' });
-    expect(planJunkMerges([departed, current, junk('Rok', 900)])).toEqual([]);
+    expect(
+      planJunkMerges([departed, current, junk('Rok', 900)], ROK_900),
+    ).toEqual([]);
   });
 
   it('M1: never merges across classes when both are known', () => {
     const rok = row({ characterName: 'Rok Androl', className: 'Mage' });
     const j = { ...junk('Rok', 900), className: 'Warrior' };
-    expect(planJunkMerges([rok, j])).toEqual([]);
+    expect(planJunkMerges([rok, j], ROK_900)).toEqual([]);
   });
 
   it('leaves an ambiguous junk row alone', () => {
     const a = row({ characterName: 'Rok Androl' });
     const b = row({ characterName: 'Rok Bloggs' });
-    expect(planJunkMerges([a, b, junk('Rok', 900)])).toEqual([]);
+    expect(planJunkMerges([a, b, junk('Rok', 900)], ROK_900)).toEqual([]);
   });
 
   it('is idempotent: the merged rows plan nothing more', () => {
     const rows = [row({ characterName: 'Rok Androl' }), junk('Rok', 900)];
-    const once = withMergesApplied(rows, planJunkMerges(rows));
+    const once = withMergesApplied(rows, planJunkMerges(rows, ROK_900));
     expect(
       once.map((r) => [
         r.characterName,
@@ -180,7 +186,7 @@ describe('planJunkMerges — repair rows an earlier sync inserted', () => {
         r.blizzardCharacterId,
       ]),
     ).toEqual([['Rok Androl', true, 900]]);
-    expect(planJunkMerges(once)).toEqual([]);
+    expect(planJunkMerges(once, ROK_900)).toEqual([]);
   });
 });
 
@@ -253,5 +259,56 @@ describe('the operator case — 11 Forever GUID rows vs 11 Blizzard first names'
     const { res, reason } = check(rows, roster);
     expect(res.matched).toEqual([]);
     expect(reason).toContain('matched only 0 of 11 LedgerLink members');
+  });
+});
+
+describe('ROK-2139 round 2 (Codex P1/P2/P3)', () => {
+  it('P1: a departed junk "Rok" (id 100) never binds to "Rok Bloggs" while the current "Rok" is id 200', () => {
+    const bloggs = row({ characterName: 'Rok Bloggs' });
+    const old = junk('Rok', 100);
+    const roster = [api('Rok', 200)];
+    const merges = planJunkMerges([bloggs, old], roster);
+    expect(merges).toEqual([]);
+    const res = matchRosterMembers(
+      withMergesApplied([bloggs, old], merges),
+      roster,
+    );
+    expect(pairs(res)).toEqual([[bloggs.id, 'Rok']]);
+    expect(res.unmatched).toEqual([]);
+  });
+
+  it('P1: a junk row merges by first name only when the roster still lists its id under that first name', () => {
+    const bloggs = row({ characterName: 'Rok Bloggs' });
+    const live = junk('Rok', 100);
+    expect(planJunkMerges([bloggs, live], [api('Rok', 100)])).toEqual([
+      { junkId: live.id, targetId: bloggs.id, blizzardCharacterId: 100 },
+    ]);
+    expect(planJunkMerges([bloggs, live], [api('Kor', 100)])).toEqual([]);
+  });
+
+  it('P2: once the last GUID member has left, a new member is not vetoed', () => {
+    const departed = row({ characterName: 'Rok Androl' });
+    const stay = Array.from({ length: 3 }, (_, i) => junk(`B${i}`, 500 + i));
+    const ids = new Set(stay.map((r) => r.id));
+    expect(identityMismatch([departed, ...stay], ids, 1)).toBeNull();
+  });
+
+  it('P2: the guard still refuses a wrong roster while the GUID batch is current', () => {
+    const rows = Array.from({ length: 4 }, () => row({}));
+    expect(identityMismatch(rows, new Set(), 4)).toContain(
+      'matched only 0 of 4 LedgerLink members',
+    );
+  });
+
+  it('P3: the merged row keeps the newer (higher) level, so the ding is 21 -> 22', () => {
+    const rok = row({ characterName: 'Rok Androl', level: 20 });
+    const j = { ...junk('Rok', 900), level: 21 };
+    const merged = withMergesApplied(
+      [rok, j],
+      planJunkMerges([rok, j], ROK_900),
+    );
+    expect(levelUpsById(merged, [{ id: rok.id, level: 22 }])).toEqual([
+      { guildMemberId: rok.id, fromLevel: 21, toLevel: 22 },
+    ]);
   });
 });

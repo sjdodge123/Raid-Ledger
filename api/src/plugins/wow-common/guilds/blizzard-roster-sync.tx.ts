@@ -236,7 +236,7 @@ function planApply(
   loaded: readonly ExistingRosterRow[],
   members: readonly ForeverGuildMember[],
 ): RosterApplyPlan {
-  const merges = planJunkMerges(loaded);
+  const merges = planJunkMerges(loaded, members);
   const existing = withMergesApplied(loaded, merges);
   const match = matchRosterMembers(existing, members);
   const ids = new Set(match.matched.map((m) => m.existingId));
