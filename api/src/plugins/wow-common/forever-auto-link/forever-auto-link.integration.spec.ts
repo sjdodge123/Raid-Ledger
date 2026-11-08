@@ -59,7 +59,10 @@ async function ensureGame(): Promise<number> {
   const [game] = nonEmpty(
     await testApp.db
       .insert(schema.games)
-      .values({ name: 'World of Warcraft: Forever', slug: WOW_FOREVER_GAME_SLUG })
+      .values({
+        name: 'World of Warcraft: Forever',
+        slug: WOW_FOREVER_GAME_SLUG,
+      })
       .returning(),
     'game',
   );

@@ -17,7 +17,10 @@ import { PluginRegistryService } from '../../plugin-host/plugin-registry.service
 import { BlizzardCharacterSyncAdapter } from '../blizzard-character-sync.adapter';
 import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
 import { ForeverAutoLinkService } from '../forever-auto-link/forever-auto-link.service';
-import { buildCharPayload, buildImportString } from './testing/addon-fixture.builder';
+import {
+  buildCharPayload,
+  buildImportString,
+} from './testing/addon-fixture.builder';
 import { pinExportClock } from './testing/pin-export-clock';
 
 pinExportClock();
@@ -37,7 +40,10 @@ async function ensureGame(): Promise<number> {
   const [game] = nonEmpty(
     await testApp.db
       .insert(schema.games)
-      .values({ name: 'World of Warcraft: Forever', slug: WOW_FOREVER_GAME_SLUG })
+      .values({
+        name: 'World of Warcraft: Forever',
+        slug: WOW_FOREVER_GAME_SLUG,
+      })
       .returning(),
     'game',
   );
@@ -88,9 +94,9 @@ const post = (token: string, path: string, dryRun: boolean) =>
     .send({ importString: importString(), dryRun });
 
 /** The outcome of the single nudge this import fired. */
-async function nudgeOutcome(): Promise<unknown> {
+function nudgeOutcome(): Promise<unknown> {
   expect(attempt).toHaveBeenCalledTimes(1);
-  return attempt.mock.results[0]?.value;
+  return Promise.resolve(attempt.mock.results[0]?.value);
 }
 
 const charRow = async (id: string) =>

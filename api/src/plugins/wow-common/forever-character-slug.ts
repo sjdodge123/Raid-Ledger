@@ -19,8 +19,7 @@ const FOREVER_NAME_PATTERN = /^(\p{L}{2,24}) (\p{L}{2,24})$/u;
  * `[[:alpha:]]` follows the database ctype, so it never admits a name the
  * JS rule rejects (ROK-2124 candidacy relies on that).
  */
-export const FOREVER_NAME_SQL_PATTERN =
-  '^[[:alpha:]]{2,24} [[:alpha:]]{2,24}$';
+export const FOREVER_NAME_SQL_PATTERN = '^[[:alpha:]]{2,24} [[:alpha:]]{2,24}$';
 
 /**
  * True when `fullName` can be addressed on Blizzard's realmless route
