@@ -4,7 +4,7 @@
  * trees when possible, and never through the Classic renderer.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { TalentDisplay } from './talent-display';
 
@@ -49,21 +49,66 @@ describe('ForeverTalentDisplay — Armory placement (AC7)', () => {
         expect(screen.queryByText('Learned talents')).toBeNull();
     });
 
-    it('heads the grid with Blizzard tree names when sent', () => {
+    it('heads the grid in class order when Blizzard sends its trees out of order (ROK-2113 T1)', () => {
         renderTalents(dto('blizzard', [{ nodeId: 12, rank: 5, name: 'Cruelty', tree: 0 }], undefined, ['Fury', 'Arms', 'Protection']));
-        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Fury', 'Arms', 'Protection']);
-    });
-
-    it('keeps the list (pills) when a talent is not on the known trees', () => {
-        renderTalents(dto('blizzard', [...NODES, { nodeId: 30, rank: 2, name: 'Forever Only Talent', tree: 2 }]));
-        expect(screen.queryAllByTestId('forever-talent-cell')).toHaveLength(0);
-        expect(screen.getByText('Forever Only Talent 2')).toBeInTheDocument();
+        expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Arms', 'Fury', 'Protection']);
+        expect(screen.getByTestId('forever-tree-spent-1')).toHaveTextContent('5');
     });
 
     it('never places an addon list payload', () => {
         renderTalents(dto('addon', NODES));
         expect(screen.queryAllByTestId('forever-talent-cell')).toHaveLength(0);
         expect(screen.getByText('Learned talents')).toBeInTheDocument();
+    });
+});
+
+const UNKNOWN: ForeverTalentNodeDto = { nodeId: 30, rank: 2, name: 'Master of Defense', tree: 2 };
+
+describe('ForeverTalentDisplay — per-talent fallback (ROK-2113)', () => {
+    it('mixed known/unknown: grid for the known, "Other talents" under the unknown one\'s tree', () => {
+        renderTalents(dto('blizzard', [...NODES, UNKNOWN]));
+        expect(screen.getAllByTestId('forever-talent-cell').map((c) => c.getAttribute('title'))).toEqual(['Improved Heroic Strike', 'Cruelty']);
+        const other = screen.getByTestId('forever-other-talents-2');
+        expect(other).toHaveTextContent(/^Other talentsMaster of Defense 2$/);
+        expect(screen.queryByTestId('forever-other-talents-0')).toBeNull();
+        expect(screen.queryByText('Learned talents')).toBeNull();
+    });
+
+    it('keeps ranks and points: header total, per-tree spent, cell ranks', () => {
+        renderTalents(dto('blizzard', [...NODES, UNKNOWN]));
+        expect(screen.getByText('10 points')).toBeInTheDocument();
+        expect(screen.getByTestId('forever-tree-spent-2')).toHaveTextContent('2');
+        expect(screen.getByTestId('forever-tree-spent-1')).toHaveTextContent('5');
+        expect(screen.getAllByTestId('forever-talent-cell')[0]).toHaveTextContent('Improved Heroic Strike3');
+    });
+
+    it('all known: grid only, no empty "Other talents" header', () => {
+        renderTalents(dto('blizzard', NODES));
+        expect(screen.getAllByTestId('forever-talent-cell')).toHaveLength(2);
+        expect(screen.queryByText('Other talents')).toBeNull();
+    });
+
+    it('none known: the list view as today', () => {
+        renderTalents(dto('blizzard', [UNKNOWN, { nodeId: 31, rank: 1, name: 'Forever Only Talent', tree: 0 }]));
+        expect(screen.queryAllByTestId('forever-talent-cell')).toHaveLength(0);
+        expect(screen.queryByText('Other talents')).toBeNull();
+        expect(screen.getByText('Learned talents')).toBeInTheDocument();
+        expect(screen.getByText('Master of Defense 2')).toBeInTheDocument();
+    });
+
+    it('counts an unnamed unplaced talent instead of naming it', () => {
+        renderTalents(dto('blizzard', [...NODES, { nodeId: 32, rank: 1, tree: 0 }]));
+        expect(screen.getByTestId('forever-other-talents-0')).toHaveTextContent('+1 unnamed talent');
+    });
+
+    it('a talent with no tree is listed after every grid, not under a tree', () => {
+        renderTalents(dto('blizzard', [...NODES, { nodeId: 40, rank: 1, name: 'Treeless Talent' }]));
+        const none = screen.getByTestId('forever-other-talents-none');
+        expect(none).toHaveTextContent(/^Other talentsTreeless Talent 1$/);
+        expect(screen.getAllByRole('heading', { name: 'Other talents' })).toHaveLength(1);
+        for (const i of [0, 1, 2]) expect(screen.queryByTestId(`forever-other-talents-${i}`)).toBeNull();
+        const lastCell = screen.getAllByTestId('forever-talent-cell').at(-1);
+        expect(lastCell?.compareDocumentPosition(none)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 });
 
@@ -91,5 +136,47 @@ describe('ForeverTalentDisplay — points come from the tree totals', () => {
         renderTalents({ ...value, trees });
         expect(screen.getAllByText('5 points').length).toBeGreaterThan(0);
         expect(screen.getByText('5 points in 0 talents')).toBeInTheDocument();
+    });
+});
+
+/** Rok Androl's real Armory import (fleet T1): Blizzard returned only the Protection tree. */
+const PROT: ForeverTalentNodeDto[] = [
+    { nodeId: 50, rank: 5, name: 'Shield Specialization', tree: 0 },
+    { nodeId: 51, rank: 2, name: 'Anticipation', tree: 0 },
+    { nodeId: 52, rank: 3, name: 'Toughness', tree: 0 },
+    { nodeId: 53, rank: 1, name: 'Improved Bloodrage', tree: 0 },
+    { nodeId: 54, rank: 1, name: 'Forever Only A', tree: 0 },
+    { nodeId: 55, rank: 1, name: 'Forever Only B', tree: 0 },
+];
+
+function treeHeadings(): (string | null)[] {
+    return screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent).filter((t) => t !== 'Other talents');
+}
+
+/** The sub-tree column holding `forever-tree-spent-<index>`. */
+function column(index: number): HTMLElement {
+    const col = screen.getByTestId(`forever-tree-spent-${index}`).parentElement?.parentElement;
+    if (!col) throw new Error(`column ${index} not rendered`);
+    return col;
+}
+
+function expectProtectionInThirdColumn(): void {
+    expect(treeHeadings(), 'one Protection tree must head column 3, Arms/Fury the first two, no duplicate').toEqual(['Arms', 'Fury', 'Protection']);
+    expect([0, 1, 2].map((i) => screen.getByTestId(`forever-tree-spent-${i}`).textContent)).toEqual(['0', '0', '13']);
+    expect(within(column(2)).getAllByTestId('forever-talent-cell')).toHaveLength(4);
+    expect(within(column(0)).queryAllByTestId('forever-talent-cell')).toHaveLength(0);
+    expect(screen.getByTestId('forever-other-talents-2')).toHaveTextContent(/Forever Only A 1.*Forever Only B 1/);
+}
+
+describe('ForeverTalentDisplay — Armory trees map to class columns by name (ROK-2113 T1)', () => {
+    it('a converted payload with only "Protection" renders Arms 0 | Fury 0 | Protection 13', () => {
+        renderTalents({ format: 'forever', source: 'blizzard', syncedAt: '2026-11-08T09:00:00.000Z', layout: 'list', trees: [{ index: 0, spent: 13, name: 'Protection' }], nodes: PROT });
+        expectProtectionInThirdColumn();
+    });
+
+    it('an unconverted classic payload with only "Protection" renders the same columns', () => {
+        const talents = PROT.map(({ nodeId, rank, name }) => ({ id: nodeId, rank, name: name ?? '' }));
+        render(<TalentDisplay talents={{ format: 'classic', trees: [{ name: 'Protection', spentPoints: 13, talents }] }} isArmoryImported characterClass="Warrior" gameVariant="wow_forever" />);
+        expectProtectionInThirdColumn();
     });
 });
