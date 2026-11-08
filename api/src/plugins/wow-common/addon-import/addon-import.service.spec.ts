@@ -12,6 +12,7 @@ import type { CharactersService } from '../../../characters/characters.service';
 import type { AddonImportAuditService } from './addon-import.audit';
 import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import type { ForeverRealmRulesetsService } from '../forever-realm-rulesets.service';
+import type { ForeverAutoLinkService } from '../forever-auto-link/forever-auto-link.service';
 import { bindToCharacter } from './addon-import.binding';
 import { applyBinding } from './addon-import-binding.apply';
 import { applyChar, previewChar } from './addon-import-char.apply';
@@ -87,6 +88,7 @@ function setup() {
   const insightsCache = {
     invalidateForCharacter: jest.fn().mockResolvedValue(undefined),
   };
+  const autoLink = { attempt: jest.fn().mockResolvedValue('linked') };
   const service = new AddonImportService(
     makeDb(),
     characters as unknown as CharactersService,
@@ -94,8 +96,9 @@ function setup() {
     itemMeta as unknown as WowItemMetaService,
     realmRulesets as unknown as ForeverRealmRulesetsService,
     insightsCache as unknown as RosterInsightsCache,
+    autoLink as unknown as ForeverAutoLinkService,
   );
-  return { service, characters, audit, itemMeta, insightsCache };
+  return { service, characters, audit, itemMeta, insightsCache, autoLink };
 }
 
 const binding = (errors: AddonImportError[] = []) => ({
@@ -190,6 +193,42 @@ describe('AddonImportService', () => {
       });
       await service.importString(1, CHAR_ID, { ...body, dryRun: true });
       expect(insightsCache.invalidateForCharacter).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Forever Armory auto-link nudge (ROK-2124)', () => {
+    it('an applied import nudges the auto-link for the imported character', async () => {
+      const { service, autoLink } = setup();
+      (applyChar as jest.Mock).mockResolvedValue({
+        status: 'applied',
+        summary: SUMMARY,
+      });
+      await service.importString(1, CHAR_ID, body);
+      expect(autoLink.attempt).toHaveBeenCalledTimes(1);
+      expect(autoLink.attempt).toHaveBeenCalledWith(CHAR_ID);
+    });
+
+    it('a dry run never nudges the auto-link', async () => {
+      const { service, autoLink } = setup();
+      (previewChar as jest.Mock).mockResolvedValue({
+        status: 'applied',
+        summary: SUMMARY,
+      });
+      await service.importString(1, CHAR_ID, { ...body, dryRun: true });
+      expect(autoLink.attempt).not.toHaveBeenCalled();
+    });
+
+    it('a rejected auto-link attempt does not fail the import', async () => {
+      const { service, autoLink } = setup();
+      autoLink.attempt.mockRejectedValue(new Error('Blizzard down'));
+      (applyChar as jest.Mock).mockResolvedValue({
+        status: 'applied',
+        summary: SUMMARY,
+      });
+      await expect(
+        service.importString(1, CHAR_ID, body),
+      ).resolves.toBeDefined();
+      expect(autoLink.attempt).toHaveBeenCalledWith(CHAR_ID);
     });
   });
 
