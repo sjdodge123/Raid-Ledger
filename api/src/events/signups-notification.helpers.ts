@@ -3,7 +3,7 @@
  * Contains roster update notifications and role-change notification logic.
  * Extracted from signups.service.ts for file size compliance (ROK-719).
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { UpdateRosterDto } from '@raid-ledger/contract';
 import type { Tx } from './signups.service.types';
@@ -141,132 +141,10 @@ function newAssignmentInput(
   };
 }
 
-export async function validateRosterAssignments(
-  db: Tx,
-  eventId: number,
-  assignments: UpdateRosterDto['assignments'],
-) {
-  const { BadRequestException } = await import('@nestjs/common');
-  const signups = await db
-    .select()
-    .from(schema.eventSignups)
-    .where(eq(schema.eventSignups.eventId, eventId));
-  const signupByUserId = new Map(signups.map((s) => [s.userId, s]));
-  for (const a of assignments) {
-    if (!signupByUserId.get(a.userId)) {
-      throw new BadRequestException(
-        `User ${a.userId} is not signed up for this event`,
-      );
-    }
-  }
-  return signupByUserId;
-}
-
 export async function captureOldAssignments(db: Tx, eventId: number) {
   const old = await db
     .select()
     .from(schema.rosterAssignments)
     .where(eq(schema.rosterAssignments.eventId, eventId));
   return new Map(old.map((a) => [a.signupId, a.role]));
-}
-
-export async function replaceRosterAssignments(
-  db: Tx,
-  eventId: number,
-  assignments: UpdateRosterDto['assignments'],
-  signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
-  benchPromotionService: {
-    cancelPromotion: (
-      eventId: number,
-      role: string,
-      position: number,
-    ) => Promise<void>;
-  },
-): Promise<number[]> {
-  await db
-    .delete(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.eventId, eventId));
-  await updateCharacterOverrides(db, assignments, signupByUserId);
-  if (assignments.length === 0) return [];
-  return insertNewAssignments(
-    db,
-    eventId,
-    assignments,
-    signupByUserId,
-    benchPromotionService,
-  );
-}
-
-async function updateCharacterOverrides(
-  db: Tx,
-  assignments: UpdateRosterDto['assignments'],
-  signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
-) {
-  for (const a of assignments) {
-    if (!a.characterId) continue;
-    const signup = signupByUserId.get(a.userId);
-    if (signup) {
-      await db
-        .update(schema.eventSignups)
-        .set({ characterId: a.characterId, confirmationStatus: 'confirmed' })
-        .where(eq(schema.eventSignups.id, signup.id));
-    }
-  }
-}
-
-async function insertNewAssignments(
-  db: Tx,
-  eventId: number,
-  assignments: UpdateRosterDto['assignments'],
-  signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
-  benchPromotionService: {
-    cancelPromotion: (
-      eventId: number,
-      role: string,
-      position: number,
-    ) => Promise<void>;
-  },
-): Promise<number[]> {
-  const values = assignments.map((a) => ({
-    eventId,
-    signupId: a.signupId ?? signupByUserId.get(a.userId)!.id,
-    role: a.slot,
-    position: a.position,
-    isOverride: a.isOverride ? 1 : 0,
-  }));
-  await db.insert(schema.rosterAssignments).values(values);
-  const reconfirmedUserIds = await confirmNonBenchSignups(
-    db,
-    assignments,
-    signupByUserId,
-  );
-  for (const a of assignments) {
-    if (a.slot && a.slot !== 'bench') {
-      await benchPromotionService.cancelPromotion(eventId, a.slot, a.position);
-    }
-  }
-  return reconfirmedUserIds;
-}
-
-/**
- * Flips matching pending signups to confirmed, returning the userIds whose
- * status actually changed (ROK-1269 — caller emits signup_reconfirmed
- * activity-log entries per returned userId).
- */
-async function confirmNonBenchSignups(
-  db: Tx,
-  assignments: UpdateRosterDto['assignments'],
-  signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
-): Promise<number[]> {
-  const flipped = assignments
-    .filter((a) => a.slot && a.slot !== 'bench')
-    .map((a) => signupByUserId.get(a.userId)!)
-    .filter((s) => s.confirmationStatus === 'pending');
-  const ids = flipped.map((s) => s.id);
-  if (ids.length === 0) return [];
-  await db
-    .update(schema.eventSignups)
-    .set({ confirmationStatus: 'confirmed' })
-    .where(inArray(schema.eventSignups.id, ids));
-  return flipped.map((s) => s.userId).filter((u): u is number => u !== null);
 }
