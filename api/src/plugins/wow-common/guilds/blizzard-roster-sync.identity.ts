@@ -4,7 +4,7 @@
  * LedgerLink stores the full Forever name ("Rok Androl"); the Blizzard roster
  * API returns the first name only ("Rok"). These rules pair the two by first
  * name when that is unambiguous, repair the GUID-less duplicates an earlier
- * sync inserted, and refuse a sync that would drop most of the GUID roster.
+ * sync inserted, and refuse a sync that would replace the GUID roster.
  */
 import { normalizeName } from '../addon-import/addon-import.binding-name';
 import type { ForeverGuildMember } from '../blizzard-forever-guild.helpers';
@@ -52,16 +52,42 @@ function uniqueByKey<T>(
 
 const hasGuid = (r: ExistingRosterRow): boolean => r.guid !== null;
 
+const seenMs = (r: ExistingRosterRow): number =>
+  r.lastSeenAt === null ? -Infinity : r.lastSeenAt.getTime();
+
+/**
+ * GUID rows of the newest snapshot that stamped any GUID row — the members
+ * LedgerLink (or the last sync) saw as current. Departed members' rows are
+ * older, so a first name never binds a newcomer to them (ROK-2139 M1).
+ * @param existing - Stored members of the guild.
+ */
+export function latestGuidBatch(
+  existing: readonly ExistingRosterRow[],
+): ExistingRosterRow[] {
+  const rows = existing.filter((r) => hasGuid(r) && r.lastSeenAt !== null);
+  const newest = Math.max(...rows.map(seenMs));
+  return rows.filter((r) => seenMs(r) === newest);
+}
+
+/**
+ * True unless both classes are known and differ (case-insensitive).
+ * @param a - A stored or mapped class name, or null.
+ * @param b - Another class name, or null.
+ */
+export function sameClass(a: string | null, b: string | null): boolean {
+  return a === null || b === null || a.toLowerCase() === b.toLowerCase();
+}
+
 /** First-name lookup built once per sync. */
 export interface FirstNameIndex {
-  /** GUID rows whose first name is unique among the guild's GUID rows. */
+  /** Current GUID rows whose first name is unique among the current batch. */
   rows: Map<string, ExistingRosterRow>;
   /** How many API members share each first name. */
   rosterCounts: Map<string, number>;
 }
 
 /**
- * Build the first-name lookup.
+ * Build the first-name lookup over the newest GUID batch only.
  * @param existing - Stored members of the guild.
  * @param incoming - Mapped API roster members.
  */
@@ -70,7 +96,7 @@ export function buildFirstNameIndex(
   incoming: readonly ForeverGuildMember[],
 ): FirstNameIndex {
   return {
-    rows: uniqueByKey(existing.filter(hasGuid), (r) =>
+    rows: uniqueByKey(latestGuidBatch(existing), (r) =>
       firstNameKey(r.characterName),
     ),
     rosterCounts: countByKey(incoming, (m) => firstNameKey(m.name)),
@@ -78,8 +104,8 @@ export function buildFirstNameIndex(
 }
 
 /**
- * The GUID row a member pairs with by first name, only when the first name
- * is unique on BOTH sides; else undefined.
+ * The current GUID row a member pairs with by first name, only when the
+ * first name is unique on BOTH sides; else undefined. The caller checks class.
  * @param member - The API member.
  * @param index - From {@link buildFirstNameIndex}.
  */
@@ -103,22 +129,33 @@ type JunkRow = ExistingRosterRow & { blizzardCharacterId: number };
 const isJunk = (r: ExistingRosterRow): r is JunkRow =>
   r.guid === null && r.blizzardCharacterId !== null;
 
-/** The GUID twin of one junk row: same Blizzard id, else unique first name. */
+/** The candidate twins of the junk rows of one sync. */
+interface JunkTwins {
+  /** Every GUID row (a Blizzard-id twin may be any of them). */
+  guidRows: readonly ExistingRosterRow[];
+  /** Current GUID rows by unique first name (ROK-2139 M1). */
+  byFirst: Map<string, ExistingRosterRow>;
+  /** How many junk rows share each first name. */
+  junkCounts: Map<string, number>;
+}
+
+/**
+ * The GUID twin of one junk row: same Blizzard id, else a unique first name
+ * in the newest GUID batch with a compatible class and no Blizzard id.
+ */
 function junkTarget(
   junk: JunkRow,
-  guidRows: readonly ExistingRosterRow[],
-  junkCounts: Map<string, number>,
+  twins: JunkTwins,
 ): ExistingRosterRow | undefined {
-  const byId = guidRows.find(
+  const byId = twins.guidRows.find(
     (r) => r.blizzardCharacterId === junk.blizzardCharacterId,
   );
   if (byId !== undefined) return byId;
   const key = firstNameKey(junk.characterName);
-  if (junkCounts.get(key) !== 1) return undefined;
-  const hit = uniqueByKey(guidRows, (r) => firstNameKey(r.characterName)).get(
-    key,
-  );
-  return hit?.blizzardCharacterId === null ? hit : undefined;
+  if (twins.junkCounts.get(key) !== 1) return undefined;
+  const hit = twins.byFirst.get(key);
+  if (hit === undefined || hit.blizzardCharacterId !== null) return undefined;
+  return sameClass(hit.className, junk.className) ? hit : undefined;
 }
 
 /**
@@ -130,13 +167,18 @@ function junkTarget(
 export function planJunkMerges(
   existing: readonly ExistingRosterRow[],
 ): JunkMerge[] {
-  const guidRows = existing.filter(hasGuid);
   const junk = existing.filter(isJunk);
-  const junkCounts = countByKey(junk, (r) => firstNameKey(r.characterName));
+  const twins: JunkTwins = {
+    guidRows: existing.filter(hasGuid),
+    byFirst: uniqueByKey(latestGuidBatch(existing), (r) =>
+      firstNameKey(r.characterName),
+    ),
+    junkCounts: countByKey(junk, (r) => firstNameKey(r.characterName)),
+  };
   const used = new Set<number>();
   const out: JunkMerge[] = [];
   for (const j of junk) {
-    const target = junkTarget(j, guidRows, junkCounts);
+    const target = junkTarget(j, twins);
     if (target === undefined || used.has(target.id)) continue;
     used.add(target.id);
     out.push({
@@ -170,31 +212,24 @@ export function withMergesApplied(
     });
 }
 
-const seenMs = (r: ExistingRosterRow): number =>
-  r.lastSeenAt === null ? -Infinity : r.lastSeenAt.getTime();
-
-/** GUID rows of the newest snapshot that stamped any GUID row. */
-function latestGuidBatch(
-  existing: readonly ExistingRosterRow[],
-): ExistingRosterRow[] {
-  const rows = existing.filter((r) => hasGuid(r) && r.lastSeenAt !== null);
-  const newest = Math.max(...rows.map(seenMs));
-  return rows.filter((r) => seenMs(r) === newest);
-}
-
 /**
- * Safety guard: the reason to refuse a sync that pairs fewer than half of the
- * guild's current GUID roster, or null when the sync may write.
+ * Safety guard: the reason to refuse a sync that REPLACES the GUID roster
+ * (few current GUID rows matched while as many members arrived unmatched),
+ * or null when the sync may write. A shrink is allowed: the candidates are
+ * the members that matched a current GUID row or matched nothing, and the
+ * sync is refused only when `hits * 2 < min(current GUID rows, candidates)`.
  * @param existing - Stored members (after {@link withMergesApplied}).
  * @param matchedIds - Stored ids the sync matched.
+ * @param unmatched - How many API members matched no stored row.
  */
 export function identityMismatch(
   existing: readonly ExistingRosterRow[],
   matchedIds: ReadonlySet<number>,
+  unmatched: number,
 ): string | null {
   const ref = latestGuidBatch(existing);
   if (ref.length === 0) return null;
   const hits = ref.filter((r) => matchedIds.has(r.id)).length;
-  if (hits * 2 >= ref.length) return null;
+  if (hits * 2 >= Math.min(ref.length, hits + unmatched)) return null;
   return `The Blizzard roster matched only ${hits} of ${ref.length} LedgerLink members, so nothing was written. Check the Blizzard guild slug, or re-import the roster from LedgerLink.`;
 }

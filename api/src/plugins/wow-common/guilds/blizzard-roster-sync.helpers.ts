@@ -15,6 +15,7 @@ import {
   buildFirstNameIndex,
   firstNameHit,
   rosterNameKey,
+  sameClass,
   type FirstNameIndex,
 } from './blizzard-roster-sync.identity';
 
@@ -40,6 +41,8 @@ export interface ExistingRosterRow {
   guid: string | null;
   blizzardCharacterId: number | null;
   characterName: string;
+  /** Stored `class` (title case), or null when unknown (ROK-2139 M1). */
+  className: string | null;
   level: number | null;
   rankIndex: number | null;
   rankName: string | null;
@@ -133,13 +136,18 @@ interface RosterIndexes {
   byFirst: FirstNameIndex;
 }
 
-/** First-name fallback (ROK-2139): unique on both sides, not bound elsewhere. */
+/**
+ * First-name fallback (ROK-2139): a current GUID row, unique on both sides,
+ * not bound elsewhere, and of the same class when both classes are known.
+ */
 function firstNameFallback(
   member: ForeverGuildMember,
   idx: RosterIndexes,
 ): ExistingRosterRow | undefined {
   const hit = firstNameHit(member, idx.byFirst);
-  return hit !== undefined && nameMatchable(hit, member) ? hit : undefined;
+  if (hit === undefined || !nameMatchable(hit, member)) return undefined;
+  const memberClass = classNameForForeverId(member.classId);
+  return sameClass(hit.className, memberClass) ? hit : undefined;
 }
 
 /**

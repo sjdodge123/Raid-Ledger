@@ -61,7 +61,8 @@ export class BlizzardRosterSyncService {
    * @param guildId - `guilds.id`.
    * @returns `skipped` (not a Forever guild with a slug), `disabled` (kill
    *   switch off), `not_found`, `skipped_empty`, `stale`, `superseded`
-   *   (slug changed mid-fetch) or `ok`.
+   *   (slug changed mid-fetch), `mismatch` (ROK-2139 guard refused the
+   *   roster; nothing written, status `error`) or `ok`.
    * @throws whatever the fetch or apply threw, after recording `error`.
    */
   async syncForeverGuildRoster(guildId: number): Promise<RosterSyncResult> {
@@ -172,6 +173,8 @@ export class BlizzardRosterSyncService {
     Sentry.captureMessage('Forever roster sync identity mismatch', {
       level: 'warning',
       tags: { guildId: String(guild.id), region: guild.region },
+      // One issue per guild, not a fresh one every 6h cron run (review m4).
+      fingerprint: ['forever-roster-identity-mismatch', String(guild.id)],
     });
     await this.writeStatus(guild.id, 'error');
     return { status: 'mismatch', reason };
