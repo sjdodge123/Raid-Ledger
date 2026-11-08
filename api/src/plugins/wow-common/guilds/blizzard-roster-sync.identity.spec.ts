@@ -16,6 +16,7 @@ import {
   withMergesApplied,
 } from './blizzard-roster-sync.identity';
 
+const OLD_T = new Date('2026-01-01T00:00:00.000Z');
 const ADDON_T = new Date('2026-11-01T00:00:00.000Z');
 const SYNC_T = new Date('2026-11-07T00:00:00.000Z');
 
@@ -32,6 +33,7 @@ function row(over: Partial<ExistingRosterRow>): ExistingRosterRow {
     guid: `Player-1-${String(id).padStart(4, '0')}`,
     blizzardCharacterId: null,
     characterName: `Member${id}`,
+    className: null,
     level: 60,
     rankIndex: 3,
     rankName: 'Raider',
@@ -99,6 +101,30 @@ describe('matchRosterMembers — Forever first-name rule (ROK-2139)', () => {
     expect(pairs(res)).toEqual([[exact.id, 'Rok']]);
   });
 
+  it('M1: never pairs with a departed GUID row (older than the newest batch)', () => {
+    const departed = row({ characterName: 'Rok Androl', lastSeenAt: OLD_T });
+    const hip = row({ characterName: 'Hip Smith' });
+    const res = matchRosterMembers([departed, hip], [api('Rok'), api('Hip')]);
+    expect(pairs(res)).toEqual([[hip.id, 'Hip']]);
+    expect(res.unmatched.map((m) => m.name)).toEqual(['Rok']);
+  });
+
+  it('M1: a departed namesake does not make the current row ambiguous', () => {
+    const departed = row({ characterName: 'Rok Androl', lastSeenAt: OLD_T });
+    const current = row({ characterName: 'Rok Bloggs' });
+    const res = matchRosterMembers([departed, current], [api('Rok')]);
+    expect(pairs(res)).toEqual([[current.id, 'Rok']]);
+  });
+
+  it('M1: never pairs across classes when both are known', () => {
+    const warrior = row({ characterName: 'Rok Androl', className: 'Warrior' });
+    expect(matchRosterMembers([warrior], [api('Rok')]).matched).toEqual([]);
+    const mage = row({ characterName: 'Rok Androl', className: 'Mage' });
+    expect(pairs(matchRosterMembers([mage], [api('Rok')]))).toEqual([
+      [mage.id, 'Rok'],
+    ]);
+  });
+
   it('never steals a row bound to another Blizzard id', () => {
     const bound = row({ characterName: 'Rok Androl', blizzardCharacterId: 5 });
     const res = matchRosterMembers([bound], [api('Rok', 6)]);
@@ -122,6 +148,18 @@ describe('planJunkMerges — repair rows an earlier sync inserted', () => {
     expect(planJunkMerges([named, bound, j])).toEqual([
       { junkId: j.id, targetId: bound.id, blizzardCharacterId: 900 },
     ]);
+  });
+
+  it('M1: never merges into a departed GUID row by first name', () => {
+    const departed = row({ characterName: 'Rok Androl', lastSeenAt: OLD_T });
+    const current = row({ characterName: 'Hip Smith' });
+    expect(planJunkMerges([departed, current, junk('Rok', 900)])).toEqual([]);
+  });
+
+  it('M1: never merges across classes when both are known', () => {
+    const rok = row({ characterName: 'Rok Androl', className: 'Mage' });
+    const j = { ...junk('Rok', 900), className: 'Warrior' };
+    expect(planJunkMerges([rok, j])).toEqual([]);
   });
 
   it('leaves an ambiguous junk row alone', () => {
@@ -150,18 +188,18 @@ describe('identityMismatch — the safety guard', () => {
 
   it('refuses when fewer than half of the latest GUID rows matched', () => {
     const rows = guild();
-    const reason = identityMismatch(rows, new Set([rows[0]?.id ?? -1]));
+    const reason = identityMismatch(rows, new Set([rows[0]?.id ?? -1]), 3);
     expect(reason).toContain('matched only 1 of 4 LedgerLink members');
   });
 
   it('allows exactly half', () => {
     const rows = guild();
     const ids = new Set(rows.slice(0, 2).map((r) => r.id));
-    expect(identityMismatch(rows, ids)).toBeNull();
+    expect(identityMismatch(rows, ids, 2)).toBeNull();
   });
 
   it('allows a guild with no GUID rows (Blizzard-only)', () => {
-    expect(identityMismatch([junk('Rok', 1)], new Set())).toBeNull();
+    expect(identityMismatch([junk('Rok', 1)], new Set(), 0)).toBeNull();
   });
 
   it('counts only the newest GUID snapshot, not departed members', () => {
@@ -170,6 +208,48 @@ describe('identityMismatch — the safety guard', () => {
     );
     const live = guild();
     const ids = new Set(live.map((r) => r.id));
-    expect(identityMismatch([...gone, ...live], ids)).toBeNull();
+    expect(identityMismatch([...gone, ...live], ids, 0)).toBeNull();
+  });
+
+  it('M2: allows a real shrink (8 → 2, both matched, nobody new)', () => {
+    const rows = Array.from({ length: 8 }, () => row({}));
+    const ids = new Set(rows.slice(0, 2).map((r) => r.id));
+    expect(identityMismatch(rows, ids, 0)).toBeNull();
+  });
+
+  it('M2: allows a small reference batch in a mostly-Blizzard guild', () => {
+    const ref = Array.from({ length: 3 }, () => row({}));
+    const blizz = Array.from({ length: 38 }, (_, i) => junk(`B${i}`, 500 + i));
+    const ids = new Set([ref[0]?.id ?? -1, ...blizz.map((r) => r.id)]);
+    expect(identityMismatch([...ref, ...blizz], ids, 0)).toBeNull();
+  });
+});
+
+describe('the operator case — 11 Forever GUID rows vs 11 Blizzard first names', () => {
+  const guidRows = () =>
+    Array.from({ length: 11 }, (_, i) =>
+      row({ characterName: `Nm${i}x Sur${i}`, className: 'Mage' }),
+    );
+  const check = (rows: ExistingRosterRow[], roster: ForeverGuildMember[]) => {
+    const res = matchRosterMembers(rows, roster);
+    const ids = new Set(res.matched.map((m) => m.existingId));
+    return { res, reason: identityMismatch(rows, ids, res.unmatched.length) };
+  };
+
+  it('0 full-name matches, all 11 pair by first name and the guard allows it', () => {
+    const rows = guidRows();
+    const roster = rows.map((_, i) => api(`Nm${i}x`, 900 + i));
+    const { res, reason } = check(rows, roster);
+    expect(pairs(res)).toEqual(rows.map((r, i) => [r.id, `Nm${i}x`]));
+    expect(res.unmatched).toEqual([]);
+    expect(reason).toBeNull();
+  });
+
+  it('a real mismatch (0 of 11 paired, 11 unknown names) is refused', () => {
+    const rows = guidRows();
+    const roster = rows.map((_, i) => api(`Zz${i}q`, 900 + i));
+    const { res, reason } = check(rows, roster);
+    expect(res.matched).toEqual([]);
+    expect(reason).toContain('matched only 0 of 11 LedgerLink members');
   });
 });
