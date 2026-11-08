@@ -1,5 +1,5 @@
 {
-  "id": "75ee42c0-e834-43ff-8240-da4f736be5a5",
+  "id": "cf92ccce-a211-45e7-b384-27c345827fec",
   "prevId": "6f92837f-e021-4b57-9fc6-450bba5c510c",
   "version": "7",
   "dialect": "postgresql",
@@ -12557,42 +12557,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "ingame_motd": {
-          "name": "ingame_motd",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ingame_motd_updated_at": {
-          "name": "ingame_motd_updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ingame_motd_updated_by": {
-          "name": "ingame_motd_updated_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ingame_info": {
-          "name": "ingame_info",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ingame_info_updated_at": {
-          "name": "ingame_info_updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ingame_info_updated_by": {
-          "name": "ingame_info_updated_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -12669,36 +12633,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_guild_profiles_ingame_motd_updated_by": {
-          "name": "idx_guild_profiles_ingame_motd_updated_by",
-          "columns": [
-            {
-              "expression": "ingame_motd_updated_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_guild_profiles_ingame_info_updated_by": {
-          "name": "idx_guild_profiles_ingame_info_updated_by",
-          "columns": [
-            {
-              "expression": "ingame_info_updated_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -12753,32 +12687,6 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
-        },
-        "guild_profiles_ingame_motd_updated_by_users_id_fk": {
-          "name": "guild_profiles_ingame_motd_updated_by_users_id_fk",
-          "tableFrom": "guild_profiles",
-          "tableTo": "users",
-          "columnsFrom": [
-            "ingame_motd_updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "guild_profiles_ingame_info_updated_by_users_id_fk": {
-          "name": "guild_profiles_ingame_info_updated_by_users_id_fk",
-          "tableFrom": "guild_profiles",
-          "tableTo": "users",
-          "columnsFrom": [
-            "ingame_info_updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -12792,14 +12700,6 @@
         "guild_profiles_discord_channel_source_check": {
           "name": "guild_profiles_discord_channel_source_check",
           "value": "\"guild_profiles\".\"discord_channel_source\" IN ('auto', 'manual')"
-        },
-        "guild_profiles_ingame_motd_length": {
-          "name": "guild_profiles_ingame_motd_length",
-          "value": "char_length(\"guild_profiles\".\"ingame_motd\") <= 255"
-        },
-        "guild_profiles_ingame_info_length": {
-          "name": "guild_profiles_ingame_info_length",
-          "value": "char_length(\"guild_profiles\".\"ingame_info\") <= 499"
         }
       },
       "isRLSEnabled": false
@@ -20637,6 +20537,80 @@
           "value": "\"steam_user_app_stats\".\"status\" IN ('ok', 'private', 'not_owned', 'pending', 'unlinked', 'error')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.wow_forever_armory_autolink": {
+      "name": "wow_forever_armory_autolink",
+      "schema": "",
+      "columns": {
+        "character_id": {
+          "name": "character_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "failures": {
+          "name": "failures",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "retry_at": {
+          "name": "retry_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_attempt_at": {
+          "name": "last_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "idx_wow_forever_armory_autolink_retry_at": {
+          "name": "idx_wow_forever_armory_autolink_retry_at",
+          "columns": [
+            {
+              "expression": "retry_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "wow_forever_armory_autolink_character_id_characters_id_fk": {
+          "name": "wow_forever_armory_autolink_character_id_characters_id_fk",
+          "tableFrom": "wow_forever_armory_autolink",
+          "tableTo": "characters",
+          "columnsFrom": [
+            "character_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
