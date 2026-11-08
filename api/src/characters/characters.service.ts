@@ -28,7 +28,7 @@ import * as crudH from './characters-crud.helpers';
 import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { checkUpdateClaim } from './characters-update-claim.helpers';
-import { defined } from '../common/defined.helpers';
+import { isRosterClaimed } from './characters-roster-claim.helpers';
 import { withDisplayOverrides } from './characters-display-equipment.helpers';
 import * as policyH from './characters-external-policy.helpers';
 
@@ -143,22 +143,24 @@ export class CharactersService {
     const [updated] = await this.db
       .update(schema.characters)
       .set({ ...prepared, updatedAt: new Date() })
-      .where(eq(schema.characters.id, characterId))
+      .where(crudH.ownedCharacter(userId, characterId))
       .returning()
       .catch((error: unknown) => {
         const name = prepared.name ?? character.name;
         identity?.rethrowIdentityViolation(error, name, character.region);
         throw error;
       });
+    // An admin Change owner committed after findOne (ROK-2128 Codex P1).
+    if (!updated) throw new NotFoundException('Character not found');
     this.logger.log(`User ${userId} updated character ${characterId}`);
-    return mapCharacterToDto(defined(updated, 'updated character row'));
+    return mapCharacterToDto(updated);
   }
 
   async delete(userId: number, characterId: string): Promise<void> {
     const character = await this.findOne(userId, characterId);
     await this.db
       .delete(schema.characters)
-      .where(eq(schema.characters.id, characterId));
+      .where(crudH.ownedCharacter(userId, characterId));
     await crudH.autoPromoteAfterDelete(
       this.db,
       userId,
@@ -175,12 +177,14 @@ export class CharactersService {
       const [updated] = await tx
         .update(schema.characters)
         .set({ isMain: true, updatedAt: new Date() })
-        .where(eq(schema.characters.id, characterId))
+        .where(crudH.ownedCharacter(userId, characterId))
         .returning();
+      // Moved to another owner mid-request: 404 (rolls back the demote).
+      if (!updated) throw new NotFoundException('Character not found');
       this.logger.log(
         `User ${userId} set character ${characterId} as main for game ${character.gameId}`,
       );
-      return mapCharacterToDto(defined(updated, 'updated character row'));
+      return mapCharacterToDto(updated);
     });
   }
 
@@ -287,11 +291,14 @@ export class CharactersService {
       .limit(1);
     if (!character)
       throw new NotFoundException(`Character ${characterId} not found`);
-    const dto = await withDisplayOverrides(
-      mapCharacterToDto(character),
-      this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
-      this.logger,
-    );
+    const dto = {
+      ...(await withDisplayOverrides(
+        mapCharacterToDto(character),
+        this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
+        this.logger,
+      )),
+      rosterClaimed: await isRosterClaimed(this.db, characterId),
+    };
     const enrichmentRows =
       await this.enrichmentsService.getEnrichmentsForEntity(
         'character',

@@ -8,6 +8,8 @@ import type { DecodedAddonPaste } from './addon-import.decoder';
  *
  *   1. the GUID pin lock   `(ADDON_GUID_LOCK_CLASS, hashtext('game:region:guid'))`
  *   2. the guild-import lock `hashtext('guild-import:game:region:nameKey')`
+ *   3. the roster-claim name lock `(ADDON_GUID_LOCK_CLASS, hashtext('claim-name:game:region:lower(name)'))`
+ *      — taken only by the ROK-2128 roster claim, after (1); no import takes it.
  *
  * Both apply routes (per-character and create) take them up front, in this
  * order, through `lockImportScope`, before any section runs. The later
@@ -28,6 +30,19 @@ export async function lockAddonGuid(
   guid: string,
 ): Promise<void> {
   const key = `${gameId}:${region}:${guid}`;
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${ADDON_GUID_LOCK_CLASS}::int4, hashtext(${key}))`,
+  );
+}
+
+/** (3) — the ROK-2128 roster-claim name-identity lock (after (1)). */
+export async function lockClaimName(
+  tx: AddonImportTx,
+  gameId: number,
+  region: string,
+  name: string,
+): Promise<void> {
+  const key = `claim-name:${gameId}:${region.toLowerCase()}:${name.toLowerCase()}`;
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(${ADDON_GUID_LOCK_CLASS}::int4, hashtext(${key}))`,
   );

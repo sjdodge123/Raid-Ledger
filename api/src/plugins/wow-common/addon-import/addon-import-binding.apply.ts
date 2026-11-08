@@ -78,9 +78,16 @@ export async function applyBinding(
   const [row] = await ctx.tx
     .update(characters)
     .set({ ...set, updatedAt: new Date() })
-    .where(eq(characters.id, ctx.characterId))
+    // ROK-2128 (Codex P1): owner-conditional — an admin may have moved it.
+    .where(
+      and(
+        eq(characters.id, ctx.characterId),
+        eq(characters.userId, ctx.userId),
+      ),
+    )
     .returning({ name: characters.name });
-  if (set.addonGuid && row) await auditPin(ctx, set.addonGuid, row.name);
+  if (!row) return false;
+  if (set.addonGuid) await auditPin(ctx, set.addonGuid, row.name);
   return true;
 }
 

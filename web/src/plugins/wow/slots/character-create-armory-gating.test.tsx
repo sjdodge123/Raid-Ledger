@@ -42,7 +42,7 @@ function gameVersionSelect(): HTMLSelectElement {
 }
 
 function Harness({ gameSlug, initial, eventId }: { gameSlug: string; initial: 'manual' | 'import'; eventId?: number }) {
-    const [tab, setTab] = useState(initial);
+    const [tab, setTab] = useState<'manual' | 'import' | 'roster'>(initial);
     return (
         <>
             <CharacterCreateImportForm onClose={() => {}} gameSlug={gameSlug} activeTab={tab} onTabChange={setTab}
