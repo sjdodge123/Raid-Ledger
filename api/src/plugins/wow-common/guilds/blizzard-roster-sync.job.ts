@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import type { GuildBlizzardRosterSyncResult } from '@raid-ledger/contract';
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
@@ -155,6 +156,9 @@ export class BlizzardRosterSyncJob {
       throw new NotFoundException('Guild not found');
     if (res.status === 'superseded')
       throw new ConflictException(ROSTER_SYNC_SUPERSEDED_MESSAGE);
+    // ROK-2139 guard refused the roster: nothing written, status `error`.
+    if (res.status === 'mismatch')
+      throw new UnprocessableEntityException(res.reason);
     // `stale` (newer snapshot already stored) is a 200 with members 0.
     const after = await this.readGuild(guildId);
     return {
@@ -207,5 +211,6 @@ export class BlizzardRosterSyncJob {
 function countResult(tally: RosterSyncTally, res: RosterSyncResult): void {
   if (res.status === 'ok') tally.ok += 1;
   else if (res.status === 'not_found') tally.notFound += 1;
+  else if (res.status === 'mismatch') tally.error += 1;
   else tally.skipped += 1; // skipped / disabled / skipped_empty / stale / superseded
 }

@@ -3,16 +3,21 @@
  * Drizzle: the sync service (B2) loads rows, calls these, and writes.
  *
  * The roster body is UNVERIFIED (B-0, synthetic fixture); identity is the
- * character `name` (B-1, any surname ignored).
+ * character `name` (B-1). The API returns the first name only, LedgerLink the
+ * full "Name Surname", so a unique first name also pairs (ROK-2139).
  */
-import {
-  normalizeName,
-  titleCaseClass,
-} from '../addon-import/addon-import.binding-name';
+import { titleCaseClass } from '../addon-import/addon-import.binding-name';
 import type {
   ForeverGuildMember,
   ForeverGuildRoster,
 } from '../blizzard-forever-guild.helpers';
+import {
+  buildFirstNameIndex,
+  firstNameHit,
+  rosterNameKey,
+  sameClass,
+  type FirstNameIndex,
+} from './blizzard-roster-sync.identity';
 
 /**
  * Classic class ids → the client class token (B-2). Run through
@@ -36,6 +41,8 @@ export interface ExistingRosterRow {
   guid: string | null;
   blizzardCharacterId: number | null;
   characterName: string;
+  /** Stored `class` (title case), or null when unknown (ROK-2139 M1). */
+  className: string | null;
   level: number | null;
   rankIndex: number | null;
   rankName: string | null;
@@ -72,9 +79,7 @@ export function classNameForForeverId(id: number | null): string | null {
 }
 
 /** The roster identity key: normalised, lower-cased name. */
-function nameKey(name: string): string {
-  return normalizeName(name).toLowerCase();
-}
+const nameKey = rosterNameKey;
 
 function seenAtMs(row: ExistingRosterRow): number {
   return row.lastSeenAt === null ? -Infinity : row.lastSeenAt.getTime();
@@ -124,25 +129,53 @@ function duplicateWarning(key: string, rows: ExistingRosterRow[]): string {
   return `Forever roster: ${rows.length} rows share name "${key}"; updating row ${kept?.id ?? '?'} (newest last_seen_at), ignoring ${ignored}`;
 }
 
-/** The stored row a member pairs with, plus the name group it came from. */
+/** The lookups one sync builds over the stored rows. */
+interface RosterIndexes {
+  byId: Map<number, ExistingRosterRow>;
+  byName: Map<string, ExistingRosterRow[]>;
+  byFirst: FirstNameIndex;
+}
+
+/**
+ * First-name fallback (ROK-2139): a current GUID row, unique on both sides,
+ * not bound elsewhere, and of the same class when both classes are known.
+ */
+function firstNameFallback(
+  member: ForeverGuildMember,
+  idx: RosterIndexes,
+): ExistingRosterRow | undefined {
+  const hit = firstNameHit(member, idx.byFirst);
+  if (hit === undefined || !nameMatchable(hit, member)) return undefined;
+  const memberClass = classNameForForeverId(member.classId);
+  return sameClass(hit.className, memberClass) ? hit : undefined;
+}
+
+/**
+ * The stored row a member pairs with — Blizzard id, then exact full name,
+ * then unique first name — plus the name group it came from.
+ */
 function findHit(
   member: ForeverGuildMember,
-  byId: Map<number, ExistingRosterRow>,
-  byName: Map<string, ExistingRosterRow[]>,
+  idx: RosterIndexes,
 ): { hit: ExistingRosterRow | undefined; dupes: ExistingRosterRow[] } {
   const idHit =
-    member.blizzardId === null ? undefined : byId.get(member.blizzardId);
+    member.blizzardId === null ? undefined : idx.byId.get(member.blizzardId);
   if (idHit !== undefined) return { hit: idHit, dupes: [] };
-  const group = (byName.get(nameKey(member.name)) ?? []).filter((r) =>
+  const group = (idx.byName.get(nameKey(member.name)) ?? []).filter((r) =>
     nameMatchable(r, member),
   );
+  if (group.length === 0) {
+    return { hit: firstNameFallback(member, idx), dupes: [] };
+  }
   return { hit: group[0], dupes: group.length > 1 ? group : [] };
 }
 
 /**
  * Pair API members with stored rows: by `blizzard_character_id` first, else
- * by lower(name). When several rows share a name the newest `last_seen_at`
- * wins and a warning is returned (B-5). A row is matched at most once.
+ * by lower(name), else by a first name unique among the GUID rows AND the
+ * roster (ROK-2139). When several rows share a name the newest
+ * `last_seen_at` wins and a warning is returned (B-5). A row is matched at
+ * most once.
  * @param existing - Stored members of the guild.
  * @param incoming - Mapped API roster members.
  */
@@ -150,8 +183,11 @@ export function matchRosterMembers(
   existing: readonly ExistingRosterRow[],
   incoming: readonly ForeverGuildMember[],
 ): RosterMatchResult {
-  const byId = indexByBlizzardId(existing);
-  const byName = indexByName(existing);
+  const idx: RosterIndexes = {
+    byId: indexByBlizzardId(existing),
+    byName: indexByName(existing),
+    byFirst: buildFirstNameIndex(existing, incoming),
+  };
   const used = new Set<number>();
   const result: RosterMatchResult = {
     matched: [],
@@ -159,7 +195,7 @@ export function matchRosterMembers(
     warnings: [],
   };
   for (const member of incoming) {
-    const { hit, dupes } = findHit(member, byId, byName);
+    const { hit, dupes } = findHit(member, idx);
     if (hit === undefined || used.has(hit.id)) {
       result.unmatched.push(member);
       continue;
