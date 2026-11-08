@@ -638,8 +638,12 @@ admission::acquire_disk() {
         admission::_log "$log_path" "[admission] waiting for disk: free=${free}GB need=${need}GB"
         if (( pruned == 0 )); then
             pruned=1
+            # ROK-2111: the ladder skips builder_prune while ANOTHER build or
+            # heavy/medium task holds the ledger; our own entries (task-start's
+            # TASK_ID, hold_image_build's key) must not block our own prune.
             admission::_log "$log_path" \
-                "[admission] disk ladder: $(disk_pressure::force_ladder 2>/dev/null || echo '{}')"
+                "[admission] disk ladder: $(RL_DISK_LADDER_SELF_KEYS="$task_id ${RL_ADMISSION_HELD:-}" \
+                    disk_pressure::force_ladder 2>/dev/null || echo '{}')"
             continue
         fi
         if (( $(date +%s) + RL_DISK_POLL_SECONDS > deadline )); then
