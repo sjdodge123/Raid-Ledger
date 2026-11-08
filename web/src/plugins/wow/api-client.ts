@@ -21,8 +21,11 @@ import type {
     ForeverProbeResultDto,
     ForeverProbeConfigDto,
     WowForeverRealmRulesetsDto,
+    GuildIngameText,
+    PutGuildIngameText,
 } from '@raid-ledger/contract';
 import {
+    GuildIngameTextSchema,
     CharacterSchema,
     BlizzardCapabilitiesSchema,
     WowForeverConfigResponseSchema,
@@ -231,4 +234,19 @@ export async function fetchForeverRealmRulesets(): Promise<WowForeverRealmRulese
 /** Admin: replace the whole realm → ruleset map; returns the saved (sorted) list (ROK-1739). */
 export async function updateForeverRealmRulesets(dto: WowForeverRealmRulesetsDto): Promise<WowForeverRealmRulesetsDto> {
     return fetchApi(FOREVER_REALM_RULESETS_PATH, { method: 'PUT', body: JSON.stringify(dto) }, WowForeverRealmRulesetsSchema);
+}
+
+const guildIngameTextPath = (guildId: number): string => `/plugins/wow/guilds/${guildId}/ingame-text`;
+
+/** ROK-2136 — the guild MOTD + Guild Information (members + staff; 403 non-member, 404 non-`wow_guild`). */
+export async function fetchGuildIngameText(guildId: number): Promise<GuildIngameText> {
+    return fetchApi(guildIngameTextPath(guildId), {}, GuildIngameTextSchema);
+}
+
+/**
+ * ROK-2136 — editors save both fields; only a changed field is written. A stale
+ * `base*UpdatedAt` on a changed field is a 409 whose body carries `ingameText`.
+ */
+export async function putGuildIngameText(guildId: number, body: PutGuildIngameText): Promise<GuildIngameText> {
+    return fetchApi(guildIngameTextPath(guildId), { method: 'PUT', body: JSON.stringify(body) }, GuildIngameTextSchema);
 }

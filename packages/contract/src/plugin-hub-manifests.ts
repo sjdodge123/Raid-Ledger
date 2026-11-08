@@ -110,6 +110,7 @@ const blizzard = {
     { id: 'forever-gear-readiness', title: 'Gear readiness', description: 'Average item level of level-60 mains, and who is missing enchants.', layoutKey: 'plugin' },
     { id: 'forever-raid-progress', title: 'Raid progress', description: 'First kills, kills and wipes per raid boss.', layoutKey: 'plugin' },
     { id: 'forever-ready-check', title: 'Ready for next run', description: 'Whether everyone signed up for the next raid or dungeon meets its level, quests, lockout and item level.', layoutKey: 'plugin' },
+    { id: 'forever-guild-text', title: 'Guild message', description: 'The guild Message of the Day and Guild Information, ready to paste in game.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
