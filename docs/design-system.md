@@ -908,8 +908,16 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   centres its label and has no tailwind-merge, so a `justify-start` override is unreliable; left-align by
   widening the label span instead: `className="[&>[data-button-label]]:w-full"` (the span's own
   `inline-flex` then packs icon + text from the left). Reference:
-  `components/admin/UserManagementRow.tsx::ActionMenuList`. That menu dismisses on Esc and outside click
+  `components/ui/action-menu.tsx::ActionMenuList` (extracted from `UserManagementRow.tsx` in ROK-2140;
+  `placement="inline"` lays the same rows out inside a `BottomSheet` body — the phone form of a ⋯ menu, as on
+  the character page's "More" sheet), dismissed by `components/ui/use-menu-dismiss.ts`. That menu dismisses on Esc and outside click
   only; the §4.14 dropdown (`SchedulingManageDropdown`) is the one with full arrow/Home/End menu keys.
+
+- **Action tiles** (ROK-2140, Option B of the character header): below `sm` a row of 2–3 equal actions is a
+  `grid grid-flow-col auto-cols-fr gap-2` of `Button variant="secondary" size="sm" fullWidth` with
+  `ACTION_TILE_CLASS` (`components/shared/character-header-layout.tsx`) — a 60px tile, 20px icon stacked over a
+  `text-xs` label; overflow actions go behind a "More" tile that opens a `BottomSheet` of `ActionMenuList` rows.
+  Its stat strip is `StatTile` (`bg-surface rounded-lg`, bold value over a muted label) from the same file.
 
 **Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
 `<button>` outside `components/ui` and `dev` at `form-primitives.baseline.json`. The list only shrinks: a new

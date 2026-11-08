@@ -6,7 +6,7 @@ describe('compactJoin (ROK-2140 meta separators)', () => {
         expect(compactJoin(['Night Elf Warrior', 'Protection'])).toBe('Night Elf Warrior · Protection');
     });
 
-    it.each([
+    it.each<[Array<string | null | undefined | false>]>([
         [[null, 'Warrior', undefined]],
         [['', 'Warrior', '  ']],
         [[undefined, null, 'Warrior', false]],

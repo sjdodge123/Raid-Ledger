@@ -1,7 +1,8 @@
-import { useState, type JSX } from 'react';
+import { useState } from 'react';
 import { RoleBadge } from '../ui/role-badge';
 import { Button } from '../ui/button';
-import { ActionMenuList, useMenuDismiss, type ActionMenuItem } from '../ui/action-menu';
+import { ActionMenuList, type ActionMenuItem } from '../ui/action-menu';
+import { useMenuDismiss } from '../ui/use-menu-dismiss';
 import { Select } from '../ui/select';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { UserRole, UserManagementDto } from '@raid-ledger/contract';

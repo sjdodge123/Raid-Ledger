@@ -28,6 +28,12 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 const UNLINK_URL = 'http://localhost:3000/admin/plugins/wow/characters/c1/unlink';
 const BUTTON = { name: /Unlink character/ };
 const OWNER_BUTTON = { name: /Change owner/ };
+/** ROK-2140: both admin actions sit behind the header's ⋯ menu at ≥ sm. */
+const MENU = { name: 'More actions for Squatter' };
+
+async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', MENU));
+}
 
 function setCharacter(addonLinked: boolean | undefined, rosterClaimed?: boolean) {
     detail.character = {
@@ -54,25 +60,27 @@ function mockUnlink(status: number, body: Record<string, unknown>) {
 describe('CharacterDetailAdminActions (ROK-1756)', () => {
     beforeEach(() => { activateWowPlugin(); vi.mocked(toast.success).mockClear(); vi.mocked(toast.error).mockClear(); });
 
-    it('shows Unlink character to an admin on an addon-linked character', () => {
+    it('shows Unlink character to an admin on an addon-linked character', async () => {
         detail.role = 'admin'; setCharacter(true);
+        const user = userEvent.setup();
         renderPage();
-        expect(screen.getByRole('button', BUTTON)).toBeInTheDocument();
+        await openMenu(user);
+        expect(screen.getByRole('menuitem', BUTTON)).toBeInTheDocument();
     });
 
     it('hides it from a non-admin, even on an addon-linked character', () => {
         detail.role = 'member'; setCharacter(true);
         renderPage();
         expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', MENU)).toBeNull();
     });
 
     it.each([['not addon-linked', false], ['link state unknown', undefined]])('hides it from an admin when %s', (_l, linked) => {
         detail.role = 'admin'; setCharacter(linked);
         renderPage();
         expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', BUTTON)).toBeNull();
-        expect(screen.queryByRole('button', OWNER_BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', MENU)).toBeNull();
+        expect(screen.queryByRole('menuitem', OWNER_BUTTON)).toBeNull();
     });
 
     it('asks for confirmation before calling the API, then deletes, toasts and navigates away', async () => {
@@ -80,7 +88,8 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
         const calls = mockUnlink(200, { characterId: 'c1', userId: 5 });
         const user = userEvent.setup();
         renderPage();
-        await user.click(screen.getByRole('button', BUTTON));
+        await openMenu(user);
+        await user.click(screen.getByRole('menuitem', BUTTON));
         expect(await screen.findByText(/deletes/)).toHaveTextContent(/rightful owner can re-import/);
         expect(calls).toHaveLength(0);
         await user.click(screen.getByRole('button', { name: 'Delete character' }));
@@ -94,7 +103,8 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
         const calls = mockUnlink(200, { characterId: 'c1', userId: 5 });
         const user = userEvent.setup();
         renderPage();
-        await user.click(screen.getByRole('button', BUTTON));
+        await openMenu(user);
+        await user.click(screen.getByRole('menuitem', BUTTON));
         await user.click(await screen.findByRole('button', { name: 'Cancel' }));
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Delete character' })).toBeNull());
         expect(calls).toHaveLength(0);
@@ -108,7 +118,8 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
         mockUnlink(status, { statusCode: status, message });
         const user = userEvent.setup();
         renderPage();
-        await user.click(screen.getByRole('button', BUTTON));
+        await openMenu(user);
+        await user.click(screen.getByRole('menuitem', BUTTON));
         await user.click(await screen.findByRole('button', { name: 'Delete character' }));
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
         expect(toast.success).not.toHaveBeenCalled();
@@ -123,23 +134,25 @@ describe('CharacterDetailAdminActions visibility (ROK-2128)', () => {
         detail.role = 'admin'; setCharacter(false, false);
         renderPage();
         expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', BUTTON)).toBeNull();
-        expect(screen.queryByRole('button', OWNER_BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', MENU)).toBeNull();
+        expect(screen.queryByRole('menuitem', OWNER_BUTTON)).toBeNull();
     });
 
-    it('ROK-2128: shows Unlink and Change owner to an admin on a roster-claimed character without a GUID', () => {
+    it('ROK-2128: shows Unlink and Change owner to an admin on a roster-claimed character without a GUID', async () => {
         detail.role = 'admin'; setCharacter(false, true);
+        const user = userEvent.setup();
         renderPage();
-        expect(screen.getByRole('button', BUTTON)).toBeInTheDocument();
-        expect(screen.getByRole('button', OWNER_BUTTON)).toBeInTheDocument();
+        await openMenu(user);
+        expect(screen.getByRole('menuitem', BUTTON)).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', OWNER_BUTTON)).toBeInTheDocument();
     });
 
     it('ROK-2128: hides Change owner and Unlink from a non-admin on a roster-claimed character', () => {
         detail.role = 'member'; setCharacter(false, true);
         renderPage();
         expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', OWNER_BUTTON)).toBeNull();
-        expect(screen.queryByRole('button', BUTTON)).toBeNull();
+        expect(screen.queryByRole('menuitem', OWNER_BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', MENU)).toBeNull();
     });
 });
 
@@ -160,7 +173,8 @@ function mockOwnerApis(status: number, body: Record<string, unknown>) {
 }
 
 async function openAndPick(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('button', OWNER_BUTTON));
+    await openMenu(user);
+    await user.click(screen.getByRole('menuitem', OWNER_BUTTON));
     expect(await screen.findByText('rosterA')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled();
     await user.type(screen.getByRole('combobox', { name: /New owner/ }), 'rosterB');
@@ -202,7 +216,8 @@ describe('CharacterChangeOwner (ROK-2128)', () => {
         const calls = mockUnlink(200, { characterId: 'c1', userId: 5 });
         const user = userEvent.setup();
         renderPage();
-        await user.click(screen.getByRole('button', OWNER_BUTTON));
+        await openMenu(user);
+    await user.click(screen.getByRole('menuitem', OWNER_BUTTON));
         await user.click(await screen.findByRole('button', { name: 'Unlink' }));
         expect(await screen.findByRole('button', { name: 'Delete character' })).toBeInTheDocument();
         await waitFor(() => expect(screen.queryByRole('button', { name: 'Assign' })).toBeNull());

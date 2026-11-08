@@ -8,7 +8,8 @@ import { useCallback, useState, type JSX } from 'react';
 import { EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/button';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
-import { ActionMenuList, useMenuDismiss, type ActionMenuItem } from '../../../components/ui/action-menu';
+import { ActionMenuList, type ActionMenuItem } from '../../../components/ui/action-menu';
+import { useMenuDismiss } from '../../../components/ui/use-menu-dismiss';
 import { ACTION_TILE_CLASS, type CharacterHeaderLayout } from '../../../components/shared/character-header-layout';
 
 interface OverflowProps { name: string; items: ActionMenuItem[] }

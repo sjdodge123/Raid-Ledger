@@ -1,10 +1,10 @@
 /**
  * The §4.11 row action menu (extracted from `UserManagementRow.tsx`, ROK-2140):
  * ghost rows, `destructive-soft` for destructive items, `role="menu"` /
- * `role="menuitem"`. `placement="popover"` floats under a `relative` trigger
+ * `role="menuitem"`. Pair the popover with `useMenuDismiss` (`use-menu-dismiss.ts`). `placement="popover"` floats under a `relative` trigger
  * wrapper; `placement="inline"` lays the rows out in place (a BottomSheet body).
  */
-import { useEffect, useRef, type JSX, type RefObject } from 'react';
+import type { JSX } from 'react';
 import { Button } from './button';
 
 /** One menu row. `destructive` items render `destructive-soft`; the rest `ghost` (no per-item hue). */
@@ -36,18 +36,4 @@ export function ActionMenuList({ items, placement = 'popover', label }: {
             ))}
         </div>
     );
-}
-
-/** Closes an open popover menu on an outside mousedown or Escape; attach the ref to the trigger's wrapper. */
-export function useMenuDismiss(open: boolean, close: () => void): RefObject<HTMLDivElement | null> {
-    const rootRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        if (!open) return;
-        const onClick = (e: MouseEvent) => { if (!rootRef.current?.contains(e.target as Node)) close(); };
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-        document.addEventListener('mousedown', onClick);
-        document.addEventListener('keydown', onKey);
-        return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
-    }, [open, close]);
-    return rootRef;
 }
