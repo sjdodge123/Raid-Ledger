@@ -3,7 +3,7 @@
  * The service sequences them; each function is one query or one fetch so
  * the service's unit spec can mock this module wholesale.
  */
-import { and, eq, isNull, lte, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import type { CharacterSyncAdapter } from '../../plugin-host/extension-points';
@@ -92,8 +92,11 @@ export async function fetchForeverProfile(
 
 /**
  * Claim one attempt atomically: insert the state row, or push an existing
- * one's `retry_at` a lease ahead only while it is due. The import nudge and
- * the hourly job both claim, so at most one of them fetches a character.
+ * one's `retry_at` a lease ahead only while it is due (or parked as an
+ * `invalid_name` — the service only claims one once the name is fixed). The
+ * import nudge and the hourly job both claim, so at most one of them fetches
+ * a character. Nothing is claimed for a row that is no longer a candidate
+ * (see {@link candidateSource}).
  * @returns the stored failure count, or null when another attempt holds it.
  */
 export async function claimAutoLinkAttempt(
@@ -101,23 +104,42 @@ export async function claimAutoLinkAttempt(
   characterId: string,
   now: Date,
 ): Promise<number | null> {
-  const s = schema.wowForeverArmoryAutolink;
   const retryAt = new Date(now.getTime() + AUTOLINK_CLAIM_LEASE_MS);
-  const [claimed] = await db
-    .insert(s)
-    .values({
-      characterId,
-      retryAt,
-      lastError: 'in_flight',
-      lastAttemptAt: now,
-    })
-    .onConflictDoUpdate({
-      target: s.characterId,
-      set: { retryAt, lastAttemptAt: now },
-      setWhere: lte(s.retryAt, now),
-    })
-    .returning({ failures: s.failures });
-  return claimed ? claimed.failures : null;
+  const rows = await db.execute<{ failures: number }>(sql`
+    INSERT INTO wow_forever_armory_autolink
+      (character_id, failures, retry_at, last_error, last_attempt_at)
+    ${candidateSource(characterId, 0, retryAt, 'in_flight', now)}
+    ON CONFLICT (character_id) DO UPDATE SET
+      retry_at = excluded.retry_at,
+      last_error = excluded.last_error,
+      last_attempt_at = excluded.last_attempt_at
+    WHERE wow_forever_armory_autolink.retry_at <= ${now.toISOString()}::timestamptz
+      OR wow_forever_armory_autolink.last_error = 'invalid_name'
+    RETURNING failures`);
+  const [claimed] = rows;
+  return claimed ? Number(claimed.failures) : null;
+}
+
+/**
+ * The one-row SELECT feeding a state-row upsert, empty once the character
+ * is gone or Armory-linked (`game_variant` set — the same compare-and-set
+ * `applyAutoLink` uses). `FOR UPDATE` serialises it against a concurrent
+ * link, so a late attempt never writes an orphan state row onto a linked
+ * character.
+ */
+function candidateSource(
+  characterId: string,
+  failures: number,
+  retryAt: Date,
+  lastError: string,
+  now: Date,
+): SQL {
+  return sql`
+    SELECT id, ${failures}::smallint, ${retryAt.toISOString()}::timestamptz,
+      ${lastError}, ${now.toISOString()}::timestamptz
+    FROM characters
+    WHERE id = ${characterId} AND game_variant IS NULL
+    FOR UPDATE`;
 }
 
 /** Id of ANOTHER row (same game + region) already holding `externalId`. */
@@ -173,7 +195,7 @@ export async function applyAutoLink(
   });
 }
 
-/** Upsert the state row after failure number `failures`. */
+/** Upsert the state row after failure number `failures` (candidates only). */
 export async function recordAutoLinkFailure(
   db: Db,
   characterId: string,
@@ -181,15 +203,14 @@ export async function recordAutoLinkFailure(
   kind: AutoLinkErrorKind,
   now: Date,
 ): Promise<void> {
-  const s = schema.wowForeverArmoryAutolink;
-  const values = {
-    failures,
-    retryAt: retryAtFor(kind, failures, now),
-    lastError: kind,
-    lastAttemptAt: now,
-  };
-  await db
-    .insert(s)
-    .values({ characterId, ...values })
-    .onConflictDoUpdate({ target: s.characterId, set: values });
+  const retryAt = retryAtFor(kind, failures, now);
+  await db.execute(sql`
+    INSERT INTO wow_forever_armory_autolink
+      (character_id, failures, retry_at, last_error, last_attempt_at)
+    ${candidateSource(characterId, failures, retryAt, kind, now)}
+    ON CONFLICT (character_id) DO UPDATE SET
+      failures = excluded.failures,
+      retry_at = excluded.retry_at,
+      last_error = excluded.last_error,
+      last_attempt_at = excluded.last_attempt_at`);
 }

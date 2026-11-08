@@ -32,6 +32,12 @@ import {
 
 /** Max due candidates one hourly job run attempts. */
 export const AUTOLINK_CAP = 60;
+/**
+ * Max due rows one job run reads. Rows that make no Blizzard call
+ * (`invalid_name`, claim contention) do not count toward {@link AUTOLINK_CAP},
+ * so the run reads past them, bounded here.
+ */
+export const AUTOLINK_SCAN_LIMIT = AUTOLINK_CAP * 4;
 /** Below this level Blizzard's realmless profile route 404s. */
 export const AUTOLINK_MIN_LEVEL = 10;
 /** Pause between two attempts inside one job run. */

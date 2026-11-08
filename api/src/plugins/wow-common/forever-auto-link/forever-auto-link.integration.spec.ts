@@ -5,6 +5,7 @@
  * multi-candidate run never waits 500 ms between attempts.
  */
 import { BadGatewayException, NotFoundException } from '@nestjs/common';
+import type { CharacterEquipmentDto } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
@@ -17,6 +18,10 @@ import { BlizzardCharacterSyncAdapter } from '../blizzard-character-sync.adapter
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
 import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
 import { ForeverAutoLinkService } from './forever-auto-link.service';
+import {
+  claimAutoLinkAttempt,
+  recordAutoLinkFailure,
+} from './forever-auto-link.apply';
 
 const HOUR = 60 * 60 * 1000;
 type CharInsert = typeof schema.characters.$inferInsert;
@@ -348,7 +353,20 @@ describe('review round 1 — names, concurrency, rename (ROK-2124)', () => {
 describe('missing AC coverage (review round 1)', () => {
   it('AC-1: the Armory columns are written from a non-null payload', async () => {
     const id = await seedChar();
-    const equipment = { items: [{ slot: 'HEAD', itemId: 1 }] };
+    const equipment: CharacterEquipmentDto = {
+      equippedItemLevel: 51,
+      items: [
+        {
+          slot: 'HEAD',
+          name: 'Test Helm',
+          itemId: 1,
+          quality: 'RARE',
+          itemLevel: 51,
+          itemSubclass: null,
+        },
+      ],
+      syncedAt: '2026-11-08T00:00:00.000Z',
+    };
     const professions = { primary: [], secondary: [], syncedAt: 'now' };
     const quests = { fetchedAt: '2026-11-08T00:00:00Z', completed: [1, 2] };
     fetchProfile.mockResolvedValue(profile({ class: 'Paladin' }));
@@ -357,7 +375,7 @@ describe('missing AC coverage (review round 1)', () => {
       role: 'healer',
       talents: { tree: 'holy' },
     });
-    jest.spyOn(adapter, 'fetchEquipment').mockResolvedValue(equipment as never);
+    jest.spyOn(adapter, 'fetchEquipment').mockResolvedValue(equipment);
     jest.spyOn(adapter, 'fetchProfessions').mockResolvedValue(professions);
     jest.spyOn(adapter, 'fetchQuests').mockResolvedValue(quests);
 
@@ -390,20 +408,61 @@ describe('missing AC coverage (review round 1)', () => {
     ]);
   });
 
-  it('AC-10: one run attempts at most 60 due rows, oldest first', async () => {
+  it('AC-10: one run makes at most 60 Blizzard calls, oldest first; invalid names take no slot', async () => {
     const base = Date.now() - 1000 * HOUR;
     const names = Array.from({ length: 61 }, (_, i) => {
       const pair = String.fromCharCode(65 + Math.floor(i / 26), 97 + (i % 26));
       return { name: `Cap ${pair}`, createdAt: new Date(base + i * HOUR) };
     });
     for (const n of [...names].reverse()) await seedChar(n);
+    for (const i of [0, 1]) {
+      const createdAt = new Date(base - (i + 1) * HOUR);
+      await seedChar({ name: `B4d Name${i}`, createdAt });
+    }
     fetchProfile.mockImplementation((name: string) =>
       Promise.resolve(profile({ name, externalId: `x-${name}` })),
     );
 
-    expect(await service.runDue()).toEqual({ linked: 60 });
+    expect(await service.runDue()).toEqual({ linked: 60, invalid_name: 2 });
     expect(fetchProfile.mock.calls.map((c) => c[0])).toEqual(
       names.slice(0, 60).map((n) => n.name),
     );
+  });
+});
+
+describe('review round 2 (ROK-2124)', () => {
+  it('an invalid_name row renamed to a valid name is attempted on the next nudge', async () => {
+    const id = await seedChar({ name: 'Ana F0rever' });
+    expect(await service.attempt(id)).toBe('invalid_name');
+    await testApp.db
+      .update(schema.characters)
+      .set({ name: 'Ana Forever' })
+      .where(eq(schema.characters.id, id));
+
+    expect(await service.attempt(id)).toBe('linked');
+    expect(fetchProfile.mock.calls.map((c) => c[0])).toEqual(['Ana Forever']);
+    expect(await stateRow(id)).toBeUndefined();
+  });
+
+  it('a claim or failure write after another attempt linked the row leaves no state row', async () => {
+    const id = await seedChar({ gameVariant: 'wow_forever' });
+    const now = new Date();
+
+    expect(await claimAutoLinkAttempt(testApp.db, id, now)).toBeNull();
+    await recordAutoLinkFailure(testApp.db, id, 1, 'upstream', now);
+
+    expect(await stateRow(id)).toBeUndefined();
+  });
+
+  it('the claim still upserts for a candidate (insert, then lease-held)', async () => {
+    const id = await seedChar();
+    const now = new Date();
+    expect(await claimAutoLinkAttempt(testApp.db, id, now)).toBe(0);
+    expect(await claimAutoLinkAttempt(testApp.db, id, now)).toBeNull();
+    await recordAutoLinkFailure(testApp.db, id, 3, 'not_found', now);
+    expect(await stateRow(id)).toMatchObject({
+      failures: 3,
+      lastError: 'not_found',
+    });
   });
 });

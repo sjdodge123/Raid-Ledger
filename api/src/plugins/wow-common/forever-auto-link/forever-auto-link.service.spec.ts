@@ -189,7 +189,7 @@ describe('ForeverAutoLinkService.runDue', () => {
       {},
       GAME_ID,
       expect.any(Date),
-      60,
+      240,
     );
     expect(m.fetchForeverProfile).toHaveBeenCalledTimes(2);
     expect(wait).toHaveBeenCalledTimes(1);
@@ -226,3 +226,57 @@ describe('ForeverAutoLinkService.runDue', () => {
     await expect(first).resolves.toEqual({});
   });
 });
+
+describe('review round 2 (ROK-2124)', () => {
+  const parked = (name: string) => ({
+    row: char({ name }),
+    state: {
+      characterId: 'c-1',
+      failures: 1,
+      retryAt: new Date(Date.now() + 20 * 60 * 60 * 1000),
+      lastError: 'invalid_name',
+      lastAttemptAt: new Date(),
+    },
+  });
+
+  it('an invalid_name row renamed to a valid name is attempted at once', async () => {
+    m.loadAutoLinkTarget.mockResolvedValue(parked('Thrall Forever'));
+    m.claimAutoLinkAttempt.mockResolvedValue(1);
+    await expect(service.attempt('c-1')).resolves.toBe('linked');
+    expect(m.claimAutoLinkAttempt).toHaveBeenCalledTimes(1);
+    expect(m.fetchForeverProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('an invalid_name row whose name is still invalid keeps backing off', async () => {
+    m.loadAutoLinkTarget.mockResolvedValue(parked('Thrall F0rever'));
+    await expect(service.attempt('c-1')).resolves.toBe('skipped');
+    expect(m.claimAutoLinkAttempt).not.toHaveBeenCalled();
+    expect(m.recordAutoLinkFailure).not.toHaveBeenCalled();
+  });
+
+  it('invalid_name / skipped rows spend neither the pause nor a cap slot', async () => {
+    const ids = ['bad-0', 'ok-0', 'bad-1', 'held', ...range(60, 'ok-x')];
+    m.listDueCandidateIds.mockResolvedValue(ids);
+    m.loadAutoLinkTarget.mockImplementation((id: string) =>
+      Promise.resolve({
+        row: char({ id, name: id.startsWith('bad') ? 'Bad N4me' : 'Ok Name' }),
+        state: null,
+      }),
+    );
+    m.claimAutoLinkAttempt.mockImplementation((_db, id: string) =>
+      Promise.resolve(id === 'held' ? null : 0),
+    );
+
+    const tally = await service.runDue();
+
+    expect(tally).toEqual({ invalid_name: 2, skipped: 1, linked: 60 });
+    expect(m.fetchForeverProfile).toHaveBeenCalledTimes(60);
+    expect(wait).toHaveBeenCalledTimes(59);
+    const fetchedIds = m.fetchForeverProfile.mock.calls.map((c) => c[2].id);
+    expect(fetchedIds).toEqual(['ok-0', ...range(59, 'ok-x')]);
+  });
+});
+
+function range(n: number, prefix: string): string[] {
+  return Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+}

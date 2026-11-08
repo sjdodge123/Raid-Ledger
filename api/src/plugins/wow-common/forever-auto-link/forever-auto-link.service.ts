@@ -15,6 +15,7 @@ import { isForeverTwoPartName } from '../forever-character-slug';
 import * as apply from './forever-auto-link.apply';
 import {
   AUTOLINK_CAP,
+  AUTOLINK_SCAN_LIMIT,
   AUTOLINK_SPACING_MS,
   classifyAutoLinkError,
   isAutoLinkCandidateShape,
@@ -84,7 +85,7 @@ export class ForeverAutoLinkService {
         this.db,
         gameId,
         new Date(),
-        AUTOLINK_CAP,
+        AUTOLINK_SCAN_LIMIT,
       );
       const tally = await this.attemptAll(ids, gameId);
       this.logger.log(`Forever auto-link run: ${JSON.stringify(tally)}`);
@@ -94,14 +95,24 @@ export class ForeverAutoLinkService {
     }
   }
 
+  /**
+   * Only an attempt that reaches Blizzard spends a cap slot or the spacing
+   * pause (taken right before the call); an `invalid_name` / `skipped` row
+   * costs neither.
+   */
   private async attemptAll(
     ids: string[],
     gameId: number,
   ): Promise<AutoLinkTally> {
     const tally: AutoLinkTally = {};
-    for (const [i, id] of ids.entries()) {
-      if (i > 0) await this.wait(AUTOLINK_SPACING_MS);
-      const outcome = await this.attemptEnabled(id, gameId);
+    let calls = 0;
+    const beforeCall = async (): Promise<void> => {
+      if (calls > 0) await this.wait(AUTOLINK_SPACING_MS);
+      calls += 1;
+    };
+    for (const id of ids) {
+      if (calls >= AUTOLINK_CAP) break;
+      const outcome = await this.attemptEnabled(id, gameId, beforeCall);
       tally[outcome] = (tally[outcome] ?? 0) + 1;
       if (isErrorKind(outcome) && stopsAutoLinkRun(outcome)) break;
     }
@@ -116,13 +127,14 @@ export class ForeverAutoLinkService {
   private async attemptEnabled(
     characterId: string,
     gameId: number,
+    beforeCall: () => Promise<void> = () => Promise.resolve(),
   ): Promise<AutoLinkOutcome> {
     const now = new Date();
     const target = await apply.loadAutoLinkTarget(this.db, characterId);
     if (!target) return 'skipped';
     const { row, state } = target;
     if (!isAutoLinkCandidateShape(row, gameId)) return 'skipped';
-    if (state && state.retryAt > now) return 'skipped';
+    if (state && isBackingOff(state, row.name, now)) return 'skipped';
     if (!isForeverTwoPartName(row.name)) {
       const failures = (state?.failures ?? 0) + 1;
       const kind = 'invalid_name';
@@ -132,6 +144,7 @@ export class ForeverAutoLinkService {
     // Atomic claim: a concurrent nudge / job attempt on this row skips.
     const prior = await apply.claimAutoLinkAttempt(this.db, row.id, now);
     if (prior === null) return 'skipped';
+    await beforeCall();
     return this.fetchAndLink(row, prior + 1, now);
   }
 
@@ -182,4 +195,17 @@ function isErrorKind(outcome: AutoLinkOutcome): outcome is AutoLinkErrorKind {
     outcome === 'external_id_conflict' ||
     outcome === 'invalid_name'
   );
+}
+
+/**
+ * Still inside its backoff — except an `invalid_name` row whose CURRENT name
+ * is now addressable (renamed since): that one is attempted at once.
+ */
+function isBackingOff(
+  state: { retryAt: Date; lastError: string },
+  name: string,
+  now: Date,
+): boolean {
+  if (state.retryAt <= now) return false;
+  return !(state.lastError === 'invalid_name' && isForeverTwoPartName(name));
 }
