@@ -9,6 +9,7 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
 import { useCharacterLocationLabel } from '../plugins/character-identity';
 import { CharacterPortraitFallback } from '../plugins/character-portrait';
+import type { CharacterPortraitSize } from '../plugins/character-identity';
 import { useMediaQuery } from '../hooks/use-media-query';
 import { compactJoin } from '../lib/compact-join';
 import { StatTile, type CharacterHeaderLayout } from '../components/shared/character-header-layout';
@@ -27,9 +28,10 @@ function CharacterAvatar({ avatarUrl, name, sizeClass }: { avatarUrl: string | n
     return <div className={`${sizeClass} rounded-full bg-overlay flex items-center justify-center text-3xl text-muted flex-shrink-0`}>&#128100;</div>;
 }
 
-function Portrait({ character, sizeClass }: { character: CharacterDto; sizeClass: string }): JSX.Element {
+/** `size` is the plugin portrait's size; `sizeClass` sizes the core avatar it wraps — keep them the same pixels. */
+function Portrait({ character, size, sizeClass }: { character: CharacterDto; size: CharacterPortraitSize; sizeClass: string }): JSX.Element {
     return (
-        <CharacterPortraitFallback character={character} size="lg">
+        <CharacterPortraitFallback character={character} size={size}>
             <CharacterAvatar avatarUrl={character.avatarUrl} name={character.name} sizeClass={sizeClass} />
         </CharacterPortraitFallback>
     );
@@ -90,10 +92,10 @@ function HeaderActions({ character, isOwner, isArmoryImported, isAdminViewer, la
 
 function PhoneHeader(props: HeaderProps): JSX.Element {
     const { character } = props;
-    const levelTile = character.level ? <StatTile value={character.level} label="Level" valueClassName="text-amber-400" /> : null;
+    const levelTile = character.level ? <StatTile value={character.level} label="Level" valueClassName="text-warning" /> : null;
     return (
         <div data-testid="character-header-phone" className="bg-panel border border-edge rounded-lg p-4 text-center">
-            <div className="mt-1 mb-2.5 flex justify-center"><Portrait character={character} sizeClass="w-[72px] h-[72px]" /></div>
+            <div className="mt-1 mb-2.5 flex justify-center"><Portrait character={character} size="phone" sizeClass="w-[72px] h-[72px]" /></div>
             <h1 className="text-xl font-bold text-foreground">{character.name}</h1>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2 empty:hidden">
                 <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'chips', layout: 'phone' }} />
@@ -113,7 +115,7 @@ function DesktopHeader(props: HeaderProps): JSX.Element {
     return (
         <div data-testid="character-header-desktop" className="bg-panel border border-edge rounded-lg p-6">
             <div className="flex items-start gap-4">
-                <Portrait character={character} sizeClass="w-20 h-20" />
+                <Portrait character={character} size="lg" sizeClass="w-20 h-20" />
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                         <h1 className="text-2xl font-bold text-foreground">{character.name}</h1>

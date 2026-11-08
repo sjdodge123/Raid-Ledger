@@ -46,6 +46,21 @@ describe('character header at phone width — Option B (ROK-2140)', () => {
         expect(tiles.map((t) => t.textContent)).toEqual(['16Item Level', '22Level', '26mUpdated']);
     });
 
+    it('colours the Item Level and Level tiles with flipping tokens, never a raw hue', () => {
+        renderPage();
+        const values = screen.getAllByTestId('character-stat-tile').map((t) => t.firstElementChild?.className ?? '');
+        expect(values[0]).toContain('text-busy');
+        expect(values[1]).toContain('text-warning');
+        expect(values.join(' ')).not.toMatch(/(purple|amber)-\d/);
+    });
+
+    it('renders the plugin portrait at Option B\'s 72px, not the 80px desktop size', () => {
+        renderPage();
+        const portrait = within(screen.getByTestId('character-header-phone')).getByTestId('forever-portrait');
+        expect(portrait).toHaveClass('w-[72px]', 'h-[72px]');
+        expect(portrait).not.toHaveClass('w-20');
+    });
+
     it('shows the meta as race class · spec, then realm, with no dangling separator', () => {
         renderPage();
         expect(screen.getByText('Night Elf Warrior · Protection')).toBeInTheDocument();
@@ -62,7 +77,9 @@ describe('character header at phone width — Option B (ROK-2140)', () => {
     it('More opens a sheet holding Change owner and Unlink character', async () => {
         const user = userEvent.setup();
         renderPage();
-        await user.click(screen.getByRole('button', { name: 'More' }));
+        const more = screen.getByRole('button', { name: 'More' });
+        expect(more).toHaveAttribute('aria-haspopup', 'dialog');
+        await user.click(more);
         const sheet = await screen.findByRole('dialog', { name: /Rok Androl/ });
         expect(within(sheet).getByRole('menuitem', { name: /Change owner/ })).toBeInTheDocument();
         expect(within(sheet).getByRole('menuitem', { name: /Unlink character/ })).toBeInTheDocument();
@@ -86,6 +103,11 @@ describe('character header at ≥ sm (ROK-2140 shared fixes)', () => {
         expect(screen.getByTestId('character-header-desktop')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Sync/ })).toHaveTextContent('Sync');
         expect(screen.getByTestId('character-stat-line')).toHaveTextContent('Item Level 16 · Updated 26m ago');
+    });
+
+    it('keeps the plugin portrait at 80px', () => {
+        renderPage();
+        expect(within(screen.getByTestId('character-header-desktop')).getByTestId('forever-portrait')).toHaveClass('w-20', 'h-20');
     });
 
     it('moves Change owner and Unlink into a "⋯" menu', async () => {

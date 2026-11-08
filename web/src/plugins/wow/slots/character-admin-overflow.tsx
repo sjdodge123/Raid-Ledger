@@ -39,7 +39,7 @@ function MoreSheet({ name, items }: OverflowProps): JSX.Element {
     const close = useCallback(() => setOpen(false), []);
     return (
         <>
-            <Button variant="secondary" size="sm" fullWidth className={ACTION_TILE_CLASS} onClick={() => setOpen(true)}>
+            <Button variant="secondary" size="sm" fullWidth className={ACTION_TILE_CLASS} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
                 <EllipsisHorizontalIcon className="w-5 h-5" aria-hidden="true" />
                 More
             </Button>

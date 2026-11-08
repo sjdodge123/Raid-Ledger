@@ -70,12 +70,12 @@ function StatLine({ itemLevel, equippedItemLevel, lastSyncedAt }: StatProps): JS
     );
 }
 
-/** Below sm: the Option B stat strip — Item Level, Level, Updated tiles. */
+/** Below sm: the Option B stat strip — Item Level, Level, Updated tiles. Values use flipping tokens (violet `busy`, amber `warning`) so both colour families read. */
 function StatTiles({ itemLevel, level, lastSyncedAt }: StatProps): JSX.Element {
     return (
         <>
-            {itemLevel ? <StatTile value={itemLevel} label="Item Level" valueClassName="text-purple-400" /> : null}
-            {level ? <StatTile value={level} label="Level" valueClassName="text-amber-400" /> : null}
+            {itemLevel ? <StatTile value={itemLevel} label="Item Level" valueClassName="text-busy" /> : null}
+            {level ? <StatTile value={level} label="Level" valueClassName="text-warning" /> : null}
             {lastSyncedAt ? <StatTile value={timeAgo(lastSyncedAt).replace(/ ago$/, '')} label="Updated" /> : null}
         </>
     );
