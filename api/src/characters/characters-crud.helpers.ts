@@ -304,13 +304,17 @@ export async function deleteOwnedCharacter(
   userId: number,
   characterId: string,
 ): Promise<void> {
-  const [gone] = await db
-    .delete(schema.characters)
-    .where(ownedCharacter(userId, characterId))
-    .returning({
-      addonGuid: schema.characters.addonGuid,
-      gameId: schema.characters.gameId,
-      region: schema.characters.region,
-    });
-  await auditGuidRelease(db, gone ? releasedGuidOf(gone) : null, userId);
+  // One transaction: a failed audit must roll the delete back, or the
+  // old grant would carry over to the row's new winner (review r2).
+  await db.transaction(async (tx) => {
+    const [gone] = await tx
+      .delete(schema.characters)
+      .where(ownedCharacter(userId, characterId))
+      .returning({
+        addonGuid: schema.characters.addonGuid,
+        gameId: schema.characters.gameId,
+        region: schema.characters.region,
+      });
+    await auditGuidRelease(tx, gone ? releasedGuidOf(gone) : null, userId);
+  });
 }
