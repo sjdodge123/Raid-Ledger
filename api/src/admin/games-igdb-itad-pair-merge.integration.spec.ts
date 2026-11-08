@@ -6,7 +6,8 @@
  * duplicate shapes found in prod plus FK children, executes the migration file
  * verbatim, and asserts keepers kept, dups gone, children repointed (keeper
  * wins on unique collisions), identity keys moved, look-alikes untouched, and
- * that a second run is a no-op.
+ * that a second run is a no-op. A collision on a NON-leaf child table skips
+ * the whole pair; a leaf child (game_interests) loses its colliding row.
  *
  * The file is resolved by SUFFIX, never by number — a renumber orphaned a
  * hardcoded-path spec on 2026-11-07.
@@ -269,6 +270,70 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
     expect(k2).toEqual([{ totalSeconds: 900 }]);
   }, 60_000);
 
+  it('deletes a colliding LEAF child (game_interests) and still merges the pair', async () => {
+    const s = await seedScenario(testApp);
+    const gi = schema.gameInterests;
+    const [keeperManual] = await testApp.db
+      .select({ id: gi.id })
+      .from(gi)
+      .where(and(eq(gi.gameId, s.k1), eq(gi.source, 'manual')));
+    if (!keeperManual) throw new Error('keeper manual interest not seeded');
+    await runMigration(testApp);
+
+    const onKeeper = await testApp.db
+      .select({ id: gi.id, source: gi.source })
+      .from(gi)
+      .where(eq(gi.gameId, s.k1));
+    const manual = onKeeper.filter((i) => i.source === 'manual');
+    expect(manual).toEqual([{ id: keeperManual.id, source: 'manual' }]);
+    expect((await identities(testApp, [s.d1])).size).toBe(0);
+  }, 60_000);
+
+  it('skips the WHOLE pair when a NON-leaf child (characters) collides', async () => {
+    const s = await seedScenario(testApp);
+    const [keep, dup] = await seedGames(testApp, NON_LEAF_PAIR);
+    if (keep == null || dup == null)
+      throw new Error('non-leaf pair not seeded');
+    const userId = testApp.seed.adminUser.id;
+    const twin = { userId, name: 'Twin Alt', realm: 'R1', isMain: false };
+    await testApp.db.insert(schema.characters).values([
+      { ...twin, gameId: keep },
+      { ...twin, gameId: dup },
+    ]);
+    await runMigration(testApp);
+
+    const rows = await identities(testApp, [keep, dup, s.d1]);
+    expect(rows.has(s.d1)).toBe(false); // other pairs still merged
+    expect(rows.get(keep)).toMatchObject({
+      igdbId: 99120030,
+      steamAppId: null,
+    });
+    expect(rows.get(dup)).toMatchObject({ igdbId: null, steamAppId: 99120030 });
+    const chars = await testApp.db
+      .select({ gameId: schema.characters.gameId })
+      .from(schema.characters)
+      .where(eq(schema.characters.name, 'Twin Alt'));
+    expect(chars.map((c) => c.gameId).sort((a, b) => a - b)).toEqual(
+      [keep, dup].sort((a, b) => a - b),
+    );
+  }, 60_000);
+
+  it('rewrites jsonb game-id arrays dup -> keeper, deduped, order kept', async () => {
+    const s = await seedScenario(testApp);
+    await seedSuggestion(testApp, 'Rok2120 has dup', [s.d1, s.k1, 424242]);
+    await seedSuggestion(testApp, 'Rok2120 no dup', [s.k2, 424242]);
+    await runMigration(testApp);
+
+    expect(await suggestionIds(testApp, 'Rok2120 has dup')).toEqual([
+      s.k1,
+      424242,
+    ]);
+    expect(await suggestionIds(testApp, 'Rok2120 no dup')).toEqual([
+      s.k2,
+      424242,
+    ]);
+  }, 60_000);
+
   it('is a no-op on a second run (zero pairs left)', async () => {
     const s = await seedScenario(testApp);
     await runMigration(testApp);
@@ -292,4 +357,42 @@ async function gameCount(testApp: TestApp): Promise<number> {
     .select({ n: sql<number>`count(*)::int` })
     .from(schema.games);
   return row?.n ?? -1;
+}
+
+/** IGDB keeper + Steam-first dup whose characters collide (non-leaf table). */
+const NON_LEAF_PAIR: GameSeed[] = [
+  { name: 'Rok2120 Stone Keep', slug: 'rok2120-stone-keep', igdbId: 99120030 },
+  {
+    name: 'Rok2120 Stone Keep',
+    slug: 'rok2120-stone-keep-2',
+    steamAppId: 99120030,
+  },
+];
+
+/** A discovery suggestion holding `ids` in candidate_game_ids. */
+async function seedSuggestion(
+  testApp: TestApp,
+  name: string,
+  ids: number[],
+): Promise<void> {
+  await testApp.db.execute(sql`
+    INSERT INTO discovery_category_suggestions
+      (name, description, category_type, theme_vector, status,
+       population_strategy, candidate_game_ids)
+    VALUES (${name}, 'rok2120', 'trend', '[0,0,0,0,0,0,0]', 'pending',
+            'fixed', ${JSON.stringify(ids)}::jsonb)`);
+}
+
+/** candidate_game_ids of the suggestion named `name`. */
+async function suggestionIds(
+  testApp: TestApp,
+  name: string,
+): Promise<number[]> {
+  const d = schema.discoveryCategorySuggestions;
+  const [row] = await testApp.db
+    .select({ ids: d.candidateGameIds })
+    .from(d)
+    .where(eq(d.name, name));
+  if (!row) throw new Error(`suggestion ${name} missing`);
+  return row.ids;
 }
