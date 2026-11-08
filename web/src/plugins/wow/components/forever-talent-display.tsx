@@ -1,10 +1,13 @@
+import { useEffect, useMemo, useState } from 'react';
 import type { ForeverTalentsDto } from '@raid-ledger/contract';
 import { getWowheadTalentCalcUrl } from '../lib/wowhead-urls';
 import { formatForeverRank } from '../lib/forever-talent-trees';
 import { ForeverTalentGrid } from './forever-talent-grid';
 import { TalentPillSection, WowheadCalcLink } from './talent-display';
 import { plural } from '../lib/plural';
-import { placeArmoryTalents } from '../lib/forever-armory-placement';
+import { alignForeverTalents, placeArmoryTalents } from '../lib/forever-armory-placement';
+import { joinForeverTalents, loadForeverClassTable, peekForeverClassTable, type ForeverClassTable, type JoinedForeverTalents } from '../lib/forever-talent-table';
+import { ForeverTalentTree, ForeverTalentTreePlaceholder } from './forever-talent-tree';
 
 const PILL_CLASS = 'bg-overlay border border-edge text-foreground';
 
@@ -30,7 +33,7 @@ function ForeverHeader({ points, source, href }: { points: number; source: strin
         <div className="flex flex-wrap items-center gap-3">
             <span className="text-lg font-mono font-bold text-foreground">{plural(points, 'point')}</span>
             <span data-testid="forever-talents-source" className="text-xs text-muted">{source}</span>
-            {href && <WowheadCalcLink href={href} />}
+            {href && <WowheadCalcLink href={href} label="Open Wowhead calculator" />}
         </div>
     );
 }
@@ -60,22 +63,54 @@ function totalPoints(talents: ForeverTalentsDto): number {
     return talents.nodes.reduce((sum, n) => sum + n.rank, 0);
 }
 
+type ClassTableState = { status: 'loading' } | { status: 'ready'; table: ForeverClassTable } | { status: 'missing' };
+
+/**
+ * The class's static Forever table (ROK-2146), lazy-loaded. `loading` is kept apart from
+ * `missing` (review MINOR-2), so the old grid/pills never flash before the tree draws.
+ */
+function useForeverClassTable(characterClass: string | null | undefined): ClassTableState {
+    const peeked = peekForeverClassTable(characterClass);
+    const [loaded, setLoaded] = useState<{ cls: string | null | undefined; table: ForeverClassTable | null } | null>(null);
+    useEffect(() => {
+        if (peeked !== undefined) return undefined;
+        let live = true;
+        void loadForeverClassTable(characterClass).then((table) => { if (live) setLoaded({ cls: characterClass, table }); });
+        return () => { live = false; };
+    }, [characterClass, peeked]);
+    // A table loaded for a previous class never draws under this one.
+    const table = peeked !== undefined ? peeked : loaded && loaded.cls === characterClass ? loaded.table : undefined;
+    if (table === undefined) return { status: 'loading' };
+    return table ? { status: 'ready', table } : { status: 'missing' };
+}
+
+/** Remounts the tree when the points move (e.g. after an Armory sync), so the phone tab re-picks the most-points tree. */
+function pointsKey(joined: JoinedForeverTalents): string {
+    return joined.trees.map((t) => t.spent).join('-');
+}
+
 /**
  * WoW: Forever talents (ROK-1744; Blizzard source ROK-2110). Header (Σ rank,
  * source line, plain Forever calc link — hard-coded `wow_forever`, D7; no build
- * string, no iframe), then the positioned grid or the list/summary fallback.
- * Blizzard list payloads are placed on the known trees by name first (D5).
+ * string, no iframe), then the Wowhead-style tree from the static Forever table
+ * (ROK-2146); a tree-height placeholder while the table loads. Without a table for the
+ * class: the positioned grid or the list/summary fallback, Blizzard list payloads placed by name (D5).
  */
 export function ForeverTalentDisplay({ talents: raw, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
+    const state = useForeverClassTable(characterClass);
+    const table = state.status === 'ready' ? state.table : null;
+    const joined = useMemo(() => (table ? joinForeverTalents(alignForeverTalents(raw, characterClass), table) : null), [table, raw, characterClass]);
     const talents = placeArmoryTalents(raw, characterClass);
     const points = totalPoints(talents);
     const href = characterClass ? getWowheadTalentCalcUrl(characterClass, 'wow_forever') : null;
     return (
         <div className="space-y-4">
             <ForeverHeader points={points} source={foreverSourceLine(talents)} href={href} />
-            {talents.layout === 'grid'
-                ? <ForeverTalentGrid talents={talents} characterClass={characterClass} />
-                : <ForeverTalentList talents={talents} points={points} />}
+            {joined ? <ForeverTalentTree key={pointsKey(joined)} joined={joined} />
+                : state.status === 'loading' ? <ForeverTalentTreePlaceholder />
+                : talents.layout === 'grid'
+                    ? <ForeverTalentGrid talents={talents} characterClass={characterClass} />
+                    : <ForeverTalentList talents={talents} points={points} />}
         </div>
     );
 }

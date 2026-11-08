@@ -189,20 +189,26 @@ function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderL
     );
 }
 
-/** Desktop (3-col) and mobile (stacked) layouts with a centre column: the render image or the portrait. */
+/**
+ * Desktop (3-col) and mobile (stacked) layouts with a centre column: the render image or the portrait.
+ * ROK-2146: they switch on the PANEL's width (container query), not the viewport — beside the
+ * character page's 320px sidebar the panel is ~600px at 1024 and ~856px at 1280, so the 3-col
+ * render needs a >= lg viewport AND `@3xl` (48rem) of panel. Below lg and on full-width
+ * pages (a ~944px panel at lg) nothing changes.
+ */
 function EquipmentWithCenter({ renderCenter, renderSlotColumn }: {
     renderCenter: CenterRenderer; renderSlotColumn: (slots: string[]) => JSX.Element;
 }) {
     return (
-        <>
-            <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-4 items-start">
+        <div data-testid="equipment-layout" className="@container">
+            <div data-testid="equipment-layout-wide" className="hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_auto_1fr] gap-4 items-start">
                 {renderSlotColumn(LEFT_SLOTS)}
                 <div className="flex items-center justify-center px-2">
                     {renderCenter('desktop')}
                 </div>
                 {renderSlotColumn(RIGHT_SLOTS)}
             </div>
-            <div className="lg:hidden space-y-4">
+            <div data-testid="equipment-layout-narrow" className="lg:@3xl:hidden space-y-4">
                 <div className="flex justify-center">
                     {renderCenter('mobile')}
                 </div>
@@ -211,6 +217,6 @@ function EquipmentWithCenter({ renderCenter, renderSlotColumn }: {
                     {renderSlotColumn(RIGHT_SLOTS)}
                 </div>
             </div>
-        </>
+        </div>
     );
 }

@@ -1,7 +1,15 @@
 /**
  * ROK-1726: talent empty-state copy and the Forever calc link (AC5, AC7).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// ROK-2146: these specs pin the pre-table grid/pills, so the static Forever table is absent here
+// (forever-talent-tree.test.tsx covers the tree). Without this the lazy table would race the asserts.
+vi.mock('../lib/forever-talent-table', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/forever-talent-table')>()),
+    loadForeverClassTable: () => Promise.resolve(null),
+    peekForeverClassTable: () => null,
+}));
 import { render, screen } from '@testing-library/react';
 import { TalentDisplay } from './talent-display';
 import { FOREVER_ADDON_HINT_TALENTS } from '../lib/wow-variant-config';
@@ -21,7 +29,7 @@ function renderMage(gameVariant: string) {
         <TalentDisplay talents={CLASSIC_MAGE} isArmoryImported characterClass="Mage" gameVariant={gameVariant} />,
     );
     return {
-        href: screen.getByRole('link', { name: /view on wowhead/i }).getAttribute('href'),
+        href: screen.getByRole('link', { name: /view on wowhead|open wowhead calculator/i }).getAttribute('href'),
         embedSrc: container.querySelector('iframe')?.getAttribute('src') ?? null,
     };
 }
