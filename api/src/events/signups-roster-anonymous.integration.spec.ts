@@ -98,6 +98,9 @@ async function testForeignSignupIdRejected() {
     { userId: 0, signupId: foreign.id, slot: 'dps', position: 1 },
   ]);
   expect(res.status).toBe(400);
+  expect(String(res.body.message)).toContain(
+    `Signup ${foreign.id} is not part of this event`,
+  );
   expect(await getSignupAssignment(testApp, foreign.id)).toBeUndefined();
 }
 
@@ -113,6 +116,9 @@ async function testMismatchedUserIdRejected() {
     { userId, signupId: anon.id, slot: 'dps', position: 1 },
   ]);
   expect(res.status).toBe(400);
+  expect(String(res.body.message)).toContain(
+    `Signup ${anon.id} does not belong to user ${userId}`,
+  );
 }
 
 beforeAll(async () => {
