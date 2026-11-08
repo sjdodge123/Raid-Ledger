@@ -223,6 +223,9 @@ export * from './game-identity/index.js';
 // through this barrel.
 export * from './wow-addon-export.schema.js';
 export * from './wow-addon-import.schema.js';
+// Mailworthy → LedgerLink guild contributions (ROK-2148).
+export * from './wow-addon-mailworthy.schema.js';
+export * from './wow-guild-contributions.schema.js';
 export * from './wow-forever-realm-rulesets.schema.js';
 export * from './ledgerlink-json-schema.js';
 
