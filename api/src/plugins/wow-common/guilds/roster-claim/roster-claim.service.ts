@@ -27,6 +27,7 @@ import {
   isForeverGame,
   rethrowForeverViolation,
 } from '../../wow-forever-identity.helpers';
+import { copyMemberArmory } from './roster-claim.armory-copy';
 import { loadCandidates, type CandidateRow } from './roster-claim.queries';
 import {
   CLAIMED_FIRST,
@@ -92,10 +93,12 @@ export class RosterClaimService {
       throw new NotFoundException('That roster character is gone');
     }
     const args: ClaimArgs = { userId, memberId, ...parsed.data };
-    const row = await this.commitClaim(member, args);
+    const claimed = await this.commitClaim(member, args);
     this.logger.log(
-      `User ${userId} claimed roster member ${memberId} as ${row.id}`,
+      `User ${userId} claimed roster member ${memberId} as ${claimed.id}`,
     );
+    // ROK-2133 (D4): copy the member's Armory snapshot; never fails the claim.
+    const row = await copyMemberArmory(this.db, member, claimed, this.logger);
     // The claim just wrote its `roster_claimed` audit (admin slot self-filter).
     return { ...(await this.refreshAfterCommit(row)), rosterClaimed: true };
   }
