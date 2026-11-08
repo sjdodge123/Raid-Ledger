@@ -217,6 +217,19 @@ describe('runProbe', () => {
   });
 });
 
+/** ROK-2143 quest / item shape keys for `classicforever:us`, sorted. */
+const QUEST_ITEM_KEYS: readonly string[] = [
+  'item:3562',
+  'item:6087',
+  'item:6505',
+  'quest-area:717',
+  'quest-index',
+  'quest:1486',
+  'quest:166',
+  'quest:378',
+  'quest:914',
+].map((k) => `classicforever:us:${k}`);
+
 describe('runProbe matches + concurrency', () => {
   /** Skyborne under classicforever; a Human-only 200 under the classic control. */
   function skyFetch(calls: string[]): ProbeFetch {
@@ -265,12 +278,15 @@ describe('runProbe matches + concurrency', () => {
       },
     ]);
     // ROK-2103: the stub answers every static-classicforever URL 200, so the
-    // three static journal / class indexes add their shapes too.
+    // three static journal / class indexes add their shapes too — and
+    // ROK-2143's quest index, quest area, quests and items, one key per id.
     expect(Object.keys(run.shapes).sort()).toEqual([
       'classicforever:us:connected-realm',
+      ...QUEST_ITEM_KEYS.slice(0, 3),
       'classicforever:us:journal-expansion',
       'classicforever:us:journal-instance',
       'classicforever:us:playable-class',
+      ...QUEST_ITEM_KEYS.slice(3),
       'classicforever:us:realm',
     ]);
     expect(run.shapes['classicforever:us:realm']).toMatchObject({
