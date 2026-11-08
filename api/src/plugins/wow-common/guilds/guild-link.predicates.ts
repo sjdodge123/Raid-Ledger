@@ -95,6 +95,8 @@ function characterGuidOnOtherLiveRow(): SQL {
 export function blizzardIdLink(): SQL {
   return (
     and(
+      // Keep: it lets Postgres prove the partial-index predicate of
+      // idx_guild_members_guild_blizzard_id (0288) — the cast join alone cannot.
       isNotNull(guildMembers.blizzardCharacterId),
       sql`${characters.externalId} = ${guildMembers.blizzardCharacterId}::text`,
       eq(characters.gameId, guilds.gameId),
