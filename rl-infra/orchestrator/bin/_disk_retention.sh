@@ -23,11 +23,14 @@
 #   runners     only a runner with no claim, no queued claimant, no running
 #               task and no admission entry. The slot is RESERVED in
 #               claims.json under the queue + claims flocks (as _borrow.sh
-#               does), re-checked inside the lock, cleaned, then restored.
+#               does), re-checked inside the lock, cleaned, then restored
+#               from state/disk-retention-reserve-<slot>.json (an orphaned
+#               reservation is restored by recover_orphans next cycle).
 #               Clean = old REGULAR files + empty dirs under /tmp, never a
 #               socket/fifo/device, never tmux-* (the runner's `main` tmux
 #               session), never a *.sock/*.lock/*.pid/runner-heartbeat and
-#               never a path a process holds open (/proc/*/fd, cwd); plus
+#               never a path a process holds open (/proc/*/fd, cwd) or
+#               under a process's cwd below /tmp; plus
 #               `npm cache clean`. NEVER /root/.cache (Playwright browsers).
 # Every rung is bounded by `timeout`, logs what it reclaimed to stderr and
 # never fails the caller: sweep always prints one JSON object and returns 0.
