@@ -1,6 +1,6 @@
 /**
  * ROK-1744: pure helpers for the Forever display-talents resolver — reading
- * typed snapshot nodes into adapter input and the D4 / origin sanity checks.
+ * typed snapshot nodes into adapter input and the origin sanity checks.
  */
 import type { AddonTalentNode } from '@raid-ledger/contract';
 import {
@@ -27,17 +27,6 @@ export function toNodeInputs(
   nodes: readonly AddonTalentNode[] | undefined,
 ): ForeverTalentNodeInput[] {
   return Array.isArray(nodes) ? nodes.map(toNodeInput) : [];
-}
-
-/** D4: stored (Armory) talents synced at/after the capture are kept. */
-export function storedTalentsAreNewer(
-  talents: unknown,
-  lastSyncedAt: string | null,
-  capturedAt: Date,
-): boolean {
-  if (talents == null || !lastSyncedAt) return false;
-  const synced = Date.parse(lastSyncedAt);
-  return Number.isFinite(synced) && synced >= capturedAt.getTime();
 }
 
 /** Sub-tree origins of the positioned nodes (same gap rule as the adapter). */

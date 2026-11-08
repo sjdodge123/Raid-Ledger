@@ -20,7 +20,7 @@ const sources = jest.mocked(loadForeverQuestSources);
 /** Feed the mocked loader a snapshot (or none) through the real D4 helper. */
 const loader = {
   mockResolvedValue(snap: { data: unknown; capturedAt: Date } | null): void {
-    const eff = effectiveQuests(snap, null, CAPTURED);
+    const eff = effectiveQuests(snap, null);
     sources.mockResolvedValue(new Map(eff ? [[CHAR_ID, eff]] : []));
   },
 };

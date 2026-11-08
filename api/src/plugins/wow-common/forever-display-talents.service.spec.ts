@@ -86,22 +86,15 @@ describe('ForeverDisplayTalentsService newest-wins + mapping (D4)', () => {
   });
   afterEach(() => warn.mockRestore());
 
-  it('stored talents synced at/after the capture win (D4)', async () => {
+  it('stored talents with no trees never win, even synced after the capture (ROK-2138 D9)', async () => {
     loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
-    const stored = { talents: { trees: [] } };
-    expect(
-      await service.resolve(
-        row({ ...stored, lastSyncedAt: CAPTURED.toISOString() }),
-      ),
-    ).toBeUndefined();
-    expect(
-      await service.resolve(
-        row({ ...stored, lastSyncedAt: '2026-10-10T00:00:00.000Z' }),
-      ),
-    ).toBeUndefined();
+    const dto = await service.resolve(
+      row({ talents: { trees: [] }, lastSyncedAt: '2026-10-10T00:00:00.000Z' }),
+    );
+    expect(dto?.source).toBe('addon');
   });
 
-  it('stored talents older than the capture yield the addon DTO (D4)', async () => {
+  it('stored talents with no trees yield the addon DTO', async () => {
     loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
     const dto = await service.resolve(
       row({ talents: { trees: [] }, lastSyncedAt: '2026-10-01T00:00:00.000Z' }),
@@ -242,10 +235,19 @@ describe('ForeverDisplayTalentsService Blizzard talents (ROK-2110)', () => {
     expect(dto?.syncedAt).toBe(NEWER);
   });
 
-  it('(c) snapshot newer than the Blizzard sync → the addon DTO', async () => {
+  it('(c) AC12: snapshot newer than the Blizzard sync → still the Blizzard DTO', async () => {
     loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
     const dto = await service.resolve(
       row({ talents: blizzardTalents, lastSyncedAt: OLDER }),
+    );
+    expect(dto?.source).toBe('blizzard');
+    expect(dto?.syncedAt).toBe(OLDER);
+  });
+
+  it('AC12: unconvertible Blizzard talents (never synced) → the addon DTO', async () => {
+    loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
+    const dto = await service.resolve(
+      row({ talents: blizzardTalents, lastSyncedAt: null }),
     );
     expect(dto?.source).toBe('addon');
     expect(dto?.syncedAt).toBe(CAPTURED.toISOString());

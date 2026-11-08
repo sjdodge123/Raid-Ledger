@@ -51,10 +51,11 @@ export interface ResolvedRosterResult {
  * ROK-2102 the effective prefix defaults to `forever` with the key absent, so
  * a stored-override test would keep the seam off on a default install. It is
  * not proof the probe currently reports the namespace live. Only while it is
- * live do blizzard facts get the fresh-window override (`fact-precedence.ts`
- * rule 2) and does the Blizzard source shadow the row source's
- * blizzard-labelled copies of the same fields; otherwise blizzard-labelled
- * facts (an Armory-synced `characters` row) compete on newest `asOf` only.
+ * live does the Blizzard source run and shadow the row source's
+ * blizzard-labelled copies of the same fields. Whether or not it is live, any
+ * blizzard fact — including an Armory-synced `characters` row's — wins
+ * regardless of age (`fact-precedence.ts` rule 2, ROK-2138 OQ-1); addon and
+ * roster facts only fill fields Blizzard has no value for.
  */
 @Injectable()
 export class WowFactsService {
@@ -94,10 +95,7 @@ export class WowFactsService {
    * are dropped, flagged `truncated` and logged once. One `load` (one query)
    * per active source.
    */
-  async resolveFacts(
-    refs: RosterCharRef[],
-    now: Date = new Date(),
-  ): Promise<ResolvedRosterResult> {
+  async resolveFacts(refs: RosterCharRef[]): Promise<ResolvedRosterResult> {
     const truncated = refs.length > MAX_ROSTER_ROWS;
     if (truncated) {
       this.logger.warn(
@@ -111,17 +109,14 @@ export class WowFactsService {
     const facts: ResolvedRoster = new Map();
     for (const ref of batch) {
       const perSource = this.candidatesFor(ref.key, sources, loaded);
-      facts.set(ref.key, resolveFacts(perSource, now, live));
+      facts.set(ref.key, resolveFacts(perSource));
     }
     return { facts, truncated };
   }
 
   /** Resolve every latest-snapshot roster row of one guild, keyed `m<memberId>`. */
-  async resolveForGuild(
-    guildId: number,
-    now: Date = new Date(),
-  ): Promise<ResolvedRosterResult> {
-    return this.resolveFacts(await this.guildRefs(guildId), now);
+  async resolveForGuild(guildId: number): Promise<ResolvedRosterResult> {
+    return this.resolveFacts(await this.guildRefs(guildId));
   }
 
   /** The guild's roster rows as refs (first linked character per member). */

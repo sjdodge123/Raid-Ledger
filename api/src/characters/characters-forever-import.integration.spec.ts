@@ -491,22 +491,22 @@ async function seedWithSnapshot(username: string, capturedAt: Date) {
     .set('Authorization', `Bearer ${token}`);
 }
 
-describe('Forever talents newest-wins against the real snapshot query (ROK-2110 D4)', () => {
-  it('newest wins against the real snapshot query: an addon capture newer than the sync serves the addon nodes', async () => {
+describe('Forever talents source against the real snapshot query (ROK-2110 D4, ROK-2138)', () => {
+  it('Blizzard primary (ROK-2138): an addon capture newer than the sync still serves the Blizzard nodes', async () => {
     const captured = new Date('2026-07-01T00:00:00.000Z');
     const res = await seedWithSnapshot('forevernewestaddon', captured);
     expect(res.status).toBe(200);
     expect(res.body.talents).toMatchObject({
       format: 'forever',
-      source: 'addon',
-      syncedAt: captured.toISOString(),
+      source: 'blizzard',
+      syncedAt: SYNCED.toISOString(),
     });
-    expect(res.body.talents.nodes).toEqual([
-      expect.objectContaining({ nodeId: 9001, rank: 2, name: 'Addon Talent' }),
-    ]);
+    expect(res.body.talents.nodes).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ nodeId: 9001 })]),
+    );
   });
 
-  it('newest wins against the real snapshot query: a Blizzard sync newer than the capture serves the Blizzard nodes', async () => {
+  it('a Blizzard sync newer than the capture serves the Blizzard nodes', async () => {
     const res = await seedWithSnapshot(
       'forevernewestblizz',
       new Date('2026-05-01T00:00:00.000Z'),

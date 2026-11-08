@@ -2,7 +2,8 @@
  * ROK-1727: WoW: Forever gear on the public character detail
  * (`GET /characters/:id`) against a real database. The LedgerLink `char`
  * snapshot is the source of truth (R1); `characters.equipment` and
- * `last_synced_at` are never written; newest wins against Armory data;
+ * `last_synced_at` are never written; stored Armory gear wins regardless of
+ * age and the addon only fills the gap (ROK-2138);
  * unknown item ids are enqueued fire-and-forget; other variants unchanged.
  */
 import { eq } from 'drizzle-orm';
@@ -202,21 +203,22 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
     });
   });
 
-  it('newest wins: an older Armory sync shows the addon gear', async () => {
+  it('Blizzard primary (ROK-2138): an older Armory sync still beats a newer addon snapshot', async () => {
+    const armory = ARMORY_EQUIPMENT('2026-09-01T00:00:00.000Z');
     const id = await seedCharacter({
       slug: FOREVER_SLUG,
       gameVariant: 'wow_forever',
-      equipment: ARMORY_EQUIPMENT('2026-09-01T00:00:00.000Z'),
+      equipment: armory,
     });
     await seedSnapshot(id);
 
     const res = await get(id);
 
-    expect(res.body.equipment.source).toBe('addon');
-    expect(res.body.equipment.syncedAt).toBe(CAPTURED_AT.toISOString());
+    expect(res.body.equipment).toEqual(armory);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it('newest wins: a newer Armory sync keeps the Armory gear', async () => {
+  it('a newer Armory sync keeps the Armory gear', async () => {
     const armory = ARMORY_EQUIPMENT('2026-09-20T00:00:00.000Z');
     const id = await seedCharacter({
       slug: FOREVER_SLUG,

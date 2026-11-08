@@ -56,10 +56,10 @@ describe('WowFactsService — Blizzard registration seam', () => {
       level: { value: 60, source: 'blizzard', asOf },
     });
 
-  it('a registered fake blizzard source wins while fresh (live namespace)', async () => {
+  it('a registered fake blizzard source wins (live namespace)', async () => {
     const { service, settings } = build('classicforever1');
     service.registerBlizzardSource(blizzardAt(ago(20 * HOUR)));
-    const got = await service.resolveFacts([REF], NOW);
+    const got = await service.resolveFacts([REF]);
     expect(got.facts.get('m1')?.level).toEqual({
       value: 60,
       source: 'blizzard',
@@ -68,11 +68,16 @@ describe('WowFactsService — Blizzard registration seam', () => {
     expect(settings.get).toHaveBeenCalledWith(WOW_FOREVER_ARMORY_IMPORT_KEY);
   });
 
-  it('a stale blizzard value loses to a newer addon value', async () => {
+  // ROK-2138: Blizzard wins regardless of age; the addon only fills gaps.
+  it('a 30-day-old blizzard value still beats a newer addon value', async () => {
     const { service } = build('classicforever1');
-    service.registerBlizzardSource(blizzardAt(ago(30 * HOUR)));
-    const got = await service.resolveFacts([REF], NOW);
-    expect(got.facts.get('m1')?.level?.source).toBe('addon');
+    service.registerBlizzardSource(blizzardAt(ago(30 * 24 * HOUR)));
+    const got = await service.resolveFacts([REF]);
+    expect(got.facts.get('m1')?.level).toEqual({
+      value: 60,
+      source: 'blizzard',
+      asOf: ago(30 * 24 * HOUR),
+    });
   });
 
   // Since ROK-2102 step 2 (#1979) the default prefix resolves to `forever`,
@@ -81,7 +86,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
     const on = build(null);
     const live = blizzardAt(NOW);
     on.service.registerBlizzardSource(live);
-    const gotOn = await on.service.resolveFacts([REF], NOW);
+    const gotOn = await on.service.resolveFacts([REF]);
     expect(live.load).toHaveBeenCalledTimes(1);
     expect(gotOn.facts.get('m1')?.level?.source).toBe('blizzard');
 
@@ -89,7 +94,7 @@ describe('WowFactsService — Blizzard registration seam', () => {
     off.settings.get.mockResolvedValue('false');
     const idle = blizzardAt(NOW);
     off.service.registerBlizzardSource(idle);
-    const gotOff = await off.service.resolveFacts([REF], NOW);
+    const gotOff = await off.service.resolveFacts([REF]);
     expect(idle.load).not.toHaveBeenCalled();
     expect(gotOff.facts.get('m1')?.level?.source).toBe('addon');
   });
@@ -122,7 +127,7 @@ describe('WowFactsService.resolveFacts — batching', () => {
       memberId: i,
       characterId: null,
     }));
-    const got = await service.resolveFacts(refs, NOW);
+    const got = await service.resolveFacts(refs);
     for (const s of [roster, addon, chars]) {
       expect(s.load).toHaveBeenCalledTimes(1);
       expect(s.load.mock.calls[0]?.[0]).toHaveLength(MAX_ROSTER_ROWS);
@@ -137,41 +142,73 @@ describe('WowFactsService.resolveFacts — batching', () => {
     const { service, roster, addon } = build(null);
     roster.load.mockResolvedValue(new Map());
     addon.load.mockResolvedValue(new Map());
-    const got = await service.resolveFacts([REF], NOW);
+    const got = await service.resolveFacts([REF]);
     expect(got.facts.get('m1')?.level).toBeNull();
   });
 });
 
-describe('WowFactsService — fresh-blizzard override needs the registered seam', () => {
-  /** A CharacterRow-style Armory row: blizzard-labelled, synced 2h ago. */
+describe('WowFactsService — a stored Armory row wins with or without the seam (ROK-2138 OQ-1)', () => {
+  /** A CharacterRow-style Armory row: blizzard-labelled, synced 10 days ago. */
   function withArmoryRow(prefix: string | null) {
     const ctx = build(prefix);
     ctx.chars.load.mockResolvedValue(
       new Map([
         [
           'm1',
-          { level: { value: 60, source: 'blizzard', asOf: ago(2 * HOUR) } },
+          { level: { value: 60, source: 'blizzard', asOf: ago(240 * HOUR) } },
         ],
       ]),
     );
     return ctx;
   }
 
-  it('seam off: a recent blizzard-labelled row loses to a newer addon snapshot', async () => {
-    const { service } = withArmoryRow('classicforever1');
-    const got = await service.resolveFacts([REF], NOW);
-    expect(got.facts.get('m1')?.level?.source).toBe('addon');
+  it('seam off: the 10-day-old blizzard-labelled row beats a newer addon snapshot (AC7)', async () => {
+    const { service, settings } = withArmoryRow(null);
+    settings.get.mockResolvedValue('false');
+    service.registerBlizzardSource(fakeSource('blizzard', {}));
+    const got = await service.resolveFacts([REF]);
+    expect((await service.activeSources()).map((s) => s.id)).not.toContain(
+      'blizzard',
+    );
+    expect(got.facts.get('m1')?.level).toEqual({
+      value: 60,
+      source: 'blizzard',
+      asOf: ago(240 * HOUR),
+    });
   });
 
-  it('seam on: the fresh blizzard fact wins', async () => {
+  it('seam on: the blizzard fact wins', async () => {
     const { service } = withArmoryRow('classicforever1');
     service.registerBlizzardSource(fakeSource('blizzard', {}));
-    const got = await service.resolveFacts([REF], NOW);
+    const got = await service.resolveFacts([REF]);
     expect(got.facts.get('m1')?.level?.source).toBe('blizzard');
+  });
+
+  it('no blizzard value anywhere: the newer addon snapshot fills the gap (AC8)', async () => {
+    const { service } = build(null);
+    const got = await service.resolveFacts([REF]);
+    expect(got.facts.get('m1')?.level).toEqual({
+      value: 59,
+      source: 'addon',
+      asOf: ago(HOUR),
+    });
+  });
+
+  it('a roster row with no character and no Blizzard row resolves from the roster (AC9)', async () => {
+    const { service, addon } = build(null);
+    addon.load.mockResolvedValue(new Map());
+    const got = await service.resolveFacts([
+      { key: 'm1', memberId: 1, characterId: null },
+    ]);
+    expect(got.facts.get('m1')?.level).toEqual({
+      value: 58,
+      source: 'roster',
+      asOf: ago(3 * HOUR),
+    });
   });
 
   it('a small batch is not truncated', async () => {
     const { service } = build(null);
-    expect((await service.resolveFacts([REF], NOW)).truncated).toBe(false);
+    expect((await service.resolveFacts([REF])).truncated).toBe(false);
   });
 });

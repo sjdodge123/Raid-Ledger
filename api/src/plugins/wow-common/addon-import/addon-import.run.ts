@@ -69,6 +69,8 @@ export function toLoadedCharacter(
       addonGuid: c.addonGuid,
       race: c.race,
       gender: c.gender,
+      externalId: c.externalId,
+      lastSyncedAt: c.lastSyncedAt,
     },
   };
 }
