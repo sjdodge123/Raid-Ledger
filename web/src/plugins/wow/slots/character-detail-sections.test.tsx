@@ -4,8 +4,8 @@
  * ruleset, read from the page's cached character query) — and drives the
  * empty states and Wowhead links from it.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -16,7 +16,11 @@ import { FOREVER_ADDON_HINT_EQUIPMENT, FOREVER_ADDON_HINT_TALENTS } from '../lib
 vi.mock('../hooks/use-wowhead-tooltips', () => ({ useWowheadTooltips: vi.fn() }));
 const panelProps = vi.hoisted(() => vi.fn());
 vi.mock('../components/CharacterProfessionsPanel', () => ({
-    CharacterProfessionsPanel: (props: unknown) => { panelProps(props); return null; },
+    CharacterProfessionsPanel: (props: unknown) => { panelProps(props); return <h2>Professions</h2>; },
+}));
+const addonsCard = vi.hoisted(() => ({ show: true }));
+vi.mock('./character-addons-card', () => ({
+    CharacterAddonsCard: () => (addonsCard.show ? <h2>Guild recommends</h2> : null),
 }));
 
 const ARMORY_EQUIPMENT = 'Equipment data is only available for characters imported from the Blizzard Armory.';
@@ -225,5 +229,65 @@ describe('CharacterDetailSections — professions source (ROK-2107 AC8)', () => 
     it('a character without professionsSource → the panel gets null (no pill)', () => {
         renderSections({ gameVariant: 'retail' });
         expect(lastSource()).toBeNull();
+    });
+});
+
+/** ROK-2146 ruling 3 (layout A): main + 320px sidebar at >= lg, one stack below it. */
+describe('CharacterDetailSections — layout A', () => {
+    const originalMatchMedia = window.matchMedia;
+    afterEach(() => { window.matchMedia = originalMatchMedia; addonsCard.show = true; });
+    const QUESTS = {
+        source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z', inProgress: [], completedKnown: [],
+        counts: { completedKnown: 0, knownTotal: 3, completedTotal: 5, inProgress: 0 },
+    };
+    const LOCKOUTS: CharacterLockoutsDto = {
+        source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z',
+        instances: [{
+            name: 'Molten Core', instanceId: 409, difficultyId: 9, difficulty: '40 Player',
+            resetAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), killed: 4, total: 10,
+        }],
+    };
+    function setDesktop(matches: boolean) {
+        window.matchMedia = ((query: string) => ({
+            matches: query === '(min-width: 1024px)' ? matches : false, media: query, onchange: null,
+            addListener: () => undefined, removeListener: () => undefined,
+            addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+        })) as unknown as typeof window.matchMedia;
+    }
+    async function renderForever(desktop: boolean, lockouts: CharacterLockoutsDto | undefined = LOCKOUTS) {
+        setDesktop(desktop);
+        server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => HttpResponse.json({ quests: QUESTS })));
+        const container = renderSections({ gameVariant: 'wow_forever', equipment: EQUIPMENT, ...(lockouts ? { lockouts } : {}) });
+        await screen.findByRole('heading', { name: 'Quests' });
+        await screen.findByRole('heading', { name: 'Guild recommends' });
+        return container;
+    }
+    const headings = (el: Element) => Array.from(el.querySelectorAll('h2')).map((h) => h.textContent);
+
+    it('>= lg: main column holds Equipment, Talents, Quests; the sidebar Professions, Saved instances, Guild recommends', async () => {
+        const container = await renderForever(true);
+        const layout = container.querySelector('[data-sections-layout]');
+        expect(layout?.getAttribute('data-sections-layout'), 'desktop layout').toBe('sidebar');
+        const main = container.querySelector('[data-sections-column="main"]');
+        const sidebar = container.querySelector('[data-sections-column="sidebar"]');
+        expect(main, 'main column').not.toBeNull();
+        expect(sidebar?.tagName, 'sidebar is an <aside>').toBe('ASIDE');
+        expect(headings(main!)).toEqual(['Equipment', 'Talents', 'Quests']);
+        expect(headings(sidebar!)).toEqual(['Professions', 'Saved instances', 'Guild recommends']);
+        expect(within(sidebar as HTMLElement).queryByRole('heading', { name: 'Quests' })).toBeNull();
+    });
+
+    it('below lg: one stack — Equipment, Talents, Professions, Saved instances, Quests, Guild recommends', async () => {
+        const container = await renderForever(false);
+        const layout = container.querySelector('[data-sections-layout]');
+        expect(layout?.getAttribute('data-sections-layout'), 'phone/tablet layout').toBe('stack');
+        expect(container.querySelector('[data-sections-column]'), 'no columns below lg').toBeNull();
+        expect(headings(layout!)).toEqual(['Equipment', 'Talents', 'Professions', 'Saved instances', 'Quests', 'Guild recommends']);
+    });
+
+    it('a panel that renders null leaves no empty wrapper behind', async () => {
+        const container = await renderForever(true, undefined);
+        const sidebar = container.querySelector('[data-sections-column="sidebar"]')!;
+        expect(Array.from(sidebar.children).map((c) => c.textContent)).toEqual(['Professions', 'Guild recommends']);
     });
 });
