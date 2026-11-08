@@ -48,10 +48,10 @@ type ShapeEntry = [
     string,
     ProbeShape,
     ForeverProbeDeepKeysShapeDto | null,
-    ForeverProbeValuesShapeDto['values'],
+    ForeverProbeValuesShapeDto | null,
 ];
 
-/** Sorted `[key, shape, deepKeysShape, values]` tuples whose value is a well-formed shape. */
+/** Sorted `[key, shape, deepKeysShape, valuesShape]` tuples whose value is a well-formed shape. */
 function shapeEntries(shapes: Record<string, unknown>): ShapeEntry[] {
     const out: ShapeEntry[] = [];
     for (const key of Object.keys(shapes).sort()) {
@@ -59,9 +59,28 @@ function shapeEntries(shapes: Record<string, unknown>): ShapeEntry[] {
         if (!isProbeShape(value)) continue;
         const deep = ForeverProbeDeepKeysShapeSchema.safeParse(value);
         const vals = ForeverProbeValuesShapeSchema.safeParse(value);
-        out.push([key, value, deep.success ? deep.data : null, vals.success ? vals.data.values : {}]);
+        out.push([key, value, deep.success ? deep.data : null, vals.success ? vals.data : null]);
     }
     return out;
+}
+
+/** One shape: its key and top-level keys, plus names / array keys / values where the shape has them. */
+function ShapeRow({ entry: [key, shape, deep, values] }: { entry: ShapeEntry }): JSX.Element {
+    return (
+        <li>
+            <code className="text-foreground">{key}</code>:{' '}
+            {shape.topLevelKeys.join(', ')}
+            {deep === null && ` (entries: ${shape.entryCount})`}
+            <ForeverProbeShapeNames shapeKey={key} names={shape.names ?? []} />
+            {deep !== null && <ForeverProbeShapeArrays shapeKey={key} shape={deep} />}
+            <ForeverProbeShapeValues
+                shapeKey={key}
+                values={values?.values ?? {}}
+                entryCount={shape.entryCount}
+                truncated={values?.truncated === true}
+            />
+        </li>
+    );
 }
 
 /** Collapsed list of the probe's response shapes (keys; values for public quest + item data); null when there are none. */
@@ -81,16 +100,7 @@ export function ForeverProbeShapes({
                 aria-label="Response shapes"
                 className="text-sm text-secondary space-y-0.5"
             >
-                {entries.map(([key, shape, deep, values]) => (
-                    <li key={key}>
-                        <code className="text-foreground">{key}</code>:{' '}
-                        {shape.topLevelKeys.join(', ')}
-                        {deep === null && ` (entries: ${shape.entryCount})`}
-                        <ForeverProbeShapeNames shapeKey={key} names={shape.names ?? []} />
-                        {deep !== null && <ForeverProbeShapeArrays shapeKey={key} shape={deep} />}
-                        <ForeverProbeShapeValues shapeKey={key} values={values} />
-                    </li>
-                ))}
+                {entries.map((entry) => <ShapeRow key={entry[0]} entry={entry} />)}
             </ul>
         </ScrollCollapsible>
     );

@@ -31,8 +31,8 @@ const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
     'ruleset-detail': 'ruleset detail', 'profile-specializations': 'specs', 'profile-encounters-raids': 'raids',
     'profile-encounters-dungeons': 'dungeons', 'profile-reputations': 'reps', 'profile-achievements': 'achievements',
     'profile-statistics': 'stats', 'profile-quests-completed': 'quests done', 'guild-summary': 'guild summary',
-    // ROK-2143: static quest + item data (one chip per probed id).
-    'quest-index': 'quest index', 'quest-area': 'quest area', quest: 'quest', item: 'item',
+    // ROK-2143: static quest + item data (one chip per probed id, labelled `<id>:<status>`).
+    'quest-index': 'quest index', 'quest-area': 'quest area', quest: 'quest (per id)', item: 'item (per id)',
 };
 const REGION_ORDER: readonly string[] = ['us', 'eu', 'kr', 'tw'];
 const TH = 'text-left px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider';
@@ -63,9 +63,16 @@ function cellsFor(cells: readonly ForeverProbeCellDto[], prefix: string, region:
         .sort((a, b) => ENDPOINT_ORDER.indexOf(a.endpoint) - ENDPOINT_ORDER.indexOf(b.endpoint));
 }
 
+/** A chip's identity: the probed id's shape key (`quest:378`) for per-id endpoints, else the endpoint. */
+function chipId(cell: ForeverProbeCellDto): string {
+    return cell.target ?? cell.endpoint;
+}
+
 function StatusChip({ cell }: { cell: ForeverProbeCellDto }): JSX.Element {
-    const label = cell.status === null ? 'err' : String(cell.status);
-    const title = `${cell.endpoint}: ${cell.status ?? cell.error ?? 'error'}`;
+    const status = cell.status === null ? 'err' : String(cell.status);
+    const id = cell.target?.split(':').pop();
+    const label = id === undefined ? status : `${id}:${status}`;
+    const title = `${chipId(cell)}: ${cell.status ?? cell.error ?? 'error'}`;
     return (
         <span title={title} className={`inline-flex px-1.5 py-0.5 text-xs font-medium font-mono rounded-full border ${TONE_CLS[probeStatusTone(cell.status)]}`}>
             {label}
@@ -80,7 +87,7 @@ function MatrixRow({ prefix, regions, cells }: { prefix: string; regions: string
             {regions.map((region) => (
                 <td key={region} className="px-3 py-2">
                     <div className="flex gap-1">
-                        {cellsFor(cells, prefix, region).map((cell) => <StatusChip key={cell.endpoint} cell={cell} />)}
+                        {cellsFor(cells, prefix, region).map((cell) => <StatusChip key={chipId(cell)} cell={cell} />)}
                     </div>
                 </td>
             ))}

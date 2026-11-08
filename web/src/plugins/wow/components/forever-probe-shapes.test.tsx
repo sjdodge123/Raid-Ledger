@@ -96,6 +96,14 @@ describe('ForeverProbeShapes values (ROK-2143)', () => {
         ]);
     });
 
+    it('says "N of M values" when the leaf count exceeds the kept values, and wraps long values', () => {
+        const shape = { ...values['forever:us:quest:378'], entryCount: 300, truncated: true };
+        render(<ForeverProbeShapes shapes={{ 'forever:us:item:3562': shape }} />);
+        expect(screen.getByText('3 of 300 values (depth-limited)')).toBeInTheDocument();
+        const list = screen.getByRole('list', { name: /forever:us:item:3562 values/i });
+        expect(within(list).getAllByRole('listitem')[0]).toHaveClass('break-words');
+    });
+
     it('shows no values toggle for an ordinary shape', () => {
         render(<ForeverProbeShapes shapes={{ 'forever:us:realm': shapes['forever:us:realm'] }} />);
         expect(screen.queryByText(/values$/)).not.toBeInTheDocument();
