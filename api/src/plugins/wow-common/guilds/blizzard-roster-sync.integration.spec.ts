@@ -381,19 +381,16 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     });
   });
 
-  // ROK-2139: a drop below half the GUID roster is now refused, so the flag
-  // case keeps 12 of 20 (8 removed: ≥5 and >25%).
   it('(7) a mass drop (≥5 and >25%) posts the staff flag', async () => {
-    const { guild } = await seedGuild(addonRoster(20));
-    const kept = (await liveNames(guild.id)).slice(0, 12);
-    stubRoster(kept.map((n) => apiMember(n)));
-    expect((await sync(guild.id)).status).toBe('ok');
+    const { guild } = await seedGuild(addonRoster(8));
+    stubRoster([apiMember('Ana'), apiMember('Member1')]);
+    await sync(guild.id);
     const flags = await testApp.db
       .select()
       .from(schema.notifications)
       .where(eq(schema.notifications.title, ROSTER_FLAG_TITLE));
     expect(flags.length).toBeGreaterThan(0);
-    expect(flags[0]?.payload).toMatchObject({ guildId: guild.id, removed: 8 });
+    expect(flags[0]?.payload).toMatchObject({ guildId: guild.id, removed: 6 });
   });
 
   it('(8) level 58 → 60 logs one ding', async () => {
@@ -561,5 +558,81 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     expect(await sync(guild.id)).toEqual(expected);
     expect(await snapshot()).toEqual(after);
     expect(await linkCount(who, guild.id)).toBe(1);
+  });
+
+  it('(16) ROK-2139: the junk merge keeps one ding per level and re-points editor grants (Codex P2a/P2c)', async () => {
+    const { guild } = await seedGuild(foreverRoster());
+    await seedJunk(guild.id);
+    const rows = await allRows();
+    const idOf = (name: string): number =>
+      nonEmpty(
+        rows.filter((r) => r.characterName === name),
+        name,
+      )[0].id;
+    const at = new Date((FIXTURE_EXPORTED_AT + 30) * 1000);
+    const ding = (guildMemberId: number, fromLevel: number) => ({
+      guildId: guild.id,
+      guildMemberId,
+      fromLevel,
+      toLevel: fromLevel + 1,
+      occurredAt: at,
+    });
+    await testApp.db
+      .insert(schema.guildMemberLevelEvents)
+      .values([
+        ding(idOf('Rok Androl'), 58),
+        ding(idOf('Rok'), 58),
+        ding(idOf('Rok'), 57),
+      ]);
+    const grant = (guildMemberId: number) => ({
+      guildId: guild.id,
+      kind: 'member',
+      guildMemberId,
+    });
+    await testApp.db
+      .insert(schema.guildEditors)
+      .values([
+        grant(idOf('Rok Androl')),
+        grant(idOf('Rok')),
+        grant(idOf('Hip')),
+      ]);
+    stubRoster(blizzardRoster());
+    await expect(sync(guild.id)).resolves.toEqual({
+      status: 'ok',
+      updated: 4,
+      inserted: 0,
+    });
+    const rok = idOf('Rok Androl');
+    const dings = await testApp.db.select().from(schema.guildMemberLevelEvents);
+    expect(
+      dings
+        .map((d) => [d.guildMemberId, d.toLevel])
+        .sort((a, b) => Number(a[1]) - Number(b[1])),
+    ).toEqual([
+      [rok, 58],
+      [rok, 59],
+    ]);
+    const grants = await testApp.db.select().from(schema.guildEditors);
+    expect(grants.map((g) => g.guildMemberId).sort()).toEqual(
+      [rok, idOf('Hip Smith')].sort(),
+    );
+  });
+
+  it('(17) ROK-2139: a stale sync writes no junk repair either (Codex P2b)', async () => {
+    const { guild } = await seedGuild(foreverRoster());
+    await seedJunk(guild.id);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ lastSnapshotAt: new Date('2099-01-01T00:00:00Z') })
+      .where(eq(schema.guilds.id, guild.id));
+    const state = async () =>
+      (await allRows())
+        .map((r) => [r.id, r.guid, r.blizzardCharacterId])
+        .sort((a, b) => Number(a[0]) - Number(b[0]));
+    const before = await state();
+    expect(before).toHaveLength(8);
+    stubRoster(blizzardRoster());
+    expect(await sync(guild.id)).toEqual({ status: 'stale' });
+    expect(await state()).toEqual(before);
   });
 });

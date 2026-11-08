@@ -100,7 +100,9 @@ describe('matchRosterMembers — Forever first-name rule (ROK-2139)', () => {
     const res = matchRosterMembers([exact], [api('Rok')]);
     expect(pairs(res)).toEqual([[exact.id, 'Rok']]);
   });
+});
 
+describe('matchRosterMembers — newest GUID batch + class (ROK-2139 M1)', () => {
   it('M1: never pairs with a departed GUID row (older than the newest batch)', () => {
     const departed = row({ characterName: 'Rok Androl', lastSeenAt: OLD_T });
     const hip = row({ characterName: 'Hip Smith' });
