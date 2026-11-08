@@ -12,7 +12,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
-import type { GuildKind, GuildPage as GuildPageDto } from '@raid-ledger/contract';
+import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
