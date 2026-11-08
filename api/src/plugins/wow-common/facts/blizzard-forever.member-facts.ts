@@ -6,7 +6,7 @@
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
-import { toForeverCandidates } from './blizzard-forever.fact-source';
+import { toForeverCandidates } from './blizzard-forever.candidates';
 import { distinctIds, fanOut } from './fact-source.helpers';
 import type {
   RosterCharRef,
