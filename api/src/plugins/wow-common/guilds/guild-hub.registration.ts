@@ -12,6 +12,7 @@ import { GuildIngameTextService } from './guild-ingame-text.service';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 import { GuildsController } from './guilds.controller';
+import { JoinGateService } from './join-gate/join-gate.service';
 import { CharacterOwnerAdminController } from './roster-claim/character-owner.admin.controller';
 import { CharacterOwnerAdminService } from './roster-claim/character-owner.admin.service';
 import { RosterClaimController } from './roster-claim/roster-claim.controller';
@@ -38,4 +39,5 @@ export const PROVIDERS = [
   ...rosterSync.PROVIDERS,
   RosterClaimService,
   CharacterOwnerAdminService,
+  JoinGateService,
 ];

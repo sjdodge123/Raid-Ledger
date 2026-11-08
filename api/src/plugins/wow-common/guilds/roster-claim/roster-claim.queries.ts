@@ -60,10 +60,16 @@ export function isRowUnclaimed(): SQL | undefined {
  * FLAG 1 (ruled 2026-11-07): every approved, visible, non-archived WoW guild
  * hub of the game. `status` is always `active` for `wow_guild`
  * (`guilds_status_kind_check`); it is repeated so the rule reads whole.
+ * ROK-2132: `guildId` narrows it to that one guild (pick-list filter, join
+ * gate 404 check); omitted, the rule is unchanged.
  */
-export function isClaimableGuild(gameId: number): SQL | undefined {
+export function isClaimableGuild(
+  gameId: number,
+  guildId?: number,
+): SQL | undefined {
   return and(
     eq(guilds.gameId, gameId),
+    guildId === undefined ? undefined : eq(guilds.id, guildId),
     eq(guilds.kind, 'wow_guild'),
     eq(guilds.status, 'active'),
     isNull(guilds.hiddenAt),
@@ -71,15 +77,21 @@ export function isClaimableGuild(gameId: number): SQL | undefined {
   );
 }
 
+/** `loadCandidates` narrowing: name search and (ROK-2132) one guild. */
+export interface CandidateFilter {
+  q?: string | undefined;
+  guildId?: number | undefined;
+}
+
 /**
- * The unclaimed candidates of every claimable guild of the game, sorted by
- * guild name then character name. Reads one row past the cap so the caller
- * can tell a truncated list from an exact fit.
+ * The unclaimed candidates of every claimable guild of the game (or of the
+ * one `guildId`), sorted by guild name then character name. Reads one row
+ * past the cap so the caller can tell a truncated list from an exact fit.
  */
 export async function loadCandidates(
   db: Db,
   gameId: number,
-  q?: string,
+  { q, guildId }: CandidateFilter = {},
 ): Promise<CandidateRow[]> {
   const byName = q
     ? ilike(guildMembers.characterName, `%${escapeLikePattern(q)}%`)
@@ -99,7 +111,7 @@ export async function loadCandidates(
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .leftJoin(guildMemberArmory, memberSnapshotJoin())
-    .where(and(isClaimableGuild(gameId), isRowUnclaimed(), byName))
+    .where(and(isClaimableGuild(gameId, guildId), isRowUnclaimed(), byName))
     .orderBy(asc(guilds.name), asc(guilds.id), asc(guildMembers.characterName))
     .limit(MAX_ROSTER_CLAIM_CANDIDATES + 1);
 }
