@@ -3,6 +3,24 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-08 — `char` `quests.completed` optional — **additive**
+
+- `data.quests.completed` becomes optional (ROK-2125, operator ruling
+  2026-11-07); stays v1. `quests` keeps `.strict()`; `inProgress` stays
+  required; the 10 000-id cap and `completedTruncated` are unchanged.
+  `schema.json` regenerated (`completed` dropped from the `quests` `required`
+  list only).
+- Semantics: **absent** = no opinion — the server takes the completed list
+  (with its truncation flag and date) from the Forever Armory
+  `quests/completed` sync, and an import that omits it keeps the completed
+  list already stored for the character. **Empty** (`[]`) keeps its meaning:
+  the character has completed no quests.
+- New golden fixture `char-forever-quests-log-only` (the quest log, no
+  `completed` key). Every existing fixture unchanged byte-for-byte.
+- A server without this change rejects a `quests` without `completed` with
+  422 `INVALID_PAYLOAD`. The addon must keep sending `completed` until a
+  server carrying this change is deployed.
+
 ## v1 — 2026-11-06 — rppvp ruleset — **additive**
 
 - `who.ruleset` gains `rppvp` (RP-PvP realms, ROK-2101); stays v1. Every
