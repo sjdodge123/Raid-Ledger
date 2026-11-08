@@ -116,10 +116,11 @@ function useRosterHandlers(eventId: number, canManageRoster: boolean, signupHand
         catch (err) { toast.error('Failed to leave slot', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [selfUnassign, signupHandlers.signup]);
 
-    const handleRosterChange = useCallback(async (pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[], characterIdMap?: Map<number, string>) => {
-        if (!canManageRoster) { toast.error('Permission denied', { description: 'Only the event creator, admin, or operator can update the roster.' }); return; }
-        try { await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments, characterIdMap)); }
-        catch (err) { toast.error('Failed to update roster', { description: err instanceof Error ? err.message : 'Please try again.' }); }
+    /** Saves the roster; resolves `true` once the PATCH succeeds, `false` after showing an error toast (ROK-2141). */
+    const handleRosterChange = useCallback(async (pool: RosterAssignmentResponse[], assignments: RosterAssignmentResponse[], characterIdMap?: Map<number, string>): Promise<boolean> => {
+        if (!canManageRoster) { toast.error('Permission denied', { description: 'Only the event creator, admin, or operator can update the roster.' }); return false; }
+        try { await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments, characterIdMap)); return true; }
+        catch (err) { toast.error('Failed to update roster', { description: err instanceof Error ? err.message : 'Please try again.' }); return false; }
     }, [canManageRoster, updateRoster]);
 
     return { handleSelfRemove, handleRosterChange };

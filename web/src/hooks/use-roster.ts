@@ -83,6 +83,8 @@ export function useAdminRemoveUser(eventId: number) {
 /**
  * Helper to build UpdateRosterDto from component state.
  * ROK-461: characterId map allows admin assignment to set a character on the signup.
+ * ROK-2141: every assignment is sent — an anonymous Discord signup has `userId: 0`
+ * and is identified by its `signupId` (the server replaces the whole roster).
  */
 export function buildRosterUpdate(
     _pool: ViewerRosterAssignment[],
@@ -90,15 +92,13 @@ export function buildRosterUpdate(
     characterIdMap?: Map<number, string>,
 ): UpdateRosterDto {
     return {
-        assignments: assignments
-            .filter((a) => a.userId > 0)
-            .map((a) => ({
-                userId: a.userId,
-                signupId: a.signupId,
-                slot: a.slot,
-                position: a.position,
-                isOverride: a.isOverride,
-                characterId: characterIdMap?.get(a.signupId),
-            })),
+        assignments: assignments.map((a) => ({
+            userId: a.userId,
+            signupId: a.signupId,
+            slot: a.slot,
+            position: a.position,
+            isOverride: a.isOverride,
+            characterId: characterIdMap?.get(a.signupId),
+        })),
     };
 }
