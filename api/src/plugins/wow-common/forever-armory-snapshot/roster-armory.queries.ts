@@ -1,0 +1,103 @@
+/**
+ * ROK-2133 D3 step 2: the roster Armory pass's due-member query. The SQL due
+ * predicate mirrors `isMemberDue` (snapshot.helpers.ts) — keep them in step.
+ */
+import {
+  and,
+  asc,
+  eq,
+  gte,
+  isNotNull,
+  lt,
+  not,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../../drizzle/schema';
+import { isClaimableGuild } from '../guilds/roster-claim/roster-claim.queries';
+import { memberOwnedByCharacterSync } from './snapshot.apply';
+import { MIN_LEVEL, RESYNC_AFTER_MS } from './snapshot.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** One due roster member: who to fetch and where to write it. */
+export interface DueRosterMember {
+  memberId: number;
+  guildId: number;
+  blizzardCharacterId: number;
+  characterName: string;
+  region: string;
+}
+
+/** Due-query scope: the Forever game, the cap, optionally one guild. */
+export interface DueRosterQuery {
+  gameId: number;
+  now: Date;
+  limit: number;
+  guildId?: number | undefined;
+}
+
+const gm = schema.guildMembers;
+const arm = schema.guildMemberArmory;
+
+/**
+ * Not synced, synced more than 24 h ago, or the roster level moved since —
+ * and not backing off. A member with no snapshot row is due.
+ */
+function isDue(now: Date): SQL | undefined {
+  const staleBefore = new Date(now.getTime() - RESYNC_AFTER_MS);
+  const stale = or(
+    sql`${arm.syncedAt} IS NULL`,
+    lt(arm.syncedAt, staleBefore),
+    sql`${arm.level} IS DISTINCT FROM ${gm.level}`,
+  );
+  const notBackingOff = or(
+    sql`${arm.retryAt} IS NULL`,
+    sql`${arm.retryAt} <= ${now}`,
+  );
+  return and(stale, notBackingOff);
+}
+
+/** The whole due-member filter for one query scope. */
+function dueWhere(q: DueRosterQuery): SQL | undefined {
+  return and(
+    isClaimableGuild(q.gameId),
+    q.guildId === undefined ? undefined : eq(gm.guildId, q.guildId),
+    isNotNull(gm.blizzardCharacterId),
+    gte(gm.level, MIN_LEVEL),
+    not(memberOwnedByCharacterSync()),
+    isDue(q.now),
+  );
+}
+
+/**
+ * Up to `limit` due members of claimable Forever hubs, oldest snapshot
+ * first (never-synced first): a Blizzard id, level ≥ 10, and no
+ * Armory-linked character already refreshing that id.
+ */
+export async function listDueRosterMembers(
+  db: Db,
+  q: DueRosterQuery,
+): Promise<DueRosterMember[]> {
+  const rows = await db
+    .select({
+      memberId: gm.id,
+      guildId: gm.guildId,
+      blizzardCharacterId: gm.blizzardCharacterId,
+      characterName: gm.characterName,
+      region: schema.guilds.region,
+    })
+    .from(gm)
+    .innerJoin(schema.guilds, eq(schema.guilds.id, gm.guildId))
+    .leftJoin(arm, eq(arm.guildMemberId, gm.id))
+    .where(dueWhere(q))
+    .orderBy(sql`${arm.syncedAt} ASC NULLS FIRST`, asc(gm.id))
+    .limit(q.limit);
+  return rows.flatMap((r) =>
+    r.blizzardCharacterId === null
+      ? []
+      : [{ ...r, blizzardCharacterId: r.blizzardCharacterId }],
+  );
+}
