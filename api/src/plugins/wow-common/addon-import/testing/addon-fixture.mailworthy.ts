@@ -40,7 +40,6 @@ export function buildMailworthyTemplate(): NonNullable<
  * game two hours earlier (delta 2026-11-08).
  */
 export function buildMailworthyBlock(): AddonMailworthy {
-  const d = MAILWORTHY_TODAY;
   return {
     generatedAt: MAILWORTHY_GENERATED_AT,
     template: buildMailworthyTemplate(),
@@ -48,37 +47,44 @@ export function buildMailworthyBlock(): AddonMailworthy {
       name: `Member${i}`,
       lastSeenAt: MAILWORTHY_GENERATED_AT - i * 3_600,
     })),
-    givers: [
-      {
-        characterName: 'Ana Forever',
-        itemsAllTime: 140,
-        countingSince: FIXTURE_EXPORTED_AT - 90 * 86_400,
-        asOf: MAILWORTHY_GENERATED_AT,
-        days: [
-          { day: d - 31, items: 20 },
-          { day: d - 29, items: 12 },
-          { day: d, items: 8 },
-        ],
-      },
-      {
-        characterName: 'Anabelle Forever',
-        itemsAllTime: 20,
-        countingSince: FIXTURE_EXPORTED_AT - 10 * 86_400,
-        asOf: MAILWORTHY_GENERATED_AT,
-        days: [{ day: d - 2, items: 20 }],
-      },
-      {
-        characterName: 'Member2',
-        itemsAllTime: 64,
-        countingSince: FIXTURE_EXPORTED_AT - 30 * 86_400,
-        asOf: MAILWORTHY_GENERATED_AT - 2 * 3_600,
-        days: [
-          { day: d - 6, items: 40 },
-          { day: d - 1, items: 24 },
-        ],
-      },
-    ],
+    givers: buildMailworthyGivers(MAILWORTHY_TODAY),
   };
+}
+
+/** The full block's givers, keyed off UTC day `d`. */
+function buildMailworthyGivers(
+  d: number,
+): NonNullable<AddonMailworthy['givers']> {
+  return [
+    {
+      characterName: 'Ana Forever',
+      itemsAllTime: 140,
+      countingSince: FIXTURE_EXPORTED_AT - 90 * 86_400,
+      asOf: MAILWORTHY_GENERATED_AT,
+      days: [
+        { day: d - 31, items: 20 },
+        { day: d - 29, items: 12 },
+        { day: d, items: 8 },
+      ],
+    },
+    {
+      characterName: 'Anabelle Forever',
+      itemsAllTime: 20,
+      countingSince: FIXTURE_EXPORTED_AT - 10 * 86_400,
+      asOf: MAILWORTHY_GENERATED_AT,
+      days: [{ day: d - 2, items: 20 }],
+    },
+    {
+      characterName: 'Member2',
+      itemsAllTime: 64,
+      countingSince: FIXTURE_EXPORTED_AT - 30 * 86_400,
+      asOf: MAILWORTHY_GENERATED_AT - 2 * 3_600,
+      days: [
+        { day: d - 6, items: 40 },
+        { day: d - 1, items: 24 },
+      ],
+    },
+  ];
 }
 
 /** `char-mailworthy`: the default char export + the full block. */

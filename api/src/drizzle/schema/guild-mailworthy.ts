@@ -97,8 +97,13 @@ export const guildMailworthyGivers = pgTable(
     }).notNull(),
     /** Daily buckets, ≤ 35 entries. */
     days: jsonb('days').$type<GuildMailworthyStoredDays>().notNull(),
-    /** Export `generatedAt` clamped to now — the latest-wins key. */
+    /**
+     * Giver `asOf` (when its own client computed the totals, delta
+     * 2026-11-08) clamped to now — the latest-wins key.
+     */
     asOf: timestamp('as_of', { withTimezone: true }).notNull(),
+    /** Export `generatedAt` of the winning row — breaks an `as_of` tie. */
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull(),
     reportedByUserId: integer('reported_by_user_id').references(
       () => users.id,
       { onDelete: 'set null' },

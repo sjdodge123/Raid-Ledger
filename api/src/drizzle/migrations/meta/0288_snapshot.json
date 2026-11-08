@@ -1,5 +1,5 @@
 {
-  "id": "95cb77e1-3891-46c4-bbac-66849413cc77",
+  "id": "c6daa3aa-d1a3-4047-a80f-fba9a4e93344",
   "prevId": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "version": "7",
   "dialect": "postgresql",
@@ -12347,6 +12347,12 @@
         },
         "as_of": {
           "name": "as_of",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "generated_at": {
+          "name": "generated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true

@@ -7,6 +7,7 @@ CREATE TABLE "guild_mailworthy_givers" (
 	"counting_since" timestamp with time zone NOT NULL,
 	"days" jsonb NOT NULL,
 	"as_of" timestamp with time zone NOT NULL,
+	"generated_at" timestamp with time zone NOT NULL,
 	"reported_by_user_id" integer,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "uq_guild_mailworthy_givers_guild_name" UNIQUE("guild_id","name_key")
