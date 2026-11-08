@@ -10,9 +10,9 @@ function ItadSetupInstructions() {
         <div className="bg-overlay/30 border border-edge rounded-lg p-4 mb-6">
             <p className="text-sm text-foreground"><strong>Setup Instructions:</strong></p>
             <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
-                <li>Go to <a href="https://isthereanydeal.com/dev/app/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">isthereanydeal.com/dev/app</a></li>
+                <li>Go to <a href="https://isthereanydeal.com/apps/my/" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">isthereanydeal.com/apps/my</a></li>
                 <li>Sign in or create an ITAD account</li>
-                <li>Create an application and copy the API key</li>
+                <li>Register an app; the API key is generated for you. Copy it.</li>
                 <li>Paste the API key below</li>
             </ol>
         </div>
