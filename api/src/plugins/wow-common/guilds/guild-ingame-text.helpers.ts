@@ -95,12 +95,16 @@ export function visibleToken(field: StoredField): string | null {
 }
 
 function baseFor(input: PutGuildIngameText, key: IngameTextFieldKey) {
-  return key === 'motd' ? input.baseMotdUpdatedAt : input.baseInfoUpdatedAt;
+  return (
+    (key === 'motd' ? input.baseMotdUpdatedAt : input.baseInfoUpdatedAt) ?? null
+  );
 }
 
 /**
- * D6: only fields whose normalised text differs are written; a changed field
- * whose stored token ≠ its `base*UpdatedAt` makes the whole save a 409.
+ * D6: only fields present in the body are considered (an omitted field is
+ * untouched and never conflict-checked); of those, only fields whose
+ * normalised text differs are written, and a changed field whose stored token
+ * ≠ its `base*UpdatedAt` makes the whole save a 409.
  */
 export function planIngameTextWrite(
   stored: StoredIngameTexts,
@@ -108,7 +112,9 @@ export function planIngameTextWrite(
 ): IngameTextPlan {
   const changes: Partial<Record<IngameTextFieldKey, string | null>> = {};
   for (const key of INGAME_TEXT_FIELDS) {
-    const next = normaliseForStorage(input[key]);
+    const sent = input[key];
+    if (sent === undefined) continue;
+    const next = normaliseForStorage(sent);
     if (next === stored[key].text) continue;
     if (visibleToken(stored[key]) !== baseFor(input, key)) {
       return { outcome: 'conflict' };

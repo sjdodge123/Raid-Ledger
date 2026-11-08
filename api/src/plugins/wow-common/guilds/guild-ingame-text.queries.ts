@@ -18,6 +18,9 @@ export type Db = PostgresJsDatabase<typeof schema>;
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 const { guildProfiles: profiles } = schema;
+
+/** `pg_advisory_xact_lock(ns, guildId)` namespace for in-game text saves. */
+const INGAME_TEXT_LOCK_NS = 2136;
 const motdEditor = alias(schema.users, 'ingame_motd_editor');
 const infoEditor = alias(schema.users, 'ingame_info_editor');
 
@@ -56,14 +59,18 @@ export async function findIngameText(
 }
 
 /**
- * Ensure the guild's profile row exists (a guild with no profile yet is still
- * writable), then lock it for the save and return the stored texts + tokens.
+ * Serialise saves for the guild (an advisory lock — a guild with no profile
+ * row yet has nothing to `FOR UPDATE`), then lock the row if it exists and
+ * return the stored texts + tokens. Inserts nothing: a no-op save or a 409
+ * leaves no `guild_profiles` row behind.
  */
 export async function lockIngameText(
   tx: Tx,
   guildId: number,
 ): Promise<StoredIngameTexts> {
-  await tx.insert(profiles).values({ guildId }).onConflictDoNothing();
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${INGAME_TEXT_LOCK_NS}::int4, ${guildId}::int4)`,
+  );
   const [row] = await tx
     .select({
       motd: profiles.ingameMotd,
@@ -80,11 +87,17 @@ export async function lockIngameText(
   };
 }
 
-/** Write only the changed fields' columns (the patch is never empty). */
+/**
+ * Write only the changed fields' columns (the patch is never empty). Upserts:
+ * the profile row is created here, on the first real change, never earlier.
+ */
 export async function writeIngameText(
   tx: Tx,
   guildId: number,
   patch: IngameTextPatch,
 ): Promise<void> {
-  await tx.update(profiles).set(patch).where(eq(profiles.guildId, guildId));
+  await tx
+    .insert(profiles)
+    .values({ guildId, ...patch })
+    .onConflictDoUpdate({ target: profiles.guildId, set: patch });
 }

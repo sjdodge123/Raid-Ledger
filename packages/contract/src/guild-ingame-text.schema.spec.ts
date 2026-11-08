@@ -46,10 +46,17 @@ describe("PutGuildIngameTextSchema", () => {
     expect(PutGuildIngameTextSchema.safeParse(put({ info: "b".repeat(500) })).success).toBe(false);
   });
 
-  it("rejects unknown keys and a missing base timestamp", () => {
+  it("rejects unknown keys and a sent field without its base timestamp", () => {
     expect(PutGuildIngameTextSchema.safeParse(put({ extra: 1 })).success).toBe(false);
     const { baseMotdUpdatedAt: _omit, ...missing } = put();
     expect(PutGuildIngameTextSchema.safeParse(missing).success).toBe(false);
+    expect(PutGuildIngameTextSchema.safeParse({ info: "x" }).success).toBe(false);
+  });
+
+  it("accepts a body carrying only the edited field (per-field save, D6)", () => {
+    expect(PutGuildIngameTextSchema.safeParse({ info: "Only info", baseInfoUpdatedAt: AT }).success).toBe(true);
+    expect(PutGuildIngameTextSchema.safeParse({ motd: "Only motd", baseMotdUpdatedAt: null }).success).toBe(true);
+    expect(PutGuildIngameTextSchema.safeParse({}).success).toBe(true);
   });
 
   it("rejects control characters but accepts newlines, CRLF, pipes and emoji", () => {

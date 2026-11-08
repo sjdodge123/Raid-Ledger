@@ -162,6 +162,29 @@ describe('planIngameTextWrite (D6)', () => {
   });
 });
 
+describe('planIngameTextWrite — omitted fields (D6)', () => {
+  it('ignores an omitted field entirely, so a stale token there never 409s (D6)', () => {
+    const plan = planIngameTextWrite(stored(['Theirs', T2], ['Info', T1]), {
+      info: 'New info',
+      baseInfoUpdatedAt: T1,
+    });
+    expect(plan).toEqual({ outcome: 'ok', changes: { info: 'New info' } });
+  });
+
+  it('still 409s when a stale untouched field is re-sent with different text', () => {
+    const plan = planIngameTextWrite(
+      stored(['Theirs', T2], ['Info', T1]),
+      put({
+        motd: 'Old',
+        baseMotdUpdatedAt: T1,
+        info: 'New info',
+        baseInfoUpdatedAt: T1,
+      }),
+    );
+    expect(plan).toEqual({ outcome: 'conflict' });
+  });
+});
+
 describe('buildIngameTextPatch', () => {
   const now = new Date('2026-11-08T12:00:00.000Z');
 

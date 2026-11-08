@@ -69,19 +69,37 @@ export const GuildIngameTextSchema = z
 export type GuildIngameText = z.infer<typeof GuildIngameTextSchema>;
 
 /**
- * `PUT /plugins/wow/guilds/:id/ingame-text`. Both texts are sent; only a
- * changed field is written. `base*UpdatedAt` is the `updatedAt` the editor
- * loaded (null when unset); a mismatch on a changed field is a 409 (D6).
- * `''` (after `normaliseIngameText`) clears the field.
+ * `PUT /plugins/wow/guilds/:id/ingame-text`. Send only the fields the editor
+ * changed, each with its `base*UpdatedAt` — the `updatedAt` the editor loaded
+ * (null when unset). An omitted field is untouched and never conflict-checked,
+ * so editing only Info never 409s on a concurrent MOTD change; a sent field
+ * whose base mismatches is a 409 (D6). `''` (after `normaliseIngameText`)
+ * clears the field.
  */
 export const PutGuildIngameTextSchema = z
   .object({
-    motd: putText(WOW_GUILD_MOTD_MAX),
-    info: putText(WOW_GUILD_INFO_MAX),
-    baseMotdUpdatedAt: isoDate.nullable(),
-    baseInfoUpdatedAt: isoDate.nullable(),
+    motd: putText(WOW_GUILD_MOTD_MAX).optional(),
+    info: putText(WOW_GUILD_INFO_MAX).optional(),
+    baseMotdUpdatedAt: isoDate.nullable().optional(),
+    baseInfoUpdatedAt: isoDate.nullable().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((body, ctx) => {
+    if (body.motd !== undefined && body.baseMotdUpdatedAt === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['baseMotdUpdatedAt'],
+        message: 'Required when motd is sent',
+      });
+    }
+    if (body.info !== undefined && body.baseInfoUpdatedAt === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['baseInfoUpdatedAt'],
+        message: 'Required when info is sent',
+      });
+    }
+  });
 export type PutGuildIngameText = z.infer<typeof PutGuildIngameTextSchema>;
 
 /**

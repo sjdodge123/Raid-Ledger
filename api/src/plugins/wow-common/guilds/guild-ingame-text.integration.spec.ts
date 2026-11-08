@@ -275,12 +275,50 @@ describe('PUT ingame-text — attribution and conflicts (AC8/AC9)', () => {
     expect(res.body.ingameText.motd).toEqual(a.body.motd);
   });
 
-  it('per field: B changing only info after A changed motd is 200', async () => {
-    await put('deleg', body({ motd: 'A wrote this' }));
-    const res = await put('admin', body({ motd: 'A wrote this', info: 'B' }));
+  it("per field: B saving only Info with a stale MOTD token is 200 and keeps A's MOTD", async () => {
+    const loaded = await put('admin', body({ motd: 'Old motd' }));
+    const staleMotd = loaded.body.motd.updatedAt as string;
+    const a = await put(
+      'deleg',
+      body({ motd: 'A wrote this', baseMotdUpdatedAt: staleMotd }),
+    );
+    expect(a.status).toBe(200);
+    // What the dialog sends when only Info was edited: the MOTD is omitted.
+    const res = await put('admin', { info: 'B', baseInfoUpdatedAt: null });
     expect(res.status).toBe(200);
-    expect(res.body.motd.text).toBe('A wrote this');
+    expect(res.body.motd).toEqual(a.body.motd);
     expect(res.body.info.text).toBe('B');
+    // Re-sending the stale MOTD (the pre-fix body) is still a 409.
+    const stale = await put('admin', {
+      motd: 'Old motd',
+      baseMotdUpdatedAt: staleMotd,
+      info: 'B2',
+      baseInfoUpdatedAt: res.body.info.updatedAt,
+    });
+    expect(stale.status).toBe(409);
+  });
+});
+
+describe('PUT ingame-text — no stray profile rows', () => {
+  const profileRows = () =>
+    testApp.db
+      .select({ id: schema.guildProfiles.guildId })
+      .from(schema.guildProfiles)
+      .where(eq(schema.guildProfiles.guildId, guildId));
+
+  it('a no-op save on a guild with no profile row leaves no row', async () => {
+    expect(await profileRows()).toHaveLength(0);
+    const res = await put('admin', body());
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ motd: null, info: null });
+    expect(await profileRows()).toHaveLength(0);
+    expect((await put('admin', {})).status).toBe(200);
+    expect(await profileRows()).toHaveLength(0);
+  });
+
+  it('the first real change creates the row', async () => {
+    expect((await put('deleg', body({ info: 'First' }))).status).toBe(200);
+    expect(await profileRows()).toHaveLength(1);
   });
 });
 
