@@ -3,7 +3,7 @@
  * status chip per probed endpoint (realm, connected-realm, playable-race,
  * profile, ROK-2102's ruleset / profile-family / guild-roster, and ROK-2103's
  * static journal tiers / instances / classes, ROK-2108's keys-only profile
- * extras / guild summary / ruleset detail), labelled
+ * extras / guild summary / ruleset detail, ROK-2143's quest / item data), labelled
  * short in the legend. Matches are listed above the matrix: a ruleset-index
  * signal reads "ruleset index", a Skyborne one its race name. Collapsed by default; the table scrolls inside its own container
  * so a phone never gets page overflow. Table styling follows the admin logs /
@@ -19,6 +19,7 @@ const ENDPOINT_ORDER: readonly ForeverProbeEndpoint[] = [
     'journal-expansion', 'journal-instance', 'playable-class',
     'ruleset-detail', 'profile-specializations', 'profile-encounters-raids', 'profile-encounters-dungeons',
     'profile-reputations', 'profile-achievements', 'profile-statistics', 'profile-quests-completed', 'guild-summary',
+    'quest-index', 'quest-area', 'quest', 'item',
 ];
 /** Legend label per endpoint — the ROK-2102 additions get short names so the legend stays one line. */
 const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
@@ -30,6 +31,8 @@ const ENDPOINT_LABEL: Record<ForeverProbeEndpoint, string> = {
     'ruleset-detail': 'ruleset detail', 'profile-specializations': 'specs', 'profile-encounters-raids': 'raids',
     'profile-encounters-dungeons': 'dungeons', 'profile-reputations': 'reps', 'profile-achievements': 'achievements',
     'profile-statistics': 'stats', 'profile-quests-completed': 'quests done', 'guild-summary': 'guild summary',
+    // ROK-2143: static quest + item data (one chip per probed id).
+    'quest-index': 'quest index', 'quest-area': 'quest area', quest: 'quest', item: 'item',
 };
 const REGION_ORDER: readonly string[] = ['us', 'eu', 'kr', 'tw'];
 const TH = 'text-left px-3 py-2 text-xs font-semibold text-muted uppercase tracking-wider';

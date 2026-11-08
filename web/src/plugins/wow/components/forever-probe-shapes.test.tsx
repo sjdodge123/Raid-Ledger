@@ -70,3 +70,34 @@ describe('ForeverProbeShapes keys-only arrays (ROK-2108)', () => {
         expect(screen.queryByText(/arrays?$/)).not.toBeInTheDocument();
     });
 });
+
+describe('ForeverProbeShapes values (ROK-2143)', () => {
+    const values = {
+        'forever:us:quest:378': {
+            topLevelKeys: ['id', 'rewards'],
+            entryCount: 3,
+            sample: [],
+            values: { id: 378, 'rewards.items[0].item.name': 'Belt of Vindication', area: null },
+        },
+    };
+
+    it('renders a collapsed "3 values" toggle listing path: value pairs', () => {
+        render(<ForeverProbeShapes shapes={values} />);
+        const toggle = screen.getByText('3 values');
+        const details = toggle.closest('details');
+        expect(details?.open).toBe(false);
+        fireEvent.click(toggle);
+        expect(details?.open).toBe(true);
+        const list = screen.getByRole('list', { name: /forever:us:quest:378 values/i });
+        expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+            'id: 378',
+            'rewards.items[0].item.name: Belt of Vindication',
+            'area: null',
+        ]);
+    });
+
+    it('shows no values toggle for an ordinary shape', () => {
+        render(<ForeverProbeShapes shapes={{ 'forever:us:realm': shapes['forever:us:realm'] }} />);
+        expect(screen.queryByText(/values$/)).not.toBeInTheDocument();
+    });
+});
