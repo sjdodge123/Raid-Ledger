@@ -1,5 +1,6 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildMemberLinkVia } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import {
   CHARACTER_CLAIM_ENTITY,
@@ -7,11 +8,18 @@ import {
 } from '../../../characters/characters-roster-claim.helpers';
 import { GUID_AUDIT_ENTITY } from '../addon-import/addon-import.guid-audit';
 import { LINK_AUDIT_ACTIONS } from './guild-delegation.helpers';
+import { guidLink } from './guild-link.predicates';
 import type { RawRosterRow, RosterLinks } from './guild-roster.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { characters: c, users, activityLog: al } = schema;
+const {
+  characters: c,
+  users,
+  activityLog: al,
+  guildMembers: gm,
+  guilds: g,
+} = schema;
 
 /**
  * ROK-1794 (review): since when the character's link is the one a member
@@ -47,6 +55,46 @@ export function rosterPicked() {
 }
 
 /**
+ * ROK-2115 (Ruling 6): true when the character holds the LedgerLink GUID of
+ * any of `memberIds` (the shared GUID arm, correlated to the outer
+ * `characters` row). False means the roster links it only by Blizzard id.
+ */
+export function guidLinkedToAny(memberIds: number[]): SQL<boolean> {
+  if (memberIds.length === 0) return sql<boolean>`false`;
+  return sql<boolean>`exists (select 1 from ${gm} inner join ${g} on ${eq(
+    g.id,
+    gm.guildId,
+  )} where ${and(inArray(gm.id, memberIds), guidLink())})`;
+}
+
+/**
+ * ROK-2115 (Ruling 6): the staff "linked via" label. A roster pick wins
+ * (ROK-2128); otherwise a GUID link is an `import` and a link made only by
+ * an Armory import's Blizzard id is `armory` — self-asserted, no GUID proof.
+ */
+export function rosterLinkVia(link: {
+  picked: boolean;
+  guidLinked: boolean;
+}): GuildMemberLinkVia {
+  if (link.picked) return 'roster_pick';
+  return link.guidLinked ? 'import' : 'armory';
+}
+
+/** The distinct linked character ids and the roster rows they link. */
+function linkedIds(rows: RawRosterRow[]): {
+  ids: string[];
+  memberIds: number[];
+} {
+  const linked = rows.flatMap((r) =>
+    r.characterId ? [{ memberId: r.memberId, charId: r.characterId }] : [],
+  );
+  return {
+    ids: [...new Set(linked.map((r) => r.charId))],
+    memberIds: [...new Set(linked.map((r) => r.memberId))],
+  };
+}
+
+/**
  * STAFF-ONLY (the caller gates it): the RL account behind each linked roster
  * row, since when, and how it was linked (`linkVia`, ROK-2128), keyed by
  * linked character id.
@@ -55,9 +103,7 @@ export async function loadRosterLinks(
   db: Db,
   rows: RawRosterRow[],
 ): Promise<RosterLinks> {
-  const ids = [
-    ...new Set(rows.flatMap((r) => (r.characterId ? [r.characterId] : []))),
-  ];
+  const { ids, memberIds } = linkedIds(rows);
   if (ids.length === 0) return new Map();
   const found = await db
     .select({
@@ -65,6 +111,7 @@ export async function loadRosterLinks(
       username: users.username,
       since: linkConfirmedAt(),
       picked: rosterPicked(),
+      guidLinked: guidLinkedToAny(memberIds),
     })
     .from(c)
     .innerJoin(users, eq(users.id, c.userId))
@@ -75,7 +122,7 @@ export async function loadRosterLinks(
       {
         username: r.username,
         linkedSince: new Date(r.since).toISOString(),
-        linkVia: r.picked ? ('roster_pick' as const) : ('import' as const),
+        linkVia: rosterLinkVia(r),
       },
     ]),
   );
