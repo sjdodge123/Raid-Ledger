@@ -499,13 +499,19 @@ test_builder_skipped_while_heavy_or_medium_task_runs() {
 }
 
 test_builder_runs_with_light_or_gc_entries_only() {
-    CURRENT_TEST_NAME="B-c: light tasks and registry_gc do not block the builder rung"
+    CURRENT_TEST_NAME="B-c: registry_gc does not block the builder rung; a light task does (review r1)"
     _setup_ladder 92 60
-    _ledger '[{"key":"t-light","kind":"task","weight":"light"},{"key":"gc","kind":"registry_gc","weight":"light"}]'
+    _ledger '[{"key":"gc","kind":"registry_gc","weight":"light"}]'
     local out
     out=$(disk_pressure::guard 2>/dev/null)
-    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "builder prune runs beside light work"
+    assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "builder prune runs beside the registry sweep"
     assert_eq "$(echo "$out" | jq -r '.rungs[0].skipped // "none"')" "none" "rung 1 is not marked skipped"
+    test_teardown
+    _setup_ladder 92 60
+    _ledger '[{"key":"t-light","kind":"task","weight":"light"},{"key":"gc","kind":"registry_gc","weight":"light"}]'
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    _assert_builder_skipped "$out" "build_running" "$RL_STATE_DIR/log.txt"
+    assert_eq "$(echo "$out" | jq -c '.rungs[0].blocked_by')" '["t-light"]' "a light task (it may run a docker build) blocks the builder rung"
     test_teardown
 }
 
@@ -571,7 +577,7 @@ test_acquire_disk_force_ladder_honours_guard() {
         if [[ "$other" == "yes" ]]; then
             _ledger '[{"key":"build-me-1","kind":"image_build"},{"key":"local-vci-9","kind":"task","weight":"heavy"}]'
         else
-            _ledger '[{"key":"build-me-1","kind":"image_build"},{"key":"t-1","kind":"task","weight":"light"}]'
+            _ledger '[{"key":"build-me-1","kind":"image_build"},{"key":"gc","kind":"registry_gc","weight":"light"}]'
         fi
         ( source "$adm" 2>/dev/null; source "$LIB"
           RL_ADMISSION_HELD="build-me-1" RL_BUILD_MIN_FREE_GB=1000 RL_BUILD_DISK_WAIT_S=0

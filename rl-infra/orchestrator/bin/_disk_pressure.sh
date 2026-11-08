@@ -156,10 +156,10 @@ disk_pressure::_log() {
 
 # ROK-2111 — `docker builder prune -af` deletes the BuildKit cache a running
 # `docker build` is writing, killing the build mid-step. Echo the keys of the
-# admission-ledger entries that make the builder rung unsafe: any image build,
-# and any task of weight heavy/medium (validate-ci runs builds too; a legacy
-# entry with no weight counts as heavy, as in _admission.sh). Light tasks and
-# registry_gc are harmless. The caller's own keys (RL_DISK_LADDER_SELF_KEYS)
+# admission-ledger entries that make the builder rung unsafe: any image build
+# and any task of ANY weight — validate-ci runs builds, and a light task can
+# run a `docker build` too (ROK-2111 review r1). Only registry_gc (the
+# sweeper's own registry sweep, no build) is harmless. The caller's own keys (RL_DISK_LADDER_SELF_KEYS)
 # are ignored — a build's own disk admission runs before it builds anything.
 # Returns 2 when the ledger is missing or unreadable.
 disk_pressure::build_busy_keys() {
@@ -169,9 +169,7 @@ disk_pressure::build_busy_keys() {
         ($self | split(" ") | map(select(length > 0))) as $mine
         | [ (.heavy_running // [])[]
             | select((.key // "") as $k | ($mine | index($k)) == null)
-            | select((.kind // "task") == "image_build"
-                     or ((.kind // "task") != "registry_gc"
-                         and ((.weight // "heavy") | IN("heavy", "medium"))))
+            | select((.kind // "task") != "registry_gc")
             | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
 }
 
