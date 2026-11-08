@@ -1,11 +1,12 @@
 import { Inject, Injectable, type Logger } from '@nestjs/common';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import { memorySwr, type MemoryCacheEntry } from '../../../../common/swr-cache';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
 import { liveMemberPredicate } from '../../../../guilds/community/community-membership.queries';
+import { characterLink } from '../guild-link.predicates';
 import { pullScopeHubIds, type PullScope } from './roster-insights.pull-scope';
 
 /** 5 minutes, the quest-coverage pattern (ROK-1748 D10). */
@@ -73,20 +74,19 @@ export class RosterInsightsCache {
 
   /**
    * After an applied addon import of `characterId`: invalidate each guild
-   * whose roster carries the character's GUID, and (ROK-1925 Q4) each
+   * whose roster links the character (`characterLink()`: GUID or Blizzard id), and (ROK-1925 Q4) each
    * community hub its owner is a live member of. Best effort — a failed
    * lookup leaves the 5-minute TTL as the bound.
    */
   async invalidateForCharacter(characterId: string): Promise<void> {
-    const { characters, guildMembers, hubCommunityMembers: m } = schema;
+    const { characters, guildMembers, guilds, hubCommunityMembers: m } = schema;
     const [guildRows, hubRows] = await Promise.all([
       this.db
         .selectDistinct({ guildId: guildMembers.guildId })
         .from(guildMembers)
-        .innerJoin(characters, eq(characters.addonGuid, guildMembers.guid))
-        .where(
-          and(eq(characters.id, characterId), isNotNull(guildMembers.guid)),
-        ),
+        .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+        .innerJoin(characters, characterLink())
+        .where(eq(characters.id, characterId)),
       this.db
         .selectDistinct({ guildId: m.guildId })
         .from(m)

@@ -8,6 +8,7 @@ import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { WOW_FOREVER_VARIANT } from '../forever-armory-switch';
+import { characterLink } from '../guilds/guild-link.predicates';
 import {
   nextRetryAt,
   snapshotToCharacterColumns,
@@ -150,23 +151,20 @@ export async function applySnapshotToCharacter(
 
 /**
  * True for a `guild_members` row whose Blizzard id an Armory-linked Forever
- * character already holds AND that the roster links to the row (the
- * `characterLink` join: same addon GUID, game, region or unknown region) —
- * the twice-daily character sync refreshes that id and the members list /
- * facts read it through the link, so the roster pass skips the member (D2,
- * L3). A member with no GUID (Blizzard-roster-only) is never owned: no read
- * can reach that character's data, so its own snapshot must stay fresh.
- * Use inside a query that selects from `guild_members` joined to `guilds`.
+ * character already holds AND that the roster links to the row (THE
+ * `characterLink()` join — GUID, else Blizzard id since ROK-2115) — the
+ * twice-daily character sync refreshes that id and the members list / facts
+ * read it through the link, so the roster pass skips the member (D2, L3).
+ * Use inside a query that selects from `guild_members` joined to `guilds`
+ * and does NOT also join `characters` (the sub-select names it unaliased).
  */
 export function memberOwnedByCharacterSync(): SQL {
   const m = schema.guildMembers;
-  const g = schema.guilds;
+  const c = schema.characters;
   return sql`exists (
-    select 1 from characters oc
-    where oc.game_variant = ${WOW_FOREVER_VARIANT}
-      and oc.external_id = ${m.blizzardCharacterId}::text
-      and oc.addon_guid = ${m.guid}
-      and oc.game_id = ${g.gameId}
-      and (oc.region is null or lower(oc.region) = lower(${g.region}))
+    select 1 from ${c}
+    where ${c.gameVariant} = ${WOW_FOREVER_VARIANT}
+      and ${c.externalId} = ${m.blizzardCharacterId}::text
+      and ${characterLink()}
   )`;
 }
