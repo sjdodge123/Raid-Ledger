@@ -30,6 +30,7 @@ import { raidProgressWidget } from './hub-widgets/raid-progress.register';
 import { WOW_FOREVER_GAME_SLUG } from './lib/forever-identity';
 import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 import { guildTextWidget } from './hub-widgets/guild-text.register';
+import { contributionsWidget } from './hub-widgets/contributions.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -68,6 +69,7 @@ blizzard.registerHubWidget(lastSeenWidget);
 blizzard.registerHubWidget(gearReadinessWidget);
 blizzard.registerHubWidget(raidProgressWidget);
 blizzard.registerHubWidget(guildTextWidget);
+blizzard.registerHubWidget(contributionsWidget);
 
 // ROK-2056 L4 — the hub Overview's "install the Companion" card on Forever guild
 // hubs (the same game scope as every Forever widget). Requirement
