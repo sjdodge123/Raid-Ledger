@@ -8,8 +8,10 @@ import { CHANNEL_LIFECYCLE_NUDGE_QUEUE } from './channel-lifecycle.nudge';
 import {
   ChannelLifecycleNudgeProcessor,
   isFinalAttempt,
+  nudgeShortfall,
   type NudgeJob,
 } from './channel-lifecycle.nudge.processor';
+import { CHANNEL_GONE_DETAIL } from './channel-lifecycle.errors';
 
 jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
@@ -112,11 +114,46 @@ describe('ChannelLifecycleNudgeProcessor', () => {
       await expect(processor.process(job(0))).resolves.toBeUndefined();
     });
 
+    it('a channel deleted in Discord settles the nudge — no throw, no Sentry (ROK-2118)', async () => {
+      lifecycle.reconcile.mockResolvedValue(
+        result({
+          items: [{ ...item(9, 'failed'), detail: CHANNEL_GONE_DETAIL }],
+        }),
+      );
+      await expect(processor.process(job(1))).resolves.toBeUndefined();
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+    });
+
     it('a disabled setting is a no-op, not a failure', async () => {
       lifecycle.reconcile.mockResolvedValue(
         result({ stoppedReason: 'disabled' }),
       );
       await expect(processor.process(job(0))).resolves.toBeUndefined();
     });
+  });
+});
+
+describe('nudgeShortfall (ROK-2118)', () => {
+  const res = (detail: string | null, outcome: 'failed' | 'deferred') => ({
+    stoppedReason: null,
+    items: [
+      { gameId: 9, gameName: 'G', action: 'create' as const, outcome, detail },
+    ],
+  });
+
+  it('treats a gone channel (fully cleaned up) as settled', () => {
+    expect(nudgeShortfall(res(CHANNEL_GONE_DETAIL, 'failed'), 9)).toBeNull();
+  });
+
+  it('still reports any other failed item', () => {
+    expect(nudgeShortfall(res('boom', 'failed'), 9)).toBe(
+      'game 9 failed: boom',
+    );
+  });
+
+  it('still reports a deferred item even with the gone detail', () => {
+    expect(nudgeShortfall(res(CHANNEL_GONE_DETAIL, 'deferred'), 9)).toBe(
+      `game 9 deferred: ${CHANNEL_GONE_DETAIL}`,
+    );
   });
 });
