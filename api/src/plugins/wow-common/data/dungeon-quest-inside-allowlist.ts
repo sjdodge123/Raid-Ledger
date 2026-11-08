@@ -41,6 +41,37 @@ export const INSIDE_DUNGEON_QUESTS: readonly InsideQuest[] = [
   q(4342, "Kharan's Tale", 'Blackrock Depths'),
   q(4361, 'The Bearer of Bad News', 'Blackrock Depths'),
   q(4201, 'The Love Potion', 'Blackrock Depths'),
+  // Lokhtos Darkbargainer stands in the Grim Guzzler, inside the instance.
+  q(
+    6642,
+    'Favor Amongst the Brotherhood, Dark Iron Ore',
+    'Blackrock Depths',
+    false,
+  ),
+  q(
+    6643,
+    'Favor Amongst the Brotherhood, Fiery Core',
+    'Blackrock Depths',
+    false,
+  ),
+  q(
+    6644,
+    'Favor Amongst the Brotherhood, Lava Core',
+    'Blackrock Depths',
+    false,
+  ),
+  q(
+    6645,
+    'Favor Amongst the Brotherhood, Core Leather',
+    'Blackrock Depths',
+    false,
+  ),
+  q(
+    6646,
+    'Favor Amongst the Brotherhood, Blood of the Mountain',
+    'Blackrock Depths',
+    false,
+  ),
   q(4083, 'The Spectral Chalice', 'Blackrock Depths'),
   q(4004, 'The Princess Saved?', 'Blackrock Depths'),
   q(4363, "The Princess's Surprise", 'Blackrock Depths'),
