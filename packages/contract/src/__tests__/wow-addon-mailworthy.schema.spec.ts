@@ -31,7 +31,7 @@ const block = {
     peers: [{ name: 'Brannoc', lastSeenAt: 1_789_990_000 }],
     givers: [{
         characterName: 'Ana', itemsAllTime: 41, countingSince: 1_786_000_000,
-        days: [{ day: 20_716, items: 3 }],
+        asOf: 1_789_999_940, days: [{ day: 20_716, items: 3 }],
     }],
 };
 const charData = {
@@ -45,7 +45,7 @@ describe('AddonMailworthySchema — wire block (ROK-2148 §A.2)', () => {
         expect([
             ADDON_MAILWORTHY_NAME_MAX, ADDON_MAILWORTHY_RULES_MAX, ADDON_MAILWORTHY_PEERS_MAX,
             ADDON_MAILWORTHY_GIVERS_MAX, ADDON_MAILWORTHY_DAYS_MAX,
-        ]).toEqual([48, 8, 1000, 50, 35]);
+        ]).toEqual([48, 8, 1000, 200, 35]);
     });
 
     it('accepts the full block and a template-only block', () => {
@@ -55,6 +55,18 @@ describe('AddonMailworthySchema — wire block (ROK-2148 §A.2)', () => {
 
     it('accepts a block with only generatedAt (no opinion on anything)', () => {
         expect(ok({ generatedAt: block.generatedAt })).toBe(true);
+    });
+
+    it('accepts a guildmate total computed before generatedAt (in-game relay, delta 2026-11-08)', () => {
+        expect(ok({ ...block, givers: [giver({ characterName: 'Brannoc', asOf: 1_789_000_000 })] })).toBe(true);
+    });
+
+    it('accepts an empty rules array (a template published with no rules)', () => {
+        expect(ok({ ...block, template: { ...block.template, rules: [] } })).toBe(true);
+    });
+
+    it('accepts 200 givers (relayed guildmates)', () => {
+        expect(ok({ ...block, givers: Array.from({ length: 200 }, () => block.givers[0]) })).toBe(true);
     });
 
     it('char data stays valid without the block and accepts it when present', () => {
@@ -70,7 +82,10 @@ describe('AddonMailworthySchema — wire block (ROK-2148 §A.2)', () => {
         ['a 36th day', { ...block, givers: [giver({ days: Array.from({ length: 36 }, (_, i) => ({ day: 20_680 + i, items: 1 })) })] }],
         ['9 rules', { ...block, template: { ...block.template, rules: Array.from({ length: 9 }, (_, i) => ({ professionSkillLineId: i + 1, recipientName: 'R' })) } }],
         ['a rule carrying a per-unit cap', { ...block, template: { ...block.template, rules: [{ ...rules[0], cap: 500 }] } }],
-        ['51 givers', { ...block, givers: Array.from({ length: 51 }, () => block.givers[0]) }],
+        ['201 givers', { ...block, givers: Array.from({ length: 201 }, () => block.givers[0]) }],
+        ['a giver without asOf', { ...block, givers: [giver({ asOf: undefined })] }],
+        ['a giver asOf after generatedAt', { ...block, givers: [giver({ asOf: block.generatedAt + 1 })] }],
+        ['a millisecond giver asOf', { ...block, givers: [giver({ asOf: 1_789_999_940_000 })] }],
         ['an unknown block key', { ...block, log: [] }],
         ['a missing generatedAt', { template: block.template }],
         ['a zero skill line id', { ...block, template: { ...block.template, rules: [{ professionSkillLineId: 0, recipientName: 'R' }] } }],

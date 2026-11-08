@@ -6,7 +6,9 @@ import { z } from 'zod';
 // What the Mailworthy addon knows about the exporter's guild, copied 1:1 by
 // LedgerLink from `MailworthyAPI.v1.GetGuildExport()`: the guild template
 // (profession → master), Mailworthy peers, and guild-rule item counts per
-// character of the exporter's account. EVERY object is `.strict()` — a
+// sending character — the exporter's account AND guildmates whose totals
+// Mailworthy relayed in the guild hellos (delta 2026-11-08), each with the
+// `asOf` its own client computed them. EVERY object is `.strict()` — a
 // per-unit `cap` (never sent) rejects the whole string, like any unknown key.
 // Absent block / template / peers / givers = no opinion; nothing is cleared.
 // ============================================================
@@ -17,8 +19,11 @@ export const ADDON_MAILWORTHY_NAME_MAX = 48;
 export const ADDON_MAILWORTHY_RULES_MAX = 8;
 /** In-game guild member cap. */
 export const ADDON_MAILWORTHY_PEERS_MAX = 1000;
-/** Characters per account. */
-export const ADDON_MAILWORTHY_GIVERS_MAX = 50;
+/**
+ * Sending characters per export: the exporter's account plus guildmates'
+ * totals relayed in game (delta 2026-11-08 raised 50 → 200).
+ */
+export const ADDON_MAILWORTHY_GIVERS_MAX = 200;
 /** 30-day window + clock slack. */
 export const ADDON_MAILWORTHY_DAYS_MAX = 35;
 
@@ -64,23 +69,51 @@ export const AddonMailworthyDaySchema = z.object({
 }).strict();
 export type AddonMailworthyDay = z.infer<typeof AddonMailworthyDaySchema>;
 
-/** One SENDING character of the exporter's account. */
+/**
+ * One SENDING character — of the exporter's account, or a guildmate whose
+ * totals Mailworthy relayed in the guild hellos (delta 2026-11-08).
+ */
 export const AddonMailworthyGiverSchema = z.object({
     characterName: mwName,
     /** Guild-rule item units since `countingSince`. */
     itemsAllTime: count,
     countingSince: unixSeconds,
+    /**
+     * When the giver's OWN client computed these totals (unix seconds,
+     * ≤ the block's `generatedAt`; own characters = `generatedAt`). Dedupe:
+     * newest `asOf` wins, a tie goes to the newer `generatedAt`.
+     */
+    asOf: unixSeconds,
     /** Non-zero days in the last 35, ascending. */
     days: z.array(AddonMailworthyDaySchema).max(ADDON_MAILWORTHY_DAYS_MAX),
 }).strict();
 export type AddonMailworthyGiver = z.infer<typeof AddonMailworthyGiverSchema>;
 
-/** `char` `data.mailworthy` — optional, additive (ROK-2148). */
+/** A relayed total cannot postdate the export that carries it. */
+function refineGiverAsOf(
+    block: { generatedAt: number; givers?: { asOf: number }[] | undefined },
+    ctx: z.RefinementCtx,
+): void {
+    block.givers?.forEach((g, i) => {
+        if (g.asOf <= block.generatedAt) return;
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['givers', i, 'asOf'],
+            message: 'giver asOf must be ≤ generatedAt',
+        });
+    });
+}
+
+/**
+ * `char` `data.mailworthy` — optional, additive (ROK-2148). `template.rules`
+ * may be `[]` (a template published with no rules); an absent `template`
+ * means no opinion.
+ */
 export const AddonMailworthySchema = z.object({
     /** Mailworthy `GetServerTime()` at the API call. */
     generatedAt: unixSeconds,
     template: AddonMailworthyTemplateSchema.optional(),
     peers: z.array(AddonMailworthyPeerSchema).max(ADDON_MAILWORTHY_PEERS_MAX).optional(),
     givers: z.array(AddonMailworthyGiverSchema).max(ADDON_MAILWORTHY_GIVERS_MAX).optional(),
-}).strict();
+}).strict().superRefine(refineGiverAsOf);
 export type AddonMailworthy = z.infer<typeof AddonMailworthySchema>;
