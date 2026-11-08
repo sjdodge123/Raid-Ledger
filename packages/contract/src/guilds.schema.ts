@@ -173,8 +173,17 @@ export const GuildMemberPresenceSchema = z
 export type GuildMemberPresence = z.infer<typeof GuildMemberPresenceSchema>;
 
 /** One roster row. Unlinked rows have `characterId: null` and no role. */
-/** ROK-2128 (FLAG 3) — how a roster row's RL link was made (staff-only). */
-export const GuildMemberLinkViaSchema = z.enum(['roster_pick', 'import']);
+/**
+ * ROK-2128 (FLAG 3) — how a roster row's RL link was made (staff-only).
+ * ROK-2115 (Ruling 6, additive): `armory` — linked only by the Blizzard
+ * character id of an Armory-imported character (self-asserted, no LedgerLink
+ * GUID proof) and not picked from the roster.
+ */
+export const GuildMemberLinkViaSchema = z.enum([
+  'roster_pick',
+  'import',
+  'armory',
+]);
 export type GuildMemberLinkVia = z.infer<typeof GuildMemberLinkViaSchema>;
 
 export const GuildMemberRowSchema = z
@@ -205,7 +214,9 @@ export const GuildMemberRowSchema = z
         /**
          * ROK-2128 (FLAG 3) — how the link was made: `roster_pick` when the
          * player claimed the row from the guild roster pick list (a
-         * self-asserted link), `import` otherwise. Optional (additive).
+         * self-asserted link), `armory` when linked only by an Armory
+         * import's Blizzard id (ROK-2115), `import` otherwise. Optional
+         * (additive).
          */
         linkVia: GuildMemberLinkViaSchema.optional(),
       })
