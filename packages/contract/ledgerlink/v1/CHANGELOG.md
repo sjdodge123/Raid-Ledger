@@ -3,6 +3,27 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-08 — guild in-game MOTD + Guild Information — **additive**
+
+- The `guild` section's `data` gains two **optional** keys (ROK-2137, guild
+  text sync P1; stays v1): `motd` (≤ 255) — the in-game Message of the Day —
+  and `infoText` (≤ 499) — the in-game Guild Information, both verbatim
+  (colour codes and newlines kept). `""` reports an empty box; an absent key
+  means "no opinion" and never clears what the server stored. Both are
+  guild-visible text; officer notes are still never read or sent.
+- `schema.json` regenerated (two optional string properties). New golden
+  fixture `guild-ingame-text` (one page, three anonymised members, both keys
+  set). Every existing fixture unchanged byte-for-byte.
+- The server stores the last reported text per guild (control characters the
+  hub's save rejects stripped) stamped with min(`snapshotAt`, server receive
+  time), plus the exporter's `who.fullName`. A field moves only when its text
+  CHANGED and the snapshot is not older than the stored one, so re-exporting
+  the same text keeps the stamp; an older snapshot never overwrites a newer
+  report, and an export the roster-replace guard flags stores no text. A server
+  without this change rejects either key with 422 `INVALID_PAYLOAD` (strict
+  keys), so the addon must not send them until a server carrying this change
+  is deployed.
+
 ## v1 — 2026-11-06 — rppvp ruleset — **additive**
 
 - `who.ruleset` gains `rppvp` (RP-PvP realms, ROK-2101); stays v1. Every

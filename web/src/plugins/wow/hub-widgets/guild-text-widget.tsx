@@ -7,13 +7,16 @@
  * empty. Default export so the registration can `React.lazy` it.
  */
 import { Suspense, lazy, useEffect, type JSX } from 'react';
-import type { GuildIngameText, GuildIngameTextField, IngameTextFieldKey } from '@raid-ledger/contract';
+import type {
+    GuildIngameGameReport, GuildIngameText, GuildIngameTextField, IngameTextFieldKey,
+} from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { CopyButton } from '../../../components/ui/CopyButton';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { useGuildIngameText } from '../hooks/use-guild-ingame-text';
 import { useGuildTextDialog } from './guild-text-dialog-store';
 import { FIELD_LABELS, updatedLine } from './guild-text.helpers';
+import { GameTextChange } from './guild-text-game-notice';
 
 const LazyGuildTextDialog = lazy(() => import('./guild-text-dialog'));
 
@@ -21,9 +24,16 @@ export const GUILD_TEXT_EMPTY_HINT = 'Add the guild Message of the Day and Guild
 export const COPY_LABEL = 'Copy for in-game';
 export const NOT_SET_COPY = 'Not set';
 
-interface BlockProps { field: IngameTextFieldKey; value: GuildIngameTextField | null; canEdit: boolean }
+interface BlockProps {
+    guildId: number;
+    field: IngameTextFieldKey;
+    value: GuildIngameTextField | null;
+    canEdit: boolean;
+    /** ROK-2137 — editors only: what the game last reported for this field. */
+    report: GuildIngameGameReport | null | undefined;
+}
 
-function TextBlock({ field, value, canEdit }: BlockProps): JSX.Element | null {
+function TextBlock({ guildId, field, value, canEdit, report }: BlockProps): JSX.Element | null {
     if (value === null && !canEdit) return null;
     return (
         <div data-testid={`guild-text-${field}`} className="flex flex-col gap-1.5">
@@ -31,6 +41,7 @@ function TextBlock({ field, value, canEdit }: BlockProps): JSX.Element | null {
                 <p className="text-xs text-muted">{FIELD_LABELS[field]}</p>
                 {value !== null && <CopyButton text={value.text} label={COPY_LABEL} />}
             </div>
+            {canEdit && <GameTextChange guildId={guildId} field={field} report={report} baseUpdatedAt={value?.updatedAt ?? null} />}
             {value === null ? (
                 <p className="text-sm text-muted">{NOT_SET_COPY}</p>
             ) : (
@@ -72,13 +83,18 @@ function useCloseDialogOnUnmount(guildId: number): void {
 }
 
 function CardBody({ data }: { data: GuildIngameText }): JSX.Element {
-    const { motd, info, viewer } = data;
+    const { guildId, motd, info, viewer, game } = data;
     return (
         <div className="flex flex-col gap-4" data-testid="guild-text-card">
-            <TextBlock field="motd" value={motd} canEdit={viewer.canEdit} />
-            <TextBlock field="info" value={info} canEdit={viewer.canEdit} />
+            <TextBlock guildId={guildId} field="motd" value={motd} canEdit={viewer.canEdit} report={game?.motd} />
+            <TextBlock guildId={guildId} field="info" value={info} canEdit={viewer.canEdit} report={game?.info} />
         </div>
     );
+}
+
+/** ROK-2137 — an editor sees the card body (with its notice) even while the hub text is empty. */
+function changedInGame(data: GuildIngameText): boolean {
+    return data.game?.motd?.changedInGame === true || data.game?.info?.changedInGame === true;
 }
 
 export default function GuildTextWidget({ page }: HubWidgetCtx): JSX.Element | null {
@@ -93,7 +109,7 @@ export default function GuildTextWidget({ page }: HubWidgetCtx): JSX.Element | n
     return (
         <>
             {viewer.canEdit && <DialogMount guildId={guildId} />}
-            {empty ? <EditorHint guildId={guildId} /> : <CardBody data={data} />}
+            {empty && !changedInGame(data) ? <EditorHint guildId={guildId} /> : <CardBody data={data} />}
         </>
     );
 }
