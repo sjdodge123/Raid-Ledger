@@ -3,6 +3,33 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-09 — `char` `mailworthy` guild contributions block — **additive**
+
+- The `char` section's `data` gains one **optional** key, `mailworthy`
+  (ROK-2148; stays v1): what the Mailworthy addon knows about the exporter's
+  guild — `generatedAt`, the guild template `{ rev, author, rules[] ≤ 8 of
+  { professionSkillLineId, recipientName } }` (per-unit caps are never sent),
+  `peers[] ≤ 1000 { name, lastSeenAt }` (guild members whose Mailworthy said
+  hello in the last 60 days) and `givers[] ≤ 50 { characterName,
+  itemsAllTime, countingSince, days[] ≤ 35 { day, items } }` — guild-rule
+  item units sent per character of the exporter's account, per UTC day.
+  Every object is `.strict()`; names ≤ 48.
+- Semantics: an absent block, template, `peers` or `givers` = no opinion;
+  nothing stored is cleared. Account-wide data exported by several alts is
+  deduped server-side (template by `rev`, peers by name, givers by sending
+  character + `generatedAt`). Item counts are stack units of guild-rule mail
+  only; mail to one of the sender's own characters never counts.
+- The decoded fixture view carries the block as `payload.mailworthy`, beside
+  the frozen snapshot `payload.data` (it is guild-level data, never stored in
+  the char snapshot).
+- New golden fixtures `char-mailworthy`, `char-mailworthy-template-only`;
+  invalid fixtures `invalid/char-mailworthy-rule-cap`,
+  `invalid/char-mailworthy-too-many-rules`. Every existing fixture
+  unchanged byte-for-byte. `schema.json` regenerated.
+- A server without this change rejects a char export carrying `mailworthy`
+  with 422 `INVALID_PAYLOAD`. LedgerLink must not emit it until a server
+  carrying this change is deployed.
+
 ## v1 — 2026-11-08 — `char` `quests.completed` optional — **additive**
 
 - `data.quests.completed` becomes optional (ROK-2125, operator ruling

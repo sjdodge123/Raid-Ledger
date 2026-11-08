@@ -84,6 +84,8 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 - `talents`: `{ configId?, importString? (≤ 2048), nodes[] ≤ 200: { nodeId, rank, entryId?, name? (≤ 64), spellId? (int ≥ 1), maxRanks? (1–255), tree? (0–2), row? (0–9), col? (0–3), posX?, posY? } }`
 - `lockouts[]` ≤ 100: `{ name ≤ 128, instanceId, difficultyId, resetAt (unix s), killed, total }`
 - `quests?` (additive, ROK-1742): `{ completed[]? ≤ 10 000 questIds, inProgress[] ≤ 35: { questId, title? ≤ 128, objectives[]? ≤ 10: { text ≤ 128, done: boolean, have?, need? } }, completedTruncated?: boolean }`. When `quests` is present `inProgress` is required (empty is fine). `completed` is optional since ROK-2125 (additive): **absent** = no opinion — Raid Ledger takes the completed list from the Forever Armory `quests/completed` sync, or keeps the list it last stored; it is never read as "none completed". An **empty** `completed` array still means "this character has completed no quests". The addon must not omit `completed` until a server carrying ROK-2125 is deployed (an older server rejects it with `INVALID_PAYLOAD`). `completed` = `GetAllCompletedQuestIDs()`; `have`/`need` = `numFulfilled`/`numRequired`. A character with more than `ADDON_QUESTS_COMPLETED_MAX` completed quests is not rejected by the addon: it sends the first 10 000 ids ascending and sets `completedTruncated: true` (absent = `false`).
+- `mailworthy?` (additive, ROK-2148): the Mailworthy addon's view of the exporter's guild, copied 1:1 from `MailworthyAPI.v1.GetGuildExport()` — see §3.1. Absent = no opinion (no Mailworthy, nothing known, or no guild). LedgerLink must not emit it until a server carrying ROK-2148 is deployed (an older server rejects it with `INVALID_PAYLOAD`).
+
 
 **Talent node position (ROK-1742).** Forever has one `C_Traits` tree per
 class, laid out like vanilla: **3 sub-trees side by side × 4 columns** and
@@ -110,6 +112,16 @@ and may recompute the grid with this rule without a wire change.
 
 **`raid`** — `data`:
 - `pulls[]` ≤ 200: `{ encounterId, name ≤ 128, difficultyId, groupSize 1–40, instanceId?, startAt, endAt (unix s), success: boolean, roster[] ≤ 40 GUIDs, rosterNames[] ≤ 40 }`
+
+### 3.1 Mailworthy block (`char` `data.mailworthy`, ROK-2148)
+
+`{ generatedAt, template?: { rev, author, rules[] ≤ 8: { professionSkillLineId, recipientName } }, peers[]? ≤ 1000: { name, lastSeenAt }, givers[]? ≤ 50: { characterName, itemsAllTime, countingSince, days[] ≤ 35: { day, items } } }` — every object `.strict()` (a rule's per-unit `cap` is never sent and rejects the string), names 1–48 chars, times unix seconds.
+
+- `generatedAt` = Mailworthy `GetServerTime()` at the API call. `template.rev` = the author's `GetServerTime()` at publish; `author` = the publishing character (rank 0–1).
+- `peers` = guild members on this guild's roster whose Mailworthy said hello in the last 60 days (`lastSeenAt` = the peer's last hello), newest first.
+- `givers` = this account's characters with a non-zero guild-rule total. **Item count** = the stack units attached to guild-rule mail (20 Linen Cloth in one mail = 20); only mail Mailworthy routed by the guild template counts, and mail to one of the sender's own characters never counts. `days` lists only non-zero UTC days (`floor(serverTime / 86400)`) within the last 35, ascending, unique `day`; `itemsAllTime` counts since `countingSince`.
+- Empty lists are omitted, never `{}`/`[]`-ambiguous. Names are bare in-game names exactly as Mailworthy holds them.
+- Server merge (account-wide data arrives from several alts): template — highest `rev` from a rank 0–1 author on the latest roster wins; peers — keyed by name, latest `lastSeenAt` kept; givers — keyed by sending character, the row moves only when `generatedAt` ≥ the stored one. The server de-duplicates `days` by `day` and clamps `itemsAllTime` up to `sum(days.items)` instead of rejecting.
 
 ## 4. Strict keys (non-negotiable)
 
@@ -200,6 +212,8 @@ payload are unchanged — this only widens what one paste may contain.
 | guild `members` | 2000 | per page and merged | `INVALID_PAYLOAD` |
 | `ADDON_QUESTS_COMPLETED_MAX` | 10 000 | `char` `data.quests.completed` — the one array exempt from the 2000 structural cap; the addon cuts to the first 10 000 ids ascending and sets `quests.completedTruncated: true` | `INVALID_PAYLOAD` |
 | `ADDON_QUESTS_IN_PROGRESS_MAX` | 35 | `char` `data.quests.inProgress` | `INVALID_PAYLOAD` |
+| `ADDON_MAILWORTHY_RULES_MAX` / `_PEERS_MAX` / `_GIVERS_MAX` / `_DAYS_MAX` | 8 / 1000 / 50 / 35 | `char` `data.mailworthy` `template.rules` / `peers` / `givers` / `givers[].days` (ROK-2148) | `INVALID_PAYLOAD` |
+| `ADDON_MAILWORTHY_NAME_MAX` | 48 | every `data.mailworthy` name | `INVALID_PAYLOAD` |
 | `ADDON_QUEST_OBJECTIVES_MAX` | 10 | objectives per in-progress quest | `INVALID_PAYLOAD` |
 | export clock window (server-internal, `addon-import.clock.ts`) | +1 day / −365 days | every `exportedAt`, plus guild `data.snapshotAt`, checked against the **server** clock at decode time; raid `pulls[].startAt`/`endAt` get only the +1 day future bound (old pull history is legitimate). Export strings are unsigned, so this stops a far-future snapshot from locking a guild against honest imports (ROK-1756) | `INVALID_PAYLOAD` |
 | structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000 (except `quests.completed`, above), any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |
