@@ -735,6 +735,14 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "motd": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "infoText": {
+              "type": "string",
+              "maxLength": 499
             }
           },
           "required": [
