@@ -369,9 +369,13 @@ describe('truncation (completedTruncated, ROK-1758)', () => {
     expect(
       truncationCutoff({ completed: [5, 90, 12], completedTruncated: true }),
     ).toBe(90);
-    expect(
-      truncationCutoff({ completed: [], completedTruncated: true }),
-    ).toBeUndefined();
+    expect(truncationCutoff({ completed: [] })).toBeUndefined();
+  });
+
+  it('an empty truncated list (completed unknown, ROK-2125) cuts off at 0: every id is unknown', () => {
+    expect(truncationCutoff({ completed: [], completedTruncated: true })).toBe(
+      0,
+    );
   });
 
   it('a step above the cutoff with no row is unknown, not needed', () => {

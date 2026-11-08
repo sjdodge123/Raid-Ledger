@@ -8,9 +8,11 @@
  *   addon list only when there is no Armory list. Never a union (OQ-5): it
  *   would resurrect abandoned/reset quests and mix the capped addon list.
  * - ROK-2125: an addon `quests` slice WITHOUT `completed` has no opinion on
- *   the completed list — only the Armory can supply it; with no Armory list
- *   the result is null (unknown), never "none completed". An explicitly
- *   EMPTY addon list keeps its meaning: "this character completed nothing".
+ *   the completed list — only the Armory can supply it. With no Armory list
+ *   the log stays visible and the completed list is UNKNOWN: an empty list
+ *   flagged truncated (see `truncationCutoff`: every id unknown), never
+ *   "none completed". An explicitly EMPTY addon list keeps its meaning:
+ *   "this character completed nothing".
  * - in-progress log: always the addon's — Blizzard serves no quest log, so an
  *   Armory sync must not blank it.
  *
@@ -71,6 +73,19 @@ function addonFact(
   return { value, source: 'addon', asOf: addon.capturedAt };
 }
 
+/**
+ * ROK-2125: a log-only slice with no completed list anywhere — the log as a
+ * fact and the completed list unknown (empty + truncated). Empty log → null.
+ */
+function unknownCompletedFact(
+  addon: AddonQuestInput | null,
+  slice: AddonQuests | undefined,
+): Fact<Completed> | null {
+  if (!addon || !slice || slice.inProgress.length === 0) return null;
+  const value: Completed = { completed: [], completedTruncated: true };
+  return { value, source: 'addon', asOf: addon.capturedAt };
+}
+
 /** The Armory column as a fact; malformed jsonb → absent (AC5). */
 function armoryFact(raw: unknown): Fact<Completed> | null {
   const parsed = ArmoryQuestsSchema.safeParse(raw);
@@ -84,14 +99,18 @@ function armoryFact(raw: unknown): Fact<Completed> | null {
 
 /**
  * Combine the two sources (ROK-2109 D4, ROK-2138 D10).
- * @returns null when neither source has usable quest data.
+ * @returns null when neither source has usable quest data (no completed
+ *   list and no in-progress log).
  */
 export function effectiveQuests(
   addon: AddonQuestInput | null,
   armoryRaw: unknown,
 ): EffectiveQuests | null {
   const slice = addon ? readQuestsSlice(addon.data) : undefined;
-  const winner = armoryFact(armoryRaw) ?? addonFact(addon, slice);
+  const winner =
+    armoryFact(armoryRaw) ??
+    addonFact(addon, slice) ??
+    unknownCompletedFact(addon, slice);
   if (!winner || !winner.asOf) return null;
   const { completed, completedTruncated } = winner.value;
   return {
