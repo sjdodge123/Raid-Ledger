@@ -164,9 +164,13 @@ describe('ROK-2137 — LedgerLink reports the in-game MOTD / Guild Info', () => 
     });
   });
 
-  it('an export without the keys creates no profile row', async () => {
+  it('an export without the keys reports nothing', async () => {
     expect(await apply(fixture('guild-1-page'))).toEqual([200, 'applied']);
-    expect(await profile()).toBeUndefined();
+    const row = await profile();
+    expect([
+      row?.gameMotdReportedAt ?? null,
+      row?.gameInfoReportedAt ?? null,
+    ]).toEqual([null, null]);
   });
 
   it('an absent key keeps the stored text; a present one updates it', async () => {
