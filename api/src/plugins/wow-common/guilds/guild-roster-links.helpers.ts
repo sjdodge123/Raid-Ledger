@@ -6,6 +6,7 @@ import {
   ROSTER_CLAIMED_ACTION,
 } from '../../../characters/characters-roster-claim.helpers';
 import { GUID_AUDIT_ENTITY } from '../addon-import/addon-import.guid-audit';
+import { LINK_AUDIT_ACTIONS } from './guild-delegation.helpers';
 import type { RawRosterRow, RosterLinks } from './guild-roster.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -13,16 +14,17 @@ type Db = PostgresJsDatabase<typeof schema>;
 const { characters: c, users, activityLog: al } = schema;
 
 /**
- * ROK-1794 (review): since when the character's GUID link is the one a member
- * grant can confirm — its creation or its latest GUID claim (first pin or
- * repin), whichever is later. `hasConfirmedMemberGrant` honours a grant
+ * ROK-1794 (review): since when the character's link is the one a member
+ * grant can confirm — its creation, its latest GUID claim (first pin, repin
+ * or admin reassign) or (ROK-2115) its latest `external_id_linked`,
+ * whichever is later. `hasConfirmedMemberGrant` honours a grant
  * exactly when it was made at or after this moment (character created ≤
  * grant, no claim after the grant): the same "confirmed link" time.
  */
 export function linkConfirmedAt() {
   const lastClaim = sql`(select max(${al.createdAt}) from ${al} where ${and(
     eq(al.entityType, GUID_AUDIT_ENTITY),
-    eq(al.action, 'addon_guid_claimed'),
+    inArray(al.action, [...LINK_AUDIT_ACTIONS]),
     sql`${al.metadata}->>'characterId' = ${c.id}::text`,
   )})`;
   return sql<Date>`greatest(${c.createdAt}, ${lastClaim})`.mapWith(c.createdAt);

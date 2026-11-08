@@ -1,7 +1,8 @@
-import { and, eq, gt, inArray, lte, notExists, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, lte, notExists, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { GUID_AUDIT_ENTITY } from '../addon-import/addon-import.guid-audit';
+import { EXTERNAL_ID_LINKED_ACTION } from '../addon-import/external-id.audit';
 import type { LinkedMemberRow } from './guild-membership.helpers';
 
 /**
@@ -22,9 +23,16 @@ const {
   activityLog: al,
 } = schema;
 
+/** The audits that mark a fresh link: a GUID claim (first pin, repin or
+ * admin reassign) or, ROK-2115 Ruling 5, a Blizzard-id link. */
+export const LINK_AUDIT_ACTIONS = [
+  'addon_guid_claimed',
+  EXTERNAL_ID_LINKED_ACTION,
+] as const;
+
 /**
- * A GUID claim (first pin or repin) by the linking character AFTER the grant
- * was made: the link is no longer the one staff confirmed.
+ * A fresh link (GUID claim or Blizzard-id link) by the linking character
+ * AFTER the grant was made: the link is no longer the one staff confirmed.
  */
 function claimedSinceGrant(db: Db) {
   return db
@@ -33,30 +41,37 @@ function claimedSinceGrant(db: Db) {
     .where(
       and(
         eq(al.entityType, GUID_AUDIT_ENTITY),
-        eq(al.action, 'addon_guid_claimed'),
+        inArray(al.action, [...LINK_AUDIT_ACTIONS]),
         sql`${al.metadata}->>'characterId' = ${c.id}::text`,
         gt(al.createdAt, ge.createdAt),
       ),
     );
 }
 
-/** The user's own characters that link to the granted member row. */
+/**
+ * The user's own character that links to the granted member row — the
+ * (member, character) pairs `findLinkedMemberRows` already resolved through
+ * THE link predicate (GUID or, ROK-2115, Blizzard id); never re-derived here.
+ */
 function linkingCharacter(rows: LinkedMemberRow[]) {
-  const ids = rows.map((r) => r.characterId);
-  return and(eq(c.addonGuid, gm.guid), inArray(c.id, ids));
+  return or(
+    ...rows.map((r) => and(eq(gm.id, r.memberId), eq(c.id, r.characterId))),
+  );
 }
 
 /**
  * A member-kind grant applies only to the link staff saw when granting: the
- * linking character existed at grant time and has claimed no GUID since. A
- * character created, or repinned onto the member's GUID, afterwards gets no
- * delegation (AC5) — staff re-grant to confirm the new link.
+ * linking character existed at grant time and has made no fresh link since
+ * (GUID claim or Blizzard-id link). A character created, repinned or
+ * Blizzard-linked onto the member afterwards gets no delegation (AC5) —
+ * staff re-grant to confirm the new link.
  */
 export async function hasConfirmedMemberGrant(
   db: Db,
   guildId: number,
   rows: LinkedMemberRow[],
 ): Promise<boolean> {
+  if (rows.length === 0) return false;
   const grants = await db
     .select({ id: ge.id })
     .from(ge)
