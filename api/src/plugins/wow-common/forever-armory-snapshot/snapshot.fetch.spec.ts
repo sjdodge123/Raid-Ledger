@@ -66,7 +66,12 @@ function makeDb(): { mock: MockDb; db: Db } {
   return { mock, db: mock as unknown as Db };
 }
 
-const target = { name: 'Thrall Stormcaller', region: 'us', gameId: 7, now: NOW };
+const target = {
+  name: 'Thrall Stormcaller',
+  region: 'us',
+  gameId: 7,
+  now: NOW,
+};
 
 describe('fetchForeverArmorySnapshot', () => {
   it('maps a fetched profile to a snapshot without fetching quests', async () => {
@@ -105,7 +110,9 @@ describe('fetchForeverArmorySnapshot', () => {
     const out = await fetchForeverArmorySnapshot(makeDb().db, adapter, target);
     expect(out.ok && out.snapshot.blizzardCharacterId).toBeNull();
   });
+});
 
+describe('fetchForeverArmorySnapshot — failures', () => {
   it('classifies a 404 as not_found', async () => {
     const { adapter, fetchProfile } = makeAdapter();
     fetchProfile.mockRejectedValue(new NotFoundException());

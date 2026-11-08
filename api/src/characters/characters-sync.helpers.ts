@@ -51,6 +51,37 @@ async function fetchRealmProfile(
   return { ...fetched, realm: fetched.realm ?? realm };
 }
 
+/** The requested (not fetched) character address for a follow-up call. */
+interface SpecRequest {
+  name: string;
+  realm: string | null;
+  region: string;
+  nsArg: string | undefined;
+}
+
+/**
+ * Infer spec/role from the specialization call (filling only what the
+ * profile lacks) and return the talents; null when the class is unknown.
+ */
+async function fillSpecialization(
+  adapter: CharacterSyncAdapter,
+  profile: EnrichedProfile['profile'],
+  req: SpecRequest,
+): Promise<unknown> {
+  if (!profile.class) return null;
+  const { name, realm, region, nsArg } = req;
+  const inferred = await adapter.fetchSpecialization(
+    name,
+    realm,
+    region,
+    profile.class,
+    nsArg,
+  );
+  if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
+  if (!profile.role && inferred.role) profile.role = inferred.role;
+  return inferred.talents ?? null;
+}
+
 /** Options for {@link fetchFullProfile}. */
 export interface FetchFullProfileOptions {
   /**
@@ -104,21 +135,12 @@ export async function fetchFullProfile(
 ): Promise<EnrichedProfile> {
   const nsArg = apiNamespacePrefix ?? undefined;
   const profile = await fetchRealmProfile(adapter, name, realm, region, nsArg);
-
-  let talents: unknown = null;
-  if (profile.class) {
-    const inferred = await adapter.fetchSpecialization(
-      name,
-      realm,
-      region,
-      profile.class,
-      nsArg,
-    );
-    if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
-    if (!profile.role && inferred.role) profile.role = inferred.role;
-    talents = inferred.talents ?? null;
-  }
-
+  const talents = await fillSpecialization(adapter, profile, {
+    name,
+    realm,
+    region,
+    nsArg,
+  });
   const includeQuests = options.quests ?? true;
   const extras = await fetchParallelExtras(
     adapter,
