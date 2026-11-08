@@ -126,6 +126,10 @@ export const characters = pgTable(
       .where(sql`${table.addonGuid} IS NOT NULL`),
     // ROK-1157: FK backing index (parent delete / RI scan)
     gameIdIndex: index('idx_characters_game_id').on(table.gameId),
+    /** ROK-2115: the Blizzard-id link arm (non-unique; Ruling 4). */
+    externalIdIndex: index('idx_characters_game_region_external_id')
+      .on(table.gameId, table.region, table.externalId)
+      .where(sql`${table.externalId} IS NOT NULL`),
   }),
 );
 

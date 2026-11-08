@@ -66,6 +66,10 @@ export const guildMembers = pgTable(
     // ROK-1157: FK backing indexes — the partial unique above does not count.
     index('idx_guild_members_guild_id').on(table.guildId),
     index('idx_guild_members_captured_by_user_id').on(table.capturedByUserId),
+    /** ROK-2115: the Blizzard-id link arm (non-unique; Ruling 4). */
+    index('idx_guild_members_guild_blizzard_id')
+      .on(table.guildId, table.blizzardCharacterId)
+      .where(sql`${table.blizzardCharacterId} IS NOT NULL`),
   ],
 );
 
