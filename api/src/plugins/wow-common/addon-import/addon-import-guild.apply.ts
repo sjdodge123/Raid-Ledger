@@ -23,10 +23,7 @@ import {
 } from './addon-import-apply.types';
 
 /** Moved to the members module (ROK-2138 L3); re-exported for callers. */
-export {
-  dedupeMembers,
-  memberValues,
-} from './addon-import-guild.members';
+export { dedupeMembers, memberValues } from './addon-import-guild.members';
 
 /**
  * ROK-1724 §4.3 Apply — section `guild`. Shared, self-reported rows: one
