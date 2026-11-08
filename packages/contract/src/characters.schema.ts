@@ -200,6 +200,8 @@ export const CharacterSchema = z.object({
     isMain: z.boolean(),
     /** ROK-1756: true when the character is bound to a LedgerLink GUID (the GUID itself is never exposed). */
     addonLinked: z.boolean().optional(),
+    /** ROK-2128: true when the character was claimed from a guild roster pick (detail + claim responses only). */
+    rosterClaimed: z.boolean().optional(),
     itemLevel: z.number().int().nullable(),
     externalId: z.string().max(255).nullable(),
     avatarUrl: z.string().url().nullable(),

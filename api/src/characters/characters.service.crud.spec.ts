@@ -655,4 +655,24 @@ describe('CharactersService — crud', () => {
       },
     );
   });
+
+  describe('update — owner-conditional write', () => {
+    it('404s when an admin moved the row after the ownership read (ROK-2128 P1)', async () => {
+      const limit = jest
+        .fn()
+        .mockResolvedValueOnce([mockCharacter])
+        .mockResolvedValueOnce([{ slug: 'world-of-warcraft' }]);
+      mockDb.select.mockReturnValue({
+        from: () => ({ where: () => ({ limit }) }),
+      });
+      const where = jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([]),
+      });
+      mockDb.update.mockReturnValue({ set: () => ({ where }) });
+      await expect(
+        service.update(1, 'char-uuid-1', { spec: 'Elemental' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(where).toHaveBeenCalledTimes(1);
+    });
+  });
 });

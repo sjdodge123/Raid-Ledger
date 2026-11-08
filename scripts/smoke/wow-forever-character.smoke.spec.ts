@@ -17,6 +17,7 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPost, getAdminToken, getInviteeToken, pollForCondition } from './api-helpers';
 import { isMobile } from './helpers';
+import { rosterCandidatesSettled, selectAddMethod } from './add-character-method';
 
 const GAME_NAME = 'World of Warcraft: Forever';
 const GAME_SLUG = 'world-of-warcraft-forever';
@@ -90,8 +91,12 @@ async function openForeverAdd(page: Page): Promise<Form> {
     await game.click();
     await game.pressSequentially(GAME_NAME, { delay: 20 });
     await settled;
+    const candidates = rosterCandidatesSettled(page);
     await page.getByRole('listbox').getByRole('option', { name: GAME_NAME, exact: true }).click();
     await expect(game).toHaveValue(GAME_NAME);
+    // ROK-2128: the dialog may open on "Guild roster" (other specs leave unlinked Forever members) — pick Manual.
+    await candidates;
+    await selectAddMethod(dialog, 'Manual');
     const form = formIn(dialog);
     await expect(form.first, 'picking Forever should show the First name field').toBeVisible();
     await expect(dialog.getByRole('textbox', { name: 'Name', exact: true }), 'Forever replaces the Name field').toHaveCount(0);

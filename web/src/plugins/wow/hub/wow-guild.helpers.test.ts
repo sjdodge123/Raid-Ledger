@@ -20,6 +20,16 @@ describe('memberOptionLabel / isUnlinkedRow (ROK-1794 review)', () => {
         expect(isUnlinkedRow(m)).toBe(false);
     });
 
+    it('marks a link the player picked from the guild roster (ROK-2128 FLAG 3)', () => {
+        const m = row({ memberId: 4, name: 'Brisa', characterId: LINKED_ID, linkedAccount: { username: 'brisa-rl', linkedSince: '2026-10-14T12:00:00.000Z', linkVia: 'roster_pick' } });
+        expect(memberOptionLabel(m)).toMatch(/^Brisa — Guild Master · linked to brisa-rl since (14 Oct 2026|Oct 14, 2026) · picked from roster$/);
+    });
+
+    it('adds no marker for an addon-import link', () => {
+        const m = row({ memberId: 5, name: 'Edda', characterId: LINKED_ID, linkedAccount: { username: 'edda-rl', linkedSince: '2026-10-14T12:00:00.000Z', linkVia: 'import' } });
+        expect(memberOptionLabel(m)).not.toContain('picked from roster');
+    });
+
     it('flags a row no RL account owns', () => {
         const m = row({ memberId: 2, name: 'Corvin', rankIndex: 2, rankName: 'Veteran' });
         expect(memberOptionLabel(m)).toBe('Corvin — Veteran · not linked to an account');

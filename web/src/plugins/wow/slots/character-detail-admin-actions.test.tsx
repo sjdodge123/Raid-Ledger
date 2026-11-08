@@ -27,11 +27,13 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 
 const UNLINK_URL = 'http://localhost:3000/admin/plugins/wow/characters/c1/unlink';
 const BUTTON = { name: /Unlink character/ };
+const OWNER_BUTTON = { name: /Change owner/ };
 
-function setCharacter(addonLinked: boolean | undefined) {
+function setCharacter(addonLinked: boolean | undefined, rosterClaimed?: boolean) {
     detail.character = {
         id: 'c1', userId: 5, gameId: 7, name: 'Squatter', region: 'us', ruleset: 'normal', gameVariant: null,
         class: 'Paladin', level: 60, lastSyncedAt: null, equipment: null, avatarUrl: null, isMain: false, addonLinked,
+        ...(rosterClaimed === undefined ? {} : { rosterClaimed }),
     } as unknown as CharacterDto;
 }
 
@@ -70,6 +72,7 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
         renderPage();
         expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
         expect(screen.queryByRole('button', BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', OWNER_BUTTON)).toBeNull();
     });
 
     it('asks for confirmation before calling the API, then deletes, toasts and navigates away', async () => {
@@ -110,5 +113,100 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
         expect(toast.success).not.toHaveBeenCalled();
         expect(screen.queryByText('Owner profile')).toBeNull();
+    });
+});
+
+describe('CharacterDetailAdminActions visibility (ROK-2128)', () => {
+    beforeEach(() => { activateWowPlugin(); });
+
+    it('ROK-2128: hides both actions from an admin when the character is neither addon-linked nor roster-claimed', () => {
+        detail.role = 'admin'; setCharacter(false, false);
+        renderPage();
+        expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', OWNER_BUTTON)).toBeNull();
+    });
+
+    it('ROK-2128: shows Unlink and Change owner to an admin on a roster-claimed character without a GUID', () => {
+        detail.role = 'admin'; setCharacter(false, true);
+        renderPage();
+        expect(screen.getByRole('button', BUTTON)).toBeInTheDocument();
+        expect(screen.getByRole('button', OWNER_BUTTON)).toBeInTheDocument();
+    });
+
+    it('ROK-2128: hides Change owner and Unlink from a non-admin on a roster-claimed character', () => {
+        detail.role = 'member'; setCharacter(false, true);
+        renderPage();
+        expect(screen.getByRole('heading', { name: 'Squatter' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', OWNER_BUTTON)).toBeNull();
+        expect(screen.queryByRole('button', BUTTON)).toBeNull();
+    });
+});
+
+const API = 'http://localhost:3000';
+const OWNER_URL = `${API}/admin/plugins/wow/characters/c1/owner`;
+
+function mockOwnerApis(status: number, body: Record<string, unknown>) {
+    const bodies: unknown[] = [];
+    server.use(
+        http.get(`${API}/users/5/profile`, () => HttpResponse.json({ data: { id: 5, username: 'rosterA', avatar: null, discordId: null } })),
+        http.get(`${API}/users`, () => HttpResponse.json({
+            data: [{ id: 9, username: 'rosterB', avatar: null, discordId: null, customAvatarUrl: null }],
+            meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+        })),
+        http.put(OWNER_URL, async ({ request }) => { bodies.push(await request.json()); return HttpResponse.json(body, { status }); }),
+    );
+    return bodies;
+}
+
+async function openAndPick(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', OWNER_BUTTON));
+    expect(await screen.findByText('rosterA')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Assign' })).toBeDisabled();
+    await user.type(screen.getByRole('combobox', { name: /New owner/ }), 'rosterB');
+    await user.click(await screen.findByRole('option', { name: /rosterB/ }));
+}
+
+describe('CharacterChangeOwner (ROK-2128)', () => {
+    beforeEach(() => { activateWowPlugin(); vi.mocked(toast.success).mockClear(); vi.mocked(toast.error).mockClear(); detail.role = 'admin'; });
+
+    it('names both users, sends the picked user id on Assign and toasts the new owner', async () => {
+        setCharacter(false, true);
+        const bodies = mockOwnerApis(200, { characterId: 'c1', fromUserId: 5, toUserId: 9 });
+        const user = userEvent.setup();
+        renderPage();
+        await openAndPick(user);
+        expect(await screen.findByText(/Moves Squatter from rosterA to rosterB/)).toBeInTheDocument();
+        expect(bodies).toHaveLength(0);
+        await user.click(screen.getByRole('button', { name: 'Assign' }));
+        await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Squatter now belongs to rosterB.'));
+        expect(bodies).toEqual([{ userId: 9 }]);
+    });
+
+    it('toasts the API message on 409 and keeps the dialog open', async () => {
+        setCharacter(true, false);
+        const message = 'rosterB already has a character named Squatter.';
+        mockOwnerApis(409, { statusCode: 409, message });
+        const user = userEvent.setup();
+        renderPage();
+        await openAndPick(user);
+        await user.click(screen.getByRole('button', { name: 'Assign' }));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+        expect(toast.success).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Assign' })).toBeInTheDocument();
+    });
+
+    it('Unlink in the Change owner footer hands off to the delete confirm without calling either API', async () => {
+        setCharacter(false, true);
+        const bodies = mockOwnerApis(200, {});
+        const calls = mockUnlink(200, { characterId: 'c1', userId: 5 });
+        const user = userEvent.setup();
+        renderPage();
+        await user.click(screen.getByRole('button', OWNER_BUTTON));
+        await user.click(await screen.findByRole('button', { name: 'Unlink' }));
+        expect(await screen.findByRole('button', { name: 'Delete character' })).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Assign' })).toBeNull());
+        expect(calls).toHaveLength(0);
+        expect(bodies).toHaveLength(0);
     });
 });
