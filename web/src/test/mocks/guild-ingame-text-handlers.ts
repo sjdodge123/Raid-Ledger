@@ -38,8 +38,10 @@ export function guildIngameGameActionHandler(
     action: 'adopt' | 'push',
     reply: GuildIngameText | { status: number },
     gate?: Promise<void>,
+    onBody?: (body: unknown) => void,
 ) {
-    return http.post(`${GUILD_INGAME_TEXT_URL}/${field}/${action}`, async () => {
+    return http.post(`${GUILD_INGAME_TEXT_URL}/${field}/${action}`, async ({ request }) => {
+        onBody?.(await request.json());
         if (gate) await gate;
         return 'status' in reply
             ? HttpResponse.json({ statusCode: reply.status, message: 'No in-game report for this field yet', code: 'NO_GAME_REPORT' }, { status: reply.status })

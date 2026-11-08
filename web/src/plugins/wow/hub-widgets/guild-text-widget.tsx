@@ -41,7 +41,7 @@ function TextBlock({ guildId, field, value, canEdit, report }: BlockProps): JSX.
                 <p className="text-xs text-muted">{FIELD_LABELS[field]}</p>
                 {value !== null && <CopyButton text={value.text} label={COPY_LABEL} />}
             </div>
-            {canEdit && <GameTextChange guildId={guildId} field={field} report={report} />}
+            {canEdit && <GameTextChange guildId={guildId} field={field} report={report} baseUpdatedAt={value?.updatedAt ?? null} />}
             {value === null ? (
                 <p className="text-sm text-muted">{NOT_SET_COPY}</p>
             ) : (

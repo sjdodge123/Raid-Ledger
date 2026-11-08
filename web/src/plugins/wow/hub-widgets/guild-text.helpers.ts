@@ -33,6 +33,7 @@ export const CONTROL_CHAR_COPY = 'Remove tabs and other invisible characters —
 /** ROK-2137 — the editor-only "Changed in game" notice copy. */
 export const GAME_NOTICE_COPY = {
     heading: 'Changed in game',
+    via: 'via',
     empty: 'The in-game box is empty.',
     adopt: 'Use in-game text',
     keep: 'Keep hub text',
@@ -42,6 +43,14 @@ export const GAME_NOTICE_COPY = {
     adoptError: 'Could not use the in-game text',
     keepError: 'Could not keep the hub text',
 } as const;
+
+
+/** "Changed in game · 3 h ago · via Thrall" — the reporter only when known. */
+export function noticeHeading(report: GuildIngameGameReport): string {
+    const parts = [GAME_NOTICE_COPY.heading, syncedAgo(report.gameReportedAt)];
+    if (report.gameReportedBy !== undefined) parts.push(`${GAME_NOTICE_COPY.via} ${report.gameReportedBy}`);
+    return parts.join(' · ');
+}
 
 export const FIELD_KEYS: readonly IngameTextFieldKey[] = ['motd', 'info'];
 

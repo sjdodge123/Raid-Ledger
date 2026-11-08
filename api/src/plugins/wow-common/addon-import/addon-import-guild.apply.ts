@@ -225,6 +225,7 @@ export async function applyGuild(
   const guild = await loadGuild(ctx, payload.data.name);
   const { delta, flag } = await guardExisting(ctx, guild, payload);
   const seenAt = receivedSnapshotAt(payload.data.snapshotAt);
+  const who = payload.who.fullName;
   const guildId = await upsertGuild(ctx, payload, seenAt);
   if (guildId === undefined) {
     const stale = await previewGuild(ctx, payload, pages);
@@ -237,15 +238,7 @@ export async function applyGuild(
     seenAt,
   );
   // A flagged wholesale roster replacement is suspect: keep the stored report.
-  if (!flag) {
-    await applyGuildGameText(
-      ctx,
-      guildId,
-      payload.data,
-      seenAt,
-      payload.who.fullName,
-    );
-  }
+  if (!flag) await applyGuildGameText(ctx, guildId, payload.data, seenAt, who);
   const members = payload.data.members.length;
   await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {

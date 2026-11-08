@@ -14,8 +14,12 @@ Newest first. Every entry states **additive** or **breaking** (see
 - `schema.json` regenerated (two optional string properties). New golden
   fixture `guild-ingame-text` (one page, three anonymised members, both keys
   set). Every existing fixture unchanged byte-for-byte.
-- The server stores the last reported text per guild with the snapshot's
-  `snapshotAt`; an older snapshot never overwrites a newer report. A server
+- The server stores the last reported text per guild (control characters the
+  hub's save rejects stripped) stamped with min(`snapshotAt`, server receive
+  time), plus the exporter's `who.fullName`. A field moves only when its text
+  CHANGED and the snapshot is not older than the stored one, so re-exporting
+  the same text keeps the stamp; an older snapshot never overwrites a newer
+  report, and an export the roster-replace guard flags stores no text. A server
   without this change rejects either key with 422 `INVALID_PAYLOAD` (strict
   keys), so the addon must not send them until a server carrying this change
   is deployed.

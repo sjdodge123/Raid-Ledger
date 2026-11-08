@@ -126,3 +126,24 @@ describe('Changed in game actions (ROK-2137)', () => {
         expect(screen.getByRole('button', { name: GAME_NOTICE_COPY.showLess })).toBeInTheDocument();
     });
 });
+
+describe('Changed in game — review r1', () => {
+    it('Adopt and Push send what the editor saw: the hub token and the report stamp', async () => {
+        const bodies: unknown[] = [];
+        server.use(guildIngameGameActionHandler('motd', 'push', PUSHED, undefined, (b) => bodies.push(b)));
+        await renderCard(CHANGED);
+        fireEvent.click(await screen.findByRole('button', { name: GAME_NOTICE_COPY.keep }));
+        await screen.findByTestId('guild-text-motd-kept');
+        const hub = CHANGED.motd;
+        expect(bodies).toEqual([{ baseUpdatedAt: hub?.updatedAt ?? null, gameReportedAt: buildGameReport().gameReportedAt }]);
+    });
+
+    it('is a polite status (not an alert) and names the exporting character', async () => {
+        const motd = buildGameReport({ gameText: GAME_MOTD, gameReportedBy: 'Thrall' });
+        await renderCard(text({ motd, info: null }));
+        const box = await screen.findByTestId('guild-text-motd-game');
+        expect(box).toHaveAttribute('role', 'status');
+        expect(box).toHaveTextContent(/Changed in game · .+ · via Thrall/);
+    });
+});
+

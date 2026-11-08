@@ -9,14 +9,13 @@
  */
 import { useState, type JSX } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { GuildIngameGameReport, IngameTextFieldKey } from '@raid-ledger/contract';
+import type { GuildIngameGameAction, GuildIngameGameReport, IngameTextFieldKey } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { DialogBanner } from '../../../components/ui/dialog-banner';
 import { toast } from '../../../lib/toast';
-import { syncedAgo } from '../../../lib/synced-ago';
 import type { GuildGameTextAction } from '../api-client';
 import { guildIngameTextKey, useGuildIngameGameAction } from '../hooks/use-guild-ingame-text';
-import { GAME_NOTICE_COPY, conflictTextOf } from './guild-text.helpers';
+import { GAME_NOTICE_COPY, conflictTextOf, noticeHeading } from './guild-text.helpers';
 
 const CLAMP_CHARS = 140;
 const CLAMP_LINES = 3;
@@ -48,8 +47,8 @@ function GameText({ field, text }: { field: IngameTextFieldKey; text: string }):
 function useGameAction(guildId: number, field: IngameTextFieldKey, onKept: () => void) {
     const client = useQueryClient();
     const mutation = useGuildIngameGameAction(guildId, field);
-    const run = (action: GuildGameTextAction): void => {
-        mutation.mutate(action, {
+    const run = (action: GuildGameTextAction, seen: GuildIngameGameAction): void => {
+        mutation.mutate({ action, seen }, {
             onSuccess: () => { if (action === 'push') onKept(); },
             onError: (error) => {
                 const fresh = conflictTextOf(error);
@@ -58,25 +57,29 @@ function useGameAction(guildId: number, field: IngameTextFieldKey, onKept: () =>
             },
         });
     };
-    return { run, pending: mutation.isPending, action: mutation.variables };
+    return { run, pending: mutation.isPending, action: mutation.variables?.action };
 }
 
-interface NoticeProps { field: IngameTextFieldKey; report: GuildIngameGameReport; act: ReturnType<typeof useGameAction> }
+interface NoticeProps {
+    field: IngameTextFieldKey; report: GuildIngameGameReport; baseUpdatedAt: string | null; act: ReturnType<typeof useGameAction>;
+}
 
-function Notice({ field, report, act: { run, pending, action } }: NoticeProps): JSX.Element {
+
+function Notice({ field, report, baseUpdatedAt, act: { run, pending, action } }: NoticeProps): JSX.Element {
+    const seen = { baseUpdatedAt, gameReportedAt: report.gameReportedAt };
     return (
-        <DialogBanner tone="warning" testId={`guild-text-${field}-game`}>
+        <DialogBanner tone="warning" role="status" spacing="" testId={`guild-text-${field}-game`}>
             <div className="flex min-w-0 basis-full flex-col gap-1">
-                <p className="text-xs font-medium">{`${GAME_NOTICE_COPY.heading} · ${syncedAgo(report.gameReportedAt)}`}</p>
+                <p className="text-xs font-medium">{noticeHeading(report)}</p>
                 <GameText field={field} text={report.gameText} />
             </div>
             <div className="flex flex-wrap gap-2">
                 <Button variant="warning-soft" size="sm" data-testid={`guild-text-${field}-adopt`}
-                    disabled={pending} loading={pending && action === 'adopt'} onClick={() => run('adopt')}>
+                    disabled={pending} loading={pending && action === 'adopt'} onClick={() => run('adopt', seen)}>
                     {GAME_NOTICE_COPY.adopt}
                 </Button>
                 <Button variant="secondary" size="sm" data-testid={`guild-text-${field}-keep`}
-                    disabled={pending} loading={pending && action === 'push'} onClick={() => run('push')}>
+                    disabled={pending} loading={pending && action === 'push'} onClick={() => run('push', seen)}>
                     {GAME_NOTICE_COPY.keep}
                 </Button>
             </div>
@@ -84,17 +87,21 @@ function Notice({ field, report, act: { run, pending, action } }: NoticeProps): 
     );
 }
 
-interface ChangeProps { guildId: number; field: IngameTextFieldKey; report: GuildIngameGameReport | null | undefined }
+interface ChangeProps {
+    guildId: number; field: IngameTextFieldKey; report: GuildIngameGameReport | null | undefined;
+    /** The hub field's `updatedAt` the editor sees (null = unset) — Adopt's conflict token. */
+    baseUpdatedAt: string | null;
+}
 
 /**
  * Editors only (the server sends `game` to editors alone): the notice, the
  * post-Push hint, or nothing. Owns the mutation, so its callbacks still run
  * after a success unmounts the notice.
  */
-export function GameTextChange({ guildId, field, report }: ChangeProps): JSX.Element | null {
+export function GameTextChange({ guildId, field, report, baseUpdatedAt }: ChangeProps): JSX.Element | null {
     const [kept, setKept] = useState(false);
     const act = useGameAction(guildId, field, () => setKept(true));
-    if (report?.changedInGame === true) return <Notice field={field} report={report} act={act} />;
+    if (report?.changedInGame === true) return <Notice field={field} report={report} baseUpdatedAt={baseUpdatedAt} act={act} />;
     if (!kept) return null;
     return <p data-testid={`guild-text-${field}-kept`} className="text-xs text-muted">{GAME_NOTICE_COPY.keptHint}</p>;
 }

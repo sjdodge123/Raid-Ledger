@@ -8,9 +8,12 @@
  * microseconds for the next `base*UpdatedAt` — never re-format it via `Date`.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { GuildIngameText, IngameTextFieldKey, PutGuildIngameText } from '@raid-ledger/contract';
+import type { GuildIngameGameAction, GuildIngameText, IngameTextFieldKey, PutGuildIngameText } from '@raid-ledger/contract';
 import type { GuildGameTextAction } from '../api-client';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
+
+/** Adopt/Push plus what the editor saw (review r1: the server 409s on a stale one). */
+export interface GuildGameActionInput { action: GuildGameTextAction; seen: GuildIngameGameAction }
 
 export const guildIngameTextKey = (guildId: number) => ['wow-guild-ingame-text', guildId] as const;
 
@@ -42,8 +45,8 @@ export function useGuildTextVisible({ page }: HubWidgetCtx): boolean {
 export function useGuildIngameGameAction(guildId: number, field: IngameTextFieldKey) {
     const client = useQueryClient();
     return useMutation({
-        mutationFn: async (action: GuildGameTextAction): Promise<GuildIngameText> =>
-            (await import('../api-client')).postGuildIngameGameAction(guildId, field, action),
+        mutationFn: async ({ action, seen }: GuildGameActionInput): Promise<GuildIngameText> =>
+            (await import('../api-client')).postGuildIngameGameAction(guildId, field, action, seen),
         // The response is the full DTO: store it, so the card updates without a refetch flash.
         onSuccess: (data) => client.setQueryData(guildIngameTextKey(guildId), data),
     });

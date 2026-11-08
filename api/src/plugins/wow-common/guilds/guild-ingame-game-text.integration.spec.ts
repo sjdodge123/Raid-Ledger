@@ -342,7 +342,9 @@ describe('review r1 — Push lasts until the in-game text changes', () => {
     await ingest('Raid at 9', T1, 'Thrall');
     expect((await post('deleg', '/motd/push')).status).toBe(200);
     await ingest('Raid at 9  \r\n', T2, 'Jaina');
-    const kept = (await get('deleg')).body.game.motd;
+    const kept = (await get('deleg')).body.game.motd as {
+      gameReportedAt: string;
+    };
     expect(kept).toMatchObject({
       changedInGame: false,
       gameReportedBy: 'Thrall',

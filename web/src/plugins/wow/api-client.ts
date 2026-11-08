@@ -1,4 +1,5 @@
 import type {
+    GuildIngameGameAction,
     CharacterDto,
     ImportWowCharacterInput,
     RefreshCharacterInput,
@@ -264,6 +265,11 @@ export async function postGuildIngameGameAction(
     guildId: number,
     field: IngameTextFieldKey,
     action: GuildGameTextAction,
+    seen: GuildIngameGameAction,
 ): Promise<GuildIngameText> {
-    return fetchApi(`${guildIngameTextPath(guildId)}/${field}/${action}`, { method: 'POST' }, GuildIngameTextSchema);
+    return fetchApi(
+        `${guildIngameTextPath(guildId)}/${field}/${action}`,
+        { method: 'POST', body: JSON.stringify(seen) },
+        GuildIngameTextSchema,
+    );
 }
