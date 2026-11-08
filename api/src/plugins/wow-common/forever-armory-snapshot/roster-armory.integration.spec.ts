@@ -612,8 +612,10 @@ describe('Sync now (AC-13)', () => {
       await gate;
       return resolveProfile(name);
     });
-    const runForGuild = jest.spyOn(service, 'runForGuild');
-    const runDue = jest.spyOn(service, 'runDue');
+    // The job holds the app's instance (real 500 ms spacing; one fetch here).
+    const appService = testApp.app.get(RosterArmoryService);
+    const runForGuild = jest.spyOn(appService, 'runForGuild');
+    const runDue = jest.spyOn(appService, 'runDue');
 
     const res = await testApp.app.get(BlizzardRosterSyncJob).syncNow(synced);
 
