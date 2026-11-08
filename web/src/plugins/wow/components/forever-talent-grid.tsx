@@ -32,14 +32,21 @@ function TalentCell({ node }: { node: PositionedNode }) {
     );
 }
 
-/** Ranked talents with no known cell (ROK-2113): named pills + a muted unnamed count; nothing when empty. */
-function OtherTalents({ testId, nodes }: { testId: string; nodes: ForeverTalentNodeDto[] }) {
+interface OtherTalentsProps { testId: string; nodes: ForeverTalentNodeDto[]; treeless?: boolean }
+
+/**
+ * Ranked talents with no known cell (ROK-2113): named pills + a muted unnamed count; nothing when empty.
+ * Under a tree it is that tree's sub-heading (h4); the tree-less block sits after all three grids as a
+ * sibling of the tree headings (h3), separated by a rule so it does not read as part of the last tree.
+ */
+function OtherTalents({ testId, nodes, treeless = false }: OtherTalentsProps) {
     if (nodes.length === 0) return null;
     const named = nodes.filter((n) => n.name);
     const unnamed = nodes.length - named.length;
+    const Heading = treeless ? 'h3' : 'h4';
     return (
-        <div data-testid={testId} className="space-y-1.5">
-            <h4 className="text-xs font-medium text-muted">Other talents</h4>
+        <div data-testid={testId} className={treeless ? 'space-y-1.5 border-t border-edge-subtle pt-3' : 'space-y-1.5'}>
+            <Heading className="text-xs font-medium text-muted">Other talents</Heading>
             <div className="flex flex-wrap gap-1.5">
                 {named.map((n) => <span key={n.nodeId} className={`px-2 py-1 text-xs rounded ${RANKED_CLASS}`}>{`${n.name ?? ''} ${formatForeverRank(n)}`}</span>)}
             </div>
@@ -96,7 +103,7 @@ export function ForeverTalentGrid({ talents, characterClass }: { talents: Foreve
                     return <SubTree key={index} name={names[index] ?? `Tree ${index + 1}`} index={index} spent={treeSpent(talents, index, [...nodes, ...other])} nodes={nodes} other={other} />;
                 })}
             </div>
-            <OtherTalents testId="forever-other-talents-none" nodes={unplaced.filter((n) => n.tree === undefined || n.tree > 2)} />
+            <OtherTalents testId="forever-other-talents-none" treeless nodes={unplaced.filter((n) => n.tree === undefined || n.tree > 2)} />
         </div>
     );
 }

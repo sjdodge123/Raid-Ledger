@@ -99,6 +99,16 @@ describe('ForeverTalentDisplay — per-talent fallback (ROK-2113)', () => {
         renderTalents(dto('blizzard', [...NODES, { nodeId: 32, rank: 1, tree: 0 }]));
         expect(screen.getByTestId('forever-other-talents-0')).toHaveTextContent('+1 unnamed talent');
     });
+
+    it('a talent with no tree is listed after every grid, not under a tree', () => {
+        renderTalents(dto('blizzard', [...NODES, { nodeId: 40, rank: 1, name: 'Treeless Talent' }]));
+        const none = screen.getByTestId('forever-other-talents-none');
+        expect(none).toHaveTextContent(/^Other talentsTreeless Talent 1$/);
+        expect(screen.getAllByRole('heading', { name: 'Other talents' })).toHaveLength(1);
+        for (const i of [0, 1, 2]) expect(screen.queryByTestId(`forever-other-talents-${i}`)).toBeNull();
+        const lastCell = screen.getAllByTestId('forever-talent-cell').at(-1);
+        expect(lastCell?.compareDocumentPosition(none)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
 });
 
 describe('TalentDisplay — Forever never hits the Classic renderer (AC8)', () => {
