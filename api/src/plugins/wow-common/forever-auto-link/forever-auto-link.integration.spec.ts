@@ -10,6 +10,7 @@ import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { CharactersService } from '../../../characters/characters.service';
 import { SettingsService } from '../../../settings/settings.service';
 import type { ExternalCharacterProfile } from '../../plugin-host/extension-types';
 import { BlizzardCharacterSyncAdapter } from '../blizzard-character-sync.adapter';
@@ -290,5 +291,117 @@ describe('gates and guards (AC-8, AC-9, AC-13, AC-14)', () => {
       .delete(schema.characters)
       .where(eq(schema.characters.id, id));
     expect(await stateRow(id)).toBeUndefined();
+  });
+});
+
+describe('review round 1 — names, concurrency, rename (ROK-2124)', () => {
+  it('an accented name is linked; a name the JS rule rejects backs off 24 h with no call', async () => {
+    const accented = await seedChar({ name: 'Zoë Forêt' });
+    const bad = await seedChar({ name: 'Ana F0rever' });
+    const before = Date.now();
+
+    expect(await service.runDue()).toEqual({ linked: 1, invalid_name: 1 });
+    expect(fetchProfile.mock.calls.map((c) => c[0])).toEqual(['Zoë Forêt']);
+    expect((await charRow(accented)).gameVariant).toBe('wow_forever');
+    const state = await stateRow(bad);
+    expect(state).toMatchObject({ failures: 1, lastError: 'invalid_name' });
+    expect(state?.retryAt.getTime()).toBeGreaterThanOrEqual(before + 24 * HOUR);
+    expect(await service.runDue()).toEqual({});
+  });
+
+  it('a nudge and the job attempting the same row at once make ONE Blizzard call', async () => {
+    const id = await seedChar();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    fetchProfile.mockImplementation(async () => {
+      if (fetchProfile.mock.calls.length >= 2) release();
+      await gate;
+      return profile();
+    });
+    const attempts = [service.attempt(id), service.attempt(id)];
+    void Promise.race(attempts).then(release);
+
+    const outcomes = await Promise.all(attempts);
+
+    expect(fetchProfile).toHaveBeenCalledTimes(1);
+    expect([...outcomes].sort()).toEqual(['linked', 'skipped']);
+    expect(await stateRow(id)).toBeUndefined();
+  });
+
+  it('a rename landing mid-fetch is a lost race: nothing linked, retried later', async () => {
+    const id = await seedChar();
+    fetchProfile.mockImplementation(async () => {
+      await testApp.db
+        .update(schema.characters)
+        .set({ name: 'Ana Renamed' })
+        .where(eq(schema.characters.id, id));
+      return profile();
+    });
+    expect(await service.attempt(id)).toBe('lost_race');
+    const row = await charRow(id);
+    expect(row).toMatchObject({ name: 'Ana Renamed', gameVariant: null });
+    expect(row.externalId).toBeNull();
+    expect(await stateRow(id)).toBeUndefined();
+  });
+});
+
+describe('missing AC coverage (review round 1)', () => {
+  it('AC-1: the Armory columns are written from a non-null payload', async () => {
+    const id = await seedChar();
+    const equipment = { items: [{ slot: 'HEAD', itemId: 1 }] };
+    const professions = { primary: [], secondary: [], syncedAt: 'now' };
+    const quests = { fetchedAt: '2026-11-08T00:00:00Z', completed: [1, 2] };
+    fetchProfile.mockResolvedValue(profile({ class: 'Paladin' }));
+    jest.spyOn(adapter, 'fetchSpecialization').mockResolvedValue({
+      spec: 'Holy',
+      role: 'healer',
+      talents: { tree: 'holy' },
+    });
+    jest.spyOn(adapter, 'fetchEquipment').mockResolvedValue(equipment as never);
+    jest.spyOn(adapter, 'fetchProfessions').mockResolvedValue(professions);
+    jest.spyOn(adapter, 'fetchQuests').mockResolvedValue(quests);
+
+    expect(await service.attempt(id)).toBe('linked');
+    expect(await charRow(id)).toMatchObject({
+      equipment,
+      talents: { tree: 'holy' },
+      armoryProfessions: professions,
+      armoryQuests: quests,
+    });
+  });
+
+  it('AC-3/AC-7: the bulk sync picks each linked row up exactly once', async () => {
+    fetchProfile.mockImplementation(async (name: string) =>
+      profile({ name, externalId: name === 'Ana Forever' ? '9001' : '9002' }),
+    );
+    const auto = await seedChar();
+    await seedChar({ name: 'Bob Linked', gameVariant: 'wow_forever' });
+    expect(await service.attempt(auto)).toBe('linked');
+    fetchProfile.mockClear();
+
+    const result = await testApp.app.get(CharactersService).syncAllCharacters();
+
+    expect(result).toEqual({ synced: 2, failed: 0 });
+    expect(fetchProfile.mock.calls.map((c) => c[0]).sort()).toEqual([
+      'Ana Forever',
+      'Bob Linked',
+    ]);
+  });
+
+  it('AC-10: one run attempts at most 60 due rows, oldest first', async () => {
+    const base = Date.now() - 1000 * HOUR;
+    const names = Array.from({ length: 61 }, (_, i) => {
+      const pair = String.fromCharCode(65 + Math.floor(i / 26), 97 + (i % 26));
+      return { name: `Cap ${pair}`, createdAt: new Date(base + i * HOUR) };
+    });
+    for (const n of [...names].reverse()) await seedChar(n);
+    fetchProfile.mockImplementation(async (name: string) =>
+      profile({ name, externalId: `x-${name}` }),
+    );
+
+    expect(await service.runDue()).toEqual({ linked: 60 });
+    expect(fetchProfile.mock.calls.map((c) => c[0])).toEqual(
+      names.slice(0, 60).map((n) => n.name),
+    );
   });
 });
