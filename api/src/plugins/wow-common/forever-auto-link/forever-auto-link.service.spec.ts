@@ -25,7 +25,7 @@ function char(over: Partial<AutoLinkCharacter> = {}): AutoLinkCharacter {
     realm: null,
     region: 'us',
     level: 20,
-    name: 'Thrall',
+    name: 'Thrall Forever',
     ...over,
   } as AutoLinkCharacter;
 }

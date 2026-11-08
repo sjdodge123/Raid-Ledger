@@ -15,6 +15,22 @@
 const FOREVER_NAME_PATTERN = /^(\p{L}{2,24}) (\p{L}{2,24})$/u;
 
 /**
+ * SQL (POSIX) twin of {@link FOREVER_NAME_PATTERN} for `btrim(name) ~ …`.
+ * `[[:alpha:]]` follows the database ctype, so it never admits a name the
+ * JS rule rejects (ROK-2124 candidacy relies on that).
+ */
+export const FOREVER_NAME_SQL_PATTERN =
+  '^[[:alpha:]]{2,24} [[:alpha:]]{2,24}$';
+
+/**
+ * True when `fullName` can be addressed on Blizzard's realmless route
+ * (the rule {@link buildForeverCharacterSlug} enforces).
+ */
+export function isForeverTwoPartName(fullName: string): boolean {
+  return FOREVER_NAME_PATTERN.test(fullName.trim());
+}
+
+/**
  * Build the realmless character path segment for a stored Forever name.
  * Lowercases with `String.prototype.toLowerCase()` (not locale-aware, same as
  * the realm route) and percent-encodes the result with `encodeURIComponent`

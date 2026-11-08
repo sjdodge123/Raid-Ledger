@@ -19,6 +19,7 @@ import {
   stopsAutoLinkRun,
   type AutoLinkCandidateRow,
 } from './forever-auto-link.helpers';
+import { FOREVER_NAME_SQL_PATTERN } from '../forever-character-slug';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -35,6 +36,7 @@ function row(over: Partial<AutoLinkCandidateRow> = {}): AutoLinkCandidateRow {
     realm: null,
     region: 'us',
     level: 25,
+    name: 'Ana Forever',
     ...over,
   };
 }
@@ -120,6 +122,8 @@ describe('isAutoLinkCandidate', () => {
     ['a realm', { realm: 'Mankrik' }, 7],
     ['no region', { region: null }, 7],
     ['another game', {}, 8],
+    ['a single-word name', { name: 'Thrall' }, 7],
+    ['a three-part name', { name: 'Ana Of Forever' }, 7],
   ])('rejects a row with %s', (_label, over, foreverGameId) => {
     expect(isAutoLinkCandidate(row(over), foreverGameId)).toBe(false);
   });
@@ -137,7 +141,8 @@ describe('autoLinkCandidateWhere', () => {
     expect(sql).toContain(
       '("characters"."level" is null or "characters"."level" >= $2)',
     );
-    expect(params).toEqual([7, AUTOLINK_MIN_LEVEL]);
+    expect(sql).toContain('btrim("characters"."name") ~ $3');
+    expect(params).toEqual([7, AUTOLINK_MIN_LEVEL, FOREVER_NAME_SQL_PATTERN]);
   });
 });
 

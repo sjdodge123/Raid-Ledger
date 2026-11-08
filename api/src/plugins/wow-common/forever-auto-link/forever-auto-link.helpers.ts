@@ -5,7 +5,9 @@
  * A row is an "auto-link candidate" when it is a Forever character bound to
  * the addon (`addon_guid` set) that is NOT Armory-linked yet (`game_variant`
  * NULL), realmless with a ruleset + region, and not known to be below level
- * 10 (Blizzard 404s those). Candidates and the twice-daily bulk-sync rows
+ * 10 (Blizzard 404s those), with a two-part "First Surname" name (the only
+ * shape the realmless route can address — anything else 400s forever).
+ * Candidates and the twice-daily bulk-sync rows
  * (`game_variant IS NOT NULL`) are disjoint by construction.
  */
 import { NotFoundException } from '@nestjs/common';
@@ -22,6 +24,10 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
+import {
+  FOREVER_NAME_SQL_PATTERN,
+  isForeverTwoPartName,
+} from '../forever-character-slug';
 
 /** Max due candidates one hourly job run attempts. */
 export const AUTOLINK_CAP = 60;
@@ -48,6 +54,7 @@ export type AutoLinkCandidateRow = Pick<
   | 'realm'
   | 'region'
   | 'level'
+  | 'name'
 >;
 
 /**
@@ -97,7 +104,8 @@ export function isAutoLinkCandidate(
     row.ruleset !== null &&
     row.realm === null &&
     row.region !== null &&
-    (row.level === null || row.level >= AUTOLINK_MIN_LEVEL)
+    (row.level === null || row.level >= AUTOLINK_MIN_LEVEL) &&
+    isForeverTwoPartName(row.name)
   );
 }
 
@@ -112,6 +120,7 @@ export function autoLinkCandidateWhere(foreverGameId: number): SQL {
     isNull(c.realm),
     isNotNull(c.region),
     or(isNull(c.level), gte(c.level, AUTOLINK_MIN_LEVEL)),
+    sql`btrim(${c.name}) ~ ${FOREVER_NAME_SQL_PATTERN}`,
   );
   return where ?? sql`false`;
 }

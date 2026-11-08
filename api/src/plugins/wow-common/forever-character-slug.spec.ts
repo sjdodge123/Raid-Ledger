@@ -1,4 +1,7 @@
-import { buildForeverCharacterSlug } from './forever-character-slug';
+import {
+  buildForeverCharacterSlug,
+  isForeverTwoPartName,
+} from './forever-character-slug';
 
 describe('buildForeverCharacterSlug (ROK-2102)', () => {
   it('joins the two parts with a hyphen, lowercased', () => {
@@ -41,5 +44,17 @@ describe('buildForeverCharacterSlug (ROK-2102)', () => {
     expect(buildForeverCharacterSlug('İlse Forever')).toBe(
       'i%CC%87lse-forever',
     );
+  });
+});
+
+describe('isForeverTwoPartName (ROK-2124)', () => {
+  it.each([
+    ['Ana Forever', true],
+    ['  Ana Forever ', true],
+    ['Thrall', false],
+    ['Ana Of Forever', false],
+    ['Ana  Forever', false],
+  ])('%j → %s', (name, expected) => {
+    expect(isForeverTwoPartName(name)).toBe(expected);
   });
 });
