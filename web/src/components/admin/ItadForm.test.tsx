@@ -71,6 +71,13 @@ describe('ItadForm — setup instructions and API key', () => {
         );
     });
 
+    it('step 3 matches the ITAD register-an-app flow', () => {
+        render(<ItadForm />);
+        expect(
+            screen.getByText('Register an app; the API key is generated for you. Copy it.'),
+        ).toBeInTheDocument();
+    });
+
     it('renders API key input field', () => {
         render(<ItadForm />);
         expect(screen.getByLabelText('ITAD API Key')).toBeInTheDocument();
