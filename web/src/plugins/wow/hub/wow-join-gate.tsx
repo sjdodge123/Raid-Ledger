@@ -20,6 +20,7 @@ import { hubCopy } from '../../../components/hub/hub-copy';
 import { guildPageKey } from '../../../components/hub/api/use-guild';
 import { AddCharacterModal } from '../../../components/profile/AddCharacterModal';
 import { useMyCharacters } from '../../../hooks/use-characters';
+import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { useJoinGate } from './use-join-gate';
 import {
     CLAIM_PARAM, CLAIM_ROSTER, IMPORT_ARMORY_LABEL, JOIN_GATE_LINE, NOT_LINKED_WARNING, NOT_ON_ROSTER_BODY,
@@ -121,7 +122,7 @@ export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element | nul
             </div>
             {gate.data.viewer.hasForeverCharacter && <NotOnRosterHint />}
             {modal.tab !== null && (
-                <AddCharacterModal isOpen onClose={modal.close} gameId={guild.gameId} initialTab={modal.tab} rosterGuildId={guild.id} />
+                <AddCharacterModal isOpen onClose={modal.close} gameSlug={WOW_FOREVER_GAME_SLUG} initialTab={modal.tab} rosterGuildId={guild.id} />
             )}
         </div>
     );
