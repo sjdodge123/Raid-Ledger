@@ -23,6 +23,7 @@ import {
   retryAtFor,
   type AutoLinkErrorKind,
 } from './forever-auto-link.helpers';
+import { logExternalIdLinked } from '../addon-import/external-id.audit';
 
 type Db = PostgresJsDatabase<typeof schema>;
 /** A `characters` row as the auto-link reads it. */
@@ -188,11 +189,33 @@ export async function applyAutoLink(
       .set({ ...fields, ...(externalId !== null ? { externalId } : {}) })
       .where(and(eq(c.id, row.id), isNull(c.gameVariant), eq(c.name, row.name)))
       .returning({ id: c.id });
+    if (updated.length > 0) await auditAutoLink(tx, row, externalId);
     // Linked here or by a racing import: either way no longer a candidate.
     const s = schema.wowForeverArmoryAutolink;
     await tx.delete(s).where(eq(s.characterId, row.id));
     return updated.length > 0;
   });
+}
+
+/** ROK-2115: the auto-link set (or changed) the Blizzard id — a fresh link. */
+async function auditAutoLink(
+  tx: Db,
+  row: RegionedCharacter,
+  externalId: string | null,
+): Promise<void> {
+  await logExternalIdLinked(
+    tx,
+    {
+      actorId: null,
+      ownerId: row.userId,
+      characterId: row.id,
+      externalId,
+      gameId: row.gameId,
+      region: row.region,
+      via: 'auto_link',
+    },
+    row.externalId,
+  );
 }
 
 /** Upsert the state row after failure number `failures` (candidates only). */

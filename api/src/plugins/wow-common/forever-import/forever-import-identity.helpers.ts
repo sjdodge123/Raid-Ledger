@@ -16,6 +16,7 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import { foreverLabel } from '../wow-forever-identity.helpers';
+import { logExternalIdLinked } from '../addon-import/external-id.audit';
 import type {
   ExternalImportCtx,
   ExternalImportFields,
@@ -134,10 +135,33 @@ export async function mergeForeverRow(
     })
     .where(eq(schema.characters.id, existing.id))
     .returning();
+  const row = defined(merged, 'merged Forever character row');
+  await auditImportLink(tx, existing, row.externalId);
   logger.log(
     `User ${existing.userId} merged Forever import into character ${existing.id} (${existing.name})`,
   );
-  return mapCharacterToDto(defined(merged, 'merged Forever character row'));
+  return mapCharacterToDto(row);
+}
+
+/** ROK-2115: a re-import that set or changed the Blizzard id — a fresh link. */
+async function auditImportLink(
+  tx: Db,
+  existing: CharacterRow,
+  externalId: string | null,
+): Promise<void> {
+  await logExternalIdLinked(
+    tx,
+    {
+      actorId: existing.userId,
+      ownerId: existing.userId,
+      characterId: existing.id,
+      externalId,
+      gameId: existing.gameId,
+      region: existing.region,
+      via: 'armory_import',
+    },
+    existing.externalId,
+  );
 }
 
 /** Everything the Forever import transaction step needs. */
