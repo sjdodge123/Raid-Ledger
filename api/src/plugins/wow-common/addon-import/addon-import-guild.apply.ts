@@ -2,17 +2,10 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type {
   AddonGuildExport,
   AddonGuildImportSummarySchema,
-  AddonGuildMember,
 } from '@raid-ledger/contract';
 import type { z } from 'zod';
 import { guildMembers, guilds } from '../../../drizzle/schema';
-import { titleCaseClass } from './addon-import.binding-name';
-import { adoptGuidlessMembers } from './addon-import-guild.adopt';
-import {
-  insertDings,
-  levelUps,
-  loadPriorLevels,
-} from './addon-import-guild.dings';
+import { upsertMembersLoggingDings } from './addon-import-guild.members';
 import { AddonImportError } from './addon-import.errors';
 import {
   auditRosterReplaced,
@@ -28,6 +21,12 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
+
+/** Moved to the members module (ROK-2138 L3); re-exported for callers. */
+export {
+  dedupeMembers,
+  memberValues,
+} from './addon-import-guild.members';
 
 /**
  * ROK-1724 §4.3 Apply — section `guild`. Shared, self-reported rows: one
@@ -75,32 +74,6 @@ export function buildGuildSummary(
     newMembers,
     updatedMembers: members - newMembers,
     pages,
-  };
-}
-
-/** Member row values. `publicNote` is the opted-in note or null — never more. */
-export function memberValues(
-  m: AddonGuildMember,
-  guildId: number,
-  ctx: AddonApplyContext,
-  seenAt: Date,
-) {
-  return {
-    guildId,
-    guid: m.guid,
-    characterName: m.name,
-    level: m.level,
-    class: titleCaseClass(m.class),
-    rankIndex: m.rankIndex,
-    rankName: m.rank,
-    publicNote: m.note ?? null,
-    source: 'addon_import',
-    lastSeenAt: seenAt,
-    // ROK-1916 D2/D3: presence verbatim; the read path normalises.
-    onlineAtExport: m.online,
-    lastOnlineDays: m.lastOnlineDays ?? null,
-    capturedByUserId: ctx.userId,
-    updatedAt: new Date(),
   };
 }
 
@@ -177,11 +150,6 @@ export async function previewGuild(
   return { status: stale ? 'stale' : 'preview', summary };
 }
 
-/** One row per GUID (the decoder rejects cross-page repeats; last wins here). */
-export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
-  return [...new Map(members.map((m) => [m.guid, m])).values()];
-}
-
 /** Guild columns an addon snapshot owns (insert + conflict update). */
 export function guildSet(
   payload: AddonGuildExport,
@@ -241,68 +209,6 @@ async function upsertGuild(
     })
     .returning({ id: guilds.id });
   return row?.id;
-}
-
-const EXCLUDED_MEMBER_COLUMNS = [
-  'character_name',
-  'level',
-  'class',
-  'rank_index',
-  'rank_name',
-  'public_note',
-  'source',
-  'last_seen_at',
-  'captured_by_user_id',
-  'updated_at',
-  // ROK-1916 D2: overwrite with excluded.* (NULL included) — clears stale days.
-  'online_at_export',
-  'last_online_days',
-] as const;
-
-const camel = (c: string) =>
-  c.replace(/_(\w)/g, (_m, ch: string) => ch.toUpperCase());
-
-/** `SET col = excluded.col` for every mutable member column. */
-const memberConflictSet = Object.fromEntries(
-  EXCLUDED_MEMBER_COLUMNS.map((c) => [camel(c), sql.raw(`excluded.${c}`)]),
-);
-
-/** Upsert members by (guild_id, guid); returns how many were inserted. */
-async function upsertMembers(
-  ctx: AddonApplyContext,
-  guildId: number,
-  payload: AddonGuildExport,
-  seenAt: Date,
-): Promise<number> {
-  const rows = dedupeMembers(payload.data.members).map((m) =>
-    memberValues(m, guildId, ctx, seenAt),
-  );
-  const result = await ctx.tx
-    .insert(guildMembers)
-    .values(rows)
-    .onConflictDoUpdate({
-      target: [guildMembers.guildId, guildMembers.guid],
-      targetWhere: sql`${guildMembers.guid} IS NOT NULL`,
-      set: memberConflictSet,
-    })
-    .returning({ inserted: sql<boolean>`(xmax = 0)` });
-  return result.filter((r) => r.inserted).length;
-}
-
-/** ROK-1919: upsert members, logging any level rise against prior rows. */
-async function upsertMembersLoggingDings(
-  ctx: AddonApplyContext,
-  guildId: number,
-  payload: AddonGuildExport,
-  seenAt: Date,
-): Promise<number> {
-  const members = dedupeMembers(payload.data.members);
-  await adoptGuidlessMembers(ctx, guildId, members); // ROK-1928 §B3
-  const guids = members.map((m) => m.guid);
-  const prior = await loadPriorLevels(ctx, guildId, guids);
-  const inserted = await upsertMembers(ctx, guildId, payload, seenAt);
-  await insertDings(ctx, guildId, levelUps(prior, members), seenAt);
-  return inserted;
 }
 
 /**

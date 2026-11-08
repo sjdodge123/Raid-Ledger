@@ -34,6 +34,24 @@ export interface AddonBindingCharacter {
   /** ROK-1742 — optional so a caller that never reads them stays valid. */
   race?: string | null;
   gender?: string | null;
+  /**
+   * ROK-2138 D7 — the Armory link. Optional so a caller that never reads
+   * them stays valid; absent = not Armory-linked (the addon fills gaps).
+   */
+  externalId?: string | null;
+  lastSyncedAt?: Date | null;
+}
+
+/**
+ * ROK-2138 D7 — a character the Blizzard Armory sync has written. Its
+ * class / level / race / gender come from the API (the primary source), so a
+ * LedgerLink import never overwrites them.
+ */
+export function isArmoryLinked(character: AddonBindingCharacter): boolean {
+  return (
+    (character.externalId ?? null) !== null &&
+    (character.lastSyncedAt ?? null) !== null
+  );
 }
 
 /** Only the envelope fields every section shares. */
@@ -223,6 +241,7 @@ export function bindToCharacter(
   }
   rulesetOutcome(payload.who, character, opts, result);
   guidOutcome(payload.who, character, opts, result);
+  if (isArmoryLinked(character)) return result;
   raceGenderOutcome(payload.who, character, result);
   result.diff = classLevelDiff(payload.who, character);
   if (result.diff.class || result.diff.level) {

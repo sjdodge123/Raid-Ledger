@@ -459,3 +459,59 @@ describe('bindToCharacter — race + gender (ROK-1742 R9)', () => {
     expect(r.setGender).toBe('male');
   });
 });
+
+/** ROK-2138 D7 — the Blizzard API is primary for an Armory-linked character. */
+describe('bindToCharacter — Armory-linked character (ROK-2138 D7)', () => {
+  const ARMORY = {
+    externalId: 'forever-us-whitemane-ana',
+    lastSyncedAt: new Date('2026-10-01T00:00:00Z'),
+  };
+  const drifted = () =>
+    payload({ class: 'MAGE', level: 42, race: 'NightElf', gender: 'male' });
+
+  it('AC15 writes no class/level/race/gender and warns no CLASS_LEVEL_UPDATED', () => {
+    const r = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, race: 'Human', gender: 'female' }),
+      APPLY,
+    );
+    expect(r.diff).toEqual({});
+    expect(r.setRace).toBeUndefined();
+    expect(r.setGender).toBeUndefined();
+    expect(warns(r)).toEqual([]);
+    expect(codes(r)).toEqual([]);
+  });
+
+  it('AC15 still pins the GUID and checks the ruleset on an Armory row', () => {
+    const r = bindToCharacter(
+      payload({ ruleset: 'pvp' }),
+      char({ ...ARMORY, addonGuid: null }),
+      { dryRun: false, confirm: { updateRuleset: true } },
+    );
+    expect(r.pinGuid).toBe(GUID);
+    expect(r.setRuleset).toBe('pvp');
+    expect(warns(r)).toEqual(['RULESET_CHANGED']);
+  });
+
+  it('AC16 an external id that never synced is not Armory-linked — the export fills', () => {
+    const r = bindToCharacter(
+      drifted(),
+      char({ externalId: ARMORY.externalId, lastSyncedAt: null, race: null }),
+      APPLY,
+    );
+    expect(r.diff).toEqual({
+      class: { from: 'Paladin', to: 'Mage' },
+      level: { from: 60, to: 42 },
+    });
+    expect(r.setRace).toBe('Night Elf');
+    expect(r.setGender).toBe('male');
+    expect(warns(r)).toEqual(['CLASS_LEVEL_UPDATED']);
+  });
+
+  it('AC16 a non-Armory character updates exactly as before', () => {
+    const r = bindToCharacter(drifted(), char({ externalId: null }), APPLY);
+    expect(r.diff.level).toEqual({ from: 60, to: 42 });
+    expect(r.setRace).toBe('Night Elf');
+    expect(warns(r)).toEqual(['CLASS_LEVEL_UPDATED']);
+  });
+});
