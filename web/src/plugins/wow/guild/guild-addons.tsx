@@ -18,6 +18,8 @@ import {
     guildAddonMatches, guildAddonView, pinnedAddonView, pinnedMatches, reorderedIds, type FlavorFilter,
 } from './addon-view';
 import { useGuildAddonMutations, useGuildAddons } from '../../../components/hub/api/use-guild-content';
+import { useGuildPage } from '../../../components/hub/api/use-guild';
+import { guildAddonFlavorForSlug, pickFlavor } from './addon-flavor-default';
 import type { HubResourceCtx } from '../../hub-module';
 
 const FILTER_OPTIONS = [
@@ -68,14 +70,17 @@ export function GuildAddonsSection({ guildId, canEdit }: HubResourceCtx): JSX.El
 }
 
 function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildAddonList; canEdit: boolean }): JSX.Element {
-    const [filter, setFilter] = useState<FlavorFilter>('any');
+    // ROK-2114: open on the guild's own flavor (a cached read — the hub page already fetched it).
+    const guildFlavor = guildAddonFlavorForSlug(useGuildPage(guildId).data?.guild.gameSlug);
+    const [choice, setFilter] = useState<FlavorFilter | undefined>(undefined);
+    const filter = pickFlavor(choice, guildFlavor, 'any');
     const visible = list.addons.filter((a) => guildAddonMatches(a, filter));
     const { actions, add, adding, addFailure, listError } = useAddonActions(guildId, list, new Set(visible.map((a) => a.id)));
     const pinned = list.pinned.filter((p) => pinnedMatches(p, filter));
     return (
         <section id="addons" className="scroll-mt-4" data-testid="guild-addons">
             <RadioGroup label="Flavor" hideLabel appearance="segmented" options={FILTER_OPTIONS} value={filter} onChange={setFilter} className="mb-4" />
-            {canEdit && <div className="mb-4"><AddAddonForm onAdd={add} pending={adding} failure={addFailure} /></div>}
+            {canEdit && <div className="mb-4"><AddAddonForm onAdd={add} pending={adding} failure={addFailure} defaultFlavor={guildFlavor} /></div>}
             {listError && <p role="alert" data-testid="guild-addons-error" className="mb-3 text-sm text-danger">{listError}</p>}
             <ul className="flex flex-col gap-2" aria-label="Recommended addons">
                 {pinned.map((p, i) => <AddonRow key={`p-${i}`} addon={pinnedAddonView(p, i)} canEdit={canEdit} actions={actions} isFirst isLast />)}

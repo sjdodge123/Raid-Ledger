@@ -124,11 +124,12 @@ describe('summariseDeepKeys', () => {
     expect(summariseDeepKeys([{ a: 1 }])).toEqual(empty);
   });
 
-  it('is the custom shape for every ROK-2108 endpoint only', () => {
+  it('is the custom shape for every ROK-2108 endpoint (+ profile-quests, ROK-2126)', () => {
     expect(isDeepKeysEndpoint('guild-summary')).toBe(true);
     expect(isDeepKeysEndpoint('ruleset-detail')).toBe(true);
     expect(isDeepKeysEndpoint('profile-statistics')).toBe(true);
-    expect(isDeepKeysEndpoint('profile-quests')).toBe(false);
+    expect(isDeepKeysEndpoint('profile-quests')).toBe(true);
+    expect(isDeepKeysEndpoint('profile-professions')).toBe(false);
     expect(
       summariseCustomShape('profile-achievements', { a: [{ b: 1 }] }),
     ).toMatchObject({

@@ -28,11 +28,20 @@ export const PROFILE_EXTRA_ENDPOINTS: readonly [
   ['profile-quests-completed', 'quests/completed'],
 ];
 
+/**
+ * ROK-2126: endpoints recorded one level deeper — the in-progress quest log,
+ * whose entries carry the quest ref + objectives under each array element.
+ */
+const NESTED_DEEP_KEYS_ENDPOINTS: ReadonlySet<ForeverProbeEndpoint> = new Set([
+  'profile-quests',
+]);
+
 /** Every endpoint whose shape is keys + first-element keys. */
 const DEEP_KEYS_ENDPOINTS: ReadonlySet<ForeverProbeEndpoint> = new Set([
   ...PROFILE_EXTRA_ENDPOINTS.map(([endpoint]) => endpoint),
   'guild-summary',
   'ruleset-detail',
+  ...NESTED_DEEP_KEYS_ENDPOINTS,
 ]);
 
 /** A ruleset entry id safe to put in a path. */
@@ -117,11 +126,14 @@ export function isDeepKeysEndpoint(endpoint: ForeverProbeEndpoint): boolean {
   return DEEP_KEYS_ENDPOINTS.has(endpoint);
 }
 
+/** True for a non-null, non-array object. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 /** Keys of a plain object, else []. */
 function objectKeys(value: unknown): string[] {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? Object.keys(value)
-    : [];
+  return isPlainObject(value) ? Object.keys(value) : [];
 }
 
 /** Top-level keys + each top-level array's first-element keys and length — no values. */
@@ -138,4 +150,52 @@ export function summariseDeepKeys(body: unknown): DeepKeysShapeSummary {
     }
   }
   return { topLevelKeys, entryCount: 0, sample: [], arrayKeys, arrayLengths };
+}
+
+/**
+ * Fold one array's first element one level deeper into `shape`, under
+ * `<arrayKey>[0].<key>`: a nested array adds its first element's keys + its
+ * length; a nested plain object adds its keys (no length). Never values.
+ */
+function addNestedKeys(
+  shape: DeepKeysShapeSummary,
+  arrayKey: string,
+  first: unknown,
+): void {
+  if (!isPlainObject(first)) return;
+  for (const [key, value] of Object.entries(first)) {
+    const path = `${arrayKey}[0].${key}`;
+    if (Array.isArray(value)) {
+      const nested: unknown = value[0];
+      shape.arrayKeys[path] = objectKeys(nested);
+      shape.arrayLengths[path] = value.length;
+    } else if (isPlainObject(value)) {
+      shape.arrayKeys[path] = Object.keys(value);
+    }
+  }
+}
+
+/**
+ * ROK-2126: {@link summariseDeepKeys} plus one more level inside each top-level
+ * array's first element (dotted `in_progress[0].objectives` keys), so the
+ * in-progress quest log reveals its quest ref / objectives / progress fields.
+ * Keys and lengths only — never a value.
+ */
+export function summariseNestedDeepKeys(body: unknown): DeepKeysShapeSummary {
+  const shape = summariseDeepKeys(body);
+  if (!isPlainObject(body)) return shape;
+  for (const [key, value] of Object.entries(body)) {
+    if (Array.isArray(value)) addNestedKeys(shape, key, value[0]);
+  }
+  return shape;
+}
+
+/** The deep-keys summary for an endpoint {@link isDeepKeysEndpoint} accepts. */
+export function summariseDeepKeysFor(
+  endpoint: ForeverProbeEndpoint,
+  body: unknown,
+): DeepKeysShapeSummary {
+  return NESTED_DEEP_KEYS_ENDPOINTS.has(endpoint)
+    ? summariseNestedDeepKeys(body)
+    : summariseDeepKeys(body);
 }

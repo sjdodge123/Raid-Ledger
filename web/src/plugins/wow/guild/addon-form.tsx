@@ -5,13 +5,14 @@
  * (prototype `AddonForm.tsx`).
  */
 import { useState, type JSX } from 'react';
-import { GUILD_ADDON_FLAVORS, GUILD_ADDON_NOTE_MAX, GUILD_URL_MAX } from '@raid-ledger/contract';
+import { GUILD_ADDON_FLAVORS, GUILD_ADDON_NOTE_MAX, GUILD_URL_MAX, type GuildAddonFlavor } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { Select } from '../../../components/ui/select';
 import { previewAddonUrl } from './addon-url';
+import { pickFlavor } from './addon-flavor-default';
 import { FLAVOR_LABEL, SOURCE_LABEL, type AddonDetails } from './addon-view';
 import { Pill } from '../../../components/hub/hub-bits';
 
@@ -47,16 +48,36 @@ const EMPTY: AddonDetails = { note: '', requirement: 'optional', flavor: null };
 
 export interface NewAddon extends AddonDetails { url: string }
 
-/** `failure` is the server's message for the last failed add (e.g. a 400 or 409). */
-export function AddAddonForm({ onAdd, pending, failure }: {
-    onAdd: (addon: NewAddon, reset: () => void) => void; pending: boolean; failure: string | null;
+/**
+ * The form's details with the Flavor pre-set to `defaultFlavor` (ROK-2114)
+ * until the editor picks one; a reset returns to it. `undefined` choice =
+ * untouched, so a default that arrives late still lands.
+ */
+function useAddonDetails(defaultFlavor: GuildAddonFlavor | null) {
+    const [details, setDetails] = useState<AddonDetails>(EMPTY);
+    const [flavorChoice, setFlavorChoice] = useState<GuildAddonFlavor | null | undefined>(undefined);
+    const shown: AddonDetails = { ...details, flavor: pickFlavor(flavorChoice, defaultFlavor, null) };
+    const onChange = (next: AddonDetails): void => {
+        if (next.flavor !== shown.flavor) setFlavorChoice(next.flavor);
+        setDetails(next);
+    };
+    const reset = (): void => { setDetails(EMPTY); setFlavorChoice(undefined); };
+    return { details: shown, onChange, reset };
+}
+
+/**
+ * `failure` is the server's message for the last failed add (e.g. a 400 or 409).
+ * `defaultFlavor` is the guild's own flavor (ROK-2114); null = Any flavor.
+ */
+export function AddAddonForm({ onAdd, pending, failure, defaultFlavor = null }: {
+    onAdd: (addon: NewAddon, reset: () => void) => void; pending: boolean; failure: string | null; defaultFlavor?: GuildAddonFlavor | null;
 }): JSX.Element {
     const [url, setUrl] = useState('');
-    const [details, setDetails] = useState<AddonDetails>(EMPTY);
+    const form = useAddonDetails(defaultFlavor);
     const preview = url.trim() ? previewAddonUrl(url) : null;
     const parsed = preview?.ok ? preview.addon : null;
     const error = preview && !preview.ok ? preview.error : undefined;
-    const reset = (): void => { setUrl(''); setDetails(EMPTY); };
+    const reset = (): void => { setUrl(''); form.reset(); };
     return (
         <div className="flex flex-col gap-3 rounded-lg border border-edge bg-panel p-3" data-testid="guild-addon-form">
             <Field label="Addon link" error={error ?? (failure ? `Couldn’t add that addon. ${failure}` : undefined)}
@@ -69,9 +90,9 @@ export function AddAddonForm({ onAdd, pending, failure }: {
                     Adding <span className="font-semibold text-foreground">{parsed.name}</span><Pill>{SOURCE_LABEL[parsed.source]}</Pill>
                 </p>
             )}
-            <AddonDetailFields value={details} onChange={setDetails} />
+            <AddonDetailFields value={form.details} onChange={form.onChange} />
             <div className="flex justify-end">
-                <Button onClick={() => parsed && onAdd({ url: url.trim(), ...details }, reset)} disabled={!parsed} loading={pending}
+                <Button onClick={() => parsed && onAdd({ url: url.trim(), ...form.details }, reset)} disabled={!parsed} loading={pending}
                     data-testid="guild-addon-add">Add addon</Button>
             </div>
         </div>

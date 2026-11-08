@@ -100,9 +100,18 @@ function makeReportingTransport(
     };
 }
 
-function initialTags(): Record<string, string> {
-    const version = (window as unknown as { __APP_VERSION__?: string }).__APP_VERSION__;
-    return { app_version: version ?? 'unknown', deployment: window.location.hostname };
+/**
+ * Scope tags every event starts with. ROK-2116: `__APP_VERSION__` is a Vite
+ * `define` (replaced as a bare identifier at build time), so it must never be
+ * read off `window` — that was always undefined and tagged every event
+ * "unknown". vitest defines none, hence the `typeof` guard.
+ */
+export function initialTags(): Record<string, string> {
+    const version: unknown = typeof __APP_VERSION__ === 'undefined' ? undefined : __APP_VERSION__;
+    return {
+        app_version: typeof version === 'string' && version ? version : 'unknown',
+        deployment: window.location.hostname,
+    };
 }
 
 export function buildSentryOptions(onTransportFailure: () => void): Sentry.BrowserOptions {
