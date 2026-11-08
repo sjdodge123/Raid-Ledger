@@ -18,7 +18,11 @@ const QUESTS_BODY = {
   character: { name: 'Rokvalue', id: 4242 },
   in_progress: [
     {
-      quest: { key: { href: 'https://quest-href' }, name: 'Kill Hogger', id: 176 },
+      quest: {
+        key: { href: 'https://quest-href' },
+        name: 'Kill Hogger',
+        id: 176,
+      },
       objectives: [
         { type: 'MONSTER', progress: 3, required: 10, completed: false },
         { type: 'ITEM', progress: 1, required: 1, completed: true },
