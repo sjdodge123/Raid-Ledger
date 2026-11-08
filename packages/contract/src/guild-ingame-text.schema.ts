@@ -56,6 +56,38 @@ const storedField = (max: number) =>
     .strict()
     .nullable();
 
+/** The field keys in route order — `POST …/ingame-text/:field/adopt|push`. */
+export const INGAME_TEXT_FIELD_KEYS = ['motd', 'info'] as const;
+
+/**
+ * ROK-2137 — what the game last reported for one field (LedgerLink export).
+ * `gameText` `''` = the in-game box was reported empty. `changedInGame` = the
+ * report differs from the hub text and was not pushed over (acknowledged)
+ * since it arrived.
+ */
+export const GuildIngameGameReportSchema = z
+  .object({
+    gameText: z.string(),
+    gameReportedAt: isoDate,
+    changedInGame: z.boolean(),
+  })
+  .strict();
+export type GuildIngameGameReport = z.infer<typeof GuildIngameGameReportSchema>;
+
+const gameReport = (max: number) =>
+  GuildIngameGameReportSchema.extend({ gameText: z.string().max(max) })
+    .strict()
+    .nullable();
+
+/** Per field: the last in-game report, null when never reported. */
+export const GuildIngameGameTextSchema = z
+  .object({
+    motd: gameReport(WOW_GUILD_MOTD_MAX),
+    info: gameReport(WOW_GUILD_INFO_MAX),
+  })
+  .strict();
+export type GuildIngameGameText = z.infer<typeof GuildIngameGameTextSchema>;
+
 /** `GET /plugins/wow/guilds/:id/ingame-text` (and the PUT/409 response body). */
 export const GuildIngameTextSchema = z
   .object({
@@ -64,6 +96,8 @@ export const GuildIngameTextSchema = z
     info: storedField(WOW_GUILD_INFO_MAX),
     /** Same idiom as `HubSessionNoteResponse.viewer`, minus `canTick`. */
     viewer: z.object({ canEdit: z.boolean() }).strict(),
+    /** ROK-2137 — editors only (`viewer.canEdit`); omitted for everyone else. */
+    game: GuildIngameGameTextSchema.optional(),
   })
   .strict();
 export type GuildIngameText = z.infer<typeof GuildIngameTextSchema>;
