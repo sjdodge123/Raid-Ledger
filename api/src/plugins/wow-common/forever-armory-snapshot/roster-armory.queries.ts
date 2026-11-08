@@ -18,6 +18,7 @@ import {
 } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
+import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
 import { isClaimableGuild } from '../guilds/roster-claim/roster-claim.queries';
 import { memberOwnedByCharacterSync } from './snapshot.apply';
 import { MIN_LEVEL, RESYNC_AFTER_MS } from './snapshot.helpers';
@@ -64,11 +65,16 @@ function isDue(now: Date): SQL | undefined {
   return and(stale, notBackingOff);
 }
 
-/** The whole due-member filter for one query scope. */
+/**
+ * The whole due-member filter for one query scope. Only the current roster
+ * (`inLatestSnapshot`, as the members list) — a soft-removed member is
+ * never fetched.
+ */
 function dueWhere(q: DueRosterQuery): SQL | undefined {
   return and(
     isClaimableGuild(q.gameId),
     q.guildId === undefined ? undefined : eq(gm.guildId, q.guildId),
+    inLatestSnapshot(),
     isNotNull(gm.blizzardCharacterId),
     gte(gm.level, MIN_LEVEL),
     not(memberOwnedByCharacterSync()),
@@ -78,8 +84,8 @@ function dueWhere(q: DueRosterQuery): SQL | undefined {
 
 /**
  * Up to `limit` due members of claimable Forever hubs, oldest snapshot
- * first (never-synced first): a Blizzard id, level ≥ 10, and no
- * Armory-linked character already refreshing that id.
+ * first (never-synced first): a Blizzard id, level ≥ 10, in the latest
+ * snapshot, and no roster-linked Armory character already refreshing that id.
  */
 export async function listDueRosterMembers(
   db: Db,

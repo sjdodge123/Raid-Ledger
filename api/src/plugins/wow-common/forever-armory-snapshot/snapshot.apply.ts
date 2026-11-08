@@ -39,7 +39,7 @@ export async function writeMemberSnapshot(
 ): Promise<void> {
   const t = schema.guildMemberArmory;
   const { memberId, blizzardId, rosterLevel } = target;
-  const set = {
+  const values = {
     ...snapshot,
     blizzardCharacterId: blizzardId,
     rosterLevel,
@@ -49,10 +49,31 @@ export async function writeMemberSnapshot(
     retryAt: null,
     lastError: null,
   };
+  const set = {
+    ...values,
+    equipment: snapshot.equipment ?? keepForSameId('equipment', blizzardId),
+    armoryProfessions:
+      snapshot.armoryProfessions ??
+      keepForSameId('armory_professions', blizzardId),
+  };
   await db
     .insert(t)
-    .values({ guildMemberId: memberId, ...set })
+    .values({ guildMemberId: memberId, ...values })
     .onConflictDoUpdate({ target: t.guildMemberId, set });
+}
+
+/**
+ * Conflict-update value for a sub-resource whose fetch failed (`null` from
+ * the adapter — a genuinely empty result is a non-null payload): keep the
+ * stored value while it belongs to the same Blizzard id, else clear it.
+ * Mirrors the character sync (a failed equipment fetch keeps the gear).
+ */
+function keepForSameId(
+  column: 'equipment' | 'armory_professions',
+  blizzardId: number,
+): SQL {
+  const stored = sql.raw(`guild_member_armory.${column}`);
+  return sql`case when guild_member_armory.blizzard_character_id = ${blizzardId} then ${stored} else null end`;
 }
 
 /**
@@ -129,15 +150,23 @@ export async function applySnapshotToCharacter(
 
 /**
  * True for a `guild_members` row whose Blizzard id an Armory-linked Forever
- * character already holds — the twice-daily character sync refreshes that
- * id, so the roster pass skips the member (D2, L3). Use inside a query
- * that selects from `guild_members`.
+ * character already holds AND that the roster links to the row (the
+ * `characterLink` join: same addon GUID, game, region or unknown region) —
+ * the twice-daily character sync refreshes that id and the members list /
+ * facts read it through the link, so the roster pass skips the member (D2,
+ * L3). A member with no GUID (Blizzard-roster-only) is never owned: no read
+ * can reach that character's data, so its own snapshot must stay fresh.
+ * Use inside a query that selects from `guild_members` joined to `guilds`.
  */
 export function memberOwnedByCharacterSync(): SQL {
-  const memberId = schema.guildMembers.blizzardCharacterId;
+  const m = schema.guildMembers;
+  const g = schema.guilds;
   return sql`exists (
     select 1 from characters oc
     where oc.game_variant = ${WOW_FOREVER_VARIANT}
-      and oc.external_id = ${memberId}::text
+      and oc.external_id = ${m.blizzardCharacterId}::text
+      and oc.addon_guid = ${m.guid}
+      and oc.game_id = ${g.gameId}
+      and (oc.region is null or lower(oc.region) = lower(${g.region}))
   )`;
 }

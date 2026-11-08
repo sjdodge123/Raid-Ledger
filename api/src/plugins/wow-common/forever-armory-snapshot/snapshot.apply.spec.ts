@@ -86,6 +86,37 @@ describe('writeMemberSnapshot', () => {
   });
 });
 
+describe('writeMemberSnapshot — a partial fetch keeps stored data (Codex P2)', () => {
+  const partial = { ...SNAPSHOT, equipment: null, armoryProfessions: null };
+
+  it('a null equipment / professions fetch keeps the stored columns for the same Blizzard id', async () => {
+    const { mock, db } = setup();
+    await writeMemberSnapshot(db, TARGET, partial, NOW);
+    const conflict = firstArg(mock.onConflictDoUpdate) as {
+      set: Record<string, unknown>;
+    };
+    for (const col of ['equipment', 'armory_professions']) {
+      const key = col === 'equipment' ? 'equipment' : 'armoryProfessions';
+      const q = dialect.sqlToQuery(conflict.set[key] as SQL);
+      expect(q.sql).toBe(
+        `case when guild_member_armory.blizzard_character_id = $1 then guild_member_armory.${col} else null end`,
+      );
+      expect(q.params).toEqual([12345]);
+    }
+    expect(conflict.set.syncedAt).toBe(SYNCED);
+  });
+
+  it('a genuinely empty (non-null) payload still overwrites', async () => {
+    const { mock, db } = setup();
+    await writeMemberSnapshot(db, TARGET, SNAPSHOT, NOW);
+    const conflict = firstArg(mock.onConflictDoUpdate) as {
+      set: Record<string, unknown>;
+    };
+    expect(conflict.set.equipment).toEqual({ items: [] });
+    expect(conflict.set.armoryProfessions).toEqual({ primaries: [] });
+  });
+});
+
 describe('recordMemberFailure', () => {
   it('counts the failure, backs off from the stored count, keeps the data', async () => {
     const { mock, db } = setup();
@@ -158,5 +189,12 @@ describe('memberOwnedByCharacterSync', () => {
     expect(text).toContain(
       'external_id = "guild_members"."blizzard_character_id"::text',
     );
+  });
+
+  it('owns the member only through the character the roster links (guid + game + region)', () => {
+    const text = dialect.sqlToQuery(memberOwnedByCharacterSync()).sql;
+    expect(text).toContain('oc.addon_guid = "guild_members"."guid"');
+    expect(text).toContain('oc.game_id = "guilds"."game_id"');
+    expect(text).toContain('lower(oc.region) = lower("guilds"."region")');
   });
 });
