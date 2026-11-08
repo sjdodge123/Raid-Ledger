@@ -20,7 +20,10 @@ import type {
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import * as ops from './channel-lifecycle.discord-ops';
 import * as queries from './game-activity.queries';
-import { ChannelGoneError } from './channel-lifecycle.errors';
+import {
+  CHANNEL_GONE_DETAIL,
+  ChannelGoneError,
+} from './channel-lifecycle.errors';
 import { ChannelLifecycleService } from './channel-lifecycle.service';
 import { HubChannelLinkService } from './hub-channel-link.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
@@ -229,7 +232,7 @@ async function tick(
   return makeService(h).reconcile({ dryRun: false, trigger: 'manual' });
 }
 
-const GONE = { outcome: 'failed', detail: 'channel deleted in Discord' };
+const GONE = { outcome: 'failed', detail: CHANNEL_GONE_DETAIL };
 
 describe('reconcile never touches the pool while a game tx is open', () => {
   it('10003 on archive: suppress + unbind + hub clear all run on the tx', async () => {

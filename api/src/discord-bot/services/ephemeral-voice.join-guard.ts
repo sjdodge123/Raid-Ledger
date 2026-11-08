@@ -10,7 +10,7 @@ type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
 /**
  * ROK-2119 — the join-guard's expected Discord refusals. A member the bot
- * cannot move (outranks it, or no Move Members) is not a bug: warn once per
+ * cannot move (no Move Members on the channel) is not a bug: warn once per
  * (event, member) instead of sending a 50013 to Sentry on every join.
  */
 
@@ -56,7 +56,7 @@ export async function guardDisconnect(
         logger,
         eventId,
         memberId,
-        'member outranks the bot or it lacks Move Members',
+        'bot lacks Move Members on the voice channel',
       );
     }
     return res;
