@@ -105,3 +105,11 @@ export function placeArmoryTalents(talents: ForeverTalentsDto, characterClass: s
     const nodes = placeEach(ranked, map, armoryTreeNames(aligned, characterClass));
     return nodes.some(hasCell) ? { ...aligned, layout: 'grid', nodes } : aligned;
 }
+
+/**
+ * ROK-2146: the DTO the static Forever table joins against — Blizzard trees moved to
+ * their class columns by name (the table is in Blizzard/Wowhead order); addon as-is.
+ */
+export function alignForeverTalents(talents: ForeverTalentsDto, characterClass: string | null | undefined): ForeverTalentsDto {
+    return talents.source === 'blizzard' ? alignArmoryTrees(talents, characterClass) : talents;
+}
