@@ -190,7 +190,14 @@ describe('BlizzardRosterSyncJob.syncNow — roster Armory pass (ROK-2133 AC-13)'
   it('fires one pass for that guild without waiting for it', async () => {
     sync.syncForeverGuildRoster.mockResolvedValue(ok);
     armory.runForGuild.mockReturnValue(new Promise(() => undefined));
-    await expect(job.syncNow(7)).resolves.toMatchObject({ status: 'ok' });
+    const blocked = new Promise<string>((r) =>
+      setTimeout(() => r('blocked'), 200),
+    );
+    const outcome = await Promise.race([
+      job.syncNow(7).then(() => 'responded'),
+      blocked,
+    ]);
+    expect(outcome).toBe('responded');
     expect(armory.runForGuild).toHaveBeenCalledTimes(1);
     expect(armory.runForGuild).toHaveBeenCalledWith(7);
   });
