@@ -1,8 +1,8 @@
 /**
  * ROK-2136 — the "Guild message" editor (the session-note dialog idiom):
  * `Modal max-w-lg` at ≥1024px, `BottomSheet 85vh` below, guarded by
- * `useDirtyCloseGuard`. One dialog edits both fields; Save sends both texts and
- * each field's loaded `updatedAt` verbatim. A 409 (per field, D6) never
+ * `useDirtyCloseGuard`. One dialog edits both fields; Save sends only the
+ * edited fields, each with its loaded `updatedAt` verbatim. A 409 (per field, D6) never
  * overwrites: the draft stays and a §4.7 `warning` banner offers "Load their
  * version". Opening refetches; a clean draft rebases on the fresh text.
  * Default export for `React.lazy`.
@@ -13,6 +13,7 @@ import type { GuildIngameText, IngameTextFieldKey } from '@raid-ledger/contract'
 import { Modal } from '../../../components/ui/modal';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
 import { Button } from '../../../components/ui/button';
+import { DialogBanner } from '../../../components/ui/dialog-banner';
 import { DiscardChangesConfirm, type DiscardCopy } from '../../../components/ui/discard-changes-confirm';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useDirtyCloseGuard, type DirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
@@ -32,16 +33,6 @@ function TextOverlay({ guard, onClose, footer, children }: OverlayProps): JSX.El
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const shared = { isOpen: true, title: DIALOG_TITLE, onClose, closeGuard: guard, footer, children };
     return isDesktop ? <Modal {...shared} maxWidth="max-w-lg" /> : <BottomSheet {...shared} maxHeight="85vh" />;
-}
-
-function Banner({ tone, children }: { tone: 'warning' | 'danger'; children: ReactNode }): JSX.Element {
-    const hue = tone === 'warning' ? 'border-warning/30 bg-warning/10 text-warning' : 'border-danger/30 bg-danger/10 text-danger';
-    return (
-        <div role="alert" data-testid={`guild-text-${tone === 'warning' ? 'conflict' : 'error'}`}
-            className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${hue}`}>
-            {children}
-        </div>
-    );
 }
 
 /** Draft + the base it started from + the save mutation; `loadTheirs` rebases on a 409's text. */
@@ -107,12 +98,12 @@ function GuildTextEditor({ guildId, data, onClose }: EditorProps): JSX.Element {
         <TextOverlay guard={guard} onClose={onClose}
             footer={<DialogFooter editor={editor} onCancel={guard.requestClose} onSave={save} />}>
             {conflict !== null && (
-                <Banner tone="warning">
+                <DialogBanner tone="warning" testId="guild-text-conflict">
                     <span>{CONFLICT_COPY}</span>
                     <Button variant="warning-soft" size="sm" data-testid="guild-text-load-theirs" onClick={load}>Load their version</Button>
-                </Banner>
+                </DialogBanner>
             )}
-            {failed && <Banner tone="danger">Couldn&apos;t save the guild text. Try again.</Banner>}
+            {failed && <DialogBanner tone="danger" testId="guild-text-error">Couldn&apos;t save the guild text. Try again.</DialogBanner>}
             <EditorFields editor={editor} />
             <DiscardChangesConfirm isOpen={confirmLoad} onKeep={() => setConfirmLoad(false)} onDiscard={loadNow}
                 copy={LOAD_COPY} message="Your unsaved changes will be replaced." />

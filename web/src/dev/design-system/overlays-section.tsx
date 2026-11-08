@@ -175,7 +175,7 @@ function ChipsAndText(): JSX.Element {
                 <span className="text-xs text-secondary">ROK-1539</span>
                 <CopyButton text="ROK-1539" />
             </StateFrame>
-            <StateFrame label="CopyButton — labelled" note="`label` adds visible text beside the icon; it reads 'Copied' for 2s after a copy (ROK-2136).">
+            <StateFrame label="CopyButton — labelled" note="`label` adds visible text beside the icon (the shared ghost sm Button: 44px below lg, focus ring); it reads 'Copied' for 2s after a copy (ROK-2136).">
                 <CopyButton text="Raid tonight 8pm" label="Copy for in-game" />
             </StateFrame>
             <StateFrame label="MarkdownText" note="Allow-listed inline tokens only. Raw HTML is never rendered.">

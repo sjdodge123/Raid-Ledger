@@ -54,7 +54,23 @@ beforeEach(() => {
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 });
 
-afterEach(() => { Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true }); });
+/** The globals these specs stub, captured once so `afterEach` puts back exactly what jsdom had. */
+const ORIGINAL = {
+    secure: Object.getOwnPropertyDescriptor(window, 'isSecureContext'),
+    clipboard: Object.getOwnPropertyDescriptor(navigator, 'clipboard'),
+    execCommand: Object.getOwnPropertyDescriptor(document, 'execCommand'),
+};
+
+function restore(target: object, key: string, original: PropertyDescriptor | undefined): void {
+    if (original === undefined) Reflect.deleteProperty(target, key);
+    else Object.defineProperty(target, key, original);
+}
+
+afterEach(() => {
+    restore(window, 'isSecureContext', ORIGINAL.secure);
+    restore(navigator, 'clipboard', ORIGINAL.clipboard);
+    restore(document, 'execCommand', ORIGINAL.execCommand);
+});
 
 describe('useGuildTextVisible (AC12)', () => {
     it('hides the card from a member when nothing is set', async () => {
@@ -122,6 +138,15 @@ describe('GuildTextWidget, editor (AC12/AC15)', () => {
         expect(await screen.findByTestId('guild-text-info')).toHaveTextContent(NOT_SET_COPY);
         fireEvent.click(await screen.findByTestId('guild-text-edit'));
         expect(useGuildTextDialog.getState().guildId).toBe(5);
+    });
+
+    it('closes the open editor when the card unmounts (leaving the hub)', async () => {
+        serve(buildGuildIngameText(null, null, true));
+        const { unmount } = renderWithProviders(<Card />);
+        fireEvent.click(await screen.findByTestId('guild-text-add'));
+        expect(useGuildTextDialog.getState().guildId).toBe(5);
+        unmount();
+        expect(useGuildTextDialog.getState().guildId).toBeNull();
     });
 });
 

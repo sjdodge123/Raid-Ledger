@@ -183,7 +183,7 @@ test.describe('WoW: Forever hub "Guild message" card (ROK-2136)', () => {
             const jwt = await signInOnboardedMember(page, guild.users.officer.userId);
             const before = await textOf(jwt, guild.guildId);
             expect(before, 'a fresh guild has no in-game text and the officer (delegated editor rank) can edit')
-                .toEqual({ motd: null, info: null, viewer: { canEdit: true } });
+                .toEqual({ guildId: guild.guildId, motd: null, info: null, viewer: { canEdit: true } });
 
             await openOverview(page, guild.guildId);
             const motdInput = await openEditorFromHint(page);

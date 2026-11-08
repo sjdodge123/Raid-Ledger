@@ -1,5 +1,6 @@
 import { useState, type JSX } from 'react';
 import { copyWithToast } from '../../lib/clipboard';
+import { Button } from './button';
 
 interface CopyButtonProps {
     text: string;
@@ -8,13 +9,14 @@ interface CopyButtonProps {
     onCopied?: (() => void) | undefined;
     /**
      * ROK-2136 — visible text beside the icon (e.g. "Copy for in-game"); it reads
-     * "Copied" for 2s after a copy. Omitted = the icon-only button named by `title`.
+     * "Copied" for 2s after a copy. Rendered as the shared `Button` ghost `sm`
+     * (44px tap target below `lg`, the shared focus ring). Omitted = the
+     * icon-only button named by `title`.
      */
     label?: string | undefined;
 }
 
 const ICON_ONLY = 'p-1.5 rounded-md text-muted hover:text-foreground hover:bg-overlay transition-colors';
-const LABELLED = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted hover:text-foreground hover:bg-overlay transition-colors';
 
 function CopyIcon({ copied }: { copied: boolean }): JSX.Element {
     return copied ? (
@@ -46,10 +48,10 @@ export function CopyButton({ text, className = '', onCopied, label }: CopyButton
 
     if (label !== undefined) {
         return (
-            <button type="button" onClick={handleCopy} className={`${LABELLED} ${className}`}>
+            <Button variant="ghost" size="sm" onClick={() => void handleCopy()} className={className}>
                 <CopyIcon copied={copied} />
                 <span aria-live="polite">{copied ? 'Copied' : label}</span>
-            </button>
+            </Button>
         );
     }
     return (

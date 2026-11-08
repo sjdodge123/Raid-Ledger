@@ -6,8 +6,8 @@
  * set" for an empty one, and the quiet "Add guild text" hint when both are
  * empty. Default export so the registration can `React.lazy` it.
  */
-import { Suspense, lazy, type JSX } from 'react';
-import type { GuildIngameTextField, IngameTextFieldKey } from '@raid-ledger/contract';
+import { Suspense, lazy, useEffect, type JSX } from 'react';
+import type { GuildIngameText, GuildIngameTextField, IngameTextFieldKey } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { CopyButton } from '../../../components/ui/CopyButton';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
@@ -63,18 +63,37 @@ function DialogMount({ guildId }: { guildId: number }): JSX.Element | null {
     return <Suspense fallback={null}><LazyGuildTextDialog guildId={guildId} onClose={close} /></Suspense>;
 }
 
-export default function GuildTextWidget({ page }: HubWidgetCtx): JSX.Element | null {
-    const guildId = page.guild.id;
-    const { data } = useGuildIngameText(guildId);
-    if (data === undefined) return null;
+/** Leaving the hub closes this hub's editor, so returning never reopens a stale dialog. */
+function useCloseDialogOnUnmount(guildId: number): void {
+    useEffect(() => () => {
+        const store = useGuildTextDialog.getState();
+        if (store.guildId === guildId) store.close();
+    }, [guildId]);
+}
+
+function CardBody({ data }: { data: GuildIngameText }): JSX.Element {
     const { motd, info, viewer } = data;
-    const dialog = viewer.canEdit ? <DialogMount guildId={guildId} /> : null;
-    if (motd === null && info === null) return viewer.canEdit ? <><EditorHint guildId={guildId} />{dialog}</> : null;
     return (
         <div className="flex flex-col gap-4" data-testid="guild-text-card">
-            {dialog}
             <TextBlock field="motd" value={motd} canEdit={viewer.canEdit} />
             <TextBlock field="info" value={info} canEdit={viewer.canEdit} />
         </div>
+    );
+}
+
+export default function GuildTextWidget({ page }: HubWidgetCtx): JSX.Element | null {
+    const guildId = page.guild.id;
+    const { data } = useGuildIngameText(guildId);
+    useCloseDialogOnUnmount(guildId);
+    if (data === undefined) return null;
+    const { motd, info, viewer } = data;
+    const empty = motd === null && info === null;
+    if (empty && !viewer.canEdit) return null;
+    // The dialog keeps one position across empty ↔ set, so a refetch never remounts it mid-edit.
+    return (
+        <>
+            {viewer.canEdit && <DialogMount guildId={guildId} />}
+            {empty ? <EditorHint guildId={guildId} /> : <CardBody data={data} />}
+        </>
     );
 }

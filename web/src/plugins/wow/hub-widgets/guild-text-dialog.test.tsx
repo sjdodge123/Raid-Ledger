@@ -53,25 +53,34 @@ const type = (field: 'motd' | 'info', text: string): void => { fireEvent.change(
 beforeEach(() => { media.desktop = true; });
 
 describe('GuildTextDialog save (AC15)', () => {
-    it('sends both texts and each loaded updatedAt verbatim, then closes', async () => {
+    it('sends only the edited field with its loaded updatedAt verbatim, then closes (D6 per field)', async () => {
         const bodies = capturePut();
         const onClose = await renderDialog();
         type('motd', 'Raid moved to 9pm');
         fireEvent.click(screen.getByTestId('guild-text-save'));
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-        expect(bodies[0]).toEqual({
-            motd: 'Raid moved to 9pm', info: 'Loot: EPGP',
-            baseMotdUpdatedAt: MOTD_UPDATED_AT, baseInfoUpdatedAt: INFO_UPDATED_AT,
-        });
+        expect(bodies[0]).toEqual({ motd: 'Raid moved to 9pm', baseMotdUpdatedAt: MOTD_UPDATED_AT });
     });
 
-    it('sends null bases for unset fields', async () => {
+    it('editing only Info never sends the untouched MOTD or its token', async () => {
+        const bodies = capturePut();
+        const onClose = await renderDialog();
+        type('info', 'Loot: council');
+        fireEvent.click(screen.getByTestId('guild-text-save'));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(bodies[0]).toEqual({ info: 'Loot: council', baseInfoUpdatedAt: INFO_UPDATED_AT });
+    });
+
+    it('sends both edited fields, with a null base for a field that was unset', async () => {
         const bodies = capturePut();
         const onClose = await renderDialog(buildGuildIngameText(null, null, true));
+        type('motd', 'Raid tonight');
         type('info', 'Recruiting healers');
         fireEvent.click(screen.getByTestId('guild-text-save'));
         await waitFor(() => expect(onClose).toHaveBeenCalled());
-        expect(bodies[0]).toEqual({ motd: '', info: 'Recruiting healers', baseMotdUpdatedAt: null, baseInfoUpdatedAt: null });
+        expect(bodies[0]).toEqual({
+            motd: 'Raid tonight', info: 'Recruiting healers', baseMotdUpdatedAt: null, baseInfoUpdatedAt: null,
+        });
     });
 
     it('caps each textarea at the in-game length with the shared counter, and shows the paste hint', async () => {

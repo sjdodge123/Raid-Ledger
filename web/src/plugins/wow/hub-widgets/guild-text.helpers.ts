@@ -46,14 +46,24 @@ export function isDirty(draft: GuildTextDraft, base: GuildTextBase): boolean {
     return draft.motd !== start.motd || draft.info !== start.info;
 }
 
-/** Both texts plus each field's loaded `updatedAt`, sent back verbatim (null when the field was unset). */
+/**
+ * Only the fields the editor changed, each with its loaded `updatedAt` sent
+ * back verbatim (null when the field was unset). An untouched field is
+ * omitted, so the server never conflict-checks it (D6, per field): editing
+ * only Info never 409s because someone else changed the MOTD.
+ */
 export function toPutBody(draft: GuildTextDraft, base: GuildTextBase): PutGuildIngameText {
-    return {
-        motd: draft.motd,
-        info: draft.info,
-        baseMotdUpdatedAt: base.motd?.updatedAt ?? null,
-        baseInfoUpdatedAt: base.info?.updatedAt ?? null,
-    };
+    const start = draftOf(base);
+    const body: PutGuildIngameText = {};
+    if (draft.motd !== start.motd) {
+        body.motd = draft.motd;
+        body.baseMotdUpdatedAt = base.motd?.updatedAt ?? null;
+    }
+    if (draft.info !== start.info) {
+        body.info = draft.info;
+        body.baseInfoUpdatedAt = base.info?.updatedAt ?? null;
+    }
+    return body;
 }
 
 /** The first field holding a character the server rejects (400), or null. */
