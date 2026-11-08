@@ -27,14 +27,22 @@ function namedColumns(trees: Trees, characterClass: string | null | undefined): 
     return columns;
 }
 
-/** Blizzard tree index → class column: named trees by name, unnamed ones fill the free columns in order. */
+function isFreeColumn(columns: Map<number, number>, column: number): boolean {
+    return column >= 0 && column <= 2 && ![...columns.values()].includes(column);
+}
+
+/**
+ * Blizzard tree index → class column: named trees by name; an unnamed tree
+ * keeps its own column when free, else takes the first free one.
+ */
 function columnMap(trees: Trees, characterClass: string | null | undefined): Map<number, number> | undefined {
     const columns = namedColumns(trees, characterClass);
     if (!columns) return undefined;
-    const free = [0, 1, 2].filter((c) => ![...columns.values()].includes(c));
-    for (const tree of trees) {
+    const unnamed = trees.filter((t) => !columns.has(t.index));
+    for (const tree of unnamed) if (isFreeColumn(columns, tree.index)) columns.set(tree.index, tree.index);
+    for (const tree of unnamed) {
         if (columns.has(tree.index)) continue;
-        const column = free.shift();
+        const column = [0, 1, 2].find((c) => isFreeColumn(columns, c));
         if (column === undefined) return undefined;
         columns.set(tree.index, column);
     }

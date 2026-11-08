@@ -89,13 +89,16 @@ function hasCell(node: ForeverTalentNodeDto): boolean {
 }
 
 /**
- * Each Blizzard tree moved to its class column by name (ROK-2113 T1), then a
+ * Each Blizzard tree moved to its class column by name (ROK-2113 T1) — grid
+ * payloads included, returned aligned as they are — then for a list payload a
  * grid DTO when at least one ranked node lands on its own cell of the known
  * trees (the others unpositioned, ROK-2113); else the aligned list.
  */
 export function placeArmoryTalents(talents: ForeverTalentsDto, characterClass: string | null | undefined): ForeverTalentsDto {
-    if (talents.source !== 'blizzard' || talents.layout !== 'list') return talents;
+    if (talents.source !== 'blizzard') return talents;
+    // Align BEFORE the layout check: a grid payload's headers, cells and spent must share one column order.
     const aligned = alignArmoryTrees(talents, characterClass);
+    if (aligned.layout !== 'list') return aligned;
     const map = classPositions(characterClass);
     const ranked = aligned.nodes.filter((n) => n.rank > 0);
     if (!map || ranked.length === 0) return aligned;
