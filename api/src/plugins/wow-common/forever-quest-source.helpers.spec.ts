@@ -107,3 +107,80 @@ describe('effectiveQuests (ROK-2109 AC5, ROK-2138 AC13–14)', () => {
     expect(addonOnly?.quests.completedTruncated).toBe(true);
   });
 });
+
+/** An addon snapshot whose `quests` has NO `completed` key (ROK-2125). */
+const logOnly = (at: Date) => ({
+  data: { quests: { inProgress: LOG } },
+  capturedAt: at,
+});
+
+describe('effectiveQuests — absent vs empty addon completed list (ROK-2125)', () => {
+  it.each([
+    ['newer', T0, T1],
+    ['older', T1, T0],
+  ])(
+    'absent + %s Armory list: the Armory supplies list, flag, date and source; the log stays the addon’s',
+    (_label, addonAt, armoryAt) => {
+      const eff = effectiveQuests(
+        logOnly(addonAt),
+        armory([1, 2], armoryAt, true),
+      );
+      expect(eff).toEqual({
+        quests: {
+          completed: [1, 2],
+          completedTruncated: true,
+          inProgress: LOG,
+        },
+        capturedAt: armoryAt,
+        source: 'blizzard',
+        inProgressAsOf: addonAt,
+      });
+    },
+  );
+
+  it.each([
+    ['newer', T0, T1],
+    ['older', T1, T0],
+  ])(
+    'empty + %s Armory list: the Armory list wins, as before',
+    (_l, addonAt, armoryAt) => {
+      const eff = effectiveQuests(addon([], addonAt), armory([1, 2], armoryAt));
+      expect(eff?.source).toBe('blizzard');
+      expect(eff?.quests.completed).toEqual([1, 2]);
+      expect(eff?.inProgressAsOf).toEqual(addonAt);
+    },
+  );
+
+  it('empty + no Armory list: an explicit "none completed" from the addon, as before', () => {
+    expect(effectiveQuests(addon([], T1), null)).toEqual({
+      quests: { completed: [], inProgress: LOG },
+      capturedAt: T1,
+      source: 'addon',
+      inProgressAsOf: T1,
+    });
+  });
+
+  it('present + no Armory list: the addon list, unchanged', () => {
+    expect(effectiveQuests(addon([4], T1), null)?.quests.completed).toEqual([
+      4,
+    ]);
+  });
+});
+
+describe('effectiveQuests — log-only with no Armory list (ROK-2125 review r1)', () => {
+  it('absent + no Armory list: the log stays visible; the completed list is flagged unknown, never "none done"', () => {
+    const expected = {
+      quests: { completed: [], completedTruncated: true, inProgress: LOG },
+      capturedAt: T1,
+      source: 'addon',
+      inProgressAsOf: T1,
+    };
+    expect(effectiveQuests(logOnly(T1), null)).toEqual(expected);
+    expect(effectiveQuests(logOnly(T1), { completed: 'x' })).toEqual(expected);
+  });
+
+  it('absent + no Armory list + an empty log: nothing to show → null', () => {
+    const emptyLog = { data: { quests: { inProgress: [] } }, capturedAt: T1 };
+    expect(effectiveQuests(emptyLog, null)).toBeNull();
+  });
+});

@@ -20,6 +20,7 @@ import type {
 } from '@raid-ledger/contract';
 import * as cancelH from './signups-cancel.helpers';
 import * as notifH from './signups-notification.helpers';
+import * as writeH from './signups-roster-write.helpers';
 import * as rosterOpsH from './signups-roster-ops.helpers';
 import * as voiceH from '../notifications/voice-access-lost.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -240,17 +241,14 @@ export class SignupsRosterService {
       'update roster',
     );
     return this.db.transaction(async (tx) => {
-      const signupByUserId = await notifH.validateRosterAssignments(
-        tx,
-        eventId,
-        dto.assignments,
-      );
+      const { signupByUserId, signupById, assignments } =
+        await writeH.validateRosterAssignments(tx, eventId, dto.assignments);
       const oldRoleBySignupId = await notifH.captureOldAssignments(tx, eventId);
-      const reconfirmedUserIds = await notifH.replaceRosterAssignments(
+      const reconfirmedUserIds = await writeH.replaceRosterAssignments(
         tx,
         eventId,
-        dto.assignments,
-        signupByUserId,
+        assignments,
+        signupById,
         this.benchPromotionService,
       );
       this.logger.log(

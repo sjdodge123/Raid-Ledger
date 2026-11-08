@@ -7,12 +7,18 @@
  *   2026-11-08: the Blizzard API is primary, LedgerLink only fills gaps); the
  *   addon list only when there is no Armory list. Never a union (OQ-5): it
  *   would resurrect abandoned/reset quests and mix the capped addon list.
+ * - ROK-2125: an addon `quests` slice WITHOUT `completed` has no opinion on
+ *   the completed list — only the Armory can supply it. With no Armory list
+ *   the log stays visible and the completed list is UNKNOWN: an empty list
+ *   flagged truncated (see `truncationCutoff`: every id unknown), never
+ *   "none completed". An explicitly EMPTY addon list keeps its meaning:
+ *   "this character completed nothing".
  * - in-progress log: always the addon's — Blizzard serves no quest log, so an
  *   Armory sync must not blank it.
  *
  * Pure: no I/O, no clock reads.
  */
-import { AddonQuestsSchema } from '@raid-ledger/contract';
+import { AddonQuestsSchema, type AddonQuests } from '@raid-ledger/contract';
 import { ArmoryQuestsSchema } from './blizzard-quests.helpers';
 import type { ForeverQuestSnapshotInput } from './character-quests.helpers';
 import type { Fact } from './facts/wow-fact.types';
@@ -41,17 +47,44 @@ export interface AddonQuestInput {
 
 /**
  * Read `data.quests` (snapshot schema 2) through the ROK-1742 wire schema.
- * Schema-1 rows (no `quests`) and malformed slices return `undefined`.
+ * Schema-1 rows (no `quests`) and malformed slices return `undefined`. The
+ * result's `completed` is absent when the addon sent none (ROK-2125).
  */
-export function readQuestsSlice(data: unknown): QuestsSlice | undefined {
+export function readQuestsSlice(data: unknown): AddonQuests | undefined {
   if (!data || typeof data !== 'object') return undefined;
   const parsed = AddonQuestsSchema.safeParse(
     (data as { quests?: unknown }).quests,
   );
-  return parsed.success ? (parsed.data satisfies QuestsSlice) : undefined;
+  return parsed.success ? parsed.data : undefined;
 }
 
 type Completed = Pick<QuestsSlice, 'completed' | 'completedTruncated'>;
+
+/** The addon's completed list as a fact; absent list → no opinion (ROK-2125). */
+function addonFact(
+  addon: AddonQuestInput | null,
+  slice: AddonQuests | undefined,
+): Fact<Completed> | null {
+  if (!addon || !slice?.completed) return null;
+  const { completed, completedTruncated } = slice;
+  const value: Completed = completedTruncated
+    ? { completed, completedTruncated }
+    : { completed };
+  return { value, source: 'addon', asOf: addon.capturedAt };
+}
+
+/**
+ * ROK-2125: a log-only slice with no completed list anywhere — the log as a
+ * fact and the completed list unknown (empty + truncated). Empty log → null.
+ */
+function unknownCompletedFact(
+  addon: AddonQuestInput | null,
+  slice: AddonQuests | undefined,
+): Fact<Completed> | null {
+  if (!addon || !slice || slice.inProgress.length === 0) return null;
+  const value: Completed = { completed: [], completedTruncated: true };
+  return { value, source: 'addon', asOf: addon.capturedAt };
+}
 
 /** The Armory column as a fact; malformed jsonb → absent (AC5). */
 function armoryFact(raw: unknown): Fact<Completed> | null {
@@ -66,18 +99,18 @@ function armoryFact(raw: unknown): Fact<Completed> | null {
 
 /**
  * Combine the two sources (ROK-2109 D4, ROK-2138 D10).
- * @returns null when neither source has usable quest data.
+ * @returns null when neither source has usable quest data (no completed
+ *   list and no in-progress log).
  */
 export function effectiveQuests(
   addon: AddonQuestInput | null,
   armoryRaw: unknown,
 ): EffectiveQuests | null {
   const slice = addon ? readQuestsSlice(addon.data) : undefined;
-  const addonFact: Fact<Completed> | null =
-    addon && slice
-      ? { value: slice, source: 'addon', asOf: addon.capturedAt }
-      : null;
-  const winner = armoryFact(armoryRaw) ?? addonFact;
+  const winner =
+    armoryFact(armoryRaw) ??
+    addonFact(addon, slice) ??
+    unknownCompletedFact(addon, slice);
   if (!winner || !winner.asOf) return null;
   const { completed, completedTruncated } = winner.value;
   return {

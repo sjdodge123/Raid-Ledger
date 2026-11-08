@@ -249,12 +249,15 @@ interface SharedQuestProps {
     onTogglePickedUp: (questId: number, currentlyPickedUp: boolean) => void;
 }
 
-/** Render outside/inside location groups for a list of quests */
+/**
+ * Render the entrance checklist: quests to get before going in, then the
+ * ones only acquired inside the instance (ROK-2142 — hidden when none).
+ */
 function QuestLocationGroups({ quests, ...rest }: { quests: EnrichedDungeonQuestDto[] } & SharedQuestProps) {
     return (
         <>
-            <QuestGroup title="Pick up before you go" icon="&#x1F5FA;&#xFE0F;" quests={quests.filter((q) => !q.startsInsideDungeon)} {...rest} />
-            <QuestGroup title="Starts inside the dungeon" icon="&#x1F3F0;" quests={quests.filter((q) => q.startsInsideDungeon)} {...rest} />
+            <QuestGroup title="Get before you go in" icon="&#x1F5FA;&#xFE0F;" quests={quests.filter((q) => !q.startsInsideDungeon)} {...rest} />
+            <QuestGroup title="Picked up inside" hint="Get these during the run" icon="&#x1F3F0;" quests={quests.filter((q) => q.startsInsideDungeon)} {...rest} />
         </>
     );
 }
@@ -277,12 +280,14 @@ function InstanceQuestSection({ instance, quests, character, ...rest }: {
 /** Props for a single quest group (outside/inside) with sub-groups */
 interface QuestGroupProps extends SharedQuestProps {
     title: string;
+    /** One-line explanation under the group title */
+    hint?: string;
     icon: string;
     quests: EnrichedDungeonQuestDto[];
 }
 
 /** Render a group of quests (outside/inside) with sub-groups */
-function QuestGroup({ title, icon, quests, ...rest }: QuestGroupProps) {
+function QuestGroup({ title, hint, icon, quests, ...rest }: QuestGroupProps) {
     if (quests.length === 0) return null;
     const { sharable, chain, solo } = groupByType(quests);
     return (
@@ -291,6 +296,7 @@ function QuestGroup({ title, icon, quests, ...rest }: QuestGroupProps) {
                 <span className="quest-group__icon">{icon}</span>
                 <span>{title} ({quests.length})</span>
             </div>
+            {hint && <p className="quest-group__hint">{hint}</p>}
             <QuestSubGroup label="Sharable" icon="🔗" quests={sharable} {...rest} />
             <QuestSubGroup label="Requires quest chain" icon="⛓" quests={chain} {...rest} />
             <QuestSubGroup label="Must pick up yourself" icon="👤" quests={solo} {...rest} />
