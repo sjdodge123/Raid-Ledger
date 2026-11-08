@@ -32,6 +32,17 @@ export function hasIngameControlChars(text: string): boolean {
   return CONTROL_CHAR_RE.test(text);
 }
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_GLOBAL_RE = /[\u0000-\u0009\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+
+/**
+ * ROK-2137 — drop every character `hasIngameControlChars` rejects (same
+ * rule), so text the game reported can always be adopted through the save.
+ */
+export function stripIngameControlChars(text: string): string {
+  return text.replace(CONTROL_CHAR_GLOBAL_RE, '');
+}
+
 const putText = (max: number) =>
   z
     .string()
@@ -69,6 +80,8 @@ export const GuildIngameGameReportSchema = z
   .object({
     gameText: z.string(),
     gameReportedAt: isoDate,
+    /** The exporting character's name; omitted when the report carried none. */
+    gameReportedBy: z.string().min(1).max(100).optional(),
     changedInGame: z.boolean(),
   })
   .strict();
@@ -87,6 +100,20 @@ export const GuildIngameGameTextSchema = z
   })
   .strict();
 export type GuildIngameGameText = z.infer<typeof GuildIngameGameTextSchema>;
+
+/**
+ * ROK-2137 — `POST …/ingame-text/:field/adopt|push` body: what the editor saw.
+ * `gameReportedAt` must still be the stored report (else 409 with the fresh
+ * `ingameText`); Adopt also sends the field's hub `updatedAt` (null = unset)
+ * as the ROK-2136 save's per-field conflict token. Push ignores it.
+ */
+export const GuildIngameGameActionSchema = z
+  .object({
+    baseUpdatedAt: isoDate.nullable(),
+    gameReportedAt: isoDate,
+  })
+  .strict();
+export type GuildIngameGameAction = z.infer<typeof GuildIngameGameActionSchema>;
 
 /** `GET /plugins/wow/guilds/:id/ingame-text` (and the PUT/409 response body). */
 export const GuildIngameTextSchema = z
