@@ -1,5 +1,5 @@
 {
-  "id": "25899562-6752-4667-98dd-fabcbd58f239",
+  "id": "dc4ffd35-ea42-42eb-836e-14963a69cfb2",
   "prevId": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "version": "7",
   "dialect": "postgresql",
@@ -12123,15 +12123,15 @@
           "name": "idx_guild_members_guild_blizzard_id",
           "columns": [
             {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "(\"blizzard_character_id\"::text)",
               "asc": true,
               "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
               "nulls": "last"
             }
           ],

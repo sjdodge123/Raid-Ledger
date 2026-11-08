@@ -69,10 +69,11 @@ export const guildMembers = pgTable(
     /**
      * ROK-2115: the Blizzard-id link arm (non-unique; Ruling 4). An expression
      * index on `blizzard_character_id::text` because the arm-B predicate casts
-     * this column (`c.external_id = gm.blizzard_character_id::text`).
+     * this column (`c.external_id = gm.blizzard_character_id::text`). The
+     * expression leads so unscoped character→row reads (no guild id) can probe it.
      */
     index('idx_guild_members_guild_blizzard_id')
-      .on(table.guildId, sql`(${table.blizzardCharacterId}::text)`)
+      .on(sql`(${table.blizzardCharacterId}::text)`, table.guildId)
       .where(sql`${table.blizzardCharacterId} IS NOT NULL`),
   ],
 );
