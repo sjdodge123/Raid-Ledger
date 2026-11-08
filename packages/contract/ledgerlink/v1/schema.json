@@ -518,7 +518,7 @@
                   }
                 },
                 "givers": {
-                  "maxItems": 50,
+                  "maxItems": 200,
                   "type": "array",
                   "items": {
                     "type": "object",
@@ -534,6 +534,11 @@
                         "maximum": 2147483647
                       },
                       "countingSince": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 4102444800
+                      },
+                      "asOf": {
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 4102444800
@@ -567,6 +572,7 @@
                       "characterName",
                       "itemsAllTime",
                       "countingSince",
+                      "asOf",
                       "days"
                     ],
                     "additionalProperties": false

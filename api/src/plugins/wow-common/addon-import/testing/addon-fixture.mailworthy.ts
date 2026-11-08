@@ -34,7 +34,11 @@ export function buildMailworthyTemplate(): NonNullable<
   };
 }
 
-/** Full block: template, 4 peers, 2 givers (exporter + one alt) with days. */
+/**
+ * Full block: template, 4 peers, 3 givers — exporter + one alt (`asOf` =
+ * `generatedAt`) and guildmate `Member2`, whose totals Mailworthy relayed in
+ * game two hours earlier (delta 2026-11-08).
+ */
 export function buildMailworthyBlock(): AddonMailworthy {
   const d = MAILWORTHY_TODAY;
   return {
@@ -49,6 +53,7 @@ export function buildMailworthyBlock(): AddonMailworthy {
         characterName: 'Ana Forever',
         itemsAllTime: 140,
         countingSince: FIXTURE_EXPORTED_AT - 90 * 86_400,
+        asOf: MAILWORTHY_GENERATED_AT,
         days: [
           { day: d - 31, items: 20 },
           { day: d - 29, items: 12 },
@@ -59,7 +64,18 @@ export function buildMailworthyBlock(): AddonMailworthy {
         characterName: 'Anabelle Forever',
         itemsAllTime: 20,
         countingSince: FIXTURE_EXPORTED_AT - 10 * 86_400,
+        asOf: MAILWORTHY_GENERATED_AT,
         days: [{ day: d - 2, items: 20 }],
+      },
+      {
+        characterName: 'Member2',
+        itemsAllTime: 64,
+        countingSince: FIXTURE_EXPORTED_AT - 30 * 86_400,
+        asOf: MAILWORTHY_GENERATED_AT - 2 * 3_600,
+        days: [
+          { day: d - 6, items: 40 },
+          { day: d - 1, items: 24 },
+        ],
       },
     ],
   };
@@ -109,7 +125,10 @@ export function buildCharMailworthyTooManyRulesPayload(): object {
   });
 }
 
-/** Size worst case (spec §A.4 / R5): every array at its cap, 48-char names. */
+/**
+ * Size worst case (spec §A.4 / R5): every array at its cap (200 givers ×
+ * 35 days since the in-game sharing delta), 48-char names.
+ */
 export function buildMailworthyWorstCaseBlock(): AddonMailworthy {
   const name = (prefix: string, i: number) =>
     `${prefix}${i}`.padEnd(ADDON_MAILWORTHY_NAME_MAX, 'x');
@@ -128,6 +147,7 @@ export function buildMailworthyWorstCaseBlock(): AddonMailworthy {
       characterName: name('Giver', i),
       itemsAllTime: 100_000 + i,
       countingSince: FIXTURE_EXPORTED_AT - 400 * 86_400,
+      asOf: MAILWORTHY_GENERATED_AT - i,
       days,
     })),
   };

@@ -52,8 +52,9 @@
         {"name":"Member4","lastSeenAt":1789985540}
       ],
       "givers": [
-        {"characterName":"Ana Forever","itemsAllTime":140,"countingSince":1782224000,"days":[{"day":20686,"items":20},{"day":20688,"items":12},{"day":20717,"items":8}]},
-        {"characterName":"Anabelle Forever","itemsAllTime":20,"countingSince":1789136000,"days":[{"day":20715,"items":20}]}
+        {"characterName":"Ana Forever","itemsAllTime":140,"countingSince":1782224000,"asOf":1789999940,"days":[{"day":20686,"items":20},{"day":20688,"items":12},{"day":20717,"items":8}]},
+        {"characterName":"Anabelle Forever","itemsAllTime":20,"countingSince":1789136000,"asOf":1789999940,"days":[{"day":20715,"items":20}]},
+        {"characterName":"Member2","itemsAllTime":64,"countingSince":1787408000,"asOf":1789992740,"days":[{"day":20711,"items":40},{"day":20716,"items":24}]}
       ]
     }
   }

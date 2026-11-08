@@ -12,11 +12,17 @@ import { join } from 'node:path';
 import {
   ADDON_EXPORT_ENVELOPE_VERSION,
   AddonImportErrorCodeSchema,
+  COMPANION_WOW_LEDGERLINK_EXPORT_MAX,
   serializeLedgerLinkJsonSchema,
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
-import { buildMailworthyBlock } from './testing/addon-fixture.mailworthy';
+import { buildImportString } from './testing/addon-fixture.builder';
+import { buildForeverQuestsPayload } from './testing/addon-fixture.forever';
+import {
+  buildMailworthyBlock,
+  buildMailworthyWorstCaseBlock,
+} from './testing/addon-fixture.mailworthy';
 import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
 import {
   TALENT_COL_STEP,
@@ -149,6 +155,22 @@ describe('char-mailworthy — the block survives decode (ROK-2148)', () => {
   it('a char export without the block decodes without the key', () => {
     const decoded = decodeImportPaste(read(FIXTURES, 'char-normal.txt'));
     expect(decoded.sections.char?.payload).not.toHaveProperty('mailworthy');
+  });
+});
+
+describe('worst-case Mailworthy char string (ROK-2148 §A.4, delta 2026-11-08)', () => {
+  it('max quests + 1000 peers + 200 givers × 35 days fits the Companion cap', () => {
+    const char = buildForeverQuestsPayload();
+    const mailworthy = buildMailworthyWorstCaseBlock();
+    const paste = buildImportString({
+      ...char,
+      data: { ...char.data, mailworthy },
+    });
+    const bytes = Buffer.byteLength(paste, 'utf8');
+    expect(bytes).toBe(45_926);
+    expect(bytes).toBeLessThanOrEqual(COMPANION_WOW_LEDGERLINK_EXPORT_MAX);
+    const decoded = decodeImportPaste(paste);
+    expect(decoded.sections.char?.payload.mailworthy?.givers).toHaveLength(200);
   });
 });
 
