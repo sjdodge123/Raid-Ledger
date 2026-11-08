@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/button';
+import { ACTION_TILE_CLASS, type CharacterHeaderLayout } from '../../../components/shared/character-header-layout';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { AddonImportDialog } from '../components/addon-import/addon-import-dialog';
 
@@ -16,9 +17,11 @@ interface CharacterDetailOwnerActionsProps {
     gameId?: number | undefined;
     ruleset?: string | null | undefined;
     gameVariant?: string | null | undefined;
+    /** ROK-2140: `phone` renders the Option B icon-over-label tile. */
+    layout?: CharacterHeaderLayout | undefined;
 }
 
-export function CharacterDetailOwnerActions({ characterId, gameId, ruleset, gameVariant }: CharacterDetailOwnerActionsProps) {
+export function CharacterDetailOwnerActions({ characterId, gameId, ruleset, gameVariant, layout }: CharacterDetailOwnerActionsProps) {
     const [open, setOpen] = useState(false);
     // A new key per opening: every session starts on an empty paste step.
     const [session, setSession] = useState(0);
@@ -26,8 +29,9 @@ export function CharacterDetailOwnerActions({ characterId, gameId, ruleset, game
     if (variant !== 'wow_forever') return null;
     return (
         <>
-            <Button variant="secondary" size="sm" onClick={() => { setSession((n) => n + 1); setOpen(true); }}>
-                <ArrowUpTrayIcon className="w-4 h-4" aria-hidden="true" />
+            <Button variant="secondary" size="sm" fullWidth={layout === 'phone'} className={layout === 'phone' ? ACTION_TILE_CLASS : ''}
+                onClick={() => { setSession((n) => n + 1); setOpen(true); }}>
+                <ArrowUpTrayIcon className={layout === 'phone' ? 'w-5 h-5' : 'w-4 h-4'} aria-hidden="true" />
                 Import string
             </Button>
             <AddonImportDialog key={session} isOpen={open} onClose={() => setOpen(false)} characterId={characterId} gameId={gameId} />
