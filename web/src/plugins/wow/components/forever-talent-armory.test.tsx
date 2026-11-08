@@ -54,16 +54,50 @@ describe('ForeverTalentDisplay — Armory placement (AC7)', () => {
         expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Fury', 'Arms', 'Protection']);
     });
 
-    it('keeps the list (pills) when a talent is not on the known trees', () => {
-        renderTalents(dto('blizzard', [...NODES, { nodeId: 30, rank: 2, name: 'Forever Only Talent', tree: 2 }]));
-        expect(screen.queryAllByTestId('forever-talent-cell')).toHaveLength(0);
-        expect(screen.getByText('Forever Only Talent 2')).toBeInTheDocument();
-    });
-
     it('never places an addon list payload', () => {
         renderTalents(dto('addon', NODES));
         expect(screen.queryAllByTestId('forever-talent-cell')).toHaveLength(0);
         expect(screen.getByText('Learned talents')).toBeInTheDocument();
+    });
+});
+
+const UNKNOWN: ForeverTalentNodeDto = { nodeId: 30, rank: 2, name: 'Master of Defense', tree: 2 };
+
+describe('ForeverTalentDisplay — per-talent fallback (ROK-2113)', () => {
+    it('mixed known/unknown: grid for the known, "Other talents" under the unknown one\'s tree', () => {
+        renderTalents(dto('blizzard', [...NODES, UNKNOWN]));
+        expect(screen.getAllByTestId('forever-talent-cell').map((c) => c.getAttribute('title'))).toEqual(['Improved Heroic Strike', 'Cruelty']);
+        const other = screen.getByTestId('forever-other-talents-2');
+        expect(other).toHaveTextContent(/^Other talentsMaster of Defense 2$/);
+        expect(screen.queryByTestId('forever-other-talents-0')).toBeNull();
+        expect(screen.queryByText('Learned talents')).toBeNull();
+    });
+
+    it('keeps ranks and points: header total, per-tree spent, cell ranks', () => {
+        renderTalents(dto('blizzard', [...NODES, UNKNOWN]));
+        expect(screen.getByText('10 points')).toBeInTheDocument();
+        expect(screen.getByTestId('forever-tree-spent-2')).toHaveTextContent('2');
+        expect(screen.getByTestId('forever-tree-spent-1')).toHaveTextContent('5');
+        expect(screen.getAllByTestId('forever-talent-cell')[0]).toHaveTextContent('Improved Heroic Strike3');
+    });
+
+    it('all known: grid only, no empty "Other talents" header', () => {
+        renderTalents(dto('blizzard', NODES));
+        expect(screen.getAllByTestId('forever-talent-cell')).toHaveLength(2);
+        expect(screen.queryByText('Other talents')).toBeNull();
+    });
+
+    it('none known: the list view as today', () => {
+        renderTalents(dto('blizzard', [UNKNOWN, { nodeId: 31, rank: 1, name: 'Forever Only Talent', tree: 0 }]));
+        expect(screen.queryAllByTestId('forever-talent-cell')).toHaveLength(0);
+        expect(screen.queryByText('Other talents')).toBeNull();
+        expect(screen.getByText('Learned talents')).toBeInTheDocument();
+        expect(screen.getByText('Master of Defense 2')).toBeInTheDocument();
+    });
+
+    it('counts an unnamed unplaced talent instead of naming it', () => {
+        renderTalents(dto('blizzard', [...NODES, { nodeId: 32, rank: 1, tree: 0 }]));
+        expect(screen.getByTestId('forever-other-talents-0')).toHaveTextContent('+1 unnamed talent');
     });
 });
 

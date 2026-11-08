@@ -1,6 +1,7 @@
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { formatForeverRank } from '../lib/forever-talent-trees';
 import { armoryTreeNames } from '../lib/forever-armory-placement';
+import { plural } from '../lib/plural';
 
 type PositionedNode = ForeverTalentNodeDto & { tree: number; row: number; col: number };
 
@@ -31,7 +32,25 @@ function TalentCell({ node }: { node: PositionedNode }) {
     );
 }
 
-function SubTree({ name, index, spent, nodes }: { name: string; index: number; spent: number; nodes: PositionedNode[] }) {
+/** Ranked talents with no known cell (ROK-2113): named pills + a muted unnamed count; nothing when empty. */
+function OtherTalents({ testId, nodes }: { testId: string; nodes: ForeverTalentNodeDto[] }) {
+    if (nodes.length === 0) return null;
+    const named = nodes.filter((n) => n.name);
+    const unnamed = nodes.length - named.length;
+    return (
+        <div data-testid={testId} className="space-y-1.5">
+            <h4 className="text-xs font-medium text-muted">Other talents</h4>
+            <div className="flex flex-wrap gap-1.5">
+                {named.map((n) => <span key={n.nodeId} className={`px-2 py-1 text-xs rounded ${RANKED_CLASS}`}>{`${n.name ?? ''} ${formatForeverRank(n)}`}</span>)}
+            </div>
+            {unnamed > 0 && <p className="text-xs text-muted">+{plural(unnamed, 'unnamed talent')}</p>}
+        </div>
+    );
+}
+
+interface SubTreeProps { name: string; index: number; spent: number; nodes: PositionedNode[]; other: ForeverTalentNodeDto[] }
+
+function SubTree({ name, index, spent, nodes, other }: SubTreeProps) {
     const rows = Math.max(0, ...nodes.map((n) => n.row)) + 1;
     return (
         <div className="space-y-2 min-w-0">
@@ -42,30 +61,42 @@ function SubTree({ name, index, spent, nodes }: { name: string; index: number; s
             <div className="grid grid-cols-4 gap-1" style={{ gridTemplateRows: `repeat(${rows}, minmax(0, auto))` }}>
                 {nodes.map((node) => <TalentCell key={node.nodeId} node={node} />)}
             </div>
+            <OtherTalents testId={`forever-other-talents-${index}`} nodes={other} />
         </div>
     );
 }
 
-function treeSpent(talents: ForeverTalentsDto, index: number, nodes: PositionedNode[]): number {
+function treeSpent(talents: ForeverTalentsDto, index: number, nodes: ForeverTalentNodeDto[]): number {
     const fromDto = talents.trees.find((t) => t.index === index)?.spent;
     return fromDto ?? nodes.reduce((sum, n) => sum + n.rank, 0);
+}
+
+/** Ranked nodes the known trees could not place (no row/col) — ROK-2113's per-talent fallback. */
+function unplacedRanked(talents: ForeverTalentsDto): ForeverTalentNodeDto[] {
+    return talents.nodes.filter((n) => n.rank > 0 && !isPositioned(n));
 }
 
 /**
  * WoW: Forever positioned talent grid (ROK-1744): three sub-trees side by side
  * at ≥md (stacked below), each a 4-column CSS grid of tiers. Empty positions
- * render nothing. Expects `layout === 'grid'` (every node positioned).
+ * render nothing. Ranked nodes without a cell are listed as "Other talents"
+ * below their tree's grid (ROK-2113), or after the trees when they have none.
  */
 export function ForeverTalentGrid({ talents, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
     // ROK-2110 (D4/F3): Blizzard's `trees[].name` wins over the class table.
     const names = armoryTreeNames(talents, characterClass);
     const positioned = talents.nodes.filter(isPositioned);
+    const unplaced = unplacedRanked(talents);
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[0, 1, 2].map((index) => {
-                const nodes = positioned.filter((n) => n.tree === index);
-                return <SubTree key={index} name={names[index] ?? `Tree ${index + 1}`} index={index} spent={treeSpent(talents, index, nodes)} nodes={nodes} />;
-            })}
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[0, 1, 2].map((index) => {
+                    const nodes = positioned.filter((n) => n.tree === index);
+                    const other = unplaced.filter((n) => n.tree === index);
+                    return <SubTree key={index} name={names[index] ?? `Tree ${index + 1}`} index={index} spent={treeSpent(talents, index, [...nodes, ...other])} nodes={nodes} other={other} />;
+                })}
+            </div>
+            <OtherTalents testId="forever-other-talents-none" nodes={unplaced.filter((n) => n.tree === undefined || n.tree > 2)} />
         </div>
     );
 }
