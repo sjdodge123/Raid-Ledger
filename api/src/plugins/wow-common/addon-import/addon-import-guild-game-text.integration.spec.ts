@@ -216,20 +216,26 @@ describe('ROK-2137 — reported text guards', () => {
     expect(row?.gameMotdReportedAt?.toISOString()).toBe(at(10).toISOString());
   });
 
-  it('never touches the hub text or a Push acknowledgement', async () => {
+  it('never touches the hub text; a Push ack survives the same text, a changed text clears it (review r2)', async () => {
     await apply(snapshot(0, { motd: 'First' }));
     const ack = new Date('2026-01-01T00:00:00Z');
     await testApp.db.update(schema.guildProfiles).set({
       ingameMotd: 'Hub MOTD',
       gameMotdAcknowledgedAt: ack,
     });
-    await apply(snapshot(5, { motd: 'Second' }));
+    await apply(snapshot(5, { motd: 'First' }));
+    const kept = await profile();
+    expect([
+      kept?.ingameMotd,
+      kept?.gameMotdAcknowledgedAt?.toISOString(),
+    ]).toEqual(['Hub MOTD', ack.toISOString()]);
+    await apply(snapshot(10, { motd: 'Second' }));
     const row = await profile();
     expect([
       row?.ingameMotd,
       row?.gameMotd,
-      row?.gameMotdAcknowledgedAt?.toISOString(),
-    ]).toEqual(['Hub MOTD', 'Second', ack.toISOString()]);
+      row?.gameMotdAcknowledgedAt ?? null,
+    ]).toEqual(['Hub MOTD', 'Second', null]);
   });
 
   it('stores the text normalised like the hub (CRLF → LF, trailing space)', async () => {
