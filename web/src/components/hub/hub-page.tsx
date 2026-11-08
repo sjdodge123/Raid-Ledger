@@ -7,10 +7,10 @@
  * it, or a module section reports content of its own (ROK-1830 — core asks
  * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
- * A 403 (not a member, or ROK-2044 the hub's plugin is off) is a friendly empty state; a 401 that survived the
+ * A 403 (not a member — ROK-2132 a module's join gate — or ROK-2044 the hub's plugin is off) is a friendly empty state (`hub-page-error.tsx`); a 401 that survived the
  * refresh re-checks the session — sign in only once it is rejected (ROK-1947).
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import type { GuildKind, GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
@@ -33,14 +33,16 @@ import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
-import { hubCopy, hubSectionsLabel, loadFailedLabel } from './hub-copy';
+import { hubCopy, hubSectionsLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
 import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 import { useSignInAgain } from './use-sign-in-again';
 import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
-import { isHubPluginInactive } from './hub-plugin-inactive.helpers';
-import { HubPluginInactiveCopy } from './hub-plugin-inactive';
+import { ErrorState, Notice, NotFoundNotice, PAGE } from './hub-page-error';
+
+/** Re-exported for the page's existing specs (moved to `hub-page-error.tsx`, ROK-2132). */
+export { ErrorState };
 
 /** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
@@ -48,19 +50,8 @@ const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m)
 const HubPostsTab = lazy(() => import('./posts/posts-tab').then((m) => ({ default: m.HubPostsTab })));
 const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
-/**
- * Phone: the fixed bottom bar + raised Hubs circle overlay the last card unless the page pads past them (ROK-1876).
- * Below 1024px a tab's Filters FAB (Materials, Planner) floats higher still, so pad past it too (ROK-1889).
- */
-const PAGE = 'max-w-5xl mx-auto px-4 pt-8 pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] '
-    + 'md:pb-[max(2rem,var(--filter-fab-clearance))]';
-
 /** Stable identity so the source list doesn't churn while a module is absent. */
 const NO_SECTIONS: readonly HubModSource[] = [];
-
-function Notice({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
-    return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
-}
 
 /** ROK-1947: the session is over — Sign in ends it and returns here after. */
 function SignInPrompt(): JSX.Element {
@@ -85,31 +76,6 @@ function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryRe
         <Notice testId="guild-session-unreachable">
             <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
             <Button variant="secondary" onClick={retry}>Try again</Button>
-        </Notice>
-    );
-}
-
-interface ErrorStateProps {
-    error: Error;
-    onRetry: () => unknown;
-    /** The hub kind when known (a module load failure); a page 403/5xx has none and reads as a WoW guild. */
-    kind?: GuildKind | undefined;
-}
-
-/** The hub page's failure notices — plugin off or not-a-member (403), not-found (404), or a retryable load failure. */
-export function ErrorState({ error, onRetry, kind }: ErrorStateProps): JSX.Element {
-    const status = httpStatusOf(error);
-    if (isHubPluginInactive(error)) return <Notice testId="guild-plugin-inactive"><HubPluginInactiveCopy /></Notice>;
-    if (status === 403) {
-        return <Notice testId="guild-not-member"><p className="text-sm text-muted">{hubCopy(kind).notMember}</p></Notice>;
-    }
-    if (status === 404) {
-        return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
-    }
-    return (
-        <Notice testId="guild-error">
-            <p className="mb-4 text-sm text-muted">{loadFailedLabel(kind)}</p>
-            <Button variant="secondary" onClick={() => void onRetry()}>Try again</Button>
         </Notice>
     );
 }
@@ -314,12 +280,12 @@ export function GuildPage(): JSX.Element {
     const moduleError = useHubModuleLoadError(query.data?.guild.kind);
     const { recovering, recoverPage } = useRecoveryLatch(query, guildId);
     if (!Number.isInteger(guildId) || guildId <= 0) {
-        return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
+        return <NotFoundNotice />;
     }
     const refetchPage = () => query.refetch({ cancelRefetch: false });
     if (recovering || httpStatusOf(query.error) === 401) return <SessionExpired onRecovered={recoverPage} />;
     // Cached data (a refetch error) still knows the kind; with none it falls back to WoW copy.
-    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} kind={query.data?.guild.kind} />;
+    if (query.error) return <ErrorState error={query.error} onRetry={refetchPage} kind={query.data?.guild.kind} guildId={guildId} />;
     if (moduleError) return <ErrorState error={moduleError} onRetry={retryHubModuleLoad} kind={query.data?.guild.kind} />;
     if (!query.data || !pluginsHydrated || modulePending) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
