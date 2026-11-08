@@ -158,8 +158,8 @@ describe('QuestPrepPanel — multi-dungeon grouping', () => {
             expect(screen.getByText('The Defias Brotherhood')).toBeInTheDocument();
         });
 
-        const outsideGroups = screen.getAllByText(/Pick up before you go/);
-        const insideGroups = screen.getAllByText(/Starts inside the dungeon/);
+        const outsideGroups = screen.getAllByText(/Get before you go in/);
+        const insideGroups = screen.getAllByText(/Picked up inside/);
 
         // Deadmines + Stockade both have outside quests; Deadmines also has inside
         expect(outsideGroups.length).toBeGreaterThanOrEqual(2);
@@ -238,5 +238,47 @@ describe('QuestPrepPanel — single-dungeon rendering', () => {
         });
 
         expect(screen.queryByText('The Deadmines')).not.toBeInTheDocument();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests — entrance checklist wording (ROK-2142)
+// ---------------------------------------------------------------------------
+
+describe('QuestPrepPanel — before-you-go-in vs picked-up-inside (ROK-2142)', () => {
+    beforeEach(() => {
+        server.resetHandlers();
+    });
+
+    it('splits quests into a before-you-go-in count and a picked-up-inside count', async () => {
+        setupMswHandlers({ [DEADMINES_INSTANCE.id]: singleDungeonQuests });
+
+        renderPanel([DEADMINES_INSTANCE]);
+
+        expect(await screen.findByText('Get before you go in (1)')).toBeInTheDocument();
+        expect(screen.getByText('Picked up inside (1)')).toBeInTheDocument();
+        expect(screen.getByText('Get these during the run')).toBeInTheDocument();
+        expect(screen.queryByText(/Starts inside the dungeon/)).not.toBeInTheDocument();
+    });
+
+    it('hides the picked-up-inside group when no quest starts inside', async () => {
+        setupMswHandlers({ [STOCKADE_INSTANCE.id]: stockadeQuests });
+
+        renderPanel([STOCKADE_INSTANCE]);
+
+        expect(await screen.findByText('Get before you go in (2)')).toBeInTheDocument();
+        expect(screen.getByText('Crime and Punishment')).toBeInTheDocument();
+        expect(screen.queryByText(/Picked up inside/)).not.toBeInTheDocument();
+        expect(screen.queryByText('Get these during the run')).not.toBeInTheDocument();
+    });
+
+    it('keeps the sharable sub-group inside the before-you-go-in group', async () => {
+        setupMswHandlers({ [STOCKADE_INSTANCE.id]: stockadeQuests });
+
+        renderPanel([STOCKADE_INSTANCE]);
+
+        await screen.findByText('Get before you go in (2)');
+        expect(screen.getByText(/Sharable/)).toBeInTheDocument();
+        expect(screen.getByText(/Must pick up yourself/)).toBeInTheDocument();
     });
 });

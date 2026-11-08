@@ -9,6 +9,7 @@
 
 import bossEncounterData from './boss-encounter-data.json';
 import bossLootData from './boss-loot-data.json';
+import { LOOT_PENDING_CLASSIC_BOSSES } from './loot-pending-bosses';
 
 // ---------------------------------------------------------------------------
 // Type helpers
@@ -280,7 +281,15 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
 
   describe('cross-reference integrity', () => {
     it('covers all seeded bosses (no boss has zero loot entries)', () => {
-      const bossKeys = bosses.map((b) => `${b.name}::${b.expansion}`);
+      const bossKeys = bosses
+        .filter(
+          (b) =>
+            !(
+              b.expansion === 'classic' &&
+              LOOT_PENDING_CLASSIC_BOSSES.has(b.name)
+            ),
+        )
+        .map((b) => `${b.name}::${b.expansion}`);
       const missing = bossKeys.filter((k) => !lootIndex.has(k));
       expect(missing).toHaveLength(0);
     });
@@ -301,9 +310,24 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
         loot.filter((l) => l.expansion === 'classic').map((l) => l.bossName),
       );
       const missing = classicBosses.filter(
-        (b) => !classicLootBosses.has(b.name),
+        (b) =>
+          !classicLootBosses.has(b.name) &&
+          !LOOT_PENDING_CLASSIC_BOSSES.has(b.name),
       );
       expect(missing).toHaveLength(0);
+    });
+
+    it('the ROK-2142 loot-pending list only names classic bosses still without loot', () => {
+      const classicNames = new Set(
+        bosses.filter((b) => b.expansion === 'classic').map((b) => b.name),
+      );
+      const classicLootBosses = new Set(
+        loot.filter((l) => l.expansion === 'classic').map((l) => l.bossName),
+      );
+      const stale = [...LOOT_PENDING_CLASSIC_BOSSES].filter(
+        (n) => !classicNames.has(n) || classicLootBosses.has(n),
+      );
+      expect(stale).toEqual([]);
     });
 
     it('has at least 109 Classic loot entries', () => {

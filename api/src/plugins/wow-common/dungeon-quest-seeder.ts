@@ -7,6 +7,7 @@ import { join } from 'path';
 import * as schema from '../../drizzle/schema';
 import { wowClassicDungeonQuests } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 
 const BATCH_SIZE = 100;
 
@@ -72,6 +73,20 @@ function buildRefreshSet(): Record<string, SQL> {
 /** ROK-1748: Forever rows (`expansion: 'forever'`), imported offline from Wowhead Forever. */
 const FOREVER_QUEST_FILE = 'forever-dungeon-quest-data.json';
 
+/**
+ * ROK-2142: `startsInsideDungeon` comes from the curated allowlist only, so a
+ * re-imported JSON can never bring back the old "assigned to this dungeon"
+ * meaning.
+ */
+export function applyInsideAllowlist<
+  T extends { questId: number; startsInsideDungeon: boolean },
+>(entries: T[]): T[] {
+  return entries.map((entry) => ({
+    ...entry,
+    startsInsideDungeon: INSIDE_DUNGEON_QUEST_IDS.has(entry.questId),
+  }));
+}
+
 async function readQuestFile(file: string): Promise<DungeonQuestEntry[]> {
   const raw = await readFile(join(__dirname, 'data', file), 'utf-8');
   return JSON.parse(raw) as DungeonQuestEntry[];
@@ -98,10 +113,10 @@ export class DungeonQuestSeeder {
    * so `inserted` counts inserted + refreshed rows.
    */
   async seed(): Promise<{ inserted: number; total: number }> {
-    const quests = [
+    const quests = applyInsideAllowlist([
       ...(await readQuestFile('dungeon-quest-data.json')),
       ...(await readQuestFile(FOREVER_QUEST_FILE)),
-    ];
+    ]);
     this.logger.log(`Seeding ${quests.length} dungeon quests...`);
     const set = buildRefreshSet();
     let inserted = 0;
