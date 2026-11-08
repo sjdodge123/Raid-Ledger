@@ -1982,6 +1982,13 @@
       "when": 1794043835172,
       "tag": "0283_characters_armory_quests",
       "breakpoints": true
+    },
+    {
+      "idx": 284,
+      "version": "7",
+      "when": 1794103205837,
+      "tag": "0284_guild_profiles_ingame_text",
+      "breakpoints": true
     }
   ]
 }
