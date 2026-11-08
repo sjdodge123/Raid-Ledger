@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WowForeverSelectableRulesetSchema } from "./blizzard.schema.js";
+import { CharacterRoleSchema } from "./characters.schema.js";
 
 /**
  * ROK-2128 — "Add character → Guild roster" for WoW: Forever. A player picks
@@ -31,6 +32,13 @@ export const RosterClaimCandidateSchema = z.object({
   class: z.string().nullable(),
   level: z.number().int().nullable(),
   source: z.enum(["addon_import", "blizzard"]),
+  /**
+   * ROK-2133 (Q10) — the row's Armory item level, spec and role from the
+   * roster Armory snapshot; omitted when the row has none (additive).
+   */
+  itemLevel: z.number().int().nonnegative().optional(),
+  spec: z.string().max(50).optional(),
+  role: CharacterRoleSchema.optional(),
 });
 export type RosterClaimCandidateDto = z.infer<typeof RosterClaimCandidateSchema>;
 
