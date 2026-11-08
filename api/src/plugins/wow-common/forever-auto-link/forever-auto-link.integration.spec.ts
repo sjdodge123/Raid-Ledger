@@ -371,8 +371,10 @@ describe('missing AC coverage (review round 1)', () => {
   });
 
   it('AC-3/AC-7: the bulk sync picks each linked row up exactly once', async () => {
-    fetchProfile.mockImplementation(async (name: string) =>
-      profile({ name, externalId: name === 'Ana Forever' ? '9001' : '9002' }),
+    fetchProfile.mockImplementation((name: string) =>
+      Promise.resolve(
+        profile({ name, externalId: name === 'Ana Forever' ? '9001' : '9002' }),
+      ),
     );
     const auto = await seedChar();
     await seedChar({ name: 'Bob Linked', gameVariant: 'wow_forever' });
@@ -395,8 +397,8 @@ describe('missing AC coverage (review round 1)', () => {
       return { name: `Cap ${pair}`, createdAt: new Date(base + i * HOUR) };
     });
     for (const n of [...names].reverse()) await seedChar(n);
-    fetchProfile.mockImplementation(async (name: string) =>
-      profile({ name, externalId: `x-${name}` }),
+    fetchProfile.mockImplementation((name: string) =>
+      Promise.resolve(profile({ name, externalId: `x-${name}` })),
     );
 
     expect(await service.runDue()).toEqual({ linked: 60 });

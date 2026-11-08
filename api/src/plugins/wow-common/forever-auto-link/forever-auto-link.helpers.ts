@@ -105,9 +105,7 @@ export function retryAtFor(
  * 404 — level < 10, never logged out, or hidden) is `not_found`; anything
  * else (502 from a 429/5xx, network, token) is `upstream`.
  */
-export function classifyAutoLinkError(
-  err: unknown,
-): 'not_found' | 'upstream' {
+export function classifyAutoLinkError(err: unknown): 'not_found' | 'upstream' {
   return err instanceof NotFoundException ? 'not_found' : 'upstream';
 }
 

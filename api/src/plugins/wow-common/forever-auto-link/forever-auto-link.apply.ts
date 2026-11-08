@@ -105,7 +105,12 @@ export async function claimAutoLinkAttempt(
   const retryAt = new Date(now.getTime() + AUTOLINK_CLAIM_LEASE_MS);
   const [claimed] = await db
     .insert(s)
-    .values({ characterId, retryAt, lastError: 'in_flight', lastAttemptAt: now })
+    .values({
+      characterId,
+      retryAt,
+      lastError: 'in_flight',
+      lastAttemptAt: now,
+    })
     .onConflictDoUpdate({
       target: s.characterId,
       set: { retryAt, lastAttemptAt: now },
@@ -159,9 +164,7 @@ export async function applyAutoLink(
     const updated = await tx
       .update(c)
       .set({ ...fields, ...(externalId !== null ? { externalId } : {}) })
-      .where(
-        and(eq(c.id, row.id), isNull(c.gameVariant), eq(c.name, row.name)),
-      )
+      .where(and(eq(c.id, row.id), isNull(c.gameVariant), eq(c.name, row.name)))
       .returning({ id: c.id });
     // Linked here or by a racing import: either way no longer a candidate.
     const s = schema.wowForeverArmoryAutolink;
