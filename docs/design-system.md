@@ -1708,7 +1708,16 @@ action (no per-boss link) and the shared `FreshnessFooter` dated by the latest p
 table at ≥768px (labelled mini chips in a `divide-edge` list below), not ready first, 10 shown then a 44px "N more"
 disclosure. Chips are `success` ✓, `warning` ✗ (the quest and lockout fails are amber too, never `danger`) and `neutral`
 ? — **unknown is never red**; an n/a check is a `text-dim` "—"; every chip carries a `title`. Members + staff only
-(`useVisible`, like Dungeon quests); the Dungeon-quests matrix idiom + `StatusChip` + §4.5/§4.6 states — no new pattern. The roster cards share
+(`useVisible`, like Dungeon quests); the Dungeon-quests matrix idiom + `StatusChip` + §4.5/§4.6 states — no new pattern. **Guild message**
+(`forever-guild-text`, order 12, span 1, ROK-2136) — the guild Message of the Day then Guild Information as plain
+text (`text-sm text-foreground whitespace-pre-wrap break-words`, never Markdown), each set field with the labelled
+`CopyButton` "Copy for in-game" (§3.1 `label`) that copies the stored text verbatim and a `text-xs text-dim`
+"Updated … by …" line. Editors get a ghost "Edit" header action (the empty card shows the quiet §4.5 "Add guild text"
+hint instead) opening the session-note editor idiom — `Modal` ≥1024px / `BottomSheet` below, `useDirtyCloseGuard`, the
+§4.7 409 "Load their version" banner — with two `Field`-wrapped `Textarea showCount` capped at the in-game 255 / 499,
+a `text-xs text-warning` line per character the game may not show (`|`, emoji, a MOTD line break; never blocking), a
+field error that blocks Save on control characters, and a neutral §4.7 paste-instruction callout. `audience: 'members'`:
+editors always see the card, members once a field is set — no new pattern beyond `CopyButton`'s `label`. The roster cards share
 one `useRosterInsights` query and the `FreshnessFooter` ("via LedgerLink · as of 3 days ago"); Class breakdown and
 Level progression also share `RosterWidgetShell` (loading / error / mains-only toggle).
 Professions, Who's saved, Last seen, Gear readiness, Raid progress and Dungeon quests are members + staff: `audience: 'everyone'` with a `useVisible` probe (the
