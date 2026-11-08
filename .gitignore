@@ -33,6 +33,8 @@ planning-artifacts/
 implementation-artifacts/
 scripts/*
 !scripts/deploy_prod.sh
+!scripts/install-git-hooks.sh
+!scripts/git-hooks/
 !scripts/deploy_dev.sh
 !scripts/env-lock.sh
 !scripts/fix-migration-order.sh

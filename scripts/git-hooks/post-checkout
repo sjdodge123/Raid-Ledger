@@ -1,0 +1,20 @@
+#!/bin/sh
+# Raid Ledger: point a NEW worktree's planning-artifacts/ at the main checkout's.
+#
+# planning-artifacts/ is gitignored and lives only in the main checkout. A
+# worktree used to carry its own stale copy, so agents read old state and sent
+# the operator links that opened the wrong file (CLAUDE.md "Handing a file to
+# the operator"). After `git worktree add`, this makes planning-artifacts a
+# symlink to the main checkout's folder. It never replaces an existing path.
+# Installed by scripts/install-git-hooks.sh.
+common=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
+gitdir=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+common_abs=$(cd "$common" && pwd -P)
+gitdir_abs=$(cd "$gitdir" && pwd -P)
+[ "$common_abs" = "$gitdir_abs" ] && exit 0 # main checkout, not a worktree
+main=$(dirname "$common_abs")
+top=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -e "$top/planning-artifacts" ] || [ -L "$top/planning-artifacts" ] && exit 0
+[ -d "$main/planning-artifacts" ] || exit 0
+ln -s "$main/planning-artifacts" "$top/planning-artifacts"
+exit 0
