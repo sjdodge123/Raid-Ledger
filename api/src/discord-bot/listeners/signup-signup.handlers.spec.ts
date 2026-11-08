@@ -6,6 +6,7 @@
 import { handleExistingSignup } from './signup-signup.handlers';
 import { createMockDeps } from './signup-handlers.spec-helpers';
 import type { ButtonInteraction } from 'discord.js';
+import { NotFoundException } from '@nestjs/common';
 
 const EVENT_ID = 104;
 const DISCORD_ID = 'discord-user-1';
@@ -143,5 +144,37 @@ describe('handleExistingSignup — pending-confirmation heal', () => {
       content: string;
     };
     expect(reply.content).toMatch(/already signed up/i);
+  });
+});
+
+describe('handleExistingSignup — row the Discord id may not manage (ROK-2097)', () => {
+  it('replies not-signed-up instead of reactivating another account\'s row', async () => {
+    const deps = createMockDeps();
+    const db = deps.db as unknown as { select: jest.Mock };
+    // findLinkedUser: the clicker's Discord id is linked to nobody.
+    db.select.mockReturnValueOnce(selectOnce([]));
+    (deps.signupsService.updateStatus as jest.Mock).mockRejectedValue(
+      new NotFoundException('Signup not found'),
+    );
+    const interaction = makeInteraction();
+    const existing = {
+      ...makeExistingSignup('confirmed'),
+      status: 'declined',
+      discordUserId: DISCORD_ID,
+    } as ExistingSignup;
+
+    await handleExistingSignup(interaction, EVENT_ID, existing, deps);
+
+    expect(deps.signupsService.updateStatus).toHaveBeenCalledWith(
+      EVENT_ID,
+      { discordUserId: DISCORD_ID },
+      { status: 'signed_up' },
+    );
+    expect(interaction.editReply).toHaveBeenCalledTimes(1);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: "You're not signed up for this event.",
+      embeds: [],
+    });
+    expect(deps.updateEmbedSignupCount).not.toHaveBeenCalled();
   });
 });

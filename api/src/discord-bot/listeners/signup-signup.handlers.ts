@@ -38,11 +38,10 @@ export async function handleExistingSignup(
 ): Promise<void> {
   const linkedUser = await findLinkedUser(interaction.user.id, deps);
   // ROK-2097: a row this Discord id may see but not manage is not-found.
-  const reactivated = await runOrReplyNotSignedUp(interaction, () =>
+  const reactivation = await runOrReplyNotSignedUp(interaction, () =>
     reactivateIfNeeded(eventId, existingSignup, linkedUser, deps),
   );
-  if (!reactivated.ok) return;
-  const reactivation = reactivated.value;
+  if (!reactivation.ok) return;
   if (!linkedUser) {
     await interaction.editReply({ content: alreadySignedUpMessage() });
     return;
@@ -63,7 +62,7 @@ export async function handleExistingSignup(
       deps.activityLog,
       existingSignup,
     );
-    await replyReactivationResult(interaction, reactivation, healed);
+    await replyReactivationResult(interaction, reactivation.value, healed);
   }
 }
 

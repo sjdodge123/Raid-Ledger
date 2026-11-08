@@ -3,10 +3,7 @@
  * choice (Skip this night / Leave series) before the per-night decline runs.
  */
 import { NotFoundException } from '@nestjs/common';
-import {
-  handleDecline,
-  DECLINE_NOT_FOUND_REPLY,
-} from './signup-status.handlers';
+import { handleDecline } from './signup-status.handlers';
 import { offerSeriesDeclineChoice } from './series-signup-decline.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import {
@@ -87,9 +84,6 @@ describe('handleDecline — signup the Discord id does not own (ROK-2097)', () =
       content: "You're not signed up for this event.",
       embeds: [],
     });
-    expect(DECLINE_NOT_FOUND_REPLY).toBe(
-      "You're not signed up for this event.",
-    );
     expect(deps.updateEmbedSignupCount).not.toHaveBeenCalled();
   });
 

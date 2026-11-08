@@ -14,10 +14,7 @@ import {
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
 import { offerSeriesDeclineChoice } from './series-signup-decline.handlers';
-import {
-  NOT_SIGNED_UP_REPLY,
-  runOrReplyNotSignedUp,
-} from './signup-not-found.helpers';
+import { runOrReplyNotSignedUp } from './signup-not-found.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -156,9 +153,6 @@ export async function handleDecline(
   });
   void deps.updateEmbedSignupCount(eventId);
 }
-
-/** Reply when a Decline finds no signup this Discord user may cancel. */
-export const DECLINE_NOT_FOUND_REPLY = NOT_SIGNED_UP_REPLY;
 
 /**
  * Cancel the clicker's signup. A signup the Discord id can see but does not

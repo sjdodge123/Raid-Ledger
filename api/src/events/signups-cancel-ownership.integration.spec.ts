@@ -96,12 +96,15 @@ async function seedRelinkedSignup(): Promise<{
 }> {
   const prev = await createMemberAndLogin(testApp, 'prevowner', 'prev@t.local');
   const next = await createMemberAndLogin(testApp, 'newowner', 'new@t.local');
+  await setDiscordId(prev.userId, RELINKED_DISCORD_ID);
   const eventId = await createFutureEvent(testApp, adminToken);
   const signupId = await insertSignup(
     eventId,
     prev.userId,
     RELINKED_DISCORD_ID,
   );
+  // users.discord_id is unique: A releases D before B links it.
+  await setDiscordId(prev.userId, 'local:prevowner@t.local');
   await setDiscordId(next.userId, RELINKED_DISCORD_ID);
   return { eventId, signupId, newOwnerToken: next.token };
 }
