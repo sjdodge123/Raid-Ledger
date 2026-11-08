@@ -73,6 +73,19 @@ describe('FactsCell class dot (ROK-1173 AC12)', () => {
     });
 });
 
+describe('FactsCell Armory spec + item level (ROK-2133)', () => {
+    it('shows spec and item level when the row has them', () => {
+        renderWithProviders(<FactsCell row={row({ spec: 'Beast Mastery', itemLevel: 118 })} />);
+        expect(screen.getByText('Lv 60 Hunter')).toBeInTheDocument();
+        expect(screen.getByTestId('guild-member-armory')).toHaveTextContent('Beast Mastery · 118 iLvl');
+    });
+
+    it('renders nothing extra when the row has neither', () => {
+        renderWithProviders(<FactsCell row={row()} />);
+        expect(screen.queryByTestId('guild-member-armory'), 'no Armory data → no empty separator').toBeNull();
+    });
+});
+
 describe('professions join (ROK-1173 AC8)', () => {
     it('indexes each linked character professions by characterId', () => {
         const found = rowProfessions(professionIndex(INSIGHTS), LINKED);

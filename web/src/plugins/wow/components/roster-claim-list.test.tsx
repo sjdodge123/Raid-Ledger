@@ -126,6 +126,20 @@ describe('RosterClaimList (ROK-2128)', () => {
     });
 });
 
+describe('RosterClaimList — Armory spec + item level (ROK-2133)', () => {
+    it('shows spec and item level on a row whose Armory snapshot has them, and only there (ROK-2133)', async () => {
+        const [first, second] = LIST.guilds;
+        if (!first || !second) throw new Error('LIST fixture needs two guilds');
+        const synced = first.candidates.map((c) => (c.memberId === 11 ? { ...c, spec: 'Frost', itemLevel: 112 } : c));
+        serveList({ ...LIST, guilds: [{ ...first, candidates: synced }, second] });
+        renderList();
+        await screen.findByText('Ashen Vale');
+        expect(screen.getByText('Lv 60 · Mage · Frost · 112 iLvl')).toBeInTheDocument();
+        expect(screen.getByText('Lv 42 · Priest'), 'a row without Armory data keeps the bare meta line').toBeInTheDocument();
+        expect(screen.getAllByText(/iLvl/), 'only the synced row carries an item level').toHaveLength(1);
+    });
+});
+
 describe('RosterClaimList — server-side search (ROK-2128 Codex P2)', () => {
     it('sends the search to the server so a row past the 1000 cap is findable (Codex P2)', async () => {
         const seen: (string | null)[] = [];
