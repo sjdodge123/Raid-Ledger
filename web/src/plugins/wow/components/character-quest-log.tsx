@@ -1,9 +1,12 @@
 /**
  * ROK-1745: "In progress (k)" — the character's quest log with per-objective
  * done/open state. Reuses the event quest-card CSS classes (D9), not its components.
+ * ROK-2146: the first 5 quests, then "Show all N" / "Show fewer".
  */
+import { useId } from 'react';
 import type { CharacterQuestLogEntry, CharacterQuestObjective } from '@raid-ledger/contract';
 import { getWowheadQuestUrl } from '../lib/wowhead-urls';
+import { ShowAllToggle, useRowCap } from './show-all-toggle';
 
 /** One objective row: success when done (check glyph + sr-only "done"), warning when open. */
 function ObjectiveRow({ objective }: { objective: CharacterQuestObjective }) {
@@ -40,15 +43,20 @@ function QuestLogRow({ quest }: { quest: CharacterQuestLogEntry }) {
 
 /** The in-progress quest list; "No quests in progress" when the log is empty. */
 export function CharacterQuestLog({ quests }: { quests: CharacterQuestLogEntry[] }) {
+    const listId = useId();
+    const { visible, capped, expanded, toggle } = useRowCap(quests);
     return (
         <div>
             <h3 className="text-sm font-medium text-foreground mb-2">In progress ({quests.length})</h3>
             {quests.length === 0 ? (
                 <p className="text-sm text-muted">No quests in progress</p>
             ) : (
-                <ul className="space-y-3">
-                    {quests.map((q) => <QuestLogRow key={q.questId} quest={q} />)}
-                </ul>
+                <>
+                    <ul id={listId} className="space-y-3">
+                        {visible.map((q) => <QuestLogRow key={q.questId} quest={q} />)}
+                    </ul>
+                    {capped && <ShowAllToggle total={quests.length} expanded={expanded} onToggle={toggle} controls={listId} />}
+                </>
             )}
         </div>
     );
