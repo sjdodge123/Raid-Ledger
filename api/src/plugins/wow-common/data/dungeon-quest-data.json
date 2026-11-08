@@ -5820,7 +5820,7 @@
   },
   {
     "questId": 6642,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Favor Amongst the Brotherhood, Dark Iron Ore",
     "questLevel": 60,
     "requiredLevel": 60,
@@ -5841,7 +5841,7 @@
   },
   {
     "questId": 6643,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Favor Amongst the Brotherhood, Fiery Core",
     "questLevel": 60,
     "requiredLevel": 60,
@@ -5862,7 +5862,7 @@
   },
   {
     "questId": 6644,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Favor Amongst the Brotherhood, Lava Core",
     "questLevel": 60,
     "requiredLevel": 60,
@@ -5883,7 +5883,7 @@
   },
   {
     "questId": 6645,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Favor Amongst the Brotherhood, Core Leather",
     "questLevel": 60,
     "requiredLevel": 60,
@@ -5904,7 +5904,7 @@
   },
   {
     "questId": 6646,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Favor Amongst the Brotherhood, Blood of the Mountain",
     "questLevel": 60,
     "requiredLevel": 60,
@@ -6240,7 +6240,7 @@
   },
   {
     "questId": 7487,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Attunement to the Core",
     "questLevel": 60,
     "requiredLevel": 55,
@@ -6890,7 +6890,7 @@
   },
   {
     "questId": 7848,
-    "dungeonInstanceId": 230,
+    "dungeonInstanceId": 228,
     "name": "Attunement to the Core",
     "questLevel": 60,
     "requiredLevel": 55,

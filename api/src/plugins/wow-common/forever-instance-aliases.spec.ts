@@ -6,6 +6,7 @@ import {
   FOREVER_JOURNAL_ALIASES,
   resolveQuestInstanceIds,
 } from './forever-instance-aliases';
+import { INSTANCE_SHORT_NAMES } from './blizzard-instance-data';
 
 const SEED_1 = FOREVER_SEED_ID_BASE + 1;
 
@@ -78,5 +79,35 @@ describe('CLASSIC_WING_PARENT_IDS (ROK-2142)', () => {
         hasQuests: true,
       });
     }
+  });
+});
+
+describe('classic dungeon data integrity (ROK-2142)', () => {
+  const instanceOf = (questId: number): number | null | undefined =>
+    questData.find((q) => q.questId === questId)?.dungeonInstanceId;
+
+  it.each([6642, 6643, 6644, 6645, 6646, 7487, 7848])(
+    'files Blackrock Depths quest %i (Lokhtos / Lothos) under BRD (228)',
+    (questId) => {
+      expect(instanceOf(questId)).toBe(228);
+    },
+  );
+
+  it('files every quest given inside Blackrock Depths under BRD (228)', () => {
+    const brdGivenElsewhere = questData
+      .filter((q) => q.questGiverZone === 'Blackrock Depths')
+      .filter((q) => q.dungeonInstanceId !== 228)
+      .map((q) => `${q.questId} -> ${String(q.dungeonInstanceId)}`);
+    expect(brdGivenElsewhere).toEqual([]);
+  });
+
+  it.each([
+    ['Stratholme - Main Gate', 'Strat:Live'],
+    ['Stratholme - Service Entrance', 'Strat:UD'],
+    ['Dire Maul - Capital Gardens', 'DM:W'],
+    ['Dire Maul - Warpwood Quarter', 'DM:E'],
+    ['Dire Maul - Gordok Commons', 'DM:N'],
+  ])('labels %s as %s', (name, shortName) => {
+    expect(INSTANCE_SHORT_NAMES[name]).toBe(shortName);
   });
 });
