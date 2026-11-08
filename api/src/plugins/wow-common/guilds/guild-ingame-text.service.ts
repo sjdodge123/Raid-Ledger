@@ -5,7 +5,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { GuildIngameText } from '@raid-ledger/contract';
+import type {
+  GuildIngameText,
+  PutGuildIngameText,
+} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   GuildAccessService,
@@ -17,6 +20,7 @@ import {
   parseIngameTextPut,
   planIngameTextWrite,
   toIngameTextDto,
+  type StoredIngameTexts,
 } from './guild-ingame-text.helpers';
 import {
   adoptPutBody,
@@ -35,7 +39,10 @@ import {
   lockIngameText,
   writeIngameText,
   type Db,
+  type Tx,
 } from './guild-ingame-text.queries';
+
+type WriteOutcome = 'ok' | 'conflict';
 
 /**
  * ROK-2136 — the WoW guild's in-game Message of the Day and Guild Information
@@ -70,16 +77,24 @@ export class GuildIngameTextService {
   ): Promise<GuildIngameText> {
     const input = parseIngameTextPut(body);
     await this.assertWowGuild(guildId);
-    const outcome = await this.db.transaction(async (tx) => {
-      const plan = planIngameTextWrite(
+    const outcome = await this.db.transaction(async (tx) =>
+      writeLocked(
+        tx,
+        actor.id,
+        guildId,
         await lockIngameText(tx, guildId),
         input,
-      );
-      if (plan.outcome === 'conflict') return plan.outcome;
-      const patch = buildIngameTextPatch(plan.changes, actor.id, new Date());
-      if (patch !== null) await writeIngameText(tx, guildId, patch);
-      return plan.outcome;
-    });
+      ),
+    );
+    return this.finish(actor, guildId, outcome);
+  }
+
+  /** The saved DTO, or the per-field 409 carrying the current text. */
+  private async finish(
+    actor: GuildActor,
+    guildId: number,
+    outcome: WriteOutcome,
+  ): Promise<GuildIngameText> {
     const response = await this.respond(actor, guildId);
     if (outcome === 'conflict') {
       throw new ConflictException({
@@ -92,9 +107,11 @@ export class GuildIngameTextService {
 
   /**
    * ROK-2137 Adopt (editors, behind `GuildEditorGuard`): copy the field's
-   * last in-game report into the hub text through `save` — same validation,
-   * per-field 409 (on the `baseUpdatedAt` the editor saw) and attribution.
-   * 409 when the field was never reported or the report moved on (review r1).
+   * last in-game report into the hub text — same validation, per-field 409
+   * (on the `baseUpdatedAt` the editor saw) and attribution as `save`. 409
+   * when the field was never reported or the report moved on (review r1).
+   * The report is read and checked under the save's row lock, in its
+   * transaction, so an import landing in between is a 409 (review r2).
    */
   async adopt(
     actor: GuildActor,
@@ -105,13 +122,19 @@ export class GuildIngameTextService {
     const field = parseIngameFieldKey(rawField);
     const seen = parseGameAction(body);
     await this.assertWowGuild(guildId);
-    const report = gameFieldOf(await findGameText(this.db, guildId), field);
-    if (report.reportedAt === null) throw noReport();
-    if (!isSameReport(report.reportedAt, seen.gameReportedAt)) {
-      throw await this.reportMoved(actor, guildId);
-    }
-    const put = adoptPutBody(field, report.text, seen.baseUpdatedAt);
-    return this.save(actor, guildId, put);
+    const outcome = await this.db.transaction(async (tx) => {
+      const stored = await lockIngameText(tx, guildId);
+      const report = gameFieldOf(await findGameText(tx, guildId), field);
+      if (report.reportedAt === null) return 'no-report' as const;
+      if (!isSameReport(report.reportedAt, seen.gameReportedAt)) {
+        return 'moved' as const;
+      }
+      const put = adoptPutBody(field, report.text, seen.baseUpdatedAt);
+      return writeLocked(tx, actor.id, guildId, stored, put);
+    });
+    if (outcome === 'no-report') throw noReport();
+    if (outcome === 'moved') throw await this.reportMoved(actor, guildId);
+    return this.finish(actor, guildId, outcome);
   }
 
   /**
@@ -169,6 +192,24 @@ export class GuildIngameTextService {
       throw new NotFoundException('Guild not found');
     }
   }
+}
+
+/**
+ * D6 inside the caller's locked transaction: write only the changed fields,
+ * or report the per-field conflict. An unchanged save stamps nothing.
+ */
+async function writeLocked(
+  tx: Tx,
+  actorId: number,
+  guildId: number,
+  stored: StoredIngameTexts,
+  input: PutGuildIngameText,
+): Promise<WriteOutcome> {
+  const plan = planIngameTextWrite(stored, input);
+  if (plan.outcome === 'conflict') return plan.outcome;
+  const patch = buildIngameTextPatch(plan.changes, actorId, new Date());
+  if (patch !== null) await writeIngameText(tx, guildId, patch);
+  return plan.outcome;
 }
 
 /** Adopt/Push on a field the game never reported. */

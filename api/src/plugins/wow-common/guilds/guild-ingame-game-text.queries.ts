@@ -7,7 +7,7 @@ import { and, eq, isNotNull, sql, type AnyColumn } from 'drizzle-orm';
 import type { IngameTextFieldKey } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import type { GameTextRow } from './guild-ingame-game-text.helpers';
-import { utcText, type Db } from './guild-ingame-text.queries';
+import { utcText, type Db, type Tx } from './guild-ingame-text.queries';
 
 const { guildProfiles: profiles } = schema;
 
@@ -15,9 +15,12 @@ const { guildProfiles: profiles } = schema;
 const acked = (reported: AnyColumn, ack: AnyColumn) =>
   sql<boolean>`coalesce(${reported} <= ${ack}, false)`;
 
-/** The two reported fields; null when the guild has no profile row. */
+/**
+ * The two reported fields; null when the guild has no profile row. Adopt
+ * reads it with the save's `tx`, under `lockIngameText`'s row lock (review r2).
+ */
 export async function findGameText(
-  db: Db,
+  db: Db | Tx,
   guildId: number,
 ): Promise<GameTextRow | null> {
   const [row] = await db
