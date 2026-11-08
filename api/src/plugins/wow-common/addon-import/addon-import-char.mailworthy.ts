@@ -1,6 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import type { AddonMailworthy } from '@raid-ledger/contract';
+import type {
+  AddonMailworthy,
+  AddonMailworthyImportOutcome,
+} from '@raid-ledger/contract';
 import { characters, guildMembers, guilds } from '../../../drizzle/schema';
 import { mailworthyNameKey } from '../../../drizzle/schema/guild-mailworthy.name-key';
 import {
@@ -18,7 +21,10 @@ import {
   templateRejection,
   type MailworthyRoster,
 } from './addon-import-char.mailworthy.helpers';
-import { applyMailworthyLists } from './addon-import-char.mailworthy.lists';
+import {
+  applyMailworthyLists,
+  type MailworthyListsCounts,
+} from './addon-import-char.mailworthy.lists';
 import { upsertTemplate } from './addon-import-char.mailworthy.writes';
 import { exportClock } from './addon-import.clock';
 import type { DecodedAddonCharExport } from './addon-import.decoder';
@@ -27,9 +33,12 @@ import type { DecodedAddonCharExport } from './addon-import.decoder';
  * ROK-2148 D.2 — apply the `char` export's Mailworthy block (lifted to
  * `payload.mailworthy` by the decoder) to its guild's template / peers /
  * givers. Runs after `applyChar` in the same transaction whatever its
- * status; never throws for block content — a skip or a rejected row is
- * logged. Dry runs never reach it.
+ * status (a stale char snapshot can still carry newer givers); never throws
+ * for block content — a skip or a rejected row is logged and reported on the
+ * char summary's `mailworthy` (Q8; absent with no block). Dry runs never reach it.
  */
+
+type TemplateOutcome = 'stored' | 'unchanged' | 'rejected' | 'none';
 
 const logger = new Logger('AddonImportMailworthy');
 
@@ -39,32 +48,53 @@ export async function applyCharThenMailworthy(
   payload: DecodedAddonCharExport,
 ): Promise<Awaited<ReturnType<typeof applyChar>>> {
   const outcome = await applyChar(ctx, payload);
-  await applyCharMailworthy(ctx, payload);
-  return outcome;
+  const mailworthy = await applyCharMailworthy(ctx, payload);
+  if (!mailworthy) return outcome;
+  return { ...outcome, summary: { ...outcome.summary, mailworthy } };
 }
+
+const skipped = (
+  reason: Extract<
+    AddonMailworthyImportOutcome,
+    { status: 'skipped' }
+  >['reason'],
+): AddonMailworthyImportOutcome => ({ status: 'skipped', reason });
 
 export async function applyCharMailworthy(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
-): Promise<void> {
+): Promise<AddonMailworthyImportOutcome | undefined> {
   const block = payload.mailworthy;
+  if (!block) return undefined;
   const guildName = payload.who.guildName;
-  if (!block || !guildName) return;
-  const guildId = await findGuildId(ctx, guildName);
+  const guildId = guildName ? await findGuildId(ctx, guildName) : undefined;
   if (guildId === undefined) {
     logger.log('mailworthy skipped: no guild');
-    return;
+    return skipped('guild_unresolved');
   }
   const roster = await loadRoster(ctx, guildId, payload.who.guid);
   if (roster.exporterKey === undefined) {
     logger.log(
       `mailworthy skipped: guild ${guildId} exporter not in latest roster`,
     );
-    return;
+    return skipped('not_on_roster');
   }
   const nowMs = exportClock.nowMs();
-  await applyTemplate(ctx, guildId, block, roster, nowMs);
-  await applyMailworthyLists(ctx, guildId, { payload, block, roster, nowMs });
+  const template = await applyTemplate(ctx, guildId, block, roster, nowMs);
+  const input = { payload, block, roster, nowMs };
+  const counts = await applyMailworthyLists(ctx, guildId, input);
+  return mailworthyOutcome(counts, template);
+}
+
+/** Every giver off-roster → skipped; otherwise applied with its counts. */
+function mailworthyOutcome(
+  counts: MailworthyListsCounts,
+  template: TemplateOutcome,
+): AddonMailworthyImportOutcome {
+  if (counts.givers === 0 && counts.giversRejected > 0) {
+    return skipped('givers_rejected');
+  }
+  return { status: 'applied', ...counts, template };
 }
 
 /** The realm-less guild the guild section writes (`applyGuild`'s target). */
@@ -134,18 +164,19 @@ async function applyTemplate(
   block: AddonMailworthy,
   roster: MailworthyRoster,
   nowMs: number,
-): Promise<void> {
+): Promise<TemplateOutcome> {
   const template = block.template;
-  if (!template) return;
+  if (!template) return 'none';
   const rejection = templateRejection(template, roster, nowMs);
   if (rejection) {
     logger.log(`mailworthy template rejected: guild ${guildId} — ${rejection}`);
-    return;
+    return 'rejected';
   }
-  await upsertTemplate(ctx, guildId, {
+  const stored = await upsertTemplate(ctx, guildId, {
     rev: template.rev,
     authorName: template.author,
     rules: dedupeRules(template.rules),
     reportedAt: clampedDate(block.generatedAt, nowMs),
   });
+  return stored ? 'stored' : 'unchanged';
 }

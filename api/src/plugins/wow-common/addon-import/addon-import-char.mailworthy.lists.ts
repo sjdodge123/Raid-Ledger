@@ -34,11 +34,18 @@ export interface MailworthyListsInput {
   nowMs: number;
 }
 
+/** What the lists step did (feeds the import summary, ROK-2148 Q8). */
+export interface MailworthyListsCounts {
+  givers: number;
+  giversRejected: number;
+  peers: number;
+}
+
 export async function applyMailworthyLists(
   ctx: AddonApplyContext,
   guildId: number,
   input: MailworthyListsInput,
-): Promise<void> {
+): Promise<MailworthyListsCounts> {
   const givers = acceptedGivers(ctx, guildId, input);
   const { payload, block, nowMs } = input;
   const reported = [
@@ -49,9 +56,15 @@ export async function applyMailworthyLists(
       lastSeenAt: Math.floor(g.asOf.getTime() / 1000),
     })),
   ];
-  await upsertPeers(ctx, guildId, peerRows(reported, nowMs));
+  const peers = peerRows(reported, nowMs);
+  await upsertPeers(ctx, guildId, peers);
   await prunePeers(ctx, guildId, peerCutoff(nowMs));
   await upsertGivers(ctx, guildId, givers);
+  return {
+    givers: givers.length,
+    giversRejected: dedupeGivers(block.givers ?? []).length - givers.length,
+    peers: peers.length,
+  };
 }
 
 /** Deduped, clamped, roster-checked giver rows with their source. */
