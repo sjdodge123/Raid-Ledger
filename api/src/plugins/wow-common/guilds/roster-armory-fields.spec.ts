@@ -1,10 +1,11 @@
 /**
  * ROK-2133 AC-12 (unit) — members list + pick list DTOs carry Armory
  * itemLevel/spec/role when present and omit the keys otherwise. The
- * character-vs-snapshot coalesce is SQL, proven in
- * blizzard-forever.member-facts.integration.spec.ts.
+ * character-vs-snapshot coalesce is pinned as rendered SQL here; its rows
+ * are proven in blizzard-forever.member-facts.integration.spec.ts.
  */
-import { armoryDtoFields } from './roster-armory-fields';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import { armoryDtoFields, memberArmoryColumns } from './roster-armory-fields';
 import { groupRoster, type RawRosterRow } from './guild-roster.helpers';
 import { groupByGuild } from './roster-claim/roster-claim.service';
 import type { CandidateRow } from './roster-claim/roster-claim.queries';
@@ -70,6 +71,26 @@ describe('armoryDtoFields', () => {
       }),
     ).toEqual({});
   });
+});
+
+describe('memberArmoryColumns — character vs snapshot (D5)', () => {
+  const dialect = new PgDialect();
+  const cases = [
+    ['armoryItemLevel', 'item_level'],
+    ['armorySpec', 'spec'],
+    ['armoryRole', 'role'],
+  ] as const;
+
+  it.each(cases)(
+    '%s: the character value wins only when it is Armory-synced (wow_forever)',
+    (key, column) => {
+      const q = dialect.sqlToQuery(memberArmoryColumns[key]);
+      expect(q.sql).toBe(
+        `coalesce(case when "characters"."game_variant" = $1 then "characters"."${column}" end, "guild_member_armory"."${column}")`,
+      );
+      expect(q.params).toEqual(['wow_forever']);
+    },
+  );
 });
 
 describe('members list DTO (AC-12)', () => {

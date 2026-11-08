@@ -1,15 +1,19 @@
 /**
  * ROK-2133 (D5, Q10): the Armory item level / spec / role on the guild
  * members list and the roster-claim pick list — the linked character's
- * Armory columns, else the member's verified `guild_member_armory` snapshot.
+ * Armory columns when it is Armory-synced (`wow_forever`), else the member's
+ * verified `guild_member_armory` snapshot. A manual character's own values
+ * lose to the snapshot (operator ruling 2026-11-08: rely on the official
+ * Blizzard API).
  * Optional DTO keys: omitted (never null) when there is no value.
  */
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import {
   CharacterRoleSchema,
   type GuildMemberRow,
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
+import { WOW_FOREVER_VARIANT } from '../forever-armory-switch';
 
 const { characters: c, guildMembers: m, guildMemberArmory: a } = schema;
 
@@ -44,11 +48,19 @@ export const snapshotArmoryColumns = {
   armoryRole: a.role,
 };
 
-/** Character Armory columns first, the member snapshot as the fallback. */
+/** The character's value only when Armory-synced, else the snapshot's. */
+function armoryFirst<T>(charCol: AnyColumn, snapCol: AnyColumn): SQL<T | null> {
+  return sql<T | null>`coalesce(case when ${c.gameVariant} = ${WOW_FOREVER_VARIANT} then ${charCol} end, ${snapCol})`;
+}
+
+/**
+ * An Armory-synced character's columns first, the member snapshot as the
+ * fallback; a manual character's user-set values never beat the snapshot.
+ */
 export const memberArmoryColumns = {
-  armoryItemLevel: sql<number | null>`coalesce(${c.itemLevel}, ${a.itemLevel})`,
-  armorySpec: sql<string | null>`coalesce(${c.spec}, ${a.spec})`,
-  armoryRole: sql<string | null>`coalesce(${c.role}, ${a.role})`,
+  armoryItemLevel: armoryFirst<number>(c.itemLevel, a.itemLevel),
+  armorySpec: armoryFirst<string>(c.spec, a.spec),
+  armoryRole: armoryFirst<string>(c.role, a.role),
 };
 
 /** The DTO keys present on `row`; each invalid or missing value is omitted. */
