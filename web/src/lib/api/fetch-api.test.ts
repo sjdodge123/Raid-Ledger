@@ -10,6 +10,8 @@ import { errorBodyOf, httpStatusOf, isConflictError } from './api-error';
 import { setAccessToken, getAccessToken } from './access-token-store';
 
 const captureExceptionMock = vi.fn();
+const addBreadcrumbMock = vi.fn();
+const toastInfoMock = vi.fn();
 
 // Mutable stored access token so tests can exercise the ROK-1409 pre-flight
 // staleness gate (fresh vs expired) against a controllable getAuthToken().
@@ -18,7 +20,12 @@ const authState = vi.hoisted(() => ({ token: null as string | null }));
 vi.mock('../../sentry', () => ({
     Sentry: {
         captureException: (...args: unknown[]) => captureExceptionMock(...args),
+        addBreadcrumb: (...args: unknown[]) => addBreadcrumbMock(...args),
     },
+}));
+
+vi.mock('sonner', () => ({
+    toast: { info: (...args: unknown[]) => toastInfoMock(...args) },
 }));
 
 vi.mock('../../hooks/use-auth', () => ({
@@ -114,6 +121,62 @@ describe('fetchApi — schema validation boundary (ROK-1237)', () => {
         expect(extra.endpoint).toBe('/fixture');
         expect(Array.isArray(extra.issues)).toBe(true);
         expect(extra.issues.length).toBeGreaterThan(0);
+    });
+});
+
+const NestedStrictSchema = z
+    .object({
+        id: z.number(),
+        guild: z.object({ name: z.string() }).strict(),
+    })
+    .strict();
+
+describe('fetchApi — version skew tolerance (ROK-2116)', () => {
+    beforeEach(() => {
+        captureExceptionMock.mockClear();
+        addBreadcrumbMock.mockClear();
+        toastInfoMock.mockClear();
+    });
+
+    it('resolves with the parsed data when the only issues are keys this bundle does not know, and notices once', async () => {
+        server.use(
+            http.get(`${API_BASE}/guilds/mine`, () =>
+                HttpResponse.json({ id: 7, crest: 'x.png', guild: { name: 'Ledger', motd: 'hi' } }),
+            ),
+        );
+        await expect(fetchApi('/guilds/mine', {}, NestedStrictSchema)).resolves.toEqual({
+            id: 7,
+            guild: { name: 'Ledger' },
+        });
+        await expect(fetchApi('/guilds/mine', {}, NestedStrictSchema)).resolves.toEqual({
+            id: 7,
+            guild: { name: 'Ledger' },
+        });
+        expect(captureExceptionMock).not.toHaveBeenCalled();
+        expect(addBreadcrumbMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+                category: 'schema-skew',
+                level: 'warning',
+                data: expect.objectContaining({ endpoint: '/guilds/mine' }),
+            }),
+        );
+        expect(toastInfoMock).toHaveBeenCalledTimes(1);
+        const [message, opts] = at(toastInfoMock.mock.calls, 0);
+        expect(message).toBe('A new version of Raid Ledger is available.');
+        expect((opts as { action: { label: string } }).action.label).toBe('Reload');
+    });
+
+    it('still throws SchemaValidationError and reports to Sentry when a real shape error rides along', async () => {
+        server.use(
+            http.get(`${API_BASE}/guilds/mine`, () =>
+                HttpResponse.json({ id: 'seven', crest: 'x.png', guild: { name: 'Ledger' } }),
+            ),
+        );
+        await expect(fetchApi('/guilds/mine', {}, NestedStrictSchema)).rejects.toBeInstanceOf(
+            SchemaValidationError,
+        );
+        expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+        expect(toastInfoMock).not.toHaveBeenCalled();
     });
 });
 
