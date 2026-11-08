@@ -15,10 +15,12 @@ import {
   type ManualSyncGuild,
 } from './blizzard-roster-sync.job';
 import { BlizzardRosterSyncService } from './blizzard-roster-sync.service';
+import { RosterArmoryService } from '../forever-armory-snapshot/roster-armory.service';
 
 let job: BlizzardRosterSyncJob;
 let sync: { syncForeverGuildRoster: jest.Mock };
 let settings: { get: jest.Mock };
+let armory: { runForGuild: jest.Mock };
 let listSpy: jest.SpyInstance;
 let readSpy: jest.SpyInstance;
 
@@ -36,12 +38,14 @@ beforeEach(async () => {
   RUNNING_ROSTER_SYNCS.clear();
   sync = { syncForeverGuildRoster: jest.fn() };
   settings = { get: jest.fn().mockResolvedValue(null) };
+  armory = { runForGuild: jest.fn().mockResolvedValue({}) };
   const mod = await Test.createTestingModule({
     providers: [
       BlizzardRosterSyncJob,
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: BlizzardRosterSyncService, useValue: sync },
       { provide: SettingsService, useValue: settings },
+      { provide: RosterArmoryService, useValue: armory },
     ],
   }).compile();
   job = mod.get(BlizzardRosterSyncJob);
@@ -177,5 +181,37 @@ describe('BlizzardRosterSyncJob.run — stale outcome (ROK-1928 MINOR 15)', () =
       .mockResolvedValueOnce({ status: 'ok', updated: 1, inserted: 0 });
     const tally = await job.run();
     expect(tally).toEqual({ ok: 1, notFound: 0, error: 0, skipped: 1 });
+  });
+});
+
+describe('BlizzardRosterSyncJob.syncNow — roster Armory pass (ROK-2133 AC-13)', () => {
+  const ok = { status: 'ok', updated: 1, inserted: 0 };
+
+  it('fires one pass for that guild without waiting for it', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue(ok);
+    armory.runForGuild.mockReturnValue(new Promise(() => undefined));
+    await expect(job.syncNow(7)).resolves.toMatchObject({ status: 'ok' });
+    expect(armory.runForGuild).toHaveBeenCalledTimes(1);
+    expect(armory.runForGuild).toHaveBeenCalledWith(7);
+  });
+
+  it('a failing pass never fails the Sync now response', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue(ok);
+    armory.runForGuild.mockRejectedValue(new Error('boom'));
+    await expect(job.syncNow(7)).resolves.toMatchObject({ status: 'ok' });
+    await new Promise((r) => setImmediate(r));
+    expect(armory.runForGuild).toHaveBeenCalledWith(7);
+  });
+
+  it('no pass when the roster sync did not succeed', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue({ status: 'stale' });
+    await job.syncNow(7);
+    expect(armory.runForGuild).not.toHaveBeenCalled();
+  });
+
+  it('the cron roster run does not fire passes (the hourly job covers them)', async () => {
+    sync.syncForeverGuildRoster.mockResolvedValue(ok);
+    await job.run();
+    expect(armory.runForGuild).not.toHaveBeenCalled();
   });
 });
