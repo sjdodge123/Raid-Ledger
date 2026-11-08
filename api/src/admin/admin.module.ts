@@ -37,6 +37,7 @@ import { DemoTestIntentTokenController } from './demo-test-intent-token.controll
 import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
 import { DemoTestGuildController } from './demo-test-guild.controller';
 import { DemoTestGuildDiscordController } from './demo-test-guild-discord.controller';
+import { DemoTestGuildGameTextController } from './demo-test-guild-game-text.controller';
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
 import { DemoTestChannelLifecycleController } from './demo-test-channel-lifecycle.controller';
 import { DemoTestCommunityHubsController } from './demo-test-community-hubs.controller';
@@ -155,6 +156,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestBrowserSessionController,
     DemoTestGuildController,
     DemoTestGuildDiscordController,
+    DemoTestGuildGameTextController,
     DemoTestHubMemberController,
     DemoTestChannelLifecycleController,
     DemoTestCommunityHubsController,

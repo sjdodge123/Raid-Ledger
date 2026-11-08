@@ -79,10 +79,11 @@ function conflictSet(report: GameTextReport): Record<string, SQL> {
  * Upsert the reported in-game text onto the guild's profile row. No-op (no
  * row created) when the export carries neither key. `reportedAt` is the
  * snapshot's received instant (`receivedSnapshotAt`), the same stamp the
- * roster gets.
+ * roster gets. Needs only `ctx.tx` (the DEMO_MODE
+ * `seed-guild-game-text` fixture calls it outside an import).
  */
 export async function applyGuildGameText(
-  ctx: AddonApplyContext,
+  ctx: Pick<AddonApplyContext, 'tx'>,
   guildId: number,
   data: Pick<AddonGuildData, 'motd' | 'infoText'>,
   reportedAt: Date,
