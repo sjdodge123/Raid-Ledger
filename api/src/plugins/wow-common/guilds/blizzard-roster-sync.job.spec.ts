@@ -187,16 +187,23 @@ describe('BlizzardRosterSyncJob.run — stale outcome (ROK-1928 MINOR 15)', () =
 describe('BlizzardRosterSyncJob.syncNow — roster Armory pass (ROK-2133 AC-13)', () => {
   const ok = { status: 'ok', updated: 1, inserted: 0 };
 
+  afterEach(() => jest.useRealTimers());
+
   it('fires one pass for that guild without waiting for it', async () => {
+    // Fake timers: no wall-clock wait. If syncNow awaited the never-settling
+    // pass, the 'blocked' timer would win the race once it is advanced.
+    jest.useFakeTimers();
     sync.syncForeverGuildRoster.mockResolvedValue(ok);
     armory.runForGuild.mockReturnValue(new Promise(() => undefined));
     const blocked = new Promise<string>((r) =>
       setTimeout(() => r('blocked'), 200),
     );
-    const outcome = await Promise.race([
+    const race = Promise.race([
       job.syncNow(7).then(() => 'responded'),
       blocked,
     ]);
+    await jest.advanceTimersByTimeAsync(200);
+    const outcome = await race;
     expect(outcome).toBe('responded');
     expect(armory.runForGuild).toHaveBeenCalledTimes(1);
     expect(armory.runForGuild).toHaveBeenCalledWith(7);
