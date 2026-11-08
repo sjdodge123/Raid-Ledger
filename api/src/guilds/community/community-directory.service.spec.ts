@@ -159,3 +159,25 @@ describe('CommunityDirectoryService.byGame (ROK-1883)', () => {
     });
   });
 });
+
+describe('CommunityDirectoryService visitor ids (ROK-2132)', () => {
+  it('ROK-2132: a non-staff scope carries the adapters visitor ids; staff skip the hook', async () => {
+    const visitorVisibleGroupIds = jest.fn().mockResolvedValue([8, 8, 9]);
+    const wow = { kind: 'wow_guild', visitorVisibleGroupIds };
+    const registry = {
+      active: () => [wow, { kind: 'game_server' }],
+    } as unknown as HubKindRegistry;
+    const access = {
+      memberHubIds: jest.fn().mockResolvedValue([]),
+    } as unknown as GuildAccessService;
+    const db = {} as PostgresJsDatabase<typeof schema>;
+    const service = new CommunityDirectoryService(db, registry, access);
+    await service.list({ id: 5, role: 'member' }, QUERY);
+    expect(visitorVisibleGroupIds).toHaveBeenCalledWith(5);
+    expect(listMock.mock.calls[0]?.[3]).toMatchObject({ visitorIds: [8, 9] });
+    visitorVisibleGroupIds.mockClear();
+    await service.list({ id: 1, role: 'admin' }, QUERY);
+    expect(visitorVisibleGroupIds).not.toHaveBeenCalled();
+    expect(listMock.mock.calls[1]?.[3]).toMatchObject({ visitorIds: [] });
+  });
+});
