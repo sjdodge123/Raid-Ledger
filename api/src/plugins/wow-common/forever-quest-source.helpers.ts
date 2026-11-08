@@ -2,18 +2,19 @@
  * ROK-2109 (D4): the effective quest data of one WoW: Forever character, from
  * the LedgerLink `char` snapshot and/or the Armory `quests/completed` sync.
  *
- * - completed list (+ truncation flag, capture time, source): the NEWER of
- *   the two, through the ROK-1910 resolver with the 24h Blizzard override off
- *   (ruling 2026-10-09: newest snapshot wins; a tie keeps the addon).
- * - in-progress log: always the addon's — Blizzard serves no quest log, so a
- *   newer Armory sync must not blank it.
+ * - completed list (+ truncation flag, capture time, source): the Armory list
+ *   whenever `armory_quests` parses, regardless of age (ROK-2138 ruling
+ *   2026-11-08: the Blizzard API is primary, LedgerLink only fills gaps); the
+ *   addon list only when there is no Armory list. Never a union (OQ-5): it
+ *   would resurrect abandoned/reset quests and mix the capped addon list.
+ * - in-progress log: always the addon's — Blizzard serves no quest log, so an
+ *   Armory sync must not blank it.
  *
- * Pure: no I/O, no clock reads (the caller passes `now`).
+ * Pure: no I/O, no clock reads.
  */
 import { AddonQuestsSchema } from '@raid-ledger/contract';
 import { ArmoryQuestsSchema } from './blizzard-quests.helpers';
 import type { ForeverQuestSnapshotInput } from './character-quests.helpers';
-import { resolveField } from './facts/fact-precedence';
 import type { Fact } from './facts/wow-fact.types';
 
 /** The quests slice every consumer reads (addon log entries included). */
@@ -64,25 +65,19 @@ function armoryFact(raw: unknown): Fact<Completed> | null {
 }
 
 /**
- * Combine the two sources (D4).
+ * Combine the two sources (ROK-2109 D4, ROK-2138 D10).
  * @returns null when neither source has usable quest data.
  */
 export function effectiveQuests(
   addon: AddonQuestInput | null,
   armoryRaw: unknown,
-  now: Date,
 ): EffectiveQuests | null {
   const slice = addon ? readQuestsSlice(addon.data) : undefined;
   const addonFact: Fact<Completed> | null =
     addon && slice
       ? { value: slice, source: 'addon', asOf: addon.capturedAt }
       : null;
-  const armory = armoryFact(armoryRaw);
-  // Addon first: the resolver keeps the earlier candidate on a tie.
-  const candidates = [addonFact, armory].filter(
-    (f): f is Fact<Completed> => f !== null,
-  );
-  const winner = resolveField('quests', candidates, now, false);
+  const winner = armoryFact(armoryRaw) ?? addonFact;
   if (!winner || !winner.asOf) return null;
   const { completed, completedTruncated } = winner.value;
   return {

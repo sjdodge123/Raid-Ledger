@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { isMobile, isPhoneLayout } from './helpers';
+import { addMethodButton, rosterCandidatesSettled, selectAddMethod } from './add-character-method';
 
 // ---------------------------------------------------------------------------
 // ROK-1636 / ROK-1722: Armory import gating in the Add Character modal.
@@ -54,20 +55,23 @@ async function openAddCharacterForGame(page: Page, gameName: string) {
     // The Combobox portals its listbox into the surrounding dialog; match by role page-wide.
     const option = page.getByRole('option').filter({ has: page.getByText(gameName, { exact: true }) });
     await expect(option, `the seeded "${gameName}" should be in the game search results`).toBeVisible({ timeout: 15_000 });
+    // ROK-2128: Forever reads its roster-claim candidates, which may open the dialog on "Guild roster".
+    const candidates = gameName === WOW_FOREVER ? rosterCandidatesSettled(page) : null;
     await option.click();
+    if (candidates) await candidates;
     return dialog;
 }
 
 async function expectForeverArmoryEnabledByDefault(page: Page) {
     await forceBlizzardConfigured(page);
     const dialog = await openAddCharacterForGame(page, WOW_FOREVER);
-    const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
+    const armoryTab = addMethodButton(dialog, 'Import from Armory');
     await expect(armoryTab).toBeVisible();
     await expect(armoryTab, 'Armory tab is on by default for WoW Forever (ROK-1722)').not.toHaveAttribute('aria-disabled', 'true', {
         timeout: 15_000,
     });
     await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toHaveCount(0);
-    await armoryTab.click();
+    await selectAddMethod(dialog, 'Import from Armory');
     await expect(dialog.getByTestId('forever-identity-fields')).toBeVisible();
     await expect(dialog.getByRole('radiogroup', { name: 'Ruleset' })).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: 'First name', exact: true })).toBeVisible();
@@ -80,13 +84,15 @@ async function expectForeverArmoryEnabledByDefault(page: Page) {
 async function expectForeverArmoryKillSwitch(page: Page) {
     await forceForeverArmoryKillSwitch(page);
     const dialog = await openAddCharacterForGame(page, WOW_FOREVER);
-    const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
+    const armoryTab = addMethodButton(dialog, 'Import from Armory');
     await expect(armoryTab, 'the kill switch disables the Forever Armory tab').toHaveAttribute('aria-disabled', 'true');
     await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeVisible();
     await expect(armoryTab, 'the note should describe the disabled tab').toHaveAccessibleDescription(ARMORY_UNAVAILABLE_NOTE);
-    // Manual stays the active tab: its form is rendered. Forever is realmless (ROK-1721), so the
-    // manual form is the Region / Ruleset / First name / Second name identity block, not Name + Realm.
-    await expect(dialog.getByRole('button', { name: 'Manual', exact: true })).toBeVisible();
+    await expect(armoryTab, 'the kill switch never lands the dialog on the Armory tab').toHaveAttribute('aria-pressed', 'false');
+    // Manual is the fallback: its form is rendered. The dialog may open on "Guild roster" (ROK-2128
+    // FLAG 9, order-dependent seed data), so pick Manual explicitly. Forever is realmless (ROK-1721), so
+    // the manual form is the Region / Ruleset / First name / Second name identity block, not Name + Realm.
+    await selectAddMethod(dialog, 'Manual');
     await expect(dialog.getByRole('combobox', { name: 'Region', exact: true })).toBeVisible();
     await expect(dialog.getByRole('radiogroup', { name: 'Ruleset' })).toBeVisible();
     await expect(dialog.getByRole('textbox', { name: 'First name', exact: true })).toBeVisible();
@@ -97,7 +103,7 @@ async function expectForeverArmoryKillSwitch(page: Page) {
 
 async function expectSupportedArmoryEnabled(page: Page) {
     const dialog = await openAddCharacterForGame(page, WOW_SUPPORTED);
-    const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
+    const armoryTab = addMethodButton(dialog, 'Import from Armory');
     await expect(armoryTab).toBeVisible();
     await expect(armoryTab, 'Armory tab should stay enabled for a supported variant').not.toHaveAttribute('aria-disabled', 'true');
     await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toHaveCount(0);

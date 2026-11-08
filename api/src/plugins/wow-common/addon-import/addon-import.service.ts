@@ -43,6 +43,8 @@ import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { readRaidPullScope } from './addon-import-raid.scope';
 import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 import { flagIfRosterChanged } from './addon-import-guild.flag';
+import { ForeverAutoLinkService } from '../forever-auto-link/forever-auto-link.service';
+import { nudgeAutoLink } from './addon-import.autolink-nudge';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -64,6 +66,7 @@ export class AddonImportService {
     private readonly itemMeta: WowItemMetaService,
     private readonly realmRulesets: ForeverRealmRulesetsService,
     private readonly insightsCache: RosterInsightsCache,
+    private readonly autoLink: ForeverAutoLinkService,
   ) {}
 
   async importString(
@@ -123,7 +126,8 @@ export class AddonImportService {
   /**
    * AFTER the tx committed: fire-and-forget gear resolution (ROK-1727),
    * drop the guild's cached roster insights (ROK-1913) and flag a wholesale
-   * roster change to staff (ROK-2066).
+   * roster change to staff (ROK-2066), and nudge the Forever Armory
+   * auto-link (ROK-2124, fire-and-forget).
    */
   private async afterApply(
     paste: DecodedAddonPaste,
@@ -132,6 +136,7 @@ export class AddonImportService {
     userId: number,
   ): Promise<void> {
     enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    nudgeAutoLink(this.autoLink, characterId, this.logger);
     await flagIfRosterChanged(this.db, userId, res, this.logger);
     await invalidateRosterInsights(
       this.insightsCache,

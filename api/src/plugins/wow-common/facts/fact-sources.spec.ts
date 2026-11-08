@@ -184,6 +184,22 @@ describe('CharacterRowFactSource', () => {
     expect(got?.role).toEqual({ value: 'dps', source: 'blizzard', asOf: T });
     expect(got?.class?.source).toBe('blizzard');
   });
+
+  // ROK-2138 — the binding's predicate: an external id with no sync stamp is
+  // not Armory data, so the addon values the binding wrote are not `blizzard`.
+  it('an external id that never synced is labelled by its addon origin', async () => {
+    db.where.mockResolvedValue([
+      { ...row, externalId: '123', lastSyncedAt: null },
+    ]);
+    const got = (
+      await new CharacterRowFactSource(db as never).load([ref(1)])
+    ).get('m1');
+    expect(got?.class).toEqual({
+      value: row.class,
+      source: 'addon',
+      asOf: null,
+    });
+  });
 });
 
 describe('AddonSnapshotFactSource — ilvl precision (ROK-1915)', () => {

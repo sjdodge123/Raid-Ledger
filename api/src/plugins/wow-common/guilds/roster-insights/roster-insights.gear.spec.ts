@@ -244,7 +244,7 @@ describe('computeGear — ilvl through the addon snapshot fact source', () => {
     const snapshot = must(loaded.get('m1'), 'snapshot facts');
     const base = row('Half');
     const level = fact(60, T2);
-    return { ...base, facts: resolveFacts([{ level }, snapshot], T2, false) };
+    return { ...base, facts: resolveFacts([{ level }, snapshot]) };
   }
 
   it('an exported 54.5 average is below the 55 floor and in the 50-54 bucket', async () => {

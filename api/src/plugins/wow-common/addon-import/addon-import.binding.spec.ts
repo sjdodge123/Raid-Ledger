@@ -459,3 +459,94 @@ describe('bindToCharacter — race + gender (ROK-1742 R9)', () => {
     expect(r.setGender).toBe('male');
   });
 });
+
+/** ROK-2138 D7 — the Blizzard API is primary for an Armory-linked character. */
+describe('bindToCharacter — Armory-linked character (ROK-2138 D7)', () => {
+  const ARMORY = {
+    externalId: '170012345',
+    lastSyncedAt: new Date('2026-10-01T00:00:00Z'),
+  };
+  const drifted = () =>
+    payload({ class: 'MAGE', level: 42, race: 'NightElf', gender: 'male' });
+
+  it('AC15 keeps stored class/level/race and warns no CLASS_LEVEL_UPDATED', () => {
+    const r = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, race: 'Human', gender: 'male' }),
+      APPLY,
+    );
+    expect(r.diff).toEqual({});
+    expect(r.setRace).toBeUndefined();
+    expect(r.setGender).toBeUndefined();
+    expect(warns(r)).toEqual([]);
+    expect(codes(r)).toEqual([]);
+  });
+
+  // Codex P2 / Opus MAJOR — the Armory sync never writes gender; only the
+  // binding does, and the Forever portrait reads it.
+  it('AC15 fills gender from the export on an Armory row', () => {
+    const r = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, gender: null }),
+      APPLY,
+    );
+    expect(r.setGender).toBe('male');
+    expect(r.diff).toEqual({});
+  });
+
+  it('AC15 fills a null race, class and level; keeps the non-null ones', () => {
+    const gaps = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, race: null, class: null, level: null }),
+      APPLY,
+    );
+    expect(gaps.setRace).toBe('Night Elf');
+    expect(gaps.diff).toEqual({
+      class: { from: null, to: 'Mage' },
+      level: { from: null, to: 42 },
+    });
+    expect(warns(gaps)).toEqual(['CLASS_LEVEL_UPDATED']);
+    const held = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, race: 'Human', level: null }),
+      APPLY,
+    );
+    expect(held.setRace).toBeUndefined();
+    expect(held.diff).toEqual({ level: { from: null, to: 42 } });
+  });
+
+  it('AC15 still pins the GUID and checks the ruleset on an Armory row', () => {
+    const r = bindToCharacter(
+      payload({ ruleset: 'pvp' }),
+      char({ ...ARMORY, addonGuid: null }),
+      { dryRun: false, confirm: { updateRuleset: true } },
+    );
+    expect(r.pinGuid).toBe(GUID);
+    expect(r.setRuleset).toBe('pvp');
+    expect(warns(r)).toEqual(['RULESET_CHANGED']);
+  });
+
+  // One predicate (`isArmoryRow`) with the fact resolver's `rowOrigin`: an
+  // external id that never synced is not an Armory row on either side.
+  it('AC16 an external id that never synced is not an Armory row — the export writes', () => {
+    const r = bindToCharacter(
+      drifted(),
+      char({ externalId: ARMORY.externalId, lastSyncedAt: null, race: null }),
+      APPLY,
+    );
+    expect(r.diff).toEqual({
+      class: { from: 'Paladin', to: 'Mage' },
+      level: { from: 60, to: 42 },
+    });
+    expect(r.setRace).toBe('Night Elf');
+    expect(r.setGender).toBe('male');
+    expect(warns(r)).toEqual(['CLASS_LEVEL_UPDATED']);
+  });
+
+  it('AC16 a non-Armory character updates exactly as before', () => {
+    const r = bindToCharacter(drifted(), char({ externalId: null }), APPLY);
+    expect(r.diff.level).toEqual({ from: 60, to: 42 });
+    expect(r.setRace).toBe('Night Elf');
+    expect(warns(r)).toEqual(['CLASS_LEVEL_UPDATED']);
+  });
+});

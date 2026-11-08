@@ -1,7 +1,10 @@
 /**
  * ROK-1727: read-path resolver for WoW: Forever gear. Builds the displayed
  * `CharacterEquipmentDto` from the character's LedgerLink `char` snapshot
- * (the source of truth, R1) plus cached Wowhead item metadata.
+ * plus cached Wowhead item metadata.
+ * ROK-2138 D8: the stored Armory (Blizzard) gear is primary — the addon gear
+ * only fills the gap when the Armory has no equipment (absent or zero items),
+ * whatever the dates.
  *
  * Read-only on `characters`: never writes `equipment` or `last_synced_at`.
  * Unknown/due item ids are enqueued fire-and-forget (D6 — the only path that
@@ -34,14 +37,12 @@ export function snapshotItemIds(snapshot: CharSnapshot): number[] {
   return [...new Set(ids)];
 }
 
-/** Newest wins (Q4): an Armory sync at/after the capture keeps the Armory. */
-export function armoryIsNewer(
+/** D8: stored Armory equipment with at least one item keeps the Armory. */
+export function armoryHasEquipment(
   equipment: CharacterEquipmentDto | null,
-  capturedAt: Date,
 ): boolean {
-  if (!equipment?.syncedAt) return false;
-  const armory = Date.parse(equipment.syncedAt);
-  return Number.isFinite(armory) && armory >= capturedAt.getTime();
+  const items: unknown = equipment?.items;
+  return Array.isArray(items) && items.length > 0;
 }
 
 @Injectable()
@@ -59,10 +60,9 @@ export class ForeverDisplayEquipmentService {
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
     if (row.gameVariant && row.gameVariant !== FOREVER_VARIANT) return;
+    if (armoryHasEquipment(row.equipment)) return undefined;
     const snapshot = await loadForeverCharSnapshot(this.db, row.id);
-    if (!snapshot || armoryIsNewer(row.equipment, snapshot.capturedAt)) {
-      return undefined;
-    }
+    if (!snapshot) return undefined;
     const ids = snapshotItemIds(snapshot);
     const meta = await this.itemMeta.getMeta(ids);
     const now = Date.now();

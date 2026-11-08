@@ -73,6 +73,16 @@ describe('effectiveProfessions', () => {
     });
   });
 
+  // ROK-2138 AC-P1: the pick is age-blind — a months-old Armory sync still
+  // beats a hand entry; the hand entry only fills a missing Armory value.
+  it('Armory beats manual however old its syncedAt (AC-P1)', () => {
+    const old = { ...ARMORY, syncedAt: '2025-01-01T00:00:00.000Z' };
+    expect(effectiveProfessions(MANUAL, old)).toEqual({
+      value: old,
+      source: 'blizzard',
+    });
+  });
+
   it('ignores a malformed Armory jsonb and falls back to manual', () => {
     expect(effectiveProfessions(MANUAL, { primary: 'nope' })).toEqual({
       value: MANUAL,

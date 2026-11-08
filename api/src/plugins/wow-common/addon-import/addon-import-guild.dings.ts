@@ -1,6 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm';
 import type { AddonGuildMember } from '@raid-ledger/contract';
-import { guildMemberLevelEvents, guildMembers } from '../../../drizzle/schema';
+import { guildMemberLevelEvents } from '../../../drizzle/schema';
 import type { AddonApplyContext } from './addon-import-apply.types';
 
 /**
@@ -22,26 +21,6 @@ export interface LevelUp {
   guildMemberId: number;
   fromLevel: number;
   toLevel: number;
-}
-
-/** Stored `(id, guid, level)` for the payload's guids in this guild. */
-export async function loadPriorLevels(
-  ctx: AddonApplyContext,
-  guildId: number,
-  guids: string[],
-): Promise<PriorLevel[]> {
-  if (guids.length === 0) return [];
-  const rows = await ctx.tx
-    .select({
-      id: guildMembers.id,
-      guid: guildMembers.guid,
-      level: guildMembers.level,
-    })
-    .from(guildMembers)
-    .where(
-      and(eq(guildMembers.guildId, guildId), inArray(guildMembers.guid, guids)),
-    );
-  return rows.flatMap((r) => (r.guid === null ? [] : [{ ...r, guid: r.guid }]));
 }
 
 /** A member's level keyed by its stored row id. */

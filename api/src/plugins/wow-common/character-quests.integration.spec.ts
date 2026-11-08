@@ -192,16 +192,19 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
     expect(body?.inProgress.map((q) => q.questId)).toEqual([92472, 5002]);
   });
 
-  it('AC9: a newer addon snapshot wins; the older Armory id is not counted', async () => {
+  // ROK-2138 AC13: Blizzard is primary — an OLDER Armory list still wins.
+  it('an older Armory list still wins the completed list; the addon log stays', async () => {
     const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
     await seedSnapshot(id, 2, { ...BASE_DATA, quests: ADDON_ONE });
-    await setArmory(id, new Date(CAPTURED_AT.getTime() - HOUR), [5001, 5002]);
+    const earlier = new Date(CAPTURED_AT.getTime() - HOUR);
+    await setArmory(id, earlier, [5001, 5002]);
     const body = CharacterQuestsResponseSchema.parse(
       (await get(id)).body,
     ).quests;
-    expect(body?.source).toBe('addon');
-    expect(body?.syncedAt).toBe(CAPTURED_AT.toISOString());
-    expect(body?.counts.completedKnown).toBe(1);
+    expect(body?.source).toBe('blizzard');
+    expect(body?.syncedAt).toBe(earlier.toISOString());
+    expect(body?.inProgressSyncedAt).toBe(CAPTURED_AT.toISOString());
+    expect(body?.counts.completedKnown).toBe(2);
     expect(body?.inProgress.map((q) => q.questId)).toEqual([92472, 5002]);
   });
 

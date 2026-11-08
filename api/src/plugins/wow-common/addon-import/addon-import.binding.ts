@@ -14,6 +14,7 @@ import {
   titleCaseClass,
 } from './addon-import.binding-name';
 import { raceDisplayName } from './addon-import.race';
+import { isArmoryRow } from '../armory-row.helpers';
 
 /**
  * ROK-1724 §4.3 Binding — pure: decides whether a decoded export may land on
@@ -34,6 +35,12 @@ export interface AddonBindingCharacter {
   /** ROK-1742 — optional so a caller that never reads them stays valid. */
   race?: string | null;
   gender?: string | null;
+  /**
+   * ROK-2138 D7 — the Armory link. Optional so a caller that never reads
+   * them stays valid; absent = not Armory-linked (the addon fills gaps).
+   */
+  externalId?: string | null;
+  lastSyncedAt?: Date | null;
 }
 
 /** Only the envelope fields every section shares. */
@@ -205,6 +212,27 @@ function raceGenderOutcome(
   }
 }
 
+/**
+ * ROK-2138 D7 — an Armory row (`isArmoryRow`): the Blizzard API is primary
+ * for class / level / race, so the export writes each only where the stored
+ * value is null. Gender is never served by the Armory sync (only this binding
+ * writes it, and the Forever portrait reads it), so it follows the export.
+ */
+function armoryGapFill(
+  who: AddonWho,
+  character: AddonBindingCharacter,
+  result: AddonBindingResult,
+): void {
+  const drift = classLevelDiff(who, character);
+  if (character.class === null && drift.class) result.diff.class = drift.class;
+  if (character.level === null && drift.level) result.diff.level = drift.level;
+  const race = who.race ? raceDisplayName(who.race) : null;
+  if (race && (character.race ?? null) === null) result.setRace = race;
+  if (who.gender && who.gender !== character.gender) {
+    result.setGender = who.gender;
+  }
+}
+
 export function bindToCharacter(
   payload: AddonBindingPayload,
   character: AddonBindingCharacter,
@@ -223,8 +251,12 @@ export function bindToCharacter(
   }
   rulesetOutcome(payload.who, character, opts, result);
   guidOutcome(payload.who, character, opts, result);
-  raceGenderOutcome(payload.who, character, result);
-  result.diff = classLevelDiff(payload.who, character);
+  if (isArmoryRow(character)) {
+    armoryGapFill(payload.who, character, result);
+  } else {
+    raceGenderOutcome(payload.who, character, result);
+    result.diff = classLevelDiff(payload.who, character);
+  }
   if (result.diff.class || result.diff.level) {
     result.warnings.push({ code: 'CLASS_LEVEL_UPDATED' });
   }

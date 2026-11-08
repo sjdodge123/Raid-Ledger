@@ -43,7 +43,6 @@ async function loadArmoryQuests(
 export async function loadForeverQuestSources(
   db: Db,
   characterIds: string[],
-  now: Date = new Date(),
 ): Promise<Map<string, EffectiveQuests>> {
   const ids = [...new Set(characterIds)];
   if (ids.length === 0) return new Map();
@@ -53,7 +52,7 @@ export async function loadForeverQuestSources(
   ]);
   const out = new Map<string, EffectiveQuests>();
   for (const id of ids) {
-    const eff = effectiveQuests(snapshots.get(id) ?? null, armory.get(id), now);
+    const eff = effectiveQuests(snapshots.get(id) ?? null, armory.get(id));
     if (eff) out.set(id, eff);
   }
   return out;

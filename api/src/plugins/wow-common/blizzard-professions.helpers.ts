@@ -76,13 +76,42 @@ function mapProfessionTier(raw: RawProfessionTier): ExternalProfessionTier {
  * both in step.
  */
 function headlineTier(
-  tiers: ExternalProfessionTier[],
+  tiers: readonly ExternalProfessionTier[],
 ): ExternalProfessionTier | undefined {
   return tiers.reduce<ExternalProfessionTier | undefined>(
     (best, t) =>
       best === undefined || t.maxSkillLevel > best.maxSkillLevel ? t : best,
     undefined,
   );
+}
+
+/** The skill pair a profession header shows. */
+export interface ProfessionSkill {
+  skillLevel: number;
+  maxSkillLevel: number;
+}
+
+/**
+ * Header skill for a STORED profession entry. Armory rows stored before the
+ * mapper read skill from `tiers[]` (ROK-2130) carry a 0/0 header, so a 0/0
+ * header falls back to the headline tier's pair until the next sync rewrites
+ * the row. Any other header is explicit and kept as is — never mixed.
+ * Mirrors `effectiveProfessionSkill` in web `plugins/wow/lib/profession-skill.ts`.
+ */
+export function effectiveProfessionSkill(entry: {
+  skillLevel: number;
+  maxSkillLevel: number;
+  tiers: readonly ExternalProfessionTier[];
+}): ProfessionSkill {
+  const header = {
+    skillLevel: entry.skillLevel,
+    maxSkillLevel: entry.maxSkillLevel,
+  };
+  if (header.skillLevel !== 0 || header.maxSkillLevel !== 0) return header;
+  const tier = headlineTier(entry.tiers);
+  return tier
+    ? { skillLevel: tier.skillLevel, maxSkillLevel: tier.maxSkillLevel }
+    : header;
 }
 
 /**

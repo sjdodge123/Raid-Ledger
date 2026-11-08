@@ -3,7 +3,8 @@
  * (`GET /characters/:id`) against a real database. The LedgerLink `char`
  * snapshot's `talents.nodes[]` becomes a `format: 'forever'` DTO (grid when
  * every node carries posX/posY, list otherwise); stored Armory talents win
- * when newer (D4); other variants and empty node sets keep the stored value.
+ * regardless of age when they convert (ROK-2138); other variants and empty
+ * node sets keep the stored value.
  */
 import { eq } from 'drizzle-orm';
 import type {
@@ -254,7 +255,7 @@ describe('Forever addon talents on GET /characters/:id (integration)', () => {
     );
   });
 
-  it('D4: stored talents synced before the capture lose to the addon DTO', async () => {
+  it('Blizzard primary (ROK-2138): stored talents synced before the capture still win as the converted Armory DTO', async () => {
     const id = await seedCharacter({
       gameVariant: 'wow_forever',
       talents: STORED_CLASSIC_TALENTS,
@@ -262,12 +263,12 @@ describe('Forever addon talents on GET /characters/:id (integration)', () => {
     });
     await seedSnapshot(id, warriorNodes());
 
-    const res = await get(id);
-
-    expect(res.body.talents).toMatchObject({
-      format: 'forever',
-      layout: 'grid',
-    });
+    expect((await get(id)).body.talents).toEqual(
+      blizzardToForeverTalents(
+        STORED_CLASSIC_TALENTS,
+        '2026-09-01T00:00:00.000Z',
+      ),
+    );
   });
 
   it('a Classic character keeps its stored talents even with a snapshot row', async () => {

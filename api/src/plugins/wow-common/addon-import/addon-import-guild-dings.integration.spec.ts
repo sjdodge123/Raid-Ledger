@@ -228,3 +228,120 @@ describe('ROK-1919 — guild re-import logs dings', () => {
     expect((await dingerRow()).level).toBe(38);
   });
 });
+
+/** ROK-2138 D11/D12 — a Blizzard-held row keeps the API's level/class/rank. */
+describe('ROK-2138 — guild import onto Blizzard-held rows', () => {
+  const BLIZZARD_ID = 987654321;
+  const holdByBlizzard = (guid: string) =>
+    testApp.db
+      .update(schema.guildMembers)
+      .set({ blizzardCharacterId: BLIZZARD_ID, level: 38, class: 'Mage' })
+      .where(eq(schema.guildMembers.guid, guid));
+
+  /** DINGER at `level` with every addon-owned column changed. */
+  function drifted(step: number, level: number): string {
+    const members = roster().map((m) =>
+      m.guid === DINGER
+        ? {
+            ...m,
+            level,
+            class: 'WARRIOR',
+            rankIndex: 1,
+            rank: 'Officer',
+            note: 'Off tank',
+            online: true,
+            lastOnlineDays: 0,
+          }
+        : m,
+    );
+    const payload = buildGuildPayload(members);
+    payload.data.snapshotAt += step * 60;
+    return buildImportString(payload);
+  }
+
+  // The rank name stays paired with the kept index: the export's name for
+  // index 3 ('Raider', from the other members), not DINGER's own 'Officer'.
+  it('AC17 keeps level/class/rank_index + its rank name; note, presence, last seen follow the export', async () => {
+    const who = await seedGuild();
+    await holdByBlizzard(DINGER);
+    const res = await apply(who, drifted(5, 41));
+    expect([res.status, res.body.status]).toEqual([200, 'applied']);
+    const row = await dingerRow();
+    expect([row.level, row.class, row.rankIndex]).toEqual([38, 'Mage', 3]);
+    expect([row.rankName, row.publicNote, row.onlineAtExport]).toEqual([
+      'Raider',
+      'Off tank',
+      true,
+    ]);
+    expect([row.lastOnlineDays, row.lastSeenAt?.getTime()]).toEqual([
+      0,
+      atStep(5),
+    ]);
+    expect(row.blizzardCharacterId).toBe(BLIZZARD_ID);
+  });
+
+  // Codex P2 — Blizzard wins only where it HAS a value: a null is filled.
+  it('AC20 fills the null level/class/rank name of a Blizzard-held row; a null rank_index takes the export pair', async () => {
+    const who = await seedGuild();
+    await holdByBlizzard(DINGER);
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ level: null, class: null, rankName: null })
+      .where(eq(schema.guildMembers.guid, DINGER));
+    expect((await apply(who, drifted(5, 41))).status).toBe(200);
+    const row = await dingerRow();
+    expect([row.level, row.class, row.rankIndex, row.rankName]).toEqual([
+      41,
+      'Warrior',
+      3,
+      'Raider',
+    ]);
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ rankIndex: null })
+      .where(eq(schema.guildMembers.guid, DINGER));
+    expect((await apply(who, drifted(6, 42))).status).toBe(200);
+    const next = await dingerRow();
+    expect([next.level, next.rankIndex, next.rankName]).toEqual([
+      41,
+      1,
+      'Officer',
+    ]);
+  });
+
+  it('AC18 a row without a Blizzard id takes every export column', async () => {
+    const who = await seedGuild();
+    const recruit = buildMember(0x98, { level: 20 });
+    const res = await apply(who, drifted(5, 41));
+    expect(res.status).toBe(200);
+    const row = await dingerRow();
+    expect([row.level, row.class, row.rankIndex, row.rankName]).toEqual([
+      41,
+      'Warrior',
+      1,
+      'Officer',
+    ]);
+    expect((await apply(who, snapshot(6, 41, [recruit]))).status).toBe(200);
+    const [added] = await testApp.db
+      .select()
+      .from(schema.guildMembers)
+      .where(eq(schema.guildMembers.guid, recruit.guid));
+    expect([added?.level, added?.rankIndex]).toEqual([20, recruit.rankIndex]);
+  });
+
+  it('AC19 a level rise on a Blizzard-held row logs no ding; on an addon row it logs one', async () => {
+    const who = await seedGuild();
+    await holdByBlizzard(DINGER);
+    expect((await apply(who, snapshot(5, 41))).status).toBe(200);
+    expect(await dings()).toEqual([]);
+    expect((await dingerRow()).level).toBe(38);
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ blizzardCharacterId: null })
+      .where(eq(schema.guildMembers.guid, DINGER));
+    expect((await apply(who, snapshot(6, 41))).status).toBe(200);
+    expect((await dings()).map((r) => [r.fromLevel, r.toLevel])).toEqual([
+      [38, 41],
+    ]);
+  });
+});

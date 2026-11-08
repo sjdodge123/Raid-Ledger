@@ -2,13 +2,7 @@ import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
-import * as rosterSync from './guilds/blizzard-roster-sync.registration';
-import { GuildsController } from './guilds/guilds.controller';
-import { GuildPageService } from './guilds/guild-page.service';
-import { GuildRaidsService } from './guilds/guild-raids.service';
-import * as guildContent from './guilds/guild-content.registration';
-import { GuildBlizzardRosterController } from './guilds/guild-blizzard-roster.controller';
-import { GuildBlizzardRosterService } from './guilds/guild-blizzard-roster.service';
+import * as guildHub from './guilds/guild-hub.registration';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
@@ -42,12 +36,8 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
-import { AddonImportController } from './addon-import/addon-import.controller';
-import { AddonImportAdminController } from './addon-import/addon-import-admin.controller';
-import { AddonCharacterUnlinkService } from './addon-import/addon-import.unlink';
-import { AddonImportService } from './addon-import/addon-import.service';
-import { AddonImportCreateService } from './addon-import/addon-import-create.service';
-import { AddonImportAuditService } from './addon-import/addon-import.audit';
+import * as addonImport from './addon-import/addon-import.registration';
+import * as foreverAutoLink from './forever-auto-link/forever-auto-link.registration';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
@@ -88,13 +78,9 @@ import { NotificationModule } from '../../notifications/notification.module';
     QuestProgressController,
     EventQuestReadinessController,
     EventRaidReadinessController,
-    AddonImportController,
-    AddonImportAdminController,
+    ...addonImport.CONTROLLERS,
     CharacterQuestsController,
-    GuildsController,
-    ...guildContent.CONTROLLERS,
-    GuildBlizzardRosterController,
-    ...rosterSync.CONTROLLERS,
+    ...guildHub.CONTROLLERS,
   ],
   providers: [
     BlizzardService,
@@ -116,10 +102,9 @@ import { NotificationModule } from '../../notifications/notification.module';
     QuestProgressReadService,
     EventQuestReadinessService,
     EventRaidReadinessService,
-    AddonImportService,
-    AddonCharacterUnlinkService,
-    AddonImportCreateService,
-    AddonImportAuditService,
+    ...addonImport.PROVIDERS,
+    // ROK-2124: Forever Armory auto-link (import nudge + hourly job).
+    ...foreverAutoLink.PROVIDERS,
     WowItemMetaService,
     // Empty partial ⇒ real defaults; the integration TestApp overrides it.
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
@@ -127,11 +112,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     ForeverDisplayTalentsService,
     ForeverDisplayLockoutsService,
     CharacterQuestsService,
-    GuildPageService,
-    GuildRaidsService,
-    ...guildContent.PROVIDERS,
-    GuildBlizzardRosterService,
-    ...rosterSync.PROVIDERS,
+    ...guildHub.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
     RosterInsightsCache,

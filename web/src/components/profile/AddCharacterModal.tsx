@@ -166,7 +166,7 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const identitySource = editingCharacter ?? prefill;
     const mutations = useCharacterModalMutations();
     const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
-    const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
+    const [activeTab, setActiveTab] = useState<'manual' | 'import' | 'roster'>('manual');
     const [prevIsOpen, setPrevIsOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
@@ -181,14 +181,14 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const identityValue = resolveIdentity(identity, form.identity, identitySource);
     const sameIdentity = (a: unknown, b: unknown) => (identity ? identity.same(resolveIdentity(identity, a, identitySource), resolveIdentity(identity, b, identitySource)) : a === b);
     const showMmoFields = effectiveRegistryGame?.hasRoles ?? (selectedIgdbGame ? false : true);
-    const { data: gameCharsData } = useMyCharacters(effectiveGameId, !!effectiveGameId);
+    const { data: gameCharsData, isLoading: gameCharsLoading } = useMyCharacters(effectiveGameId, !!effectiveGameId);
     const gameChars = gameCharsData?.data ?? [];
     const hasMainForGame = gameChars.some((c) => c.isMain);
     syncModalOpenClose(isOpen, prevIsOpen, editingCharacter, prefill, hasMainForGame, preselectedGameId, registryGames, { setForm, setBaseline, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen });
     const isDirty = isCharacterFormDirty(form, baseline, sameIdentity, isEditing ? undefined : selectedIgdbGame?.slug, preselectedRegistryGame?.slug);
     const updateField = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [field]: value }));
 
-    return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, identity, identityValue, gameChars, hasMainForGame, isEditing, isDirty, ...mutations, updateField, onClose };
+    return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, identity, identityValue, gameChars, gameCharsLoading, hasMainForGame, isEditing, isDirty, ...mutations, updateField, onClose };
 }
 
 /**
@@ -230,7 +230,7 @@ function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiv
                     error={s.errors.game} />
             )}
             {!s.isEditing && currentSlug && (
-                <PluginSlot name="character-create:import-form" context={{ onClose, gameSlug: currentSlug, activeTab: s.activeTab, onTabChange: s.setActiveTab, defaultIsMain: !s.hasMainForGame, existingCharacters: s.gameChars }} />
+                <PluginSlot name="character-create:import-form" context={{ onClose, gameSlug: currentSlug, gameId: s.effectiveGameId, activeTab: s.activeTab, onTabChange: s.setActiveTab, defaultIsMain: !s.hasMainForGame, existingCharacters: s.gameChars, charactersLoading: s.gameCharsLoading }} />
             )}
             {s.activeTab === 'manual' && (
                 <>

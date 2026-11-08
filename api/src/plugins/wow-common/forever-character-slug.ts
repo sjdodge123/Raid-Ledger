@@ -15,6 +15,24 @@
 const FOREVER_NAME_PATTERN = /^(\p{L}{2,24}) (\p{L}{2,24})$/u;
 
 /**
+ * SQL (POSIX) prefilter for `btrim(name) ~ …`: two space-free parts.
+ * Deliberately a locale-free SUPERSET of {@link FOREVER_NAME_PATTERN} —
+ * `[[:alpha:]]` follows the database ctype and on a C/POSIX-locale database
+ * matches ASCII only, which silently dropped accented names (ROK-2124
+ * review). {@link isForeverTwoPartName} stays the real rule, applied before
+ * any Blizzard call.
+ */
+export const FOREVER_NAME_SQL_PATTERN = '^[^ ]+ [^ ]+$';
+
+/**
+ * True when `fullName` can be addressed on Blizzard's realmless route
+ * (the rule {@link buildForeverCharacterSlug} enforces).
+ */
+export function isForeverTwoPartName(fullName: string): boolean {
+  return FOREVER_NAME_PATTERN.test(fullName.trim());
+}
+
+/**
  * Build the realmless character path segment for a stored Forever name.
  * Lowercases with `String.prototype.toLowerCase()` (not locale-aware, same as
  * the realm route) and percent-encodes the result with `encodeURIComponent`
