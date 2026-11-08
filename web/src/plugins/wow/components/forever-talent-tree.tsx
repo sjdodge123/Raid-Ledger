@@ -9,9 +9,9 @@ const ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/medium/';
 const STEP = '(var(--ti) + var(--tg))';
 /** Phone 44/18 (touch), md 36/12, lg 32/10 (three trees beside a 320px sidebar), xl 40/14. */
 const SIZE_VARS = '[--ti:44px] [--tg:18px] md:[--ti:36px] md:[--tg:12px] lg:[--ti:32px] lg:[--tg:10px] xl:[--ti:40px] xl:[--tg:14px]';
-/** Spent = WoW talent gold (categorical, semantic-hue.categorical.json), the amber-400 light remap. */
-const SPENT_BORDER = 'border-amber-400';
-const SPENT_TEXT = 'text-amber-400';
+/** Spent = talent gold via the warning token (gold dark, amber-800 light): a raw border/fill hue has no light remap. */
+const SPENT_BORDER = 'border-warning';
+const SPENT_TEXT = 'text-warning';
 
 function TalentIcon({ talent }: { talent: JoinedTalent }) {
     const spent = talent.rank > 0;
@@ -58,7 +58,7 @@ function Arrow({ spec }: { spec: ArrowSpec }) {
     if (!style) return null;
     const spent = spec.to.rank > 0;
     return <span data-testid="forever-talent-arrow" data-spent={spent ? 'true' : 'false'} aria-hidden="true" style={style}
-        className={`absolute z-[1] ${spent ? 'bg-amber-400' : 'bg-edge-strong'}`} />;
+        className={`absolute z-[1] ${spent ? 'bg-warning' : 'bg-edge-strong'}`} />;
 }
 
 function TreeCard({ tree, hiddenOnPhone }: { tree: JoinedTree; hiddenOnPhone: boolean }) {
@@ -66,7 +66,7 @@ function TreeCard({ tree, hiddenOnPhone }: { tree: JoinedTree; hiddenOnPhone: bo
     const grid: CSSProperties = { width: `calc(4 * var(--ti) + 3 * var(--tg))`, height: `calc(7 * var(--ti) + 6 * var(--tg))` };
     return (
         <div data-testid={`forever-tree-${tree.index}`}
-            className={`${hiddenOnPhone ? 'hidden md:block' : ''} rounded-lg border bg-surface px-3.5 pt-2.5 pb-4 ${spent ? 'border-amber-400/50' : 'border-edge'}`}>
+            className={`${hiddenOnPhone ? 'hidden md:block' : ''} rounded-lg border bg-surface px-3.5 pt-2.5 pb-4 ${spent ? 'border-warning/50' : 'border-edge'}`}>
             <div className="mb-3 flex items-center gap-2">
                 <h3 className="font-semibold text-foreground">{tree.name}</h3>
                 <span data-testid={`forever-tree-spent-${tree.index}`} aria-label={`${tree.spent} points`}

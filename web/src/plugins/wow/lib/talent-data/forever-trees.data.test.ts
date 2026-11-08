@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import trees from './forever-trees.json';
+import fixture from '../__fixtures__/forever-warrior-trees.json';
+import { isForeverTalentTable, type ForeverTalentTable } from '../forever-talent-table';
 
 const CLASSES = [
     'warrior',
@@ -13,21 +15,16 @@ const CLASSES = [
     'druid',
 ] as const;
 
-type Table = Record<
-    string,
-    {
-        trees: {
-            name: string;
-            talents: {
-                spellId: number;
-                row: number;
-                col: number;
-                prereqSpellId: number | null;
-            }[];
-        }[];
-    }
->;
-const table = trees as Table;
+/** The JSON through the same shape guard the loader uses — no cast. */
+function loadTable(): ForeverTalentTable {
+    if (!isForeverTalentTable(trees)) throw new Error('forever-trees.json fails isForeverTalentTable');
+    return trees;
+}
+const table = loadTable();
+
+it('the warrior spec fixture is a copy of the real warrior table (no drift)', () => {
+    expect(isForeverTalentTable(fixture) ? fixture.warrior : null).toEqual(table.warrior);
+});
 
 describe.each(CLASSES)('forever-trees.json: %s', (slug) => {
     const entry = table[slug];

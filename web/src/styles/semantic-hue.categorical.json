@@ -119,6 +119,5 @@
   "pages/game-detail/lfg-toggle-button.tsx": "LFG toggle \"on\" pill amber-300/95 + amber-950 ink / hover amber-200, and the idle hover border previewing it (selection accent, not a status)",
   "plugins/wow/slots/character-variant-badge.tsx": "WoW game-variant badge (Era / Classic / …) amber tag (a variant category label, promises nothing)",
   "plugins/wow/slots/event-detail-content-sections.tsx": "WoW content-instance tag chips emerald (a categorical instance label; the level range inside is already text-success)",
-  "components/lfg/lfg-chip.tsx": "ROK-1453 AC2/D4 mandates the amber-300/95 + amber-950 tonal pill for the LFG chip so it stays distinct from the Wishlist / On-Sale warning badges (lfg-chip.test.tsx asserts not bg-warning); the LFM state is the sanctioned solid bg-emerald-700 fill",
-  "plugins/wow/components/forever-talent-tree.tsx": "WoW: Forever talent tree (ROK-2146): gold border, rank badge, tree points and lit prerequisite arrows for spent talents (game UI convention, like talent-display.tsx), not a status"
+  "components/lfg/lfg-chip.tsx": "ROK-1453 AC2/D4 mandates the amber-300/95 + amber-950 tonal pill for the LFG chip so it stays distinct from the Wishlist / On-Sale warning badges (lfg-chip.test.tsx asserts not bg-warning); the LFM state is the sanctioned solid bg-emerald-700 fill"
 }

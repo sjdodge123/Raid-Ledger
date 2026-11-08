@@ -221,7 +221,8 @@ describe('CharacterQuestsSection — 5-row caps', () => {
         const big = { dungeonInstanceId: 70, instanceName: 'Uldaman', knownCount: 12, completed: Array.from({ length: 8 }, (_, i) => done(i)) };
         body = { quests: makeQuests({ completedKnown: [big, ...makeQuests().completedKnown] }) };
         await renderLoaded();
-        const group = screen.getByText('Uldaman · 8/12').closest('details')!;
+        const group = screen.getByText('Uldaman · 8/12').closest('details');
+        if (!group) throw new Error('Uldaman <details> group missing');
         expect(group.querySelectorAll('[data-completed-quest-row]'), 'capped to 5').toHaveLength(5);
         const toggle = within(group).getByRole('button', { name: 'Show all 8' });
         expect(toggle).toHaveAttribute('aria-expanded', 'false');
