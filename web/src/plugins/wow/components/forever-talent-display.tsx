@@ -6,8 +6,8 @@ import { ForeverTalentGrid } from './forever-talent-grid';
 import { TalentPillSection, WowheadCalcLink } from './talent-display';
 import { plural } from '../lib/plural';
 import { alignForeverTalents, placeArmoryTalents } from '../lib/forever-armory-placement';
-import { joinForeverTalents, loadForeverClassTable, type ForeverClassTable } from '../lib/forever-talent-table';
-import { ForeverTalentTree } from './forever-talent-tree';
+import { joinForeverTalents, loadForeverClassTable, peekForeverClassTable, type ForeverClassTable, type JoinedForeverTalents } from '../lib/forever-talent-table';
+import { ForeverTalentTree, ForeverTalentTreePlaceholder } from './forever-talent-tree';
 
 const PILL_CLASS = 'bg-overlay border border-edge text-foreground';
 
@@ -63,27 +63,42 @@ function totalPoints(talents: ForeverTalentsDto): number {
     return talents.nodes.reduce((sum, n) => sum + n.rank, 0);
 }
 
-/** The class's static Forever table (ROK-2146), lazy-loaded; null while loading or when missing. */
-function useForeverClassTable(characterClass: string | null | undefined): ForeverClassTable | null {
+type ClassTableState = { status: 'loading' } | { status: 'ready'; table: ForeverClassTable } | { status: 'missing' };
+
+/**
+ * The class's static Forever table (ROK-2146), lazy-loaded. `loading` is kept apart from
+ * `missing` (review MINOR-2), so the old grid/pills never flash before the tree draws.
+ */
+function useForeverClassTable(characterClass: string | null | undefined): ClassTableState {
+    const peeked = peekForeverClassTable(characterClass);
     const [loaded, setLoaded] = useState<{ cls: string | null | undefined; table: ForeverClassTable | null } | null>(null);
     useEffect(() => {
+        if (peeked !== undefined) return undefined;
         let live = true;
         void loadForeverClassTable(characterClass).then((table) => { if (live) setLoaded({ cls: characterClass, table }); });
         return () => { live = false; };
-    }, [characterClass]);
+    }, [characterClass, peeked]);
     // A table loaded for a previous class never draws under this one.
-    return loaded && loaded.cls === characterClass ? loaded.table : null;
+    const table = peeked !== undefined ? peeked : loaded && loaded.cls === characterClass ? loaded.table : undefined;
+    if (table === undefined) return { status: 'loading' };
+    return table ? { status: 'ready', table } : { status: 'missing' };
+}
+
+/** Remounts the tree when the points move (e.g. after an Armory sync), so the phone tab re-picks the most-points tree. */
+function pointsKey(joined: JoinedForeverTalents): string {
+    return joined.trees.map((t) => t.spent).join('-');
 }
 
 /**
  * WoW: Forever talents (ROK-1744; Blizzard source ROK-2110). Header (Σ rank,
  * source line, plain Forever calc link — hard-coded `wow_forever`, D7; no build
  * string, no iframe), then the Wowhead-style tree from the static Forever table
- * (ROK-2146). Without a table for the class (or while it loads): the positioned
- * grid or the list/summary fallback, Blizzard list payloads placed by name (D5).
+ * (ROK-2146); a tree-height placeholder while the table loads. Without a table for the
+ * class: the positioned grid or the list/summary fallback, Blizzard list payloads placed by name (D5).
  */
 export function ForeverTalentDisplay({ talents: raw, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
-    const table = useForeverClassTable(characterClass);
+    const state = useForeverClassTable(characterClass);
+    const table = state.status === 'ready' ? state.table : null;
     const joined = useMemo(() => (table ? joinForeverTalents(alignForeverTalents(raw, characterClass), table) : null), [table, raw, characterClass]);
     const talents = placeArmoryTalents(raw, characterClass);
     const points = totalPoints(talents);
@@ -91,7 +106,8 @@ export function ForeverTalentDisplay({ talents: raw, characterClass }: { talents
     return (
         <div className="space-y-4">
             <ForeverHeader points={points} source={foreverSourceLine(talents)} href={href} />
-            {joined ? <ForeverTalentTree joined={joined} />
+            {joined ? <ForeverTalentTree key={pointsKey(joined)} joined={joined} />
+                : state.status === 'loading' ? <ForeverTalentTreePlaceholder />
                 : talents.layout === 'grid'
                     ? <ForeverTalentGrid talents={talents} characterClass={characterClass} />
                     : <ForeverTalentList talents={talents} points={points} />}

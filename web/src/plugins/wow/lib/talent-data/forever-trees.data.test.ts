@@ -51,6 +51,17 @@ describe.each(CLASSES)('forever-trees.json: %s', (slug) => {
         }
     });
 
+    it('draws every prerequisite as a straight arrow: down its column, or along its row (review MINOR-7)', () => {
+        for (const tree of entry?.trees ?? []) {
+            for (const t of tree.talents) {
+                const from = tree.talents.find((p) => p.spellId === t.prereqSpellId);
+                if (!from) continue;
+                const drawable = (from.col === t.col && t.row > from.row) || (from.row === t.row && from.col !== t.col);
+                expect(drawable, `${t.name} ← ${from.name} (${from.row},${from.col} → ${t.row},${t.col})`).toBe(true);
+            }
+        }
+    });
+
     it('points every prerequisite at a talent in the same tree', () => {
         for (const tree of entry?.trees ?? []) {
             const ids = new Set(tree.talents.map((t) => t.spellId));

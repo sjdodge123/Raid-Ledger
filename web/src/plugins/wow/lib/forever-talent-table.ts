@@ -53,11 +53,14 @@ export function isForeverTalentTable(value: unknown): value is ForeverTalentTabl
 }
 
 let tablePromise: Promise<ForeverTalentTable | null> | undefined;
+/** The settled table (null = absent/malformed); undefined until the first load settles. */
+let settledTable: ForeverTalentTable | null | undefined;
 
 function loadTable(): Promise<ForeverTalentTable | null> {
     const load = Object.values(TABLE_LOADERS)[0];
     if (!load) return Promise.resolve(null);
-    tablePromise ??= load().then((json) => (isForeverTalentTable(json) ? json : null), () => null);
+    tablePromise ??= load().then((json) => (isForeverTalentTable(json) ? json : null), () => null)
+        .then((table) => { settledTable = table; return table; });
     return tablePromise;
 }
 
@@ -71,6 +74,16 @@ export async function loadForeverClassTable(characterClass: string | null | unde
     if (!characterClass) return null;
     const table = await loadTable();
     return (table && ownLookup(table, classSlug(characterClass))) ?? null;
+}
+
+/**
+ * The class's trees without waiting: undefined until the table has settled once (the
+ * caller then loads it), else the trees or null — so a revisit draws with no placeholder.
+ */
+export function peekForeverClassTable(characterClass: string | null | undefined): ForeverClassTable | null | undefined {
+    if (!characterClass) return null;
+    if (settledTable === undefined) return undefined;
+    return (settledTable && ownLookup(settledTable, classSlug(characterClass))) ?? null;
 }
 
 /** "Improved  Bloodrage" / "improved-bloodrage" → "improved bloodrage". */

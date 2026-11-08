@@ -119,6 +119,15 @@ describe('ForeverTalentTree — tabs, other talents, label, fallback', () => {
         render(<TalentDisplay talents={dto(ROK)} isArmoryImported={false} characterClass="Warrior" gameVariant={null} />);
         expect(await screen.findByText('Learned talents')).toBeInTheDocument();
         expect(screen.queryByTestId('forever-talent')).toBeNull();
+        expect(screen.queryByTestId('forever-talents-loading'), 'no placeholder once the table is known missing').toBeNull();
+    });
+
+    it('shows a neutral placeholder, not the old grid/pills, while the table loads (review MINOR-2)', () => {
+        loadTable.mockReturnValue(new Promise<ForeverClassTable | null>(() => {}));
+        render(<TalentDisplay talents={dto(ROK)} isArmoryImported={false} characterClass="Warrior" gameVariant={null} />);
+        expect(screen.queryAllByTestId('forever-talents-loading'), 'tree-height placeholder while loading').toHaveLength(1);
+        expect(screen.queryByText('Learned talents'), 'no old pills flash before the tree').toBeNull();
+        expect(screen.queryByTestId('forever-talent')).toBeNull();
     });
 });
 

@@ -1,3 +1,8 @@
+/**
+ * ROK-2146: the Wowhead-calculator-style WoW: Forever talent tree, drawn from the
+ * static Forever table joined with a character's ranks (lib/forever-talent-table.ts),
+ * and the tree-height placeholder shown while that table loads.
+ */
 import { useState, type CSSProperties } from 'react';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
@@ -7,8 +12,8 @@ import { OtherTalents } from './forever-talent-grid';
 const ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/medium/';
 /** One cell + gap; `--ti` (icon) and `--tg` (gap) are set per breakpoint on the wrapper. */
 const STEP = '(var(--ti) + var(--tg))';
-/** Phone 44/18 (touch), md 36/12, lg 32/10 (three trees beside a 320px sidebar), xl 40/14. */
-const SIZE_VARS = '[--ti:44px] [--tg:18px] md:[--ti:36px] md:[--tg:12px] lg:[--ti:32px] lg:[--tg:10px] xl:[--ti:40px] xl:[--tg:14px]';
+/** Phone 44/18 (touch), md 36/12, lg 32/8 (three trees beside a 320px sidebar, with room for a classic scrollbar), xl 40/14. */
+const SIZE_VARS = '[--ti:44px] [--tg:18px] md:[--ti:36px] md:[--tg:12px] lg:[--ti:32px] lg:[--tg:8px] xl:[--ti:40px] xl:[--tg:14px]';
 /** Spent = talent gold via the warning token (gold dark, amber-800 light): a raw border/fill hue has no light remap. */
 const SPENT_BORDER = 'border-warning';
 const SPENT_TEXT = 'text-warning';
@@ -65,7 +70,7 @@ function TreeCard({ tree, hiddenOnPhone }: { tree: JoinedTree; hiddenOnPhone: bo
     const spent = tree.spent > 0;
     const grid: CSSProperties = { width: `calc(4 * var(--ti) + 3 * var(--tg))`, height: `calc(7 * var(--ti) + 6 * var(--tg))` };
     return (
-        <div data-testid={`forever-tree-${tree.index}`}
+        <section data-testid={`forever-tree-${tree.index}`} aria-label={`${tree.name} tree`}
             className={`${hiddenOnPhone ? 'hidden md:block' : ''} rounded-lg border bg-surface px-3.5 pt-2.5 pb-4 ${spent ? 'border-warning/50' : 'border-edge'}`}>
             <div className="mb-3 flex items-center gap-2">
                 <h3 className="font-semibold text-foreground">{tree.name}</h3>
@@ -76,15 +81,24 @@ function TreeCard({ tree, hiddenOnPhone }: { tree: JoinedTree; hiddenOnPhone: bo
                 {treeArrows(tree).map((spec) => <Arrow key={spec.key} spec={spec} />)}
                 {tree.talents.map((t) => <TalentIcon key={t.spellId} talent={t} />)}
             </div>
-        </div>
+        </section>
     );
 }
 
 function TreeTabs({ trees, active, onChange }: { trees: JoinedTree[]; active: number; onChange: (index: number) => void }) {
-    const options = trees.map((t) => ({ value: String(t.index), label: `${t.name} · ${t.spent} pts` }));
+    const options = trees.map((t) => ({ value: String(t.index), label: `${t.name} ${t.spent}` }));
     return (
         <RadioGroup label="Talent tree" hideLabel appearance="segmented" className="md:hidden"
             options={options} value={String(active)} onChange={(v) => onChange(Number(v))} />
+    );
+}
+
+/** One tree card's height (header + 7 tiers + padding) in a neutral pulse, so the tree replaces it without a jump. */
+export function ForeverTalentTreePlaceholder() {
+    return (
+        <div data-testid="forever-talents-loading" role="status" aria-label="Loading talent tree"
+            className={`${SIZE_VARS} rounded-lg border border-edge bg-overlay animate-pulse motion-reduce:animate-none`}
+            style={{ height: 'calc(7 * var(--ti) + 6 * var(--tg) + 4rem)' }} />
     );
 }
 

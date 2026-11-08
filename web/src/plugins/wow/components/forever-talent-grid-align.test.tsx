@@ -11,6 +11,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../lib/forever-talent-table', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../lib/forever-talent-table')>()),
     loadForeverClassTable: () => Promise.resolve(null),
+    peekForeverClassTable: () => null,
 }));
 import { render, screen, within } from '@testing-library/react';
 import type { ForeverTalentsDto } from '@raid-ledger/contract';

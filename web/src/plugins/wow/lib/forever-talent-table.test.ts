@@ -2,7 +2,7 @@
  * ROK-2146: the static Forever talent table — the join of `ForeverTalentsDto.nodes`
  * onto it (spellId first, then normalised name within the tree) and the default tree.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import fixture from './__fixtures__/forever-warrior-trees.json';
 import { isForeverTalentTable, joinForeverTalents, mostPointsTreeIndex, type ForeverClassTable } from './forever-talent-table';
@@ -81,5 +81,17 @@ describe('loadForeverClassTable (the real lazy table)', () => {
         }
         expect(await loadForeverClassTable('Monk')).toBeNull();
         expect(await loadForeverClassTable(null)).toBeNull();
+    });
+});
+
+describe('peekForeverClassTable (review MINOR-2: loading vs missing)', () => {
+    it('is undefined until the table settles, then the class trees, null for an unknown class or none', async () => {
+        vi.resetModules();
+        const mod = await import('./forever-talent-table');
+        expect(mod.peekForeverClassTable('Warrior'), 'not loaded yet = loading').toBeUndefined();
+        expect(mod.peekForeverClassTable(null), 'no class is known missing at once').toBeNull();
+        await mod.loadForeverClassTable('Warrior');
+        expect(mod.peekForeverClassTable('Warrior')?.trees.length, 'settled = ready without waiting').toBe(3);
+        expect(mod.peekForeverClassTable('Monk'), 'class absent = missing').toBeNull();
     });
 });
