@@ -5,6 +5,7 @@ import type { HubFactSource } from '@raid-ledger/contract';
 import { effectiveProfessions } from '../../../characters/characters-professions.helpers';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { isArmoryRow } from '../armory-row.helpers';
 import { distinctIds, fact, fanOut, toRole } from './fact-source.helpers';
 import type {
   RosterCharRef,
@@ -34,13 +35,13 @@ interface CharRow {
 
 /**
  * Where the row's synced columns came from: Armory, addon, or hand entry.
- * An `external_id` row is Armory data → `blizzard`, which wins regardless of
- * age even while the Blizzard source is off (ROK-2138 OQ-1). That is only
- * correct while the addon import does not write class/level/race into an
- * Armory-linked row (ROK-2138 D7, the addon-import binding).
+ * An Armory row (`isArmoryRow`: external id + sync stamp) → `blizzard`, which
+ * wins regardless of age even while the Blizzard source is off (ROK-2138
+ * OQ-1). Correct because the addon import uses the same predicate and only
+ * fills such a row's null class/level/race (ROK-2138 D7, the binding).
  */
 function rowOrigin(row: CharRow): HubFactSource {
-  if (row.externalId) return 'blizzard';
+  if (isArmoryRow(row)) return 'blizzard';
   return row.addonGuid ? 'addon' : 'manual';
 }
 

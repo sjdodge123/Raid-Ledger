@@ -463,16 +463,16 @@ describe('bindToCharacter — race + gender (ROK-1742 R9)', () => {
 /** ROK-2138 D7 — the Blizzard API is primary for an Armory-linked character. */
 describe('bindToCharacter — Armory-linked character (ROK-2138 D7)', () => {
   const ARMORY = {
-    externalId: 'forever-us-whitemane-ana',
+    externalId: '170012345',
     lastSyncedAt: new Date('2026-10-01T00:00:00Z'),
   };
   const drifted = () =>
     payload({ class: 'MAGE', level: 42, race: 'NightElf', gender: 'male' });
 
-  it('AC15 writes no class/level/race/gender and warns no CLASS_LEVEL_UPDATED', () => {
+  it('AC15 keeps stored class/level/race and warns no CLASS_LEVEL_UPDATED', () => {
     const r = bindToCharacter(
       drifted(),
-      char({ ...ARMORY, race: 'Human', gender: 'female' }),
+      char({ ...ARMORY, race: 'Human', gender: 'male' }),
       APPLY,
     );
     expect(r.diff).toEqual({});
@@ -480,6 +480,39 @@ describe('bindToCharacter — Armory-linked character (ROK-2138 D7)', () => {
     expect(r.setGender).toBeUndefined();
     expect(warns(r)).toEqual([]);
     expect(codes(r)).toEqual([]);
+  });
+
+  // Codex P2 / Opus MAJOR — the Armory sync never writes gender; only the
+  // binding does, and the Forever portrait reads it.
+  it('AC15 fills gender from the export on an Armory row', () => {
+    const r = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, gender: null }),
+      APPLY,
+    );
+    expect(r.setGender).toBe('male');
+    expect(r.diff).toEqual({});
+  });
+
+  it('AC15 fills a null race, class and level; keeps the non-null ones', () => {
+    const gaps = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, race: null, class: null, level: null }),
+      APPLY,
+    );
+    expect(gaps.setRace).toBe('Night Elf');
+    expect(gaps.diff).toEqual({
+      class: { from: null, to: 'Mage' },
+      level: { from: null, to: 42 },
+    });
+    expect(warns(gaps)).toEqual(['CLASS_LEVEL_UPDATED']);
+    const held = bindToCharacter(
+      drifted(),
+      char({ ...ARMORY, race: 'Human', level: null }),
+      APPLY,
+    );
+    expect(held.setRace).toBeUndefined();
+    expect(held.diff).toEqual({ level: { from: null, to: 42 } });
   });
 
   it('AC15 still pins the GUID and checks the ruleset on an Armory row', () => {
@@ -493,7 +526,9 @@ describe('bindToCharacter — Armory-linked character (ROK-2138 D7)', () => {
     expect(warns(r)).toEqual(['RULESET_CHANGED']);
   });
 
-  it('AC16 an external id that never synced is not Armory-linked — the export fills', () => {
+  // One predicate (`isArmoryRow`) with the fact resolver's `rowOrigin`: an
+  // external id that never synced is not an Armory row on either side.
+  it('AC16 an external id that never synced is not an Armory row — the export writes', () => {
     const r = bindToCharacter(
       drifted(),
       char({ externalId: ARMORY.externalId, lastSyncedAt: null, race: null }),

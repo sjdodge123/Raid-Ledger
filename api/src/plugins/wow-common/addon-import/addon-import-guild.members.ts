@@ -16,9 +16,9 @@ import type { AddonApplyContext } from './addon-import-apply.types';
  * `addon-import-guild.apply.ts` (ROK-2138 L3) with the Blizzard-held rule:
  * a row the Blizzard roster sync matched (`blizzard_character_id IS NOT
  * NULL`, operator ruling 2026-11-08) keeps its stored level / class /
- * rank_index — the API is the primary source; LedgerLink only fills gaps.
- * Everything the API does not serve (rank name, note, presence, last seen)
- * still follows the export.
+ * rank_index where it has one — the API is the primary source; LedgerLink
+ * fills every null. Everything the API does not serve (note, presence, last
+ * seen) follows the export; the rank name stays paired with the kept index.
  */
 
 /** Member row values. `publicNote` is the opted-in note or null — never more. */
@@ -55,7 +55,6 @@ export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
 /** Columns the export always owns: `SET col = excluded.col`. */
 const ADDON_OWNED_MEMBER_COLUMNS = [
   'character_name',
-  'rank_name',
   'public_note',
   'source',
   'last_seen_at',
@@ -69,20 +68,57 @@ const ADDON_OWNED_MEMBER_COLUMNS = [
 const camel = (c: string) =>
   c.replace(/_(\w)/g, (_m, ch: string) => ch.toUpperCase());
 
-/** ROK-2138 D11 — the stored value on a Blizzard-held row, else the export's. */
+const blizzardHeld = sql`${guildMembers.blizzardCharacterId} IS NOT NULL`;
+
+/** ROK-2138 D11 — a Blizzard-held row's stored value if non-null, else the export's. */
 function unlessBlizzardHeld(stored: AnyPgColumn, column: string): SQL {
-  return sql`CASE WHEN ${guildMembers.blizzardCharacterId} IS NOT NULL THEN ${stored} ELSE ${sql.raw(`excluded.${column}`)} END`;
+  const excluded = sql.raw(`excluded.${column}`);
+  return sql`CASE WHEN ${blizzardHeld} AND ${stored} IS NOT NULL THEN ${stored} ELSE ${excluded} END`;
 }
 
-/** The member upsert's conflict update. */
-export const memberConflictSet: Record<string, SQL> = {
-  ...Object.fromEntries(
-    ADDON_OWNED_MEMBER_COLUMNS.map((c) => [camel(c), sql.raw(`excluded.${c}`)]),
-  ),
-  level: unlessBlizzardHeld(guildMembers.level, 'level'),
-  class: unlessBlizzardHeld(guildMembers.class, 'class'),
-  rankIndex: unlessBlizzardHeld(guildMembers.rankIndex, 'rank_index'),
-};
+/** The export's rank list: rank index → name, as its members carry it. */
+export function rankNamesByIndex(
+  members: readonly AddonGuildMember[],
+): Map<number, string> {
+  return new Map(members.map((m) => [m.rankIndex, m.rank]));
+}
+
+/** SQL: the export's name for the row's STORED rank_index, else NULL. */
+function exportNameForStoredIndex(names: Map<number, string>): SQL {
+  if (names.size === 0) return sql`NULL::text`;
+  const arms = [...names].map(([i, n]) => sql`WHEN ${i}::int THEN ${n}::text`);
+  return sql`CASE ${guildMembers.rankIndex} ${sql.join(arms, sql` `)} ELSE NULL END`;
+}
+
+/**
+ * ROK-2138 — the rank name follows the rank_index the row keeps: where a
+ * Blizzard-held row keeps its stored index, the name is the export's name
+ * for THAT index, else the stored name, else the member's own; otherwise the
+ * export's (`nextRankName` reads the pair together).
+ */
+function rankNameSet(names: Map<number, string>): SQL {
+  const keepsIndex = sql`${blizzardHeld} AND ${guildMembers.rankIndex} IS NOT NULL`;
+  const paired = sql`COALESCE(${exportNameForStoredIndex(names)}, ${guildMembers.rankName}, excluded.rank_name)`;
+  return sql`CASE WHEN ${keepsIndex} THEN ${paired} ELSE excluded.rank_name END`;
+}
+
+/** The member upsert's conflict update for this export's members. */
+export function memberConflictSet(
+  members: readonly AddonGuildMember[],
+): Record<string, SQL> {
+  return {
+    ...Object.fromEntries(
+      ADDON_OWNED_MEMBER_COLUMNS.map((c) => [
+        camel(c),
+        sql.raw(`excluded.${c}`),
+      ]),
+    ),
+    level: unlessBlizzardHeld(guildMembers.level, 'level'),
+    class: unlessBlizzardHeld(guildMembers.class, 'class'),
+    rankIndex: unlessBlizzardHeld(guildMembers.rankIndex, 'rank_index'),
+    rankName: rankNameSet(rankNamesByIndex(members)),
+  };
+}
 
 /** Upsert members by (guild_id, guid); returns how many were inserted. */
 async function upsertMembers(
@@ -98,7 +134,7 @@ async function upsertMembers(
     .onConflictDoUpdate({
       target: [guildMembers.guildId, guildMembers.guid],
       targetWhere: sql`${guildMembers.guid} IS NOT NULL`,
-      set: memberConflictSet,
+      set: memberConflictSet(members),
     })
     .returning({ inserted: sql<boolean>`(xmax = 0)` });
   return result.filter((r) => r.inserted).length;

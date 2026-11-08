@@ -50,8 +50,9 @@ function profileFacts(row: ForeverArmoryRow, out: WowFactCandidates): void {
  * the date drives the "synced …" line (ROK-2130). Since ROK-2138 the date no
  * longer decides against a LedgerLink snapshot — any Blizzard gear wins; an
  * empty equipment list emits no fact (`armoryGear` → null, E1), so the
- * snapshot fills that gap. `enchantsReported` is false (F5): the Forever equipment API has
- * not been seen reporting enchants, so a missing enchant reads as unknown.
+ * snapshot fills that gap. `enchantsReported` is false (F5): the Forever
+ * equipment API has not been seen reporting enchants, so a missing enchant
+ * reads as unknown.
  */
 function gearFacts(row: ForeverArmoryRow, out: WowFactCandidates): void {
   const gear = armoryGear(row.equipment);

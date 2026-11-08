@@ -259,7 +259,9 @@ describe('ROK-2138 — guild import onto Blizzard-held rows', () => {
     return buildImportString(payload);
   }
 
-  it('AC17 keeps level/class/rank_index; rank name, note, presence, last seen follow the export', async () => {
+  // The rank name stays paired with the kept index: the export's name for
+  // index 3 ('Raider', from the other members), not DINGER's own 'Officer'.
+  it('AC17 keeps level/class/rank_index + its rank name; note, presence, last seen follow the export', async () => {
     const who = await seedGuild();
     await holdByBlizzard(DINGER);
     const res = await apply(who, drifted(5, 41));
@@ -267,7 +269,7 @@ describe('ROK-2138 — guild import onto Blizzard-held rows', () => {
     const row = await dingerRow();
     expect([row.level, row.class, row.rankIndex]).toEqual([38, 'Mage', 3]);
     expect([row.rankName, row.publicNote, row.onlineAtExport]).toEqual([
-      'Officer',
+      'Raider',
       'Off tank',
       true,
     ]);
@@ -276,6 +278,35 @@ describe('ROK-2138 — guild import onto Blizzard-held rows', () => {
       atStep(5),
     ]);
     expect(row.blizzardCharacterId).toBe(BLIZZARD_ID);
+  });
+
+  // Codex P2 — Blizzard wins only where it HAS a value: a null is filled.
+  it('AC20 fills the null level/class/rank name of a Blizzard-held row; a null rank_index takes the export pair', async () => {
+    const who = await seedGuild();
+    await holdByBlizzard(DINGER);
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ level: null, class: null, rankName: null })
+      .where(eq(schema.guildMembers.guid, DINGER));
+    expect((await apply(who, drifted(5, 41))).status).toBe(200);
+    const row = await dingerRow();
+    expect([row.level, row.class, row.rankIndex, row.rankName]).toEqual([
+      41,
+      'Warrior',
+      3,
+      'Raider',
+    ]);
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ rankIndex: null })
+      .where(eq(schema.guildMembers.guid, DINGER));
+    expect((await apply(who, drifted(6, 42))).status).toBe(200);
+    const next = await dingerRow();
+    expect([next.level, next.rankIndex, next.rankName]).toEqual([
+      41,
+      1,
+      'Officer',
+    ]);
   });
 
   it('AC18 a row without a Blizzard id takes every export column', async () => {

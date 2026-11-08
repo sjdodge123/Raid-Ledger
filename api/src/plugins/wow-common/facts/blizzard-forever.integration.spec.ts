@@ -4,7 +4,8 @@
  * seam is live (effective prefix `forever`, Armory switch on) its
  * level/class/ilvl/gear win over a newer LedgerLink snapshot regardless of
  * age (ROK-2138), and the switch turns the source off again — the stored
- * row's blizzard-labelled facts still win, the snapshot fills the gaps. Professions/quests/lockouts never come from Blizzard.
+ * row's blizzard-labelled facts still win, the snapshot fills the gaps.
+ * Professions/quests/lockouts never come from Blizzard.
  */
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
