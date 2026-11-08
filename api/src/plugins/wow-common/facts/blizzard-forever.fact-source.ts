@@ -6,6 +6,7 @@ import * as schema from '../../../drizzle/schema';
 import { parseProfessions } from '../../../characters/characters-professions.helpers';
 import { armoryGear, armoryGearSyncedAt } from './blizzard-gear.helpers';
 import { distinctIds, fact, fanOut, toRole } from './fact-source.helpers';
+import { hasFacts, loadMemberFacts } from './blizzard-forever.member-facts';
 import type {
   RosterCharRef,
   RosterKey,
@@ -103,21 +104,35 @@ export class BlizzardForeverFactSource implements WowFactSource {
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
-  /** One query for the whole batch; a failed query yields no facts. */
+  /**
+   * One query for the characters, then (ROK-2133 D5) one for the member
+   * snapshots of the refs whose character produced no blizzard facts. A
+   * failed query yields no facts.
+   */
   async load(
     refs: RosterCharRef[],
   ): Promise<Map<RosterKey, WowFactCandidates>> {
-    const ids = distinctIds(refs, byChar);
-    if (ids.length === 0) return new Map();
     try {
-      const rows = await this.query(ids);
-      const byId = new Map(rows.map((r) => [r.id, toForeverCandidates(r)]));
-      return fanOut(refs, byChar, byId);
+      const out = await this.characterFacts(refs);
+      const pending = refs.filter((r) => !hasFacts(out.get(r.key)));
+      const members = await loadMemberFacts(this.db, pending);
+      for (const [key, facts] of members) out.set(key, facts);
+      return out;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Blizzard Forever facts unavailable: ${msg}`);
       return new Map();
     }
+  }
+
+  private async characterFacts(
+    refs: RosterCharRef[],
+  ): Promise<Map<RosterKey, WowFactCandidates>> {
+    const ids = distinctIds(refs, byChar);
+    if (ids.length === 0) return new Map();
+    const rows = await this.query(ids);
+    const byId = new Map(rows.map((r) => [r.id, toForeverCandidates(r)]));
+    return fanOut(refs, byChar, byId);
   }
 
   private query(ids: string[]): Promise<ForeverArmoryRow[]> {
