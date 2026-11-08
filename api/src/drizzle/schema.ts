@@ -105,3 +105,4 @@ export * from './schema/bg3';
 export * from './schema/bg3-saves';
 export * from './schema/discord-game-roles';
 export * from './schema/steam-app-stats';
+export * from './schema/wow-forever-armory-autolink';

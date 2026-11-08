@@ -36,12 +36,8 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
-import { AddonImportController } from './addon-import/addon-import.controller';
-import { AddonImportAdminController } from './addon-import/addon-import-admin.controller';
-import { AddonCharacterUnlinkService } from './addon-import/addon-import.unlink';
-import { AddonImportService } from './addon-import/addon-import.service';
-import { AddonImportCreateService } from './addon-import/addon-import-create.service';
-import { AddonImportAuditService } from './addon-import/addon-import.audit';
+import * as addonImport from './addon-import/addon-import.registration';
+import * as foreverAutoLink from './forever-auto-link/forever-auto-link.registration';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
@@ -82,8 +78,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     QuestProgressController,
     EventQuestReadinessController,
     EventRaidReadinessController,
-    AddonImportController,
-    AddonImportAdminController,
+    ...addonImport.CONTROLLERS,
     CharacterQuestsController,
     ...guildHub.CONTROLLERS,
   ],
@@ -107,10 +102,9 @@ import { NotificationModule } from '../../notifications/notification.module';
     QuestProgressReadService,
     EventQuestReadinessService,
     EventRaidReadinessService,
-    AddonImportService,
-    AddonCharacterUnlinkService,
-    AddonImportCreateService,
-    AddonImportAuditService,
+    ...addonImport.PROVIDERS,
+    // ROK-2124: Forever Armory auto-link (import nudge + hourly job).
+    ...foreverAutoLink.PROVIDERS,
     WowItemMetaService,
     // Empty partial ⇒ real defaults; the integration TestApp overrides it.
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
