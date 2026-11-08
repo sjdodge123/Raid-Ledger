@@ -17,8 +17,16 @@ import * as schema from '../../drizzle/schema';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 import { pinExportClock } from './addon-import/testing/pin-export-clock';
-import { buildImportString } from './addon-import/testing/addon-fixture.builder';
-import { buildForeverQuestsPayload } from './addon-import/testing/addon-fixture.forever';
+import {
+  buildImportString,
+  FIXTURE_EXPORTED_AT,
+} from './addon-import/testing/addon-fixture.builder';
+import {
+  buildForeverQuestsLogOnlyPayload,
+  buildForeverQuestsPayload,
+  buildForeverQuestsTruncatedPayload,
+  buildQuests,
+} from './addon-import/testing/addon-fixture.forever';
 
 pinExportClock();
 
@@ -35,6 +43,14 @@ const ARMORY = {
   fetchedAt: '2026-09-01T00:00:00.000Z',
   completed: [456, 9001],
 };
+
+/** An export `secs` after the fixtures' exportedAt (the clock is pinned +1h). */
+const exportAfter = (
+  payload: ReturnType<typeof buildForeverQuestsPayload>,
+  secs: number,
+): string =>
+  buildImportString({ ...payload, exportedAt: FIXTURE_EXPORTED_AT + secs });
+const LOG_ONLY_LATER = exportAfter(buildForeverQuestsLogOnlyPayload(), 1200);
 
 let testApp: TestApp;
 
@@ -139,10 +155,13 @@ async function importPaste(
   expect(res.status).toBe(200);
 }
 
-async function armorySync(charId: string): Promise<void> {
+async function armorySync(
+  charId: string,
+  armoryQuests: typeof ARMORY = ARMORY,
+): Promise<void> {
   await testApp.db
     .update(schema.characters)
-    .set({ armoryQuests: ARMORY })
+    .set({ armoryQuests })
     .where(eq(schema.characters.id, charId));
 }
 
@@ -152,6 +171,22 @@ async function getQuests(charId: string) {
   );
   expect(res.status).toBe(200);
   return CharacterQuestsResponseSchema.parse(res.body).quests;
+}
+
+/** The stored `char` snapshot's quests slice + capture time. */
+async function storedSnapshot(charId: string) {
+  const [row] = await testApp.db
+    .select({
+      data: schema.characterAddonSnapshots.data,
+      capturedAt: schema.characterAddonSnapshots.capturedAt,
+    })
+    .from(schema.characterAddonSnapshots)
+    .where(eq(schema.characterAddonSnapshots.characterId, charId));
+  type Q = { completed?: number[]; completedTruncated?: boolean };
+  return {
+    quests: (row?.data as { quests?: Q } | undefined)?.quests,
+    capturedAt: row?.capturedAt,
+  };
 }
 
 const rfcIds = (q: Awaited<ReturnType<typeof getQuests>>): number[] =>
@@ -174,13 +209,12 @@ describe('ROK-2125 — quests.completed absent vs empty', () => {
   it('absent after an earlier full import: the stored completed list is kept', async () => {
     const { token, charId } = await memberWithChar('logonly2');
     await importPaste(token, charId, fixture('char-forever-quests'));
-    await importPaste(token, charId, fixture('char-forever-quests-log-only'));
-    const [row] = await testApp.db
-      .select({ data: schema.characterAddonSnapshots.data })
-      .from(schema.characterAddonSnapshots)
-      .where(eq(schema.characterAddonSnapshots.characterId, charId));
-    const stored = (row?.data as { quests?: { completed?: number[] } }).quests;
-    expect(stored?.completed).toHaveLength(10_000);
+    await importPaste(token, charId, LOG_ONLY_LATER);
+    const stored = await storedSnapshot(charId);
+    expect(stored.capturedAt?.getTime()).toBe(
+      (FIXTURE_EXPORTED_AT + 1200) * 1000,
+    );
+    expect(stored.quests?.completed).toHaveLength(10_000);
     const quests = await getQuests(charId);
     expect(quests?.source).toBe('addon');
     expect(quests?.counts).toMatchObject({
@@ -189,12 +223,68 @@ describe('ROK-2125 — quests.completed absent vs empty', () => {
     });
   });
 
-  it('absent with no list anywhere: no completed list is invented', async () => {
+  it('absent with no list anywhere: the log stays visible, no completed list is invented (review r1)', async () => {
     const { token, charId } = await memberWithChar('logonly3');
     await importPaste(token, charId, fixture('char-forever-quests-log-only'));
-    expect(await getQuests(charId)).toBeNull();
+    const quests = await getQuests(charId);
+    expect(quests?.source).toBe('addon');
+    expect(quests?.counts).toMatchObject({
+      completedKnown: 0,
+      completedTotal: 0,
+      inProgress: 3,
+    });
+    expect(rfcIds(quests)).toEqual([]);
+    expect(quests?.inProgress.map((q) => q.questId)).toContain(2459);
+  });
+});
+
+describe('ROK-2125 review r1 — carried list: Armory ordering and truncation flag', () => {
+  it('full export (t1) → Armory sync (t2) → log-only export (t3): the Armory list and date win (review r1)', async () => {
+    const { token, charId } = await memberWithChar('logonly4');
+    await importPaste(token, charId, fixture('char-forever-quests'));
+    const fetchedAt = new Date((FIXTURE_EXPORTED_AT + 600) * 1000);
+    await armorySync(charId, { ...ARMORY, fetchedAt: fetchedAt.toISOString() });
+    await importPaste(token, charId, LOG_ONLY_LATER);
+    const quests = await getQuests(charId);
+    expect(quests?.source).toBe('blizzard');
+    expect(quests?.syncedAt).toBe(fetchedAt.toISOString());
+    expect(quests?.counts).toMatchObject({ completedTotal: 2, inProgress: 3 });
+    expect((await storedSnapshot(charId)).quests?.completed).toHaveLength(
+      10_000,
+    );
   });
 
+  it('the carried list keeps the STORED truncation flag, not the incoming one (review r1)', async () => {
+    const { token, charId } = await memberWithChar('logonly5');
+    await importPaste(
+      token,
+      charId,
+      buildImportString(buildForeverQuestsTruncatedPayload()),
+    );
+    await importPaste(token, charId, LOG_ONLY_LATER);
+    expect((await storedSnapshot(charId)).quests).toMatchObject({
+      completed: [456, 463, 470],
+      completedTruncated: true,
+    });
+    const stray = buildForeverQuestsLogOnlyPayload();
+    const strayQuests = {
+      inProgress: buildQuests(0).inProgress,
+      completedTruncated: true,
+    };
+    const strayFlag = {
+      ...stray,
+      data: { ...stray.data, quests: strayQuests },
+    };
+    const { token: t2, charId: c2 } = await memberWithChar('logonly6');
+    await importPaste(t2, c2, fixture('char-forever-quests'));
+    await importPaste(t2, c2, exportAfter(strayFlag, 1200));
+    const kept = (await storedSnapshot(c2)).quests;
+    expect(kept?.completed).toHaveLength(10_000);
+    expect(kept?.completedTruncated).toBeUndefined();
+  });
+});
+
+describe('ROK-2125 — quests.completed empty (today’s behaviour)', () => {
   it('empty after an Armory sync: today’s behaviour — the Armory list is primary', async () => {
     const { token, charId } = await memberWithChar('emptylist1');
     await armorySync(charId);
