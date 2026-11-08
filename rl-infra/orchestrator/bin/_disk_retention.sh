@@ -13,14 +13,26 @@
 #               carries ALL of them), which would reap a stopped env container.
 #   images      created > MAX_IMAGE_AGE ago and not used by ANY container
 #               (running or stopped), not referenced by an env-registry row's
-#               .image, not labelled rl.role=runner, not tagged rl-infra/*
-#               (locally built compose images). Removed by tag (else id),
-#               never -f, so the daemon also refuses an image still in use.
-#   runners     only a runner with no claim, no running task and no admission
-#               entry: `find /tmp -mmin +60 -delete` + `npm cache clean`.
-#               NEVER /root/.cache (Playwright browsers live there).
+#               .image (by tag OR repo@digest), not labelled rl.role=runner,
+#               not tagged rl-infra/* (locally built compose images), not a
+#               base image the Dockerfiles build FROM (KEEP_IMAGE_PREFIXES).
+#               Skipped while the admission ledger holds any task or build
+#               (a build may be about to use an old base). Removed by tag
+#               (else id), never -f, so the daemon also refuses an image in use.
+#               An unreadable env registry aborts the rung (fail closed).
+#   runners     only a runner with no claim, no queued claimant, no running
+#               task and no admission entry. The slot is RESERVED in
+#               claims.json under the queue + claims flocks (as _borrow.sh
+#               does), re-checked inside the lock, cleaned, then restored.
+#               Clean = old REGULAR files + empty dirs under /tmp, never a
+#               socket/fifo/device, never tmux-* (the runner's `main` tmux
+#               session), never a *.sock/*.lock/*.pid/runner-heartbeat and
+#               never a path a process holds open (/proc/*/fd, cwd); plus
+#               `npm cache clean`. NEVER /root/.cache (Playwright browsers).
 # Every rung is bounded by `timeout`, logs what it reclaimed to stderr and
 # never fails the caller: sweep always prints one JSON object and returns 0.
+# Counts and bytes are successes only; failures land in .failed + .error.
+# A dry run reports would_reclaim_bytes (containers, images) instead.
 #
 # Env knobs:
 #   RL_DISK_RETENTION_DRY_RUN             1    list candidates, remove nothing
@@ -31,6 +43,8 @@
 #   RL_DISK_RETENTION_COMPOSE_PROJECT     rl-infra
 #   RL_DISK_RETENTION_TIMEOUT_SECONDS     300  per docker call
 #   RL_DISK_RETENTION_STATE_FILE          $STATE_DIR/disk-retention.json
+#   RL_DISK_RETENTION_KEEP_IMAGE_PREFIXES "node:22-alpine debian:bookworm-slim
+#                                          nginx:alpine mcr.microsoft.com/playwright:"
 
 RL_DISK_RETENTION_DRY_RUN="${RL_DISK_RETENTION_DRY_RUN:-1}"
 RL_DISK_RETENTION_INTERVAL_HOURS="${RL_DISK_RETENTION_INTERVAL_HOURS:-6}"
@@ -39,6 +53,8 @@ RL_DISK_RETENTION_IMAGE_AGE_HOURS="${RL_DISK_RETENTION_IMAGE_AGE_HOURS:-48}"
 RL_DISK_RETENTION_TMP_AGE_MINUTES="${RL_DISK_RETENTION_TMP_AGE_MINUTES:-60}"
 RL_DISK_RETENTION_COMPOSE_PROJECT="${RL_DISK_RETENTION_COMPOSE_PROJECT:-rl-infra}"
 RL_DISK_RETENTION_TIMEOUT_SECONDS="${RL_DISK_RETENTION_TIMEOUT_SECONDS:-300}"
+RL_DISK_RETENTION_KEEP_IMAGE_PREFIXES="${RL_DISK_RETENTION_KEEP_IMAGE_PREFIXES:-node:22-alpine debian:bookworm-slim nginx:alpine mcr.microsoft.com/playwright:}"
+DISK_RETENTION_AGENT_ID="gc-sweeper:disk-retention"
 
 disk_retention::_state_dir() { echo "${RL_STATE_DIR:-${STATE_DIR:-/state}}"; }
 disk_retention::_log() { echo "disk-retention: $*" >&2; }
@@ -64,91 +80,206 @@ disk_retention::_containers() {
     disk_retention::_docker container inspect --size $ids 2>/dev/null | jq -ce 'arrays' 2>/dev/null
 }
 
+# Remove each doomed item on its own so a failure is attributed. Args: doomed
+# JSON, kind (container|image). Echoes the JSON array of ids that were removed.
+disk_retention::_remove_each() {
+    local doomed="$1" kind="$2" id refs ok=()
+    [[ "$RL_DISK_RETENTION_DRY_RUN" == "1" ]] && { echo '[]'; return 0; }
+    while IFS=$'\t' read -r id refs; do
+        [[ -z "$id" ]] && continue
+        # shellcheck disable=SC2086
+        if disk_retention::_docker "$kind" rm ${refs:-$id} >/dev/null 2>&1; then ok+=("$id")
+        else disk_retention::_log "$kind rm ${refs:-$id} failed (in use, or the daemon refused)"; fi
+    done < <(jq -r '.[] | [.Id, ((.RepoTags // []) | join(" "))] | @tsv' <<<"$doomed")
+    printf '%s\n' "${ok[@]:-}" | jq -Rnc '[inputs | select(length > 0)]'
+}
+
 # Rung 1 — stopped containers. Args: containers JSON. Echoes the rung record.
 disk_retention::_container_rung() {
-    local cj="$1" cut doomed ids
+    local cj="$1" cut doomed ok
     cut=$(disk_retention::_cutoff "$RL_DISK_RETENTION_CONTAINER_AGE_HOURS")
     doomed=$(jq -c --argjson cut "$cut" --arg proj "$RL_DISK_RETENTION_COMPOSE_PROJECT" "$DISK_RETENTION_JQ_EPOCH"'
         [ .[] | select((.State.Status // "") | IN("exited", "created", "dead"))
           | select((.Created // "" | ep) < $cut)
           | (.Config.Labels // {}) as $l
           | select(($l["rl.role"] // "") | IN("env", "runner", "infra") | not)
-          | select(($l["com.docker.compose.project"] // "") != $proj) ]' <<<"$cj") || return 1
-    ids=$(jq -r '[.[].Id] | join(" ")' <<<"$doomed")
-    if [[ -n "$ids" && "$RL_DISK_RETENTION_DRY_RUN" != "1" ]]; then
-        # shellcheck disable=SC2086
-        disk_retention::_docker container rm $ids >/dev/null 2>&1 || disk_retention::_log "container rm reported an error (partial removal possible)"
-    fi
-    disk_retention::_record "$doomed" SizeRw
+          | select(($l["com.docker.compose.project"] // "") != $proj)
+          | del(.RepoTags) ]' <<<"$cj") || return 1
+    ok=$(disk_retention::_remove_each "$doomed" container) || return 1
+    disk_retention::_record "$doomed" SizeRw "$ok"
 }
 
-# Rung record from the doomed list. Args: doomed JSON, size field.
+# Rung record. Args: doomed JSON, size field, removed-ids JSON. bytes/removed
+# count successes only; would_reclaim_bytes is every candidate's size.
 disk_retention::_record() {
-    jq -c --arg dry "$RL_DISK_RETENTION_DRY_RUN" --arg f "$2" '
-        {candidates:[.[].Id], removed:(if $dry == "1" then 0 else length end),
-         bytes:(if $dry == "1" then 0 else (map(.[$f] // 0) | add // 0) end)}' <<<"$1"
+    jq -c --arg dry "$RL_DISK_RETENTION_DRY_RUN" --arg f "$2" --argjson ok "$3" '
+        (map(.[$f] // 0) | add // 0) as $all
+        | [.[] | select(.Id as $i | $ok | index($i))] as $done
+        | [.[].Id | select(. as $i | ($ok | index($i)) == null)] as $failed
+        | {candidates:[.[].Id], removed:($done | length),
+           bytes:($done | map(.[$f] // 0) | add // 0), would_reclaim_bytes:$all}
+        + (if $dry != "1" and ($failed | length) > 0 then {failed:$failed, error:"remove_failed"} else {} end)' <<<"$1"
 }
 
-# Every image ref/id that must survive: container image ids + refs, env rows.
+# Every image ref/id that must survive: container image ids + refs, env rows
+# (plus their repo@digest form). rc 1 — the rung aborts — when the env
+# registry is missing, unreadable or not an array: an empty set would let the
+# rung delete a preserved env's image.
 disk_retention::_protected_refs() {
-    local cj="$1" envs="${RL_ENVS_FILE:-$(disk_retention::_state_dir)/env-registry.json}" rows='[]'
-    if [[ -r "$envs" ]]; then rows=$(jq -c '[.[]? | .image? // empty]' "$envs" 2>/dev/null) || return 1; fi
-    jq -c --argjson rows "$rows" '[.[] | .Image, .Config.Image] + $rows | map(select(. != null))' <<<"$cj"
+    local cj="$1" envs="${RL_ENVS_FILE:-$(disk_retention::_state_dir)/env-registry.json}" rows
+    rows=$(jq -ec 'if type == "array" then [.[] | .image? // empty] else error("not an array") end' "$envs" 2>/dev/null) || {
+        disk_retention::_log "env registry $envs unreadable — image rung aborted"; return 1; }
+    jq -c --argjson rows "$rows" '[.[] | .Image, .Config.Image] + $rows | map(select(type == "string"))
+        | . + map(select(test("@sha256:")) | sub(":[^/@]*@"; "@")) | unique' <<<"$cj"
+}
+
+# 0 (busy) when the admission ledger holds any task or build — light weight
+# included, registry_gc excluded — or cannot be read. Echoes the keys.
+disk_retention::_ledger_busy() {
+    local ledger="${RL_ADMISSION_FILE:-$(disk_retention::_state_dir)/admission.json}" keys
+    keys=$(jq -er '
+        if type != "object" then error("bad ledger") else . end
+        | [ (.heavy_running // [])[] | select((.kind // "task") != "registry_gc") | (.key // "?") ] | join(" ")' \
+        "$ledger" 2>/dev/null) || { echo "ledger_unreadable"; return 0; }
+    [[ -n "$keys" ]] && { echo "$keys"; return 0; }
+    return 1
 }
 
 # Rung 2 — unused images. Args: containers JSON. Echoes the rung record.
 disk_retention::_image_rung() {
-    local cj="$1" ids ij prot cut doomed targets
+    local cj="$1" ids ij prot cut doomed ok busy
+    if busy=$(disk_retention::_ledger_busy); then
+        disk_retention::_log "image rung skipped — admission ledger busy: $busy"
+        jq -nc --arg b "$busy" '{skipped:"build_running", blocked_by:($b | split(" ")), candidates:[], removed:0, bytes:0}'
+        return 0
+    fi
     prot=$(disk_retention::_protected_refs "$cj") || return 1
     ids=$(disk_retention::_docker image ls -q --no-trunc 2>/dev/null) || return 1
-    [[ -z "$ids" ]] && { echo '{"candidates":[],"removed":0,"bytes":0}'; return 0; }
+    [[ -z "$ids" ]] && { echo '{"candidates":[],"removed":0,"bytes":0,"would_reclaim_bytes":0}'; return 0; }
     # shellcheck disable=SC2046
     ij=$(disk_retention::_docker image inspect $(sort -u <<<"$ids") 2>/dev/null | jq -ce 'arrays' 2>/dev/null) || return 1
     cut=$(disk_retention::_cutoff "$RL_DISK_RETENTION_IMAGE_AGE_HOURS")
-    doomed=$(jq -c --argjson cut "$cut" --argjson prot "$prot" "$DISK_RETENTION_JQ_EPOCH"'
-        [ .[] | select((.Created // "" | ep) < $cut)
+    doomed=$(jq -c --argjson cut "$cut" --argjson prot "$prot" --arg keep "$RL_DISK_RETENTION_KEEP_IMAGE_PREFIXES" "$DISK_RETENTION_JQ_EPOCH"'
+        ($keep | split(" ") | map(select(length > 0))) as $kp
+        | [ .[] | select((.Created // "" | ep) < $cut)
           | select(((.Config.Labels // {})["rl.role"] // "") != "runner")
-          | select(([.Id] + (.RepoTags // [])) as $refs | ($refs - $prot | length) == ($refs | length))
-          | select((.RepoTags // []) | any(startswith("rl-infra/")) | not) ]' <<<"$ij") || return 1
-    targets=$(jq -r '[.[] | if ((.RepoTags // []) | length) > 0 then .RepoTags[] else .Id end] | join(" ")' <<<"$doomed")
-    if [[ -n "$targets" && "$RL_DISK_RETENTION_DRY_RUN" != "1" ]]; then
-        # shellcheck disable=SC2086
-        disk_retention::_docker image rm $targets >/dev/null 2>&1 || disk_retention::_log "image rm reported an error (an image in use is refused by the daemon)"
-    fi
-    disk_retention::_record "$doomed" Size
+          | select(([.Id] + (.RepoTags // []) + (.RepoDigests // [])) as $refs
+                   | ($refs - $prot | length) == ($refs | length))
+          | select((.RepoTags // []) | any(startswith("rl-infra/")) | not)
+          | select((.RepoTags // []) | any(. as $t | $kp | any(. as $p | $t | startswith($p))) | not) ]' <<<"$ij") || return 1
+    ok=$(disk_retention::_remove_each "$doomed" image) || return 1
+    disk_retention::_record "$doomed" Size "$ok"
 }
 
-# 0 when slot $1 is busy: claimed, a running task on it, or an admission-ledger
-# entry (running or waiting) whose own .slot or task JSON names it. An
-# unreadable claims file or ledger counts as busy — a skipped clean is cheap.
+# 0 when slot $1 is busy: claimed, a claimant queued for it, a running task on
+# it, or an admission-ledger entry (heavy_running / heavy_waiting, any weight
+# except registry_gc) whose task (`$TASKS_DIR/<task_id>.json`, else <key>)
+# runs on it. Fail-safe: an unreadable/malformed claims file or ledger, or a
+# ledger entry whose slot cannot be resolved, counts as busy.
 disk_retention::_slot_busy() {
-    local slot="$1" sd tasks claims ledger t
+    local slot="$1" sd tasks claims ledger queue t tid key tslot entries
     sd=$(disk_retention::_state_dir); tasks="${TASKS_DIR:-$sd/tasks}"
     claims="${RL_CLAIMS_FILE:-$sd/claims.json}"; ledger="${RL_ADMISSION_FILE:-$sd/admission.json}"
+    queue="${LEASE_QUEUE_DIR:-$sd/lease-queue}/$slot.json"
     jq -e --argjson s "$slot" 'any(.[]?; .slot == $s and .claimed == true) | not' "$claims" >/dev/null 2>&1 || return 0
-    [[ -r "$ledger" ]] || return 0
+    if [[ -e "$queue" ]]; then jq -e 'length == 0' "$queue" >/dev/null 2>&1 || return 0; fi
     for t in "$tasks"/*.json; do
         [[ -f "$t" ]] || continue
         jq -e --argjson s "$slot" '.status == "running" and .slot == $s' "$t" >/dev/null 2>&1 && return 0
     done
-    while IFS=$'\t' read -r key eslot; do
-        [[ -z "$key$eslot" ]] && continue
-        [[ "$eslot" == "$slot" ]] && return 0
-        [[ -f "$tasks/$key.json" ]] && jq -e --argjson s "$slot" '.slot == $s' "$tasks/$key.json" >/dev/null 2>&1 && return 0
-    done < <(jq -r '((.heavy_running // [])[], (.waiting // [])[]) | [(.key // ""), ((.slot // "") | tostring)] | @tsv' "$ledger" 2>/dev/null || echo "?	?")
+    entries=$(jq -er 'if type != "object" then error("bad ledger") else . end
+        | ((.heavy_running // []) + (.heavy_waiting // []))[]
+        | select((.kind // "task") != "registry_gc") | [(.task_id // .key // ""), (.key // "")] | @tsv' \
+        "$ledger" 2>/dev/null; echo "rc=$?") || return 0
+    [[ "${entries##*rc=}" == "0" || "${entries##*rc=}" == "4" ]] || return 0   # 4 = jq -e with no output
+    while IFS=$'\t' read -r tid key; do
+        [[ "$tid" == rc=* || -z "$tid$key" ]] && continue
+        tslot=""
+        for t in "$tasks/$tid.json" "$tasks/$key.json"; do
+            [[ -f "$t" ]] && { tslot=$(jq -r '.slot // empty' "$t" 2>/dev/null); break; }
+        done
+        [[ -z "$tslot" || "$tslot" == "$slot" ]] && return 0
+    done <<<"$entries"
     return 1
 }
 
-# Echoes "<KB before> <KB after>" from inside the runner. /root/.cache is
-# deliberately absent: Playwright's browsers live there.
+# flock(1) or fail: the reservation is only safe under the real serializer.
+disk_retention::_lock_dir() { echo "${RL_LOCK_DIR:-${LOCK_DIR:-$(disk_retention::_state_dir)/locks}}"; }
+
+# Reserve idle slot $1 (exit 0) the way _borrow.sh claims one: queue lock,
+# then claims lock (the STRICT order in _state.sh); refuse when the slot is
+# busy as seen INSIDE the locks; else flip its claims row to claimed by
+# $DISK_RETENTION_AGENT_ID. The original row is saved to $2 for the restore.
+disk_retention::_reserve() {
+    local slot="$1" save="$2" sd claims ld qlock
+    sd=$(disk_retention::_state_dir); claims="${RL_CLAIMS_FILE:-$sd/claims.json}"; ld=$(disk_retention::_lock_dir)
+    command -v flock >/dev/null 2>&1 || { disk_retention::_log "flock missing — runner rung refuses to reserve"; return 1; }
+    mkdir -p "$ld" 2>/dev/null; qlock="$ld/$slot.json.lock"
+    (
+        flock -x 201 || exit 1
+        (
+            flock -x 200 || exit 1
+            disk_retention::_slot_busy "$slot" && exit 1
+            jq -ce --argjson s "$slot" 'first(.[] | select(.slot == $s and .claimed != true))' "$claims" > "$save" 2>/dev/null || exit 1
+            local tmp now; tmp=$(mktemp "$claims.XXXXXX") || exit 1; now=$(date -u +%FT%TZ)
+            jq --argjson s "$slot" --arg a "$DISK_RETENTION_AGENT_ID" --arg t "$now" \
+                'map(if .slot == $s and .claimed != true
+                     then .claimed = true | .agent_id = $a | .started_at = $t | .last_heartbeat = $t
+                          | .expires_at = null | .keep_alive = false else . end)' "$claims" > "$tmp" \
+                && mv "$tmp" "$claims" || { rm -f "$tmp"; exit 1; }
+            chmod 664 "$claims" 2>/dev/null || true
+        ) 200>"$ld/$(basename "$claims").lock"
+    ) 201>"$qlock"
+}
+
+# Restore slot $1's saved row ($2) — only while the row is still ours.
+disk_retention::_unreserve() {
+    local slot="$1" save="$2" sd claims ld adv
+    sd=$(disk_retention::_state_dir); claims="${RL_CLAIMS_FILE:-$sd/claims.json}"; ld=$(disk_retention::_lock_dir)
+    (
+        flock -x 200 || exit 1
+        local tmp; tmp=$(mktemp "$claims.XXXXXX") || exit 1
+        jq --argjson s "$slot" --arg a "$DISK_RETENTION_AGENT_ID" --slurpfile row "$save" \
+            'map(if .slot == $s and .agent_id == $a then $row[0] else . end)' "$claims" > "$tmp" \
+            && mv "$tmp" "$claims" || { rm -f "$tmp"; exit 1; }
+        chmod 664 "$claims" 2>/dev/null || true
+    ) 200>"$ld/$(basename "$claims").lock" || disk_retention::_log "slot $slot reservation restore failed — the stale-claim reaper frees it"
+    rm -f "$save"
+    # A claim that landed meanwhile was enqueued: hand the slot on like release.
+    adv="${DISK_RETENTION_LEASE_ADVANCE:-$(dirname "${BASH_SOURCE[0]}")/lease-advance}"
+    if [[ -x "$adv" ]] && ! jq -e 'length == 0' "${LEASE_QUEUE_DIR:-$sd/lease-queue}/$slot.json" >/dev/null 2>&1; then
+        RL_STATE_DIR="$sd" "$adv" --slot "$slot" >/dev/null 2>&1 || disk_retention::_log "lease-advance slot $slot failed"
+    fi
+}
+
+# Echoes "<KB before> <KB after>" from inside the runner. Args: tmp root
+# (default /tmp), proc root (default /proc). Only regular files and empty
+# dirs older than TMP_AGE_MINUTES go; sockets, fifos, devices, tmux-* (the
+# `main` session's socket dir), *.sock/*.lock/*.pid, runner-heartbeat and
+# anything a process holds open or sits in stay. /root/.cache is absent on
+# purpose: Playwright's browsers live there.
 disk_retention::_runner_script() {
-    local m="$RL_DISK_RETENTION_TMP_AGE_MINUTES"
-    printf '%s' "du_kb() { du -sk /tmp \"\$(npm config get cache 2>/dev/null || echo /root/.npm)\" 2>/dev/null | awk '{s+=\$1} END {print s+0}'; }; b=\$(du_kb); find /tmp -xdev -mindepth 1 -mmin +$m -delete 2>/dev/null; npm cache clean --force >/dev/null 2>&1; echo \"\$b \$(du_kb)\""
+    local m="$RL_DISK_RETENTION_TMP_AGE_MINUTES" r="${1:-/tmp}" p="${2:-/proc}"
+    cat <<SCRIPT
+R='$r'; P='$p'; M='$m'
+NPMC=\$(npm config get cache 2>/dev/null || echo /root/.npm)
+du_kb() { du -sk "\$R" "\$NPMC" 2>/dev/null | awk '{s+=\$1} END {print s+0}'; }
+b=\$(du_kb)
+INUSE=\$(for l in "\$P"/[0-9]*/fd/* "\$P"/[0-9]*/cwd; do readlink "\$l" 2>/dev/null; done | sort -u)
+keep() { [ -n "\$INUSE" ] && printf '%s\n' "\$INUSE" | grep -qxF -- "\$1"; }
+skip='( -name tmux-* -o -name *.sock -o -name *.lock -o -name *.pid -o -name runner-heartbeat -o -type s -o -type p -o -type c -o -type b )'
+set -f
+find "\$R" -xdev -mindepth 1 \$skip -prune -o -type f -mmin +\$M -print | while IFS= read -r f; do keep "\$f" || rm -f -- "\$f"; done
+find "\$R" -xdev -mindepth 1 \$skip -prune -o -type d -empty -mmin +\$M -print | while IFS= read -r d; do keep "\$d" || rmdir -- "\$d" 2>/dev/null; done
+set +f
+npm cache clean --force >/dev/null 2>&1
+echo "\$b \$(du_kb)"
+SCRIPT
 }
 
 # Rung 3 — idle-runner caches. Echoes {idle, busy, cleaned, bytes}.
 disk_retention::_runner_rung() {
-    local names n slot idle=() busy=() cleaned=() bytes=0 out b a
+    local names n slot idle=() busy=() cleaned=() bytes=0 out b a save
     names=$(disk_retention::_docker ps --filter label=rl.role=runner --format '{{.Names}}' 2>/dev/null) || return 1
     for n in $names; do
         [[ "$n" =~ ^rl-runner-([0-9]+)$ ]] || continue
@@ -156,9 +287,15 @@ disk_retention::_runner_rung() {
         if disk_retention::_slot_busy "$slot"; then busy+=("$slot"); continue; fi
         idle+=("$slot")
         [[ "$RL_DISK_RETENTION_DRY_RUN" == "1" ]] && continue
-        # Re-check right before the exec: a claim may have landed meanwhile.
-        disk_retention::_slot_busy "$slot" && continue
-        out=$(disk_retention::_docker exec "$n" sh -c "$(disk_retention::_runner_script)" 2>/dev/null) || { disk_retention::_log "runner $n clean failed"; continue; }
+        save=$(mktemp "${TMPDIR:-/tmp}/rl-retention-row.XXXXXX") || continue
+        # Reserve under the claims flock (re-checked inside): a claim landing
+        # mid-clean now finds the slot taken instead of racing the find.
+        if ! disk_retention::_reserve "$slot" "$save"; then
+            rm -f "$save"; disk_retention::_log "runner $n became busy — not cleaned"; continue
+        fi
+        out=$(disk_retention::_docker exec "$n" sh -c "$(disk_retention::_runner_script)" 2>/dev/null) || out=""
+        disk_retention::_unreserve "$slot" "$save"
+        [[ -n "$out" ]] || { disk_retention::_log "runner $n clean failed"; continue; }
         cleaned+=("$slot")
         read -r b a <<<"$out"
         [[ "${b:-}" =~ ^[0-9]+$ && "${a:-}" =~ ^[0-9]+$ ]] && (( b > a )) && bytes=$(( bytes + (b - a) * 1024 ))
@@ -181,7 +318,7 @@ disk_retention::_within_interval() {
 disk_retention::_rung() {
     local name="$1" out; shift
     out=$("$@") && [[ -n "$out" ]] || out=$(jq -nc --arg n "$name" '{error:($n + "_failed")}')
-    disk_retention::_log "$name: $(jq -rc '"removed=" + ((.removed // .cleaned // [] | if type == "array" then length else . end)|tostring) + " bytes=" + ((.bytes // 0)|tostring) + (if .error then " error=" + .error else "" end)' <<<"$out" 2>/dev/null)"
+    disk_retention::_log "$name: $(jq -rc '"removed=" + ((.removed // .cleaned // [] | if type == "array" then length else . end)|tostring) + " bytes=" + ((.bytes // 0)|tostring) + (if .would_reclaim_bytes then " would_reclaim=" + (.would_reclaim_bytes|tostring) else "" end) + (if .skipped then " skipped=" + .skipped else "" end) + (if .error then " error=" + .error else "" end)' <<<"$out" 2>/dev/null)"
     echo "$out"
 }
 
