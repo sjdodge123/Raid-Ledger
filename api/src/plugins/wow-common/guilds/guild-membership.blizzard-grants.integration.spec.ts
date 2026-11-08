@@ -7,6 +7,8 @@
  * Change owner of a Blizzard-only character re-audits the id link for the new
  * owner, so the old owner's grant is not inherited) and case 8 (Ruling 1:
  * a Blizzard-only rank-0 link never holds the top rank; a GUID one does).
+ * Codex r2 P1: a grant made while a GUID holder won the row is not honoured
+ * for the Blizzard-id character that wins once the holder goes.
  *
  * Timestamps sit DAYS apart: `characters.created_at` is a naive timestamp
  * compared against timestamptz grants, so a session-timezone shift must not
@@ -17,7 +19,10 @@ import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { CharactersService } from '../../../characters/characters.service';
+import { deleteUserTransaction } from '../../../users/users-delete.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { AddonCharacterUnlinkService } from '../addon-import/addon-import.unlink';
 import { logExternalIdLinked } from '../addon-import/external-id.audit';
 import { hasConfirmedMemberGrant } from './guild-delegation.helpers';
 import { findLinkedMemberRows } from './guild-membership.helpers';
@@ -329,5 +334,76 @@ describe('ROK-2115 case 8 (Ruling 1): holdsTopRank is GUID-only', () => {
     const rows = await findLinkedMemberRows(testApp.db, userId, guildId);
     expect(rows.map((r) => [r.via, r.rankIndex])).toEqual([['guid', 0]]);
     expect(await adapter.holdsTopRank(userId, guildId)).toBe(true);
+  });
+});
+
+/**
+ * Codex r2 P1 — row R (GUID G + Blizzard id X): A holds G and wins R; B
+ * (external_id X, created before the grant) is suppressed by Ruling 3.
+ * Staff grant R while A wins. Without a fresh audit when A goes, B's link
+ * is older than the grant and B's owner inherits A's grant.
+ */
+async function seedGuidWinnerOverBlizzard() {
+  const guildId = await insertGuild();
+  const id = blizzardId();
+  const guid = `Player-2115-${next()}`;
+  const memberId = await insertRow(guildId, { guid, blizzardId: id });
+  const ownerA = await insertUser();
+  const charA = await insertChar(ownerA, { addonGuid: guid });
+  const ownerB = await insertUser();
+  const charB = await insertChar(ownerB, { externalId: String(id) });
+  await grant(guildId, memberId, T1);
+  const rowsA = await findLinkedMemberRows(testApp.db, ownerA, guildId);
+  expect(rowsA.map((r) => r.via)).toEqual(['guid']);
+  expect(await hasConfirmedMemberGrant(testApp.db, guildId, rowsA)).toBe(true);
+  expect(await findLinkedMemberRows(testApp.db, ownerB, guildId)).toEqual([]);
+  return { guildId, ownerA, charA, ownerB, charB };
+}
+
+type GuidWinnerSeed = Awaited<ReturnType<typeof seedGuidWinnerOverBlizzard>>;
+
+/** B now wins R through the Blizzard arm; is A's grant honoured for B? */
+async function expectGrantNotInherited(s: GuidWinnerSeed): Promise<void> {
+  const rows = await blizzardRows(s.ownerB, s.guildId);
+  expect(await hasConfirmedMemberGrant(testApp.db, s.guildId, rows)).toBe(
+    false,
+  );
+  const audits = await idLinkAudits(s.ownerB);
+  expect(audits.map((a) => a.metadata)).toEqual([
+    expect.objectContaining({ characterId: s.charB, via: 'guid_released' }),
+  ]);
+}
+
+describe('ROK-2115 Codex r2 P1: a grant never carries over to a new winning character', () => {
+  it('the GUID holder deletes its own character', async () => {
+    const s = await seedGuidWinnerOverBlizzard();
+    await testApp.app.get(CharactersService).delete(s.ownerA, s.charA);
+    await expectGrantNotInherited(s);
+  });
+
+  it('an admin unlinks the GUID holder', async () => {
+    const s = await seedGuidWinnerOverBlizzard();
+    const admin = await insertUser();
+    await testApp.app.get(AddonCharacterUnlinkService).unlink(admin, s.charA);
+    await expectGrantNotInherited(s);
+  });
+
+  it("the GUID holder's owner is deleted", async () => {
+    const s = await seedGuidWinnerOverBlizzard();
+    const heir = await insertUser();
+    await deleteUserTransaction(testApp.db, s.ownerA, heir);
+    await expectGrantNotInherited(s);
+  });
+
+  it('control: a re-grant after the release is honoured for the new winner', async () => {
+    const s = await seedGuidWinnerOverBlizzard();
+    await testApp.app.get(CharactersService).delete(s.ownerA, s.charA);
+    const rows = await blizzardRows(s.ownerB, s.guildId);
+    const [row] = nonEmpty(rows, 'B row');
+    // A day ahead: clear of any app-vs-DB clock skew against the audit's now().
+    await regrant(s.guildId, row.memberId, new Date(NOW + DAY));
+    expect(await hasConfirmedMemberGrant(testApp.db, s.guildId, rows)).toBe(
+      true,
+    );
   });
 });

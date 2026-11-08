@@ -12,9 +12,15 @@ import { GUID_AUDIT_ENTITY } from './addon-import.guid-audit';
 export const EXTERNAL_ID_LINKED_ACTION = 'external_id_linked';
 
 /** Where the id was set: an Armory (re-)import merge, ROK-2124's auto-link,
- * a ROK-2128 roster pick, or an admin Change owner (a fresh owner's link). */
+ * a ROK-2128 roster pick, an admin Change owner (a fresh owner's link), or
+ * `guid_released` — the row's GUID holder went, so this id link newly wins
+ * the row (Codex r2 P1, `external-id.guid-release.ts`). */
 export type ExternalIdLinkVia =
-  'armory_import' | 'auto_link' | 'roster_pick' | 'admin_reassign';
+  | 'armory_import'
+  | 'auto_link'
+  | 'roster_pick'
+  | 'admin_reassign'
+  | 'guid_released';
 
 export interface ExternalIdLinkEntry {
   /** Null for a background job (auto-link). */
