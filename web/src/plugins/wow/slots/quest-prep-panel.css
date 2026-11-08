@@ -35,7 +35,7 @@
     font-size: 1.25rem;
 }
 
-/* Location group: "Pick up before you go" / "Starts inside" */
+/* Location group: "Get before you go in" / "Picked up inside" (ROK-2142) */
 .quest-group {
     margin-bottom: 1.25rem;
 }
@@ -54,6 +54,12 @@
 
 .quest-group__icon {
     font-size: 1rem;
+}
+
+.quest-group__hint {
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    margin: -0.5rem 0 0.75rem;
 }
 
 /* Sub-group: "Sharable" / "Must pick up yourself" */
