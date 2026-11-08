@@ -10,6 +10,7 @@ import { Button } from '../ui/button';
 import { buttonClass } from '../ui/button-classes';
 import { StatusChip } from '../ui/status-chip';
 import { guildHref } from '../layout/hub-nav/my-hubs-queries';
+import { hubCopy } from './hub-copy';
 
 /** One hub row's action inputs: the hub, the inline Join and whether it is in flight. */
 export interface HubViewerActionProps {
@@ -26,12 +27,30 @@ function ViewLink({ hub }: { hub: HubDirectoryEntry }): JSX.Element {
     );
 }
 
+/** ROK-2132 — the hub page with the gate's "open Add character on the Guild roster tab" flag. */
+function claimRosterHref(hubId: number): string {
+    return `${guildHref(hubId)}?claim=roster`;
+}
+
+/** ROK-2132 Ruling 9 — a non-member's way into a hub whose membership comes from a claimed roster character. */
+function ClaimLink({ hub, action }: { hub: HubDirectoryEntry; action: { label: string; short: string } }): JSX.Element {
+    return (
+        <Link to={claimRosterHref(hub.id)} aria-label={`${action.label}: ${hub.name}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+            <span className="sm:hidden">{action.short}</span>
+            <span className="hidden sm:inline">{action.label}</span>
+        </Link>
+    );
+}
+
 /**
  * The viewer's action on a hub row (ROK-1875 rule, shared by ROK-1883):
  * server and guild hubs → "View" (membership is presence/character-driven);
+ * a WoW guild a non-member can claim into → "Claim your character to join" (ROK-2132);
  * community hubs → Join / Joined / Leader / Banned.
  */
 export function HubViewerAction({ hub, onJoin, joining }: HubViewerActionProps): JSX.Element {
+    const claim = hubCopy(hub.kind).joinAction;
+    if (claim && hub.viewer === 'not-member') return <ClaimLink hub={hub} action={claim} />;
     if (hub.kind !== 'game_community') return <ViewLink hub={hub} />;
     if (hub.viewer === 'banned') return <StatusChip tone="danger" title="You can't join this hub">Banned</StatusChip>;
     if (hub.viewer === 'not-member') {

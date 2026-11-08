@@ -710,6 +710,7 @@ describe('DesignSystemPage — hub row bits demo (ROK-1883)', () => {
         renderWithProviders(<DesignSystemPage />);
         const demo = screen.getByTestId('ds-hub-row-bits');
         expect(within(demo).getByRole('link', { name: 'View Valheim Dedicated' })).toHaveAttribute('href', '/hubs/310');
+        expect(within(demo).getByRole('link', { name: 'Claim your character to join: Iron Remnant' })).toHaveAttribute('href', '/hubs/320?claim=roster');
         expect(within(demo).getByRole('button', { name: 'Join Tavern Regulars' })).toBeEnabled();
         expect(within(demo).getByText('Joined')).toHaveAttribute('data-tone', 'success');
         expect(within(demo).getByText('Leader')).toHaveAttribute('data-tone', 'success');
