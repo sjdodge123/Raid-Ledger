@@ -22,6 +22,7 @@ import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
+import { CharacterHeaderDemo } from './character-header-demo';
 
 const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
 
@@ -188,6 +189,7 @@ export function PrimitivesSection(): JSX.Element {
                 <EmptyAndLoading />
                 <TabRowDemo />
                 <HubRowBitsDemo />
+                <CharacterHeaderDemo />
             </StateGrid>
         </Section>
     );
