@@ -273,9 +273,11 @@ export class RescheduleResponseListener {
       await i.editReply({ content: 'This event has been cancelled.' });
       return null;
     }
+    // ROK-2097: a row owned by an account this Discord id left is not theirs.
     const signup = await this.signupsService.findByDiscordUser(
       eventId,
       i.user.id,
+      { managedOnly: true },
     );
     if (!signup) {
       await i.editReply({ content: "You're not signed up for this event." });

@@ -14,6 +14,7 @@ import {
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
 import { offerSeriesDeclineChoice } from './series-signup-decline.handlers';
+import { runOrReplyNotSignedUp } from './signup-not-found.helpers';
 
 type ExistingSignup = NonNullable<
   Awaited<
@@ -55,14 +56,13 @@ async function replyExistingTentative(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const slot = await markExistingTentative(
-    interaction,
-    eventId,
-    existingSignup,
-    deps,
+  // ROK-2097: a row this Discord id may see but not manage is not-found.
+  const marked = await runOrReplyNotSignedUp(interaction, () =>
+    markExistingTentative(interaction, eventId, existingSignup, deps),
   );
+  if (!marked.ok) return;
   await interaction.editReply({
-    content: `You're marked as **tentative**.${benchSuffix(slot)}`,
+    content: `You're marked as **tentative**.${benchSuffix(marked.value)}`,
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
@@ -142,7 +142,7 @@ export async function handleDecline(
   );
 
   if (existingSignup) {
-    await deps.signupsService.cancelByDiscordUser(eventId, discordUserId);
+    if (!(await cancelOrReplyNotFound(interaction, eventId, deps))) return;
   } else {
     await createDeclinedSignup(interaction, eventId, deps);
   }
@@ -152,6 +152,22 @@ export async function handleDecline(
     embeds: [],
   });
   void deps.updateEmbedSignupCount(eventId);
+}
+
+/**
+ * Cancel the clicker's signup. A signup the Discord id can see but does not
+ * own (ROK-2097: re-linked or unlinked account) is not-found — reply so,
+ * instead of letting the dispatcher answer "Something went wrong".
+ */
+async function cancelOrReplyNotFound(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<boolean> {
+  const result = await runOrReplyNotSignedUp(interaction, () =>
+    deps.signupsService.cancelByDiscordUser(eventId, interaction.user.id),
+  );
+  return result.ok;
 }
 
 async function createDeclinedSignup(

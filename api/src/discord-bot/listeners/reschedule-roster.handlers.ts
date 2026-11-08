@@ -15,6 +15,7 @@ import type {
 import { logDiscordAck } from './reschedule-response.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
+import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
 
 export type { RescheduleDeps, ReconfirmOptions };
 
@@ -181,9 +182,12 @@ async function updateUnlinkedSignup(
   event: EventRow,
   updateSet: Record<string, unknown>,
 ): Promise<number | undefined> {
+  // ROK-2097: an unlinked id reaches guest rows only — a stale role menu
+  // clicked after an unlink must not touch the previous owner's signup.
   const where = and(
     eq(schema.eventSignups.eventId, event.id),
     eq(schema.eventSignups.discordUserId, interaction.user.id),
+    unclaimedOrOwnedBy(),
   );
   const [signup] = await deps.db
     .select()
