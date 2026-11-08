@@ -9,6 +9,7 @@ import {
   parseIngameFieldKey,
   toGameTextDto,
   type GameFieldState,
+  isSameReport,
   type GameTextRow,
 } from './guild-ingame-game-text.helpers';
 
@@ -17,6 +18,7 @@ const AT = '2026-11-08T20:00:00.000000Z';
 const state = (over: Partial<GameFieldState> = {}): GameFieldState => ({
   text: 'Raid at 9',
   reportedAt: AT,
+  reportedBy: null,
   acked: false,
   ...over,
 });
@@ -39,11 +41,34 @@ describe('toGameTextDto', () => {
   const row: GameTextRow = {
     motd: 'Raid at 9',
     motdReportedAt: AT,
+    motdReportedBy: null,
     motdAcked: false,
     info: null,
     infoReportedAt: null,
+    infoReportedBy: null,
     infoAcked: false,
   };
+
+  it('carries the exporting character as gameReportedBy only when known', () => {
+    const dto = toGameTextDto(
+      { ...row, motdReportedBy: 'Thrall' },
+      { motd: null, info: null },
+    );
+    expect(dto.motd?.gameReportedBy).toBe('Thrall');
+    expect(
+      toGameTextDto(row, { motd: null, info: null }).motd,
+    ).not.toHaveProperty('gameReportedBy');
+  });
+
+  it('isSameReport compares instants, never-reported is never the same', () => {
+    expect(
+      isSameReport('2026-11-08T12:00:00.123000Z', '2026-11-08T12:00:00.123Z'),
+    ).toBe(true);
+    expect(
+      isSameReport('2026-11-08T12:00:00.123000Z', '2026-11-08T12:00:01.123Z'),
+    ).toBe(false);
+    expect(isSameReport(null, '2026-11-08T12:00:00.123Z')).toBe(false);
+  });
 
   it('maps each field; null when never reported; null text → ""', () => {
     expect(toGameTextDto(row, { motd: 'Raid at 8', info: 'x' })).toEqual({

@@ -86,9 +86,7 @@ function fieldSet(field: Field): Record<string, SQL> {
     `game${field}ReportedAt`,
     `game${field}ReportedBy`,
   ];
-  return Object.fromEntries(
-    columns.map((c) => [c, changedNotOlder(c, field)]),
-  );
+  return Object.fromEntries(columns.map((c) => [c, changedNotOlder(c, field)]));
 }
 
 /** The conflict `set` for the fields this report carries. */

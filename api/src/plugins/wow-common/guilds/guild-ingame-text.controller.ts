@@ -62,8 +62,9 @@ export class GuildIngameTextController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Param('field') field: string,
+    @Body() body: unknown,
   ): Promise<GuildIngameText> {
-    return this.ingameText.adopt(req.user, id, field);
+    return this.ingameText.adopt(req.user, id, field, body);
   }
 
   /** ROK-2137 — keep the hub text; hide the banner until a newer report. */
@@ -74,7 +75,8 @@ export class GuildIngameTextController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
     @Param('field') field: string,
+    @Body() body: unknown,
   ): Promise<GuildIngameText> {
-    return this.ingameText.push(req.user, id, field);
+    return this.ingameText.push(req.user, id, field, body);
   }
 }

@@ -21,6 +21,8 @@ import {
 import {
   adoptPutBody,
   gameFieldOf,
+  isSameReport,
+  parseGameAction,
   parseIngameFieldKey,
   toGameTextDto,
 } from './guild-ingame-game-text.helpers';
@@ -91,42 +93,59 @@ export class GuildIngameTextService {
   /**
    * ROK-2137 Adopt (editors, behind `GuildEditorGuard`): copy the field's
    * last in-game report into the hub text through `save` — same validation,
-   * per-field 409 and attribution. 409 when the field was never reported.
+   * per-field 409 (on the `baseUpdatedAt` the editor saw) and attribution.
+   * 409 when the field was never reported or the report moved on (review r1).
    */
   async adopt(
     actor: GuildActor,
     guildId: number,
     rawField: string,
+    body: unknown,
   ): Promise<GuildIngameText> {
     const field = parseIngameFieldKey(rawField);
+    const seen = parseGameAction(body);
     await this.assertWowGuild(guildId);
-    const [game, hub] = await Promise.all([
-      findGameText(this.db, guildId),
-      findIngameText(this.db, guildId),
-    ]);
-    const report = gameFieldOf(game, field);
+    const report = gameFieldOf(await findGameText(this.db, guildId), field);
     if (report.reportedAt === null) throw noReport();
-    const text = field === 'motd' ? hub?.motd : hub?.info;
-    const stamp = field === 'motd' ? hub?.motdUpdatedAt : hub?.infoUpdatedAt;
-    const token = text == null ? null : (stamp ?? null);
-    return this.save(actor, guildId, adoptPutBody(field, report.text, token));
+    if (!isSameReport(report.reportedAt, seen.gameReportedAt)) {
+      throw await this.reportMoved(actor, guildId);
+    }
+    const put = adoptPutBody(field, report.text, seen.baseUpdatedAt);
+    return this.save(actor, guildId, put);
   }
 
   /**
-   * ROK-2137 Push (editors): the hub text wins — acknowledge the field's
-   * current report so the banner hides until a newer report differs again.
+   * ROK-2137 Push (editors): the hub text wins — acknowledge the report the
+   * editor saw, so the banner hides until the in-game text changes again.
+   * 409 when never reported, or (with fresh `ingameText`) when it moved on.
    */
   async push(
     actor: GuildActor,
     guildId: number,
     rawField: string,
+    body: unknown,
   ): Promise<GuildIngameText> {
     const field = parseIngameFieldKey(rawField);
+    const seen = parseGameAction(body);
     await this.assertWowGuild(guildId);
-    if (!(await acknowledgeGameText(this.db, guildId, field))) {
-      throw noReport();
+    const at = seen.gameReportedAt;
+    if (await acknowledgeGameText(this.db, guildId, field, at)) {
+      return this.respond(actor, guildId);
     }
-    return this.respond(actor, guildId);
+    const report = gameFieldOf(await findGameText(this.db, guildId), field);
+    if (report.reportedAt === null) throw noReport();
+    throw await this.reportMoved(actor, guildId);
+  }
+
+  /** The ROK-2136 409 body shape, so the web refreshes from `ingameText`. */
+  private async reportMoved(
+    actor: GuildActor,
+    guildId: number,
+  ): Promise<ConflictException> {
+    return new ConflictException({
+      message: 'Guild text changed in game',
+      ingameText: await this.respond(actor, guildId),
+    });
   }
 
   /** The DTO; editors also get the `game` block (ROK-2137), others never. */

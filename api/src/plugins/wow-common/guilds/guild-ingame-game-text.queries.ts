@@ -24,12 +24,14 @@ export async function findGameText(
     .select({
       motd: profiles.gameMotd,
       motdReportedAt: utcText(profiles.gameMotdReportedAt),
+      motdReportedBy: profiles.gameMotdReportedBy,
       motdAcked: acked(
         profiles.gameMotdReportedAt,
         profiles.gameMotdAcknowledgedAt,
       ),
       info: profiles.gameInfo,
       infoReportedAt: utcText(profiles.gameInfoReportedAt),
+      infoReportedBy: profiles.gameInfoReportedBy,
       infoAcked: acked(
         profiles.gameInfoReportedAt,
         profiles.gameInfoAcknowledgedAt,
@@ -41,27 +43,36 @@ export async function findGameText(
 }
 
 /**
- * Push: `acknowledged_at = reported_at` for the field (the hub text stays).
- * Using the report's own stamp, not now(), means any NEWER report re-raises
- * the banner. False when the field was never reported (nothing to push over).
+ * Push: `acknowledged_at = reported_at` for the field (the hub text stays),
+ * only while the stored report is still the one the editor saw (`seenAt`,
+ * compared at ms precision). Using the report's own stamp, not now(), means
+ * a report whose text changes later re-raises the banner. False when the
+ * field was never reported or the report moved on.
  */
 export async function acknowledgeGameText(
   db: Db,
   guildId: number,
   field: IngameTextFieldKey,
+  seenAt: string,
 ): Promise<boolean> {
-  const set =
-    field === 'motd'
-      ? { gameMotdAcknowledgedAt: sql`${profiles.gameMotdReportedAt}` }
-      : { gameInfoAcknowledgedAt: sql`${profiles.gameInfoReportedAt}` };
   const reported =
     field === 'motd'
       ? profiles.gameMotdReportedAt
       : profiles.gameInfoReportedAt;
+  const set =
+    field === 'motd'
+      ? { gameMotdAcknowledgedAt: sql`${reported}` }
+      : { gameInfoAcknowledgedAt: sql`${reported}` };
   const rows = await db
     .update(profiles)
     .set(set)
-    .where(and(eq(profiles.guildId, guildId), isNotNull(reported)))
+    .where(
+      and(
+        eq(profiles.guildId, guildId),
+        isNotNull(reported),
+        sql`date_trunc('milliseconds', ${reported}) = date_trunc('milliseconds', ${seenAt}::timestamptz)`,
+      ),
+    )
     .returning({ guildId: profiles.guildId });
   return rows.length > 0;
 }

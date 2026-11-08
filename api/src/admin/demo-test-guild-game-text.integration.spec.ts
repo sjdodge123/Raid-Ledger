@@ -120,20 +120,30 @@ describe('POST /admin/test/wow/seed-guild-game-text writes', () => {
   }
 
   it('stores the report so the editor sees changedInGame, and a reseed after Push re-raises it', async () => {
-    const seeded = await fixture({ guildId: guild.guildId, motd: GAME_MOTD });
+    const seeded = await fixture({
+      guildId: guild.guildId,
+      motd: GAME_MOTD,
+      reportedBy: 'Seedwarden',
+    });
     expect(seeded.status).toBe(200);
     expect(seeded.body).toMatchObject({
       guildId: guild.guildId,
       game: { motd: GAME_MOTD, motdAcked: false, info: null },
     });
-    expect(await gameMotd()).toMatchObject({
+    const raised = await gameMotd();
+    expect(raised).toMatchObject({
       gameText: GAME_MOTD,
+      gameReportedBy: 'Seedwarden',
       changedInGame: true,
     });
 
     const push = await testApp.request
       .post(textPath('/motd/push'))
-      .set('Authorization', `Bearer ${await tokenFor('officer')}`);
+      .set('Authorization', `Bearer ${await tokenFor('officer')}`)
+      .send({
+        baseUpdatedAt: null,
+        gameReportedAt: (raised as { gameReportedAt: string }).gameReportedAt,
+      });
     expect(push.status).toBe(200);
     expect(await gameMotd()).toMatchObject({ changedInGame: false });
 

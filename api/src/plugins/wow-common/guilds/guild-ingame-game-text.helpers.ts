@@ -5,21 +5,26 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import {
+  GuildIngameGameActionSchema,
   INGAME_TEXT_FIELD_KEYS,
+  type GuildIngameGameAction,
   type GuildIngameGameReport,
   type GuildIngameGameText,
   type IngameTextFieldKey,
   type PutGuildIngameText,
 } from '@raid-ledger/contract';
+import { parseOrThrow } from '../../../guilds/posts/hub-posts.service.helpers';
 
 /** `findGameText`'s row: reported text, its stamp, and "pushed over". */
 export interface GameTextRow {
   motd: string | null;
   motdReportedAt: string | null;
+  motdReportedBy: string | null;
   /** `acknowledged_at IS NOT NULL AND reported_at <= acknowledged_at`. */
   motdAcked: boolean;
   info: string | null;
   infoReportedAt: string | null;
+  infoReportedBy: string | null;
   infoAcked: boolean;
 }
 
@@ -27,6 +32,8 @@ export interface GameTextRow {
 export interface GameFieldState {
   text: string | null;
   reportedAt: string | null;
+  /** The exporting character, null when unknown. */
+  reportedBy: string | null;
   acked: boolean;
 }
 
@@ -38,10 +45,22 @@ export function gameFieldOf(
   row: GameTextRow | null,
   field: IngameTextFieldKey,
 ): GameFieldState {
-  if (row === null) return { text: null, reportedAt: null, acked: false };
+  if (row === null) {
+    return { text: null, reportedAt: null, reportedBy: null, acked: false };
+  }
   return field === 'motd'
-    ? { text: row.motd, reportedAt: row.motdReportedAt, acked: row.motdAcked }
-    : { text: row.info, reportedAt: row.infoReportedAt, acked: row.infoAcked };
+    ? {
+        text: row.motd,
+        reportedAt: row.motdReportedAt,
+        reportedBy: row.motdReportedBy,
+        acked: row.motdAcked,
+      }
+    : {
+        text: row.info,
+        reportedAt: row.infoReportedAt,
+        reportedBy: row.infoReportedBy,
+        acked: row.infoAcked,
+      };
 }
 
 /**
@@ -65,6 +84,7 @@ function toReport(
   return {
     gameText: report.text ?? '',
     gameReportedAt: report.reportedAt,
+    ...(report.reportedBy ? { gameReportedBy: report.reportedBy } : {}),
     changedInGame: isChangedInGame(report, hubText),
   };
 }
@@ -101,4 +121,18 @@ export function adoptPutBody(
   return field === 'motd'
     ? { motd: gameText ?? '', baseMotdUpdatedAt: baseUpdatedAt }
     : { info: gameText ?? '', baseInfoUpdatedAt: baseUpdatedAt };
+}
+
+/**
+ * Review r1: the report the editor acted on must still be the stored one.
+ * Compared as instants (ms) — the stored stamp is µs text, the client echoes it.
+ */
+export function isSameReport(stored: string | null, sent: string): boolean {
+  if (stored === null) return false;
+  return new Date(stored).getTime() === new Date(sent).getTime();
+}
+
+/** 400 on a bad Adopt/Push body (`{ baseUpdatedAt, gameReportedAt }`). */
+export function parseGameAction(input: unknown): GuildIngameGameAction {
+  return parseOrThrow(GuildIngameGameActionSchema, input);
 }

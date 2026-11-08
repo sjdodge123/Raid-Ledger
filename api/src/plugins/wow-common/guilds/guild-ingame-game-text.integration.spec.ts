@@ -7,6 +7,7 @@
  * covered by `addon-import-guild-game-text.integration.spec.ts`.
  */
 import * as bcrypt from 'bcrypt';
+import { applyGuildGameText } from '../addon-import/addon-import-guild.game-text';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
@@ -17,6 +18,7 @@ import { PluginRegistryService } from '../../plugin-host/plugin-registry.service
 const SNAP = new Date('2026-11-08T20:00:00.000Z');
 const T1 = new Date('2026-11-08T21:00:00.000Z');
 const T2 = new Date('2026-11-08T22:00:00.000Z');
+const T3 = new Date('2026-11-08T23:00:00.000Z');
 const BASE = '/plugins/wow/guilds';
 
 type Who = 'deleg' | 'plain';
@@ -103,8 +105,20 @@ const path = (id: number, suffix = '') => `${BASE}/${id}/ingame-text${suffix}`;
 const auth = (who: Actor) => `Bearer ${tokens[who]}`;
 const get = (who: Actor, id = guildId) =>
   testApp.request.get(path(id)).set('Authorization', auth(who));
-const post = (who: Actor, suffix: string, id = guildId) =>
-  testApp.request.post(path(id, suffix)).set('Authorization', auth(who));
+/** Review r1 — what the editor saw: the field's hub token + report stamp. */
+async function seenBody(suffix: string, id: number): Promise<object> {
+  const field = suffix.startsWith('/info') ? 'info' : 'motd';
+  const res = await get('admin', id);
+  return {
+    baseUpdatedAt: res.body[field]?.updatedAt ?? null,
+    gameReportedAt: res.body.game?.[field]?.gameReportedAt ?? T1.toISOString(),
+  };
+}
+const post = async (who: Actor, suffix: string, id = guildId, body?: object) =>
+  testApp.request
+    .post(path(id, suffix))
+    .set('Authorization', auth(who))
+    .send(body ?? (await seenBody(suffix, id)));
 const put = (who: Actor, body: object) =>
   testApp.request.put(path(guildId)).set('Authorization', auth(who)).send(body);
 
@@ -315,6 +329,71 @@ describe('adopt / push guards', () => {
     '%s is 404 on a non-wow_guild hub',
     async (suffix) => {
       expect((await post('admin', suffix, communityId)).status).toBe(404);
+    },
+  );
+});
+
+describe('review r1 — Push lasts until the in-game text changes', () => {
+  const ingest = (motd: string, at: Date, by: string) =>
+    applyGuildGameText({ tx: testApp.db }, guildId, { motd }, at, by);
+
+  it('a later export of the SAME text stays hidden; a changed text re-raises it', async () => {
+    await setHub('Raid at 8');
+    await ingest('Raid at 9', T1, 'Thrall');
+    expect((await post('deleg', '/motd/push')).status).toBe(200);
+    await ingest('Raid at 9  \r\n', T2, 'Jaina');
+    const kept = (await get('deleg')).body.game.motd;
+    expect(kept).toMatchObject({
+      changedInGame: false,
+      gameReportedBy: 'Thrall',
+    });
+    expect(new Date(kept.gameReportedAt).getTime()).toBe(T1.getTime());
+    await ingest('Raid at 10', T3, 'Jaina');
+    expect((await get('deleg')).body.game.motd).toMatchObject({
+      gameText: 'Raid at 10',
+      gameReportedBy: 'Jaina',
+      changedInGame: true,
+    });
+  });
+});
+
+describe('review r1 — Adopt / Push check what the editor saw', () => {
+  it.each(['/motd/adopt', '/motd/push'])(
+    '%s is a 409 with fresh ingameText when the report moved on',
+    async (suffix) => {
+      await setHub('Raid at 8');
+      await reportMotd('Raid at 9', T2);
+      const res = await post('deleg', suffix, guildId, {
+        baseUpdatedAt: null,
+        gameReportedAt: T1.toISOString(),
+      });
+      expect(res.status).toBe(409);
+      expect(res.body.ingameText.motd.text).toBe('Raid at 8');
+      expect(res.body.ingameText.game.motd).toMatchObject({
+        gameText: 'Raid at 9',
+        changedInGame: true,
+      });
+    },
+  );
+
+  it('Adopt runs the save on the sent baseUpdatedAt: a stale hub token is its per-field 409', async () => {
+    await setHub('Raid at 8');
+    await reportMotd('Raid at 9', T1);
+    const res = await post('deleg', '/motd/adopt', guildId, {
+      baseUpdatedAt: T3.toISOString(),
+      gameReportedAt: T1.toISOString(),
+    });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('Guild text changed');
+    expect(res.body.ingameText.motd.text).toBe('Raid at 8');
+  });
+
+  it.each(['/motd/adopt', '/motd/push'])(
+    '%s is a 400 without gameReportedAt',
+    async (suffix) => {
+      await reportMotd('Raid at 9', T1);
+      const res = await post('deleg', suffix, guildId, { baseUpdatedAt: null });
+      expect(res.status).toBe(400);
     },
   );
 });

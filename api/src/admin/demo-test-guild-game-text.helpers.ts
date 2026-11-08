@@ -2,7 +2,9 @@
  * ROK-2137 — `POST /admin/test/wow/seed-guild-game-text`: store an in-game
  * MOTD / Guild Information REPORT on a guild, exactly as a LedgerLink guild
  * export would (`applyGuildGameText`), then clear the field's Push
- * acknowledgement so the editor's "Changed in game" notice is raised again.
+ * acknowledgement so the editor's "Changed in game" notice is raised again
+ * (re-seeding the SAME text keeps its stamp — ingest moves a report only when
+ * the text changes — but the cleared acknowledgement still re-raises it).
  * Lets the smoke + fleet test plan drive Adopt / Keep without an addon string.
  */
 import { NotFoundException } from '@nestjs/common';
@@ -23,6 +25,8 @@ export const SeedGuildGameTextSchema = z
     info: z.string().max(499).optional(),
     /** ISO instant of the report; default now. An older one than stored is ignored. */
     reportedAt: z.string().datetime({ offset: true }).optional(),
+    /** The exporting character's name shown as "via <name>"; default none. */
+    reportedBy: z.string().min(1).max(100).optional(),
   })
   .strict()
   .refine((b) => b.motd !== undefined || b.info !== undefined, {
@@ -75,6 +79,7 @@ export async function seedGuildGameText(
     input.guildId,
     gameTextData(input),
     reportedAt,
+    input.reportedBy ?? null,
   );
   await clearAcknowledged(db, input);
   const row = await findGameText(db, input.guildId);

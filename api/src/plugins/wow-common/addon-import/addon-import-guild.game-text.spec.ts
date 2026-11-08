@@ -49,16 +49,14 @@ describe('gameTextReport — review r1', () => {
   });
 
   it('records the exporting character on each reported field', () => {
-    expect(gameTextReport({ motd: 'Hi', infoText: '' }, AT, 'Thrall')).toEqual(
-      {
-        gameMotd: 'Hi',
-        gameMotdReportedAt: AT,
-        gameMotdReportedBy: 'Thrall',
-        gameInfo: null,
-        gameInfoReportedAt: AT,
-        gameInfoReportedBy: 'Thrall',
-      },
-    );
+    expect(gameTextReport({ motd: 'Hi', infoText: '' }, AT, 'Thrall')).toEqual({
+      gameMotd: 'Hi',
+      gameMotdReportedAt: AT,
+      gameMotdReportedBy: 'Thrall',
+      gameInfo: null,
+      gameInfoReportedAt: AT,
+      gameInfoReportedBy: 'Thrall',
+    });
   });
 });
 
