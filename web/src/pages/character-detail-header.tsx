@@ -52,7 +52,7 @@ function useRealmLabel(character: CharacterDto): string | null {
 function DesktopMeta({ character }: { character: CharacterDto }): JSX.Element | null {
     const realm = useRealmLabel(character);
     const items: Array<[string, ReactNode]> = [];
-    if (character.level) items.push(['level', <span className="text-amber-400">Level {character.level}</span>]);
+    if (character.level) items.push(['level', <span className="text-warning">Level {character.level}</span>]);
     for (const [key, value] of [['race', character.race], ['class', character.class], ['spec', character.spec], ['realm', realm]] as const) {
         if (value) items.push([key, <span>{value}</span>]);
     }
