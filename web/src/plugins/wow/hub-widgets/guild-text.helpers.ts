@@ -1,3 +1,4 @@
+import type { GuildIngameGameReport } from '@raid-ledger/contract';
 /**
  * ROK-2136 — pure helpers for the guild in-game text card and editor: labels,
  * warning copy, the draft model, the PUT body and the 409 body parser.
