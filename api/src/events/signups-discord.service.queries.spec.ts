@@ -4,6 +4,8 @@
  */
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SignupsService } from './signups.service';
@@ -59,6 +61,24 @@ function makeSelectChain(resolvedValue: unknown[]) {
       }),
     }),
   };
+}
+
+/**
+ * Select chain whose `where` is a spy, so a spec can render the WHERE clause
+ * the service built (ROK-2097: the Discord-id ownership predicate).
+ */
+function makeSpiedSelectChain(resolvedValue: unknown[]) {
+  const where = jest.fn().mockReturnValue({
+    limit: jest.fn().mockResolvedValue(resolvedValue),
+  });
+  return { chain: { from: jest.fn().mockReturnValue({ where }) }, where };
+}
+
+/** Renders the first WHERE clause a spied chain received. */
+function renderWhere(where: jest.Mock): { sql: string; params: unknown[] } {
+  const clause = (where.mock.calls[0] as [SQL] | undefined)?.[0];
+  if (!clause) throw new Error('expected a WHERE clause, got none');
+  return new PgDialect().sqlToQuery(clause);
 }
 
 function createMockDb() {
@@ -158,7 +178,11 @@ async function setupEach() {
 
 async function testUpdateStatusAnonymous() {
   const updatedSignup = { ...mockAnonymousSignup, status: 'tentative' };
-  mockDb.select.mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]));
+  // ROK-2097: the Discord id is linked to nobody → guest rows only.
+  const signupQuery = makeSpiedSelectChain([mockAnonymousSignup]);
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(signupQuery.chain);
   mockDb.update.mockReturnValueOnce({
     set: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
@@ -173,6 +197,11 @@ async function testUpdateStatusAnonymous() {
   );
   expect(result.status).toBe('tentative');
   expect(result.isAnonymous).toBe(true);
+  const { sql, params } = renderWhere(signupQuery.where);
+  expect(sql).toContain(
+    '"event_signups"."discord_user_id" = $2 and "event_signups"."user_id" is null',
+  );
+  expect(params).toEqual([1, 'discord-anon-456']);
 }
 
 async function testUpdateStatusLinked() {
@@ -210,7 +239,11 @@ async function testUpdateStatusNoIdentifier() {
 }
 
 async function testUpdateStatusByDiscordId() {
-  mockDb.select.mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]));
+  // ROK-2097: linked to RL user 1 → guest rows or user 1's own row only.
+  const signupQuery = makeSpiedSelectChain([mockAnonymousSignup]);
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([{ id: 1 }]))
+    .mockReturnValueOnce(signupQuery.chain);
   mockDb.update.mockReturnValueOnce({
     set: jest.fn().mockReturnValue({
       where: jest.fn().mockReturnValue({
@@ -226,6 +259,11 @@ async function testUpdateStatusByDiscordId() {
     { status: 'signed_up' },
   );
   expect(result.status).toBe('signed_up');
+  const { sql, params } = renderWhere(signupQuery.where);
+  expect(sql).toContain(
+    '("event_signups"."user_id" is null or "event_signups"."user_id" = $3)',
+  );
+  expect(params).toEqual([1, 'discord-anon-456', 1]);
 }
 
 // ─── findByDiscordUser tests ────────────────────────────────────────────────
