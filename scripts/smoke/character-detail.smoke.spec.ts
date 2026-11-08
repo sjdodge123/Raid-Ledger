@@ -108,6 +108,8 @@ test.describe('Character detail page', () => {
         seeded = await seedCharacter(await getAdminToken(), testInfo);
     });
 
+    // Removes only the seeded users. The seeded guild, roster, raids and editor
+    // grant stay behind on purpose: the next reset-to-seed clears them.
     test.afterAll(async () => {
         if (seeded) await removeUsers(await getAdminToken(), seeded.guild);
     });
@@ -145,7 +147,7 @@ test.describe('Character detail page', () => {
         }
     });
 
-    test('displays level and item level', async ({ page }) => {
+    test('displays level (item level only when the character has one)', async ({ page }) => {
         const character = seededCharacter();
         await page.goto(`/characters/${character.id}`);
 
