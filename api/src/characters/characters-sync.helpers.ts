@@ -51,6 +51,15 @@ async function fetchRealmProfile(
   return { ...fetched, realm: fetched.realm ?? realm };
 }
 
+/** Options for {@link fetchFullProfile}. */
+export interface FetchFullProfileOptions {
+  /**
+   * ROK-2133: false skips the completed-quests call (`armoryQuests` comes
+   * back null = "leave alone"). Default true.
+   */
+  quests?: boolean;
+}
+
 /** Equipment, professions and quests in parallel; missing optional fetchers → null. */
 async function fetchParallelExtras(
   adapter: CharacterSyncAdapter,
@@ -58,6 +67,7 @@ async function fetchParallelExtras(
   realm: string | null,
   region: string,
   nsArg: string | undefined,
+  includeQuests: boolean,
 ): Promise<
   Pick<EnrichedProfile, 'equipment' | 'professions' | 'armoryQuests'>
 > {
@@ -66,7 +76,7 @@ async function fetchParallelExtras(
     adapter.fetchProfessions
       ? adapter.fetchProfessions(name, realm, region, nsArg)
       : Promise.resolve(null),
-    adapter.fetchQuests
+    includeQuests && adapter.fetchQuests
       ? adapter.fetchQuests(name, realm, region, nsArg)
       : Promise.resolve(null),
   ]);
@@ -82,6 +92,7 @@ async function fetchParallelExtras(
  * which the orchestrator interprets as "leave the prior `armory_professions` /
  * `armory_quests` alone."
  * @param apiNamespacePrefix - The game's namespace prefix (null for retail)
+ * @param options - `{ quests: false }` skips the completed-quests call
  */
 export async function fetchFullProfile(
   adapter: CharacterSyncAdapter,
@@ -89,6 +100,7 @@ export async function fetchFullProfile(
   realm: string | null,
   region: string,
   apiNamespacePrefix: string | null,
+  options: FetchFullProfileOptions = {},
 ): Promise<EnrichedProfile> {
   const nsArg = apiNamespacePrefix ?? undefined;
   const profile = await fetchRealmProfile(adapter, name, realm, region, nsArg);
@@ -107,7 +119,15 @@ export async function fetchFullProfile(
     talents = inferred.talents ?? null;
   }
 
-  const extras = await fetchParallelExtras(adapter, name, realm, region, nsArg);
+  const includeQuests = options.quests ?? true;
+  const extras = await fetchParallelExtras(
+    adapter,
+    name,
+    realm,
+    region,
+    nsArg,
+    includeQuests,
+  );
   return { profile, talents, ...extras };
 }
 
