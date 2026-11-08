@@ -28,6 +28,7 @@ export interface JoinedTree { name: string; index: number; spent: number; talent
 /** Every table talent with its rank, plus the ranked nodes nothing matched (ROK-2113 "Other talents"). */
 export interface JoinedForeverTalents { trees: JoinedTree[]; other: ForeverTalentNodeDto[] }
 
+// Glob, not a literal import(): resolves to {} when the file is absent instead of failing the build.
 const TABLE_LOADERS = import.meta.glob<unknown>('./talent-data/forever-trees.json', { import: 'default' });
 
 function isRecord(value: unknown): value is Record<string, unknown> {

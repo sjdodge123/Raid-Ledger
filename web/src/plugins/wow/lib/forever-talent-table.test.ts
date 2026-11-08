@@ -72,3 +72,14 @@ describe('isForeverTalentTable', () => {
         expect(isForeverTalentTable(null)).toBe(false);
     });
 });
+
+describe('loadForeverClassTable (the real lazy table)', () => {
+    it('resolves a three-tree table for every Forever class, null for an unknown one', async () => {
+        const { loadForeverClassTable } = await import('./forever-talent-table');
+        for (const cls of ['Warrior', 'Paladin', 'Hunter', 'Rogue', 'Priest', 'Shaman', 'Mage', 'Warlock', 'Druid']) {
+            expect((await loadForeverClassTable(cls))?.trees.length, cls).toBe(3);
+        }
+        expect(await loadForeverClassTable('Monk')).toBeNull();
+        expect(await loadForeverClassTable(null)).toBeNull();
+    });
+});
