@@ -178,7 +178,6 @@ describe('a successful link (AC-1 shape, AC-3)', () => {
       level: 42,
       name: 'Ana Forever',
       ruleset: 'normal',
-      class: 'Paladin',
     });
     expect(row.addonGuid).not.toBeNull();
     expect(row.lastSyncedAt).toBeInstanceOf(Date);
