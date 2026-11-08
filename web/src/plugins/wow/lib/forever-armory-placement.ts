@@ -1,20 +1,24 @@
 /**
- * ROK-2110 (D5, F1, F3): place Blizzard-sourced WoW: Forever talents that
- * arrive without grid positions (`layout: 'list'`) onto the known trees
- * (`CLASSIC_TALENT_POSITIONS`, keyed by talent-name slug). Every ranked node
- * placed → a `grid` DTO; any ranked node unknown → the DTO unchanged, so the
- * existing list rendering ("unplaced" fallback) applies. Pure.
+ * ROK-2110 (D5, F1, F3) + ROK-2113: place Blizzard-sourced WoW: Forever
+ * talents that arrive without grid positions (`layout: 'list'`) onto the known
+ * trees (`CLASSIC_TALENT_POSITIONS`, keyed by talent-name slug). Pure.
+ *
+ * Per-talent fallback (ROK-2113, operator ruling 2026-11-07): every ranked
+ * node the table can place gets its cell; the rest stay in the DTO with their
+ * `tree` but no `row`/`col`, and the grid lists them as "Other talents" under
+ * their tree. Only when NO ranked node places does the DTO stay a list.
  *
  * The known-trees table is TBC-sourced (Wowhead TBC Classic calculator, rows
  * a–i) while vanilla — and so Forever — trees have 7 tiers (rows 0–6). So a
- * position past row 6, or two ranked talents landing in one cell, rejects the
- * WHOLE payload back to the list: a wrong cell is worse than no grid. A
- * same-named talent whose vanilla cell differs from its TBC one can still
- * slip through; a vanilla position table is tracked in TECH-DEBT-BACKLOG.md.
+ * position past row 6 is unplaced, and two ranked talents landing in one cell
+ * are BOTH unplaced: a wrong cell is worse than a listed talent. A same-named
+ * talent whose vanilla cell differs from its TBC one can still slip through;
+ * a vanilla position table is tracked in TECH-DEBT-BACKLOG.md.
  */
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { ownLookup } from '../../../lib/own-lookup';
 import { CLASSIC_TALENT_POSITIONS, nameToSlug } from './classic-talent-positions';
+import { alignArmoryTrees } from './forever-armory-tree-align';
 import { foreverTreeNames } from './forever-talent-trees';
 import type { ClassPositionMap } from './talent-data/types';
 
@@ -25,10 +29,14 @@ const MAX_ROW = 6;
 /** Header names whose known-tree key differs (`foreverTreeNames` says "Feral"). */
 const TREE_KEY_ALIASES: Readonly<Record<string, string>> = { Feral: 'Feral Combat' };
 
-/** Tree header names: Blizzard's `trees[].name` first, then the class table (F3). */
+/**
+ * Tree header names: Blizzard's `trees[].name` first, then the class table
+ * (F3) — after moving each Blizzard tree to its class column by name (T1).
+ */
 export function armoryTreeNames(talents: ForeverTalentsDto, characterClass: string | null | undefined): string[] {
     const fallback = foreverTreeNames(characterClass);
-    return [0, 1, 2].map((i) => talents.trees.find((t) => t.index === i)?.name ?? fallback[i] ?? `Tree ${i + 1}`);
+    const { trees } = alignArmoryTrees(talents, characterClass);
+    return [0, 1, 2].map((i) => trees.find((t) => t.index === i)?.name ?? fallback[i] ?? `Tree ${i + 1}`);
 }
 
 function classPositions(characterClass: string | null | undefined): ClassPositionMap | undefined {
@@ -53,27 +61,47 @@ function placeNode(node: ForeverTalentNodeDto, map: ClassPositionMap, treeNames:
     return rc ? { ...node, ...rc } : undefined;
 }
 
-/** Every ranked node placed on a distinct cell, or undefined (no partial grids). */
-function placeAll(ranked: ForeverTalentNodeDto[], map: ClassPositionMap, treeNames: string[]): ForeverTalentNodeDto[] | undefined {
-    const taken = new Set<string>();
-    const nodes: ForeverTalentNodeDto[] = [];
-    for (const node of ranked) {
-        const placed = placeNode(node, map, treeNames);
-        const cell = placed ? `${String(placed.tree)}:${String(placed.row)}:${String(placed.col)}` : undefined;
-        if (!placed || !cell || taken.has(cell)) return undefined;
-        taken.add(cell);
-        nodes.push(placed);
-    }
-    return nodes;
+function cellKey(node: ForeverTalentNodeDto): string {
+    return `${String(node.tree)}:${String(node.row)}:${String(node.col)}`;
 }
 
-/** A grid DTO when every ranked node lands on its own cell of the known trees; else `talents` unchanged. */
+/** The node with any `row`/`col` removed — listed under its tree, never on a cell. */
+function unpositioned(node: ForeverTalentNodeDto): ForeverTalentNodeDto {
+    const copy = { ...node };
+    delete copy.row;
+    delete copy.col;
+    return copy;
+}
+
+/** Each ranked node on its own known cell, or unpositioned (unknown, past row 6, or a shared cell). */
+function placeEach(ranked: ForeverTalentNodeDto[], map: ClassPositionMap, treeNames: string[]): ForeverTalentNodeDto[] {
+    const placed = ranked.map((node) => placeNode(node, map, treeNames));
+    const counts = new Map<string, number>();
+    for (const p of placed) if (p) counts.set(cellKey(p), (counts.get(cellKey(p)) ?? 0) + 1);
+    return ranked.map((node, i) => {
+        const p = placed[i];
+        return p && counts.get(cellKey(p)) === 1 ? p : unpositioned(node);
+    });
+}
+
+function hasCell(node: ForeverTalentNodeDto): boolean {
+    return node.row !== undefined && node.col !== undefined;
+}
+
+/**
+ * Each Blizzard tree moved to its class column by name (ROK-2113 T1) — grid
+ * payloads included, returned aligned as they are — then for a list payload a
+ * grid DTO when at least one ranked node lands on its own cell of the known
+ * trees (the others unpositioned, ROK-2113); else the aligned list.
+ */
 export function placeArmoryTalents(talents: ForeverTalentsDto, characterClass: string | null | undefined): ForeverTalentsDto {
-    if (talents.source !== 'blizzard' || talents.layout !== 'list') return talents;
+    if (talents.source !== 'blizzard') return talents;
+    // Align BEFORE the layout check: a grid payload's headers, cells and spent must share one column order.
+    const aligned = alignArmoryTrees(talents, characterClass);
+    if (aligned.layout !== 'list') return aligned;
     const map = classPositions(characterClass);
-    const ranked = talents.nodes.filter((n) => n.rank > 0);
-    if (!map || ranked.length === 0) return talents;
-    const treeNames = armoryTreeNames(talents, characterClass);
-    const nodes = placeAll(ranked, map, treeNames);
-    return nodes ? { ...talents, layout: 'grid', nodes } : talents;
+    const ranked = aligned.nodes.filter((n) => n.rank > 0);
+    if (!map || ranked.length === 0) return aligned;
+    const nodes = placeEach(ranked, map, armoryTreeNames(aligned, characterClass));
+    return nodes.some(hasCell) ? { ...aligned, layout: 'grid', nodes } : aligned;
 }

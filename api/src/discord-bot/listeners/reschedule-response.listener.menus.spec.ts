@@ -245,6 +245,7 @@ function selectMenuRoutingTests() {
     mockDb.limit.mockResolvedValueOnce([{ id: 5 }]);
     mockDb.limit.mockResolvedValueOnce([{ ...mockEvent, slotConfig: null }]);
     mockDb.limit.mockResolvedValueOnce([mockSignup]);
+    mockDb.limit.mockResolvedValueOnce([]); // ensureRosterAssignment
     const interaction = makeSelectMenuInteraction(
       `${RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT}:42`,
       ['char-1'],

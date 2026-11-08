@@ -8,6 +8,7 @@ import type { ZodType } from 'zod';
 import { withErrorBody, withHttpStatus } from './api-error';
 import { endDeactivatedSession, isDeactivatedResponse } from './deactivated-session';
 import { nativeFetch } from './native-fetch';
+import { reportVersionSkew, stripUnrecognizedKeys } from './schema-skew';
 
 
 function buildHeaders(options: RequestInit): Record<string, string> {
@@ -118,6 +119,15 @@ export async function fetchApi<T>(
 
     const result = schema.safeParse(data);
     if (result.success) return result.data;
+
+    // ROK-2116: unknown keys only = a newer server than this bundle. Drop
+    // them, keep the page working, and offer a reload — not an exception.
+    const stripped = stripUnrecognizedKeys(data, result.error.issues);
+    const retry = stripped === null ? null : schema.safeParse(stripped);
+    if (retry?.success) {
+        reportVersionSkew(endpoint, result.error.issues);
+        return retry.data;
+    }
 
     // Capture the raw issue array in Sentry only — never on the thrown
     // message, to keep the issue payload out of the rendered DOM.

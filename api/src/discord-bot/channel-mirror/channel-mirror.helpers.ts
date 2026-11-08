@@ -15,6 +15,7 @@ import {
   toThreadMessageDto,
   type MirrorSourceMessage,
 } from '../thread-mirror/thread-mirror.helpers';
+import { isDiscordAccessError } from '../channel-lifecycle/channel-lifecycle.errors';
 
 /** How many messages one Discord read asks for (D10: headroom after filtering). */
 export const CHANNEL_MIRROR_FETCH_LIMIT = 10;
@@ -23,8 +24,6 @@ export const CHANNEL_MIRROR_TTL_MS = 60_000;
 /** Cap on message content and embed text sent to the page (D10). */
 export const CHANNEL_MIRROR_TEXT_CAP = 2000;
 
-/** Discord error codes that mean the bot cannot read the channel. */
-const NO_ACCESS_CODES = new Set<number | string>([50001, 50013]);
 /** Discord "Unknown Channel". */
 const UNKNOWN_CHANNEL = 10003;
 
@@ -131,7 +130,7 @@ export function toGuildDiscordMessages(
  */
 export function classifyMirrorError(error: unknown): ChannelMirrorFailure {
   if (!(error instanceof DiscordAPIError)) return 'disconnected';
-  if (NO_ACCESS_CODES.has(error.code)) return 'no-access';
+  if (isDiscordAccessError(error)) return 'no-access';
   if (error.code === UNKNOWN_CHANNEL) return 'gone';
   return 'disconnected';
 }

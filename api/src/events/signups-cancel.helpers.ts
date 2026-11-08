@@ -13,6 +13,10 @@ import { eq, and, ne } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
 import { determineCancelStatus } from './signups-roster.helpers';
+import {
+  discordManagedSignupCondition,
+  unclaimedOrOwnedBy,
+} from './signups-ownership.helpers';
 import { defined } from '../common/defined.helpers';
 
 export async function fetchEventOrThrow(db: Tx, eventId: number) {
@@ -121,6 +125,7 @@ async function findUnclaimedAnonymousSignup(
       and(
         eq(schema.eventSignups.eventId, eventId),
         eq(schema.eventSignups.discordUserId, user.discordId),
+        unclaimedOrOwnedBy(userId),
         ne(schema.eventSignups.status, 'roached_out'),
         ne(schema.eventSignups.status, 'declined'),
         ne(schema.eventSignups.status, 'departed'),
@@ -256,11 +261,12 @@ export async function findSignupByIdentifier(
   const conditions = [eq(schema.eventSignups.eventId, eventId)];
   if (identifier.userId)
     conditions.push(eq(schema.eventSignups.userId, identifier.userId));
-  else if (identifier.discordUserId)
+  else if (identifier.discordUserId) {
+    // ROK-2097: never a row owned by an account the Discord id left.
     conditions.push(
-      eq(schema.eventSignups.discordUserId, identifier.discordUserId),
+      await discordManagedSignupCondition(db, identifier.discordUserId),
     );
-  else
+  } else
     throw new BadRequestException(
       'Either userId or discordUserId must be provided',
     );

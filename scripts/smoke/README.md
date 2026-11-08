@@ -46,7 +46,7 @@ still parallel.
 | `admin-slow-queries-log.smoke.spec.ts` | Demo-scoped | `POST /admin/test/seed-slow-queries-log` in `beforeEach` | n/a | ROK-1070: replaces real cron trigger to avoid `/data/logs` perms dependency on Mac dev. |
 | `auth.smoke.spec.ts` | Self-contained | None | n/a | Login/logout flows. |
 | `calendar.smoke.spec.ts` | Self-contained | None | n/a | Calendar rendering. |
-| `character-detail.smoke.spec.ts` | Self-contained | None | n/a | Read-only baseline demo characters. |
+| `character-detail.smoke.spec.ts` | Self-contained | `POST /admin/test/wow/seed-guild` in `beforeAll` (unique guild per project/worker/run; GM gets a level-60 Warrior with Armory professions) | n/a | ROK-2112: seeds its own character instead of skipping on the demo seed; `afterAll` deletes the seeded users only. |
 | `characters.smoke.spec.ts` | Self-contained | None | n/a | Read-only character list. |
 | `community-insights.smoke.spec.ts` | Self-contained | None | n/a | Read-only insights page. |
 | `community-lineup.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1070: switched bare POST `/lineups` to `createLineupOrRetry` to avoid `/lineups/banner` fallback. Banner-backed pages are pinned to the spec's own lineup with `scopeBannerTo` before `page.goto`. |
