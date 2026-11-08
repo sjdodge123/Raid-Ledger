@@ -6,7 +6,7 @@
 import { and, eq, isNull, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
-import type { CharacterSyncAdapter } from '../../plugin-host/extension-types';
+import type { CharacterSyncAdapter } from '../../plugin-host/extension-points';
 import {
   buildSyncUpdateFieldsFromSync,
   fetchFullProfile,

@@ -9,7 +9,6 @@ import * as apply from './forever-auto-link.apply';
 import type { AutoLinkCharacter } from './forever-auto-link.apply';
 import type { EnrichedProfile } from '../../../characters/characters-sync.helpers';
 import type { SettingsService } from '../../../settings/settings.service';
-import type { CharacterSyncAdapter } from '../../plugin-host/extension-types';
 
 jest.mock('./forever-auto-link.apply');
 const m = jest.mocked(apply);
@@ -27,6 +26,7 @@ function char(over: Partial<AutoLinkCharacter> = {}): AutoLinkCharacter {
     region: 'us',
     level: 20,
     name: 'Thrall',
+    ...over,
   } as AutoLinkCharacter;
 }
 
@@ -48,7 +48,7 @@ beforeEach(() => {
   service = new ForeverAutoLinkService(
     {} as never,
     settings as unknown as SettingsService,
-    {} as CharacterSyncAdapter,
+    {} as never,
     wait,
   );
   m.findForeverGameId.mockResolvedValue(GAME_ID);
@@ -70,7 +70,11 @@ describe('ForeverAutoLinkService.attempt', () => {
     await expect(service.attempt('c-1')).resolves.toBe('not_found');
     expect(m.applyAutoLink).not.toHaveBeenCalled();
     expect(m.recordAutoLinkFailure).toHaveBeenCalledWith(
-      {}, 'c-1', 1, 'not_found', expect.any(Date),
+      {},
+      'c-1',
+      1,
+      'not_found',
+      expect.any(Date),
     );
   });
 
@@ -80,7 +84,11 @@ describe('ForeverAutoLinkService.attempt', () => {
     m.fetchForeverProfile.mockRejectedValue(new BadGatewayException('429'));
     await expect(service.attempt('c-1')).resolves.toBe('upstream');
     expect(m.recordAutoLinkFailure).toHaveBeenCalledWith(
-      {}, 'c-1', 4, 'upstream', expect.any(Date),
+      {},
+      'c-1',
+      4,
+      'upstream',
+      expect.any(Date),
     );
   });
 
@@ -92,13 +100,15 @@ describe('ForeverAutoLinkService.attempt', () => {
   });
 
   it('skips an already Armory-linked row', async () => {
-    const row = { ...char(), gameVariant: 'wow_forever' };
+    const row = char({ gameVariant: 'wow_forever' });
     m.loadAutoLinkTarget.mockResolvedValue({ row, state: null });
     await expect(service.attempt('c-1')).resolves.toBe('skipped');
     expect(m.fetchForeverProfile).not.toHaveBeenCalled();
     expect(m.recordAutoLinkFailure).not.toHaveBeenCalled();
   });
+});
 
+describe('ForeverAutoLinkService.attempt — gates and guards', () => {
   it('kill switch off → no call, no state write', async () => {
     settings.get.mockResolvedValue('false');
     await expect(service.attempt('c-1')).resolves.toBe('disabled');
@@ -119,7 +129,11 @@ describe('ForeverAutoLinkService.attempt', () => {
     await expect(service.attempt('c-1')).resolves.toBe('external_id_conflict');
     expect(m.applyAutoLink).not.toHaveBeenCalled();
     expect(m.recordAutoLinkFailure).toHaveBeenCalledWith(
-      {}, 'c-1', 1, 'external_id_conflict', expect.any(Date),
+      {},
+      'c-1',
+      1,
+      'external_id_conflict',
+      expect.any(Date),
     );
   });
 
@@ -134,7 +148,10 @@ describe('ForeverAutoLinkService.runDue', () => {
     m.listDueCandidateIds.mockResolvedValue(['a', 'b']);
     const tally = await service.runDue();
     expect(m.listDueCandidateIds).toHaveBeenCalledWith(
-      {}, GAME_ID, expect.any(Date), 60,
+      {},
+      GAME_ID,
+      expect.any(Date),
+      60,
     );
     expect(m.fetchForeverProfile).toHaveBeenCalledTimes(2);
     expect(wait).toHaveBeenCalledTimes(1);
@@ -164,9 +181,7 @@ describe('ForeverAutoLinkService.runDue', () => {
 
   it('skips an overlapping run', async () => {
     let release: (ids: string[]) => void = () => undefined;
-    m.listDueCandidateIds.mockReturnValue(
-      new Promise((r) => (release = r)),
-    );
+    m.listDueCandidateIds.mockReturnValue(new Promise((r) => (release = r)));
     const first = service.runDue();
     await expect(service.runDue()).resolves.toBeNull();
     release([]);

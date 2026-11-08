@@ -4,6 +4,7 @@ import { BossDataRefreshService } from './boss-data-refresh.service';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
+import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 import type { ForeverProbeResultDto } from '@raid-ledger/contract';
@@ -11,7 +12,8 @@ import type { ForeverProbeResultDto } from '@raid-ledger/contract';
 /**
  * Registers cron jobs for WoW character auto-sync, boss data refresh and the
  * Forever namespace probe (ROK-1716) and the Forever guild roster sync
- * (ROK-1928). Only active when the plugin is enabled.
+ * (ROK-1928) and the Forever Armory auto-link (ROK-2124). Only active when
+ * the plugin is enabled.
  * The auto-sync includes Armory-imported WoW: Forever rows (realm NULL,
  * ruleset set, game_variant set); manual Forever rows are skipped (ROK-1722).
  */
@@ -26,6 +28,7 @@ export class WowCronRegistrar implements CronRegistrar {
     private readonly foreverProbe: ForeverNamespaceProbeService,
     private readonly itemMeta: WowItemMetaService,
     private readonly rosterSync: BlizzardRosterSyncJob,
+    private readonly autoLink: ForeverAutoLinkService,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -53,6 +56,12 @@ export class WowCronRegistrar implements CronRegistrar {
         // Every 6h at :20 — Forever guild rosters from Blizzard (ROK-1928 C)
         cronExpression: '0 20 */6 * * *',
         handler: () => this.rosterSync.run().then(() => undefined),
+      },
+      {
+        name: 'forever-armory-autolink',
+        // Hourly at :40 — link LedgerLink Forever rows to the Armory (ROK-2124)
+        cronExpression: '0 40 * * * *',
+        handler: () => this.autoLink.runDue().then(() => undefined),
       },
     ];
   }
