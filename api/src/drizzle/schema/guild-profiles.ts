@@ -26,19 +26,8 @@ function ingameTextConstraints(table: {
   ingameInfo: AnyPgColumn;
   ingameMotdUpdatedBy: AnyPgColumn;
   ingameInfoUpdatedBy: AnyPgColumn;
-  gameMotd: AnyPgColumn;
-  gameInfo: AnyPgColumn;
 }) {
   return [
-    // ROK-2137: the reported in-game text obeys the same in-game caps.
-    check(
-      'guild_profiles_game_motd_length',
-      sql`char_length(${table.gameMotd}) <= 255`,
-    ),
-    check(
-      'guild_profiles_game_info_length',
-      sql`char_length(${table.gameInfo}) <= 499`,
-    ),
     check(
       'guild_profiles_ingame_motd_length',
       sql`char_length(${table.ingameMotd}) <= 255`,
@@ -52,6 +41,23 @@ function ingameTextConstraints(table: {
     ),
     index('idx_guild_profiles_ingame_info_updated_by').on(
       table.ingameInfoUpdatedBy,
+    ),
+  ];
+}
+
+/** ROK-2137: the text reported from the game obeys the same in-game caps. */
+function gameTextConstraints(table: {
+  gameMotd: AnyPgColumn;
+  gameInfo: AnyPgColumn;
+}) {
+  return [
+    check(
+      'guild_profiles_game_motd_length',
+      sql`char_length(${table.gameMotd}) <= 255`,
+    ),
+    check(
+      'guild_profiles_game_info_length',
+      sql`char_length(${table.gameInfo}) <= 499`,
     ),
   ];
 }
@@ -199,6 +205,7 @@ export const guildProfiles = pgTable(
       table.mediaChannelSetBy,
     ),
     ...ingameTextConstraints(table),
+    ...gameTextConstraints(table),
   ],
 );
 

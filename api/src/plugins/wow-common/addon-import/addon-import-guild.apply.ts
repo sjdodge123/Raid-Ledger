@@ -6,6 +6,7 @@ import type {
 import type { z } from 'zod';
 import { guildMembers, guilds } from '../../../drizzle/schema';
 import { upsertMembersLoggingDings } from './addon-import-guild.members';
+import { applyGuildGameText } from './addon-import-guild.game-text';
 import { AddonImportError } from './addon-import.errors';
 import {
   auditRosterReplaced,
@@ -235,6 +236,7 @@ export async function applyGuild(
     payload,
     seenAt,
   );
+  await applyGuildGameText(ctx, guildId, payload.data, seenAt);
   const members = payload.data.members.length;
   await auditRosterReplaced(ctx, guildId, members, inserted, delta);
   return {
