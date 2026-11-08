@@ -254,7 +254,6 @@ describe('roster facts from member Armory snapshots (ROK-2133 AC-8)', () => {
 
 describe('members list + pick list Armory fields (ROK-2133 AC-12)', () => {
   const ARMORY_KEYS = ['itemLevel', 'spec', 'role'];
-
   it('the members list carries the snapshot fields only when present', async () => {
     const rows = groupRoster(await loadRosterRows(testApp.db, guildId)).flatMap(
       (g) => g.members,
@@ -299,5 +298,36 @@ describe('members list + pick list Armory fields (ROK-2133 AC-12)', () => {
       expect(c).toMatchObject({ memberId: memberIds[who], class: 'Priest' });
       for (const key of ARMORY_KEYS) expect(c).not.toHaveProperty(key);
     }
+  });
+});
+
+describe('GUID-less roster members (ROK-2133 Codex P2)', () => {
+  // Codex P2: `linked` has no addon GUID, so the roster never joins it to the
+  // Armory character holding its Blizzard id — its own snapshot must serve.
+  // (The pick list's GUID-less case is `unclaimed`, AC-12 above; `linked` is not a
+  // candidate there because a character holds its id.)
+  it('a GUID-less member whose id an Armory character holds shows its own snapshot (members list + roster facts)', async () => {
+    const raw = await loadRosterRows(testApp.db, guildId);
+    const row = nonEmpty(
+      raw.filter((r) => r.memberId === memberIds.linked),
+      'guid-less roster row',
+    )[0];
+    expect(row.characterId).toBeNull();
+    const listed = groupRoster(raw)
+      .flatMap((g) => g.members)
+      .find((m) => m.memberId === memberIds.linked);
+    expect(listed).toMatchObject({
+      itemLevel: 50,
+      spec: 'Holy',
+      role: 'healer',
+    });
+    const facts = await testApp.app
+      .get(BlizzardForeverFactSource)
+      .load([{ key: 'linked', memberId: row.memberId, characterId: null }]);
+    expect(facts.get('linked')?.ilvl).toEqual({
+      value: 50,
+      source: 'blizzard',
+      asOf: SNAP_SYNCED,
+    });
   });
 });

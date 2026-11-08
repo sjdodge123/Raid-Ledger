@@ -329,18 +329,73 @@ describe('Armory-linked ids are left to the character sync (AC-2)', () => {
       region: 'us',
       gameVariant: 'wow_forever',
       externalId: '9002',
+      addonGuid: 'Player-5-0A0B0C0D',
     });
     const owned = await seedMember(hub, {
       characterName: 'Owned Forever',
       blizzardCharacterId: 9002,
+      guid: 'Player-5-0A0B0C0D',
     });
     profileIds.set('Owned Forever', '9002');
+    const guidless = await seedMember(hub, {
+      characterName: 'Guidless Forever',
+      blizzardCharacterId: 9002,
+    });
+    profileIds.set('Guidless Forever', '9002');
     await seedMember(hub);
+
+    expect(await service.runDue()).toEqual({ written: 2 });
+
+    // The roster reaches that character only through the GUID link, so a
+    // Blizzard-roster-only (guid null) member keeps its own snapshot fresh.
+    expect(fetchedNames().sort()).toEqual(['Ana Forever', 'Guidless Forever']);
+    expect(await armRow(owned)).toBeUndefined();
+    expect(await armRow(guidless)).toMatchObject({
+      blizzardCharacterId: 9002,
+      itemLevel: 51,
+    });
+  });
+});
+
+describe('Codex P2s: soft-removed members, partial fetches (ROK-2133)', () => {
+  it('a member soft-removed by the roster sync (older last_seen_at) is never fetched', async () => {
+    const snapshotAt = new Date();
+    const hub = await insertGuild({ lastSnapshotAt: snapshotAt });
+    await seedMember(hub, { lastSeenAt: snapshotAt });
+    const gone = await seedMember(hub, {
+      characterName: 'Gone Forever',
+      blizzardCharacterId: 9020,
+      lastSeenAt: new Date(snapshotAt.getTime() - HOUR),
+    });
+    profileIds.set('Gone Forever', '9020');
 
     expect(await service.runDue()).toEqual({ written: 1 });
 
     expect(fetchedNames()).toEqual(['Ana Forever']);
-    expect(await armRow(owned)).toBeUndefined();
+    expect(await armRow(gone)).toBeUndefined();
+  });
+
+  it('a failed equipment / professions sub-call keeps the stored gear and professions', async () => {
+    const memberId = await seedMember(await insertGuild());
+    const stale = new Date(Date.now() - 25 * HOUR);
+    await seedSnapshot(memberId, {
+      itemLevel: 40,
+      equipment,
+      armoryProfessions: professions,
+      syncedAt: stale,
+    });
+    jest.spyOn(adapter, 'fetchEquipment').mockResolvedValue(null);
+    jest.spyOn(adapter, 'fetchProfessions').mockResolvedValue(null);
+
+    expect(await service.runDue()).toEqual({ written: 1 });
+
+    const row = await armRow(memberId);
+    expect(row).toMatchObject({
+      itemLevel: 51,
+      equipment,
+      armoryProfessions: professions,
+    });
+    expect(row?.syncedAt?.getTime()).toBeGreaterThan(stale.getTime());
   });
 });
 
