@@ -12,6 +12,7 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
+import { carryStoredCompletedQuests } from './addon-import-char.quests-carry';
 
 /** ROK-1724 §4.3 Apply — section `char`: one snapshot row per character. */
 
@@ -24,6 +25,8 @@ export type CharWriteDecision = 'noop' | 'stale' | 'write';
 export interface StoredCharSnapshot {
   payloadSha256: string;
   capturedAt: Date;
+  /** The stored `data` jsonb (ROK-2125: source of a carried completed list). */
+  data?: unknown;
 }
 
 export function buildCharSummary(
@@ -64,6 +67,7 @@ async function loadStored(
     .select({
       payloadSha256: characterAddonSnapshots.payloadSha256,
       capturedAt: characterAddonSnapshots.capturedAt,
+      data: characterAddonSnapshots.data,
     })
     .from(characterAddonSnapshots)
     .where(
@@ -112,24 +116,25 @@ export async function applyChar(
   payload: DecodedAddonCharExport,
 ): Promise<CharOutcome> {
   const summary = buildCharSummary(payload.data);
-  const decision = decideCharWrite(
-    await loadStored(ctx),
-    ctx.sha256,
-    payload.exportedAt,
-  );
+  const stored = await loadStored(ctx);
+  const decision = decideCharWrite(stored, ctx.sha256, payload.exportedAt);
   if (decision !== 'write') return { status: decision, summary };
-  if (await upsertChar(ctx, payload)) return { status: 'applied', summary };
+  const data = carryStoredCompletedQuests(payload.data, stored?.data);
+  if (await upsertChar(ctx, payload, data)) {
+    return { status: 'applied', summary };
+  }
   return { status: decideLostRace(await loadStored(ctx), ctx.sha256), summary };
 }
 
-/** True when a row was inserted or updated. */
+/** True when a row was inserted or updated; `data` is what gets stored. */
 async function upsertChar(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
+  data: AddonCharSnapshotData,
 ): Promise<boolean> {
   const values = {
     schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
-    data: payload.data,
+    data,
     capturedAt: fromUnix(payload.exportedAt),
     importedAt: new Date(),
     payloadSha256: ctx.sha256,

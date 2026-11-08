@@ -121,9 +121,16 @@ describe('effectiveQuests — absent vs empty addon completed list (ROK-2125)', 
   ])(
     'absent + %s Armory list: the Armory supplies list, flag, date and source; the log stays the addon’s',
     (_label, addonAt, armoryAt) => {
-      const eff = effectiveQuests(logOnly(addonAt), armory([1, 2], armoryAt, true));
+      const eff = effectiveQuests(
+        logOnly(addonAt),
+        armory([1, 2], armoryAt, true),
+      );
       expect(eff).toEqual({
-        quests: { completed: [1, 2], completedTruncated: true, inProgress: LOG },
+        quests: {
+          completed: [1, 2],
+          completedTruncated: true,
+          inProgress: LOG,
+        },
         capturedAt: armoryAt,
         source: 'blizzard',
         inProgressAsOf: addonAt,
@@ -139,12 +146,15 @@ describe('effectiveQuests — absent vs empty addon completed list (ROK-2125)', 
   it.each([
     ['newer', T0, T1],
     ['older', T1, T0],
-  ])('empty + %s Armory list: the Armory list wins, as before', (_l, addonAt, armoryAt) => {
-    const eff = effectiveQuests(addon([], addonAt), armory([1, 2], armoryAt));
-    expect(eff?.source).toBe('blizzard');
-    expect(eff?.quests.completed).toEqual([1, 2]);
-    expect(eff?.inProgressAsOf).toEqual(addonAt);
-  });
+  ])(
+    'empty + %s Armory list: the Armory list wins, as before',
+    (_l, addonAt, armoryAt) => {
+      const eff = effectiveQuests(addon([], addonAt), armory([1, 2], armoryAt));
+      expect(eff?.source).toBe('blizzard');
+      expect(eff?.quests.completed).toEqual([1, 2]);
+      expect(eff?.inProgressAsOf).toEqual(addonAt);
+    },
+  );
 
   it('empty + no Armory list: an explicit "none completed" from the addon, as before', () => {
     expect(effectiveQuests(addon([], T1), null)).toEqual({
@@ -156,6 +166,8 @@ describe('effectiveQuests — absent vs empty addon completed list (ROK-2125)', 
   });
 
   it('present + no Armory list: the addon list, unchanged', () => {
-    expect(effectiveQuests(addon([4], T1), null)?.quests.completed).toEqual([4]);
+    expect(effectiveQuests(addon([4], T1), null)?.quests.completed).toEqual([
+      4,
+    ]);
   });
 });
