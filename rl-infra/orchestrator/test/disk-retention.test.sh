@@ -70,12 +70,12 @@ echo "docker $*" >> "$DOCKER_LOG"
 [[ -n "${DOCKER_FAIL:-}" ]] && { echo "boom" >&2; exit 1; }
 [[ -n "${DOCKER_RM_FAIL:-}" && "$*" == *" rm "*"$DOCKER_RM_FAIL"* ]] && { echo "refused" >&2; exit 1; }
 case "$*" in
+    "ps "*"rl.slot="*) echo "keepslug keepcid001 rl-env-keepslug-allinone" ;;
     "ps -aq"*) cat "$DOCKER_FIX/container_ids" ;;
     "ps --filter label=rl.role=runner"*) cat "$DOCKER_FIX/runners" ;;
     "container inspect"*) cat "$DOCKER_FIX/containers.json" ;;
     "image ls"*) cat "$DOCKER_FIX/image_ids" ;;
     "image inspect"*) cat "$DOCKER_FIX/images.json" ;;
-    "ps "*"rl.slot="*) echo "keepslug keepcid001" ;;
     "exec "*) cp "$STATE_DIR/claims.json" "$DOCKER_FIX/claims_at_exec"
         [[ -n "${DOCKER_EXEC_HOOK:-}" ]] && sh -c "$DOCKER_EXEC_HOOK"
         [[ -n "${DOCKER_EXEC_FAIL:-}" ]] && exit 1
