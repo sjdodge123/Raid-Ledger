@@ -35,8 +35,8 @@ describe('ForeverQuestImportPanel status', () => {
     it('running: shows the run as in progress and the button busy', async () => {
         server.use(foreverQuestImportGetHandler(RUNNING));
         renderWithProviders(<ForeverQuestImportPanel />);
-        expect(await screen.findByText('running')).toBeInTheDocument();
-        expect(screen.getByText(/Import\s+running\s+since/)).toBeInTheDocument();
+        const state = await screen.findByText('running');
+        expect(state.closest('p')).toHaveTextContent(/Import\s+running\s+since/);
         expect(button()).toHaveAttribute('aria-busy', 'true');
     });
 
