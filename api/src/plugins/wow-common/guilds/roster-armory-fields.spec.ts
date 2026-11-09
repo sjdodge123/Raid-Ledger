@@ -100,7 +100,8 @@ describe('members list DTO (AC-12)', () => {
       itemLevel: 51,
       spec: 'Holy',
       role: 'healer',
-      effectiveRole: null,
+      // ROK-2158: with no override or character role, the row resolves to the Armory role.
+      effectiveRole: 'healer',
     });
   });
 
