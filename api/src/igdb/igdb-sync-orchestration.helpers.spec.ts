@@ -12,7 +12,7 @@ import {
   refreshExistingGames,
 } from './igdb-helpers.barrel';
 import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
-import { at, defined } from '../common/testing/narrow';
+import { at } from '../common/testing/narrow';
 
 jest.mock('./igdb-helpers.barrel', () => ({
   refreshExistingGames: jest.fn().mockResolvedValue(0),
@@ -85,17 +85,43 @@ describe('runSyncAllGames — ITAD fetch options', () => {
 describe('runSyncAllGames — one taste recompute per game per run (ROK-2121)', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('forwards a game changed by refresh, discover and ITAD to onGameChanged once', async () => {
+  it('enqueues each game changed by refresh, discover and ITAD once, after the ITAD phase', async () => {
     const { deps } = buildDeps();
-    await runSyncAllGames(deps);
-    const phases = [
-      at(jest.mocked(refreshExistingGames).mock.calls, 0)[3],
-      at(jest.mocked(discoverPopularGames).mock.calls, 0)[3],
-      at(jest.mocked(enrichSyncedGamesWithItad).mock.calls, 0)[3],
-    ];
-    for (const notify of phases) defined(notify, 'phase onGameChanged')(7);
-    defined(phases[0], 'refresh onGameChanged')(8);
+    const enqueuedDuringItad: unknown[] = [];
+    jest.mocked(refreshExistingGames).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      args[3]?.(8);
+      return Promise.resolve(2);
+    });
+    jest.mocked(discoverPopularGames).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      return Promise.resolve(1);
+    });
+    jest.mocked(enrichSyncedGamesWithItad).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      enqueuedDuringItad.push(...jest.mocked(deps.onGameChanged).mock.calls);
+      return Promise.resolve(1);
+    });
 
+    await runSyncAllGames(deps);
+
+    // Nothing is enqueued before ITAD has written its tags.
+    expect(enqueuedDuringItad).toEqual([]);
     expect(jest.mocked(deps.onGameChanged).mock.calls).toEqual([[7], [8]]);
+  });
+
+  it('still enqueues the games changed before a phase throws', async () => {
+    const { deps } = buildDeps();
+    jest.mocked(refreshExistingGames).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      return Promise.resolve(1);
+    });
+    jest
+      .mocked(enrichSyncedGamesWithItad)
+      .mockRejectedValueOnce(new Error('itad down'));
+
+    await expect(runSyncAllGames(deps)).rejects.toThrow('itad down');
+
+    expect(jest.mocked(deps.onGameChanged).mock.calls).toEqual([[7]]);
   });
 });

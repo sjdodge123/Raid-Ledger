@@ -4,8 +4,8 @@
  */
 import {
   changedTasteInputIds,
+  collectChangedGames,
   itadTagsChanged,
-  oncePerGame,
   tasteInputKey,
 } from './taste-input-change.helpers';
 
@@ -88,13 +88,24 @@ describe('itadTagsChanged', () => {
   });
 });
 
-describe('oncePerGame', () => {
-  it('forwards each game id once per wrapper', () => {
+describe('collectChangedGames', () => {
+  it('fires nothing until flush, then each game id once', () => {
     const fn = jest.fn<void, [number]>();
-    const once = oncePerGame(fn);
-    once(7);
-    once(8);
-    once(7);
+    const collector = collectChangedGames(fn);
+    collector.notify(7);
+    collector.notify(8);
+    collector.notify(7);
+    expect(fn.mock.calls).toEqual([]);
+    collector.flush();
     expect(fn.mock.calls).toEqual([[7], [8]]);
+  });
+
+  it('forgets flushed ids, so a second flush fires nothing', () => {
+    const fn = jest.fn<void, [number]>();
+    const collector = collectChangedGames(fn);
+    collector.notify(7);
+    collector.flush();
+    collector.flush();
+    expect(fn.mock.calls).toEqual([[7]]);
   });
 });
