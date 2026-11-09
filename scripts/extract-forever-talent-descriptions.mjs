@@ -115,7 +115,8 @@ function extract(table, data) {
     for (const [classSlug, entry] of Object.entries(table)) {
         const trees = entry.trees.map((tree) => {
             const wowhead = findWowheadTree(data, classSlug, tree);
-            const talents = tree.talents.map(({ descriptions: _old, ...talent }) =>
+            // Spreading then overwriting replaces any descriptions from a previous run (idempotent).
+            const talents = tree.talents.map((talent) =>
                 ({ ...talent, descriptions: descriptionsFor(classSlug, tree.name, talent, wowhead) }));
             return { name: tree.name, talents };
         });

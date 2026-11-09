@@ -62,6 +62,19 @@ describe.each(CLASSES)('forever-trees.json: %s', (slug) => {
         }
     });
 
+    it('carries the calculator hashVersion and one plain-text description per rank (ROK-2150)', () => {
+        expect(entry?.hashVersion).toMatch(/^[a-z0-9]+$/);
+        for (const tree of entry?.trees ?? []) {
+            for (const t of tree.talents) {
+                expect(t.descriptions, t.name).toHaveLength(t.maxRank);
+                for (const text of t.descriptions) {
+                    expect(text, `${t.name} is plain text`).not.toMatch(/<[^>]*>|&[a-z#0-9]+;|<!--/i);
+                    expect(text.trim(), `${t.name} has text`).not.toBe('');
+                }
+            }
+        }
+    });
+
     it('points every prerequisite at a talent in the same tree', () => {
         for (const tree of entry?.trees ?? []) {
             const ids = new Set(tree.talents.map((t) => t.spellId));

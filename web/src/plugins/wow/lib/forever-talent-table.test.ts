@@ -71,6 +71,17 @@ describe('isForeverTalentTable', () => {
         expect(isForeverTalentTable({ warrior: { trees: [{ name: 'Arms', talents: [{ spellId: 'x' }] }] } })).toBe(false);
         expect(isForeverTalentTable(null)).toBe(false);
     });
+
+    it('rejects a table without hashVersion, or a talent with too few or HTML descriptions (ROK-2150)', () => {
+        expect(isForeverTalentTable({ warrior: { trees: warrior().trees } })).toBe(false);
+        const withDescriptions = (descriptions: string[]) => ({
+            hashVersion: 'vkndmh',
+            trees: [{ name: 'Arms', talents: [{ spellId: 1, name: 'X', row: 0, col: 0, maxRank: 2, icon: 'i', prereqSpellId: null, descriptions }] }],
+        });
+        expect(isForeverTalentTable({ warrior: withDescriptions(['a', 'b']) })).toBe(true);
+        expect(isForeverTalentTable({ warrior: withDescriptions(['a']) })).toBe(false);
+        expect(isForeverTalentTable({ warrior: withDescriptions(['a', 'b<br />c']) })).toBe(false);
+    });
 });
 
 describe('loadForeverClassTable (the real lazy table)', () => {
