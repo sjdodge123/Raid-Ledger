@@ -168,8 +168,11 @@ async function expectNoOwnerOrAdminControls(
     page.getByRole("menuitem", { name: "Unlink character" }),
   ).toHaveCount(0);
   await expect(
-    actions.getByRole("button").filter({ hasNotText: /claim/i }),
-    "every header button is a claim CTA, never an owner action",
+    actions
+      .getByRole("button")
+      .filter({ hasNotText: /claim/i })
+      .filter({ hasNotText: /^Back$/ }),
+    "every header button is the claim CTA or its confirm-step Back, never an owner action",
   ).toHaveCount(0);
 }
 
