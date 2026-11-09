@@ -22,6 +22,8 @@ export interface RosterCtx {
   gameId: number;
   hash: string;
   now: Date;
+  /** `rosterSuffix` (ROK-2132): appended to every roster character name. */
+  nameSuffix: string;
 }
 
 export interface SeedGuildUser {

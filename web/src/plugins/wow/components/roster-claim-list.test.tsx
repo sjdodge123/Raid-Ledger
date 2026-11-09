@@ -158,3 +158,50 @@ describe('RosterClaimList — server-side search (ROK-2128 Codex P2)', () => {
         expect(seen).toContain('big 1000');
     });
 });
+
+describe('RosterClaimList — one-guild filter (ROK-2132 Ruling 6)', () => {
+    /** Answers like the server: a `guildId` narrows the list to that guild. Records each request's `guildId`. */
+    function serveFiltered(seen: Array<string | null>): void {
+        server.use(http.get(`${API_BASE}/plugins/wow/roster-claim/candidates`, ({ request }) => {
+            const guildId = new URL(request.url).searchParams.get('guildId');
+            seen.push(guildId);
+            return HttpResponse.json(guildId ? { ...LIST, guilds: LIST.guilds.filter((g) => String(g.guildId) === guildId) } : LIST);
+        }));
+    }
+
+    it('sends guildId, lists only that guild and says "Showing <guild> only"', async () => {
+        const seen: Array<string | null> = [];
+        serveFiltered(seen);
+        renderWithProviders(
+            <RosterClaimList gameId={GAME_ID} existingCharacters={[]} armoryAvailable guildId={1} onClaimed={() => {}} onSwitchTab={() => {}} />,
+        );
+        expect(await screen.findByText('Ashen Vale')).toBeInTheDocument();
+        expect(seen).toEqual(['1']);
+        expect(screen.getByText(/^Showing/)).toHaveTextContent('Showing Ledger Test Guild only · Show all guilds');
+        expect(screen.queryByText('Fernwhistle Thorne')).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /night market/i })).not.toBeInTheDocument();
+    });
+
+    it('"Show all guilds" clears the filter: the next request has no guildId and every guild is listed', async () => {
+        const seen: Array<string | null> = [];
+        serveFiltered(seen);
+        renderWithProviders(
+            <RosterClaimList gameId={GAME_ID} existingCharacters={[]} armoryAvailable guildId={1} onClaimed={() => {}} onSwitchTab={() => {}} />,
+        );
+        await screen.findByText('Ashen Vale');
+        await userEvent.click(screen.getByRole('button', { name: 'Show all guilds' }));
+        expect(await screen.findByText('Fernwhistle Thorne')).toBeInTheDocument();
+        expect(seen.at(-1)).toBeNull();
+        expect(screen.queryByText(/^Showing/)).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: /night market/i })).toBeInTheDocument();
+    });
+
+    it('without guildId sends no guildId and shows no filter line', async () => {
+        const seen: Array<string | null> = [];
+        serveFiltered(seen);
+        renderList();
+        await screen.findByText('Fernwhistle Thorne');
+        expect(seen).toEqual([null]);
+        expect(screen.queryByRole('button', { name: 'Show all guilds' })).not.toBeInTheDocument();
+    });
+});

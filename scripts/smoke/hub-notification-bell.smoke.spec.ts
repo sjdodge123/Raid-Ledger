@@ -154,7 +154,9 @@ test('visitor: a non-member sees no bell', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInOnboardedMember(page, guild.users.outsider.userId);
         await page.goto(`/hubs/${guild.guildId}`);
-        await expect(page.getByTestId('guild-not-member')).toBeVisible({ timeout: 15_000 });
+        // ROK-2132: a non-member of a WoW: Forever guild lands on the join gate, not the page.
+        await expect(page.getByTestId('wow-join-gate')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('guild-hero'), 'the gate shows no member page').toHaveCount(0);
         await expect(page.getByTestId('hub-notify-bell'), 'D11: the bell is member-only').toHaveCount(0);
     });
 });

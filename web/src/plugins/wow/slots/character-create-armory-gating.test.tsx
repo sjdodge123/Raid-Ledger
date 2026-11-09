@@ -41,12 +41,12 @@ function gameVersionSelect(): HTMLSelectElement {
     return at(selects, 0);
 }
 
-function Harness({ gameSlug, initial, eventId }: { gameSlug: string; initial: 'manual' | 'import'; eventId?: number }) {
+function Harness({ gameSlug, initial, eventId, requested }: { gameSlug: string; initial: 'manual' | 'import'; eventId?: number; requested?: 'import' }) {
     const [tab, setTab] = useState<'manual' | 'import' | 'roster'>(initial);
     return (
         <>
             <CharacterCreateImportForm onClose={() => {}} gameSlug={gameSlug} activeTab={tab} onTabChange={setTab}
-                {...(eventId === undefined ? {} : { eventId })} />
+                {...(eventId === undefined ? {} : { eventId })} {...(requested === undefined ? {} : { initialTab: requested })} />
             <span data-testid="active-tab">{tab}</span>
         </>
     );
@@ -181,6 +181,24 @@ describe('Armory gating follows the runtime Forever capability (ROK-1717)', () =
         await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('import'));
         expect(importTab()).not.toHaveAttribute('aria-disabled');
         expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
+    });
+
+    it('ROK-2132: a requested Import tab opened before the capabilities load returns to Import once they do', async () => {
+        blizzardConfigured();
+        let release: () => void = () => undefined;
+        const loaded = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.get(`${API_BASE}/blizzard/capabilities`, async () => {
+            await loaded;
+            return HttpResponse.json({ armoryImport: { wow_forever: true } });
+        }));
+        renderWithProviders(<Harness gameSlug={FOREVER} initial="import" requested="import" />);
+        await waitFor(() => expect(screen.getByTestId('active-tab'), 'fail-closed while loading').toHaveTextContent('manual'));
+        release();
+        await waitFor(() => expect(importTab(), 'the Armory became available').not.toHaveAttribute('aria-disabled'));
+        await waitFor(() => expect(
+            screen.getByTestId('active-tab'),
+            'the requested Import tab must win once the capabilities load',
+        ).toHaveTextContent('import'));
     });
 
     it('capability on: the Classic Game Version picker offers Forever', async () => {

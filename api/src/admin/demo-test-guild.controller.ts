@@ -62,13 +62,13 @@ import {
   findWowGameId,
   guildKeyHash,
   parseSeedGuildBody,
-  seedRosterGuid,
   upsertGuild,
   upsertMember,
   upsertSeedUser,
   type SeedGuildInput,
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
+import { seedRosterGuid } from './demo-test-guild-roster-suffix.helpers';
 import {
   ensureGuildRaids,
   raiderOf,
@@ -127,7 +127,8 @@ export class DemoTestGuildController {
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input.name, now);
     const hash = guildKeyHash(input.name.toLowerCase());
-    const ctx: RosterCtx = { guildId, gameId, hash, now };
+    const nameSuffix = input.rosterSuffix;
+    const ctx: RosterCtx = { guildId, gameId, hash, now, nameSuffix };
     const { users, unlinked } = await this.seedRoster(ctx);
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
     const raids = await this.seedRaids(ctx, users);
@@ -340,10 +341,11 @@ export class DemoTestGuildController {
     | { owner: SeedGuildRole; user: SeedGuildUser }
   > {
     const guid = seedRosterGuid(ctx.hash, entry.rank);
+    const row = { ...entry, char: `${entry.char}${ctx.nameSuffix}` };
     const memberId = await upsertMember(
       this.db,
       ctx.guildId,
-      entry,
+      row,
       guid,
       ctx.now,
     );
@@ -353,13 +355,12 @@ export class DemoTestGuildController {
       userId: user.userId,
       gameId: ctx.gameId,
       guid,
-      name: entry.char,
+      name: row.char,
       role: entry.role,
     });
-    const rankIndex = entry.rank;
     return {
       owner: entry.owner,
-      user: { ...user, characterId, memberId, rankIndex },
+      user: { ...user, characterId, memberId, rankIndex: entry.rank },
     };
   }
 }

@@ -3,23 +3,28 @@
  * kind's own visibility rule (D8), adapter-sourced membership (D9), the
  * `kind` filter, the live `kinds` list, and keyset paging over mixed kinds.
  * ROK-1883: staff also see hidden hubs (every kind), flagged `hidden`.
+ * ROK-2132: claimable WoW: Forever guilds are listed to non-members.
  * Fixture + hooks: `community-directory.matrix.test-fixtures.ts`.
  */
 import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
+import { WOW_COMMON_MANIFEST } from '../../plugins/wow-common/manifest';
 import {
   ALL_KINDS,
   app,
   authOf,
   getHubs,
+  linkWow,
   must,
   namesOf,
   registry,
+  seedForeverGame,
   seedHub,
   seedMatrix,
   seedUser,
   serverMember,
   setupMatrixSuite,
   type Auth,
+  type Matrix,
 } from './community-directory.matrix.test-fixtures';
 
 setupMatrixSuite();
@@ -158,4 +163,67 @@ describe('GET /hubs — staff see hidden hubs (ROK-1883)', () => {
       for (const e of body.items) expect(e).not.toHaveProperty('hidden');
     },
   );
+});
+
+/**
+ * ROK-2132 Ruling 2 / R2 — claimable WoW: Forever guilds (F1 linked by U1,
+ * F2 nobody's) are listed to non-members as `not-member`; hidden (F3) and
+ * archived (F4) Forever guilds and every non-Forever WoW guild (W2) stay
+ * members-only; staff are unchanged (every WoW guild, hidden flagged).
+ */
+async function seedForever(): Promise<Matrix> {
+  const m = await seedMatrix();
+  const gameId = await seedForeverGame();
+  const wow = { kind: 'wow_guild', gameId } as const;
+  m.ids.F1 = await seedHub('F1 Guild', { ...wow, members: 30 });
+  m.ids.F2 = await seedHub('F2 Guild', { ...wow, members: 20 });
+  m.ids.F3 = await seedHub('F3 Guild', { ...wow, hidden: true });
+  m.ids.F4 = await seedHub('F4 Guild', { ...wow, archived: true });
+  await linkWow(must(m.ids.F1), m.u1Id, gameId);
+  return m;
+}
+
+describe('GET /hubs — claimable Forever guilds for non-members (ROK-2132)', () => {
+  it.each([
+    ['u1', ['C1', 'F1', 'F2', 'S1', 'W1']],
+    ['u2', ['C1', 'F1', 'F2', 'S1']],
+    [
+      'admin',
+      ['C1', 'C4', 'F1', 'F2', 'F3', 'F4', 'S1', 'S2', 'W1', 'W2', 'W3'],
+    ],
+  ] as const)('%s sees %j', async (who, expected) => {
+    const m = await seedForever();
+    const body = await getHubs(m[who]);
+    expect(namesOf(m, body)).toEqual(expected);
+    expect(body.total).toBe(expected.length);
+  });
+
+  it.each([
+    ['u1', 'F1', 'member'],
+    ['u1', 'F2', 'not-member'],
+    ['u2', 'F1', 'not-member'],
+    ['u2', 'F2', 'not-member'],
+  ] as const)('%s sees %s as %s', async (who, hub, viewer) => {
+    const m = await seedForever();
+    const row = (await getHubs(m[who])).items.find((e) => e.id === m.ids[hub]);
+    expect(row).toMatchObject({ kind: 'wow_guild', viewer });
+  });
+
+  it.each([
+    ['u1', 'joined', ['C1', 'F1', 'S1', 'W1']],
+    ['u1', 'not-joined', ['F2']],
+    ['u2', 'joined', []],
+    ['u2', 'not-joined', ['C1', 'F1', 'F2', 'S1']],
+  ] as const)('%s ?membership=%s → %j', async (who, membership, expected) => {
+    const m = await seedForever();
+    const body = await getHubs(m[who], `?membership=${membership}`);
+    expect(namesOf(m, body)).toEqual(expected);
+  });
+
+  it('the WoW plugin inactive lists no Forever guild to anyone', async () => {
+    const m = await seedForever();
+    await registry().deactivate(WOW_COMMON_MANIFEST.id);
+    const shown = namesOf(m, await getHubs(m.u2));
+    expect(shown).toEqual(['C1', 'S1']);
+  });
 });

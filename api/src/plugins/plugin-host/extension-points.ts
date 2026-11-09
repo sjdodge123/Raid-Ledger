@@ -302,6 +302,13 @@ export interface HubKindAdapter {
   memberUserIds(groupId: number): Promise<number[]>;
   /** Ids of the groups of this kind the user is a live member of. */
   memberGroupIds(userId: number): Promise<number[]>;
+  /**
+   * ROK-2132 Ruling 2: ids of the groups of this kind the `/hubs` directory
+   * lists to a non-member (`viewer: 'not-member'`) — e.g. a WoW: Forever
+   * guild they can join by claiming a roster character. Optional; omitted ⇒
+   * the kind stays members-only for non-staff.
+   */
+  visitorVisibleGroupIds?(userId: number): Promise<number[]>;
   /** Rank index → rank name for rank-based editor grants (empty if none). */
   rankNames(groupId: number): Promise<Map<number, string | null>>;
   /** Is this member-row id a live member of the group (member grants)? */

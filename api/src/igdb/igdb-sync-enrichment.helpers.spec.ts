@@ -10,7 +10,10 @@ import type { ItadGame } from '../itad/itad.constants';
 /**
  * Minimal mock DB supporting the query pattern used by enrichSyncedGamesWithItad:
  *   db.select(...).from(...).where(...) → rows[]
- *   db.update(...).set(...).where(...)
+ *   db.transaction(tx => {
+ *     tx.select(...).from(...).where(...).for('update') → [{ itadTags }]
+ *     tx.update(...).set(...).where(...)
+ *   })
  *
  * Uses manual chaining mocks to avoid coupling to flat-mock terminal methods,
  * since the query terminates at .where() (not .limit() or .returning()).
@@ -26,7 +29,19 @@ function createEnrichMockDb(
   const selectFrom = jest.fn().mockReturnValue({ where: selectWhere });
   const select = jest.fn().mockReturnValue({ from: selectFrom });
 
-  return { select, update, updateSet, updateWhere };
+  // ROK-2121: the per-game write re-reads the row's tags under a row lock.
+  const lockedFor = jest.fn().mockResolvedValue([{ itadTags: [] }]);
+  const lockedWhere = jest.fn().mockReturnValue({ for: lockedFor });
+  const lockedFrom = jest.fn().mockReturnValue({ where: lockedWhere });
+  const tx = {
+    select: jest.fn().mockReturnValue({ from: lockedFrom }),
+    update,
+  };
+  const transaction = jest.fn((cb: (t: typeof tx) => Promise<unknown>) =>
+    cb(tx),
+  );
+
+  return { select, update, updateSet, updateWhere, transaction };
 }
 
 function makeItadGame(overrides: Partial<ItadGame> = {}): ItadGame {
