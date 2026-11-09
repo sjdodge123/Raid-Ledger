@@ -14,8 +14,8 @@
  * at Dainel + the seeded guild and a `data.mailworthy` block whose timestamps
  * are relative to now (the golden one's fixed dates fall out of the 30-day
  * and 60-day windows as the calendar moves). Dainel's roster GUID is the
- * fixture's `Player-<sha1(lower(name))[0..12]>-<rank>`
- * (`demo-test-guild.controller.ts`) — a drift there fails the import on a
+ * fixture's wire-shaped `Player-4395-<SHA1(lower(name))[0..7]><rank hex>`
+ * (`seedRosterGuid`, `demo-test-guild.helpers.ts`) — a drift there fails the import on a
  * named assertion, not on a missing card.
  *
  *  T1 Member: after the import the card shows the Enchanting master, the
@@ -94,10 +94,10 @@ async function removeUsers(token: string, guild: SeededGuild): Promise<void> {
     }
 }
 
-/** The seed fixture's roster GUID for `rank` (`demo-test-guild.controller.ts` + `guildKeyHash`). */
+/** The seed fixture's roster GUID for `rank` (`demo-test-guild.helpers.ts` `guildKeyHash` + `seedRosterGuid`). */
 function seededGuid(name: string, rank: number): string {
     const hash = createHash('sha1').update(name.toLowerCase()).digest('hex').slice(0, 12);
-    return `Player-${hash}-${String(rank)}`;
+    return `Player-4395-${`${hash.slice(0, 7)}${rank.toString(16)}`.toUpperCase()}`;
 }
 
 /** The golden char wire payload (the `.txt`, not the decoder-output `.json`). */
