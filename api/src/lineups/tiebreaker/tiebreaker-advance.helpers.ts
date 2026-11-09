@@ -20,8 +20,10 @@
  * transaction on a failed statement. Side effects (resolve, phase transition,
  * notifications) belong to the caller AFTER this returns.
  */
+import { ConflictException } from '@nestjs/common';
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { pgErrorCode } from '../../common/pg-error.helpers';
 import * as schema from '../../drizzle/schema';
 import { countDistinctVoters } from '../lineups-query.helpers';
 import { advanceBracket, getCurrentRound } from './tiebreaker-bracket.helpers';
@@ -33,22 +35,59 @@ type Db = PostgresJsDatabase<typeof schema>;
 export const TIEBREAKER_ADVANCE_LOCK_CLASS = 938;
 
 /**
+ * How long a caller waits for the round-advance lock (or a matchup row lock
+ * under it) before giving up — ROK-2098 review MAJOR-1.
+ *
+ * The finalize holder keeps its lock connection idle in transaction and does
+ * its work on OTHER pooled connections (`deps.db`). With Postgres's default
+ * `lock_timeout = 0` every waiter would hold a pooled connection forever, so
+ * a burst of ~pool-size waiters behind an admin force-resolve could leave the
+ * holder without a connection: an app-wide stall. Bounding the wait means a
+ * waiter always hands its connection back. 5s is far above the holder's
+ * normal work (a resolve, a flip and one matching rebuild — well under a
+ * second) yet short enough that a pile-up drains before the 10-connection
+ * pool is exhausted for long.
+ */
+export const TIEBREAKER_ADVANCE_LOCK_TIMEOUT = '5s';
+
+/** SQLSTATE `lock_not_available` — raised when `lock_timeout` expires. */
+const LOCK_NOT_AVAILABLE = '55P03';
+
+/**
  * Run `fn` while holding the per-tiebreaker round-advance advisory lock.
  * The lock lives for the transaction `fn` receives; it is released when `fn`
  * settles. ROK-2098: the finalize path takes the same lock so a force-resolve
  * and a round-completing vote can never both advance or both finalize.
+ * @throws ConflictException when the lock is not free within
+ *   `TIEBREAKER_ADVANCE_LOCK_TIMEOUT` (the transaction has rolled back; the
+ *   caller may retry — every step re-reads durable state).
  */
 export async function withTiebreakerAdvanceLock<T>(
   db: Db,
   tiebreakerId: number,
   fn: (tx: Db) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${TIEBREAKER_ADVANCE_LOCK_CLASS}::int4, ${tiebreakerId}::int4)`,
+  try {
+    return await db.transaction(async (tx) => {
+      // SET LOCAL takes no bind parameters; the value is a constant.
+      await tx.execute(
+        sql.raw(
+          `SET LOCAL lock_timeout = '${TIEBREAKER_ADVANCE_LOCK_TIMEOUT}'`,
+        ),
+      );
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(${TIEBREAKER_ADVANCE_LOCK_CLASS}::int4, ${tiebreakerId}::int4)`,
+      );
+      return fn(tx);
+    });
+  } catch (err) {
+    // Mapped only AFTER the transaction rolled back — never caught and
+    // retried inside it (postgres.js poisons a transaction on any failure).
+    if (pgErrorCode(err) !== LOCK_NOT_AVAILABLE) throw err;
+    throw new ConflictException(
+      'This tiebreaker is being finalized right now. Please try again.',
     );
-    return fn(tx);
-  });
+  }
 }
 
 /**
