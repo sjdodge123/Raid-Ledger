@@ -4,7 +4,7 @@
  * copied from `addon-import-guild-game-text.integration.spec.ts`.
  */
 import * as bcrypt from 'bcrypt';
-import { asc, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type {
   AddonCharExport,
   AddonMailworthy,
@@ -138,8 +138,13 @@ async function guildId(): Promise<number> {
   return g.id;
 }
 
+/** Giver rows in byte order of name key — independent of the DB collation
+ * (en_US ignores the space, so 'anabelle forever' sorts before 'ana forever'). */
 async function giverRows() {
-  return testApp.db.select().from(givers).orderBy(asc(givers.nameKey));
+  const rows = await testApp.db.select().from(givers);
+  return rows.sort((a, b) =>
+    a.nameKey < b.nameKey ? -1 : a.nameKey > b.nameKey ? 1 : 0,
+  );
 }
 
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
@@ -191,7 +196,9 @@ beforeEach(async () => {
   charId = await createChar(token, 'Ana Forever');
   altCharId = await createChar(token, 'Anabelle Forever', ANABELLE.guid);
   const other = await memberToken('mwother');
-  await createChar(other, 'Member2', buildMember(2).guid);
+  // Forever names are two-part (ROK-2124); the roster link is by GUID, so the
+  // row's own name need not match the roster's single-word 'Member2'.
+  await createChar(other, 'Member Two', buildMember(2).guid);
   expect(await importString(buildImportString(buildGuildPayload(ROSTER)))).toBe(
     200,
   );
