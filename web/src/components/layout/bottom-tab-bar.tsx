@@ -9,6 +9,7 @@ import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { Z_INDEX } from '../../lib/z-index';
 import { useAuth } from '../../hooks/use-auth';
 import { BottomHubsButton } from './hub-nav/bottom-hubs-button';
+import { hidesBottomTabBar } from './bottom-tab-bar-routes';
 
 const LEFT_TABS = [
     { to: '/calendar', icon: CalendarIcon, label: 'Calendar' },
@@ -25,19 +26,6 @@ type Tab = (typeof LEFT_TABS)[number] | (typeof RIGHT_TABS)[number];
  * circle's 24px lift (and a little shadow), so the circle never peeks above the edge.
  */
 export const TAB_BAR_HIDDEN_CLASS = 'translate-y-[calc(100%+2rem)]';
-
-/**
- * Mobile bottom tab bar — persistent navigation for the primary sections.
- *
- * Visible only below the `md` breakpoint (< 768px).
- * Strategy 2: direct tabs with hamburger for overflow (ROK-331). ROK-1875
- * (operator ruling 2026-10-21): five even grid columns — Calendar · Events ·
- * (raised Hubs circle) · Games · Players. Each slot fills its column (64px at
- * 320px wide), so no label truncates and nothing overflows.
- */
-// Full-screen wizard routes where the tab bar must not render. Exact-match
-// paths mirroring app-routes.tsx — update this when those routes move.
-const MODAL_ROUTES = new Set(['/onboarding', '/admin/setup', '/claim']);
 
 function TabLink({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     return (
@@ -66,13 +54,21 @@ export function BottomTabGrid({ pathname }: { pathname: string }) {
     );
 }
 
-/** The phone bottom bar (below 768px); hidden on full-screen wizard routes. */
+/**
+ * Mobile bottom tab bar — persistent navigation for the primary sections.
+ *
+ * Visible only below the `md` breakpoint (< 768px); hidden on full-screen wizard routes (`hidesBottomTabBar`).
+ * Strategy 2: direct tabs with hamburger for overflow (ROK-331). ROK-1875
+ * (operator ruling 2026-10-21): five even grid columns — Calendar · Events ·
+ * (raised Hubs circle) · Games · Players. Each slot fills its column (64px at
+ * 320px wide), so no label truncates and nothing overflows.
+ */
 export function BottomTabBar() {
     const location = useLocation();
     const scrollDirection = useScrollDirection();
     const isHidden = scrollDirection === 'down';
 
-    if (MODAL_ROUTES.has(location.pathname)) return null;
+    if (hidesBottomTabBar(location.pathname)) return null;
 
     return (
         <nav data-testid="bottom-tab-bar" className={`fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle will-change-transform md:will-change-auto ${isHidden ? TAB_BAR_HIDDEN_CLASS : 'translate-y-0'}`}

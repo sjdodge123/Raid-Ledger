@@ -14,12 +14,16 @@ export function joinGateKey(guildId: number, viewer: unknown): unknown[] {
     return [...guildPageKey(guildId), 'join-gate', viewer];
 }
 
-export function useJoinGate(guildId: number): UseQueryResult<WowGuildJoinGateDto, Error> {
+/**
+ * `enabled` (ROK-2151 D8): the staff claim banner's probe runs on every Forever
+ * guild hub, but only a staff viewer may need the read — others never request it.
+ */
+export function useJoinGate(guildId: number, enabled = true): UseQueryResult<WowGuildJoinGateDto, Error> {
     const viewer = useViewerCacheScope();
     return useQuery({
         queryKey: joinGateKey(guildId, viewer),
         queryFn: () => fetchApi(`/plugins/wow/guilds/${guildId}/join-gate`, {}, WowGuildJoinGateSchema),
-        enabled: guildId > 0,
+        enabled: enabled && guildId > 0,
         retry: false,
     });
 }

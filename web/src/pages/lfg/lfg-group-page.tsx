@@ -139,11 +139,8 @@ function LfgGroupLoaded({ gameId, fallbackName, group }: { gameId: number; fallb
     const detail = useGameDetail(gameId);
     const actions = useGroupActions(gameId, group);
     const overlays = useLfgOverlay();
-    // ROK-1556: the page ends under the fixed mobile tab bar (3.5rem +
-    // safe-area), so the last panel needs the same clearance the lineup
-    // detail page gives itself (`pb-24 md:pb-*`); desktop has no tab bar.
     return (
-        <div className="mx-auto max-w-4xl space-y-4 px-4 pt-6 pb-24 md:pb-6">
+        <div className="mx-auto max-w-4xl space-y-4 px-4 pt-6 md:pb-6">
             <LfgTopBar onManage={() => overlays.open('manage')} canManage={group.playingNow == null} />
             <LfgHeader gameId={gameId} game={detail.data} fallbackName={fallbackName} />
             <LfgGroupTop
