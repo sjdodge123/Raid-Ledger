@@ -10,6 +10,7 @@ import {
 } from './igdb.constants';
 import { delay } from './igdb-api.helpers';
 import { upsertGamesFromApi } from './igdb-upsert.helpers';
+import { itadTagsChanged } from './taste-input-change.helpers';
 import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 
 const logger = new Logger('IgdbSyncHelpers');
@@ -130,8 +131,8 @@ export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
  * @param db - Database connection
  * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
  * @param getGameInfo - Function to fetch full game info (including tags) by ITAD ID
- * @param onGameChanged - ROK-1082: fired per successful update so the caller
- *                        can enqueue a game-taste-vector recompute for that id.
+ * @param onGameChanged - ROK-1082: fired per update whose ITAD tags changed
+ *                        (ROK-2121) so the caller can enqueue a recompute.
  * @returns Number of successfully enriched games
  */
 export async function enrichSyncedGamesWithItad(
@@ -141,7 +142,11 @@ export async function enrichSyncedGamesWithItad(
   onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   const games = await db
-    .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
+    .select({
+      id: schema.games.id,
+      steamAppId: schema.games.steamAppId,
+      itadTags: schema.games.itadTags,
+    })
     .from(schema.games)
     .where(isNotNull(schema.games.steamAppId));
 
@@ -154,7 +159,8 @@ export async function enrichSyncedGamesWithItad(
       if (!itadGame) continue;
       const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
       await updateGameWithItadData(db, game.id, itadGame, info);
-      onGameChanged?.(game.id);
+      // ROK-2121: only a tag change moves the taste vector.
+      if (itadTagsChanged(game.itadTags, info.tags)) onGameChanged?.(game.id);
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);

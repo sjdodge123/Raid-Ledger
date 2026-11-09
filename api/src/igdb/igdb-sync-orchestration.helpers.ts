@@ -23,6 +23,7 @@ import {
   reEnrichGamesWithIgdb,
 } from './igdb-helpers.barrel';
 import type { ReEnrichResult } from './igdb-reenrichment.helpers';
+import { oncePerGame } from './taste-input-change.helpers';
 
 export interface SyncAllDeps {
   db: PostgresJsDatabase<typeof schema>;
@@ -48,17 +49,19 @@ export async function runSyncAllGames(
   deps: SyncAllDeps,
 ): Promise<SyncAllSummary> {
   const themeFilter = buildAdultThemeFilter(await deps.isAdultFilterEnabled());
+  // ROK-2121: refresh, discover and ITAD can touch one game; recompute once.
+  const onGameChanged = oncePerGame(deps.onGameChanged);
   const refreshed = await refreshExistingGames(
     deps.db,
     deps.queryIgdb,
     themeFilter,
-    deps.onGameChanged,
+    onGameChanged,
   );
   const discovered = await discoverPopularGames(
     deps.db,
     deps.queryIgdb,
     themeFilter,
-    deps.onGameChanged,
+    onGameChanged,
   );
   const backfilled = await backfillMissingCovers(deps.db, deps.queryIgdb);
   const enriched = await enrichSyncedGamesWithItad(
@@ -70,7 +73,7 @@ export async function runSyncAllGames(
         ...deps.itadOpts,
         throwOnExhausted: true,
       }),
-    deps.onGameChanged,
+    onGameChanged,
   );
   const reEnriched = await reEnrichGamesWithIgdb(deps.db, deps.queryIgdb);
   await clearDiscoveryCache(deps.redis);
