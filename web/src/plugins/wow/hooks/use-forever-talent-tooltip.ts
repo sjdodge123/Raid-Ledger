@@ -4,7 +4,7 @@
  * it; leaving, blur, Escape or a press elsewhere closes it. A touch tap toggles it
  * instead, since a phone has no hover — the icon is a button and never navigates.
  */
-import { useCallback, useEffect, useId, useRef, useState, type PointerEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent, type RefObject } from 'react';
 import { useEscapeLayer } from '../../../hooks/use-escape-layer';
 
 export interface TalentTooltipAnchorProps {
@@ -29,19 +29,27 @@ function usePressOutside(anchorRef: RefObject<HTMLElement | null>, open: boolean
     }, [anchorRef, open, close]);
 }
 
-/** Hover/focus/tap handlers for the icon; `lastPointer` tells a tap's focus + click apart from a keyboard's. */
+/** The last pointer type pressed on the icon (null = keyboard), read and written only in event handlers. */
+interface PointerKind { set: (kind: string | null) => void; get: () => string | null }
+
+function usePointerKind(): PointerKind {
+    const last = useRef<string | null>(null);
+    return useMemo(() => ({ set: (kind) => { last.current = kind; }, get: () => last.current }), []);
+}
+
+/** Hover/focus/tap handlers for the icon; `pointer` tells a tap's focus + click apart from a keyboard's. */
 function anchorHandlers(open: boolean, id: string, setOpen: (fn: (o: boolean) => boolean) => void,
-    lastPointer: { current: string | null }): TalentTooltipAnchorProps {
+    pointer: PointerKind): TalentTooltipAnchorProps {
     return {
         'aria-describedby': open ? id : undefined,
         onPointerEnter: (e) => { if (e.pointerType !== 'touch') setOpen(() => true); },
         onPointerLeave: (e) => { if (e.pointerType !== 'touch') setOpen(() => false); },
-        onPointerDown: (e) => { lastPointer.current = e.pointerType; },
-        onFocus: () => { if (lastPointer.current === null) setOpen(() => true); },
-        onBlur: () => { lastPointer.current = null; setOpen(() => false); },
+        onPointerDown: (e) => { pointer.set(e.pointerType); },
+        onFocus: () => { if (pointer.get() === null) setOpen(() => true); },
+        onBlur: () => { pointer.set(null); setOpen(() => false); },
         onClick: () => {
-            if (lastPointer.current === 'touch') setOpen((o) => !o);
-            lastPointer.current = null;
+            if (pointer.get() === 'touch') setOpen((o) => !o);
+            pointer.set(null);
         },
     };
 }
@@ -49,9 +57,9 @@ function anchorHandlers(open: boolean, id: string, setOpen: (fn: (o: boolean) =>
 export function useForeverTalentTooltip(anchorRef: RefObject<HTMLElement | null>) {
     const [open, setOpen] = useState(false);
     const id = useId();
-    const lastPointer = useRef<string | null>(null);
+    const pointer = usePointerKind();
     const close = useCallback(() => setOpen(false), []);
     useEscapeLayer(open, close);
     usePressOutside(anchorRef, open, close);
-    return { open, id, close, anchorProps: anchorHandlers(open, id, setOpen, lastPointer) };
+    return { open, id, close, anchorProps: anchorHandlers(open, id, setOpen, pointer) };
 }
