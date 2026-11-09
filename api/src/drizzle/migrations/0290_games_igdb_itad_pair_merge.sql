@@ -9,16 +9,27 @@
 --   * Group non-banned rows by a SQL normalisation of `name` that mirrors
 --     contract `normalizeForDedup` minus the Roman-numeral rewrite (lower-case,
 --     drop ™/®/©, ":" and " - " subtitle separators -> space, collapse spaces).
---   * Only groups of EXACTLY two rows are considered (ambiguous groups skipped).
---   * Skip when both rows hold an igdb_id (distinct IGDB games), both hold a
---     steam_app_id, or both hold an itad_game_id (both unique -> the values
---     differ -> different storefront products), when `hidden` differs (merging
---     would change moderation visibility), or when both release dates are set
---     and more than a year apart (remake/original).
+--   * Only groups of EXACTLY two rows are considered (ambiguous groups of 3+
+--     are skipped).
+--   * Skip when both rows hold an igdb_id (distinct IGDB games — out of scope),
+--     when `hidden` differs (merging would change moderation visibility), or
+--     when both release dates are set and more than a year apart
+--     (remake/original).
 --   * igdb pair: exactly one row holds igdb_id -> it is the KEEPER; the other
 --     (the dup) must carry steam_app_id or itad_game_id (ITAD/Steam-first shape).
+--     OPERATOR RE-RULING Q2 (2026-11-09): the pair merges EVEN WHEN BOTH rows
+--     hold a (different) steam_app_id. The prod-clone proof showed 100 of 101
+--     real twins have exactly that shape — IGDB stamped a secondary/edition
+--     app id (Borderlands 2: IGDB row 379880, Steam-first row 49520, the real
+--     one). The Steam-first row's steam_app_id WINS: step 6 frees it on the
+--     dup, then writes it onto the keeper (whose IGDB-side id is dropped) and
+--     tags it 'manual' so the 6-hourly IGDB refresh cannot re-stamp the IGDB
+--     id over it (igdb-upsert-sets.helpers keeps a 'manual' Steam id).
+--     Both rows holding an itad_game_id is only allowed when the dup also
+--     carries the Steam id (its ITAD id travels with it); otherwise skipped.
 --   * itad pair: neither holds igdb_id and exactly one holds itad_game_id ->
---     KEEPER = the lower id.
+--     KEEPER = the lower id. Skipped when both hold a steam_app_id or both
+--     hold an itad_game_id (different storefront products).
 --
 -- PER PAIR, in order:
 --   0. Registry config (the ROK-400 per-game config columns short_name,
@@ -80,10 +91,19 @@
 --          community_insights_snapshots.*: point-in-time snapshots, rebuilt.
 --        * player_co_play.games_played: rebuilt (delete+insert) by its job.
 --        * games_dedup_audit: regenerated every boot (see step 3).
---   6. Identity: the dup's steam_app_id / itad_game_id are cleared first, then
---      copied onto the keeper where the keeper's is NULL (with the steam source
---      and the ITAD price/boxart/tags that belong to that ITAD id), plus
---      cover_url / twitch_game_id fallbacks, plus the step-0 registry config.
+--   6. Identity: the dup's steam_app_id / itad_game_id are cleared first (so
+--      the unique keys never collide), then written onto the keeper:
+--      * steam_app_id: the dup's wins whenever it has one (Q2 re-ruling);
+--        otherwise the keeper keeps its own.
+--      * itad_game_id + its price/boxart/tags: the dup's block is adopted when
+--        the keeper has none, or when the dup's Steam id was adopted (the ITAD
+--        id was resolved from that Steam id; the ITAD pass re-derives it from
+--        the Steam id anyway).
+--      * cover_url / twitch_game_id fallbacks and the step-0 registry config.
+--      6b. steam_app_id_source of an adopted id, in its OWN statement (the 0192
+--      trigger NULLs the source when steam_app_id changes in a statement that
+--      leaves the source unchanged): the dup's source when the keeper had no
+--      Steam id, 'manual' when the dup's id REPLACED the keeper's.
 --   7. DELETE the dup row. Every FK was repointed in step 4, so no cascade
 --      fires (multi-column / non-id FKs were refused up front).
 --
@@ -109,6 +129,8 @@ DECLARE
   r record;
   jc record;
   dup_row games%ROWTYPE;
+  keep_row games%ROWTYPE;
+  adopt_itad boolean;
   gone jsonb;
   conflict text;
   merged integer := 0;
@@ -145,12 +167,24 @@ BEGIN
         JOIN grp USING (nkey)
         JOIN norm b ON b.nkey = a.nkey AND b.id > a.id
        WHERE NOT (a.igdb_id IS NOT NULL AND b.igdb_id IS NOT NULL)
-         AND NOT (a.steam_app_id IS NOT NULL AND b.steam_app_id IS NOT NULL)
-         AND NOT (a.itad_game_id IS NOT NULL AND b.itad_game_id IS NOT NULL)
          AND a.hidden = b.hidden
          AND (a.first_release_date IS NULL OR b.first_release_date IS NULL
               OR abs(extract(epoch FROM a.first_release_date - b.first_release_date))
                  <= 366 * 86400)
+         AND (
+           -- igdb pair (Q2 re-ruling): one IGDB row + one non-IGDB row; two
+           -- different Steam ids are allowed (the dup's wins in step 6). Both
+           -- ITAD ids set only when the dup's Steam id comes along with its own.
+           ((a.igdb_id IS NULL) <> (b.igdb_id IS NULL)
+            AND NOT (a.itad_game_id IS NOT NULL AND b.itad_game_id IS NOT NULL
+                     AND (CASE WHEN a.igdb_id IS NULL THEN a.steam_app_id
+                               ELSE b.steam_app_id END) IS NULL))
+           OR
+           -- itad pair: neither row is IGDB; storefront keys must not clash.
+           (a.igdb_id IS NULL AND b.igdb_id IS NULL
+            AND NOT (a.steam_app_id IS NOT NULL AND b.steam_app_id IS NOT NULL)
+            AND NOT (a.itad_game_id IS NOT NULL AND b.itad_game_id IS NOT NULL))
+         )
     )
     SELECT CASE WHEN b_igdb IS NOT NULL THEN b_id ELSE id END AS keeper_id,
            CASE WHEN b_igdb IS NOT NULL THEN id ELSE b_id END AS dup_id,
@@ -288,23 +322,25 @@ BEGIN
                     THEN to_jsonb(p.keeper_id::text) ELSE to_jsonb(p.keeper_id) END)
        WHERE config->'gameId' IN (to_jsonb(p.dup_id), to_jsonb(p.dup_id::text));
 
-      -- 6. Identity: clear the dup's unique keys, then fill the keeper's gaps.
+      -- 6. Identity: clear the dup's unique keys, then write them onto the keeper.
       SELECT g.* INTO dup_row FROM games g WHERE g.id = p.dup_id;
+      SELECT g.* INTO keep_row FROM games g WHERE g.id = p.keeper_id;
+      adopt_itad := dup_row.itad_game_id IS NOT NULL
+        AND (keep_row.itad_game_id IS NULL OR dup_row.steam_app_id IS NOT NULL);
       UPDATE games SET steam_app_id = NULL, itad_game_id = NULL WHERE id = p.dup_id;
       UPDATE games k SET
-        steam_app_id = COALESCE(k.steam_app_id, dup_row.steam_app_id),
-        steam_app_id_source = CASE WHEN k.steam_app_id IS NULL AND dup_row.steam_app_id IS NOT NULL
-                                   THEN dup_row.steam_app_id_source ELSE k.steam_app_id_source END,
-        itad_game_id = COALESCE(k.itad_game_id, dup_row.itad_game_id),
-        itad_boxart_url = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_boxart_url ELSE k.itad_boxart_url END,
-        itad_tags = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_tags ELSE k.itad_tags END,
-        itad_current_price = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_current_price ELSE k.itad_current_price END,
-        itad_current_cut = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_current_cut ELSE k.itad_current_cut END,
-        itad_current_shop = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_current_shop ELSE k.itad_current_shop END,
-        itad_current_url = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_current_url ELSE k.itad_current_url END,
-        itad_lowest_price = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_lowest_price ELSE k.itad_lowest_price END,
-        itad_lowest_cut = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_lowest_cut ELSE k.itad_lowest_cut END,
-        itad_price_updated_at = CASE WHEN k.itad_game_id IS NULL THEN dup_row.itad_price_updated_at ELSE k.itad_price_updated_at END,
+        -- Q2 re-ruling: the Steam-first row's Steam id wins (source: 6b).
+        steam_app_id = COALESCE(dup_row.steam_app_id, k.steam_app_id),
+        itad_game_id = CASE WHEN adopt_itad THEN dup_row.itad_game_id ELSE k.itad_game_id END,
+        itad_boxart_url = CASE WHEN adopt_itad THEN dup_row.itad_boxart_url ELSE k.itad_boxart_url END,
+        itad_tags = CASE WHEN adopt_itad THEN dup_row.itad_tags ELSE k.itad_tags END,
+        itad_current_price = CASE WHEN adopt_itad THEN dup_row.itad_current_price ELSE k.itad_current_price END,
+        itad_current_cut = CASE WHEN adopt_itad THEN dup_row.itad_current_cut ELSE k.itad_current_cut END,
+        itad_current_shop = CASE WHEN adopt_itad THEN dup_row.itad_current_shop ELSE k.itad_current_shop END,
+        itad_current_url = CASE WHEN adopt_itad THEN dup_row.itad_current_url ELSE k.itad_current_url END,
+        itad_lowest_price = CASE WHEN adopt_itad THEN dup_row.itad_lowest_price ELSE k.itad_lowest_price END,
+        itad_lowest_cut = CASE WHEN adopt_itad THEN dup_row.itad_lowest_cut ELSE k.itad_lowest_cut END,
+        itad_price_updated_at = CASE WHEN adopt_itad THEN dup_row.itad_price_updated_at ELSE k.itad_price_updated_at END,
         cover_url = COALESCE(k.cover_url, dup_row.cover_url),
         twitch_game_id = COALESCE(k.twitch_game_id, dup_row.twitch_game_id),
         -- Registry config (step 0 ruled out a conflict): a keeper still on
@@ -319,10 +355,21 @@ BEGIN
         api_namespace_prefix = COALESCE(k.api_namespace_prefix, dup_row.api_namespace_prefix)
        WHERE k.id = p.keeper_id;
 
+      -- 6b. Provenance of an adopted Steam id, in its own statement (see header).
+      IF dup_row.steam_app_id IS NOT NULL
+         AND dup_row.steam_app_id IS DISTINCT FROM keep_row.steam_app_id THEN
+        UPDATE games SET steam_app_id_source = CASE
+            WHEN keep_row.steam_app_id IS NULL THEN dup_row.steam_app_id_source
+            ELSE 'manual' END
+         WHERE id = p.keeper_id;
+      END IF;
+
       -- 7. Drop the dup.
       DELETE FROM games WHERE id = p.dup_id;
       merged := merged + 1;
-      RAISE NOTICE 'ROK-2120 merged % pair: keep=% dup=%', p.kind, p.keeper_id, p.dup_id;
+      RAISE NOTICE 'ROK-2120 merged % pair: keep=% dup=% steam %->%', p.kind,
+        p.keeper_id, p.dup_id, keep_row.steam_app_id,
+        COALESCE(dup_row.steam_app_id, keep_row.steam_app_id);
     EXCEPTION WHEN SQLSTATE 'RL120' OR unique_violation OR exclusion_violation
                    OR foreign_key_violation THEN
       skipped := skipped + 1;
