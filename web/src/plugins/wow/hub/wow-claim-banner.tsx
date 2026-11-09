@@ -21,7 +21,7 @@ import { useClaimBannerDismissed } from './use-wow-claim-banner';
 import { CLAIM_BANNER_COPY as COPY } from './wow-claim-banner.helpers';
 
 /** §4.7 neutral instruction callout; the right padding keeps the × clear of the copy and button. */
-const CALLOUT_CLS = 'relative rounded-lg border border-edge bg-overlay/30 p-4 sm:pr-12';
+const CALLOUT_CLS = 'relative rounded-lg border border-edge bg-overlay/30 p-4 sm:pr-14';
 
 /**
  * The × pinned to the callout's top-right corner. The wrapper is what is
@@ -51,7 +51,7 @@ export function WowClaimBannerView({ onClaim, onDismiss, showWarning }: WowClaim
     return (
         <section aria-label={COPY.label} data-testid="wow-claim-banner" className={CALLOUT_CLS}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <p className="min-w-0 flex-1 pr-10 text-sm text-foreground sm:pr-0">{COPY.line}</p>
+                <p className="min-w-0 flex-1 pr-10 text-sm text-secondary sm:pr-0">{COPY.line}</p>
                 <Button onClick={onClaim} className="w-full sm:w-auto">{COPY.button}</Button>
             </div>
             {showWarning && <NotLinkedWarning className="mt-3 text-left" />}
