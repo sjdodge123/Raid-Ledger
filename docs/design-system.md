@@ -491,9 +491,12 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
   the 140px stack at 768–1023px with `md:pb-40`; **FAB clearance (ROK-1889):** every `FilterFab` renders
   `[data-filter-fab]`, so `:root:has([data-filter-fab])` (`index.css`, pure CSS, no JS hook) turns
   `--filter-fab-clearance` (`index.css`, `0px` otherwise) into the FAB's top edge + 16px — `9rem` below 768px,
-  `9.75rem` at 768–1023px. A shell that hosts tabs which may carry a `FilterEntry` pads
-  `pb-[max(<its own bottom>,var(--filter-fab-clearance))]` so the last row scrolls fully above the FAB — the
-  hub page (`hub-page.tsx`) does, covering Valheim Materials and Planner; DON'T move the FAB instead) opens the same `FilterPanel` as a
+  `9.75rem` at 768–1023px. **Below 768px the app shell owns it (ROK-2156):** `Layout.tsx`'s `<main>` pads
+  `pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] md:pb-0`, so every page's last row
+  scrolls above the tab bar AND a phone FAB — pages add no phone bottom padding of their own. At 768–1023px a page
+  that hosts a `FilterEntry` (or tabs that may carry one) pads `md:pb-[max(<its own bottom>,var(--filter-fab-clearance))]`
+  (or `md:pb-40`) — the hub page (`hub-page-error.tsx` `PAGE`) does, covering Valheim Materials and Planner; DON'T
+  move the FAB instead) opens the same `FilterPanel` as a
   `BottomSheet`, which uses its own height cap instead. Neutral tone (`bg-surface border border-edge-strong
   shadow-lg`, funnel `text-foreground`) — it is a secondary trigger, not a page's primary action, so it
   does NOT take the `FAB` primitive's default emerald fill. `aria-label="Filters"`, `aria-describedby`
@@ -1068,10 +1071,17 @@ wearing the same circle at 28px (`HubsCircle size="inline"`; operator ruling 202
 thing on every width — circle + "Hubs ▾" from 1024px, circle + chevron at 768–1023px.
 The More drawer lists **no** hubs (ROK-1890, operator 2026-10-21): the bottom button's "Your hubs" sheet replaced its "Your hubs" block and "Browse all hubs" row, and a viewer in no hubs reaches `/hubs` through the button's plain link.
 
-**DO** dock or pad anything above the bar with `--bottom-nav-clearance` (`index.css`: `--bottom-nav-height`
+**DO** dock anything fixed or sticky above the bar with `--bottom-nav-clearance` (`index.css`: `--bottom-nav-height`
 3.5rem + `--bottom-nav-raise` 1.5rem + the safe-area inset) — e.g. `bottom-[var(--bottom-nav-clearance)]`
-(game-time `SelectedBlockInspector`), `bottom-[calc(var(--bottom-nav-clearance)+0.5rem)]` (`DayBlockEditor`),
-`pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-…` (page bottoms). `bottom-nav-clearance.guard.test.ts` pins it.
+(game-time `SelectedBlockInspector`, hub `ArrangeFooter`), `bottom-[calc(var(--bottom-nav-clearance)+0.5rem)]`
+(`DayBlockEditor`).
+
+**The shell owns the page-bottom clearance (ROK-2156).** `Layout.tsx`'s `<main>` pads
+`pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] md:pb-0` below 768px, except on the
+full-screen wizard routes where the bar does not render (`hidesBottomTabBar`, `bottom-tab-bar-routes.ts`).
+**DON'T** add `pb-24`, `pb-[calc(var(--bottom-nav-clearance)…)]` or any other phone bar clearance to a page — it
+doubles the gap; a page keeps only its own `md:`/`lg:` bottom padding. `bottom-nav-clearance.guard.test.ts` pins
+both the shell padding and the no-page-padding rule.
 
 **DON'T** add a second raised slot, give a tab a fixed `min-w-[…]` (it overflows at 320px), or dock a fixed
 or sticky element to the bare `bottom: 3.5rem` bar height — the circle's 24px lift would cover it.
