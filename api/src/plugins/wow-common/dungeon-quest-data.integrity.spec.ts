@@ -8,6 +8,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { DUNGEON_INSTANCE_NAMES } from './dungeon-instance-names';
+import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 
 interface Row {
   questId: number;
@@ -63,11 +64,14 @@ describe('bundled classic dungeon quest data (ROK-2143)', () => {
     expect(synthetic).toEqual([]);
   });
 
-  it("never names the quest's own dungeon as its giver zone (R5=B)", () => {
+  // R5=B, Lead ruling: an inside-start quest (ROK-2142 allowlist) really is
+  // given inside its dungeon, so only the others may not name it.
+  it("names the quest's own dungeon as giver zone only for inside starts (R5=B)", () => {
     const own = rows
       .filter(
         (r) =>
           r.dungeonInstanceId !== null &&
+          !INSIDE_DUNGEON_QUEST_IDS.has(r.questId) &&
           r.questGiverZone === DUNGEON_INSTANCE_NAMES[r.dungeonInstanceId],
       )
       .map((r) => r.questId);
