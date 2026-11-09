@@ -410,6 +410,34 @@ describe('ROK-2148 — Mailworthy on a stale char export (T17)', () => {
   });
 });
 
+describe('ROK-2148 Codex P2 — "Export all" applies the block after the guild section', () => {
+  it("a giver who joined in the same paste's guild section is accepted", async () => {
+    const newbie = buildMember(6, { name: 'Newbie' });
+    const guild = {
+      ...buildGuildPayload([...ROSTER, newbie]),
+      exportedAt: FIXTURE_EXPORTED_AT + 600,
+    };
+    const char = buildCharMailworthyPayload(
+      block([giver({ characterName: 'Newbie' })]),
+    );
+    const res = await testApp.request
+      .post(`/plugins/wow/characters/${charId}/addon-import`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        importString: [char, guild].map((p) => buildImportString(p)).join('\n'),
+        dryRun: false,
+      });
+    expect(res.status).toBe(200);
+    const body = res.body as { summary: { mailworthy?: unknown } };
+    expect(body.summary.mailworthy).toMatchObject({
+      status: 'applied',
+      givers: 1,
+      giversRejected: 0,
+    });
+    expect((await giverRows()).map((r) => r.nameKey)).toEqual(['newbie']);
+  });
+});
+
 describe('ROK-2148 Q8 — the char summary reports the Mailworthy block', () => {
   it('applied: givers / rejected / peers / template counts', async () => {
     const res = await importOutcome(buildCharMailworthyPayload());

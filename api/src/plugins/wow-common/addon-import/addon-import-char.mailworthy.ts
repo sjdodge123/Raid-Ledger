@@ -13,8 +13,8 @@ import {
 import {
   guildNameKey,
   type AddonApplyContext,
+  type AddonSectionOutcome,
 } from './addon-import-apply.types';
-import { applyChar } from './addon-import-char.apply';
 import {
   clampedDate,
   dedupeRules,
@@ -32,8 +32,8 @@ import type { DecodedAddonCharExport } from './addon-import.decoder';
 /**
  * ROK-2148 D.2 — apply the `char` export's Mailworthy block (lifted to
  * `payload.mailworthy` by the decoder) to its guild's template / peers /
- * givers. Runs after `applyChar` in the same transaction whatever its
- * status (a stale char snapshot can still carry newer givers); never throws
+ * givers. Runs after every section of the paste (`runPaste`) in the same
+ * transaction whatever the char status (a stale char snapshot can still carry newer givers); never throws
  * for block content — a skip or a rejected row is logged and reported on the
  * char summary's `mailworthy` (Q8; absent with no block). Dry runs never reach it.
  */
@@ -42,12 +42,16 @@ type TemplateOutcome = 'stored' | 'unchanged' | 'rejected' | 'none';
 
 const logger = new Logger('AddonImportMailworthy');
 
-/** `applyChar`, then the Mailworthy block (non-dry char branch). */
-export async function applyCharThenMailworthy(
+/**
+ * The char section's outcome with its Mailworthy block applied. `runPaste`
+ * calls it once EVERY section of the paste has run (Codex P2): an "Export
+ * all" paste's guild section must refresh the roster D5 checks first.
+ */
+export async function withCharMailworthy<S extends object>(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
-): Promise<Awaited<ReturnType<typeof applyChar>>> {
-  const outcome = await applyChar(ctx, payload);
+  outcome: AddonSectionOutcome<S>,
+): Promise<AddonSectionOutcome<S>> {
   const mailworthy = await applyCharMailworthy(ctx, payload);
   if (!mailworthy) return outcome;
   return { ...outcome, summary: { ...outcome.summary, mailworthy } };
@@ -98,7 +102,7 @@ function mailworthyOutcome(
 }
 
 /** The realm-less guild the guild section writes (`applyGuild`'s target). */
-async function findGuildId(
+export async function findGuildId(
   ctx: AddonApplyContext,
   guildName: string,
 ): Promise<number | undefined> {
