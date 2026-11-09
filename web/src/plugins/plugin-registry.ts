@@ -18,6 +18,8 @@ export type PluginSlotName =
     | 'character-detail:owner-actions'
     /** Admin-only actions in the character page header (ROK-1756); context `{ characterId, name, addonLinked }`. */
     | 'character-detail:admin-actions'
+    /** ROK-2149: actions on a read-only roster-member page (claim CTA); context `{ hubId, rosterMemberId, canClaim, fromClaim, gameId, name, layout, … }`. */
+    | 'character-detail:read-only-actions'
     /** Actions above the Add Character form, create only (ROK-1738); context `{ onClose, gameSlug }`. */
     | 'character-create:header-actions'
     | 'character-create:import-form'
