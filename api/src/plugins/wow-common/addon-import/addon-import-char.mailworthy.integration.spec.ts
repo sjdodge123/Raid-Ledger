@@ -438,6 +438,40 @@ describe('ROK-2148 Codex P2 — "Export all" applies the block after the guild s
   });
 });
 
+describe('ROK-2148 Codex P2 — previewing a stale char export with newer givers', () => {
+  /** Dry-run status of an older char export carrying one giver. */
+  async function previewStatus(): Promise<string> {
+    const res = await testApp.request
+      .post(`/plugins/wow/characters/${charId}/addon-import`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        importString: buildImportString(
+          buildCharMailworthyPayload(block([giver({})])),
+        ),
+        dryRun: true,
+      });
+    expect(res.status).toBe(200);
+    return (res.body as { status: string }).status;
+  }
+
+  beforeEach(async () => {
+    const newer = buildCharPayload({ exportedAt: FIXTURE_EXPORTED_AT + 600 });
+    expect((await importOutcome(newer)).status).toBe('applied');
+  });
+
+  it('is applicable (preview) when a giver is newer than stored', async () => {
+    const at = MAILWORTHY_GENERATED_AT;
+    await seedGiver('Ana Forever', 'self', at - 86_400, at - 86_400);
+    expect(await previewStatus()).toBe('preview');
+  });
+
+  it('stays stale when no giver is newer than stored', async () => {
+    const at = MAILWORTHY_GENERATED_AT;
+    await seedGiver('Ana Forever', 'self', at, at);
+    expect(await previewStatus()).toBe('stale');
+  });
+});
+
 describe('ROK-2148 Q8 — the char summary reports the Mailworthy block', () => {
   it('applied: givers / rejected / peers / template counts', async () => {
     const res = await importOutcome(buildCharMailworthyPayload());

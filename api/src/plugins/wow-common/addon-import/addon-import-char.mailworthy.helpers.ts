@@ -103,6 +103,21 @@ export function clampGiver(giver: AddonMailworthyGiver): {
 }
 
 /**
+ * Codex P2 — true when a giver (deduped, `asOf` clamped to now) has no stored
+ * row in `stored` (name key → stored `as_of`) or a strictly newer `asOf`.
+ */
+export function anyGiverNewer(
+  givers: readonly AddonMailworthyGiver[],
+  stored: ReadonlyMap<string, Date>,
+  nowMs: number,
+): boolean {
+  return dedupeGivers(givers).some((giver) => {
+    const asOf = stored.get(mailworthyNameKey(giver.characterName));
+    return asOf === undefined || clampedDate(giver.asOf, nowMs) > asOf;
+  });
+}
+
+/**
  * D5 amended: `self` = the exporter or a roster character linked to the
  * importing user; `relayed` = any other roster member; null = off roster.
  */
