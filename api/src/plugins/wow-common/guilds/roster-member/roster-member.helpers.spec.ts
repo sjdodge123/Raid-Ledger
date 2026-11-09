@@ -65,12 +65,12 @@ describe('noArmoryReason (D1, AC-5)', () => {
   it('returns each reason for its condition, in table order', () => {
     expect(reason(null, 5, null)).toBe('no_blizzard_id');
     expect(reason(9, 9, null)).toBe('below_level_10');
-    expect(reason(9, 30, snap({ syncedAt: null, lastError: 'invalid_name' }))).toBe(
-      'invalid_name',
-    );
-    expect(reason(9, 30, snap({ syncedAt: null, lastError: 'not_found' }))).toBe(
-      'not_found',
-    );
+    expect(
+      reason(9, 30, snap({ syncedAt: null, lastError: 'invalid_name' })),
+    ).toBe('invalid_name');
+    expect(
+      reason(9, 30, snap({ syncedAt: null, lastError: 'not_found' })),
+    ).toBe('not_found');
     expect(reason(10, 30, snap({ lastError: 'id_mismatch' }))).toBe(
       'id_mismatch',
     );
@@ -84,7 +84,9 @@ describe('noArmoryReason (D1, AC-5)', () => {
   });
 });
 
-const armory = (over: Partial<RosterMemberSnapshot> = {}): RosterMemberSnapshot => ({
+const armory = (
+  over: Partial<RosterMemberSnapshot> = {},
+): RosterMemberSnapshot => ({
   blizzardCharacterId: 9,
   level: 40,
   class: 'Mage',
@@ -151,7 +153,9 @@ describe('toRosterMemberCharacter', () => {
   });
   it('an id-mismatched snapshot is not returned (AC-4)', () => {
     const dto = toRosterMemberCharacter(
-      row({ snapshot: armory({ blizzardCharacterId: 8, lastError: 'id_mismatch' }) }),
+      row({
+        snapshot: armory({ blizzardCharacterId: 8, lastError: 'id_mismatch' }),
+      }),
       { includeRoster: true, canClaim: false },
     );
     expect(dto.race).toBeNull();
