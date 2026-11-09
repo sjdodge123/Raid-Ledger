@@ -4145,3 +4145,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-09 — feat/rok-2148-guild-contributions (surfaced during the fleet UI verify, plan 2026-11-09-0406-d6a0)
 
 - **nit** `web/src/plugins/wow/hub-widgets/contributions-givers.tsx:76` — the Top givers "30 days" segment of the shared `RadioGroup appearance="segmented"` wraps to two lines ("30 / days") in the hub column at 1280, 820 and 375 (tap target still ≥44px; all steps PASS). The segmented primitive lets option labels wrap. Suggested: `whitespace-nowrap` on segmented option labels in the primitive (check its other callers), or a non-breaking space in the option label.
+
+### 2026-11-09 — fix/rok-2098-tiebreaker-race (surfaced during review r2/r3)
+
+- **med** `api/src/lineups/tiebreaker/tiebreaker.service.ts` (vote path → `finalizeTiebreaker`) — a vote is saved before the advance lock is taken, so a vote whose lock wait times out (`lock_timeout` 5s → 409) or whose bracket-completing matching fails (500) leaves the vote stored while the caller sees an error. A retry is a duplicate no-op that then advances, but a failed matching after a saved bracket-completing vote is only recoverable through admin forceResolve. Suggested: run the vote write and the finalize in one tx (or have the next vote / a sweeper re-run `finalizeTiebreaker` for a decided-without-matching tiebreaker) and return 200 with a `pending` flag on lock timeout.
+- **low** `api/src/lineups/tiebreaker/tiebreaker-query.helpers.ts` (`findPendingOrActiveTiebreaker`) — no ORDER BY; with two pending/active rows for one lineup the row returned is arbitrary. Suggested: `ORDER BY created_at DESC LIMIT 1`.
