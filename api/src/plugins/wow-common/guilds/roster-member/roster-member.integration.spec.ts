@@ -363,6 +363,9 @@ describe('roster member — refusals (AC-2, AC-3)', () => {
     const res = await get(hub('hidden'), member('hidden'), token('admin'));
     expect(res.status).toBe(200);
     expect(res.body.rosterMemberId).toBe(member('hidden'));
+    // AC-6: a hidden hub is not claimable, so nobody is offered a claim.
+    expect(res.body.canClaim).toBe(false);
+    expect(res.body.noArmoryReason).toBe('no_blizzard_id');
     expectStrictPayload(res.body);
   });
 
