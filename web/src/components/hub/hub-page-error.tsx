@@ -16,11 +16,11 @@ import { hubNotMemberKind, isHubPluginInactive } from './hub-plugin-inactive.hel
 import { HubPluginInactiveCopy } from './hub-plugin-inactive';
 
 /**
- * Phone: the fixed bottom bar + raised Hubs circle overlay the last card unless the page pads past them (ROK-1876).
- * Below 1024px a tab's Filters FAB (Materials, Planner) floats higher still, so pad past it too (ROK-1889).
+ * Phone: the app shell (`Layout.tsx` `<main>`) already pads past the bottom bar, the raised Hubs circle and a
+ * Filters FAB (ROK-2156), so this adds no phone bottom padding. At 768-1023px a tab's Filters FAB (Materials,
+ * Planner) still floats over the last card, so the page pads past it there (ROK-1889).
  */
-export const PAGE = 'max-w-5xl mx-auto px-4 pt-8 pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] '
-    + 'md:pb-[max(2rem,var(--filter-fab-clearance))]';
+export const PAGE = 'max-w-5xl mx-auto px-4 pt-8 md:pb-[max(2rem,var(--filter-fab-clearance))]';
 
 export function Notice({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
