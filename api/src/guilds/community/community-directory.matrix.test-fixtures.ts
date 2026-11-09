@@ -1,10 +1,12 @@
 /**
  * ROK-1875 §6 / ROK-1883 — the shared hub-directory matrix for the `/hubs`
  * and `/hubs/by-game` integration specs: C1–C4 community, S1–S2 server,
- * W1–W3 WoW; viewers U1, U2 and the seeded admin. `setupMatrixSuite()`
+ * W1–W3 WoW (+ ROK-2132's Forever F1–F4 via `seedForeverGame`); viewers U1,
+ * U2 and the seeded admin. `setupMatrixSuite()`
  * registers the Pelican + WoW activation hooks (real `PluginRegistryService`,
  * no `jest.mock`) and the per-test truncate.
  */
+import { eq } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
@@ -14,6 +16,7 @@ import * as schema from '../../drizzle/schema';
 import { PELICAN_PLUGIN_ID } from '../../plugins/pelican/pelican.constants';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { WOW_COMMON_MANIFEST } from '../../plugins/wow-common/manifest';
+import { WOW_FOREVER_GAME_SLUG } from '../../plugins/wow-common/wow-forever-identity.helpers';
 
 export type Kind = 'wow_guild' | 'game_server' | 'game_community';
 type Status = 'proposed' | 'active' | 'archived';
@@ -23,6 +26,10 @@ interface HubOpts {
   status?: Status;
   hidden?: boolean;
   members?: number;
+  /** Defaults to the seed game (not WoW: Forever). */
+  gameId?: number;
+  /** `archived_at` set while `status` stays active (WoW / server kinds). */
+  archived?: boolean;
 }
 
 const DAY = 86_400_000;
@@ -71,9 +78,9 @@ function hubValues(
 ): typeof schema.guilds.$inferInsert {
   const status = o.status ?? 'active';
   const community = o.kind === 'game_community';
-  const archived = status === 'archived';
+  const archived = status === 'archived' || o.archived === true;
   return {
-    gameId: testApp.seed.game.id,
+    gameId: o.gameId ?? testApp.seed.game.id,
     kind: o.kind,
     region: community ? 'community' : 'us',
     source: community
@@ -144,12 +151,16 @@ export async function serverMember(
 }
 
 /** A character linked by GUID to a live `guild_members` row (WoW D3). */
-export async function linkWow(guildId: number, userId: number): Promise<void> {
+export async function linkWow(
+  guildId: number,
+  userId: number,
+  gameId: number = testApp.seed.game.id,
+): Promise<void> {
   seq += 1;
   const guid = `Player-1-dir${seq}`;
   await testApp.db.insert(schema.characters).values({
     userId,
-    gameId: testApp.seed.game.id,
+    gameId,
     name: `Char${seq}`,
     addonGuid: guid,
     region: 'us',
@@ -164,18 +175,36 @@ export async function linkWow(guildId: number, userId: number): Promise<void> {
   });
 }
 
+/** ROK-2132: the WoW: Forever game row (its slug is what makes it Forever). */
+export async function seedForeverGame(): Promise<number> {
+  const [existing] = await testApp.db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(eq(schema.games.slug, WOW_FOREVER_GAME_SLUG))
+    .limit(1);
+  if (existing) return existing.id;
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'WoW Forever', slug: WOW_FOREVER_GAME_SLUG })
+      .returning(),
+    'forever game',
+  );
+  return game.id;
+}
+
 export interface Matrix {
   ids: Record<string, number>;
+  /** U1's user id (ROK-2132 links U1 into a Forever guild). */
+  u1Id: number;
   u1: Auth;
   u2: Auth;
   admin: Auth;
 }
 
-/** The §6 fixture: C1–C4 community, S1–S2 server, W1–W3 WoW; U1, U2, A. */
-export async function seedMatrix(): Promise<Matrix> {
-  const u1 = await seedUser('dir-u1');
-  const u2 = await seedUser('dir-u2');
-  const ids: Record<string, number> = {
+/** C1–C4, S1–S2, W1–W3 on the seed game (§6). */
+async function seedMatrixHubs(): Promise<Record<string, number>> {
+  return {
     C1: await seedHub('C1 Crew', { kind: 'game_community', members: 3 }),
     C2: await seedHub('C2 Crew', {
       kind: 'game_community',
@@ -192,12 +221,25 @@ export async function seedMatrix(): Promise<Matrix> {
     W2: await seedHub('W2 Guild', { kind: 'wow_guild', members: 40 }),
     W3: await seedHub('W3 Guild', { kind: 'wow_guild', hidden: true }),
   };
+}
+
+/** The §6 fixture: C1–C4 community, S1–S2 server, W1–W3 WoW; U1, U2, A. */
+export async function seedMatrix(): Promise<Matrix> {
+  const u1 = await seedUser('dir-u1');
+  const u2 = await seedUser('dir-u2');
+  const ids = await seedMatrixHubs();
   await joinCommunity(must(ids.C1), u1.id);
   await serverMember(must(ids.S1), u1.id);
   await linkWow(must(ids.W1), u1.id);
   await linkWow(must(ids.W3), u1.id);
   const admin = await authOf(testApp.seed.adminUser);
-  return { ids, u1: await authOf(u1), u2: await authOf(u2), admin };
+  return {
+    ids,
+    u1Id: u1.id,
+    u1: await authOf(u1),
+    u2: await authOf(u2),
+    admin,
+  };
 }
 
 /** A fixture id, or a loud failure. */

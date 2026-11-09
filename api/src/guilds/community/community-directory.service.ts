@@ -63,9 +63,27 @@ export class CommunityDirectoryService {
   ): Promise<{ live: GuildKind[]; scope: DirectoryScope }> {
     const live = this.hubKinds.active().map((a) => a.kind);
     const kinds = directoryKinds(live, kind);
-    const memberIds = await this.access.memberHubIds(actor.id);
-    const scope = { kinds: kinds.queried, memberIds, staff: isStaff(actor) };
+    const staff = isStaff(actor);
+    const [memberIds, visitorIds] = await Promise.all([
+      this.access.memberHubIds(actor.id),
+      staff ? Promise.resolve([]) : this.visitorHubIds(actor.id),
+    ]);
+    const scope = { kinds: kinds.queried, memberIds, visitorIds, staff };
     return { live: kinds.live, scope };
+  }
+
+  /**
+   * ROK-2132 Ruling 2: hubs each live kind lists to non-members (adapter
+   * `visitorVisibleGroupIds`; a kind without it lists none). Staff skip it —
+   * their scope has no member gate.
+   */
+  private async visitorHubIds(userId: number): Promise<number[]> {
+    const perKind = await Promise.all(
+      this.hubKinds
+        .active()
+        .map((a) => a.visitorVisibleGroupIds?.(userId) ?? Promise.resolve([])),
+    );
+    return [...new Set(perKind.flat())];
   }
 
   /** The game page card: hubs, the viewer's proposals, may they propose. */
