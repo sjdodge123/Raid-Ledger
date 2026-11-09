@@ -62,13 +62,10 @@ export async function upsertBlizzardQuests(
   const unique = dedupeByQuestId(rows);
   for (let i = 0; i < unique.length; i += BLIZZARD_QUEST_UPSERT_CHUNK) {
     const chunk = unique.slice(i, i + BLIZZARD_QUEST_UPSERT_CHUNK);
-    await db
-      .insert(t)
-      .values(chunk)
-      .onConflictDoUpdate({
-        target: t.questId,
-        set: blizzardQuestConflictSet(),
-      });
+    await db.insert(t).values(chunk).onConflictDoUpdate({
+      target: t.questId,
+      set: blizzardQuestConflictSet(),
+    });
   }
   return unique.length;
 }
