@@ -3,11 +3,13 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventRaidReadiness } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import {
   GuildAccessService,
   type GuildActor,
 } from '../../guilds/guild-access.service';
 import { loadEventQuestSet } from './event-forever-progress.query';
+import type { QuestOverlayDeps } from './dungeon-quests.overlay';
 import {
   buildQuestReadiness,
   type ReadinessSignup,
@@ -86,7 +88,13 @@ export class EventRaidReadinessService {
     private readonly db: Db,
     private readonly access: GuildAccessService,
     private readonly facts: WowFactsService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** The DB plus the quest-import switch the known-quest overlay reads. */
+  private get questDeps(): QuestOverlayDeps {
+    return { db: this.db, settings: this.settings };
+  }
 
   async readiness(
     actor: GuildActor,
@@ -106,7 +114,7 @@ export class EventRaidReadinessService {
     event: ReadinessEvent,
   ): Promise<EventRaidReadiness> {
     const [quests, signups, manual] = await Promise.all([
-      loadEventQuestSet(this.db, event.contentInstances),
+      loadEventQuestSet(this.questDeps, event.contentInstances),
       loadReadinessRoster(this.db, eventId),
       loadEventManualRows(this.db, eventId),
     ]);

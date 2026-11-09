@@ -3,11 +3,13 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventQuestReadinessDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import {
   GuildAccessService,
   type GuildActor,
 } from '../../guilds/guild-access.service';
 import { loadEventQuestSet } from './event-forever-progress.query';
+import type { QuestOverlayDeps } from './dungeon-quests.overlay';
 import { buildQuestReadiness } from './event-quest-readiness.helpers';
 import {
   loadEventManualRows,
@@ -31,7 +33,13 @@ export class EventQuestReadinessService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly access: GuildAccessService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** The DB plus the quest-import switch the known-quest overlay reads. */
+  private get questDeps(): QuestOverlayDeps {
+    return { db: this.db, settings: this.settings };
+  }
 
   /** The readiness matrix; every read is batched (no per-signup query). */
   async readiness(
@@ -45,7 +53,7 @@ export class EventQuestReadinessService {
       throw new NotFoundException('Quest readiness is for Forever events only');
     }
     const [quests, signups, manual] = await Promise.all([
-      loadEventQuestSet(this.db, event.contentInstances),
+      loadEventQuestSet(this.questDeps, event.contentInstances),
       loadReadinessRoster(this.db, eventId),
       loadEventManualRows(this.db, eventId),
     ]);

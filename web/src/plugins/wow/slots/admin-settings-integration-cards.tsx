@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
+import { reloadOnChunkError } from '../../../lib/chunk-error';
 import { toast } from '../../../lib/toast';
 import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { useAdminSettings } from '../../../hooks/use-admin-settings';
@@ -10,8 +11,16 @@ import { PasswordInput } from '../../../components/ui/password-input';
 import { TestResultBanner } from '../../../components/admin/admin-form-helpers';
 import { getPluginBadge } from '../../plugin-registry';
 import { IntegrationFormActions } from '../../../components/admin/integration-form-actions';
-import { ForeverSettingsSection } from '../components/forever-settings-section';
 import { ForeverRealmRulesetsSection } from '../components/forever-realm-rulesets-form';
+
+/**
+ * ROK-2143: the Forever section (probe + Blizzard quest import panels) is
+ * admin-only and gated on configured credentials, so it loads on demand
+ * instead of riding in app-entry through the WoW plugin registration. Fallback
+ * is `null`, matching the section's own render-nothing-until-loaded state.
+ */
+const ForeverSettingsSection = lazy(() =>
+    reloadOnChunkError(import('../components/forever-settings-section')).then((m) => ({ default: m.ForeverSettingsSection })));
 
 async function handleSave(
     e: React.FormEvent, clientId: string, clientSecret: string,
@@ -112,7 +121,7 @@ export function BlizzardIntegrationSlot({ pluginSlug }: { pluginSlug?: string })
                 onTest={() => handleTest(testBlizzard, setTestResult)} onClear={() => handleClear(clearBlizzard, setTestResult)}
                 savePending={updateBlizzard.isPending} testPending={testBlizzard.isPending} clearPending={clearBlizzard.isPending} />
             {/* ROK-1717: Forever prefix + Armory flag — only once Blizzard credentials exist. */}
-            {blizzardStatus.data?.configured && <ForeverSettingsSection />}
+            {blizzardStatus.data?.configured && <Suspense fallback={null}><ForeverSettingsSection /></Suspense>}
             {/* ROK-1739: the realm → ruleset map needs no Blizzard credentials — outside the gate. */}
             <ForeverRealmRulesetsSection />
         </IntegrationCard>

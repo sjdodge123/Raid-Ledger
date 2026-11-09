@@ -22,6 +22,8 @@ const LAZY_ONLY = [
     'pages/scheduling/GameTimeCheckSheet.tsx',
     'components/features/game-time/phone/PhoneWeekCheckStep.tsx',
     'components/admin/admin-nav-data.tsx',
+    'plugins/wow/components/forever-settings-section.tsx',
+    'plugins/wow/components/forever-quest-import-panel.tsx',
 ];
 
 function resolveLocal(fromFile: string, spec: string): string | null {

@@ -23,3 +23,13 @@ export function formatGold(copper: number): string {
     if (copperRem > 0 || parts.length === 0) parts.push(`${copperRem}c`);
     return parts.join(' ');
 }
+
+/**
+ * ROK-2143: how many prerequisite quests sit before this quest in its chain.
+ * 0 when there is no chain, or the only entry is the quest itself (a
+ * `prevQuestId` that is not in our data) — never count the quest as its own.
+ */
+export function prerequisiteCount(quest: { questId: number; prerequisiteChain: { questId: number }[] | null }): number {
+    const idx = quest.prerequisiteChain?.findIndex((step) => step.questId === quest.questId) ?? -1;
+    return idx > 0 ? idx : 0;
+}

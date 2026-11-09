@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import {
   createDrizzleMock,
   type MockDb,
@@ -65,6 +66,7 @@ function forever(): ForeverEventProgress {
 
 let service: QuestProgressReadService;
 let mockDb: MockDb;
+const mockSettings = { get: jest.fn() };
 
 beforeEach(async () => {
   mockDb = createDrizzleMock();
@@ -74,6 +76,7 @@ beforeEach(async () => {
     providers: [
       QuestProgressReadService,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: SettingsService, useValue: mockSettings },
     ],
   }).compile();
   service = module.get(QuestProgressReadService);
@@ -180,7 +183,11 @@ describe('QuestProgressReadService — prereqs read scope (ROK-1758)', () => {
     mockMember.mockResolvedValue(forever());
     mockDb.where.mockResolvedValueOnce([]);
     const out = await service.getPrereqsForViewer(10, 1);
-    expect(mockMember).toHaveBeenCalledWith(mockDb, 10, 1);
+    expect(mockMember).toHaveBeenCalledWith(
+      { db: mockDb, settings: mockSettings },
+      10,
+      1,
+    );
     expect(mockLoad).not.toHaveBeenCalled();
     expect(out?.characterId).toBe('char-1');
   });

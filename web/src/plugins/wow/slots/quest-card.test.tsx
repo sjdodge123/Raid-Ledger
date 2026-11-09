@@ -110,3 +110,40 @@ describe('QuestCardHeader — Done pill (ROK-1748)', () => {
     });
 });
 
+
+describe('QuestCard — prerequisite not in our data (ROK-2143)', () => {
+    function renderExpanded(overrides: Partial<EnrichedDungeonQuestDto>) {
+        return render(
+            <QuestCard quest={createQuest(overrides)} questCoverage={undefined} currentUserId={1} eventId={1}
+                wowheadVariant="classic" isExpanded pendingQuestId={null} equippedBySlot={new Map()}
+                charClass={null} characterId={undefined} onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />,
+        );
+    }
+
+    it('a dangling prevQuestId shows no Chain badge, no self "Requires" and a muted not-in-data line', () => {
+        const { container } = renderExpanded({ prevQuestId: 99, prerequisiteChain: null });
+        expect(screen.queryByText('Chain'), 'no Chain badge without a resolved prerequisite').toBeNull();
+        expect(screen.queryByText('Requires:'), 'the quest must not be listed as its own prerequisite').toBeNull();
+        const line = screen.getByTestId('quest-prereq-missing');
+        expect(line).toHaveTextContent('Prerequisite not in data');
+        expect(line).toHaveClass('text-muted');
+        expect(container.querySelector('.quest-coverage__btn'), 'a quest with a prerequisite stays non-shareable').toBeNull();
+    });
+
+    it('a chain holding only the quest itself (old api shape) renders no badge and no self "Requires"', () => {
+        renderExpanded({ prevQuestId: 99, prerequisiteChain: [createQuest()] });
+        expect(screen.queryByText('Chain')).toBeNull();
+        expect(screen.queryByText('Requires:')).toBeNull();
+        expect(screen.getByTestId('quest-prereq-missing')).toBeInTheDocument();
+    });
+
+    it('a resolved chain keeps the badge with the count of quests before this one', () => {
+        renderExpanded({
+            prevQuestId: 50,
+            prerequisiteChain: [createQuest({ questId: 50, name: 'Step One' }), createQuest(), createQuest({ questId: 150, name: 'Next' })],
+        });
+        expect(screen.getByText('Chain')).toHaveAttribute('title', 'Requires 1 prerequisite quest(s)');
+        expect(screen.getByText('Requires:')).toBeInTheDocument();
+        expect(screen.queryByTestId('quest-prereq-missing')).toBeNull();
+    });
+});

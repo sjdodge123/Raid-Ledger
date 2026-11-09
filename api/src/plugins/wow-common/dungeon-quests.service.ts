@@ -1,7 +1,8 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { defined } from '../../common/defined.helpers';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, inArray, and } from 'drizzle-orm';
+import { inArray, and } from 'drizzle-orm';
 import type Redis from 'ioredis';
 
 import * as schema from '../../drizzle/schema';
@@ -9,18 +10,26 @@ import { wowClassicDungeonQuests } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { redisSwr } from '../../common/swr-cache';
+import { SettingsService } from '../../settings/settings.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
+import {
+  applyChainOverlay,
+  applyInstanceOverlay,
+} from './dungeon-quests.overlay';
 import {
   MAX_CHAIN_DEPTH,
   VARIANT_EXPANSIONS,
   toDto,
   walkChainInMemory,
+  prerequisiteChainOf,
   collectFrontierIds,
   loadRewardItemLookup,
   buildItemDetailsMap,
   collectAllItemIds,
 } from './dungeon-quests.helpers';
 import { resolveQuestInstanceIds } from './forever-instance-aliases';
+import { WOW_FOREVER_CONFIG_UPDATED } from './forever.settings';
+import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import type {
   DungeonQuestDto,
   EnrichedDungeonQuestDto,
@@ -49,6 +58,7 @@ export class DungeonQuestsService {
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     private readonly seeder: DungeonQuestSeeder,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Get the expansion set for a given WoW game variant. */
@@ -59,7 +69,10 @@ export class DungeonQuestsService {
     );
   }
 
-  /** Get all quests for a dungeon instance, filtered by variant. */
+  /**
+   * Get all quests for a dungeon instance, filtered by variant, with the
+   * Blizzard overlay merged in (ROK-2143; kill switch off → bundled only).
+   */
   async getQuestsForInstance(
     instanceId: number,
     variant: string = 'classic_era',
@@ -78,20 +91,24 @@ export class DungeonQuestsService {
       )
       .orderBy(wowClassicDungeonQuests.questLevel);
 
-    return rows.map((row) => toDto(row));
+    return applyInstanceOverlay(
+      { db: this.db, settings: this.settings },
+      rows.map((row) => toDto(row)),
+      { instanceIds, expansions },
+    );
   }
 
-  /** Get the full prerequisite chain for a quest. */
+  /**
+   * Get the full prerequisite chain for a quest. Codex P2: the root is
+   * loaded like any chain link — bundled row merged with the overlay, or an
+   * overlay-only row (kill switch on) — so the walk follows the same
+   * prevQuestId the returned root names, and a root only Blizzard has still
+   * gets its chain.
+   */
   async getQuestChain(questId: number): Promise<DungeonQuestDto[]> {
-    const [quest] = await this.db
-      .select()
-      .from(wowClassicDungeonQuests)
-      .where(eq(wowClassicDungeonQuests.questId, questId))
-      .limit(1);
-    if (!quest) return [];
-
+    const [dto] = await this.loadChainLinks([questId]);
+    if (!dto) return [];
     const questLookup = new Map<number, DungeonQuestDto>();
-    const dto = toDto(quest);
     questLookup.set(dto.questId, dto);
 
     await this.fetchChainQuests(dto, questLookup);
@@ -124,12 +141,25 @@ export class DungeonQuestsService {
     }
   }
 
-  /** Get enriched quests for an instance — includes resolved reward items and prerequisite chains (ROK-246, ROK-665). */
+  /** A Forever config save may flip the quest overlay — drop the cache (ROK-2143). */
+  @OnEvent(WOW_FOREVER_CONFIG_UPDATED)
+  async onForeverConfigUpdated(): Promise<void> {
+    await this.clearCache();
+  }
+
+  /**
+   * Enriched quests for an instance — resolved reward items and prerequisite
+   * chains (ROK-246, ROK-665). The key carries the overlay kill switch, so
+   * flipping `wow_forever_quest_import` by any path misses the cache (ROK-2143).
+   */
   async getEnrichedQuestsForInstance(
     instanceId: number,
     variant: string = 'classic_era',
   ): Promise<EnrichedDungeonQuestDto[]> {
-    const cacheKey = `${CACHE_PREFIX}:enriched:${instanceId}:${variant}`;
+    const overlay = (await isForeverQuestImportEnabled(this.settings))
+      ? 'bz'
+      : 'bundled';
+    const cacheKey = `${CACHE_PREFIX}:enriched:${overlay}:${instanceId}:${variant}`;
     const result = await redisSwr<EnrichedDungeonQuestDto[]>({
       redis: this.redis,
       key: cacheKey,
@@ -192,7 +222,10 @@ export class DungeonQuestsService {
     );
   }
 
-  /** Batch-fetch prerequisite chains for all quests (ROK-447). */
+  /**
+   * Batch-fetch prerequisite chains for all quests (ROK-447). A quest whose
+   * prerequisite is not in our data gets no chain (ROK-2143).
+   */
   private async batchGetQuestChains(
     quests: DungeonQuestDto[],
   ): Promise<Map<number, DungeonQuestDto[]>> {
@@ -206,7 +239,8 @@ export class DungeonQuestsService {
     await this.expandFrontier(quests, questLookup);
 
     for (const quest of questsWithPrereqs) {
-      chainMap.set(quest.questId, walkChainInMemory(quest, questLookup));
+      const chain = prerequisiteChainOf(quest, questLookup);
+      if (chain) chainMap.set(quest.questId, chain);
     }
     return chainMap;
   }
@@ -222,14 +256,9 @@ export class DungeonQuestsService {
     while (frontier.size > 0 && iterations < MAX_CHAIN_DEPTH) {
       iterations++;
       const idsToFetch = [...frontier];
-      const rows = await this.db
-        .select()
-        .from(wowClassicDungeonQuests)
-        .where(inArray(wowClassicDungeonQuests.questId, idsToFetch));
-
+      const dtos = await this.loadChainLinks(idsToFetch);
       const newFrontier = new Set<number>();
-      for (const row of rows) {
-        const dto = toDto(row);
+      for (const dto of dtos) {
         questLookup.set(dto.questId, dto);
         if (dto.prevQuestId !== null && !questLookup.has(dto.prevQuestId))
           newFrontier.add(dto.prevQuestId);
@@ -256,16 +285,28 @@ export class DungeonQuestsService {
       !questLookup.has(cur) &&
       questLookup.size < MAX_CHAIN_DEPTH
     ) {
-      const [row] = await this.db
-        .select()
-        .from(wowClassicDungeonQuests)
-        .where(eq(wowClassicDungeonQuests.questId, cur))
-        .limit(1);
-      if (!row) break;
-      const dto = toDto(row);
+      const [dto] = await this.loadChainLinks([cur]);
+      if (!dto) break;
       questLookup.set(dto.questId, dto);
       cur = direction === 'prev' ? dto.prevQuestId : dto.nextQuestId;
     }
+  }
+
+  /**
+   * Chain links by id. M3: they carry the same Blizzard-overlay prevQuestId
+   * as the instance's own quests, so the chain agrees with the cards. Codex
+   * P2: an id only the overlay has comes from the overlay (kill switch on).
+   */
+  private async loadChainLinks(ids: number[]): Promise<DungeonQuestDto[]> {
+    const rows = await this.db
+      .select()
+      .from(wowClassicDungeonQuests)
+      .where(inArray(wowClassicDungeonQuests.questId, ids));
+    return applyChainOverlay(
+      { db: this.db, settings: this.settings },
+      rows.map((row) => toDto(row)),
+      ids,
+    );
   }
 
   /** Fetch chain quest links for a single quest's chain walk. */
