@@ -40,6 +40,7 @@ import {
   FOREVER_QUEST_IMPORT_MAX_DEPTH,
   FOREVER_QUEST_IMPORT_SPACING_MS,
   QuestImportAbort,
+  isQuestImportOff,
   isFatalQuestImportStatus,
   pushQuestImportError,
   type ForeverQuestImportReport,
@@ -241,8 +242,7 @@ export class QuestImportCrawl {
     if (questId === null) return null;
     const url = buildQuestUrl(this.deps.region, questId);
     const res = await this.requestRaw(url).catch((e: unknown) => {
-      if (e instanceof Error && e.message === FOREVER_QUEST_IMPORT_OFF_MESSAGE)
-        throw e;
+      if (isQuestImportOff(e)) throw e;
       const why = e instanceof Error ? e.message : String(e);
       pushQuestImportError(this.report, `quest/${questId}: ${why}`);
       return null;

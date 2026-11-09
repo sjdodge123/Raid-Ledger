@@ -4,6 +4,7 @@
  * `GET /admin/plugins/blizzard/forever-quests/import`.
  */
 import type { ForeverQuestImportReport } from '@raid-ledger/contract';
+import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 
 /** Pause between Blizzard requests (same as the ROK-2124 auto-link job). */
 export const FOREVER_QUEST_IMPORT_SPACING_MS = 500;
@@ -64,6 +65,14 @@ export function isFatalQuestImportStatus(status: number): boolean {
 
 /** Thrown to end a run as `failed`; what was written is kept. */
 export class QuestImportAbort extends Error {}
+
+/** True for the abort the kill switch throws (the operator's stop). */
+export function isQuestImportOff(e: unknown): boolean {
+  return (
+    e instanceof QuestImportAbort &&
+    e.message === FOREVER_QUEST_IMPORT_OFF_MESSAGE
+  );
+}
 
 /** Append one error line, capped at {@link FOREVER_QUEST_IMPORT_MAX_ERRORS}. */
 export function pushQuestImportError(
