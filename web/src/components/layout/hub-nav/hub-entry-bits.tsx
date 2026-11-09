@@ -6,8 +6,8 @@
 import type { JSX, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
-import type { MyGuild } from '@raid-ledger/contract';
-import { guildHref } from './my-hubs-queries';
+import type { GuildKind, HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
+import { guildHref, memberCountLabel } from './my-hubs-queries';
 import { HubKindChip } from './hub-kind-chip';
 import { HubCrest } from '../../hub/crest/hub-crest';
 import type { HubCrestInput } from '../../hub/crest/hub-crest.helpers';
@@ -41,11 +41,14 @@ const ROW_CLS: Record<GuildRowSize, { row: string; meta: string; crest: CrestSiz
 /** ROK-1814 Q8 / ROK-1831 D6: the hub's crest, else the hub game's icon when the API sends one, else the shield. */
 export function GuildRowIcon({ guild, size = 'md' }: { guild: MyGuild; size?: GuildRowSize }): JSX.Element {
     const crest = ROW_CLS[size].crest;
-    const gameIcon = guild.gameIconUrl
-        ? <img src={guild.gameIconUrl} alt="" aria-hidden="true" data-testid="guild-entry-game-icon"
-            className={`${CREST_BOX[crest]} shrink-0 rounded-lg border border-edge-strong object-cover`} />
-        : undefined;
-    return <GuildCrest size={crest} crest={guild.crest} name={guild.name} fallback={gameIcon} />;
+    return <GuildCrest size={crest} crest={guild.crest} name={guild.name} fallback={gameIconOf(guild.gameIconUrl, crest)} />;
+}
+
+/** The hub game's icon at a crest box size, the crest's fallback; none without a URL. */
+function gameIconOf(url: string | null | undefined, crest: CrestSize): JSX.Element | undefined {
+    if (!url) return undefined;
+    return <img src={url} alt="" aria-hidden="true" data-testid="guild-entry-game-icon"
+        className={`${CREST_BOX[crest]} shrink-0 rounded-lg border border-edge-strong object-cover`} />;
 }
 
 /** "whitemane" → "Whitemane"; the API's display name wins when sent. */
@@ -69,22 +72,44 @@ function hubRowMeta(guild: MyGuild): string {
 /** `menuitem` when the rows sit in a `role="menu"` (the header Hubs menu, ROK-1875 D7). */
 type RowRole = 'menuitem' | undefined;
 
+/** What every hub row needs, whatever the source of the hub (ROK-2152 D6). */
+interface HubLinkRowProps {
+    href: string;
+    name: string;
+    meta: string;
+    kind: GuildKind;
+    icon: JSX.Element;
+    testId: 'guild-entry-row' | 'popular-hub-row';
+    hubId?: number | undefined;
+    onNavigate?: (() => void) | undefined;
+    role?: RowRole;
+    size: GuildRowSize;
+}
+
+/** The row shell: icon · name over meta · kind chip · chevron. */
+function HubLinkRow({ href, name, meta, kind, icon, testId, hubId, onNavigate, role, size }: HubLinkRowProps): JSX.Element {
+    const cls = ROW_CLS[size];
+    return (
+        <Link to={href} onClick={onNavigate} data-testid={testId} data-size={size} data-hub-id={hubId} role={role}
+            className={`flex items-center ${cls.row} transition-colors hover:bg-overlay focus-visible:bg-overlay focus-visible:outline-none`}>
+            {icon}
+            <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-foreground">{name}</span>
+                {meta && <span className={`block truncate ${cls.meta} text-muted`}>{meta}</span>}
+            </span>
+            <HubKindChip kind={kind} size={size === 'lg' ? 'md' : 'sm'} />
+            <ChevronRightIcon className={`${cls.chevron} shrink-0 text-muted`} aria-hidden="true" />
+        </Link>
+    );
+}
+
 interface RowProps { guild: MyGuild; onNavigate?: (() => void) | undefined; role?: RowRole; size: GuildRowSize }
 
 function GuildLinkRow({ guild, onNavigate, role, size }: RowProps): JSX.Element {
-    const meta = hubRowMeta(guild);
-    const cls = ROW_CLS[size];
     return (
-        <Link to={guildHref(guild.id)} onClick={onNavigate} data-testid="guild-entry-row" data-size={size} role={role}
-            className={`flex items-center ${cls.row} transition-colors hover:bg-overlay focus-visible:bg-overlay focus-visible:outline-none`}>
-            <GuildRowIcon guild={guild} size={size} />
-            <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-foreground">{guild.name}</span>
-                {meta && <span className={`block truncate ${cls.meta} text-muted`}>{meta}</span>}
-            </span>
-            <HubKindChip kind={guild.kind} size={size === 'lg' ? 'md' : 'sm'} />
-            <ChevronRightIcon className={`${cls.chevron} shrink-0 text-muted`} aria-hidden="true" />
-        </Link>
+        <HubLinkRow href={guildHref(guild.id)} name={guild.name} meta={hubRowMeta(guild)} kind={guild.kind}
+            icon={<GuildRowIcon guild={guild} size={size} />} testId="guild-entry-row"
+            onNavigate={onNavigate} role={role} size={size} />
     );
 }
 
@@ -95,6 +120,30 @@ export function GuildRows({ guilds, onNavigate, role, size = 'md' }: GuildRowsPr
     return (
         <ul className="divide-y divide-edge-subtle" role={role ? 'none' : undefined}>
             {guilds.map((g) => <li key={g.id} role={role ? 'none' : undefined}><GuildLinkRow guild={g} onNavigate={onNavigate} role={role} size={size} /></li>)}
+        </ul>
+    );
+}
+
+interface PopularRowProps { hub: HubDirectoryEntry; onNavigate?: (() => void) | undefined; role?: RowRole; size: GuildRowSize }
+
+/** A directory entry the viewer is not in: "<game> · N members"; game icon, else the shield (no crest, Q5). */
+function PopularHubRow({ hub, onNavigate, role, size }: PopularRowProps): JSX.Element {
+    const crest = ROW_CLS[size].crest;
+    const icon = <GuildCrest size={crest} crest={null} name={hub.name} fallback={gameIconOf(hub.gameIconUrl, crest)} />;
+    return (
+        <HubLinkRow href={guildHref(hub.id)} name={hub.name} meta={`${hub.gameName} · ${memberCountLabel(hub.memberCount)}`}
+            kind={hub.kind} icon={icon} testId="popular-hub-row" hubId={hub.id}
+            onNavigate={onNavigate} role={role} size={size} />
+    );
+}
+
+interface PopularHubRowsProps { hubs: HubDirectoryEntry[]; onNavigate?: (() => void) | undefined; role?: RowRole; size?: GuildRowSize }
+
+/** ROK-2152: the "Popular hubs" rows, same list shell as `GuildRows`. Pass `role="menuitem"` inside a menu. */
+export function PopularHubRows({ hubs, onNavigate, role, size = 'md' }: PopularHubRowsProps): JSX.Element {
+    return (
+        <ul className="divide-y divide-edge-subtle" role={role ? 'none' : undefined}>
+            {hubs.map((h) => <li key={h.id} role={role ? 'none' : undefined}><PopularHubRow hub={h} onNavigate={onNavigate} role={role} size={size} /></li>)}
         </ul>
     );
 }

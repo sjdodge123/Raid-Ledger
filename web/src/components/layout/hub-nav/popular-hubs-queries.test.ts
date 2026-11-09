@@ -95,10 +95,10 @@ describe('usePopularHubsQuery', () => {
         const client = createTestQueryClient();
         const { result } = renderHook(() => usePopularHubsQuery(), { wrapper: wrapperFor(client) });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        const params = seen[0]?.searchParams;
-        expect(params?.get('membership')).toBe('not-joined');
-        expect(params?.get('sort')).toBe('members');
-        expect(params?.get('limit')).toBe('10');
+        expect(seen).toHaveLength(1);
+        expect(seen[0]?.searchParams.get('membership')).toBe('not-joined');
+        expect(seen[0]?.searchParams.get('sort')).toBe('members');
+        expect(seen[0]?.searchParams.get('limit')).toBe('10');
         expect(ids(client.getQueryData<{ items: HubDirectoryEntry[] }>(['hubs-directory', 'nav-popular', 1])?.items ?? []))
             .toEqual([1]);
     });
