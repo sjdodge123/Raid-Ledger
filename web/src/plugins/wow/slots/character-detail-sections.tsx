@@ -17,32 +17,26 @@
  * Guild recommends. ONE tree at every width, laid out in CSS only, so crossing lg
  * (resize, tablet rotate) never remounts a panel or drops its state (Codex P2).
  */
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { lazy, Suspense } from 'react';
+import type { CharacterDto, CharacterEquipmentDto, CharacterProfessionsDto, RosterMemberNoArmoryReason } from '@raid-ledger/contract';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
-import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations, professionsPillSource } from '../lib/wow-variant-config';
+import { professionsPillSource } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
-import { ItemDetailModal } from '../components/item-detail-modal';
-import { TalentDisplay } from '../components/talent-display';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
 import { CharacterQuestsSection } from '../components/character-quests-section';
 import { CharacterLockoutsSection } from '../components/character-lockouts-section';
-import { formatAddonSourceLine } from '../lib/addon-source-line';
-import { EquipmentGrid } from './equipment-grid';
-import { buildOrderedItems } from './equipment-constants';
-import { selectForeverPortrait, type ForeverPortrait } from '../lib/forever-portrait';
-import type { WowVariant } from '../lib/wow-era';
-import type {
-    CharacterEquipmentDto,
-    CharacterProfessionsDto,
-    EquipmentItemDto,
-} from '@raid-ledger/contract';
+import {
+    EquipmentEmptyState, EquipmentWithItems, renderSlotPortrait, SectionsLayout, TalentSection,
+    VariantPendingSections, type SectionPanels,
+} from './character-detail-panels';
+import { ReadOnlyCharacterSections } from './character-detail-read-only-sections';
 
 /** ROK-1786: lazy so the guild addons card stays out of the entry chunk. */
 const CharacterAddonsCard = lazy(() => import('./character-addons-card').then((m) => ({ default: m.CharacterAddonsCard })));
 
 /** Props passed via PluginSlot context from character-detail-page */
-interface CharacterDetailSectionsProps {
+export interface CharacterDetailSectionsProps {
     equipment: CharacterEquipmentDto | null;
     talents: unknown;
     professions: CharacterProfessionsDto | null;
@@ -53,48 +47,25 @@ interface CharacterDetailSectionsProps {
     isOwner: boolean;
     characterId: string;
     gameId: number;
+    /** ROK-2149: set on a read-only roster member — render from it, never fetch by `characterId`. */
+    readOnlyCharacter?: CharacterDto | undefined;
+    /** ROK-2149: why the read-only member has no Armory data. */
+    noArmoryReason?: RosterMemberNoArmoryReason | null | undefined;
 }
 
-/** Equipment panel with items and item detail modal */
-function EquipmentWithItems({ equipment, gameVariant, renderUrl, portrait, isArmoryImported }: {
-    equipment: CharacterEquipmentDto; gameVariant: string | null; renderUrl: string | null;
-    portrait: ForeverPortrait; isArmoryImported: boolean;
-}) {
-    const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
-    const orderedItems = buildOrderedItems(equipment);
-
-    function handleItemClick(item: EquipmentItemDto) {
-        const idx = orderedItems.findIndex((i) => i.slot === item.slot);
-        if (idx >= 0) setSelectedItemIndex(idx);
-    }
-
-    return (
-        <>
-            <div className="bg-panel border border-edge rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
-                <EquipmentSourceLine equipment={equipment} />
-                {equipment.items.length > 0 ? (
-                    <EquipmentGrid equipment={equipment} gameVariant={gameVariant}
-                        renderUrl={renderUrl} portrait={portrait} onItemClick={handleItemClick} />
-                ) : (
-                    <EquipmentEmptyMessage isArmoryImported={isArmoryImported} gameVariant={gameVariant} />
-                )}
-            </div>
-            <ItemDetailModal isOpen={selectedItemIndex !== null} onClose={() => setSelectedItemIndex(null)}
-                items={orderedItems} currentIndex={selectedItemIndex ?? 0}
-                onNavigate={setSelectedItemIndex} gameVariant={gameVariant} />
-        </>
-    );
+/**
+ * The `character-detail:sections` filler. ROK-2149: a read-only roster member
+ * gets the read-only sections (no Quests, Saved instances or Guild recommends,
+ * nothing fetched by character id); every real character the owned sections.
+ */
+export function CharacterDetailSections(props: CharacterDetailSectionsProps) {
+    return props.readOnlyCharacter
+        ? <ReadOnlyCharacterSections {...props} character={props.readOnlyCharacter} noArmoryReason={props.noArmoryReason ?? null} />
+        : <OwnedCharacterSections {...props} />;
 }
 
-/** Source line under the Equipment heading; Armory equipment (or absent source) shows nothing new. */
-function EquipmentSourceLine({ equipment }: { equipment: CharacterEquipmentDto }) {
-    if (equipment.source !== 'addon') return null;
-    return <p className="-mt-3 mb-4 text-xs text-muted">{formatAddonSourceLine(equipment.syncedAt)}</p>;
-}
-
-/** Main character detail sections component */
-export function CharacterDetailSections({
+/** A real character's sections (unchanged before ROK-2149). */
+function OwnedCharacterSections({
     equipment, talents, professions, gameVariant,
     renderUrl, isArmoryImported, characterClass,
     isOwner, characterId, gameId,
@@ -121,105 +92,3 @@ export function CharacterDetailSections({
     return <SectionsLayout panels={panels} />;
 }
 
-type SectionPanels = Record<'equipment' | 'talents' | 'quests' | 'professions' | 'lockouts' | 'addons', ReactNode>;
-
-/**
- * >= lg: main column + 320px sidebar; the sidebar hides when every panel in it is
- * empty, and only a non-empty sidebar widens the page (character-detail-page.tsx).
- * Below lg both columns are `display: contents`, so their panels join one stack and
- * `order` moves Quests (then Guild recommends) after the sidebar's reference panels.
- * Layout A is for every WoW variant, not only Forever (Lead ruling on review MINOR-5): a
- * variant without the sidebar panels gets the plain stack via the empty-sidebar hide.
- * Quests and Guild recommends are wrapped for that order; `empty:hidden` keeps a
- * wrapper whose panel renders null from leaving a gap. The other panels stay unwrapped.
- */
-function SectionsLayout({ panels }: { panels: SectionPanels }) {
-    return (
-        <div data-sections-layout="sidebar" className="flex flex-col gap-6 lg:flex-row lg:items-start">
-            <div data-sections-column="main" className="contents lg:flex lg:min-w-0 lg:flex-1 lg:flex-col lg:gap-6">
-                {panels.equipment}{panels.talents}
-                <div data-sections-slot="quests" className={`${SLOT_WRAPPER} max-lg:order-1`}>{panels.quests}</div>
-            </div>
-            <aside data-sections-column="sidebar"
-                className="contents lg:flex lg:w-80 lg:shrink-0 lg:flex-col lg:gap-6 lg:[&:not(:has(>:not(:empty)))]:hidden">
-                {panels.professions}{panels.lockouts}
-                <div data-sections-slot="addons" className={`${SLOT_WRAPPER} max-lg:order-2`}>{panels.addons}</div>
-            </aside>
-        </div>
-    );
-}
-
-const SLOT_WRAPPER = 'flex flex-col gap-6 empty:hidden';
-
-type PortraitCharacter = { race: string | null; gender?: string | null | undefined; class: string | null; name: string };
-
-/**
- * ROK-1747: the Forever fallback portrait for the equipment render slot.
- * `renderUrl` stands in for the avatar so a Blizzard render always wins here.
- */
-function renderSlotPortrait(character: PortraitCharacter | undefined, variant: WowVariant | null, renderUrl: string | null): ForeverPortrait {
-    if (!character) return { kind: 'none' };
-    return selectForeverPortrait({
-        variant, avatarUrl: renderUrl, race: character.race, gender: character.gender,
-        characterClass: character.class, name: character.name,
-    });
-}
-
-/**
- * Neutral Equipment + Talents panels while the game registry resolves the
- * variant (ROK-1751): no Armory copy and no addon hint, so the page does not
- * flip from one to the other once the registry answers.
- */
-function VariantPendingSections() {
-    return (
-        <>
-            {['Equipment', 'Talents'].map((title) => (
-                <div key={title} className="bg-panel border border-edge rounded-lg p-6" aria-busy="true">
-                    <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
-                    <div className="h-16 rounded-md bg-overlay animate-pulse" />
-                </div>
-            ))}
-        </>
-    );
-}
-
-/** Empty state when no equipment data is available */
-function EquipmentEmptyState({ isArmoryImported, gameVariant }: { isArmoryImported: boolean; gameVariant: string | null }) {
-    return (
-        <div className="bg-panel border border-edge rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
-            <EquipmentEmptyMessage isArmoryImported={isArmoryImported} gameVariant={gameVariant} />
-        </div>
-    );
-}
-
-function equipmentEmptyHint(isArmoryImported: boolean, gameVariant: string | null): string {
-    if (isArmoryImported) return 'Equipment data may not be available for this character. Try refreshing.';
-    // A variant whose data comes from the addon (WoW: Forever) gets the addon hint (AC5).
-    if (getWowVariantIntegrations(gameVariant)?.addonHints === true) return FOREVER_ADDON_HINT_EQUIPMENT;
-    return 'Equipment data is only available for characters imported from the Blizzard Armory.';
-}
-
-/** Empty message content for equipment section */
-function EquipmentEmptyMessage({ isArmoryImported, gameVariant }: { isArmoryImported: boolean; gameVariant: string | null }) {
-    return (
-        <div className="text-center py-8 text-muted">
-            <p className="text-lg">No equipment data</p>
-            <p className="text-sm mt-1">{equipmentEmptyHint(isArmoryImported, gameVariant)}</p>
-        </div>
-    );
-}
-
-/** Talents section wrapper */
-function TalentSection({ talents, isArmoryImported, characterClass, gameVariant }: {
-    talents: unknown; isArmoryImported: boolean;
-    characterClass: string | null; gameVariant: string | null;
-}) {
-    return (
-        <div className="bg-panel border border-edge rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4">Talents</h2>
-            <TalentDisplay talents={talents} isArmoryImported={isArmoryImported}
-                characterClass={characterClass} gameVariant={gameVariant} />
-        </div>
-    );
-}

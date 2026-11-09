@@ -7,22 +7,17 @@
  */
 import { useMemo, useState, type JSX } from 'react';
 import {
-    WOW_FOREVER_RULESET_LABELS,
-    WOW_FOREVER_SELECTABLE_RULESETS,
     type CharacterDto,
     type RosterClaimCandidateDto,
     type RosterClaimGuildDto,
     type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
-import { Field } from '../../../components/ui/field';
-import { Select } from '../../../components/ui/select';
 import { SearchInput } from '../../../components/ui/search-input';
 import { useDebouncedValue } from '../../../hooks/use-debounced-value';
 import { ModalEmptyState } from '../../../components/ui/modal-helpers';
-import { toast } from '../../../lib/toast';
-import { httpStatusOf } from '../../../lib/api/api-error';
-import { useClaimRosterMember, useRosterClaimCandidates } from '../hooks/use-roster-claim';
+import { useRosterClaimCandidates } from '../hooks/use-roster-claim';
+import { RulesetSelect, useClaimHandler } from './roster-claim-actions';
 import { classDotClass } from '../hub/wow-member-professions';
 import { getClassIconUrl } from '../lib/class-icons';
 import { countCandidates, defaultClaimRuleset, filterRosterGuilds, rosterMetaLine } from '../lib/roster-claim';
@@ -111,37 +106,12 @@ function GuildFilterNote({ guildName, onShowAll }: { guildName: string; onShowAl
     );
 }
 
-function RulesetSelect({ value, onChange }: { value: WowForeverSelectableRuleset; onChange: (r: WowForeverSelectableRuleset) => void }): JSX.Element {
-    return (
-        <Field label="Ruleset">
-            <Select value={value} onChange={(e) => {
-                const next = WOW_FOREVER_SELECTABLE_RULESETS.find((r) => r === e.target.value);
-                if (next) onChange(next);
-            }}>
-                {WOW_FOREVER_SELECTABLE_RULESETS.map((r) => <option key={r} value={r}>{WOW_FOREVER_RULESET_LABELS[r]}</option>)}
-            </Select>
-        </Field>
-    );
-}
-
 function LoadingRows(): JSX.Element {
     return (
         <div className="space-y-2" aria-busy="true" aria-label="Loading guild roster">
             {[0, 1, 2].map((i) => <div key={i} className="h-11 rounded-lg bg-panel animate-pulse" />)}
         </div>
     );
-}
-
-function useClaimHandler(gameId: number, existing: CharacterDto[], ruleset: WowForeverSelectableRuleset, onClaimed: () => void) {
-    const claim = useClaimRosterMember(gameId);
-    const isMain = !existing.some((c) => c.isMain);
-    const onClaim = (c: RosterClaimCandidateDto): void => {
-        claim.mutate({ memberId: c.memberId, body: { ruleset, isMain } }, {
-            onSuccess: () => { toast.success(`${c.name} is now yours.`); onClaimed(); },
-            onError: (e) => { toast.error(httpStatusOf(e) === 409 ? 'Someone claimed this first' : e.message || 'Could not claim this character'); },
-        });
-    };
-    return { onClaim, pendingId: claim.isPending ? claim.variables?.memberId ?? null : null };
 }
 
 /**
