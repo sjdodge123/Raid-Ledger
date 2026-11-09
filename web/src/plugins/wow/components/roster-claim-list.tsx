@@ -89,13 +89,14 @@ function GuildSection({ guild, pendingId, onClaim, showHeader }: {
     );
 }
 
+const LINK_CLASS = 'underline text-success hover:text-foreground';
+
 function NotListedHint({ armoryAvailable, onSwitchTab }: Pick<RosterClaimListProps, 'armoryAvailable' | 'onSwitchTab'>): JSX.Element {
-    const link = 'underline text-success hover:text-foreground';
     return (
         <p className="text-xs text-muted">
             Not listed?{' '}
-            {armoryAvailable && <><Button variant="bare" className={link} onClick={() => onSwitchTab('import')}>Import from Armory</Button>{' or '}</>}
-            <Button variant="bare" className={link} onClick={() => onSwitchTab('manual')}>{armoryAvailable ? 'add it manually' : 'Add it manually'}</Button>.
+            {armoryAvailable && <><Button variant="bare" className={LINK_CLASS} onClick={() => onSwitchTab('import')}>Import from Armory</Button>{' or '}</>}
+            <Button variant="bare" className={LINK_CLASS} onClick={() => onSwitchTab('manual')}>{armoryAvailable ? 'add it manually' : 'Add it manually'}</Button>.
         </p>
     );
 }
@@ -105,7 +106,7 @@ function GuildFilterNote({ guildName, onShowAll }: { guildName: string; onShowAl
     return (
         <p className="text-xs text-muted">
             Showing <span className="font-semibold text-foreground">{guildName}</span> only ·{' '}
-            <Button variant="bare" className="underline text-success hover:text-foreground" onClick={onShowAll}>Show all guilds</Button>
+            <Button variant="bare" className={LINK_CLASS} onClick={onShowAll}>Show all guilds</Button>
         </p>
     );
 }

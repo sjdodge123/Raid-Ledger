@@ -39,7 +39,7 @@ import { HubNotifyBell } from './hub-notify-bell';
 import { hubBellVisible } from './hub-notify-bell.helpers';
 import { useSignInAgain } from './use-sign-in-again';
 import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
-import { ErrorState, Notice, NotFoundNotice, PAGE } from './hub-page-error';
+import { ErrorState, LoadingState, Notice, NotFoundNotice, PAGE } from './hub-page-error';
 
 /** Re-exported for the page's existing specs (moved to `hub-page-error.tsx`, ROK-2132). */
 export { ErrorState };
@@ -77,15 +77,6 @@ function SessionExpired({ onRecovered }: { onRecovered: () => Promise<RecoveryRe
             <p className="mb-4 text-sm text-muted">We couldn&apos;t reach the server. Try again.</p>
             <Button variant="secondary" onClick={retry}>Try again</Button>
         </Notice>
-    );
-}
-
-function LoadingState(): JSX.Element {
-    return (
-        <div className={PAGE} aria-busy="true" data-testid="guild-loading">
-            <div className="mb-4 h-28 animate-pulse rounded-xl border border-edge bg-panel" />
-            <div className="h-64 animate-pulse rounded-lg border border-edge bg-surface" />
-        </div>
     );
 }
 

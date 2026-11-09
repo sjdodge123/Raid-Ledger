@@ -19,10 +19,28 @@ import { HUB_PLUGIN_INACTIVE } from '../../../components/hub/hub-plugin-inactive
 import { usePluginStore } from '../../../stores/plugin-store';
 import { NOT_LINKED_WARNING } from './wow-join-gate.helpers';
 
+/**
+ * The viewer's characters come through a real query (so `['me', 'characters']`
+ * invalidation refetches them), and `charsReady` can hold the first load back
+ * so a test can open the modal before the list has arrived (AC 8).
+ */
 let myChars: { id: string }[] = [];
-vi.mock('../../../hooks/use-characters', () => ({
-    useMyCharacters: () => ({ data: { data: myChars, meta: { total: myChars.length } } }),
-}));
+let charsReady: Promise<void> = Promise.resolve();
+let charsServed = 0;
+vi.mock('../../../hooks/use-characters', async () => {
+    const { useQuery } = await import('@tanstack/react-query');
+    return {
+        useMyCharacters: (gameId?: number, enabled = true) => useQuery({
+            queryKey: ['me', 'characters', gameId ?? null],
+            queryFn: async () => {
+                await charsReady;
+                charsServed += 1;
+                return { data: [...myChars], meta: { total: myChars.length } };
+            },
+            enabled,
+        }),
+    };
+});
 
 interface StubProps { onClose: () => void; initialTab?: string; rosterGuildId?: number; gameSlug?: string }
 vi.mock('../../../components/profile/AddCharacterModal', () => ({
@@ -51,11 +69,17 @@ const forbidden = (body: Record<string, unknown>) => HttpResponse.json({ statusC
 const notMember = (kind = 'wow_guild') => forbidden({ message: 'Not a member of this guild', code: HUB_NOT_MEMBER, kind });
 
 let pageIsMember = false;
+/** The page answers 200 from this request number on (1-based) — a deterministic "membership arrived". */
+let pageOkFrom = Number.POSITIVE_INFINITY;
+let pageCalls = 0;
 let requested: string[] = [];
 
 function serve(gate: WowGuildJoinGateDto | null = GATE, pageBody = notMember): void {
     server.use(
-        http.get(`${API}/guilds/7`, () => (pageIsMember ? HttpResponse.json(PAGE_DTO) : pageBody())),
+        http.get(`${API}/guilds/7`, () => {
+            pageCalls += 1;
+            return pageIsMember || pageCalls >= pageOkFrom ? HttpResponse.json(PAGE_DTO) : pageBody();
+        }),
         http.get(`${API}/plugins/wow/guilds/7/join-gate`, () => (gate ? HttpResponse.json(gate) : HttpResponse.json({ message: 'Hub not found' }, { status: 404 }))),
     );
 }
@@ -74,7 +98,11 @@ function renderPage(path = '/hubs/7') {
 beforeEach(() => {
     activateWowPlugin();
     myChars = [];
+    charsReady = Promise.resolve();
+    charsServed = 0;
     pageIsMember = false;
+    pageOkFrom = Number.POSITIVE_INFINITY;
+    pageCalls = 0;
     requested = [];
     server.events.on('request:start', ({ request }) => { requested.push(new URL(request.url).pathname); });
 });
@@ -108,7 +136,7 @@ describe('WoW join gate — render (AC 1, 6)', () => {
     });
 });
 
-describe('WoW join gate — actions (AC 2, 3, 4, 8, Ruling 9)', () => {
+describe('WoW join gate — actions (AC 2, 3)', () => {
     it('Pick my character opens Add character on the roster tab, filtered to this guild', async () => {
         serve();
         renderPage();
@@ -126,6 +154,9 @@ describe('WoW join gate — actions (AC 2, 3, 4, 8, Ruling 9)', () => {
         expect(screen.getByTestId('add-character-modal')).toHaveAttribute('data-tab', 'import');
     });
 
+});
+
+describe('WoW join gate — after the modal (AC 4, 8, Ruling 9)', () => {
     it('a claim that confers membership lands on the guild page without a reload', async () => {
         serve();
         renderPage();
@@ -152,12 +183,29 @@ describe('WoW join gate — actions (AC 2, 3, 4, 8, Ruling 9)', () => {
         await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^$/));
     });
 
+    it('a claim before the characters have loaded (the ?claim=roster landing) still warns', async () => {
+        let release: () => void = () => undefined;
+        charsReady = new Promise<void>((resolve) => { release = resolve; });
+        serve();
+        renderPage('/hubs/7?claim=roster');
+        await screen.findByTestId('add-character-modal');
+        expect(charsServed, 'the modal must open before the characters load').toBe(0);
+        release();
+        await waitFor(() => expect(charsServed, 'the first character load').toBe(1));
+        await userEvent.click(screen.getByRole('button', { name: 'stub-claim' }));
+        await waitFor(() => expect(
+            screen.queryByTestId('wow-join-gate-warning'),
+            'a new character with the page still 403 must show the warning',
+        ).toHaveTextContent(NOT_LINKED_WARNING));
+    });
+
     it('a viewer who is already a member is sent on to the page', async () => {
+        // The first page request is the 403 that shows the gate; the gate's re-ask is answered 200.
+        pageOkFrom = 2;
         serve({ ...GATE, viewer: { isMember: true, hasForeverCharacter: true } });
         renderPage();
-        await screen.findByTestId('wow-join-gate');
-        pageIsMember = true;
         expect(await screen.findByRole('navigation', { name: 'Guild page sections' })).toBeInTheDocument();
+        expect(screen.queryByTestId('wow-join-gate')).toBeNull();
     });
 });
 

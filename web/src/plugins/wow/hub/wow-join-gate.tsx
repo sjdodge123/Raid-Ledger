@@ -15,11 +15,13 @@ import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import type { WowGuildJoinGateDto } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
+import { DialogBanner } from '../../../components/ui/dialog-banner';
 import { HubCrest } from '../../../components/hub/crest/hub-crest';
 import { hubCopy } from '../../../components/hub/hub-copy';
 import { guildPageKey } from '../../../components/hub/api/use-guild';
 import { AddCharacterModal } from '../../../components/profile/AddCharacterModal';
 import { useMyCharacters } from '../../../hooks/use-characters';
+import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { useJoinGate } from './use-join-gate';
 import {
@@ -29,17 +31,21 @@ import {
 
 type GateTab = 'roster' | 'import';
 
-/** The Add character modal's state, plus whether a character arrived since it last opened. */
+/**
+ * The Add character modal's state, plus whether a character arrived since the
+ * viewer's characters first loaded. The baseline is taken on that first load,
+ * not at open: on the `?claim=roster` landing (or a fast click) the modal opens
+ * before the list has arrived, and an open-time baseline would never be set.
+ */
 function useGateModal(guildId: number, gameId: number | undefined) {
     const queryClient = useQueryClient();
     const chars = useMyCharacters(gameId, gameId !== undefined);
     const [tab, setTab] = useState<GateTab | null>(null);
     const [baseline, setBaseline] = useState<ReadonlySet<string> | null>(null);
     const current = chars.data?.data;
-    const open = useCallback((next: GateTab) => {
-        setTab(next);
-        if (current !== undefined) setBaseline((b) => b ?? new Set(current.map((c) => c.id)));
-    }, [current]);
+    // Adjust-state-during-render: record the first loaded list exactly once.
+    if (baseline === null && current !== undefined) setBaseline(new Set(current.map((c) => c.id)));
+    const open = useCallback((next: GateTab) => setTab(next), []);
     const close = useCallback(() => {
         setTab(null);
         void queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
@@ -94,23 +100,36 @@ function NotOnRosterHint(): JSX.Element {
 
 function NotLinkedWarning(): JSX.Element {
     return (
-        <div role="status" data-testid="wow-join-gate-warning" className="mx-auto mb-4 max-w-md rounded-lg border border-warning/30 bg-warning/10 px-3 py-2.5 text-left text-sm text-warning">
-            {NOT_LINKED_WARNING}
+        <div className="mx-auto max-w-md text-left">
+            <DialogBanner tone="warning" role="status" testId="wow-join-gate-warning">{NOT_LINKED_WARNING}</DialogBanner>
         </div>
     );
 }
 
-export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element | null {
+/** The gate read is in flight — a crest-and-title placeholder rather than an empty page. */
+function GateLoading(): JSX.Element {
+    return (
+        <div aria-busy="true" data-testid="wow-join-gate-loading" className="py-12">
+            <div className="mx-auto mb-3 h-20 w-20 animate-pulse rounded-full border border-edge bg-panel" />
+            <div className="mx-auto mb-2 h-6 w-48 animate-pulse rounded bg-panel" />
+            <div className="mx-auto h-4 w-64 animate-pulse rounded bg-surface" />
+        </div>
+    );
+}
+
+export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element {
     const gate = useJoinGate(guildId);
     const guild = gate.data?.guild;
     const modal = useGateModal(guildId, guild?.gameId);
+    // The modal preselects WoW: Forever by slug on open, so it waits for the registry (else no game, no WoW tabs).
+    const registryLoading = useGameRegistry().isLoading;
     const pageFetching = useIsFetching({ queryKey: guildPageKey(guildId) }) > 0;
     useClaimParam(guild !== undefined, modal.open);
     useMemberSkip(guildId, gate.data?.viewer.isMember === true);
     if (gate.error) {
         return <div data-testid="guild-not-member" className="py-12 text-center"><p className="text-sm text-muted">{hubCopy('wow_guild').notMember}</p></div>;
     }
-    if (!gate.data || !guild) return null;
+    if (!gate.data || !guild) return <GateLoading />;
     return (
         <div data-testid="wow-join-gate" className="py-12 text-center">
             {modal.gained && !pageFetching && <NotLinkedWarning />}
@@ -121,7 +140,7 @@ export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element | nul
                 <Button variant="secondary" onClick={() => modal.open('import')} className="w-full sm:w-auto">{IMPORT_ARMORY_LABEL}</Button>
             </div>
             {gate.data.viewer.hasForeverCharacter && <NotOnRosterHint />}
-            {modal.tab !== null && (
+            {modal.tab !== null && !registryLoading && (
                 <AddCharacterModal isOpen onClose={modal.close} gameSlug={WOW_FOREVER_GAME_SLUG} initialTab={modal.tab} rosterGuildId={guild.id} />
             )}
         </div>

@@ -10,6 +10,7 @@ import type { GuildKind } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { httpStatusOf } from '../../lib/api/api-error';
 import { useHubModule } from '../../plugins/hub-module';
+import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { hubCopy, loadFailedLabel } from './hub-copy';
 import { hubNotMemberKind, isHubPluginInactive } from './hub-plugin-inactive.helpers';
 import { HubPluginInactiveCopy } from './hub-plugin-inactive';
@@ -23,6 +24,16 @@ export const PAGE = 'max-w-5xl mx-auto px-4 pt-8 pb-[max(calc(var(--bottom-nav-c
 
 export function Notice({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
+}
+
+/** The page skeleton while the page, the plugin list or a join gate is still arriving. */
+export function LoadingState(): JSX.Element {
+    return (
+        <div className={PAGE} aria-busy="true" data-testid="guild-loading">
+            <div className="mb-4 h-28 animate-pulse rounded-xl border border-edge bg-panel" />
+            <div className="h-64 animate-pulse rounded-lg border border-edge bg-surface" />
+        </div>
+    );
 }
 
 const NOT_FOUND_COPY = "This guild doesn't exist. Check the link and try again.";
@@ -44,9 +55,13 @@ interface ErrorStateProps {
 function NotMemberState({ error, kind, guildId }: Pick<ErrorStateProps, 'error' | 'kind' | 'guildId'>): JSX.Element {
     const gateKind = hubNotMemberKind(error);
     const mod = useHubModule(gateKind ?? '');
+    const pluginsHydrated = usePluginsHydrated();
     const Gate = mod?.nonMemberGate;
-    if (Gate && guildId !== undefined && guildId > 0) {
-        return <div className={PAGE}><Suspense fallback={null}><Gate guildId={guildId} /></Suspense></div>;
+    const hasGuild = guildId !== undefined && guildId > 0;
+    // Until the plugin list settles the module (and its gate) may be missing — don't flash the notice first.
+    if (gateKind !== undefined && hasGuild && !Gate && !pluginsHydrated) return <LoadingState />;
+    if (Gate && hasGuild) {
+        return <Suspense fallback={<LoadingState />}><div className={PAGE}><Gate guildId={guildId} /></div></Suspense>;
     }
     return <Notice testId="guild-not-member"><p className="text-sm text-muted">{hubCopy(kind).notMember}</p></Notice>;
 }
