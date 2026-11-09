@@ -93,4 +93,14 @@ describe('summary copy', () => {
         expect(resultHeadline(charResult({ status: 'applied' }))).toBe('Character data imported.');
         expect(resultHeadline(charResult({ status: 'noop' }))).toMatch(/already up to date/);
     });
+    it('ROK-2148: a stale char export whose Mailworthy block applied says the guild contributions updated', () => {
+        const applied = { status: 'applied' as const, givers: 2, giversRejected: 0, peers: 2, template: 'none' as const };
+        const summary = { gearCount: 17, avgIlvl: 61.4, talentNodes: 31, lockouts: 2, mailworthy: applied };
+        expect(resultHeadline(charResult({ status: 'stale', summary })))
+            .toBe('Guild contributions updated. Character data not imported — a newer export is already saved.');
+        const skipped = { ...summary, mailworthy: { status: 'skipped' as const, reason: 'not_on_roster' as const } };
+        expect(resultHeadline(charResult({ status: 'stale', summary: skipped })))
+            .toBe('Character data not imported — a newer export is already saved.');
+        expect(resultHeadline(charResult({ status: 'stale' }))).toBe('Character data not imported — a newer export is already saved.');
+    });
 });

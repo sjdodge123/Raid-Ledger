@@ -126,8 +126,14 @@ const SECTION_NOUN: Record<AddonImportResultDto['section'], string> = {
     raid: 'Boss pulls',
 };
 
+/** ROK-2148: a stale char export can still carry newer Mailworthy givers. */
+function staleMailworthyApplied(result: AddonImportResultDto): boolean {
+    return result.section === 'char' && result.status === 'stale' && result.summary.mailworthy?.status === 'applied';
+}
+
 export function resultHeadline(result: AddonImportResultDto): string {
     const noun = SECTION_NOUN[result.section];
+    if (staleMailworthyApplied(result)) return `Guild contributions updated. ${noun} not imported — a newer export is already saved.`;
     if (result.status === 'noop') return `${noun} already up to date — nothing changed.`;
     if (result.status === 'stale') return `${noun} not imported — a newer export is already saved.`;
     return `${noun} imported.`;
