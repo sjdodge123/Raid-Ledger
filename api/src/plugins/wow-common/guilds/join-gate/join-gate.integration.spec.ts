@@ -25,8 +25,19 @@ const NOT_FOUND = {
 let testApp: TestApp;
 let foreverId: number;
 let gateId: number;
-const ids = {} as Record<'hidden' | 'archived' | 'retail' | 'crew', number>;
-const tokens = {} as Record<'outsider' | 'player' | 'member', string>;
+type HubKey = 'hidden' | 'archived' | 'retail' | 'crew';
+type TokenKey = 'outsider' | 'player' | 'member';
+const ids: Partial<Record<HubKey, number>> = {};
+const tokens: Partial<Record<TokenKey, string>> = {};
+
+/** A fixture `beforeAll` seeded — fails loudly by name if the seed never ran. */
+function seeded<T>(value: T | undefined, label: string): T {
+  if (value === undefined)
+    throw new Error(`join-gate fixture not seeded: ${label}`);
+  return value;
+}
+const hubId = (k: HubKey): number => seeded(ids[k], k);
+const token = (k: TokenKey): string => seeded(tokens[k], k);
 
 async function ensureForever(): Promise<number> {
   const [found] = await testApp.db
@@ -143,7 +154,7 @@ const gate = (id: number, auth?: string) => {
 
 describe('GET /plugins/wow/guilds/:id/join-gate — 200 (ROK-2132)', () => {
   it('a non-member gets exactly the Ruling 1 fields', async () => {
-    const res = await gate(gateId, tokens.outsider);
+    const res = await gate(gateId, token('outsider'));
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       guild: {
@@ -160,7 +171,7 @@ describe('GET /plugins/wow/guilds/:id/join-gate — 200 (ROK-2132)', () => {
   });
 
   it('hasForeverCharacter is true for an owner of a Forever character', async () => {
-    const res = await gate(gateId, tokens.player);
+    const res = await gate(gateId, token('player'));
     expect(res.status).toBe(200);
     expect(res.body.viewer).toEqual({
       isMember: false,
@@ -169,7 +180,7 @@ describe('GET /plugins/wow/guilds/:id/join-gate — 200 (ROK-2132)', () => {
   });
 
   it('isMember is true for a linked member', async () => {
-    const res = await gate(gateId, tokens.member);
+    const res = await gate(gateId, token('member'));
     expect(res.status).toBe(200);
     expect(res.body.viewer).toEqual({
       isMember: true,
@@ -184,13 +195,13 @@ describe('GET /plugins/wow/guilds/:id/join-gate — refusals (ROK-2132)', () => 
   });
 
   it.each([
-    ['hidden (non-staff)', () => ids.hidden],
-    ['archived', () => ids.archived],
+    ['hidden (non-staff)', () => hubId('hidden')],
+    ['archived', () => hubId('archived')],
     ['unknown', () => 999999],
-    ['non-Forever WoW guild', () => ids.retail],
-    ['non-WoW hub of the Forever game', () => ids.crew],
+    ['non-Forever WoW guild', () => hubId('retail')],
+    ['non-WoW hub of the Forever game', () => hubId('crew')],
   ])('%s → the same 404 body', async (_label, id) => {
-    const res = await gate(id(), tokens.outsider);
+    const res = await gate(id(), token('outsider'));
     expect(res.status).toBe(404);
     expect(res.body).toEqual(NOT_FOUND);
   });
