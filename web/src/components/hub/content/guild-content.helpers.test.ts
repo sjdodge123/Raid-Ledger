@@ -8,7 +8,7 @@ import { moveItem, resourcesVisible, ruleLines } from './guild-content.helpers';
 
 const stub = (id: number): GuildAddon => ({
     id, guildId: 1, source: 'url', slugOrUrl: `https://x.test/${id}`, url: `https://x.test/${id}`, displayName: `A${id}`, note: null,
-    requirement: 'optional', flavor: id === 2 ? 'retail' : null, sortOrder: id, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
+    requirement: 'optional', flavor: id === 2 ? 'retail' : null, folderName: null, sortOrder: id, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
 });
 
 const profile = (over: Partial<GuildProfile> = {}): GuildProfile => ({ guildId: 1, gmPost: null, rules: [], links: [], ...over });

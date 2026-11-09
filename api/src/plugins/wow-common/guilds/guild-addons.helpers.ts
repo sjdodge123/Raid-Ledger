@@ -58,6 +58,8 @@ export function toGuildAddon(row: AddonRow): GuildAddon {
     note: row.note,
     requirement: row.requirement as GuildAddonRequirement,
     flavor: (row.flavor as GuildAddonFlavor | null) ?? null,
+    // ROK-2147 L1: the `folder_name` column lands in L2, which maps it here.
+    folderName: null,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

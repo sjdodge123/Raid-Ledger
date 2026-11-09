@@ -50,7 +50,7 @@ const NO_ADDONS: GuildAddonList = { pinned: [], addons: [] };
 function addon(id: number, displayName: string, overrides: Partial<GuildAddon> = {}): GuildAddon {
     return {
         id, guildId: 7, source: 'curseforge', slugOrUrl: displayName.toLowerCase(), url: `https://www.curseforge.com/wow/addons/${displayName.toLowerCase()}`,
-        displayName, note: null, requirement: 'optional', flavor: null, sortOrder: id, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', ...overrides,
+        displayName, note: null, requirement: 'optional', flavor: null, folderName: null, sortOrder: id, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z', ...overrides,
     };
 }
 

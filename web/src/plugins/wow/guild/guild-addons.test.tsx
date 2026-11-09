@@ -34,7 +34,7 @@ function page(gameSlug?: string): GuildPage {
 function added(flavor: GuildAddon['flavor']): GuildAddon {
     return {
         id: 99, guildId: 7, source: 'curseforge', slugOrUrl: 'details', url: URL, displayName: 'Details', note: null,
-        requirement: 'optional', flavor, sortOrder: 1, createdAt: '2026-11-07T00:00:00.000Z', updatedAt: '2026-11-07T00:00:00.000Z',
+        requirement: 'optional', flavor, folderName: null, sortOrder: 1, createdAt: '2026-11-07T00:00:00.000Z', updatedAt: '2026-11-07T00:00:00.000Z',
     };
 }
 
