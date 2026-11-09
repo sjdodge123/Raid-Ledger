@@ -6,10 +6,12 @@
  * importer accepts from `quest/index` `areas[]`; a dungeon whose area name
  * does not match is skipped and reported (self-verification by name).
  * Only `verified` entries were checked against the live API (probe 2026-11-08).
- * Live run 2 (2026-11-09): Blizzard's `quest/area/index` (static-forever) does
- * not list 491 (Razorfen Kraul) or 1337 (Uldaman); the right ids are not known
- * yet, so those entries stay as they are and a run reports, per skipped
- * dungeon, the name-alike areas and the area one of its quests is filed under.
+ * Live run 3 (2026-11-09): Blizzard's `quest/area/index` (static-forever) does
+ * not list the importer's 491 (Razorfen Kraul) or 1337 (Uldaman). It lists
+ * "Razorfen Kraul" as area 1717 (our quest 1101 is filed there) and
+ * "Uldaman" as 1517 (our quest 721 is filed there), so those are used. A
+ * skipped dungeon still reports the name-alike areas and its sample quest's
+ * area.
  */
 export interface ClassicQuestArea {
   dungeon: string;
@@ -42,11 +44,11 @@ export const CLASSIC_QUEST_AREAS: Readonly<Record<number, ClassicQuestArea>> = {
   231: area('Gnomeregan', 721),
   232: area('Maraudon', 2100),
   233: area('Razorfen Downs', 722),
-  234: area('Razorfen Kraul', 491),
+  234: area('Razorfen Kraul', 1717),
   236: area('Stratholme', 2017),
   237: area('Sunken Temple', 1477, ["The Temple of Atal'Hakkar"]),
   238: area('The Stockade', 717, ['Stormwind Stockade'], true),
-  239: area('Uldaman', 1337),
+  239: area('Uldaman', 1517),
   240: area('Wailing Caverns', 718, [], true),
   241: area("Zul'Farrak", 1176),
   246: area('Scholomance', 2057),

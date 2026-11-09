@@ -142,3 +142,18 @@ describe('firstKnownQuestId', () => {
     expect(firstKnownQuestId(known, 239)).toBeNull();
   });
 });
+
+describe('CLASSIC_QUEST_AREAS — ids Blizzard serves (live run 3)', () => {
+  it.each([
+    [234, 'Razorfen Kraul', 1717],
+    [239, 'Uldaman', 1517],
+  ])(
+    'maps instance %i (%s) to Blizzard quest area %i, not the retired importer id',
+    (instanceId, dungeon, areaId) => {
+      const entry = must(CLASSIC_QUEST_AREAS[instanceId], dungeon);
+      expect(entry.dungeon).toBe(dungeon);
+      expect(entry.areaId).toBe(areaId);
+      expect([491, 1337]).not.toContain(entry.areaId);
+    },
+  );
+});
