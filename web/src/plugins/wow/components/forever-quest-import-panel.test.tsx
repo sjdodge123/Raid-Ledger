@@ -3,7 +3,7 @@
  * finished, failed, and the server's 409 / 403 message on Re-import.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -64,6 +64,45 @@ describe('ForeverQuestImportPanel status', () => {
         expect(screen.getByText('Wailing Caverns (area 718: The Barrens)')).toBeInTheDocument();
     });
 
+});
+
+describe('ForeverQuestImportPanel error list (L6)', () => {
+    it('lists every error line and the evidence for a skipped dungeon', async () => {
+        server.use(foreverQuestImportGetHandler(buildSucceededReport({
+            errors: ['quest/1101: HTTP 404', 'quest/2040: unparseable response', 'quest/area/1337: HTTP 404'],
+            mismatchedAreas: [{
+                instanceId: 234, dungeon: 'Razorfen Kraul', areaId: 491, actualName: null,
+                nameMatches: [{ id: 4000, name: 'Razorfen Kraul' }],
+                sampleQuest: { questId: 1101, httpStatus: 200, areaId: 17, areaName: 'The Barrens' },
+            }],
+        })));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        const list = await screen.findByTestId('forever-quest-import-errors');
+        expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+            'quest/1101: HTTP 404', 'quest/2040: unparseable response', 'quest/area/1337: HTTP 404',
+        ]);
+        expect(screen.getByTestId('forever-quest-import-counts')).toHaveTextContent('3 errors');
+        expect(screen.getByText('Razorfen Kraul (area 491: not found)', { exact: false })).toBeInTheDocument();
+        expect(screen.getByText('Blizzard lists "Razorfen Kraul" as area 4000')).toBeInTheDocument();
+        expect(screen.getByText('its quest 1101 is filed under The Barrens (area 17)')).toBeInTheDocument();
+    });
+
+    it('caps a long error list at 5 rows behind Show all', async () => {
+        const errors = Array.from({ length: 7 }, (_, i) => `quest/${100 + i}: HTTP 404`);
+        server.use(foreverQuestImportGetHandler(buildSucceededReport({ errors })));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        const list = await screen.findByTestId('forever-quest-import-errors');
+        expect(within(list).getAllByRole('listitem')).toHaveLength(5);
+        await userEvent.click(within(list).getByRole('button', { name: 'Show all 7' }));
+        expect(within(list).getAllByRole('listitem')).toHaveLength(7);
+    });
+
+    it('shows no error list when the run had no errors', async () => {
+        server.use(foreverQuestImportGetHandler(buildSucceededReport()));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        await screen.findByText('succeeded');
+        expect(screen.queryByTestId('forever-quest-import-errors')).not.toBeInTheDocument();
+    });
 });
 
 describe('ForeverQuestImportPanel Re-import', () => {

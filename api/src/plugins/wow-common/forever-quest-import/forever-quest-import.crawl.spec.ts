@@ -241,3 +241,95 @@ describe('QuestImportCrawl — a run that finds no areas fails', () => {
     expect(urls.some((u) => /quest\/area\/\d+\?/.test(u))).toBe(false);
   });
 });
+
+const KRAUL = 234;
+const kraulEntry = CLASSIC_QUEST_AREAS[KRAUL];
+if (!kraulEntry) throw new Error('missing area entry: Razorfen Kraul (234)');
+const kraulAreaId = kraulEntry.areaId;
+/** Every mapped area but Razorfen Kraul, plus a same-named area 4000. */
+const listed = [
+  ...mappedAreas().filter((a) => a.id !== kraulAreaId),
+  { id: 4000, name: 'Razorfen Kraul' },
+];
+
+function route(path: string): QuestImportResponse {
+  if (path === 'quest/index') return ok(LINKED_INDEX);
+  if (path === 'quest/area/index') return ok({ _links: {}, areas: listed });
+  if (path === 'quest/1101') {
+    return ok({
+      id: 1101,
+      title: 'The Crone of the Kraul',
+      area: { id: 17, name: 'The Barrens' },
+    });
+  }
+  if (path.startsWith('quest/area/')) return ok({ quests: [] });
+  return NOT_FOUND;
+}
+
+describe('QuestImportCrawl — mismatch evidence (L6)', () => {
+  it('reports the name-alike area and the area a sample quest is filed under', async () => {
+    const urls: string[] = [];
+    const saved: number[] = [];
+    const { report, err } = await runCrawl({
+      ...routed(urls, route),
+      knownQuests: new Map([
+        [1144, KRAUL],
+        [1101, KRAUL],
+      ]),
+      saveQuest: (row) => {
+        saved.push(row.questId);
+        return Promise.resolve();
+      },
+    });
+    expect(err).toBeNull();
+    expect(report.mismatchedAreas).toEqual([
+      {
+        instanceId: KRAUL,
+        dungeon: 'Razorfen Kraul',
+        areaId: kraulAreaId,
+        actualName: null,
+        nameMatches: [{ id: 4000, name: 'Razorfen Kraul' }],
+        sampleQuest: {
+          questId: 1101,
+          httpStatus: 200,
+          areaId: 17,
+          areaName: 'The Barrens',
+        },
+      },
+    ]);
+    expect(saved).toEqual([]);
+    expect(urls.some((u) => u.includes('/quest/area/4000?'))).toBe(false);
+  });
+
+  it('omits the evidence fields when there is none', async () => {
+    const { report } = await runCrawl(
+      routed([], (path) =>
+        path === 'quest/area/index' || path === 'quest/index'
+          ? ok({ areas: mappedAreas().filter((a) => a.id !== kraulAreaId) })
+          : ok({ quests: [] }),
+      ),
+    );
+    expect(report.mismatchedAreas).toEqual([
+      {
+        instanceId: KRAUL,
+        dungeon: 'Razorfen Kraul',
+        areaId: kraulAreaId,
+        actualName: null,
+      },
+    ]);
+  });
+});
+
+describe('QuestImportCrawl — error lines (L6)', () => {
+  it('keeps a non-fatal quest miss as a readable error line naming the quest', async () => {
+    const stockade = 238;
+    const { report, err } = await runCrawl({
+      ...routed([], route),
+      knownQuests: new Map([[99999, stockade]]),
+    });
+    expect(err).toBeNull();
+    expect(report.status).toBe('idle');
+    expect(report.errors).toEqual(['quest/99999: HTTP 404']);
+    expect(report.unlistedQuests).toEqual([]);
+  });
+});

@@ -1,9 +1,12 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import {
+  AREA_NAME_CANDIDATE_LIMIT,
   CLASSIC_QUEST_AREAS,
+  areaNameCandidates,
   areaNameMatches,
   classicQuestAreaInstanceIds,
+  firstKnownQuestId,
   normaliseAreaName,
   type ClassicQuestArea,
 } from './classic-quest-areas';
@@ -90,5 +93,52 @@ describe('areaNameMatches', () => {
     expect(areaNameMatches(stockade, 'Elwynn Forest')).toBe(false);
     expect(areaNameMatches(stockade, 'Wetlands')).toBe(false);
     expect(areaNameMatches(stockade, '')).toBe(false);
+  });
+});
+
+describe('areaNameCandidates (L6: evidence for a wrong area id)', () => {
+  const kraul = must(CLASSIC_QUEST_AREAS[234], '234');
+
+  it('finds a same-named area listed under another id, and name-alike ones', () => {
+    const areas = [
+      { id: 17, name: 'The Barrens' },
+      { id: 4000, name: 'Razorfen Kraul' },
+      { id: 4001, name: 'Razorfen Kraul Entrance' },
+      { id: 722, name: 'Razorfen Downs' },
+    ];
+    expect(areaNameCandidates(kraul, areas)).toEqual([
+      { id: 4000, name: 'Razorfen Kraul' },
+      { id: 4001, name: 'Razorfen Kraul Entrance' },
+    ]);
+  });
+
+  it('never returns the mapped id itself, nor blank names', () => {
+    const areas = [
+      { id: kraul.areaId, name: 'Razorfen Kraul' },
+      { id: 5, name: '' },
+    ];
+    expect(areaNameCandidates(kraul, areas)).toEqual([]);
+  });
+
+  it('caps the list at AREA_NAME_CANDIDATE_LIMIT', () => {
+    const areas = Array.from({ length: 9 }, (_, i) => ({
+      id: 5000 + i,
+      name: `Razorfen Kraul ${i}`,
+    }));
+    expect(areaNameCandidates(kraul, areas)).toHaveLength(
+      AREA_NAME_CANDIDATE_LIMIT,
+    );
+  });
+});
+
+describe('firstKnownQuestId', () => {
+  it('returns the lowest bundled quest id of the dungeon, else null', () => {
+    const known = new Map([
+      [1144, 234],
+      [1101, 234],
+      [378, 238],
+    ]);
+    expect(firstKnownQuestId(known, 234)).toBe(1101);
+    expect(firstKnownQuestId(known, 239)).toBeNull();
   });
 });
