@@ -5,7 +5,7 @@ import {
   PluginActiveGuard,
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
-import type { ForeverQuestImportReport } from './forever-quest-import.report';
+import type { ForeverQuestImportReport } from '@raid-ledger/contract';
 import { ForeverQuestImportService } from './forever-quest-import.service';
 
 /**

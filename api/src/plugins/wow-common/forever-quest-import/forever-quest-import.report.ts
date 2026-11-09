@@ -3,7 +3,7 @@
  * `wow_forever_quest_import_status` setting and returned by
  * `GET /admin/plugins/blizzard/forever-quests/import`.
  */
-import { z } from 'zod';
+import type { ForeverQuestImportReport } from '@raid-ledger/contract';
 
 /** Pause between Blizzard requests (same as the ROK-2124 auto-link job). */
 export const FOREVER_QUEST_IMPORT_SPACING_MS = 500;
@@ -18,52 +18,15 @@ export const FOREVER_QUEST_IMPORT_MAX_ERRORS = 50;
 /** Sentry `context` tag for a failed run. */
 export const FOREVER_QUEST_IMPORT_SENTRY_CONTEXT = 'wow-forever-quest-import';
 
-export const ForeverQuestImportCountsSchema = z.object({
-  requests: z.number(),
-  areasImported: z.number(),
-  questsListed: z.number(),
-  questsFetched: z.number(),
-  prerequisitesFetched: z.number(),
-  upserted: z.number(),
-});
-
-export const ForeverQuestImportReportSchema = z.object({
-  status: z.enum(['idle', 'running', 'succeeded', 'failed']),
-  runId: z.string().nullable(),
-  startedAt: z.string().nullable(),
-  finishedAt: z.string().nullable(),
-  counts: ForeverQuestImportCountsSchema,
-  mismatchedAreas: z.array(
-    z.object({
-      instanceId: z.number(),
-      dungeon: z.string(),
-      areaId: z.number(),
-      actualName: z.string().nullable(),
-    }),
-  ),
-  /** Our quests a mapped area did not list, with the area Blizzard files them under. */
-  unlistedQuests: z.array(
-    z.object({ questId: z.number(), areaId: z.number().nullable() }),
-  ),
-  requirementKeyPaths: z.array(z.string()),
-  staleQuestIds: z.array(z.number()),
-  /** R8=B: one classic 1.x item lookup for reward item level. */
-  itemLevelProbe: z
-    .object({
-      itemId: z.number(),
-      httpStatus: z.number(),
-      itemLevel: z.number().nullable(),
-    })
-    .nullable(),
-  errors: z.array(z.string()),
-});
-
-export type ForeverQuestImportCounts = z.infer<
-  typeof ForeverQuestImportCountsSchema
->;
-export type ForeverQuestImportReport = z.infer<
-  typeof ForeverQuestImportReportSchema
->;
+/** The report shape lives in the contract (shared with the admin web panel). */
+export {
+  ForeverQuestImportCountsSchema,
+  ForeverQuestImportReportSchema,
+} from '@raid-ledger/contract';
+export type {
+  ForeverQuestImportCounts,
+  ForeverQuestImportReport,
+} from '@raid-ledger/contract';
 
 /** A blank report; `idle` = never ran. */
 export function emptyQuestImportReport(): ForeverQuestImportReport {
