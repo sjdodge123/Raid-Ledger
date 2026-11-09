@@ -117,8 +117,26 @@ export interface HubMemberGrouping {
 export interface HubMemberColumn {
     id: string;
     header: string;
-    cell: ComponentType<{ row: HubMemberRow }>;
+    /**
+     * ROK-2155: `stretched` is true only for the `rowLink` column on a phone
+     * card whose row has an href — the cell then puts `STRETCHED_LINK` on its
+     * one link so a tap anywhere on the card follows it (core has already made
+     * the card `relative`). The desktop table never stretches (design-system §4.32).
+     */
+    cell: ComponentType<{ row: HubMemberRow; stretched?: boolean }>;
     groupBy?: (row: HubMemberRow) => HubMemberGrouping;
+    /**
+     * ROK-2155 — whole-row click, opt-in per hub kind: a React HOOK (core calls
+     * it once per mounted row) returning the href of the ONE link this column's
+     * cell renders, or `undefined` when the row has no link (plain-text name).
+     * Phone cards stretch that link over the card (§4.2 StretchedAction idea);
+     * the desktop table row gets a mouse-only click to the same href, and the
+     * link stays the keyboard path (design-system §4.32). Omitted on every
+     * column = rows are not clickable.
+     */
+    rowLink?: (row: HubMemberRow) => string | undefined;
+    /** ROK-2155 — phone cards: `'own'` draws this column on its own line under the meta line (WoW: professions). */
+    cardLine?: 'own';
 }
 
 /**

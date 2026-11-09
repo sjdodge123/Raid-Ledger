@@ -15,16 +15,27 @@ interface CharacterLinkProps {
     className?: string;
     /** ROK-2149 — where an unlinked name goes (the caller builds the path); omitted = plain text. */
     unlinkedTo?: string | undefined;
+    /**
+     * ROK-2155 — stretch the link over the nearest `relative` ancestor (a
+     * Members phone card) with an `::after` overlay, so the whole card opens it
+     * while staying ONE link (the §4.2 StretchedAction idea; members list §4.32).
+     * Only a shell that made the card `relative` may pass it.
+     */
+    stretched?: boolean;
 }
 
-function linkClass(className: string): string {
-    return `${className} rounded-sm underline-offset-2 transition-opacity hover:underline hover:opacity-80 ${FOCUS_RING}`;
+/** The StretchedAction overlay as a link's own `::after` — one link per row, no duplicate anchor. */
+export const STRETCHED_LINK = 'after:absolute after:-inset-px';
+
+function linkClass(className: string, stretched: boolean): string {
+    const base = `${className} rounded-sm underline-offset-2 transition-opacity hover:underline hover:opacity-80 ${FOCUS_RING}`;
+    return stretched ? `${base} ${STRETCHED_LINK}` : base;
 }
 
-export function CharacterLink({ name, characterId, className = 'font-medium text-foreground', unlinkedTo }: CharacterLinkProps): JSX.Element {
+export function CharacterLink({ name, characterId, className = 'font-medium text-foreground', unlinkedTo, stretched = false }: CharacterLinkProps): JSX.Element {
     if (characterId === null) {
         if (unlinkedTo === undefined) return <span className={className} data-testid="guild-member-unlinked">{name}</span>;
-        return <Link to={unlinkedTo} data-testid="guild-member-roster-link" className={linkClass(className)}>{name}</Link>;
+        return <Link to={unlinkedTo} data-testid="guild-member-roster-link" className={linkClass(className, stretched)}>{name}</Link>;
     }
-    return <Link to={`/characters/${characterId}`} data-testid="guild-member-link" className={linkClass(className)}>{name}</Link>;
+    return <Link to={`/characters/${characterId}`} data-testid="guild-member-link" className={linkClass(className, stretched)}>{name}</Link>;
 }
