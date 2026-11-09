@@ -1,11 +1,12 @@
 /**
- * ROK-2146: the static WoW: Forever talent table (`talent-data/forever-trees.json`,
- * extracted from Wowhead's Forever calculator) and the join of a character's spent
- * ranks onto it. Replaces the TBC-sourced `CLASSIC_TALENT_POSITIONS` for Forever.
+ * ROK-2146: the static WoW: Forever talent table (one `talent-data/forever/<class>.json`
+ * per class, extracted from Wowhead's Forever calculator) and the join of a character's
+ * spent ranks onto it. Replaces the TBC-sourced `CLASSIC_TALENT_POSITIONS` for Forever.
  *
- * The JSON is lazy-loaded through `import.meta.glob`, so it never lands in the
- * entry chunk, and a checkout without the file still builds: the loader resolves
- * `null` and the display keeps its old grid/pills.
+ * Each class file is lazy-loaded through `import.meta.glob`, so only the viewed class's
+ * chunk is fetched (ROK-2150: the per-rank text made one all-class chunk 32 KB gz), it
+ * never lands in the entry chunk, and a checkout without the files still builds: the
+ * loader resolves `null` and the display keeps its old grid/pills.
  */
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { ownLookup } from '../../../lib/own-lookup';
@@ -31,8 +32,8 @@ export interface JoinedTree { name: string; index: number; spent: number; talent
 /** Every table talent with its rank, plus the ranked nodes nothing matched (ROK-2113 "Other talents"). */
 export interface JoinedForeverTalents { trees: JoinedTree[]; other: ForeverTalentNodeDto[] }
 
-// Glob, not a literal import(): resolves to {} when the file is absent instead of failing the build.
-const TABLE_LOADERS = import.meta.glob<unknown>('./talent-data/forever-trees.json', { import: 'default' });
+// Glob, not a literal import(): resolves to {} when the files are absent instead of failing the build.
+const CLASS_LOADERS = import.meta.glob<unknown>('./talent-data/forever/*.json', { import: 'default' });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -52,7 +53,8 @@ function hasRankDescriptions(value: Record<string, unknown>): boolean {
         && descriptions.every((d: unknown) => typeof d === 'string' && d.length > 0 && !/[<>]/.test(d));
 }
 
-function isClassTable(value: unknown): value is ForeverClassTable {
+/** One class file's shape: `{ hashVersion, trees }`. */
+export function isForeverClassTable(value: unknown): value is ForeverClassTable {
     if (!isRecord(value) || !Array.isArray(value.trees)) return false;
     if (typeof value.hashVersion !== 'string' || value.hashVersion.length === 0) return false;
     return value.trees.every((t: unknown) => isRecord(t) && typeof t.name === 'string' && Array.isArray(t.talents) && t.talents.every(isTalent));
@@ -60,41 +62,50 @@ function isClassTable(value: unknown): value is ForeverClassTable {
 
 /** Shape guard for the JSON (it is data, not code — a bad extract must not crash the page). */
 export function isForeverTalentTable(value: unknown): value is ForeverTalentTable {
-    return isRecord(value) && Object.values(value).every(isClassTable);
+    return isRecord(value) && Object.values(value).every(isForeverClassTable);
 }
 
-let tablePromise: Promise<ForeverTalentTable | null> | undefined;
-/** The settled table (null = absent/malformed); undefined until the first load settles. */
-let settledTable: ForeverTalentTable | null | undefined;
-
-function loadTable(): Promise<ForeverTalentTable | null> {
-    const load = Object.values(TABLE_LOADERS)[0];
-    if (!load) return Promise.resolve(null);
-    tablePromise ??= load().then((json) => (isForeverTalentTable(json) ? json : null), () => null)
-        .then((table) => { settledTable = table; return table; });
-    return tablePromise;
-}
-
-/** "Warrior" → "warrior"; the table's class slugs are lower-case single words. */
+/** "Warrior" → "warrior"; the class file names are lower-case single words. */
 function classSlug(characterClass: string): string {
     return characterClass.trim().toLowerCase().replace(/\s+/g, '');
 }
 
-/** The class's trees, or null when the table (or the class in it) is missing. */
+/** The lazy loader of `./talent-data/forever/<slug>.json`, or undefined when there is no such file. */
+function classLoader(slug: string): (() => Promise<unknown>) | undefined {
+    return ownLookup(CLASS_LOADERS, `./talent-data/forever/${slug}.json`);
+}
+
+const classPromises = new Map<string, Promise<ForeverClassTable | null>>();
+/** Per class slug: the settled table (null = malformed); absent until its first load settles. */
+const settledClasses = new Map<string, ForeverClassTable | null>();
+
+function loadClass(slug: string): Promise<ForeverClassTable | null> {
+    const load = classLoader(slug);
+    if (!load) return Promise.resolve(null);
+    let promise = classPromises.get(slug);
+    if (!promise) {
+        promise = load().then((json) => (isForeverClassTable(json) ? json : null), () => null)
+            .then((table) => { settledClasses.set(slug, table); return table; });
+        classPromises.set(slug, promise);
+    }
+    return promise;
+}
+
+/** The class's trees, or null when the class has no (or a malformed) table file. */
 export async function loadForeverClassTable(characterClass: string | null | undefined): Promise<ForeverClassTable | null> {
     if (!characterClass) return null;
-    const table = await loadTable();
-    return (table && ownLookup(table, classSlug(characterClass))) ?? null;
+    return loadClass(classSlug(characterClass));
 }
 
 /**
- * The class's trees without waiting: undefined until the table has settled once (the
- * caller then loads it), else the trees or null — so a revisit draws with no placeholder.
+ * The class's trees without waiting: undefined until that class's file has settled once
+ * (the caller then loads it), else the trees or null — so a revisit draws with no placeholder.
  */
 export function peekForeverClassTable(characterClass: string | null | undefined): ForeverClassTable | null | undefined {
     if (!characterClass) return null;
-    if (settledTable === undefined) return undefined;
-    return (settledTable && ownLookup(settledTable, classSlug(characterClass))) ?? null;
+    const slug = classSlug(characterClass);
+    if (!classLoader(slug)) return null;
+    return settledClasses.has(slug) ? (settledClasses.get(slug) ?? null) : undefined;
 }
 
 /** "Improved  Bloodrage" / "improved-bloodrage" → "improved bloodrage". */
