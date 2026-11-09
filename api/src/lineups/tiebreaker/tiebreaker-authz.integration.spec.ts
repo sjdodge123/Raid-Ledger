@@ -565,6 +565,9 @@ function describeTiebreakerAuthz() {
       const [[forceResult]] = await Promise.all([force, voted]);
       return defined(forceResult, 'force-resolve result');
     } finally {
+      // A throw before the release above would leave force-resolve parked
+      // with its tx open and hang the suite instead of failing it.
+      gate.release();
       gate.spy.mockRestore();
     }
   }
