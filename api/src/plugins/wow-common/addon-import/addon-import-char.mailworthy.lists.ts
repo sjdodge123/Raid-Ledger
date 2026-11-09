@@ -17,6 +17,7 @@ import {
   upsertPeers,
   type MailworthyGiverRow,
 } from './addon-import-char.mailworthy.writes';
+import { resolveExportName } from './addon-import.binding-name';
 import type { DecodedAddonCharExport } from './addon-import.decoder';
 
 /**
@@ -36,35 +37,57 @@ export interface MailworthyListsInput {
 
 /** What the lists step did (feeds the import summary, ROK-2148 Q8). */
 export interface MailworthyListsCounts {
+  /** Giver rows actually written (a refused older report is not counted). */
   givers: number;
   giversRejected: number;
   peers: number;
+}
+
+/** The counts plus the accepted-giver total the outcome gate needs. */
+export interface MailworthyListsResult {
+  counts: MailworthyListsCounts;
+  giversAccepted: number;
 }
 
 export async function applyMailworthyLists(
   ctx: AddonApplyContext,
   guildId: number,
   input: MailworthyListsInput,
-): Promise<MailworthyListsCounts> {
+): Promise<MailworthyListsResult> {
   const givers = acceptedGivers(ctx, guildId, input);
-  const { payload, block, nowMs } = input;
-  const reported = [
+  const { block, nowMs } = input;
+  const peers = peerRows(reportedPeers(input, givers), nowMs);
+  await upsertPeers(ctx, guildId, peers);
+  await prunePeers(ctx, guildId, peerCutoff(nowMs));
+  const written = await upsertGivers(ctx, guildId, givers);
+  const counts = {
+    givers: written,
+    giversRejected: dedupeGivers(block.givers ?? []).length - givers.length,
+    peers: peers.length,
+  };
+  return { counts, giversAccepted: givers.length };
+}
+
+/**
+ * The block's peers, the exporter (realm suffix stripped, the same name
+ * rule as the binding, so its key matches the roster) and every accepted
+ * giver at its own `asOf`.
+ */
+function reportedPeers(
+  { payload, block }: MailworthyListsInput,
+  givers: readonly MailworthyGiverRow[],
+): { name: string; lastSeenAt: number }[] {
+  const exporter = resolveExportName(payload.who);
+  return [
     ...(block.peers ?? []),
-    { name: payload.who.fullName, lastSeenAt: payload.exportedAt },
+    ...(exporter === ''
+      ? []
+      : [{ name: exporter, lastSeenAt: payload.exportedAt }]),
     ...givers.map((g) => ({
       name: g.characterName,
       lastSeenAt: Math.floor(g.asOf.getTime() / 1000),
     })),
   ];
-  const peers = peerRows(reported, nowMs);
-  await upsertPeers(ctx, guildId, peers);
-  await prunePeers(ctx, guildId, peerCutoff(nowMs));
-  await upsertGivers(ctx, guildId, givers);
-  return {
-    givers: givers.length,
-    giversRejected: dedupeGivers(block.givers ?? []).length - givers.length,
-    peers: peers.length,
-  };
 }
 
 /** Deduped, clamped, roster-checked giver rows with their source. */

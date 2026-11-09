@@ -10,7 +10,10 @@ import {
 } from '../../../drizzle/schema';
 import type { GuildMailworthyGiverSource } from '../../../drizzle/schema/guild-mailworthy';
 import type { AddonApplyContext } from './addon-import-apply.types';
-import type { MailworthyPeerRow } from './addon-import-char.mailworthy.helpers';
+import {
+  sortByNameKey,
+  type MailworthyPeerRow,
+} from './addon-import-char.mailworthy.helpers';
 
 /**
  * ROK-2148 D.2 — the Mailworthy writes. Every one is a single upsert whose
@@ -54,7 +57,7 @@ export async function upsertPeers(
   const t = guildMailworthyPeers;
   await ctx.tx
     .insert(t)
-    .values(peers.map((p) => ({ guildId, ...p })))
+    .values(sortByNameKey(peers).map((p) => ({ guildId, ...p })))
     .onConflictDoUpdate({
       target: [t.guildId, t.nameKey],
       set: {
@@ -102,33 +105,46 @@ const giverMoves = sql`(excluded.source = 'self' AND ${guildMailworthyGivers.sou
     AND (${guildMailworthyGivers.asOf}, ${guildMailworthyGivers.generatedAt})
       <= (excluded.as_of, excluded.generated_at))`;
 
-/** Upsert the export's accepted givers (already deduped by name key). */
+const ex = (col: string) => sql.raw(`excluded.${col}`);
+
+/** What a moving giver row takes from the export. */
+const giverSet = {
+  characterName: ex('character_name'),
+  itemsAllTime: ex('items_all_time'),
+  countingSince: ex('counting_since'),
+  days: ex('days'),
+  asOf: ex('as_of'),
+  generatedAt: ex('generated_at'),
+  source: ex('source'),
+  reportedByUserId: ex('reported_by_user_id'),
+  updatedAt: sql`now()`,
+};
+
+/**
+ * Upsert the export's accepted givers (already deduped by name key).
+ * Returns how many rows were written — a row `giverMoves` refused is not.
+ */
 export async function upsertGivers(
   ctx: AddonApplyContext,
   guildId: number,
   givers: readonly MailworthyGiverRow[],
-): Promise<void> {
-  if (givers.length === 0) return;
+): Promise<number> {
+  if (givers.length === 0) return 0;
   const t = guildMailworthyGivers;
-  const ex = (col: string) => sql.raw(`excluded.${col}`);
-  await ctx.tx
+  const rows = await ctx.tx
     .insert(t)
     .values(
-      givers.map((g) => ({ guildId, ...g, reportedByUserId: ctx.userId })),
+      sortByNameKey(givers).map((g) => ({
+        guildId,
+        ...g,
+        reportedByUserId: ctx.userId,
+      })),
     )
     .onConflictDoUpdate({
       target: [t.guildId, t.nameKey],
-      set: {
-        characterName: ex('character_name'),
-        itemsAllTime: ex('items_all_time'),
-        countingSince: ex('counting_since'),
-        days: ex('days'),
-        asOf: ex('as_of'),
-        generatedAt: ex('generated_at'),
-        source: ex('source'),
-        reportedByUserId: ex('reported_by_user_id'),
-        updatedAt: sql`now()`,
-      },
+      set: giverSet,
       setWhere: giverMoves,
-    });
+    })
+    .returning({ nameKey: t.nameKey });
+  return rows.length;
 }

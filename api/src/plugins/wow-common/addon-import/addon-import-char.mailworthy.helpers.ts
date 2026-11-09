@@ -132,3 +132,16 @@ export function peerRows(
   }
   return [...byKey.values()];
 }
+
+/**
+ * Rows in `nameKey` order. Every multi-row upsert sorts first so two
+ * concurrent imports in one guild lock the shared rows in the same order
+ * (no deadlock between overlapping peer / giver sets).
+ */
+export function sortByNameKey<T extends { nameKey: string }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort((a, b) =>
+    a.nameKey < b.nameKey ? -1 : a.nameKey > b.nameKey ? 1 : 0,
+  );
+}

@@ -23,7 +23,7 @@ import {
 } from './addon-import-char.mailworthy.helpers';
 import {
   applyMailworthyLists,
-  type MailworthyListsCounts,
+  type MailworthyListsResult,
 } from './addon-import-char.mailworthy.lists';
 import { upsertTemplate } from './addon-import-char.mailworthy.writes';
 import { exportClock } from './addon-import.clock';
@@ -82,16 +82,16 @@ export async function applyCharMailworthy(
   const nowMs = exportClock.nowMs();
   const template = await applyTemplate(ctx, guildId, block, roster, nowMs);
   const input = { payload, block, roster, nowMs };
-  const counts = await applyMailworthyLists(ctx, guildId, input);
-  return mailworthyOutcome(counts, template);
+  const lists = await applyMailworthyLists(ctx, guildId, input);
+  return mailworthyOutcome(lists, template);
 }
 
 /** Every giver off-roster → skipped; otherwise applied with its counts. */
 function mailworthyOutcome(
-  counts: MailworthyListsCounts,
+  { counts, giversAccepted }: MailworthyListsResult,
   template: TemplateOutcome,
 ): AddonMailworthyImportOutcome {
-  if (counts.givers === 0 && counts.giversRejected > 0) {
+  if (giversAccepted === 0 && counts.giversRejected > 0) {
     return skipped('givers_rejected');
   }
   return { status: 'applied', ...counts, template };

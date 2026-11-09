@@ -21,6 +21,7 @@ import {
   buildGuildPayload,
   buildImportString,
   buildMember,
+  buildWho,
 } from './testing/addon-fixture.builder';
 import {
   MAILWORTHY_GENERATED_AT,
@@ -50,6 +51,8 @@ let testApp: TestApp;
 let gameId: number;
 let token: string;
 let charId: string;
+/** The exporter's alt on the same account (pinned to ANABELLE's GUID). */
+let altCharId: string;
 
 async function ensureGame(): Promise<number> {
   const [existing] = await testApp.db
@@ -117,9 +120,9 @@ const importBlock = (block: AddonMailworthy, dryRun = false) =>
   importString(buildImportString(buildCharMailworthyPayload(block)), dryRun);
 
 /** Apply a char export; the 200 body's status + summary.mailworthy (Q8). */
-async function importOutcome(payload: AddonCharExport) {
+async function importOutcome(payload: AddonCharExport, onChar = charId) {
   const res = await testApp.request
-    .post(`/plugins/wow/characters/${charId}/addon-import`)
+    .post(`/plugins/wow/characters/${onChar}/addon-import`)
     .set('Authorization', `Bearer ${token}`)
     .send({ importString: buildImportString(payload), dryRun: false });
   expect(res.status).toBe(200);
@@ -186,7 +189,7 @@ beforeEach(async () => {
   await registry.activate('blizzard');
   token = await memberToken('mwexporter');
   charId = await createChar(token, 'Ana Forever');
-  await createChar(token, 'Anabelle Forever', ANABELLE.guid);
+  altCharId = await createChar(token, 'Anabelle Forever', ANABELLE.guid);
   const other = await memberToken('mwother');
   await createChar(other, 'Member2', buildMember(2).guid);
   expect(await importString(buildImportString(buildGuildPayload(ROSTER)))).toBe(
@@ -460,5 +463,73 @@ describe('ROK-2148 Q8 — the char summary reports the Mailworthy block', () => 
   it('absent when the export carries no block', async () => {
     const res = await importOutcome(buildCharPayload());
     expect(res.mailworthy).toBeUndefined();
+  });
+});
+
+/** The full block exported by the alt (Anabelle) instead of Ana. */
+function altMailworthyPayload(): AddonCharExport {
+  const name = 'Anabelle Forever';
+  return {
+    ...buildCharMailworthyPayload(),
+    who: buildWho({
+      guid: ANABELLE.guid,
+      fullName: name,
+      raw: { getUnitName: name, unitName: [name, null] },
+    }),
+  };
+}
+
+describe('ROK-2148 review r1 — exporter name, re-imports, alts', () => {
+  it("the exporter's peer row drops a -Realm suffix from who.fullName", async () => {
+    const payload = buildCharMailworthyPayload(
+      block([giver({ characterName: 'Member2' })]),
+    );
+    const realmed = {
+      ...payload,
+      who: buildWho({ fullName: 'Ana Forever-Doomhowl' }),
+    };
+    expect((await importOutcome(realmed)).status).toBe('applied');
+    const keys = (await testApp.db.select().from(peers)).map((p) => p.nameKey);
+    expect(keys.sort()).toEqual(['ana forever', 'member2']);
+  });
+
+  it('counts only the giver rows actually written (a refused older report is 0)', async () => {
+    const at = MAILWORTHY_GENERATED_AT;
+    await seedGiver('Ana Forever', 'self', at + 60, at);
+    const res = await importOutcome(
+      buildCharMailworthyPayload(block([giver({})])),
+    );
+    expect(res.mailworthy).toMatchObject({
+      status: 'applied',
+      givers: 0,
+      giversRejected: 0,
+    });
+    expect((await giverRows())[0]?.itemsAllTime).toBe(999);
+  });
+
+  it('two alts of one account importing the same block keep one row per giver (T14)', async () => {
+    const first = await importOutcome(buildCharMailworthyPayload());
+    const alt = altMailworthyPayload();
+    const second = await importOutcome(alt, altCharId);
+    expect([first.status, second.status]).toEqual(['applied', 'applied']);
+    const rows = await giverRows();
+    expect(
+      rows.map((r) => [r.characterName, r.source, r.itemsAllTime]),
+    ).toEqual([
+      ['Ana Forever', 'self', 140],
+      ['Anabelle Forever', 'self', 20],
+      ['Member2', 'relayed', 64],
+    ]);
+    const peerKeys = (await testApp.db.select().from(peers)).map(
+      (p) => p.nameKey,
+    );
+    expect(peerKeys.sort()).toEqual([
+      'ana forever',
+      'anabelle forever',
+      'member1',
+      'member2',
+      'member3',
+      'member4',
+    ]);
   });
 });

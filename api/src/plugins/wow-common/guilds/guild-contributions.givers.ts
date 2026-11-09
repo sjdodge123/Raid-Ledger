@@ -38,11 +38,14 @@ interface CharTotals {
 
 type Window = 'last30' | 'allTime';
 
-/** Items in the 30-day window ending `todayDay` (inclusive). */
+/**
+ * Items in the 30-day window ending `todayDay` (inclusive). A day after
+ * `todayDay` (skewed clock or relayed data) never counts.
+ */
 export function last30Items(days: unknown, todayDay: number): number {
   const from = todayDay - LAST_30_SPAN;
   return parseStoredDays(days)
-    .filter((d) => d.day >= from)
+    .filter((d) => d.day >= from && d.day <= todayDay)
     .reduce((sum, d) => sum + d.items, 0);
 }
 

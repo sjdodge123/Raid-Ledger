@@ -20,6 +20,8 @@ import { mailworthyNameKey } from '../../../drizzle/schema/guild-mailworthy.name
 const DAY_MS = 86_400_000;
 /** D6 / ruling 4 — Mailworthy `PEER_DAYS`. */
 export const USERS_WINDOW_DAYS = 60;
+/** The DTO's `users.max(1000)` — never return more than it accepts. */
+export const USERS_MAX = 1000;
 
 /** One latest-snapshot roster member, keyed by `mailworthyNameKey(name)`. */
 export interface RosterEntry {
@@ -131,5 +133,7 @@ export function computeUsers(
       lastSeenAt: peer.lastSeenAt.toISOString(),
     });
   }
-  return users.sort((a, b) => a.characterName.localeCompare(b.characterName));
+  return users
+    .sort((a, b) => a.characterName.localeCompare(b.characterName))
+    .slice(0, USERS_MAX);
 }

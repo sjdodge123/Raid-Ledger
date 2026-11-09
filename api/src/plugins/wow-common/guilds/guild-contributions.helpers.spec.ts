@@ -16,6 +16,7 @@ import {
   computeTemplate,
   computeUsers,
   dayIndex,
+  USERS_MAX,
   type RosterRow,
   type StoredTemplate,
 } from './guild-contributions.helpers';
@@ -55,6 +56,15 @@ describe('last30Items (T7)', () => {
       { day: TODAY, items: 2 },
     ];
     expect(last30Items(days, TODAY)).toBe(7);
+  });
+
+  it('never counts a day after today (skewed clock / relayed data)', () => {
+    const days = [
+      { day: TODAY, items: 2 },
+      { day: TODAY + 1, items: 50 },
+      { day: TODAY + 10_000, items: 900 },
+    ];
+    expect(last30Items(days, TODAY)).toBe(2);
   });
 
   it('treats malformed stored days as none', () => {
@@ -240,5 +250,12 @@ describe('computeUsers (T10)', () => {
       ['Amy', null],
       ['Zed', CHAR_A],
     ]);
+  });
+
+  it('never returns more users than the DTO accepts', () => {
+    const many = Array.from({ length: USERS_MAX + 5 }, (_, n) => `P${n}`);
+    const roster = buildRoster(many.map((n) => member(n)));
+    const peers = many.map((name) => ({ name, lastSeenAt: new Date(NOW_MS) }));
+    expect(computeUsers(peers, roster, NOW_MS)).toHaveLength(USERS_MAX);
   });
 });
