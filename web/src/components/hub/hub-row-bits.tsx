@@ -43,6 +43,16 @@ function ClaimLink({ hub, action }: { hub: HubDirectoryEntry; action: { label: s
 }
 
 /**
+ * ROK-2132 (Codex P3): a non-member row is claimable only when the API's claim rule
+ * chose it. A non-staff viewer is listed a non-member guild only through that rule
+ * (`visitorVisibleGroupIds`); staff see every guild (Retail/Classic, hidden, archived)
+ * and are told so by the staff-only `hidden` key, so their rows keep "View".
+ */
+function isClaimableRow(hub: HubDirectoryEntry): boolean {
+    return hub.viewer === 'not-member' && hub.hidden === undefined;
+}
+
+/**
  * The viewer's action on a hub row (ROK-1875 rule, shared by ROK-1883):
  * server and guild hubs → "View" (membership is presence/character-driven);
  * a WoW guild a non-member can claim into → "Claim your character to join" (ROK-2132);
@@ -50,7 +60,7 @@ function ClaimLink({ hub, action }: { hub: HubDirectoryEntry; action: { label: s
  */
 export function HubViewerAction({ hub, onJoin, joining }: HubViewerActionProps): JSX.Element {
     const claim = hubCopy(hub.kind).joinAction;
-    if (claim && hub.viewer === 'not-member') return <ClaimLink hub={hub} action={claim} />;
+    if (claim && isClaimableRow(hub)) return <ClaimLink hub={hub} action={claim} />;
     if (hub.kind !== 'game_community') return <ViewLink hub={hub} />;
     if (hub.viewer === 'banned') return <StatusChip tone="danger" title="You can't join this hub">Banned</StatusChip>;
     if (hub.viewer === 'not-member') {

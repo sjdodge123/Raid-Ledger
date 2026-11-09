@@ -1,8 +1,8 @@
 /**
  * ROK-2132 Ruling 9 — `HubViewerAction` on a WoW guild a non-member can claim
  * into: a "Claim your character to join" link (short "Claim to join" below
- * `sm`) to `/hubs/<id>?claim=roster`. Members keep "View"; server and
- * community hubs are unchanged.
+ * `sm`) to `/hubs/<id>?claim=roster`. Members and staff rows keep "View";
+ * server and community hubs are unchanged.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
@@ -33,6 +33,18 @@ describe('HubViewerAction — guild join gate (ROK-2132)', () => {
         renderAction({ ...GUILD, viewer: 'member' });
         expect(screen.getByRole('link', { name: 'View Iron Remnant' })).toHaveAttribute('href', '/hubs/42');
         expect(screen.queryByRole('link', { name: /claim/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps "View" on a staff row (the `hidden` key) — staff see guilds the claim rule excludes (Codex P3)', () => {
+        for (const hidden of [false, true]) {
+            const { unmount } = renderAction({ ...GUILD, hidden });
+            expect(
+                screen.getByRole('link', { name: 'View Iron Remnant' }),
+                `staff row with hidden=${String(hidden)} must keep View`,
+            ).toHaveAttribute('href', '/hubs/42');
+            expect(screen.queryByRole('link', { name: /claim/i })).not.toBeInTheDocument();
+            unmount();
+        }
     });
 
     it('keeps "View" for a non-member of a game-server hub', () => {
