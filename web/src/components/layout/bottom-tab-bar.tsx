@@ -9,6 +9,7 @@ import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { Z_INDEX } from '../../lib/z-index';
 import { useAuth } from '../../hooks/use-auth';
 import { BottomHubsButton } from './hub-nav/bottom-hubs-button';
+import { hidesBottomTabBar } from './bottom-tab-bar-routes';
 
 const LEFT_TABS = [
     { to: '/calendar', icon: CalendarIcon, label: 'Calendar' },
@@ -35,9 +36,6 @@ export const TAB_BAR_HIDDEN_CLASS = 'translate-y-[calc(100%+2rem)]';
  * (raised Hubs circle) · Games · Players. Each slot fills its column (64px at
  * 320px wide), so no label truncates and nothing overflows.
  */
-// Full-screen wizard routes where the tab bar must not render. Exact-match
-// paths mirroring app-routes.tsx — update this when those routes move.
-const MODAL_ROUTES = new Set(['/onboarding', '/admin/setup', '/claim']);
 
 function TabLink({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     return (
@@ -72,7 +70,7 @@ export function BottomTabBar() {
     const scrollDirection = useScrollDirection();
     const isHidden = scrollDirection === 'down';
 
-    if (MODAL_ROUTES.has(location.pathname)) return null;
+    if (hidesBottomTabBar(location.pathname)) return null;
 
     return (
         <nav data-testid="bottom-tab-bar" className={`fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle will-change-transform md:will-change-auto ${isHidden ? TAB_BAR_HIDDEN_CLASS : 'translate-y-0'}`}

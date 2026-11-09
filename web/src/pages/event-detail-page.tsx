@@ -255,7 +255,7 @@ export function EventDetailPage(): JSX.Element | null {
         }
         return <EventDetailError message={page.detailError.message} onBack={() => page.navigate('/calendar')} />;
     }
-    if (page.detailLoading) return <div className="event-detail-page pb-0"><EventDetailSkeleton /></div>;
+    if (page.detailLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
     if (!page.event) return null;
 
     return <EventDetailBody page={page as PageState & { event: EventResponseDto }} voice={voice} bannerRef={bannerRef} isBannerCollapsed={isBannerCollapsed} derived={derived} handlers={handlers} modals={modals} />;
