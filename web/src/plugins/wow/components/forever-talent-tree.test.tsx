@@ -107,11 +107,12 @@ describe('ForeverTalentTree — tabs, other talents, label, fallback', () => {
         expect(within(other).getByText('Mystery Talent 1')).toBeInTheDocument();
     });
 
-    it('labels the button "Open Wowhead calculator" with the bare Forever calc URL', async () => {
+    // ROK-2150 (operator 2026-11-09) replaces ROK-2146 D7's bare link: the calc opens on the character's build.
+    it('labels the button "Open Wowhead calculator" and links the character\'s build (Protection 2/5/0/0/0/0/1)', async () => {
         await renderWarrior();
         const calc = screen.getByTestId('forever-talents-source').parentElement?.querySelector('a');
         expect(calc, 'calc link in the header').toHaveAccessibleName('Open Wowhead calculator');
-        expect(calc).toHaveAttribute('href', 'https://www.wowhead.com/forever/talent-calc/warrior');
+        expect(calc).toHaveAttribute('href', 'https://www.wowhead.com/forever/talent-calc/warrior/vkndmh--2500001');
     });
 
     it('keeps the old grid/pills when the class has no table', async () => {

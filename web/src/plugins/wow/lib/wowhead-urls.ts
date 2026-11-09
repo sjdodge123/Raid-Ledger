@@ -82,16 +82,21 @@ export function getWowheadNpcSearchUrl(bossName: string, variant?: string | null
  * Maps the Blizzard API class name to the Wowhead URL slug, then builds the
  * appropriate talent-calc URL for the game variant.
  *
+ * `build` (ROK-2150) is an optional calculator build string appended as the last
+ * path segment (e.g. Forever `vkndmh--25`); null/empty → the bare calculator.
+ *
  * Returns null if the class name cannot be mapped.
  */
 export function getWowheadTalentCalcUrl(
     className: string,
     variant?: string | null,
+    build?: string | null,
 ): string | null {
     const slug = wowClassToSlug(className);
     if (!slug) return null;
     const { urlBase } = getWowheadDomain(variant);
-    return `https://${urlBase}/talent-calc/${slug}`;
+    const base = `https://${urlBase}/talent-calc/${slug}`;
+    return build ? `${base}/${encodeURIComponent(build)}` : base;
 }
 
 /**
