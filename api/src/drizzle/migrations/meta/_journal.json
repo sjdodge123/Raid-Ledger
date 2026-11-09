@@ -2007,8 +2007,29 @@
     {
       "idx": 287,
       "version": "7",
-      "when": 1794126839645,
-      "tag": "0287_games_igdb_itad_pair_merge",
+      "when": 1794159577924,
+      "tag": "0287_guild_member_armory",
+      "breakpoints": true
+    },
+    {
+      "idx": 288,
+      "version": "7",
+      "when": 1794176721350,
+      "tag": "0288_blizzard_id_link_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
+      "when": 1794181200982,
+      "tag": "0289_guild_mailworthy",
+      "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "7",
+      "when": 1794181300982,
+      "tag": "0290_games_igdb_itad_pair_merge",
       "breakpoints": true
     }
   ]

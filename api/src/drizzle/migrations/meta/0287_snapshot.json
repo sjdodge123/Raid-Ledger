@@ -1,5 +1,5 @@
 {
-  "id": "650970a4-8fff-4b9c-a8df-5021e2dcf70f",
+  "id": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "prevId": "80e635fe-08dc-4e4a-8c9b-a40a88b5c204",
   "version": "7",
   "dialect": "postgresql",
@@ -12126,6 +12126,179 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.guild_member_armory": {
+      "name": "guild_member_armory",
+      "schema": "",
+      "columns": {
+        "guild_member_id": {
+          "name": "guild_member_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "blizzard_character_id": {
+          "name": "blizzard_character_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "level": {
+          "name": "level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "roster_level": {
+          "name": "roster_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "class": {
+          "name": "class",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "race": {
+          "name": "race",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spec": {
+          "name": "spec",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item_level": {
+          "name": "item_level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "equipment": {
+          "name": "equipment",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "talents": {
+          "name": "talents",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "armory_professions": {
+          "name": "armory_professions",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_login_at": {
+          "name": "last_login_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failures": {
+          "name": "failures",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "retry_at": {
+          "name": "retry_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_attempt_at": {
+          "name": "last_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_guild_member_armory_retry_at": {
+          "name": "idx_guild_member_armory_retry_at",
+          "columns": [
+            {
+              "expression": "retry_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_guild_member_armory_blizzard_id": {
+          "name": "idx_guild_member_armory_blizzard_id",
+          "columns": [
+            {
+              "expression": "blizzard_character_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "guild_member_armory_guild_member_id_guild_members_id_fk": {
+          "name": "guild_member_armory_guild_member_id_guild_members_id_fk",
+          "tableFrom": "guild_member_armory",
+          "tableTo": "guild_members",
+          "columnsFrom": [
+            "guild_member_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.guild_member_level_events": {
       "name": "guild_member_level_events",
       "schema": "",
@@ -12841,14 +13014,6 @@
           "name": "guild_profiles_discord_channel_source_check",
           "value": "\"guild_profiles\".\"discord_channel_source\" IN ('auto', 'manual')"
         },
-        "guild_profiles_game_motd_length": {
-          "name": "guild_profiles_game_motd_length",
-          "value": "char_length(\"guild_profiles\".\"game_motd\") <= 255"
-        },
-        "guild_profiles_game_info_length": {
-          "name": "guild_profiles_game_info_length",
-          "value": "char_length(\"guild_profiles\".\"game_info\") <= 499"
-        },
         "guild_profiles_ingame_motd_length": {
           "name": "guild_profiles_ingame_motd_length",
           "value": "char_length(\"guild_profiles\".\"ingame_motd\") <= 255"
@@ -12856,6 +13021,14 @@
         "guild_profiles_ingame_info_length": {
           "name": "guild_profiles_ingame_info_length",
           "value": "char_length(\"guild_profiles\".\"ingame_info\") <= 499"
+        },
+        "guild_profiles_game_motd_length": {
+          "name": "guild_profiles_game_motd_length",
+          "value": "char_length(\"guild_profiles\".\"game_motd\") <= 255"
+        },
+        "guild_profiles_game_info_length": {
+          "name": "guild_profiles_game_info_length",
+          "value": "char_length(\"guild_profiles\".\"game_info\") <= 499"
         }
       },
       "isRLSEnabled": false
@@ -20772,10 +20945,10 @@
   },
   "enums": {},
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},
