@@ -379,3 +379,37 @@ describe('QuestImportCrawl — the sample-quest probe is evidence only (M1)', ()
     expect(report.counts.areasImported).toBe(MAPPED - 1);
   });
 });
+
+/** Kraul's sample quest routed normally; the switch answers `enabled()`. */
+function switchDeps(urls: string[], enabled: () => boolean): QuestImportDeps {
+  return {
+    ...routed(urls, route),
+    knownQuests: new Map([[1101, KRAUL]]),
+    isEnabled: () => Promise.resolve(enabled()),
+  };
+}
+
+describe('QuestImportCrawl — the kill switch still stops the run at the probe (r4 MINOR 2)', () => {
+  it('aborts with the OFF message when the switch is off exactly at the sample probe', async () => {
+    const firstPass: string[] = [];
+    await runCrawl(switchDeps(firstPass, () => true));
+    const probeAt = firstPass.findIndex((u) => u.includes('/quest/1101?'));
+    expect(probeAt).toBeGreaterThan(0);
+
+    let checks = 0;
+    const urls: string[] = [];
+    const { report, err } = await runCrawl(
+      switchDeps(urls, () => {
+        checks += 1;
+        return checks !== probeAt + 1;
+      }),
+    );
+    expect(err).toBeInstanceOf(QuestImportAbort);
+    expect(err instanceof Error ? err.message : err).toBe(
+      FOREVER_QUEST_IMPORT_OFF_MESSAGE,
+    );
+    expect(urls.some((u) => u.includes('/quest/1101?'))).toBe(false);
+    expect(report.errors.filter((e) => e.startsWith('quest/1101'))).toEqual([]);
+    expect(report.counts.requests).toBe(probeAt);
+  });
+});
