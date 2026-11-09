@@ -607,6 +607,8 @@ as `text-xs text-muted` under the chain. Without a state the chain renders exact
 `text-amber-400` on a new ON label until that is fixed. The removable chip is tokens only, so it flips with `success` (`#10b981` →
 `#065f46`); check both families in the gallery's side-by-side view.
 
+**Row accent for a missing required item (ROK-2147).** A list row that needs the viewer's action (a Required addon reported Missing) takes `border-l-2 border-l-warning bg-warning/10 pl-2` next to a `warning` `Pill`. Tokens only, so it holds in every theme; use it only for a row the viewer must act on, never as decoration.
+
 ### 4.4 Modal vs bottom sheet
 
 **DO** — pick by viewport, not by taste: `useMediaQuery(DESKTOP_MQ)` (1024px, §4.18) →

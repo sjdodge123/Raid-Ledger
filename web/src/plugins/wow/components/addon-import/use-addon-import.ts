@@ -111,7 +111,7 @@ export function useAddonImportPreview(characterId: string) {
     });
 }
 
-/** Apply (`dryRun: false`). Success invalidates the character's detail query and its Quests snapshot (ROK-1758). */
+/** Apply (`dryRun: false`). Success invalidates the character's detail query, its Quests snapshot (ROK-1758) and its installed-addons list (ROK-2147). */
 export function useAddonImportApply(characterId: string) {
     const queryClient = useQueryClient();
     return useMutation<AddonImportResultDto, AddonImportRequestError, AddonImportVariables>({
@@ -121,6 +121,7 @@ export function useAddonImportApply(characterId: string) {
             return Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['characters', characterId] }),
                 queryClient.invalidateQueries({ queryKey: ['character-quests', characterId] }),
+                queryClient.invalidateQueries({ queryKey: ['plugins', 'wow', 'characters', characterId, 'installed-addons'] }),
                 invalidateAllHubMemberships(queryClient),
             ]);
         },
