@@ -5,19 +5,22 @@
  * this guild; claiming a roster row confers membership and lands on the page;
  * the `/hubs` directory card says "Claim your character to join" and lands on
  * `/hubs/<id>?claim=roster` with the filtered list open; a signed-out visitor
- * is sent to sign in and comes back to the gate (ACs 1, 2, 4, 5, 12).
+ * is sent to sign in, and the requested hub is saved for after sign-in
+ * (ACs 1, 2, 4, 5, 12).
  *
  * Fixture: `POST /admin/test/wow/seed-guild` (ROK-1785; Forever by default)
  * with a per-project, per-worker, per-run name. Its `outsider` user has no
  * character (the non-member), and `unlinkedMemberIds` are the two owner-less
- * roster rows (Corvin, Elowen). Seeded rows are `addon_import` rows carrying a
+ * roster rows (Corvin, Elowen + a per-run `rosterSuffix`). Seeded rows are `addon_import` rows carrying a
  * roster GUID, and a claim writes that GUID as the character's `addon_guid`,
  * so the claim confers membership on main without ROK-2115 (which covers the
  * GUID-less `source='blizzard'` rows).
  *
  * A claim hides every same-named row of the game (identity is game + region +
- * name), so desktop claims the first owner-less row and mobile the second; the
- * claim test skips tablet (no third row — the fleet test plan covers tablet).
+ * name), so each seed gets its own random `rosterSuffix`: a concurrent spec
+ * (wow-roster-claim claims the unsuffixed Corvin/Elowen) never shares a name.
+ * Desktop still claims the first owner-less row and mobile the second; the
+ * claim test skips tablet (the fleet test plan covers tablet).
  * The claimed character is admin-unlinked and the seeded users deleted in
  * `finally`; the guild row stays, as in wow-roster-claim.
  */
@@ -55,8 +58,13 @@ function guildName(testInfo: TestInfo): string {
     return `Gate ${testInfo.project.name} w${testInfo.workerIndex} ${Date.now()}`;
 }
 
+/** Six random letters: this seed's roster names are its own (see header). */
+function rosterSuffix(): string {
+    return Array.from({ length: 6 }, () => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('');
+}
+
 async function seedGuild(token: string, testInfo: TestInfo): Promise<SeededGuild> {
-    const body = (await apiPost(token, '/admin/test/wow/seed-guild', { name: guildName(testInfo) })) as Partial<SeededGuild> | null;
+    const body = (await apiPost(token, '/admin/test/wow/seed-guild', { name: guildName(testInfo), rosterSuffix: rosterSuffix() })) as Partial<SeededGuild> | null;
     if (typeof body?.guildId !== 'number' || typeof body.gameId !== 'number' || !body.users || !Array.isArray(body.unlinkedMemberIds)) {
         throw new Error(`[wow-guild-join-gate] seed-guild: ${JSON.stringify(body)}`);
     }
@@ -204,12 +212,13 @@ test.describe('WoW: Forever — guild join gate (ROK-2132)', () => {
         try {
             const page = await context.newPage();
             await page.goto(target);
-            await expect(page, 'AuthGuard sends a signed-out visitor to the sign-in page').toHaveURL(/\/(\?.*)?$/, { timeout: 20_000 });
+            await expect(page, 'AuthGuard sends a signed-out visitor to the sign-in page').toHaveURL((url) => url.pathname === '/', { timeout: 20_000 });
             await expect(page.getByRole('button', { name: /sign in|continue with/i }).first()).toBeVisible({ timeout: 20_000 });
             await expect(gate(page)).toHaveCount(0);
             const saved = await page.evaluate(() => window.sessionStorage.getItem('authRedirect'));
             expect(saved, 'AuthGuard keeps the requested hub for after sign-in').toBe(target);
-            // The outsider has no password; sign in the way such a member does — a magic link back to the hub.
+            // The outsider has no password, so a magic link minted with `path: target` signs in. Landing on the
+            // hub proves the link honours `path`, not that the saved redirect is consumed (unit-tested elsewhere).
             const res = (await apiPost(token, '/admin/test/sign-in-link', { userId: guild.users.outsider.userId, path: target })) as { url?: unknown } | null;
             if (typeof res?.url !== 'string') throw new Error('sign-in-link minted no url');
             const link = new URL(res.url);
