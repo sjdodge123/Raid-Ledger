@@ -12,11 +12,12 @@ import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse, delay } from 'msw';
 import { useLocation } from 'react-router-dom';
-import type { GuildKind, HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
+import type { GuildKind, HubDirectoryEntry, HubDirectoryPage, MyGuild } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { createMockHubDirectoryPage, createMockHubEntry } from '../../../test/handlers/community-hubs';
 import { HubsNavItem } from './hubs-nav-menu';
+import { popularHubsKey } from './popular-hubs-queries';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -307,10 +308,9 @@ describe('HubsNavItem — Popular hubs: zero-hub viewers (Q1), keys and picks (R
     it('Q1: popular hubs while your own list is still loading → still the plain link', async () => {
         server.use(http.get(MINE, async () => { await delay('infinite'); return HttpResponse.json({ guilds: [] }); }));
         servePopular(popular(3));
-        const done = popularSettled();
-        renderWithProviders(<HubsNavItem pathname="/players" />);
-        await done;
-        await new Promise((r) => setTimeout(r, 0));
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<HubsNavItem pathname="/players" />, { queryClient });
+        await waitFor(() => expect(queryClient.getQueryData<HubDirectoryPage>(popularHubsKey(1))?.items, 'the popular read has landed').toHaveLength(3));
         expect(screen.getByTestId('nav-hubs-link')).toHaveAttribute('href', '/hubs');
         expect(screen.queryByTestId('nav-hubs-menu-trigger')).not.toBeInTheDocument();
     });
