@@ -12,7 +12,9 @@ export interface HubsNavLists { hubs: MyGuild[]; popular: HubDirectoryEntry[]; s
 /**
  * ROK-1875 D1 + ROK-2152 Q1: the menu / sheet once the viewer has a hub, or once
  * `/guilds/mine` has settled and there is a popular hub to suggest. Otherwise the
- * plain `/hubs` link, so the item goes link → menu only, never menu → link.
+ * plain `/hubs` link. It goes link → menu once data settles; it falls back menu → link
+ * only when a zero-hub viewer's popular read later fails or empties (or they leave
+ * their last hub with nothing to suggest).
  */
 export function useHubsNavLists(): HubsNavLists {
     const mine = useMyGuildsQuery();
