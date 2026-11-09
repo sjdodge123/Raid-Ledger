@@ -423,3 +423,51 @@ describe('POST /admin/test/wow/seed-guild — withLockouts (ROK-1914)', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST /admin/test/wow/seed-guild — withArmorySnapshots (ROK-2149)', () => {
+  const armory = schema.guildMemberArmory;
+
+  it('snapshots every unlinked row but the last; the member page reads it', async () => {
+    const out = await seedGuild('Armory Keepers', {
+      withArmorySnapshots: true,
+    });
+    const [first, last] = out.unlinkedMemberIds;
+    expect(out.armorySnapshots).toEqual({
+      memberIds: [first],
+      withoutSnapshot: [last],
+    });
+    const rows = await testApp.db
+      .select({ id: armory.guildMemberId, failures: armory.failures })
+      .from(armory)
+      .where(inArray(armory.guildMemberId, out.unlinkedMemberIds));
+    expect(rows).toEqual([{ id: first, failures: 0 }]);
+    const res = await testApp.request
+      .get(`/plugins/wow/guilds/${out.guildId}/members/${first}`)
+      .set('Authorization', `Bearer ${await tokenFor(out.users.member)}`);
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty('noArmoryReason');
+    expect(res.body).toMatchObject({
+      class: 'Warrior',
+      spec: 'Arms',
+      itemLevel: 63,
+      talents: { format: 'classic' },
+      lastSeen: { online: false, lastOnlineDays: 1 },
+    });
+    expect(res.body.equipment?.items).toHaveLength(3);
+  });
+
+  it('without the flag: no armorySnapshots key and no snapshot rows', async () => {
+    const out = await seedGuild('Armoryless Keepers');
+    expect(out).not.toHaveProperty('armorySnapshots');
+    const rows = await testApp.db
+      .select({ id: armory.guildMemberId })
+      .from(armory)
+      .where(inArray(armory.guildMemberId, out.unlinkedMemberIds));
+    expect(rows).toEqual([]);
+  });
+
+  it('is 400 for a non-boolean withArmorySnapshots', async () => {
+    const res = await seed({ name: 'Flag Armory', withArmorySnapshots: 'yes' });
+    expect(res.status).toBe(400);
+  });
+});

@@ -9,6 +9,12 @@ import type { ResolvedWowFacts } from '../../facts/wow-fact.types';
 export interface InsightRow {
   name: string;
   characterId: string | null;
+  /**
+   * ROK-2149 — the `guild_members.id` of a `wow_guild` roster row (null for
+   * a community character; absent in fixtures that predate it). Keys an
+   * unclaimed member's snapshot professions.
+   */
+  memberId?: number | null;
   /** Owner of the linked character; null when unlinked. */
   userId: number | null;
   isMain: boolean;

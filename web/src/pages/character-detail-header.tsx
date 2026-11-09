@@ -14,11 +14,17 @@ import { useMediaQuery } from '../hooks/use-media-query';
 import { compactJoin } from '../lib/compact-join';
 import { StatTile, type CharacterHeaderLayout } from '../components/shared/character-header-layout';
 import { CharacterRoleBadge } from './character-role-editor';
+import type { ReadOnlyCharacterMeta } from './character-detail-source';
+import { RosterMemberFacts, RosterMemberPill } from './character-detail-read-only';
 
 /** Below Tailwind's `sm` (640px). */
 const PHONE_MQ = '(max-width: 639px)';
 
-interface HeaderProps { character: CharacterDto; isOwner: boolean; isArmoryImported: boolean; isAdminViewer: boolean }
+interface HeaderProps {
+    character: CharacterDto; isOwner: boolean; isArmoryImported: boolean; isAdminViewer: boolean;
+    /** ROK-2149: a roster member with no character — no owner/admin actions, no slot keyed by character id. */
+    readOnly?: ReadOnlyCharacterMeta | null | undefined;
+}
 
 function CharacterAvatar({ avatarUrl, name, sizeClass }: { avatarUrl: string | null; name: string; sizeClass: string }): JSX.Element {
     // Track which URL failed so a corrected avatar URL is retried.
@@ -37,9 +43,9 @@ function Portrait({ character, size, sizeClass }: { character: CharacterDto; siz
     );
 }
 
-/** Slot context shared by both `character-detail:header-badges` parts. */
-function badgeContext(character: CharacterDto): Record<string, unknown> {
-    return { faction: character.faction, itemLevel: character.itemLevel, equippedItemLevel: character.equipment?.equippedItemLevel ?? null, lastSyncedAt: character.lastSyncedAt, profileUrl: character.profileUrl, level: character.level };
+/** Slot context shared by both `character-detail:header-badges` parts; read-only drops `characterId` (no guild-by-character lookup). */
+function badgeContext({ character, readOnly }: HeaderProps): Record<string, unknown> {
+    return { characterId: readOnly ? undefined : character.id, faction: character.faction, itemLevel: character.itemLevel, equippedItemLevel: character.equipment?.equippedItemLevel ?? null, lastSyncedAt: character.lastSyncedAt, profileUrl: character.profileUrl, level: character.level };
 }
 
 /** ROK-1733: a realmless character shows its plugin's location label (e.g. "PvP (US)") in the realm slot. */
@@ -78,8 +84,18 @@ const ACTION_ROW: Record<CharacterHeaderLayout, string> = {
     desktop: 'col-start-2 mt-3 flex flex-wrap items-center gap-2 empty:hidden',
 };
 
-function HeaderActions({ character, isOwner, isArmoryImported, isAdminViewer, layout }: HeaderProps & { layout: CharacterHeaderLayout }): JSX.Element {
+/** ROK-2149: the plugin's read-only actions (the WoW claim CTA) — never an owner/admin slot. */
+function ReadOnlyActions({ character, readOnly, layout }: { character: CharacterDto; readOnly: ReadOnlyCharacterMeta; layout: CharacterHeaderLayout }): JSX.Element {
+    return (
+        <div data-testid="character-header-actions" className={ACTION_ROW[layout]}>
+            <PluginSlot name="character-detail:read-only-actions" context={{ ...readOnly, gameId: character.gameId, name: character.name, layout }} />
+        </div>
+    );
+}
+
+function HeaderActions({ character, isOwner, isArmoryImported, isAdminViewer, readOnly, layout }: HeaderProps & { layout: CharacterHeaderLayout }): JSX.Element {
     const c = character;
+    if (readOnly) return <ReadOnlyActions character={c} readOnly={readOnly} layout={layout} />;
     return (
         <div data-testid="character-header-actions" className={ACTION_ROW[layout]}>
             {isOwner && isArmoryImported && <PluginSlot name="profile:character-actions" context={{ characterId: c.id, lastSyncedAt: c.lastSyncedAt, region: c.region, gameVariant: c.gameVariant, layout }} />}
@@ -99,12 +115,14 @@ function PhoneHero(props: HeaderProps): JSX.Element {
             <div className="mt-1 mb-2.5 flex justify-center"><Portrait character={character} size="phone" sizeClass="w-[72px] h-[72px]" /></div>
             <h1 className="text-xl font-bold text-foreground">{character.name}</h1>
             <div className="mt-2 flex flex-wrap items-center justify-center gap-2 empty:hidden">
-                <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'chips', layout: 'phone' }} />
+                {props.readOnly && <RosterMemberPill />}
+                <PluginSlot name="character-detail:header-badges" context={{ ...badgeContext(props), part: 'chips', layout: 'phone' }} />
             </div>
             <div className="mt-4 grid grid-flow-col auto-cols-fr gap-2 empty:hidden">
-                <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'stats', layout: 'phone' }} fallback={levelTile} />
+                <PluginSlot name="character-detail:header-badges" context={{ ...badgeContext(props), part: 'stats', layout: 'phone' }} fallback={levelTile} />
             </div>
             <PhoneMeta character={character} />
+            {props.readOnly && <RosterMemberFacts facts={props.readOnly.facts} centered />}
             <div className="mt-2.5 flex items-center justify-center gap-3 empty:hidden"><CharacterRoleBadge character={character} isOwner={props.isOwner} /></div>
         </>
     );
@@ -119,11 +137,13 @@ function DesktopHero(props: HeaderProps): JSX.Element {
             <div className="min-w-0">
                 <div className="flex items-center gap-3 flex-wrap">
                     <h1 className="text-2xl font-bold text-foreground">{character.name}</h1>
-                    <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'chips', layout: 'desktop' }} />
+                    {props.readOnly && <RosterMemberPill />}
+                    <PluginSlot name="character-detail:header-badges" context={{ ...badgeContext(props), part: 'chips', layout: 'desktop' }} />
                     <CharacterRoleBadge character={character} isOwner={props.isOwner} />
                 </div>
-                <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, ...badgeContext(character), part: 'stats', layout: 'desktop' }} />
+                <PluginSlot name="character-detail:header-badges" context={{ ...badgeContext(props), part: 'stats', layout: 'desktop' }} />
                 <DesktopMeta character={character} />
+                {props.readOnly && <RosterMemberFacts facts={props.readOnly.facts} />}
             </div>
         </>
     );

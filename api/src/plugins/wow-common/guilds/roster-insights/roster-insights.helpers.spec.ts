@@ -196,6 +196,80 @@ describe('roster-insights professions + freshness', () => {
     ]);
   });
 
+  /** `base` holding one Blacksmithing entry as a blizzard fact. */
+  function smith(
+    base: InsightRow,
+    extra: Partial<InsightRow> = {},
+  ): InsightRow {
+    const entry = {
+      id: 164,
+      slug: 'blacksmithing',
+      name: 'Blacksmithing',
+      skillLevel: 150,
+      maxSkillLevel: 225,
+      tiers: [],
+    };
+    return {
+      ...base,
+      ...extra,
+      facts: {
+        ...EMPTY,
+        professions: {
+          value: {
+            primary: [entry],
+            secondary: [],
+            syncedAt: AS_OF.toISOString(),
+          },
+          source: 'blizzard',
+          asOf: AS_OF,
+        },
+      },
+    };
+  }
+
+  it('emits an unclaimed member from its snapshot with characterId null + memberId (ROK-2149 AC-13)', () => {
+    const got = computeProfessions([smith(row('pug'), { memberId: 77 })]);
+    expect(got).toEqual([
+      {
+        name: 'Blacksmithing',
+        members: [
+          {
+            characterId: null,
+            memberId: 77,
+            name: 'pug',
+            skill: 150,
+            maxSkill: 225,
+            source: 'blizzard',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('a linked row keeps its characterId and also carries its memberId (ROK-2149)', () => {
+    const linked = row('owner', { userId: 3 });
+    const got = computeProfessions([smith(linked, { memberId: 12 })]);
+    expect(got[0]?.members).toEqual([
+      expect.objectContaining({
+        characterId: linked.characterId,
+        memberId: 12,
+      }),
+    ]);
+  });
+
+  it('drops a row with neither a character nor a roster member id (ROK-2149)', () => {
+    const orphan = smith(row('ghost'), { memberId: null });
+    expect(computeProfessions([orphan])).toEqual([]);
+  });
+
+  it('counts linked and snapshot-only members under one profession (ROK-2149)', () => {
+    const got = computeProfessions([
+      smith(row('owner', { userId: 3 })),
+      smith(row('pug'), { memberId: 5 }),
+    ]);
+    expect(got[0]?.members.map((m) => m.name)).toEqual(['owner', 'pug']);
+  });
+
   it('reports the oldest roster fact and per-character sources', () => {
     const older = new Date('2026-10-01T00:00:00.000Z');
     const got = computeFreshness([

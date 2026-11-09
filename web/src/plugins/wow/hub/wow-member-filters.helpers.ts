@@ -2,12 +2,14 @@
  * ROK-1173 — the WoW Members filters (AC2) as pure functions: the state, the
  * options derived from the roster, the predicate (AND across groups, OR
  * within one), the active-group count for the funnel/FAB badge and the extra
- * "Sort by" options. Professions come from roster insights, joined by
- * `characterId` (spec D2) — unlinked rows never carry any.
+ * "Sort by" options. Professions come from roster insights, joined by the
+ * row key (`characterId`, else `'m' + memberId` — ROK-2149 Q4=A: an unclaimed
+ * member's Armory snapshot counts too).
  */
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import type { HubMemberRow, HubMemberSort } from '../../hub-module';
 import { MEMBER_SORT_PRESETS } from '../../../components/hub/hub-members.helpers';
+import { professionMemberKey, rowProfessionKey } from '../lib/profession-member-key';
 import { rankLabel } from './wow-guild.helpers';
 
 export type WowRosterProfession = NonNullable<WowRosterInsightsDto['professions']>[number];
@@ -22,7 +24,7 @@ export const WOW_ROLE_OPTIONS: readonly { value: WowRoleOption; label: string }[
     { value: 'unknown', label: 'Unknown' },
 ];
 
-export const PROFESSION_FILTER_LABEL = 'Profession (linked characters with synced professions only)';
+export const PROFESSION_FILTER_LABEL = 'Profession';
 
 export interface WowMemberFilterState {
     classes: readonly string[];
@@ -50,7 +52,7 @@ export interface WowMemberFilterOptions {
     maxLevel: number | null;
 }
 
-/** characterId → the professions that character has synced. */
+/** Row key (`rowProfessionKey`) → the professions that member has reported. */
 export type ProfessionIndex = ReadonlyMap<string, ReadonlySet<string>>;
 
 export function wowRankKey(row: Pick<HubMemberRow, 'rankIndex'>): string {
@@ -87,14 +89,16 @@ export function clampLevel(value: number | null, maxLevel: number | null): numbe
     return maxLevel === null ? floor : Math.min(floor, Math.max(1, maxLevel));
 }
 
-/** The insights professions as a lookup by character. */
+/** The insights professions as a lookup by row key. */
 export function buildProfessionIndex(professions: readonly WowRosterProfession[] | undefined): ProfessionIndex {
     const index = new Map<string, Set<string>>();
     for (const profession of professions ?? []) {
         for (const member of profession.members) {
-            const set = index.get(member.characterId) ?? new Set<string>();
+            const key = professionMemberKey(member);
+            if (key === null) continue;
+            const set = index.get(key) ?? new Set<string>();
             set.add(profession.name);
-            index.set(member.characterId, set);
+            index.set(key, set);
         }
     }
     return index;
@@ -113,7 +117,7 @@ function inLevelRange(state: WowMemberFilterState, level: number | null): boolea
 
 function hasProfession(state: WowMemberFilterState, row: HubMemberRow, index: ProfessionIndex): boolean {
     if (state.professions.length === 0) return true;
-    const own = row.characterId === null ? undefined : index.get(row.characterId);
+    const own = index.get(rowProfessionKey(row));
     return own !== undefined && state.professions.some((name) => own.has(name));
 }
 
@@ -151,7 +155,7 @@ export interface ProfessionCoverage { name: string; count: number }
 /** Professions with at least one member, most members first, then A–Z. */
 export function professionCoverage(professions: readonly WowRosterProfession[]): readonly ProfessionCoverage[] {
     return professions
-        .map((p) => ({ name: p.name, count: new Set(p.members.map((m) => m.characterId)).size }))
+        .map((p) => ({ name: p.name, count: new Set(p.members.map((m) => professionMemberKey(m) ?? m.name)).size }))
         .filter((p) => p.count > 0)
         .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }

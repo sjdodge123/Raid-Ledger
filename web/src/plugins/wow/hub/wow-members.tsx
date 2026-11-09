@@ -7,6 +7,7 @@
  * cell stays on one line and truncates instead of wrapping.
  */
 import type { JSX } from 'react';
+import { useParams } from 'react-router-dom';
 import type { HubCtx, HubMemberRow } from '../../hub-module';
 import { Pill } from '../../../components/hub/hub-bits';
 import { CharacterLink } from '../../../components/hub/character-link';
@@ -15,6 +16,7 @@ import { rankLabel } from './wow-guild.helpers';
 import { ProfessionBadges } from '../components/ProfessionBadges';
 import { classDotClass, useRowProfessions } from './wow-member-professions';
 import { armoryMetaParts } from '../lib/armory-meta';
+import { memberPagePath } from '../lib/member-routes';
 
 function memberFacts(m: HubMemberRow): string {
     return [m.level === null ? null : `Lv ${m.level}`, m.class].filter(Boolean).join(' ');
@@ -28,11 +30,23 @@ function MemberAvatar({ url }: { url: string }): JSX.Element {
     );
 }
 
+/**
+ * ROK-2149 AC-8 — an unlinked row opens its read-only roster-member page. The hub
+ * id comes from the `/hubs/:id` route (cells get only the row; same as `useRowProfessions`).
+ */
+function useRosterMemberHref(row: Pick<HubMemberRow, 'characterId' | 'memberId'>): string | undefined {
+    const { id } = useParams<{ id: string }>();
+    const hubId = Number(id);
+    if (row.characterId !== null || !Number.isInteger(hubId) || hubId <= 0) return undefined;
+    return memberPagePath(hubId, row.memberId);
+}
+
 export function NameCell({ row }: { row: HubMemberRow }): JSX.Element {
+    const unlinkedTo = useRosterMemberHref(row);
     return (
         <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle">
             {row.avatarUrl ? <MemberAvatar url={row.avatarUrl} /> : null}
-            <span className="min-w-0 truncate"><CharacterLink name={row.name} characterId={row.characterId} /></span>
+            <span className="min-w-0 truncate"><CharacterLink name={row.name} characterId={row.characterId} unlinkedTo={unlinkedTo} /></span>
             {row.isViewer === true && <span data-testid="guild-member-you"><Pill>You</Pill></span>}
         </span>
     );
@@ -57,7 +71,7 @@ export function FactsCell({ row }: { row: HubMemberRow }): JSX.Element {
 
 /** AC8: linked rows with synced professions show badges; anything else renders nothing. */
 export function ProfessionsCell({ row }: { row: HubMemberRow }): JSX.Element | null {
-    const professions = useRowProfessions(row.characterId);
+    const professions = useRowProfessions(row);
     if (!professions) return null;
     return (
         <span className="inline-flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-muted" data-testid="guild-member-professions">

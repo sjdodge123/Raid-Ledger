@@ -28,6 +28,9 @@
  *     snapshots for the Gear readiness widget (`demo-test-guild-gear.helpers.ts`).
  *   - with `withPulls: true` (ROK-1917), LedgerLink raid-export boss pulls for
  *     the Raid progress widget (`demo-test-guild-pulls.helpers.ts`).
+ *   - with `withArmorySnapshots: true` (ROK-2149), a verified Armory snapshot
+ *     on every unlinked roster row but the last, for the read-only member
+ *     page (`demo-test-guild-armory.helpers.ts`).
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -94,6 +97,7 @@ import {
 } from './demo-test-guild.response';
 import { seedGuildPulls } from './demo-test-guild-pulls.helpers';
 import { applyArmoryProfessions } from './demo-test-guild-professions.helpers';
+import { seedArmoryHalf } from './demo-test-guild-armory.helpers';
 import {
   seedGuildDings,
   type SeededGuildDings,
@@ -146,7 +150,7 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147). */
+  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147), `withArmorySnapshots` (ROK-2149). */
   private async seedOptional(
     input: SeedGuildInput,
     ctx: RosterCtx,
@@ -174,6 +178,7 @@ export class DemoTestGuildController {
       ...(presence ? { presence } : {}),
       ...pulls,
       ...(installedAddons ? { installedAddons } : {}),
+      ...(await seedArmoryHalf(this.db, input, unlinked, ctx.now)),
     };
   }
 

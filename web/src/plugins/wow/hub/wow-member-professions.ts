@@ -1,12 +1,14 @@
 /**
  * ROK-1173 AC8/AC12 — the per-row decorations the Members list needs beyond
- * the page payload: each linked character's professions (joined from roster
- * insights by `characterId`, D2 — no roster contract change) and the class
- * dot's token class.
+ * the page payload: each row's professions (joined from roster insights by
+ * the row key — `characterId`, or `'m' + memberId` for an unclaimed member's
+ * Armory snapshot, ROK-2149 Q4=A) and the class dot's token class.
  */
 import { useParams } from 'react-router-dom';
 import type { CharacterProfessionsDto, WowRosterInsightsDto } from '@raid-ledger/contract';
+import type { HubMemberRow } from '../../hub-module';
 import { useRosterInsights } from '../hub-widgets/use-roster-insights';
+import { professionMemberKey, rowProfessionKey } from '../lib/profession-member-key';
 
 type ProfessionIndex = ReadonlyMap<string, CharacterProfessionsDto>;
 
@@ -18,7 +20,7 @@ function slugOf(name: string): string {
 }
 
 /**
- * characterId → that character's professions, in the `ProfessionBadges`
+ * Row key (`professionMemberKey`) → that member's professions, in the `ProfessionBadges`
  * shape. Insights reports skill per profession member; an unreported skill
  * reads as 0. Visitors get no `professions` key, so the index is empty.
  */
@@ -29,29 +31,31 @@ export function professionIndex(insights: WowRosterInsightsDto | undefined): Pro
     const index = new Map<string, CharacterProfessionsDto>();
     insights.professions.forEach((prof, i) => {
         for (const m of prof.members) {
+            const key = professionMemberKey(m);
+            if (key === null) continue;
             const entry = { id: i, name: prof.name, slug: slugOf(prof.name), skillLevel: m.skill ?? 0, maxSkillLevel: m.maxSkill ?? 0, tiers: [] };
-            const prev = index.get(m.characterId) ?? { primary: [], secondary: [], syncedAt: EPOCH };
-            index.set(m.characterId, { ...prev, primary: [...prev.primary, entry] });
+            const prev = index.get(key) ?? { primary: [], secondary: [], syncedAt: EPOCH };
+            index.set(key, { ...prev, primary: [...prev.primary, entry] });
         }
     });
     INDEX_CACHE.set(insights, index);
     return index;
 }
 
-/** One row's professions; null when the row is unlinked or has none synced (AC8: absent, not "none"). */
-export function rowProfessions(index: ProfessionIndex, characterId: string | null): CharacterProfessionsDto | null {
-    return characterId === null ? null : index.get(characterId) ?? null;
+/** One row's professions by its row key; null when it has none reported (AC8: absent, not "none"). */
+export function rowProfessions(index: ProfessionIndex, rowKey: string): CharacterProfessionsDto | null {
+    return index.get(rowKey) ?? null;
 }
 
 /**
  * The hub's guild id comes from the `/hubs/:id` route; the insights query is
  * shared (react-query dedupes it) with the filters hook and the widgets.
  */
-export function useRowProfessions(characterId: string | null): CharacterProfessionsDto | null {
+export function useRowProfessions(row: Pick<HubMemberRow, 'characterId' | 'memberId'>): CharacterProfessionsDto | null {
     const { id } = useParams<{ id: string }>();
     const guildId = Number(id);
     const insights = useRosterInsights(Number.isInteger(guildId) ? guildId : 0);
-    return rowProfessions(professionIndex(insights.data), characterId);
+    return rowProfessions(professionIndex(insights.data), rowProfessionKey(row));
 }
 
 /** The nine classic classes' dot tokens (index.css `--color-class-*`, both families). */

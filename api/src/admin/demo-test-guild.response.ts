@@ -14,6 +14,7 @@ import type {
 import type { SeededGuildGear } from './demo-test-guild-gear.helpers';
 import type { SeededGuildDings } from './demo-test-guild-dings.helpers';
 import type { SeededGuildPresence } from './demo-test-guild-presence.helpers';
+import type { SeededArmorySnapshots } from './demo-test-guild-armory.helpers';
 import type { SeededGuildPulls } from './demo-test-guild-pulls.helpers';
 import type { SeededInstalledAddons } from './demo-test-guild-installed-addons.helpers';
 
@@ -62,6 +63,8 @@ export interface SeedGuildResponse {
   pulls?: SeededGuildPulls;
   /** Present only when the body sent `withInstalledAddons: true` (ROK-2147). */
   installedAddons?: SeededInstalledAddons;
+  /** Present only when the body sent `withArmorySnapshots: true` (ROK-2149). */
+  armorySnapshots?: SeededArmorySnapshots;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
@@ -74,6 +77,7 @@ export type SeedGuildExtras = Pick<
   | 'gear'
   | 'pulls'
   | 'installedAddons'
+  | 'armorySnapshots'
 >;
 
 export interface SeededRoster {

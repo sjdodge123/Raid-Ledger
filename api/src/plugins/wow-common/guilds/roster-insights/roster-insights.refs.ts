@@ -97,6 +97,7 @@ export function toInsightRow(
   return {
     name: r.name,
     characterId: r.characterId,
+    memberId: r.memberId,
     userId: r.userId,
     isMain: r.isMain,
     rankIndex: r.rankIndex,
