@@ -148,15 +148,23 @@ describe('staff claim banner — who sees it (AC 1, 2)', () => {
         expect(screen.queryByTestId('wow-claim-banner')).toBeNull();
     });
 
-    it('a non-staff viewer sees no banner and the join gate is never requested', async () => {
-        // The gate would say "not a member" if asked: only the isStaff check keeps the banner away.
-        const { queryClient } = renderPage({ isStaff: false, isMember: false });
+    it('a non-staff viewer sees no banner even when the gate would say "not a member"', async () => {
+        // Gate answer pre-seeded as "not a member": only the isStaff check keeps the banner away.
+        const { queryClient } = renderPage({ isStaff: false, isMember: false, seed: true });
         await overviewReady();
         expect(document.getElementById(CELL_ID), 'a non-staff viewer must not see the staff banner').toBeNull();
-        const gateQuery = queryClient.getQueryCache().find({ queryKey: joinGateKey(7, VIEWER) });
-        expect(gateQuery?.state.fetchStatus, 'the join-gate read must stay disabled for non-staff').toBe('idle');
-        expect(gateQuery?.state.dataUpdatedAt, 'the join-gate read must never have run').toBe(0);
+        expect(
+            queryClient.getQueryCache().find({ queryKey: joinGateKey(7, VIEWER) })?.state.fetchStatus,
+            'the join-gate read must stay disabled for non-staff',
+        ).toBe('idle');
+    });
+
+    it('a non-staff viewer never requests the join gate', async () => {
+        const { queryClient } = renderPage({ isStaff: false, isMember: false });
+        await overviewReady();
         await waitFor(() => expect(screen.getByRole('navigation', { name: 'Guild page sections' })).toBeInTheDocument());
+        const gateQuery = queryClient.getQueryCache().find({ queryKey: joinGateKey(7, VIEWER) });
+        expect(gateQuery?.state.dataUpdatedAt, 'the join-gate read must never have run').toBe(0);
         expect(gateCalls, 'the join-gate handler must never be hit for a non-staff viewer').toEqual([]);
     });
 
