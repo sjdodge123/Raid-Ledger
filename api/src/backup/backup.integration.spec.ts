@@ -415,6 +415,9 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
   });
 
   afterEach(async () => {
+    // A test's background uploads archive must settle before the next test's
+    // POST /admin/backups, or assertIdle answers 409 (TECH-DEBT 2026-11-08).
+    await testApp.app.get(BackupService).uploadsArchives.whenIdle();
     for (const subdir of ['daily', 'migrations']) {
       const dir = path.join(TEST_BACKUP_DIR, subdir);
       try {

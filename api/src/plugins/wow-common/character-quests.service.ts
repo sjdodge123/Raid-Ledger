@@ -10,9 +10,11 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { SettingsService } from '../../settings/settings.service';
 import { buildCharacterQuests } from './character-quests.helpers';
 import { instanceName } from './dungeon-instance-names';
 import { VARIANT_EXPANSIONS, toDto } from './dungeon-quests.helpers';
+import { applyKnownQuestOverlay } from './dungeon-quests.overlay';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import { readQuestsSlice } from './forever-quest-source.helpers';
 import { loadForeverQuestSources } from './forever-quest-source.query';
@@ -25,6 +27,7 @@ export class CharacterQuestsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly settings: SettingsService,
   ) {}
 
   /** @returns the quest DTO, or null when the section is hidden (D2). */
@@ -46,7 +49,11 @@ export class CharacterQuestsService {
     return buildCharacterQuests(input, await this.loadKnown(), instanceName);
   }
 
-  /** Known dungeon quests for the Forever variant (D5). */
+  /**
+   * Known dungeon quests for the Forever variant (D5), with the switch-aware
+   * Blizzard overlay (ROK-2143): Blizzard titles, overlay-only dungeon quests
+   * and their prerequisites — the same set Quest Prep progress uses.
+   */
   private async loadKnown(): Promise<DungeonQuestDto[]> {
     const rows = await this.db
       .select()
@@ -57,6 +64,7 @@ export class CharacterQuestsService {
           VARIANT_EXPANSIONS.wow_forever ?? [],
         ),
       );
-    return rows.map(toDto);
+    const deps = { db: this.db, settings: this.settings };
+    return applyKnownQuestOverlay(deps, rows.map(toDto));
   }
 }

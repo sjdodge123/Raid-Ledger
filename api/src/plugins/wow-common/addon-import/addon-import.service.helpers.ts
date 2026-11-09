@@ -17,6 +17,7 @@ import type {
 } from './addon-import-apply.types';
 import { applyChar } from './addon-import-char.apply';
 import { previewCharThenMailworthy } from './addon-import-char.mailworthy.preview';
+import { withCharInstalledAddonsPreview } from './addon-import-char.installed';
 import { applyGuild, previewGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
 
@@ -112,7 +113,9 @@ export function runSection(
   const { payload, pages } = decoded;
   if (payload.section === 'char') {
     return dryRun
-      ? previewCharThenMailworthy(ctx, payload)
+      ? previewCharThenMailworthy(ctx, payload).then((outcome) =>
+          withCharInstalledAddonsPreview(ctx, payload, outcome),
+        )
       : applyChar(ctx, payload);
   }
   if (payload.section === 'guild') {

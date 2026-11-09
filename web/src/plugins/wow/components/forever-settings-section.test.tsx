@@ -11,6 +11,7 @@ import {
     renderWithProviders,
     createTestQueryClient,
 } from '../../../test/render-helpers';
+import { foreverQuestImportHandlers } from '../../../test/mocks/forever-quest-import-handlers';
 import { ForeverSettingsSection } from './forever-settings-section';
 
 const URL = 'http://localhost:3000/admin/plugins/blizzard/forever';
@@ -25,6 +26,7 @@ let puts: unknown[] = [];
 beforeEach(() => {
     puts = [];
     server.use(
+        ...foreverQuestImportHandlers,
         http.get(URL, () => HttpResponse.json(DEFAULT_CONFIG)),
         http.get(`${URL}-probe`, () =>
             HttpResponse.json({
@@ -279,5 +281,59 @@ describe('ForeverSettingsSection — namespace status (ROK-2102)', () => {
                     'Forever namespace: not confirmed — prefix forever. Run the probe below.',
         );
         expect(line).toBeInTheDocument();
+    });
+});
+
+describe('ForeverSettingsSection quest import (ROK-2143)', () => {
+    it('renders the quest import panel under the namespace probe', async () => {
+        renderWithProviders(<ForeverSettingsSection />);
+        expect(await screen.findByRole('button', { name: 'Re-import quests' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Dungeon quest data' })).toBeInTheDocument();
+    });
+});
+
+/** ROK-2143: the Forever quest import kill switch (unset ⇒ ON). */
+describe('ForeverSettingsSection — quest import switch (ROK-2143)', () => {
+    const questSwitch = () =>
+        screen.findByRole('switch', { name: /quest import from the blizzard api/i });
+
+    it('reads unset as ON and turning it off PUTs questImportEnabled false with the other settings', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverSettingsSection />);
+        const toggle = await questSwitch();
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        await user.click(toggle);
+        await waitFor(() =>
+            expect(puts).toEqual([
+                {
+                    namespacePrefix: 'classicforever',
+                    armoryImportEnabled: false,
+                    questImportEnabled: false,
+                },
+            ]),
+        );
+    });
+
+    it('reads a saved false and keeps it when the Armory switch is flipped', async () => {
+        server.use(
+            http.get(URL, () =>
+                HttpResponse.json({ ...DEFAULT_CONFIG, questImportEnabled: false }),
+            ),
+        );
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverSettingsSection />);
+        expect(await questSwitch()).toHaveAttribute('aria-checked', 'false');
+        await user.click(
+            screen.getByRole('switch', { name: /armory import for wow forever/i }),
+        );
+        await waitFor(() =>
+            expect(puts).toEqual([
+                {
+                    namespacePrefix: 'classicforever',
+                    armoryImportEnabled: true,
+                    questImportEnabled: false,
+                },
+            ]),
+        );
     });
 });

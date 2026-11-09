@@ -11,7 +11,9 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
+import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { WOW_FOREVER_QUEST_IMPORT_KEY } from './forever.settings';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
 const CAPTURED_AT = new Date('2026-10-01T12:00:00.000Z');
@@ -164,6 +166,44 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
       dungeonInstanceId: 63,
       instanceName: 'Deadmines',
     });
+  });
+
+  /** 92460 (completed, unknown to our JSON) as a Blizzard Deadmines quest. */
+  async function insertOverlayOnlyQuest(): Promise<void> {
+    await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
+      questId: 92460,
+      areaId: 1581,
+      dungeonInstanceId: 63,
+      title: 'Overlay VC',
+      typeId: 81,
+      rewardItems: [],
+      raw: { id: 92460 },
+      fetchedAt: new Date(),
+      runId: 'run-cq',
+    });
+  }
+
+  it('lists an overlay-only quest with the import on, not with it off (ROK-2143)', async () => {
+    const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
+    await seedSnapshot(id, 2, { ...BASE_DATA, quests: QUESTS });
+    await insertOverlayOnlyQuest();
+    const deadmines = async (): Promise<string[]> => {
+      const res = await get(id);
+      expect(res.status).toBe(200);
+      const body = CharacterQuestsResponseSchema.parse(res.body).quests;
+      const group = body?.completedKnown.find(
+        (g) => g.dungeonInstanceId === 63,
+      );
+      return (group?.completed ?? []).map((q) => q.name).sort();
+    };
+    const settings = testApp.app.get(SettingsService);
+    try {
+      expect(await deadmines()).toEqual(['Overlay VC', 'VC Quest']);
+      await settings.set(WOW_FOREVER_QUEST_IMPORT_KEY, 'false');
+      expect(await deadmines()).toEqual(['VC Quest']);
+    } finally {
+      await settings.delete(WOW_FOREVER_QUEST_IMPORT_KEY);
+    }
   });
 
   /** ROK-2109: write the Armory column the Forever sync owns. */

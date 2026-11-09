@@ -9,9 +9,11 @@ import {
   type AddonExport,
   type AddonExportSection,
   type AddonGuildExport,
+  type AddonInstalledList,
   type AddonMailworthy,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
+import { dedupeInstalled } from './addon-import-char.installed.helpers';
 import { assertPlausibleExportTimes, exportClock } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
@@ -36,6 +38,8 @@ export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
    * guild-level contributions data, never stored in the char snapshot.
    */
   mailworthy?: AddonMailworthy;
+  /** `data.addons` lifted the same way (ROK-2147): never in the snapshot. */
+  addons?: AddonInstalledList;
 };
 /** Validated + sanitised payload, discriminated by `section`. */
 export type DecodedAddonExport =
@@ -163,11 +167,12 @@ function finalize(pages: AddonExport[]): DecodedAddonExport {
   }
   if (first.section === 'raid') return sanitizeStrings(first);
   const { data, ...envelope } = first;
-  const { mailworthy } = data;
+  const { mailworthy, addons } = data;
   return {
     ...sanitizeStrings(envelope),
     data: toCharSnapshotData(data),
     ...(mailworthy ? { mailworthy: sanitizeStrings(mailworthy) } : {}),
+    ...(addons ? { addons: dedupeInstalled(sanitizeStrings(addons)) } : {}),
   };
 }
 

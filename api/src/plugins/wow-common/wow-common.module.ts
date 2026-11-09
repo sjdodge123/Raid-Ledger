@@ -9,6 +9,8 @@ import { ForeverConfigController } from './forever-config.controller';
 import { ForeverConfigService } from './forever-config.service';
 import { ForeverNamespaceProbeController } from './forever-namespace-probe.controller';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
+import { ForeverQuestImportController } from './forever-quest-import/forever-quest-import.controller';
+import { ForeverQuestImportService } from './forever-quest-import/forever-quest-import.service';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
 import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
@@ -46,6 +48,8 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
+import { CharacterInstalledAddonsController } from './character-installed-addons.controller';
+import { CharacterInstalledAddonsService } from './character-installed-addons.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
 import { WowFactsModule } from './facts/wow-facts.module';
@@ -73,6 +77,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     BlizzardController,
     ForeverConfigController,
     ForeverNamespaceProbeController,
+    ForeverQuestImportController,
     ForeverRealmRulesetsController,
     DungeonQuestsController,
     BossEncountersController,
@@ -81,6 +86,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     EventRaidReadinessController,
     ...addonImport.CONTROLLERS,
     CharacterQuestsController,
+    // ROK-2147: owner/officer-only installed-addon list.
+    CharacterInstalledAddonsController,
     ...guildHub.CONTROLLERS,
   ],
   providers: [
@@ -88,6 +95,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     BlizzardAuthService,
     ForeverConfigService,
     ForeverNamespaceProbeService,
+    // ROK-2143: manual Forever quest import (admin POST; no cron).
+    ForeverQuestImportService,
     ForeverRealmRulesetsService,
     ForeverRulesetLookupService,
     BlizzardCharacterSyncAdapter,
@@ -115,6 +124,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     ForeverDisplayTalentsService,
     ForeverDisplayLockoutsService,
     CharacterQuestsService,
+    CharacterInstalledAddonsService,
     ...guildHub.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.

@@ -17,8 +17,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 45,
-    "rewardGold": 25
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5723,
@@ -43,8 +43,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 195,
-    "rewardGold": 375
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5722,
@@ -69,8 +69,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 205,
-    "rewardGold": 400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5724,
@@ -98,8 +98,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 205,
-    "rewardGold": 400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5725,
@@ -128,8 +128,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 205,
-    "rewardGold": 400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5728,
@@ -149,8 +149,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 205,
-    "rewardGold": 400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5761,
@@ -170,8 +170,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 205,
-    "rewardGold": 400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 214,
@@ -200,8 +200,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 215,
-    "rewardGold": 425
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1486,
@@ -233,8 +233,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 215,
-    "rewardGold": 425
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1491,
@@ -254,8 +254,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 225,
-    "rewardGold": 450
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2040,
@@ -283,8 +283,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 245,
-    "rewardGold": 500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1487,
@@ -294,7 +294,7 @@
     "requiredLevel": 15,
     "expansion": "classic",
     "questGiverNpc": "Ebru",
-    "questGiverZone": "Wailing Caverns",
+    "questGiverZone": null,
     "prevQuestId": null,
     "nextQuestId": null,
     "rewardsJson": [
@@ -308,8 +308,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 255,
-    "rewardGold": 1050
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1653,
@@ -336,8 +336,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 255,
-    "rewardGold": 1050
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 166,
@@ -366,8 +366,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 914,
@@ -395,8 +395,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1442,
@@ -425,8 +425,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1654,
@@ -453,8 +453,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6562,
@@ -479,8 +479,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6563,
@@ -505,8 +505,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6564,
@@ -531,8 +531,8 @@
     "startsInsideDungeon": true,
     "sharable": false,
     "rewardType": "none",
-    "rewardXp": 265,
-    "rewardGold": 1100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 971,
@@ -559,8 +559,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 275,
-    "rewardGold": 1150
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1198,
@@ -585,8 +585,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 285,
-    "rewardGold": 1200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1275,
@@ -614,8 +614,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 285,
-    "rewardGold": 1200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 386,
@@ -643,8 +643,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 295,
-    "rewardGold": 1250
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1098,
@@ -666,8 +666,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 295,
-    "rewardGold": 1250
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1199,
@@ -695,8 +695,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 295,
-    "rewardGold": 1250
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1740,
@@ -721,8 +721,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 295,
-    "rewardGold": 1250
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 377,
@@ -750,8 +750,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 387,
@@ -776,8 +776,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 388,
@@ -802,8 +802,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1013,
@@ -831,8 +831,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1221,
@@ -854,8 +854,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2922,
@@ -880,8 +880,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2923,
@@ -906,8 +906,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6565,
@@ -935,8 +935,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 305,
-    "rewardGold": 1300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 378,
@@ -946,7 +946,7 @@
     "requiredLevel": 22,
     "expansion": "classic",
     "questGiverNpc": "Motley Garmason",
-    "questGiverZone": "The Stockade",
+    "questGiverZone": null,
     "prevQuestId": "303",
     "nextQuestId": null,
     "rewardsJson": [
@@ -959,8 +959,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1014,
@@ -982,8 +982,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1200,
@@ -1011,8 +1011,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2926,
@@ -1037,8 +1037,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2927,
@@ -1063,8 +1063,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6561,
@@ -1092,8 +1092,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6921,
@@ -1118,8 +1118,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 315,
-    "rewardGold": 1350
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2931,
@@ -1139,8 +1139,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 325,
-    "rewardGold": 1400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 391,
@@ -1165,8 +1165,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 435,
-    "rewardGold": 1450
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1142,
@@ -1189,8 +1189,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1144,
@@ -1214,8 +1214,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2904,
@@ -1238,8 +1238,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2924,
@@ -1259,8 +1259,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2925,
@@ -1280,8 +1280,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2928,
@@ -1309,8 +1309,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2930,
@@ -1333,8 +1333,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2951,
@@ -1354,8 +1354,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2952,
@@ -1377,8 +1377,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2953,
@@ -1400,8 +1400,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2962,
@@ -1426,8 +1426,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4601,
@@ -1447,8 +1447,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4602,
@@ -1468,8 +1468,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4603,
@@ -1491,8 +1491,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4604,
@@ -1514,8 +1514,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4605,
@@ -1537,8 +1537,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4606,
@@ -1560,8 +1560,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6922,
@@ -1589,8 +1589,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 450,
-    "rewardGold": 1500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1109,
@@ -1615,8 +1615,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 495,
-    "rewardGold": 1650
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1101,
@@ -1645,8 +1645,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 510,
-    "rewardGold": 1700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1102,
@@ -1670,8 +1670,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 510,
-    "rewardGold": 1700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2945,
@@ -1691,8 +1691,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 510,
-    "rewardGold": 1700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2947,
@@ -1717,8 +1717,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 510,
-    "rewardGold": 1700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2949,
@@ -1743,8 +1743,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 510,
-    "rewardGold": 1700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 721,
@@ -1769,8 +1769,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 525,
-    "rewardGold": 1750
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2841,
@@ -1794,8 +1794,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 525,
-    "rewardGold": 1750
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2842,
@@ -1815,8 +1815,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 525,
-    "rewardGold": 1750
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2843,
@@ -1838,8 +1838,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 525,
-    "rewardGold": 1750
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2929,
@@ -1868,8 +1868,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 525,
-    "rewardGold": 1750
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6626,
@@ -1889,8 +1889,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 525,
-    "rewardGold": 1750
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6521,
@@ -1919,8 +1919,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 540,
-    "rewardGold": 1800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6522,
@@ -1945,8 +1945,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 540,
-    "rewardGold": 1800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3523,
@@ -1966,8 +1966,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 555,
-    "rewardGold": 1850
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3525,
@@ -1989,8 +1989,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 555,
-    "rewardGold": 1850
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 722,
@@ -2000,7 +2000,7 @@
     "requiredLevel": 35,
     "expansion": "classic",
     "questGiverNpc": "Hammertoe Grez",
-    "questGiverZone": "Uldaman",
+    "questGiverZone": null,
     "prevQuestId": "721",
     "nextQuestId": "723",
     "rewardsJson": null,
@@ -2015,8 +2015,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 600,
-    "rewardGold": 2000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1951,
@@ -2038,8 +2038,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 600,
-    "rewardGold": 2000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1956,
@@ -2061,8 +2061,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 600,
-    "rewardGold": 2000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2240,
@@ -2090,8 +2090,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 600,
-    "rewardGold": 2000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2398,
@@ -2116,8 +2116,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 600,
-    "rewardGold": 2000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2198,
@@ -2142,8 +2142,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 615,
-    "rewardGold": 4100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2199,
@@ -2168,8 +2168,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 615,
-    "rewardGold": 4100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2283,
@@ -2189,8 +2189,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 615,
-    "rewardGold": 4100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2284,
@@ -2210,8 +2210,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 615,
-    "rewardGold": 4100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2200,
@@ -2236,8 +2236,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2318,
@@ -2257,8 +2257,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2338,
@@ -2278,8 +2278,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3341,
@@ -2307,8 +2307,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3636,
@@ -2336,8 +2336,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2201,
@@ -2362,8 +2362,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 645,
-    "rewardGold": 4300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2204,
@@ -2388,8 +2388,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 660,
-    "rewardGold": 4400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2339,
@@ -2414,8 +2414,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 660,
-    "rewardGold": 4400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2340,
@@ -2440,8 +2440,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 660,
-    "rewardGold": 4400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2341,
@@ -2468,8 +2468,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 660,
-    "rewardGold": 4400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2361,
@@ -2496,8 +2496,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 660,
-    "rewardGold": 4400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1139,
@@ -2524,8 +2524,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 675,
-    "rewardGold": 4500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2864,
@@ -2545,8 +2545,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 675,
-    "rewardGold": 4500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2865,
@@ -2566,8 +2566,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 675,
-    "rewardGold": 4500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2936,
@@ -2587,8 +2587,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 675,
-    "rewardGold": 4500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3042,
@@ -2608,8 +2608,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 675,
-    "rewardGold": 4500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2769,
@@ -2634,8 +2634,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 690,
-    "rewardGold": 4600
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2846,
@@ -2658,8 +2658,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 690,
-    "rewardGold": 4600
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2861,
@@ -2679,8 +2679,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 690,
-    "rewardGold": 4600
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2278,
@@ -2700,8 +2700,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2279,
@@ -2726,8 +2726,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2280,
@@ -2752,8 +2752,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2768,
@@ -2776,8 +2776,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2991,
@@ -2802,8 +2802,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3527,
@@ -2823,8 +2823,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1445,
@@ -2846,8 +2846,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 750,
-    "rewardGold": 5000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1475,
@@ -2874,8 +2874,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 750,
-    "rewardGold": 5000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 2770,
@@ -2897,8 +2897,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 750,
-    "rewardGold": 5000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3380,
@@ -2923,8 +2923,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 765,
-    "rewardGold": 5100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3446,
@@ -2944,8 +2944,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 765,
-    "rewardGold": 5100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3447,
@@ -2967,8 +2967,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 765,
-    "rewardGold": 5100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3801,
@@ -2988,8 +2988,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3802,
@@ -3011,8 +3011,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3906,
@@ -3037,8 +3037,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3981,
@@ -3063,8 +3063,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4081,
@@ -3089,8 +3089,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4143,
@@ -3115,8 +3115,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4262,
@@ -3141,8 +3141,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8232,
@@ -3168,8 +3168,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8236,
@@ -3195,8 +3195,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8253,
@@ -3222,8 +3222,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8257,
@@ -3249,8 +3249,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8413,
@@ -3281,8 +3281,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8418,
@@ -3314,8 +3314,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8422,
@@ -3341,8 +3341,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8425,
@@ -3368,8 +3368,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9053,
@@ -3395,8 +3395,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 780,
-    "rewardGold": 5200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1446,
@@ -3419,8 +3419,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 795,
-    "rewardGold": 5300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3528,
@@ -3444,8 +3444,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 795,
-    "rewardGold": 5300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4136,
@@ -3469,8 +3469,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 795,
-    "rewardGold": 5300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4148,
@@ -3497,8 +3497,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 795,
-    "rewardGold": 5300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4324,
@@ -3518,8 +3518,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 795,
-    "rewardGold": 5300
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3982,
@@ -3544,8 +3544,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4001,
@@ -3570,8 +3570,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4002,
@@ -3596,8 +3596,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4082,
@@ -3617,8 +3617,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4201,
@@ -3641,8 +3641,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4241,
@@ -3667,8 +3667,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4242,
@@ -3697,8 +3697,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7201,
@@ -3725,8 +3725,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 810,
-    "rewardGold": 5400
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3373,
@@ -3748,8 +3748,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4083,
@@ -3769,8 +3769,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4123,
@@ -3790,8 +3790,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4126,
@@ -3820,8 +3820,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4128,
@@ -3846,8 +3846,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4133,
@@ -3867,8 +3867,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4134,
@@ -3893,8 +3893,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 825,
-    "rewardGold": 5500
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 3907,
@@ -3924,8 +3924,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 840,
-    "rewardGold": 5600
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4263,
@@ -3955,8 +3955,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 840,
-    "rewardGold": 5600
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4286,
@@ -3983,8 +3983,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 840,
-    "rewardGold": 5600
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7488,
@@ -4011,8 +4011,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 855,
-    "rewardGold": 5700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7489,
@@ -4039,8 +4039,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 855,
-    "rewardGold": 5700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7492,
@@ -4060,8 +4060,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 855,
-    "rewardGold": 5700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7494,
@@ -4086,8 +4086,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 855,
-    "rewardGold": 5700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4024,
@@ -4111,8 +4111,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4063,
@@ -4142,8 +4142,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4121,
@@ -4168,8 +4168,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4122,
@@ -4189,8 +4189,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4132,
@@ -4217,8 +4217,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4264,
@@ -4243,8 +4243,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4282,
@@ -4269,8 +4269,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4322,
@@ -4299,8 +4299,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4788,
@@ -4320,8 +4320,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5529,
@@ -4341,8 +4341,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5582,
@@ -4362,8 +4362,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7441,
@@ -4386,8 +4386,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 870,
-    "rewardGold": 5800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4003,
@@ -4412,8 +4412,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4341,
@@ -4438,8 +4438,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4342,
@@ -4464,8 +4464,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4361,
@@ -4490,8 +4490,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4362,
@@ -4516,8 +4516,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4363,
@@ -4545,8 +4545,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4701,
@@ -4570,8 +4570,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4724,
@@ -4600,8 +4600,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4729,
@@ -4623,8 +4623,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4862,
@@ -4646,8 +4646,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4981,
@@ -4667,8 +4667,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4982,
@@ -4693,8 +4693,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4983,
@@ -4717,8 +4717,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5001,
@@ -4743,8 +4743,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5002,
@@ -4764,8 +4764,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 885,
-    "rewardGold": 5900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1193,
@@ -4785,8 +4785,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1318,
@@ -4811,8 +4811,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4004,
@@ -4840,8 +4840,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4742,
@@ -4861,8 +4861,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4743,
@@ -4884,8 +4884,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4771,
@@ -4908,8 +4908,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4866,
@@ -4931,8 +4931,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4867,
@@ -4954,8 +4954,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 4903,
@@ -4981,8 +4981,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5047,
@@ -5002,8 +5002,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5081,
@@ -5034,8 +5034,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5089,
@@ -5060,8 +5060,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5103,
@@ -5081,8 +5081,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5122,
@@ -5102,8 +5102,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5125,
@@ -5126,8 +5126,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5127,
@@ -5151,8 +5151,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5160,
@@ -5172,8 +5172,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5212,
@@ -5193,8 +5193,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5213,
@@ -5217,8 +5217,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5214,
@@ -5240,8 +5240,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5243,
@@ -5266,8 +5266,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5251,
@@ -5287,8 +5287,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5262,
@@ -5308,8 +5308,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5263,
@@ -5329,8 +5329,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5281,
@@ -5350,8 +5350,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5282,
@@ -5373,8 +5373,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5305,
@@ -5396,8 +5396,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5306,
@@ -5419,8 +5419,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5307,
@@ -5442,8 +5442,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5341,
@@ -5468,8 +5468,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5343,
@@ -5494,8 +5494,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5382,
@@ -5515,8 +5515,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5384,
@@ -5540,8 +5540,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5463,
@@ -5561,8 +5561,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5466,
@@ -5587,8 +5587,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5515,
@@ -5608,8 +5608,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5518,
@@ -5631,8 +5631,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5519,
@@ -5654,8 +5654,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5522,
@@ -5675,8 +5675,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5525,
@@ -5696,8 +5696,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5526,
@@ -5720,8 +5720,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5528,
@@ -5744,8 +5744,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5531,
@@ -5765,8 +5765,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 5848,
@@ -5786,8 +5786,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6163,
@@ -5815,8 +5815,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6642,
@@ -5836,8 +5836,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6643,
@@ -5857,8 +5857,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6644,
@@ -5878,8 +5878,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6645,
@@ -5899,8 +5899,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 6646,
@@ -5920,8 +5920,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7429,
@@ -5941,8 +5941,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7461,
@@ -5962,8 +5962,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7462,
@@ -5992,8 +5992,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7463,
@@ -6015,8 +6015,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7478,
@@ -6043,8 +6043,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7479,
@@ -6071,8 +6071,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7480,
@@ -6099,8 +6099,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7481,
@@ -6125,8 +6125,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7482,
@@ -6151,8 +6151,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7483,
@@ -6179,8 +6179,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7484,
@@ -6207,8 +6207,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7485,
@@ -6235,8 +6235,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7487,
@@ -6261,8 +6261,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7498,
@@ -6284,8 +6284,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7499,
@@ -6307,8 +6307,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7500,
@@ -6330,8 +6330,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7501,
@@ -6353,8 +6353,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7502,
@@ -6376,8 +6376,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7503,
@@ -6399,8 +6399,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7504,
@@ -6422,8 +6422,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7505,
@@ -6445,8 +6445,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7506,
@@ -6470,8 +6470,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7507,
@@ -6491,8 +6491,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7508,
@@ -6512,8 +6512,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7581,
@@ -6535,8 +6535,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7604,
@@ -6558,8 +6558,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7629,
@@ -6581,8 +6581,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7631,
@@ -6604,8 +6604,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7642,
@@ -6632,8 +6632,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7643,
@@ -6660,8 +6660,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7647,
@@ -6688,8 +6688,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7649,
@@ -6711,8 +6711,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7650,
@@ -6734,8 +6734,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7651,
@@ -6757,8 +6757,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7666,
@@ -6787,8 +6787,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7668,
@@ -6817,8 +6817,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7703,
@@ -6843,8 +6843,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7737,
@@ -6864,8 +6864,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7761,
@@ -6885,8 +6885,8 @@
     "startsInsideDungeon": false,
     "sharable": false,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7848,
@@ -6911,8 +6911,8 @@
     "startsInsideDungeon": false,
     "sharable": false,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7877,
@@ -6941,8 +6941,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8258,
@@ -6971,8 +6971,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8905,
@@ -7001,8 +7001,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8906,
@@ -7031,8 +7031,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8907,
@@ -7061,8 +7061,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8908,
@@ -7091,8 +7091,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8909,
@@ -7121,8 +7121,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8910,
@@ -7151,8 +7151,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8911,
@@ -7181,8 +7181,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8912,
@@ -7211,8 +7211,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8913,
@@ -7241,8 +7241,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8914,
@@ -7271,8 +7271,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8915,
@@ -7301,8 +7301,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8916,
@@ -7331,8 +7331,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8917,
@@ -7361,8 +7361,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8918,
@@ -7391,8 +7391,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8919,
@@ -7421,8 +7421,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8920,
@@ -7451,8 +7451,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8926,
@@ -7477,8 +7477,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8927,
@@ -7503,8 +7503,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8931,
@@ -7529,8 +7529,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8932,
@@ -7555,8 +7555,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8933,
@@ -7581,8 +7581,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8934,
@@ -7607,8 +7607,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8935,
@@ -7633,8 +7633,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8936,
@@ -7659,8 +7659,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8937,
@@ -7685,8 +7685,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8938,
@@ -7711,8 +7711,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8939,
@@ -7737,8 +7737,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8940,
@@ -7763,8 +7763,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8941,
@@ -7789,8 +7789,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8942,
@@ -7815,8 +7815,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8943,
@@ -7841,8 +7841,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8944,
@@ -7867,8 +7867,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8945,
@@ -7890,8 +7890,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8948,
@@ -7911,8 +7911,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8949,
@@ -7935,8 +7935,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8950,
@@ -7956,8 +7956,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8951,
@@ -7988,8 +7988,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8952,
@@ -8020,8 +8020,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8953,
@@ -8052,8 +8052,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8954,
@@ -8084,8 +8084,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8955,
@@ -8116,8 +8116,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8956,
@@ -8148,8 +8148,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8957,
@@ -8180,8 +8180,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8958,
@@ -8212,8 +8212,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8959,
@@ -8244,8 +8244,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8966,
@@ -8268,8 +8268,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8967,
@@ -8292,8 +8292,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8968,
@@ -8316,8 +8316,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8969,
@@ -8341,8 +8341,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8989,
@@ -8366,8 +8366,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8990,
@@ -8390,8 +8390,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8991,
@@ -8414,8 +8414,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8992,
@@ -8438,8 +8438,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 8999,
@@ -8469,8 +8469,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9000,
@@ -8500,8 +8500,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9001,
@@ -8531,8 +8531,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9002,
@@ -8562,8 +8562,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9003,
@@ -8593,8 +8593,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9004,
@@ -8624,8 +8624,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9005,
@@ -8655,8 +8655,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9006,
@@ -8686,8 +8686,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9007,
@@ -8717,8 +8717,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9008,
@@ -8748,8 +8748,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9009,
@@ -8779,8 +8779,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9010,
@@ -8810,8 +8810,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9011,
@@ -8841,8 +8841,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9012,
@@ -8872,8 +8872,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9013,
@@ -8903,8 +8903,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9014,
@@ -8934,8 +8934,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9015,
@@ -8955,8 +8955,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9016,
@@ -8987,8 +8987,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9017,
@@ -9019,8 +9019,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9018,
@@ -9051,8 +9051,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9019,
@@ -9083,8 +9083,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9020,
@@ -9115,8 +9115,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9021,
@@ -9147,8 +9147,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9022,
@@ -9179,8 +9179,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9257,
@@ -9204,8 +9204,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9269,
@@ -9229,8 +9229,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9270,
@@ -9254,8 +9254,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 9271,
@@ -9279,8 +9279,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 900,
-    "rewardGold": 6000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1160,
@@ -9305,8 +9305,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 540,
-    "rewardGold": 1800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1049,
@@ -9334,8 +9334,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 570,
-    "rewardGold": 1900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1050,
@@ -9362,8 +9362,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 570,
-    "rewardGold": 1900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1053,
@@ -9393,8 +9393,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 600,
-    "rewardGold": 2000
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 1048,
@@ -9423,8 +9423,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7068,
@@ -9447,8 +9447,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7070,
@@ -9476,8 +9476,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 630,
-    "rewardGold": 4200
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7028,
@@ -9502,8 +9502,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7029,
@@ -9532,8 +9532,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7041,
@@ -9562,8 +9562,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 705,
-    "rewardGold": 4700
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7067,
@@ -9585,8 +9585,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 720,
-    "rewardGold": 4800
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7044,
@@ -9606,8 +9606,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 735,
-    "rewardGold": 4900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7046,
@@ -9629,8 +9629,8 @@
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 735,
-    "rewardGold": 4900
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7064,
@@ -9659,8 +9659,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 765,
-    "rewardGold": 5100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7065,
@@ -9689,8 +9689,8 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
-    "rewardXp": 765,
-    "rewardGold": 5100
+    "rewardXp": null,
+    "rewardGold": null
   },
   {
     "questId": 7066,
@@ -9710,7 +9710,7 @@
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
-    "rewardXp": 765,
-    "rewardGold": 5100
+    "rewardXp": null,
+    "rewardGold": null
   }
 ]

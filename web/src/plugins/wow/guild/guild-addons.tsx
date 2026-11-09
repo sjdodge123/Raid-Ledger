@@ -39,13 +39,18 @@ function useAddonActions(guildId: number, list: GuildAddonList, visible: Readonl
     const actions: RowActions = {
         onMove: (id, dir) => { const ids = reorderedIds(list.addons, id, dir, visible); if (ids) m.reorder.mutate(ids, report('move')); },
         onSave: (id, d, callbacks) => m.update.mutate(
-            { id, input: { note: d.note.trim() || null, requirement: d.requirement, flavor: d.flavor } }, callbacks,
+            { id, input: { note: d.note.trim() || null, requirement: d.requirement, flavor: d.flavor, folderName: d.folderName.trim() || null } },
+            callbacks,
         ),
         onRemove: (id) => m.remove.mutate(id, report('remove')),
     };
-    const add = (a: NewAddon, reset: () => void): void => m.add.mutate(
-        { url: a.url, note: a.note.trim() || null, requirement: a.requirement, flavor: a.flavor }, { onSuccess: reset },
-    );
+    const add = (a: NewAddon, reset: () => void): void => {
+        const folderName = a.folderName.trim();
+        m.add.mutate(
+            { url: a.url, note: a.note.trim() || null, requirement: a.requirement, flavor: a.flavor, ...(folderName ? { folderName } : {}) },
+            { onSuccess: reset },
+        );
+    };
     return { actions, add, adding: m.add.isPending, addFailure: m.add.error?.message ?? null, listError };
 }
 
@@ -86,7 +91,7 @@ function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildA
                 {pinned.map((p, i) => <AddonRow key={`p-${i}`} addon={pinnedAddonView(p, i)} canEdit={canEdit} actions={actions} isFirst isLast />)}
                 {visible.map((a, i) => (
                     <AddonRow key={a.id} addon={guildAddonView(a)} canEdit={canEdit} actions={actions} isFirst={i === 0} isLast={i === visible.length - 1}
-                        details={{ note: a.note ?? '', requirement: a.requirement, flavor: a.flavor }} />
+                        details={{ note: a.note ?? '', requirement: a.requirement, flavor: a.flavor, folderName: a.folderName ?? '' }} />
                 ))}
             </ul>
             {visible.length === 0 && <p className="mt-3 text-sm text-muted">No guild addons for this flavor yet.</p>}

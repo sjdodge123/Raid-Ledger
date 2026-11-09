@@ -60,6 +60,8 @@ interface SeedAddon {
   displayName: string;
   note: string | null;
   requirement: GuildAddonRequirement;
+  /** ROK-2147: client folder name, matched against installed addons. */
+  folderName: string;
 }
 
 /** Slugs are stored lower-case, exactly as `parseAddonLink` would emit them. */
@@ -70,6 +72,7 @@ export const SEED_GUILD_ADDONS: readonly SeedAddon[] = [
     displayName: 'Details! Damage Meter',
     note: 'Everyone runs a meter on raid night.',
     requirement: 'required',
+    folderName: 'Details',
   },
   {
     source: 'github',
@@ -77,6 +80,7 @@ export const SEED_GUILD_ADDONS: readonly SeedAddon[] = [
     displayName: 'WeakAuras',
     note: null,
     requirement: 'optional',
+    folderName: 'WeakAuras',
   },
 ];
 
@@ -109,6 +113,20 @@ async function upsertProfile(
     .onConflictDoUpdate({ target: schema.guildProfiles.guildId, set });
 }
 
+/** The columns a re-seed rewrites on an existing addon row. */
+function addonSet(addon: SeedAddon, sortOrder: number, gmUserId: number) {
+  return {
+    displayName: addon.displayName,
+    note: addon.note,
+    requirement: addon.requirement,
+    flavor: null,
+    folderName: addon.folderName,
+    sortOrder,
+    updatedByUserId: gmUserId,
+    updatedAt: new Date(),
+  };
+}
+
 async function upsertAddon(
   db: Db,
   guildId: number,
@@ -116,15 +134,7 @@ async function upsertAddon(
   sortOrder: number,
   gmUserId: number,
 ): Promise<number> {
-  const set = {
-    displayName: addon.displayName,
-    note: addon.note,
-    requirement: addon.requirement,
-    flavor: null,
-    sortOrder,
-    updatedByUserId: gmUserId,
-    updatedAt: new Date(),
-  };
+  const set = addonSet(addon, sortOrder, gmUserId);
   const ga = schema.guildRecommendedAddons;
   const [row] = await db
     .insert(ga)

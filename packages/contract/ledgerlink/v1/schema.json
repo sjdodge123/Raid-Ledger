@@ -583,6 +583,36 @@
                 "generatedAt"
               ],
               "additionalProperties": false
+            },
+            "addons": {
+              "maxItems": 500,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "version": {
+                    "type": "string",
+                    "maxLength": 32
+                  },
+                  "loaded": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "loaded"
+                ],
+                "additionalProperties": false
+              }
             }
           },
           "required": [

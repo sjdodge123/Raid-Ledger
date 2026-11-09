@@ -36,6 +36,12 @@ export const guildRecommendedAddons = pgTable(
       .notNull(),
     /** retail | classic | forever; null = every flavor. */
     flavor: varchar('flavor', { length: 30 }),
+    /**
+     * ROK-2147: the addon's client folder name (`Details`, `WeakAuras`),
+     * matched case-insensitively against a character's installed addons.
+     * Null = no Installed/Missing state for this recommendation.
+     */
+    folderName: varchar('folder_name', { length: 64 }),
     sortOrder: integer('sort_order').default(0).notNull(),
     createdByUserId: integer('created_by_user_id').references(() => users.id, {
       onDelete: 'set null',
