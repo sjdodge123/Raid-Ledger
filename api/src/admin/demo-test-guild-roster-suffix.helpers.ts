@@ -23,3 +23,13 @@ export function parseRosterSuffix(value: unknown): string {
   }
   return value;
 }
+
+/**
+ * A roster GUID in the LedgerLink wire shape (`AddonGuidSchema`,
+ * `Player-<realm>-<8 hex>`), so a smoke can send it as a char export's
+ * `who.guid`: 7 hex of the guild hash + the rank as the 8th digit.
+ */
+export function seedRosterGuid(hash: string, rank: number): string {
+  const tail = `${hash.slice(0, 7)}${rank.toString(16)}`.toUpperCase();
+  return `Player-4395-${tail}`;
+}

@@ -62,13 +62,13 @@ import {
   findWowGameId,
   guildKeyHash,
   parseSeedGuildBody,
-  seedRosterGuid,
   upsertGuild,
   upsertMember,
   upsertSeedUser,
   type SeedGuildInput,
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
+import { seedRosterGuid } from './demo-test-guild-roster-suffix.helpers';
 import {
   ensureGuildRaids,
   raiderOf,
