@@ -108,7 +108,7 @@ describe('whole-row click: phone cards stretch the name link (ROK-2155 report 2)
         const links = within(el).getAllByRole('link');
         expect(links, 'one link per row — no duplicate overlay anchor').toHaveLength(1);
         expect(links[0]).toHaveAttribute('href', `/characters/${LINKED}`);
-        expect(links[0]?.className, 'the name link stretches over the card, border included').toContain('after:-inset-px');
+        expect(links[0]?.className, 'the name link stretches over the card (the li overflow-hidden clips the -inset-px to its padding edge)').toContain('after:-inset-px');
         expect(el.className.split(' '), 'the card is the containing block of the overlay').toContain('relative');
         expect(el).not.toHaveAttribute('role', 'button');
     });
@@ -189,5 +189,22 @@ describe('whole-row click: the desktop table row is a mouse-only click (ROK-2155
         expect(classes, 'hover must not promise a click that does nothing').not.toContain('hover:bg-panel');
         fireEvent.click(within(el).getByText('Guild Master'));
         expect(where()).toBe('/dev');
+    });
+});
+
+describe('whole-row click: a text selection is not a click (ROK-2155 delta review)', () => {
+    it('a drag that selected text inside the row does not navigate', () => {
+        const el = renderWowRow(row({ characterId: LINKED }), true);
+        const rank = within(el).getByText('Guild Master');
+        const range = document.createRange();
+        range.selectNodeContents(rank);
+        const sel = window.getSelection();
+        if (sel === null) throw new Error('jsdom must provide a Selection');
+        sel.addRange(range);
+        fireEvent.click(rank);
+        expect(where(), 'a non-collapsed selection inside the row keeps the user on the page').toBe('/hubs/7');
+        sel.removeAllRanges();
+        fireEvent.click(rank);
+        expect(where(), 'once the selection is cleared a click opens the row').toBe(`/characters/${LINKED}`);
     });
 });

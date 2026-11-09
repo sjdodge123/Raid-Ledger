@@ -59,7 +59,8 @@ function useRowHref(columns: readonly HubMemberColumn[], row: HubMemberRow): str
 
 /**
  * The desktop row's mouse-only click: plain left clicks outside any control
- * open `href`; modified clicks are left to the name link (new tab / window).
+ * open `href`; modified clicks are left to the name link (new tab / window),
+ * and a drag that selected text inside the row does not navigate.
  */
 function useRowClick(href: string | undefined): ((e: MouseEvent<HTMLTableRowElement>) => void) | undefined {
     const navigate = useNavigate();
@@ -68,6 +69,8 @@ function useRowClick(href: string | undefined): ((e: MouseEvent<HTMLTableRowElem
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         const own = e.target instanceof Element ? e.target.closest(OWN_CLICK) : null;
         if (own !== null && e.currentTarget.contains(own)) return;
+        const sel = window.getSelection();
+        if (sel !== null && !sel.isCollapsed && e.currentTarget.contains(sel.anchorNode)) return;
         navigate(href);
     };
 }
@@ -160,6 +163,7 @@ const CARD_LINE_CLASS = 'flex min-w-0 flex-nowrap items-center gap-x-2 overflow-
 function MemberCard({ row, columns, rowClass, setSize, posInSet, height }: { row: HubMemberRow } & CardLayout & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const [first, ...rest] = columns;
     const own = rest.filter((c) => c.cardLine === 'own');
+    // Columns are stable per hub kind (module constants), so the rowLink hook call order is fixed.
     const linked = useRowHref(columns, row) !== undefined;
     return (
         <li data-testid="guild-member-row" style={{ height }} aria-setsize={setSize} aria-posinset={posInSet}
