@@ -2,8 +2,8 @@
  * ROK-2143: the admin WoW Forever quest import panel — idle, running (polled),
  * finished, failed, and the server's 409 / 403 message on Re-import.
  */
-import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -68,17 +68,26 @@ describe('ForeverQuestImportPanel status', () => {
 
 describe('ForeverQuestImportPanel Re-import', () => {
     it('Re-import: 202 shows running, then polls until the run finishes', async () => {
-        server.use(
-            foreverQuestImportGetHandler(buildQuestImportReport(), RUNNING, buildSucceededReport()),
-            foreverQuestImportPostHandler(RUNNING),
-        );
-        renderWithProviders(<ForeverQuestImportPanel />);
-        await screen.findByText('The quest import has not run yet.');
-        await userEvent.click(button());
-        expect(await screen.findByText('running')).toBeInTheDocument();
-        expect(await screen.findByText('succeeded', {}, { timeout: FOREVER_QUEST_IMPORT_POLL_MS * 3 })).toBeInTheDocument();
-        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy', 'true'));
-    }, 15_000);
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            server.use(
+                foreverQuestImportGetHandler(buildQuestImportReport(), RUNNING, buildSucceededReport()),
+                foreverQuestImportPostHandler(RUNNING),
+            );
+            const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+            renderWithProviders(<ForeverQuestImportPanel />);
+            await screen.findByText('The quest import has not run yet.');
+            await user.click(button());
+            expect(await screen.findByText('running')).toBeInTheDocument();
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(FOREVER_QUEST_IMPORT_POLL_MS * 2);
+            });
+            expect(await screen.findByText('succeeded')).toBeInTheDocument();
+            await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy', 'true'));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 
     it.each([
         [409, 'A Forever quest import is already running'],
