@@ -4,11 +4,12 @@
  * D5/D6). The More drawer no longer lists hubs (ROK-1890).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { MyGuild } from '@raid-ledger/contract';
+import type { HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { GuildRows } from './hub-entry-bits';
+import { createMockHubEntry } from '../../../test/handlers/community-hubs';
+import { GuildRows, PopularHubRows } from './hub-entry-bits';
 
 function guild(id: number, name: string, memberCount = 12): MyGuild {
     return {
@@ -83,5 +84,48 @@ describe('hub row icon precedence (ROK-1814)', () => {
         renderWithProviders(<GuildRows guilds={[{ ...guild(11, 'Iron Vanguard'), gameIconUrl: '/g.png', crest: { source: 'preset', emblemId: 'oak', fg: 'argent', bg: 'vert' } }]} />);
         expect(screen.getByTestId('hub-crest')).toHaveAttribute('data-crest', 'preset');
         expect(screen.queryByTestId('guild-entry-game-icon')).toBeNull();
+    });
+});
+
+/** ROK-2152 — a "Popular hubs" row: a directory entry the viewer is not in, on the same row shell. */
+describe('PopularHubRows (ROK-2152)', () => {
+    const popular = (overrides: Partial<HubDirectoryEntry> = {}): HubDirectoryEntry => createMockHubEntry({
+        id: 77, name: 'Iron Wolves', gameName: 'Valheim', memberCount: 12, kind: 'game_community', gameIconUrl: null, ...overrides,
+    });
+
+    it('links to the hub page and shows the name, "<game> · N members" and the kind chip', () => {
+        renderWithProviders(<PopularHubRows hubs={[popular()]} />);
+        const row = screen.getByTestId('popular-hub-row');
+        expect(row).toHaveAttribute('href', '/hubs/77');
+        expect(row).toHaveAttribute('data-hub-id', '77');
+        expect(row).toHaveAttribute('data-size', 'md');
+        expect(row).toHaveTextContent('Iron Wolves');
+        expect(row).toHaveTextContent('Valheim · 12 members');
+        expect(within(row).getByTestId('hub-kind-chip')).toHaveTextContent('Community');
+        expect(screen.queryByTestId('guild-entry-row')).toBeNull();
+    });
+
+    it('one member → "· 1 member"', () => {
+        renderWithProviders(<PopularHubRows hubs={[popular({ memberCount: 1 })]} />);
+        expect(screen.getByTestId('popular-hub-row')).toHaveTextContent('Valheim · 1 member');
+        expect(screen.getByTestId('popular-hub-row')).not.toHaveTextContent('1 members');
+    });
+
+    it('the game icon stands in for the crest; without one, the shield', () => {
+        renderWithProviders(<PopularHubRows hubs={[popular({ id: 1, gameIconUrl: '/g.png' }), popular({ id: 2 })]} />);
+        const [withIcon, without] = screen.getAllByTestId('popular-hub-row');
+        expect(within(withIcon ?? document.body).getByTestId('guild-entry-game-icon')).toHaveAttribute('src', '/g.png');
+        expect(within(without ?? document.body).getByTestId('hub-crest')).toHaveAttribute('data-crest', 'shield');
+    });
+
+    it('the phone sheet size: 64px rows, 40px icon box; menuitem role inside a menu; tapping calls onNavigate', async () => {
+        const onNavigate = vi.fn();
+        renderWithProviders(<div role="menu"><PopularHubRows hubs={[popular()]} size="lg" role="menuitem" onNavigate={onNavigate} /></div>);
+        const row = screen.getByRole('menuitem');
+        expect(row).toHaveAttribute('data-size', 'lg');
+        expect(row).toHaveClass('min-h-[64px]');
+        expect(within(row).getByTestId('hub-crest')).toHaveClass('h-10', 'w-10');
+        await userEvent.click(row);
+        expect(onNavigate).toHaveBeenCalledTimes(1);
     });
 });
