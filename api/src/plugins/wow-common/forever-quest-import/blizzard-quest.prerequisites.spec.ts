@@ -115,4 +115,24 @@ describe('pickPrevQuestId', () => {
     for (let i = 0; i < 20; i++) deep = { conditions: [deep] };
     expect(listPrerequisiteIds({ quests: deep })).toEqual([]);
   });
+
+  it('names no prerequisite for a 10k-deep nested array (review r4 MINOR 1)', () => {
+    let deep: unknown = target(1);
+    for (let i = 0; i < 10_000; i++) deep = [deep];
+    let refs: unknown = 'threw';
+    expect(() => {
+      refs = listPrerequisiteRefs({ quests: deep });
+    }).not.toThrow();
+    expect(refs).toEqual([]);
+  });
+
+  it('names no prerequisite for a 10k-deep target chain (review r4 MINOR 1)', () => {
+    let deep: unknown = { id: 1 };
+    for (let i = 0; i < 10_000; i++) deep = { target: deep };
+    let refs: unknown = 'threw';
+    expect(() => {
+      refs = listPrerequisiteRefs({ quests: deep });
+    }).not.toThrow();
+    expect(refs).toEqual([]);
+  });
 });

@@ -118,7 +118,7 @@ describe('requirementFields', () => {
         races: [{ name: 'Tauren', id: 6 }],
         faction: { type: 'HORDE' },
         classes: [{ name: 'Druid', id: 11 }],
-        quests: { conditions: [{ id: 50 }, { id: 40 }] },
+        quests: { conditions: [{ id: 40 }, { id: 50 }] },
       }),
     ).toEqual({
       prevQuestId: 50,
