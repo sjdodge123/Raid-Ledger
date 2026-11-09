@@ -241,6 +241,54 @@ async function seedAltPresenceGuild(): Promise<{ gid: number; altId: string }> {
   return { gid, altId: alt.id };
 }
 
+/**
+ * ROK-2149 (AC-13) — a guild holding lead (so lead is a member) and one
+ * unclaimed roster member whose verified Armory snapshot lists Blacksmithing.
+ */
+async function seedSnapshotProfessionGuild(): Promise<{
+  gid: number;
+  pugId: number;
+}> {
+  const gid = await insertGuild('Forever Snapshot Professions');
+  const [, pug] = nonEmpty(
+    await testApp.db
+      .insert(schema.guildMembers)
+      .values([
+        memberRow(gid, 'Player-7-lead', 'lead', 60, 'Warrior'),
+        {
+          ...memberRow(gid, 'Player-7-smith', 'Smithy', 40, 'Paladin'),
+          blizzardCharacterId: 91_149,
+        },
+      ])
+      .returning({ id: schema.guildMembers.id }),
+    'snapshot guild members',
+  );
+  if (!pug) throw new Error('unclaimed member not inserted');
+  await testApp.db.insert(schema.guildMemberArmory).values({
+    guildMemberId: pug.id,
+    blizzardCharacterId: 91_149,
+    level: 40,
+    class: 'Paladin',
+    armoryProfessions: {
+      primary: [
+        {
+          id: 164,
+          name: 'Blacksmithing',
+          slug: 'blacksmithing',
+          skillLevel: 150,
+          maxSkillLevel: 225,
+          tiers: [],
+        },
+      ],
+      secondary: [],
+      syncedAt: SNAP.toISOString(),
+    },
+    syncedAt: SNAP,
+    lastAttemptAt: SNAP,
+  });
+  return { gid, pugId: pug.id };
+}
+
 const insights = (who: Who, gid = guildId) =>
   testApp.request
     .get(`/plugins/wow/guilds/${gid}/roster-insights`)
@@ -385,6 +433,29 @@ describe('GET roster-insights (real DB)', () => {
     expect('lockoutReporters' in res.body).toBe(false);
     expect('lastSeen' in res.body).toBe(false);
     expect('gear' in res.body).toBe(false);
+  });
+
+  it('a member gets an unclaimed member\'s snapshot professions; a visitor gets none (ROK-2149 AC-13)', async () => {
+    const { gid, pugId } = await seedSnapshotProfessionGuild();
+    const dto = WowRosterInsightsSchema.parse((await insights('lead', gid)).body);
+    expect(dto.professions).toEqual([
+      {
+        name: 'Blacksmithing',
+        members: [
+          {
+            characterId: null,
+            memberId: pugId,
+            name: 'Smithy',
+            skill: 150,
+            maxSkill: 225,
+            source: 'blizzard',
+          },
+        ],
+      },
+    ]);
+    const visitor = await insights('outsider', gid);
+    expect(visitor.status).toBe(200);
+    expect('professions' in visitor.body).toBe(false);
   });
 
   it('a member gets gear readiness over linked cap mains (ROK-1915 AC4)', async () => {

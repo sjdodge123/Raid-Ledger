@@ -69,18 +69,40 @@ export function computeRoles(rows: readonly InsightRow[]): Roles {
   return roles;
 }
 
-/** Profession → linked members with their skill; most members first. */
+type ProfessionMember = Profession['members'][number];
+
+/**
+ * The identity half of a profession member: a linked character, or (ROK-2149
+ * Q4=A) an unclaimed roster member keyed by `memberId`. Null = unkeyable.
+ */
+function memberIdentity(
+  row: InsightRow,
+): Pick<ProfessionMember, 'characterId' | 'memberId'> | null {
+  const memberId = row.memberId ?? null;
+  if (row.characterId === null && memberId === null) return null;
+  return {
+    characterId: row.characterId,
+    ...(memberId === null ? {} : { memberId }),
+  };
+}
+
+/**
+ * Profession → members with their skill; most members first. A linked row
+ * reports its character's resolved facts; an unclaimed roster row reports its
+ * verified Armory snapshot (ROK-2133 member facts), with `characterId: null`.
+ */
 export function computeProfessions(rows: readonly InsightRow[]): Profession[] {
   const byName = new Map<string, Profession>();
   for (const row of rows) {
     const fact = row.facts?.professions;
-    if (!fact || row.characterId === null) continue;
+    const identity = memberIdentity(row);
+    if (!fact || !identity) continue;
     for (const p of [...fact.value.primary, ...fact.value.secondary]) {
       const entry = byName.get(p.name) ?? { name: p.name, members: [] };
       // Pre-ROK-2130 Armory rows store 0/0 with the real pair in `tiers[]`.
       const skill = effectiveProfessionSkill(p);
       entry.members.push({
-        characterId: row.characterId,
+        ...identity,
         name: row.name,
         skill: skill.skillLevel,
         maxSkill: skill.maxSkillLevel,
