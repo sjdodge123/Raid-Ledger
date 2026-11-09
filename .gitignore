@@ -55,6 +55,7 @@ scripts/*
 # ROK-1900 interim-folder -> approvals inbox migration helper (dry-run export).
 !scripts/pending-approval-export.mjs
 !scripts/pending-approval-export.spec.mjs
+!scripts/extract-forever-talent-descriptions.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/validate-migrations-drift.spec.mjs
