@@ -115,7 +115,6 @@ describe('computeGivers (T8 + round 2)', () => {
     expect(out.allTime).toEqual([
       {
         rank: 1,
-        userId: 3,
         characterName: 'Alt',
         characterId: CHAR_B,
         characterCount: 2,
@@ -124,7 +123,6 @@ describe('computeGivers (T8 + round 2)', () => {
       },
       {
         rank: 2,
-        userId: null,
         characterName: 'Solo',
         characterId: null,
         characterCount: 1,

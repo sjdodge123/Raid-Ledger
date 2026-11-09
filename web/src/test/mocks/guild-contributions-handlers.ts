@@ -21,7 +21,7 @@ export function buildMaster(over: Partial<GuildContributionsMaster> = {}): Guild
 }
 
 export function buildGiver(over: Partial<GuildContributionsGiver> = {}): GuildContributionsGiver {
-    return { rank: 1, userId: null, characterName: 'Aldren', characterId: CHAR_ID, characterCount: 1, items: 142, isYou: false, ...over };
+    return { rank: 1, characterName: 'Aldren', characterId: CHAR_ID, characterCount: 1, items: 142, isYou: false, ...over };
 }
 
 export function buildUser(name: string, over: Partial<GuildContributionsUser> = {}): GuildContributionsUser {

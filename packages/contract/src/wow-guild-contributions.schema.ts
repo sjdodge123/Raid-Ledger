@@ -70,8 +70,6 @@ export type GuildContributionsMaster = z.infer<typeof GuildContributionsMasterSc
 export const GuildContributionsGiverSchema = z.object({
     /** 1-based position in the full ranking (also for a `you…` row below the top 10). */
     rank: z.number().int().positive(),
-    /** RL user the characters roll up to; null = an unlinked character ranked alone. */
-    userId: z.number().int().positive().nullable(),
     /** The name shown: the player's top-giving character in the window. */
     characterName: z.string(),
     characterId,

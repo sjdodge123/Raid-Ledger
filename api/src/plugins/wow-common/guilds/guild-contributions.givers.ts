@@ -97,7 +97,6 @@ function rollUp(
     const [top] = ranked;
     if (!top) continue;
     players.push({
-      userId: top.userId,
       characterName: top.characterName,
       characterId: top.characterId,
       characterCount: ranked.length,
