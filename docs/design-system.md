@@ -1079,9 +1079,11 @@ The More drawer lists **no** hubs (ROK-1890, operator 2026-10-21): the bottom bu
 **The shell owns the page-bottom clearance (ROK-2156).** `Layout.tsx`'s `<main>` pads
 `pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] md:pb-0` below 768px, except on the
 full-screen wizard routes where the bar does not render (`hidesBottomTabBar`, `bottom-tab-bar-routes.ts`).
-**DON'T** add `pb-24`, `pb-[calc(var(--bottom-nav-clearance)…)]` or any other phone bar clearance to a page — it
-doubles the gap; a page keeps only its own `md:`/`lg:` bottom padding. `bottom-nav-clearance.guard.test.ts` pins
-both the shell padding and the no-page-padding rule.
+**DON'T** add a phone bar clearance to a page — it doubles the gap; a page keeps only its own `md:`/`lg:` bottom
+padding. `bottom-nav-clearance.guard.test.ts` pins the shell padding and fails on two page patterns: any
+`pb-[…--bottom-nav-clearance…]` under `components/`, `pages/` or `plugins/`, and, in `pages/` files, a phone-only
+pad of 5rem or more that the same class string resets at `md:` (`pb-24 md:pb-6`, `pb-[6rem] md:pb-0`). `Layout.test.tsx`
+renders a padded route (`/events`) and an unpadded wizard route (`/onboarding`).
 
 **DON'T** add a second raised slot, give a tab a fixed `min-w-[…]` (it overflows at 320px), or dock a fixed
 or sticky element to the bare `bottom: 3.5rem` bar height — the circle's 24px lift would cover it.

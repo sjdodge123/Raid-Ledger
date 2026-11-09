@@ -27,16 +27,6 @@ type Tab = (typeof LEFT_TABS)[number] | (typeof RIGHT_TABS)[number];
  */
 export const TAB_BAR_HIDDEN_CLASS = 'translate-y-[calc(100%+2rem)]';
 
-/**
- * Mobile bottom tab bar — persistent navigation for the primary sections.
- *
- * Visible only below the `md` breakpoint (< 768px).
- * Strategy 2: direct tabs with hamburger for overflow (ROK-331). ROK-1875
- * (operator ruling 2026-10-21): five even grid columns — Calendar · Events ·
- * (raised Hubs circle) · Games · Players. Each slot fills its column (64px at
- * 320px wide), so no label truncates and nothing overflows.
- */
-
 function TabLink({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     return (
         <Link to={tab.to}
@@ -64,7 +54,15 @@ export function BottomTabGrid({ pathname }: { pathname: string }) {
     );
 }
 
-/** The phone bottom bar (below 768px); hidden on full-screen wizard routes. */
+/**
+ * Mobile bottom tab bar — persistent navigation for the primary sections.
+ *
+ * Visible only below the `md` breakpoint (< 768px); hidden on full-screen wizard routes (`hidesBottomTabBar`).
+ * Strategy 2: direct tabs with hamburger for overflow (ROK-331). ROK-1875
+ * (operator ruling 2026-10-21): five even grid columns — Calendar · Events ·
+ * (raised Hubs circle) · Games · Players. Each slot fills its column (64px at
+ * 320px wide), so no label truncates and nothing overflows.
+ */
 export function BottomTabBar() {
     const location = useLocation();
     const scrollDirection = useScrollDirection();

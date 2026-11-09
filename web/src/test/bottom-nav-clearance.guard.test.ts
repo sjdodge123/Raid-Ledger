@@ -23,6 +23,12 @@ const SCANNED_ROOTS = ['components', 'pages', 'plugins'];
 /** A dock/padding that clears only the flat 3.5rem bar, not the circle above it. */
 const BANNED: RegExp[] = [/bottom-\[calc\(3\.5rem/, /\bpb-20 md:pb-/];
 
+/**
+ * ROK-2156: a phone bottom pad of 5rem+ (`pb-20`…`pb-99`, `pb-[6rem]`, `pb-[max(6rem,…)]`) that the same class
+ * string resets at `md:` — the per-page bar clearance the shell now owns. Scoped to `pages/` only.
+ */
+const PHONE_ONLY_PAGE_PAD = /(?:^|[\s'"`])pb-(?:[2-9]\d|\[[^\]\s'"`]*\drem[^\]\s'"`]*\])(?=[^'"`\n]*\bmd:pb-)/;
+
 /** Every shipped, non-test `.ts`/`.tsx` file under `dir`, recursively. */
 function sourceFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((entry) => {
@@ -54,7 +60,6 @@ describe('bottom-nav clearance (ROK-1875)', () => {
     it.each([
         'components/features/game-time/SelectedBlockInspector.tsx',
         'components/features/game-time/phone/DayBlockEditor.tsx',
-        'components/layout/Layout.tsx',
         'components/hub/arrange/arrange-footer.tsx',
     ])('%s docks above the circle via --bottom-nav-clearance', (path) => {
         expect(source(path)).toContain('var(--bottom-nav-clearance)');
@@ -74,7 +79,7 @@ describe('bottom-nav clearance (ROK-1875)', () => {
     it('the shell <main> owns the phone bar + Filters FAB clearance (ROK-2156)', () => {
         const layout = source('components/layout/Layout.tsx');
         expect(layout).toContain("const MAIN_TAB_BAR_CLEARANCE = 'pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] md:pb-0';");
-        expect(layout, 'main pads unless the bar is hidden').toContain("<main id=\"main-content\" className={hidesBottomTabBar(pathname) ? 'flex-1' : `flex-1 ${MAIN_TAB_BAR_CLEARANCE}`}>");
+        expect(layout, 'main pads unless the bar is hidden (runtime cases: Layout.test.tsx)').toMatch(/hidesBottomTabBar\(pathname\)[^\n]*MAIN_TAB_BAR_CLEARANCE/);
         expect(source('components/layout/bottom-tab-bar.tsx'), 'the bar and the shell share one hidden-route rule').toContain('if (hidesBottomTabBar(location.pathname)) return null;');
     });
 
@@ -85,6 +90,13 @@ describe('bottom-nav clearance (ROK-1875)', () => {
             .filter((file) => pagePad.test(stripComments(readFileSync(file, 'utf8'))))
             .map((file) => relative(WEB_SRC, file));
         expect(offenders, 'drop the page padding; Layout.tsx <main> clears the bar').toEqual([]);
+    });
+
+    it('no page file keeps a phone-only bottom pad reset at md (pb-24 md:pb-*) (ROK-2156)', () => {
+        const offenders = sourceFiles(join(WEB_SRC, 'pages'))
+            .filter((file) => PHONE_ONLY_PAGE_PAD.test(stripComments(readFileSync(file, 'utf8'))))
+            .map((file) => relative(WEB_SRC, file));
+        expect(offenders, 'drop the phone pb-*; keep only the md:/lg: bottom padding — Layout.tsx <main> clears the bar').toEqual([]);
     });
 
     // ROK-2132 moved the hub page's `PAGE` padding into `hub-page-error.tsx`; every

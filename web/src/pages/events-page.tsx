@@ -109,7 +109,7 @@ export function EventsPage() {
 
   return (
     <PullToRefresh onRefresh={refetch}>
-      <div>
+      <>
         <SchedulingBanner />
         <StandalonePollBanner />
         <LfgSummaryBanner />
@@ -121,7 +121,7 @@ export function EventsPage() {
           filterGameTime={state.filterGameTime} setFilterGameTime={state.setFilterGameTime} slotSet={slotSet} overlapSet={overlapSet}
           sentinelRef={sentinelRef} isFetchingNextPage={isFetchingNextPage} hasNextPage={hasNextPage} navigate={navigate} />
         {isAuthenticated && <FAB onClick={() => navigate('/events/new')} label="Create Event" />}
-      </div>
+      </>
     </PullToRefresh>
   );
 }
