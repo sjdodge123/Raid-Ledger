@@ -16,12 +16,27 @@ import { buildCharPayload } from './addon-fixture.builder';
  */
 export function buildInstalledAddons(): AddonInstalledList {
   return [
-    { name: 'LedgerLink', title: '|cff33ff99Ledger|rLink', version: '1.4.0', loaded: true },
-    { name: 'Details', title: 'Details! Damage Meter', version: '1.15.7.142', loaded: true },
+    {
+      name: 'LedgerLink',
+      title: '|cff33ff99Ledger|rLink',
+      version: '1.4.0',
+      loaded: true,
+    },
+    {
+      name: 'Details',
+      title: 'Details! Damage Meter',
+      version: '1.15.7.142',
+      loaded: true,
+    },
     { name: 'WeakAuras', title: 'WeakAuras', version: '5.19.2', loaded: true },
     { name: 'DBM-Core', title: 'Deadly Boss Mods Core', loaded: true },
     { name: 'Questie', loaded: true },
-    { name: 'DBM-StatusBarTimers', title: 'DBM Status Bar Timers', version: '1.15.10', loaded: false },
+    {
+      name: 'DBM-StatusBarTimers',
+      title: 'DBM Status Bar Timers',
+      version: '1.15.10',
+      loaded: false,
+    },
   ];
 }
 

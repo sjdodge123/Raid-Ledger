@@ -23,6 +23,10 @@ import {
   buildMailworthyBlock,
   buildMailworthyWorstCaseBlock,
 } from './testing/addon-fixture.mailworthy';
+import {
+  buildInstalledAddons,
+  buildInstalledAddonsWorstCase,
+} from './testing/addon-fixture.installed';
 import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
 import {
   TALENT_COL_STEP,
@@ -70,6 +74,7 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
       'char-forever-quests-log-only',
       'char-forever-quests-truncated',
       'char-forever-talents-named',
+      'char-installed-addons',
       'char-mailworthy',
       'char-mailworthy-template-only',
       'char-normal',
@@ -110,6 +115,8 @@ describe('LedgerLink v1 golden fixtures — invalid', () => {
         'quests-completed-over-cap',
         'char-mailworthy-rule-cap',
         'char-mailworthy-too-many-rules',
+        'char-addons-too-many',
+        'char-addons-name-too-long',
       ]),
     );
   });
@@ -171,6 +178,46 @@ describe('worst-case Mailworthy char string (ROK-2148 §A.4, delta 2026-11-08)',
     expect(bytes).toBeLessThanOrEqual(COMPANION_WOW_LEDGERLINK_EXPORT_MAX);
     const decoded = decodeImportPaste(paste);
     expect(decoded.sections.char?.payload.mailworthy?.givers).toHaveLength(200);
+  });
+});
+
+describe('char-installed-addons — the list survives decode (ROK-2147)', () => {
+  it('carries the list beside the frozen snapshot data, escapes stripped', () => {
+    const decoded = decodeImportPaste(
+      read(FIXTURES, 'char-installed-addons.txt'),
+    );
+    const payload = decoded.sections.char?.payload;
+    const [first, ...rest] = buildInstalledAddons();
+    expect(payload?.addons).toEqual([
+      { ...first, title: 'LedgerLink' },
+      ...rest,
+    ]);
+    expect(payload?.addons?.map((a) => a.loaded)).toContain(false);
+    expect(payload?.data).not.toHaveProperty('addons');
+  });
+
+  it('a char export without the list decodes without the key', () => {
+    const decoded = decodeImportPaste(read(FIXTURES, 'char-normal.txt'));
+    expect(decoded.sections.char?.payload).not.toHaveProperty('addons');
+  });
+});
+
+describe('worst-case char string with installed addons (ROK-2147 §2 D8)', () => {
+  it('max quests + max Mailworthy + 500 max-length addons fits the Companion cap', () => {
+    const char = buildForeverQuestsPayload();
+    const paste = buildImportString({
+      ...char,
+      data: {
+        ...char.data,
+        mailworthy: buildMailworthyWorstCaseBlock(),
+        addons: buildInstalledAddonsWorstCase(),
+      },
+    });
+    const bytes = Buffer.byteLength(paste, 'utf8');
+    expect(bytes).toBe(133_134);
+    expect(bytes).toBeLessThanOrEqual(COMPANION_WOW_LEDGERLINK_EXPORT_MAX);
+    const decoded = decodeImportPaste(paste);
+    expect(decoded.sections.char?.payload.addons).toHaveLength(500);
   });
 });
 
