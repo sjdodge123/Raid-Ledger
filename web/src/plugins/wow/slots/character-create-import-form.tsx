@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, useRef } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
@@ -86,6 +86,20 @@ function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, keepTa
 }
 
 /**
+ * ROK-2132 (Codex P2): an `initialTab` of `import` resolves once the capabilities have
+ * loaded. While they load, Forever's Armory is fail-closed and the sync above falls back to
+ * Manual; the moment they settle, the requested Import tab wins if it is available — once.
+ */
+function useRequestedImportTab(initialTab: Tab | undefined, capsSettled: boolean, armoryOk: boolean, onTabChange: (tab: Tab) => void) {
+    const resolved = useRef(false);
+    useEffect(() => {
+        if (initialTab !== 'import' || !capsSettled || resolved.current) return;
+        resolved.current = true;
+        if (armoryOk) onTabChange('import');
+    }, [initialTab, capsSettled, armoryOk, onTabChange]);
+}
+
+/**
  * ROK-2128: "Guild roster" exists only for WoW: Forever with ≥1 unclaimed candidate (FLAG 8);
  * it opens by default only for a user with no character of the game (FLAG 9), and an
  * emptied list falls back off the tab. ROK-2132: an `initialTab` of `roster` holds the tab
@@ -132,13 +146,14 @@ export function CharacterCreateImportForm({
 }: CharacterCreateImportFormProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
-    const { data: caps } = useArmoryCapabilities();
+    const { data: caps, isPending: capsPending } = useArmoryCapabilities();
     const { showVariantSelector, wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters, caps);
 
     const armoryOk = isArmoryImportSupported(wowVariant, caps);
     const noteId = useId();
     const { showRoster, rosterDefault } = useRosterTab(gameSlug, gameId, charactersLoading ? undefined : existingCharacters, activeTab, onTabChange, initialTab);
     useArmoryTabSync(blizzardConfigured, armoryOk, rosterDefault || initialTab !== undefined, activeTab, onTabChange);
+    useRequestedImportTab(initialTab, !capsPending, armoryOk, onTabChange);
     if (!isWowSlug(gameSlug)) return null;
     const showImport = activeTab === 'import' && armoryOk;
 
