@@ -17,7 +17,7 @@ import type { HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { HubsCircle } from './hubs-circle';
 import { HUBS_PATH } from './my-hubs-queries';
-import { useHubsNavLists } from './popular-hubs-queries';
+import { useHubsNavLists } from './use-hubs-nav-lists';
 import { isHubsNavActive } from './use-hub-nav-active';
 
 const BottomHubsSheet = lazy(() => import('./bottom-hubs-sheet'));

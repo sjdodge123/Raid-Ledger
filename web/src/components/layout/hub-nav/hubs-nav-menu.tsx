@@ -19,7 +19,7 @@ import { GuildRows } from './hub-entry-bits';
 import { HubsCircle } from './hubs-circle';
 import { HUBS_PATH } from './my-hubs-queries';
 import { PopularHubsSection } from './popular-hubs-section';
-import { useHubsNavLists } from './popular-hubs-queries';
+import { useHubsNavLists } from './use-hubs-nav-lists';
 import { isHubsNavActive } from './use-hub-nav-active';
 
 type Close = (restoreFocus?: boolean) => void;

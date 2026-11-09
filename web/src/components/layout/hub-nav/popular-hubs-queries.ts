@@ -11,7 +11,6 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { HubDirectoryPageSchema, type HubDirectoryEntry, type HubDirectoryPage, type MyGuild } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
-import { useMyGuildsQuery } from './my-hubs-queries';
 
 /** How many popular hubs the menu / sheet lists at most. */
 export const POPULAR_HUBS_SHOWN = 5;
@@ -51,20 +50,4 @@ export function usePopularHubs(mine: MyGuild[]): { hubs: HubDirectoryEntry[]; se
     const query = usePopularHubsQuery();
     const hubs = selectPopularHubs(query.data?.items ?? [], new Set(mine.map((g) => g.id)));
     return { hubs, settled: query.isSuccess || query.isError };
-}
-
-/** What both nav shells draw: the viewer's hubs, the popular ones, and menu-or-link. */
-export interface HubsNavLists { hubs: MyGuild[]; popular: HubDirectoryEntry[]; showMenu: boolean }
-
-/**
- * ROK-1875 D1 + ROK-2152 Q1: the menu / sheet once the viewer has a hub, or once
- * `/guilds/mine` has settled and there is a popular hub to suggest. Otherwise the
- * plain `/hubs` link, so the item goes link → menu only, never menu → link.
- */
-export function useHubsNavLists(): HubsNavLists {
-    const mine = useMyGuildsQuery();
-    const hubs = mine.data?.guilds ?? [];
-    const popular = usePopularHubs(hubs).hubs;
-    const mineSettled = mine.isSuccess || mine.isError;
-    return { hubs, popular, showMenu: hubs.length > 0 || (mineSettled && popular.length > 0) };
 }

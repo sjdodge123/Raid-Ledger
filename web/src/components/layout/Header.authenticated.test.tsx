@@ -17,6 +17,11 @@ vi.mock('./hub-nav/my-hubs-queries', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./hub-nav/my-hubs-queries')>()),
     useMyGuildsQuery: () => ({ data: { guilds: hubs.list.map((h) => ({ ...h, region: 'us', rankName: null, realmName: null, realmSlug: null, gameIconUrl: null })) } }),
 }));
+// ROK-2152: no popular hubs here, so the Hubs item stays as these specs pin it; hubs-nav-menu.test.tsx drives the real read.
+vi.mock('./hub-nav/popular-hubs-queries', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./hub-nav/popular-hubs-queries')>()),
+    usePopularHubs: () => ({ hubs: [], settled: true }),
+}));
 
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({
