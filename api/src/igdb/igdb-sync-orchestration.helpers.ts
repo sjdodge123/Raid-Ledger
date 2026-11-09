@@ -23,7 +23,7 @@ import {
   reEnrichGamesWithIgdb,
 } from './igdb-helpers.barrel';
 import type { ReEnrichResult } from './igdb-reenrichment.helpers';
-import { oncePerGame } from './taste-input-change.helpers';
+import { collectChangedGames } from './taste-input-change.helpers';
 
 export interface SyncAllDeps {
   db: PostgresJsDatabase<typeof schema>;
@@ -44,28 +44,33 @@ export interface SyncAllSummary {
   reEnriched: ReEnrichResult;
 }
 
-/** Execute the full IGDB+ITAD sync pipeline. */
-export async function runSyncAllGames(
+type PhaseCounts = Omit<SyncAllSummary, 'reEnriched'>;
+
+/**
+ * Refresh → discover → backfill covers → ITAD enrichment: the phases that
+ * report a taste-input change through `notify`.
+ */
+async function runChangeEmittingPhases(
   deps: SyncAllDeps,
-): Promise<SyncAllSummary> {
-  const themeFilter = buildAdultThemeFilter(await deps.isAdultFilterEnabled());
-  // ROK-2121: refresh, discover and ITAD can touch one game; recompute once.
-  const onGameChanged = oncePerGame(deps.onGameChanged);
+  themeFilter: string,
+  notify: (gameId: number) => void,
+): Promise<PhaseCounts> {
+  const { db, queryIgdb } = deps;
   const refreshed = await refreshExistingGames(
-    deps.db,
-    deps.queryIgdb,
+    db,
+    queryIgdb,
     themeFilter,
-    onGameChanged,
+    notify,
   );
   const discovered = await discoverPopularGames(
-    deps.db,
-    deps.queryIgdb,
+    db,
+    queryIgdb,
     themeFilter,
-    onGameChanged,
+    notify,
   );
-  const backfilled = await backfillMissingCovers(deps.db, deps.queryIgdb);
+  const backfilled = await backfillMissingCovers(db, queryIgdb);
   const enriched = await enrichSyncedGamesWithItad(
-    deps.db,
+    db,
     (id) => deps.itadService.lookupBySteamAppId(id, deps.itadOpts),
     // Rate-limited info rejects, so enrichment keeps the row's existing tags.
     (itadId) =>
@@ -73,9 +78,25 @@ export async function runSyncAllGames(
         ...deps.itadOpts,
         throwOnExhausted: true,
       }),
-    onGameChanged,
+    notify,
   );
+  return { refreshed, discovered, backfilled, enriched };
+}
+
+/** Execute the full IGDB+ITAD sync pipeline. */
+export async function runSyncAllGames(
+  deps: SyncAllDeps,
+): Promise<SyncAllSummary> {
+  const themeFilter = buildAdultThemeFilter(await deps.isAdultFilterEnabled());
+  // ROK-2121: one recompute per changed game, enqueued after the ITAD phase
+  // so it sees the final row; `finally` still enqueues on a mid-sync throw.
+  const changed = collectChangedGames(deps.onGameChanged);
+  const counts = await runChangeEmittingPhases(
+    deps,
+    themeFilter,
+    changed.notify,
+  ).finally(() => changed.flush());
   const reEnriched = await reEnrichGamesWithIgdb(deps.db, deps.queryIgdb);
   await clearDiscoveryCache(deps.redis);
-  return { refreshed, discovered, backfilled, enriched, reEnriched };
+  return { ...counts, reEnriched };
 }

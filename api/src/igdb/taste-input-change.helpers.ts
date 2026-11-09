@@ -135,17 +135,32 @@ export async function withTasteInputDiff<
   return { results, changedIds: changedTasteInputIds(before, results) };
 }
 
+/** Collects changed game ids during a sync and fires each one once. */
+export interface ChangedGameCollector {
+  /** Record a changed game; fires nothing until `flush`. */
+  notify: (gameId: number) => void;
+  /** Fire `fn` once per recorded game id, then forget them. */
+  flush: () => void;
+}
+
 /**
- * Wrap a per-game callback so each id fires at most once per sync run —
- * refresh, discover and ITAD enrichment can all touch the same game.
+ * Defer per-game callbacks to one flush at the end of the change-emitting
+ * phases. Refresh, discover and ITAD enrichment can all touch one game; a
+ * first-wins fire would let the recompute run before the later ITAD tag write
+ * and swallow the ITAD fire, so the single recompute must see the final row.
  */
-export function oncePerGame(
+export function collectChangedGames(
   fn: (gameId: number) => void,
-): (gameId: number) => void {
-  const seen = new Set<number>();
-  return (gameId) => {
-    if (seen.has(gameId)) return;
-    seen.add(gameId);
-    fn(gameId);
+): ChangedGameCollector {
+  const changed = new Set<number>();
+  return {
+    notify: (gameId) => {
+      changed.add(gameId);
+    },
+    flush: () => {
+      const ids = [...changed];
+      changed.clear();
+      for (const id of ids) fn(id);
+    },
   };
 }
