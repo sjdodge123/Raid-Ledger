@@ -5,6 +5,7 @@
  */
 import type { JSX } from 'react';
 import type { GuildContributionsMaster, GuildContributionsTemplate } from '@raid-ledger/contract';
+import { CardFootnote, QuietEmpty } from '../../../components/hub/card-bits';
 import { CharacterLink } from '../../../components/hub/character-link';
 import { ContributionsSection } from './contributions-section';
 import { MASTERS_EMPTY, NOT_ON_ROSTER, formatDay } from './contributions.helpers';
@@ -23,11 +24,11 @@ function MasterRow({ master }: { master: GuildContributionsMaster }): JSX.Elemen
 
 function TemplateLine({ template }: { template: GuildContributionsTemplate }): JSX.Element {
     return (
-        <p data-testid="contributions-template" className="mt-1.5 text-xs text-dim">
+        <CardFootnote testId="contributions-template">
             Guild template by{' '}
             <CharacterLink name={template.authorName} characterId={template.authorCharacterId} className="text-muted" />
             {' · '}revised {formatDay(template.rev)}
-        </p>
+        </CardFootnote>
     );
 }
 
@@ -37,7 +38,7 @@ export function ContributionsMasters({ template, masters }: MastersProps): JSX.E
     return (
         <ContributionsSection title="Profession masters" testId="contributions-masters">
             {template === null || masters.length === 0 ? (
-                <p data-testid="contributions-masters-empty" className="py-2 text-sm text-muted">{MASTERS_EMPTY}</p>
+                <QuietEmpty testId="contributions-masters-empty">{MASTERS_EMPTY}</QuietEmpty>
             ) : (
                 <ul className="flex flex-col gap-1">
                     {masters.map((m) => <MasterRow key={m.professionSkillLineId} master={m} />)}

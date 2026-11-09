@@ -5,6 +5,7 @@
  */
 import { useState, type JSX } from 'react';
 import type { GuildContributionsUser } from '@raid-ledger/contract';
+import { QuietEmpty } from '../../../components/hub/card-bits';
 import { CharacterLink } from '../../../components/hub/character-link';
 import { Button } from '../../../components/ui/button';
 import { syncedAgo } from '../../../lib/synced-ago';
@@ -29,7 +30,7 @@ export function ContributionsUsers({ users }: { users: readonly GuildContributio
     return (
         <ContributionsSection title="Mailworthy users" testId="contributions-users">
             {users.length === 0 ? (
-                <p data-testid="contributions-users-empty" className="py-2 text-sm text-muted">{USERS_EMPTY}</p>
+                <QuietEmpty testId="contributions-users-empty">{USERS_EMPTY}</QuietEmpty>
             ) : (
                 <>
                     <p data-testid="contributions-users-count" className="mb-2 text-xs text-muted">

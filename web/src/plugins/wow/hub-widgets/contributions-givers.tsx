@@ -1,12 +1,14 @@
 /**
  * ROK-2148 — "Top givers": a 30 days / All time segmented toggle, the guild
  * total, up to ten ranked players (medals for #1–3, a meter scaled to the
- * top giver) and the viewer's own row under the top 10 ("You" pill).
+ * top giver) and the viewer's own row under the top 10 ("You" pill). Each row
+ * is the shared `RankedMeterRow` with the medal `RankBadge` in its badge slot.
  */
 import { useState, type JSX } from 'react';
 import type { GuildContributionsGiver, GuildContributionsGivers } from '@raid-ledger/contract';
 import { CharacterLink } from '../../../components/hub/character-link';
-import { GuildMeter } from '../../../components/hub/events/guild-meter';
+import { QuietEmpty } from '../../../components/hub/card-bits';
+import { RankedMeterRow } from '../../../components/hub/ranked-meter-row';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { ContributionsSection } from './contributions-section';
@@ -16,37 +18,34 @@ import {
     formatCount, meterPct, totalSuffix, type ContributionsPeriod,
 } from './contributions.helpers';
 
-function GiverLine({ giver }: { giver: GuildContributionsGiver }): JSX.Element {
-    const top3 = giver.rank <= 3;
-    return (
-        <div className="flex items-center gap-2 text-sm">
-            <RankBadge rank={giver.rank} />
-            <span className="min-w-0 flex-1 truncate">
-                <CharacterLink name={giver.characterName} characterId={giver.characterId} />
-                {giver.isYou && <StatusChip tone="success" title="Your rank" className="ml-1">You</StatusChip>}
-            </span>
-            <span data-testid="contributions-giver-items"
-                className={`whitespace-nowrap tabular-nums ${top3 ? 'font-semibold text-foreground' : 'text-secondary'}`}>
-                {formatCount(giver.items)} items
-            </span>
-        </div>
-    );
-}
+interface RowProps { giver: GuildContributionsGiver; top: number; as?: 'li' | 'div' }
 
-function GiverMeter({ giver, top }: { giver: GuildContributionsGiver; top: number }): JSX.Element {
+function GiverRow({ giver, top, as = 'li' }: RowProps): JSX.Element {
+    const top3 = giver.rank <= 3;
+    const name = (
+        <>
+            <CharacterLink name={giver.characterName} characterId={giver.characterId} />
+            {giver.isYou && <StatusChip tone="success" title="Your rank" className="ml-1">You</StatusChip>}
+        </>
+    );
+    const items = (
+        <span data-testid="contributions-giver-items" className={`whitespace-nowrap tabular-nums ${top3 ? 'font-semibold text-foreground' : ''}`}>
+            {formatCount(giver.items)} items
+        </span>
+    );
     return (
-        <div className="mt-1 pl-8">
-            <GuildMeter pct={meterPct(giver.items, top)} label={`${giver.characterName}: ${giver.items} items`} />
-        </div>
+        <RankedMeterRow as={as} testId={as === 'li' ? 'contributions-giver-row' : 'contributions-giver-you-row'}
+            rank={giver.rank} badge={<RankBadge rank={giver.rank} />} name={name} trailing={items}
+            pct={meterPct(giver.items, top)} meterLabel={`${giver.characterName}: ${giver.items} items`} />
     );
 }
 
 function GiversEmpty({ period }: { period: ContributionsPeriod }): JSX.Element {
     return (
-        <div data-testid="contributions-givers-empty" className="px-2 py-4 text-center text-sm text-muted">
-            <p>{period === '30' ? GIVERS_EMPTY_30 : GIVERS_EMPTY_ALL}</p>
-            <p className="mt-1">{GIVERS_EMPTY_HINT}</p>
-        </div>
+        <QuietEmpty testId="contributions-givers-empty">
+            <span className="block">{period === '30' ? GIVERS_EMPTY_30 : GIVERS_EMPTY_ALL}</span>
+            <span className="mt-1 block">{GIVERS_EMPTY_HINT}</span>
+        </QuietEmpty>
     );
 }
 
@@ -56,16 +55,12 @@ function GiverList({ rows, you }: ListProps): JSX.Element {
     const top = rows[0]?.items ?? 0;
     return (
         <>
-            <ol className="flex flex-col gap-2">
-                {rows.map((g) => (
-                    <li key={`${g.rank}-${g.characterName}`} data-testid="contributions-giver-row">
-                        <GiverLine giver={g} /><GiverMeter giver={g} top={top} />
-                    </li>
-                ))}
+            <ol className="flex flex-col gap-2.5">
+                {rows.map((g) => <GiverRow key={`${g.rank}-${g.characterName}`} giver={g} top={top} />)}
             </ol>
             {you !== null && (
                 <div data-testid="contributions-giver-you" className="mt-2.5 border-t border-dashed border-edge pt-2.5">
-                    <GiverLine giver={you} /><GiverMeter giver={you} top={top} />
+                    <GiverRow as="div" giver={you} top={top} />
                 </div>
             )}
             <p className="mt-2.5 text-xs text-muted">{GIVERS_ENCOURAGE}</p>

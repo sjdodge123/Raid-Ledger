@@ -4,25 +4,16 @@ import type { GuildKind, GuildRaidsDto, GuildAttendanceRowDto } from '@raid-ledg
 import { hubCopy } from '../hub-copy';
 import { CharacterLink } from '../character-link';
 import { WidgetCard } from '../hub-bits';
-import { GuildMeter } from './guild-meter';
+import { RankedMeterRow } from '../ranked-meter-row';
 import { percent } from './guild-raids.helpers';
 import { CardFootnote, QuietEmpty } from '../card-bits';
 
 function LeaderRow({ row, rank }: { row: GuildAttendanceRowDto; rank: number }): JSX.Element {
     const pct = percent(row.attended, row.of);
+    const trailing = <><span className="font-semibold text-foreground">{pct}%</span> · {row.attended}/{row.of}</>;
     return (
-        <li data-testid="guild-attendance-row" className="flex items-center gap-3">
-            <span className="w-5 shrink-0 text-right text-xs font-semibold text-muted">{rank}</span>
-            <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                    <span className="min-w-0 truncate text-sm"><CharacterLink name={row.name} characterId={row.characterId} /></span>
-                    <span className="shrink-0 text-xs text-secondary">
-                        <span className="font-semibold text-foreground">{pct}%</span> · {row.attended}/{row.of}
-                    </span>
-                </div>
-                <GuildMeter pct={pct} label={`${row.name} attendance`} />
-            </div>
-        </li>
+        <RankedMeterRow testId="guild-attendance-row" rank={rank} pct={pct} meterLabel={`${row.name} attendance`}
+            name={<CharacterLink name={row.name} characterId={row.characterId} />} trailing={trailing} />
     );
 }
 
