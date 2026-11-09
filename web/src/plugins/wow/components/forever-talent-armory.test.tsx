@@ -3,7 +3,15 @@
  * Forever display with a "via Armory · date" source line, placed on the known
  * trees when possible, and never through the Classic renderer.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// ROK-2146: these specs pin the pre-table grid/pills, so the static Forever table is absent here
+// (forever-talent-tree.test.tsx covers the tree). Without this the lazy table would race the asserts.
+vi.mock('../lib/forever-talent-table', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/forever-talent-table')>()),
+    loadForeverClassTable: () => Promise.resolve(null),
+    peekForeverClassTable: () => null,
+}));
 import { render, screen, within } from '@testing-library/react';
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { TalentDisplay } from './talent-display';

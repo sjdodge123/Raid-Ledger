@@ -7,7 +7,7 @@
  *   boundary (as `pages/admin/cron-jobs-panel.tsx::ThemeFilter` does).
  * - The row action menu — `Button role="menuitem"` rows, ghost or
  *   destructive-soft, left-aligned by widening the label span (as
- *   `components/admin/UserManagementRow.tsx::ActionMenuList` does). Shown open
+ *   `components/ui/action-menu.tsx::ActionMenuList` does). Shown open
  *   and static here; the real one is a popover.
  * - One save at a time across rows — the saving row's Save is `loading`, a
  *   sibling row's Save is native `disabled` until it settles (as

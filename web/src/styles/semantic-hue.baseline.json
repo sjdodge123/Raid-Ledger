@@ -1,5 +1,5 @@
 {
-  "__total": 636,
+  "__total": 632,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingRow.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -130,7 +130,7 @@
   "pages/admin/discord-overview-page.tsx": 5,
   "pages/admin/logs-panel.tsx": 9,
   "pages/auth-success-page.tsx": 1,
-  "pages/character-detail-page.tsx": 7,
+  "pages/character-role-editor.tsx": 6,
   "pages/create-event-page.tsx": 1,
   "pages/cron-jobs/CronJobCard.tsx": 3,
   "pages/cron-jobs/cron-utils.ts": 6,
@@ -180,7 +180,6 @@
   "plugins/wow/components/item-fallback-tooltip.tsx": 6,
   "plugins/wow/components/talent-display.tsx": 8,
   "plugins/wow/components/wow-item-card.tsx": 2,
-  "plugins/wow/slots/character-detail-header-badges.tsx": 3,
   "plugins/wow/slots/character-variant-badge.tsx": 3,
   "plugins/wow/slots/equipment-constants.ts": 2,
   "plugins/wow/slots/equipment-grid.tsx": 1,

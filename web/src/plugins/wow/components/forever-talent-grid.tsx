@@ -39,7 +39,7 @@ interface OtherTalentsProps { testId: string; nodes: ForeverTalentNodeDto[]; tre
  * Under a tree it is that tree's sub-heading (h4); the tree-less block sits after all three grids as a
  * sibling of the tree headings (h3), separated by a rule so it does not read as part of the last tree.
  */
-function OtherTalents({ testId, nodes, treeless = false }: OtherTalentsProps) {
+export function OtherTalents({ testId, nodes, treeless = false }: OtherTalentsProps) {
     if (nodes.length === 0) return null;
     const named = nodes.filter((n) => n.name);
     const unnamed = nodes.length - named.length;

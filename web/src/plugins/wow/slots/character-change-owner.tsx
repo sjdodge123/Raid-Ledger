@@ -5,7 +5,6 @@
  * `CharacterDetailAdminActions`, which core shows to admins only.
  */
 import { useState, type JSX } from 'react';
-import { UserIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Modal } from '../../../components/ui/modal';
@@ -18,6 +17,9 @@ interface CharacterChangeOwnerProps {
     characterId: string;
     name: string;
     ownerId: number | undefined;
+    /** ROK-2140: controlled — the trigger is a row in the admin ⋯ menu / More sheet. */
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
     /** Closes this dialog and opens the Unlink confirm. */
     onUnlink: () => void;
 }
@@ -49,8 +51,7 @@ function ownerHint(name: string, owner: string, pick: MemberOption | null): stri
 }
 
 /** Dialog state + the Assign mutation; a success closes the dialog and toasts the new owner. */
-function useChangeOwnerFlow(characterId: string, name: string) {
-    const [open, setOpen] = useState(false);
+function useChangeOwnerFlow(characterId: string, name: string, setOpen: (open: boolean) => void) {
     const [pick, setPick] = useState<MemberOption | null>(null);
     const change = useChangeCharacterOwner();
     const close = (): void => { if (!change.isPending) { setOpen(false); setPick(null); } };
@@ -61,21 +62,16 @@ function useChangeOwnerFlow(characterId: string, name: string) {
             onError: (error: Error) => toast.error(error.message || `Couldn't change the owner of ${name}.`),
         });
     };
-    return { open, setOpen, pick, setPick, close, assign, pending: change.isPending };
+    return { pick, setPick, close, assign, pending: change.isPending };
 }
 
-/** Admin-only trigger + dialog that reassigns a WoW character to another member. */
-export function CharacterChangeOwner({ characterId, name, ownerId, onUnlink }: CharacterChangeOwnerProps): JSX.Element {
-    const { open, setOpen, pick, setPick, close, assign, pending } = useChangeOwnerFlow(characterId, name);
+/** Admin-only dialog that reassigns a WoW character to another member. */
+export function CharacterChangeOwner({ characterId, name, ownerId, open, onOpenChange, onUnlink }: CharacterChangeOwnerProps): JSX.Element {
+    const { pick, setPick, close, assign, pending } = useChangeOwnerFlow(characterId, name, onOpenChange);
     const owner = useUserProfile(open ? ownerId : undefined).data?.username ?? 'the current owner';
     const unlink = (): void => { close(); onUnlink(); };
     return (
-        <>
-            <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-                <UserIcon className="w-4 h-4" aria-hidden="true" />
-                Change owner
-            </Button>
-            <Modal isOpen={open} onClose={close} title={`Change owner of ${name}`}
+        <Modal isOpen={open} onClose={close} title={`Change owner of ${name}`}
                 footer={<OwnerFooter pick={pick} pending={pending} onUnlink={unlink} onCancel={close} onAssign={assign} />}>
                 <p className="mb-3 text-sm text-muted">Owned by <strong className="text-foreground">{owner}</strong></p>
                 <div className="min-h-[21rem]">
@@ -83,7 +79,6 @@ export function CharacterChangeOwner({ characterId, name, ownerId, onUnlink }: C
                         <MemberCombobox value={pick} onChange={setPick} />
                     </Field>
                 </div>
-            </Modal>
-        </>
+        </Modal>
     );
 }

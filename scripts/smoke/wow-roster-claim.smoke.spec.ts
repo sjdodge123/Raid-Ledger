@@ -115,7 +115,9 @@ async function expectOwner(token: string, characterId: string, userId: number): 
 
 async function changeOwnerInUi(page: Page, characterId: string, row: Candidate, target: SeedUser): Promise<void> {
     await page.goto(`/characters/${characterId}`);
-    await page.getByRole('button', { name: 'Change owner' }).click();
+    // ROK-2140: admin actions sit behind the header's overflow — "⋯ More actions for <name>" at ≥ sm, the "More" tile + sheet on phones.
+    await page.getByRole('button', { name: /^More( actions for .+)?$/ }).click();
+    await page.getByRole('menuitem', { name: 'Change owner' }).click();
     const modal = page.getByRole('dialog', { name: `Change owner of ${row.name}` });
     await expect(modal).toBeVisible({ timeout: 15_000 });
     const search = modal.getByPlaceholder('Search members');
