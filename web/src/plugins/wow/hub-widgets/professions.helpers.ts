@@ -2,6 +2,7 @@
  * ROK-1923 (epic ROK-1905 H8) — pure helpers for the Guild professions widget.
  */
 import type { HubFactSource, WowRosterInsightsDto } from '@raid-ledger/contract';
+import { professionMemberKey } from '../lib/profession-member-key';
 
 export type RosterProfession = NonNullable<WowRosterInsightsDto['professions']>[number];
 export type ProfessionMember = RosterProfession['members'][number];
@@ -33,9 +34,12 @@ export function sourceLabel(source: HubFactSource): string {
     return SOURCE_LABEL[source];
 }
 
-/** How many distinct characters have at least one profession. */
+/**
+ * How many distinct members have at least one profession — linked characters
+ * and (ROK-2149 Q4=A) unclaimed members' Armory snapshots, by row key.
+ */
 export function charactersWithProfessions(professions: readonly RosterProfession[]): number {
-    return new Set(professions.flatMap((p) => p.members.map((m) => m.characterId))).size;
+    return new Set(professions.flatMap((p) => p.members.map((m) => professionMemberKey(m) ?? m.name))).size;
 }
 
 /** `1 character` / `3 characters`. */

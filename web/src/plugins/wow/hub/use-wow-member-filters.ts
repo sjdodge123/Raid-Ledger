@@ -33,6 +33,6 @@ export function useWowMemberFilters(ctx: HubCtx, rows: readonly HubMemberRow[]):
         matches,
         clearAll,
         controls: createElement(WowMemberFilterControls, { state, options, professions: coverage, onChange: setState }),
-        lead: createElement(WowProfessionCoverage, { rows, professions: coverage, selected: state.professions, onToggle: toggleProfession }),
+        lead: createElement(WowProfessionCoverage, { rows, professions: coverage, index, selected: state.professions, onToggle: toggleProfession }),
     };
 }

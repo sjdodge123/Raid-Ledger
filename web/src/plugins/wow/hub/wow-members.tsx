@@ -57,7 +57,7 @@ export function FactsCell({ row }: { row: HubMemberRow }): JSX.Element {
 
 /** AC8: linked rows with synced professions show badges; anything else renders nothing. */
 export function ProfessionsCell({ row }: { row: HubMemberRow }): JSX.Element | null {
-    const professions = useRowProfessions(row.characterId);
+    const professions = useRowProfessions(row);
     if (!professions) return null;
     return (
         <span className="inline-flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-muted" data-testid="guild-member-professions">
