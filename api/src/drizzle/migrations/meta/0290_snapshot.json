@@ -1,5 +1,5 @@
 {
-  "id": "45a62cdf-53c7-4c20-a9ab-a86ca6a896c6",
+  "id": "45b73e59-5e93-448f-911c-b52607328ea8",
   "prevId": "7817494d-568d-4e21-a7a9-028f9292ad57",
   "version": "7",
   "dialect": "postgresql",
@@ -5256,6 +5256,99 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.wow_dungeon_quest_blizzard": {
+      "name": "wow_dungeon_quest_blizzard",
+      "schema": "",
+      "columns": {
+        "quest_id": {
+          "name": "quest_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "area_id": {
+          "name": "area_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dungeon_instance_id": {
+          "name": "dungeon_instance_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type_id": {
+          "name": "type_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reward_xp": {
+          "name": "reward_xp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reward_money_copper": {
+          "name": "reward_money_copper",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reward_items": {
+          "name": "reward_items",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "reputations": {
+          "name": "reputations",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "requirements_raw": {
+          "name": "requirements_raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -10967,64 +11060,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.character_installed_addons": {
-      "name": "character_installed_addons",
-      "schema": "",
-      "columns": {
-        "character_id": {
-          "name": "character_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "addons": {
-          "name": "addons",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "captured_at": {
-          "name": "captured_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "imported_at": {
-          "name": "imported_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "payload_sha256": {
-          "name": "payload_sha256",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "character_installed_addons_character_id_characters_id_fk": {
-          "name": "character_installed_addons_character_id_characters_id_fk",
-          "tableFrom": "character_installed_addons",
-          "tableTo": "characters",
-          "columnsFrom": [
-            "character_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.addon_encounter_pulls": {
       "name": "addon_encounter_pulls",
       "schema": "",
@@ -14271,12 +14306,6 @@
         "flavor": {
           "name": "flavor",
           "type": "varchar(30)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "folder_name": {
-          "name": "folder_name",
-          "type": "varchar(64)",
           "primaryKey": false,
           "notNull": false
         },

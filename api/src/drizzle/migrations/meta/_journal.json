@@ -2028,8 +2028,15 @@
     {
       "idx": 290,
       "version": "7",
+      "when": 1794200313265,
+      "tag": "0290_wow_dungeon_quest_blizzard",
+      "breakpoints": true
+    },
+    {
+      "idx": 291,
+      "version": "7",
       "when": 1794201947823,
-      "tag": "0290_character_installed_addons",
+      "tag": "0291_character_installed_addons",
       "breakpoints": true
     }
   ]
