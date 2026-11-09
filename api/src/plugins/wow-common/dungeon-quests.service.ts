@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { defined } from '../../common/defined.helpers';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, and } from 'drizzle-orm';
@@ -27,6 +28,8 @@ import {
   collectAllItemIds,
 } from './dungeon-quests.helpers';
 import { resolveQuestInstanceIds } from './forever-instance-aliases';
+import { WOW_FOREVER_CONFIG_UPDATED } from './forever.settings';
+import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import type {
   DungeonQuestDto,
   EnrichedDungeonQuestDto,
@@ -141,12 +144,25 @@ export class DungeonQuestsService {
     }
   }
 
-  /** Get enriched quests for an instance — includes resolved reward items and prerequisite chains (ROK-246, ROK-665). */
+  /** A Forever config save may flip the quest overlay — drop the cache (ROK-2143). */
+  @OnEvent(WOW_FOREVER_CONFIG_UPDATED)
+  async onForeverConfigUpdated(): Promise<void> {
+    await this.clearCache();
+  }
+
+  /**
+   * Enriched quests for an instance — resolved reward items and prerequisite
+   * chains (ROK-246, ROK-665). The key carries the overlay kill switch, so
+   * flipping `wow_forever_quest_import` by any path misses the cache (ROK-2143).
+   */
   async getEnrichedQuestsForInstance(
     instanceId: number,
     variant: string = 'classic_era',
   ): Promise<EnrichedDungeonQuestDto[]> {
-    const cacheKey = `${CACHE_PREFIX}:enriched:${instanceId}:${variant}`;
+    const overlay = (await isForeverQuestImportEnabled(this.settings))
+      ? 'bz'
+      : 'bundled';
+    const cacheKey = `${CACHE_PREFIX}:enriched:${overlay}:${instanceId}:${variant}`;
     const result = await redisSwr<EnrichedDungeonQuestDto[]>({
       redis: this.redis,
       key: cacheKey,

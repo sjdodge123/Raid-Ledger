@@ -19,6 +19,7 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { BlizzardAuthService } from '../blizzard-auth.service';
+import { DungeonQuestsService } from '../dungeon-quests.service';
 import { WOW_FOREVER_QUEST_IMPORT_STATUS_KEY } from '../forever.settings';
 import { listStaleQuestIds, upsertBlizzardQuests } from './blizzard-quest.repo';
 import {
@@ -58,6 +59,7 @@ export class ForeverQuestImportService {
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly settings: SettingsService,
     private readonly auth: BlizzardAuthService,
+    private readonly quests: DungeonQuestsService,
   ) {}
 
   /** The run in progress (the integration spec awaits it); null when idle. */
@@ -136,6 +138,8 @@ export class ForeverQuestImportService {
         `Forever quest import report not saved: ${String(err)}`,
       );
     });
+    // Quest Prep's 24h cache would hide the new rows (clearCache never throws).
+    if (report.counts.upserted > 0) await this.quests.clearCache();
   }
 
   private async buildDeps(runId: string): Promise<QuestImportDeps> {

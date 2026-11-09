@@ -8,6 +8,7 @@ import { SettingsService } from '../../settings/settings.service';
 let service: DungeonQuestsService;
 let mockSeeder: { seed: jest.Mock; drop: jest.Mock };
 let mockDb: { select: jest.Mock };
+let mockSettings: { get: jest.Mock };
 let mockRedis: {
   get: jest.Mock;
   setex: jest.Mock;
@@ -37,6 +38,8 @@ async function setupEach() {
     del: jest.fn().mockResolvedValue(0),
   };
 
+  mockSettings = { get: jest.fn().mockResolvedValue('false') };
+
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       DungeonQuestsService,
@@ -44,10 +47,7 @@ async function setupEach() {
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: REDIS_CLIENT, useValue: mockRedis },
       // ROK-2143: Blizzard overlay switched off — these cases cover the bundled read path.
-      {
-        provide: SettingsService,
-        useValue: { get: jest.fn().mockResolvedValue('false') },
-      },
+      { provide: SettingsService, useValue: mockSettings },
     ],
   }).compile();
 
@@ -131,5 +131,33 @@ describe('DungeonQuestsService — seeder and cache', () => {
       await service.clearCache();
       expect(mockRedis.del).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('DungeonQuestsService — quest overlay cache invalidation (ROK-2143)', () => {
+  beforeEach(() => setupEach());
+
+  /** A fresh SWR envelope, so the read is served without the fetcher. */
+  const fresh = JSON.stringify({ storedAt: Date.now(), data: [] });
+
+  it('keys the enriched cache on the kill switch, so a flip misses it', async () => {
+    mockRedis.get.mockResolvedValue(fresh);
+    await service.getEnrichedQuestsForInstance(228);
+    mockSettings.get.mockResolvedValue(null);
+    await service.getEnrichedQuestsForInstance(228);
+    expect(mockRedis.get.mock.calls.map((c: unknown[]) => c[0])).toEqual([
+      'wow:quests:enriched:bundled:228:classic_era',
+      'wow:quests:enriched:bz:228:classic_era',
+    ]);
+  });
+
+  it('clears the quest cache when the Forever config is saved', async () => {
+    mockRedis.keys.mockResolvedValue([
+      'wow:quests:enriched:bz:228:classic_era',
+    ]);
+    await service.onForeverConfigUpdated();
+    expect(mockRedis.del).toHaveBeenCalledWith(
+      'wow:quests:enriched:bz:228:classic_era',
+    );
   });
 });
