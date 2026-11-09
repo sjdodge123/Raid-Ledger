@@ -124,13 +124,19 @@ describe('roster-insights classes', () => {
 });
 
 describe('roster-insights roles', () => {
-  it('counts one role per linked user (main wins) and skips unlinked rows', () => {
+  it('counts one role per linked user (main wins) plus each unlinked row (ROK-2158)', () => {
     const got = computeRoles([
       row('alt', { userId: 1, level: 60, role: 'dps' }),
       row('main', { userId: 1, level: 60, role: 'tank', isMain: true }),
       row('pug', { level: 60, role: 'healer' }),
     ]);
-    expect(got.raid).toEqual({ tank: 1, healer: 0, dps: 0, unknown: 0 });
+    expect(got.raid).toEqual({ tank: 1, healer: 1, dps: 0, unknown: 0 });
+  });
+
+  it('counts an unlinked roster member once per memberId (ROK-2158)', () => {
+    const pug = { ...row('pug', { level: 60, role: 'healer' }), memberId: 42 };
+    const got = computeRoles([pug, { ...pug }]);
+    expect(got.raid).toEqual({ tank: 0, healer: 1, dps: 0, unknown: 0 });
   });
 
   it('splits dungeon-eligible (≥ lowest instance min) from raid-eligible (cap)', () => {
