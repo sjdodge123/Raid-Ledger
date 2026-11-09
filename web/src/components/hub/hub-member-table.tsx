@@ -12,10 +12,13 @@
  *
  * ROK-2155: a phone card is three fixed lines when a column asks for its own
  * (`cardLine: 'own'`, WoW professions), and a hub kind whose column sets
- * `rowLink` gets whole-row click — the row is `relative` and that column's one
- * link stretches over it (design-system §4.18). No `role=button`, no second link.
+ * `rowLink` gets whole-row click (design-system §4.32): the card is `relative`
+ * and that column's one link stretches over it; the table row gets a mouse-only
+ * `onClick` to the same href (a stretched link on a `<tr>` is unreliable in
+ * WebKit). No `role=button`, no second link, no extra tab stop.
  */
-import type { JSX } from 'react';
+import type { JSX, MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { HubMemberColumn, HubMemberRow } from '../../plugins/hub-module';
 import { cardMetrics, TABLE_METRICS, type VirtualSlice, type VisibleBand } from './hub-member-virtual.helpers';
 
@@ -37,17 +40,42 @@ function rule(row: HubMemberRow, rowClass: MemberShellProps['rowClass']): string
     return rowClass ? rowClass(row) : 'border-transparent';
 }
 
-/** Rows of a hub kind that opted into whole-row click: the containing block of the stretched link. */
-const LINKED_ROW = 'relative transition-colors hover:bg-panel';
+/** A phone card with an href: the containing block of the stretched link. */
+const LINKED_CARD = 'relative transition-colors hover:bg-panel';
+/** A table row with an href: clickable with the mouse; only rows that open something look clickable. */
+const LINKED_ROW = 'cursor-pointer transition-colors hover:bg-panel';
+/** Clicks on these keep their own behaviour instead of opening the row. */
+const OWN_CLICK = 'a, button, input, select, textarea, [role="button"]';
 
-function linkedRow(columns: readonly HubMemberColumn[]): string {
-    return columns.some((c) => c.rowLink === true) ? LINKED_ROW : '';
+function useNoRowHref(): string | undefined {
+    return undefined;
 }
 
-/** One cell; only the `rowLink` column is told to stretch its link. */
-function MemberCell({ column, row }: { column: HubMemberColumn; row: HubMemberRow }): JSX.Element {
+/** The href the row opens (the `rowLink` column's hook), or undefined. Columns are stable per hub kind. */
+function useRowHref(columns: readonly HubMemberColumn[], row: HubMemberRow): string | undefined {
+    const useHref = columns.find((c) => c.rowLink !== undefined)?.rowLink ?? useNoRowHref;
+    return useHref(row);
+}
+
+/**
+ * The desktop row's mouse-only click: plain left clicks outside any control
+ * open `href`; modified clicks are left to the name link (new tab / window).
+ */
+function useRowClick(href: string | undefined): ((e: MouseEvent<HTMLTableRowElement>) => void) | undefined {
+    const navigate = useNavigate();
+    if (href === undefined) return undefined;
+    return (e) => {
+        if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const own = e.target instanceof Element ? e.target.closest(OWN_CLICK) : null;
+        if (own !== null && e.currentTarget.contains(own)) return;
+        navigate(href);
+    };
+}
+
+/** One cell; only the `rowLink` column on a linked phone card is told to stretch its link. */
+function MemberCell({ column, row, stretch = false }: { column: HubMemberColumn; row: HubMemberRow; stretch?: boolean }): JSX.Element {
     const Cell = column.cell;
-    return <Cell row={row} stretched={column.rowLink === true} />;
+    return <Cell row={row} stretched={stretch && column.rowLink !== undefined} />;
 }
 
 /** A spacer standing in for the rows that are not mounted. */
@@ -61,6 +89,21 @@ function firstRowIndex(visible: VisibleBand): number {
     return visible.firstItem + 2;
 }
 
+function TableRow({ row, rowIndex, columns, rowClass }: { row: HubMemberRow; rowIndex: number } & Omit<MemberShellProps, 'slice'>): JSX.Element {
+    const href = useRowHref(columns, row);
+    const onClick = useRowClick(href);
+    return (
+        <tr data-testid="guild-member-row" style={{ height: TABLE_METRICS.row }} aria-rowindex={rowIndex}
+            className={`border-t border-edge-subtle ${href === undefined ? '' : LINKED_ROW}`} onClick={onClick}>
+            {columns.map((c, i) => (
+                <td key={c.id} className={`${CELL} ${i === 0 ? `border-l-2 ${rule(row, rowClass)}` : ''}`}>
+                    <MemberCell column={c} row={row} />
+                </td>
+            ))}
+        </tr>
+    );
+}
+
 function TableBand({ visible, columns, rowClass }: { visible: VisibleBand } & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const { band } = visible;
     const rowBase = firstRowIndex(visible) + (visible.showHeading ? 1 : 0);
@@ -72,14 +115,7 @@ function TableBand({ visible, columns, rowClass }: { visible: VisibleBand } & Om
                 </tr>
             )}
             {visible.rows.map((row, i) => (
-                <tr key={row.memberId} data-testid="guild-member-row" style={{ height: TABLE_METRICS.row }} aria-rowindex={rowBase + i}
-                    className={`border-t border-edge-subtle ${linkedRow(columns)}`}>
-                    {columns.map((c, i) => (
-                        <td key={c.id} className={`${CELL} ${i === 0 ? `border-l-2 ${rule(row, rowClass)}` : ''}`}>
-                            <MemberCell column={c} row={row} />
-                        </td>
-                    ))}
-                </tr>
+                <TableRow key={row.memberId} row={row} rowIndex={rowBase + i} columns={columns} rowClass={rowClass} />
             ))}
         </tbody>
     );
@@ -111,16 +147,17 @@ const CARD_LINE_CLASS = 'flex min-w-0 flex-nowrap items-center gap-x-2 overflow-
 function MemberCard({ row, columns, rowClass, setSize, posInSet, height }: { row: HubMemberRow } & CardLayout & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const [first, ...rest] = columns;
     const own = rest.filter((c) => c.cardLine === 'own');
+    const linked = useRowHref(columns, row) !== undefined;
     return (
         <li data-testid="guild-member-row" style={{ height }} aria-setsize={setSize} aria-posinset={posInSet}
-            className={`flex flex-col justify-center gap-1 overflow-hidden border-b border-edge-subtle border-l-2 pl-2 last:border-b-0 ${rule(row, rowClass)} ${linkedRow(columns)}`}>
-            {first && <div className="truncate text-sm"><MemberCell column={first} row={row} /></div>}
+            className={`flex flex-col justify-center gap-1 overflow-hidden border-b border-edge-subtle border-l-2 pl-2 last:border-b-0 ${rule(row, rowClass)} ${linked ? LINKED_CARD : ''}`}>
+            {first && <div className="truncate text-sm"><MemberCell column={first} row={row} stretch={linked} /></div>}
             <div data-testid="guild-member-card-meta" className={CARD_LINE_CLASS}>
-                {rest.filter((c) => c.cardLine !== 'own').map((c) => <MemberCell key={c.id} column={c} row={row} />)}
+                {rest.filter((c) => c.cardLine !== 'own').map((c) => <MemberCell key={c.id} column={c} row={row} stretch={linked} />)}
             </div>
             {own.length > 0 && (
                 <div data-testid="guild-member-card-own-line" className={CARD_LINE_CLASS}>
-                    {own.map((c) => <MemberCell key={c.id} column={c} row={row} />)}
+                    {own.map((c) => <MemberCell key={c.id} column={c} row={row} stretch={linked} />)}
                 </div>
             )}
         </li>

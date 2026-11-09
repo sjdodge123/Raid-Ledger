@@ -17,15 +17,15 @@ interface CharacterLinkProps {
     unlinkedTo?: string | undefined;
     /**
      * ROK-2155 — stretch the link over the nearest `relative` ancestor (a
-     * Members row) with an `::after` overlay, so the whole row opens it while
-     * staying ONE link (design-system §4.18). Only a shell that made the row
-     * `relative` may pass it.
+     * Members phone card) with an `::after` overlay, so the whole card opens it
+     * while staying ONE link (the §4.2 StretchedAction idea; members list §4.32).
+     * Only a shell that made the card `relative` may pass it.
      */
     stretched?: boolean;
 }
 
 /** The StretchedAction overlay as a link's own `::after` — one link per row, no duplicate anchor. */
-export const STRETCHED_LINK = 'after:absolute after:inset-0';
+export const STRETCHED_LINK = 'after:absolute after:-inset-px';
 
 function linkClass(className: string, stretched: boolean): string {
     const base = `${className} rounded-sm underline-offset-2 transition-opacity hover:underline hover:opacity-80 ${FOCUS_RING}`;

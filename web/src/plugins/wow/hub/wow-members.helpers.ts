@@ -6,6 +6,7 @@
 import type { GuildPage } from '@raid-ledger/contract';
 import type { HubMemberColumn, HubMemberGrouping, HubMemberRow } from '../../hub-module';
 import { FactsCell, MainCell, NameCell, ProfessionsCell, RankCell, RoleCell } from './wow-members';
+import { useMemberRowHref } from './wow-member-row-href';
 import { ROLE_META, rankLabel } from './wow-guild.helpers';
 
 export const WOW_MEMBERS_EMPTY = 'No members yet. Import a LedgerLink guild export to fill the roster.';
@@ -36,7 +37,7 @@ export function wowMemberSearch(row: HubMemberRow): string {
 
 export const WOW_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
     // ROK-2155 — the name link (character page, or the read-only roster page) opens the whole row.
-    { id: 'name', header: 'Name', cell: NameCell, rowLink: true },
+    { id: 'name', header: 'Name', cell: NameCell, rowLink: useMemberRowHref },
     { id: 'facts', header: 'Class', cell: FactsCell },
     { id: 'rank', header: 'Rank', cell: RankCell, groupBy: wowRankGroup },
     { id: 'main', header: 'Main', cell: MainCell },
