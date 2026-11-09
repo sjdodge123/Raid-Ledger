@@ -25,6 +25,7 @@ import {
   type GuildRaidsDto,
   type MyGuilds,
   type WowRecentDingsDto,
+  type WowGuildJoinGateDto,
   type WowRosterInsightsDto,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../../auth/types';
@@ -39,6 +40,7 @@ import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 import { RosterInsightsService } from './roster-insights/roster-insights.service';
 import { RecentDingsService } from './recent-dings/recent-dings.service';
+import { JoinGateService } from './join-gate/join-gate.service';
 
 const jwt = AuthGuard('jwt');
 
@@ -59,6 +61,7 @@ export class GuildsController {
     private readonly hubs: HubService,
     private readonly insightsSvc: RosterInsightsService,
     private readonly dingsSvc: RecentDingsService,
+    private readonly joinGate: JoinGateService,
   ) {}
 
   @Get()
@@ -98,6 +101,19 @@ export class GuildsController {
   ): Promise<GuildPage> {
     const page = await this.pages.page(req.user, id);
     return this.hubs.withCoreExtras(req.user, id, page);
+  }
+
+  /**
+   * ROK-2132 (Ruling 7) — the join gate's summary for a non-member: 200 only
+   * for a claimable WoW: Forever hub, one 404 for everything else.
+   */
+  @Get(':id/join-gate')
+  @UseGuards(jwt, HubVisibleGuard)
+  joinGateSummary(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<WowGuildJoinGateDto> {
+    return this.joinGate.gate(req.user, id);
   }
 
   /** ROK-1787 — Raids tab + Overview widgets (members + staff). */

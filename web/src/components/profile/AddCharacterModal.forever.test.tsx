@@ -13,6 +13,7 @@ import { withHttpStatus } from '../../lib/api/api-error';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { PluginSlot } from '../../plugins';
 
 vi.mock('../../hooks/use-character-mutations', () => ({
     useCreateCharacter: vi.fn(), useUpdateCharacter: vi.fn(),
@@ -27,7 +28,7 @@ const { registryGames } = vi.hoisted(() => ({
 }));
 vi.mock('../../hooks/use-game-registry', () => ({ useGameRegistry: vi.fn() }));
 vi.mock('../events/game-search-input', () => ({ GameSearchInput: vi.fn(() => null) }));
-vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
+vi.mock('../../plugins', () => ({ PluginSlot: vi.fn(() => null) }));
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();
@@ -163,5 +164,40 @@ describe('AddCharacterModal — WoW: Forever with no registry game id', () => {
         submit(/add character/i);
         expect(createMutate, 'a Forever submit with no resolved game id must not reach the mutation').not.toHaveBeenCalled();
         expect(screen.getByRole('alert')).toHaveTextContent('This game is not registered in the system.');
+    });
+});
+
+describe('AddCharacterModal — guild join gate entry (ROK-2132)', () => {
+    /** The context the modal last handed the WoW import-form slot. */
+    function importFormContext(): Record<string, unknown> | undefined {
+        const calls = vi.mocked(PluginSlot).mock.calls.filter(([p]) => p.name === 'character-create:import-form');
+        return calls.at(-1)?.[0].context;
+    }
+
+    function renderGateModal(extra: Partial<Parameters<typeof AddCharacterModal>[0]>) {
+        const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        return render(
+            <QueryClientProvider client={qc}>
+                <AddCharacterModal isOpen onClose={vi.fn()} {...extra} />
+            </QueryClientProvider>,
+        );
+    }
+
+    beforeEach(() => { vi.mocked(PluginSlot).mockClear(); });
+
+    it('opens with WoW: Forever preselected by slug on the Guild roster tab, forwarding the guild to the slot', () => {
+        renderGateModal({ gameSlug: 'world-of-warcraft-forever', initialTab: 'roster', rosterGuildId: 42 });
+        expect(importFormContext()).toMatchObject({
+            gameSlug: 'world-of-warcraft-forever', gameId: 7, activeTab: 'roster', initialTab: 'roster', rosterGuildId: 42,
+        });
+        expect(screen.queryByRole('button', { name: /add character/i }), 'the Manual-only footer must not show on the roster tab').not.toBeInTheDocument();
+    });
+
+    it('without initialTab opens on Manual and forwards no guild', () => {
+        renderGateModal({ gameId: 7 });
+        const ctx = importFormContext();
+        expect(ctx).toMatchObject({ gameSlug: 'world-of-warcraft-forever', activeTab: 'manual' });
+        expect(ctx?.initialTab).toBeUndefined();
+        expect(ctx?.rosterGuildId).toBeUndefined();
     });
 });

@@ -14,6 +14,14 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
 import { writeDecidedCohortMemory } from '../cohort-memory-write.helpers';
+import {
+  buildMatchesForLineup,
+  type MatchingPassResult,
+} from '../lineups-matching.helpers';
+import {
+  fireMatchEnteredScheduling,
+  fireOrphanedPollCards,
+} from '../lineups-scheduling-hook.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -38,18 +46,65 @@ export async function decideLineupFromTiebreaker(
   lineupId: number,
   decidedGameId?: number,
 ): Promise<void> {
-  const update: Partial<typeof schema.communityLineups.$inferInsert> = {
-    status: 'decided',
-    updatedAt: new Date(),
-  };
-  if (decidedGameId) update.decidedGameId = decidedGameId;
-  await deps.db
-    .update(schema.communityLineups)
-    .set(update)
-    .where(eq(schema.communityLineups.id, lineupId));
+  await flipLineupToDecided(deps.db, lineupId, decidedGameId);
   // Run matching algorithm so decided view has match groups.
   await runMatchingAlgorithm(deps.db, lineupId, deps.logger, deps.events);
   // ROK-1309: this path bypasses `runStatusTransition` entirely, so it needs
   // its own cohort-memory write — after matching, for the same reason.
   await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
+}
+
+/**
+ * ROK-2098: the flip + matching pass of a decide, on `tx` (the finalize
+ * path's round-advance-lock transaction). Pure DB work: it fires no events
+ * and swallows no error — a failed statement poisons the transaction, so it
+ * must reach the caller and roll the whole finalize back. The caller hands
+ * the result to `announceLineupDecided` AFTER the transaction commits.
+ */
+export async function decideLineupInTx(
+  tx: Db,
+  lineupId: number,
+  decidedGameId: number,
+): Promise<MatchingPassResult> {
+  await flipLineupToDecided(tx, lineupId, decidedGameId);
+  // `?? EMPTY_PASS` — several specs mock the matching helper bare.
+  return (await buildMatchesForLineup(tx, lineupId)) ?? EMPTY_PASS;
+}
+
+/**
+ * ROK-2098: after-commit side effects of `decideLineupInTx` — the poll-card
+ * events (their listeners read the committed match rows on other
+ * connections) and the decided cohort memory (best-effort, swallows errors,
+ * so never on a transaction handle).
+ */
+export async function announceLineupDecided(
+  deps: TiebreakerDecideDeps,
+  lineupId: number,
+  pass: MatchingPassResult,
+): Promise<void> {
+  fireOrphanedPollCards(deps.events, pass.orphanedCards);
+  fireMatchEnteredScheduling(deps.events, pass.schedulingMatchIds);
+  await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
+}
+
+const EMPTY_PASS: MatchingPassResult = {
+  schedulingMatchIds: [],
+  orphanedCards: [],
+};
+
+/** Flip the lineup row to `decided`, stamping the winner when there is one. */
+async function flipLineupToDecided(
+  db: Db,
+  lineupId: number,
+  decidedGameId?: number,
+): Promise<void> {
+  const update: Partial<typeof schema.communityLineups.$inferInsert> = {
+    status: 'decided',
+    updatedAt: new Date(),
+  };
+  if (decidedGameId) update.decidedGameId = decidedGameId;
+  await db
+    .update(schema.communityLineups)
+    .set(update)
+    .where(eq(schema.communityLineups.id, lineupId));
 }

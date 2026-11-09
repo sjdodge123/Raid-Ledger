@@ -341,7 +341,7 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
 
   // ─── AC: refreshExistingGames fires onGameChanged per upserted row ───
 
-  it('refreshExistingGames fires onGameChanged for each refreshed game', async () => {
+  it('refreshExistingGames fires onGameChanged for each refreshed game whose genres changed', async () => {
     // Seed two existing games with igdbId so the helper's select picks them up.
     const [gameA] = nonEmpty(
       await testApp.db
@@ -369,15 +369,19 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
     const queryIgdb = jest
       .fn<Promise<IgdbApiGame[]>, [string]>()
       .mockResolvedValue([
+        // ROK-2121: only a taste-input change fires, so IGDB now serves
+        // genres the seeded rows (genres []) do not have yet.
         {
           id: 8100001,
           name: 'Refresh A',
           slug: 'refresh-a',
+          genres: [{ id: 12 }],
         },
         {
           id: 8100002,
           name: 'Refresh B',
           slug: 'refresh-b',
+          genres: [{ id: 31 }],
         },
       ]);
 

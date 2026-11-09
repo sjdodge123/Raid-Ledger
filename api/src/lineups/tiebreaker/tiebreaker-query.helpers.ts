@@ -1,7 +1,7 @@
 /**
  * Tiebreaker DB read queries (ROK-938).
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -14,6 +14,15 @@ export function findTiebreakerById(db: Db, tiebreakerId: number) {
     .from(schema.communityLineupTiebreakers)
     .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
     .limit(1);
+}
+
+/** ROK-2098: one tiebreaker row by id, or null. */
+export async function findTiebreakerRow(
+  db: Db,
+  tiebreakerId: number,
+): Promise<typeof schema.communityLineupTiebreakers.$inferSelect | null> {
+  const [row] = await findTiebreakerById(db, tiebreakerId);
+  return row ?? null;
 }
 
 /** Find the active tiebreaker for a lineup. */
@@ -156,4 +165,45 @@ export function findUserVeto(db: Db, tiebreakerId: number, userId: number) {
       ),
     )
     .limit(1);
+}
+
+/** What a tiebreaker finalize needs to know about its lineup (ROK-2098). */
+export interface LineupDecideState {
+  status: typeof schema.communityLineups.$inferSelect.status;
+  /** True when a match group was created at or after the `since` bound. */
+  hasMatches: boolean;
+}
+
+/**
+ * ROK-2098: read the lineup's phase and whether matching has produced a
+ * match group since `since`. `rebuildMatches` wipes and inserts in ONE
+ * transaction, so a match row is durable proof that a matching pass
+ * completed — but only a row created after the tiebreaker began counts.
+ * A lineup that was decided, reverted to voting and then tiebroken keeps its
+ * earlier round's rows until the next rebuild; counted as "done" they would
+ * stop a repair retry and leave the lineup wired to the old game's poll
+ * (the ROK-1306 wrong-game-link). Review MINOR-1.
+ *
+ * @param since - the tiebreaker's `createdAt`. Both it and the match
+ *   `createdAt` are stamped by the database clock (`defaultNow()`), unlike the
+ *   app-stamped `resolvedAt`, so no app/DB clock skew can misorder them.
+ */
+export async function findLineupDecideState(
+  db: Db,
+  lineupId: number,
+  since: Date,
+): Promise<LineupDecideState | null> {
+  const [lineup] = await db
+    .select({ status: schema.communityLineups.status })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  if (!lineup) return null;
+  const matches = schema.communityLineupMatches;
+  const [match] = await db
+    .select({ id: matches.id })
+    .from(matches)
+    .where(and(eq(matches.lineupId, lineupId), gte(matches.createdAt, since)))
+    .limit(1);
+  return { status: lineup.status, hasMatches: match !== undefined };
 }
