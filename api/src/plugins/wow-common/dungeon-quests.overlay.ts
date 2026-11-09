@@ -7,7 +7,7 @@
  * With the `wow_forever_quest_import` kill switch off nothing here runs and
  * the curated rows come back unchanged (full rollback without a deploy).
  */
-import { inArray } from 'drizzle-orm';
+import { inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -113,10 +113,28 @@ async function listOverlayOnly(
     .where(
       inArray(wowDungeonQuestBlizzard.dungeonInstanceId, [...instanceIds]),
     );
+  return toOverlayOnlyDtos(rows, known);
+}
+
+/** Rows not in `known` whose type is a dungeon type (m5), as quest DTOs. */
+function toOverlayOnlyDtos(
+  rows: readonly WowDungeonQuestBlizzardRow[],
+  known: ReadonlySet<number>,
+): DungeonQuestDto[] {
   return rows
     .filter((row) => !known.has(row.questId) && isOverlayOnlyType(row.typeId))
     .sort((a, b) => a.questId - b.questId)
     .map(overlayOnlyDto);
+}
+
+/** Overlay rows mapped to any dungeon, for {@link applyKnownQuestOverlay}. */
+function listMappedOverlay(
+  db: QuestOverlayDeps['db'],
+): Promise<WowDungeonQuestBlizzardRow[]> {
+  return db
+    .select()
+    .from(wowDungeonQuestBlizzard)
+    .where(isNotNull(wowDungeonQuestBlizzard.dungeonInstanceId));
 }
 
 /** Merge the overlay into quests (chain reads). Kill switch off → unchanged. */
@@ -172,4 +190,24 @@ export async function applyChainOverlay(
       return row ? [overlayOnlyDto(row)] : [];
     });
   return [...merged, ...extras];
+}
+
+/**
+ * Codex P2 3: the Forever known-quest set (event quest sets, progress,
+ * coverage, readiness). Curated rows merged with the overlay, plus every
+ * dungeon-type overlay-only quest mapped to any dungeon (R4) — the same
+ * quests the Quest Prep cards show, so they get completion state too.
+ * Kill switch off → the curated rows unchanged.
+ */
+export async function applyKnownQuestOverlay(
+  deps: QuestOverlayDeps,
+  quests: DungeonQuestDto[],
+): Promise<DungeonQuestDto[]> {
+  if (!(await isForeverQuestImportEnabled(deps.settings))) return quests;
+  const [merged, mapped] = await Promise.all([
+    mergeQuests(deps.db, quests),
+    listMappedOverlay(deps.db),
+  ]);
+  const known = new Set(quests.map((q) => q.questId));
+  return [...merged, ...toOverlayOnlyDtos(mapped, known)];
 }

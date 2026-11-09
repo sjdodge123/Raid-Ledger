@@ -9,11 +9,13 @@ import type {
 import * as schema from '../../drizzle/schema';
 import { wowClassicQuestProgress } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import { memorySwr, type MemoryCacheEntry } from '../../common/swr-cache';
 import {
   loadForeverEventProgress,
   loadForeverMemberProgress,
 } from './event-forever-progress.query';
+import type { QuestOverlayDeps } from './dungeon-quests.overlay';
 import {
   buildViewerPrereqs,
   groupCoverage,
@@ -47,13 +49,19 @@ export class QuestProgressReadService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** The DB plus the quest-import switch the known-quest overlay reads. */
+  private get questDeps(): QuestOverlayDeps {
+    return { db: this.db, settings: this.settings };
+  }
 
   /** All progress for an event; Forever adds addon rows (`id: 0`). */
   async getProgressForEvent(eventId: number): Promise<QuestProgressDto[]> {
     const [manual, forever] = await Promise.all([
       this.queryManualRows(eventId),
-      loadForeverEventProgress(this.db, eventId),
+      loadForeverEventProgress(this.questDeps, eventId),
     ]);
     if (!forever) return manual.map((r) => toClassicDto(eventId, r));
     return toProgressDtos(eventId, manual, forever);
@@ -83,7 +91,7 @@ export class QuestProgressReadService {
     eventId: number,
     userId: number,
   ): Promise<EventQuestPrereqsResponse> {
-    const forever = await loadForeverMemberProgress(this.db, eventId, userId);
+    const forever = await loadForeverMemberProgress(this.questDeps, eventId, userId);
     const member = forever?.members.find((m) => m.userId === userId);
     if (!forever || !member) return null;
     const mine = await this.queryManualRows(eventId, userId);
@@ -92,7 +100,7 @@ export class QuestProgressReadService {
 
   /** Coverage source rows: Forever merges addon rows, Classic is manual only. */
   private async coverageRows(eventId: number) {
-    const forever = await loadForeverEventProgress(this.db, eventId);
+    const forever = await loadForeverEventProgress(this.questDeps, eventId);
     const manual = await this.queryManualRows(eventId);
     return forever ? toProgressDtos(eventId, manual, forever) : manual;
   }

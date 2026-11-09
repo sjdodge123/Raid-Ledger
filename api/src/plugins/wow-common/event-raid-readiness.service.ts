@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventRaidReadiness } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import {
   GuildAccessService,
   type GuildActor,
@@ -86,6 +87,7 @@ export class EventRaidReadinessService {
     private readonly db: Db,
     private readonly access: GuildAccessService,
     private readonly facts: WowFactsService,
+    private readonly settings: SettingsService,
   ) {}
 
   async readiness(
@@ -106,7 +108,10 @@ export class EventRaidReadinessService {
     event: ReadinessEvent,
   ): Promise<EventRaidReadiness> {
     const [quests, signups, manual] = await Promise.all([
-      loadEventQuestSet(this.db, event.contentInstances),
+      loadEventQuestSet(
+        { db: this.db, settings: this.settings },
+        event.contentInstances,
+      ),
       loadReadinessRoster(this.db, eventId),
       loadEventManualRows(this.db, eventId),
     ]);

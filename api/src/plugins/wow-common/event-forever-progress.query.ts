@@ -3,11 +3,17 @@
  * WoW: Forever event — known quests for its instances (+ chain steps), active
  * signups with characters (D8) and their `char` snapshots. `null` for any
  * non-Forever event, so Classic paths never touch addon data (AC6).
+ * ROK-2143 Codex P2 3: known quests carry the kill-switch-aware Blizzard
+ * overlay, so an overlay-only Quest Prep card gets completion state too.
  */
 import { and, eq, inArray, isNotNull, notInArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { VARIANT_EXPANSIONS, toDto } from './dungeon-quests.helpers';
+import {
+  applyKnownQuestOverlay,
+  type QuestOverlayDeps,
+} from './dungeon-quests.overlay';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import {
   buildMembers,
@@ -30,11 +36,15 @@ type Db = PostgresJsDatabase<typeof schema>;
  */
 export const INACTIVE_SIGNUP_STATUSES = ['declined', 'roached_out', 'departed'];
 
-/** Known quests are seed data; a short memo spares a table read per request. */
+/**
+ * Curated quests are seed data; a short memo spares a table read per request.
+ * The overlay is applied per call on top, so the kill switch and a fresh
+ * import take effect at once.
+ */
 const KNOWN_QUESTS_TTL_MS = 60_000;
 let knownMemo: { at: number; rows: Promise<DungeonQuestDto[]> } | null = null;
 
-/** Drop the known-quest memo (tests; quest reseeds). */
+/** Drop the curated-quest memo (tests; quest reseeds). */
 export function clearKnownQuestMemo(): void {
   knownMemo = null;
 }
@@ -56,8 +66,8 @@ async function loadForeverEvent(
   return row?.slug === WOW_FOREVER_GAME_SLUG ? row : null;
 }
 
-/** Known quests for the Forever variant (bounded: classic + forever rows). */
-async function queryKnownQuests(db: Db): Promise<DungeonQuestDto[]> {
+/** Curated quests for the Forever variant (bounded: classic + forever rows). */
+async function queryCuratedQuests(db: Db): Promise<DungeonQuestDto[]> {
   const q = schema.wowClassicDungeonQuests;
   const rows = await db
     .select()
@@ -66,19 +76,26 @@ async function queryKnownQuests(db: Db): Promise<DungeonQuestDto[]> {
   return rows.map(toDto);
 }
 
-/** {@link queryKnownQuests}, memoised for {@link KNOWN_QUESTS_TTL_MS}. */
-function loadKnownQuests(db: Db): Promise<DungeonQuestDto[]> {
+/** {@link queryCuratedQuests}, memoised for {@link KNOWN_QUESTS_TTL_MS}. */
+function loadCuratedQuests(db: Db): Promise<DungeonQuestDto[]> {
   const now = Date.now();
   if (knownMemo && now - knownMemo.at < KNOWN_QUESTS_TTL_MS) {
     return knownMemo.rows;
   }
-  const rows = queryKnownQuests(db);
+  const rows = queryCuratedQuests(db);
   const entry = { at: now, rows };
   knownMemo = entry;
   rows.catch(() => {
     if (knownMemo === entry) knownMemo = null;
   });
   return rows;
+}
+
+/** Curated quests with the Blizzard overlay (switch-aware). */
+async function loadKnownQuests(
+  deps: QuestOverlayDeps,
+): Promise<DungeonQuestDto[]> {
+  return applyKnownQuestOverlay(deps, await loadCuratedQuests(deps.db));
 }
 
 /** A signup row as selected; null class/race when the character has none. */
@@ -146,17 +163,17 @@ function loadSnapshots(
 
 /** Shared body: every active member, or only `userId` when given. */
 async function loadProgress(
-  db: Db,
+  deps: QuestOverlayDeps,
   eventId: number,
   userId?: number,
 ): Promise<ForeverEventProgress | null> {
-  const event = await loadForeverEvent(db, eventId);
+  const event = await loadForeverEvent(deps.db, eventId);
   if (!event) return null;
   const [known, signups] = await Promise.all([
-    loadKnownQuests(db),
-    loadSignupChars(db, eventId, userId),
+    loadKnownQuests(deps),
+    loadSignupChars(deps.db, eventId, userId),
   ]);
-  const snapshots = await loadSnapshots(db, signups);
+  const snapshots = await loadSnapshots(deps.db, signups);
   const instanceIds = contentInstanceIds(event.contentInstances);
   return {
     ...selectEventQuests(known, instanceIds),
@@ -169,10 +186,10 @@ async function loadProgress(
  * @returns null when the event is missing or not a Forever event.
  */
 export function loadForeverEventProgress(
-  db: Db,
+  deps: QuestOverlayDeps,
   eventId: number,
 ): Promise<ForeverEventProgress | null> {
-  return loadProgress(db, eventId);
+  return loadProgress(deps, eventId);
 }
 
 /**
@@ -181,21 +198,21 @@ export function loadForeverEventProgress(
  * @returns null when the event is missing or not a Forever event.
  */
 export function loadForeverMemberProgress(
-  db: Db,
+  deps: QuestOverlayDeps,
   eventId: number,
   userId: number,
 ): Promise<ForeverEventProgress | null> {
-  return loadProgress(db, eventId, userId);
+  return loadProgress(deps, eventId, userId);
 }
 
 /**
  * ROK-1911: the event's quest set (instance match + chain steps) for stored
- * `content_instances`, from the same memoised known-quest read as above.
+ * `content_instances`, from the same overlaid known-quest read as above.
  */
 export async function loadEventQuestSet(
-  db: Db,
+  deps: QuestOverlayDeps,
   contentInstances: unknown,
 ): Promise<ReturnType<typeof selectEventQuests>> {
-  const known = await loadKnownQuests(db);
+  const known = await loadKnownQuests(deps);
   return selectEventQuests(known, contentInstanceIds(contentInstances));
 }

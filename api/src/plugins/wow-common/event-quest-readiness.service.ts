@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventQuestReadinessDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import {
   GuildAccessService,
   type GuildActor,
@@ -31,6 +32,7 @@ export class EventQuestReadinessService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly access: GuildAccessService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** The readiness matrix; every read is batched (no per-signup query). */
@@ -45,7 +47,10 @@ export class EventQuestReadinessService {
       throw new NotFoundException('Quest readiness is for Forever events only');
     }
     const [quests, signups, manual] = await Promise.all([
-      loadEventQuestSet(this.db, event.contentInstances),
+      loadEventQuestSet(
+        { db: this.db, settings: this.settings },
+        event.contentInstances,
+      ),
       loadReadinessRoster(this.db, eventId),
       loadEventManualRows(this.db, eventId),
     ]);

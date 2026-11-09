@@ -6,6 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { wowClassicQuestProgress } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 
 import { QuestProgressReadService } from './quest-progress-read.service';
 import type { QuestProgressDto } from './quest-progress-read.service';
@@ -34,6 +35,7 @@ export class QuestProgressService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly reads: QuestProgressReadService,
+    private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -140,7 +142,11 @@ export class QuestProgressService {
     userId: number,
     questId: number,
   ): Promise<AddonProgressRow | undefined> {
-    const forever = await loadForeverMemberProgress(this.db, eventId, userId);
+    const forever = await loadForeverMemberProgress(
+      { db: this.db, settings: this.settings },
+      eventId,
+      userId,
+    );
     if (!forever) return undefined;
     return addonRowsFor(forever, userId).find((r) => r.questId === questId);
   }
