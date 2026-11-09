@@ -377,3 +377,24 @@ describe('ROK-1778 — /privacy is a chromeless public page', () => {
         expect(document.documentElement).not.toHaveAttribute('data-chromeless');
     });
 });
+
+/**
+ * ROK-2156: below 768px the shell's <main> — not each page — pads past the fixed
+ * bottom tab bar and a phone Filters FAB, except on the full-screen wizard routes
+ * where the bar does not render (`hidesBottomTabBar`).
+ */
+describe('ROK-2156 — the shell <main> owns the phone tab-bar clearance', () => {
+    const CLEARANCE = 'pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))]';
+
+    it('pads <main> past the bar on a tab-bar route (/events) and resets it at md', () => {
+        renderLayout('/events');
+        const main = screen.getByRole('main');
+        expect(main).toHaveClass('flex-1', CLEARANCE, 'md:pb-0');
+    });
+
+    it('leaves <main> unpadded on a wizard route with no bar (/onboarding)', () => {
+        renderLayout('/onboarding');
+        const main = screen.getByRole('main');
+        expect(main.className).toBe('flex-1');
+    });
+});
