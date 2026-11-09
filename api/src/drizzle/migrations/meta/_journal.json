@@ -2024,6 +2024,13 @@
       "when": 1794181200982,
       "tag": "0289_guild_mailworthy",
       "breakpoints": true
+    },
+    {
+      "idx": 290,
+      "version": "7",
+      "when": 1794201947823,
+      "tag": "0290_character_installed_addons",
+      "breakpoints": true
     }
   ]
 }
