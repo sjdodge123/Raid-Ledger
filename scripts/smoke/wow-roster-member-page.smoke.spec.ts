@@ -69,10 +69,12 @@ function rosterSuffix(): string {
 async function seedGuild(
   token: string,
   testInfo: TestInfo,
+  extra: Record<string, unknown> = {},
 ): Promise<SeededGuild> {
   const body = (await apiPost(token, "/admin/test/wow/seed-guild", {
     name: guildName(testInfo),
     rosterSuffix: rosterSuffix(),
+    ...extra,
   })) as Partial<SeededGuild> | null;
   if (
     typeof body?.guildId !== "number" ||
@@ -150,6 +152,29 @@ async function expectMemberPage(page: Page, row: Candidate): Promise<Locator> {
     "Roster member",
   );
   return page.getByTestId("character-header-actions");
+}
+
+/**
+ * The snapshot member's Armory sections + the roster's last-online fact. The
+ * "No Armory data" note also carries an "Equipment" heading, so the Talents
+ * heading + the note's absence are what prove the snapshot rendered.
+ */
+async function expectArmorySections(page: Page): Promise<void> {
+  await expect(
+    page.getByTestId("roster-member-facts"),
+    "the roster's own last-online renders as last seen",
+  ).toContainText("Last seen yesterday");
+  await expect(
+    page.getByRole("heading", { name: "Talents", level: 2 }),
+    "a verified snapshot shows the Talents panel",
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("heading", { name: "Equipment", level: 2 }),
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("roster-member-no-armory"),
+    "no 'No Armory data' note on the snapshot member",
+  ).toHaveCount(0);
 }
 
 /** AC: no owner/admin control on the read-only page — only the plugin's claim CTA sits in the action row. */
@@ -246,7 +271,10 @@ test.describe("WoW: Forever — read-only roster member page (ROK-2149)", () => 
   }, testInfo) => {
     test.setTimeout(90_000);
     const token = await getAdminToken();
-    const guild = await seedGuild(token, testInfo);
+    // ROK-2149: the first unlinked row carries a verified Armory snapshot.
+    const guild = await seedGuild(token, testInfo, {
+      withArmorySnapshots: true,
+    });
     try {
       const row = await firstUnlinkedRow(token, guild);
       await signInOnboardedMember(page, guild.users.member.userId);
@@ -274,6 +302,7 @@ test.describe("WoW: Forever — read-only roster member page (ROK-2149)", () => 
         page.getByTestId("roster-member-facts"),
         "hub members see the roster facts",
       ).toContainText("Rank:");
+      await expectArmorySections(page);
       await expectNoOwnerOrAdminControls(page, actions);
       await expect(
         actions.getByRole("button", { name: CONFIRM_LABEL }),
