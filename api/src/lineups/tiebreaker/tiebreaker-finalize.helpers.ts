@@ -42,7 +42,7 @@ import {
 } from './tiebreaker-lifecycle.helpers';
 import {
   findLineupDecideState,
-  findTiebreakerById,
+  findTiebreakerRow,
 } from './tiebreaker-query.helpers';
 
 type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
@@ -63,7 +63,7 @@ export function finalizeTiebreaker(
   pickWinner: WinnerPicker,
 ): Promise<number | null> {
   return withTiebreakerAdvanceLock(deps.db, tiebreakerId, async () => {
-    const [tb] = await findTiebreakerById(deps.db, tiebreakerId);
+    const tb = await findTiebreakerRow(deps.db, tiebreakerId);
     if (!tb || tb.status === 'dismissed') return null;
     const winner = await settleWinner(deps.db, tb, pickWinner);
     await clearActiveTiebreaker(deps.db, tb.lineupId);

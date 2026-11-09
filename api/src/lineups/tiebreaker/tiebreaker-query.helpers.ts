@@ -16,6 +16,15 @@ export function findTiebreakerById(db: Db, tiebreakerId: number) {
     .limit(1);
 }
 
+/** ROK-2098: one tiebreaker row by id, or null. */
+export async function findTiebreakerRow(
+  db: Db,
+  tiebreakerId: number,
+): Promise<typeof schema.communityLineupTiebreakers.$inferSelect | null> {
+  const [row] = await findTiebreakerById(db, tiebreakerId);
+  return row ?? null;
+}
+
 /** Find the active tiebreaker for a lineup. */
 export function findActiveTiebreaker(db: Db, lineupId: number) {
   return db
