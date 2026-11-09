@@ -1191,6 +1191,22 @@ hand-writes `'(min-width: 1024px)'` — right value, wrong spelling; switch it t
 is a tablet bug. Pages outside the scheduling / game-time / profile surfaces keep their own breakpoints
 until someone moves them deliberately.
 
+**Hub Members list (ROK-2155).** Below 1024px each member is a fixed-height card
+(`HubMemberCards`, `web/src/components/hub/hub-member-table.tsx`) of up to **three lines**: the first
+column (identity), one meta line with the rest, and — only when a column sets `cardLine: 'own'` (WoW
+professions) — a third line for those columns. The windowed list needs the height up front, so it is
+**derived**, never typed: `cardRowHeight(lines)` = 2 × 8px padding + lines × 22px (a Pill's height) +
+4px gaps → 64px for two lines, 90px for three; `cardMetrics(columns)` feeds both the card and the
+virtualiser. A cell that must not wrap (WoW rank: "Guild Master") is `shrink-0 whitespace-nowrap`; a
+strip of icons shows one line (`flex-wrap max-h-4 overflow-hidden`) so an icon drops whole instead of
+clipping mid-glyph. **Whole-row click is opt-in per hub kind:** a column with `rowLink: true` (WoW's
+name) gets `stretched` and puts `STRETCHED_LINK` (`after:absolute after:inset-0`, `character-link.tsx`)
+on its one link, and core makes the row (`<li>` and `<tr>`, both shells) `relative` + `hover:bg-panel`.
+It is the §4.2 StretchedAction idea as a link's own `::after` — one link per row, never a duplicate
+`aria-hidden` anchor and never `role="button"` on the row. Anything in the row that must stay hoverable
+or clickable (titled badges, a row-action button) gets `relative` to sit above the overlay. Community and
+server hubs set no `rowLink`, so their rows are not clickable.
+
 ### 4.19 Legend copy (group week view)
 
 **DO** — the desktop group week view's key is `GroupWeekLegend`
