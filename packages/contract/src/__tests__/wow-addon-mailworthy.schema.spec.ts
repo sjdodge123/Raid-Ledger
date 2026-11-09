@@ -126,7 +126,7 @@ describe('crafting skill lines + master titles (D7, round-2 label ruling)', () =
 
 const CHAR = '0b6a3f0e-2f4c-4e0a-9d5b-1c2d3e4f5a6b';
 const giverRow = {
-    rank: 14, userId: 7, characterName: 'Brannoc', characterId: CHAR,
+    rank: 14, characterName: 'Brannoc', characterId: CHAR,
     characterCount: 2, items: 3, isYou: true,
 };
 const dto = {
@@ -136,7 +136,7 @@ const dto = {
         recipientName: 'Aldren', characterId: CHAR, onRoster: true,
     }],
     givers: {
-        last30Days: [{ ...giverRow, rank: 1, isYou: false, userId: null, characterCount: 1 }],
+        last30Days: [{ ...giverRow, rank: 1, isYou: false, characterCount: 1 }],
         allTime: [],
         youLast30Days: giverRow,
         youAllTime: null,
