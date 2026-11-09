@@ -6,9 +6,13 @@ import {
   runSyncAllGames,
   type SyncAllDeps,
 } from './igdb-sync-orchestration.helpers';
-import { enrichSyncedGamesWithItad } from './igdb-helpers.barrel';
+import {
+  discoverPopularGames,
+  enrichSyncedGamesWithItad,
+  refreshExistingGames,
+} from './igdb-helpers.barrel';
 import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
-import { at } from '../common/testing/narrow';
+import { at, defined } from '../common/testing/narrow';
 
 jest.mock('./igdb-helpers.barrel', () => ({
   refreshExistingGames: jest.fn().mockResolvedValue(0),
@@ -75,5 +79,23 @@ describe('runSyncAllGames — ITAD fetch options', () => {
     expect(itadService.getGameInfo).toHaveBeenCalledWith('itad-1', {
       throwOnExhausted: true,
     });
+  });
+});
+
+describe('runSyncAllGames — one taste recompute per game per run (ROK-2121)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('forwards a game changed by refresh, discover and ITAD to onGameChanged once', async () => {
+    const { deps } = buildDeps();
+    await runSyncAllGames(deps);
+    const phases = [
+      at(jest.mocked(refreshExistingGames).mock.calls, 0)[3],
+      at(jest.mocked(discoverPopularGames).mock.calls, 0)[3],
+      at(jest.mocked(enrichSyncedGamesWithItad).mock.calls, 0)[3],
+    ];
+    for (const notify of phases) defined(notify, 'phase onGameChanged')(7);
+    defined(phases[0], 'refresh onGameChanged')(8);
+
+    expect(jest.mocked(deps.onGameChanged).mock.calls).toEqual([[7], [8]]);
   });
 });
