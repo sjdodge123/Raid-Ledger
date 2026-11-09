@@ -21,6 +21,7 @@ import { Switch } from '../../../components/ui/switch';
 import { useForeverConfig } from '../hooks/use-forever-config';
 import { useForeverProbe } from '../hooks/use-forever-probe';
 import { ForeverProbePanel } from './forever-probe-panel';
+import { ForeverQuestImportPanel } from './forever-quest-import-panel';
 
 type SaveFn = ReturnType<typeof useForeverConfig>['update']['mutateAsync'];
 type SaveDto = Parameters<SaveFn>[0];
@@ -248,6 +249,7 @@ export function ForeverSettingsSection(): JSX.Element | null {
                 pending={update.isPending}
             />
             <ForeverProbePanel />
+            <ForeverQuestImportPanel />
         </section>
     );
 }
