@@ -10,16 +10,20 @@
  *
  * - **Level:** Blizzard serves no required level, so `requiredLevel` stays
  *   curated (nothing here maps it).
- * - **Prerequisite:** only `quests { operator, conditions }` names one. No
- *   captured response shows a condition's inner shape, so the walk accepts a
- *   bare id, an `{ id }` reference or a `{ quest: { id } }` wrapper (see
- *   `listPrerequisiteIds`). `prevQuestId` holds one id: the first named.
+ * - **Prerequisite:** only `quests { operator, conditions }` names one; the
+ *   live shape (quest 4132) is `conditions[].target.id`, nested groups
+ *   included. Only AND groups count (OR / negated → none). `prevQuestId`
+ *   holds one id: the most direct one, ties → the highest id (see
+ *   `blizzard-quest.prerequisites.ts`).
  * - **Faction:** there is no faction field, and the curated data encodes a
  *   faction as its four races, so a faction becomes that race list (unless
  *   `races[]` names races itself).
  * - **Classes / races:** reference names (`{ id, name }`) or plain strings.
  */
-import { listPrerequisiteIds } from './blizzard-quest.parse';
+import {
+  listPrerequisiteRefs,
+  pickPrevQuestId,
+} from './blizzard-quest.prerequisites';
 
 export type QuestFaction = 'ALLIANCE' | 'HORDE';
 
@@ -30,8 +34,10 @@ export const FACTION_RACES: Record<QuestFaction, readonly string[]> = {
 };
 
 export interface QuestRequirements {
-  /** Prerequisite quest ids, document order, without the quest itself. */
+  /** AND prerequisite quest ids, document order, without the quest itself. */
   prerequisiteIds: number[];
+  /** The one prerequisite `prevQuestId` takes (most direct, then highest). */
+  prevQuestId: number | null;
   faction: QuestFaction | null;
   classes: string[];
   races: string[];
@@ -68,8 +74,10 @@ export function parseQuestRequirements(
   selfId?: number,
 ): QuestRequirements {
   const req = isRecord(requirements) ? requirements : {};
+  const refs = listPrerequisiteRefs(req, selfId);
   return {
-    prerequisiteIds: listPrerequisiteIds(req, selfId),
+    prerequisiteIds: refs.map((r) => r.id),
+    prevQuestId: pickPrevQuestId(refs),
     faction: parseFaction(req.faction),
     classes: names(req.classes),
     races: names(req.races),
@@ -95,7 +103,7 @@ export function requirementFields(
 ): RequirementFields {
   const req = parseQuestRequirements(requirements, selfId);
   return {
-    prevQuestId: req.prerequisiteIds[0] ?? null,
+    prevQuestId: req.prevQuestId,
     classRestriction: req.classes.length > 0 ? req.classes : null,
     raceRestriction: requirementRaces(req),
   };

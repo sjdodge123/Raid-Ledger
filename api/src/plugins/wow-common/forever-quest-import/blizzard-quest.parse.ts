@@ -15,6 +15,12 @@ import type {
   BlizzardQuestReputation,
   BlizzardQuestRewardItem,
 } from '../../../drizzle/schema/dungeon-quest-blizzard';
+import { extractPrerequisiteIds } from './blizzard-quest.prerequisites';
+
+export {
+  extractPrerequisiteIds,
+  listPrerequisiteIds,
+} from './blizzard-quest.prerequisites';
 
 /** Only `static-forever-{region}` serves quest data (probe). */
 export const FOREVER_QUEST_NAMESPACE_PREFIX = 'forever';
@@ -180,61 +186,6 @@ export function parseBlizzardQuest(json: unknown): ParsedBlizzardQuest | null {
 }
 
 const SKIPPED_KEYS = new Set(['key', '_links']);
-
-/**
- * Inside a quest-named subtree, `conditions` keeps the quest context: the
- * live run (2026-11-09, run 2) served `quests: { operator, conditions }`, and
- * a condition may be a bare `{ id }` reference with no quest-named key of its
- * own. `operator` (AND/OR) never names a quest.
- */
-function childIsQuest(key: string, inQuest: boolean): boolean {
-  if (key === 'operator') return false;
-  return /quest/i.test(key) || (inQuest && key === 'conditions');
-}
-
-function collectQuestIds(
-  v: unknown,
-  inQuest: boolean,
-  ids: Set<number>,
-  depth: number,
-): void {
-  if (depth > MAX_WALK_DEPTH) return;
-  if (Array.isArray(v)) {
-    for (const e of v) collectQuestIds(e, inQuest, ids, depth + 1);
-    return;
-  }
-  const own = inQuest ? asInt(isRecord(v) ? v.id : v) : null;
-  if (own !== null && own > 0) ids.add(own);
-  if (!isRecord(v)) return;
-  for (const [key, child] of Object.entries(v)) {
-    if (!SKIPPED_KEYS.has(key)) {
-      collectQuestIds(child, childIsQuest(key, inQuest), ids, depth + 1);
-    }
-  }
-}
-
-/**
- * Quest ids named under any `*quest*` key inside `requirements` (a number, an
- * `{ id }` reference, arrays of either, or `{ operator, conditions[] }`),
- * minus the quest itself, in document order.
- */
-export function listPrerequisiteIds(
-  requirements: unknown,
-  selfId?: number,
-): number[] {
-  const ids = new Set<number>();
-  collectQuestIds(requirements, false, ids, 0);
-  if (selfId !== undefined) ids.delete(selfId);
-  return [...ids];
-}
-
-/** {@link listPrerequisiteIds}, sorted ascending. */
-export function extractPrerequisiteIds(
-  requirements: unknown,
-  selfId?: number,
-): number[] {
-  return listPrerequisiteIds(requirements, selfId).sort((a, b) => a - b);
-}
 
 function walkKeyPaths(
   v: unknown,
