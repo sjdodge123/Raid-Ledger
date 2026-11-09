@@ -32,10 +32,16 @@ describe('claim banner dismiss memory', () => {
         expect(readClaimBannerDismissed(7)).toBe(false);
     });
 
-    it('a storage that throws reads as not dismissed, and a write is ignored', () => {
+    it('a storage that throws on read reads as not dismissed', () => {
+        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
+        expect(readClaimBannerDismissed(7)).toBe(false);
+    });
+
+    it('a refused write still hides the banner for this page session (in-memory fallback)', () => {
         vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('SecurityError'); });
         vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('QuotaExceededError'); });
-        expect(() => writeClaimBannerDismissed(7)).not.toThrow();
-        expect(readClaimBannerDismissed(7)).toBe(false);
+        expect(() => writeClaimBannerDismissed(41)).not.toThrow();
+        expect(readClaimBannerDismissed(41), 'the × must still dismiss when sessionStorage refuses the write').toBe(true);
+        expect(readClaimBannerDismissed(42), 'another guild is unaffected').toBe(false);
     });
 });

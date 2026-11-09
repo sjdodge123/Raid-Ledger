@@ -18,8 +18,15 @@ export function claimBannerDismissKey(guildId: number): string {
     return `rl:wow-claim-banner-dismissed:${guildId}`;
 }
 
-/** Whether this browser session dismissed the banner for this guild. Storage refusal = not dismissed. */
+/**
+ * Dismisses whose sessionStorage write was refused (private mode / quota). Kept
+ * for this page session so the × still hides the banner until a reload.
+ */
+const unsavedDismisses = new Set<number>();
+
+/** Whether this browser session dismissed the banner for this guild. */
 export function readClaimBannerDismissed(guildId: number): boolean {
+    if (unsavedDismisses.has(guildId)) return true;
     try {
         return sessionStorage.getItem(claimBannerDismissKey(guildId)) === '1';
     } catch {
@@ -27,11 +34,11 @@ export function readClaimBannerDismissed(guildId: number): boolean {
     }
 }
 
-/** Remember a dismiss for this browser session (storage refusal is ignored). */
+/** Remember a dismiss for this browser session; a refused write is kept in memory instead. */
 export function writeClaimBannerDismissed(guildId: number): void {
     try {
         sessionStorage.setItem(claimBannerDismissKey(guildId), '1');
     } catch {
-        // Private mode / quota: nothing is remembered; the banner stays.
+        unsavedDismisses.add(guildId);
     }
 }
