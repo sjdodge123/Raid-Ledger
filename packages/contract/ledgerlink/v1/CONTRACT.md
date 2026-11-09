@@ -85,6 +85,7 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 - `lockouts[]` ≤ 100: `{ name ≤ 128, instanceId, difficultyId, resetAt (unix s), killed, total }`
 - `quests?` (additive, ROK-1742): `{ completed[]? ≤ 10 000 questIds, inProgress[] ≤ 35: { questId, title? ≤ 128, objectives[]? ≤ 10: { text ≤ 128, done: boolean, have?, need? } }, completedTruncated?: boolean }`. When `quests` is present `inProgress` is required (empty is fine). `completed` is optional since ROK-2125 (additive): **absent** = no opinion — Raid Ledger takes the completed list from the Forever Armory `quests/completed` sync, or keeps the list it last stored; it is never read as "none completed". An **empty** `completed` array still means "this character has completed no quests". The addon must not omit `completed` until a server carrying ROK-2125 is deployed (an older server rejects it with `INVALID_PAYLOAD`). `completed` = `GetAllCompletedQuestIDs()`; `have`/`need` = `numFulfilled`/`numRequired`. A character with more than `ADDON_QUESTS_COMPLETED_MAX` completed quests is not rejected by the addon: it sends the first 10 000 ids ascending and sets `completedTruncated: true` (absent = `false`).
 - `mailworthy?` (additive, ROK-2148): the Mailworthy addon's view of the exporter's guild, copied 1:1 from `MailworthyAPI.v1.GetGuildExport()` — see §3.1. Absent = no opinion (no Mailworthy, nothing known, or no guild). LedgerLink must not emit it until a server carrying ROK-2148 is deployed (an older server rejects it with `INVALID_PAYLOAD`).
+- `addons[]?` ≤ 500 (additive, ROK-2147): every installed addon folder, `{ name 1–64, title? ≤ 128, version? ≤ 32, loaded: boolean }` — see §3.2. Absent = no opinion. LedgerLink must not emit it until a server carrying ROK-2147 is deployed (an older server rejects it with `INVALID_PAYLOAD`).
 
 
 **Talent node position (ROK-1742).** Forever has one `C_Traits` tree per
@@ -122,6 +123,16 @@ and may recompute the grid with this rule without a wire change.
 - `givers` = sending characters with a non-zero guild-rule total: this account's characters AND guildmates whose totals Mailworthy received in the guild hellos (in-game sharing, operator ruling 2026-11-08). One export can therefore carry many guildmates' totals, so a few full installs upload the whole guild; a relayed total is only as fresh as its `asOf`. `asOf` (required) = unix seconds when the giver's OWN client computed the totals, `≤ generatedAt` (a later `asOf` rejects the whole string); own characters send `asOf = generatedAt`. Up to 200 givers per export. **Item count** = the stack units attached to guild-rule mail (20 Linen Cloth in one mail = 20); only mail Mailworthy routed by the guild template counts, and mail to one of the sender's own characters never counts. `days` lists only non-zero UTC days (`floor(serverTime / 86400)`) within the last 35, ascending, unique `day`; `itemsAllTime` counts since `countingSince`.
 - Empty lists are omitted, never `{}`/`[]`-ambiguous — **except `template.rules`**, which may be `[]`: the GM published a template with no rules. An absent `template` still means no opinion. Names are bare in-game names exactly as Mailworthy holds them.
 - Server merge (account-wide data arrives from several alts): template — highest `rev` from a rank 0–1 author on the latest roster wins; peers — keyed by name, latest `lastSeenAt` kept; givers — keyed by guild + sending character, the newest `asOf` wins; on a tie the newer `generatedAt` wins (so a relayed copy never overwrites fresher totals from the giver's own export). The server de-duplicates `days` by `day` and clamps `itemsAllTime` up to `sum(days.items)` instead of rejecting.
+
+### 3.2 Installed addons (`char` `data.addons`, ROK-2147)
+
+`addons[] ≤ 500: { name, title?, version?, loaded }` — every entry `.strict()`.
+
+- `name` (1–64) = the addon **folder** name, the first return of `GetAddOnInfo(i)`. Raid Ledger matches it case-insensitively against the folder name a guild sets on a recommended addon (Installed / Missing).
+- `title?` (≤ 128) = `## Title` metadata (the server strips colour codes); `version?` (≤ 32) = `GetAddOnMetadata(name, "Version")`; `loaded` = loaded this session (`C_AddOns.IsAddOnLoaded` / `IsAddOnLoaded` — which API the Forever client exposes is the addon's concern).
+- Send every installed folder (`GetNumAddOns()` entries, enabled or not), loaded entries first, cut to 500; cut each string to its cap. Over a cap rejects the whole string with `INVALID_PAYLOAD`.
+- Absent = no opinion (the server keeps what it stored); `[]` = nothing installed. Duplicate `name`s (case-insensitive) are not a reject: the server keeps the first.
+- Visible only to the character's owner and officers of the character's current guild; never stored in the char snapshot.
 
 ## 4. Strict keys (non-negotiable)
 
@@ -214,6 +225,8 @@ payload are unchanged — this only widens what one paste may contain.
 | `ADDON_QUESTS_IN_PROGRESS_MAX` | 35 | `char` `data.quests.inProgress` | `INVALID_PAYLOAD` |
 | `ADDON_MAILWORTHY_RULES_MAX` / `_PEERS_MAX` / `_GIVERS_MAX` / `_DAYS_MAX` | 8 / 1000 / 200 / 35 | `char` `data.mailworthy` `template.rules` / `peers` / `givers` / `givers[].days` (ROK-2148) | `INVALID_PAYLOAD` |
 | `ADDON_MAILWORTHY_NAME_MAX` | 48 | every `data.mailworthy` name | `INVALID_PAYLOAD` |
+| `ADDON_INSTALLED_MAX` | 500 | `char` `data.addons` entries (ROK-2147) | `INVALID_PAYLOAD` |
+| `ADDON_INSTALLED_NAME_MAX` / `_TITLE_MAX` / `_VERSION_MAX` | 64 / 128 / 32 | `data.addons[].name` / `.title` / `.version` | `INVALID_PAYLOAD` |
 | `ADDON_QUEST_OBJECTIVES_MAX` | 10 | objectives per in-progress quest | `INVALID_PAYLOAD` |
 | export clock window (server-internal, `addon-import.clock.ts`) | +1 day / −365 days | every `exportedAt`, plus guild `data.snapshotAt`, checked against the **server** clock at decode time; raid `pulls[].startAt`/`endAt` get only the +1 day future bound (old pull history is legitimate). Export strings are unsigned, so this stops a far-future snapshot from locking a guild against honest imports (ROK-1756) | `INVALID_PAYLOAD` |
 | structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000 (except `quests.completed`, above), any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |

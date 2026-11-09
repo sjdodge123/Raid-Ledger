@@ -3,6 +3,30 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-09 — `char` `addons` installed-addon list — **additive**
+
+- The `char` section's `data` gains one **optional** key, `addons`
+  (ROK-2147; stays v1): every addon folder installed in the exporter's
+  client — `addons[] ≤ 500 { name (1–64, the folder name), title? ≤ 128
+  (`## Title`), version? ≤ 32 (`## Version`), loaded: boolean }`, loaded
+  entries first. Every entry is `.strict()`. The addon cuts the list and the
+  strings to the caps before export; the server rejects anything over a cap.
+- Semantics: an **absent** `addons` = no opinion (the server keeps the list
+  it stored); `[]` = nothing installed. Duplicate `name`s (case-insensitive)
+  are not a reject — the server keeps the first. Colour codes in `title` are
+  stripped by the server sanitizer.
+- The decoded fixture view carries the list as `payload.addons`, beside the
+  frozen snapshot `payload.data` (it is never stored in the char snapshot).
+- New golden fixture `char-installed-addons`; invalid fixtures
+  `invalid/char-addons-too-many` (501 entries) and
+  `invalid/char-addons-name-too-long` (65-char `name`). Every existing
+  fixture unchanged byte-for-byte. `schema.json` regenerated. Worst case
+  (max `quests` + max `mailworthy` + 500 max-length entries) = 133 134 B,
+  under the 260 096 Companion cap.
+- **An older server rejects a char export carrying `addons` with 422
+  `INVALID_PAYLOAD`.** LedgerLink must not emit it until a server carrying
+  this change is deployed.
+
 ## v1 — 2026-11-09 — `char` `mailworthy` guild contributions block — **additive**
 
 - The `char` section's `data` gains one **optional** key, `mailworthy`
