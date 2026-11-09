@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * ROK-2150: add per-rank tooltip text and the calculator hash version to the static
- * WoW: Forever talent table (`web/src/plugins/wow/lib/talent-data/forever-trees.json`).
+ * WoW: Forever talent table (`web/src/plugins/wow/lib/talent-data/forever/<class>.json`,
+ * one lazy file per class).
  *
  * Forever reuses one spell id for every rank of a talent, so Wowhead's spell tooltip
  * cannot show per-rank values. Wowhead's Forever calculator data carries the per-rank
@@ -22,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const TABLE_PATH = path.join(ROOT, 'web/src/plugins/wow/lib/talent-data/forever-trees.json');
+const TABLE_DIR = path.join(ROOT, 'web/src/plugins/wow/lib/talent-data/forever');
 const FIXTURE_PATH = path.join(ROOT, 'web/src/plugins/wow/lib/__fixtures__/forever-warrior-trees.json');
 const PAGE_DATA_KEY = 'wow.talentCalcClassic.classicplus.data';
 
@@ -125,16 +126,25 @@ function extract(table, data) {
     return out;
 }
 
+/** Every `<class>.json` in TABLE_DIR, keyed by class slug (the file name). */
+function readTable() {
+    const files = fs.existsSync(TABLE_DIR) ? fs.readdirSync(TABLE_DIR).filter((f) => f.endsWith('.json')).sort() : [];
+    if (files.length === 0) fail(`no class files in ${path.relative(ROOT, TABLE_DIR)}`);
+    return Object.fromEntries(files.map((f) => [f.slice(0, -'.json'.length), JSON.parse(fs.readFileSync(path.join(TABLE_DIR, f), 'utf8'))]));
+}
+
 function main() {
     const file = process.argv[2];
     if (!file) fail('usage: node scripts/extract-forever-talent-descriptions.mjs <wowhead-talents-data.js>');
     const data = readCalculatorData(file);
-    const table = JSON.parse(fs.readFileSync(TABLE_PATH, 'utf8'));
-    const out = extract(table, data);
-    fs.writeFileSync(TABLE_PATH, `${JSON.stringify(out, null, 2)}\n`);
+    const out = extract(readTable(), data);
+    if (!out.warrior) fail('no warrior.json to copy into the spec fixture');
+    for (const [classSlug, entry] of Object.entries(out)) {
+        fs.writeFileSync(path.join(TABLE_DIR, `${classSlug}.json`), `${JSON.stringify(entry, null, 2)}\n`);
+    }
     fs.writeFileSync(FIXTURE_PATH, `${JSON.stringify({ warrior: out.warrior }, null, 1)}\n`);
     const count = Object.values(out).flatMap((c) => c.trees).reduce((n, t) => n + t.talents.length, 0);
-    console.log(`wrote ${count} talents (hashVersion ${data.hashVersion}) to ${path.relative(ROOT, TABLE_PATH)}`);
+    console.log(`wrote ${count} talents (hashVersion ${data.hashVersion}) to ${path.relative(ROOT, TABLE_DIR)}/<class>.json`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

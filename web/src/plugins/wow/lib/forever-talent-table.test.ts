@@ -84,7 +84,7 @@ describe('isForeverTalentTable', () => {
     });
 });
 
-describe('loadForeverClassTable (the real lazy table)', () => {
+describe('loadForeverClassTable (the real lazy per-class files)', () => {
     it('resolves a three-tree table for every Forever class, null for an unknown one', async () => {
         const { loadForeverClassTable } = await import('./forever-talent-table');
         for (const cls of ['Warrior', 'Paladin', 'Hunter', 'Rogue', 'Priest', 'Shaman', 'Mage', 'Warlock', 'Druid']) {
@@ -103,6 +103,7 @@ describe('peekForeverClassTable (review MINOR-2: loading vs missing)', () => {
         expect(mod.peekForeverClassTable(null), 'no class is known missing at once').toBeNull();
         await mod.loadForeverClassTable('Warrior');
         expect(mod.peekForeverClassTable('Warrior')?.trees.length, 'settled = ready without waiting').toBe(3);
+        expect(mod.peekForeverClassTable('Paladin'), 'ROK-2150: only the loaded class file settles').toBeUndefined();
         expect(mod.peekForeverClassTable('Monk'), 'class absent = missing').toBeNull();
     });
 });
