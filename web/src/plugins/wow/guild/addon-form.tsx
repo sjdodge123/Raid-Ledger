@@ -1,11 +1,13 @@
 /**
  * ROK-1786 — the editor's "Add addon" form (paste a link; the name + source
  * preview is client-side only, the server parses for real) and the shared
- * note / required / flavor fields the inline row editor reuses
+ * note / required / flavor / folder-name fields the inline row editor reuses
  * (prototype `AddonForm.tsx`).
  */
 import { useState, type JSX } from 'react';
-import { GUILD_ADDON_FLAVORS, GUILD_ADDON_NOTE_MAX, GUILD_URL_MAX, type GuildAddonFlavor } from '@raid-ledger/contract';
+import {
+    GUILD_ADDON_FLAVORS, GUILD_ADDON_FOLDER_NAME_MAX, GUILD_ADDON_NOTE_MAX, GUILD_URL_MAX, type GuildAddonFlavor,
+} from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
@@ -40,11 +42,17 @@ export function AddonDetailFields({ value, onChange }: { value: AddonDetails; on
                     {FLAVOR_OPTIONS.map((f) => <option key={f} value={f}>{FLAVOR_LABEL[f]}</option>)}
                 </Select>
             </Field>
+            <div className="md:col-span-3">
+                <Field label="Addon folder name" hint="As it appears in Interface/AddOns — used to show who has it installed.">
+                    <Input value={value.folderName} maxLength={GUILD_ADDON_FOLDER_NAME_MAX} placeholder="Optional"
+                        onChange={(e) => onChange({ ...value, folderName: e.target.value })} />
+                </Field>
+            </div>
         </div>
     );
 }
 
-const EMPTY: AddonDetails = { note: '', requirement: 'optional', flavor: null };
+const EMPTY: AddonDetails = { note: '', requirement: 'optional', flavor: null, folderName: '' };
 
 export interface NewAddon extends AddonDetails { url: string }
 
