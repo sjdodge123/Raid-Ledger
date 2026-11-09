@@ -115,8 +115,33 @@ describe('IGDB sync taste-recompute gating (ROK-2121)', () => {
     expect(enqueueSpy.mock.calls).toEqual([]);
   });
 
+  /** Lowercased, sorted ITAD tags of a game as stored right now. */
+  async function readItadTags(gameId: number): Promise<string[]> {
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ itadTags: schema.games.itadTags })
+        .from(schema.games)
+        .where(eq(schema.games.id, gameId)),
+      `game ${gameId}`,
+    );
+    const tags: unknown = row.itadTags;
+    return Array.isArray(tags)
+      ? tags.map((t) => String(t).toLowerCase()).sort()
+      : [];
+  }
+
   it('AC2: genres + ITAD tags changed in one run enqueue exactly one recompute for that game', async () => {
     const { idA } = await seedStoredGames();
+    // Read the row the recompute would see at enqueue time (ordering, not count).
+    const tagsAtEnqueue: string[][] = [];
+    const reads: Promise<void>[] = [];
+    enqueueSpy.mockImplementation((gameId: number) => {
+      const read = readItadTags(gameId).then((tags) => {
+        tagsAtEnqueue.push(tags);
+      });
+      reads.push(read);
+      return read;
+    });
     const changedA: IgdbApiGame = {
       ...GAME_A,
       genres: [{ id: 12 }, { id: 31 }],
@@ -134,7 +159,10 @@ describe('IGDB sync taste-recompute gating (ROK-2121)', () => {
 
     await testApp.app.get(IgdbService).syncAllGames();
 
+    await Promise.all(reads);
     // Refresh (genres) and ITAD (tags) both changed A; B changed nothing.
     expect(enqueueSpy.mock.calls).toEqual([[idA]]);
+    // The one enqueue happened after ITAD wrote A's new tags.
+    expect(tagsAtEnqueue).toEqual([['co-op', 'rpg', 'survival']]);
   });
 });
