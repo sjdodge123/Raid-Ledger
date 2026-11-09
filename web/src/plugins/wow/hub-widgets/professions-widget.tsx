@@ -9,6 +9,7 @@ import { useState, type JSX } from 'react';
 import { CharacterLink } from '../../../components/hub/character-link';
 import { Button } from '../../../components/ui/button';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
+import { professionMemberKey } from '../lib/profession-member-key';
 import { useRosterInsights } from './use-roster-insights';
 import { ProfessionsEmpty } from './professions-empty';
 import { FreshnessFooter } from './freshness-footer';
@@ -62,7 +63,7 @@ function MemberList({ name, members }: { name: string; members: readonly Profess
     return (
         <ul aria-label={`${name} members`} className="mt-1 flex flex-col gap-1 pl-3">
             {sortMembers(members).map((m) => (
-                <li key={m.characterId} className="flex items-center justify-between gap-2 text-sm">
+                <li key={professionMemberKey(m) ?? m.name} className="flex items-center justify-between gap-2 text-sm">
                     <CharacterLink name={m.name} characterId={m.characterId} className="min-w-0 truncate text-foreground" />
                     <span className="flex shrink-0 items-center gap-2">
                         <span className="tabular-nums text-foreground">{formatSkill(m.skill, m.maxSkill) ?? '—'}</span>

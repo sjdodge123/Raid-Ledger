@@ -78,7 +78,7 @@ describe('GuildPage (ROK-1785)', () => {
         expect(hero, 'a realm-less guild with raw_realm must still show its realm').toHaveTextContent('Doomhowl · US');
     });
 
-    it('renders the members grouped by rank, linking only RL characters', async () => {
+    it('renders the members grouped by rank: RL characters link to their page, unlinked rows to the roster-member page (ROK-2149 AC-8)', async () => {
         window.location.hash = '#members';
         serve(makePage());
         renderPage();
@@ -86,8 +86,9 @@ describe('GuildPage (ROK-1785)', () => {
         expect(within(gm).getByRole('link', { name: 'Grimtusk' })).toHaveAttribute('href', `/characters/${LINKED_ID}`);
         const raiders = screen.getByTestId('guild-rank-2');
         expect(within(raiders).getByText('Raider · 2')).toBeInTheDocument();
-        expect(within(raiders).queryByRole('link', { name: 'Nolinkadin' })).toBeNull();
-        expect(within(raiders).getByTestId('guild-member-unlinked')).toHaveTextContent('Nolinkadin');
+        const unlinked = within(raiders).getByRole('link', { name: 'Nolinkadin' });
+        expect(unlinked, 'an unlinked row opens its read-only roster-member page').toHaveAttribute('href', '/hubs/7/members/3');
+        expect(unlinked).toHaveAttribute('data-testid', 'guild-member-roster-link');
     });
 
     it('an old #roster link opens Members and the hash is rewritten to #members (ROK-1830 D7-A)', async () => {

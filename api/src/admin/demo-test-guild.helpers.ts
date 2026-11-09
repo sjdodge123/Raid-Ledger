@@ -52,6 +52,8 @@ export interface SeedGuildInput {
   withPulls: boolean;
   /** ROK-2147: also seed the member character's installed addons. */
   withInstalledAddons: boolean;
+  /** ROK-2149: Armory snapshots on the unlinked roster rows (member page). */
+  withArmorySnapshots: boolean;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
   /** ROK-2132: appended to every roster name, so parallel claim specs never share one ('' = none). */

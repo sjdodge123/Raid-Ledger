@@ -71,6 +71,20 @@ describe('ProfessionsWidget', () => {
         expect(await screen.findByTestId('professions-footer')).toHaveTextContent('2 characters with professions');
     });
 
+    it('lists a snapshot-only member as plain text and counts it (ROK-2149 Q9)', async () => {
+        const withSnapshot = { ...PROFESSIONS_FIXTURE, professions: [
+            ...(PROFESSIONS_FIXTURE.professions ?? []),
+            { name: 'Skinning', members: [{ characterId: null, memberId: 9, name: 'Pugsy', skill: 60, maxSkill: 75, source: 'blizzard' as const }] },
+        ] };
+        server.use(rosterInsightsHandler({ all: withSnapshot }));
+        renderWidget();
+        expect(await screen.findByTestId('professions-footer')).toHaveTextContent('3 characters with professions');
+        await userEvent.click(screen.getByRole('button', { name: /Skinning/ }));
+        const list = screen.getByRole('list', { name: 'Skinning members' });
+        expect(within(list).getByText('Pugsy')).toBeInTheDocument();
+        expect(within(list).queryByRole('link'), 'no character page to link to (Q9: plain text)').toBeNull();
+    });
+
     it('says "1 character" (singular) when one character has professions', async () => {
         const one = { ...NO_PROFESSIONS_FIXTURE, professions: [
             { name: 'Mining', members: [{ characterId: MOCK_CHAR_IDS.jaina, name: 'Mixer', skill: 150, maxSkill: 150, source: 'addon' as const }] },

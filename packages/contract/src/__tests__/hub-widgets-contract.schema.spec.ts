@@ -243,6 +243,50 @@ describe("EventQuestReadiness", () => {
   });
 });
 
+describe("WowRosterInsights snapshot-only profession members (ROK-2149 Q4=A)", () => {
+  const withMember = (m: Record<string, unknown>) => ({
+    ...insights,
+    professions: [{ name: "Alchemy", members: [m] }],
+  });
+  const base = { name: "Wren", skill: 75, maxSkill: 150, source: "blizzard" };
+  const uuid = "7f1c2c1e-3b1a-4c5e-9a2b-1d2e3f4a5b6c";
+  it("an old member (uuid characterId, no memberId) still parses", () => {
+    const r = WowRosterInsightsSchema.safeParse(
+      withMember({ ...base, characterId: uuid }),
+    );
+    expect(r.success).toBe(true);
+  });
+  it("an unlinked member parses with characterId null + memberId", () => {
+    const r = WowRosterInsightsSchema.safeParse(
+      withMember({ ...base, characterId: null, memberId: 42 }),
+    );
+    expect(r.success).toBe(true);
+  });
+  it("a linked member may also carry its memberId", () => {
+    const r = WowRosterInsightsSchema.safeParse(
+      withMember({ ...base, characterId: uuid, memberId: 42 }),
+    );
+    expect(r.success).toBe(true);
+  });
+  it("rejects a null characterId without a memberId (nothing to key it by)", () => {
+    const r = WowRosterInsightsSchema.safeParse(
+      withMember({ ...base, characterId: null }),
+    );
+    expect(r.success).toBe(false);
+  });
+  it("rejects a non-integer memberId and unknown member keys", () => {
+    const bad = [
+      { ...base, characterId: null, memberId: "42" },
+      { ...base, characterId: null, memberId: 0 },
+      { ...base, characterId: uuid, extra: 1 },
+    ];
+    for (const m of bad)
+      expect(WowRosterInsightsSchema.safeParse(withMember(m)).success).toBe(
+        false,
+      );
+  });
+});
+
 describe("characterId is the characters table uuid (ROK-1911 review)", () => {
   it("rejects an integer characterId", () => {
     const r = WowRosterInsightsSchema.safeParse({

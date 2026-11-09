@@ -55,10 +55,10 @@ function serveLostRace(memberId: number): void {
     );
 }
 
-function renderList(opts: { existing?: CharacterDto[]; onClaimed?: () => void; onSwitchTab?: (t: 'manual' | 'import') => void } = {}) {
+function renderList(opts: { existing?: CharacterDto[]; onClaimed?: () => void; onSwitchTab?: (t: 'manual' | 'import') => void; onNavigate?: () => void } = {}) {
     return renderWithProviders(
         <RosterClaimList gameId={GAME_ID} existingCharacters={opts.existing ?? []} armoryAvailable
-            onClaimed={opts.onClaimed ?? (() => {})} onSwitchTab={opts.onSwitchTab ?? (() => {})} />,
+            onClaimed={opts.onClaimed ?? (() => {})} onSwitchTab={opts.onSwitchTab ?? (() => {})} onNavigate={opts.onNavigate} />,
     );
 }
 
@@ -203,5 +203,33 @@ describe('RosterClaimList — one-guild filter (ROK-2132 Ruling 6)', () => {
         await screen.findByText('Fernwhistle Thorne');
         expect(seen).toEqual([null]);
         expect(screen.queryByRole('button', { name: 'Show all guilds' })).not.toBeInTheDocument();
+    });
+});
+
+describe('RosterClaimList — View link to the read-only member page (ROK-2149)', () => {
+    it("links each candidate's name and View button to its roster-member page in claim mode", async () => {
+        serveList();
+        renderList();
+        const name = await screen.findByRole('link', { name: 'Ashen Vale' });
+        expect(name, 'the name opens /hubs/:guildId/members/:memberId as the confirm step').toHaveAttribute('href', '/hubs/1/members/11?from=claim');
+        expect(screen.getByRole('link', { name: 'View Ashen Vale' })).toHaveAttribute('href', '/hubs/1/members/11?from=claim');
+        expect(screen.getByRole('link', { name: 'View Fernwhistle Thorne' }), 'the hub id is the candidate guild').toHaveAttribute('href', '/hubs/2/members/21?from=claim');
+        expect(screen.getAllByTestId('roster-claim-view-link')).toHaveLength(3);
+    });
+
+    it('shows the View button on phones only (the name is the link on wider screens)', async () => {
+        serveList();
+        renderList();
+        const view = await screen.findByRole('link', { name: 'View Brine Hollow' });
+        expect(view).toHaveClass('sm:hidden');
+        expect(view).toHaveTextContent('View');
+    });
+
+    it('tells the host to close its modal when a View link is followed', async () => {
+        const onNavigate = vi.fn();
+        serveList();
+        renderList({ onNavigate });
+        await userEvent.click(await screen.findByRole('link', { name: 'View Ashen Vale' }));
+        expect(onNavigate, 'following View must close the Add Character modal').toHaveBeenCalledTimes(1);
     });
 });
