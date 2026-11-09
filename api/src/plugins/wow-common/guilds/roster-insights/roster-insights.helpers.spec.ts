@@ -197,7 +197,10 @@ describe('roster-insights professions + freshness', () => {
   });
 
   /** `base` holding one Blacksmithing entry as a blizzard fact. */
-  function smith(base: InsightRow, extra: Partial<InsightRow> = {}): InsightRow {
+  function smith(
+    base: InsightRow,
+    extra: Partial<InsightRow> = {},
+  ): InsightRow {
     const entry = {
       id: 164,
       slug: 'blacksmithing',

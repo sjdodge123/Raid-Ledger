@@ -435,9 +435,11 @@ describe('GET roster-insights (real DB)', () => {
     expect('gear' in res.body).toBe(false);
   });
 
-  it('a member gets an unclaimed member\'s snapshot professions; a visitor gets none (ROK-2149 AC-13)', async () => {
+  it("a member gets an unclaimed member's snapshot professions; a visitor gets none (ROK-2149 AC-13)", async () => {
     const { gid, pugId } = await seedSnapshotProfessionGuild();
-    const dto = WowRosterInsightsSchema.parse((await insights('lead', gid)).body);
+    const dto = WowRosterInsightsSchema.parse(
+      (await insights('lead', gid)).body,
+    );
     expect(dto.professions).toEqual([
       {
         name: 'Blacksmithing',
