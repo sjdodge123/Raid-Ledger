@@ -1667,7 +1667,9 @@ renders its own card or heading.
 `action` that links to the full view. Keep kind-structural cards (role composition, recent arrivals) in the
 owning `HubModule.overviewWidgets`.
 
-**Adopters.** Valheim (`web/src/plugins/valheim/register.ts`): the claim banner (`chrome: 'none'`, order 5,
+**Adopters.** WoW: Forever (`web/src/plugins/wow/hub-widgets/claim-banner.register.ts`): the staff non-member
+claim banner (`chrome: 'none'`, order 5, ROK-2151 — a §4.7 neutral callout opening the join gate's roster claim
+modal; × dismisses for the browser session). Valheim (`web/src/plugins/valheim/register.ts`): the claim banner (`chrome: 'none'`, order 5,
 ROK-1933) and **Deaths** (ROK-1930, order 45 — after the core cards): a ranked `<ol>` of at most 8 rows, each a
 name + `tabular-nums` count line over a §3.2 `GuildMeter` scaled to the top row. ROK-2029: when the row has a
 target, the **name** and the **count + `MapPinIcon`** are two separate 44px `Link`s (`hover:underline`, distinct
