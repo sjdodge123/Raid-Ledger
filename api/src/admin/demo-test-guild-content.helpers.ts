@@ -113,14 +113,9 @@ async function upsertProfile(
     .onConflictDoUpdate({ target: schema.guildProfiles.guildId, set });
 }
 
-async function upsertAddon(
-  db: Db,
-  guildId: number,
-  addon: SeedAddon,
-  sortOrder: number,
-  gmUserId: number,
-): Promise<number> {
-  const set = {
+/** The columns a re-seed rewrites on an existing addon row. */
+function addonSet(addon: SeedAddon, sortOrder: number, gmUserId: number) {
+  return {
     displayName: addon.displayName,
     note: addon.note,
     requirement: addon.requirement,
@@ -130,6 +125,16 @@ async function upsertAddon(
     updatedByUserId: gmUserId,
     updatedAt: new Date(),
   };
+}
+
+async function upsertAddon(
+  db: Db,
+  guildId: number,
+  addon: SeedAddon,
+  sortOrder: number,
+  gmUserId: number,
+): Promise<number> {
+  const set = addonSet(addon, sortOrder, gmUserId);
   const ga = schema.guildRecommendedAddons;
   const [row] = await db
     .insert(ga)

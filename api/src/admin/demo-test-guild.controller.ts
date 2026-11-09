@@ -75,7 +75,10 @@ import {
   type SeededGuildRaids,
 } from './demo-test-guild-raids.helpers';
 import { seedGuildContent } from './demo-test-guild-content.helpers';
-import { seedInstalledAddons } from './demo-test-guild-installed-addons.helpers';
+import {
+  seedInstalledAddons,
+  type SeededInstalledAddons,
+} from './demo-test-guild-installed-addons.helpers';
 import {
   seedGuildLockouts,
   type SeededGuildLockouts,
@@ -162,13 +165,7 @@ export class DemoTestGuildController {
       ? await this.seedPresence(roster, ctx.guildId)
       : null;
     const pulls = await this.seedPulls(users, ctx, input);
-    const installedAddons = input.withInstalledAddons
-      ? await seedInstalledAddons(
-          this.db,
-          snapshotOwners(users).member,
-          ctx.now,
-        )
-      : null;
+    const installedAddons = await this.seedInstalledHalf(input, users, ctx);
     return {
       ...(content ? { content } : {}),
       ...snapshots,
@@ -177,6 +174,16 @@ export class DemoTestGuildController {
       ...pulls,
       ...(installedAddons ? { installedAddons } : {}),
     };
+  }
+
+  /** `withInstalledAddons` (ROK-2147): the member character's installed-addon list, or null when not asked. */
+  private async seedInstalledHalf(
+    input: Pick<SeedGuildInput, 'withInstalledAddons'>,
+    users: Record<SeedGuildRole, SeedGuildUser>,
+    ctx: RosterCtx,
+  ): Promise<SeededInstalledAddons | null> {
+    if (!input.withInstalledAddons) return null;
+    return seedInstalledAddons(this.db, snapshotOwners(users).member, ctx.now);
   }
 
   /** `withLockouts` / `withGear`: one snapshot write, each half reported only when asked. */
