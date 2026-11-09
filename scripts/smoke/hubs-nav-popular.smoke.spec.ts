@@ -10,7 +10,10 @@
  * owns to sit in the list, so it prepends this tag's `Seed Solo` to that same real
  * answer while the API still reports the viewer outside it (`GET /hubs/by-game`); the
  * Join then has to drop it through the server read + the `['hubs-directory']`
- * invalidation alone.
+ * invalidation alone. Test 3 pins this tag's `Seed Crew` + `Seed Solo` the same way:
+ * `community-banned` is ONE shared user banned from every tag's Seed Crew (6 members
+ * each), so once ten of them exist the real top-10 read is all banned rows and
+ * Seed Solo (1 member) never makes the page.
  *
  * Seed, per test: `POST /admin/test/community-hubs/seed` with this spec's tag
  * (`./hub-seed`, ROK-2030) on a configured game → `Seed Crew #<tag>` (officer in it,
@@ -148,14 +151,18 @@ async function viewerOf(jwt: string, gameId: number, hubId: number): Promise<Ent
     return body?.hubs?.find((h) => h.id === hubId);
 }
 
-/** Prepends Seed Solo to the real popular answer while the API still has the viewer outside it. */
-async function pinSoloWhileNotJoined(page: Page, jwt: string, seed: CommunitySeed): Promise<void> {
+/**
+ * Prepends this tag's hubs (`ids`, as `GET /hubs/by-game` shows them to the viewer right
+ * now, kept only while `keep` holds) to the real popular answer, so the test never
+ * depends on where they rank among every other spec's hubs.
+ */
+async function pinSeedHubs(page: Page, jwt: string, seed: CommunitySeed, ids: number[], keep: (e: Entry) => boolean = () => true): Promise<void> {
     await page.route((url) => isPopularRead(url.href), async (route) => {
         const res = await route.fetch();
         const body = (await res.json()) as DirectoryPage & Record<string, unknown>;
-        const solo = await viewerOf(jwt, seed.gameId, seed.hubIds.solo);
-        const pinned = solo && solo.viewer === 'not-member' ? [solo] : [];
-        const items = [...pinned, ...body.items.filter((h) => h.id !== seed.hubIds.solo)];
+        const live = await Promise.all(ids.map((id) => viewerOf(jwt, seed.gameId, id)));
+        const pinned = live.filter((e): e is Entry => e !== undefined && keep(e));
+        const items = [...pinned, ...body.items.filter((h) => !ids.includes(h.id))];
         await route.fulfill({ response: res, json: { ...body, items } });
     });
 }
@@ -186,7 +193,7 @@ test.describe('Hubs nav — Popular hubs (ROK-2152)', () => {
         expect((await viewerOf(jwt, seed.gameId, seed.hubIds.solo))?.viewer, 'the officer starts outside Seed Solo').toBe('not-member');
         let joined = false;
         try {
-            await pinSoloWhileNotJoined(page, jwt, seed);
+            await pinSeedHubs(page, jwt, seed, [seed.hubIds.solo], (e) => e.viewer === 'not-member');
             await page.goto(NAV_START);
             let scope = await openHubsNav(page);
             await expect(popularRow(scope, seed.hubIds.solo), 'Seed Solo is suggested before the Join').toHaveCount(1, { timeout: 15_000 });
@@ -211,13 +218,24 @@ test.describe('Hubs nav — Popular hubs (ROK-2152)', () => {
     test('a viewer in no hub (Q1): the menu / sheet opens with only "Popular hubs", banned hubs left out', async ({ page }, testInfo) => {
         const seed = await seedHubs(testInfo);
         const jwt = await signInOnboardedMember(page, seed.bannedUserId);
+        const { crew, solo } = seed.hubIds;
         expect(await mineIds(jwt), 'community-banned is in no hub').toEqual([]);
-        const expected = await expectedPopular(await loadWithPopularRead(page), []);
-        expect(expected.length, 'at least Seed Solo is suggested').toBeGreaterThan(0);
+        expect((await viewerOf(jwt, seed.gameId, crew))?.viewer, 'community-banned is banned from Seed Crew').toBe('banned');
+        expect((await viewerOf(jwt, seed.gameId, solo))?.viewer, 'and outside Seed Solo').toBe('not-member');
+        try {
+            await pinSeedHubs(page, jwt, seed, [crew, solo]);
+            const res = await loadWithPopularRead(page);
+            const read = (await res.json()) as DirectoryPage;
+            expect(read.items.slice(0, 2).map((h) => h.id), 'the read carries the banned Seed Crew, then Seed Solo').toEqual([crew, solo]);
+            const expected = await expectedPopular(res, []);
+            expect(expected[0], 'Seed Solo leads the suggestions, Seed Crew dropped').toBe(solo);
 
-        const scope = await openHubsNav(page);
-        await expect.poll(() => popularIds(scope), { message: 'popular rows = the API read minus banned/hidden, first 5', timeout: 15_000 }).toEqual(expected);
-        await expect(scope.getByTestId('guild-entry-row'), 'no "Your hubs" rows').toHaveCount(0);
-        await expect(popularRow(scope, seed.hubIds.crew), 'the hub the viewer is banned from is never suggested').toHaveCount(0);
+            const scope = await openHubsNav(page);
+            await expect.poll(() => popularIds(scope), { message: 'popular rows = the API read minus banned/hidden, first 5', timeout: 15_000 }).toEqual(expected);
+            await expect(scope.getByTestId('guild-entry-row'), 'no "Your hubs" rows').toHaveCount(0);
+            await expect(popularRow(scope, crew), 'the hub the viewer is banned from is never suggested').toHaveCount(0);
+        } finally {
+            await page.unrouteAll({ behavior: 'ignoreErrors' });
+        }
     });
 });
