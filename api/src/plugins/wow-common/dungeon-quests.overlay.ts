@@ -31,7 +31,9 @@ export interface QuestOverlayDeps {
 export const OVERLAY_ONLY_EXPANSION = 'classic';
 
 /** A quest Blizzard lists for the dungeon that our JSON lacks (R4). */
-export function overlayOnlyDto(row: WowDungeonQuestBlizzardRow): DungeonQuestDto {
+export function overlayOnlyDto(
+  row: WowDungeonQuestBlizzardRow,
+): DungeonQuestDto {
   const itemIds = row.rewardItems.map((item) => item.id);
   return {
     questId: row.questId,
@@ -78,7 +80,9 @@ async function listOverlayOnly(
   const rows = await db
     .select()
     .from(wowDungeonQuestBlizzard)
-    .where(inArray(wowDungeonQuestBlizzard.dungeonInstanceId, [...instanceIds]));
+    .where(
+      inArray(wowDungeonQuestBlizzard.dungeonInstanceId, [...instanceIds]),
+    );
   return rows
     .filter((row) => !known.has(row.questId))
     .sort((a, b) => a.questId - b.questId)

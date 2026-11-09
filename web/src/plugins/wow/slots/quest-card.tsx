@@ -6,7 +6,7 @@ import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, Que
 import { getWowheadQuestUrl, getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import { ItemComparison } from '../components/item-comparison';
 import { WowItemCard } from '../components/wow-item-card';
-import { REWARD_TO_EQUIP_SLOT, formatGold } from './quest-card-constants';
+import { REWARD_TO_EQUIP_SLOT, formatGold, prerequisiteCount } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
@@ -47,20 +47,22 @@ export function QuestCard({
     onToggleExpanded, onTogglePickedUp, prereqs,
 }: QuestCardProps) {
     const { isCovered, coveredByMe, coveredByOthers } = useQuestCardState(questCoverage, currentUserId);
-    const hasPrereqs = !!quest.prevQuestId;
+    // A quest with any prevQuestId is not shareable; the Chain badge and line need a resolved prerequisite (ROK-2143).
+    const hasPrevQuest = !!quest.prevQuestId;
+    const prereqTotal = prerequisiteCount(quest);
 
     return (
         <div key={quest.questId} className="quest-card-row">
-            {quest.sharable && !hasPrereqs && (
+            {quest.sharable && !hasPrevQuest && (
                 <CoverageIndicator questId={quest.questId} coveredByMe={coveredByMe} isCovered={isCovered}
                     eventId={eventId} pendingQuestId={pendingQuestId} onToggle={onTogglePickedUp} />
             )}
             <div className="quest-card">
-                <QuestCardHeader quest={quest} isExpanded={isExpanded} hasPrereqs={hasPrereqs}
+                <QuestCardHeader quest={quest} isExpanded={isExpanded} prereqTotal={prereqTotal}
                     completed={prereqs?.state.completed ?? false}
                     wowheadVariant={wowheadVariant} onToggle={() => onToggleExpanded(quest.questId)} />
                 {isExpanded && (
-                    <QuestCardBody quest={quest} hasPrereqs={hasPrereqs} coveredByMe={coveredByMe}
+                    <QuestCardBody quest={quest} hasPrevQuest={hasPrevQuest} prereqTotal={prereqTotal} coveredByMe={coveredByMe}
                         coveredByOthers={coveredByOthers} isCovered={isCovered} questCoverage={questCoverage}
                         wowheadSuffix={getWowheadDataSuffix(wowheadVariant)} wowheadVariant={wowheadVariant}
                         equippedBySlot={equippedBySlot} charClass={charClass} characterId={characterId} prereqs={prereqs} />
@@ -101,8 +103,8 @@ function CoverageIndicator({ questId, coveredByMe, isCovered, eventId, pendingQu
     return <span className="quest-card__inline-status quest-card__inline-status--needed">&#x26A0;</span>;
 }
 
-function QuestCardHeader({ quest, isExpanded, hasPrereqs, completed, wowheadVariant, onToggle }: {
-    quest: EnrichedDungeonQuestDto; isExpanded: boolean; hasPrereqs: boolean;
+function QuestCardHeader({ quest, isExpanded, prereqTotal, completed, wowheadVariant, onToggle }: {
+    quest: EnrichedDungeonQuestDto; isExpanded: boolean; prereqTotal: number;
     completed: boolean; wowheadVariant: string; onToggle: () => void;
 }) {
     return (
@@ -116,8 +118,8 @@ function QuestCardHeader({ quest, isExpanded, hasPrereqs, completed, wowheadVari
                         {quest.name}
                         {quest.questLevel && <span className="quest-card__level"> (Lv{quest.questLevel})</span>}
                     </span>
-                    {hasPrereqs && (
-                        <span className="quest-card__prereq-badge" title={`Requires ${quest.prerequisiteChain!.length - 1} prerequisite quest(s)`}>Chain</span>
+                    {prereqTotal > 0 && (
+                        <span className="quest-card__prereq-badge" title={`Requires ${prereqTotal} prerequisite quest(s)`}>Chain</span>
                     )}
                     {completed && <DonePill />}
                 </div>
@@ -137,8 +139,8 @@ function DonePill() {
     );
 }
 
-function QuestCardBody({ quest, hasPrereqs, coveredByMe, coveredByOthers, isCovered, questCoverage, wowheadSuffix, wowheadVariant, equippedBySlot, charClass, characterId, prereqs }: {
-    quest: EnrichedDungeonQuestDto; hasPrereqs: boolean; coveredByMe: boolean;
+function QuestCardBody({ quest, hasPrevQuest, prereqTotal, coveredByMe, coveredByOthers, isCovered, questCoverage, wowheadSuffix, wowheadVariant, equippedBySlot, charClass, characterId, prereqs }: {
+    quest: EnrichedDungeonQuestDto; hasPrevQuest: boolean; prereqTotal: number; coveredByMe: boolean;
     coveredByOthers: { userId: number; username: string }[];
     isCovered: boolean; questCoverage: QuestCoverageEntry | undefined;
     wowheadSuffix: string; wowheadVariant: string;
@@ -158,14 +160,23 @@ function QuestCardBody({ quest, hasPrereqs, coveredByMe, coveredByOthers, isCove
                 {quest.requiredLevel && <span className="quest-card__meta-item">Requires Lv{quest.requiredLevel}</span>}
                 {quest.sharable && <span className="quest-card__meta-item quest-card__meta-item--sharable">Sharable</span>}
             </div>
-            <QuestRestrictions quest={quest} hasPrereqs={hasPrereqs} coveredByMe={coveredByMe}
+            <QuestRestrictions quest={quest} hasPrereqs={hasPrevQuest} coveredByMe={coveredByMe}
                 coveredByOthers={coveredByOthers} isCovered={isCovered} questCoverage={questCoverage} />
             <QuestRewardsMeta quest={quest} />
-            {hasPrereqs && <QuestPrereqChain quest={quest} state={prereqs?.state} asOf={prereqs?.asOf} />}
+            <QuestPrereqSection quest={quest} hasPrevQuest={hasPrevQuest} prereqTotal={prereqTotal} prereqs={prereqs} />
             <QuestRewardItems quest={quest} wowheadSuffix={wowheadSuffix} wowheadVariant={wowheadVariant}
                 equippedBySlot={equippedBySlot} charClass={charClass} characterId={characterId} />
         </div>
     );
+}
+
+/** The chain line, or a muted note when the prerequisite is not in our data (ROK-2143). */
+function QuestPrereqSection({ quest, hasPrevQuest, prereqTotal, prereqs }: {
+    quest: EnrichedDungeonQuestDto; hasPrevQuest: boolean; prereqTotal: number; prereqs: QuestCardPrereqs | undefined;
+}) {
+    if (prereqTotal > 0) return <QuestPrereqChain quest={quest} state={prereqs?.state} asOf={prereqs?.asOf} />;
+    if (!hasPrevQuest) return null;
+    return <p className="text-xs text-muted" data-testid="quest-prereq-missing">Prerequisite not in data</p>;
 }
 
 function QuestCoverageStatus({ coveredByMe, coveredByOthers, isCovered, questCoverage }: {

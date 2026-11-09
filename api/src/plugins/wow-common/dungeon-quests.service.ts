@@ -11,7 +11,10 @@ import { REDIS_CLIENT } from '../../redis/redis.module';
 import { redisSwr } from '../../common/swr-cache';
 import { SettingsService } from '../../settings/settings.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
-import { applyInstanceOverlay, applyQuestOverlay } from './dungeon-quests.overlay';
+import {
+  applyInstanceOverlay,
+  applyQuestOverlay,
+} from './dungeon-quests.overlay';
 import {
   MAX_CHAIN_DEPTH,
   VARIANT_EXPANSIONS,
