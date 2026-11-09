@@ -33,6 +33,10 @@ import { advanceBracket } from './tiebreaker-bracket.helpers';
 import { advanceRoundIfComplete } from './tiebreaker-advance.helpers';
 import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
 import {
+  finalizeTiebreaker,
+  type WinnerPicker,
+} from './tiebreaker-finalize.helpers';
+import {
   submitVeto,
   revealVetoes,
   findSurvivor,
@@ -62,7 +66,6 @@ import {
   clearActiveTiebreaker,
   createActiveTiebreaker,
   findAndValidateLineup,
-  resolveTiebreaker,
   updateTiebreakerStatus,
 } from './tiebreaker-lifecycle.helpers';
 
@@ -227,15 +230,15 @@ export class TiebreakerService {
     return buildTiebreakerDetail(this.db, tb, userId);
   }
 
-  /** Force-resolve an active tiebreaker (operator). */
+  /**
+   * Force-resolve a tiebreaker (operator). ROK-2098: runs under the
+   * round-advance lock, and on an already-resolved row completes any missing
+   * clear / decided flip / matching with the stored winner (a repair retry).
+   */
   async forceResolve(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb) throw new NotFoundException('No tiebreaker found');
-
-    const winnerId = await this.determineWinner(tb);
-    await resolveTiebreaker(this.db, tb.id, winnerId);
-    await clearActiveTiebreaker(this.db, lineupId);
-    await this.transitionToDecided(lineupId, winnerId);
+    await this.finalize(tb.id, (row, tx) => this.determineWinner(row, tx));
   }
 
   /**
@@ -250,10 +253,18 @@ export class TiebreakerService {
   ): Promise<void> {
     const winner = await advanceRoundIfComplete(this.db, tb.id, lineupId);
     if (!winner) return;
-    await resolveTiebreaker(this.db, tb.id, winner);
-    await clearActiveTiebreaker(this.db, lineupId);
-    await this.transitionToDecided(lineupId, winner);
-    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);
+    const final = await this.finalize(tb.id, () => Promise.resolve(winner));
+    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${final}`);
+  }
+
+  /** ROK-2098: once-only, repairable resolve → clear → decide. */
+  private finalize(tiebreakerId: number, pickWinner: WinnerPicker) {
+    const deps = {
+      db: this.db,
+      logger: this.logger,
+      events: this.eventEmitter,
+    };
+    return finalizeTiebreaker(deps, tiebreakerId, pickWinner);
   }
 
   /**
@@ -313,23 +324,29 @@ export class TiebreakerService {
     );
   }
 
+  /**
+   * ROK-2098: runs inside the finalize lock transaction — every query uses
+   * `tx`, never `this.db` (an outer-pool query here would wait on a second
+   * pooled connection while the lock pins the first).
+   */
   private async determineWinner(
     tb: typeof schema.communityLineupTiebreakers.$inferSelect,
+    tx: PostgresJsDatabase<typeof schema>,
   ): Promise<number> {
     const tiedGameIds = tb.tiedGameIds;
 
     if (tb.mode === 'bracket') {
-      const winner = await advanceBracket(this.db, tb.id);
+      const winner = await advanceBracket(tx, tb.id);
       if (winner) return winner;
       // If bracket isn't done, pick highest-seeded remaining
-      const matchups = await findMatchups(this.db, tb.id);
+      const matchups = await findMatchups(tx, tb.id);
       const final = matchups.find((m) => m.winnerGameId);
       return final?.winnerGameId ?? defined(tiedGameIds[0], 'top tied game');
     }
 
     // Veto mode: reveal and find survivor
-    await revealVetoes(this.db, tb.id);
-    const vetoes = await findVetoes(this.db, tb.id);
+    await revealVetoes(tx, tb.id);
+    const vetoes = await findVetoes(tx, tb.id);
     return findSurvivor(tiedGameIds, vetoes);
   }
 }
