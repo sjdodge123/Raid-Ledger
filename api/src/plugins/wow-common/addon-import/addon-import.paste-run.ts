@@ -8,6 +8,7 @@ import type {
   DecodedAddonPaste,
 } from './addon-import.decoder';
 import type { AddonApplyContext, RosterFlag } from './addon-import-apply.types';
+import { withCharInstalledAddons } from './addon-import-char.installed';
 import { withCharMailworthy } from './addon-import-char.mailworthy';
 import { buildResult, runSection } from './addon-import.service.helpers';
 
@@ -52,14 +53,15 @@ export async function runPaste(
       outcome: await runSection(sectionCtx, decoded, dryRun),
     });
   }
-  return dryRun ? runs : withDeferredMailworthy(ctx, runs);
+  return dryRun ? runs : withDeferredCharBlocks(ctx, runs);
 }
 
 /**
  * ROK-2148 (Codex P2) — the char block's roster check reads the guild
  * section's writes, so it runs once every section has (same `ctx.tx`).
+ * ROK-2147 — the installed-addon list is written in the same pass.
  */
-async function withDeferredMailworthy(
+async function withDeferredCharBlocks(
   ctx: Omit<AddonApplyContext, 'sha256'>,
   runs: PasteSectionRun[],
 ): Promise<PasteSectionRun[]> {
@@ -71,7 +73,8 @@ async function withDeferredMailworthy(
       continue;
     }
     const charCtx = { ...ctx, sha256 };
-    const outcome = await withCharMailworthy(charCtx, payload, run.outcome);
+    const mailed = await withCharMailworthy(charCtx, payload, run.outcome);
+    const outcome = await withCharInstalledAddons(charCtx, payload, mailed);
     out.push({ ...run, outcome });
   }
   return out;

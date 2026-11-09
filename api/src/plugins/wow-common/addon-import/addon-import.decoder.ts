@@ -13,6 +13,7 @@ import {
   type AddonMailworthy,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
+import { dedupeInstalled } from './addon-import-char.installed.helpers';
 import { assertPlausibleExportTimes, exportClock } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
@@ -171,7 +172,7 @@ function finalize(pages: AddonExport[]): DecodedAddonExport {
     ...sanitizeStrings(envelope),
     data: toCharSnapshotData(data),
     ...(mailworthy ? { mailworthy: sanitizeStrings(mailworthy) } : {}),
-    ...(addons ? { addons: sanitizeStrings(addons) } : {}),
+    ...(addons ? { addons: dedupeInstalled(sanitizeStrings(addons)) } : {}),
   };
 }
 
