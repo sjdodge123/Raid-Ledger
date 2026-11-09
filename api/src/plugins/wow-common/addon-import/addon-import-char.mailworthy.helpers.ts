@@ -80,7 +80,14 @@ export function dedupeGivers(
   return [...byKey.values()];
 }
 
-/** Days deduped by `day` (last wins), ascending; all-time ≥ their sum. */
+/** `guild_mailworthy_givers.items_all_time` is a Postgres `integer`. */
+export const MAX_ITEMS_ALL_TIME = 2_147_483_647;
+
+/**
+ * Days deduped by `day` (last wins), ascending; all-time ≥ their sum, capped
+ * at int32 (Codex P2: an overflowing sum failed the write and rolled back the
+ * whole char import).
+ */
 export function clampGiver(giver: AddonMailworthyGiver): {
   itemsAllTime: number;
   days: GuildMailworthyStoredDays;
@@ -91,7 +98,8 @@ export function clampGiver(giver: AddonMailworthyGiver): {
     .sort(([a], [b]) => a - b)
     .map(([day, items]) => ({ day, items }));
   const sum = days.reduce((total, d) => total + d.items, 0);
-  return { itemsAllTime: Math.max(giver.itemsAllTime, sum), days };
+  const itemsAllTime = Math.max(giver.itemsAllTime, sum);
+  return { itemsAllTime: Math.min(itemsAllTime, MAX_ITEMS_ALL_TIME), days };
 }
 
 /**
