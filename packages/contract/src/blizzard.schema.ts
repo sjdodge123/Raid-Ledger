@@ -91,6 +91,8 @@ export const WowForeverConfigSchema = z.object({
     armoryImportEnabled: z.boolean(),
     /** ROK-1727: Wowhead item resolver kill switch. Omitted on PUT = unchanged; GET always sends it (unset ⇒ true). */
     wowheadResolverEnabled: z.boolean().optional(),
+    /** ROK-2143: Forever classic quest import kill switch. Omitted on PUT = unchanged; GET always sends it (unset ⇒ true). */
+    questImportEnabled: z.boolean().optional(),
 });
 export type WowForeverConfigDto = z.infer<typeof WowForeverConfigSchema>;
 

@@ -24,8 +24,10 @@ import {
   WOW_FOREVER_ARMORY_IMPORT_KEY,
   WOW_FOREVER_CONFIG_UPDATED,
   WOW_FOREVER_NAMESPACE_PREFIX_KEY,
+  WOW_FOREVER_QUEST_IMPORT_KEY,
   type WowForeverConfigUpdatedPayload,
 } from './forever.settings';
+import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import {
   isWowheadResolverEnabled,
   setWowheadResolverEnabled,
@@ -77,6 +79,7 @@ export class ForeverConfigService implements OnModuleInit {
       namespacePrefixIsDefault: namespacePrefix === FOREVER_DEFAULT_PREFIX,
       armoryImportEnabled: await this.isArmoryImportEnabled(),
       wowheadResolverEnabled: await isWowheadResolverEnabled(this.settings),
+      questImportEnabled: await isForeverQuestImportEnabled(this.settings),
     };
   }
 
@@ -94,19 +97,8 @@ export class ForeverConfigService implements OnModuleInit {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message));
     }
-    const { namespacePrefix, armoryImportEnabled, wowheadResolverEnabled } =
-      parsed.data;
-    await this.writeOrDelete(
-      WOW_FOREVER_NAMESPACE_PREFIX_KEY,
-      isDefaultPrefix(namespacePrefix) ? null : namespacePrefix,
-    );
-    await this.writeOrDelete(
-      WOW_FOREVER_ARMORY_IMPORT_KEY,
-      armoryImportEnabled ? null : 'false',
-    );
-    if (wowheadResolverEnabled !== undefined) {
-      await setWowheadResolverEnabled(this.settings, wowheadResolverEnabled);
-    }
+    const { namespacePrefix } = parsed.data;
+    await this.writeConfig(parsed.data);
     const payload: WowForeverConfigUpdatedPayload = { namespacePrefix };
     this.events.emit(WOW_FOREVER_CONFIG_UPDATED, payload);
     return this.getConfig();
@@ -139,6 +131,31 @@ export class ForeverConfigService implements OnModuleInit {
   /** ROK-1722: on by default — absent (or legacy 'true') = on, 'false' = off. */
   async isArmoryImportEnabled(): Promise<boolean> {
     return isForeverArmoryImportEnabled(this.settings);
+  }
+
+  /** Persist each setting; an omitted optional switch stays unchanged. */
+  private async writeConfig(dto: WowForeverConfigDto): Promise<void> {
+    await this.writeOrDelete(
+      WOW_FOREVER_NAMESPACE_PREFIX_KEY,
+      isDefaultPrefix(dto.namespacePrefix) ? null : dto.namespacePrefix,
+    );
+    await this.writeOrDelete(
+      WOW_FOREVER_ARMORY_IMPORT_KEY,
+      dto.armoryImportEnabled ? null : 'false',
+    );
+    if (dto.wowheadResolverEnabled !== undefined) {
+      await setWowheadResolverEnabled(
+        this.settings,
+        dto.wowheadResolverEnabled,
+      );
+    }
+    // ROK-2143: the save event after this also drops the Quest Prep quest cache.
+    if (dto.questImportEnabled !== undefined) {
+      await this.writeOrDelete(
+        WOW_FOREVER_QUEST_IMPORT_KEY,
+        dto.questImportEnabled ? null : 'false',
+      );
+    }
   }
 
   private async writeOrDelete(

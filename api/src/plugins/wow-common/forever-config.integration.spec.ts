@@ -23,7 +23,9 @@ import {
 import {
   WOW_FOREVER_ARMORY_IMPORT_KEY,
   WOW_FOREVER_NAMESPACE_PREFIX_KEY,
+  WOW_FOREVER_QUEST_IMPORT_KEY,
 } from './forever.settings';
+import { DungeonQuestsService } from './dungeon-quests.service';
 
 const ADMIN_ROUTE = '/admin/plugins/blizzard/forever';
 
@@ -92,6 +94,7 @@ describe('GET /blizzard/capabilities (ROK-1717)', () => {
       namespacePrefixIsDefault: false,
       armoryImportEnabled: false,
       wowheadResolverEnabled: true,
+      questImportEnabled: true,
     });
     const flagRows = () =>
       testApp.db
@@ -112,6 +115,35 @@ describe('GET /blizzard/capabilities (ROK-1717)', () => {
     const on = await testApp.request.get('/blizzard/capabilities');
     expect(on.body).toEqual({ armoryImport: { wow_forever: true } });
     expect(await flagRows()).toHaveLength(0);
+  });
+});
+
+describe('PUT /admin/plugins/blizzard/forever quest import switch (ROK-2143)', () => {
+  it('turning it off stores "false" and drops the quest cache; on again deletes the key', async () => {
+    const clearCache = jest.spyOn(
+      testApp.app.get(DungeonQuestsService),
+      'clearCache',
+    );
+    try {
+      const base = { namespacePrefix: 'forever', armoryImportEnabled: true };
+      const off = await put(adminToken, { ...base, questImportEnabled: false });
+      expect(off.status).toBe(200);
+      expect(off.body.questImportEnabled).toBe(false);
+      const rows = () =>
+        testApp.db
+          .select({ key: schema.appSettings.key })
+          .from(schema.appSettings)
+          .where(eq(schema.appSettings.key, WOW_FOREVER_QUEST_IMPORT_KEY));
+      expect(await rows()).toHaveLength(1);
+      expect(clearCache).toHaveBeenCalledTimes(1);
+
+      const on = await put(adminToken, { ...base, questImportEnabled: true });
+      expect(on.body.questImportEnabled).toBe(true);
+      expect(await rows()).toHaveLength(0);
+      expect(clearCache).toHaveBeenCalledTimes(2);
+    } finally {
+      clearCache.mockRestore();
+    }
   });
 });
 
@@ -143,6 +175,7 @@ describe('/admin/plugins/blizzard/forever guards (ROK-1717)', () => {
       namespacePrefixIsDefault: true,
       armoryImportEnabled: true,
       wowheadResolverEnabled: true,
+      questImportEnabled: true,
     });
   });
 });
