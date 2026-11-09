@@ -4,7 +4,8 @@
  * The Forever namespace prefix is known (`forever`, confirmed by the ROK-2102
  * probe), so the prefix field is an override only. A one-line status reads the
  * latest probe result to say whether the configured prefix is confirmed live.
- * The prefix is a form field saved with its button; the Armory switch applies
+ * The prefix is a form field saved with its button; the switches (Armory,
+ * quest import — ROK-2143 — and Wowhead lookup) apply
  * immediately with the saved prefix (design-system: a Switch is for settings
  * that apply at once).
  */
@@ -36,6 +37,9 @@ function savedDto(
         armoryImportEnabled: saved.armoryImportEnabled,
         ...(saved.wowheadResolverEnabled !== undefined && {
             wowheadResolverEnabled: saved.wowheadResolverEnabled,
+        }),
+        ...(saved.questImportEnabled !== undefined && {
+            questImportEnabled: saved.questImportEnabled,
         }),
         ...patch,
     };
@@ -135,6 +139,30 @@ function NamespaceStatus({ prefix }: { prefix: string }): JSX.Element | null {
     );
 }
 
+/** One setting that applies at once: label + hint on the left, a Switch on the right. */
+interface SwitchRowProps {
+    label: string;
+    hint: string;
+    checked: boolean;
+    onChange: (next: boolean) => void;
+    disabled: boolean;
+}
+
+function SwitchRow({ label, hint, ...sw }: SwitchRowProps): JSX.Element {
+    const hintId = useId();
+    return (
+        <div className="flex items-center justify-between gap-4">
+            <div>
+                <p className="text-sm font-medium text-foreground">{label}</p>
+                <p id={hintId} className="text-sm text-secondary">
+                    {hint}
+                </p>
+            </div>
+            <Switch {...sw} label={label} aria-describedby={hintId} />
+        </div>
+    );
+}
+
 function ArmoryToggle({
     saved,
     mutate,
@@ -144,7 +172,6 @@ function ArmoryToggle({
     mutate: SaveFn;
     pending: boolean;
 }): JSX.Element {
-    const hintId = useId();
     const onChange = (next: boolean): void => {
         void save(
             mutate,
@@ -155,24 +182,13 @@ function ArmoryToggle({
         );
     };
     return (
-        <div className="flex items-center justify-between gap-4">
-            <div>
-                <p className="text-sm font-medium text-foreground">
-                    Armory import for WoW Forever
-                </p>
-                <p id={hintId} className="text-sm text-secondary">
-                    On by default. Turn off to hide “Import from Armory” for
-                    Forever characters.
-                </p>
-            </div>
-            <Switch
-                checked={saved.armoryImportEnabled}
-                onChange={onChange}
-                label="Armory import for WoW Forever"
-                aria-describedby={hintId}
-                disabled={pending}
-            />
-        </div>
+        <SwitchRow
+            label="Armory import for WoW Forever"
+            hint="On by default. Turn off to hide “Import from Armory” for Forever characters."
+            checked={saved.armoryImportEnabled}
+            onChange={onChange}
+            disabled={pending}
+        />
     );
 }
 
@@ -185,7 +201,6 @@ function ResolverToggle({
     mutate: SaveFn;
     pending: boolean;
 }): JSX.Element {
-    const hintId = useId();
     const onChange = (next: boolean): void => {
         void save(
             mutate,
@@ -196,23 +211,43 @@ function ResolverToggle({
         );
     };
     return (
-        <div className="flex items-center justify-between gap-4">
-            <div>
-                <p className="text-sm font-medium text-foreground">
-                    Wowhead item lookup
-                </p>
-                <p id={hintId} className="text-sm text-secondary">
-                    Fetch names and icons for addon-imported gear from Wowhead.
-                </p>
-            </div>
-            <Switch
-                checked={saved.wowheadResolverEnabled ?? true}
-                onChange={onChange}
-                label="Wowhead item lookup"
-                aria-describedby={hintId}
-                disabled={pending}
-            />
-        </div>
+        <SwitchRow
+            label="Wowhead item lookup"
+            hint="Fetch names and icons for addon-imported gear from Wowhead."
+            checked={saved.wowheadResolverEnabled ?? true}
+            onChange={onChange}
+            disabled={pending}
+        />
+    );
+}
+
+/** ROK-2143: kill switch for the Blizzard quest import and its overlay (unset ⇒ ON). */
+function QuestImportToggle({
+    saved,
+    mutate,
+    pending,
+}: {
+    saved: WowForeverConfigResponseDto;
+    mutate: SaveFn;
+    pending: boolean;
+}): JSX.Element {
+    const onChange = (next: boolean): void => {
+        void save(
+            mutate,
+            savedDto(saved, { questImportEnabled: next }),
+            next
+                ? 'Quest import from the Blizzard API turned on'
+                : 'Quest import from the Blizzard API turned off',
+        );
+    };
+    return (
+        <SwitchRow
+            label="Quest import from the Blizzard API"
+            hint="On by default. Turn off to stop the import and show the bundled quest data in Quest Prep."
+            checked={saved.questImportEnabled ?? true}
+            onChange={onChange}
+            disabled={pending}
+        />
     );
 }
 
@@ -239,6 +274,11 @@ export function ForeverSettingsSection(): JSX.Element | null {
                 pending={update.isPending}
             />
             <ArmoryToggle
+                saved={config.data}
+                mutate={update.mutateAsync}
+                pending={update.isPending}
+            />
+            <QuestImportToggle
                 saved={config.data}
                 mutate={update.mutateAsync}
                 pending={update.isPending}
