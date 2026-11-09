@@ -18,6 +18,10 @@ import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identit
 import type { CharacterProfessionsDto } from '@raid-ledger/contract';
 import { parseArmoryProfessionsFlag } from './demo-test-guild-professions.helpers';
 import {
+  parseSeedFlags,
+  type RawSeedFlags,
+} from './demo-test-guild-flags.helpers';
+import {
   parseRosterSuffix,
   type SeedRosterEntry,
 } from './demo-test-guild-roster-suffix.helpers';
@@ -46,6 +50,8 @@ export interface SeedGuildInput {
   withGear: boolean;
   /** ROK-1917: also seed LedgerLink raid-export boss pulls (Raid progress). */
   withPulls: boolean;
+  /** ROK-2147: also seed the member character's installed addons. */
+  withInstalledAddons: boolean;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
   /** ROK-2132: appended to every roster name, so parallel claim specs never share one ('' = none). */
@@ -77,38 +83,6 @@ export const SEED_GUILD_ROSTER = [
 export const SEED_GUILD_EDITOR_RANK = 1;
 
 const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{2,47}$/;
-
-/** An optional boolean body flag (absent = false). */
-function boolFlag(value: unknown, name: string): boolean {
-  const flag = value ?? false;
-  if (typeof flag !== 'boolean') {
-    throw new BadRequestException(`${name} must be a boolean`);
-  }
-  return flag;
-}
-
-interface RawSeedFlags {
-  withContent?: unknown;
-  withLockouts?: unknown;
-  withDings?: unknown;
-  withPresence?: unknown;
-  withGear?: unknown;
-  withPulls?: unknown;
-}
-
-/** The opt-in boolean flags; 400 on a non-boolean. */
-function parseSeedFlags(
-  raw: RawSeedFlags,
-): Omit<SeedGuildInput, 'name' | 'gameSlug' | 'rosterSuffix'> {
-  return {
-    withContent: boolFlag(raw.withContent, 'withContent'),
-    withLockouts: boolFlag(raw.withLockouts, 'withLockouts'),
-    withDings: boolFlag(raw.withDings, 'withDings'),
-    withPresence: boolFlag(raw.withPresence, 'withPresence'),
-    withGear: boolFlag(raw.withGear, 'withGear'),
-    withPulls: boolFlag(raw.withPulls, 'withPulls'),
-  };
-}
 
 /** Body → validated input; 400 on a bad name or a non-WoW slug. */
 export function parseSeedGuildBody(body: unknown): SeedGuildInput {

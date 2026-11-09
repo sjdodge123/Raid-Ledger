@@ -206,6 +206,7 @@ function newRow(
     note: blankToNull(input.note),
     requirement: input.requirement,
     flavor: input.flavor ?? null,
+    folderName: input.folderName ?? null,
     sortOrder,
     createdByUserId: userId,
     updatedByUserId: userId,

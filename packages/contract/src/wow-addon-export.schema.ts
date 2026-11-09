@@ -10,6 +10,7 @@ import {
 } from './wow-addon-import.schema.js';
 import { WOW_GUILD_INFO_MAX, WOW_GUILD_MOTD_MAX } from './guild-ingame-text.schema.js';
 import { AddonMailworthySchema } from './wow-addon-mailworthy.schema.js';
+import { AddonInstalledListSchema } from './wow-addon-installed.schema.js';
 
 // ============================================================
 // WoW: Forever addon export payload (ROK-1724)
@@ -191,6 +192,8 @@ export const AddonCharDataSchema = z.object({
     quests: AddonQuestsSchema.optional(),
     /** Mailworthy guild contributions block (ROK-2148, additive). Absent = no opinion. */
     mailworthy: AddonMailworthySchema.optional(),
+    /** Installed addon folders (ROK-2147, additive). Absent = no opinion. */
+    addons: AddonInstalledListSchema.optional(),
 }).strict();
 export type AddonCharData = z.infer<typeof AddonCharDataSchema>;
 

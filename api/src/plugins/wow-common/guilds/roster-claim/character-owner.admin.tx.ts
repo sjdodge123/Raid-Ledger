@@ -9,6 +9,7 @@ import * as schema from '../../../../drizzle/schema';
 import { ALL_WOW_GAME_SLUGS } from '../../manifest';
 import { autoPromoteAfterDelete } from '../../../../characters/characters-crud.helpers';
 import type { AddonImportTx } from '../../addon-import/addon-import-apply.types';
+import { deleteInstalledAddons } from '../../addon-import/addon-import-char.installed';
 import { logGuidAudit } from '../../addon-import/addon-import.guid-audit';
 import { logExternalIdLinked } from '../../addon-import/external-id.audit';
 import {
@@ -209,6 +210,7 @@ export async function reassignWithin(
     .update(characters)
     .set({ userId: args.toUserId, isMain, updatedAt: new Date() })
     .where(and(eq(characters.id, row.id), eq(characters.userId, row.userId)));
+  await deleteInstalledAddons(tx, row.id);
   await autoPromoteAfterDelete(tx, row.userId, row.gameId, args.logger);
   await auditReassign(tx, row, args);
   return { row, toUserId: args.toUserId, toName };

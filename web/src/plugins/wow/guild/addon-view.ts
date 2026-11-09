@@ -23,14 +23,17 @@ export interface AddonView {
     required: boolean;
     source: string;
     flavorLabel: string;
+    /** Addon folder name (ROK-2147); null = no Installed/Missing state on the character card. */
+    folderName: string | null;
 }
 
-export interface AddonDetails { note: string; requirement: GuildAddonRequirement; flavor: GuildAddonFlavor | null }
+/** `folderName` is the raw input ('' = none); callers send `trim() || null`. */
+export interface AddonDetails { note: string; requirement: GuildAddonRequirement; flavor: GuildAddonFlavor | null; folderName: string }
 
 export function guildAddonView(a: GuildAddon): AddonView {
     return {
         key: `g-${a.id}`, id: a.id, name: a.displayName, url: a.url, note: a.note, required: a.requirement === 'required',
-        source: SOURCE_LABEL[a.source], flavorLabel: FLAVOR_LABEL[a.flavor ?? 'any'],
+        source: SOURCE_LABEL[a.source], flavorLabel: FLAVOR_LABEL[a.flavor ?? 'any'], folderName: a.folderName,
     };
 }
 
@@ -39,7 +42,7 @@ export function pinnedAddonView(p: PinnedAddon, i: number): AddonView {
     const flavorLabel = p.flavors.length === 0 ? FLAVOR_LABEL.any : p.flavors.map((f) => FLAVOR_LABEL[f]).join(' · ');
     return {
         key: `p-${i}`, id: null, name: p.name, url: p.url, note: p.note, required: p.requirement === 'required',
-        source: SOURCE_LABEL[source], flavorLabel,
+        source: SOURCE_LABEL[source], flavorLabel, folderName: p.folderName ?? null,
     };
 }
 

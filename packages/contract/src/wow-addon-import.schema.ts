@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AddonInstalledImportOutcomeSchema } from './wow-addon-installed.schema.js';
 // Via the barrel, never by file path (ROK-1733 moves these between files).
 import {
     WowForeverRulesetSchema,
@@ -190,6 +191,8 @@ export const AddonCharImportSummarySchema = z.object({
     lockouts: n,
     /** ROK-2148 Q8 — applied char sections with a Mailworthy block only. */
     mailworthy: AddonMailworthyImportOutcomeSchema.optional(),
+    /** ROK-2147 — applied char sections with an installed-addon list only. */
+    addons: AddonInstalledImportOutcomeSchema.optional(),
 });
 export const AddonGuildImportSummarySchema = z.object({
     guildName: z.string(),

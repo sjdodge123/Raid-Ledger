@@ -340,6 +340,47 @@ describe('addons — write', () => {
   });
 });
 
+describe('addons — folder name (ROK-2147)', () => {
+  it('round-trips folderName through create, patch, clear and the list', async () => {
+    const made = await call('post', `/${guildId}/addons`, 'deleg', {
+      url: CF,
+      folderName: '  Details  ',
+    });
+    expect(made.status).toBe(201);
+    expect(made.body.folderName).toBe('Details');
+    const id = made.body.id as number;
+    const plain = await call('post', `/${guildId}/addons`, 'admin', {
+      url: WAGO,
+    });
+    expect(plain.body.folderName).toBeNull();
+    const renamed = await call('patch', `/${guildId}/addons/${id}`, 'deleg', {
+      folderName: 'Details_Plus',
+    });
+    expect(renamed.body.folderName).toBe('Details_Plus');
+    const note = await call('patch', `/${guildId}/addons/${id}`, 'deleg', {
+      note: 'meter',
+    });
+    expect(note.body.folderName).toBe('Details_Plus');
+    const listed = await call('get', `/${guildId}/addons`, 'plain');
+    const byId = (
+      listed.body.addons as { id: number; folderName: unknown }[]
+    ).map((a) => [a.id, a.folderName]);
+    expect(byId).toContainEqual([id, 'Details_Plus']);
+    const cleared = await call('patch', `/${guildId}/addons/${id}`, 'deleg', {
+      folderName: null,
+    });
+    expect(cleared.body.folderName).toBeNull();
+  });
+
+  it('400 on a folder name with a path character', async () => {
+    const bad = await call('post', `/${guildId}/addons`, 'admin', {
+      url: CF,
+      folderName: 'Interface/AddOns/Details',
+    });
+    expect(bad.status).toBe(400);
+  });
+});
+
 describe('addons — order', () => {
   it('reorders the full set and rejects a mismatched one', async () => {
     await seedPair();

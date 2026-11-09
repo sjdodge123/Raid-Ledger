@@ -122,26 +122,49 @@ describe('buildAddonUpdate', () => {
 });
 
 describe('toGuildAddon', () => {
+  const row = {
+    id: 1,
+    guildId: 2,
+    source: 'curseforge',
+    slugOrUrl: 'details',
+    displayName: 'Details!',
+    note: null,
+    requirement: 'required',
+    flavor: null,
+    folderName: null,
+    sortOrder: 0,
+    createdByUserId: null,
+    updatedByUserId: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+
   it('maps a stored row with a canonical link-out', () => {
-    const addon = toGuildAddon({
-      id: 1,
-      guildId: 2,
-      source: 'curseforge',
-      slugOrUrl: 'details',
-      displayName: 'Details!',
-      note: null,
-      requirement: 'required',
-      flavor: null,
-      sortOrder: 0,
-      createdByUserId: null,
-      updatedByUserId: null,
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
-    expect(addon).toMatchObject({
+    expect(toGuildAddon(row)).toMatchObject({
       url: 'https://www.curseforge.com/wow/addons/details',
       flavor: null,
+      folderName: null,
       createdAt: NOW.toISOString(),
     });
+  });
+
+  it('ROK-2147: maps the stored folder name', () => {
+    expect(toGuildAddon({ ...row, folderName: 'Details' }).folderName).toBe(
+      'Details',
+    );
+  });
+});
+
+describe('buildAddonUpdate folderName (ROK-2147)', () => {
+  it('sets, clears, or leaves the folder name', () => {
+    expect(
+      buildAddonUpdate({ folderName: 'Details' }, null, 4, NOW),
+    ).toMatchObject({ folderName: 'Details' });
+    expect(
+      buildAddonUpdate({ folderName: null }, null, 4, NOW).folderName,
+    ).toBeNull();
+    expect(buildAddonUpdate({ note: 'x' }, null, 4, NOW)).not.toHaveProperty(
+      'folderName',
+    );
   });
 });

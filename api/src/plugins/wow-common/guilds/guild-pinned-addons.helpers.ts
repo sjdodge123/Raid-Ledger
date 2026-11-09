@@ -17,6 +17,8 @@ export const DEFAULT_PINNED_ADDONS: readonly PinnedAddon[] = [
     note: 'Exports your roster, characters and raid pulls to Raid Ledger.',
     requirement: 'required',
     flavors: [],
+    // ROK-2147 D4 — UNVERIFIED: confirm against the addon's `.toc` folder.
+    folderName: 'LedgerLink',
   },
 ];
 

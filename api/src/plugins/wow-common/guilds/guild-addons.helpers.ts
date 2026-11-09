@@ -58,6 +58,7 @@ export function toGuildAddon(row: AddonRow): GuildAddon {
     note: row.note,
     requirement: row.requirement as GuildAddonRequirement,
     flavor: (row.flavor as GuildAddonFlavor | null) ?? null,
+    folderName: row.folderName ?? null,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -199,6 +200,7 @@ export function buildAddonUpdate(
   if (input.note !== undefined) set.note = blankToNull(input.note);
   if (input.requirement !== undefined) set.requirement = input.requirement;
   if (input.flavor !== undefined) set.flavor = input.flavor;
+  if (input.folderName !== undefined) set.folderName = input.folderName;
   return set;
 }
 

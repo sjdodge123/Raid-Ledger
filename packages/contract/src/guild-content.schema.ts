@@ -129,6 +129,10 @@ export type GuildAddonFlavor = z.infer<typeof GuildAddonFlavorSchema>;
 
 const addonName = z.string().trim().min(1).max(GUILD_ADDON_NAME_MAX);
 const addonNote = z.string().trim().max(GUILD_ADDON_NOTE_MAX).nullable();
+/** In-game addon folder name (ROK-2147) — matched case-insensitively against `char` `data.addons[].name`. */
+export const GUILD_ADDON_FOLDER_NAME_MAX = 64;
+const addonFolderName = z.string().trim().min(1).max(GUILD_ADDON_FOLDER_NAME_MAX)
+  .regex(/^[^\\/:*?"<>|]+$/, 'Folder names cannot contain \\ / : * ? " < > |').nullable();
 
 /** One guild-recommended addon (ordered by `sortOrder`). */
 export const GuildAddonSchema = z
@@ -144,6 +148,8 @@ export const GuildAddonSchema = z
     note: z.string().nullable(),
     requirement: GuildAddonRequirementSchema,
     flavor: GuildAddonFlavorSchema.nullable(),
+    /** Addon folder name; null = no Installed/Missing state (ROK-2147). */
+    folderName: z.string().nullable(),
     sortOrder: z.number().int(),
     createdAt: isoDate,
     updatedAt: isoDate,
@@ -160,6 +166,7 @@ export const CreateGuildAddonSchema = z
     note: addonNote.optional(),
     requirement: GuildAddonRequirementSchema.default('optional'),
     flavor: GuildAddonFlavorSchema.nullable().optional(),
+    folderName: addonFolderName.optional(),
   })
   .strict();
 export type CreateGuildAddonInput = z.infer<typeof CreateGuildAddonSchema>;
@@ -172,6 +179,7 @@ export const UpdateGuildAddonSchema = z
     note: addonNote.optional(),
     requirement: GuildAddonRequirementSchema.optional(),
     flavor: GuildAddonFlavorSchema.nullable().optional(),
+    folderName: addonFolderName.optional(),
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, {
@@ -198,6 +206,8 @@ export const PinnedAddonSchema = z
     requirement: GuildAddonRequirementSchema,
     /** Empty = every flavor. */
     flavors: z.array(GuildAddonFlavorSchema),
+    /** Optional so stored settings without it still parse (ROK-2147). */
+    folderName: addonFolderName.optional(),
   })
   .strict();
 export type PinnedAddon = z.infer<typeof PinnedAddonSchema>;

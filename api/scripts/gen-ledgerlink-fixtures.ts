@@ -46,6 +46,11 @@ import {
   buildCharMailworthyTooManyRulesPayload,
   buildMailworthyWorstCaseBlock,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.mailworthy';
+import {
+  buildCharAddonsNameTooLongPayload,
+  buildCharAddonsTooManyPayload,
+  buildCharInstalledAddonsPayload,
+} from '../src/plugins/wow-common/addon-import/testing/addon-fixture.installed';
 import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
 
 const OUT = join(__dirname, '../../packages/contract/ledgerlink/v1/fixtures');
@@ -116,6 +121,8 @@ const VALID: Record<string, () => string> = {
   'char-mailworthy': () => buildImportString(buildCharMailworthyPayload()),
   'char-mailworthy-template-only': () =>
     buildImportString(buildCharMailworthyTemplateOnlyPayload()),
+  'char-installed-addons': () =>
+    buildImportString(buildCharInstalledAddonsPayload()),
   'guild-1-page': () => guildPaste(40),
   'guild-3-pages': () => guildPaste(600),
   'guild-8-pages-2000-members': () => guildPaste(2000),
@@ -188,6 +195,14 @@ const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
   'char-mailworthy-too-many-rules': [
     'INVALID_PAYLOAD',
     () => buildImportString(buildCharMailworthyTooManyRulesPayload()),
+  ],
+  'char-addons-too-many': [
+    'INVALID_PAYLOAD',
+    () => buildImportString(buildCharAddonsTooManyPayload()),
+  ],
+  'char-addons-name-too-long': [
+    'INVALID_PAYLOAD',
+    () => buildImportString(buildCharAddonsNameTooLongPayload()),
   ],
   'ruleset-misspelled': [
     'INVALID_PAYLOAD',
