@@ -9,12 +9,15 @@ import { wowClassicDungeonQuests } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { redisSwr } from '../../common/swr-cache';
+import { SettingsService } from '../../settings/settings.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
+import { applyInstanceOverlay, applyQuestOverlay } from './dungeon-quests.overlay';
 import {
   MAX_CHAIN_DEPTH,
   VARIANT_EXPANSIONS,
   toDto,
   walkChainInMemory,
+  prerequisiteChainOf,
   collectFrontierIds,
   loadRewardItemLookup,
   buildItemDetailsMap,
@@ -49,6 +52,7 @@ export class DungeonQuestsService {
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     private readonly seeder: DungeonQuestSeeder,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Get the expansion set for a given WoW game variant. */
@@ -59,7 +63,10 @@ export class DungeonQuestsService {
     );
   }
 
-  /** Get all quests for a dungeon instance, filtered by variant. */
+  /**
+   * Get all quests for a dungeon instance, filtered by variant, with the
+   * Blizzard overlay merged in (ROK-2143; kill switch off → bundled only).
+   */
   async getQuestsForInstance(
     instanceId: number,
     variant: string = 'classic_era',
@@ -78,7 +85,11 @@ export class DungeonQuestsService {
       )
       .orderBy(wowClassicDungeonQuests.questLevel);
 
-    return rows.map((row) => toDto(row));
+    return applyInstanceOverlay(
+      { db: this.db, settings: this.settings },
+      rows.map((row) => toDto(row)),
+      { instanceIds, expansions },
+    );
   }
 
   /** Get the full prerequisite chain for a quest. */
@@ -95,7 +106,10 @@ export class DungeonQuestsService {
     questLookup.set(dto.questId, dto);
 
     await this.fetchChainQuests(dto, questLookup);
-    return walkChainInMemory(dto, questLookup);
+    return applyQuestOverlay(
+      { db: this.db, settings: this.settings },
+      walkChainInMemory(dto, questLookup),
+    );
   }
 
   /** Seed quest data (delegates to seeder). */
@@ -192,7 +206,10 @@ export class DungeonQuestsService {
     );
   }
 
-  /** Batch-fetch prerequisite chains for all quests (ROK-447). */
+  /**
+   * Batch-fetch prerequisite chains for all quests (ROK-447). A quest whose
+   * prerequisite is not in our data gets no chain (ROK-2143).
+   */
   private async batchGetQuestChains(
     quests: DungeonQuestDto[],
   ): Promise<Map<number, DungeonQuestDto[]>> {
@@ -206,7 +223,8 @@ export class DungeonQuestsService {
     await this.expandFrontier(quests, questLookup);
 
     for (const quest of questsWithPrereqs) {
-      chainMap.set(quest.questId, walkChainInMemory(quest, questLookup));
+      const chain = prerequisiteChainOf(quest, questLookup);
+      if (chain) chainMap.set(quest.questId, chain);
     }
     return chainMap;
   }

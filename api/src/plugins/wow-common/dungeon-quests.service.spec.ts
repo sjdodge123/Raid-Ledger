@@ -3,6 +3,7 @@ import { DungeonQuestsService } from './dungeon-quests.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
+import { SettingsService } from '../../settings/settings.service';
 
 let service: DungeonQuestsService;
 let mockSeeder: { seed: jest.Mock; drop: jest.Mock };
@@ -42,6 +43,11 @@ async function setupEach() {
       { provide: DungeonQuestSeeder, useValue: mockSeeder },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       { provide: REDIS_CLIENT, useValue: mockRedis },
+      // ROK-2143: Blizzard overlay switched off — these cases cover the bundled read path.
+      {
+        provide: SettingsService,
+        useValue: { get: jest.fn().mockResolvedValue('false') },
+      },
     ],
   }).compile();
 
