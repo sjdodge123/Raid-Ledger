@@ -42,7 +42,7 @@ export function CompactRow({ addon, state }: { addon: AddonView; state?: Install
 function InstalledRow({ addon }: { addon: CharacterInstalledAddon }): JSX.Element {
     return (
         <li className={ROW}>
-            <span className="min-w-0 flex-1 truncate text-sm text-foreground">{addon.title ?? addon.name}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-foreground">{addon.title?.trim() || addon.name}</span>
             {addon.version && <span className="shrink-0 text-xs text-muted">{addon.version}</span>}
             {!addon.loaded && <span className="shrink-0 text-xs text-dim">not loaded</span>}
         </li>

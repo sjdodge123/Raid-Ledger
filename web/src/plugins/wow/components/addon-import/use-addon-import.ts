@@ -157,6 +157,7 @@ function refreshAfterCreate(queryClient: QueryClient) {
         queryClient.invalidateQueries({ queryKey: ['characters'] }),
         queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
         queryClient.invalidateQueries({ queryKey: ['character-quests'] }),
+        queryClient.invalidateQueries({ queryKey: ['plugins', 'wow', 'characters'] }),
         invalidateAllHubMemberships(queryClient),
     ]);
 }
