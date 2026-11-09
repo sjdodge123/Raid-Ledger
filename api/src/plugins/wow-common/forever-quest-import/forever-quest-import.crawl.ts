@@ -9,6 +9,10 @@
  * switch and is spaced {@link FOREVER_QUEST_IMPORT_SPACING_MS}; a fatal
  * status throws {@link QuestImportAbort} and keeps what was written.
  */
+import type {
+  ForeverQuestImportMismatchedArea,
+  ForeverQuestImportSampleQuest,
+} from '@raid-ledger/contract';
 import type { WowDungeonQuestBlizzardInsert } from '../../../drizzle/schema/dungeon-quest-blizzard';
 import {
   buildClassicItemUrl,
@@ -25,8 +29,11 @@ import {
 } from './blizzard-quest.parse';
 import {
   CLASSIC_QUEST_AREAS,
+  areaNameCandidates,
   areaNameMatches,
   classicQuestAreaInstanceIds,
+  firstKnownQuestId,
+  type ClassicQuestArea,
 } from './classic-quest-areas';
 import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
@@ -186,20 +193,58 @@ export class QuestImportCrawl {
       if (!entry) continue;
       const actual = areas.find((a) => a.id === entry.areaId);
       if (!actual || !areaNameMatches(entry, actual.name)) {
-        const { dungeon, areaId } = entry;
-        const actualName = actual?.name ?? null;
-        this.report.mismatchedAreas.push({
-          instanceId,
-          dungeon,
-          areaId,
-          actualName,
-        });
+        this.report.mismatchedAreas.push(
+          await this.describeMismatch(instanceId, entry, areas, actual),
+        );
         continue;
       }
       if (await this.listArea(instanceId, entry.areaId))
         imported.add(instanceId);
     }
     return imported;
+  }
+
+  /**
+   * A skipped dungeon, with the evidence needed to fix its area id: the
+   * name-alike areas Blizzard lists and the area one of our quests is filed
+   * under (nothing is imported for it).
+   */
+  private async describeMismatch(
+    instanceId: number,
+    entry: ClassicQuestArea,
+    areas: BlizzardRef[],
+    actual: BlizzardRef | undefined,
+  ): Promise<ForeverQuestImportMismatchedArea> {
+    const nameMatches = areaNameCandidates(entry, areas);
+    const sampleQuest = await this.probeSampleQuest(instanceId);
+    return {
+      instanceId,
+      dungeon: entry.dungeon,
+      areaId: entry.areaId,
+      actualName: actual?.name ?? null,
+      ...(nameMatches.length > 0 ? { nameMatches } : {}),
+      ...(sampleQuest ? { sampleQuest } : {}),
+    };
+  }
+
+  /** One `quest/{id}` of a skipped dungeon: its status and Blizzard area. */
+  private async probeSampleQuest(
+    instanceId: number,
+  ): Promise<ForeverQuestImportSampleQuest | null> {
+    const questId = firstKnownQuestId(this.deps.knownQuests, instanceId);
+    if (questId === null) return null;
+    const res = await this.requestRaw(buildQuestUrl(this.deps.region, questId));
+    if (isFatalQuestImportStatus(res.status)) {
+      throw new QuestImportAbort(`quest/${questId}: HTTP ${res.status}`);
+    }
+    const area =
+      res.status === 200 ? (parseBlizzardQuest(res.body)?.area ?? null) : null;
+    return {
+      questId,
+      httpStatus: res.status,
+      areaId: area?.id ?? null,
+      areaName: area?.name ?? null,
+    };
   }
 
   /** `quest/area/{id}` → queue its quests; false when the area had no data. */

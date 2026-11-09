@@ -6,6 +6,10 @@
  * importer accepts from `quest/index` `areas[]`; a dungeon whose area name
  * does not match is skipped and reported (self-verification by name).
  * Only `verified` entries were checked against the live API (probe 2026-11-08).
+ * Live run 2 (2026-11-09): Blizzard's `quest/area/index` (static-forever) does
+ * not list 491 (Razorfen Kraul) or 1337 (Uldaman); the right ids are not known
+ * yet, so those entries stay as they are and a run reports, per skipped
+ * dungeon, the name-alike areas and the area one of its quests is filed under.
  */
 export interface ClassicQuestArea {
   dungeon: string;
@@ -74,4 +78,42 @@ export function areaNameMatches(
     actual !== '' &&
     entry.areaNames.some((n) => normaliseAreaName(n) === actual)
   );
+}
+
+/** Most name-alike areas reported per skipped dungeon. */
+export const AREA_NAME_CANDIDATE_LIMIT = 5;
+
+/**
+ * Areas in Blizzard's list (other than the mapped id) whose name equals,
+ * contains or is contained in one of the entry's names — evidence for a
+ * wrong area id in the map. Never used to import; the map is fixed by hand.
+ */
+export function areaNameCandidates(
+  entry: ClassicQuestArea,
+  areas: readonly { id: number; name: string }[],
+): { id: number; name: string }[] {
+  const wanted = entry.areaNames.map(normaliseAreaName).filter((n) => n);
+  const alike = (name: string): boolean => {
+    const actual = normaliseAreaName(name);
+    if (actual === '') return false;
+    return wanted.some((w) => actual.includes(w) || w.includes(actual));
+  };
+  return areas
+    .filter((a) => a.id !== entry.areaId && alike(a.name))
+    .slice(0, AREA_NAME_CANDIDATE_LIMIT)
+    .map(({ id, name }) => ({ id, name }));
+}
+
+/** Lowest bundled quest id of a dungeon, else null. */
+export function firstKnownQuestId(
+  knownQuests: ReadonlyMap<number, number>,
+  instanceId: number,
+): number | null {
+  let first: number | null = null;
+  for (const [questId, owner] of knownQuests) {
+    if (owner === instanceId && (first === null || questId < first)) {
+      first = questId;
+    }
+  }
+  return first;
 }

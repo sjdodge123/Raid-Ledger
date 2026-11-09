@@ -23,12 +23,35 @@ export const ForeverQuestImportCountsSchema = z.object({
     upserted: z.number(),
 });
 
-/** A mapped dungeon whose Blizzard quest-area name did not match (the dungeon was skipped). */
+/** An `{ id, name }` area from Blizzard's quest area list. */
+export const ForeverQuestImportAreaRefSchema = z.object({
+    id: z.number(),
+    name: z.string(),
+});
+
+/**
+ * One of our quests for a skipped dungeon, fetched so the report shows the
+ * area Blizzard files it under (ROK-2143 L6: evidence for the area map).
+ */
+export const ForeverQuestImportSampleQuestSchema = z.object({
+    questId: z.number(),
+    httpStatus: z.number(),
+    areaId: z.number().nullable(),
+    areaName: z.string().nullable(),
+});
+
+/**
+ * A mapped dungeon whose Blizzard quest area was not listed or whose name did
+ * not match (the dungeon was skipped). `nameMatches` (areas in the list named
+ * like the dungeon) and `sampleQuest` are optional additions (v1, additive).
+ */
 export const ForeverQuestImportMismatchedAreaSchema = z.object({
     instanceId: z.number(),
     dungeon: z.string(),
     areaId: z.number(),
     actualName: z.string().nullable(),
+    nameMatches: z.array(ForeverQuestImportAreaRefSchema).optional(),
+    sampleQuest: ForeverQuestImportSampleQuestSchema.optional(),
 });
 
 export const ForeverQuestImportReportSchema = z.object({
@@ -63,6 +86,12 @@ export type ForeverQuestImportCounts = z.infer<
 >;
 export type ForeverQuestImportMismatchedArea = z.infer<
     typeof ForeverQuestImportMismatchedAreaSchema
+>;
+export type ForeverQuestImportAreaRef = z.infer<
+    typeof ForeverQuestImportAreaRefSchema
+>;
+export type ForeverQuestImportSampleQuest = z.infer<
+    typeof ForeverQuestImportSampleQuestSchema
 >;
 export type ForeverQuestImportReport = z.infer<
     typeof ForeverQuestImportReportSchema
