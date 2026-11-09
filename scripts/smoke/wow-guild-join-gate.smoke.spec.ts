@@ -28,7 +28,7 @@ import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
-import { isPhoneLayout, isTablet } from './helpers';
+import { isTablet } from './helpers';
 
 const CLAIM_PATH = /\/plugins\/wow\/roster-claim\/members\/\d+\/claim$/;
 const CANDIDATES_PATH = /\/plugins\/wow\/roster-claim\/candidates$/;
@@ -191,7 +191,11 @@ test.describe('WoW: Forever — guild join gate (ROK-2132)', () => {
             await expect(card, 'the non-member sees the claimable Forever guild').toHaveCount(1, { timeout: 15_000 });
             const link = card.getByRole('link', { name: `${CLAIM_LABEL}: ${guild.name}`, exact: true });
             await expect(link).toBeVisible();
-            await expect(link).toHaveText(isPhoneLayout(testInfo) ? CLAIM_SHORT : CLAIM_LABEL);
+            // Both labels are in the DOM (`sm:hidden` / `hidden sm:inline`), so assert the one
+            // the viewport shows: short below Tailwind's `sm` (640px), long from there up.
+            const narrow = (page.viewportSize()?.width ?? 1280) < 640;
+            await expect(link.getByText(narrow ? CLAIM_SHORT : CLAIM_LABEL, { exact: true })).toBeVisible();
+            await expect(link.getByText(narrow ? CLAIM_LABEL : CLAIM_SHORT, { exact: true })).toBeHidden();
             await expect(card.getByRole('link', { name: 'View', exact: true }), 'a non-member gets the claim action, not View').toHaveCount(0);
             await link.click();
             await expect(page).toHaveURL(new RegExp(`/hubs/${guild.guildId}(\\?claim=roster)?$`), { timeout: 15_000 });
