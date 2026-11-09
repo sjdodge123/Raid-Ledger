@@ -14,7 +14,7 @@ import { rankLabel } from './wow-guild.helpers';
 
 export type WowRosterProfession = NonNullable<WowRosterInsightsDto['professions']>[number];
 
-/** `effectiveRole`, or `unknown` for unlinked rows and rows with no role set (spec Q3: no guessing). */
+/** `effectiveRole` (override → Armory → character role; an unlinked row uses its Armory snapshot), or `unknown` when none is known (spec Q3: no guessing). */
 export type WowRoleOption = 'tank' | 'healer' | 'dps' | 'unknown';
 
 export const WOW_ROLE_OPTIONS: readonly { value: WowRoleOption; label: string }[] = [

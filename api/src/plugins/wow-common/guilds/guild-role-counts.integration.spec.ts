@@ -66,8 +66,11 @@ async function insertArmoryMember(
   return m.id;
 }
 
-/** A linked character with NO manual role and no role of its own. */
-async function linkRoleLessCharacter(name: string): Promise<string> {
+/** A linked manual (non-Armory) character: no override, its own `role`. */
+async function linkManualCharacter(
+  name: string,
+  role: string | null,
+): Promise<string> {
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
@@ -83,7 +86,7 @@ async function linkRoleLessCharacter(name: string): Promise<string> {
         gameId: testApp.seed.game.id,
         name,
         addonGuid: `Player-1-${name}`,
-        role: null,
+        role,
         roleOverride: null,
         isMain: true,
       })
@@ -101,9 +104,11 @@ beforeAll(async () => {
   guildId = await insertGuild();
   // Unclaimed Holy Paladin: no RL character, Armory says healer.
   await insertArmoryMember('Bambolina', 7001, 'healer');
-  // Linked character with no role of its own; its member's Armory says tank.
+  // Linked manual character whose own role is dps; its member's verified
+  // Armory snapshot says tank — the Armory wins (ROK-2133 ruling), so the
+  // old `roleOverride ?? role` precedence would show dps here.
   await insertArmoryMember('Tankard', 7002, 'tank');
-  await linkRoleLessCharacter('Tankard');
+  await linkManualCharacter('Tankard', 'dps');
   // Unclaimed member with an invalid Armory role: no chip (unknown).
   await insertArmoryMember('Mystery', 7003, 'bard');
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
@@ -116,7 +121,7 @@ interface PageRow {
 }
 
 describe('GET /:id — role counts include unclaimed members (ROK-2158)', () => {
-  it('counts the unclaimed Armory healer and the linked Armory tank; rows agree', async () => {
+  it('counts the unclaimed Armory healer and the linked Armory tank over its manual dps; rows agree', async () => {
     const res = await testApp.request
       .get(`/plugins/wow/guilds/${guildId}`)
       .set('Authorization', `Bearer ${adminToken}`);

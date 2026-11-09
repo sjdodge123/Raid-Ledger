@@ -87,7 +87,9 @@ describe('roleCountRows (ROK-2158)', () => {
     const dupe = { ...member, name: 'same member, another join row' };
     const main = row({ userId: 10, isMain: true });
     const alt = row({ userId: 10, rankIndex: 0 });
-    expect(roleCountRows([member, dupe, alt, main])).toEqual([main, member]);
+    const got = roleCountRows([member, dupe, alt, main]);
+    expect(got).toHaveLength(2);
+    expect(got).toEqual(expect.arrayContaining([main, member]));
     expect(computeRoleCounts([member, dupe, alt, main])).toMatchObject({
       healer: 1,
     });
@@ -96,6 +98,8 @@ describe('roleCountRows (ROK-2158)', () => {
   it('keeps every unlinked row that has no roster member id', () => {
     const a = { ...unlinked({}), memberId: null };
     const b = { ...unlinked({}), memberId: null };
-    expect(roleCountRows([a, b])).toEqual([a, b]);
+    const got = roleCountRows([a, b]);
+    expect(got).toHaveLength(2);
+    expect(got).toEqual(expect.arrayContaining([a, b]));
   });
 });

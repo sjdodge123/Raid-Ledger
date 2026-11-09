@@ -22,31 +22,17 @@ type Freshness = WowRosterInsightsDto['freshness'];
 
 const MAX_PROFESSIONS = 40;
 
-/** Main first, then the best (lowest) rank. */
-function outranks(a: InsightRow, b: InsightRow): boolean {
-  if (a.isMain !== b.isMain) return a.isMain;
-  const ra = a.rankIndex ?? Number.MAX_SAFE_INTEGER;
-  const rb = b.rankIndex ?? Number.MAX_SAFE_INTEGER;
-  return ra < rb;
-}
-
-/** One row per linked user (its main, else best rank); unlinked rows dropped. */
-export function representativeRows(rows: readonly InsightRow[]): InsightRow[] {
-  const byUser = new Map<number, InsightRow>();
-  for (const row of rows) {
-    if (row.userId === null || row.characterId === null) continue;
-    const prev = byUser.get(row.userId);
-    if (!prev || outranks(row, prev)) byUser.set(row.userId, row);
-  }
-  return [...byUser.values()];
-}
-
 /**
- * "Mains only": a linked user's alts drop out (their representative row
- * stays); unlinked rows are kept — we cannot tell whose alt they are.
+ * "Mains only": a linked user's alts drop out (their representative row —
+ * main, else best rank — stays, picked by {@link roleCountRows}); unlinked
+ * rows are kept — we cannot tell whose alt they are.
  */
 export function mainsOnly(rows: readonly InsightRow[]): InsightRow[] {
-  const keep = new Set(representativeRows(rows));
+  const keep = new Set(
+    roleCountRows(rows).filter(
+      (r) => r.userId !== null && r.characterId !== null,
+    ),
+  );
   return rows.filter((r) => r.userId === null || keep.has(r));
 }
 
@@ -57,9 +43,13 @@ function zeroRoles(): RoleCounts {
 /**
  * Role mix, ONE per linked user plus one per unlinked roster member — the
  * same rows as the guild page's `roleCounts` (ROK-2158). The role is the
- * resolved `role` fact (manual override, else Blizzard/Armory — the member
- * snapshot for an unclaimed row — else the gap-fill). Dungeon-eligible =
- * level ≥ the lowest instance minimum; raid-eligible = at cap.
+ * resolved `role` fact from the facts layer: a manual override, else a
+ * manual (non-Armory) character's own `role`, else Blizzard/Armory (the
+ * member snapshot for an unclaimed row), else the gap-fill. This DIVERGES
+ * from the guild chips/rows (`effectiveRole`: override → Armory → character
+ * role): a manual character with role `dps` and an Armory snapshot `healer`
+ * counts dps here but healer on the chips (TECH-DEBT-BACKLOG 2026-11-09).
+ * Dungeon-eligible = level ≥ the lowest instance minimum; raid = at cap.
  */
 export function computeRoles(rows: readonly InsightRow[]): Roles {
   const roles: Roles = { dungeon: zeroRoles(), raid: zeroRoles() };
