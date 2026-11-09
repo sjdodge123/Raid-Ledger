@@ -1,7 +1,9 @@
 /**
  * ROK-2143: pure URL builders and tolerant parsers for the Blizzard WoW:
- * Forever quest endpoints (shapes from the 2026-11-08 probe: `quest/index`
- * `areas[]`, `quest/area/{id}` `quests[]`, `quest/{id}` with
+ * Forever quest endpoints (shapes from the 2026-11-08 probe and Blizzard's
+ * Game Data API docs: `quest/index` links its lists — `areas: { href }` —
+ * and `quest/area/index` holds `areas[]`; an inline `areas[]` on
+ * `quest/index` is accepted too. `quest/area/{id}` `quests[]`, `quest/{id}` with
  * `rewards.experience`, `rewards.money`, `rewards.items.items[].item`,
  * `rewards.reputations`). Nothing here throws on off-shape input: a missing
  * piece parses as null / empty. `requirements` is kept verbatim; its shape is
@@ -26,6 +28,11 @@ function staticUrl(region: string, path: string, prefix: string): string {
 
 export function buildQuestIndexUrl(region: string): string {
   return staticUrl(region, 'quest/index', FOREVER_QUEST_NAMESPACE_PREFIX);
+}
+
+/** The area list `quest/index` links to (`areas: { href }`). */
+export function buildQuestAreaIndexUrl(region: string): string {
+  return staticUrl(region, 'quest/area/index', FOREVER_QUEST_NAMESPACE_PREFIX);
 }
 
 export function buildQuestAreaUrl(region: string, areaId: number): string {
@@ -78,7 +85,11 @@ const toRefs = (v: unknown): BlizzardRef[] =>
     .map(toRef)
     .filter((r): r is BlizzardRef => r !== null);
 
-/** `quest/index` → its `areas[]` (id + name). */
+/**
+ * `areas[]` (id + name) of `quest/area/index`, or of a `quest/index` that
+ * lists them inline. The documented `quest/index` has `areas: { href }`
+ * instead, which parses as [] (the crawl then reads `quest/area/index`).
+ */
 export function parseQuestIndexAreas(json: unknown): BlizzardRef[] {
   return isRecord(json) ? toRefs(json.areas) : [];
 }

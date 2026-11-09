@@ -1,6 +1,9 @@
 /**
- * ROK-2143: one Forever quest import crawl — `quest/index` (verifies the area
- * map by name), `quest/area/{id}` per mapped dungeon, then `quest/{id}` for
+ * ROK-2143: one Forever quest import crawl — the area list (`quest/index`
+ * `areas[]` when inline, else `quest/area/index`, which the documented
+ * `quest/index` only links to; verifies the area map by name; no areas, or
+ * no mapped area found, fails the run), `quest/area/{id}` per mapped
+ * dungeon, then `quest/{id}` for
  * every listed quest, every quest of ours the area did not list, and their
  * prerequisites (visited set, depth cap). Every request re-checks the kill
  * switch and is spaced {@link FOREVER_QUEST_IMPORT_SPACING_MS}; a fatal
@@ -9,6 +12,7 @@
 import type { WowDungeonQuestBlizzardInsert } from '../../../drizzle/schema/dungeon-quest-blizzard';
 import {
   buildClassicItemUrl,
+  buildQuestAreaIndexUrl,
   buildQuestAreaUrl,
   buildQuestIndexUrl,
   buildQuestUrl,
@@ -33,6 +37,15 @@ import {
   pushQuestImportError,
   type ForeverQuestImportReport,
 } from './forever-quest-import.report';
+
+/** Error line when neither index yields an area (run ends `failed`). */
+export const QUEST_IMPORT_NO_AREAS_MESSAGE =
+  'Quest area list empty: quest/index and quest/area/index listed no areas';
+
+/** Error line when no mapped dungeon area is in the list (run ends `failed`). */
+export function questImportNoMappedAreasMessage(mapped: number): string {
+  return `None of the ${mapped} mapped dungeon areas is in Blizzard's quest area list (ids or names differ, see mismatchedAreas)`;
+}
 
 export interface QuestImportResponse {
   status: number;
@@ -103,18 +116,43 @@ export class QuestImportCrawl {
   ) {}
 
   async run(): Promise<void> {
-    const index = await this.request(
-      buildQuestIndexUrl(this.deps.region),
-      'quest/index',
-    );
-    if (index === null) throw new QuestImportAbort('quest/index: no data');
-    const imported = await this.listAreas(parseQuestIndexAreas(index));
+    const areas = await this.loadAreaList();
+    if (areas.length === 0) {
+      throw new QuestImportAbort(QUEST_IMPORT_NO_AREAS_MESSAGE);
+    }
+    const imported = await this.listAreas(areas);
+    this.assertSomeAreaMapped();
     this.enqueueUnlisted(imported);
     for (let q = this.queue.shift(); q; q = this.queue.shift()) {
       await this.importQuest(q);
     }
     this.report.requirementKeyPaths = [...this.keyPaths].sort();
     await this.probeItemLevel();
+  }
+
+  /**
+   * `quest/index` `areas[]` when it lists them inline; otherwise (the
+   * documented `areas: { href }` link) `quest/area/index`. The link is never
+   * followed: the URL is rebuilt on the pinned host + static-forever namespace.
+   */
+  private async loadAreaList(): Promise<BlizzardRef[]> {
+    const { region } = this.deps;
+    const index = await this.request(buildQuestIndexUrl(region), 'quest/index');
+    if (index === null) throw new QuestImportAbort('quest/index: no data');
+    const inline = parseQuestIndexAreas(index);
+    if (inline.length > 0) return inline;
+    const label = 'quest/area/index';
+    const list = await this.request(buildQuestAreaIndexUrl(region), label);
+    if (list === null) throw new QuestImportAbort(`${label}: no data`);
+    return parseQuestIndexAreas(list);
+  }
+
+  /** Every mapped area missing or misnamed = a broken map, not a success. */
+  private assertSomeAreaMapped(): void {
+    const mapped = classicQuestAreaInstanceIds().length;
+    if (mapped > 0 && this.report.mismatchedAreas.length >= mapped) {
+      throw new QuestImportAbort(questImportNoMappedAreasMessage(mapped));
+    }
   }
 
   /** Kill switch, spacing, then one GET. */
