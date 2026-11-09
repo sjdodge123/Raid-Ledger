@@ -460,23 +460,26 @@ function describeTiebreakerAuthz() {
     return defined(row, 'tiebreaker row').status;
   }
 
-  /** Every voter but the last has voted `gameAId` on each open round-1 matchup. */
+  /**
+   * Every round-1 ballot except ONE is cast (`gameAId`): every voter but the
+   * last on every open matchup, and the last voter on every open matchup but
+   * the target. The returned vote is therefore the one that completes the
+   * round — Codex P2: with the last voter missing from the other matchups
+   * too, the raced vote could not complete the round, only force-resolve
+   * advanced, and the multi-round case passed on unprotected code.
+   */
   async function voteAllButLast(tb: TiedSetup) {
     const open = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
       (m) => m.round === 1 && !m.isBye,
     );
-    const early = tb.voterIds.slice(0, -1);
-    await testApp.db.insert(BV).values(
-      open.flatMap((m) =>
-        early.map((userId) => ({
-          matchupId: m.id,
-          userId,
-          gameId: m.gameAId,
-        })),
-      ),
-    );
     const last = at(tb.voterIds, tb.voterIds.length - 1);
     const target = at(open, open.length - 1);
+    const ballots = open.flatMap((m) =>
+      tb.voterIds
+        .filter((userId) => userId !== last || m.id !== target.id)
+        .map((userId) => ({ matchupId: m.id, userId, gameId: m.gameAId })),
+    );
+    await testApp.db.insert(BV).values(ballots);
     return { last, vote: { matchupId: target.id, gameId: target.gameAId } };
   }
 
@@ -634,6 +637,18 @@ function describeTiebreakerAuthz() {
       games: 4,
     });
     const { last, vote } = await voteAllButLast(tb);
+    // Precondition: the raced vote is the round's only missing ballot.
+    const required = tb.voterIds.length;
+    const open = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
+      (m) => m.round === 1 && !m.isBye,
+    );
+    expect(open).toHaveLength(2);
+    const counts = await Promise.all(
+      open.map(async (m) => (await bracketVotesFor(m.id)).length),
+    );
+    expect(counts).toEqual(
+      open.map((m) => (m.id === vote.matchupId ? required - 1 : required)),
+    );
     const force = await raceForceAgainstVote(tb, last, vote);
     expect(force.status).toBe('fulfilled');
     const roundTwo = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
