@@ -18,6 +18,12 @@
  *      (late-vote race: the round advanced after the pre-check).
  *  10. Two concurrent round-completing votes advance the round exactly once
  *      (tech-debt 2026-10-10: `checkAndAdvanceRound` was not serialized).
+ *  11. ROK-2098: a force-resolve racing the final vote runs matching once.
+ *  12. ROK-2098: a force-resolve retry repairs a lineup left in `voting`
+ *      after the resolve committed, with the stored winner; a second retry
+ *      does not rebuild the match groups.
+ *  13. ROK-2098: a force-resolve racing a round-completing vote advances the
+ *      bracket once (one round-2 matchup).
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -31,6 +37,7 @@ import { TiebreakerService } from './tiebreaker.service';
 import { advanceBracket } from './tiebreaker-bracket.helpers';
 import { insertBracketVoteIfOpen } from './tiebreaker-authz.helpers';
 import { findMatchups } from './tiebreaker-query.helpers';
+import * as matching from '../lineups-matching.helpers';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 import { at, defined, nonEmpty } from '../../common/testing/narrow';
 
@@ -431,6 +438,123 @@ function describeTiebreakerAuthz() {
       .from(schema.communityLineupTiebreakers)
       .where(eq(schema.communityLineupTiebreakers.id, tb.tiebreakerId));
     expect(row?.status).toBe('active');
+  });
+
+  // -- ROK-2098: force-resolve vs the final vote, and partial-failure repair --
+
+  async function lineupRow(lineupId: number) {
+    const L = schema.communityLineups;
+    const [row] = await testApp.db.select().from(L).where(eq(L.id, lineupId));
+    return defined(row, 'lineup row');
+  }
+
+  async function tiebreakerStatus(tiebreakerId: number) {
+    const T = schema.communityLineupTiebreakers;
+    const [row] = await testApp.db
+      .select()
+      .from(T)
+      .where(eq(T.id, tiebreakerId));
+    return defined(row, 'tiebreaker row').status;
+  }
+
+  /** Every voter but the last has voted `gameAId` on each open round-1 matchup. */
+  async function voteAllButLast(tb: TiedSetup) {
+    const open = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
+      (m) => m.round === 1 && !m.isBye,
+    );
+    const early = tb.voterIds.slice(0, -1);
+    await testApp.db.insert(BV).values(
+      open.flatMap((m) =>
+        early.map((userId) => ({
+          matchupId: m.id,
+          userId,
+          gameId: m.gameAId,
+        })),
+      ),
+    );
+    const last = at(tb.voterIds, tb.voterIds.length - 1);
+    const target = at(open, open.length - 1);
+    return { last, vote: { matchupId: target.id, gameId: target.gameAId } };
+  }
+
+  it('force-resolve racing the final vote runs matching exactly once (ROK-2098)', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 2,
+    });
+    const { last, vote } = await voteAllButLast(tb);
+    const buildSpy = jest.spyOn(matching, 'buildMatchesForLineup');
+    try {
+      const [force] = await Promise.allSettled([
+        service.forceResolve(tb.lineupId),
+        service.castBracketVote(tb.lineupId, vote, {
+          id: last,
+          role: 'member',
+        }),
+      ]);
+      expect(force.status).toBe('fulfilled');
+      expect(buildSpy).toHaveBeenCalledTimes(1);
+      const lineup = await lineupRow(tb.lineupId);
+      expect(lineup.status).toBe('decided');
+      expect(lineup.activeTiebreakerId).toBeNull();
+      expect(await tiebreakerStatus(tb.tiebreakerId)).toBe('resolved');
+    } finally {
+      buildSpy.mockRestore();
+    }
+  });
+
+  it('a force-resolve retry repairs a lineup left in voting after the resolve committed (ROK-2098)', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 2,
+    });
+    const final = at(await findMatchups(testApp.db, tb.tiebreakerId), 0);
+    const storedWinner = defined(final.gameBId, 'final gameB');
+    // Seeded partial failure: resolve committed, clear + decide never ran.
+    const T = schema.communityLineupTiebreakers;
+    await testApp.db
+      .update(T)
+      .set({
+        status: 'resolved',
+        winnerGameId: storedWinner,
+        resolvedAt: new Date(),
+      })
+      .where(eq(T.id, tb.tiebreakerId));
+    const buildSpy = jest.spyOn(matching, 'buildMatchesForLineup');
+    try {
+      await service.forceResolve(tb.lineupId);
+      const lineup = await lineupRow(tb.lineupId);
+      expect(lineup.status).toBe('decided');
+      expect(lineup.decidedGameId).toBe(storedWinner);
+      expect(lineup.activeTiebreakerId).toBeNull();
+      expect(buildSpy).toHaveBeenCalledTimes(1);
+      // A second retry finds matching complete and does not rebuild.
+      await service.forceResolve(tb.lineupId);
+      expect(buildSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      buildSpy.mockRestore();
+    }
+  });
+
+  it('force-resolve racing a round-completing vote advances the bracket once (ROK-2098)', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 4,
+    });
+    const { last, vote } = await voteAllButLast(tb);
+    const [force] = await Promise.allSettled([
+      service.forceResolve(tb.lineupId),
+      service.castBracketVote(tb.lineupId, vote, { id: last, role: 'member' }),
+    ]);
+    expect(force.status).toBe('fulfilled');
+    const roundTwo = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
+      (m) => m.round === 2,
+    );
+    expect(roundTwo).toHaveLength(1);
+    expect(await tiebreakerStatus(tb.tiebreakerId)).toBe('resolved');
   });
 }
 
