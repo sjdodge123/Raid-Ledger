@@ -18,6 +18,7 @@ import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 import { IgdbService } from './igdb.service';
 import type { IgdbApiGame } from './igdb.constants';
 import { upsertGamesFromApi } from './igdb-upsert.helpers';
+import { enrichSyncedGamesWithItad } from './igdb-sync.helpers';
 
 const GAME_A: IgdbApiGame = {
   id: 9300001,
@@ -164,5 +165,31 @@ describe('IGDB sync taste-recompute gating (ROK-2121)', () => {
     expect(enqueueSpy.mock.calls).toEqual([[idA]]);
     // The one enqueue happened after ITAD wrote A's new tags.
     expect(tagsAtEnqueue).toEqual([['co-op', 'rpg', 'survival']]);
+  });
+  it('AC3: ITAD enrichment compares against the row at write time, not the start-of-phase snapshot', async () => {
+    const { idA } = await seedStoredGames();
+    // An ITAD search upsert rewrites A's tags mid-phase (after the phase's
+    // whole-table SELECT); enrichment then restores the original tags.
+    const lookup = jest.fn((appId: number) => {
+      const write =
+        appId === 930001
+          ? testApp.db
+              .update(schema.games)
+              .set({ itadTags: ['Survival'] })
+              .where(eq(schema.games.id, idA))
+          : Promise.resolve();
+      return write.then(() => itadGame(appId));
+    });
+    const getInfo = jest.fn(() => Promise.resolve(itadInfo(['RPG', 'Co-op'])));
+    const changed: number[] = [];
+
+    await enrichSyncedGamesWithItad(testApp.db, lookup, getInfo, (id) =>
+      changed.push(id),
+    );
+
+    // A went Survival → RPG/Co-op on this write, so it must recompute; B
+    // kept its tags. A stale-snapshot compare (RPG/Co-op vs RPG/Co-op) misses A.
+    expect(changed).toEqual([idA]);
+    expect(await readItadTags(idA)).toEqual(['co-op', 'rpg']);
   });
 });

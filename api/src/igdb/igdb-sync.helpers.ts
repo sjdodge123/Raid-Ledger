@@ -142,11 +142,7 @@ export async function enrichSyncedGamesWithItad(
   onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   const games = await db
-    .select({
-      id: schema.games.id,
-      steamAppId: schema.games.steamAppId,
-      itadTags: schema.games.itadTags,
-    })
+    .select({ id: schema.games.id, steamAppId: schema.games.steamAppId })
     .from(schema.games)
     .where(isNotNull(schema.games.steamAppId));
 
@@ -158,9 +154,10 @@ export async function enrichSyncedGamesWithItad(
       const itadGame = await lookupBySteamAppId(game.steamAppId!);
       if (!itadGame) continue;
       const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
-      await updateGameWithItadData(db, game.id, itadGame, info);
       // ROK-2121: only a tag change moves the taste vector.
-      if (itadTagsChanged(game.itadTags, info.tags)) onGameChanged?.(game.id);
+      if (await updateGameWithItadData(db, game.id, itadGame, info)) {
+        onGameChanged?.(game.id);
+      }
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);
@@ -189,13 +186,17 @@ async function fetchInfoGracefully(
   }
 }
 
-/** Persist ITAD metadata to a game row. */
+/**
+ * Persist ITAD metadata to a game row. Returns whether its ITAD tags changed,
+ * compared against the row as locked inside the write — not the start-of-phase
+ * snapshot, which an ITAD search upsert may have overwritten since (ROK-2121).
+ */
 async function updateGameWithItadData(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   itadGame: ItadGame,
   info: ItadEnrichInfo,
-): Promise<void> {
+): Promise<boolean> {
   const values: Record<string, unknown> = {
     itadGameId: itadGame.id,
     itadBoxartUrl: itadGame.assets?.boxart ?? null,
@@ -204,5 +205,16 @@ async function updateGameWithItadData(
   if (info.earlyAccess !== undefined) {
     values.earlyAccess = info.earlyAccess;
   }
-  await db.update(schema.games).set(values).where(eq(schema.games.id, gameId));
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ itadTags: schema.games.itadTags })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .for('update');
+    await tx
+      .update(schema.games)
+      .set(values)
+      .where(eq(schema.games.id, gameId));
+    return itadTagsChanged(row?.itadTags, info.tags);
+  });
 }
