@@ -19,10 +19,18 @@ export const WOW_FOREVER_NAMESPACE_PREFIX_KEY =
 export const WOW_FOREVER_ARMORY_IMPORT_KEY =
   'wow_forever_armory_import' as SettingKey;
 
+/**
+ * Forever classic quest import kill switch (ROK-2143): `'false'` = off.
+ * Off also makes the quest read path ignore the Blizzard overlay.
+ */
+export const WOW_FOREVER_QUEST_IMPORT_KEY =
+  'wow_forever_quest_import' as SettingKey;
+
 /** Both Forever setting keys, for the plugin manifest. */
 export const WOW_FOREVER_SETTING_KEYS: string[] = [
   WOW_FOREVER_NAMESPACE_PREFIX_KEY,
   WOW_FOREVER_ARMORY_IMPORT_KEY,
+  WOW_FOREVER_QUEST_IMPORT_KEY,
 ];
 
 /** JSON {@link ForeverProbeResultDto}-shaped latest probe run (ROK-1716, D1). */
