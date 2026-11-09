@@ -10,57 +10,22 @@
  * lands on the page (AC 4); if a new character arrived but the page still
  * 403s, a warning banner says so instead of looping (AC 8).
  */
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useEffect, type JSX } from 'react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import type { WowGuildJoinGateDto } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
-import { DialogBanner } from '../../../components/ui/dialog-banner';
 import { HubCrest } from '../../../components/hub/crest/hub-crest';
 import { hubCopy } from '../../../components/hub/hub-copy';
 import { guildPageKey } from '../../../components/hub/api/use-guild';
-import { AddCharacterModal } from '../../../components/profile/AddCharacterModal';
-import { useMyCharacters } from '../../../hooks/use-characters';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
-import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { useJoinGate } from './use-join-gate';
+import { useGateModal, type GateTab } from './use-join-gate-modal';
+import { JoinGateClaimModal, NotLinkedWarning } from './join-gate-pieces';
 import {
-    CLAIM_PARAM, CLAIM_ROSTER, IMPORT_ARMORY_LABEL, JOIN_GATE_LINE, NOT_LINKED_WARNING, NOT_ON_ROSTER_BODY,
-    NOT_ON_ROSTER_LEAD, PICK_CHARACTER_LABEL, gainedCharacter, joinGateMeta, memberCountLabel,
+    CLAIM_PARAM, CLAIM_ROSTER, IMPORT_ARMORY_LABEL, JOIN_GATE_LINE, NOT_ON_ROSTER_BODY,
+    NOT_ON_ROSTER_LEAD, PICK_CHARACTER_LABEL, joinGateMeta, memberCountLabel,
 } from './wow-join-gate.helpers';
-
-type GateTab = 'roster' | 'import';
-
-/**
- * The Add character modal's state, plus whether a character arrived since the
- * viewer's characters first loaded. The baseline is taken on that first load,
- * and the modal is not mounted (`ready`) until it exists (Codex P2): on the
- * `?claim=roster` landing (or a fast click) a claim made before the list
- * arrived would land in the baseline itself, and the AC 8 warning never shows.
- */
-function useGateModal(guildId: number, gameId: number | undefined) {
-    const queryClient = useQueryClient();
-    const chars = useMyCharacters(gameId, gameId !== undefined);
-    const [tab, setTab] = useState<GateTab | null>(null);
-    const [baseline, setBaseline] = useState<ReadonlySet<string> | null>(null);
-    // The warning is about a gate action, so it waits for the modal to have opened.
-    const [opened, setOpened] = useState(false);
-    const current = chars.data?.data;
-    // Adjust-state-during-render: record the first loaded list exactly once.
-    if (baseline === null && current !== undefined) setBaseline(new Set(current.map((c) => c.id)));
-    const open = useCallback((next: GateTab) => {
-        setOpened(true);
-        setTab(next);
-    }, []);
-    const close = useCallback(() => {
-        setTab(null);
-        void queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
-        void queryClient.invalidateQueries({ queryKey: guildPageKey(guildId) });
-    }, [queryClient, guildId]);
-    // A failed list never yields a baseline; the modal still opens (no warning is possible then).
-    const ready = baseline !== null || chars.isError;
-    return { tab, ready, open, close, gained: opened && tab === null && gainedCharacter(baseline, current) };
-}
 
 /** `?claim=roster` (the directory card's landing) opens the roster tab once, then leaves the URL (Ruling 9). */
 function useClaimParam(ready: boolean, open: (tab: GateTab) => void): void {
@@ -106,14 +71,6 @@ function NotOnRosterHint(): JSX.Element {
     );
 }
 
-function NotLinkedWarning(): JSX.Element {
-    return (
-        <div className="mx-auto max-w-md text-left">
-            <DialogBanner tone="warning" role="status" testId="wow-join-gate-warning">{NOT_LINKED_WARNING}</DialogBanner>
-        </div>
-    );
-}
-
 /** The gate read is in flight — a crest-and-title placeholder rather than an empty page. */
 function GateLoading(): JSX.Element {
     return (
@@ -149,7 +106,7 @@ export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element {
             </div>
             {gate.data.viewer.hasForeverCharacter && <NotOnRosterHint />}
             {modal.tab !== null && modal.ready && !registryLoading && (
-                <AddCharacterModal isOpen onClose={modal.close} gameSlug={WOW_FOREVER_GAME_SLUG} initialTab={modal.tab} rosterGuildId={guild.id} />
+                <JoinGateClaimModal tab={modal.tab} guildId={guild.id} onClose={modal.close} />
             )}
         </div>
     );

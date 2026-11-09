@@ -26,7 +26,7 @@ let testApp: TestApp;
 let foreverId: number;
 let gateId: number;
 type HubKey = 'hidden' | 'archived' | 'retail' | 'crew';
-type TokenKey = 'outsider' | 'player' | 'member';
+type TokenKey = 'outsider' | 'player' | 'member' | 'admin';
 const ids: Partial<Record<HubKey, number>> = {};
 const tokens: Partial<Record<TokenKey, string>> = {};
 
@@ -77,15 +77,16 @@ async function insertHub(
   return g.id;
 }
 
-/** A local-login member; returns its id and access token. */
+/** A local-login user (member unless `role` says otherwise); returns its id and access token. */
 async function makeUser(
   handle: string,
+  role: 'member' | 'operator' | 'admin' = 'member',
 ): Promise<{ id: number; token: string }> {
   const email = `${handle}@join-gate.test`;
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
-      .values({ discordId: `local:${email}`, username: handle, role: 'member' })
+      .values({ discordId: `local:${email}`, username: handle, role })
       .returning(),
     'user',
   );
@@ -142,6 +143,7 @@ beforeAll(async () => {
   const member = await makeUser('gatemember');
   tokens.member = member.token;
   await ownForeverCharacter(member.id, 'Gate Member', 'G-GATE-MEMBER');
+  tokens.admin = (await makeUser('gateadmin', 'admin')).token;
 });
 
 // No truncate here: the shared integration setup closes the pool in its own
@@ -185,6 +187,17 @@ describe('GET /plugins/wow/guilds/:id/join-gate — 200 (ROK-2132)', () => {
     expect(res.body.viewer).toEqual({
       isMember: true,
       hasForeverCharacter: true,
+    });
+  });
+
+  // ROK-2151: the staff claim banner's read — staff can view any hub, but the
+  // gate still answers membership by the hub kind's real rule (no staff shortcut).
+  it('an admin who is not a member gets 200 with viewer.isMember false', async () => {
+    const res = await gate(gateId, token('admin'));
+    expect(res.status).toBe(200);
+    expect(res.body.viewer).toEqual({
+      isMember: false,
+      hasForeverCharacter: false,
     });
   });
 });
