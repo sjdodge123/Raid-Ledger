@@ -9,6 +9,8 @@
  *    15 / 14 / 13 (server-hub.smoke uses `1 + parallelIndex % 15` from the
  *    bottom, slot 0 is the fleet test plan's). Re-seeding resets the slot. Its
  *    `outsider` is in no hub at all — the no-hubs viewer (signed in on its own).
+ *    ROK-2152 Q1 gives it the menu / sheet with "Popular hubs" only; the plain-link
+ *    fallback empties its popular read with `page.route` to stay deterministic.
  *  - community hubs: `POST /admin/test/community-hubs/seed { gameId }` on a
  *    configured game (index 3 + project slot) with this spec's tag (`./hub-seed`,
  *    ROK-2030) → `Seed Crew #<tag>` (the actor is in it) and `Seed Solo #<tag>`
@@ -99,6 +101,16 @@ async function seedMember(page: Page, testInfo: TestInfo): Promise<Seed> {
     }, { timeoutMs: 15_000, description: `user ${actorId} lists server hub ${server.guildId} + Seed Crew ${community.hubIds.crew}` });
     const serverHubName = must(hubs.find((h) => h.id === server.guildId)?.name, 'server hub name');
     return { serverHubId: server.guildId, serverHubName, crewId: community.hubIds.crew, hubNames: community.hubNames, gameId: community.gameId, actorId };
+}
+
+/** ROK-2152: the nav's "Popular hubs" read (`GET /hubs?membership=not-joined&sort=members…`). */
+function isPopularRead(raw: string): boolean {
+    const url = new URL(raw);
+    return url.pathname.endsWith('/hubs') && url.searchParams.get('membership') === 'not-joined' && url.searchParams.get('sort') === 'members';
+}
+
+function isWide(page: Page): boolean {
+    return (page.viewportSize()?.width ?? 0) >= HEADER_HUBS_MIN_WIDTH;
 }
 
 function rowFor(scope: Locator | Page, hubId: number): Locator {
@@ -237,26 +249,69 @@ test.describe('Hubs nav (ROK-1875)', () => {
         }
     });
 
-    test('a viewer in no hubs gets a plain Hubs link to /hubs, no menu', async ({ page }, testInfo) => {
+    test('a viewer in no hubs (ROK-2152 Q1): the menu / sheet opens with "Popular hubs" only, and Browse all reaches /hubs', async ({ page }, testInfo) => {
         const server = await seedServerHub(await getAdminToken(), testInfo);
         const outsiderJwt = await signInOnboardedMember(page, server.userIds.outsider);
         expect(await myHubs(outsiderJwt), 'the outsider is in no hub').toEqual([]);
+        await page.goto('about:blank');
+        const read = page.waitForResponse((r) => r.request().method() === 'GET' && isPopularRead(r.url()), { timeout: 20_000 });
         await page.goto(NAV_START);
-        const width = page.viewportSize()?.width ?? 0;
-        if (width >= HEADER_HUBS_MIN_WIDTH) {
+        const body = (await (await read).json()) as { items?: { viewer?: string; hidden?: boolean }[] };
+        const eligible = (body.items ?? []).filter((h) => h.viewer !== 'banned' && h.hidden !== true);
+        expect(eligible.length, 'the instance has a hub to suggest (the seeded server hub at least)').toBeGreaterThan(0);
+        let scope: Locator;
+        if ((page.viewportSize()?.width ?? 0) >= HEADER_HUBS_MIN_WIDTH) {
             const nav = page.getByRole('navigation', { name: 'Main navigation' });
-            const link = nav.getByTestId('nav-hubs-link');
-            await expect(link, 'no hubs → a plain link').toHaveAttribute('href', '/hubs', { timeout: 15_000 });
-            await expect(nav.getByTestId('nav-hubs-menu-trigger'), 'no hubs → no menu trigger').toHaveCount(0);
-            await link.click();
+            const trigger = nav.getByTestId('nav-hubs-menu-trigger');
+            await expect(trigger, 'Q1: no hubs + a popular hub → the menu trigger').toBeVisible({ timeout: 15_000 });
+            await expect(nav.getByTestId('nav-hubs-link'), 'Q1: no plain link').toHaveCount(0);
+            await trigger.click();
+            scope = page.getByRole('menu', { name: 'Hubs' });
+            await expect(scope.getByText('Your hubs', { exact: true }), 'no "Your hubs" heading').toHaveCount(0);
         } else {
-            const bottom = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-link');
-            await expect(bottom, 'no hubs → the bottom Hubs circle is a plain link').toHaveAttribute('href', '/hubs', { timeout: 15_000 });
-            await expect(page.getByTestId('bottom-hubs-trigger'), 'no hubs → no sheet trigger').toHaveCount(0);
-            await expectDrawerHasNoHubs(page, bottom);
-            await bottom.click();
+            const trigger = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-trigger');
+            await expect(trigger, 'Q1: no hubs + a popular hub → the bottom sheet trigger').toHaveAttribute('aria-haspopup', 'dialog', { timeout: 15_000 });
+            await expect(page.getByTestId('bottom-hubs-link'), 'Q1: no plain link').toHaveCount(0);
+            await expectDrawerHasNoHubs(page, trigger);
+            await trigger.click();
+            scope = page.getByRole('dialog', { name: 'Your hubs' });
         }
+        await expect(scope.getByTestId('popular-hubs-heading'), 'the "Popular hubs" section').toHaveText('Popular hubs', { timeout: 15_000 });
+        await expect(scope.getByTestId('popular-hub-row').first(), 'at least one popular row').toBeVisible();
+        await expect(scope.getByTestId('guild-entry-row'), 'no "Your hubs" rows').toHaveCount(0);
+        await scope.getByTestId(isWide(page) ? 'nav-hubs-browse-all' : 'bottom-hubs-browse-all').click();
         await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
+    });
+
+    test('a viewer in no hubs with no hub to suggest gets a plain Hubs link to /hubs, no menu', async ({ page }, testInfo) => {
+        const server = await seedServerHub(await getAdminToken(), testInfo);
+        const outsiderJwt = await signInOnboardedMember(page, server.userIds.outsider);
+        expect(await myHubs(outsiderJwt), 'the outsider is in no hub').toEqual([]);
+        // The popular set is instance-wide; empty it for this viewer so the fallback is deterministic.
+        await page.route((url) => isPopularRead(url.href), async (route) => {
+            const res = await route.fetch();
+            const page0 = (await res.json()) as Record<string, unknown>;
+            await route.fulfill({ response: res, json: { ...page0, items: [] } });
+        });
+        try {
+            await page.goto(NAV_START);
+            if (isWide(page)) {
+                const nav = page.getByRole('navigation', { name: 'Main navigation' });
+                const link = nav.getByTestId('nav-hubs-link');
+                await expect(link, 'no hubs + nothing to suggest → a plain link').toHaveAttribute('href', '/hubs', { timeout: 15_000 });
+                await expect(nav.getByTestId('nav-hubs-menu-trigger'), 'no menu trigger').toHaveCount(0);
+                await link.click();
+            } else {
+                const bottom = page.getByTestId('bottom-tab-bar').getByTestId('bottom-hubs-link');
+                await expect(bottom, 'no hubs + nothing to suggest → the bottom Hubs circle is a plain link').toHaveAttribute('href', '/hubs', { timeout: 15_000 });
+                await expect(page.getByTestId('bottom-hubs-trigger'), 'no sheet trigger').toHaveCount(0);
+                await expectDrawerHasNoHubs(page, bottom);
+                await bottom.click();
+            }
+            await expect(page).toHaveURL(/\/hubs(?:[?#]|$)/);
+        } finally {
+            await page.unrouteAll({ behavior: 'ignoreErrors' });
+        }
     });
 
     test('/hubs: the server card shows View (no Join) and opens the hub; a community card keeps Join', async ({ page }) => {
