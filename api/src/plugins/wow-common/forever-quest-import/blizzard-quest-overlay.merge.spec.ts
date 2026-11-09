@@ -34,10 +34,12 @@ function overlay(
   overrides: Partial<BlizzardQuestOverlay> = {},
 ): BlizzardQuestOverlay {
   return {
+    questId: 1486,
     title: 'Deviate Hides',
     rewardXp: 3100,
     rewardMoneyCopper: 1800,
     rewardItems: [{ id: 918, name: 'Deviate Hide Pack' }],
+    requirementsRaw: {},
     ...overrides,
   };
 }
@@ -111,5 +113,47 @@ describe('mergeBlizzardOverlay', () => {
     mergeBlizzardOverlay(row, ov);
     expect(row).toEqual(curated());
     expect(ov).toEqual(overlay());
+  });
+
+  it('maps requirements onto prevQuestId and the class/race restrictions (L6)', () => {
+    const merged = mergeBlizzardOverlay(
+      curated({ prevQuestId: 77, classRestriction: null }),
+      overlay({
+        requirementsRaw: {
+          classes: [{ id: 9, name: 'Warlock' }],
+          faction: { name: 'Horde', type: 'HORDE' },
+          quests: { operator: { type: 'AND' }, conditions: [{ id: 1485 }] },
+        },
+      }),
+    );
+    expect(merged.prevQuestId).toBe(1485);
+    expect(merged.classRestriction).toEqual(['Warlock']);
+    expect(merged.raceRestriction).toEqual([
+      'Troll',
+      'Tauren',
+      'Undead',
+      'Orc',
+    ]);
+    expect(merged.requiredLevel).toBe(13);
+  });
+
+  it('keeps the curated prerequisite and restrictions for empty requirements', () => {
+    for (const requirementsRaw of [{}, null]) {
+      const merged = mergeBlizzardOverlay(
+        curated({ prevQuestId: 77, classRestriction: ['Mage'] }),
+        overlay({ requirementsRaw }),
+      );
+      expect(merged.prevQuestId).toBe(77);
+      expect(merged.classRestriction).toEqual(['Mage']);
+      expect(merged.raceRestriction).toEqual(['Orc']);
+    }
+  });
+
+  it('never makes a quest its own prerequisite', () => {
+    const merged = mergeBlizzardOverlay(
+      curated({ prevQuestId: null }),
+      overlay({ requirementsRaw: { quests: { conditions: [{ id: 1486 }] } } }),
+    );
+    expect(merged.prevQuestId).toBeNull();
   });
 });

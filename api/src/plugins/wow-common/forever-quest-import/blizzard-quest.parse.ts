@@ -6,8 +6,10 @@
  * `quest/index` is accepted too. `quest/area/{id}` `quests[]`, `quest/{id}` with
  * `rewards.experience`, `rewards.money`, `rewards.items.items[].item`,
  * `rewards.reputations`). Nothing here throws on off-shape input: a missing
- * piece parses as null / empty. `requirements` is kept verbatim; its shape is
- * learned from the first run (L5), so prerequisite extraction is heuristic.
+ * piece parses as null / empty. `requirements` is kept verbatim; the live run
+ * (L5, 2026-11-09) saw only `classes[]`, `races[]`, `faction { name, type }`
+ * and `quests { operator, conditions }` under it (no level) — the field
+ * mapping lives in `blizzard-quest.requirements.ts`.
  */
 import type {
   BlizzardQuestReputation,
@@ -179,6 +181,17 @@ export function parseBlizzardQuest(json: unknown): ParsedBlizzardQuest | null {
 
 const SKIPPED_KEYS = new Set(['key', '_links']);
 
+/**
+ * Inside a quest-named subtree, `conditions` keeps the quest context: the
+ * live run (2026-11-09, run 2) served `quests: { operator, conditions }`, and
+ * a condition may be a bare `{ id }` reference with no quest-named key of its
+ * own. `operator` (AND/OR) never names a quest.
+ */
+function childIsQuest(key: string, inQuest: boolean): boolean {
+  if (key === 'operator') return false;
+  return /quest/i.test(key) || (inQuest && key === 'conditions');
+}
+
 function collectQuestIds(
   v: unknown,
   inQuest: boolean,
@@ -195,23 +208,32 @@ function collectQuestIds(
   if (!isRecord(v)) return;
   for (const [key, child] of Object.entries(v)) {
     if (!SKIPPED_KEYS.has(key)) {
-      collectQuestIds(child, /quest/i.test(key), ids, depth + 1);
+      collectQuestIds(child, childIsQuest(key, inQuest), ids, depth + 1);
     }
   }
 }
 
 /**
  * Quest ids named under any `*quest*` key inside `requirements` (a number, an
- * `{ id }` reference, or arrays of either), minus the quest itself; sorted.
+ * `{ id }` reference, arrays of either, or `{ operator, conditions[] }`),
+ * minus the quest itself, in document order.
  */
-export function extractPrerequisiteIds(
+export function listPrerequisiteIds(
   requirements: unknown,
   selfId?: number,
 ): number[] {
   const ids = new Set<number>();
   collectQuestIds(requirements, false, ids, 0);
   if (selfId !== undefined) ids.delete(selfId);
-  return [...ids].sort((a, b) => a - b);
+  return [...ids];
+}
+
+/** {@link listPrerequisiteIds}, sorted ascending. */
+export function extractPrerequisiteIds(
+  requirements: unknown,
+  selfId?: number,
+): number[] {
+  return listPrerequisiteIds(requirements, selfId).sort((a, b) => a - b);
 }
 
 function walkKeyPaths(

@@ -41,7 +41,11 @@ function curated(questId: number): DungeonQuestDto {
   };
 }
 
-function overlay(questId: number, dungeonInstanceId: number | null = 238) {
+function overlay(
+  questId: number,
+  dungeonInstanceId: number | null = 238,
+  extra: Partial<WowDungeonQuestBlizzardRow> = {},
+): WowDungeonQuestBlizzardRow {
   return {
     questId,
     areaId: 717,
@@ -56,7 +60,8 @@ function overlay(questId: number, dungeonInstanceId: number | null = 238) {
     raw: {},
     fetchedAt: new Date('2026-11-09T00:00:00Z'),
     runId: 'run-1',
-  } satisfies WowDungeonQuestBlizzardRow;
+    ...extra,
+  };
 }
 
 /** Deps whose extras query resolves `extras`; `switchValue` is the stored setting. */
@@ -143,5 +148,49 @@ describe('applyQuestOverlay', () => {
     expect(on?.name).toBe('Blizzard 378');
     const rows = [curated(378)];
     expect(await applyQuestOverlay(deps('false').value, rows)).toBe(rows);
+  });
+});
+
+describe('overlay-only quests (m5 type gate, m6 reward type, L6 requirements)', () => {
+  it('appends only Dungeon (81) and Group (1) types — not Raid (62) or untyped', async () => {
+    listOverlay.mockResolvedValue(new Map());
+    const d = deps(null, [
+      overlay(386, 238, { typeId: 81 }),
+      overlay(387, 238, { typeId: 1 }),
+      overlay(388, 238, { typeId: 62 }),
+      overlay(389, 238, { typeId: null }),
+    ]);
+    const out = await applyInstanceOverlay(d.value, [], SCOPE);
+    expect(out.map((q) => q.questId)).toEqual([386, 387]);
+  });
+
+  it('gives an overlay-only quest with one reward item rewardType "choice", like curated rows', async () => {
+    listOverlay.mockResolvedValue(new Map());
+    const d = deps(null, [
+      overlay(386),
+      overlay(387, 238, { rewardItems: [] }),
+    ]);
+    const out = await applyInstanceOverlay(d.value, [], SCOPE);
+    expect(out.map((q) => [q.questId, q.rewardType])).toEqual([
+      [386, 'choice'],
+      [387, 'none'],
+    ]);
+  });
+
+  it('maps requirements onto an overlay-only quest', async () => {
+    listOverlay.mockResolvedValue(new Map());
+    const requirementsRaw = {
+      faction: { name: 'Alliance', type: 'ALLIANCE' },
+      classes: [{ id: 2, name: 'Paladin' }],
+      quests: { operator: { type: 'AND' }, conditions: [{ id: 303 }] },
+    };
+    const d = deps(null, [overlay(386, 238, { requirementsRaw })]);
+    const [dto] = await applyInstanceOverlay(d.value, [], SCOPE);
+    expect(dto).toMatchObject({
+      prevQuestId: 303,
+      classRestriction: ['Paladin'],
+      raceRestriction: ['Gnome', 'Night Elf', 'Dwarf', 'Human'],
+      requiredLevel: null,
+    });
   });
 });

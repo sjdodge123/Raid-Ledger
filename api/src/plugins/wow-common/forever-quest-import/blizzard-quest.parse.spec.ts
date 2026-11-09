@@ -307,6 +307,25 @@ describe('extractPrerequisiteIds', () => {
     ).toEqual([303]);
   });
 
+  it('reads quests { operator, conditions } with bare { id } conditions (run-2 key path)', () => {
+    expect(
+      extractPrerequisiteIds({
+        quests: {
+          operator: { id: 1, type: 'AND' },
+          conditions: [{ id: 303 }, { quest: { id: 12 } }],
+        },
+        faction: { name: 'Alliance', type: 'ALLIANCE' },
+        classes: [{ id: 9, name: 'Warlock' }],
+      }),
+    ).toEqual([12, 303]);
+  });
+
+  it('ignores ids under a non-quest conditions key', () => {
+    expect(
+      extractPrerequisiteIds({ reputation: { conditions: [{ id: 47 }] } }),
+    ).toEqual([]);
+  });
+
   it('returns [] for absent or quest-free requirements', () => {
     expect(extractPrerequisiteIds(null)).toEqual([]);
     expect(extractPrerequisiteIds({ min_character_level: 13 })).toEqual([]);

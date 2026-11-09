@@ -18,6 +18,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 import { listBlizzardOverlay } from './forever-quest-import/blizzard-quest.repo';
 import { mergeBlizzardOverlay } from './forever-quest-import/blizzard-quest-overlay.merge';
+import { requirementFields } from './forever-quest-import/blizzard-quest.requirements';
 import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 
@@ -30,11 +31,37 @@ export interface QuestOverlayDeps {
 /** The overlay is classic data; overlay-only quests carry this expansion. */
 export const OVERLAY_ONLY_EXPANSION = 'classic';
 
-/** A quest Blizzard lists for the dungeon that our JSON lacks (R4). */
+/**
+ * R4 ("include, after L5 confirms `type` = Dungeon") — the Blizzard quest
+ * `type.id`s an overlay-only quest may have to become a card.
+ *
+ * Evidence (L5 live run 2, 2026-11-09, 312 quests in the mapped dungeon
+ * areas): type_id 81: 282 · 62: 12 · 1: 4 · NULL: 14. The raw responses name
+ * 81 `"Dungeon"` (quests 378, 1486). 62 and 1 were not named in anything
+ * captured; Blizzard's QuestInfo ids are 1 = Group, 62 = Raid, 81 = Dungeon.
+ * Allowed: 81 (Dungeon) and 1 (Group — a group quest filed under the
+ * dungeon's area). Excluded: 62 (Raid — e.g. the UBRS raid quests filed
+ * under Blackrock Spire, not 5-player dungeon prep) and NULL (an ordinary
+ * quest with no type; R4 says exclude non-dungeon types). A curated quest is
+ * never filtered by this — it only gates quests our JSON lacks.
+ */
+export const OVERLAY_ONLY_TYPE_IDS: ReadonlySet<number> = new Set([81, 1]);
+
+export function isOverlayOnlyType(typeId: number | null): boolean {
+  return typeId !== null && OVERLAY_ONLY_TYPE_IDS.has(typeId);
+}
+
+/**
+ * A quest Blizzard lists for the dungeon that our JSON lacks (R4).
+ * `rewardType` follows the curated rows: any reward item → `'choice'`
+ * (the bundled JSON uses `'choice'` for single-item quests too; the card only
+ * says "Choose one reward" when there is more than one), none → `'none'`.
+ */
 export function overlayOnlyDto(
   row: WowDungeonQuestBlizzardRow,
 ): DungeonQuestDto {
   const itemIds = row.rewardItems.map((item) => item.id);
+  const req = requirementFields(row.requirementsRaw, row.questId);
   return {
     questId: row.questId,
     dungeonInstanceId: row.dungeonInstanceId,
@@ -44,17 +71,17 @@ export function overlayOnlyDto(
     expansion: OVERLAY_ONLY_EXPANSION,
     questGiverNpc: null,
     questGiverZone: null,
-    prevQuestId: null,
+    prevQuestId: req.prevQuestId,
     nextQuestId: null,
     rewardsJson: itemIds.length > 0 ? itemIds : null,
     objectives: null,
-    classRestriction: null,
-    raceRestriction: null,
+    classRestriction: req.classRestriction,
+    raceRestriction: req.raceRestriction,
     startsInsideDungeon: INSIDE_DUNGEON_QUEST_IDS.has(row.questId),
     sharable: true,
     rewardXp: row.rewardXp,
     rewardGold: row.rewardMoneyCopper,
-    rewardType: itemIds.length > 1 ? 'choice' : 'none',
+    rewardType: itemIds.length > 0 ? 'choice' : 'none',
   };
 }
 
@@ -70,7 +97,10 @@ async function mergeQuests(
   return quests.map((q) => mergeBlizzardOverlay(q, overlay.get(q.questId)));
 }
 
-/** Overlay rows mapped to these dungeons whose quest id is not in `known`. */
+/**
+ * Overlay rows mapped to these dungeons whose quest id is not in `known` and
+ * whose type is a dungeon type (m5).
+ */
 async function listOverlayOnly(
   db: QuestOverlayDeps['db'],
   instanceIds: readonly number[],
@@ -84,7 +114,7 @@ async function listOverlayOnly(
       inArray(wowDungeonQuestBlizzard.dungeonInstanceId, [...instanceIds]),
     );
   return rows
-    .filter((row) => !known.has(row.questId))
+    .filter((row) => !known.has(row.questId) && isOverlayOnlyType(row.typeId))
     .sort((a, b) => a.questId - b.questId)
     .map(overlayOnlyDto);
 }
