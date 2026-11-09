@@ -223,7 +223,7 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
     isBannerCollapsed: boolean; derived: EventDetailDerived; handlers: EventDetailHandlers; modals: ModalState;
 }) {
     return (
-        <div className="event-detail-page pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-0">
+        <div className="event-detail-page pb-0">
             <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}
                 canManageRoster={derived.canManageRoster} isCancelled={derived.isCancelled} isEnded={derived.isEnded} eventId={page.eventId}
                 recurrenceGroupId={page.event.recurrenceGroupId} onInvite={() => modals.setShowInviteModal(true)} onReschedule={() => modals.setShowRescheduleModal(true)}
@@ -255,7 +255,7 @@ export function EventDetailPage(): JSX.Element | null {
         }
         return <EventDetailError message={page.detailError.message} onBack={() => page.navigate('/calendar')} />;
     }
-    if (page.detailLoading) return <div className="event-detail-page"><EventDetailSkeleton /></div>;
+    if (page.detailLoading) return <div className="event-detail-page pb-0"><EventDetailSkeleton /></div>;
     if (!page.event) return null;
 
     return <EventDetailBody page={page as PageState & { event: EventResponseDto }} voice={voice} bannerRef={bannerRef} isBannerCollapsed={isBannerCollapsed} derived={derived} handlers={handlers} modals={modals} />;

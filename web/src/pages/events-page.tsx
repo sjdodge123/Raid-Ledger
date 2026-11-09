@@ -109,7 +109,7 @@ export function EventsPage() {
 
   return (
     <PullToRefresh onRefresh={refetch}>
-      <div className="pb-[calc(var(--bottom-nav-clearance)+1rem)] md:pb-0">
+      <div>
         <SchedulingBanner />
         <StandalonePollBanner />
         <LfgSummaryBanner />
