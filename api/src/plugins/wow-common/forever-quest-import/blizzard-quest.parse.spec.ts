@@ -286,7 +286,7 @@ describe('parseBlizzardQuest', () => {
 });
 
 describe('extractPrerequisiteIds', () => {
-  it('reads ids under any quest-named key and ignores other ids', () => {
+  it('reads ids under quest-named top-level keys only and ignores other ids', () => {
     expect(
       extractPrerequisiteIds({
         min_character_level: 20,
@@ -295,7 +295,7 @@ describe('extractPrerequisiteIds', () => {
         prerequisite_quests: [303, 303, 12],
         requires: [{ quest: { key: key('q'), id: 40 } }],
       }),
-    ).toEqual([12, 40, 155, 303]);
+    ).toEqual([12, 155, 303]);
   });
 
   it('drops the quest itself and non-positive ids', () => {

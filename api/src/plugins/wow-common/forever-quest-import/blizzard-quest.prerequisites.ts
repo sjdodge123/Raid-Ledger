@@ -39,8 +39,7 @@ function positiveInt(v: unknown): number | null {
 function isAndGroup(group: JsonRecord): boolean {
   const op = group.operator;
   if (op === undefined || op === null) return true;
-  const type =
-    typeof op === 'string' ? op : isRecord(op) ? op.type : undefined;
+  const type = typeof op === 'string' ? op : isRecord(op) ? op.type : undefined;
   return typeof type === 'string' && type.toUpperCase() === 'AND';
 }
 
@@ -113,7 +112,9 @@ export function extractPrerequisiteIds(
  * 4121, not the nested 4081/4082); ties → the highest id, a deterministic
  * pick independent of Blizzard's ordering. The crawl still follows them all.
  */
-export function pickPrevQuestId(refs: readonly PrerequisiteRef[]): number | null {
+export function pickPrevQuestId(
+  refs: readonly PrerequisiteRef[],
+): number | null {
   let best: PrerequisiteRef | null = null;
   for (const ref of refs) {
     if (
