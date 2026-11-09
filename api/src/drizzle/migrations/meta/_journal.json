@@ -2014,8 +2014,15 @@
     {
       "idx": 288,
       "version": "7",
+      "when": 1794176721350,
+      "tag": "0288_blizzard_id_link_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 289,
+      "version": "7",
       "when": 1794181200982,
-      "tag": "0288_guild_mailworthy",
+      "tag": "0289_guild_mailworthy",
       "breakpoints": true
     }
   ]

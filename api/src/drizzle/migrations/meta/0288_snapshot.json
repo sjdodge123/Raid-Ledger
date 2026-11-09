@@ -1,5 +1,5 @@
 {
-  "id": "7817494d-568d-4e21-a7a9-028f9292ad57",
+  "id": "dc4ffd35-ea42-42eb-836e-14963a69cfb2",
   "prevId": "df5198f5-3de7-4321-98ca-02276f13ffa7",
   "version": "7",
   "dialect": "postgresql",
@@ -1997,6 +1997,34 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_characters_game_region_external_id": {
+          "name": "idx_characters_game_region_external_id",
+          "columns": [
+            {
+              "expression": "game_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"region\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"characters\".\"external_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -12090,6 +12118,28 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_guild_members_guild_blizzard_id": {
+          "name": "idx_guild_members_guild_blizzard_id",
+          "columns": [
+            {
+              "expression": "(\"blizzard_character_id\"::text)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "guild_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"guild_members\".\"blizzard_character_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -12290,343 +12340,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.guild_mailworthy_givers": {
-      "name": "guild_mailworthy_givers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_key": {
-          "name": "name_key",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "character_name": {
-          "name": "character_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "items_all_time": {
-          "name": "items_all_time",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "counting_since": {
-          "name": "counting_since",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "days": {
-          "name": "days",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "as_of": {
-          "name": "as_of",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "generated_at": {
-          "name": "generated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reported_by_user_id": {
-          "name": "reported_by_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_guild_mailworthy_givers_reported_by": {
-          "name": "idx_guild_mailworthy_givers_reported_by",
-          "columns": [
-            {
-              "expression": "reported_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "guild_mailworthy_givers_guild_id_guilds_id_fk": {
-          "name": "guild_mailworthy_givers_guild_id_guilds_id_fk",
-          "tableFrom": "guild_mailworthy_givers",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "guild_mailworthy_givers_reported_by_user_id_users_id_fk": {
-          "name": "guild_mailworthy_givers_reported_by_user_id_users_id_fk",
-          "tableFrom": "guild_mailworthy_givers",
-          "tableTo": "users",
-          "columnsFrom": [
-            "reported_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_guild_mailworthy_givers_guild_name": {
-          "name": "uq_guild_mailworthy_givers_guild_name",
-          "nullsNotDistinct": false,
-          "columns": [
-            "guild_id",
-            "name_key"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "chk_guild_mailworthy_givers_source": {
-          "name": "chk_guild_mailworthy_givers_source",
-          "value": "\"guild_mailworthy_givers\".\"source\" IN ('self', 'relayed')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.guild_mailworthy_peers": {
-      "name": "guild_mailworthy_peers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name_key": {
-          "name": "name_key",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_guild_mailworthy_peers_guild_seen": {
-          "name": "idx_guild_mailworthy_peers_guild_seen",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "last_seen_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "guild_mailworthy_peers_guild_id_guilds_id_fk": {
-          "name": "guild_mailworthy_peers_guild_id_guilds_id_fk",
-          "tableFrom": "guild_mailworthy_peers",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "uq_guild_mailworthy_peers_guild_name": {
-          "name": "uq_guild_mailworthy_peers_guild_name",
-          "nullsNotDistinct": false,
-          "columns": [
-            "guild_id",
-            "name_key"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.guild_mailworthy_templates": {
-      "name": "guild_mailworthy_templates",
-      "schema": "",
-      "columns": {
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "rev": {
-          "name": "rev",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "author_name": {
-          "name": "author_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "rules": {
-          "name": "rules",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reported_by_user_id": {
-          "name": "reported_by_user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reported_at": {
-          "name": "reported_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_guild_mailworthy_templates_reported_by": {
-          "name": "idx_guild_mailworthy_templates_reported_by",
-          "columns": [
-            {
-              "expression": "reported_by_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "guild_mailworthy_templates_guild_id_guilds_id_fk": {
-          "name": "guild_mailworthy_templates_guild_id_guilds_id_fk",
-          "tableFrom": "guild_mailworthy_templates",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "guild_mailworthy_templates_reported_by_user_id_users_id_fk": {
-          "name": "guild_mailworthy_templates_reported_by_user_id_users_id_fk",
-          "tableFrom": "guild_mailworthy_templates",
-          "tableTo": "users",
-          "columnsFrom": [
-            "reported_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
