@@ -98,7 +98,9 @@ export interface MailworthyGiverRow {
 /**
  * Amended D5 precedence, as ONE predicate: `self` always replaces
  * `relayed`; `relayed` never replaces `self`; same source moves only on a
- * not-older (`as_of`, `generated_at`).
+ * not-older (`as_of`, `generated_at`). TS twin (the preview's rule):
+ * `giverPrecedence` in `…mailworthy.helpers.ts` — moves exactly when it is
+ * >= 0; change both together.
  */
 const giverMoves = sql`(excluded.source = 'self' AND ${guildMailworthyGivers.source} = 'relayed')
   OR (excluded.source = ${guildMailworthyGivers.source}

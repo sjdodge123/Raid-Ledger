@@ -123,7 +123,7 @@ export async function findGuildId(
 }
 
 /** Latest-snapshot members by name key, with every linked owner. */
-async function loadRoster(
+export async function loadRoster(
   ctx: AddonApplyContext,
   guildId: number,
   exporterGuid: string,

@@ -1,4 +1,5 @@
 import type {
+  AddonMailworthy,
   AddonMailworthyGiver,
   AddonMailworthyPeer,
   AddonMailworthyRule,
@@ -102,18 +103,59 @@ export function clampGiver(giver: AddonMailworthyGiver): {
   return { itemsAllTime: Math.min(itemsAllTime, MAX_ITEMS_ALL_TIME), days };
 }
 
+/** What decides whether a giver row replaces another (amended D5). */
+export interface GiverRank {
+  source: GuildMailworthyGiverSource;
+  asOf: Date;
+  generatedAt: Date;
+}
+
 /**
- * Codex P2 — true when a giver (deduped, `asOf` clamped to now) has no stored
- * row in `stored` (name key → stored `as_of`) or a strictly newer `asOf`.
+ * Amended D5 precedence: > 0 the incoming row wins, 0 same rank, < 0 the
+ * stored row wins. `self` beats `relayed` whatever the dates; same source
+ * compares (`as_of`, `generated_at`). The write path's SQL `giverMoves`
+ * (`…mailworthy.writes.ts`) moves a row exactly when this is >= 0 — change
+ * both together.
  */
-export function anyGiverNewer(
-  givers: readonly AddonMailworthyGiver[],
-  stored: ReadonlyMap<string, Date>,
-  nowMs: number,
-): boolean {
-  return dedupeGivers(givers).some((giver) => {
-    const asOf = stored.get(mailworthyNameKey(giver.characterName));
-    return asOf === undefined || clampedDate(giver.asOf, nowMs) > asOf;
+export function giverPrecedence(
+  incoming: GiverRank,
+  stored: GiverRank,
+): number {
+  if (incoming.source !== stored.source) {
+    return incoming.source === 'self' ? 1 : -1;
+  }
+  const byAsOf = incoming.asOf.getTime() - stored.asOf.getTime();
+  if (byAsOf !== 0) return byAsOf;
+  return incoming.generatedAt.getTime() - stored.generatedAt.getTime();
+}
+
+export interface GiverPreviewInput {
+  block: Pick<AddonMailworthy, 'givers' | 'generatedAt'>;
+  roster: MailworthyRoster;
+  userId: number;
+  /** Stored giver rows by name key. */
+  stored: ReadonlyMap<string, GiverRank>;
+  nowMs: number;
+}
+
+/**
+ * Codex P2 — true when the apply would write a giver the store lacks or one
+ * that outranks the stored row (`giverPrecedence` > 0; an equal rank is a
+ * re-paste). Mirrors the apply: no exporter on the roster → nothing; an
+ * off-roster giver is rejected.
+ */
+export function anyGiverNewer(input: GiverPreviewInput): boolean {
+  const { block, roster, userId, stored, nowMs } = input;
+  if (roster.exporterKey === undefined) return false;
+  const generatedAt = clampedDate(block.generatedAt, nowMs);
+  return dedupeGivers(block.givers ?? []).some((giver) => {
+    const nameKey = mailworthyNameKey(giver.characterName);
+    const source = giverSource(nameKey, roster, userId);
+    if (source === null) return false;
+    const kept = stored.get(nameKey);
+    if (!kept) return true;
+    const asOf = clampedDate(giver.asOf, nowMs);
+    return giverPrecedence({ source, asOf, generatedAt }, kept) > 0;
   });
 }
 
