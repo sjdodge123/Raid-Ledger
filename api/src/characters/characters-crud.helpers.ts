@@ -21,6 +21,10 @@ import {
 import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
 import type { ExternalImportPolicy } from '../plugins/plugin-host/character-external-import.types';
+import {
+  auditGuidRelease,
+  releasedGuidOf,
+} from '../plugins/wow-common/addon-import/external-id.guid-release';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -288,4 +292,29 @@ export function ownedCharacter(userId: number, characterId: string): SQL {
     ),
     'owned character filter',
   );
+}
+
+/**
+ * Delete the user's own character. ROK-2115 Codex r2 P1: when it held a
+ * roster GUID, a Blizzard-id character that now wins that row gets a fresh
+ * link audit, so no member grant made for this character carries over.
+ */
+export async function deleteOwnedCharacter(
+  db: Db,
+  userId: number,
+  characterId: string,
+): Promise<void> {
+  // One transaction: a failed audit must roll the delete back, or the
+  // old grant would carry over to the row's new winner (review r2).
+  await db.transaction(async (tx) => {
+    const [gone] = await tx
+      .delete(schema.characters)
+      .where(ownedCharacter(userId, characterId))
+      .returning({
+        addonGuid: schema.characters.addonGuid,
+        gameId: schema.characters.gameId,
+        region: schema.characters.region,
+      });
+    await auditGuidRelease(tx, gone ? releasedGuidOf(gone) : null, userId);
+  });
 }

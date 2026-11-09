@@ -86,3 +86,16 @@ describe('EquipmentGrid — Forever portrait in the render slot (ROK-1747)', () 
         expect(screen.getAllByRole('link', { name: 'Test Helm' })).toHaveLength(1);
     });
 });
+
+/** ROK-2146 review MAJOR-2: the 3-col render layout keys on the panel width, not the viewport alone. */
+describe('EquipmentGrid — container-query layout (ROK-2146)', () => {
+    it('switches to 3 columns only at lg AND a 48rem panel (@3xl)', () => {
+        renderGrid(RENDER_URL);
+        expect(screen.getByTestId('equipment-layout').className.split(' '), 'the panel is the container').toContain('@container');
+        const wide = screen.getByTestId('equipment-layout-wide').className.split(' ');
+        expect(wide, '3-col needs lg + @3xl').toEqual(expect.arrayContaining(['hidden', 'lg:@3xl:grid', 'lg:@3xl:grid-cols-[1fr_auto_1fr]']));
+        expect(wide.filter((c) => /^lg:grid/.test(c)), 'no viewport-only switch').toEqual([]);
+        expect(screen.getByTestId('equipment-layout-narrow').className.split(' ')).toContain('lg:@3xl:hidden');
+    });
+});
+

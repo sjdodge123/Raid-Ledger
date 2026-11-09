@@ -1,18 +1,21 @@
 /**
  * WoW plugin filler for the core `character-detail:admin-actions` slot:
- * "Change owner" (ROK-2128) and "Unlink character" (ROK-1756) for a character
+ * "Change owner" (ROK-2128) and "Unlink character" (ROK-1756), in the ⋯ menu / More sheet (ROK-2140), for a character
  * linked to an in-game roster row — a LedgerLink GUID (`addonLinked`) or a
  * roster pick (`rosterClaimed`). Core renders the slot for admins only; this
  * self-filters to linked characters, and the API re-checks both (AdminGuard).
  */
 import { useState, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LinkSlashIcon } from '@heroicons/react/24/outline';
+import { LinkSlashIcon, UserIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/button';
 import { Modal } from '../../../components/ui/modal';
 import { toast } from '../../../lib/toast';
 import { useUnlinkAddonCharacter } from '../hooks/use-unlink-addon-character';
 import { CharacterChangeOwner } from './character-change-owner';
+import { CharacterAdminOverflow } from './character-admin-overflow';
+import type { ActionMenuItem } from '../../../components/ui/action-menu';
+import type { CharacterHeaderLayout } from '../../../components/shared/character-header-layout';
 
 interface CharacterDetailAdminActionsProps {
     characterId: string;
@@ -22,6 +25,8 @@ interface CharacterDetailAdminActionsProps {
     addonLinked?: boolean | undefined;
     /** ROK-2128: claimed from a guild roster (may have no GUID). */
     rosterClaimed?: boolean | undefined;
+    /** ROK-2140: `phone` = More tile + BottomSheet; otherwise the ⋯ menu. */
+    layout?: CharacterHeaderLayout | undefined;
 }
 
 function UnlinkFooter({ onCancel, onConfirm, isPending }: { onCancel: () => void; onConfirm: () => void; isPending: boolean }) {
@@ -66,17 +71,19 @@ function UnlinkConfirm({ characterId, name, open, setOpen }: UnlinkConfirmProps)
     );
 }
 
-/** Admin actions for a roster-linked WoW character; renders nothing for any other character. */
-export function CharacterDetailAdminActions({ characterId, name, userId, addonLinked, rosterClaimed }: CharacterDetailAdminActionsProps) {
+/** Admin actions for a roster-linked WoW character, behind the header's ⋯ menu / More sheet (ROK-2140); nothing for any other character. */
+export function CharacterDetailAdminActions({ characterId, name, userId, addonLinked, rosterClaimed, layout }: CharacterDetailAdminActionsProps) {
     const [unlinkOpen, setUnlinkOpen] = useState(false);
+    const [ownerOpen, setOwnerOpen] = useState(false);
     if (addonLinked !== true && rosterClaimed !== true) return null;
+    const items: ActionMenuItem[] = [
+        { key: 'owner', icon: <UserIcon className="w-4 h-4" aria-hidden="true" />, label: 'Change owner', onClick: () => setOwnerOpen(true) },
+        { key: 'unlink', icon: <LinkSlashIcon className="w-4 h-4" aria-hidden="true" />, label: 'Unlink character', destructive: true, onClick: () => setUnlinkOpen(true) },
+    ];
     return (
         <>
-            <CharacterChangeOwner characterId={characterId} name={name} ownerId={userId} onUnlink={() => setUnlinkOpen(true)} />
-            <Button variant="destructive-soft" size="sm" onClick={() => setUnlinkOpen(true)}>
-                <LinkSlashIcon className="w-4 h-4" aria-hidden="true" />
-                Unlink character
-            </Button>
+            <CharacterAdminOverflow name={name} items={items} layout={layout ?? 'desktop'} />
+            <CharacterChangeOwner characterId={characterId} name={name} ownerId={userId} open={ownerOpen} onOpenChange={setOwnerOpen} onUnlink={() => setUnlinkOpen(true)} />
             <UnlinkConfirm characterId={characterId} name={name} open={unlinkOpen} setOpen={setUnlinkOpen} />
         </>
     );

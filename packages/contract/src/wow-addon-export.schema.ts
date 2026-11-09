@@ -9,6 +9,7 @@ import {
     ADDON_QUESTS_IN_PROGRESS_MAX,
 } from './wow-addon-import.schema.js';
 import { WOW_GUILD_INFO_MAX, WOW_GUILD_MOTD_MAX } from './guild-ingame-text.schema.js';
+import { AddonMailworthySchema } from './wow-addon-mailworthy.schema.js';
 
 // ============================================================
 // WoW: Forever addon export payload (ROK-1724)
@@ -165,9 +166,15 @@ export const AddonQuestInProgressSchema = z.object({
 }).strict();
 export type AddonQuestInProgress = z.infer<typeof AddonQuestInProgressSchema>;
 
-/** ROK-1742. Optional as a whole; when present both arrays are required. */
+/**
+ * ROK-1742. Optional as a whole; when present `inProgress` is required.
+ * `completed` is optional since ROK-2125 (additive v1): ABSENT = "no opinion"
+ * (Raid Ledger takes the completed list from the Armory `quests/completed`
+ * sync, or keeps the last one it stored); an EMPTY array still means "this
+ * character has completed no quests".
+ */
 export const AddonQuestsSchema = z.object({
-    completed: z.array(id).max(ADDON_QUESTS_COMPLETED_MAX),
+    completed: z.array(id).max(ADDON_QUESTS_COMPLETED_MAX).optional(),
     inProgress: z.array(AddonQuestInProgressSchema).max(ADDON_QUESTS_IN_PROGRESS_MAX),
     /**
      * Set by the addon when `completed` was cut to `ADDON_QUESTS_COMPLETED_MAX`
@@ -182,6 +189,8 @@ export const AddonCharDataSchema = z.object({
     talents: AddonTalentsSchema,
     lockouts: z.array(AddonLockoutSchema).max(100),
     quests: AddonQuestsSchema.optional(),
+    /** Mailworthy guild contributions block (ROK-2148, additive). Absent = no opinion. */
+    mailworthy: AddonMailworthySchema.optional(),
 }).strict();
 export type AddonCharData = z.infer<typeof AddonCharDataSchema>;
 

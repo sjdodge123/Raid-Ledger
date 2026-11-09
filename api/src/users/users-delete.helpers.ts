@@ -24,6 +24,10 @@ import {
 } from '../feedback/feedback-screenshot-user.helpers';
 import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
 import { wipeCommunityHubData } from '../guilds/community/community-user-wipe.helpers';
+import {
+  auditGuidReleases,
+  heldGuidsOf,
+} from '../plugins/wow-common/addon-import/external-id.guid-release';
 
 const logger = new Logger('UserDelete');
 
@@ -279,6 +283,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-2136: `ingame_motd_updated_by` / `ingame_info_updated_by` too — the
   // guild's in-game text outlives its editor (`updatedBy` reads null).
   schema.guildProfiles,
+  // ROK-2148: `reported_by_user_id` is SET NULL; a guild's Mailworthy rules and
+  // giver totals belong to the guild, not to the member whose upload carried them.
+  schema.guildMailworthyTemplates,
+  schema.guildMailworthyGivers,
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).
   schema.hubPosts,
@@ -417,7 +425,11 @@ export async function wipeUserData(
   userId: number,
   reassignToUserId: number,
 ): Promise<void> {
+  // ROK-2115 Codex r2 P1: rows the user's GUIDs held get new Blizzard-id
+  // winners — audit them as fresh links so no member grant carries over.
+  const held = await heldGuidsOf(tx, userId);
   await deleteUserOwnedData(tx, userId);
+  await auditGuidReleases(tx, held, null);
   await reassignUserEntities(tx, userId, reassignToUserId);
 }
 

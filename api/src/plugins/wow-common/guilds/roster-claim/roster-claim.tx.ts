@@ -6,6 +6,7 @@ import { resolveAndDemoteMain } from '../../../../characters/characters-import.h
 import { defined } from '../../../../common/defined.helpers';
 import type { AddonImportTx } from '../../addon-import/addon-import-apply.types';
 import { logGuidAudit } from '../../addon-import/addon-import.guid-audit';
+import { logExternalIdLinked } from '../../addon-import/external-id.audit';
 import {
   lockAddonGuid,
   lockClaimName,
@@ -162,7 +163,10 @@ export async function claimWithin(
   return row;
 }
 
-/** D4 GUID audit (`via:'roster_pick'`) + D7 `character_claim/roster_claimed`. */
+/**
+ * D4 GUID audit (`via:'roster_pick'`), ROK-2115 `external_id_linked` for a
+ * Blizzard-sourced row, + D7 `character_claim/roster_claimed`.
+ */
 async function auditClaim(
   tx: AddonImportTx,
   m: ClaimMember,
@@ -180,6 +184,7 @@ async function auditClaim(
       via: 'roster_pick',
     });
   }
+  await auditBlizzardLink(tx, m, row);
   await logCharacterClaimAudit(tx, {
     ...base,
     action: 'roster_claimed',
@@ -189,4 +194,22 @@ async function auditClaim(
     fromUserId: null,
     toUserId: row.userId,
   });
+}
+
+/** ROK-2115: a Blizzard-sourced row's id is a fresh link for the claimer. */
+async function auditBlizzardLink(
+  tx: AddonImportTx,
+  m: ClaimMember,
+  row: CharacterRow,
+): Promise<void> {
+  const link = {
+    actorId: row.userId,
+    ownerId: row.userId,
+    characterId: row.id,
+    externalId: row.externalId,
+    gameId: m.gameId,
+    region: m.region,
+    via: 'roster_pick' as const,
+  };
+  await logExternalIdLinked(tx, link, null);
 }

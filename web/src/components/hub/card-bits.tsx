@@ -17,11 +17,11 @@ export function JumpLink({ testId, href, children }: { testId: string; href: str
 }
 
 /** Centred, quiet, one sentence that says what happens next. */
-export function QuietEmpty({ children }: { children: ReactNode }): JSX.Element {
-    return <p className="mb-4 py-4 text-center text-sm text-muted">{children}</p>;
+export function QuietEmpty({ children, testId }: { children: ReactNode; testId?: string }): JSX.Element {
+    return <p data-testid={testId} className="mb-4 py-4 text-center text-sm text-muted">{children}</p>;
 }
 
 /** Card footer line ("Shown in your local time", "Last 8 weeks"). */
-export function CardFootnote({ children }: { children: ReactNode }): JSX.Element {
-    return <p className="mt-3 text-xs text-dim">{children}</p>;
+export function CardFootnote({ children, testId }: { children: ReactNode; testId?: string }): JSX.Element {
+    return <p data-testid={testId} className="mt-3 text-xs text-dim">{children}</p>;
 }

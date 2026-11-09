@@ -66,6 +66,15 @@ export const guildMembers = pgTable(
     // ROK-1157: FK backing indexes — the partial unique above does not count.
     index('idx_guild_members_guild_id').on(table.guildId),
     index('idx_guild_members_captured_by_user_id').on(table.capturedByUserId),
+    /**
+     * ROK-2115: the Blizzard-id link arm (non-unique; Ruling 4). An expression
+     * index on `blizzard_character_id::text` because the arm-B predicate casts
+     * this column (`c.external_id = gm.blizzard_character_id::text`). The
+     * expression leads so unscoped character→row reads (no guild id) can probe it.
+     */
+    index('idx_guild_members_guild_blizzard_id')
+      .on(sql`(${table.blizzardCharacterId}::text)`, table.guildId)
+      .where(sql`${table.blizzardCharacterId} IS NOT NULL`),
   ],
 );
 

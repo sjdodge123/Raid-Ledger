@@ -2,7 +2,15 @@
  * ROK-1744: WoW: Forever addon talents (`format: 'forever'`) — grid, pills,
  * summary-only, the plain Forever calc link (no iframe) and sub-tree headings.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// ROK-2146: these specs pin the pre-table grid/pills, so the static Forever table is absent here
+// (forever-talent-tree.test.tsx covers the tree). Without this the lazy table would race the asserts.
+vi.mock('../lib/forever-talent-table', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/forever-talent-table')>()),
+    loadForeverClassTable: () => Promise.resolve(null),
+    peekForeverClassTable: () => null,
+}));
 import { render, screen } from '@testing-library/react';
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import { TalentDisplay } from './talent-display';
@@ -48,14 +56,14 @@ describe('ForeverTalentDisplay — header + calc link', () => {
 
     it('links to the Forever Wowhead calc even when gameVariant is null, with no iframe', () => {
         const { container } = renderForever(talents('grid', GRID_NODES));
-        const href = screen.getByRole('link', { name: /view on wowhead/i }).getAttribute('href');
+        const href = screen.getByRole('link', { name: /open wowhead calculator/i }).getAttribute('href');
         expect(href).toMatch(/\/forever\/talent-calc\/warrior$/);
         expect(container.querySelector('iframe')).toBeNull();
     });
 
     it('omits the calc link for an unmappable class', () => {
         renderForever(talents('grid', GRID_NODES), null);
-        expect(screen.queryByRole('link', { name: /view on wowhead/i })).toBeNull();
+        expect(screen.queryByRole('link', { name: /open wowhead calculator/i })).toBeNull();
     });
 });
 

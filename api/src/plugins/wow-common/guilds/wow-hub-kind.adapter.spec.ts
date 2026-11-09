@@ -27,6 +27,7 @@ const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({
   memberId: id,
   rankIndex,
   characterId: `char-${id}`,
+  via: 'guid',
 });
 const actor = (role: GuildActor['role']): GuildActor => ({ id: 42, role });
 
@@ -144,6 +145,12 @@ describe('ROK-1814 WowHubKindAdapter.holdsTopRank (crest edit right)', () => {
     ['no live row', []],
   ] as const)('%s does not', async (_label, rows) => {
     db.where.mockResolvedValueOnce([...rows]);
+    expect(await adapter.holdsTopRank(42, GUILD)).toBe(false);
+  });
+
+  it('ROK-2115 Ruling 1: a Blizzard-id-only rank-0 link does not hold it', async () => {
+    const armoryGm: LinkedMemberRow = { ...member(1, 0), via: 'blizzard' };
+    db.where.mockResolvedValueOnce([armoryGm, member(2, 3)]);
     expect(await adapter.holdsTopRank(42, GUILD)).toBe(false);
   });
 });

@@ -12,6 +12,8 @@ import {
     type AddonImportRulesetInferenceDto,
     type WowForeverSelectableRuleset,
     type AddonImportWarning,
+    type AddonMailworthyImportOutcome,
+    type AddonMailworthyImportSkipReason,
 } from '@raid-ledger/contract';
 import type { AddonImportConfirm } from './use-addon-import';
 
@@ -57,12 +59,29 @@ export function canApplyAddonImport(result: AddonImportResultDto, confirm: Addon
 
 type Row = readonly [label: string, value: string];
 
+const MAILWORTHY_SKIP_COPY: Record<AddonMailworthyImportSkipReason, string> = {
+    guild_unresolved: 'guild not found — import the guild roster first',
+    not_on_roster: "you're not on the latest guild roster",
+    givers_rejected: 'no givers are on the latest guild roster',
+};
+
+/** ROK-2148 Q8: what the import did with the Mailworthy block (applied char sections only). */
+export function mailworthyRow(outcome: AddonMailworthyImportOutcome | undefined): Row | null {
+    if (!outcome) return null;
+    if (outcome.status === 'skipped') return ['Guild contributions', `Skipped — ${MAILWORTHY_SKIP_COPY[outcome.reason]}`];
+    const plural = outcome.givers === 1 ? '' : 's';
+    const rejected = outcome.giversRejected > 0 ? ` · ${outcome.giversRejected} not on the roster` : '';
+    return ['Guild contributions', `Updated ${outcome.givers} giver${plural}${rejected}`];
+}
+
 function charRows(s: Extract<AddonImportResultDto, { section: 'char' }>['summary']): Row[] {
     const ilvl = s.avgIlvl === null ? '' : ` · avg ilvl ${Math.round(s.avgIlvl)}`;
+    const mailworthy = mailworthyRow(s.mailworthy);
     return [
         ['Gear', `${s.gearCount} items${ilvl}`],
         ['Talents', `${s.talentNodes} nodes`],
         ['Lockouts', String(s.lockouts)],
+        ...(mailworthy ? [mailworthy] : []),
     ];
 }
 
@@ -107,8 +126,14 @@ const SECTION_NOUN: Record<AddonImportResultDto['section'], string> = {
     raid: 'Boss pulls',
 };
 
+/** ROK-2148: a stale char export can still carry newer Mailworthy givers. */
+function staleMailworthyApplied(result: AddonImportResultDto): boolean {
+    return result.section === 'char' && result.status === 'stale' && result.summary.mailworthy?.status === 'applied';
+}
+
 export function resultHeadline(result: AddonImportResultDto): string {
     const noun = SECTION_NOUN[result.section];
+    if (staleMailworthyApplied(result)) return `Guild contributions updated. ${noun} not imported — a newer export is already saved.`;
     if (result.status === 'noop') return `${noun} already up to date — nothing changed.`;
     if (result.status === 'stale') return `${noun} not imported — a newer export is already saved.`;
     return `${noun} imported.`;

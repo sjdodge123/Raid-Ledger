@@ -3,7 +3,8 @@
  * against a real database: the D5 claim tx (locks, locked re-check, insert),
  * D4 GUID pin + `addon_guid_claimed` audit with `via:'roster_pick'` (operator
  * ruling: the claimer is a guild member at once), Blizzard rows set
- * `external_id` only, the concurrent double-claim race, 404s and 400s.
+ * `external_id` only (ROK-2115: that id link makes the claimer a member
+ * too), the concurrent double-claim race, 404s and 400s.
  */
 import * as bcrypt from 'bcrypt';
 import { and, eq } from 'drizzle-orm';
@@ -241,7 +242,11 @@ describe('POST /plugins/wow/roster-claim/members/:memberId/claim (ROK-2128)', ()
 });
 
 describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
-  it('claims a Blizzard row: sets external_id, no GUID, not yet a member', async () => {
+  // ROK-2115 case 6 (intended behaviour change): the claimed character's
+  // `external_id` now links it to the Blizzard row through `characterLink()`
+  // arm B, so the claimer is a guild member in the same request (the ROK-2132
+  // members-only loop). Before 2115 this asserted "not yet a member".
+  it('claims a Blizzard row: sets external_id, no GUID, audits the id link, makes a member (ROK-2115)', async () => {
     const picker = await makeUser('l2brine');
     const res = await claim(memberId('Brine Hollow'), picker.token);
     expect(res.status).toBe(201);
@@ -257,9 +262,30 @@ describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
     expect(
       await auditRows('addon_guid', 'addon_guid_claimed', picker.id),
     ).toEqual([]);
-    expect(await findLinkedMemberRows(testApp.db, picker.id, guildId)).toEqual(
-      [],
+    const [idAudit] = await auditRows(
+      'addon_guid',
+      'external_id_linked',
+      picker.id,
     );
+    expect(idAudit?.metadata).toMatchObject({
+      characterId: row.id,
+      externalId: '9555',
+      via: 'roster_pick',
+    });
+    const links = await findLinkedMemberRows(testApp.db, picker.id, guildId);
+    expect(
+      links.map((l) => ({
+        memberId: l.memberId,
+        characterId: l.characterId,
+        via: l.via,
+      })),
+    ).toEqual([
+      {
+        memberId: memberId('Brine Hollow'),
+        characterId: row.id,
+        via: 'blizzard',
+      },
+    ]);
     // CharacterDto.rosterClaimed: the admin slot's self-filter for a no-GUID row.
     expect(res.body.rosterClaimed).toBe(true);
     const detail = await testApp.request.get(`/characters/${row.id}`);

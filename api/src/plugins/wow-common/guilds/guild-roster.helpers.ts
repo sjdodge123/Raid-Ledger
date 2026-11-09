@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CharacterRoleSchema,
@@ -8,6 +8,12 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import { characterLink, inLatestSnapshot } from './guild-membership.helpers';
+import {
+  armoryDtoFields,
+  memberArmoryColumns,
+  memberSnapshotJoin,
+  type ArmoryFieldsRow,
+} from './roster-armory-fields';
 
 /**
  * ROK-1785 — the guild page roster: latest-snapshot `guild_members` rows,
@@ -17,15 +23,19 @@ import { characterLink, inLatestSnapshot } from './guild-membership.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { guilds, guildMembers, characters, users } = schema;
+const { guilds, guildMembers, guildMemberArmory, characters, users } = schema;
 
 /** The character's owner is active — a deactivated user's characters never link (D3). */
 export function ownerIsActive() {
   return sql`exists (select 1 from ${users} where ${users.id} = ${characters.userId} and ${users.deactivatedAt} is null)`;
 }
 
-/** One raw roster row as the query returns it. */
-export interface RawRosterRow {
+/**
+ * One raw roster row as the query returns it. ROK-2133: the optional
+ * `armory*` columns (character first, else member snapshot) — optional so
+ * hand-built fixtures stay valid; the query always sets them.
+ */
+export interface RawRosterRow extends ArmoryFieldsRow {
   memberId: number;
   name: string;
   class: string | null;
@@ -107,6 +117,7 @@ export function toMemberRow(
     isMain: row.isMain ?? false,
     ...(account ? { linkedAccount: account } : {}),
     ...rosterRowExtras(row, viewerId),
+    ...armoryDtoFields(row),
   };
 }
 
@@ -155,34 +166,36 @@ export function groupRoster(
   return groups;
 }
 
+/** The columns of a {@link RawRosterRow}. */
+const ROSTER_COLUMNS = {
+  memberId: guildMembers.id,
+  name: guildMembers.characterName,
+  class: guildMembers.class,
+  level: guildMembers.level,
+  rankIndex: guildMembers.rankIndex,
+  rankName: guildMembers.rankName,
+  characterId: characters.id,
+  userId: characters.userId,
+  role: characters.role,
+  roleOverride: characters.roleOverride,
+  isMain: characters.isMain,
+  onlineAtExport: guildMembers.onlineAtExport,
+  lastOnlineDays: guildMembers.lastOnlineDays,
+  avatarUrl: characters.avatarUrl,
+  ...memberArmoryColumns,
+};
+
 /** The guild's latest-snapshot roster rows, joined to linked characters. */
 export async function loadRosterRows(
   db: Db,
   guildId: number,
 ): Promise<RawRosterRow[]> {
   return db
-    .select({
-      memberId: guildMembers.id,
-      name: guildMembers.characterName,
-      class: guildMembers.class,
-      level: guildMembers.level,
-      rankIndex: guildMembers.rankIndex,
-      rankName: guildMembers.rankName,
-      characterId: characters.id,
-      userId: characters.userId,
-      role: characters.role,
-      roleOverride: characters.roleOverride,
-      isMain: characters.isMain,
-      onlineAtExport: guildMembers.onlineAtExport,
-      lastOnlineDays: guildMembers.lastOnlineDays,
-      avatarUrl: characters.avatarUrl,
-    })
+    .select(ROSTER_COLUMNS)
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .leftJoin(
-      characters,
-      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
-    )
+    .leftJoin(characters, and(characterLink(), ownerIsActive()))
+    .leftJoin(guildMemberArmory, memberSnapshotJoin())
     .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()))
     .orderBy(asc(guildMembers.rankIndex), asc(guildMembers.characterName));
 }
@@ -202,10 +215,7 @@ export async function loadRosterMemberIds(
     .select({ memberId: guildMembers.id, characterId: characters.id })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .innerJoin(
-      characters,
-      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
-    )
+    .innerJoin(characters, and(characterLink(), ownerIsActive()))
     .where(
       and(
         eq(guildMembers.guildId, guildId),

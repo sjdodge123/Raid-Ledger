@@ -9,6 +9,7 @@ import type { AddonApplyContext } from './addon-import-apply.types';
 import type { AddonBindingResult } from './addon-import.binding';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { applyChar, previewChar } from './addon-import-char.apply';
+import { withCharMailworthy } from './addon-import-char.mailworthy';
 import { applyGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
 import { AddonImportError } from './addon-import.errors';
@@ -24,6 +25,9 @@ import {
 jest.mock('./addon-import-char.apply', () => ({
   applyChar: jest.fn(),
   previewChar: jest.fn(),
+}));
+jest.mock('./addon-import-char.mailworthy', () => ({
+  withCharMailworthy: jest.fn(),
 }));
 jest.mock('./addon-import-guild.apply', () => ({
   applyGuild: jest.fn(),
@@ -83,8 +87,19 @@ const BINDING: AddonBindingResult = {
   pinGuid: null,
 };
 
+/** First call position of a mock; a never-called mock fails loudly. */
+function callOrder(fn: unknown): number {
+  const [at] = (fn as jest.Mock).mock.invocationCallOrder;
+  if (at === undefined) throw new Error('mock was never called');
+  return at;
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
+  (withCharMailworthy as jest.Mock).mockImplementation(
+    (_ctx: unknown, _payload: unknown, outcome: unknown) =>
+      Promise.resolve(outcome),
+  );
   (applyChar as jest.Mock).mockResolvedValue({
     status: 'applied',
     summary: CHAR_SUMMARY,
@@ -142,6 +157,30 @@ describe('runPaste', () => {
       code: 'NOT_IN_GUILD',
     });
     expect(applyRaid).not.toHaveBeenCalled();
+  });
+});
+
+describe('runPaste — ROK-2148 Mailworthy deferral', () => {
+  it('ROK-2148 Codex P2: the char Mailworthy block applies AFTER the guild section', async () => {
+    await runPaste(CTX, paste('char', 'guild'), false);
+    expect(withCharMailworthy).toHaveBeenCalledTimes(1);
+    expect(callOrder(withCharMailworthy)).toBeGreaterThan(
+      callOrder(applyGuild),
+    );
+    expect(withCharMailworthy).toHaveBeenCalledWith(
+      expect.objectContaining({ tx: 'TX', sha256: 'c'.repeat(64) }),
+      expect.objectContaining({ section: 'char' }),
+      { status: 'applied', summary: CHAR_SUMMARY },
+    );
+  });
+
+  it('ROK-2148: a dry run never applies the Mailworthy block', async () => {
+    (previewChar as jest.Mock).mockResolvedValue({
+      status: 'preview',
+      summary: CHAR_SUMMARY,
+    });
+    await runPaste(CTX, paste('char'), true);
+    expect(withCharMailworthy).not.toHaveBeenCalled();
   });
 });
 

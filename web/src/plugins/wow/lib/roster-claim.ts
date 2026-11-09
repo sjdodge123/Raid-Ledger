@@ -9,6 +9,7 @@ import {
     type RosterClaimGuildDto,
     type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
+import { armoryMetaParts } from './armory-meta';
 
 /** Rows whose name contains the query (case-insensitive); guilds left empty are dropped. */
 export function filterRosterGuilds(guilds: readonly RosterClaimGuildDto[], query: string): RosterClaimGuildDto[] {
@@ -24,9 +25,13 @@ export function countCandidates(guilds: readonly RosterClaimGuildDto[]): number 
     return guilds.reduce((n, g) => n + g.candidates.length, 0);
 }
 
-/** "Lv 60 · Mage"; either half is dropped when the roster row lacks it. */
-export function rosterMetaLine(c: Pick<RosterClaimCandidateDto, 'level' | 'class'>): string {
-    return [c.level === null ? null : `Lv ${c.level}`, c.class].filter((p): p is string => !!p).join(' · ');
+/**
+ * "Lv 60 · Mage · Frost · 112 iLvl"; each part is dropped when the roster row
+ * lacks it (spec + item level are the ROK-2133 Armory snapshot, optional).
+ */
+export function rosterMetaLine(c: Pick<RosterClaimCandidateDto, 'level' | 'class' | 'spec' | 'itemLevel'>): string {
+    const base = [c.level === null ? null : `Lv ${c.level}`, c.class].filter((p): p is string => !!p);
+    return [...base, ...armoryMetaParts(c)].join(' · ');
 }
 
 function isSelectable(r: string | null | undefined): r is WowForeverSelectableRuleset {

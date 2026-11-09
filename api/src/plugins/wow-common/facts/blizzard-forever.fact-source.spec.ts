@@ -8,10 +8,8 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../../common/testing/drizzle-mock';
-import {
-  BlizzardForeverFactSource,
-  toForeverCandidates,
-} from './blizzard-forever.fact-source';
+import { BlizzardForeverFactSource } from './blizzard-forever.fact-source';
+import { toForeverCandidates } from './blizzard-forever.candidates';
 import { MAX_ROSTER_ROWS, type RosterCharRef } from './wow-fact.types';
 
 const SYNCED = new Date('2026-11-05T09:00:00.000Z');

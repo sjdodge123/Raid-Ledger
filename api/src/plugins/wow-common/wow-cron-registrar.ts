@@ -5,6 +5,7 @@ import { ForeverNamespaceProbeService } from './forever-namespace-probe.service'
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
+import { RosterArmoryService } from './forever-armory-snapshot/roster-armory.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 import type { ForeverProbeResultDto } from '@raid-ledger/contract';
@@ -12,8 +13,8 @@ import type { ForeverProbeResultDto } from '@raid-ledger/contract';
 /**
  * Registers cron jobs for WoW character auto-sync, boss data refresh and the
  * Forever namespace probe (ROK-1716) and the Forever guild roster sync
- * (ROK-1928) and the Forever Armory auto-link (ROK-2124). Only active when
- * the plugin is enabled.
+ * (ROK-1928) and the Forever Armory auto-link (ROK-2124) and the roster
+ * Armory pass (ROK-2133). Only active when the plugin is enabled.
  * The auto-sync includes Armory-imported WoW: Forever rows (realm NULL,
  * ruleset set, game_variant set); manual Forever rows are skipped (ROK-1722).
  */
@@ -29,6 +30,7 @@ export class WowCronRegistrar implements CronRegistrar {
     private readonly itemMeta: WowItemMetaService,
     private readonly rosterSync: BlizzardRosterSyncJob,
     private readonly autoLink: ForeverAutoLinkService,
+    private readonly rosterArmory: RosterArmoryService,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -57,11 +59,24 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 20 */6 * * *',
         handler: () => this.rosterSync.run().then(() => undefined),
       },
+      ...this.foreverArmoryJobs(),
+    ];
+  }
+
+  /** The hourly Forever Armory jobs: auto-link (2124) + roster pass (2133). */
+  private foreverArmoryJobs(): CronJobDefinition[] {
+    return [
       {
         name: 'forever-armory-autolink',
         // Hourly at :40 — link LedgerLink Forever rows to the Armory (ROK-2124)
         cronExpression: '0 40 * * * *',
         handler: () => this.autoLink.runDue().then(() => undefined),
+      },
+      {
+        name: 'forever-roster-armory',
+        // Hourly at :50 — Armory snapshots of roster members (ROK-2133 D3)
+        cronExpression: '0 50 * * * *',
+        handler: () => this.rosterArmory.runDue().then(() => undefined),
       },
     ];
   }

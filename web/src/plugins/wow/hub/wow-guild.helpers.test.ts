@@ -30,6 +30,11 @@ describe('memberOptionLabel / isUnlinkedRow (ROK-1794 review)', () => {
         expect(memberOptionLabel(m)).not.toContain('picked from roster');
     });
 
+    it('marks a link made only by an Armory import\'s Blizzard id (ROK-2115 Ruling 6)', () => {
+        const m = row({ memberId: 6, name: 'Fenna', characterId: LINKED_ID, linkedAccount: { username: 'fenna-rl', linkedSince: '2026-10-14T12:00:00.000Z', linkVia: 'armory' } });
+        expect(memberOptionLabel(m)).toMatch(/^Fenna — Guild Master · linked to fenna-rl since (14 Oct 2026|Oct 14, 2026) · linked via Armory$/);
+    });
+
     it('flags a row no RL account owns', () => {
         const m = row({ memberId: 2, name: 'Corvin', rankIndex: 2, rankName: 'Veteran' });
         expect(memberOptionLabel(m)).toBe('Corvin — Veteran · not linked to an account');

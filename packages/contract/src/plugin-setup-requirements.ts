@@ -150,6 +150,16 @@ export const BLIZZARD_SETUP = {
       appliesTo: ['wow_guild'],
       rlCompanion: { collector: 'wow-ledgerlink' },
     },
+    {
+      // ROK-2148: feeds the Guild contributions card; link pending (spec U5).
+      id: 'mailworthy-addon',
+      kind: 'companion_app',
+      title: 'Mailworthy addon (players, optional)',
+      instructions:
+        '1. Install Mailworthy.\n2. An officer (guild master or the rank below) publishes the guild template in Mailworthy.\n3. Players export with LedgerLink as usual — LedgerLink adds the Mailworthy summary. The Guild contributions card fills in from those exports.',
+      required: false,
+      appliesTo: ['wow_guild'],
+    },
   ],
 } satisfies PluginSetup;
 

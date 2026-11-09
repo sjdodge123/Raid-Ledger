@@ -34,6 +34,7 @@ type FallbackProps = CharacterPortraitFallbackProps;
 const SIZES: Record<ForeverPortraitSize, { box: string; icon: string; badge: string }> = {
     sm: { box: 'w-8 h-8', icon: 'w-5 h-5', badge: 'min-w-[1.125rem] h-[1.125rem] text-[0.625rem]' },
     md: { box: 'w-10 h-10', icon: 'w-6 h-6', badge: 'min-w-5 h-5 text-[0.6875rem]' },
+    phone: { box: 'w-[72px] h-[72px]', icon: 'w-11 h-11', badge: 'min-w-7 h-7 text-xs' },
     lg: { box: 'w-20 h-20', icon: 'w-12 h-12', badge: 'min-w-8 h-8 text-sm' },
 };
 

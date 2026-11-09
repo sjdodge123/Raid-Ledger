@@ -156,7 +156,30 @@ test.describe('Character detail page', () => {
             page.getByRole('heading', { name: character.name, level: 1 }),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Level is displayed as "Level N"
+        // ROK-2140: below 640px the header is the Option B profile card, where
+        // level and item level are stat tiles (value over label), not inline text.
+        const isPhone = (page.viewportSize()?.width ?? 1280) < 640;
+        const statTile = (label: string) =>
+            page
+                .getByTestId('character-stat-tile')
+                .filter({ has: page.getByText(label, { exact: true }) });
+        if (isPhone) {
+            if (character.level) {
+                await expect(statTile('Level')).toContainText(
+                    String(character.level),
+                    { timeout: 5_000 },
+                );
+            }
+            if (character.itemLevel) {
+                await expect(statTile('Item Level')).toContainText(
+                    String(character.itemLevel),
+                    { timeout: 5_000 },
+                );
+            }
+            return;
+        }
+
+        // Desktop: level is displayed as "Level N"
         if (character.level) {
             await expect(
                 page.getByText(`Level ${character.level}`),

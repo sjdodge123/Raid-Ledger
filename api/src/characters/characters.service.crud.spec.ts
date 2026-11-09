@@ -121,7 +121,9 @@ describe('CharactersService — crud', () => {
     });
 
     mockDb.delete.mockReturnValue({
-      where: jest.fn().mockResolvedValue(undefined),
+      where: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([]),
+      }),
     });
   }
 

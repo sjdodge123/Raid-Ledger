@@ -51,6 +51,14 @@ describe('rosterMetaLine', () => {
         expect(rosterMetaLine({ level: 12, class: null })).toBe('Lv 12');
         expect(rosterMetaLine({ level: null, class: null })).toBe('');
     });
+    it('appends the Armory spec and item level when present (ROK-2133)', () => {
+        expect(rosterMetaLine({ level: 60, class: 'Mage', spec: 'Frost', itemLevel: 112 })).toBe('Lv 60 · Mage · Frost · 112 iLvl');
+        expect(rosterMetaLine({ level: 60, class: 'Mage', itemLevel: 112 })).toBe('Lv 60 · Mage · 112 iLvl');
+        expect(rosterMetaLine({ level: 60, class: 'Mage', spec: 'Frost' })).toBe('Lv 60 · Mage · Frost');
+    });
+    it('omits a blank spec and a zero item level (ROK-2133)', () => {
+        expect(rosterMetaLine({ level: 60, class: 'Mage', spec: '  ', itemLevel: 0 })).toBe('Lv 60 · Mage');
+    });
 });
 
 describe('defaultClaimRuleset (FLAG 4)', () => {

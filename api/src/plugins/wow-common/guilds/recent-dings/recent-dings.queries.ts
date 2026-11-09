@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../../drizzle/schema';
 import { characterLink, inLatestSnapshot } from '../guild-membership.helpers';
@@ -30,8 +30,8 @@ function inFeedWindow(guildId: number, since: Date) {
 
 /**
  * The guild's level-up events since `since`, newest first, each LEFT-joined
- * to the active RL character carrying the member's GUID (same link as the
- * roster). A GUID can match two characters (one with an unknown region), so
+ * to the active RL character the member links to (`characterLink()`: GUID,
+ * else Blizzard id — same link as the roster). A GUID can match two characters (one with an unknown region), so
  * the caller dedupes by event id (first row wins) — hence `rowCap` > the
  * feed size. Within one event the region-matched character sorts first, then
  * the lowest id, so `characterId` is stable across reads. Only members in
@@ -56,10 +56,7 @@ export async function loadDingRows(
     .from(ev)
     .innerJoin(guildMembers, eq(guildMembers.id, ev.guildMemberId))
     .innerJoin(guilds, eq(guilds.id, ev.guildId))
-    .leftJoin(
-      characters,
-      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
-    )
+    .leftJoin(characters, and(characterLink(), ownerIsActive()))
     .where(inFeedWindow(guildId, since))
     .orderBy(...dingOrder())
     .limit(rowCap);

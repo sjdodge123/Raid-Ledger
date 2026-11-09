@@ -35,7 +35,7 @@ function AddonsCardBody({ guild }: { guild: GuildSummary }): JSX.Element | null 
     if (rows.length === 0) return null;
     const where = [guild.name, guildRealm(guild)].filter(Boolean).join(' · ');
     return (
-        <div data-testid="character-guild-addons"><Card className="max-w-md">
+        <div data-testid="character-guild-addons"><Card>
             <h3 className="text-base font-semibold text-foreground">Your guild recommends</h3>
             <p className="mb-2 text-xs text-muted">{where}</p>
             <ul aria-label="Addons your guild recommends">{rows.map((a) => <CompactRow key={a.key} addon={a} />)}</ul>

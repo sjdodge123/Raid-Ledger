@@ -12,10 +12,17 @@ import { join } from 'node:path';
 import {
   ADDON_EXPORT_ENVELOPE_VERSION,
   AddonImportErrorCodeSchema,
+  COMPANION_WOW_LEDGERLINK_EXPORT_MAX,
   serializeLedgerLinkJsonSchema,
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { buildImportString } from './testing/addon-fixture.builder';
+import { buildForeverQuestsPayload } from './testing/addon-fixture.forever';
+import {
+  buildMailworthyBlock,
+  buildMailworthyWorstCaseBlock,
+} from './testing/addon-fixture.mailworthy';
 import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
 import {
   TALENT_COL_STEP,
@@ -60,8 +67,11 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
   it('ships the agreed valid cases', () => {
     expect(names).toEqual([
       'char-forever-quests',
+      'char-forever-quests-log-only',
       'char-forever-quests-truncated',
       'char-forever-talents-named',
+      'char-mailworthy',
+      'char-mailworthy-template-only',
       'char-normal',
       'char-null-ruleset-no-guild',
       'char-roleplaying',
@@ -98,6 +108,8 @@ describe('LedgerLink v1 golden fixtures — invalid', () => {
         'mixed-11-tokens',
         'gender-unknown-value',
         'quests-completed-over-cap',
+        'char-mailworthy-rule-cap',
+        'char-mailworthy-too-many-rules',
       ]),
     );
   });
@@ -131,6 +143,36 @@ function contractSlot(n: PositionedNode, origins: number[]) {
     col: Math.round((n.posX - origin) / TALENT_COL_STEP),
   };
 }
+
+describe('char-mailworthy — the block survives decode (ROK-2148)', () => {
+  it('carries the Mailworthy block beside the frozen snapshot data', () => {
+    const decoded = decodeImportPaste(read(FIXTURES, 'char-mailworthy.txt'));
+    const payload = decoded.sections.char?.payload;
+    expect(payload?.mailworthy).toEqual(buildMailworthyBlock());
+    expect(payload?.data).not.toHaveProperty('mailworthy');
+  });
+
+  it('a char export without the block decodes without the key', () => {
+    const decoded = decodeImportPaste(read(FIXTURES, 'char-normal.txt'));
+    expect(decoded.sections.char?.payload).not.toHaveProperty('mailworthy');
+  });
+});
+
+describe('worst-case Mailworthy char string (ROK-2148 §A.4, delta 2026-11-08)', () => {
+  it('max quests + 1000 peers + 200 givers × 35 days fits the Companion cap', () => {
+    const char = buildForeverQuestsPayload();
+    const mailworthy = buildMailworthyWorstCaseBlock();
+    const paste = buildImportString({
+      ...char,
+      data: { ...char.data, mailworthy },
+    });
+    const bytes = Buffer.byteLength(paste, 'utf8');
+    expect(bytes).toBe(45_926);
+    expect(bytes).toBeLessThanOrEqual(COMPANION_WOW_LEDGERLINK_EXPORT_MAX);
+    const decoded = decodeImportPaste(paste);
+    expect(decoded.sections.char?.payload.mailworthy?.givers).toHaveLength(200);
+  });
+});
 
 describe('char-forever-talents-named — hints follow CONTRACT §3 (ROK-1758)', () => {
   it('every tree/row/col hint equals the rule applied to its own posX/posY', () => {
