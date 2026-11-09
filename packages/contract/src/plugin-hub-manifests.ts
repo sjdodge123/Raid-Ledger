@@ -113,6 +113,8 @@ const blizzard = {
     { id: 'forever-guild-text', title: 'Guild message', description: 'The guild Message of the Day and Guild Information, ready to paste in game.', layoutKey: 'plugin' },
     // ROK-2148 — Mailworthy guild contributions (masters, top givers, users).
     { id: 'forever-guild-contributions', title: 'Guild contributions', description: 'Profession masters, top givers of guild-rule mail, and who runs Mailworthy.', layoutKey: 'plugin' },
+    // ROK-2151 — the staff non-member claim banner (chrome-less, order 5).
+    { id: 'forever-claim-banner', title: 'Claim your character', description: 'Asks staff who are not guild members to claim their character.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
