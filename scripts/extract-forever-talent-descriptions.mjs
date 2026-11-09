@@ -86,7 +86,11 @@ function findWowheadTree(data, classSlug, tree) {
             talents.some((w) => w.row === t.row && w.col === t.col && normalise(w.name) === normalise(t.name)));
     });
     if (candidates.length !== 1) fail(`${classSlug}/${tree.name}: ${candidates.length} Wowhead trees match (want 1)`);
-    return data.talents[candidates[0]];
+    const wowhead = data.talents[candidates[0]];
+    // The build string has one digit per talent: an extra Wowhead talent would shift every later digit.
+    const count = Object.keys(wowhead).length;
+    if (count !== tree.talents.length) fail(`${classSlug}/${tree.name}: Wowhead has ${count} talents, the table ${tree.talents.length}`);
+    return wowhead;
 }
 
 function descriptionsFor(classSlug, treeName, talent, wowhead) {

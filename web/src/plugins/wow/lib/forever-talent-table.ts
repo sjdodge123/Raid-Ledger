@@ -18,9 +18,12 @@ export interface ForeverTableTalent {
     maxRank: number;
     icon: string;
     prereqSpellId: number | null;
+    /** ROK-2150: per-rank tooltip text, plain text with `\n` breaks (index 0 = rank 1, length = maxRank). */
+    descriptions: string[];
 }
 export interface ForeverTableTree { name: string; talents: ForeverTableTalent[] }
-export interface ForeverClassTable { trees: ForeverTableTree[] }
+/** `hashVersion`: the Wowhead calculator build-string version the table was extracted with (ROK-2150). */
+export interface ForeverClassTable { hashVersion: string; trees: ForeverTableTree[] }
 export type ForeverTalentTable = Record<string, ForeverClassTable>;
 
 export interface JoinedTalent extends ForeverTableTalent { rank: number }
@@ -39,11 +42,19 @@ function isTalent(value: unknown): value is ForeverTableTalent {
     if (!isRecord(value)) return false;
     const nums = ['spellId', 'row', 'col', 'maxRank'].every((k) => typeof value[k] === 'number');
     const prereq = value.prereqSpellId === null || typeof value.prereqSpellId === 'number';
-    return nums && prereq && typeof value.name === 'string' && typeof value.icon === 'string';
+    return nums && prereq && typeof value.name === 'string' && typeof value.icon === 'string' && hasRankDescriptions(value);
+}
+
+/** One plain-text description per rank — a short or HTML-bearing list is a bad extract. */
+function hasRankDescriptions(value: Record<string, unknown>): boolean {
+    const { descriptions, maxRank } = value;
+    return Array.isArray(descriptions) && descriptions.length === maxRank
+        && descriptions.every((d: unknown) => typeof d === 'string' && d.length > 0 && !/[<>]/.test(d));
 }
 
 function isClassTable(value: unknown): value is ForeverClassTable {
     if (!isRecord(value) || !Array.isArray(value.trees)) return false;
+    if (typeof value.hashVersion !== 'string' || value.hashVersion.length === 0) return false;
     return value.trees.every((t: unknown) => isRecord(t) && typeof t.name === 'string' && Array.isArray(t.talents) && t.talents.every(isTalent));
 }
 
