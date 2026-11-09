@@ -7,6 +7,7 @@ import type { WowDungeonQuestBlizzardRow } from '../../drizzle/schema';
 import { listBlizzardOverlay } from './forever-quest-import/blizzard-quest.repo';
 import {
   applyInstanceOverlay,
+  applyKnownQuestOverlay,
   applyQuestOverlay,
   type QuestOverlayDeps,
 } from './dungeon-quests.overlay';
@@ -148,6 +149,27 @@ describe('applyQuestOverlay', () => {
     expect(on?.name).toBe('Blizzard 378');
     const rows = [curated(378)];
     expect(await applyQuestOverlay(deps('false').value, rows)).toBe(rows);
+  });
+});
+
+describe('applyKnownQuestOverlay (Codex P2 3)', () => {
+  it('merges curated rows and appends dungeon-type overlay-only quests of any dungeon', async () => {
+    listOverlay.mockResolvedValue(new Map([[378, overlay(378)]]));
+    const raid = overlay(387, 229, { typeId: 62 });
+    const d = deps(null, [overlay(378), overlay(386, 228), raid]);
+    const out = await applyKnownQuestOverlay(d.value, [curated(378)]);
+    expect(out.map((q) => [q.questId, q.name])).toEqual([
+      [378, 'Blizzard 378'],
+      [386, 'Blizzard 386'],
+    ]);
+  });
+
+  it('returns the curated rows untouched and queries nothing when the switch is off', async () => {
+    const d = deps('false', [overlay(386)]);
+    const rows = [curated(378)];
+    expect(await applyKnownQuestOverlay(d.value, rows)).toBe(rows);
+    expect(listOverlay).not.toHaveBeenCalled();
+    expect(d.select).not.toHaveBeenCalled();
   });
 });
 

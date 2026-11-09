@@ -11,6 +11,7 @@ const mockLoad = jest.mocked(loadForeverMemberProgress);
 jest.mock('./quest-progress-signup.helpers');
 const mockAssertSignup = jest.mocked(assertActiveSignup);
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import {
   createDrizzleMock,
   type MockDb,
@@ -19,6 +20,7 @@ import {
 let service: QuestProgressService;
 let mockDb: MockDb;
 const mockReads = { invalidateCoverage: jest.fn() };
+const mockSettings = { get: jest.fn() };
 
 async function setupEach() {
   mockDb = createDrizzleMock();
@@ -31,6 +33,7 @@ async function setupEach() {
       QuestProgressService,
       { provide: QuestProgressReadService, useValue: mockReads },
       { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: SettingsService, useValue: mockSettings },
     ],
   }).compile();
 
@@ -124,7 +127,11 @@ describe('QuestProgressService — write', () => {
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({ pickedUp: true, completed: true }),
       );
-      expect(mockLoad).toHaveBeenCalledWith(mockDb, 10, 1);
+      expect(mockLoad).toHaveBeenCalledWith(
+        { db: mockDb, settings: mockSettings },
+        10,
+        1,
+      );
       expect(mockReads.invalidateCoverage).toHaveBeenCalledWith(10);
     });
 

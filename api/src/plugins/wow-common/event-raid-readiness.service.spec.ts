@@ -6,6 +6,7 @@
  */
 import { Test } from '@nestjs/testing';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SettingsService } from '../../settings/settings.service';
 import { GuildAccessService } from '../../guilds/guild-access.service';
 import { loadEventQuestSet } from './event-forever-progress.query';
 import type { ReadinessSignup } from './event-quest-readiness.helpers';
@@ -78,6 +79,7 @@ async function readinessFor(count: number) {
       { provide: DrizzleAsyncProvider, useValue: db },
       { provide: GuildAccessService, useValue: {} },
       { provide: WowFactsService, useValue: { resolveFacts } },
+      { provide: SettingsService, useValue: { get: jest.fn() } },
     ],
   }).compile();
   const service = moduleRef.get(EventRaidReadinessService);
