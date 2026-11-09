@@ -604,6 +604,26 @@ describe('Quest Progress — Forever addon rows (ROK-1748, integration)', () => 
       await settings.delete(WOW_FOREVER_QUEST_IMPORT_KEY);
     }
   });
+
+  it('an overlay-only prerequisite with no dungeon the viewer has not done is needed (ROK-2143 Codex P2)', async () => {
+    const requirementsRaw = {
+      quests: {
+        operator: { name: 'And', type: 'AND' },
+        conditions: [{ target: { id: 990604, name: 'Overlay 990604' } }],
+      },
+    };
+    await insertOverlayQuest(990603, 81, { requirementsRaw });
+    await insertOverlayQuest(990604, null, { dungeonInstanceId: null });
+    const res = await get(foreverEvent, 'quest-prereqs/me');
+    expect(res.status).toBe(200);
+    expect(res.body.neededTotal).toBe(1);
+    const quest = (
+      res.body as { quests: Array<{ questId: number; steps: unknown[] }> }
+    ).quests.find((q) => q.questId === 990603);
+    expect(quest?.steps).toEqual([
+      expect.objectContaining({ questId: 990604, done: false }),
+    ]);
+  });
 });
 
 interface ProgressRow {
@@ -613,7 +633,11 @@ interface ProgressRow {
 }
 
 /** A Blizzard overlay row for instance 63 that our curated data lacks. */
-async function insertOverlayQuest(questId: number, typeId: number) {
+async function insertOverlayQuest(
+  questId: number,
+  typeId: number | null,
+  extra: Partial<typeof schema.wowDungeonQuestBlizzard.$inferInsert> = {},
+) {
   await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
     questId,
     areaId: 718,
@@ -627,5 +651,6 @@ async function insertOverlayQuest(questId: number, typeId: number) {
     raw: { id: questId },
     fetchedAt: new Date(),
     runId: 'run-qp',
+    ...extra,
   });
 }

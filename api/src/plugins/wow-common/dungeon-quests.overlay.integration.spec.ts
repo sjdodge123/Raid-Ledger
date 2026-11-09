@@ -110,6 +110,8 @@ const CHAIN = { a: 990601, b: 990602, c: 990603, d: 990604 };
 /** A prerequisite only the overlay has, imported with no dungeon (Codex P2). */
 const OVERLAY_PREREQ_ID = 990605;
 const CHAIN_INSTANCE = 990;
+/** A chain root only the overlay has (Codex P2: the chain route). */
+const OVERLAY_ROOT_ID = 990606;
 
 async function insertBundledQuest(
   questId: number,
@@ -269,6 +271,26 @@ describe('Quest Prep chain sources (ROK-2143 Codex P2)', () => {
     const expected = [OVERLAY_PREREQ_ID, CHAIN.a];
     expect(await routeChainIds()).toEqual(expected);
     expect(await enrichedChainIds()).toEqual(expected);
+  });
+
+  it('the chain route resolves a root only the overlay has; kill switch off → []', async () => {
+    await insertBundledQuest(CHAIN.c, 991, null);
+    await insertOverlay(
+      OVERLAY_ROOT_ID,
+      null,
+      'Root (Blizzard)',
+      requiresQuest(CHAIN.c),
+    );
+    const chainOf = async (): Promise<number[]> => {
+      const res = await testApp.request.get(
+        `/plugins/wow-classic/quests/${OVERLAY_ROOT_ID}/chain`,
+      );
+      expect(res.status).toBe(200);
+      return (res.body as { questId: number }[]).map((q) => q.questId);
+    };
+    expect(await chainOf()).toEqual([CHAIN.c, OVERLAY_ROOT_ID]);
+    await settings().set(WOW_FOREVER_QUEST_IMPORT_KEY, 'false');
+    expect(await chainOf()).toEqual([]);
   });
 
   it('kill switch off: an overlay-only prerequisite is ignored', async () => {
