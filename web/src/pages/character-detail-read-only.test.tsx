@@ -129,7 +129,8 @@ describe('roster member page (read-only CharacterDetailPage)', () => {
         state.member = { data: memberPayload({ canClaim: true }) };
         renderAt('/hubs/9/members/42');
         expect(await screen.findByRole('button', { name: 'Claim this character' })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^back$/i })).not.toBeInTheDocument();
+        // Only the claim-list confirm step adds a Back beside the CTA; the page's own top Back is always there.
+        expect(within(screen.getByTestId('roster-member-claim')).queryByRole('button', { name: /^back$/i })).not.toBeInTheDocument();
     });
 
     it('reads as the confirm step from a claim list, with Back', async () => {
