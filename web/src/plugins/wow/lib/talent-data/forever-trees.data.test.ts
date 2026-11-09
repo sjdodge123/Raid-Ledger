@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import trees from './forever-trees.json';
 import fixture from '../__fixtures__/forever-warrior-trees.json';
 import { isForeverTalentTable, type ForeverTalentTable } from '../forever-talent-table';
 
@@ -15,18 +14,26 @@ const CLASSES = [
     'druid',
 ] as const;
 
+/** Every `forever/<class>.json`, keyed by class slug (the file name) — the files the loader globs. */
+const FILES = import.meta.glob<unknown>('./forever/*.json', { eager: true, import: 'default' });
+const trees = Object.fromEntries(Object.entries(FILES).map(([file, json]) => [file.replace(/^\.\/forever\/|\.json$/g, ''), json]));
+
 /** The JSON through the same shape guard the loader uses — no cast. */
 function loadTable(): ForeverTalentTable {
-    if (!isForeverTalentTable(trees)) throw new Error('forever-trees.json fails isForeverTalentTable');
+    if (!isForeverTalentTable(trees)) throw new Error('forever/<class>.json fails isForeverTalentTable');
     return trees;
 }
 const table = loadTable();
+
+it('has exactly one file per Forever class (ROK-2150 per-class split)', () => {
+    expect(Object.keys(table).sort()).toEqual([...CLASSES].sort());
+});
 
 it('the warrior spec fixture is a copy of the real warrior table (no drift)', () => {
     expect(isForeverTalentTable(fixture) ? fixture.warrior : null).toEqual(table.warrior);
 });
 
-describe.each(CLASSES)('forever-trees.json: %s', (slug) => {
+describe.each(CLASSES)('forever/%s.json', (slug) => {
     const entry = table[slug];
 
     it('has 3 trees with at least 14 talents each', () => {
@@ -58,6 +65,19 @@ describe.each(CLASSES)('forever-trees.json: %s', (slug) => {
                 if (!from) continue;
                 const drawable = (from.col === t.col && t.row > from.row) || (from.row === t.row && from.col !== t.col);
                 expect(drawable, `${t.name} ← ${from.name} (${from.row},${from.col} → ${t.row},${t.col})`).toBe(true);
+            }
+        }
+    });
+
+    it('carries the calculator hashVersion and one plain-text description per rank (ROK-2150)', () => {
+        expect(entry?.hashVersion).toMatch(/^[a-z0-9]+$/);
+        for (const tree of entry?.trees ?? []) {
+            for (const t of tree.talents) {
+                expect(t.descriptions, t.name).toHaveLength(t.maxRank);
+                for (const text of t.descriptions) {
+                    expect(text, `${t.name} is plain text`).not.toMatch(/<[^>]*>|&[a-z#0-9]+;|<!--/i);
+                    expect(text.trim(), `${t.name} has text`).not.toBe('');
+                }
             }
         }
     });

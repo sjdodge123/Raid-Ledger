@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ForeverTalentsDto } from '@raid-ledger/contract';
-import { getWowheadTalentCalcUrl } from '../lib/wowhead-urls';
+import { getForeverTalentCalcUrl } from '../lib/forever-talent-build';
 import { formatForeverRank } from '../lib/forever-talent-trees';
 import { ForeverTalentGrid } from './forever-talent-grid';
 import { TalentPillSection, WowheadCalcLink } from './talent-display';
@@ -91,8 +91,9 @@ function pointsKey(joined: JoinedForeverTalents): string {
 
 /**
  * WoW: Forever talents (ROK-1744; Blizzard source ROK-2110). Header (Σ rank,
- * source line, plain Forever calc link — hard-coded `wow_forever`, D7; no build
- * string, no iframe), then the Wowhead-style tree from the static Forever table
+ * source line, Forever calc link — hard-coded `wow_forever`; carries the character's
+ * build string once the table is joined, ROK-2150, overriding ROK-2146 D7 per the
+ * operator 2026-11-09; the bare calculator until then; no iframe), then the Wowhead-style tree from the static Forever table
  * (ROK-2146); a tree-height placeholder while the table loads. Without a table for the
  * class: the positioned grid or the list/summary fallback, Blizzard list payloads placed by name (D5).
  */
@@ -102,7 +103,7 @@ export function ForeverTalentDisplay({ talents: raw, characterClass }: { talents
     const joined = useMemo(() => (table ? joinForeverTalents(alignForeverTalents(raw, characterClass), table) : null), [table, raw, characterClass]);
     const talents = placeArmoryTalents(raw, characterClass);
     const points = totalPoints(talents);
-    const href = characterClass ? getWowheadTalentCalcUrl(characterClass, 'wow_forever') : null;
+    const href = characterClass ? getForeverTalentCalcUrl(characterClass, joined, table?.hashVersion ?? null) : null;
     return (
         <div className="space-y-4">
             <ForeverHeader points={points} source={foreverSourceLine(talents)} href={href} />
