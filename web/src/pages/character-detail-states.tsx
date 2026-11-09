@@ -6,6 +6,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { hubCopy } from '../components/hub/hub-copy';
+import { Button } from '../components/ui/button';
 
 const FRAME = 'max-w-5xl mx-auto px-4 py-8';
 
@@ -48,7 +49,7 @@ export function CharacterDetailError({ message, status, hubId, onBack }: Charact
         <div className={FRAME}>
             <div className="bg-danger/10 border border-danger/40 rounded-lg p-6 text-center">
                 <p className="text-danger">{message}</p>
-                <button onClick={onBack} className="text-sm text-success hover:underline mt-2 inline-block">Go back</button>
+                <Button variant="bare" onClick={onBack} className="text-sm text-success hover:underline mt-2">Go back</Button>
             </div>
         </div>
     );
