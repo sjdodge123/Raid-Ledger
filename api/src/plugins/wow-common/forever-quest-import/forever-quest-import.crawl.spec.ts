@@ -333,3 +333,49 @@ describe('QuestImportCrawl — error lines (L6)', () => {
     expect(report.unlistedQuests).toEqual([]);
   });
 });
+
+/** Kraul's sample quest 1101 answers with `answer`; everything else routes. */
+function probeDeps(answer: () => Promise<QuestImportResponse>) {
+  const base = routed([], route);
+  const deps: QuestImportDeps = {
+    ...base,
+    knownQuests: new Map([[1101, KRAUL]]),
+    fetchJson: (url) =>
+      url.includes('/quest/1101?') ? answer() : base.fetchJson(url),
+  };
+  return deps;
+}
+
+describe('QuestImportCrawl — the sample-quest probe is evidence only (M1)', () => {
+  it.each([404, 503, 500, 401])(
+    'records HTTP %i on the skipped area and finishes the run',
+    async (status) => {
+      const { report, err } = await runCrawl(
+        probeDeps(() => Promise.resolve({ status, body: null })),
+      );
+      expect(err).toBeNull();
+      expect(report.mismatchedAreas[0]?.sampleQuest).toEqual({
+        questId: 1101,
+        httpStatus: status,
+        areaId: null,
+        areaName: null,
+      });
+      expect(report.counts.areasImported).toBe(MAPPED - 1);
+    },
+  );
+
+  it('records a thrown request as HTTP 0 plus an error line and finishes the run', async () => {
+    const { report, err } = await runCrawl(
+      probeDeps(() => Promise.reject(new Error('socket hang up'))),
+    );
+    expect(err).toBeNull();
+    expect(report.mismatchedAreas[0]?.sampleQuest).toEqual({
+      questId: 1101,
+      httpStatus: 0,
+      areaId: null,
+      areaName: null,
+    });
+    expect(report.errors).toContain('quest/1101: socket hang up');
+    expect(report.counts.areasImported).toBe(MAPPED - 1);
+  });
+});

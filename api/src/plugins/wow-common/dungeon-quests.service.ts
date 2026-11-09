@@ -264,9 +264,11 @@ export class DungeonQuestsService {
         .from(wowClassicDungeonQuests)
         .where(inArray(wowClassicDungeonQuests.questId, idsToFetch));
 
+      // M3: chain links carry the same Blizzard-overlay prevQuestId as the
+      // instance's own quests, so the chain agrees with the cards.
+      const dtos = await this.overlay(rows.map((row) => toDto(row)));
       const newFrontier = new Set<number>();
-      for (const row of rows) {
-        const dto = toDto(row);
+      for (const dto of dtos) {
         questLookup.set(dto.questId, dto);
         if (dto.prevQuestId !== null && !questLookup.has(dto.prevQuestId))
           newFrontier.add(dto.prevQuestId);
@@ -298,11 +300,16 @@ export class DungeonQuestsService {
         .from(wowClassicDungeonQuests)
         .where(eq(wowClassicDungeonQuests.questId, cur))
         .limit(1);
-      if (!row) break;
-      const dto = toDto(row);
+      const [dto] = row ? await this.overlay([toDto(row)]) : [];
+      if (!dto) break;
       questLookup.set(dto.questId, dto);
       cur = direction === 'prev' ? dto.prevQuestId : dto.nextQuestId;
     }
+  }
+
+  /** The Blizzard overlay (kill switch off → unchanged) for chain links. */
+  private overlay(quests: DungeonQuestDto[]): Promise<DungeonQuestDto[]> {
+    return applyQuestOverlay({ db: this.db, settings: this.settings }, quests);
   }
 
   /** Fetch chain quest links for a single quest's chain walk. */

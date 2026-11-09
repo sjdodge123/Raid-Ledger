@@ -227,21 +227,31 @@ export class QuestImportCrawl {
     };
   }
 
-  /** One `quest/{id}` of a skipped dungeon: its status and Blizzard area. */
+  /**
+   * One `quest/{id}` of a skipped dungeon: its status and Blizzard area.
+   * Evidence only, never fatal (M1, like `probeItemLevel`): any status is
+   * recorded; a thrown request is recorded as `httpStatus` 0 (no HTTP
+   * response) plus an error line. Only the kill switch still stops the run
+   * here — that is the operator's stop, not a probe failure.
+   */
   private async probeSampleQuest(
     instanceId: number,
   ): Promise<ForeverQuestImportSampleQuest | null> {
     const questId = firstKnownQuestId(this.deps.knownQuests, instanceId);
     if (questId === null) return null;
-    const res = await this.requestRaw(buildQuestUrl(this.deps.region, questId));
-    if (isFatalQuestImportStatus(res.status)) {
-      throw new QuestImportAbort(`quest/${questId}: HTTP ${res.status}`);
-    }
+    const url = buildQuestUrl(this.deps.region, questId);
+    const res = await this.requestRaw(url).catch((e: unknown) => {
+      if (e instanceof Error && e.message === FOREVER_QUEST_IMPORT_OFF_MESSAGE)
+        throw e;
+      const why = e instanceof Error ? e.message : String(e);
+      pushQuestImportError(this.report, `quest/${questId}: ${why}`);
+      return null;
+    });
     const area =
-      res.status === 200 ? (parseBlizzardQuest(res.body)?.area ?? null) : null;
+      res?.status === 200 ? (parseBlizzardQuest(res.body)?.area ?? null) : null;
     return {
       questId,
-      httpStatus: res.status,
+      httpStatus: res?.status ?? 0,
       areaId: area?.id ?? null,
       areaName: area?.name ?? null,
     };
