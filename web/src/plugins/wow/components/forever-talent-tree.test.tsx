@@ -1,10 +1,10 @@
 /**
  * ROK-2146: the Wowhead-style WoW: Forever talent tree — every talent at its cell,
- * spent vs unspent, tooltips, phone tree tabs, "Other talents", the calc label and
+ * spent vs unspent, per-rank tooltips (ROK-2150), phone tree tabs, "Other talents", the calc label and
  * the fallback to the old grid when the class has no table.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
 import fixture from '../lib/__fixtures__/forever-warrior-trees.json';
@@ -40,9 +40,9 @@ async function renderWarrior(nodes = ROK) {
     await screen.findAllByTestId('forever-talent');
 }
 
-/** The talent link whose accessible name starts with `name` (any rank), so a wrong rank fails the name assert. */
+/** The talent button whose accessible name starts with `name` (any rank), so a wrong rank fails the name assert. */
 function talent(name: string): HTMLElement {
-    return screen.getByRole('link', { name: new RegExp(`^${name} \\d+ of \\d+$`) });
+    return screen.getByRole('button', { name: new RegExp(`^${name} \\d+ of \\d+$`) });
 }
 
 beforeEach(() => { loadTable.mockReset(); loadTable.mockResolvedValue(warrior()); });
@@ -67,11 +67,14 @@ describe('ForeverTalentTree', () => {
         expect(unspent.querySelector('img')?.className).toContain('grayscale');
     });
 
-    it('hooks each talent to the Forever Wowhead tooltip and the zamimg icon', async () => {
+    // ROK-2150: Wowhead's Forever spell tooltip/page shows one rank's numbers for every rank, so icons no longer hook or link it.
+    it('draws each talent as a button with the zamimg icon, not a Wowhead spell link', async () => {
         await renderWarrior();
-        const link = talent('Shield Specialization');
-        expect(link).toHaveAttribute('data-wowhead', 'spell=12298&domain=forever');
-        expect(link.querySelector('img')).toHaveAttribute('src', 'https://wow.zamimg.com/images/wow/icons/medium/inv_shield_06.jpg');
+        const icon = talent('Shield Specialization');
+        expect(icon.tagName).toBe('BUTTON');
+        expect(icon).not.toHaveAttribute('data-wowhead');
+        expect(icon).not.toHaveAttribute('href');
+        expect(icon.querySelector('img')).toHaveAttribute('src', 'https://wow.zamimg.com/images/wow/icons/medium/inv_shield_06.jpg');
     });
 
     it('draws prerequisite arrows, lit when the dependent talent is spent', async () => {
@@ -88,6 +91,65 @@ describe('ForeverTalentTree', () => {
         expect(screen.getByRole('heading', { name: 'Protection' })).toBeInTheDocument();
     });
 
+});
+
+/** ROK-2150: our own per-rank tooltip (Master of Defense 1/2 read "0% chance" on Wowhead's). */
+describe('ForeverTalentTree — per-rank talent tooltip', () => {
+    const MOD_RANK_1: ForeverTalentNodeDto[] = [{ nodeId: 1, rank: 1, spellId: 1310316 }];
+
+    it('opens on hover with the name, rank, current and next rank text, and closes on leave', async () => {
+        await renderWarrior(MOD_RANK_1);
+        const icon = talent('Master of Defense');
+        await userEvent.hover(icon);
+        const tip = screen.getByRole('tooltip');
+        expect(icon).toHaveAttribute('aria-describedby', tip.id);
+        expect(within(tip).getByText('Master of Defense')).toBeInTheDocument();
+        expect(within(tip).getByText('Rank 1/2')).toBeInTheDocument();
+        expect(within(screen.getByTestId('forever-talent-tooltip-current')).getByText(/50% chance to generate 5 Rage/)).toBeInTheDocument();
+        const next = screen.getByTestId('forever-talent-tooltip-next');
+        expect(within(next).getByText('Next rank:')).toBeInTheDocument();
+        expect(within(next).getByText(/100% chance to generate 5 Rage/)).toBeInTheDocument();
+        await userEvent.unhover(icon);
+        expect(screen.queryByRole('tooltip'), 'closes on mouse leave').toBeNull();
+        expect(icon).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('opens on keyboard focus and closes on Escape', async () => {
+        await renderWarrior(MOD_RANK_1);
+        const icon = talent('Master of Defense');
+        act(() => icon.focus());
+        expect(within(screen.getByRole('tooltip')).getByText('Rank 1/2')).toBeInTheDocument();
+        await userEvent.keyboard('{Escape}');
+        expect(screen.queryByRole('tooltip'), 'Escape closes it').toBeNull();
+    });
+
+    it('shows only the next-rank (rank 1) text at rank 0', async () => {
+        await renderWarrior(MOD_RANK_1);
+        await userEvent.hover(talent('Mortal Strike'));
+        expect(within(screen.getByRole('tooltip')).getByText('Rank 0/1')).toBeInTheDocument();
+        expect(screen.queryByTestId('forever-talent-tooltip-current'), 'no current text at rank 0').toBeNull();
+        expect(within(screen.getByTestId('forever-talent-tooltip-next')).getByText(/A vicious strike/)).toBeInTheDocument();
+    });
+
+    it('shows no "Next rank" at max rank', async () => {
+        await renderWarrior();
+        await userEvent.hover(talent('Shield Specialization'));
+        const tip = screen.getByRole('tooltip');
+        expect(within(tip).getByText('Rank 5/5')).toBeInTheDocument();
+        expect(within(tip).getByText(/by 5% and grants you a 100% chance/)).toBeInTheDocument();
+        expect(within(tip).queryByText('Next rank:'), 'no next rank at 5/5').toBeNull();
+    });
+
+    it('toggles on a touch tap instead of navigating', async () => {
+        await renderWarrior(MOD_RANK_1);
+        const icon = talent('Master of Defense');
+        fireEvent.pointerDown(icon, { pointerType: 'touch' });
+        fireEvent.click(icon);
+        expect(within(screen.getByRole('tooltip')).getByText('Rank 1/2')).toBeInTheDocument();
+        fireEvent.pointerDown(icon, { pointerType: 'touch' });
+        fireEvent.click(icon);
+        expect(screen.queryByRole('tooltip'), 'a second tap closes it').toBeNull();
+    });
 });
 
 describe('ForeverTalentTree — tabs, other talents, label, fallback', () => {

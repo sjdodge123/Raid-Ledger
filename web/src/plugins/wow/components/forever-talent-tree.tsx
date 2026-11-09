@@ -3,11 +3,12 @@
  * static Forever table joined with a character's ranks (lib/forever-talent-table.ts),
  * and the tree-height placeholder shown while that table loads.
  */
-import { useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import { RadioGroup } from '../../../components/ui/radio-group';
-import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
+import { useForeverTalentTooltip } from '../hooks/use-forever-talent-tooltip';
 import { mostPointsTreeIndex, type JoinedForeverTalents, type JoinedTalent, type JoinedTree } from '../lib/forever-talent-table';
 import { OtherTalents } from './forever-talent-grid';
+import { ForeverTalentTooltip } from './forever-talent-tooltip';
 
 const ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/medium/';
 /** One cell + gap; `--ti` (icon) and `--tg` (gap) are set per breakpoint on the wrapper. */
@@ -20,19 +21,21 @@ const SPENT_TEXT = 'text-warning';
 
 function TalentIcon({ talent }: { talent: JoinedTalent }) {
     const spent = talent.rank > 0;
+    const anchorRef = useRef<HTMLButtonElement | null>(null);
+    const tip = useForeverTalentTooltip(anchorRef);
     const style: CSSProperties = { left: `calc(${talent.col} * ${STEP})`, top: `calc(${talent.row} * ${STEP})`, width: 'var(--ti)', height: 'var(--ti)' };
     return (
-        <a data-testid="forever-talent" data-spent={spent ? 'true' : 'false'} style={style}
-            href={`https://www.wowhead.com/forever/spell=${talent.spellId}`} target="_blank" rel="noopener noreferrer"
-            data-wowhead={`spell=${talent.spellId}&domain=forever`} aria-label={`${talent.name} ${talent.rank} of ${talent.maxRank}`}
-            className={`absolute z-[2] rounded-md border-2 bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success ${spent ? SPENT_BORDER : 'border-edge-strong'}`}>
+        <button ref={anchorRef} type="button" data-testid="forever-talent" data-spent={spent ? 'true' : 'false'} style={style}
+            aria-label={`${talent.name} ${talent.rank} of ${talent.maxRank}`} {...tip.anchorProps}
+            className={`absolute z-[2] rounded-md border-2 bg-surface p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success ${spent ? SPENT_BORDER : 'border-edge-strong'}`}>
             <img src={`${ICON_BASE}${talent.icon}.jpg`} alt="" loading="lazy"
                 className={`block w-full h-full rounded-sm ${spent ? '' : 'grayscale opacity-40'}`} />
             <span aria-hidden="true"
                 className={`absolute -right-2 -bottom-2 z-[3] rounded px-1 py-0.5 text-[10px] leading-none font-semibold bg-surface border ${spent ? `${SPENT_BORDER} ${SPENT_TEXT}` : 'border-edge-strong text-dim'}`}>
                 {`${talent.rank}/${talent.maxRank}`}
             </span>
-        </a>
+            {tip.open && <ForeverTalentTooltip talent={talent} id={tip.id} anchorRef={anchorRef} onOutside={tip.close} />}
+        </button>
     );
 }
 
@@ -105,12 +108,13 @@ export function ForeverTalentTreePlaceholder() {
 /**
  * WoW: Forever talent tree, Wowhead-calculator style (ROK-2146 rulings 1 + 4): every
  * talent of the class at its tier/column, spent ones gold-bordered with an `x/y` badge,
- * unspent ones greyed `0/y`, prerequisite arrows and Wowhead spell tooltips. Three
- * trees side by side from `md`; below it, tree tabs opening on the most-points tree.
+ * unspent ones greyed `0/y`, prerequisite arrows and our own per-rank tooltips (ROK-2150:
+ * Wowhead's Forever spell tooltip shows one rank's numbers for every rank, so the icons
+ * no longer link or hook it). Three trees side by side from `md`; below it, tree tabs
+ * opening on the most-points tree.
  */
 export function ForeverTalentTree({ joined }: { joined: JoinedForeverTalents }) {
     const [active, setActive] = useState(() => mostPointsTreeIndex(joined.trees));
-    useWowheadTooltips([joined]);
     return (
         <div className={`space-y-3 ${SIZE_VARS}`}>
             <TreeTabs trees={joined.trees} active={active} onChange={setActive} />
