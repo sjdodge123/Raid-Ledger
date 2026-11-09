@@ -31,6 +31,7 @@ export * from './schema/post-event-reminders-sent';
 export * from './schema/post-event-followup-sent';
 export * from './schema/event-plans';
 export * from './schema/dungeon-quests';
+export * from './schema/dungeon-quest-blizzard';
 export * from './schema/boss-encounters';
 export * from './schema/quest-progress';
 export * from './schema/game-activity-sessions';

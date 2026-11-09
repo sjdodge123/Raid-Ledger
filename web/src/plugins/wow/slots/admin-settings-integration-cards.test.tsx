@@ -208,9 +208,9 @@ describe('BlizzardIntegrationSlot — action triad layout (ROK-1652 B)', () => {
 describe('BlizzardIntegrationSlot — WoW Forever section (ROK-1717)', () => {
     beforeEach(resetMocks);
 
-    it('renders the Forever section once Blizzard credentials are configured', () => {
+    it('renders the Forever section once Blizzard credentials are configured', async () => {
         renderConfigured();
-        expect(screen.getByTestId('forever-settings-section')).toBeInTheDocument();
+        expect(await screen.findByTestId('forever-settings-section')).toBeInTheDocument();
     });
 
     it('hides the Forever section until Blizzard is configured', () => {
@@ -230,9 +230,9 @@ describe('BlizzardIntegrationSlot — realm rulesets section (ROK-1739)', () => 
         expect(screen.queryByTestId('forever-settings-section')).not.toBeInTheDocument();
     });
 
-    it('renders the realm-rulesets editor alongside the Forever section once configured', () => {
+    it('renders the realm-rulesets editor alongside the Forever section once configured', async () => {
         renderConfigured();
         expect(screen.getByTestId('forever-realm-rulesets-section')).toBeInTheDocument();
-        expect(screen.getByTestId('forever-settings-section')).toBeInTheDocument();
+        expect(await screen.findByTestId('forever-settings-section')).toBeInTheDocument();
     });
 });

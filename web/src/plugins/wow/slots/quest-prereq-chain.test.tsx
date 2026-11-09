@@ -78,3 +78,26 @@ describe('QuestPrereqChain', () => {
         expect(screen.queryByTestId('quest-prereq-source')).toBeNull();
     });
 });
+
+describe('QuestPrereqChain — never the quest as its own prerequisite (ROK-2143)', () => {
+    it('renders nothing when the chain holds only the quest itself', () => {
+        const self = { ...quest, prerequisiteChain: [{ questId: 20, name: 'Final Step' }] } as EnrichedDungeonQuestDto;
+        const { container } = render(<QuestPrereqChain quest={self} />);
+        expect(container.innerHTML, 'a lone self entry must not render "Requires: Final Step"').toBe('');
+    });
+
+    it('renders nothing when the chain only has quests after this one', () => {
+        const nextOnly = {
+            ...quest,
+            prerequisiteChain: [{ questId: 20, name: 'Final Step' }, { questId: 30, name: 'Follow-up' }],
+        } as EnrichedDungeonQuestDto;
+        const { container } = render(<QuestPrereqChain quest={nextOnly} />);
+        expect(container.innerHTML).toBe('');
+    });
+
+    it('renders nothing for a null chain', () => {
+        const none = { ...quest, prerequisiteChain: null } as EnrichedDungeonQuestDto;
+        const { container } = render(<QuestPrereqChain quest={none} />);
+        expect(container.innerHTML).toBe('');
+    });
+});

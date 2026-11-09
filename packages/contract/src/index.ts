@@ -229,6 +229,8 @@ export * from './wow-addon-mailworthy.schema.js';
 export * from './wow-addon-installed.schema.js';
 export * from './wow-guild-contributions.schema.js';
 export * from './wow-forever-realm-rulesets.schema.js';
+// WoW: Forever classic quest import run report (ROK-2143).
+export * from './forever-quest-import.schema.js';
 export * from './ledgerlink-json-schema.js';
 
 // RL Valheim Link mod push messages — wire contract v1 (ROK-1829).

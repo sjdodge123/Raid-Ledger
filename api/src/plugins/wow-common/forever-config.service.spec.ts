@@ -8,6 +8,7 @@ import {
   WOW_FOREVER_ARMORY_IMPORT_KEY,
   WOW_FOREVER_CONFIG_UPDATED,
   WOW_FOREVER_NAMESPACE_PREFIX_KEY,
+  WOW_FOREVER_QUEST_IMPORT_KEY,
 } from './forever.settings';
 
 /** SettingsService stand-in backed by a Map (get/set/delete only). */
@@ -50,6 +51,7 @@ describe('ForeverConfigService reads (ROK-1717)', () => {
       namespacePrefixIsDefault: true,
       armoryImportEnabled: true,
       wowheadResolverEnabled: true,
+      questImportEnabled: true,
     });
     // ROK-1722: Armory import is on by default (absent key = enabled).
     await expect(service.getCapabilities()).resolves.toEqual({
@@ -74,6 +76,7 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
       namespacePrefixIsDefault: false,
       armoryImportEnabled: false,
       wowheadResolverEnabled: true,
+      questImportEnabled: true,
     });
     expect(events.emit).toHaveBeenCalledWith(WOW_FOREVER_CONFIG_UPDATED, {
       namespacePrefix: 'foo',
@@ -129,6 +132,29 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
     });
     expect(on.wowheadResolverEnabled).toBe(true);
     expect(store.has('wowhead_resolver_enabled')).toBe(false);
+  });
+
+  it('quest import switch: off stores "false", on deletes it, omitted leaves it; each save emits the change (ROK-2143)', async () => {
+    const { service, store, events } = setup();
+    const base = { namespacePrefix: 'forever', armoryImportEnabled: true };
+    const off = await service.updateConfig({
+      ...base,
+      questImportEnabled: false,
+    });
+    expect(off.questImportEnabled).toBe(false);
+    expect(store.get(WOW_FOREVER_QUEST_IMPORT_KEY)).toBe('false');
+    expect(events.emit).toHaveBeenCalledWith(WOW_FOREVER_CONFIG_UPDATED, {
+      namespacePrefix: 'forever',
+    });
+    await service.updateConfig(base);
+    expect(store.get(WOW_FOREVER_QUEST_IMPORT_KEY)).toBe('false');
+    const on = await service.updateConfig({
+      ...base,
+      questImportEnabled: true,
+    });
+    expect(on.questImportEnabled).toBe(true);
+    expect(store.has(WOW_FOREVER_QUEST_IMPORT_KEY)).toBe(false);
+    expect(events.emit).toHaveBeenCalledTimes(3);
   });
 
   it('rejects an invalid prefix with 400 and writes nothing', async () => {

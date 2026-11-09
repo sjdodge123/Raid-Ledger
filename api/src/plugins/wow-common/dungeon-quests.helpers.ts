@@ -105,6 +105,19 @@ export function walkChainInMemory(
   return chain;
 }
 
+/**
+ * ROK-2143: a quest's prerequisite chain, or null when the backward walk
+ * found no other quest before it (no `prevQuestId`, or one that is not in
+ * our data) — so a quest never shows up as its own prerequisite.
+ */
+export function prerequisiteChainOf(
+  quest: DungeonQuestDto,
+  questLookup: Map<number, DungeonQuestDto>,
+): DungeonQuestDto[] | null {
+  const chain = walkChainInMemory(quest, questLookup);
+  return chain[0]?.questId === quest.questId ? null : chain;
+}
+
 /** Collect IDs from quest chain links not yet in the lookup. */
 export function collectFrontierIds(
   quests: DungeonQuestDto[],

@@ -9,6 +9,8 @@ import { ForeverConfigController } from './forever-config.controller';
 import { ForeverConfigService } from './forever-config.service';
 import { ForeverNamespaceProbeController } from './forever-namespace-probe.controller';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
+import { ForeverQuestImportController } from './forever-quest-import/forever-quest-import.controller';
+import { ForeverQuestImportService } from './forever-quest-import/forever-quest-import.service';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
 import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
@@ -75,6 +77,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     BlizzardController,
     ForeverConfigController,
     ForeverNamespaceProbeController,
+    ForeverQuestImportController,
     ForeverRealmRulesetsController,
     DungeonQuestsController,
     BossEncountersController,
@@ -92,6 +95,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     BlizzardAuthService,
     ForeverConfigService,
     ForeverNamespaceProbeService,
+    // ROK-2143: manual Forever quest import (admin POST; no cron).
+    ForeverQuestImportService,
     ForeverRealmRulesetsService,
     ForeverRulesetLookupService,
     BlizzardCharacterSyncAdapter,
