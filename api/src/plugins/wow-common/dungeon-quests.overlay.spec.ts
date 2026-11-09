@@ -173,6 +173,40 @@ describe('applyKnownQuestOverlay (Codex P2 3)', () => {
   });
 });
 
+describe('applyKnownQuestOverlay prerequisites (Codex P2)', () => {
+  /** Deps whose successive overlay queries resolve `results` in order. */
+  function sequenced(...results: WowDungeonQuestBlizzardRow[][]) {
+    const where = jest.fn();
+    for (const rows of results) where.mockResolvedValueOnce(rows);
+    const select = jest.fn(() => ({ from: () => ({ where }) }));
+    const value = { db: { select }, settings: { get: jest.fn() } };
+    return { value: value as unknown as QuestOverlayDeps, select };
+  }
+
+  it('resolves an overlay-only prerequisite with no dungeon, never as a card', async () => {
+    const quest = { ...curated(378), prevQuestId: 900 };
+    const prereq = overlay(900, null, { typeId: null });
+    const d = sequenced([overlay(378)], [prereq]);
+    const out = await applyKnownQuestOverlay(d.value, [quest]);
+    expect(out.map((q) => [q.questId, q.dungeonInstanceId])).toEqual([
+      [378, 238],
+      [900, null],
+    ]);
+    expect(d.select).toHaveBeenCalledTimes(2);
+  });
+
+  it('takes a mapped non-dungeon-type prerequisite from the first read, not as a card', async () => {
+    const quest = { ...curated(378), prevQuestId: 387 };
+    const d = sequenced([overlay(378), overlay(387, 229, { typeId: 62 })]);
+    const out = await applyKnownQuestOverlay(d.value, [quest]);
+    expect(out.map((q) => [q.questId, q.dungeonInstanceId])).toEqual([
+      [378, 238],
+      [387, null],
+    ]);
+    expect(d.select).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('overlay-only quests (m5 type gate, m6 reward type, L6 requirements)', () => {
   it('appends only Dungeon (81) and Group (1) types — not Raid (62) or untyped', async () => {
     listOverlay.mockResolvedValue(new Map());
