@@ -8,6 +8,7 @@ import type {
   DecodedAddonPaste,
 } from './addon-import.decoder';
 import type { AddonApplyContext, RosterFlag } from './addon-import-apply.types';
+import { withCharMailworthy } from './addon-import-char.mailworthy';
 import { buildResult, runSection } from './addon-import.service.helpers';
 
 /**
@@ -15,7 +16,8 @@ import { buildResult, runSection } from './addon-import.service.helpers';
  * caller's ONE transaction. Sections run in canonical order char → guild →
  * raid, each routed exactly as a single-section import; a rejecting section
  * throws and rolls every section back (all-or-nothing). A stale section
- * writes nothing for itself and is reported, not thrown.
+ * writes nothing for itself and is reported, not thrown. The char section's
+ * Mailworthy block (ROK-2148) applies LAST, after the guild section.
  */
 
 type SectionOutcome = Awaited<ReturnType<typeof runSection>>;
@@ -50,7 +52,29 @@ export async function runPaste(
       outcome: await runSection(sectionCtx, decoded, dryRun),
     });
   }
-  return runs;
+  return dryRun ? runs : withDeferredMailworthy(ctx, runs);
+}
+
+/**
+ * ROK-2148 (Codex P2) — the char block's roster check reads the guild
+ * section's writes, so it runs once every section has (same `ctx.tx`).
+ */
+async function withDeferredMailworthy(
+  ctx: Omit<AddonApplyContext, 'sha256'>,
+  runs: PasteSectionRun[],
+): Promise<PasteSectionRun[]> {
+  const out: PasteSectionRun[] = [];
+  for (const run of runs) {
+    const { payload, sha256 } = run.decoded;
+    if (payload.section !== 'char') {
+      out.push(run);
+      continue;
+    }
+    const charCtx = { ...ctx, sha256 };
+    const outcome = await withCharMailworthy(charCtx, payload, run.outcome);
+    out.push({ ...run, outcome });
+  }
+  return out;
 }
 
 /** True when the binding's character-row writes should run (not all stale). */

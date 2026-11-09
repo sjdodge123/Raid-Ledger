@@ -1,0 +1,61 @@
+{
+  "pages": 1,
+  "payload": {
+    "schema": 1,
+    "addonVersion": "0.1.0",
+    "client": {
+      "interface": 11507,
+      "build": "1.15.7",
+      "locale": "enUS",
+      "region": 1
+    },
+    "exportedAt": 1790000000,
+    "who": {
+      "guid": "Player-4395-0ABCDEF0",
+      "fullName": "Ana Forever",
+      "raw": {
+        "getUnitName": "Ana Forever",
+        "unitName": ["Ana Forever",null]
+      },
+      "ruleset": "normal",
+      "class": "PALADIN",
+      "race": "Human",
+      "level": 60,
+      "faction": "Alliance",
+      "guildName": "Night Shift"
+    },
+    "section": "char",
+    "data": {
+      "gear": [
+        {"slot":16,"itemId":19019,"ilvl":80,"bonusIds":[6646,7890],"name":"Thunderfury"},
+        {"slot":1,"itemId":16921,"ilvl":76,"bonusIds":[]}
+      ],
+      "talents": {
+        "configId": 7,
+        "nodes": [{"nodeId":101,"rank":2}]
+      },
+      "lockouts": [
+        {"name":"Molten Core","instanceId":409,"difficultyId":9,"resetAt":1790500000,"killed":3,"total":10}
+      ]
+    },
+    "mailworthy": {
+      "generatedAt": 1789999940,
+      "template": {
+        "rev": 1789568000,
+        "author": "Member1",
+        "rules": [{"professionSkillLineId":333,"recipientName":"Member2"},{"professionSkillLineId":171,"recipientName":"Member3"},{"professionSkillLineId":164,"recipientName":"Ana Forever"}]
+      },
+      "peers": [
+        {"name":"Member1","lastSeenAt":1789996340},
+        {"name":"Member2","lastSeenAt":1789992740},
+        {"name":"Member3","lastSeenAt":1789989140},
+        {"name":"Member4","lastSeenAt":1789985540}
+      ],
+      "givers": [
+        {"characterName":"Ana Forever","itemsAllTime":140,"countingSince":1782224000,"asOf":1789999940,"days":[{"day":20686,"items":20},{"day":20688,"items":12},{"day":20717,"items":8}]},
+        {"characterName":"Anabelle Forever","itemsAllTime":20,"countingSince":1789136000,"asOf":1789999940,"days":[{"day":20715,"items":20}]},
+        {"characterName":"Member2","itemsAllTime":64,"countingSince":1787408000,"asOf":1789992740,"days":[{"day":20711,"items":40},{"day":20716,"items":24}]}
+      ]
+    }
+  }
+}

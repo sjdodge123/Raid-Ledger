@@ -9,6 +9,7 @@ import {
     ADDON_QUESTS_IN_PROGRESS_MAX,
 } from './wow-addon-import.schema.js';
 import { WOW_GUILD_INFO_MAX, WOW_GUILD_MOTD_MAX } from './guild-ingame-text.schema.js';
+import { AddonMailworthySchema } from './wow-addon-mailworthy.schema.js';
 
 // ============================================================
 // WoW: Forever addon export payload (ROK-1724)
@@ -188,6 +189,8 @@ export const AddonCharDataSchema = z.object({
     talents: AddonTalentsSchema,
     lockouts: z.array(AddonLockoutSchema).max(100),
     quests: AddonQuestsSchema.optional(),
+    /** Mailworthy guild contributions block (ROK-2148, additive). Absent = no opinion. */
+    mailworthy: AddonMailworthySchema.optional(),
 }).strict();
 export type AddonCharData = z.infer<typeof AddonCharDataSchema>;
 

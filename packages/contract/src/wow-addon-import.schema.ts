@@ -153,12 +153,43 @@ export type AddonImportDiff = z.infer<typeof AddonImportDiffSchema>;
 
 const n = z.number().int().nonnegative();
 
+/**
+ * ROK-2148 Q8 — what an applied char import did with its Mailworthy (guild
+ * contributions) block — absent when the export carried none (or on a
+ * preview). `skipped` names why no giver was stored: `guild_unresolved` (no guild name,
+ * or no such guild in Raid Ledger), `not_on_roster` (the exporter is not on
+ * the guild's latest roster), `givers_rejected` (every giver was off-roster).
+ */
+export const AddonMailworthyImportSkipReasonSchema = z.enum([
+    'guild_unresolved',
+    'not_on_roster',
+    'givers_rejected',
+]);
+export type AddonMailworthyImportSkipReason = z.infer<typeof AddonMailworthyImportSkipReasonSchema>;
+
+export const AddonMailworthyImportOutcomeSchema = z.discriminatedUnion('status', [
+    z.object({
+        status: z.literal('applied'),
+        /** Givers accepted (each stored unless the saved row is newer). */
+        givers: n,
+        /** Givers dropped as not on the guild's latest roster. */
+        giversRejected: n,
+        /** Peer names reported (exporter and accepted givers included). */
+        peers: n,
+        template: z.enum(['stored', 'unchanged', 'rejected', 'none']),
+    }),
+    z.object({ status: z.literal('skipped'), reason: AddonMailworthyImportSkipReasonSchema }),
+]);
+export type AddonMailworthyImportOutcome = z.infer<typeof AddonMailworthyImportOutcomeSchema>;
+
 export const AddonCharImportSummarySchema = z.object({
     gearCount: n,
     /** Null when no gear row carried an item level. */
     avgIlvl: z.number().nullable(),
     talentNodes: n,
     lockouts: n,
+    /** ROK-2148 Q8 — applied char sections with a Mailworthy block only. */
+    mailworthy: AddonMailworthyImportOutcomeSchema.optional(),
 });
 export const AddonGuildImportSummarySchema = z.object({
     guildName: z.string(),
