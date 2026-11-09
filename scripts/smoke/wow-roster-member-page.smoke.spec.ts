@@ -11,6 +11,10 @@
  *    member page in claim mode (`?from=claim`): no roster facts, the confirm
  *    copy "This is my character — claim it" + Back; claiming lands on
  *    `/characters/<id>`.
+ * 3. (ROK-2155) Whole-row click: clicking a Members row's BODY (the phone
+ *    card's meta line, or the desktop Rank cell — never the name link) opens
+ *    the claimed row's `/characters/<id>` and the unclaimed row's member
+ *    page; on phones the meta line also fits (professions on their own line).
  *
  * Fixture: `POST /admin/test/wow/seed-guild` (ROK-1785; Forever by default)
  * per test, with a per-project, per-worker, per-run name AND a random
@@ -265,6 +269,83 @@ async function confirmClaim(page: Page, row: Candidate): Promise<string> {
   return body.id;
 }
 
+/**
+ * ROK-2155 — the point to click on a Members row that is NOT its name link: the
+ * phone card's meta line (rank · class · role), or the desktop table's Rank
+ * cell. Returned relative to the row so `row.click` keeps Playwright's
+ * hit-target check (the stretched link is the row's own descendant).
+ */
+async function rowBodyPoint(
+  row: Locator,
+  cards: boolean,
+): Promise<{ x: number; y: number }> {
+  const target = cards
+    ? row.getByTestId("guild-member-card-meta")
+    : row.locator("td").nth(2);
+  const rowBox = must(await row.boundingBox(), "row box");
+  const box = must(await target.boundingBox(), "row body box");
+  const name = must(
+    await row.getByRole("link").first().boundingBox(),
+    "name link box",
+  );
+  const point = {
+    x: box.x + box.width / 2 - rowBox.x,
+    y: box.y + box.height / 2 - rowBox.y,
+  };
+  const onName =
+    rowBox.x + point.x >= name.x &&
+    rowBox.x + point.x <= name.x + name.width &&
+    rowBox.y + point.y >= name.y &&
+    rowBox.y + point.y <= name.y + name.height;
+  expect(onName, "the body click point must sit outside the name link").toBe(
+    false,
+  );
+  return point;
+}
+
+/** Opens the hub's Members tab; true when the phone/tablet card shell renders (not the table). */
+async function openMembers(page: Page, guild: SeededGuild): Promise<boolean> {
+  await page.goto(`/hubs/${guild.guildId}#members`);
+  await expect(page.getByTestId("guild-members")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(
+    page.getByTestId("guild-member-row").filter({ visible: true }).first(),
+  ).toBeVisible({ timeout: 15_000 });
+  return page.getByTestId("guild-members-cards").isVisible();
+}
+
+/** AC (phone): the card's meta line fits — nothing pushed past its right edge. */
+async function expectMetaLineFits(row: Locator): Promise<void> {
+  const meta = row.getByTestId("guild-member-card-meta");
+  const overflow = await meta.evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(
+    overflow,
+    "the phone card's meta line is not squashed (scrollWidth − clientWidth)",
+  ).toBeLessThanOrEqual(1);
+  await expect(
+    row.getByTestId("guild-member-card-own-line"),
+    "professions get their own third card line",
+  ).toHaveCount(1);
+}
+
+/** Click the row body (not the name) and expect the name link's own href. */
+async function clickRowBody(
+  page: Page,
+  row: Locator,
+  link: Locator,
+  cards: boolean,
+  href: RegExp,
+): Promise<void> {
+  await expect(link).toHaveAttribute("href", href, { timeout: 15_000 });
+  const position = await rowBodyPoint(row, cards);
+  await row.click({ position });
+  await expect(
+    page,
+    "clicking the row body (not the name link) opens the row's page",
+  ).toHaveURL(href, { timeout: 15_000 });
+}
+
 test.describe("WoW: Forever — read-only roster member page (ROK-2149)", () => {
   test("a guild member opens an unlinked Members row and sees it read-only", async ({
     page,
@@ -352,6 +433,50 @@ test.describe("WoW: Forever — read-only roster member page (ROK-2149)", () => 
       ).toHaveCount(0);
     } finally {
       await cleanup(token, guild, characterId);
+    }
+  });
+});
+
+test.describe("WoW: Forever — Members rows open from anywhere (ROK-2155)", () => {
+  test("clicking a Members row body opens the claimed character and the unclaimed roster member", async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const token = await getAdminToken();
+    const guild = await seedGuild(token, testInfo);
+    try {
+      const unclaimed = await firstUnlinkedRow(token, guild);
+      await signInOnboardedMember(page, guild.users.member.userId);
+      const cards = await openMembers(page, guild);
+      const rows = page
+        .getByTestId("guild-member-row")
+        .filter({ visible: true });
+      // Claimed: the viewer's own row (`member` owns a linked main).
+      const mine = rows.filter({ has: page.getByTestId("guild-member-you") });
+      if (cards) await expectMetaLineFits(mine);
+      await clickRowBody(
+        page,
+        mine,
+        mine.getByTestId("guild-member-link"),
+        cards,
+        /\/characters\/[^/?#]+$/,
+      );
+      // Unclaimed: an owner-less roster row → its read-only member page.
+      await openMembers(page, guild);
+      const link = page
+        .getByTestId("guild-member-roster-link")
+        .filter({ hasText: unclaimed.name });
+      const row = rows.filter({ has: link });
+      await clickRowBody(
+        page,
+        row,
+        link,
+        cards,
+        memberUrl(guild, unclaimed, false),
+      );
+      await expectMemberPage(page, unclaimed);
+    } finally {
+      await cleanup(token, guild, null);
     }
   });
 });
