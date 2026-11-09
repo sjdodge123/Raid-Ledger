@@ -33,27 +33,60 @@ type Db = PostgresJsDatabase<typeof schema>;
 export const TIEBREAKER_ADVANCE_LOCK_CLASS = 938;
 
 /**
+ * Run `fn` while holding the per-tiebreaker round-advance advisory lock.
+ * The lock lives for the transaction `fn` receives; it is released when `fn`
+ * settles. ROK-2098: the finalize path takes the same lock so a force-resolve
+ * and a round-completing vote can never both advance or both finalize.
+ */
+export async function withTiebreakerAdvanceLock<T>(
+  db: Db,
+  tiebreakerId: number,
+  fn: (tx: Db) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${TIEBREAKER_ADVANCE_LOCK_CLASS}::int4, ${tiebreakerId}::int4)`,
+    );
+    return fn(tx);
+  });
+}
+
+/**
  * Advance the bracket if every lineup voter has voted on every open matchup
  * of the current round. Serialized per tiebreaker; at most one concurrent
- * caller advances a given round.
+ * caller advances a given round. ROK-2098: a tiebreaker that is no longer
+ * `active` (an admin force-resolved it while this vote waited on the lock)
+ * is never advanced again.
  * @returns the bracket's final winner game id when this call completed the
- *   bracket, else null (round still open, already advanced, or a new round
- *   was created).
+ *   bracket, else null (round still open, already advanced, tiebreaker no
+ *   longer active, or a new round was created).
  */
 export async function advanceRoundIfComplete(
   db: Db,
   tiebreakerId: number,
   lineupId: number,
 ): Promise<number | null> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${TIEBREAKER_ADVANCE_LOCK_CLASS}::int4, ${tiebreakerId}::int4)`,
-    );
+  return withTiebreakerAdvanceLock(db, tiebreakerId, async (tx) => {
+    if (!(await isTiebreakerActive(tx, tiebreakerId))) return null;
     if (!(await isCurrentRoundComplete(tx, tiebreakerId, lineupId))) {
       return null;
     }
     return advanceBracket(tx, tiebreakerId);
   });
+}
+
+/** True while the tiebreaker row is still `active`. */
+async function isTiebreakerActive(
+  tx: Db,
+  tiebreakerId: number,
+): Promise<boolean> {
+  const t = schema.communityLineupTiebreakers;
+  const [row] = await tx
+    .select({ status: t.status })
+    .from(t)
+    .where(eq(t.id, tiebreakerId))
+    .limit(1);
+  return row?.status === 'active';
 }
 
 /** True when the current round has open matchups and all are fully voted. */

@@ -157,3 +157,34 @@ export function findUserVeto(db: Db, tiebreakerId: number, userId: number) {
     )
     .limit(1);
 }
+
+/** What a tiebreaker finalize needs to know about its lineup (ROK-2098). */
+export interface LineupDecideState {
+  status: typeof schema.communityLineups.$inferSelect.status;
+  /** True when at least one match group exists for the lineup. */
+  hasMatches: boolean;
+}
+
+/**
+ * ROK-2098: read the lineup's phase and whether matching has produced any
+ * match group. `rebuildMatches` wipes and inserts in ONE transaction, so a
+ * match row is durable proof that a matching pass completed.
+ */
+export async function findLineupDecideState(
+  db: Db,
+  lineupId: number,
+): Promise<LineupDecideState | null> {
+  const [lineup] = await db
+    .select({ status: schema.communityLineups.status })
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1);
+  if (!lineup) return null;
+  const matches = schema.communityLineupMatches;
+  const [match] = await db
+    .select({ id: matches.id })
+    .from(matches)
+    .where(eq(matches.lineupId, lineupId))
+    .limit(1);
+  return { status: lineup.status, hasMatches: match !== undefined };
+}

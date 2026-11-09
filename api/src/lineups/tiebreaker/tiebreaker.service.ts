@@ -33,6 +33,10 @@ import { advanceBracket } from './tiebreaker-bracket.helpers';
 import { advanceRoundIfComplete } from './tiebreaker-advance.helpers';
 import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
 import {
+  finalizeTiebreaker,
+  type WinnerPicker,
+} from './tiebreaker-finalize.helpers';
+import {
   submitVeto,
   revealVetoes,
   findSurvivor,
@@ -62,7 +66,6 @@ import {
   clearActiveTiebreaker,
   createActiveTiebreaker,
   findAndValidateLineup,
-  resolveTiebreaker,
   updateTiebreakerStatus,
 } from './tiebreaker-lifecycle.helpers';
 
@@ -227,15 +230,15 @@ export class TiebreakerService {
     return buildTiebreakerDetail(this.db, tb, userId);
   }
 
-  /** Force-resolve an active tiebreaker (operator). */
+  /**
+   * Force-resolve a tiebreaker (operator). ROK-2098: runs under the
+   * round-advance lock, and on an already-resolved row completes any missing
+   * clear / decided flip / matching with the stored winner (a repair retry).
+   */
   async forceResolve(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb) throw new NotFoundException('No tiebreaker found');
-
-    const winnerId = await this.determineWinner(tb);
-    await resolveTiebreaker(this.db, tb.id, winnerId);
-    await clearActiveTiebreaker(this.db, lineupId);
-    await this.transitionToDecided(lineupId, winnerId);
+    await this.finalize(tb.id, (row) => this.determineWinner(row));
   }
 
   /**
@@ -250,10 +253,18 @@ export class TiebreakerService {
   ): Promise<void> {
     const winner = await advanceRoundIfComplete(this.db, tb.id, lineupId);
     if (!winner) return;
-    await resolveTiebreaker(this.db, tb.id, winner);
-    await clearActiveTiebreaker(this.db, lineupId);
-    await this.transitionToDecided(lineupId, winner);
-    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${winner}`);
+    const final = await this.finalize(tb.id, () => Promise.resolve(winner));
+    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${final}`);
+  }
+
+  /** ROK-2098: once-only, repairable resolve → clear → decide. */
+  private finalize(tiebreakerId: number, pickWinner: WinnerPicker) {
+    const deps = {
+      db: this.db,
+      logger: this.logger,
+      events: this.eventEmitter,
+    };
+    return finalizeTiebreaker(deps, tiebreakerId, pickWinner);
   }
 
   /**
