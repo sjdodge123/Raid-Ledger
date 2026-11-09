@@ -89,9 +89,11 @@ function firstRowIndex(visible: VisibleBand): number {
     return visible.firstItem + 2;
 }
 
-function TableRow({ row, rowIndex, columns, rowClass }: { row: HubMemberRow; rowIndex: number } & Omit<MemberShellProps, 'slice'>): JSX.Element {
-    const href = useRowHref(columns, row);
-    const onClick = useRowClick(href);
+type TableRowProps = { row: HubMemberRow; rowIndex: number } & Omit<MemberShellProps, 'slice'>;
+
+function PlainTableRow({ row, rowIndex, columns, rowClass, href, onClick }: TableRowProps & {
+    href?: string | undefined; onClick?: ((e: MouseEvent<HTMLTableRowElement>) => void) | undefined;
+}): JSX.Element {
     return (
         <tr data-testid="guild-member-row" style={{ height: TABLE_METRICS.row }} aria-rowindex={rowIndex}
             className={`border-t border-edge-subtle ${href === undefined ? '' : LINKED_ROW}`} onClick={onClick}>
@@ -102,6 +104,17 @@ function TableRow({ row, rowIndex, columns, rowClass }: { row: HubMemberRow; row
             ))}
         </tr>
     );
+}
+
+/** A row of a hub kind with `rowLink`: needs the router (its href hook and `useNavigate`). */
+function LinkedTableRow(props: TableRowProps): JSX.Element {
+    const href = useRowHref(props.columns, props.row);
+    return <PlainTableRow {...props} href={href} onClick={useRowClick(href)} />;
+}
+
+/** Columns are stable per hub kind, so the row component (and its hooks) never flips between renders. */
+function TableRow(props: TableRowProps): JSX.Element {
+    return props.columns.some((c) => c.rowLink !== undefined) ? <LinkedTableRow {...props} /> : <PlainTableRow {...props} />;
 }
 
 function TableBand({ visible, columns, rowClass }: { visible: VisibleBand } & Omit<MemberShellProps, 'slice'>): JSX.Element {

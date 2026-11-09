@@ -7,7 +7,7 @@
  * desktop table row (a stretched link on a `<tr>` is unreliable in WebKit).
  */
 import type { JSX } from 'react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import type { GuildMemberRow } from '@raid-ledger/contract';
@@ -22,6 +22,12 @@ import { bandMembers } from './hub-members.helpers';
 import { HubMemberCards, HubMemberTable } from './hub-member-table';
 import { HubMemberVirtualList, OVERSCAN } from './hub-member-virtual-list';
 import { CARD_METRICS, cardMetrics, cardRowHeight, virtualSlice } from './hub-member-virtual.helpers';
+
+// The roster-insights query (professions) only runs for a signed-in member.
+vi.mock('../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../hooks/use-auth')>()),
+    useAuth: () => ({ user: { id: 1, role: 'member' }, isAuthenticated: true }),
+}));
 
 const LINKED = '11111111-1111-4111-8111-111111111111';
 
