@@ -347,8 +347,9 @@ describe('EquipmentGrid — image loading (ROK-1159)', () => {
         ]);
         for (const img of renders) expect(img).not.toHaveAttribute('loading', 'lazy');
         // jsdom does no layout, so the class is the only observable proof that the
-        // width attribute cannot become the CSS width (preflight sets height:auto only).
-        for (const img of renders) expect(img).toHaveClass('w-auto');
+        // width attribute cannot become the CSS width: ROK-2157 sets an explicit CSS
+        // width (w-full) on both layouts, which overrides the attribute.
+        for (const img of renders) expect(img).toHaveClass('w-full');
     });
 });
 
