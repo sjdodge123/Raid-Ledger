@@ -10,6 +10,7 @@ import { effectiveQuests } from './forever-quest-source.helpers';
 import { loadForeverQuestSources } from './forever-quest-source.query';
 import { buildCharacterQuests } from './character-quests.helpers';
 import { instanceName } from './dungeon-instance-names';
+import type { SettingsService } from '../../settings/settings.service';
 
 jest.mock('./forever-quest-source.query');
 jest.mock('./character-quests.helpers');
@@ -66,6 +67,31 @@ function makeDb(...results: unknown[][]): PostgresJsDatabase<typeof schema> {
   return { select } as unknown as PostgresJsDatabase<typeof schema>;
 }
 
+/** Settings whose `wow_forever_quest_import` switch reads `value`. */
+function switchSettings(value: string | null): SettingsService {
+  const get = jest.fn().mockResolvedValue(value);
+  return { get } as unknown as SettingsService;
+}
+/**
+ * The Blizzard quest import switched off (the overlay is ignored). A fresh
+ * mock per call: `jest.resetAllMocks()` would blank a shared one (→ on).
+ */
+const off = (): SettingsService => switchSettings('false');
+
+/** A `wow_dungeon_quest_blizzard` row as the overlay read selects it. */
+function overlayRow(questId: number, title: string): Record<string, unknown> {
+  return {
+    questId,
+    dungeonInstanceId: 226,
+    title,
+    typeId: 81,
+    rewardXp: null,
+    rewardMoneyCopper: null,
+    rewardItems: [],
+    requirementsRaw: null,
+  };
+}
+
 const snapshot = (data: Record<string, unknown>) => ({
   data,
   capturedAt: CAPTURED,
@@ -80,7 +106,7 @@ describe('CharacterQuestsService.getForCharacter', () => {
   beforeEach(() => jest.resetAllMocks());
 
   it('throws NotFoundException when the character row is missing', async () => {
-    const svc = new CharacterQuestsService(makeDb([]));
+    const svc = new CharacterQuestsService(makeDb([]), off());
     await expect(svc.getForCharacter(CHAR_ID)).rejects.toBeInstanceOf(
       NotFoundException,
     );
@@ -89,14 +115,14 @@ describe('CharacterQuestsService.getForCharacter', () => {
 
   it('returns null when the character has no Forever snapshot', async () => {
     loader.mockResolvedValue(null);
-    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
+    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]), off());
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
     expect(builder).not.toHaveBeenCalled();
   });
 
   it('returns null for a schema-1 snapshot without quests', async () => {
     loader.mockResolvedValue(snapshot({ gear: [], lockouts: [] }));
-    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
+    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]), off());
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
     expect(builder).not.toHaveBeenCalled();
   });
@@ -105,7 +131,7 @@ describe('CharacterQuestsService.getForCharacter', () => {
     loader.mockResolvedValue(
       snapshot({ quests: { completed: 'x', inProgress: [] } }),
     );
-    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
+    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]), off());
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
   });
 
@@ -115,6 +141,7 @@ describe('CharacterQuestsService.getForCharacter', () => {
     builder.mockReturnValue(built);
     const svc = new CharacterQuestsService(
       makeDb([{ id: CHAR_ID }], [KNOWN_ROW]),
+      off(),
     );
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBe(built);
     expect(sources).toHaveBeenCalledWith(expect.anything(), [CHAR_ID]);
@@ -128,6 +155,37 @@ describe('CharacterQuestsService.getForCharacter', () => {
       [expect.objectContaining({ questId: 5001, dungeonInstanceId: 226 })],
       instanceName,
     );
+  });
+});
+
+describe('CharacterQuestsService.getForCharacter — Blizzard overlay (ROK-2143)', () => {
+  beforeEach(() => jest.resetAllMocks());
+
+  it('passes known rows with Blizzard titles and overlay-only quests when the import is on', async () => {
+    loader.mockResolvedValue(snapshot({ quests: QUESTS }));
+    const overlay = [
+      overlayRow(5001, 'Known (Blizzard)'),
+      overlayRow(5002, 'Only Blizzard'),
+    ];
+    const db = makeDb([{ id: CHAR_ID }], [KNOWN_ROW], overlay);
+    await new CharacterQuestsService(db, switchSettings(null)).getForCharacter(
+      CHAR_ID,
+    );
+    const known = builder.mock.calls[0]?.[1];
+    expect(known?.map((q) => [q.questId, q.name])).toEqual([
+      [5001, 'Known (Blizzard)'],
+      [5002, 'Only Blizzard'],
+    ]);
+  });
+
+  it('ignores the overlay (no overlay query) when the import is off', async () => {
+    loader.mockResolvedValue(snapshot({ quests: QUESTS }));
+    const db = makeDb([{ id: CHAR_ID }], [KNOWN_ROW]);
+    await new CharacterQuestsService(db, off()).getForCharacter(CHAR_ID);
+    expect(builder.mock.calls[0]?.[1]?.map((q) => q.name)).toEqual([
+      'Known Quest',
+    ]);
+    expect(db.select).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -149,7 +207,7 @@ describe('CharacterQuestsService.getForCharacter — malformed slice', () => {
     ],
   ])('returns null (no 500) when %s', async (_label, quests) => {
     loader.mockResolvedValue(snapshot({ quests }));
-    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
+    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]), off());
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
     expect(builder).not.toHaveBeenCalled();
   });

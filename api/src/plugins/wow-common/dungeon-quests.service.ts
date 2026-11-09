@@ -2,7 +2,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { defined } from '../../common/defined.helpers';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, inArray, and } from 'drizzle-orm';
+import { inArray, and } from 'drizzle-orm';
 import type Redis from 'ioredis';
 
 import * as schema from '../../drizzle/schema';
@@ -15,7 +15,6 @@ import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import {
   applyChainOverlay,
   applyInstanceOverlay,
-  applyQuestOverlay,
 } from './dungeon-quests.overlay';
 import {
   MAX_CHAIN_DEPTH,
@@ -99,19 +98,16 @@ export class DungeonQuestsService {
     );
   }
 
-  /** Get the full prerequisite chain for a quest. */
+  /**
+   * Get the full prerequisite chain for a quest. Codex P2: the root is
+   * loaded like any chain link — bundled row merged with the overlay, or an
+   * overlay-only row (kill switch on) — so the walk follows the same
+   * prevQuestId the returned root names, and a root only Blizzard has still
+   * gets its chain.
+   */
   async getQuestChain(questId: number): Promise<DungeonQuestDto[]> {
-    const [quest] = await this.db
-      .select()
-      .from(wowClassicDungeonQuests)
-      .where(eq(wowClassicDungeonQuests.questId, questId))
-      .limit(1);
-    if (!quest) return [];
-
-    // Codex P2: overlay the root first, so the walk follows the same
-    // prevQuestId the returned root names. Links are overlaid as fetched.
-    const bundled = toDto(quest);
-    const [dto = bundled] = await this.overlay([bundled]);
+    const [dto] = await this.loadChainLinks([questId]);
+    if (!dto) return [];
     const questLookup = new Map<number, DungeonQuestDto>();
     questLookup.set(dto.questId, dto);
 
@@ -311,11 +307,6 @@ export class DungeonQuestsService {
       rows.map((row) => toDto(row)),
       ids,
     );
-  }
-
-  /** The Blizzard overlay (kill switch off → unchanged) for the root quest. */
-  private overlay(quests: DungeonQuestDto[]): Promise<DungeonQuestDto[]> {
-    return applyQuestOverlay({ db: this.db, settings: this.settings }, quests);
   }
 
   /** Fetch chain quest links for a single quest's chain walk. */
