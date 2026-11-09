@@ -50,13 +50,37 @@ function skipUnlessPhone(testInfo: TestInfo): void {
     test.skip(!isMobile(testInfo), 'The bottom tab bar renders below 768px only — the mobile project');
 }
 
-/** Scroll to the very end and let any infinite list settle its next page. */
+/**
+ * Scroll to the very end and keep scrolling until the page stops growing.
+ *
+ * /events (and /games) are infinite lists: reaching the end trips the
+ * IntersectionObserver sentinel, which appends the next page and moves the
+ * end further down. A single scroll followed by an "am I at the end?" check
+ * races that append (fleet run 6f2f17d2ff1a: the poll timed out at
+ * scrollY + clientHeight < scrollHeight). So every poll re-scrolls, and the
+ * page counts as settled only when it is at its end, no next-page spinner is
+ * running in `<main>`, and the height has not changed across two consecutive
+ * polls.
+ */
 async function scrollToEnd(page: Page): Promise<void> {
-    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
-    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
-    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
-    await expect.poll(() => page.evaluate(() => Math.ceil(window.scrollY + document.documentElement.clientHeight) >= document.documentElement.scrollHeight),
-        { message: 'the page is scrolled to its very end' }).toBe(true);
+    let lastHeight = -1;
+    let stablePolls = 0;
+    await expect.poll(async () => {
+        const state = await page.evaluate(() => {
+            const doc = document.documentElement;
+            window.scrollTo({ top: doc.scrollHeight, behavior: 'instant' });
+            return {
+                height: doc.scrollHeight,
+                atEnd: Math.ceil(window.scrollY + doc.clientHeight) >= doc.scrollHeight,
+                loading: document.querySelector('main#main-content .animate-spin') !== null,
+            };
+        });
+        stablePolls = state.height === lastHeight && state.atEnd && !state.loading ? stablePolls + 1 : 0;
+        lastHeight = state.height;
+        if (state.loading) return `next page loading (height ${state.height}px)`;
+        if (!state.atEnd) return `not at the end (height ${state.height}px)`;
+        return stablePolls >= 2 ? 'settled' : `height ${state.height}px, stable for ${stablePolls} poll(s)`;
+    }, { message: 'the page is scrolled to its very end and no more rows are loading', timeout: 20_000, intervals: [500] }).toBe('settled');
 }
 
 /**
@@ -173,7 +197,8 @@ test.describe('Phone bottom-nav clearance (ROK-2156)', () => {
         skipUnlessPhone(testInfo);
         await page.goto('/events');
         await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
-        await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
         await expectContentClearsOverlays(page, { expectFab: false, mustScroll: true });
+        // The infinite list really was exhausted, so the measured end is the true end.
+        await expect(page.getByText("You've reached the end")).toBeVisible();
     });
 });
