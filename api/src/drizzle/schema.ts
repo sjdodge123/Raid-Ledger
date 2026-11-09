@@ -68,6 +68,7 @@ export * from './schema/lfg-invites';
 export * from './schema/lfg-group-messages';
 export * from './schema/discord-thread-messages';
 export * from './schema/character-addon-snapshots';
+export * from './schema/character-installed-addons';
 export * from './schema/addon-encounter-pulls';
 export * from './schema/addon-import-audit';
 export * from './schema/wow-item-meta';
