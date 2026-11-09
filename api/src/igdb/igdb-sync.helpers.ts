@@ -14,6 +14,7 @@ import {
   findOtherItadIdOwner,
   reportDuplicatePair,
 } from './games-key-owner.helpers';
+import { itadTagsChanged } from './taste-input-change.helpers';
 import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 
 const logger = new Logger('IgdbSyncHelpers');
@@ -134,8 +135,8 @@ export function buildAdultThemeFilter(adultFilterEnabled: boolean): string {
  * @param db - Database connection
  * @param lookupBySteamAppId - Function to look up ITAD game by Steam App ID
  * @param getGameInfo - Function to fetch full game info (including tags) by ITAD ID
- * @param onGameChanged - ROK-1082: fired per successful update so the caller
- *                        can enqueue a game-taste-vector recompute for that id.
+ * @param onGameChanged - ROK-1082: fired per update whose ITAD tags changed
+ *                        (ROK-2121) so the caller can enqueue a recompute.
  * @returns Number of successfully enriched games
  */
 export async function enrichSyncedGamesWithItad(
@@ -157,9 +158,11 @@ export async function enrichSyncedGamesWithItad(
       const itadGame = await lookupBySteamAppId(game.steamAppId!);
       if (!itadGame) continue;
       const info = await fetchInfoGracefully(getGameInfo, itadGame.id);
-      const written = await updateGameWithItadData(db, game.id, itadGame, info);
-      if (!written) continue;
-      onGameChanged?.(game.id);
+      // ROK-2120: skipped when another row holds the itad id.
+      // ROK-2121: only a tag change moves the taste vector.
+      const result = await updateGameWithItadData(db, game.id, itadGame, info);
+      if (result === 'skipped') continue;
+      if (result === 'tagsChanged') onGameChanged?.(game.id);
       enriched++;
     } catch (err) {
       logger.warn(`ITAD enrichment failed for game ${game.id}: ${err}`);
@@ -167,6 +170,9 @@ export async function enrichSyncedGamesWithItad(
   }
   return enriched;
 }
+
+/** Outcome of one ITAD enrichment write (ROK-2120 skip, ROK-2121 tag change). */
+type ItadWriteResult = 'skipped' | 'tagsChanged' | 'written';
 
 /** Info extracted from ITAD getGameInfo endpoint. */
 interface ItadEnrichInfo {
@@ -189,20 +195,23 @@ async function fetchInfoGracefully(
 }
 
 /**
- * Persist ITAD metadata to a game row. Returns false (no write) when another
- * row already holds this itad_game_id — ROK-2120: the pair is reported for the
- * dedup sweep instead of violating games_itad_game_id_unique.
+ * Persist ITAD metadata to a game row. Returns 'skipped' (no write) when
+ * another row already holds this itad_game_id — ROK-2120: the pair is reported
+ * for the dedup sweep instead of violating games_itad_game_id_unique. Else
+ * 'tagsChanged' when its ITAD tags changed, compared against the row as locked
+ * inside the write — not the start-of-phase snapshot, which an ITAD search
+ * upsert may have overwritten since (ROK-2121) — or 'written'.
  */
 async function updateGameWithItadData(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
   itadGame: ItadGame,
   info: ItadEnrichInfo,
-): Promise<boolean> {
+): Promise<ItadWriteResult> {
   const owner = await findOtherItadIdOwner(db, itadGame.id, gameId);
   if (owner != null) {
     reportDuplicatePair(owner, gameId, 'itad_game_id');
-    return false;
+    return 'skipped';
   }
   const values: Record<string, unknown> = {
     itadGameId: itadGame.id,
@@ -212,6 +221,26 @@ async function updateGameWithItadData(
   if (info.earlyAccess !== undefined) {
     values.earlyAccess = info.earlyAccess;
   }
-  await db.update(schema.games).set(values).where(eq(schema.games.id, gameId));
-  return true;
+  return writeItadRow(db, gameId, values, info.tags);
+}
+
+/** Lock the row, write the ITAD values, report whether its tags changed (ROK-2121). */
+function writeItadRow(
+  db: PostgresJsDatabase<typeof schema>,
+  gameId: number,
+  values: Record<string, unknown>,
+  tags: ItadEnrichInfo['tags'],
+): Promise<ItadWriteResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ itadTags: schema.games.itadTags })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .for('update');
+    await tx
+      .update(schema.games)
+      .set(values)
+      .where(eq(schema.games.id, gameId));
+    return itadTagsChanged(row?.itadTags, tags) ? 'tagsChanged' : 'written';
+  });
 }

@@ -11,8 +11,10 @@ import {
   authOf,
   banCommunity,
   getHubs,
+  linkWow,
   must,
   registry,
+  seedForeverGame,
   seedHub,
   seedMatrix,
   seedUser,
@@ -33,10 +35,11 @@ interface GameHubsBody {
   proposeBlockedReason: string | null;
 }
 
-async function byGame(auth: Auth): Promise<GameHubsBody> {
-  const res = await app()
-    .request.get(`/hubs/by-game/${app().seed.game.id}`)
-    .set(auth);
+async function byGame(
+  auth: Auth,
+  gameId: number = app().seed.game.id,
+): Promise<GameHubsBody> {
+  const res = await app().request.get(`/hubs/by-game/${gameId}`).set(auth);
   expect(res.status).toBe(200);
   return res.body as GameHubsBody;
 }
@@ -143,5 +146,64 @@ describe('GET /hubs/by-game/:gameId — plugins and proposals (ROK-1883)', () =>
     expect(body.canPropose).toBe(false);
     expect(body.proposeBlockedReason).toBe('pending-for-game');
     expect(namesInOrder(m, body)).not.toContain('C2');
+  });
+});
+
+/**
+ * ROK-2132 — the Forever game page's Hubs card shares `/hubs`' widened scope:
+ * claimable WoW: Forever guilds (F1 linked by U1, F2 nobody's) are listed to
+ * non-members as `not-member`, never `member`; hidden (F3) and archived (F4)
+ * Forever guilds stay members-only; staff see what `/hubs` shows them.
+ */
+async function seedForeverCard(): Promise<{ m: Matrix; gameId: number }> {
+  const m = await seedMatrix();
+  const gameId = await seedForeverGame();
+  const wow = { kind: 'wow_guild', gameId } as const;
+  m.ids.F1 = await seedHub('F1 Guild', { ...wow, members: 30 });
+  m.ids.F2 = await seedHub('F2 Guild', { ...wow, members: 20 });
+  m.ids.F3 = await seedHub('F3 Guild', { ...wow, hidden: true });
+  m.ids.F4 = await seedHub('F4 Guild', { ...wow, archived: true });
+  await linkWow(must(m.ids.F1), m.u1Id, gameId);
+  return { m, gameId };
+}
+
+describe('GET /hubs/by-game/:gameId — claimable Forever guilds (ROK-2132)', () => {
+  it('a non-member sees F1 and F2 as not-member, never F3/F4 or a hidden key', async () => {
+    const { m, gameId } = await seedForeverCard();
+    const body = await byGame(m.u2, gameId);
+    expect([...namesInOrder(m, body)].sort()).toEqual(['F1', 'F2']);
+    expect(body.total).toBe(2);
+    for (const h of body.hubs) {
+      expect(h).toMatchObject({ kind: 'wow_guild', viewer: 'not-member' });
+      expect(h).not.toHaveProperty('hidden');
+    }
+  });
+
+  it('a member sees their guild first as member, the claimable one as not-member', async () => {
+    const { m, gameId } = await seedForeverCard();
+    const body = await byGame(m.u1, gameId);
+    expect(namesInOrder(m, body)).toEqual(['F1', 'F2']);
+    expect(body.hubs.map((h) => h.viewer)).toEqual(['member', 'not-member']);
+  });
+
+  it('staff see the same Forever guilds as /hubs, hidden F3 flagged', async () => {
+    const { m, gameId } = await seedForeverCard();
+    const forever = new Set(['F1', 'F2', 'F3', 'F4']);
+    const dir = (await getHubs(m.admin)).items
+      .filter((e) => [...forever].some((k) => m.ids[k] === e.id))
+      .map((e) => e.id)
+      .sort((a, b) => a - b);
+    const body = await byGame(m.admin, gameId);
+    expect(body.hubs.map((h) => h.id).sort((a, b) => a - b)).toEqual(dir);
+    expect(namesInOrder(m, body)).toContain('F3');
+    for (const h of body.hubs) expect(h.hidden).toBe(h.id === m.ids.F3);
+  });
+
+  it('the Forever guilds stay off the non-Forever game card for a non-member', async () => {
+    const { m } = await seedForeverCard();
+    const shown = namesInOrder(m, await byGame(m.u2));
+    expect(shown.filter((n) => n.startsWith('F') || n.startsWith('W'))).toEqual(
+      [],
+    );
   });
 });

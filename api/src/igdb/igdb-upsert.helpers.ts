@@ -12,6 +12,7 @@ import {
   findBySteamAppId,
 } from './igdb-merge-targets.helpers';
 import { withGameNameLock } from './games-name-lock.helpers';
+import { withTasteInputDiff } from './taste-input-change.helpers';
 import {
   buildUpsertSet,
   buildBatchUpsertSet,
@@ -191,7 +192,8 @@ function applyNameMergeMap(
  * Upsert games from IGDB API responses. Merges into existing rows by steamAppId
  * (ROK-1024) and normalized canonical name (ROK-1113), then runs ONE batched
  * INSERT ... ON CONFLICT DO UPDATE for the remainder. `onGameChanged` (ROK-1082)
- * fires per touched row so callers can enqueue a taste-vector recompute.
+ * fires per row whose taste inputs changed (ROK-2121) so callers can enqueue
+ * a taste-vector recompute.
  *
  * ROK-1438: merges + insert run under advisory locks on every incoming
  * normalized name, taken in sorted order so two overlapping batches cannot
@@ -208,13 +210,20 @@ export async function upsertGamesFromApi(
   if (filteredGames.length === 0) return [];
 
   const rows = filteredGames.map((g) => mapApiGameToDbRow(g));
-  const results = await withGameNameLock(
+  // ROK-2121: diff taste inputs inside the lock; only changed rows fire.
+  const { results, changedIds } = await withGameNameLock(
     db,
     rows.map((r) => r.name),
-    (tx) => applyBatchUpsert(tx, rows),
+    (tx) =>
+      withTasteInputDiff(
+        tx,
+        rows,
+        () => applyBatchUpsert(tx, rows),
+        onGameChanged != null,
+      ),
   );
   // After commit, per the ROK-1082 contract.
-  if (onGameChanged) for (const r of results) onGameChanged(r.id);
+  if (onGameChanged) for (const id of changedIds) onGameChanged(id);
   return results.map((g) => mapDbRowToDetail(g));
 }
 

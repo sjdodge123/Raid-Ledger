@@ -2,7 +2,8 @@
  * Hub row bits for /dev/design-system (docs/design-system.md §5, ROK-1883).
  *
  * The real `HubViewerAction` in each state it ships in — View (server and
- * guild hubs), Join, Joined, Leader, Banned (community hubs) — and the
+ * guild hubs), Claim to join (a WoW guild a non-member claims into, ROK-2132),
+ * Join, Joined, Leader, Banned (community hubs) — and the
  * staff-only `HubHiddenChip`. Mock entries only; Join is a no-op here.
  * Tokens only, so it flips with the colour family.
  */
@@ -18,6 +19,7 @@ const BASE: HubDirectoryEntry = {
 
 const STATES: Array<{ label: string; hub: HubDirectoryEntry }> = [
     { label: 'View', hub: { ...BASE, id: 310, name: 'Valheim Dedicated', kind: 'game_server', leaderName: null, hidden: true } },
+    { label: 'Claim to join', hub: { ...BASE, id: 320, name: 'Iron Remnant', gameName: 'World of Warcraft: Forever', kind: 'wow_guild', leaderName: null } },
     { label: 'Join', hub: BASE },
     { label: 'Joined', hub: { ...BASE, id: 2, name: 'Officers Club', viewer: 'member' } },
     { label: 'Leader', hub: { ...BASE, id: 3, name: 'My Own Hub', viewer: 'leader' } },
