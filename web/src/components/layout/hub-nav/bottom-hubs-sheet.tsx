@@ -28,7 +28,7 @@ export default function BottomHubsSheet({ isOpen, onClose, hubs, popular }: Prop
     return (
         <BottomSheet isOpen={isOpen} onClose={onClose} title="Your hubs" maxHeight="88vh">
             <div className="-mx-4 -my-4 min-h-[calc(var(--sheet-vh,1dvh)_*_50)]" data-testid="bottom-hubs-sheet">
-                <GuildRows guilds={hubs} onNavigate={onClose} size="lg" />
+                {hubs.length > 0 && <GuildRows guilds={hubs} onNavigate={onClose} size="lg" />}
                 <PopularHubsSection hubs={popular} onNavigate={onClose} size="lg" divided={hubs.length > 0} />
                 <Link to={HUBS_PATH} onClick={onClose} data-testid="bottom-hubs-browse-all"
                     className="flex min-h-[64px] w-full items-center gap-1 border-t border-edge px-5 py-3 text-base font-medium text-secondary transition-colors hover:bg-overlay hover:text-foreground">

@@ -45,9 +45,14 @@ export function selectPopularHubs(items: HubDirectoryEntry[], mineIds: ReadonlyS
         .slice(0, POPULAR_HUBS_SHOWN);
 }
 
-/** The popular hubs to list (`[]` while loading, on error, or signed out) and whether the read has settled. */
+/**
+ * The popular hubs to list (`[]` while loading, on error, or signed out) and whether the read has settled.
+ * Only a successful read lists rows (D7): after a failed background refetch react-query keeps the old
+ * `data`, but `isSuccess` turns false, so the section hides instead of showing stale rows.
+ */
 export function usePopularHubs(mine: MyGuild[]): { hubs: HubDirectoryEntry[]; settled: boolean } {
     const query = usePopularHubsQuery();
-    const hubs = selectPopularHubs(query.data?.items ?? [], new Set(mine.map((g) => g.id)));
+    const items = query.isSuccess ? query.data.items : [];
+    const hubs = selectPopularHubs(items, new Set(mine.map((g) => g.id)));
     return { hubs, settled: query.isSuccess || query.isError };
 }

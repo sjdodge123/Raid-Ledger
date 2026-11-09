@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import type { HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { createMockHubEntry } from '../../../test/handlers/community-hubs';
+import { must } from '../../../test/must';
 import BottomHubsSheet from './bottom-hubs-sheet';
 
 vi.mock('../../ui/bottom-sheet-viewport', async (importOriginal) => ({
@@ -45,17 +46,17 @@ describe('BottomHubsSheet — larger rows (operator 2026-10-24)', () => {
             expect(classesOf(row), 'lg row height + type').toEqual(expect.arrayContaining(['min-h-[64px]', 'text-base', 'px-5']));
             expect(classesOf(row)).not.toContain('text-sm');
             const svgs = row.querySelectorAll('svg');
-            expect(classesOf(svgs[svgs.length - 1] ?? row), 'chevron').toEqual(expect.arrayContaining(['h-5', 'w-5']));
+            expect(classesOf(must(svgs[svgs.length - 1], 'chevron svg')), 'chevron').toEqual(expect.arrayContaining(['h-5', 'w-5']));
         }
-        expect(within(rows[0] ?? sheet).getByText('Member')).toHaveClass('text-sm');
+        expect(within(must(rows[0], 'first row')).getByText('Member')).toHaveClass('text-sm');
     });
 
     it('scales the hub image, the shield fallback and the kind chip', () => {
         const sheet = renderSheet();
         expect(classesOf(within(sheet).getByTestId('guild-entry-game-icon'))).toEqual(expect.arrayContaining(['h-10', 'w-10']));
-        const crestRow = within(sheet).getAllByTestId('guild-entry-row')[1] ?? sheet;
-        expect(classesOf(crestRow.querySelector('[aria-hidden="true"]') ?? crestRow), 'shield fallback box').toEqual(expect.arrayContaining(['h-10', 'w-10']));
-        const chip = within(sheet).getAllByTestId('hub-kind-chip')[0]?.firstElementChild ?? sheet;
+        const crestRow = must(within(sheet).getAllByTestId('guild-entry-row')[1], 'crest row');
+        expect(classesOf(must(crestRow.querySelector('[aria-hidden="true"]'), 'shield box')), 'shield fallback box').toEqual(expect.arrayContaining(['h-10', 'w-10']));
+        const chip = must(within(sheet).getAllByTestId('hub-kind-chip')[0]?.firstElementChild, 'kind chip');
         expect(classesOf(chip), 'md chip').toEqual(expect.arrayContaining(['text-sm', 'px-2.5', 'py-1']));
     });
 
@@ -81,7 +82,7 @@ describe('BottomHubsSheet — Popular hubs (ROK-2152)', () => {
             expect(row).toHaveAttribute('data-size', 'lg');
             expect(classesOf(row), '64px target').toContain('min-h-[64px]');
         }
-        const ownLast = within(sheet).getAllByTestId('guild-entry-row')[1] ?? sheet;
+        const ownLast = must(within(sheet).getAllByTestId('guild-entry-row')[1], 'last own row');
         expect(ownLast.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING, 'popular follows your rows').toBeTruthy();
         const browse = screen.getByTestId('bottom-hubs-browse-all');
         expect(section.compareDocumentPosition(browse) & Node.DOCUMENT_POSITION_FOLLOWING, 'Browse all is last').toBeTruthy();
@@ -96,7 +97,7 @@ describe('BottomHubsSheet — Popular hubs (ROK-2152)', () => {
     it('picking a popular row closes the sheet', async () => {
         const onClose = vi.fn();
         const sheet = renderSheet(POPULAR, onClose);
-        await userEvent.click(within(sheet).getAllByTestId('popular-hub-row')[0] ?? sheet);
+        await userEvent.click(must(within(sheet).getAllByTestId('popular-hub-row')[0], 'first popular row'));
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 });

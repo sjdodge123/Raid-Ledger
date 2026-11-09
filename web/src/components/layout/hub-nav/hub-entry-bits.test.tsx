@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import type { HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { createMockHubEntry } from '../../../test/handlers/community-hubs';
+import { must } from '../../../test/must';
 import { GuildRows, PopularHubRows } from './hub-entry-bits';
 
 function guild(id: number, name: string, memberCount = 12): MyGuild {
@@ -24,7 +25,7 @@ describe('GuildRows', () => {
         renderWithProviders(<GuildRows guilds={[guild(11, 'Iron Vanguard'), guild(12, 'Dusk Wardens', 1)]} onNavigate={onNavigate} />);
         const rows = screen.getAllByTestId('guild-entry-row');
         expect(rows).toHaveLength(2);
-        await userEvent.click(rows[0] ?? document.body);
+        await userEvent.click(must(rows[0], 'first row'));
         expect(onNavigate).toHaveBeenCalledTimes(1);
     });
 });
@@ -114,8 +115,8 @@ describe('PopularHubRows (ROK-2152)', () => {
     it('the game icon stands in for the crest; without one, the shield', () => {
         renderWithProviders(<PopularHubRows hubs={[popular({ id: 1, gameIconUrl: '/g.png' }), popular({ id: 2 })]} />);
         const [withIcon, without] = screen.getAllByTestId('popular-hub-row');
-        expect(within(withIcon ?? document.body).getByTestId('guild-entry-game-icon')).toHaveAttribute('src', '/g.png');
-        expect(within(without ?? document.body).getByTestId('hub-crest')).toHaveAttribute('data-crest', 'shield');
+        expect(within(must(withIcon, 'row with icon')).getByTestId('guild-entry-game-icon')).toHaveAttribute('src', '/g.png');
+        expect(within(must(without, 'row without icon')).getByTestId('hub-crest')).toHaveAttribute('data-crest', 'shield');
     });
 
     it('the phone sheet size: 64px rows, 40px icon box; menuitem role inside a menu; tapping calls onNavigate', async () => {

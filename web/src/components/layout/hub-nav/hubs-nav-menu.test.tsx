@@ -18,6 +18,7 @@ import { createTestQueryClient, renderWithProviders } from '../../../test/render
 import { createMockHubDirectoryPage, createMockHubEntry } from '../../../test/handlers/community-hubs';
 import { HubsNavItem } from './hubs-nav-menu';
 import { popularHubsKey } from './popular-hubs-queries';
+import { must } from '../../../test/must';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -28,6 +29,8 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 
 const MINE = 'http://localhost:3000/guilds/mine';
 const DIRECTORY = 'http://localhost:3000/hubs';
+/** `useMyGuildsQuery`'s key for the mocked viewer 1. */
+const MINE_KEY = ['plugins', 'wow', 'guilds', 'mine', 1] as const;
 
 function hub(id: number, name: string, kind: GuildKind): MyGuild {
     return {
@@ -49,13 +52,6 @@ function servePopular(items: HubDirectoryEntry[]): void {
 const popular = (n: number): HubDirectoryEntry[] =>
     Array.from({ length: n }, (_, i) => createMockHubEntry({ id: 501 + i, name: `Popular ${i + 1}`, memberCount: 20 - i }));
 
-/** Resolves once the popular-hubs directory request has been answered. */
-function popularSettled(): Promise<void> {
-    return new Promise((resolve) => {
-        server.events.on('response:mocked', ({ request }) => { if (new URL(request.url).pathname === '/hubs') resolve(); });
-    });
-}
-
 /** Resolves once the `/guilds/mine` request has been answered. */
 function settled(): Promise<void> {
     return new Promise((resolve) => {
@@ -63,8 +59,8 @@ function settled(): Promise<void> {
     });
 }
 
-async function openMenu(pathname = '/players'): Promise<HTMLElement> {
-    renderWithProviders(<HubsNavItem pathname={pathname} />);
+async function openMenu(pathname = '/players', queryClient = createTestQueryClient()): Promise<HTMLElement> {
+    renderWithProviders(<HubsNavItem pathname={pathname} />, { queryClient });
     await userEvent.click(await screen.findByTestId('nav-hubs-menu-trigger'));
     return screen.getByRole('menu', { name: 'Hubs' });
 }
@@ -92,10 +88,9 @@ describe('HubsNavItem — the plain-link fallback (D1)', () => {
 
     it('a failed list → the plain link', async () => {
         server.use(http.get(MINE, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
-        const done = settled();
-        renderWithProviders(<HubsNavItem pathname="/players" />);
-        await done;
-        await new Promise((r) => setTimeout(r, 0));
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<HubsNavItem pathname="/players" />, { queryClient });
+        await waitFor(() => expect(queryClient.getQueryState(MINE_KEY)?.status, 'the /guilds/mine read failed').toBe('error'));
         expect(screen.getByTestId('nav-hubs-link')).toHaveAttribute('href', '/hubs');
         expect(screen.queryByTestId('nav-hubs-menu-trigger')).not.toBeInTheDocument();
     });
@@ -164,7 +159,7 @@ describe('HubsNavItem — the menu (D7)', () => {
     it('clicking a row closes the menu', async () => {
         serve(TWO);
         await openMenu();
-        await userEvent.click(screen.getAllByRole('menuitem')[0] ?? document.body);
+        await userEvent.click(must(screen.getAllByRole('menuitem')[0], 'first menu item'));
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
 
@@ -250,7 +245,7 @@ const hrefs = (menu: HTMLElement): (string | null)[] =>
 
 describe('HubsNavItem — Popular hubs section (ROK-2152)', () => {
     it('"Your hubs" rows, then the "Popular hubs" heading + at most 5 rows in server order, then "Browse all hubs" last', async () => {
-        serve([TWO[0] ?? hub(31, 'x', 'game_server')]);
+        serve([must(TWO[0], 'TWO[0]')]);
         servePopular(popular(6));
         const menu = await openMenu();
         expect(await within(menu).findAllByTestId('popular-hub-row')).toHaveLength(5);
@@ -265,10 +260,9 @@ describe('HubsNavItem — Popular hubs section (ROK-2152)', () => {
 
     it('no popular hubs → no section and no "Popular hubs" heading', async () => {
         serve(TWO);
-        const done = popularSettled();
-        const menu = await openMenu();
-        await done;
-        await new Promise((r) => setTimeout(r, 0));
+        const queryClient = createTestQueryClient();
+        const menu = await openMenu('/players', queryClient);
+        await waitFor(() => expect(queryClient.getQueryState(popularHubsKey(1))?.status, 'the popular read landed').toBe('success'));
         expect(within(menu).queryByTestId('popular-hubs-section')).not.toBeInTheDocument();
         expect(menu).not.toHaveTextContent('Popular hubs');
     });
@@ -276,10 +270,9 @@ describe('HubsNavItem — Popular hubs section (ROK-2152)', () => {
     it('a failed popular read → the menu keeps "Your hubs" only', async () => {
         serve(TWO);
         server.use(http.get(DIRECTORY, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
-        const done = popularSettled();
-        const menu = await openMenu();
-        await done;
-        await new Promise((r) => setTimeout(r, 0));
+        const queryClient = createTestQueryClient();
+        const menu = await openMenu('/players', queryClient);
+        await waitFor(() => expect(queryClient.getQueryState(popularHubsKey(1))?.status, 'the popular read failed').toBe('error'));
         expect(within(menu).queryByTestId('popular-hubs-section')).not.toBeInTheDocument();
         expect(hrefs(menu)).toEqual(['/hubs/31', '/hubs/21', '/hubs']);
     });
@@ -316,7 +309,7 @@ describe('HubsNavItem — Popular hubs: zero-hub viewers (Q1), keys and picks (R
     });
 
     it('arrows cross from your rows into the popular rows; End lands on "Browse all hubs"', async () => {
-        serve([TWO[0] ?? hub(31, 'x', 'game_server')]);
+        serve([must(TWO[0], 'TWO[0]')]);
         servePopular(popular(2));
         const menu = await openMenu();
         const firstPopular = (await within(menu).findAllByTestId('popular-hub-row'))[0];
@@ -333,7 +326,7 @@ describe('HubsNavItem — Popular hubs: zero-hub viewers (Q1), keys and picks (R
         servePopular(popular(2));
         renderWithProviders(<><HubsNavItem pathname="/players" /><Where /></>);
         await userEvent.click(await screen.findByTestId('nav-hubs-menu-trigger'));
-        const row = (await screen.findAllByTestId('popular-hub-row'))[1] ?? document.body;
+        const row = must((await screen.findAllByTestId('popular-hub-row'))[1], 'second popular row');
         await userEvent.click(row);
         expect(screen.queryByRole('menu')).not.toBeInTheDocument();
         expect(screen.getByTestId('where')).toHaveTextContent('/hubs/502');

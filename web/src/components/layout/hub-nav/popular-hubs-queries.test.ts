@@ -12,7 +12,7 @@ import type { HubDirectoryEntry, MyGuild } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import { communityHubHandlers, createMockHubDirectoryPage, createMockHubEntry } from '../../../test/handlers/community-hubs';
-import { selectPopularHubs, usePopularHubs, usePopularHubsQuery } from './popular-hubs-queries';
+import { popularHubsKey, selectPopularHubs, usePopularHubs, usePopularHubsQuery } from './popular-hubs-queries';
 
 const auth = vi.hoisted(() => ({ signedIn: true }));
 
@@ -65,6 +65,11 @@ describe('selectPopularHubs', () => {
             entry(5), entry(6), entry(7), entry(8), entry(9),
         ];
         expect(ids(selectPopularHubs(items, new Set([6])))).toEqual([1, 3, 5, 7, 8]);
+    });
+
+    it('keeps the server order even when it is not member-count or name order', () => {
+        const items = [entry(9, { memberCount: 1, name: 'Zed' }), entry(1, { memberCount: 500, name: 'Alpha' }), entry(5)];
+        expect(ids(selectPopularHubs(items, new Set()))).toEqual([9, 1, 5]);
     });
 
     it('keeps a staff row that is not hidden (hidden: false)', () => {
@@ -120,5 +125,20 @@ describe('usePopularHubs', () => {
         const { result } = renderHook(() => usePopularHubs([]), { wrapper: wrapperFor(createTestQueryClient()) });
         await waitFor(() => expect(result.current.settled).toBe(true));
         expect(result.current.hubs).toEqual([]);
+    });
+
+    it('a success then a failed background refetch → no hubs (stale rows are not shown, D7)', async () => {
+        let fail = false;
+        server.use(http.get('http://localhost:3000/hubs', () => (fail
+            ? HttpResponse.json({ message: 'boom' }, { status: 500 })
+            : HttpResponse.json(createMockHubDirectoryPage({ items: [entry(1), entry(2)] })))));
+        const client = createTestQueryClient();
+        const { result } = renderHook(() => usePopularHubs([]), { wrapper: wrapperFor(client) });
+        await waitFor(() => expect(ids(result.current.hubs), 'the first read lists both').toEqual([1, 2]));
+        fail = true;
+        await client.refetchQueries({ queryKey: popularHubsKey(1) });
+        await waitFor(() => expect(client.getQueryState(popularHubsKey(1))?.status, 'the refetch failed').toBe('error'));
+        expect(client.getQueryData<{ items: HubDirectoryEntry[] }>(popularHubsKey(1))?.items, 'react-query kept the old data').toHaveLength(2);
+        expect(ids(result.current.hubs), 'a failed refetch hides the section').toEqual([]);
     });
 });

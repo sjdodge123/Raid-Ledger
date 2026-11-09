@@ -5,14 +5,15 @@
  * neither, the plain `/hubs` link (ROK-1875 D1).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { HubDirectoryEntry } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { createMockHubDirectoryPage, createMockHubEntry } from '../../../test/handlers/community-hubs';
 import { BottomHubsButton } from './bottom-hubs-button';
+import { popularHubsKey } from './popular-hubs-queries';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -35,16 +36,8 @@ function serve(popular: HubDirectoryEntry[]): void {
     );
 }
 
-/** Resolves once both the `/guilds/mine` and the popular `/hubs` reads have been answered. */
-function bothSettled(): Promise<void> {
-    const seen = new Set<string>();
-    return new Promise((resolve) => {
-        server.events.on('response:mocked', ({ request }) => {
-            seen.add(new URL(request.url).pathname);
-            if (seen.has('/guilds/mine') && seen.has('/hubs')) resolve();
-        });
-    });
-}
+/** `useMyGuildsQuery`'s key for the mocked viewer 1. */
+const MINE_KEY = ['plugins', 'wow', 'guilds', 'mine', 1] as const;
 
 beforeEach(() => { server.events.removeAllListeners(); });
 
@@ -62,10 +55,12 @@ describe('BottomHubsButton — Popular hubs for a viewer with no hubs (ROK-2152 
 
     it('no hubs + no popular hubs → the plain /hubs link (D1)', async () => {
         serve([]);
-        const done = bothSettled();
-        renderWithProviders(<BottomHubsButton pathname="/players" />);
-        await done;
-        await new Promise((r) => setTimeout(r, 0));
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<BottomHubsButton pathname="/players" />, { queryClient });
+        await waitFor(() => {
+            expect(queryClient.getQueryState(MINE_KEY)?.status, 'the /guilds/mine read landed').toBe('success');
+            expect(queryClient.getQueryState(popularHubsKey(1))?.status, 'the popular read landed').toBe('success');
+        });
         expect(screen.getByTestId('bottom-hubs-link')).toHaveAttribute('href', '/hubs');
         expect(screen.queryByTestId('bottom-hubs-trigger')).not.toBeInTheDocument();
     });

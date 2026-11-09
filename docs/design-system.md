@@ -1060,7 +1060,7 @@ every phone width. The bar keeps its `env(safe-area-inset-bottom)` padding (iner
 §4.4). From 768px (landscape phones included) the bar is gone and the header's Hubs menu (§4.14) takes over,
 wearing the same circle at 28px (`HubsCircle size="inline"`; operator ruling 2026-10-21) so Hubs reads as one
 thing on every width — circle + "Hubs ▾" from 1024px, circle + chevron at 768–1023px.
-The More drawer lists **no** hubs (ROK-1890, operator 2026-10-21): the bottom button's "Your hubs" sheet replaced its "Your hubs" block and "Browse all hubs" row, and a viewer in no hubs reaches `/hubs` through the button's plain link.
+The More drawer lists **no** hubs (ROK-1890, operator 2026-10-21): the bottom button's "Your hubs" sheet replaced its "Your hubs" block and "Browse all hubs" row, and a viewer in no hubs reaches `/hubs` through the button's plain link, or — with a popular hub to suggest (ROK-2152 Q1) — through the sheet's "Browse all hubs".
 
 **DO** dock or pad anything above the bar with `--bottom-nav-clearance` (`index.css`: `--bottom-nav-height`
 3.5rem + `--bottom-nav-raise` 1.5rem + the safe-area inset) — e.g. `bottom-[var(--bottom-nav-clearance)]`
