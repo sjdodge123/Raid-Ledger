@@ -1,5 +1,6 @@
 import {
   buildClassicItemUrl,
+  buildQuestAreaIndexUrl,
   buildQuestAreaUrl,
   buildQuestIndexUrl,
   buildQuestUrl,
@@ -87,6 +88,9 @@ describe('URL builders', () => {
     expect(buildQuestAreaUrl('eu', 717)).toBe(
       'https://eu.api.blizzard.com/data/wow/quest/area/717?namespace=static-forever-eu&locale=en_US',
     );
+    expect(buildQuestAreaIndexUrl('us')).toBe(
+      'https://us.api.blizzard.com/data/wow/quest/area/index?namespace=static-forever-us&locale=en_US',
+    );
     expect(buildQuestUrl('us', 378)).toBe(
       'https://us.api.blizzard.com/data/wow/quest/378?namespace=static-forever-us&locale=en_US',
     );
@@ -117,6 +121,34 @@ describe('parseQuestIndexAreas', () => {
       ],
       categories: [],
       types: [],
+    };
+    expect(parseQuestIndexAreas(json)).toEqual([
+      { id: 717, name: 'The Stockade' },
+      { id: 718, name: 'Wailing Caverns' },
+    ]);
+  });
+
+  it('returns [] for the documented quest/index, whose areas is a link', () => {
+    const json = {
+      _links: { self: key('data/wow/quest/index') },
+      categories: key('data/wow/quest/category/index'),
+      areas: key('data/wow/quest/area/index'),
+      types: key('data/wow/quest/type/index'),
+    };
+    expect(parseQuestIndexAreas(json)).toEqual([]);
+  });
+
+  it('reads the documented quest/area/index areas[] (key, name, id)', () => {
+    const json = {
+      _links: { self: key('data/wow/quest/area/index') },
+      areas: [
+        { key: key('data/wow/quest/area/717'), name: 'The Stockade', id: 717 },
+        {
+          key: key('data/wow/quest/area/718'),
+          name: 'Wailing Caverns',
+          id: 718,
+        },
+      ],
     };
     expect(parseQuestIndexAreas(json)).toEqual([
       { id: 717, name: 'The Stockade' },

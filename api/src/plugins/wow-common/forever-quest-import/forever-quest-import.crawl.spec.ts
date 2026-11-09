@@ -9,8 +9,11 @@ import {
 } from './classic-quest-areas';
 import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
+  QUEST_IMPORT_NO_AREAS_MESSAGE,
   QuestImportCrawl,
+  questImportNoMappedAreasMessage,
   type QuestImportDeps,
+  type QuestImportResponse,
 } from './forever-quest-import.crawl';
 import {
   FOREVER_QUEST_IMPORT_SPACING_MS,
@@ -18,14 +21,18 @@ import {
   emptyQuestImportReport,
 } from './forever-quest-import.report';
 
-/** An index naming every mapped area, so each one is requested (and 404s). */
-function indexBody(): unknown {
-  const areas = classicQuestAreaInstanceIds().flatMap((id) => {
+/** Every mapped area as a Blizzard `{ id, name }` area entry. */
+function mappedAreas(): { id: number; name: string }[] {
+  return classicQuestAreaInstanceIds().flatMap((id) => {
     const entry = CLASSIC_QUEST_AREAS[id];
     if (!entry) return [];
     return [{ id: entry.areaId, name: entry.areaNames[0] ?? entry.dungeon }];
   });
-  return { areas };
+}
+
+/** An index naming every mapped area, so each one is requested (and 404s). */
+function indexBody(): unknown {
+  return { areas: mappedAreas() };
 }
 
 /** Deps whose calls land in `log` in order: `pause:<ms>` / `fetch`. */
@@ -95,5 +102,142 @@ describe('QuestImportCrawl — kill switch before each request', () => {
     );
     expect(report.counts.requests).toBe(2);
     expect(log.filter((e) => e === 'fetch')).toHaveLength(2);
+  });
+});
+
+const BLIZZ = 'https://us.api.blizzard.com/data/wow/';
+const link = (path: string) => ({
+  href: `${BLIZZ}${path}?namespace=static-forever-us`,
+});
+/** Blizzard's documented `quest/index`: links to its lists, no inline areas. */
+const LINKED_INDEX = {
+  _links: { self: link('quest/index') },
+  categories: link('quest/category/index'),
+  areas: link('quest/area/index'),
+  types: link('quest/type/index'),
+};
+const MAPPED = classicQuestAreaInstanceIds().length;
+
+/** Deps answering by URL path; every fetched URL lands in `urls`. */
+function routed(
+  urls: string[],
+  route: (path: string) => QuestImportResponse,
+): QuestImportDeps {
+  return {
+    region: 'us',
+    runId: 'run-1',
+    knownQuests: new Map(),
+    fetchJson: (url) => {
+      urls.push(url);
+      const path = url.startsWith(BLIZZ) ? url.slice(BLIZZ.length) : url;
+      return Promise.resolve(route(path.split('?')[0] ?? ''));
+    },
+    pause: () => Promise.resolve(),
+    isEnabled: () => Promise.resolve(true),
+    saveQuest: () => Promise.resolve(),
+  };
+}
+
+const ok = (body: unknown): QuestImportResponse => ({ status: 200, body });
+const NOT_FOUND: QuestImportResponse = { status: 404, body: null };
+
+async function runCrawl(deps: QuestImportDeps) {
+  const report = emptyQuestImportReport();
+  const err: unknown = await new QuestImportCrawl(deps, report).run().then(
+    () => null,
+    (e: unknown) => e,
+  );
+  return { report, err };
+}
+
+describe('QuestImportCrawl — area list source (L5: quest/index only links)', () => {
+  it('reads quest/area/index when quest/index has areas: { href }', async () => {
+    const urls: string[] = [];
+    const listed = mappedAreas();
+    const { report, err } = await runCrawl(
+      routed(urls, (path) => {
+        if (path === 'quest/index') return ok(LINKED_INDEX);
+        if (path === 'quest/area/index')
+          return ok({ _links: {}, areas: listed });
+        if (path.startsWith('quest/area/')) return ok({ quests: [] });
+        return NOT_FOUND;
+      }),
+    );
+    expect(err).toBeNull();
+    expect(report.mismatchedAreas).toEqual([]);
+    expect(report.counts.areasImported).toBe(MAPPED);
+    expect(urls.filter((u) => u.includes('/quest/area/index?'))).toEqual([
+      `${BLIZZ}quest/area/index?namespace=static-forever-us&locale=en_US`,
+    ]);
+    expect(urls.every((u) => u.startsWith(BLIZZ))).toBe(true);
+    expect(urls.every((u) => u.includes('namespace=static-forever-us'))).toBe(
+      true,
+    );
+  });
+
+  it('uses an inline quest/index areas[] without requesting quest/area/index', async () => {
+    const urls: string[] = [];
+    const { err } = await runCrawl(
+      routed(urls, (path) =>
+        path === 'quest/index' ? ok(indexBody()) : NOT_FOUND,
+      ),
+    );
+    expect(err).toBeNull();
+    expect(urls.some((u) => u.includes('/quest/area/index?'))).toBe(false);
+  });
+});
+
+describe('QuestImportCrawl — a run that finds no areas fails', () => {
+  it('fails when neither index lists an area', async () => {
+    const urls: string[] = [];
+    const { report, err } = await runCrawl(
+      routed(urls, (path) => {
+        if (path === 'quest/index') return ok(LINKED_INDEX);
+        if (path === 'quest/area/index') return ok({ _links: {}, areas: [] });
+        return NOT_FOUND;
+      }),
+    );
+    expect(err).toBeInstanceOf(QuestImportAbort);
+    expect(err instanceof Error ? err.message : err).toBe(
+      QUEST_IMPORT_NO_AREAS_MESSAGE,
+    );
+    expect(report.counts.requests).toBe(2);
+  });
+
+  it('fails when quest/area/index has no data', async () => {
+    const urls: string[] = [];
+    const { err } = await runCrawl(
+      routed(urls, (path) =>
+        path === 'quest/index' ? ok(LINKED_INDEX) : NOT_FOUND,
+      ),
+    );
+    expect(err).toBeInstanceOf(QuestImportAbort);
+    expect(err instanceof Error ? err.message : err).toBe(
+      'quest/area/index: no data',
+    );
+  });
+
+  it('fails, keeping mismatchedAreas, when no mapped area is in the list', async () => {
+    const urls: string[] = [];
+    const { report, err } = await runCrawl(
+      routed(urls, (path) => {
+        if (path === 'quest/index') return ok(LINKED_INDEX);
+        if (path === 'quest/area/index') {
+          return ok({
+            _links: {},
+            areas: [
+              { key: link('quest/area/12'), name: 'Elwynn Forest', id: 12 },
+            ],
+          });
+        }
+        return NOT_FOUND;
+      }),
+    );
+    expect(err).toBeInstanceOf(QuestImportAbort);
+    expect(err instanceof Error ? err.message : err).toBe(
+      questImportNoMappedAreasMessage(MAPPED),
+    );
+    expect(report.mismatchedAreas).toHaveLength(MAPPED);
+    expect(urls.some((u) => /quest\/area\/\d+\?/.test(u))).toBe(false);
   });
 });
