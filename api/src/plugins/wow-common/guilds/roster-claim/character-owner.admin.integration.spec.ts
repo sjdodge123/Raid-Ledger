@@ -257,6 +257,24 @@ async function expectReassignTrail(
   expect(await systemMessages(toId)).toContain('An admin gave you Ashen Vale.');
 }
 
+/** ROK-2147 F6: an installed-addon list stored for a character. */
+async function seedInstalled(characterId: string): Promise<void> {
+  await testApp.db.insert(schema.characterInstalledAddons).values({
+    characterId,
+    addons: [{ name: 'Details', loaded: true }],
+    capturedAt: SNAPSHOT,
+    payloadSha256: 'b'.repeat(64),
+  });
+}
+
+async function installedRows(characterId: string): Promise<string[]> {
+  const rows = await testApp.db
+    .select({ id: schema.characterInstalledAddons.characterId })
+    .from(schema.characterInstalledAddons)
+    .where(eq(schema.characterInstalledAddons.characterId, characterId));
+  return rows.map((r) => r.id);
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
   const registry = testApp.app.get(PluginRegistryService);
@@ -279,6 +297,8 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
     await addCharacter(to.id, 'To Main', true);
     const future = await signupAt(from.id, ashen, 48);
     const past = await signupAt(from.id, ashen, -48);
+    await seedInstalled(ashen);
+    expect(await installedRows(ashen)).toEqual([ashen]);
 
     const res = await reassign(admin.token, ashen, { userId: to.id });
 
@@ -297,6 +317,8 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
     expect(promoted.isMain).toBe(true);
     expect(await signupCharacter(future)).toBeNull();
     expect(await signupCharacter(past)).toBe(ashen);
+    // ROK-2147 F6: the new owner never sees the previous owner's addon list.
+    expect(await installedRows(ashen)).toEqual([]);
     await expectReassignTrail(ashen, from.id, to.id);
   });
 
@@ -312,10 +334,13 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
     const to = await makeUser('l3dupto');
     const id = await claimAs(from.token, 'Dup Name');
     await addCharacter(to.id, 'Dup Name', false);
+    await seedInstalled(id);
     const res = await reassign(admin.token, id, { userId: to.id });
     expect(res.status).toBe(409);
     const [row] = nonEmpty(await characterById(id), 'unmoved');
     expect(row.userId).toBe(from.id);
+    // ROK-2147 F6: a refused move keeps the list (same transaction).
+    expect(await installedRows(id)).toEqual([id]);
   });
 
   it('409 for the current owner, 404 for an unknown user, 400 for a bad body', async () => {
