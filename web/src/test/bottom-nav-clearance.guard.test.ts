@@ -92,13 +92,6 @@ describe('bottom-nav clearance (ROK-1875)', () => {
         expect(offenders, 'drop the page padding; Layout.tsx <main> clears the bar').toEqual([]);
     });
 
-    it('no page file keeps a phone-only bottom pad reset at md (pb-24 md:pb-*) (ROK-2156)', () => {
-        const offenders = sourceFiles(join(WEB_SRC, 'pages'))
-            .filter((file) => PHONE_ONLY_PAGE_PAD.test(stripComments(readFileSync(file, 'utf8'))))
-            .map((file) => relative(WEB_SRC, file));
-        expect(offenders, 'drop the phone pb-*; keep only the md:/lg: bottom padding — Layout.tsx <main> clears the bar').toEqual([]);
-    });
-
     // ROK-2132 moved the hub page's `PAGE` padding into `hub-page-error.tsx`; every
     // render path — the body, each notice, the skeleton and a module's join gate —
     // must still wrap in that one class string, so the tablet FAB clearance applies
@@ -121,5 +114,14 @@ describe('bottom-nav clearance (ROK-1875)', () => {
             .filter((file) => BANNED.some((re) => re.test(stripComments(readFileSync(file, 'utf8')))))
             .map((file) => relative(WEB_SRC, file));
         expect(offenders, 'use var(--bottom-nav-clearance) so the raised Hubs circle covers nothing').toEqual([]);
+    });
+});
+
+describe('page bottom padding (ROK-2156)', () => {
+    it('no page file keeps a phone-only bottom pad reset at md (pb-24 md:pb-*) (ROK-2156)', () => {
+        const offenders = sourceFiles(join(WEB_SRC, 'pages'))
+            .filter((file) => PHONE_ONLY_PAGE_PAD.test(stripComments(readFileSync(file, 'utf8'))))
+            .map((file) => relative(WEB_SRC, file));
+        expect(offenders, 'drop the phone pb-*; keep only the md:/lg: bottom padding — Layout.tsx <main> clears the bar').toEqual([]);
     });
 });
