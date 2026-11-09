@@ -16,6 +16,7 @@ import { apiDelete, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 import { expectActiveHubTab } from './hub-tabs';
 import { editorTextbox, typeBoldLine } from './hub-post-editor';
+import { assertInstalledSeed, expectInstalledAddonsCard, expectNoGuildAddonsCard } from './guild-content-installed-addons';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -42,21 +43,24 @@ function guildName(testInfo: TestInfo): string {
     return `Content ${testInfo.project.name} w${testInfo.workerIndex} ${Date.now()}`;
 }
 
-async function seedGuild(token: string, testInfo: TestInfo): Promise<SeededGuild> {
+/** ROK-2147: `withInstalledAddons` also stores an installed-addon list on the member's character. */
+async function seedGuild(token: string, testInfo: TestInfo, withInstalledAddons: boolean): Promise<SeededGuild> {
     const body = (await apiPost(token, '/admin/test/wow/seed-guild', {
         name: guildName(testInfo),
         withContent: true,
-    })) as Partial<SeededGuild> & { content?: { addonIds?: number[] } };
+        ...(withInstalledAddons ? { withInstalledAddons: true } : {}),
+    })) as Partial<SeededGuild> & { content?: { addonIds?: number[] }; installedAddons?: { names?: string[] } };
     if (typeof body.guildId !== 'number' || !body.users || body.content?.addonIds?.length !== 2) {
         throw new Error(`seed-guild withContent: ${JSON.stringify(body)}`);
     }
+    if (withInstalledAddons) assertInstalledSeed(body);
     return { guildId: body.guildId, users: body.users };
 }
 
 /** Seed a content guild, run `body`, and always delete the seeded users. */
-async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promise<void>) {
+async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promise<void>, withInstalledAddons = false) {
     const token = await getAdminToken();
-    const guild = await seedGuild(token, testInfo);
+    const guild = await seedGuild(token, testInfo, withInstalledAddons);
     try {
         await body(guild);
     } finally {
@@ -169,16 +173,37 @@ test('editor (rank-1 officer): adds an addon from a GitHub URL, reorders it, the
     });
 });
 
-test('character page: the compact guild addons card for the member\'s character', async ({ page }, testInfo) => {
+/** The member's seeded character id (the installed-addon list lives on it). */
+function memberCharacter(guild: SeededGuild): string {
+    const characterId = guild.users.member.characterId;
+    if (characterId === null) throw new Error('seed-guild: the member has no character');
+    return characterId;
+}
+
+test('character page (owner): guild addons card with Installed / highlighted Missing Required / Also installed', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
-        const characterId = guild.users.member.characterId;
-        if (characterId === null) throw new Error('seed-guild: the member has no character');
         await signInOnboardedMember(page, guild.users.member.userId);
-        await page.goto(`/characters/${characterId}`);
+        await page.goto(`/characters/${memberCharacter(guild)}`);
         const card = page.getByTestId('character-guild-addons');
         await expect(card).toBeVisible({ timeout: 15_000 });
         await expect(card).toContainText('LedgerLink');
         await expect(card).toContainText(CURSEFORGE_ADDON);
         await expect(card).toContainText(GITHUB_ADDON);
-    });
+        await expectInstalledAddonsCard(page, CURSEFORGE_ADDON, GITHUB_ADDON);
+    }, true);
+});
+
+test('character page (officer): the member\'s character shows the same installed-addon states', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await signInOnboardedMember(page, guild.users.officer.userId);
+        await page.goto(`/characters/${memberCharacter(guild)}`);
+        await expectInstalledAddonsCard(page, CURSEFORGE_ADDON, GITHUB_ADDON);
+    }, true);
+});
+
+test('character page (outsider): no guild addons card on the member\'s character', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await signInOnboardedMember(page, guild.users.outsider.userId);
+        await expectNoGuildAddonsCard(page, memberCharacter(guild));
+    }, true);
 });
