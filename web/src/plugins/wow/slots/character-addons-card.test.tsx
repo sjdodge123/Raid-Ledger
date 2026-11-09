@@ -75,6 +75,15 @@ describe('CharacterAddonsCard — owner / officer view', () => {
         expect(within(details).getByText('Missing')).toHaveAttribute('data-tone', 'neutral');
     });
 
+    it('keeps the full addon name on its own line with the pills under it (no truncation)', async () => {
+        const card = await renderCard(visibleInstalled([installedAddon('LedgerLink')]));
+        const name = within(card).getByText('Deadly Boss Mods');
+        expect(name.className, 'name is not cut to an ellipsis').not.toContain('truncate');
+        const pills = within(row(card, 'Deadly Boss Mods')).getByTestId('addon-row-pills');
+        expect(within(pills).getByText('Missing')).toBeInTheDocument();
+        expect(within(pills).getByText('Required')).toBeInTheDocument();
+    });
+
     it('lists unclaimed folders under "Also installed", capped at 5 with Show all', async () => {
         const card = await renderCard(visibleInstalled([installedAddon('LedgerLink'), ...EXTRAS]));
         const also = within(card).getByTestId('character-also-installed');

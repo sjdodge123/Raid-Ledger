@@ -28,9 +28,24 @@ export function CompactRow({ addon, state }: { addon: AddonView; state?: Install
     const highlighted = state === 'missing' && addon.required;
     return (
         <li className={highlighted ? `${ROW} ${MISSING_REQUIRED}` : ROW} data-install-state={state ?? undefined}>
-            <span className="min-w-0 flex-1 truncate text-sm text-foreground">{addon.name}</span>
-            {state !== undefined && <StatePill state={state} required={addon.required} />}
-            {addon.required && <Pill tone="warning">Required</Pill>}
+            {state === undefined ? (
+                <>
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{addon.name}</span>
+                    {addon.required && <Pill tone="warning">Required</Pill>}
+                </>
+            ) : (
+                // ROK-2147 verify: the name keeps its own line and the pills wrap under
+                // it, so a 320px sidebar card never cuts "Details! Damage Meter" to "Details! D…".
+                <div className="min-w-0 flex-1 py-1">
+                    <span className="block break-words text-sm text-foreground">{addon.name}</span>
+                    {(state !== null || addon.required) && (
+                        <span className="mt-0.5 flex flex-wrap gap-1" data-testid="addon-row-pills">
+                            <StatePill state={state} required={addon.required} />
+                            {addon.required && <Pill tone="warning">Required</Pill>}
+                        </span>
+                    )}
+                </div>
+            )}
             <a href={addon.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${addon.name} on ${addon.source}`}
                 className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-overlay hover:text-foreground">
                 <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
