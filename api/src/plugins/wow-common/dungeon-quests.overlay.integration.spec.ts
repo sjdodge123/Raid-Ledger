@@ -3,7 +3,8 @@
  * rows (`wow_dungeon_quest_blizzard`) win for title / XP / money / reward item
  * ids, survive a re-seed of the bundled JSON (AC5), drop out when the kill
  * switch is off (AC6), a prerequisite not in our data gives no chain (AC7),
- * and an overlay-only quest shows in its dungeon's list (R4).
+ * an overlay-only quest shows in its dungeon's list (R4), and chain links
+ * walked from a quest take the Blizzard prevQuestId (review M3).
  */
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -43,6 +44,7 @@ async function insertOverlay(
   questId: number,
   instanceId: number,
   title: string,
+  requirementsRaw: unknown = null,
 ): Promise<void> {
   await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
     questId,
@@ -53,6 +55,7 @@ async function insertOverlay(
     rewardXp: 5750,
     rewardMoneyCopper: 1800,
     rewardItems: [{ id: 918, name: 'Deviate Hide Pack' }],
+    requirementsRaw,
     raw: { id: questId },
     fetchedAt: new Date(),
     runId: 'run-it',
@@ -94,6 +97,71 @@ async function expectOverlayWins(): Promise<void> {
   expect(rocknot.startsInsideDungeon).toBe(
     INSIDE_DUNGEON_QUEST_IDS.has(ROCKNOT.questId),
   );
+}
+
+/**
+ * M3 chain: A (instance 990) ← B ← C in the bundled data (B, C, D live in
+ * instance 991, so only the chain walk fetches them). B's Blizzard row names
+ * D as its prerequisite instead of C.
+ */
+const CHAIN = { a: 990601, b: 990602, c: 990603, d: 990604 };
+const CHAIN_INSTANCE = 990;
+
+async function insertBundledQuest(
+  questId: number,
+  instanceId: number,
+  prevQuestId: number | null,
+): Promise<void> {
+  await testApp.db.insert(schema.wowClassicDungeonQuests).values({
+    questId,
+    dungeonInstanceId: instanceId,
+    name: `Chain ${questId}`,
+    expansion: 'classic',
+    questLevel: 30,
+    prevQuestId,
+    startsInsideDungeon: false,
+    sharable: true,
+  });
+}
+
+async function seedBundledChain(): Promise<void> {
+  await insertBundledQuest(CHAIN.a, CHAIN_INSTANCE, CHAIN.b);
+  await insertBundledQuest(CHAIN.b, 991, CHAIN.c);
+  await insertBundledQuest(CHAIN.c, 991, null);
+  await insertBundledQuest(CHAIN.d, 991, null);
+}
+
+/** Blizzard's live requirements shape (quest 4132): an AND group of targets. */
+function requiresQuest(id: number): unknown {
+  return {
+    quests: {
+      operator: { name: 'And', type: 'AND' },
+      conditions: [{ target: { id, name: `Chain ${id}` } }],
+    },
+  };
+}
+
+/** Quest ids of A's prerequisite chain on the enriched list (expandFrontier). */
+async function enrichedChainIds(): Promise<number[]> {
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/instances/${CHAIN_INSTANCE}/quests/enriched?variant=classic_era`,
+  );
+  expect(res.status).toBe(200);
+  const quest = (res.body as QuestBody[]).find((q) => q.questId === CHAIN.a);
+  const chain = defined(quest, 'chain quest A').prerequisiteChain;
+  expect(Array.isArray(chain)).toBe(true);
+  return Array.isArray(chain)
+    ? chain.map((q: { questId: number }) => q.questId)
+    : [];
+}
+
+/** Quest ids of A's chain from the chain route (walkChainDirection). */
+async function routeChainIds(): Promise<number[]> {
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/quests/${CHAIN.a}/chain`,
+  );
+  expect(res.status).toBe(200);
+  return (res.body as { questId: number }[]).map((q) => q.questId);
 }
 
 beforeAll(async () => {
@@ -172,5 +240,20 @@ describe('Quest Prep overlay read path (ROK-2143)', () => {
     const only = await questOf(FURY.instanceId, OVERLAY_ONLY_ID);
     expectBlizzardValues(only, 'Only On Blizzard');
     expect(only.startsInsideDungeon).toBe(false);
+  });
+});
+
+describe('Quest Prep chain links (ROK-2143 M3)', () => {
+  it('M3: chain links walked from a quest use the Blizzard overlay prevQuestId', async () => {
+    await seedBundledChain();
+    const bundled = [CHAIN.c, CHAIN.b, CHAIN.a];
+    expect(await enrichedChainIds()).toEqual(bundled);
+    expect(await routeChainIds()).toEqual(bundled);
+
+    await insertOverlay(CHAIN.b, 991, 'B (Blizzard)', requiresQuest(CHAIN.d));
+    await service().clearCache();
+    const blizzard = [CHAIN.d, CHAIN.b, CHAIN.a];
+    expect(await enrichedChainIds()).toEqual(blizzard);
+    expect(await routeChainIds()).toEqual(blizzard);
   });
 });
