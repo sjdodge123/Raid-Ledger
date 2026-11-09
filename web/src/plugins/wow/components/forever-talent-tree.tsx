@@ -4,6 +4,7 @@
  * and the tree-height placeholder shown while that table loads.
  */
 import { useRef, useState, type CSSProperties } from 'react';
+import { Button } from '../../../components/ui/button';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { useForeverTalentTooltip } from '../hooks/use-forever-talent-tooltip';
 import { mostPointsTreeIndex, type JoinedForeverTalents, type JoinedTalent, type JoinedTree } from '../lib/forever-talent-table';
@@ -25,9 +26,10 @@ function TalentIcon({ talent }: { talent: JoinedTalent }) {
     const tip = useForeverTalentTooltip(anchorRef);
     const style: CSSProperties = { left: `calc(${talent.col} * ${STEP})`, top: `calc(${talent.row} * ${STEP})`, width: 'var(--ti)', height: 'var(--ti)' };
     return (
-        <button ref={anchorRef} type="button" data-testid="forever-talent" data-spent={spent ? 'true' : 'false'} style={style}
+        <div className="absolute z-[2]" style={style}>
+        <Button variant="bare" ref={anchorRef} data-testid="forever-talent" data-spent={spent ? 'true' : 'false'}
             aria-label={`${talent.name} ${talent.rank} of ${talent.maxRank}`} {...tip.anchorProps}
-            className={`absolute z-[2] rounded-md border-2 bg-surface p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-success ${spent ? SPENT_BORDER : 'border-edge-strong'}`}>
+            className={`w-full h-full rounded-md border-2 bg-surface p-0 ${spent ? SPENT_BORDER : 'border-edge-strong'}`}>
             <img src={`${ICON_BASE}${talent.icon}.jpg`} alt="" loading="lazy"
                 className={`block w-full h-full rounded-sm ${spent ? '' : 'grayscale opacity-40'}`} />
             <span aria-hidden="true"
@@ -35,7 +37,8 @@ function TalentIcon({ talent }: { talent: JoinedTalent }) {
                 {`${talent.rank}/${talent.maxRank}`}
             </span>
             {tip.open && <ForeverTalentTooltip talent={talent} id={tip.id} anchorRef={anchorRef} onOutside={tip.close} />}
-        </button>
+        </Button>
+        </div>
     );
 }
 
