@@ -4141,3 +4141,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-09 — feat/rok-2148-guild-contributions (surfaced during ROK-2148 delta review of the Codex fixes)
 
 - **nit** `api/src/plugins/wow-common/addon-import/addon-import-char.mailworthy.preview.ts:35` — on an "Export all" dry run, `findGuildId` runs before the paste's guild section exists, so for a guild imported for the first time the preview says the Mailworthy block has nothing to apply although the real import writes its givers (the apply defers Mailworthy until after the guild section; the preview cannot). Pre-existing in the sense that the dry run never materialises the guild. Suggested: let the preview resolve the guild from the paste's own guild section when the stored lookup misses.
+
+### 2026-11-09 — feat/rok-2148-guild-contributions (surfaced during the fleet UI verify, plan 2026-11-09-0406-d6a0)
+
+- **nit** `web/src/plugins/wow/hub-widgets/contributions-givers.tsx:76` — the Top givers "30 days" segment of the shared `RadioGroup appearance="segmented"` wraps to two lines ("30 / days") in the hub column at 1280, 820 and 375 (tap target still ≥44px; all steps PASS). The segmented primitive lets option labels wrap. Suggested: `whitespace-nowrap` on segmented option labels in the primitive (check its other callers), or a non-breaking space in the option label.
