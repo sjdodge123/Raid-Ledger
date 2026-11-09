@@ -12,9 +12,10 @@
  *   - winner: a `resolved` row keeps its stored winner; otherwise the
  *     caller's picker runs (the force path's bracket advance therefore runs
  *     under the same lock as the vote path's — no double advance);
- *   - decide: the lineup still in `voting`, or `decided` with no match group,
- *     needs the flip + matching pass; `decided` WITH a match group (or any
- *     later phase) is complete and is left alone.
+ *   - decide: the lineup still in `voting`, or `decided` with no match group
+ *     created since the tiebreaker began, needs the flip + matching pass;
+ *     `decided` WITH such a group (or any later phase) is complete and is
+ *     left alone. Older groups from an earlier, reverted decide do not count.
  *
  * A second concurrent caller waits for the lock, finds the work done and
  * returns. A retry after a partial failure (clear / flip / matching failed
@@ -67,7 +68,7 @@ export function finalizeTiebreaker(
     if (!tb || tb.status === 'dismissed') return null;
     const winner = await settleWinner(deps.db, tb, pickWinner);
     await clearActiveTiebreaker(deps.db, tb.lineupId);
-    if (await needsDecide(deps.db, tb.lineupId)) {
+    if (await needsDecide(deps.db, tb)) {
       await decideLineupFromTiebreaker(deps, tb.lineupId, winner);
     }
     return winner;
@@ -88,10 +89,11 @@ async function settleWinner(
 
 /**
  * True when the decided flip or the matching pass has not completed:
- * the lineup is still `voting`, or `decided` without any match group.
+ * the lineup is still `voting`, or `decided` without a match group created
+ * since this tiebreaker began.
  */
-async function needsDecide(db: Db, lineupId: number): Promise<boolean> {
-  const state = await findLineupDecideState(db, lineupId);
+async function needsDecide(db: Db, tb: TiebreakerRow): Promise<boolean> {
+  const state = await findLineupDecideState(db, tb.lineupId, tb.createdAt);
   if (!state) return false;
   if (state.status === 'voting') return true;
   return state.status === 'decided' && !state.hasMatches;

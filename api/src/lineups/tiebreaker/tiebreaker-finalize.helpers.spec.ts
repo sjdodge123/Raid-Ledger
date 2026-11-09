@@ -190,6 +190,23 @@ describe('finalizeTiebreaker repair (ROK-2098)', () => {
     expect(store.matchingRuns).toBe(1);
   });
 
+  it('counts only match groups created since the tiebreaker began', async () => {
+    const createdAt = new Date('2026-11-01T12:00:00Z');
+    const store = newStore({
+      tb: tiebreakerRow({ status: 'resolved', winnerGameId: 7, createdAt }),
+      lineup: { status: 'decided', hasMatches: false },
+    });
+    wireStore(store);
+
+    await finalizeTiebreaker(deps, TB_ID, jest.fn());
+
+    expect(findLineupDecideState).toHaveBeenCalledWith(
+      deps.db,
+      LINEUP_ID,
+      createdAt,
+    );
+  });
+
   it('a retry after a failed decide completes it with the stored winner', async () => {
     const store = newStore({ decideFailures: 1 });
     wireStore(store);
