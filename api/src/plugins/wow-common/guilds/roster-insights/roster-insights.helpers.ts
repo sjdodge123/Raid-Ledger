@@ -10,6 +10,7 @@ import {
   levelOf,
 } from './roster-insights.levels';
 import type { InsightRow } from './roster-insights.types';
+import { roleCountRows } from '../guild-role-counts.helpers';
 
 type Roles = WowRosterInsightsDto['roles'];
 type RoleCounts = Roles['dungeon'];
@@ -54,12 +55,15 @@ function zeroRoles(): RoleCounts {
 }
 
 /**
- * Role mix, ONE per linked user (like `roleCounts`). Dungeon-eligible =
+ * Role mix, ONE per linked user plus one per unlinked roster member — the
+ * same rows as the guild page's `roleCounts` (ROK-2158). The role is the
+ * resolved `role` fact (manual override, else Blizzard/Armory — the member
+ * snapshot for an unclaimed row — else the gap-fill). Dungeon-eligible =
  * level ≥ the lowest instance minimum; raid-eligible = at cap.
  */
 export function computeRoles(rows: readonly InsightRow[]): Roles {
   const roles: Roles = { dungeon: zeroRoles(), raid: zeroRoles() };
-  for (const row of representativeRows(rows)) {
+  for (const row of roleCountRows(rows)) {
     const level = levelOf(row);
     if (level === null || level < LOWEST_DUNGEON_LEVEL) continue;
     const role = row.facts?.role?.value ?? 'unknown';
