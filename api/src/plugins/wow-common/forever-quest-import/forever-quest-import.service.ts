@@ -10,11 +10,13 @@ import {
   Inject,
   Injectable,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { randomUUID } from 'node:crypto';
 import { isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { bestEffortInit } from '../../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
@@ -31,12 +33,14 @@ import {
   type QuestImportDeps,
 } from './forever-quest-import.crawl';
 import {
+  FOREVER_QUEST_IMPORT_FETCH_TIMEOUT_MS,
   FOREVER_QUEST_IMPORT_REGION,
   FOREVER_QUEST_IMPORT_SENTRY_CONTEXT,
   FOREVER_QUEST_IMPORT_STALE_RUNNING_MS,
   ForeverQuestImportReportSchema,
   QuestImportAbort,
   emptyQuestImportReport,
+  markQuestImportInterrupted,
   pushQuestImportError,
   type ForeverQuestImportReport,
 } from './forever-quest-import.report';
@@ -49,7 +53,7 @@ export const FOREVER_QUEST_IMPORT_RUNNING_MESSAGE =
   'A WoW: Forever quest import is already running';
 
 @Injectable()
-export class ForeverQuestImportService {
+export class ForeverQuestImportService implements OnModuleInit {
   private readonly logger = new Logger(ForeverQuestImportService.name);
   private busy = false;
   private active: ForeverQuestImportReport | null = null;
@@ -62,6 +66,21 @@ export class ForeverQuestImportService {
     private readonly quests: DungeonQuestsService,
   ) {}
 
+  /**
+   * A boot never has a run of its own, so a stored `running` report is a run
+   * the last process died in: settle it as `failed` (prod runs one instance).
+   */
+  async onModuleInit(): Promise<void> {
+    await bestEffortInit(
+      'ForeverQuestImportService: settle an interrupted run',
+      this.logger,
+      async () => {
+        const stored = await this.readReport();
+        if (stored?.status === 'running') await this.settleInterrupted(stored);
+      },
+    );
+  }
+
   /** The run in progress (the integration spec awaits it); null when idle. */
   get currentRun(): Promise<void> | null {
     return this.inFlight;
@@ -72,9 +91,19 @@ export class ForeverQuestImportService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /** The live report while running, else the last stored one (or `idle`). */
+  /**
+   * The live report while running, else the last stored one (or `idle`). A
+   * stored `running` marker past the stale cut-off reads (and is saved) as
+   * `failed`, so the panel never polls a dead run forever.
+   */
   async getStatus(): Promise<ForeverQuestImportReport> {
-    return this.active ?? (await this.readReport()) ?? emptyQuestImportReport();
+    if (this.active) return this.active;
+    const stored = await this.readReport();
+    if (!stored) return emptyQuestImportReport();
+    if (isDeadRunningMarker(stored, this.busy, new Date())) {
+      return this.settleInterrupted(stored);
+    }
+    return stored;
   }
 
   /**
@@ -152,6 +181,7 @@ export class ForeverQuestImportService {
       fetchJson: async (url) => {
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(FOREVER_QUEST_IMPORT_FETCH_TIMEOUT_MS),
         });
         const body: unknown = res.ok ? await res.json() : null;
         return { status: res.status, body };
@@ -205,6 +235,15 @@ export class ForeverQuestImportService {
     }
   }
 
+  private async settleInterrupted(
+    stored: ForeverQuestImportReport,
+  ): Promise<ForeverQuestImportReport> {
+    const settled = markQuestImportInterrupted(stored, new Date());
+    await this.persist(settled);
+    this.logger.warn(`Forever quest import ${stored.runId} was interrupted`);
+    return settled;
+  }
+
   private persist(report: ForeverQuestImportReport): Promise<void> {
     return this.settings.set(
       WOW_FOREVER_QUEST_IMPORT_STATUS_KEY,
@@ -213,7 +252,10 @@ export class ForeverQuestImportService {
   }
 }
 
-/** A stored `running` marker younger than the stale cut-off (another instance's run). */
+/**
+ * A stored `running` marker younger than the stale cut-off — treated as a live
+ * run (best effort across instances: the check and the write are not atomic).
+ */
 export function isLiveRunningMarker(
   report: ForeverQuestImportReport | null,
   now: Date,
@@ -221,4 +263,15 @@ export function isLiveRunningMarker(
   if (report?.status !== 'running' || report.startedAt === null) return false;
   const age = now.getTime() - Date.parse(report.startedAt);
   return age < FOREVER_QUEST_IMPORT_STALE_RUNNING_MS;
+}
+
+/** A stored `running` marker with no run behind it: not ours, and stale. */
+export function isDeadRunningMarker(
+  report: ForeverQuestImportReport,
+  busy: boolean,
+  now: Date,
+): boolean {
+  return (
+    report.status === 'running' && !busy && !isLiveRunningMarker(report, now)
+  );
 }

@@ -13,6 +13,11 @@ export const FOREVER_QUEST_IMPORT_MAX_DEPTH = 10;
 export const FOREVER_QUEST_IMPORT_REGION = 'us';
 /** A `running` marker older than this is a crashed run, not a live one. */
 export const FOREVER_QUEST_IMPORT_STALE_RUNNING_MS = 60 * 60 * 1000;
+/** Per-request Blizzard timeout: a hung socket fails the run instead of pinning it. */
+export const FOREVER_QUEST_IMPORT_FETCH_TIMEOUT_MS = 15_000;
+/** Error line on a run the server stopped mid-way (restart, deploy, crash). */
+export const FOREVER_QUEST_IMPORT_INTERRUPTED_MESSAGE =
+  'Interrupted (server restarted) — run the import again';
 /** Most error lines kept in a report. */
 export const FOREVER_QUEST_IMPORT_MAX_ERRORS = 50;
 /** Sentry `context` tag for a failed run. */
@@ -68,4 +73,19 @@ export function pushQuestImportError(
   if (report.errors.length < FOREVER_QUEST_IMPORT_MAX_ERRORS) {
     report.errors.push(message);
   }
+}
+
+/** A stored `running` report whose run no longer exists, as `failed`. */
+export function markQuestImportInterrupted(
+  report: ForeverQuestImportReport,
+  now: Date,
+): ForeverQuestImportReport {
+  const out: ForeverQuestImportReport = {
+    ...report,
+    status: 'failed',
+    finishedAt: now.toISOString(),
+    errors: [...report.errors],
+  };
+  pushQuestImportError(out, FOREVER_QUEST_IMPORT_INTERRUPTED_MESSAGE);
+  return out;
 }
