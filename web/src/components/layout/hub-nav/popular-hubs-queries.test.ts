@@ -21,6 +21,8 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useAuth: () => (auth.signedIn
         ? { user: { id: 1, role: 'member' }, isAuthenticated: true }
         : { user: null, isAuthenticated: false }),
+    // The real useViewerCacheScope calls the module-internal useAuth, which the mock above does not reach.
+    useViewerCacheScope: () => (auth.signedIn ? 1 : 'anon'),
 }));
 
 const entry = (id: number, extra: Partial<HubDirectoryEntry> = {}): HubDirectoryEntry =>
