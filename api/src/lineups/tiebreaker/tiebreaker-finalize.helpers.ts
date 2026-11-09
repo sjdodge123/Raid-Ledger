@@ -17,29 +17,31 @@
  *     `decided` WITH such a group (or any later phase) is complete and is
  *     left alone. Older groups from an earlier, reverted decide do not count.
  *
- * A second concurrent caller waits for the lock, finds the work done and
- * returns. A retry after a partial failure (clear / flip / matching failed
- * after the resolve committed) finds the missing step and completes it with
- * the stored winner. Neither earlier once-only guard did both: a conditional
- * resolve stranded the lineup in `voting`, a conditional decided flip stopped
- * a retry from re-running matching (which swallows its own errors).
+ * Every read and write under the lock runs on the lock's `tx` (Codex P1):
+ * work on the outer pool while the lock transaction pins a pooled connection
+ * self-deadlocks at `DB_POOL_MAX=1` and lets concurrent finalizers exhaust a
+ * larger pool. One transaction also makes the finalize atomic — a failure
+ * anywhere (matching included: on `tx` it throws instead of swallowing) rolls
+ * the whole thing back, and a retry redoes it from durable state. A second
+ * concurrent caller waits for the lock, finds the work done and returns.
  *
- * The steps deliberately use `deps.db`, NOT the lock's `tx`: each must commit
- * on its own so a failure leaves a repairable state, and the matching pass
- * must commit its match rows before the poll-card events it fires are
- * handled. The lock transaction only holds the advisory lock. Every waiter
- * on that lock takes it first, holding no row locks, so the outer-connection
- * work cannot deadlock against a waiter.
+ * Side effects run only AFTER the transaction commits, and only for the
+ * caller that did the work: the poll-card events (their listeners read the
+ * committed match rows on other connections) and the best-effort cohort
+ * memory writes (they swallow errors, which would poison the transaction).
  */
 import type * as schema from '../../drizzle/schema';
+import type { MatchingPassResult } from '../lineups-matching.helpers';
+import { writeTiebreakerCohortMemory } from '../cohort-memory-write.helpers';
 import { withTiebreakerAdvanceLock } from './tiebreaker-advance.helpers';
 import {
-  decideLineupFromTiebreaker,
+  announceLineupDecided,
+  decideLineupInTx,
   type TiebreakerDecideDeps,
 } from './tiebreaker-decide.helpers';
 import {
   clearActiveTiebreaker,
-  resolveTiebreaker,
+  markTiebreakerResolved,
 } from './tiebreaker-lifecycle.helpers';
 import {
   findLineupDecideState,
@@ -49,8 +51,22 @@ import {
 type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
 type Db = TiebreakerDecideDeps['db'];
 
-/** Picks the winner of a tiebreaker that has not been resolved yet. */
-export type WinnerPicker = (tb: TiebreakerRow) => Promise<number>;
+/**
+ * Picks the winner of a tiebreaker that has not been resolved yet. `tx` is
+ * the round-advance-lock transaction — every query the picker runs MUST use
+ * it, never the outer pool.
+ */
+export type WinnerPicker = (tb: TiebreakerRow, tx: Db) => Promise<number>;
+
+/** What the locked transaction did, for the after-commit side effects. */
+interface FinalizeOutcome {
+  winner: number;
+  lineupId: number;
+  /** True when THIS call resolved the row (writes the veto cohort memory). */
+  resolvedNow: boolean;
+  /** The matching pass this call ran, or null when decide was complete. */
+  pass: MatchingPassResult | null;
+}
 
 /**
  * Resolve (if needed), detach, and decide the lineup of a tiebreaker —
@@ -58,33 +74,66 @@ export type WinnerPicker = (tb: TiebreakerRow) => Promise<number>;
  * @returns the winning game id, or null when the tiebreaker is gone or
  *   dismissed (nothing to finalize).
  */
-export function finalizeTiebreaker(
+export async function finalizeTiebreaker(
   deps: TiebreakerDecideDeps,
   tiebreakerId: number,
   pickWinner: WinnerPicker,
 ): Promise<number | null> {
-  return withTiebreakerAdvanceLock(deps.db, tiebreakerId, async () => {
-    const tb = await findTiebreakerRow(deps.db, tiebreakerId);
-    if (!tb || tb.status === 'dismissed') return null;
-    const winner = await settleWinner(deps.db, tb, pickWinner);
-    await clearActiveTiebreaker(deps.db, tb.lineupId);
-    if (await needsDecide(deps.db, tb)) {
-      await decideLineupFromTiebreaker(deps, tb.lineupId, winner);
-    }
-    return winner;
-  });
+  const outcome = await withTiebreakerAdvanceLock(deps.db, tiebreakerId, (tx) =>
+    finalizeUnderLock(tx, tiebreakerId, pickWinner),
+  );
+  if (!outcome) return null;
+  await announceFinalized(deps, tiebreakerId, outcome);
+  return outcome.winner;
+}
+
+/** The locked part: every query on `tx`, no side effects. */
+async function finalizeUnderLock(
+  tx: Db,
+  tiebreakerId: number,
+  pickWinner: WinnerPicker,
+): Promise<FinalizeOutcome | null> {
+  const tb = await findTiebreakerRow(tx, tiebreakerId);
+  if (!tb || tb.status === 'dismissed') return null;
+  const { winner, resolvedNow } = await settleWinner(tx, tb, pickWinner);
+  await clearActiveTiebreaker(tx, tb.lineupId);
+  const pass = (await needsDecide(tx, tb))
+    ? await decideLineupInTx(tx, tb.lineupId, winner)
+    : null;
+  return { winner, lineupId: tb.lineupId, resolvedNow, pass };
+}
+
+/** After commit: cohort memory + poll-card events for the work THIS call did. */
+async function announceFinalized(
+  deps: TiebreakerDecideDeps,
+  tiebreakerId: number,
+  outcome: FinalizeOutcome,
+): Promise<void> {
+  const { winner, lineupId, resolvedNow, pass } = outcome;
+  if (resolvedNow) {
+    await writeTiebreakerCohortMemory(
+      deps.db,
+      lineupId,
+      tiebreakerId,
+      winner,
+      deps.logger,
+    );
+  }
+  if (pass) await announceLineupDecided(deps, lineupId, pass);
 }
 
 /** The stored winner of a resolved row, else pick one and resolve the row. */
 async function settleWinner(
-  db: Db,
+  tx: Db,
   tb: TiebreakerRow,
   pickWinner: WinnerPicker,
-): Promise<number> {
-  if (tb.status === 'resolved' && tb.winnerGameId) return tb.winnerGameId;
-  const winner = await pickWinner(tb);
-  await resolveTiebreaker(db, tb.id, winner);
-  return winner;
+): Promise<{ winner: number; resolvedNow: boolean }> {
+  if (tb.status === 'resolved' && tb.winnerGameId) {
+    return { winner: tb.winnerGameId, resolvedNow: false };
+  }
+  const winner = await pickWinner(tb, tx);
+  await markTiebreakerResolved(tx, tb.id, winner);
+  return { winner, resolvedNow: true };
 }
 
 /**
@@ -92,8 +141,8 @@ async function settleWinner(
  * the lineup is still `voting`, or `decided` without a match group created
  * since this tiebreaker began.
  */
-async function needsDecide(db: Db, tb: TiebreakerRow): Promise<boolean> {
-  const state = await findLineupDecideState(db, tb.lineupId, tb.createdAt);
+async function needsDecide(tx: Db, tb: TiebreakerRow): Promise<boolean> {
+  const state = await findLineupDecideState(tx, tb.lineupId, tb.createdAt);
   if (!state) return false;
   if (state.status === 'voting') return true;
   return state.status === 'decided' && !state.hasMatches;

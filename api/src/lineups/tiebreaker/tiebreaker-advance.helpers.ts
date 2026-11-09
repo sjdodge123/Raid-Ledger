@@ -38,15 +38,15 @@ export const TIEBREAKER_ADVANCE_LOCK_CLASS = 938;
  * How long a caller waits for the round-advance lock (or a matchup row lock
  * under it) before giving up — ROK-2098 review MAJOR-1.
  *
- * The finalize holder keeps its lock connection idle in transaction and does
- * its work on OTHER pooled connections (`deps.db`). With Postgres's default
- * `lock_timeout = 0` every waiter would hold a pooled connection forever, so
- * a burst of ~pool-size waiters behind an admin force-resolve could leave the
- * holder without a connection: an app-wide stall. Bounding the wait means a
- * waiter always hands its connection back. 5s is far above the holder's
- * normal work (a resolve, a flip and one matching rebuild — well under a
- * second) yet short enough that a pile-up drains before the 10-connection
- * pool is exhausted for long.
+ * Every waiter holds a pooled connection while it waits. With Postgres's
+ * default `lock_timeout = 0` a burst of ~pool-size waiters behind an admin
+ * force-resolve would pin the pool until the holder finished. Bounding the
+ * wait means a waiter always hands its connection back. (The holder does
+ * all of its work on the lock's own `tx` — ROK-2098 Codex P1 — so it never
+ * needs a second connection.) 5s is far above the holder's normal work (a
+ * resolve, a flip and one matching rebuild — well under a second) yet short
+ * enough that a pile-up drains quickly. It also bounds every row-lock wait
+ * inside `fn`.
  */
 export const TIEBREAKER_ADVANCE_LOCK_TIMEOUT = '5s';
 
@@ -56,7 +56,9 @@ const LOCK_NOT_AVAILABLE = '55P03';
 /**
  * Run `fn` while holding the per-tiebreaker round-advance advisory lock.
  * The lock lives for the transaction `fn` receives; it is released when `fn`
- * settles. ROK-2098: the finalize path takes the same lock so a force-resolve
+ * settles. `fn` must run every query on that `tx` (never the outer `db`, which
+ * would need a second pooled connection while this one is pinned) and must
+ * fire no side effects — return what happened and act after commit. ROK-2098: the finalize path takes the same lock so a force-resolve
  * and a round-completing vote can never both advance or both finalize.
  * @throws ConflictException when the lock is not free within
  *   `TIEBREAKER_ADVANCE_LOCK_TIMEOUT` (the transaction has rolled back; the

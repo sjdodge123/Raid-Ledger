@@ -238,7 +238,7 @@ export class TiebreakerService {
   async forceResolve(lineupId: number): Promise<void> {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb) throw new NotFoundException('No tiebreaker found');
-    await this.finalize(tb.id, (row) => this.determineWinner(row));
+    await this.finalize(tb.id, (row, tx) => this.determineWinner(row, tx));
   }
 
   /**
@@ -324,23 +324,29 @@ export class TiebreakerService {
     );
   }
 
+  /**
+   * ROK-2098: runs inside the finalize lock transaction — every query uses
+   * `tx`, never `this.db` (an outer-pool query here would wait on a second
+   * pooled connection while the lock pins the first).
+   */
   private async determineWinner(
     tb: typeof schema.communityLineupTiebreakers.$inferSelect,
+    tx: PostgresJsDatabase<typeof schema>,
   ): Promise<number> {
     const tiedGameIds = tb.tiedGameIds;
 
     if (tb.mode === 'bracket') {
-      const winner = await advanceBracket(this.db, tb.id);
+      const winner = await advanceBracket(tx, tb.id);
       if (winner) return winner;
       // If bracket isn't done, pick highest-seeded remaining
-      const matchups = await findMatchups(this.db, tb.id);
+      const matchups = await findMatchups(tx, tb.id);
       const final = matchups.find((m) => m.winnerGameId);
       return final?.winnerGameId ?? defined(tiedGameIds[0], 'top tied game');
     }
 
     // Veto mode: reveal and find survivor
-    await revealVetoes(this.db, tb.id);
-    const vetoes = await findVetoes(this.db, tb.id);
+    await revealVetoes(tx, tb.id);
+    const vetoes = await findVetoes(tx, tb.id);
     return findSurvivor(tiedGameIds, vetoes);
   }
 }
