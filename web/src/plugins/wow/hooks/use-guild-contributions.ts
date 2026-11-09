@@ -7,7 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import type { GuildContributionsDto } from '@raid-ledger/contract';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 
-export const guildContributionsKey = (guildId: number) => ['wow-guild-contributions', guildId] as const;
+/** Under the hub-page prefix `['plugins', 'wow', 'guilds', id]`, so an addon import's `invalidateAllHubMemberships` refreshes the card (Codex P2). */
+export const guildContributionsKey = (guildId: number) => ['plugins', 'wow', 'guilds', guildId, 'contributions'] as const;
 
 /** `useQuery` options for one hub; idle until a guild id is known. A 403 is not retried. */
 export function guildContributionsQuery(guildId: number) {
