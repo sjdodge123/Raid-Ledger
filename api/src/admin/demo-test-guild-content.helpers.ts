@@ -60,6 +60,8 @@ interface SeedAddon {
   displayName: string;
   note: string | null;
   requirement: GuildAddonRequirement;
+  /** ROK-2147: client folder name, matched against installed addons. */
+  folderName: string;
 }
 
 /** Slugs are stored lower-case, exactly as `parseAddonLink` would emit them. */
@@ -70,6 +72,7 @@ export const SEED_GUILD_ADDONS: readonly SeedAddon[] = [
     displayName: 'Details! Damage Meter',
     note: 'Everyone runs a meter on raid night.',
     requirement: 'required',
+    folderName: 'Details',
   },
   {
     source: 'github',
@@ -77,6 +80,7 @@ export const SEED_GUILD_ADDONS: readonly SeedAddon[] = [
     displayName: 'WeakAuras',
     note: null,
     requirement: 'optional',
+    folderName: 'WeakAuras',
   },
 ];
 
@@ -121,6 +125,7 @@ async function upsertAddon(
     note: addon.note,
     requirement: addon.requirement,
     flavor: null,
+    folderName: addon.folderName,
     sortOrder,
     updatedByUserId: gmUserId,
     updatedAt: new Date(),

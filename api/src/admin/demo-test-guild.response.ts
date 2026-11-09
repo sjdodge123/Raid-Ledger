@@ -15,6 +15,7 @@ import type { SeededGuildGear } from './demo-test-guild-gear.helpers';
 import type { SeededGuildDings } from './demo-test-guild-dings.helpers';
 import type { SeededGuildPresence } from './demo-test-guild-presence.helpers';
 import type { SeededGuildPulls } from './demo-test-guild-pulls.helpers';
+import type { SeededInstalledAddons } from './demo-test-guild-installed-addons.helpers';
 
 export interface RosterCtx {
   guildId: number;
@@ -57,12 +58,20 @@ export interface SeedGuildResponse {
   gear?: SeededGuildGear;
   /** Present only when the body sent `withPulls: true` (ROK-1917). */
   pulls?: SeededGuildPulls;
+  /** Present only when the body sent `withInstalledAddons: true` (ROK-2147). */
+  installedAddons?: SeededInstalledAddons;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
 export type SeedGuildExtras = Pick<
   SeedGuildResponse,
-  'content' | 'lockouts' | 'dings' | 'presence' | 'gear' | 'pulls'
+  | 'content'
+  | 'lockouts'
+  | 'dings'
+  | 'presence'
+  | 'gear'
+  | 'pulls'
+  | 'installedAddons'
 >;
 
 export interface SeededRoster {

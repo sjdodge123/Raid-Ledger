@@ -42,6 +42,8 @@ export interface SeedGuildInput {
   withGear: boolean;
   /** ROK-1917: also seed LedgerLink raid-export boss pulls (Raid progress). */
   withPulls: boolean;
+  /** ROK-2147: also seed the member character's installed addons. */
+  withInstalledAddons: boolean;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
 }
@@ -88,6 +90,7 @@ interface RawSeedFlags {
   withPresence?: unknown;
   withGear?: unknown;
   withPulls?: unknown;
+  withInstalledAddons?: unknown;
 }
 
 /** The opt-in boolean flags; 400 on a non-boolean. */
@@ -101,6 +104,10 @@ function parseSeedFlags(
     withPresence: boolFlag(raw.withPresence, 'withPresence'),
     withGear: boolFlag(raw.withGear, 'withGear'),
     withPulls: boolFlag(raw.withPulls, 'withPulls'),
+    withInstalledAddons: boolFlag(
+      raw.withInstalledAddons,
+      'withInstalledAddons',
+    ),
   };
 }
 

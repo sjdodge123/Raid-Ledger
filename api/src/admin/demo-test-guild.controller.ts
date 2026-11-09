@@ -75,6 +75,7 @@ import {
   type SeededGuildRaids,
 } from './demo-test-guild-raids.helpers';
 import { seedGuildContent } from './demo-test-guild-content.helpers';
+import { seedInstalledAddons } from './demo-test-guild-installed-addons.helpers';
 import {
   seedGuildLockouts,
   type SeededGuildLockouts,
@@ -141,7 +142,7 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917). */
+  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147). */
   private async seedOptional(
     input: SeedGuildInput,
     ctx: RosterCtx,
@@ -161,12 +162,20 @@ export class DemoTestGuildController {
       ? await this.seedPresence(roster, ctx.guildId)
       : null;
     const pulls = await this.seedPulls(users, ctx, input);
+    const installedAddons = input.withInstalledAddons
+      ? await seedInstalledAddons(
+          this.db,
+          snapshotOwners(users).member,
+          ctx.now,
+        )
+      : null;
     return {
       ...(content ? { content } : {}),
       ...snapshots,
       ...(dings ? { dings } : {}),
       ...(presence ? { presence } : {}),
       ...pulls,
+      ...(installedAddons ? { installedAddons } : {}),
     };
   }
 
