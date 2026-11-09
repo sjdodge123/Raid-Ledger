@@ -48,7 +48,7 @@ export function CharacterDetailError({ message, status, hubId, onBack }: Charact
         <div className={FRAME}>
             <div className="bg-danger/10 border border-danger/40 rounded-lg p-6 text-center">
                 <p className="text-danger">{message}</p>
-                <button onClick={onBack} className="text-blue-400 hover:underline mt-2 inline-block">Go back</button>
+                <button onClick={onBack} className="text-sm text-success hover:underline mt-2 inline-block">Go back</button>
             </div>
         </div>
     );
