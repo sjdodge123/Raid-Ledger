@@ -1,12 +1,14 @@
 /**
  * /dev/design-system — GuildMeter tones (§3.2) and the small vertical CSS
- * histogram (§4.30, ROK-1921). Static sample data, tokens only, so both flip
+ * histogram (§4.30, ROK-1921), plus the ranked leaderboard row that sits on
+ * the meter (§3.2, ROK-2148). Static sample data, tokens only, so both flip
  * with the colour family. Lazy-loaded by DesignSystemPage.tsx (own Suspense).
  */
 import type { JSX } from 'react';
 import { GuildMeter, type MeterTone } from '../../components/hub/events/guild-meter';
 import { FOCUS_RING } from '../../components/ui/form-classes';
 import { Section, StateFrame } from './design-system-bits';
+import { RankedRowDemo } from './ranked-row-demo';
 
 const TONES: { tone: MeterTone; pct: number; note: string }[] = [
     { tone: 'success', pct: 80, note: 'Default — a fill that is good (roster filled, requirement covered).' },
@@ -70,6 +72,8 @@ export function MeterHistogramSection(): JSX.Element {
             <MeterTones />
             <h3 className="mt-6 text-sm font-semibold text-foreground">Small vertical histogram (§4.30, ROK-1921)</h3>
             <Histogram />
+            <h3 className="mt-6 text-sm font-semibold text-foreground">Ranked leaderboard row (§3.2, ROK-2148)</h3>
+            <RankedRowDemo />
         </Section>
     );
 }
