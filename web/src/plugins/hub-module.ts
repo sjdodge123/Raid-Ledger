@@ -117,8 +117,21 @@ export interface HubMemberGrouping {
 export interface HubMemberColumn {
     id: string;
     header: string;
-    cell: ComponentType<{ row: HubMemberRow }>;
+    /**
+     * ROK-2155: `stretched` is true only for the `rowLink` column — the cell
+     * then puts `STRETCHED_LINK` on its one link so a click anywhere on the row
+     * follows it (core has already made the row `relative`).
+     */
+    cell: ComponentType<{ row: HubMemberRow; stretched?: boolean }>;
     groupBy?: (row: HubMemberRow) => HubMemberGrouping;
+    /**
+     * ROK-2155 — whole-row click, opt-in per hub kind: this column's cell holds
+     * the row's ONE link and stretches it over the row (StretchedAction pattern,
+     * design-system §4.18). Omitted on every column = rows are not clickable.
+     */
+    rowLink?: true;
+    /** ROK-2155 — phone cards: `'own'` draws this column on its own line under the meta line (WoW: professions). */
+    cardLine?: 'own';
 }
 
 /**

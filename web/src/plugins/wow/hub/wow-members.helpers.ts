@@ -35,11 +35,12 @@ export function wowMemberSearch(row: HubMemberRow): string {
 }
 
 export const WOW_MEMBER_COLUMNS: readonly HubMemberColumn[] = [
-    { id: 'name', header: 'Name', cell: NameCell },
+    // ROK-2155 — the name link (character page, or the read-only roster page) opens the whole row.
+    { id: 'name', header: 'Name', cell: NameCell, rowLink: true },
     { id: 'facts', header: 'Class', cell: FactsCell },
     { id: 'rank', header: 'Rank', cell: RankCell, groupBy: wowRankGroup },
     { id: 'main', header: 'Main', cell: MainCell },
     { id: 'role', header: 'Raid role', cell: RoleCell },
-    // ROK-1173 AC8 — last, so on phone cards a clipped line loses professions first.
-    { id: 'professions', header: 'Professions', cell: ProfessionsCell },
+    // ROK-1173 AC8 — last; ROK-2155 — on phone cards on a line of its own, not crammed into the meta line.
+    { id: 'professions', header: 'Professions', cell: ProfessionsCell, cardLine: 'own' },
 ];

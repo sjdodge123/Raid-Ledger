@@ -8,11 +8,16 @@
  * ROK-1173: both shells draw only the mounted slice `HubMemberVirtualList`
  * computes, with a spacer above and below it standing in for the rest. Every
  * row and band heading has the fixed height in `TABLE_METRICS` /
- * `CARD_METRICS`, which is what keeps the spacer maths exact.
+ * `cardMetrics(columns)`, which is what keeps the spacer maths exact.
+ *
+ * ROK-2155: a phone card is three fixed lines when a column asks for its own
+ * (`cardLine: 'own'`, WoW professions), and a hub kind whose column sets
+ * `rowLink` gets whole-row click — the row is `relative` and that column's one
+ * link stretches over it (design-system §4.18). No `role=button`, no second link.
  */
 import type { JSX } from 'react';
 import type { HubMemberColumn, HubMemberRow } from '../../plugins/hub-module';
-import { CARD_METRICS, TABLE_METRICS, type VirtualSlice, type VisibleBand } from './hub-member-virtual.helpers';
+import { cardMetrics, TABLE_METRICS, type VirtualSlice, type VisibleBand } from './hub-member-virtual.helpers';
 
 export interface MemberShellProps {
     slice: VirtualSlice;
@@ -30,6 +35,19 @@ function bandHeading(band: VisibleBand['band']): string {
 
 function rule(row: HubMemberRow, rowClass: MemberShellProps['rowClass']): string {
     return rowClass ? rowClass(row) : 'border-transparent';
+}
+
+/** Rows of a hub kind that opted into whole-row click: the containing block of the stretched link. */
+const LINKED_ROW = 'relative transition-colors hover:bg-panel';
+
+function linkedRow(columns: readonly HubMemberColumn[]): string {
+    return columns.some((c) => c.rowLink === true) ? LINKED_ROW : '';
+}
+
+/** One cell; only the `rowLink` column is told to stretch its link. */
+function MemberCell({ column, row }: { column: HubMemberColumn; row: HubMemberRow }): JSX.Element {
+    const Cell = column.cell;
+    return <Cell row={row} stretched={column.rowLink === true} />;
 }
 
 /** A spacer standing in for the rows that are not mounted. */
@@ -55,10 +73,10 @@ function TableBand({ visible, columns, rowClass }: { visible: VisibleBand } & Om
             )}
             {visible.rows.map((row, i) => (
                 <tr key={row.memberId} data-testid="guild-member-row" style={{ height: TABLE_METRICS.row }} aria-rowindex={rowBase + i}
-                    className="border-t border-edge-subtle">
+                    className={`border-t border-edge-subtle ${linkedRow(columns)}`}>
                     {columns.map((c, i) => (
                         <td key={c.id} className={`${CELL} ${i === 0 ? `border-l-2 ${rule(row, rowClass)}` : ''}`}>
-                            <c.cell row={row} />
+                            <MemberCell column={c} row={row} />
                         </td>
                     ))}
                 </tr>
@@ -85,34 +103,43 @@ export function HubMemberTable({ slice, columns, rowClass }: MemberShellProps): 
     );
 }
 
-interface CardPosition { setSize: number; posInSet: number }
+interface CardLayout { setSize: number; posInSet: number; height: number }
 
-function MemberCard({ row, columns, rowClass, setSize, posInSet }: { row: HubMemberRow } & CardPosition & Omit<MemberShellProps, 'slice'>): JSX.Element {
+const CARD_LINE_CLASS = 'flex min-w-0 flex-nowrap items-center gap-x-2 overflow-hidden text-sm';
+
+/** Line 1 the identity column, line 2 the meta line, line 3 (when any) the `cardLine: 'own'` columns. */
+function MemberCard({ row, columns, rowClass, setSize, posInSet, height }: { row: HubMemberRow } & CardLayout & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const [first, ...rest] = columns;
+    const own = rest.filter((c) => c.cardLine === 'own');
     return (
-        <li data-testid="guild-member-row" style={{ height: CARD_METRICS.row }} aria-setsize={setSize} aria-posinset={posInSet}
-            className={`flex flex-col justify-center gap-1 overflow-hidden border-b border-edge-subtle border-l-2 pl-2 last:border-b-0 ${rule(row, rowClass)}`}>
-            {first && <div className="truncate text-sm"><first.cell row={row} /></div>}
-            <div className="flex min-w-0 flex-nowrap items-center gap-x-2 overflow-hidden text-sm">
-                {rest.map((c) => <c.cell key={c.id} row={row} />)}
+        <li data-testid="guild-member-row" style={{ height }} aria-setsize={setSize} aria-posinset={posInSet}
+            className={`flex flex-col justify-center gap-1 overflow-hidden border-b border-edge-subtle border-l-2 pl-2 last:border-b-0 ${rule(row, rowClass)} ${linkedRow(columns)}`}>
+            {first && <div className="truncate text-sm"><MemberCell column={first} row={row} /></div>}
+            <div data-testid="guild-member-card-meta" className={CARD_LINE_CLASS}>
+                {rest.filter((c) => c.cardLine !== 'own').map((c) => <MemberCell key={c.id} column={c} row={row} />)}
             </div>
+            {own.length > 0 && (
+                <div data-testid="guild-member-card-own-line" className={CARD_LINE_CLASS}>
+                    {own.map((c) => <MemberCell key={c.id} column={c} row={row} />)}
+                </div>
+            )}
         </li>
     );
 }
 
-function CardBand({ visible, columns, rowClass }: { visible: VisibleBand } & Omit<MemberShellProps, 'slice'>): JSX.Element {
+function CardBand({ visible, columns, rowClass, height }: { visible: VisibleBand; height: number } & Omit<MemberShellProps, 'slice'>): JSX.Element {
     const { band } = visible;
     return (
         <div data-testid={band.testId}>
             {visible.showHeading && (
-                <p style={{ height: CARD_METRICS.heading }}
+                <p style={{ height: cardMetrics(columns).heading }}
                     className="flex items-center border-b border-edge-subtle bg-panel px-3 text-xs font-semibold text-muted">
                     {bandHeading(band)}
                 </p>
             )}
             <ul aria-label={band.label === '' ? 'Members' : `${band.label} members`} className="flex flex-col px-3">
                 {visible.rows.map((row, i) => (
-                    <MemberCard key={row.memberId} row={row} columns={columns} rowClass={rowClass}
+                    <MemberCard key={row.memberId} row={row} columns={columns} rowClass={rowClass} height={height}
                         setSize={band.rows.length} posInSet={visible.firstRow + i + 1} />
                 ))}
             </ul>
@@ -121,10 +148,11 @@ function CardBand({ visible, columns, rowClass }: { visible: VisibleBand } & Omi
 }
 
 export function HubMemberCards({ slice, columns, rowClass }: MemberShellProps): JSX.Element {
+    const { row: height } = cardMetrics(columns);
     return (
         <div data-testid="guild-members-cards">
             {slice.top > 0 && <div aria-hidden="true" style={{ height: slice.top }} />}
-            {slice.bands.map((v) => <CardBand key={v.band.key} visible={v} columns={columns} rowClass={rowClass} />)}
+            {slice.bands.map((v) => <CardBand key={v.band.key} visible={v} columns={columns} rowClass={rowClass} height={height} />)}
             {slice.bottom > 0 && <div aria-hidden="true" style={{ height: slice.bottom }} />}
         </div>
     );

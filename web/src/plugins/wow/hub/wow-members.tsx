@@ -41,12 +41,13 @@ function useRosterMemberHref(row: Pick<HubMemberRow, 'characterId' | 'memberId'>
     return memberPagePath(hubId, row.memberId);
 }
 
-export function NameCell({ row }: { row: HubMemberRow }): JSX.Element {
+/** ROK-2155: `stretched` (the `rowLink` column) — the name link covers the whole row, claimed or unclaimed. */
+export function NameCell({ row, stretched = false }: { row: HubMemberRow; stretched?: boolean }): JSX.Element {
     const unlinkedTo = useRosterMemberHref(row);
     return (
         <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle">
             {row.avatarUrl ? <MemberAvatar url={row.avatarUrl} /> : null}
-            <span className="min-w-0 truncate"><CharacterLink name={row.name} characterId={row.characterId} unlinkedTo={unlinkedTo} /></span>
+            <span className="min-w-0 truncate"><CharacterLink name={row.name} characterId={row.characterId} unlinkedTo={unlinkedTo} stretched={stretched} /></span>
             {row.isViewer === true && <span data-testid="guild-member-you"><Pill>You</Pill></span>}
         </span>
     );
@@ -69,12 +70,17 @@ export function FactsCell({ row }: { row: HubMemberRow }): JSX.Element {
     );
 }
 
-/** AC8: linked rows with synced professions show badges; anything else renders nothing. */
+/**
+ * AC8: linked rows with synced professions show badges; anything else renders nothing.
+ * ROK-2155: wraps but shows ONE 16px line (`max-h-4`), so a badge that does not
+ * fit drops whole instead of clipping mid-icon; `relative` lifts the titled
+ * badges above the row's stretched link so their tooltips stay hoverable.
+ */
 export function ProfessionsCell({ row }: { row: HubMemberRow }): JSX.Element | null {
     const professions = useRowProfessions(row);
     if (!professions) return null;
     return (
-        <span className="inline-flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-muted" data-testid="guild-member-professions">
+        <span className="relative inline-flex max-h-4 min-w-0 max-w-full flex-wrap items-center gap-x-1.5 overflow-hidden whitespace-nowrap text-xs text-muted" data-testid="guild-member-professions">
             <ProfessionBadges professions={professions} separator="" />
         </span>
     );
@@ -85,7 +91,8 @@ export function MainCell({ row }: { row: HubMemberRow }): JSX.Element | null {
 }
 
 export function RankCell({ row }: { row: HubMemberRow }): JSX.Element {
-    return <span className="text-xs text-muted">{rankLabel(row)}</span>;
+    // ROK-2155: never wraps ("Guild Master" broke onto two lines) and never gives up width to the facts.
+    return <span className="shrink-0 whitespace-nowrap text-xs text-muted">{rankLabel(row)}</span>;
 }
 
 export function RoleCell({ row }: { row: HubMemberRow }): JSX.Element | null {
