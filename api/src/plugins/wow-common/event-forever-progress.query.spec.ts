@@ -47,9 +47,9 @@ beforeEach(() => {
   db = createDrizzleMock();
   deps = { db: db as never, settings: { get: jest.fn() } };
   sources.mockReset().mockResolvedValue(new Map());
-  overlay.mockReset().mockImplementation((_deps, quests) =>
-    Promise.resolve(quests),
-  );
+  overlay
+    .mockReset()
+    .mockImplementation((_deps, quests) => Promise.resolve(quests));
 });
 
 describe('INACTIVE_SIGNUP_STATUSES (D8)', () => {

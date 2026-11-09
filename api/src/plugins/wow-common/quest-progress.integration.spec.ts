@@ -3,7 +3,8 @@
  *
  * Verifies quest progress upsert, event progress retrieval, and
  * sharable quest coverage queries against a real PostgreSQL database
- * via HTTP endpoints.
+ * via HTTP endpoints. ROK-2143 Codex P2 3: an overlay-only (Blizzard)
+ * dungeon quest gets addon completion state while the import switch is on.
  */
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -15,6 +16,8 @@ import { eq } from 'drizzle-orm';
 import { defined } from '../../common/testing/narrow';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { clearKnownQuestMemo } from './event-forever-progress.query';
+import { SettingsService } from '../../settings/settings.service';
+import { WOW_FOREVER_QUEST_IMPORT_KEY } from './forever.settings';
 
 /** Create a test event owned by (and signed up to by) the admin user. */
 async function createTestEvent(
@@ -578,4 +581,51 @@ describe('Quest Progress — Forever addon rows (ROK-1748, integration)', () => 
     expect(prereqs.status).toBe(200);
     expect(prereqs.text).toBe('null');
   });
+
+  it('an overlay-only dungeon quest gets completion state with the import on, none with it off (ROK-2143 Codex P2 3)', async () => {
+    await insertOverlayQuest(990601, 81);
+    await insertOverlayQuest(990602, 62);
+    const userId = await seedUser('qp-overlay');
+    const charId = await seedChar(userId, 'Ovra', {
+      completed: [990601, 990602],
+      inProgress: [],
+    });
+    await signUp(foreverEvent, userId, charId);
+    const rowsOf = async () =>
+      ((await get(foreverEvent, 'quest-progress')).body as ProgressRow[])
+        .filter((r) => r.userId === userId)
+        .map((r) => ({ questId: r.questId, completed: r.completed }));
+    const settings = testApp.app.get(SettingsService);
+    try {
+      expect(await rowsOf()).toEqual([{ questId: 990601, completed: true }]);
+      await settings.set(WOW_FOREVER_QUEST_IMPORT_KEY, 'false');
+      expect(await rowsOf()).toEqual([]);
+    } finally {
+      await settings.delete(WOW_FOREVER_QUEST_IMPORT_KEY);
+    }
+  });
 });
+
+interface ProgressRow {
+  userId: number;
+  questId: number;
+  completed: boolean;
+}
+
+/** A Blizzard overlay row for instance 63 that our curated data lacks. */
+async function insertOverlayQuest(questId: number, typeId: number) {
+  await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
+    questId,
+    areaId: 718,
+    dungeonInstanceId: 63,
+    title: `Overlay ${questId}`,
+    typeId,
+    rewardXp: 1000,
+    rewardMoneyCopper: 500,
+    rewardItems: [],
+    requirementsRaw: null,
+    raw: { id: questId },
+    fetchedAt: new Date(),
+    runId: 'run-qp',
+  });
+}

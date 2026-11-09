@@ -9,6 +9,7 @@ import {
   type GuildActor,
 } from '../../guilds/guild-access.service';
 import { loadEventQuestSet } from './event-forever-progress.query';
+import type { QuestOverlayDeps } from './dungeon-quests.overlay';
 import {
   buildQuestReadiness,
   type ReadinessSignup,
@@ -90,6 +91,11 @@ export class EventRaidReadinessService {
     private readonly settings: SettingsService,
   ) {}
 
+  /** The DB plus the quest-import switch the known-quest overlay reads. */
+  private get questDeps(): QuestOverlayDeps {
+    return { db: this.db, settings: this.settings };
+  }
+
   async readiness(
     actor: GuildActor,
     eventId: number,
@@ -108,10 +114,7 @@ export class EventRaidReadinessService {
     event: ReadinessEvent,
   ): Promise<EventRaidReadiness> {
     const [quests, signups, manual] = await Promise.all([
-      loadEventQuestSet(
-        { db: this.db, settings: this.settings },
-        event.contentInstances,
-      ),
+      loadEventQuestSet(this.questDeps, event.contentInstances),
       loadReadinessRoster(this.db, eventId),
       loadEventManualRows(this.db, eventId),
     ]);

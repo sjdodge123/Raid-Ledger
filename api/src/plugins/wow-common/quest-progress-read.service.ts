@@ -91,7 +91,11 @@ export class QuestProgressReadService {
     eventId: number,
     userId: number,
   ): Promise<EventQuestPrereqsResponse> {
-    const forever = await loadForeverMemberProgress(this.questDeps, eventId, userId);
+    const forever = await loadForeverMemberProgress(
+      this.questDeps,
+      eventId,
+      userId,
+    );
     const member = forever?.members.find((m) => m.userId === userId);
     if (!forever || !member) return null;
     const mine = await this.queryManualRows(eventId, userId);
