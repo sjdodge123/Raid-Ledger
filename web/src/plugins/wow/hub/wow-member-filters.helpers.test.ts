@@ -78,7 +78,7 @@ describe('wowMemberMatches — each filter group (ROK-1173 AC2)', () => {
         expect(names({ linkedOnly: true })).toEqual(['Tankard', 'Mendy', 'Arrow']);
     });
 
-    it('Profession: OR within the group, joined by characterId; unlinked rows never match', () => {
+    it('Profession: OR within the group, joined by characterId; an unlinked row with no snapshot never matches', () => {
         expect(names({ professions: ['Enchanting'] })).toEqual(['Tankard', 'Mendy']);
         expect(names({ professions: ['Enchanting', 'Mining'] })).toEqual(['Tankard', 'Mendy', 'Arrow']);
         expect(names({ professions: ['Fishing'] })).toEqual([]);
@@ -136,6 +136,37 @@ describe('wowFilterOptions (ROK-1173 AC2)', () => {
 
     it('has no max level when no row reports one', () => {
         expect(wowFilterOptions([row({ memberId: 9, name: 'X', level: null })]).maxLevel).toBeNull();
+    });
+});
+
+describe('snapshot-only profession members (ROK-2149 AC-14)', () => {
+    // Alty (memberId 4) is unclaimed; its Armory snapshot reports Mining. A
+    // snapshot entry for memberId 1 must NOT attach to Tankard, who is linked
+    // and therefore keyed by its character.
+    const withSnapshot: readonly WowRosterProfession[] = [
+        ...PROFESSIONS.filter((p) => p.name !== 'Mining'),
+        { name: 'Mining', members: [
+            { characterId: UUID.c, name: 'Arrow', skill: 75, maxSkill: 150, source: 'addon' },
+            { characterId: null, memberId: 4, name: 'Alty', skill: 40, maxSkill: 75, source: 'blizzard' },
+        ] },
+        { name: 'Skinning', members: [{ characterId: null, memberId: 1, name: 'Stray', skill: 1, maxSkill: 75, source: 'blizzard' }] },
+    ];
+    const index = buildProfessionIndex(withSnapshot);
+    const match = (professions: string[]): string[] =>
+        ROWS.filter((r) => wowMemberMatches({ ...EMPTY_WOW_MEMBER_FILTERS, professions }, r, index)).map((r) => r.name);
+
+    it('the Profession filter includes an unlinked row with snapshot professions', () => {
+        expect(match(['Mining'])).toEqual(['Arrow', 'Alty']);
+    });
+
+    it('a snapshot entry keys by memberId and never attaches to a linked row with that memberId', () => {
+        expect(match(['Skinning']), 'Tankard is linked (memberId 1) — keyed by its character').toEqual([]);
+    });
+
+    it('the coverage chip counts the snapshot member', () => {
+        expect(professionCoverage(withSnapshot)).toEqual([
+            { name: 'Enchanting', count: 2 }, { name: 'Mining', count: 2 }, { name: 'Skinning', count: 1 },
+        ]);
     });
 });
 
