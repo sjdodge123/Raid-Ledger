@@ -22,20 +22,28 @@ export interface CharacterDetailReadOnlyActionsProps {
     name: string;
 }
 
+/**
+ * Codex P2: until the viewer's characters load, "no characters" is unknown — a claim
+ * then would go out as the main with the default ruleset and could demote the real
+ * main. The CTA stays disabled until the list loads; a failed list says so.
+ */
 function RosterMemberClaimCta({ rosterMemberId, fromClaim, gameId, name }: Omit<CharacterDetailReadOnlyActionsProps, 'canClaim'>): JSX.Element {
     const navigate = useNavigate();
-    const existing = useMyCharacters(gameId).data?.data ?? [];
+    const chars = useMyCharacters(gameId);
+    const existing = chars.data?.data;
     const [picked, setPicked] = useState<WowForeverSelectableRuleset | null>(null);
-    const ruleset = picked ?? defaultClaimRuleset(existing);
-    const { onClaim, pendingId } = useClaimHandler(gameId, existing, ruleset, (created) => navigate(`/characters/${created.id}`, { replace: true }));
+    const ruleset = picked ?? defaultClaimRuleset(existing ?? []);
+    const { onClaim, pendingId } = useClaimHandler(gameId, existing ?? [], ruleset, (created) => navigate(`/characters/${created.id}`, { replace: true }));
     const pending = pendingId !== null;
     return (
         <div data-testid="roster-member-claim" className="col-span-full flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <RulesetSelect value={ruleset} onChange={setPicked} />
-            <Button variant="primary" loading={pending} loadingLabel="Claiming…" onClick={() => onClaim({ memberId: rosterMemberId, name })}>
+            <Button variant="primary" loading={pending} loadingLabel="Claiming…" disabled={existing === undefined}
+                onClick={() => { if (existing !== undefined) onClaim({ memberId: rosterMemberId, name }); }}>
                 {fromClaim ? 'This is my character — claim it' : 'Claim this character'}
             </Button>
             {fromClaim && <Button variant="secondary" onClick={() => navigate(-1)}>Back</Button>}
+            {chars.isError && <p data-testid="roster-member-claim-error" role="alert" className="w-full text-sm text-danger">Couldn&apos;t load your characters — reload the page to claim.</p>}
         </div>
     );
 }
