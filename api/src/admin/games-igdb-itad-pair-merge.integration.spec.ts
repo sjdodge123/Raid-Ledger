@@ -12,7 +12,9 @@
  * leaf link table (game_interests) loses its colliding row (Steam playtime folded
  * onto the keeper first). Registry config is copied onto a default keeper; a
  * two-sided config conflict skips the pair. Template
- * `config.gameId` is rewritten too.
+ * `config.gameId` is rewritten too. Q2 re-ruling (2026-11-09): an IGDB row +
+ * a Steam-first twin with a DIFFERENT Steam id merge, the twin's Steam id
+ * (tagged 'manual') and ITAD id win; name groups of 3+ stay untouched.
  *
  * The file is resolved by SUFFIX, never by number — a renumber orphaned a
  * hardcoded-path spec on 2026-11-07.
@@ -104,12 +106,13 @@ const GAME_ROWS: GameSeed[] = [
   // 6 / 7 — both own an igdb id: distinct games, must stay.
   { name: 'Rok2120 Twin', slug: 'rok2120-twin-a', igdbId: 99120010 },
   { name: 'Rok2120 Twin', slug: 'rok2120-twin-b', igdbId: 99120011 },
-  // 8 / 9 — both Steam-linked (different products): must stay.
+  // 8 / 9 — neither row is IGDB and both are Steam-linked (different
+  // products): must stay. (An IGDB row + Steam-first twin merges — Q2.)
   {
     name: 'Rok2120 Steamy',
     slug: 'rok2120-steamy-a',
-    igdbId: 99120020,
     steamAppId: 99120020,
+    itadGameId: 'itad-rok2120-s',
   },
   { name: 'Rok2120 Steamy', slug: 'rok2120-steamy-b', steamAppId: 99120021 },
 ];
@@ -550,6 +553,43 @@ describe('ROK-2120 games IGDB/ITAD pair merge migration', () => {
     ]);
   }, 60_000);
 
+  it('Q2: merges an IGDB row + Steam-first twin with DIFFERENT Steam ids into the IGDB row, adopting the twin’s ids', async () => {
+    const ids = await seedGames(testApp, BL2_PAIR);
+    const keep = at(ids, 0);
+    const dup = at(ids, 1);
+    const userId = testApp.seed.adminUser.id;
+    const gi = schema.gameInterests;
+    await testApp.db
+      .insert(gi)
+      .values({ userId, gameId: dup, source: 'steam_library' });
+    await runMigration(testApp);
+
+    const rows = await identities(testApp, [keep, dup]);
+    expect(rows.has(dup)).toBe(false);
+    expect(rows.get(keep)).toMatchObject({
+      igdbId: 99120040,
+      steamAppId: 99120042,
+      steamAppIdSource: 'manual',
+      itadGameId: 'itad-rok2120-bl-y',
+      itadBoxartUrl: 'https://example.test/bl-y.png',
+    });
+    const links = await testApp.db
+      .select({ gameId: gi.gameId })
+      .from(gi)
+      .where(inArray(gi.gameId, [keep, dup]));
+    expect(links).toEqual([{ gameId: keep }]);
+  }, 60_000);
+
+  it('Q2: leaves a name group of three rows untouched (ambiguous)', async () => {
+    const ids = await seedGames(testApp, TRIPLE);
+    await runMigration(testApp);
+
+    const rows = await identities(testApp, ids);
+    expect(rows.size).toBe(3);
+    expect(rows.get(at(ids, 0))?.steamAppId).toBe(99120050);
+    expect(rows.get(at(ids, 1))?.steamAppId).toBe(99120051);
+  }, 60_000);
+
   it('is a no-op on a second run (zero pairs left)', async () => {
     const s = await seedScenario(testApp);
     await runMigration(testApp);
@@ -574,6 +614,46 @@ async function gameCount(testApp: TestApp): Promise<number> {
     .from(schema.games);
   return row?.n ?? -1;
 }
+
+/** Borderlands-2 shape (Q2): IGDB row on an edition Steam id + real Steam-first row. */
+const BL2_PAIR: GameSeed[] = [
+  {
+    name: 'Rok2120 Border Lands',
+    slug: 'rok2120-border-lands',
+    igdbId: 99120040,
+    steamAppId: 99120041,
+    steamAppIdSource: 'igdb',
+    itadGameId: 'itad-rok2120-bl-x',
+  },
+  {
+    name: 'Rok2120 Border Lands',
+    slug: 'rok2120-border-lands-2',
+    steamAppId: 99120042,
+    steamAppIdSource: 'steam',
+    itadGameId: 'itad-rok2120-bl-y',
+    itadBoxartUrl: 'https://example.test/bl-y.png',
+  },
+];
+
+/** Three rows share a name: ambiguous, never merged. */
+const TRIPLE: GameSeed[] = [
+  {
+    name: 'Rok2120 Tri Peak',
+    slug: 'rok2120-tri-peak',
+    igdbId: 99120050,
+    steamAppId: 99120050,
+  },
+  {
+    name: 'Rok2120 Tri Peak',
+    slug: 'rok2120-tri-peak-2',
+    steamAppId: 99120051,
+  },
+  {
+    name: 'Rok2120 Tri Peak',
+    slug: 'rok2120-tri-peak-3',
+    itadGameId: 'itad-rok2120-tri',
+  },
+];
 
 /** IGDB keeper + Steam-first dup whose characters collide (non-leaf table). */
 const NON_LEAF_PAIR: GameSeed[] = [
