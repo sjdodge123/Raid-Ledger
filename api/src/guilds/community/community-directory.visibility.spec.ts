@@ -15,7 +15,7 @@ function render(q: SQL): { text: string; params: unknown[] } {
 }
 
 function scope(over: Partial<DirectoryScope> = {}): DirectoryScope {
-  return { kinds: [], memberIds: [], staff: false, ...over };
+  return { kinds: [], memberIds: [], visitorIds: [], staff: false, ...over };
 }
 
 describe('visibleKinds', () => {
@@ -48,6 +48,21 @@ describe('visibleKinds', () => {
     );
     expect(text).toContain('"guilds"."id" in');
     expect(params).toEqual(['wow_guild', 7, 9]);
+  });
+
+  it('ROK-2132: a non-staff WoW branch also lists the visitor ids, deduped', () => {
+    const { text, params } = render(
+      visibleKinds(
+        scope({ kinds: ['wow_guild'], memberIds: [7], visitorIds: [7, 11] }),
+      ),
+    );
+    expect(text).toContain('"guilds"."id" in');
+    expect(params).toEqual(['wow_guild', 7, 11]);
+  });
+
+  it('ROK-2132: visitor ids never count as joined', () => {
+    const { params } = render(joinedPredicate(scope({ visitorIds: [11] })));
+    expect(params).not.toContain(11);
   });
 
   it('a non-staff WoW branch with no memberships matches nothing', () => {

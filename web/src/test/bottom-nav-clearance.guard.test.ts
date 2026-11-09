@@ -54,7 +54,7 @@ describe('bottom-nav clearance (ROK-1875)', () => {
     it.each([
         'components/features/game-time/SelectedBlockInspector.tsx',
         'components/features/game-time/phone/DayBlockEditor.tsx',
-        'components/hub/hub-page.tsx',
+        'components/hub/hub-page-error.tsx',
         'components/hub/arrange/arrange-footer.tsx',
     ])('%s docks above the circle via --bottom-nav-clearance', (path) => {
         expect(source(path)).toContain('var(--bottom-nav-clearance)');
@@ -64,7 +64,22 @@ describe('bottom-nav clearance (ROK-1875)', () => {
         const css = readFileSync(join(WEB_SRC, 'index.css'), 'utf8');
         expect(css).toContain(':root:has([data-filter-fab]) { --filter-fab-clearance: 9rem; }');
         expect(css).toContain(':root:has([data-filter-fab]) { --filter-fab-clearance: 9.75rem; }');
-        expect(source('components/hub/hub-page.tsx')).toContain('var(--filter-fab-clearance)');
+        expect(source('components/hub/hub-page-error.tsx')).toContain('var(--filter-fab-clearance)');
+    });
+
+    // ROK-2132 moved the hub page's `PAGE` padding into `hub-page-error.tsx`; every
+    // render path — the body, each notice, the skeleton and a module's join gate —
+    // must still wrap in that one class string, so both clearances apply everywhere.
+    it('every hub-page render path wraps in the one PAGE padding (ROK-2132)', () => {
+        const owner = source('components/hub/hub-page-error.tsx');
+        expect(owner).toMatch(/export const PAGE = '[^;]*var\(--bottom-nav-clearance\)[^;]*var\(--filter-fab-clearance\)/);
+        expect(owner, 'Notice pads past the bar').toMatch(/function Notice\b[\s\S]*?<div className=\{PAGE\}>/);
+        expect(owner, 'the loading skeleton pads past the bar').toMatch(/function LoadingState\b[\s\S]*?<div className=\{PAGE\}/);
+        expect(owner, "a module's join gate pads past the bar").toMatch(/<div className=\{PAGE\}><Gate\b/);
+        const page = source('components/hub/hub-page.tsx');
+        expect(page).toMatch(/import \{[^}]*\bPAGE\b[^}]*\} from '\.\/hub-page-error';/);
+        expect(page, 'the hub body pads past the bar').toContain('<div className={PAGE}>');
+        expect(page, 'hub-page.tsx must not re-declare its own page padding').not.toMatch(/\bconst PAGE\b/);
     });
 
     it('no shipped file docks or pads against the flat bar height', () => {

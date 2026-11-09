@@ -15,7 +15,7 @@
  * are relative to now (the golden one's fixed dates fall out of the 30-day
  * and 60-day windows as the calendar moves). Dainel's roster GUID is the
  * fixture's wire-shaped `Player-4395-<SHA1(lower(name))[0..7]><rank hex>`
- * (`seedRosterGuid`, `demo-test-guild.helpers.ts`) — a drift there fails the import on a
+ * (`seedRosterGuid`, `demo-test-guild-roster-suffix.helpers.ts`) — a drift there fails the import on a
  * named assertion, not on a missing card.
  *
  *  T1 Member: after the import the card shows the Enchanting master, the

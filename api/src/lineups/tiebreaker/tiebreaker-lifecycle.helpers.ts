@@ -146,19 +146,17 @@ export async function clearActiveTiebreaker(
 }
 
 /**
- * Mark a tiebreaker resolved with its winning game.
- *
- * ROK-1309: this is the single choke point for BOTH `resolveTiebreaker(...)`
- * call sites in `tiebreaker.service.ts` (force-resolve and bracket
- * completion), so the veto cohort-memory write hangs here rather than being
- * duplicated at each caller — which also keeps that service off its 300-line
- * ESLint cap. The write is idempotent and never throws into the caller.
+ * Mark a tiebreaker resolved with its winning game — the row write only, no
+ * side effects, so it is safe on a transaction handle (ROK-2098: the finalize
+ * path runs it under the round-advance lock and writes the cohort memory
+ * after commit).
+ * @returns the tiebreaker's lineup id, or null when the row is gone.
  */
-export async function resolveTiebreaker(
+export async function markTiebreakerResolved(
   db: Db,
   tiebreakerId: number,
   winnerId: number,
-): Promise<void> {
+): Promise<number | null> {
   const [row] = await db
     .update(schema.communityLineupTiebreakers)
     .set({
@@ -169,6 +167,22 @@ export async function resolveTiebreaker(
     })
     .where(eq(schema.communityLineupTiebreakers.id, tiebreakerId))
     .returning({ lineupId: schema.communityLineupTiebreakers.lineupId });
-  if (!row) return;
-  await writeTiebreakerCohortMemory(db, row.lineupId, tiebreakerId, winnerId);
+  return row?.lineupId ?? null;
+}
+
+/**
+ * Mark a tiebreaker resolved with its winning game, then record the veto
+ * cohort memory (ROK-1309). The memory write is idempotent and never throws
+ * into the caller — which also means it must NOT run on a transaction handle
+ * (a swallowed SQL error would poison the transaction), so the finalize path
+ * uses `markTiebreakerResolved` + its own after-commit write instead.
+ */
+export async function resolveTiebreaker(
+  db: Db,
+  tiebreakerId: number,
+  winnerId: number,
+): Promise<void> {
+  const lineupId = await markTiebreakerResolved(db, tiebreakerId, winnerId);
+  if (lineupId === null) return;
+  await writeTiebreakerCohortMemory(db, lineupId, tiebreakerId, winnerId);
 }

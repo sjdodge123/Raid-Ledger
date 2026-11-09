@@ -20,7 +20,16 @@ interface AddCharacterModalProps {
     editingCharacter?: CharacterDto | null;
     /** New character only: starting values from another flow (router state). */
     prefill?: CharacterPrefill | null | undefined;
+    /** ROK-2132: new character only — preselect the registry game with this slug (when `gameId` is not given). */
+    gameSlug?: string | undefined;
+    /** ROK-2132: the tab to open on; it wins over the plugin's automatic tab default. */
+    initialTab?: CharacterAddTab | undefined;
+    /** ROK-2132: narrow the WoW: Forever Guild roster tab to this guild. */
+    rosterGuildId?: number | undefined;
 }
+
+/** The Add character tabs: Manual, Import from Armory, Guild roster (the last two are plugin-rendered). */
+export type CharacterAddTab = 'manual' | 'import' | 'roster';
 
 interface FormState {
     name: string;
@@ -124,37 +133,38 @@ function useCharacterModalMutations() {
     return { createMutation, updateMutation, setMainMutation, isPending };
 }
 
-function useCharacterModalRegistryLookup(selectedIgdbGame: IgdbGameDto | null, preselectedGameId?: number) {
+function useCharacterModalRegistryLookup(selectedIgdbGame: IgdbGameDto | null, preselectedGameId?: number, preselectedGameSlug?: string) {
     const { games: registryGames } = useGameRegistry();
     const registryGame = useMemo(() => {
         if (!selectedIgdbGame) return undefined;
         return registryGames.find((g) => g.name.toLowerCase() === selectedIgdbGame.name.toLowerCase() || g.slug === selectedIgdbGame.slug);
     }, [selectedIgdbGame, registryGames]);
     const preselectedRegistryGame = useMemo(() => {
-        if (!preselectedGameId) return undefined;
-        return registryGames.find((g) => g.id === preselectedGameId);
-    }, [preselectedGameId, registryGames]);
+        if (preselectedGameId) return registryGames.find((g) => g.id === preselectedGameId);
+        return preselectedGameSlug ? registryGames.find((g) => g.slug === preselectedGameSlug) : undefined;
+    }, [preselectedGameId, preselectedGameSlug, registryGames]);
     return { registryGames, registryGame, preselectedRegistryGame };
 }
 
 interface ModalResetState {
     setForm: React.Dispatch<React.SetStateAction<FormState>>; setBaseline: React.Dispatch<React.SetStateAction<FormState>>; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
     setResetKey: React.Dispatch<React.SetStateAction<number>>; setSelectedIgdbGame: React.Dispatch<React.SetStateAction<IgdbGameDto | null>>;
-    setPrevIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    setPrevIsOpen: React.Dispatch<React.SetStateAction<boolean>>; setActiveTab: React.Dispatch<React.SetStateAction<CharacterAddTab>>;
 }
 
 function syncModalOpenClose(
-    isOpen: boolean, prevIsOpen: boolean, editingCharacter: CharacterDto | null | undefined, prefill: CharacterPrefill | null | undefined,
-    hasMainForGame: boolean, preselectedGameId: number | undefined,
-    registryGames: { id: number; name: string; slug: string }[], rs: ModalResetState,
+    isOpen: boolean, prevIsOpen: boolean, props: AddCharacterModalProps,
+    hasMainForGame: boolean, preselected: { id: number; name: string; slug: string } | undefined, rs: ModalResetState,
 ) {
+    const { editingCharacter, prefill, initialTab } = props;
     if (isOpen && !prevIsOpen) {
         rs.setPrevIsOpen(true); rs.setResetKey((k) => k + 1);
         const initial = getInitialFormState(editingCharacter, editingCharacter ? null : prefill);
         if (!editingCharacter && !hasMainForGame) initial.isMain = true;
         rs.setForm(initial); rs.setBaseline(initial); rs.setErrors({});
+        if (initialTab) rs.setActiveTab(initialTab);
         if (!editingCharacter) {
-            if (preselectedGameId) { const match = registryGames.find((g) => g.id === preselectedGameId); if (match) rs.setSelectedIgdbGame({ id: 0, igdbId: 0, name: match.name, slug: match.slug, coverUrl: null }); }
+            if (props.gameId || props.gameSlug) { if (preselected) rs.setSelectedIgdbGame({ id: 0, igdbId: 0, name: preselected.name, slug: preselected.slug, coverUrl: null }); }
             else { rs.setSelectedIgdbGame(null); }
         }
     }
@@ -166,13 +176,13 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const identitySource = editingCharacter ?? prefill;
     const mutations = useCharacterModalMutations();
     const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
-    const [activeTab, setActiveTab] = useState<'manual' | 'import' | 'roster'>('manual');
+    const [activeTab, setActiveTab] = useState<CharacterAddTab>(props.initialTab ?? 'manual');
     const [prevIsOpen, setPrevIsOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
     const [baseline, setBaseline] = useState<FormState>(() => getInitialFormState(editingCharacter));
     const [errors, setErrors] = useState<FormErrors>({});
-    const { registryGames, registryGame, preselectedRegistryGame } = useCharacterModalRegistryLookup(selectedIgdbGame, preselectedGameId);
+    const { registryGame, preselectedRegistryGame } = useCharacterModalRegistryLookup(selectedIgdbGame, preselectedGameId, props.gameSlug);
     const isEditing = !!editingCharacter;
     const effectiveRegistryGame = isEditing ? preselectedRegistryGame : registryGame;
     const effectiveGameId = effectiveRegistryGame?.id ?? preselectedGameId;
@@ -184,7 +194,7 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const { data: gameCharsData, isLoading: gameCharsLoading } = useMyCharacters(effectiveGameId, !!effectiveGameId);
     const gameChars = gameCharsData?.data ?? [];
     const hasMainForGame = gameChars.some((c) => c.isMain);
-    syncModalOpenClose(isOpen, prevIsOpen, editingCharacter, prefill, hasMainForGame, preselectedGameId, registryGames, { setForm, setBaseline, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen });
+    syncModalOpenClose(isOpen, prevIsOpen, props, hasMainForGame, preselectedRegistryGame, { setForm, setBaseline, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen, setActiveTab });
     const isDirty = isCharacterFormDirty(form, baseline, sameIdentity, isEditing ? undefined : selectedIgdbGame?.slug, preselectedRegistryGame?.slug);
     const updateField = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -216,9 +226,10 @@ function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, edi
     }
 }
 
-function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiveGameName, currentSlug, isArmorySynced }: {
+function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiveGameName, currentSlug, isArmorySynced, initialTab, rosterGuildId }: {
     formId: string; s: ReturnType<typeof useCharacterModalState>; editingCharacter?: CharacterDto | null | undefined;
     onClose: () => void; effectiveGameName: string; currentSlug: string; isArmorySynced: boolean;
+    initialTab?: CharacterAddTab | undefined; rosterGuildId?: number | undefined;
 }) {
     return (
         <form id={formId} onSubmit={(e) => { e.preventDefault(); handleCharacterSubmit(s, editingCharacter, onClose); }} className="space-y-4">
@@ -230,7 +241,7 @@ function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiv
                     error={s.errors.game} />
             )}
             {!s.isEditing && currentSlug && (
-                <PluginSlot name="character-create:import-form" context={{ onClose, gameSlug: currentSlug, gameId: s.effectiveGameId, activeTab: s.activeTab, onTabChange: s.setActiveTab, defaultIsMain: !s.hasMainForGame, existingCharacters: s.gameChars, charactersLoading: s.gameCharsLoading }} />
+                <PluginSlot name="character-create:import-form" context={{ onClose, gameSlug: currentSlug, gameId: s.effectiveGameId, activeTab: s.activeTab, onTabChange: s.setActiveTab, defaultIsMain: !s.hasMainForGame, existingCharacters: s.gameChars, charactersLoading: s.gameCharsLoading, initialTab, rosterGuildId }} />
             )}
             {s.activeTab === 'manual' && (
                 <>
@@ -262,7 +273,8 @@ export function AddCharacterModal(props: AddCharacterModalProps) {
     return (
         <Modal isOpen={isOpen} onClose={onClose} closeGuard={guard} footer={footer} title={s.isEditing ? 'Edit Character' : 'Add Character'}>
             <CharacterModalFormBody formId={formId} s={s} editingCharacter={editingCharacter} onClose={onClose}
-                effectiveGameName={effectiveGameName} currentSlug={currentSlug} isArmorySynced={isArmorySynced} />
+                effectiveGameName={effectiveGameName} currentSlug={currentSlug} isArmorySynced={isArmorySynced}
+                initialTab={props.initialTab} rosterGuildId={props.rosterGuildId} />
         </Modal>
     );
 }

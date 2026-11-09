@@ -6,7 +6,11 @@ import {
   runSyncAllGames,
   type SyncAllDeps,
 } from './igdb-sync-orchestration.helpers';
-import { enrichSyncedGamesWithItad } from './igdb-helpers.barrel';
+import {
+  discoverPopularGames,
+  enrichSyncedGamesWithItad,
+  refreshExistingGames,
+} from './igdb-helpers.barrel';
 import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
 import { at } from '../common/testing/narrow';
 
@@ -75,5 +79,49 @@ describe('runSyncAllGames — ITAD fetch options', () => {
     expect(itadService.getGameInfo).toHaveBeenCalledWith('itad-1', {
       throwOnExhausted: true,
     });
+  });
+});
+
+describe('runSyncAllGames — one taste recompute per game per run (ROK-2121)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('enqueues each game changed by refresh, discover and ITAD once, after the ITAD phase', async () => {
+    const { deps } = buildDeps();
+    const enqueuedDuringItad: unknown[] = [];
+    jest.mocked(refreshExistingGames).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      args[3]?.(8);
+      return Promise.resolve(2);
+    });
+    jest.mocked(discoverPopularGames).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      return Promise.resolve(1);
+    });
+    jest.mocked(enrichSyncedGamesWithItad).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      enqueuedDuringItad.push(...jest.mocked(deps.onGameChanged).mock.calls);
+      return Promise.resolve(1);
+    });
+
+    await runSyncAllGames(deps);
+
+    // Nothing is enqueued before ITAD has written its tags.
+    expect(enqueuedDuringItad).toEqual([]);
+    expect(jest.mocked(deps.onGameChanged).mock.calls).toEqual([[7], [8]]);
+  });
+
+  it('still enqueues the games changed before a phase throws', async () => {
+    const { deps } = buildDeps();
+    jest.mocked(refreshExistingGames).mockImplementationOnce((...args) => {
+      args[3]?.(7);
+      return Promise.resolve(1);
+    });
+    jest
+      .mocked(enrichSyncedGamesWithItad)
+      .mockRejectedValueOnce(new Error('itad down'));
+
+    await expect(runSyncAllGames(deps)).rejects.toThrow('itad down');
+
+    expect(jest.mocked(deps.onGameChanged).mock.calls).toEqual([[7]]);
   });
 });

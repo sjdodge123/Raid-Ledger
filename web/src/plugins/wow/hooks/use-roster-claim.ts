@@ -1,7 +1,8 @@
 /**
  * ROK-2128 — Add character → "Guild roster".
- * `GET /plugins/wow/roster-claim/candidates?gameId=&q=` lists the unclaimed rows of
- * every visible Forever guild (`q` narrows by name server-side, before the cap); `POST /plugins/wow/roster-claim/members/:memberId/claim`
+ * `GET /plugins/wow/roster-claim/candidates?gameId=&q=&guildId=` lists the unclaimed rows of
+ * every visible Forever guild (`q` narrows by name server-side, before the cap; `guildId`
+ * narrows to one guild — ROK-2132 Ruling 6); `POST /plugins/wow/roster-claim/members/:memberId/claim`
  * makes one the caller's character (409 when someone claimed it first).
  */
 import { keepPreviousData, useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
@@ -21,18 +22,22 @@ export function rosterClaimCandidatesKey(gameId: number | undefined): readonly u
     return ['wow', 'roster-claim', 'candidates', gameId ?? null];
 }
 
-/** The candidates URL; a non-blank `q` is sent so the server filters before its cap. */
-export function rosterClaimCandidatesUrl(gameId: number | undefined, q = ''): string {
+/**
+ * The candidates URL; a non-blank `q` is sent so the server filters before its cap,
+ * and a `guildId` (ROK-2132) narrows the list to that one guild.
+ */
+export function rosterClaimCandidatesUrl(gameId: number | undefined, q = '', guildId?: number): string {
     const term = q.trim();
     const search = term ? `&q=${encodeURIComponent(term)}` : '';
-    return `/plugins/wow/roster-claim/candidates?gameId=${gameId ?? 0}${search}`;
+    const guild = guildId !== undefined ? `&guildId=${guildId}` : '';
+    return `/plugins/wow/roster-claim/candidates?gameId=${gameId ?? 0}${search}${guild}`;
 }
 
-/** The unclaimed roster rows of every visible guild of the game (disabled until `enabled`). */
-export function useRosterClaimCandidates(gameId: number | undefined, enabled: boolean, q = ''): UseQueryResult<RosterClaimListResponseDto> {
+/** The unclaimed roster rows of every visible guild of the game, or of one guild (disabled until `enabled`). */
+export function useRosterClaimCandidates(gameId: number | undefined, enabled: boolean, q = '', guildId?: number): UseQueryResult<RosterClaimListResponseDto> {
     return useQuery({
-        queryKey: [...rosterClaimCandidatesKey(gameId), q.trim()],
-        queryFn: () => fetchApi(rosterClaimCandidatesUrl(gameId, q), {}, RosterClaimListResponseSchema),
+        queryKey: [...rosterClaimCandidatesKey(gameId), q.trim(), guildId ?? null],
+        queryFn: () => fetchApi(rosterClaimCandidatesUrl(gameId, q, guildId), {}, RosterClaimListResponseSchema),
         enabled: enabled && !!gameId,
         staleTime: 30_000,
         placeholderData: keepPreviousData,

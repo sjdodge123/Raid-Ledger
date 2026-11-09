@@ -26,6 +26,7 @@ import {
 import { hasDelegation } from './guild-delegation.helpers';
 import { editorGrantStatus } from './guild-editor-status.helpers';
 import { rankNamesInSnapshot } from './guild-queries.helpers';
+import { findClaimableForeverGuildIds } from './wow-visitor-visible.helpers';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 
@@ -127,6 +128,14 @@ export class WowHubKindAdapter implements HubKindAdapter {
   async memberGroupIds(userId: number): Promise<number[]> {
     const rows = await findLinkedMemberRows(this.db, userId);
     return [...new Set(rows.map((r) => r.guildId))];
+  }
+
+  /**
+   * ROK-2132 Ruling 2: claimable Forever guilds are listed to non-members so
+   * they can reach the join gate (the same set for every viewer).
+   */
+  visitorVisibleGroupIds(): Promise<number[]> {
+    return findClaimableForeverGuildIds(this.db);
   }
 
   rankNames(guildId: number): Promise<Map<number, string | null>> {

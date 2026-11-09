@@ -13,13 +13,16 @@ import { CharacterRoleSchema } from "./characters.schema.js";
 export const MAX_ROSTER_CLAIM_CANDIDATES = 1000;
 
 /**
- * `GET /plugins/wow/roster-claim/candidates?gameId=&q=` query. `q` (optional,
- * additive) narrows by character name server-side BEFORE the cap, so a row
- * past the first 1000 is still findable.
+ * `GET /plugins/wow/roster-claim/candidates?gameId=&q=&guildId=` query. `q`
+ * (optional, additive) narrows by character name server-side BEFORE the cap,
+ * so a row past the first 1000 is still findable. `guildId` (ROK-2132,
+ * optional, additive) narrows to one claimable guild; a non-claimable or
+ * unknown id lists nothing.
  */
 export const RosterClaimCandidatesQuerySchema = z.object({
   gameId: z.coerce.number().int().positive(),
   q: z.string().trim().max(100).optional(),
+  guildId: z.coerce.number().int().positive().optional(),
 });
 export type RosterClaimCandidatesQueryDto = z.infer<
   typeof RosterClaimCandidatesQuerySchema

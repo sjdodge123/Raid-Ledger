@@ -213,6 +213,13 @@ export interface HubModule {
      * rows on the viewer's role.
      */
     settingsSections?: ComponentType<HubCtx>;
+    /**
+     * ROK-2132 — what a non-member sees instead of the 403 notice when the page
+     * answers `HUB_NOT_MEMBER` for this kind (WoW: the Forever join gate). It
+     * gets only the hub id — the 403 carries no page data. Core wraps it in
+     * Suspense, so a `lazy` component is fine. Unset = today's notice.
+     */
+    nonMemberGate?: ComponentType<{ guildId: number }>;
 }
 
 export interface HubModuleRegistration {

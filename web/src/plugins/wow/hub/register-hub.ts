@@ -34,6 +34,9 @@ import { BlizzardRosterSection } from '../guild/blizzard-roster-section';
  */
 const GuildAddonsSection = lazy(() => import('../guild/guild-addons').then((m) => ({ default: m.GuildAddonsSection })));
 
+/** ROK-2132 — the WoW: Forever join gate (and its Add character modal) loads only for a non-member's 403. */
+const WowJoinGate = lazy(() => import('./wow-join-gate').then((m) => ({ default: m.WowJoinGate })));
+
 export const wowHubModule: HubModule = {
     kind: 'wow_guild',
     tabs: [
@@ -65,5 +68,7 @@ export const wowHubModule: HubModule = {
     editorDelegation: WowEditorDelegation,
     /** ROK-1928 A4: the Forever guild's Blizzard roster slug + sync status (renders nothing elsewhere). */
     settingsSections: BlizzardRosterSection,
+    /** ROK-2132: a non-member of a Forever guild gets the join gate instead of the 403 notice. */
+    nonMemberGate: WowJoinGate,
     modSources: [{ id: 'wow-addons', label: 'World of Warcraft addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
 };

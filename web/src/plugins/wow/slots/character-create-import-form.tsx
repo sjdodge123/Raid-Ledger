@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useId } from 'react';
+import { useState, useEffect, useMemo, useId, useRef } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
@@ -28,6 +28,13 @@ interface CharacterCreateImportFormProps {
     onRegisterValidator?: (fn: () => boolean) => void;
     /** ROK-587: Event ID for variant context auto-population */
     eventId?: number;
+    /**
+     * ROK-2132: the tab the caller asked to open on (the guild join gate opens `roster`).
+     * Set → it wins over the automatic Armory / Guild roster defaults.
+     */
+    initialTab?: Tab | undefined;
+    /** ROK-2132: narrow the Guild roster list to this guild ("Show all guilds" clears it). */
+    rosterGuildId?: number | undefined;
 }
 
 /** Check if the slug is for any WoW Classic variant (including world-of-warcraft-classic). */
@@ -73,23 +80,42 @@ function TabToggle({ activeTab, onTabChange, noteId, showRoster }: {
  * Default to Armory when Blizzard is configured; force Manual when the variant has no Armory (ROK-1636).
  * ROK-2128 FLAG 9: never over the Guild roster default, whichever query resolves first.
  */
-function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, rosterDefault: boolean, activeTab: Tab, onTabChange: (tab: Tab) => void) {
-    useEffect(() => { if (blizzardConfigured && armoryOk && !rosterDefault) onTabChange('import'); }, [blizzardConfigured, armoryOk, rosterDefault, onTabChange]);
+function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, keepTab: boolean, activeTab: Tab, onTabChange: (tab: Tab) => void) {
+    useEffect(() => { if (blizzardConfigured && armoryOk && !keepTab) onTabChange('import'); }, [blizzardConfigured, armoryOk, keepTab, onTabChange]);
     useEffect(() => { if (!armoryOk && activeTab === 'import') onTabChange('manual'); }, [armoryOk, activeTab, onTabChange]);
+}
+
+/**
+ * ROK-2132 (Codex P2): an `initialTab` of `import` resolves once the capabilities have
+ * loaded. While they load, Forever's Armory is fail-closed and the sync above falls back to
+ * Manual; the moment they settle, the requested Import tab wins if it is available — once.
+ */
+function useRequestedImportTab(initialTab: Tab | undefined, capsSettled: boolean, armoryOk: boolean, onTabChange: (tab: Tab) => void) {
+    const resolved = useRef(false);
+    useEffect(() => {
+        if (initialTab !== 'import' || !capsSettled || resolved.current) return;
+        resolved.current = true;
+        if (armoryOk) onTabChange('import');
+    }, [initialTab, capsSettled, armoryOk, onTabChange]);
 }
 
 /**
  * ROK-2128: "Guild roster" exists only for WoW: Forever with ≥1 unclaimed candidate (FLAG 8);
  * it opens by default only for a user with no character of the game (FLAG 9), and an
- * emptied list falls back off the tab.
+ * emptied list falls back off the tab. ROK-2132: an `initialTab` of `roster` holds the tab
+ * while the list loads (falling back only once it is known to be empty); any `initialTab`
+ * turns the automatic default off.
  */
-function useRosterTab(gameSlug: string, gameId: number | undefined, existing: CharacterDto[] | undefined, activeTab: Tab, onTabChange: (tab: Tab) => void) {
+function useRosterTab(gameSlug: string, gameId: number | undefined, existing: CharacterDto[] | undefined, activeTab: Tab, onTabChange: (tab: Tab) => void, initialTab: Tab | undefined) {
     const isForever = gameSlug === WOW_FOREVER_GAME_SLUG;
     const { data } = useRosterClaimCandidates(gameId, isForever);
     const count = isForever ? countCandidates(data?.guilds ?? []) : 0;
-    const rosterDefault = existing !== undefined && shouldDefaultToRoster(existing, count);
+    const known = !isForever || data !== undefined;
+    const rosterDefault = initialTab === undefined
+        ? existing !== undefined && shouldDefaultToRoster(existing, count)
+        : initialTab === 'roster' && (!known || count > 0);
     useEffect(() => { if (rosterDefault) onTabChange('roster'); }, [rosterDefault, onTabChange]);
-    useEffect(() => { if (count === 0 && activeTab === 'roster') onTabChange('manual'); }, [count, activeTab, onTabChange]);
+    useEffect(() => { if (known && count === 0 && activeTab === 'roster') onTabChange('manual'); }, [known, count, activeTab, onTabChange]);
     return { showRoster: count > 0, rosterDefault };
 }
 
@@ -116,17 +142,18 @@ function BlizzardNotConfigured() {
 }
 
 export function CharacterCreateImportForm({
-    onClose, gameSlug, gameId, activeTab, onTabChange, existingCharacters = [], charactersLoading = false, onRegisterValidator, eventId,
+    onClose, gameSlug, gameId, activeTab, onTabChange, existingCharacters = [], charactersLoading = false, onRegisterValidator, eventId, initialTab, rosterGuildId,
 }: CharacterCreateImportFormProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
-    const { data: caps } = useArmoryCapabilities();
+    const { data: caps, isPending: capsPending } = useArmoryCapabilities();
     const { showVariantSelector, wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters, caps);
 
     const armoryOk = isArmoryImportSupported(wowVariant, caps);
     const noteId = useId();
-    const { showRoster, rosterDefault } = useRosterTab(gameSlug, gameId, charactersLoading ? undefined : existingCharacters, activeTab, onTabChange);
-    useArmoryTabSync(blizzardConfigured, armoryOk, rosterDefault, activeTab, onTabChange);
+    const { showRoster, rosterDefault } = useRosterTab(gameSlug, gameId, charactersLoading ? undefined : existingCharacters, activeTab, onTabChange, initialTab);
+    useArmoryTabSync(blizzardConfigured, armoryOk, rosterDefault || initialTab !== undefined, activeTab, onTabChange);
+    useRequestedImportTab(initialTab, !capsPending, armoryOk, onTabChange);
     if (!isWowSlug(gameSlug)) return null;
     const showImport = activeTab === 'import' && armoryOk;
 
@@ -140,7 +167,7 @@ export function CharacterCreateImportForm({
                 : <BlizzardNotConfigured />)}
             {activeTab === 'roster' && showRoster && gameId !== undefined && (
                 <RosterClaimList key={charactersLoading ? 'loading' : 'ready'} gameId={gameId} existingCharacters={existingCharacters} armoryAvailable={armoryOk && blizzardConfigured}
-                    onClaimed={onClose} onSwitchTab={onTabChange} />
+                    guildId={rosterGuildId} onClaimed={onClose} onSwitchTab={onTabChange} />
             )}
         </>
     );
