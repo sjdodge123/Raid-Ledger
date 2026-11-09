@@ -59,6 +59,35 @@ describe('NameCell (ROK-1173 AC9 / AC11)', () => {
     });
 });
 
+describe('NameCell link targets (ROK-2149 AC-8)', () => {
+    function renderInHub(r: GuildMemberRow): void {
+        renderWithProviders(
+            <Routes><Route path="/hubs/:id" element={<NameCell row={r} />} /></Routes>,
+            { initialEntries: ['/hubs/7'] },
+        );
+    }
+
+    it('links an unlinked row to its read-only roster-member page', () => {
+        renderInHub(row({ memberId: 42, characterId: null }));
+        const link = screen.getByTestId('guild-member-roster-link');
+        expect(link, 'an unlinked row must open /hubs/:id/members/:memberId').toHaveAttribute('href', '/hubs/7/members/42');
+        expect(link).toHaveTextContent('Aldren');
+        expect(screen.queryByTestId('guild-member-link'), 'an unlinked row must not link to a character page').toBeNull();
+    });
+
+    it('keeps a linked row on its character page', () => {
+        renderInHub(row({ memberId: 42, characterId: LINKED }));
+        expect(screen.getByTestId('guild-member-link')).toHaveAttribute('href', `/characters/${LINKED}`);
+        expect(screen.queryByTestId('guild-member-roster-link'), 'a linked row must not point at the roster-member page').toBeNull();
+    });
+
+    it('stays plain text outside a hub route (no hub id to build the path)', () => {
+        renderWithProviders(<NameCell row={row({ characterId: null })} />);
+        expect(screen.getByTestId('guild-member-unlinked')).toHaveTextContent('Aldren');
+        expect(screen.queryByRole('link'), 'no hub id → no roster-member link').toBeNull();
+    });
+});
+
 describe('FactsCell class dot (ROK-1173 AC12)', () => {
     it('paints a known class with its class token', () => {
         renderWithProviders(<FactsCell row={row({ class: 'Hunter' })} />);
