@@ -184,17 +184,30 @@ describe('memberOwnedByCharacterSync', () => {
     const query = dialect.sqlToQuery(memberOwnedByCharacterSync());
     const text = query.sql;
     expect(text).toContain('exists');
-    expect(text).toContain('oc.game_variant = $1');
+    expect(text).toContain('"characters"."game_variant" = $1');
     expect(query.params).toEqual(['wow_forever']);
     expect(text).toContain(
-      'external_id = "guild_members"."blizzard_character_id"::text',
+      '"characters"."external_id" = "guild_members"."blizzard_character_id"::text',
     );
   });
 
-  it('owns the member only through the character the roster links (guid + game + region)', () => {
+  it('counts only an ACTIVE owner, as the roster read (ROK-2115 Codex r2 P2)', () => {
     const text = dialect.sqlToQuery(memberOwnedByCharacterSync()).sql;
-    expect(text).toContain('oc.addon_guid = "guild_members"."guid"');
-    expect(text).toContain('oc.game_id = "guilds"."game_id"');
-    expect(text).toContain('lower(oc.region) = lower("guilds"."region")');
+    expect(text).toContain(
+      '"users"."id" = "characters"."user_id" and "users"."deactivated_at" is null',
+    );
+  });
+
+  it('owns the member only through THE roster link (characterLink: GUID arm or Blizzard-id arm, ROK-2115)', () => {
+    const text = dialect.sqlToQuery(memberOwnedByCharacterSync()).sql;
+    expect(text).toContain(
+      '"characters"."addon_guid" = "guild_members"."guid"',
+    );
+    expect(text).toContain('"characters"."game_id" = "guilds"."game_id"');
+    expect(text).toContain(
+      'lower("characters"."region") = lower("guilds"."region")',
+    );
+    // ROK-2115 arm B: a Blizzard-only row is owned too, unless GUID wins.
+    expect(text).toContain('from "characters" as "link_guid_holder"');
   });
 });

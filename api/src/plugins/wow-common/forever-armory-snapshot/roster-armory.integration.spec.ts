@@ -357,6 +357,44 @@ describe('Armory-linked ids are left to the character sync (AC-2)', () => {
   });
 });
 
+describe('ROK-2115 Codex r2 P2: a deactivated owner never starves a member', () => {
+  it('fetches a GUID-less member whose only Armory-linked character belongs to a deactivated user', async () => {
+    const hub = await insertGuild();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:armory-gone@test.local',
+          username: 'armory-gone',
+          deactivatedAt: new Date(),
+        })
+        .returning(),
+      'deactivated user',
+    );
+    await testApp.db.insert(schema.characters).values({
+      userId: user.id,
+      gameId,
+      name: 'Gone Forever',
+      class: 'Mage',
+      region: 'us',
+      gameVariant: 'wow_forever',
+      externalId: '9003',
+    });
+    const member = await seedMember(hub, {
+      characterName: 'Gone Forever',
+      blizzardCharacterId: 9003,
+    });
+    profileIds.set('Gone Forever', '9003');
+
+    expect(await service.runDue()).toEqual({ written: 1 });
+
+    // The roster read drops that character (ownerIsActive), so nothing else
+    // refreshes the member: the roster pass must keep its snapshot.
+    expect(fetchedNames()).toEqual(['Gone Forever']);
+    expect(await armRow(member)).toMatchObject({ blizzardCharacterId: 9003 });
+  });
+});
+
 describe('Codex P2s: soft-removed members, partial fetches (ROK-2133)', () => {
   it('a member soft-removed by the roster sync (older last_seen_at) is never fetched', async () => {
     const snapshotAt = new Date();

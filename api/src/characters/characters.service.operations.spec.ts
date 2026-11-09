@@ -125,7 +125,9 @@ describe('CharactersService — operations', () => {
       }),
     });
     mockDb.delete.mockReturnValue({
-      where: jest.fn().mockResolvedValue(undefined),
+      where: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([]),
+      }),
     });
   }
 
@@ -133,6 +135,8 @@ describe('CharactersService — operations', () => {
     mockDb.transaction.mockImplementation(
       (callback: (tx: Record<string, jest.Mock>) => unknown) => {
         const tx = {
+          // ROK-2115: the own-character delete runs inside the transaction.
+          delete: mockDb.delete,
           select: mockTxSelectDualCall([], [{ charCount: 1 }]),
           update: jest.fn().mockReturnValue({
             set: jest.fn().mockReturnValue({

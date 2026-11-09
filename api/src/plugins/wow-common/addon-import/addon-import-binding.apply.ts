@@ -5,6 +5,11 @@ import type { AddonBindingResult } from './addon-import.binding';
 import { AddonImportError } from './addon-import.errors';
 import type { AddonApplyContext } from './addon-import-apply.types';
 import { logGuidAudit } from './addon-import.guid-audit';
+import {
+  auditGuidRelease,
+  releasedGuidOf,
+  type ReleasedGuid,
+} from './external-id.guid-release';
 
 /**
  * ROK-1724 §4.3 — write the binding's character-row changes (GUID pin,
@@ -75,6 +80,7 @@ export async function applyBinding(
   const set = bindingUpdates(binding);
   if (Object.keys(set).length === 0) return false;
   if (set.addonGuid) await assertGuidFree(ctx, set.addonGuid);
+  const released = set.addonGuid ? await guidBeingReplaced(ctx) : null;
   const [row] = await ctx.tx
     .update(characters)
     .set({ ...set, updatedAt: new Date() })
@@ -88,7 +94,26 @@ export async function applyBinding(
     .returning({ name: characters.name });
   if (!row) return false;
   if (set.addonGuid) await auditPin(ctx, set.addonGuid, row.name);
+  // ROK-2115 Codex r2 P1: the old GUID's row may now have a Blizzard-id winner.
+  if (released?.guid !== set.addonGuid)
+    await auditGuidRelease(ctx.tx, released, ctx.userId);
   return true;
+}
+
+/** The GUID the importer's character holds before a (re)pin; null if none. */
+async function guidBeingReplaced(
+  ctx: AddonApplyContext,
+): Promise<ReleasedGuid | null> {
+  const [row] = await ctx.tx
+    .select({
+      addonGuid: characters.addonGuid,
+      gameId: characters.gameId,
+      region: characters.region,
+    })
+    .from(characters)
+    .where(eq(characters.id, ctx.characterId))
+    .limit(1);
+  return row ? releasedGuidOf(row) : null;
 }
 
 /** ROK-1756 — the GUID is free (checked above), so this pin is its claim. */

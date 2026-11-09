@@ -14,6 +14,7 @@ import * as schema from '../../../drizzle/schema';
 import { ADDON_GUID_LOCK_CLASS } from './addon-import-binding.apply';
 import type { AddonImportTx } from './addon-import-apply.types';
 import { logGuidAudit } from './addon-import.guid-audit';
+import { auditGuidRelease } from './external-id.guid-release';
 import { NotificationService } from '../../../notifications/notification.service';
 import {
   lockCharacter,
@@ -85,6 +86,12 @@ async function unlinkGuidRow(
     gameId: row.gameId,
     region: row.region,
   });
+  // ROK-2115 Codex r2 P1: the row's new Blizzard-id winner is a fresh link.
+  await auditGuidRelease(
+    tx,
+    { guid, gameId: row.gameId, region: row.region },
+    adminId,
+  );
 }
 
 /** ROK-2128 (FLAG 6) — a roster-claimed row: delete it, audit `admin_unlinked_roster`. */

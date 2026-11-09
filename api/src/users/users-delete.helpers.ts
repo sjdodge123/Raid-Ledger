@@ -24,6 +24,10 @@ import {
 } from '../feedback/feedback-screenshot-user.helpers';
 import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
 import { wipeCommunityHubData } from '../guilds/community/community-user-wipe.helpers';
+import {
+  auditGuidReleases,
+  heldGuidsOf,
+} from '../plugins/wow-common/addon-import/external-id.guid-release';
 
 const logger = new Logger('UserDelete');
 
@@ -417,7 +421,11 @@ export async function wipeUserData(
   userId: number,
   reassignToUserId: number,
 ): Promise<void> {
+  // ROK-2115 Codex r2 P1: rows the user's GUIDs held get new Blizzard-id
+  // winners — audit them as fresh links so no member grant carries over.
+  const held = await heldGuidsOf(tx, userId);
   await deleteUserOwnedData(tx, userId);
+  await auditGuidReleases(tx, held, null);
   await reassignUserEntities(tx, userId, reassignToUserId);
 }
 

@@ -3,7 +3,7 @@
  * labels and editor delegation. The tab frame moved to
  * `web/src/components/hub/hub-tabs.ts` (core).
  */
-import type { CharacterRole, GuildEditor, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
+import type { CharacterRole, GuildEditor, GuildMemberLinkVia, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
 import { updatedLabel as dateLabel } from '../../../components/hub/content/guild-content.helpers';
 
 /** Role label + the existing role colour class (`web/src/index.css` `.role-*`). */
@@ -53,14 +53,22 @@ export function isUnlinkedRow(m: GuildMemberRow): boolean {
     return !m.linkedAccount && m.characterId === null;
 }
 
+/** Marker per self-asserted link kind; an addon import (proof) gets none. */
+const LINK_VIA_MARKER: Partial<Record<GuildMemberLinkVia, string>> = {
+    roster_pick: 'picked from roster',
+    armory: 'linked via Armory',
+};
+
 /**
  * "linked to aldren since 14 Oct 2026", plus "· picked from roster" when the
- * player claimed the row from the guild roster pick list (ROK-2128 FLAG 3) —
- * a self-asserted link staff should weigh before granting on it.
+ * player claimed the row from the guild roster pick list (ROK-2128 FLAG 3) or
+ * "· linked via Armory" when only an Armory import's Blizzard id links it
+ * (ROK-2115) — self-asserted links staff should weigh before granting on them.
  */
 function linkedLabel(a: NonNullable<GuildMemberRow['linkedAccount']>): string {
     const label = `linked to ${a.username} since ${dateLabel(a.linkedSince)}`;
-    return a.linkVia === 'roster_pick' ? `${label} · picked from roster` : label;
+    const marker = a.linkVia ? LINK_VIA_MARKER[a.linkVia] : undefined;
+    return marker ? `${label} · ${marker}` : label;
 }
 
 /**
