@@ -294,6 +294,37 @@ describe('roster claim: Blizzard rows and conflicts (ROK-2128)', () => {
   });
 });
 
+describe('roster claim → members-only guild page (ROK-2132 AC 9)', () => {
+  // The join gate's loop end to end: the page is the members-only 403 before
+  // the claim and 200 after it, with no other write in between — the claimed
+  // character's `external_id` links it to the GUID-less Blizzard row through
+  // `characterLink()` arm B (ROK-2115).
+  it('a non-member claims a Blizzard row of guild G, then GET /guilds/G is 200', async () => {
+    const rowId = await insertMember(guildId, {
+      characterName: 'Dusk Reach',
+      blizzardCharacterId: 9666,
+      source: 'blizzard',
+      class: 'Rogue',
+      level: 30,
+    });
+    const joiner = await makeUser('l2dusk');
+    const page = () =>
+      testApp.request
+        .get(`/guilds/${guildId}`)
+        .set('Authorization', `Bearer ${joiner.token}`);
+    const before = await page();
+    expect(before.status).toBe(403);
+    expect(before.body).toMatchObject({
+      code: 'HUB_NOT_MEMBER',
+      kind: 'wow_guild',
+    });
+    expect((await claim(rowId, joiner.token)).status).toBe(201);
+    const after = await page();
+    expect(after.status).toBe(200);
+    expect(after.body.guild.id).toBe(guildId);
+  });
+});
+
 describe('CharacterDto.rosterClaimed (ROK-2128)', () => {
   it('a manually added character is not rosterClaimed on the detail read', async () => {
     const owner = await makeUser('l2manual');

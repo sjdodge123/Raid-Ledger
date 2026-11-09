@@ -43,6 +43,12 @@ export interface HubCopy {
     rulesTitle: string;
     /** The hub page's 403 notice for a viewer who is not a member. */
     notMember: string;
+    /**
+     * ROK-2132 Ruling 9 — the directory/game-page action for a viewer who is not
+     * a member and must claim a roster character to get in (`short` below `sm`);
+     * null where membership has no claim step.
+     */
+    joinAction: { label: string; short: string } | null;
 }
 
 /** ROK-1891 — the schedule card on hubs that are not WoW guilds (operator ruling). */
@@ -80,6 +86,7 @@ const WOW_COPY: HubCopy = {
     discordFallback: 'the community Discord',
     rulesTitle: 'Guild rules & loot rules',
     notMember: "You're not a member of this guild. Link a character in the guild to see its page.",
+    joinAction: { label: 'Claim your character to join', short: 'Claim to join' },
 };
 
 const SERVER_COPY: HubCopy = {
@@ -106,6 +113,7 @@ const SERVER_COPY: HubCopy = {
     discordFallback: "the server's Discord",
     rulesTitle: 'Server rules',
     notMember: "You're not a member of this server.",
+    joinAction: null,
 };
 
 /** ROK-1870 — a community hub has a leader (the approved proposer) and sessions, no server. */
@@ -133,6 +141,7 @@ const COMMUNITY_COPY: HubCopy = {
     discordFallback: 'the community Discord',
     rulesTitle: 'Hub rules',
     notMember: "You're not a member of this hub.",
+    joinAction: null,
 };
 
 export const HUB_COPY: Readonly<Record<GuildKind, HubCopy>> = {

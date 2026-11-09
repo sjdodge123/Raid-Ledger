@@ -303,6 +303,8 @@ export * from './wow-event-quest-readiness.schema.js';
 export * from './wow-event-raid-readiness.schema.js';
 // ROK-2128: Add character → Guild roster pick list + admin Change owner.
 export * from './wow-roster-claim.schema.js';
+// ROK-2132: WoW: Forever guild join gate (HUB_NOT_MEMBER + gate summary).
+export * from './wow-guild-join-gate.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
 export * from './discord-join-post.schema.js';

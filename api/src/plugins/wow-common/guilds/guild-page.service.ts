@@ -5,11 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type {
-  CharacterGuild,
-  GuildPage,
-  MyGuild,
-  MyGuilds,
+import {
+  HUB_NOT_MEMBER,
+  type CharacterGuild,
+  type GuildPage,
+  type MyGuild,
+  type MyGuilds,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { HubMineRank } from '../../plugin-host/extension-points';
@@ -45,6 +46,21 @@ import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
 import { logLinkDisagreements } from './guild-link.disagreements';
 import { loadRosterLinks } from './guild-roster-links.helpers';
+
+/**
+ * ROK-2132 (Ruling 8) — the page's 403 names its code and kind, so core's hub
+ * page can ask the kind's module for a non-member gate without importing a
+ * plugin. `message` is unchanged.
+ */
+export function notMemberError(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    error: 'Forbidden',
+    message: 'Not a member of this guild',
+    code: HUB_NOT_MEMBER,
+    kind: 'wow_guild',
+  });
+}
 
 /**
  * ROK-1785 — read side of `/plugins/wow/guilds`. Every access answer comes
@@ -116,7 +132,7 @@ export class GuildPageService {
   /** Hero + roster; 403 unless the viewer may view, 404 when missing. */
   async page(actor: GuildActor, guildId: number): Promise<GuildPage> {
     if (!(await this.access.canView(actor, guildId))) {
-      throw new ForbiddenException('Not a member of this guild');
+      throw notMemberError();
     }
     const hub = await findHubGuild(this.db, guildId);
     if (!hub) throw new NotFoundException('Guild not found');

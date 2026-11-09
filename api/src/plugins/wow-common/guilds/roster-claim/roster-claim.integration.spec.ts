@@ -269,3 +269,70 @@ describe('GET /plugins/wow/roster-claim/candidates — cap (ROK-2128)', () => {
     }
   });
 });
+
+describe('GET /plugins/wow/roster-claim/candidates?guildId= (ROK-2132)', () => {
+  let betaId: number;
+
+  beforeAll(async () => {
+    betaId = await insertGuild('Beta Guild');
+    await insertMembers(betaId, [{ characterName: 'Beta One', guid: 'G-B1' }]);
+  });
+
+  const listGuild = (guildId: number | string) =>
+    list(`${foreverId}&guildId=${guildId}`);
+
+  it('omitted, every claimable guild is listed (unchanged)', async () => {
+    const res = await list(foreverId);
+    const ids = (res.body.guilds as GuildBody[]).map((g) => g.guildId);
+    expect(ids).toEqual(expect.arrayContaining([alphaId, betaId]));
+  });
+
+  it('narrows to that one guild', async () => {
+    const res = await listGuild(alphaId);
+    expect(res.status).toBe(200);
+    const ids = (res.body.guilds as GuildBody[]).map((g) => g.guildId);
+    expect(ids).toEqual([alphaId]);
+    expect(guildOf(res, alphaId)?.candidates.map((c) => c.name)).toEqual([
+      'Ashen Vale',
+      'Brine Hollow',
+      'Guid Elsewhere',
+    ]);
+    expect(res.body.truncated).toBe(false);
+  });
+
+  it.each([
+    ['hidden', () => hiddenId],
+    ['archived', () => archivedId],
+    ['unknown', () => 999999],
+  ])('a %s guild id lists nothing (never 404)', async (_label, id) => {
+    const res = await listGuild(id());
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ guilds: [], truncated: false });
+  });
+
+  it('a guild of another game lists nothing', async () => {
+    const [other] = nonEmpty(
+      await testApp.db
+        .insert(schema.guilds)
+        .values({
+          gameId: testApp.seed.game.id,
+          region: 'us',
+          name: 'Retail Guild',
+          nameKey: 'retail guild',
+          source: 'addon_import',
+          lastSnapshotAt: SNAPSHOT,
+        })
+        .returning({ id: schema.guilds.id }),
+      'retail guild',
+    );
+    await insertMembers(other.id, [{ characterName: 'Retail One' }]);
+    expect((await listGuild(other.id)).body).toEqual({
+      guilds: [],
+      truncated: false,
+    });
+  });
+
+  it('a bad guildId is a 400', async () => {
+    expect((await listGuild('abc')).status).toBe(400);
+  });
+});

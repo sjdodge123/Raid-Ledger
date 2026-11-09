@@ -41,9 +41,11 @@ function guildName(testInfo: TestInfo): string {
     return `Smoke ${testInfo.project.name} w${testInfo.workerIndex} ${Date.now()}`;
 }
 
-async function seedGuild(token: string, testInfo: TestInfo): Promise<SeededGuild> {
+/** The fixture seeds a WoW: Forever guild unless told otherwise (ROK-2132). */
+async function seedGuild(token: string, testInfo: TestInfo, gameSlug?: string): Promise<SeededGuild> {
     const body = (await apiPost(token, '/admin/test/wow/seed-guild', {
         name: guildName(testInfo),
+        ...(gameSlug ? { gameSlug } : {}),
     })) as Partial<SeededGuild>;
     if (typeof body.guildId !== 'number' || !body.users) {
         throw new Error(`seed-guild: ${JSON.stringify(body)}`);
@@ -58,9 +60,9 @@ async function removeUsers(token: string, guild: SeededGuild): Promise<void> {
 }
 
 /** Seed a guild, run `body`, and always delete the seeded users. */
-async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promise<void>) {
+async function withGuild(testInfo: TestInfo, body: (guild: SeededGuild) => Promise<void>, gameSlug?: string) {
     const token = await getAdminToken();
-    const guild = await seedGuild(token, testInfo);
+    const guild = await seedGuild(token, testInfo, gameSlug);
     try {
         await body(guild);
     } finally {
@@ -160,12 +162,16 @@ test('plain member: the page renders without the Page editors card', async ({ pa
     });
 });
 
-test('non-member: the "not a member" state, no hero', async ({ page }, testInfo) => {
+// ROK-2132: a non-member of a WoW: Forever guild gets the join gate (wow-guild-join-gate.smoke.spec.ts);
+// a Retail guild has no roster-claim path, so it keeps the "not a member" notice (AC 7).
+test('non-member of a Retail guild: the "not a member" state, no gate, no hero', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'outsider');
         await expect(page.getByTestId('guild-not-member')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('guild-not-member')).toContainText("You're not a member of this guild");
+        await expect(page.getByTestId('wow-join-gate'), 'no join gate on a non-Forever guild').toHaveCount(0);
         await expect(page.getByTestId('guild-hero')).toHaveCount(0);
-    });
+    }, 'world-of-warcraft');
 });
 
 test('entry points: header Hubs menu row / drawer "Your hubs" reach the page; Players card', async ({ page }, testInfo) => {

@@ -278,6 +278,25 @@ describe('GET /:id — view matrix', () => {
   });
 });
 
+describe('GET /:id — 403 body (ROK-2132)', () => {
+  it('the 403 names HUB_NOT_MEMBER + kind on both page routes (ROK-2132)', async () => {
+    const body = {
+      statusCode: 403,
+      error: 'Forbidden',
+      message: 'Not a member of this guild',
+      code: 'HUB_NOT_MEMBER',
+      kind: 'wow_guild',
+    };
+    const alias = await get(`/${guildId}`, 'outsider');
+    expect(alias.body).toEqual(body);
+    const core = await testApp.request
+      .get(`/guilds/${guildId}`)
+      .set('Authorization', `Bearer ${tokens.outsider}`);
+    expect(core.status).toBe(403);
+    expect(core.body).toEqual(body);
+  });
+});
+
 describe('editors endpoints — manage matrix', () => {
   it.each(['admin'] as const)('%s lists editors', async (who) => {
     const res = await get(`/${guildId}/editors`, who);
