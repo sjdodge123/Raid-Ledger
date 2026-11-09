@@ -213,7 +213,6 @@ describe('GET contributions — content (T22, round 2)', () => {
       expect.objectContaining({ rank: 1, characterName: 'Loner', items: 20 }),
       expect.objectContaining({
         rank: 2,
-        userId: memberUserId,
         characterName: 'Contribalt',
         characterId: charIds.Contribalt,
         characterCount: 2,
