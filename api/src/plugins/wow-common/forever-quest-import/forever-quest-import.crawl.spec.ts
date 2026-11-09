@@ -413,3 +413,90 @@ describe('QuestImportCrawl — the kill switch still stops the run at the probe 
     expect(report.counts.requests).toBe(probeAt);
   });
 });
+
+const ITEM_PROBE_QUEST = 500;
+const ITEM_PROBE_ITEM = 9001;
+const firstMapped = mappedAreas()[0];
+if (!firstMapped) throw new Error('no mapped classic quest area');
+const FIRST_AREA_ID = firstMapped.id;
+
+/** Every mapped area inline; the first lists one quest with a reward item. */
+function itemRoute(path: string): QuestImportResponse {
+  if (path === 'quest/index') return ok(indexBody());
+  if (path === `quest/area/${FIRST_AREA_ID}`) {
+    return ok({ quests: [{ id: ITEM_PROBE_QUEST, name: 'Probe quest' }] });
+  }
+  if (path.startsWith('quest/area/')) return ok({ quests: [] });
+  if (path === `quest/${ITEM_PROBE_QUEST}`) {
+    return ok({
+      id: ITEM_PROBE_QUEST,
+      title: 'Probe quest',
+      rewards: {
+        items: { items: [{ item: { id: ITEM_PROBE_ITEM, name: 'Blade' } }] },
+      },
+    });
+  }
+  return NOT_FOUND;
+}
+
+/** The final item probe answers with `answer`; everything else routes. */
+function itemProbeDeps(
+  urls: string[],
+  answer: () => Promise<QuestImportResponse>,
+  enabled: () => boolean = () => true,
+): QuestImportDeps {
+  const base = routed(urls, itemRoute);
+  return {
+    ...base,
+    fetchJson: (url) => {
+      if (!url.includes(`/item/${ITEM_PROBE_ITEM}?`))
+        return base.fetchJson(url);
+      urls.push(url);
+      return answer();
+    },
+    isEnabled: () => Promise.resolve(enabled()),
+  };
+}
+
+describe('QuestImportCrawl — the item-level probe is evidence only (codex P2 4)', () => {
+  it('records a thrown item probe as HTTP 0 plus an error line and finishes the run', async () => {
+    const { report, err } = await runCrawl(
+      itemProbeDeps([], () => Promise.reject(new Error('timed out'))),
+    );
+    expect(err).toBeNull();
+    expect(report.itemLevelProbe).toEqual({
+      itemId: ITEM_PROBE_ITEM,
+      httpStatus: 0,
+      itemLevel: null,
+    });
+    expect(report.errors).toContain(`item/${ITEM_PROBE_ITEM}: timed out`);
+    expect(report.counts.questsFetched).toBe(1);
+  });
+
+  it('still aborts with the OFF message when the switch is off exactly at the item probe', async () => {
+    const firstPass: string[] = [];
+    await runCrawl(
+      itemProbeDeps(firstPass, () => Promise.resolve(ok({ level: 20 }))),
+    );
+    const total = firstPass.length;
+    expect(total).toBeGreaterThan(1);
+
+    let checks = 0;
+    const { report, err } = await runCrawl(
+      itemProbeDeps(
+        [],
+        () => Promise.resolve(ok({ level: 20 })),
+        () => {
+          checks += 1;
+          return checks !== total;
+        },
+      ),
+    );
+    expect(err).toBeInstanceOf(QuestImportAbort);
+    expect(err instanceof Error ? err.message : err).toBe(
+      FOREVER_QUEST_IMPORT_OFF_MESSAGE,
+    );
+    expect(report.itemLevelProbe).toBeNull();
+    expect(report.errors.filter((e) => e.startsWith('item/'))).toEqual([]);
+  });
+});

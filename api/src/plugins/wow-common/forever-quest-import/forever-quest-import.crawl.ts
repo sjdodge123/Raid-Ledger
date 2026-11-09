@@ -40,11 +40,11 @@ import {
   FOREVER_QUEST_IMPORT_MAX_DEPTH,
   FOREVER_QUEST_IMPORT_SPACING_MS,
   QuestImportAbort,
-  isQuestImportOff,
   isFatalQuestImportStatus,
   pushQuestImportError,
   type ForeverQuestImportReport,
 } from './forever-quest-import.report';
+import { itemLevelOf, recordProbeFailure } from './forever-quest-import.probe';
 
 /** Error line when neither index yields an area (run ends `failed`). */
 export const QUEST_IMPORT_NO_AREAS_MESSAGE =
@@ -102,14 +102,6 @@ export function toOverlayRow(
     fetchedAt,
     runId,
   };
-}
-
-/** `level` of a classic item response, else null. */
-function itemLevelOf(body: unknown): number | null {
-  if (typeof body !== 'object' || body === null || !('level' in body)) {
-    return null;
-  }
-  return typeof body.level === 'number' ? body.level : null;
 }
 
 export class QuestImportCrawl {
@@ -241,12 +233,9 @@ export class QuestImportCrawl {
     const questId = firstKnownQuestId(this.deps.knownQuests, instanceId);
     if (questId === null) return null;
     const url = buildQuestUrl(this.deps.region, questId);
-    const res = await this.requestRaw(url).catch((e: unknown) => {
-      if (isQuestImportOff(e)) throw e;
-      const why = e instanceof Error ? e.message : String(e);
-      pushQuestImportError(this.report, `quest/${questId}: ${why}`);
-      return null;
-    });
+    const res = await this.requestRaw(url).catch((e: unknown) =>
+      recordProbeFailure(this.report, `quest/${questId}`, e),
+    );
     const area =
       res?.status === 200 ? (parseBlizzardQuest(res.body)?.area ?? null) : null;
     return {
@@ -353,14 +342,19 @@ export class QuestImportCrawl {
     this.itemProbeId ??= parsed.rewardItems[0]?.id ?? null;
   }
 
-  /** R8=B: one classic 1.x item lookup; any status is recorded, never fatal. */
+  /**
+   * R8=B: one classic 1.x item lookup; any status is recorded, never fatal.
+   * A thrown request is HTTP 0 plus an error line (kill switch still stops).
+   */
   private async probeItemLevel(): Promise<void> {
     const itemId = this.itemProbeId;
     if (itemId === null) return;
-    const res = await this.requestRaw(
-      buildClassicItemUrl(this.deps.region, itemId),
+    const url = buildClassicItemUrl(this.deps.region, itemId);
+    const res = await this.requestRaw(url).catch((e: unknown) =>
+      recordProbeFailure(this.report, `item/${itemId}`, e),
     );
-    const itemLevel = res.status === 200 ? itemLevelOf(res.body) : null;
-    this.report.itemLevelProbe = { itemId, httpStatus: res.status, itemLevel };
+    const itemLevel = res?.status === 200 ? itemLevelOf(res.body) : null;
+    const httpStatus = res?.status ?? 0;
+    this.report.itemLevelProbe = { itemId, httpStatus, itemLevel };
   }
 }
