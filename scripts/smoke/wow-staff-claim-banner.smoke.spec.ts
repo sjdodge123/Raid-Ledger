@@ -175,6 +175,8 @@ test.describe('WoW: Forever — staff "Claim your character" banner (ROK-2151)',
             await page.reload();
             expect((await gateRead).status(), 'the staff gate read still answers after the reload').toBe(200);
             await expect(page.getByTestId('guild-overview'), 'the page renders after the reload').toBeVisible({ timeout: 20_000 });
+            // A later Overview card has committed, so the probe has had its render: the absence below is not a first-poll pass.
+            await expect(page.getByRole('region', { name: 'Class breakdown', exact: true }), 'a core Forever card has rendered').toBeVisible({ timeout: 20_000 });
             await expect(banner(page), 'AC6: still dismissed after a reload').toHaveCount(0);
         } finally {
             await cleanup(token, guild, null);
