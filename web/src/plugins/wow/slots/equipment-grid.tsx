@@ -128,7 +128,7 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, portrait, onI
     return (
         <div className="space-y-4">
             {renderCenter ? (
-                <EquipmentWithCenter renderCenter={renderCenter} renderSlotColumn={(slots: string[]) => <SlotColumn slots={slots} {...columnProps} />} />
+                <EquipmentWithCenter center={renderCenter} renderSlotColumn={(slots: string[]) => <SlotColumn slots={slots} {...columnProps} />} />
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <SlotColumn slots={LEFT_SLOTS} {...columnProps} />
@@ -147,43 +147,54 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, portrait, onI
 
 type RenderLayout = 'desktop' | 'mobile';
 type CenterRenderer = (layout: RenderLayout) => JSX.Element;
+/** The centre column's content; `fill` = the Blizzard render, which takes a fixed track and the full column height. */
+interface CenterSlot { render: CenterRenderer; fill: boolean }
 
 /** The render slot's content: the Blizzard render wins, else the Forever portrait, else nothing (2-col grid). */
-function pickCenter(renderUrl: string | null, portrait: ForeverPortrait | undefined): CenterRenderer | null {
-    if (renderUrl) return (layout) => <RenderImage renderUrl={renderUrl} layout={layout} />;
+function pickCenter(renderUrl: string | null, portrait: ForeverPortrait | undefined): CenterSlot | null {
+    if (renderUrl) return { fill: true, render: (layout) => <RenderImage renderUrl={renderUrl} layout={layout} /> };
     if (!portrait || portrait.kind === 'none') return null;
-    return () => (
-        <div data-testid="equipment-portrait">
-            <ForeverPortraitTile key={portraitKey(portrait)} portrait={portrait} size="lg" />
-        </div>
-    );
+    return {
+        fill: false,
+        render: () => (
+            <div data-testid="equipment-portrait">
+                <ForeverPortraitTile key={portraitKey(portrait)} portrait={portrait} size="lg" />
+            </div>
+        ),
+    };
 }
 
 /**
- * Expected box of the character render, per layout (ROK-1159): Blizzard's
- * `main-raw` render at an assumed 4:3, scaled to each layout's max height.
- * The ratio is unverified, and the API falls back to the `main` asset when
- * `main-raw` is missing, so these attributes must not pin the box: `w-auto`
- * keeps the painted size on the natural render (capped by max-h) and the
- * attributes only hint the ratio. The render is the character page's likely
- * LCP image, so it is never lazy-loaded.
+ * Ratio hints for the character render, per layout (ROK-1159). The API prefers
+ * Blizzard's `main-raw` (a transparent PNG with a lot of padding around the
+ * figure) and falls back to `main` (the same framing over a backdrop scene).
+ * ROK-2157: the CSS box is explicit (`w-full` + `h-full`/`h-[300px]`), so these
+ * attributes never become the painted size; `object-cover` crops the padding
+ * and the 50%/35% focus keeps the head and torso in frame. On `main` the crop
+ * only trims backdrop at the edges, which is fine. The render is the character
+ * page's likely LCP image, so it is never lazy-loaded.
  */
 const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
 const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
+const RENDER_FIT = 'object-cover object-[50%_35%] drop-shadow-lg';
 
 /** The Blizzard character render for one layout; a dead URL hides the image. */
 function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderLayout }) {
     if (layout === 'desktop') {
+        // Absolutely placed so the image never sizes the grid row: the slot columns set the
+        // height, the frame fills it (min 24rem so a short column can't shrink the figure).
         return (
-            <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
-                className="w-auto max-h-[600px] object-contain drop-shadow-lg"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
+            <div data-testid="equipment-render-frame" className="relative w-full min-h-[24rem] self-stretch overflow-hidden">
+                <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
+                    className={`absolute inset-0 h-full w-full ${RENDER_FIT}`}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            </div>
         );
     }
     return (
         <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
-            className="w-auto max-h-[300px] object-contain drop-shadow-lg"
+            className={`h-[300px] w-full ${RENDER_FIT}`}
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
     );
@@ -191,26 +202,39 @@ function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderL
 
 /**
  * Desktop (3-col) and mobile (stacked) layouts with a centre column: the render image or the portrait.
+ * ROK-2157: the render gets a fixed 14–20rem track and a centre cell stretched to the slot columns'
+ * height (an `auto` track let preflight's img max-width shrink it to a ~100px figure); the portrait
+ * tile keeps the `auto` track and its top-aligned cell.
  * ROK-2146: they switch on the PANEL's width (container query), not the viewport — beside the
  * character page's 320px sidebar the panel is ~600px at 1024 and ~856px at 1280, so the 3-col
  * render needs a >= lg viewport AND `@3xl` (48rem) of panel. Below lg and on full-width
  * pages (a ~944px panel at lg) nothing changes.
  */
-function EquipmentWithCenter({ renderCenter, renderSlotColumn }: {
-    renderCenter: CenterRenderer; renderSlotColumn: (slots: string[]) => JSX.Element;
+const WIDE_GRID = {
+    fill: 'hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_minmax(14rem,20rem)_1fr] gap-4 items-start',
+    tile: 'hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_auto_1fr] gap-4 items-start',
+} as const;
+const WIDE_CENTRE = {
+    fill: 'flex justify-center self-stretch overflow-hidden',
+    tile: 'flex items-center justify-center px-2',
+} as const;
+
+function EquipmentWithCenter({ center, renderSlotColumn }: {
+    center: CenterSlot; renderSlotColumn: (slots: string[]) => JSX.Element;
 }) {
+    const kind = center.fill ? 'fill' : 'tile';
     return (
         <div data-testid="equipment-layout" className="@container">
-            <div data-testid="equipment-layout-wide" className="hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_auto_1fr] gap-4 items-start">
+            <div data-testid="equipment-layout-wide" className={WIDE_GRID[kind]}>
                 {renderSlotColumn(LEFT_SLOTS)}
-                <div className="flex items-center justify-center px-2">
-                    {renderCenter('desktop')}
+                <div data-testid="equipment-centre" className={WIDE_CENTRE[kind]}>
+                    {center.render('desktop')}
                 </div>
                 {renderSlotColumn(RIGHT_SLOTS)}
             </div>
             <div data-testid="equipment-layout-narrow" className="lg:@3xl:hidden space-y-4">
                 <div className="flex justify-center">
-                    {renderCenter('mobile')}
+                    {center.render('mobile')}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {renderSlotColumn(LEFT_SLOTS)}

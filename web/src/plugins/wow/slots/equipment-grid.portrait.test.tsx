@@ -93,9 +93,47 @@ describe('EquipmentGrid — container-query layout (ROK-2146)', () => {
         renderGrid(RENDER_URL);
         expect(screen.getByTestId('equipment-layout').className.split(' '), 'the panel is the container').toContain('@container');
         const wide = screen.getByTestId('equipment-layout-wide').className.split(' ');
-        expect(wide, '3-col needs lg + @3xl').toEqual(expect.arrayContaining(['hidden', 'lg:@3xl:grid', 'lg:@3xl:grid-cols-[1fr_auto_1fr]']));
+        expect(wide, '3-col needs lg + @3xl').toEqual(expect.arrayContaining(['hidden', 'lg:@3xl:grid', 'lg:@3xl:grid-cols-[1fr_minmax(14rem,20rem)_1fr]']));
         expect(wide.filter((c) => /^lg:grid/.test(c)), 'no viewport-only switch').toEqual([]);
         expect(screen.getByTestId('equipment-layout-narrow').className.split(' ')).toContain('lg:@3xl:hidden');
     });
 });
 
+
+/** ROK-2157: the desktop render filled a ~100px `auto` track; it now fills a fixed track and the column height. */
+describe('EquipmentGrid — render sizing (ROK-2157)', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('gives the render a fixed centre track and a centre cell stretched to the slot columns', () => {
+        renderGrid(RENDER_URL);
+        const wide = screen.getByTestId('equipment-layout-wide').className.split(' ');
+        expect(wide, 'fixed centre track, not auto').toContain('lg:@3xl:grid-cols-[1fr_minmax(14rem,20rem)_1fr]');
+        expect(wide, 'no auto centre track for the render').not.toContain('lg:@3xl:grid-cols-[1fr_auto_1fr]');
+        const centre = screen.getByTestId('equipment-centre').className.split(' ');
+        expect(centre, 'centre cell stretches and clips').toEqual(expect.arrayContaining(['self-stretch', 'overflow-hidden']));
+        const frame = screen.getByTestId('equipment-render-frame').className.split(' ');
+        expect(frame, 'frame fills the cell with a minimum height').toEqual(expect.arrayContaining(['relative', 'self-stretch', 'min-h-[24rem]']));
+    });
+
+    it('crops the render with object-cover at the 50%/35% focus on both layouts', () => {
+        renderGrid(RENDER_URL);
+        const [desktop, phone] = screen.getAllByRole('img', { name: 'Character render' });
+        expect(desktop?.className.split(' '), 'desktop fills the frame').toEqual(
+            expect.arrayContaining(['absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'object-[50%_35%]']));
+        expect(desktop?.className.split(' '), 'no contain/auto sizing').not.toEqual(expect.arrayContaining(['object-contain']));
+        expect(phone?.className.split(' '), 'phone is a 300px cover crop').toEqual(
+            expect.arrayContaining(['h-[300px]', 'w-full', 'object-cover', 'object-[50%_35%]']));
+    });
+
+    it('keeps the portrait tile in an auto track with its unstretched cell when there is no render', () => {
+        renderGrid(null, racePortrait);
+        expect(screen.getAllByTestId('forever-portrait')).toHaveLength(2);
+        expect(screen.queryByTestId('equipment-render-frame')).toBeNull();
+        expect(screen.getByTestId('equipment-layout-wide').className.split(' ')).toContain('lg:@3xl:grid-cols-[1fr_auto_1fr]');
+        const centre = screen.getByTestId('equipment-centre').className.split(' ');
+        expect(centre).toEqual(expect.arrayContaining(['flex', 'items-center', 'justify-center', 'px-2']));
+        expect(centre).not.toContain('self-stretch');
+    });
+});
