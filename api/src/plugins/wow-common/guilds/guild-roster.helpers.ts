@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CharacterRoleSchema,
@@ -194,10 +194,7 @@ export async function loadRosterRows(
     .select(ROSTER_COLUMNS)
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .leftJoin(
-      characters,
-      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
-    )
+    .leftJoin(characters, and(characterLink(), ownerIsActive()))
     .leftJoin(guildMemberArmory, memberSnapshotJoin())
     .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()))
     .orderBy(asc(guildMembers.rankIndex), asc(guildMembers.characterName));
@@ -218,10 +215,7 @@ export async function loadRosterMemberIds(
     .select({ memberId: guildMembers.id, characterId: characters.id })
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .innerJoin(
-      characters,
-      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
-    )
+    .innerJoin(characters, and(characterLink(), ownerIsActive()))
     .where(
       and(
         eq(guildMembers.guildId, guildId),

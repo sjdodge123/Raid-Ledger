@@ -10,6 +10,7 @@ import { ALL_WOW_GAME_SLUGS } from '../../manifest';
 import { autoPromoteAfterDelete } from '../../../../characters/characters-crud.helpers';
 import type { AddonImportTx } from '../../addon-import/addon-import-apply.types';
 import { logGuidAudit } from '../../addon-import/addon-import.guid-audit';
+import { logExternalIdLinked } from '../../addon-import/external-id.audit';
 import {
   lockAddonGuid,
   lockClaimName,
@@ -214,10 +215,8 @@ export async function reassignWithin(
 }
 
 /**
- * D7 `admin_reassigned` audit. A GUID-linked row also gets a fresh
- * `addon_guid_claimed` (`via:'admin_reassign'`) for the new owner: the move
- * keeps `created_at`, so without it `hasConfirmedMemberGrant` would honour a
- * ROK-1794 member grant staff made for the OLD owner's link (review 1 MAJOR).
+ * D7 `admin_reassigned` audit, then fresh-link audits for the new owner
+ * (`auditFreshLinks`, review 1 MAJOR).
  */
 async function auditReassign(
   tx: AddonImportTx,
@@ -235,14 +234,34 @@ async function auditReassign(
     fromUserId: row.userId,
     toUserId: args.toUserId,
   });
-  if (!row.addonGuid) return;
-  await logGuidAudit(tx, {
-    ...base,
-    action: 'addon_guid_claimed',
+  await auditFreshLinks(tx, row, args);
+}
+
+/**
+ * The move keeps `created_at`, so each link the row carries — GUID and
+ * (ROK-2115) Blizzard id — is re-audited as a fresh link for the new owner;
+ * otherwise `hasConfirmedMemberGrant` would honour the OLD owner's grant.
+ */
+async function auditFreshLinks(
+  tx: AddonImportTx,
+  row: CharacterRow,
+  args: ReassignArgs,
+): Promise<void> {
+  const link = {
+    actorId: args.adminId,
     ownerId: args.toUserId,
-    guid: row.addonGuid,
+    characterId: row.id,
     gameId: row.gameId,
     region: row.region,
-    via: 'admin_reassign',
-  });
+    via: 'admin_reassign' as const,
+  };
+  if (row.addonGuid) {
+    await logGuidAudit(tx, {
+      ...link,
+      action: 'addon_guid_claimed',
+      name: row.name,
+      guid: row.addonGuid,
+    });
+  }
+  await logExternalIdLinked(tx, { ...link, externalId: row.externalId }, null);
 }

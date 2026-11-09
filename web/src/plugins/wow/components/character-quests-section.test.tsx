@@ -3,7 +3,7 @@
  * hidden states, summary line, quest log objectives and completed groups.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { CharacterQuestsDto, CharacterQuestsResponse } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -193,5 +193,51 @@ describe('CharacterQuestsSection — completed dungeon quests', () => {
         await renderLoaded();
         expect(screen.getByText('0 of 377 known dungeon quests')).toBeInTheDocument();
         expect(screen.queryByText(/ · \d+\/\d+$/)).toBeNull();
+    });
+});
+
+/** ROK-2146 ruling 5: long lists show the first 5 rows + a "Show all N" / "Show fewer" toggle. */
+describe('CharacterQuestsSection — 5-row caps', () => {
+    const logEntry = (i: number) => ({ questId: 1000 + i, title: `Log quest ${i}`, dungeonInstanceId: null, instanceName: null, objectives: [] });
+    const done = (i: number) => ({ questId: 2000 + i, name: `Done quest ${i}`, questLevel: 30, chain: [] });
+
+    it('In progress with 7 quests shows 5 rows and a "Show all 7" toggle that expands and collapses', async () => {
+        body = { quests: makeQuests({ inProgress: Array.from({ length: 7 }, (_, i) => logEntry(i)) }) };
+        const { container } = renderSection();
+        await screen.findByRole('heading', { name: 'Quests' });
+        expect(container.querySelectorAll('[data-quest-row]'), 'capped to 5').toHaveLength(5);
+        expect(screen.getByText('In progress (7)')).toBeInTheDocument();
+        const toggle = screen.getByRole('button', { name: 'Show all 7' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(container.querySelectorAll('[data-quest-row]'), 'all rows after Show all').toHaveLength(7);
+        const fewer = screen.getByRole('button', { name: 'Show fewer' });
+        expect(fewer).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(fewer);
+        expect(container.querySelectorAll('[data-quest-row]'), 'capped again after Show fewer').toHaveLength(5);
+    });
+
+    it('each completed group caps at 5 rows with its own toggle', async () => {
+        const big = { dungeonInstanceId: 70, instanceName: 'Uldaman', knownCount: 12, completed: Array.from({ length: 8 }, (_, i) => done(i)) };
+        body = { quests: makeQuests({ completedKnown: [big, ...makeQuests().completedKnown] }) };
+        await renderLoaded();
+        const group = screen.getByText('Uldaman · 8/12').closest('details');
+        if (!group) throw new Error('Uldaman <details> group missing');
+        expect(group.querySelectorAll('[data-completed-quest-row]'), 'capped to 5').toHaveLength(5);
+        const toggle = within(group).getByRole('button', { name: 'Show all 8' });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(group.querySelectorAll('[data-completed-quest-row]'), 'all rows after Show all').toHaveLength(8);
+        expect(within(group).getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('a list of 5 or fewer rows shows every row and no toggle', async () => {
+        const five = { dungeonInstanceId: 70, instanceName: 'Uldaman', knownCount: 12, completed: Array.from({ length: 5 }, (_, i) => done(i)) };
+        body = { quests: makeQuests({ inProgress: Array.from({ length: 5 }, (_, i) => logEntry(i)), completedKnown: [five] }) };
+        const { container } = renderSection();
+        await screen.findByRole('heading', { name: 'Quests' });
+        expect(container.querySelectorAll('[data-quest-row]')).toHaveLength(5);
+        expect(container.querySelectorAll('[data-completed-quest-row]')).toHaveLength(5);
+        expect(screen.queryByRole('button', { name: /^Show (all|fewer)/ })).toBeNull();
     });
 });

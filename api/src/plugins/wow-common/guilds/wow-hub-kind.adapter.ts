@@ -106,14 +106,16 @@ export class WowHubKindAdapter implements HubKindAdapter {
   }
 
   /**
-   * ROK-1814: a live linked row at rank 0 (the GM) — crest edit right only.
-   * Rank 0 is self-reported via unsigned LedgerLink exports, so a GUID
+   * ROK-1814: a live GUID-linked row at rank 0 (the GM) — crest edit right
+   * only. Rank 0 is self-reported via unsigned LedgerLink exports, so a GUID
    * squatter passes this; accepted by the operator 2026-10-30 (staff can
    * remove a squatter's upload). See the SECURITY note on GM_RANK_IMPLIES_EDIT.
+   * ROK-2115 Ruling 1: a Blizzard-id-only link (`via:'blizzard'`) confers
+   * membership but NEVER this right — anyone can Armory-import the GM's name.
    */
   async holdsTopRank(userId: number, guildId: number): Promise<boolean> {
     return (await findLinkedMemberRows(this.db, userId, guildId)).some(
-      isGuildMaster,
+      (row) => row.via === 'guid' && isGuildMaster(row),
     );
   }
 

@@ -1,11 +1,8 @@
-import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterGuild, GuildSummary } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
-import {
-  inLatestSnapshot,
-  sameRegionOrUnknown,
-} from './guild-membership.helpers';
+import { characterLink, inLatestSnapshot } from './guild-membership.helpers';
 import { toGuildSummary } from '../../../guilds/guild-core.queries';
 
 /** ROK-1785 — read queries behind the guild endpoints (no access logic). */
@@ -79,9 +76,9 @@ export async function rankNamesInSnapshot(
 }
 
 /**
- * The guild a character is in now: its `addon_guid` on a latest-snapshot
- * member row of a guild of the same game (and region, when the character's
- * is known). Newest snapshot wins.
+ * The guild a character is in now: a latest-snapshot member row it links to
+ * (`characterLink()` — GUID, else Blizzard id, ROK-2115). Newest snapshot
+ * wins.
  */
 export async function findCharacterGuild(
   db: Db,
@@ -89,23 +86,10 @@ export async function findCharacterGuild(
 ): Promise<Omit<NonNullable<CharacterGuild['data']>, 'viewerCanOpen'> | null> {
   const [row] = await db
     .select({ guild: guilds, rankName: guildMembers.rankName })
-    .from(characters)
-    .innerJoin(guildMembers, eq(guildMembers.guid, characters.addonGuid))
-    .innerJoin(
-      guilds,
-      and(
-        eq(guilds.id, guildMembers.guildId),
-        eq(guilds.gameId, characters.gameId),
-        sameRegionOrUnknown(),
-      ),
-    )
-    .where(
-      and(
-        eq(characters.id, characterId),
-        isNotNull(characters.addonGuid),
-        inLatestSnapshot(),
-      ),
-    )
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .innerJoin(characters, characterLink())
+    .where(and(eq(characters.id, characterId), inLatestSnapshot()))
     .orderBy(desc(guilds.lastSnapshotAt))
     .limit(1);
   if (!row) return null;

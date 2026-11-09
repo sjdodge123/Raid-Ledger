@@ -43,6 +43,7 @@ import {
 } from '../../../guilds/hub-hidden.helpers';
 import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
+import { logLinkDisagreements } from './guild-link.disagreements';
 import { loadRosterLinks } from './guild-roster-links.helpers';
 
 /**
@@ -119,6 +120,8 @@ export class GuildPageService {
     }
     const hub = await findHubGuild(this.db, guildId);
     if (!hub) throw new NotFoundException('Guild not found');
+    // ROK-2115 Ruling 3: surface GUID-vs-Blizzard-id disagreements (best effort).
+    void logLinkDisagreements(this.db, guildId);
     const [rows, importedBy, role, ownRows] = await Promise.all([
       loadRosterRows(this.db, guildId),
       findImportedBy(this.db, guildId),

@@ -158,9 +158,7 @@ export class CharactersService {
 
   async delete(userId: number, characterId: string): Promise<void> {
     const character = await this.findOne(userId, characterId);
-    await this.db
-      .delete(schema.characters)
-      .where(crudH.ownedCharacter(userId, characterId));
+    await crudH.deleteOwnedCharacter(this.db, userId, characterId);
     await crudH.autoPromoteAfterDelete(
       this.db,
       userId,
