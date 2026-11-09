@@ -17,6 +17,10 @@ import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
 import type { CharacterProfessionsDto } from '@raid-ledger/contract';
 import { parseArmoryProfessionsFlag } from './demo-test-guild-professions.helpers';
+import {
+  parseRosterSuffix,
+  type SeedRosterEntry,
+} from './demo-test-guild-roster-suffix.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -44,6 +48,8 @@ export interface SeedGuildInput {
   withPulls: boolean;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
+  /** ROK-2132: appended to every roster name, so parallel claim specs never share one ('' = none). */
+  rosterSuffix: string;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -93,7 +99,7 @@ interface RawSeedFlags {
 /** The opt-in boolean flags; 400 on a non-boolean. */
 function parseSeedFlags(
   raw: RawSeedFlags,
-): Omit<SeedGuildInput, 'name' | 'gameSlug'> {
+): Omit<SeedGuildInput, 'name' | 'gameSlug' | 'rosterSuffix'> {
   return {
     withContent: boolFlag(raw.withContent, 'withContent'),
     withLockouts: boolFlag(raw.withLockouts, 'withLockouts'),
@@ -110,6 +116,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
     name?: unknown;
     gameSlug?: unknown;
     armoryProfessions?: unknown;
+    rosterSuffix?: unknown;
   };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
@@ -125,22 +132,13 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
     gameSlug,
     ...parseSeedFlags(raw),
     ...parseArmoryProfessionsFlag(raw),
+    rosterSuffix: parseRosterSuffix(raw.rosterSuffix),
   };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */
 export function guildKeyHash(nameKey: string): string {
   return createHash('sha1').update(nameKey).digest('hex').slice(0, 12);
-}
-
-/**
- * A roster GUID in the LedgerLink wire shape (`AddonGuidSchema`,
- * `Player-<realm>-<8 hex>`), so a smoke can send it as a char export's
- * `who.guid`: 7 hex of the guild hash + the rank as the 8th digit.
- */
-export function seedRosterGuid(hash: string, rank: number): string {
-  const tail = `${hash.slice(0, 7)}${rank.toString(16)}`.toUpperCase();
-  return `Player-4395-${tail}`;
 }
 
 /** The seeded game id; 404 when the WoW game row is missing. */
@@ -217,7 +215,7 @@ const MEMBER_BASE = { level: 60, class: 'Warrior', source: 'addon_import' };
 export async function upsertMember(
   db: Db,
   guildId: number,
-  entry: (typeof SEED_GUILD_ROSTER)[number],
+  entry: SeedRosterEntry,
   guid: string,
   now: Date,
 ): Promise<number> {

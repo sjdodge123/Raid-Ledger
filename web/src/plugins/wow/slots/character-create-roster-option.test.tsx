@@ -34,12 +34,16 @@ function serveCandidates(list: RosterClaimListResponseDto): { calls: () => numbe
     return { calls: () => n };
 }
 
-function Harness({ gameSlug, existing = [], loading = false }: { gameSlug: string; existing?: CharacterDto[]; loading?: boolean }) {
-    const [tab, setTab] = useState<'manual' | 'import' | 'roster'>('manual');
+type Tab = 'manual' | 'import' | 'roster';
+
+function Harness({ gameSlug, existing = [], loading = false, initialTab, rosterGuildId }: {
+    gameSlug: string; existing?: CharacterDto[]; loading?: boolean; initialTab?: Tab; rosterGuildId?: number;
+}) {
+    const [tab, setTab] = useState<Tab>(initialTab ?? 'manual');
     return (
         <>
             <CharacterCreateImportForm onClose={() => {}} gameSlug={gameSlug} gameId={GAME_ID} activeTab={tab}
-                onTabChange={setTab} existingCharacters={existing} charactersLoading={loading} />
+                onTabChange={setTab} existingCharacters={existing} charactersLoading={loading} initialTab={initialTab} rosterGuildId={rosterGuildId} />
             <span data-testid="active-tab">{tab}</span>
         </>
     );
@@ -89,5 +93,20 @@ describe('CharacterCreateImportForm — Guild roster option (ROK-2128)', () => {
         await waitFor(() => expect(screen.getByRole('button', { name: 'Manual' })).toBeInTheDocument());
         expect(api.calls()).toBe(0);
         expect(rosterOption()).toBeNull();
+    });
+
+    it('ROK-2132: initialTab "roster" holds the tab over the Armory default and sends the forwarded guildId', async () => {
+        const guildIds: Array<string | null> = [];
+        serveCandidates(ONE);
+        server.use(http.get(`${API_BASE}/plugins/wow/roster-claim/candidates`, ({ request }) => {
+            guildIds.push(new URL(request.url).searchParams.get('guildId'));
+            return HttpResponse.json(ONE);
+        }));
+        const existing = [{ id: 'c0', ruleset: 'normal', isMain: true } as CharacterDto];
+        renderWithProviders(<Harness gameSlug={FOREVER} existing={existing} initialTab="roster" rosterGuildId={1} />);
+        expect(await screen.findByText('Ashen Vale')).toBeInTheDocument();
+        expect(screen.getByTestId('active-tab')).toHaveTextContent('roster');
+        expect(guildIds, 'the tab probe asks unfiltered; the pick list asks for the one guild').toEqual(expect.arrayContaining([null, '1']));
+        expect(screen.getByText(/^Showing/)).toHaveTextContent('Showing Ledger Test Guild only');
     });
 });
