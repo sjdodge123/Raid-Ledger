@@ -4,8 +4,11 @@
  * Rows show name, class and level only (FLAG 2) — plus the Armory spec and
  * item level when the roster snapshot has them (ROK-2133); one Ruleset select above the
  * list is defaulted from the user's other Forever character (FLAG 4).
+ * ROK-2149: each name (plus a "View" button on phones) opens the read-only
+ * roster-member page as the claim confirm step (`?from=claim`).
  */
 import { useMemo, useState, type JSX } from 'react';
+import { Link } from 'react-router-dom';
 import {
     type CharacterDto,
     type RosterClaimCandidateDto,
@@ -13,6 +16,8 @@ import {
     type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
+import { buttonClass } from '../../../components/ui/button-classes';
+import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { SearchInput } from '../../../components/ui/search-input';
 import { useDebouncedValue } from '../../../hooks/use-debounced-value';
 import { ModalEmptyState } from '../../../components/ui/modal-helpers';
@@ -21,6 +26,7 @@ import { RulesetSelect, useClaimHandler } from './roster-claim-actions';
 import { classDotClass } from '../hub/wow-member-professions';
 import { getClassIconUrl } from '../lib/class-icons';
 import { countCandidates, defaultClaimRuleset, filterRosterGuilds, rosterMetaLine } from '../lib/roster-claim';
+import { memberPagePath } from '../lib/member-routes';
 
 export interface RosterClaimListProps {
     gameId: number;
@@ -31,6 +37,8 @@ export interface RosterClaimListProps {
     onSwitchTab: (tab: 'manual' | 'import') => void;
     /** ROK-2132 Ruling 6: start narrowed to this guild ("Showing X only · Show all guilds"). */
     guildId?: number | undefined;
+    /** ROK-2149 — a View link was followed; the host closes its modal so the page shows. */
+    onNavigate?: (() => void) | undefined;
 }
 
 function ClassBadge({ cls }: { cls: string | null }): JSX.Element {
@@ -45,16 +53,22 @@ function ClassBadge({ cls }: { cls: string | null }): JSX.Element {
     );
 }
 
-function CandidateRow({ c, pending, busy, onClaim }: {
-    c: RosterClaimCandidateDto; pending: boolean; busy: boolean; onClaim: () => void;
+const NAME_LINK_CLASS = `block truncate rounded-sm font-medium text-foreground underline-offset-2 hover:underline ${FOCUS_RING}`;
+
+function CandidateRow({ c, href, pending, busy, onClaim, onNavigate }: {
+    c: RosterClaimCandidateDto; href: string; pending: boolean; busy: boolean; onClaim: () => void; onNavigate?: (() => void) | undefined;
 }): JSX.Element {
     return (
         <li className="flex items-center gap-2.5 min-h-11 px-2.5 py-1.5 border-t border-edge first:border-t-0 bg-surface">
             <ClassBadge cls={c.class} />
             <div className="flex-1 min-w-0">
-                <p className="text-foreground font-medium truncate">{c.name}</p>
+                <Link to={href} onClick={onNavigate} data-testid="roster-claim-name-link" className={NAME_LINK_CLASS}>{c.name}</Link>
                 <p className="text-xs text-muted truncate">{rosterMetaLine(c)}</p>
             </div>
+            <Link to={href} onClick={onNavigate} aria-label={`View ${c.name}`} data-testid="roster-claim-view-link"
+                className={buttonClass({ variant: 'ghost', size: 'sm', className: 'flex-none sm:hidden' })}>
+                View
+            </Link>
             <Button variant="secondary" size="sm" aria-label={`Claim ${c.name}`} loading={pending} loadingLabel="Claiming…"
                 disabled={busy && !pending} onClick={onClaim}>
                 {pending ? 'Claiming…' : 'Claim'}
@@ -63,8 +77,9 @@ function CandidateRow({ c, pending, busy, onClaim }: {
     );
 }
 
-function GuildSection({ guild, pendingId, onClaim, showHeader }: {
+function GuildSection({ guild, pendingId, onClaim, showHeader, onNavigate }: {
     guild: RosterClaimGuildDto; pendingId: number | null; onClaim: (c: RosterClaimCandidateDto) => void; showHeader: boolean;
+    onNavigate?: (() => void) | undefined;
 }): JSX.Element {
     const n = guild.candidates.length;
     return (
@@ -77,7 +92,8 @@ function GuildSection({ guild, pendingId, onClaim, showHeader }: {
             )}
             <ul className="rounded-lg border border-edge overflow-hidden">
                 {guild.candidates.map((c) => (
-                    <CandidateRow key={c.memberId} c={c} pending={pendingId === c.memberId} busy={pendingId !== null} onClaim={() => onClaim(c)} />
+                    <CandidateRow key={c.memberId} c={c} href={memberPagePath(guild.guildId, c.memberId, { fromClaim: true })} onNavigate={onNavigate}
+                        pending={pendingId === c.memberId} busy={pendingId !== null} onClaim={() => onClaim(c)} />
                 ))}
             </ul>
         </section>
@@ -138,7 +154,7 @@ function emptyMessage(query: string, filteredGuildName: string | null): string {
 }
 
 /** The "Guild roster" body of the Add character dialog (WoW: Forever only). */
-export function RosterClaimList({ gameId, existingCharacters, armoryAvailable, onClaimed, onSwitchTab, guildId }: RosterClaimListProps): JSX.Element {
+export function RosterClaimList({ gameId, existingCharacters, armoryAvailable, onClaimed, onSwitchTab, guildId, onNavigate }: RosterClaimListProps): JSX.Element {
     const [query, setQuery] = useState('');
     const { data, isLoading, visible, filteredGuildName, showAllGuilds } = useRosterCandidatesView(gameId, guildId, query);
     const [ruleset, setRuleset] = useState<WowForeverSelectableRuleset>(() => defaultClaimRuleset(existingCharacters));
@@ -150,7 +166,7 @@ export function RosterClaimList({ gameId, existingCharacters, armoryAvailable, o
             {filteredGuildName && <GuildFilterNote guildName={filteredGuildName} onShowAll={showAllGuilds} />}
             {isLoading ? <LoadingRows /> : countCandidates(visible) === 0
                 ? <ModalEmptyState message={emptyMessage(query, filteredGuildName)} />
-                : visible.map((g) => <GuildSection key={g.guildId} guild={g} pendingId={pendingId} onClaim={onClaim} showHeader={!filteredGuildName} />)}
+                : visible.map((g) => <GuildSection key={g.guildId} guild={g} pendingId={pendingId} onClaim={onClaim} showHeader={!filteredGuildName} onNavigate={onNavigate} />)}
             {data?.truncated && <p className="text-xs text-muted">Showing the first 1000 — search to narrow.</p>}
             <NotListedHint armoryAvailable={armoryAvailable} onSwitchTab={onSwitchTab} />
         </div>
