@@ -34,8 +34,9 @@ type GateTab = 'roster' | 'import';
 /**
  * The Add character modal's state, plus whether a character arrived since the
  * viewer's characters first loaded. The baseline is taken on that first load,
- * not at open: on the `?claim=roster` landing (or a fast click) the modal opens
- * before the list has arrived, and an open-time baseline would never be set.
+ * and the modal is not mounted (`ready`) until it exists (Codex P2): on the
+ * `?claim=roster` landing (or a fast click) a claim made before the list
+ * arrived would land in the baseline itself, and the AC 8 warning never shows.
  */
 function useGateModal(guildId: number, gameId: number | undefined) {
     const queryClient = useQueryClient();
@@ -56,7 +57,9 @@ function useGateModal(guildId: number, gameId: number | undefined) {
         void queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
         void queryClient.invalidateQueries({ queryKey: guildPageKey(guildId) });
     }, [queryClient, guildId]);
-    return { tab, open, close, gained: opened && tab === null && gainedCharacter(baseline, current) };
+    // A failed list never yields a baseline; the modal still opens (no warning is possible then).
+    const ready = baseline !== null || chars.isError;
+    return { tab, ready, open, close, gained: opened && tab === null && gainedCharacter(baseline, current) };
 }
 
 /** `?claim=roster` (the directory card's landing) opens the roster tab once, then leaves the URL (Ruling 9). */
@@ -145,7 +148,7 @@ export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element {
                 <Button variant="secondary" onClick={() => modal.open('import')} className="w-full sm:w-auto">{IMPORT_ARMORY_LABEL}</Button>
             </div>
             {gate.data.viewer.hasForeverCharacter && <NotOnRosterHint />}
-            {modal.tab !== null && !registryLoading && (
+            {modal.tab !== null && modal.ready && !registryLoading && (
                 <AddCharacterModal isOpen onClose={modal.close} gameSlug={WOW_FOREVER_GAME_SLUG} initialTab={modal.tab} rosterGuildId={guild.id} />
             )}
         </div>

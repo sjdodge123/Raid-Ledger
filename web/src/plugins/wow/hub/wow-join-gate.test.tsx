@@ -141,7 +141,7 @@ describe('WoW join gate — actions (AC 2, 3)', () => {
         serve();
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Pick my character' }));
-        const modal = screen.getByTestId('add-character-modal');
+        const modal = await screen.findByTestId('add-character-modal');
         expect(modal).toHaveAttribute('data-tab', 'roster');
         expect(modal).toHaveAttribute('data-guild', '7');
         expect(modal).toHaveAttribute('data-slug', 'world-of-warcraft-forever');
@@ -151,7 +151,7 @@ describe('WoW join gate — actions (AC 2, 3)', () => {
         serve();
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Import from Armory' }));
-        expect(screen.getByTestId('add-character-modal')).toHaveAttribute('data-tab', 'import');
+        expect(await screen.findByTestId('add-character-modal')).toHaveAttribute('data-tab', 'import');
     });
 
 });
@@ -162,7 +162,7 @@ describe('WoW join gate — after the modal (AC 4, 8, Ruling 9)', () => {
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Pick my character' }));
         pageIsMember = true;
-        await userEvent.click(screen.getByRole('button', { name: 'stub-claim' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'stub-claim' }));
         expect(await screen.findByRole('navigation', { name: 'Guild page sections' })).toBeInTheDocument();
         expect(screen.queryByTestId('wow-join-gate')).toBeNull();
     });
@@ -171,7 +171,7 @@ describe('WoW join gate — after the modal (AC 4, 8, Ruling 9)', () => {
         serve();
         renderPage();
         await userEvent.click(await screen.findByRole('button', { name: 'Pick my character' }));
-        await userEvent.click(screen.getByRole('button', { name: 'stub-claim' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'stub-claim' }));
         expect(await screen.findByTestId('wow-join-gate-warning')).toHaveTextContent(NOT_LINKED_WARNING);
         expect(screen.getByTestId('wow-join-gate')).toBeInTheDocument();
     });
@@ -183,16 +183,22 @@ describe('WoW join gate — after the modal (AC 4, 8, Ruling 9)', () => {
         await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(/^$/));
     });
 
-    it('a claim before the characters have loaded (the ?claim=roster landing) still warns', async () => {
+    it('the ?claim=roster landing waits for the characters before the modal can add one, so a claim still warns (Codex P2)', async () => {
         let release: () => void = () => undefined;
         charsReady = new Promise<void>((resolve) => { release = resolve; });
         serve();
         renderPage('/hubs/7?claim=roster');
-        await screen.findByTestId('add-character-modal');
-        expect(charsServed, 'the modal must open before the characters load').toBe(0);
+        await screen.findByTestId('wow-join-gate');
+        await waitFor(() => expect(screen.getByTestId('search'), 'the landing consumed the param').toHaveTextContent(/^$/));
+        expect(
+            screen.queryByTestId('add-character-modal'),
+            'the modal must not mount before the characters baseline exists — a claim now would join the baseline',
+        ).toBeNull();
+        expect(charsServed).toBe(0);
         release();
-        await waitFor(() => expect(charsServed, 'the first character load').toBe(1));
-        await userEvent.click(screen.getByRole('button', { name: 'stub-claim' }));
+        expect(await screen.findByTestId('add-character-modal')).toHaveAttribute('data-tab', 'roster');
+        expect(charsServed, 'the first character load').toBe(1);
+        await userEvent.click(await screen.findByRole('button', { name: 'stub-claim' }));
         await waitFor(() => expect(
             screen.queryByTestId('wow-join-gate-warning'),
             'a new character with the page still 403 must show the warning',
