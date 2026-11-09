@@ -2013,10 +2013,28 @@ against a new dependency (Q1: no `@tanstack/react-virtual`). Used by the hub Mem
 - One scroll box, `max-h-[70vh] overflow-auto`, `role="region" aria-label="Members list" tabIndex={0}`. The viewport
   height is `round(innerHeight × 0.7)` (no DOM measuring); `virtualSlice()` maps `scrollTop` to the mounted bands
   plus a top and bottom spacer (`<tbody aria-hidden>` / `<div aria-hidden>`), with 8 rows of overscan.
-- **Every row has a FIXED height**, set inline: table row 44px / band heading 32px (≥1024px), card 64px / heading
-  32px (below). A cell never wraps: `whitespace-nowrap`, `truncate`, `flex-nowrap overflow-hidden`. Anything added
-  to a row (avatar 20px `loading="lazy"`, the "You" `Pill`, a class dot, `ProfessionBadges`) must fit that height —
-  clip, never wrap. Rows are not focus traps; the region itself is the tab stop.
+- **Every row has a FIXED height**, set inline: table row 44px / band heading 32px (≥1024px); card 64px, or 90px
+  when a column sets `cardLine: 'own'` / heading 32px (below). The card height is **derived**, never typed:
+  `cardRowHeight(lines)` = 2 × 8px padding + lines × 22px (a Pill's height) + 4px gaps, and `cardMetrics(columns)`
+  feeds both the card and the virtualiser. A card is up to **three lines** (ROK-2155): the first column (identity),
+  one meta line with the rest, and — only for `cardLine: 'own'` columns (WoW professions) — a third line. Every line
+  stays one line: `whitespace-nowrap`, `truncate`, `flex-nowrap overflow-hidden`; a cell that must not shrink (WoW
+  rank: "Guild Master") is `shrink-0 whitespace-nowrap`; a strip of icons (`ProfessionBadges`) shows one line
+  (`flex-wrap max-h-4 overflow-hidden`) so an icon drops whole instead of clipping mid-glyph. Anything added to a row
+  (avatar 20px `loading="lazy"`, the "You" `Pill`, a class dot) must fit that height. Rows are not focus traps; the
+  region itself is the tab stop.
+- **Whole-row click is opt-in per hub kind (ROK-2155).** A column's `rowLink` is a hook returning the href of the ONE
+  link its cell renders (WoW's name: the character page, or the read-only roster page), or `undefined` for a
+  plain-text name. Only rows with an href look clickable (`hover:bg-panel`, and `cursor-pointer` on the table).
+  - **Cards (<1024px):** the card is `relative` and the name link gets `STRETCHED_LINK`
+    (`after:absolute after:-inset-px`, `character-link.tsx`) — the §4.2 StretchedAction idea as the link's own
+    `::after`, so the whole card opens it. One link per row, never a duplicate anchor, never `role="button"`.
+  - **Table (≥1024px):** no overlay — `position: relative` on a `<tr>` is not a reliable containing block in WebKit.
+    The `<tr>` gets a **mouse-only** `onClick` that navigates to the same href, ignoring clicks inside
+    `a`/`button`/`input`/`[role=button]` and modified or non-left clicks (ctrl/cmd-click goes to the name link). No
+    `tabIndex` on the row: keyboard users keep the name link as the one tab stop.
+  - Anything that must stay hoverable above a card overlay on a hover shell gets `lg:relative` (not bare `relative`,
+    which turns that part of a touch card into a tap dead zone). Community and server hubs set no `rowLink`.
 - **A11y + scroll:** the table carries `aria-rowcount` (all rows + headings + the header row) and each mounted row
   its `aria-rowindex`; cards carry `aria-setsize` / `aria-posinset` within their band. A scroll that unmounts the
   focused row moves focus to the region (never `<body>`). A new `bands` array (sort, filter, search, grouping)
@@ -2026,7 +2044,7 @@ against a new dependency (Q1: no `@tanstack/react-virtual`). Used by the hub Mem
 - **Class dot:** `h-2 w-2 rounded-full bg-class-<slug>` + `aria-hidden`, before the class name, which stays text.
 
 **DO** — reuse `HubMemberVirtualList` for any hub list that can reach hundreds of rows. **DON'T** — give a row
-variable height, add a virtualisation library, or use a class colour for text. Sample: `/dev/design-system` →
+variable height (a third card line is a fixed per-hub-kind height, not per row), add a virtualisation library, or use a class colour for text. Sample: `/dev/design-system` →
 "Windowed member list + class dots" (`member-list-section.tsx`, 2,000 static rows, both shells).
 
 ### 4.33 Wizard sub-step rail (ROK-1703)

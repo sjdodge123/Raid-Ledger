@@ -4,7 +4,7 @@
  * known offsets: from the scroll position and the viewport height we pick the
  * slice to mount (plus overscan) and the spacer heights above and below it.
  */
-import type { HubMemberRow } from '../../plugins/hub-module';
+import type { HubMemberColumn, HubMemberRow } from '../../plugins/hub-module';
 import type { HubMemberBand } from './hub-members.helpers';
 
 export interface VirtualMetrics {
@@ -16,8 +16,26 @@ export interface VirtualMetrics {
 
 /** Fixed heights of the desktop table rows / band headings (the shells set them inline). */
 export const TABLE_METRICS: VirtualMetrics = { row: 44, heading: 32 };
-/** Fixed heights of the phone cards / band headings. */
-export const CARD_METRICS: VirtualMetrics = { row: 64, heading: 32 };
+/**
+ * ROK-2155 — a phone card is a fixed stack of lines, so its height is derived:
+ * each line is at most a Pill tall (12px text-xs leading 16 + py-0.5 + 1px
+ * border = 22), lines are `gap-1` apart, and the card keeps 8px above and below.
+ */
+export const CARD_LINE = { height: 22, gap: 4, padY: 8 } as const;
+
+/** Height of a phone card with `lines` lines: 2 → 64 (name + meta), 3 → 90 (+ an own line). */
+export function cardRowHeight(lines: number): number {
+    return 2 * CARD_LINE.padY + lines * CARD_LINE.height + (lines - 1) * CARD_LINE.gap;
+}
+
+/** Fixed heights of a two-line phone card / band heading (no `cardLine: 'own'` column). */
+export const CARD_METRICS: VirtualMetrics = { row: cardRowHeight(2), heading: 32 };
+
+/** The card metrics for these columns: one more line when any column after the first asks for its own. */
+export function cardMetrics(columns: readonly HubMemberColumn[]): VirtualMetrics {
+    const ownLine = columns.slice(1).some((c) => c.cardLine === 'own');
+    return ownLine ? { ...CARD_METRICS, row: cardRowHeight(3) } : CARD_METRICS;
+}
 
 /** The mounted part of one band. */
 export interface VisibleBand {
