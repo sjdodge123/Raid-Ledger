@@ -273,7 +273,9 @@ async function confirmClaim(page: Page, row: Candidate): Promise<string> {
  * ROK-2155 — the point to click on a Members row that is NOT its name link: the
  * phone card's meta line (rank · class · role), or the desktop table's Rank
  * cell. Returned relative to the row so `row.click` keeps Playwright's
- * hit-target check (the stretched link is the row's own descendant).
+ * hit-target check: on a card the hit is the stretched name link (the row's
+ * own descendant); on the table it is the Rank cell, and the row's mouse-only
+ * `onClick` navigates.
  */
 async function rowBodyPoint(
   row: Locator,
