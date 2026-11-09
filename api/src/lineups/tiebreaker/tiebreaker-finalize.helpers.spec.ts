@@ -65,10 +65,20 @@ interface Store {
   matchingRuns: number;
   /** Fail the next N decide calls (simulates a flip/matching failure). */
   decideFailures: number;
-  /** True while a fake-lock callback runs. */
-  lockHeld: boolean;
-  /** `lockHeld` at each poll-card announce (must all be false). */
-  announcedUnderLock: boolean[];
+  /** Sequence number of the fake-lock callback running now (null = none). */
+  currentLock: number | null;
+  /** Fake-lock callbacks started so far. */
+  lockSeq: number;
+  /** The lock whose callback ran the successful decide (matching). */
+  decidedInLock: number | null;
+  /** Locks whose callbacks have finished (committed or rolled back). */
+  exitedLocks: number[];
+  /**
+   * At each poll-card announce: had the lock that decided already exited?
+   * Must all be true. Tracked per lock, not as one global flag, because a
+   * racing caller may legitimately hold ITS lock while the decider announces.
+   */
+  announcedAfterCommit: boolean[];
 }
 
 function tiebreakerRow(overrides: Partial<TiebreakerRow> = {}): TiebreakerRow {
@@ -97,14 +107,17 @@ function fakeLock(store: Store) {
   return <T>(_db: Db, _id: number, fn: (tx: Db) => Promise<T>): Promise<T> => {
     const run = chain.then(async () => {
       const snapshot = { tb: store.tb, lineup: store.lineup };
-      store.lockHeld = true;
+      store.lockSeq += 1;
+      const seq = store.lockSeq;
+      store.currentLock = seq;
       try {
         return await fn(TX);
       } catch (err) {
         Object.assign(store, snapshot);
         throw err;
       } finally {
-        store.lockHeld = false;
+        store.currentLock = null;
+        store.exitedLocks.push(seq);
       }
     });
     chain = run.catch(() => undefined);
@@ -138,10 +151,14 @@ function wireStore(store: Store): void {
     }
     store.matchingRuns += 1;
     store.lineup = { ...store.lineup, hasMatches: true };
+    store.decidedInLock = store.currentLock;
     return EMPTY_PASS;
   });
   jest.mocked(announceLineupDecided).mockImplementation(() => {
-    store.announcedUnderLock.push(store.lockHeld);
+    const decider = store.decidedInLock;
+    store.announcedAfterCommit.push(
+      decider !== null && store.exitedLocks.includes(decider),
+    );
     return Promise.resolve();
   });
 }
@@ -152,8 +169,11 @@ function newStore(overrides: Partial<Store> = {}): Store {
     lineup: { status: 'voting', hasMatches: false },
     matchingRuns: 0,
     decideFailures: 0,
-    lockHeld: false,
-    announcedUnderLock: [],
+    currentLock: null,
+    lockSeq: 0,
+    decidedInLock: null,
+    exitedLocks: [],
+    announcedAfterCommit: [],
     ...overrides,
   };
 }
@@ -182,7 +202,7 @@ describe('finalizeTiebreaker races (ROK-2098)', () => {
     expect(decideLineupInTx).toHaveBeenCalledTimes(1);
     expect(markTiebreakerResolved).toHaveBeenCalledTimes(1);
     // Side effects fire once, for the caller that did the work, after commit.
-    expect(store.announcedUnderLock).toEqual([false]);
+    expect(store.announcedAfterCommit).toEqual([true]);
     expect(writeTiebreakerCohortMemory).toHaveBeenCalledTimes(1);
     // The second caller adopts the stored winner instead of re-picking.
     expect(votePick).not.toHaveBeenCalled();
@@ -276,7 +296,7 @@ describe('finalizeTiebreaker rollback (ROK-2098 Codex P1)', () => {
     expect(pick).toHaveBeenCalledTimes(2);
     expect(store.matchingRuns).toBe(1);
     expect(store.lineup).toEqual({ status: 'decided', hasMatches: true });
-    expect(store.announcedUnderLock).toEqual([false]);
+    expect(store.announcedAfterCommit).toEqual([true]);
   });
 });
 
