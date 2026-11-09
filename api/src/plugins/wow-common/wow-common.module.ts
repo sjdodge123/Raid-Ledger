@@ -46,6 +46,8 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
+import { CharacterInstalledAddonsController } from './character-installed-addons.controller';
+import { CharacterInstalledAddonsService } from './character-installed-addons.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
 import { WowFactsModule } from './facts/wow-facts.module';
@@ -81,6 +83,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     EventRaidReadinessController,
     ...addonImport.CONTROLLERS,
     CharacterQuestsController,
+    // ROK-2147: owner/officer-only installed-addon list.
+    CharacterInstalledAddonsController,
     ...guildHub.CONTROLLERS,
   ],
   providers: [
@@ -115,6 +119,7 @@ import { NotificationModule } from '../../notifications/notification.module';
     ForeverDisplayTalentsService,
     ForeverDisplayLockoutsService,
     CharacterQuestsService,
+    CharacterInstalledAddonsService,
     ...guildHub.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
