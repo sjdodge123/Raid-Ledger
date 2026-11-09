@@ -62,6 +62,7 @@ import {
   findWowGameId,
   guildKeyHash,
   parseSeedGuildBody,
+  seedRosterGuid,
   upsertGuild,
   upsertMember,
   upsertSeedUser,
@@ -323,7 +324,7 @@ export class DemoTestGuildController {
     | { owner: null; memberId: number }
     | { owner: SeedGuildRole; user: SeedGuildUser }
   > {
-    const guid = `Player-${ctx.hash}-${String(entry.rank)}`;
+    const guid = seedRosterGuid(ctx.hash, entry.rank);
     const row = { ...entry, char: `${entry.char}${ctx.nameSuffix}` };
     const memberId = await upsertMember(
       this.db,

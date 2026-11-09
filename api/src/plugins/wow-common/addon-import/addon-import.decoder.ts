@@ -9,6 +9,7 @@ import {
   type AddonExport,
   type AddonExportSection,
   type AddonGuildExport,
+  type AddonMailworthy,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
 import { assertPlausibleExportTimes, exportClock } from './addon-import.clock';
@@ -30,6 +31,11 @@ import {
 /** Char export with `data` already in the frozen snapshot shape. */
 export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
   data: AddonCharSnapshotData;
+  /**
+   * `data.mailworthy` lifted beside the frozen snapshot `data` (ROK-2148):
+   * guild-level contributions data, never stored in the char snapshot.
+   */
+  mailworthy?: AddonMailworthy;
 };
 /** Validated + sanitised payload, discriminated by `section`. */
 export type DecodedAddonExport =
@@ -157,7 +163,12 @@ function finalize(pages: AddonExport[]): DecodedAddonExport {
   }
   if (first.section === 'raid') return sanitizeStrings(first);
   const { data, ...envelope } = first;
-  return { ...sanitizeStrings(envelope), data: toCharSnapshotData(data) };
+  const { mailworthy } = data;
+  return {
+    ...sanitizeStrings(envelope),
+    data: toCharSnapshotData(data),
+    ...(mailworthy ? { mailworthy: sanitizeStrings(mailworthy) } : {}),
+  };
 }
 
 function normalisedHash(headers: AddonPageHeader[]): string {

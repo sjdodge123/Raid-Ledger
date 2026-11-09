@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ADDON_IMPORT_MAX_BYTES, type AddonImportResultDto } from '@raid-ledger/contract';
 import {
     canApplyAddonImport, diffRows, formatKb, importStringBytes, importStringHeaderLabel,
-    provenanceLine, resultHeadline, sendableImportString, summaryRows,
+    mailworthyRow, provenanceLine, resultHeadline, sendableImportString, summaryRows,
 } from './addon-import.helpers';
 import { CHAR_STRING, EXPORTED_AT, charResult } from './addon-import.test-fixtures';
 
@@ -59,6 +59,18 @@ describe('summary copy', () => {
     it('builds char rows with the rounded average item level', () => {
         expect(summaryRows(charResult())).toEqual([['Gear', '17 items · avg ilvl 61'], ['Talents', '31 nodes'], ['Lockouts', '2']]);
     });
+    it('ROK-2148 Q8: adds a Guild contributions row for an applied Mailworthy block', () => {
+        const summary = { gearCount: 17, avgIlvl: 61.4, talentNodes: 31, lockouts: 2,
+            mailworthy: { status: 'applied' as const, givers: 3, giversRejected: 1, peers: 6, template: 'stored' as const } };
+        expect(summaryRows(charResult({ status: 'applied', summary }))).toContainEqual(['Guild contributions', 'Updated 3 givers · 1 not on the roster']);
+    });
+    it('ROK-2148 Q8: names the skip reason, and shows no row without a block', () => {
+        expect(mailworthyRow({ status: 'skipped', reason: 'not_on_roster' }))
+            .toEqual(['Guild contributions', "Skipped — you're not on the latest guild roster"]);
+        expect(mailworthyRow({ status: 'applied', givers: 1, giversRejected: 0, peers: 1, template: 'none' }))
+            .toEqual(['Guild contributions', 'Updated 1 giver']);
+        expect(summaryRows(charResult()).map(([label]) => label)).not.toContain('Guild contributions');
+    });
     it('omits the average when no gear carried an item level', () => {
         expect(summaryRows(charResult({ summary: { gearCount: 0, avgIlvl: null, talentNodes: 0, lockouts: 0 } }))[0]).toEqual(['Gear', '0 items']);
     });
@@ -80,5 +92,15 @@ describe('summary copy', () => {
     it('words the result headline per status', () => {
         expect(resultHeadline(charResult({ status: 'applied' }))).toBe('Character data imported.');
         expect(resultHeadline(charResult({ status: 'noop' }))).toMatch(/already up to date/);
+    });
+    it('ROK-2148: a stale char export whose Mailworthy block applied says the guild contributions updated', () => {
+        const applied = { status: 'applied' as const, givers: 2, giversRejected: 0, peers: 2, template: 'none' as const };
+        const summary = { gearCount: 17, avgIlvl: 61.4, talentNodes: 31, lockouts: 2, mailworthy: applied };
+        expect(resultHeadline(charResult({ status: 'stale', summary })))
+            .toBe('Guild contributions updated. Character data not imported — a newer export is already saved.');
+        const skipped = { ...summary, mailworthy: { status: 'skipped' as const, reason: 'not_on_roster' as const } };
+        expect(resultHeadline(charResult({ status: 'stale', summary: skipped })))
+            .toBe('Character data not imported — a newer export is already saved.');
+        expect(resultHeadline(charResult({ status: 'stale' }))).toBe('Character data not imported — a newer export is already saved.');
     });
 });

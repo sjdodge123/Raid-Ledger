@@ -439,6 +439,150 @@
                 "inProgress"
               ],
               "additionalProperties": false
+            },
+            "mailworthy": {
+              "type": "object",
+              "properties": {
+                "generatedAt": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 4102444800
+                },
+                "template": {
+                  "type": "object",
+                  "properties": {
+                    "rev": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 4102444800
+                    },
+                    "author": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 48
+                    },
+                    "rules": {
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "professionSkillLineId": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 2147483647
+                          },
+                          "recipientName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 48
+                          }
+                        },
+                        "required": [
+                          "professionSkillLineId",
+                          "recipientName"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "rev",
+                    "author",
+                    "rules"
+                  ],
+                  "additionalProperties": false
+                },
+                "peers": {
+                  "maxItems": 1000,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 48
+                      },
+                      "lastSeenAt": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 4102444800
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "lastSeenAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "givers": {
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "characterName": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 48
+                      },
+                      "itemsAllTime": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "countingSince": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 4102444800
+                      },
+                      "asOf": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 4102444800
+                      },
+                      "days": {
+                        "maxItems": 35,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "day": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 47482
+                            },
+                            "items": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2147483647
+                            }
+                          },
+                          "required": [
+                            "day",
+                            "items"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "characterName",
+                      "itemsAllTime",
+                      "countingSince",
+                      "asOf",
+                      "days"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "generatedAt"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [

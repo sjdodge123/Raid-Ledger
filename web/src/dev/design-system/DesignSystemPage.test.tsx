@@ -747,6 +747,18 @@ describe('DesignSystemPage — plugin hub widgets (ROK-1909)', () => {
         expect(within(histogram).getAllByRole('link')).toHaveLength(6);
     });
 
+    it('renders the shared ranked row with a plain rank and with the medal badge slot (§3.2, ROK-2148)', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const plain = await screen.findByTestId('ds-ranked-plain', undefined, { timeout: 5000 });
+        expect(within(plain).getAllByTestId('ranked-row-rank').map((r) => r.textContent)).toEqual(['1', '2', '3', '4']);
+        expect(within(plain).queryByTestId('contributions-rank')).not.toBeInTheDocument();
+        const medal = screen.getByTestId('ds-ranked-medal');
+        expect(within(medal).getAllByTestId('contributions-rank').map((r) => r.getAttribute('data-rank'))).toEqual(['1', '2', '3', '4']);
+        expect(within(medal).queryByTestId('ranked-row-rank')).not.toBeInTheDocument();
+        expect(within(medal).getAllByRole('meter')).toHaveLength(4);
+    });
+
     it('renders the arrange list (§4.28) through the real ArrangeRow: arrows reorder and announce', async () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
