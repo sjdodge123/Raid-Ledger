@@ -8,25 +8,17 @@
  */
 import type { JSX } from 'react';
 import type { CharacterDto, RosterMemberNoArmoryReason } from '@raid-ledger/contract';
+import { NO_ARMORY_COPY } from './no-armory-copy';
 import { professionsPillSource } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
 import {
-    EquipmentEmptyState, EquipmentWithItems, renderSlotPortrait, SectionsLayout, TalentSection,
+    EquipmentEmptyState, EquipmentWithItems, SectionsLayout, TalentSection,
     VariantPendingSections, type SectionPanels,
 } from './character-detail-panels';
+import { renderSlotPortrait } from './render-slot-portrait';
 import type { CharacterDetailSectionsProps } from './character-detail-sections';
-
-/** D1 copy — one sentence per reason (design-system §4.5). */
-export const NO_ARMORY_COPY: Record<RosterMemberNoArmoryReason, string> = {
-    no_blizzard_id: "Not on the Blizzard roster yet, so there's no Armory data.",
-    below_level_10: 'Blizzard shows the Armory from level 10.',
-    invalid_name: "This name can't be looked up on the Armory.",
-    not_found: "The Armory profile is private or hasn't been published yet (it updates after a logout).",
-    id_mismatch: 'This name now belongs to a different Armory character.',
-    pending: "Armory data hasn't been fetched yet — it refreshes hourly.",
-};
 
 export function NoArmoryNote({ reason }: { reason: RosterMemberNoArmoryReason }): JSX.Element {
     return (

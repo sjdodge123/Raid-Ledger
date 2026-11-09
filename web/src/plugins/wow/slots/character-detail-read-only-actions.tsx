@@ -3,7 +3,7 @@
  * character" CTA on a read-only roster member's page, shown only with `canClaim`.
  * Opened from a claim list (`?from=claim`) it reads as the confirm step — "This is
  * my character — claim it" + Back. ONE claim code path: the Guild-roster list's
- * Ruleset select and claim handler (`roster-claim-actions.tsx`).
+ * Ruleset select and claim handler (`roster-claim-actions.tsx`, `roster-claim-handler.ts`).
  */
 import { useState, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +11,8 @@ import type { WowForeverSelectableRuleset } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { useMyCharacters } from '../../../hooks/use-characters';
 import { defaultClaimRuleset } from '../lib/roster-claim';
-import { RulesetSelect, useClaimHandler } from '../components/roster-claim-actions';
+import { RulesetSelect } from '../components/roster-claim-actions';
+import { useClaimHandler } from '../components/roster-claim-handler';
 
 export interface CharacterDetailReadOnlyActionsProps {
     rosterMemberId: number;

@@ -10,8 +10,7 @@ import { TalentDisplay } from '../components/talent-display';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
-import { selectForeverPortrait, type ForeverPortrait } from '../lib/forever-portrait';
-import type { WowVariant } from '../lib/wow-era';
+import type { ForeverPortrait } from '../lib/forever-portrait';
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 
 /** Equipment panel with items and item detail modal */
@@ -81,20 +80,6 @@ export function SectionsLayout({ panels }: { panels: SectionPanels }) {
 }
 
 const SLOT_WRAPPER = 'flex flex-col gap-6 empty:hidden';
-
-type PortraitCharacter = { race: string | null; gender?: string | null | undefined; class: string | null; name: string };
-
-/**
- * ROK-1747: the Forever fallback portrait for the equipment render slot.
- * `renderUrl` stands in for the avatar so a Blizzard render always wins here.
- */
-export function renderSlotPortrait(character: PortraitCharacter | undefined, variant: WowVariant | null, renderUrl: string | null): ForeverPortrait {
-    if (!character) return { kind: 'none' };
-    return selectForeverPortrait({
-        variant, avatarUrl: renderUrl, race: character.race, gender: character.gender,
-        characterClass: character.class, name: character.name,
-    });
-}
 
 /**
  * Neutral Equipment + Talents panels while the game registry resolves the

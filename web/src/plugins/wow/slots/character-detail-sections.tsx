@@ -27,9 +27,10 @@ import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPan
 import { CharacterQuestsSection } from '../components/character-quests-section';
 import { CharacterLockoutsSection } from '../components/character-lockouts-section';
 import {
-    EquipmentEmptyState, EquipmentWithItems, renderSlotPortrait, SectionsLayout, TalentSection,
+    EquipmentEmptyState, EquipmentWithItems, SectionsLayout, TalentSection,
     VariantPendingSections, type SectionPanels,
 } from './character-detail-panels';
+import { renderSlotPortrait } from './render-slot-portrait';
 import { ReadOnlyCharacterSections } from './character-detail-read-only-sections';
 
 /** ROK-1786: lazy so the guild addons card stays out of the entry chunk. */
