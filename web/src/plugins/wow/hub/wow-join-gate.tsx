@@ -42,16 +42,21 @@ function useGateModal(guildId: number, gameId: number | undefined) {
     const chars = useMyCharacters(gameId, gameId !== undefined);
     const [tab, setTab] = useState<GateTab | null>(null);
     const [baseline, setBaseline] = useState<ReadonlySet<string> | null>(null);
+    // The warning is about a gate action, so it waits for the modal to have opened.
+    const [opened, setOpened] = useState(false);
     const current = chars.data?.data;
     // Adjust-state-during-render: record the first loaded list exactly once.
     if (baseline === null && current !== undefined) setBaseline(new Set(current.map((c) => c.id)));
-    const open = useCallback((next: GateTab) => setTab(next), []);
+    const open = useCallback((next: GateTab) => {
+        setOpened(true);
+        setTab(next);
+    }, []);
     const close = useCallback(() => {
         setTab(null);
         void queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
         void queryClient.invalidateQueries({ queryKey: guildPageKey(guildId) });
     }, [queryClient, guildId]);
-    return { tab, open, close, gained: tab === null && gainedCharacter(baseline, current) };
+    return { tab, open, close, gained: opened && tab === null && gainedCharacter(baseline, current) };
 }
 
 /** `?claim=roster` (the directory card's landing) opens the roster tab once, then leaves the URL (Ruling 9). */
