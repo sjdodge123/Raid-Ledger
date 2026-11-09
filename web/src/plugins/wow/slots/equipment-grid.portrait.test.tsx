@@ -4,7 +4,7 @@
  * the grid keeps its 2-column layout.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { EquipmentGrid } from './equipment-grid';
 import { selectForeverPortrait, type ForeverPortrait } from '../lib/forever-portrait';
 import type { EquipmentItemDto, CharacterEquipmentDto } from '@raid-ledger/contract';
@@ -36,6 +36,11 @@ const racePortrait = selectForeverPortrait({
     variant: 'wow_forever', avatarUrl: null, race: 'Night Elf', gender: 'female',
     characterClass: 'Druid', name: 'Ayla',
 });
+
+function must<T>(value: T | undefined, label: string): T {
+    if (value === undefined) throw new Error(`missing: ${label}`);
+    return value;
+}
 
 function renderGrid(renderUrl: string | null, portrait?: ForeverPortrait): void {
     mockMatchMedia(false);
@@ -93,7 +98,7 @@ describe('EquipmentGrid — container-query layout (ROK-2146)', () => {
         renderGrid(RENDER_URL);
         expect(screen.getByTestId('equipment-layout').className.split(' '), 'the panel is the container').toContain('@container');
         const wide = screen.getByTestId('equipment-layout-wide').className.split(' ');
-        expect(wide, '3-col needs lg + @3xl').toEqual(expect.arrayContaining(['hidden', 'lg:@3xl:grid', 'lg:@3xl:grid-cols-[1fr_minmax(14rem,20rem)_1fr]']));
+        expect(wide, '3-col needs lg + @3xl').toEqual(expect.arrayContaining(['hidden', 'lg:@3xl:grid', 'lg:@3xl:grid-cols-[1fr_minmax(14rem,18rem)_1fr]']));
         expect(wide.filter((c) => /^lg:grid/.test(c)), 'no viewport-only switch').toEqual([]);
         expect(screen.getByTestId('equipment-layout-narrow').className.split(' ')).toContain('lg:@3xl:hidden');
     });
@@ -109,12 +114,12 @@ describe('EquipmentGrid — render sizing (ROK-2157)', () => {
     it('gives the render a fixed centre track and a centre cell stretched to the slot columns', () => {
         renderGrid(RENDER_URL);
         const wide = screen.getByTestId('equipment-layout-wide').className.split(' ');
-        expect(wide, 'fixed centre track, not auto').toContain('lg:@3xl:grid-cols-[1fr_minmax(14rem,20rem)_1fr]');
+        expect(wide, 'fixed centre track, not auto').toContain('lg:@3xl:grid-cols-[1fr_minmax(14rem,18rem)_1fr]');
         expect(wide, 'no auto centre track for the render').not.toContain('lg:@3xl:grid-cols-[1fr_auto_1fr]');
         const centre = screen.getByTestId('equipment-centre').className.split(' ');
         expect(centre, 'centre cell stretches and clips').toEqual(expect.arrayContaining(['self-stretch', 'overflow-hidden']));
         const frame = screen.getByTestId('equipment-render-frame').className.split(' ');
-        expect(frame, 'frame fills the cell with a minimum height').toEqual(expect.arrayContaining(['relative', 'self-stretch', 'min-h-[24rem]']));
+        expect(frame, 'frame fills the cell with a minimum height').toEqual(expect.arrayContaining(['relative', 'min-h-[24rem]']));
     });
 
     it('crops the render with object-cover at the 50%/35% focus on both layouts', () => {
@@ -122,9 +127,9 @@ describe('EquipmentGrid — render sizing (ROK-2157)', () => {
         const [desktop, phone] = screen.getAllByRole('img', { name: 'Character render' });
         expect(desktop?.className.split(' '), 'desktop fills the frame').toEqual(
             expect.arrayContaining(['absolute', 'inset-0', 'h-full', 'w-full', 'object-cover', 'object-[50%_35%]']));
-        expect(desktop?.className.split(' '), 'no contain/auto sizing').not.toEqual(expect.arrayContaining(['object-contain']));
-        expect(phone?.className.split(' '), 'phone is a 300px cover crop').toEqual(
-            expect.arrayContaining(['h-[300px]', 'w-full', 'object-cover', 'object-[50%_35%]']));
+        expect(desktop?.className.split(' '), 'no contain/auto sizing').not.toContain('object-contain');
+        expect(phone?.className.split(' '), 'phone is a 300px cover crop, capped at 400px wide').toEqual(
+            expect.arrayContaining(['h-[300px]', 'w-full', 'max-w-[400px]', 'mx-auto', 'object-cover', 'object-[50%_35%]']));
     });
 
     it('keeps the portrait tile in an auto track with its unstretched cell when there is no render', () => {
@@ -135,5 +140,22 @@ describe('EquipmentGrid — render sizing (ROK-2157)', () => {
         const centre = screen.getByTestId('equipment-centre').className.split(' ');
         expect(centre).toEqual(expect.arrayContaining(['flex', 'items-center', 'justify-center', 'px-2']));
         expect(centre).not.toContain('self-stretch');
+    });
+
+    it('drops a render that fails to load to the portrait layout, leaving no blank fixed centre column', () => {
+        renderGrid(RENDER_URL, racePortrait);
+        fireEvent.error(must(screen.getAllByRole('img', { name: 'Character render' })[0], 'desktop render img'));
+        expect(screen.queryByTestId('equipment-render-frame'), 'no render frame after the error').toBeNull();
+        expect(screen.queryAllByRole('img', { name: 'Character render' }), 'no render imgs after the error').toHaveLength(0);
+        expect(screen.getAllByTestId('forever-portrait'), 'portrait tile in both layouts').toHaveLength(2);
+        expect(screen.getByTestId('equipment-layout-wide').className.split(' ')).toContain('lg:@3xl:grid-cols-[1fr_auto_1fr]');
+    });
+
+    it('drops a render that fails to load to the 2-column grid when there is no portrait', () => {
+        renderGrid(RENDER_URL);
+        fireEvent.error(must(screen.getAllByRole('img', { name: 'Character render' })[1], 'phone render img'));
+        expect(screen.queryByTestId('equipment-layout'), 'no centre-column layout after the error').toBeNull();
+        expect(screen.queryByTestId('equipment-render-frame')).toBeNull();
+        expect(screen.getAllByRole('link', { name: 'Test Helm' }), '2-col grid renders the slot once').toHaveLength(1);
     });
 });

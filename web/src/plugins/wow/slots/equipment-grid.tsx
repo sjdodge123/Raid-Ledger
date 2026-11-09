@@ -123,7 +123,11 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, portrait, onI
 }) {
     const itemsBySlot = new Map(equipment.items.map((i) => [i.slot, i]));
     const columnProps = { itemsBySlot, gameVariant, onItemClick };
-    const renderCenter = pickCenter(renderUrl, portrait);
+    // A render URL that fails to load drops to the no-render layout (portrait tile or 2-col), so a
+    // dead URL never leaves a blank fixed centre column. Keyed on the URL so a new one is retried.
+    const [failedRenderUrl, setFailedRenderUrl] = useState<string | null>(null);
+    const liveRenderUrl = renderUrl !== null && renderUrl !== failedRenderUrl ? renderUrl : null;
+    const renderCenter = pickCenter(liveRenderUrl, portrait, () => setFailedRenderUrl(renderUrl));
 
     return (
         <div className="space-y-4">
@@ -151,8 +155,12 @@ type CenterRenderer = (layout: RenderLayout) => JSX.Element;
 interface CenterSlot { render: CenterRenderer; fill: boolean }
 
 /** The render slot's content: the Blizzard render wins, else the Forever portrait, else nothing (2-col grid). */
-function pickCenter(renderUrl: string | null, portrait: ForeverPortrait | undefined): CenterSlot | null {
-    if (renderUrl) return { fill: true, render: (layout) => <RenderImage renderUrl={renderUrl} layout={layout} /> };
+function pickCenter(
+    renderUrl: string | null, portrait: ForeverPortrait | undefined, onRenderError: () => void,
+): CenterSlot | null {
+    if (renderUrl) {
+        return { fill: true, render: (layout) => <RenderImage renderUrl={renderUrl} layout={layout} onError={onRenderError} /> };
+    }
     if (!portrait || portrait.kind === 'none') return null;
     return {
         fill: false,
@@ -168,7 +176,8 @@ function pickCenter(renderUrl: string | null, portrait: ForeverPortrait | undefi
  * Ratio hints for the character render, per layout (ROK-1159). The API prefers
  * Blizzard's `main-raw` (a transparent PNG with a lot of padding around the
  * figure) and falls back to `main` (the same framing over a backdrop scene).
- * ROK-2157: the CSS box is explicit (`w-full` + `h-full`/`h-[300px]`), so these
+ * ROK-2157: the CSS box is explicit (`w-full` + `h-full`/`h-[300px]`, capped at
+ * 400px wide on the narrow layout so a tablet-width panel doesn't zoom to the head), so these
  * attributes never become the painted size; `object-cover` crops the padding
  * and the 50%/35% focus keeps the head and torso in frame. On `main` the crop
  * only trims backdrop at the edges, which is fine. The render is the character
@@ -178,31 +187,27 @@ const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
 const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
 const RENDER_FIT = 'object-cover object-[50%_35%] drop-shadow-lg';
 
-/** The Blizzard character render for one layout; a dead URL hides the image. */
-function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderLayout }) {
+/** The Blizzard character render for one layout; a dead URL reports `onError` (the grid drops the render slot). */
+function RenderImage({ renderUrl, layout, onError }: { renderUrl: string; layout: RenderLayout; onError: () => void }) {
     if (layout === 'desktop') {
         // Absolutely placed so the image never sizes the grid row: the slot columns set the
         // height, the frame fills it (min 24rem so a short column can't shrink the figure).
         return (
-            <div data-testid="equipment-render-frame" className="relative w-full min-h-[24rem] self-stretch overflow-hidden">
+            <div data-testid="equipment-render-frame" className="relative w-full min-h-[24rem] overflow-hidden">
                 <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
-                    className={`absolute inset-0 h-full w-full ${RENDER_FIT}`}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                />
+                    className={`absolute inset-0 h-full w-full ${RENDER_FIT}`} onError={onError} />
             </div>
         );
     }
     return (
         <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
-            className={`h-[300px] w-full ${RENDER_FIT}`}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
+            className={`mx-auto h-[300px] w-full max-w-[400px] ${RENDER_FIT}`} onError={onError} />
     );
 }
 
 /**
  * Desktop (3-col) and mobile (stacked) layouts with a centre column: the render image or the portrait.
- * ROK-2157: the render gets a fixed 14–20rem track and a centre cell stretched to the slot columns'
+ * ROK-2157: the render gets a fixed 14–18rem track and a centre cell stretched to the slot columns'
  * height (an `auto` track let preflight's img max-width shrink it to a ~100px figure); the portrait
  * tile keeps the `auto` track and its top-aligned cell.
  * ROK-2146: they switch on the PANEL's width (container query), not the viewport — beside the
@@ -211,7 +216,7 @@ function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderL
  * pages (a ~944px panel at lg) nothing changes.
  */
 const WIDE_GRID = {
-    fill: 'hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_minmax(14rem,20rem)_1fr] gap-4 items-start',
+    fill: 'hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_minmax(14rem,18rem)_1fr] gap-4 items-start',
     tile: 'hidden lg:@3xl:grid lg:@3xl:grid-cols-[1fr_auto_1fr] gap-4 items-start',
 } as const;
 const WIDE_CENTRE = {
