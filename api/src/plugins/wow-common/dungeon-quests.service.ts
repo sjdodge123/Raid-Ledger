@@ -13,6 +13,7 @@ import { redisSwr } from '../../common/swr-cache';
 import { SettingsService } from '../../settings/settings.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import {
+  applyChainOverlay,
   applyInstanceOverlay,
   applyQuestOverlay,
 } from './dungeon-quests.overlay';
@@ -107,15 +108,15 @@ export class DungeonQuestsService {
       .limit(1);
     if (!quest) return [];
 
+    // Codex P2: overlay the root first, so the walk follows the same
+    // prevQuestId the returned root names. Links are overlaid as fetched.
+    const bundled = toDto(quest);
+    const [dto = bundled] = await this.overlay([bundled]);
     const questLookup = new Map<number, DungeonQuestDto>();
-    const dto = toDto(quest);
     questLookup.set(dto.questId, dto);
 
     await this.fetchChainQuests(dto, questLookup);
-    return applyQuestOverlay(
-      { db: this.db, settings: this.settings },
-      walkChainInMemory(dto, questLookup),
-    );
+    return walkChainInMemory(dto, questLookup);
   }
 
   /** Seed quest data (delegates to seeder). */
@@ -259,14 +260,7 @@ export class DungeonQuestsService {
     while (frontier.size > 0 && iterations < MAX_CHAIN_DEPTH) {
       iterations++;
       const idsToFetch = [...frontier];
-      const rows = await this.db
-        .select()
-        .from(wowClassicDungeonQuests)
-        .where(inArray(wowClassicDungeonQuests.questId, idsToFetch));
-
-      // M3: chain links carry the same Blizzard-overlay prevQuestId as the
-      // instance's own quests, so the chain agrees with the cards.
-      const dtos = await this.overlay(rows.map((row) => toDto(row)));
+      const dtos = await this.loadChainLinks(idsToFetch);
       const newFrontier = new Set<number>();
       for (const dto of dtos) {
         questLookup.set(dto.questId, dto);
@@ -295,19 +289,31 @@ export class DungeonQuestsService {
       !questLookup.has(cur) &&
       questLookup.size < MAX_CHAIN_DEPTH
     ) {
-      const [row] = await this.db
-        .select()
-        .from(wowClassicDungeonQuests)
-        .where(eq(wowClassicDungeonQuests.questId, cur))
-        .limit(1);
-      const [dto] = row ? await this.overlay([toDto(row)]) : [];
+      const [dto] = await this.loadChainLinks([cur]);
       if (!dto) break;
       questLookup.set(dto.questId, dto);
       cur = direction === 'prev' ? dto.prevQuestId : dto.nextQuestId;
     }
   }
 
-  /** The Blizzard overlay (kill switch off → unchanged) for chain links. */
+  /**
+   * Chain links by id. M3: they carry the same Blizzard-overlay prevQuestId
+   * as the instance's own quests, so the chain agrees with the cards. Codex
+   * P2: an id only the overlay has comes from the overlay (kill switch on).
+   */
+  private async loadChainLinks(ids: number[]): Promise<DungeonQuestDto[]> {
+    const rows = await this.db
+      .select()
+      .from(wowClassicDungeonQuests)
+      .where(inArray(wowClassicDungeonQuests.questId, ids));
+    return applyChainOverlay(
+      { db: this.db, settings: this.settings },
+      rows.map((row) => toDto(row)),
+      ids,
+    );
+  }
+
+  /** The Blizzard overlay (kill switch off → unchanged) for the root quest. */
   private overlay(quests: DungeonQuestDto[]): Promise<DungeonQuestDto[]> {
     return applyQuestOverlay({ db: this.db, settings: this.settings }, quests);
   }

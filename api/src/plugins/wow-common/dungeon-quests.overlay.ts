@@ -145,3 +145,31 @@ export async function applyInstanceOverlay(
   const extras = await listOverlayOnly(deps.db, scope.instanceIds, known);
   return [...merged, ...extras];
 }
+
+/**
+ * Chain links (Codex P2): the bundled rows for `requestedIds`, merged with
+ * the overlay, plus an overlay-only row for every requested id our JSON
+ * lacks — a prerequisite Blizzard imported with no dungeon still joins the
+ * chain. No type filter: a prerequisite need not be a dungeon quest. Kill
+ * switch off → the bundled rows unchanged.
+ */
+export async function applyChainOverlay(
+  deps: QuestOverlayDeps,
+  bundled: DungeonQuestDto[],
+  requestedIds: readonly number[],
+): Promise<DungeonQuestDto[]> {
+  if (requestedIds.length === 0) return bundled;
+  if (!(await isForeverQuestImportEnabled(deps.settings))) return bundled;
+  const overlay = await listBlizzardOverlay(deps.db, requestedIds);
+  const merged = bundled.map((q) =>
+    mergeBlizzardOverlay(q, overlay.get(q.questId)),
+  );
+  const known = new Set(bundled.map((q) => q.questId));
+  const extras = [...new Set(requestedIds)]
+    .filter((id) => !known.has(id))
+    .flatMap((id) => {
+      const row = overlay.get(id);
+      return row ? [overlayOnlyDto(row)] : [];
+    });
+  return [...merged, ...extras];
+}

@@ -4,7 +4,9 @@
  * ids, survive a re-seed of the bundled JSON (AC5), drop out when the kill
  * switch is off (AC6), a prerequisite not in our data gives no chain (AC7),
  * an overlay-only quest shows in its dungeon's list (R4), and chain links
- * walked from a quest take the Blizzard prevQuestId (review M3).
+ * walked from a quest take the Blizzard prevQuestId (review M3), a
+ * prerequisite only Blizzard has joins the chain, and the chain route walks
+ * from the root's Blizzard prevQuestId (Codex P2s).
  */
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -42,7 +44,7 @@ const settings = () => testApp.app.get(SettingsService);
 
 async function insertOverlay(
   questId: number,
-  instanceId: number,
+  instanceId: number | null,
   title: string,
   requirementsRaw: unknown = null,
 ): Promise<void> {
@@ -105,6 +107,8 @@ async function expectOverlayWins(): Promise<void> {
  * D as its prerequisite instead of C.
  */
 const CHAIN = { a: 990601, b: 990602, c: 990603, d: 990604 };
+/** A prerequisite only the overlay has, imported with no dungeon (Codex P2). */
+const OVERLAY_PREREQ_ID = 990605;
 const CHAIN_INSTANCE = 990;
 
 async function insertBundledQuest(
@@ -255,5 +259,40 @@ describe('Quest Prep chain links (ROK-2143 M3)', () => {
     const blizzard = [CHAIN.d, CHAIN.b, CHAIN.a];
     expect(await enrichedChainIds()).toEqual(blizzard);
     expect(await routeChainIds()).toEqual(blizzard);
+  });
+});
+
+describe('Quest Prep chain sources (ROK-2143 Codex P2)', () => {
+  it('a prerequisite only in the overlay (no dungeon) joins the chain', async () => {
+    await insertBundledQuest(CHAIN.a, CHAIN_INSTANCE, OVERLAY_PREREQ_ID);
+    await insertOverlay(OVERLAY_PREREQ_ID, null, 'Overlay Prereq');
+    const expected = [OVERLAY_PREREQ_ID, CHAIN.a];
+    expect(await routeChainIds()).toEqual(expected);
+    expect(await enrichedChainIds()).toEqual(expected);
+  });
+
+  it('kill switch off: an overlay-only prerequisite is ignored', async () => {
+    await insertBundledQuest(CHAIN.a, CHAIN_INSTANCE, OVERLAY_PREREQ_ID);
+    await insertOverlay(OVERLAY_PREREQ_ID, null, 'Overlay Prereq');
+    await settings().set(WOW_FOREVER_QUEST_IMPORT_KEY, 'false');
+    expect(await routeChainIds()).toEqual([CHAIN.a]);
+  });
+
+  it('the chain route walks from the root quest Blizzard prevQuestId', async () => {
+    await seedBundledChain();
+    await insertOverlay(
+      CHAIN.a,
+      CHAIN_INSTANCE,
+      'A (Blizzard)',
+      requiresQuest(CHAIN.d),
+    );
+    const res = await testApp.request.get(
+      `/plugins/wow-classic/quests/${CHAIN.a}/chain`,
+    );
+    expect(res.status).toBe(200);
+    const chain = res.body as { questId: number; prevQuestId: number | null }[];
+    expect(chain.map((q) => q.questId)).toEqual([CHAIN.d, CHAIN.a]);
+    expect(chain.find((q) => q.questId === CHAIN.a)?.prevQuestId).toBe(CHAIN.d);
+    expect(await enrichedChainIds()).toEqual([CHAIN.d, CHAIN.a]);
   });
 });
