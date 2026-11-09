@@ -14,6 +14,11 @@
  * cannot read as `AND` (a negated "not completed X" condition, a breadcrumb
  * exclusion) names no prerequisite. A group with no operator is a plain list
  * and counts as AND.
+ *
+ * Recursion is bounded (review r4 MINOR 1): every array or group level
+ * counts toward {@link MAX_GROUP_DEPTH} and a condition follows at most
+ * {@link MAX_CONDITION_HOPS} `target`/`quest` wrappers, so over-deep stored
+ * JSON names no prerequisite instead of overflowing the stack.
  */
 
 type JsonRecord = Record<string, unknown>;
@@ -23,6 +28,9 @@ const isRecord = (v: unknown): v is JsonRecord =>
 
 /** Group nesting cap (circular-safe by depth). */
 const MAX_GROUP_DEPTH = 8;
+
+/** `target` / `quest` wrappers followed per condition (live data uses 1). */
+const MAX_CONDITION_HOPS = 3;
 
 /** A prerequisite id and how deep its AND group sits (1 = direct). */
 export interface PrerequisiteRef {
@@ -44,17 +52,18 @@ function isAndGroup(group: JsonRecord): boolean {
 }
 
 /** A condition's quest id: `target`, a `quest` wrapper, `{ id }` or a number. */
-function conditionId(v: unknown): number | null {
+function conditionId(v: unknown, hops = 0): number | null {
   if (!isRecord(v)) return positiveInt(v);
-  if (v.target !== undefined) return conditionId(v.target);
-  if (v.quest !== undefined) return conditionId(v.quest);
+  if (hops >= MAX_CONDITION_HOPS) return null;
+  if (v.target !== undefined) return conditionId(v.target, hops + 1);
+  if (v.quest !== undefined) return conditionId(v.quest, hops + 1);
   return positiveInt(v.id);
 }
 
 function walk(v: unknown, depth: number, out: PrerequisiteRef[]): void {
   if (depth > MAX_GROUP_DEPTH) return;
   if (Array.isArray(v)) {
-    for (const e of v) walk(e, depth, out);
+    for (const e of v) walk(e, depth + 1, out);
     return;
   }
   if (isRecord(v) && Array.isArray(v.conditions)) {
