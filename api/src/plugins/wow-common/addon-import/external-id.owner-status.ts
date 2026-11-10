@@ -1,9 +1,13 @@
-import { and, eq, exists, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, exists, gt, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import { guidLink } from '../guilds/guild-link.predicates';
 import type { AddonImportTx } from './addon-import-apply.types';
 import { logGuidAudit } from './addon-import.guid-audit';
-import { auditGuidReleases, heldGuidsOf } from './external-id.guid-release';
+import {
+  auditGuidReleases,
+  heldGuidsOf,
+  lockReleasedRows,
+} from './external-id.guid-release';
 
 /**
  * ROK-2160 (Codex P1) — a deactivated owner's character stops holding its
@@ -30,6 +34,8 @@ export async function auditOwnerDeactivated(
   actorId: number | null,
 ): Promise<void> {
   const held = await heldGuidsOf(tx, userId);
+  // Serialise with a staff grant on the same rows (review r3 N2).
+  await lockReleasedRows(tx, held);
   await auditGuidReleases(tx, held, actorId, sql`clock_timestamp()`);
 }
 
@@ -69,6 +75,23 @@ function grantedSince(tx: AddonImportTx, since: string) {
 }
 
 /**
+ * ROK-2160 (review r3 m1) — `FOR UPDATE` the roster rows the user's GUID
+ * characters win, BEFORE `grantedSince` reads them: a staff grant still open
+ * on a row (`insertMemberGrant` holds `FOR SHARE`) commits first and is then
+ * seen. Lock order as `lockReleasedRows`: users row, then rows by id.
+ */
+async function lockWonRows(tx: AddonImportTx, userId: number): Promise<void> {
+  await tx
+    .select({ id: guildMembers.id })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .innerJoin(characters, guidLink())
+    .where(eq(characters.userId, userId))
+    .orderBy(asc(guildMembers.id))
+    .for('update', { of: guildMembers });
+}
+
+/**
  * Call after `deactivated_at` is cleared (same tx), with the value it had
  * ({@link lockDeactivatedAt}'s text).
  * @returns audits written.
@@ -79,6 +102,7 @@ export async function auditOwnerReactivated(
   deactivatedAt: string,
   actorId: number | null,
 ): Promise<number> {
+  await lockWonRows(tx, userId);
   const won = await tx
     .selectDistinct({
       characterId: characters.id,

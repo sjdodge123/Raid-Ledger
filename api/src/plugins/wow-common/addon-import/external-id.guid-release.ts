@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import { blizzardIdLink } from '../guilds/guild-link.predicates';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -65,6 +65,27 @@ function rowsOf(r: ReleasedGuid): SQL | undefined {
       ? undefined
       : sql`lower(${guilds.region}) = lower(${r.region})`,
   );
+}
+
+/**
+ * ROK-2160 (review r3 m1/N2) — `FOR UPDATE` every roster row the released
+ * GUIDs could hold, ordered by id. Lock order on every owner-status path:
+ * the `users` row first (the caller's UPDATE / `lockDeactivatedAt`), then
+ * these `guild_members` rows by ascending id. `insertMemberGrant` takes only
+ * one `guild_members` row, so no cycle is possible.
+ */
+export async function lockReleasedRows(
+  tx: AddonImportTx,
+  released: ReleasedGuid[],
+): Promise<void> {
+  if (released.length === 0) return;
+  await tx
+    .select({ id: guildMembers.id })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .where(or(...released.map(rowsOf)))
+    .orderBy(asc(guildMembers.id))
+    .for('update', { of: guildMembers });
 }
 
 /**
