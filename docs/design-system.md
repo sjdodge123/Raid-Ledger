@@ -746,6 +746,9 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   my character". The list opens in `Modal max-w-lg` at ≥1024px, `BottomSheet maxHeight="85vh"` below (§4.4).
   A failed claim is a `warning` (stale list: taken, gone, already claimed; the status refetches) or `danger`
   status banner inline, never a toast.
+  **Priority on the hub Overview:** while the claim prompt shows, the Companion install prompt is not rendered
+  (claiming is the earlier step); once claimed or dismissed, the Companion prompt shows as before
+  (`OverviewPrompts` in `hub-overview.tsx`, the claim cell reports `onShowingChange`).
 
 **DON'T** stack per-phase banners. `/dev/wireframes/simplify` §U1 documents exactly this failure ("Same
 job · 4 different shapes") as the thing Cycle 4 removes.
