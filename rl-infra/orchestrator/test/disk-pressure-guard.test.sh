@@ -36,6 +36,8 @@
 #        is running (review r1 MAJOR — the 92–95% starvation band)
 #   C-j  a parked build freed mid-clean-up waits (bounded) on disk-ladder.lock,
 #        which _walk holds exclusive for the whole ladder (review r3 MAJOR)
+#   C-k  a queued ladder re-reads used% after the lock and skips when freed;
+#        lock timeouts are in the result; an unopenable lock is logged (r4)
 
 set -uo pipefail
 
@@ -869,6 +871,49 @@ test_parked_build_waits_for_running_ladder() {
     test_teardown
 }
 
+# C-k (review r4 MINORs): a ladder that queued behind another re-reads used%
+# once it holds the lock and skips the walk when the other freed the disk; a
+# lock timeout is recorded in the result (callers drop stderr); a build that
+# cannot open the lock file says so in its task log.
+test_queued_ladder_rereads_and_records_lock() {
+    CURRENT_TEST_NAME="C-k: a queued ladder re-reads the disk after the lock, records lock outcomes, logs an unopenable lock"
+    local adm="$TEST_DIR/../bin/_admission.sh" st="$TEST_DIR/../bin/_state.sh" lock holder out err wait_s
+    for wait_s in 30 1; do
+        _setup_ladder 92 50
+        lock="$RL_LOCK_DIR/disk-ladder.lock"; out="$RL_STATE_DIR/out.json"; err="$RL_STATE_DIR/err"; : > "$err"
+        ( exec 203>>"$lock"; flock -x 203; : > "$RL_STATE_DIR/held"
+          _poll_until "[[ -e '$RL_STATE_DIR/go' ]]" ) &
+        holder=$!
+        _poll_until "[[ -e '$RL_STATE_DIR/held' ]]"
+        ( source "$LIB"; RL_DISK_LADDER_LOCK_WAIT_S="$wait_s"; disk_pressure::guard > "$out" 2> "$err" ) &
+        if [[ "$wait_s" == 30 ]]; then
+            # The sweeper read 92%, queued; the other ladder then freed the disk to 50%.
+            _poll_until "grep -q 'waiting up to' '$err'"
+            : > "$RL_STATE_DIR/go"; wait
+            assert_eq "$(_docker_calls)" "0" "stale reading: the queued ladder runs no rung once the disk is free"
+            assert_eq "$(jq -c '[.rungs[] | del(.waited_s)]' "$out")" \
+                '[{"rung":"ladder_lock","lock":"waited","before_pct":92,"after_pct":50,"skipped":"no_longer_needed"}]' \
+                "stale reading: the skip is recorded with the fresh reading"
+        else
+            wait "$!"; : > "$RL_STATE_DIR/go"; wait "$holder"
+            assert_eq "$(jq -c '.rungs[0] | {rung, lock}' "$out")" '{"rung":"ladder_lock","lock":"timed_out"}' \
+                "timeout: the unlocked walk is recorded in the result, not only on stderr"
+            assert_neq "$(_docker_calls)" "0" "timeout: the ladder still walks (fails open)"
+        fi
+        test_teardown
+    done
+    # The build side cannot open the lock file: it says so instead of skipping silently.
+    _setup_ladder 92 50
+    _ledger '[{"key":"local-t-1","kind":"image_build"}]'
+    : > "$RL_STATE_DIR/notadir"
+    ( source "$st" 2>/dev/null; source "$adm" 2>/dev/null; source "$LIB"
+      disk_pressure::force_ladder() { echo 2 > "$DF_IDX"; echo '{}'; }
+      RL_LOCK_DIR="$RL_STATE_DIR/notadir" RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=60
+      admission::acquire_disk "local-t-1" "" "$RL_STATE_DIR/task.log" >/dev/null 2>&1 )
+    assert_contains "$(cat "$RL_STATE_DIR/task.log")" "disk-ladder.lock not openable" "unopenable lock is logged on the build side"
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -901,5 +946,6 @@ run_test "c-g-floor-fail-safe" test_dangling_floor_fail_safe
 run_test "c-h-floor-ignores-disk-parked" test_dangling_floor_ignores_disk_parked_builds
 run_test "c-i-acquire-disk-parked-marker" test_acquire_disk_marks_and_clears_disk_parked
 run_test "c-j-parked-build-waits-for-ladder" test_parked_build_waits_for_running_ladder
+run_test "c-k-queued-ladder-rereads" test_queued_ladder_rereads_and_records_lock
 
 print_test_summary

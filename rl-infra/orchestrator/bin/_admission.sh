@@ -654,7 +654,11 @@ admission::_await_disk_ladder() {
     declare -F disk_pressure::ladder_lock_path >/dev/null 2>&1 || return 0
     command -v flock >/dev/null 2>&1 || return 0
     lock="$(disk_pressure::ladder_lock_path)"
-    { : >>"$lock"; } 2>/dev/null || return 0
+    if ! { : >>"$lock"; } 2>/dev/null; then
+        admission::_log "$log_path" \
+            "[admission] disk-ladder.lock not openable ($lock) — not waiting for a running disk clean-up"
+        return 0
+    fi
     ( flock -s -n 203 ) 203>>"$lock" 2>/dev/null && return 0
     t0=$(date +%s)
     admission::_log "$log_path" \

@@ -303,6 +303,14 @@ disk_pressure::ladder_lock_path() {
 # (walks unlocked) when flock is missing, the lock file cannot be opened, or
 # the lock stays busy for RL_DISK_LADDER_LOCK_WAIT_S (600): freeing disk must
 # never wait forever on a stuck holder.
+#
+# Review r4: a ladder that QUEUED behind another re-reads used% once it holds
+# the lock (the other ladder may have freed the disk meanwhile) and walks from
+# that reading, or skips the walk when it is already below the target (or the
+# caller's alarm threshold). Lock outcomes other than "got it at once" are
+# recorded as a {rung:"ladder_lock"} entry at the head of the rung array, so
+# they reach the sweeper's audit, rl_fleet_prune and the build's task log
+# (both callers discard stderr).
 disk_pressure::_walk() {
     local lock wait_s="${RL_DISK_LADDER_LOCK_WAIT_S:-600}"
     lock="$(disk_pressure::ladder_lock_path)"
@@ -312,9 +320,27 @@ disk_pressure::_walk() {
     fi
     chmod 664 "$lock" 2>/dev/null || true
     (
-        flock -x -w "$wait_s" 203 \
-            || echo "[disk_pressure] disk-ladder.lock still held after ${wait_s}s — walking unlocked" >&2
-        disk_pressure::_walk_unlocked "$1"
+        flock -x -n 203 && { disk_pressure::_walk_unlocked "$1"; exit 0; }
+        local t0 now note rungs
+        t0=$(date +%s)
+        disk_pressure::_log "disk ladder: waiting up to ${wait_s}s for disk-ladder.lock (another clean-up is running)"
+        if ! flock -x -w "$wait_s" 203; then
+            note=$(jq -nc --argjson w "$wait_s" --argjson b "$1" \
+                '{rung:"ladder_lock", lock:"timed_out", waited_s:$w, before_pct:$b, after_pct:$b}')
+            disk_pressure::_log "disk ladder: disk-ladder.lock still held after ${wait_s}s — walking unlocked"
+            jq -c --argjson n "$note" '[$n] + .' <<<"$(disk_pressure::_walk_unlocked "$1")"
+            exit 0
+        fi
+        now=$(disk_pressure::used_pct)
+        [[ "$now" =~ ^[0-9]+$ ]] || now="$1"
+        note=$(jq -nc --argjson w "$(( $(date +%s) - t0 ))" --argjson b "$1" --argjson a "$now" \
+            '{rung:"ladder_lock", lock:"waited", waited_s:$w, before_pct:$b, after_pct:$a}')
+        if (( now < RL_DISK_TARGET_PCT || now < RL_DISK_PRUNE_PCT )); then
+            disk_pressure::_log "disk ladder: ${now}% used after waiting for disk-ladder.lock — walk skipped"
+            jq -c '[. + {skipped:"no_longer_needed"}]' <<<"$note"
+            exit 0
+        fi
+        jq -c --argjson n "$note" '[$n] + .' <<<"$(disk_pressure::_walk_unlocked "$now")"
     ) 203>>"$lock"
 }
 
