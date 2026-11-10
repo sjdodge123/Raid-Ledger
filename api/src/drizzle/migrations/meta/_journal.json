@@ -2038,6 +2038,13 @@
       "when": 1794201947823,
       "tag": "0291_character_installed_addons",
       "breakpoints": true
+    },
+    {
+      "idx": 292,
+      "version": "7",
+      "when": 1794271698664,
+      "tag": "0292_addon_snapshot_completed_captured_at",
+      "breakpoints": true
     }
   ]
 }
