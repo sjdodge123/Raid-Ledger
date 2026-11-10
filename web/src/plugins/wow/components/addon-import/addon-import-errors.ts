@@ -52,6 +52,7 @@ const COPY: Record<AddonImportErrorCode, Omit<AddonImportErrorCopy, 'action'>> =
     CHARACTER_CLAIMED: { title: 'Already claimed', body: 'Another player already has this character on Raid Ledger.' },
     RULESET_REQUIRED: { title: 'Choose a ruleset', body: "The export doesn't say which ruleset this character plays on. Pick one above, then import." },
     RULESET_CONFIRM_STALE: { title: 'Ruleset changed', body: "The realm's ruleset changed since your preview — preview again and confirm the new value." },
+    CHARACTER_MOVED: { title: 'Character moved', body: 'This character now belongs to another member. Re-open it and try again.' },
 };
 
 const FALLBACK: AddonImportErrorCopy = {

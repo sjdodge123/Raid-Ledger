@@ -146,16 +146,43 @@ export async function runForCharacter(
     pendingGuid: binding.pinGuid,
   };
   // ROK-1794 — THE lock order (GUID, then guild) before any section runs.
-  if (!request.dryRun) {
-    const { gameId, region } = ctx;
-    await lockImportScope(tx, { gameId, region, guid: binding.pinGuid, paste });
-  }
+  if (!request.dryRun) await lockAndRecheckOwner(ctx, character, paste);
   const runs = withPendingBindingStatus(
     await runPaste(ctx, paste, request.dryRun),
     binding,
     request.dryRun,
   );
   return finishRun({ ...ctx, sha256: '' }, runs, binding, request.dryRun);
+}
+
+/**
+ * ROK-2159 — take THE import locks, then `FOR UPDATE` the character row and
+ * re-check its owner on the SAME tx. The pre-tx owner check
+ * (`characters.findOne`) races an admin Change owner, which locks GUID →
+ * name → row (`character-owner.admin.tx.ts::lockCharacter`): without this
+ * the import waited on that row lock and then wrote the old owner's
+ * snapshot onto the moved character. The GUID locked is the one the apply
+ * pins, else the one the row already carries, so both sides queue on the
+ * same lock (1) before the row lock — never row-then-GUID.
+ */
+async function lockAndRecheckOwner(
+  ctx: Pick<
+    AddonApplyContext,
+    'tx' | 'userId' | 'gameId' | 'region' | 'pendingGuid'
+  >,
+  character: LoadedCharacter,
+  paste: DecodedAddonPaste,
+): Promise<void> {
+  const { tx, gameId, region } = ctx;
+  const guid = ctx.pendingGuid ?? character.binding.addonGuid;
+  await lockImportScope(tx, { gameId, region, guid, paste });
+  const [row] = await tx
+    .select({ userId: schema.characters.userId })
+    .from(schema.characters)
+    .where(eq(schema.characters.id, character.id))
+    .for('update');
+  if (!row || row.userId !== ctx.userId)
+    throw new AddonImportError('CHARACTER_MOVED');
 }
 
 /**

@@ -234,7 +234,7 @@ payload are unchanged — this only widens what one paste may contain.
 ## 7. Error codes (`AddonImportErrorCodeSchema`)
 
 Body: `{ code, message }` — `message` never echoes the paste. HTTP 413 for
-`TOO_LARGE`, 429 for `RATE_LIMITED`, 422 otherwise.
+`TOO_LARGE`, 429 for `RATE_LIMITED`, 409 for `CHARACTER_MOVED`, 422 otherwise.
 
 | Code | Meaning for the addon author |
 |---|---|
@@ -246,6 +246,7 @@ Body: `{ code, message }` — `message` never echoes the paste. HTTP 413 for
 | `INVALID_PAYLOAD` | JSON violates the schema (unknown key, wrong type, out of range, header/section mismatch, duplicate member, structural limit), or the sections of a mixed paste come from different characters / exports. Message names the field **path** only (prefixed with the section in a mixed paste). |
 | `PAGES_INCOMPLETE` | > 10 tokens, a guild page missing/duplicated, mixed `m`, pages from different exports, a second char/raid string or a second guild export in one paste. |
 | `WRONG_GAME` · `REGION_MISMATCH` · `NAME_MISMATCH` · `NOT_IN_GUILD` · `GUID_CONFIRM_REQUIRED` · `RATE_LIMITED` · `CHARACTER_CLAIMED` · `RULESET_REQUIRED` | Apply-time checks against the Raid Ledger character/account — the string itself is well-formed. Not addon-format bugs. |
+| `CHARACTER_MOVED` | Apply-time (ROK-2159): the Raid Ledger character changed owner while the import ran (admin Change owner). HTTP 409; nothing was written. Not an addon-format bug. |
 
 ## 8. Fixtures
 
