@@ -3,12 +3,13 @@
  * makes the pills links, `onToggle` makes them `aria-pressed` toggles.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { RoleSummary } from './role-bits';
 import { filterStateFromHash, membersHashFor, roleFilterHref, roleFromHash } from './wow-role-filter.helpers';
 import { EMPTY_WOW_MEMBER_FILTERS } from './wow-member-filters.helpers';
+import { FILTER_CHIP_ON_EDGE, FILTER_CHIP_ON_FILL, FILTER_CHIP_ON_LABEL } from '../../../components/ui/filter-chip-classes';
 
 const COUNTS: Record<CharacterRole, number> = { tank: 2, healer: 4, dps: 12 };
 
@@ -33,6 +34,21 @@ describe('RoleSummary (ROK-2172)', () => {
         expect(screen.getByRole('button', { name: 'Show 2 Tank members' })).toHaveAttribute('aria-pressed', 'false');
         await userEvent.click(screen.getByRole('button', { name: 'Show 2 Tank members' }));
         expect(onToggle).toHaveBeenCalledWith('tank');
+    });
+
+    it('a pressed pill wears the FilterChip ON fill, border and label; an unpressed one keeps its role border', () => {
+        render(<RoleSummary counts={COUNTS} selected={['healer']} onToggle={() => undefined} />);
+        const on = screen.getByRole('button', { name: 'Show 4 Heal members' });
+        const off = screen.getByRole('button', { name: 'Show 2 Tank members' });
+        for (const cls of [...FILTER_CHIP_ON_FILL.split(' '), FILTER_CHIP_ON_EDGE]) {
+            expect(on, `pressed pill carries ${cls}`).toHaveClass(cls);
+            expect(off, `unpressed pill must not carry ${cls}`).not.toHaveClass(cls);
+        }
+        expect(on, 'the ON border replaces the role border').not.toHaveClass('role-healer');
+        expect(off).toHaveClass('role-tank');
+        expect(within(on).getByText('Heal'), 'pressed label').toHaveClass(FILTER_CHIP_ON_LABEL);
+        expect(within(on).getByText('4'), 'pressed count').toHaveClass(FILTER_CHIP_ON_LABEL);
+        expect(within(off).getByText('Tank'), 'unpressed label').not.toHaveClass(FILTER_CHIP_ON_LABEL);
     });
 });
 
