@@ -268,12 +268,13 @@ describe('GET /:id — view matrix', () => {
       effectiveRole: 'tank',
       isMain: true,
     });
-    // One per linked user: gm tank; officer/deleg/plain dps; unlinked skipped.
+    // One per linked user: gm tank; officer/deleg/plain dps; plus the
+    // role-less unlinked member as unknown (ROK-2158).
     expect(res.body.roleCounts).toEqual({
       tank: 1,
       healer: 0,
       dps: 3,
-      unknown: 0,
+      unknown: 1,
     });
   });
 });

@@ -256,8 +256,10 @@ export type GuildRankGroup = z.infer<typeof GuildRankGroupSchema>;
 /** `GET /plugins/wow/guilds/:id` — hero fields + roster grouped by rank. */
 /**
  * Roster role mix: ONE count per linked RL user (their main in this guild,
- * else their highest-rank character). Unlinked members are not counted;
- * a linked character with no role counts as `unknown`.
+ * else their highest-rank character) PLUS one per unlinked roster member
+ * (ROK-2158). Each is counted by the same role the Members row shows: the
+ * manual override, else the Armory role, else the character's role; a
+ * member with no known role counts as `unknown`.
  */
 export const GuildRoleCountsSchema = z
   .object({

@@ -341,7 +341,9 @@ describe('GET roster-insights (real DB)', () => {
     const dto = WowRosterInsightsSchema.parse(res.body);
     expect(dto.classes.find((c) => c.class === 'Mage')?.count).toBe(2);
     expect(dto.levels).toMatchObject({ max: 60, atCap: 2 });
-    expect(dto.roles.raid).toEqual({ tank: 1, healer: 0, dps: 0, unknown: 0 });
+    // ROK-2158: every roster member counts — unlinked Pugtwo (60 Hunter, no
+    // role fact) lands in `unknown`.
+    expect(dto.roles.raid).toEqual({ tank: 1, healer: 0, dps: 0, unknown: 1 });
     expect(dto.roles.dungeon).toMatchObject({ tank: 1, healer: 1 });
     expect(dto.professions).toEqual([
       {
