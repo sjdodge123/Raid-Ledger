@@ -11,8 +11,8 @@ import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
 /**
- * The viewer's chain state for this quest + its quest data date: addon
- * snapshot or Armory list (ROK-1748, ROK-2109).
+ * The viewer's chain state for this quest (ROK-1748, ROK-2109); the capture date
+ * now sits once under the Quest Prep header (ROK-2144).
  */
 export interface QuestCardPrereqs { state: QuestPrereqState }
 

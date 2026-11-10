@@ -349,7 +349,7 @@ describe('ROK-2144 — pre-column rows (completed_captured_at NULL) and the back
   });
 
   // The migration itself runs only in the fleet's migration step.
-  it('the 0292 backfill stamps a row with a completed list and leaves a log-only row NULL', async () => {
+  it('the 0292 backfill stamps a row with a completed list', async () => {
     const full = await memberWithChar('asof7');
     await importPaste(full, FULL_T1());
     await nullOutColumn(full.charId);
