@@ -259,14 +259,17 @@ function QuestRewardsMeta({ quest }: { quest: EnrichedDungeonQuestDto }) {
     );
 }
 
-/** ROK-2161: one span per faction — `text-success` for a gain, `text-danger` for a loss. */
+/** ROK-2161: the ROK-2165 label chip — the `.quest-card` overlay fill is below AA for bare semantic text. */
+const REPUTATION_CHIP = 'inline-block max-w-full truncate rounded-sm bg-surface/70 px-1';
+
+/** ROK-2161: one chip per faction — `text-success` for a gain, `text-danger` for a loss. */
 function QuestReputationRewards({ rewards }: { rewards: { factionName: string; amount: number }[] }) {
     return (
         <span data-testid="quest-reward-reputation">
             {rewards.map((reward, i) => (
                 <span key={`${reward.factionName}-${i}`}>
                     {i > 0 && ', '}
-                    <span className={reward.amount > 0 ? 'text-success' : 'text-danger'} data-testid="quest-reward-reputation-entry">
+                    <span className={`${REPUTATION_CHIP} ${reward.amount > 0 ? 'text-success' : 'text-danger'}`} data-testid="quest-reward-reputation-entry">
                         {formatReputationReward(reward)}
                     </span>
                 </span>
