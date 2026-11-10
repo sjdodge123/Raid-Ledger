@@ -202,6 +202,16 @@ async function servedHub(scenario: Scenario): Promise<number> {
   return id;
 }
 
+/** Response headers minus the ones that legitimately vary per request. */
+const VARYING_HEADERS = new Set(['date', 'x-request-id', 'x-correlation-id']);
+function stableHeaders(
+  headers: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([k]) => !VARYING_HEADERS.has(k)),
+  );
+}
+
 function getStatus(id: number, who: Who | null = 'member') {
   const req = testApp.request.get(`/guilds/${id}/claim`);
   return who === null ? req : req.set('Authorization', `Bearer ${tokens[who]}`);
@@ -285,6 +295,24 @@ describe('guilds/:id/claim — hidden hub is indistinguishable from missing', ()
     ];
     expect([hPost.status, mPost.status]).toEqual([404, 404]);
     expect(mPost.text).toBe(hPost.text);
+  });
+
+  it('hidden hub and missing guild give identical 404 headers (GET + POST)', async () => {
+    const id = await servedHub({ status: plainStatus([cand('a')]) });
+    await testApp.db
+      .update(schema.guilds)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.guilds.id, id));
+    const missing = 2_000_000_002;
+    const [hGet, mGet] = [await getStatus(id), await getStatus(missing)];
+    expect([hGet.status, mGet.status]).toEqual([404, 404]);
+    expect(stableHeaders(mGet.headers)).toEqual(stableHeaders(hGet.headers));
+    const [hPost, mPost] = [
+      await postClaim(id, 'a'),
+      await postClaim(missing, 'a'),
+    ];
+    expect([hPost.status, mPost.status]).toEqual([404, 404]);
+    expect(stableHeaders(mPost.headers)).toEqual(stableHeaders(hPost.headers));
   });
 
   it('401 without a JWT', async () => {
@@ -374,7 +402,7 @@ describe('GET guilds/:id/claim — ranking and contract', () => {
 });
 
 describe('POST guilds/:id/claim/:candidateId', () => {
-  it('200 with a schema-valid result; options reach the provider', async () => {
+  it('200 with a schema-valid result, no-store; options reach the provider', async () => {
     const id = await servedHub({
       status: plainStatus([cand('12:Generic:Human:1')]),
       claim: (cid) => okClaim(cid),
@@ -383,6 +411,7 @@ describe('POST guilds/:id/claim/:candidateId', () => {
       options: { ruleset: 'hc' },
     });
     expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, no-store');
     expect(HubClaimResultSchema.safeParse(res.body).success).toBe(true);
     expect(res.body.claimed.id).toBe('12:Generic:Human:1');
     const call = fake.claimCalls.at(-1);
