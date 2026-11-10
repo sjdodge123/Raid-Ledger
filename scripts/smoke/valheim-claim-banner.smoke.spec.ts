@@ -131,6 +131,24 @@ async function openOverview(
   await Promise.all(waits);
 }
 
+/**
+ * Every `GET /guilds/:id/claim` `page` makes from now on. The core prompt only
+ * asks for claim status while its onboarding key is NOT dismissed
+ * (`useHubClaim(guildId, prompt.visible)` in hub-claim-prompt.tsx), so an
+ * empty list after a settled load proves the web honoured the dismissal.
+ */
+function recordClaimGets(page: Page, f: Fixture): string[] {
+  const gets: string[] = [];
+  page.on("request", (r) => {
+    if (
+      r.method() === "GET" &&
+      new URL(r.url()).pathname.endsWith(`/guilds/${f.guildId}/claim`)
+    )
+      gets.push(r.url());
+  });
+  return gets;
+}
+
 /** Sign `page` in as `userId`, open the Overview, return the boot access JWT. */
 async function bootOnOverview(
   page: Page,
@@ -319,16 +337,29 @@ test.describe("Valheim hub — claim prompt (ROK-1933, ROK-2153 S4)", () => {
       { description: `claim-character dismissal stored for hub ${f.guildId}` },
     );
 
+    const reloadClaimGets = recordClaimGets(page, f);
     await openOverview(page, f, { claim: false });
     await expect(prompt(page)).toHaveCount(0);
 
     const fresh = await freshPageAs(browser, page, testInfo, f.users.b.id);
     try {
+      const freshClaimGets = recordClaimGets(fresh, f);
       await openOverview(fresh, f, { claim: false });
       await expect(prompt(fresh)).toHaveCount(0);
       // The Characters tab banner is Valheim's own and ignores the core dismiss.
       await openCharacters(fresh, f, true);
       await expect(banner(fresh)).toHaveCount(1);
+      // Settled: both Overviews had their onboarding state well before this
+      // second full load, and an undismissed prompt asks for claim status on
+      // the very render that state lands. None asked, so the dismissal held.
+      expect(
+        freshClaimGets,
+        "a dismissed prompt never fetches claim status (fresh browser)",
+      ).toEqual([]);
+      expect(
+        reloadClaimGets,
+        "a dismissed prompt never fetches claim status (reload)",
+      ).toEqual([]);
     } finally {
       await fresh.context().close();
     }
@@ -342,6 +373,10 @@ test.describe("Valheim hub — claim prompt (ROK-1933, ROK-2153 S4)", () => {
 
     await openCharacters(page, f, true);
     await expect(banner(page)).toHaveCount(1);
+    // The Characters banner is not dismissable (only the Overview prompt is).
+    await expect(
+      banner(page).getByRole("button", { name: /Dismiss/ }),
+    ).toHaveCount(0);
     await banner(page).getByRole("button", { name: TEXT.cta }).click();
     await expect(page).toHaveURL(/[?&]unclaimed=1.*#characters$/);
     const filter = page.getByRole("button", { name: "Unclaimed only" });
