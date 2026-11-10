@@ -3,12 +3,17 @@
  * Forever" section, under the namespace probe and in its idiom — a heading,
  * a last-run line and a secondary button. A run is a background job: the
  * button starts it (202) and the report is polled while it says `running`.
+ * ROK-2162: the server also runs it by itself when the quest data is empty and
+ * weekly; the status names what started the last run and when the last
+ * automatic run was. The button stays as the manual override.
  */
-import { useId, type JSX } from 'react';
+import { useEffect, useId, type JSX } from 'react';
 import type {
     ForeverQuestImportMismatchedArea, ForeverQuestImportReport, ForeverQuestImportStatus,
+    ForeverQuestImportTrigger,
 } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
+import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { useForeverQuestImport } from '../hooks/use-forever-quest-import';
 import { useRowCap } from '../hooks/use-row-cap';
 import { ShowAllToggle } from './show-all-toggle';
@@ -17,15 +22,35 @@ const STATUS_CLS: Record<ForeverQuestImportStatus, string> = {
     idle: 'text-muted', running: 'text-warning', succeeded: 'text-success', failed: 'text-danger',
 };
 
-const when = (iso: string | null): string => (iso ? new Date(iso).toLocaleString() : 'an unknown time');
+const TRIGGER_LABEL: Record<ForeverQuestImportTrigger, string> = {
+    manual: 'manual',
+    'auto-empty': 'automatic (first import)',
+    weekly: 'automatic (weekly)',
+};
+
+function when(iso: string | null | undefined): string {
+    if (!iso) return 'an unknown time';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? 'an unknown time' : d.toLocaleString();
+}
+
+/** " · automatic (weekly)" etc.; empty on a pre-ROK-2162 report without a trigger. */
+const triggerSuffix = (t: ForeverQuestImportTrigger | undefined): string => (t ? ` · ${TRIGGER_LABEL[t]}` : '');
 
 function StatusLine({ report }: { report: ForeverQuestImportReport }): JSX.Element {
     if (report.status === 'idle') return <p className="text-sm text-muted">The quest import has not run yet.</p>;
     const label = <span className={`font-medium ${STATUS_CLS[report.status]}`}>{report.status}</span>;
     if (report.status === 'running') {
-        return <p className="text-sm text-secondary">Import {label} since {when(report.startedAt)}</p>;
+        return <p className="text-sm text-secondary">Import {label} since {when(report.startedAt)}{triggerSuffix(report.trigger)}</p>;
     }
-    return <p className="text-sm text-secondary">Last run {when(report.finishedAt)} · {label}</p>;
+    return <p className="text-sm text-secondary">Last run {when(report.finishedAt)}{triggerSuffix(report.trigger)} · {label}</p>;
+}
+
+/** ROK-2162: when the server last ran the import by itself; "never" until it has (old reports included). */
+function LastAutoRun({ report }: { report: ForeverQuestImportReport }): JSX.Element | null {
+    if (report.status === 'idle') return null;
+    const at = report.lastAutoRunAt ? when(report.lastAutoRunAt) : 'never';
+    return <p className="text-sm text-muted" data-testid="forever-quest-import-last-auto">Last automatic run: {at}</p>;
 }
 
 function Counts({ report }: { report: ForeverQuestImportReport }): JSX.Element | null {
@@ -81,9 +106,29 @@ function ErrorList({ report }: { report: ForeverQuestImportReport }): JSX.Elemen
     );
 }
 
+/** ROK-2162: a Re-import that raced a run already in progress (409) gets plain copy, not the server text. */
+export const QUEST_IMPORT_ALREADY_RUNNING = 'An import is already running. The status above updates when it finishes.';
+
+/** The api's machine `code` on the busy 409 (`FOREVER_QUEST_IMPORT_RUNNING_CODE`); the unconfigured 409 has none. */
+export const QUEST_IMPORT_RUNNING_CODE = 'FOREVER_QUEST_IMPORT_RUNNING';
+
+/** Only the busy 409 gets the plain copy, at once; any other error (e.g. the unconfigured 409) shows the server's message. */
+function startErrorText(err: Error): string {
+    const busy = isConflictError(err) && errorBodyOf(err)?.['code'] === QUEST_IMPORT_RUNNING_CODE;
+    return busy ? QUEST_IMPORT_ALREADY_RUNNING : err.message;
+}
+
+/** Clears a stale Re-import error (e.g. the 409 alert) once the report leaves `running`. */
+function useResetWhenNotRunning(status: ForeverQuestImportStatus | undefined, reset: () => void): void {
+    useEffect(() => {
+        if (status !== undefined && status !== 'running') reset();
+    }, [status, reset]);
+}
+
 /** Admin Forever quest import status + Re-import; renders nothing until the report has loaded. */
 export function ForeverQuestImportPanel(): JSX.Element | null {
     const { report, start } = useForeverQuestImport();
+    useResetWhenNotRunning(report.data?.status, start.reset);
     if (report.isError) return <p className="text-sm text-danger">Failed to load the quest import status.</p>;
     if (!report.data) return null;
     const running = report.data.status === 'running';
@@ -92,15 +137,19 @@ export function ForeverQuestImportPanel(): JSX.Element | null {
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h4 id="wow-forever-quest-import-heading" className="text-sm font-semibold text-foreground">Dungeon quest data</h4>
+                    <p className="text-sm text-muted">
+                        Imports automatically when there is no quest data yet, then every week. Re-import quests runs it now.
+                    </p>
                     <StatusLine report={report.data} />
+                    <LastAutoRun report={report.data} />
                 </div>
-                <Button variant="secondary" loading={start.isPending || running} loadingLabel="Importing quests..."
-                    onClick={() => start.mutate()}>Re-import quests</Button>
+                <Button variant="secondary" loading={start.isPending || running} disabled={running}
+                    loadingLabel="Importing quests..." onClick={() => start.mutate()}>Re-import quests</Button>
             </div>
             <Counts report={report.data} />
             <MismatchedAreas report={report.data} />
             <ErrorList report={report.data} />
-            {start.isError && <p role="alert" className="text-sm text-danger">{start.error.message}</p>}
+            {start.isError && <p role="alert" className="text-sm text-danger">{startErrorText(start.error)}</p>}
         </section>
     );
 }

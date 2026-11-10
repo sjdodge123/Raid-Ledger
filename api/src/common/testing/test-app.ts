@@ -54,6 +54,7 @@ import {
 } from './socket-handle-audit';
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 import { WOWHEAD_RESOLVER_DEPS } from '../../plugins/wow-common/wowhead-item/wow-item-meta.resolve';
+import { FOREVER_QUEST_AUTO_IMPORT_KICKS } from '../../plugins/wow-common/forever-quest-import/forever-quest-auto-import.service';
 import { noNetworkWowheadDeps } from './wowhead-no-network';
 import { installValheimLinkBodyBypass } from '../../plugins/valheim/link/ingest/valheim-link-body-bypass';
 import { installCompanionBodyBypass } from '../../companion/ingest/companion-body-bypass';
@@ -236,6 +237,9 @@ async function buildNestApp(
     // ROK-1727: no integration spec may call nether.wowhead.com.
     .overrideProvider(WOWHEAD_RESOLVER_DEPS)
     .useValue(noNetworkWowheadDeps())
+    // ROK-2162: no boot / settings-save quest import; specs call it directly.
+    .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
+    .useValue(false)
     .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,

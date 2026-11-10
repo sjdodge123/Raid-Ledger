@@ -13,8 +13,10 @@ import {
     foreverQuestImportGetHandler,
     foreverQuestImportPostHandler,
 } from '../../../test/mocks/forever-quest-import-handlers';
-import { FOREVER_QUEST_IMPORT_POLL_MS, questImportRefetchInterval } from '../hooks/use-forever-quest-import';
-import { ForeverQuestImportPanel } from './forever-quest-import-panel';
+import {
+    FOREVER_QUEST_IMPORT_IDLE_POLL_MS, FOREVER_QUEST_IMPORT_POLL_MS, questImportRefetchInterval,
+} from '../hooks/use-forever-quest-import';
+import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING, QUEST_IMPORT_RUNNING_CODE } from './forever-quest-import-panel';
 
 const RUNNING = buildQuestImportReport({ status: 'running', runId: 'run-2', startedAt: '2026-11-09T11:00:00.000Z' });
 
@@ -38,6 +40,7 @@ describe('ForeverQuestImportPanel status', () => {
         const state = await screen.findByText('running');
         expect(state.closest('p')).toHaveTextContent(/Import\s+running\s+since/);
         expect(button()).toHaveAttribute('aria-busy', 'true');
+        expect(button()).toBeDisabled();
     });
 
     it('succeeded: shows the finish time, counts and no mismatches', async () => {
@@ -128,27 +131,75 @@ describe('ForeverQuestImportPanel Re-import', () => {
         }
     });
 
+    // ROK-2162: only the busy 409 (its `code`) gets the plain copy; any other 409 or 403 shows the server sentence.
+    const UNCONFIGURED = 'Blizzard API credentials are not configured. Add them on the Blizzard plugin page, then run the quest import again.';
     it.each([
-        [409, 'A Forever quest import is already running'],
-        [403, 'The WoW Forever quest import is turned off'],
-    ] as const)('Re-import: a %i shows the server message', async (status, message) => {
+        ['busy 409', 409, 'A Forever quest import is already running', QUEST_IMPORT_RUNNING_CODE, QUEST_IMPORT_ALREADY_RUNNING],
+        ['unconfigured 409', 409, UNCONFIGURED, undefined, UNCONFIGURED],
+        ['403', 403, 'The WoW Forever quest import is turned off', undefined, 'The WoW Forever quest import is turned off'],
+    ] as const)('Re-import: a %s shows its alert copy', async (_label, status, message, code, shown) => {
         server.use(
             foreverQuestImportGetHandler(buildQuestImportReport()),
-            foreverQuestImportPostHandler({ status, message }),
+            foreverQuestImportPostHandler({ status, message, ...(code ? { code } : {}) }),
         );
         renderWithProviders(<ForeverQuestImportPanel />);
         await screen.findByText('The quest import has not run yet.');
         await userEvent.click(button());
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(await screen.findByRole('alert')).toHaveTextContent(shown);
         expect(screen.getByText('The quest import has not run yet.')).toBeInTheDocument();
     });
 });
 
+describe('ForeverQuestImportPanel automatic runs (ROK-2162)', () => {
+    it.each([
+        ['manual', 'manual'],
+        ['auto-empty', 'automatic (first import)'],
+        ['weekly', 'automatic (weekly)'],
+    ] as const)('names the %s trigger next to the last run time', async (trigger, label) => {
+        const report = buildSucceededReport({ trigger, lastAutoRunAt: null });
+        server.use(foreverQuestImportGetHandler(report));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        const line = (await screen.findByText('succeeded')).closest('p');
+        const time = new Date(report.finishedAt ?? '').toLocaleString().replace(/\s+/g, ' ');
+        expect(line).toHaveTextContent(`Last run ${time} · ${label} · succeeded`);
+        expect(line).not.toHaveTextContent('auto-empty');
+    });
+
+    it('shows the last automatic run time', async () => {
+        const at = '2026-11-04T06:30:00.000Z';
+        server.use(foreverQuestImportGetHandler(buildSucceededReport({ trigger: 'manual', lastAutoRunAt: at })));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        expect(await screen.findByTestId('forever-quest-import-last-auto')).toHaveTextContent(
+            `Last automatic run: ${new Date(at).toLocaleString().replace(/\s+/g, ' ')}`,
+        );
+    });
+
+    it('an old report without trigger or last automatic run renders cleanly', async () => {
+        server.use(foreverQuestImportGetHandler(buildSucceededReport()));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        const line = (await screen.findByText('succeeded')).closest('p');
+        expect(line).toHaveTextContent(/^Last run .+ · succeeded$/);
+        expect(line).not.toHaveTextContent(/manual|automatic/);
+        expect(screen.getByTestId('forever-quest-import-last-auto')).toHaveTextContent('Last automatic run: never');
+        expect(document.body).not.toHaveTextContent(/undefined|Invalid Date/);
+    });
+
+    it('says the import runs by itself, with Re-import as the manual override', async () => {
+        server.use(foreverQuestImportGetHandler(buildQuestImportReport()));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        expect(await screen.findByText(
+            'Imports automatically when there is no quest data yet, then every week. Re-import quests runs it now.',
+        )).toBeInTheDocument();
+        expect(screen.queryByTestId('forever-quest-import-last-auto')).not.toBeInTheDocument();
+    });
+});
+
 describe('questImportRefetchInterval', () => {
-    it('polls only while the report is running', () => {
+    it('polls fast while the report is running, slowly otherwise (ROK-2162: a server-started run shows up)', () => {
         expect(questImportRefetchInterval(RUNNING)).toBe(FOREVER_QUEST_IMPORT_POLL_MS);
-        expect(questImportRefetchInterval(buildSucceededReport())).toBe(false);
-        expect(questImportRefetchInterval(buildQuestImportReport())).toBe(false);
-        expect(questImportRefetchInterval(undefined)).toBe(false);
+        expect(questImportRefetchInterval(buildSucceededReport())).toBe(FOREVER_QUEST_IMPORT_IDLE_POLL_MS);
+        expect(questImportRefetchInterval(buildQuestImportReport())).toBe(FOREVER_QUEST_IMPORT_IDLE_POLL_MS);
+        expect(questImportRefetchInterval(undefined)).toBe(FOREVER_QUEST_IMPORT_IDLE_POLL_MS);
+        expect(FOREVER_QUEST_IMPORT_IDLE_POLL_MS).toBeGreaterThan(FOREVER_QUEST_IMPORT_POLL_MS);
     });
 });
