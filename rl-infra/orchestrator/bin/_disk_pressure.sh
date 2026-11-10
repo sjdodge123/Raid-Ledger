@@ -23,6 +23,7 @@
 #   RL_DISK_PRUNE_PCT       80     run the ladder at/above this used%
 #   RL_DISK_TARGET_PCT      65     stop as soon as used% is below this
 #   RL_IMAGE_PRUNE_AGE      48h    only prune images older than this
+#   RL_DANGLING_PRUNE_AGE   6h     dangling_prune: untagged images older than this
 #   RL_DISK_ROOT            /      filesystem to measure
 #   RL_DISK_STATE_FILE      $STATE_DIR/disk-pressure.json
 #   RL_DISK_PRUNE_DRY_RUN   0      1 = list the rungs, invoke no docker
@@ -37,6 +38,7 @@
 RL_DISK_PRUNE_PCT="${RL_DISK_PRUNE_PCT:-80}"
 RL_DISK_TARGET_PCT="${RL_DISK_TARGET_PCT:-65}"
 RL_IMAGE_PRUNE_AGE="${RL_IMAGE_PRUNE_AGE:-48h}"
+RL_DANGLING_PRUNE_AGE="${RL_DANGLING_PRUNE_AGE:-6h}"
 RL_DISK_ROOT="${RL_DISK_ROOT:-/}"
 RL_DISK_STATE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/disk-pressure.json}"
 RL_DISK_PRUNE_DRY_RUN="${RL_DISK_PRUNE_DRY_RUN:-${DRY_RUN:-0}}"
@@ -77,9 +79,21 @@ disk_pressure::free_gb() {
 # protected by the running-container rule alone. RL_RUNNER_IMAGE cannot be
 # expressed as a prune filter (docker has no repo-name exclusion), which is
 # why the label is the mechanism.
+#
+# dangling_prune (2026-11-10): the runners build with the CLASSIC builder
+# (compose `DOCKER_BUILDKIT: "0"`), so a build leaves no BuildKit cache for
+# builder_prune to reclaim. It leaves untagged images instead — each
+# Dockerfile.allinone stage result, and the old `rl:ci-test` / env tag every
+# rebuild moves off. ~950 of them, all younger than 48h, filled the host on
+# 2026-11-10 while image_prune's `until=48h` skipped every one. Without `-a`
+# docker prunes DANGLING images only (untagged, no child image, no container
+# of any state using it), so tagged images, env images and runner images
+# stay. It shares builder_prune's build guard: a running classic build can be
+# mid-way through reusing an old stage image as cache.
 disk_pressure::rungs() {
     echo "builder_prune"
     echo "image_prune"
+    echo "dangling_prune"
     echo "volume_prune"
 }
 
@@ -97,6 +111,7 @@ disk_pressure::rung_cmd() {
         # gc-sweeper image has no buildx plugin, so it was on this path already.
         builder_prune) echo "DOCKER_BUILDKIT=0 docker builder prune -af" ;;
         image_prune)   echo "docker image prune -af --filter until=${RL_IMAGE_PRUNE_AGE} --filter label!=rl.role=runner" ;;
+        dangling_prune) echo "docker image prune -f --filter until=${RL_DANGLING_PRUNE_AGE} --filter label!=rl.role=runner" ;;
         # `volume prune` is anonymous-only from engine 23, but older engines
         # remove unattached NAMED volumes too — and traefik-acme /
         # registry-data / loki-data are unattached during any compose
@@ -173,11 +188,11 @@ disk_pressure::build_busy_keys() {
             | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
 }
 
-# Decide the builder rung at used% $1. Echoes a JSON fragment merged into the
+# Decide a build-guarded rung ($2, default builder_prune) at used% $1. Echoes a JSON fragment merged into the
 # rung record: {} = run, {forced:true} = run over the ceiling despite a build,
 # {skipped:<reason>} = do not run. Logs every non-plain outcome.
 disk_pressure::_builder_gate() {
-    local pct="$1" keys rc=0 reason
+    local pct="$1" rung="${2:-builder_prune}" keys rc=0 reason
     keys=$(disk_pressure::build_busy_keys) || rc=$?
     if (( rc != 0 )); then
         reason="ledger_unreadable"
@@ -187,10 +202,10 @@ disk_pressure::_builder_gate() {
         echo '{}'; return 0
     fi
     if (( pct >= RL_DISK_BUILDER_FORCE_PCT )); then
-        disk_pressure::_log "disk ladder: builder_prune forced at ${pct}% >= RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}% despite ${reason}${keys:+ (${keys})}"
+        disk_pressure::_log "disk ladder: ${rung} forced at ${pct}% >= RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}% despite ${reason}${keys:+ (${keys})}"
         echo '{"forced":true}'; return 0
     fi
-    disk_pressure::_log "disk ladder: builder_prune skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%"
+    disk_pressure::_log "disk ladder: ${rung} skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%"
     jq -nc --arg r "$reason" --arg k "$keys" \
         '{skipped:$r} + (if $k == "" then {} else {blocked_by:($k | split(" "))} end)'
 }
@@ -217,8 +232,8 @@ disk_pressure::_walk() {
     local before="$1" rungs='[]' rung after gate
     for rung in $(disk_pressure::rungs); do
         gate='{}'
-        if [[ "$rung" == "builder_prune" ]]; then
-            gate=$(disk_pressure::_builder_gate "$before")
+        if [[ "$rung" == "builder_prune" || "$rung" == "dangling_prune" ]]; then
+            gate=$(disk_pressure::_builder_gate "$before" "$rung")
             [[ -n "$gate" ]] || gate='{"skipped":"guard_error"}'   # fail safe
         fi
         if [[ "$(jq -r '.skipped // empty' <<<"$gate")" != "" ]]; then

@@ -29,6 +29,9 @@
 #   B-*  ROK-2111: the builder rung is skipped while the admission ledger holds
 #        an image build or a heavy/medium task (or is unreadable), unless used%
 #        is at/above RL_DISK_BUILDER_FORCE_PCT; a caller's own key is excluded
+#   C-*  2026-11-10: a dangling_prune rung removes untagged images younger than
+#        RL_IMAGE_PRUNE_AGE (classic-builder stage results, retagged
+#        rl:ci-test predecessors), never with -a, behind the same build guard
 
 set -uo pipefail
 
@@ -145,21 +148,21 @@ test_ladder_stops_at_first_rung_that_hits_target() {
 # A-c: when the cheap rungs don't get there, the ladder walks all the way down
 # to anonymous volumes — the rung that actually reclaimed 14.5 GB on 09-14.
 test_ladder_walks_all_rungs() {
-    CURRENT_TEST_NAME="A-c: ladder walks image + volume rungs when builder is not enough"
-    # 98 → builder → 90 → image prune → 80 → volume prune → 39.
-    _setup_ladder 98 90 80 39
+    CURRENT_TEST_NAME="A-c: ladder walks image, dangling + volume rungs when builder is not enough"
+    # 98 → builder → 90 → image prune → 80 → dangling prune → 70 → volume prune → 39.
+    _setup_ladder 98 90 80 70 39
 
     local out
     out=$(disk_pressure::guard 2>/dev/null)
     local log
     log=$(cat "$DOCKER_LOG")
-    assert_eq "$(_docker_calls)" "3" "all three rungs must run"
+    assert_eq "$(_docker_calls)" "4" "all four rungs must run"
     assert_contains "$log" "image prune -af" "rung 2 prunes unused images"
     assert_contains "$log" "until=48h" "rung 2 honours RL_IMAGE_PRUNE_AGE"
     assert_contains "$log" "label!=rl.role=runner" "rung 2 must never prune a runner image"
     assert_contains "$log" "volume prune -f" "rung 3 prunes anonymous volumes"
-    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "3" "three rungs recorded"
-    assert_eq "$(echo "$out" | jq -r '.rungs[2].rung')" "volume_prune" "last rung is volume_prune"
+    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "4" "four rungs recorded"
+    assert_eq "$(echo "$out" | jq -r '.rungs[3].rung')" "volume_prune" "last rung is volume_prune"
     assert_eq "$(echo "$out" | jq -r '.after_pct')" "39" "final percentage after the last rung"
     test_teardown
 }
@@ -188,7 +191,7 @@ test_dry_run_lists_without_running() {
     out=$(disk_pressure::guard 2>/dev/null)
     assert_eq "$(_docker_calls)" "0" "dry-run must not invoke docker"
     assert_eq "$(echo "$out" | jq -r '.dry_run')" "true" "result is flagged dry_run"
-    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "3" "dry-run lists every rung it would run"
+    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "4" "dry-run lists every rung it would run"
     assert_eq "$(echo "$out" | jq -r '.rungs[0].would_run')" "true" "dry-run rungs are marked would_run"
     assert_file_not_exists "$RL_DISK_STATE_FILE" \
         "a dry run must not overwrite the state file rl_status.disk_pressure reads"
@@ -292,7 +295,7 @@ test_failed_rung_is_recorded_not_swallowed() {
     assert_contains "$(echo "$out" | jq -r '.rungs[0].stderr')" "403" "a refused rung must record why"
     assert_eq "$(echo "$out" | jq -r '.rungs[0].reclaimed')" "0B" "a refused rung reclaims nothing"
     assert_eq "$(echo "$out" | jq -r '.rungs[1].exit_code')" "0" "a healthy rung records exit_code 0"
-    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "3" "one denied route must not abort the ladder"
+    assert_eq "$(echo "$out" | jq -r '.rungs | length')" "4" "one denied route must not abort the ladder"
     test_teardown
 }
 
@@ -421,7 +424,7 @@ test_failed_rung_is_logged_and_ladder_continues() {
     )
     assert_contains "$(cat "$logged" 2>/dev/null)" "builder_prune failed (exit 1)" "failure must be logged"
     assert_contains "$(cat "$logged" 2>/dev/null)" "driver not running" "log must carry the error text"
-    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")')" "builder_prune,image_prune,volume_prune" \
+    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")')" "builder_prune,image_prune,dangling_prune,volume_prune" \
         "the ladder must continue past the failed rung"
     test_teardown
 }
@@ -441,7 +444,7 @@ test_failed_rung_log_does_not_corrupt_stdout_json() {
         }
         disk_pressure::guard 2>/dev/null
     )
-    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")' 2>/dev/null)" "builder_prune,image_prune,volume_prune" \
+    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")' 2>/dev/null)" "builder_prune,image_prune,dangling_prune,volume_prune" \
         "guard stdout must stay pure JSON when log() prints to stdout"
     test_teardown
 }
@@ -592,6 +595,62 @@ test_acquire_disk_force_ladder_honours_guard() {
     done
 }
 
+# ── 2026-11-10: dangling_prune ──────────────────────────────────────────────
+# The runners build with the classic builder, so builder_prune finds no cache;
+# the waste is ~950 untagged stage images younger than image_prune's 48h cut.
+
+test_dangling_rung_prunes_young_untagged_images_only() {
+    CURRENT_TEST_NAME="C-a: dangling_prune runs after image_prune, dangling-only, younger cut-off"
+    # 97 → builder 96 → image prune 95 → dangling prune 60 → stop.
+    _setup_ladder 97 96 95 60
+    local out line
+    out=$(disk_pressure::guard 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '[.rungs[].rung] | join(",")')" "builder_prune,image_prune,dangling_prune" \
+        "dangling_prune must be rung 3, after the aged image prune"
+    line=$(sed -n 3p "$DOCKER_LOG")
+    assert_contains "$line" "image prune -f --filter until=6h" "rung 3 prunes untagged images older than 6h"
+    assert_eq "$([[ "$line" == *" -af "* || "$line" == *" -a "* ]] && echo has-a || echo dangling-only)" "dangling-only" \
+        "rung 3 must never pass -a (that would remove tagged env images)"
+    assert_contains "$line" "label!=rl.role=runner" "rung 3 must never prune a runner image"
+    assert_eq "$(echo "$out" | jq -r '.after_pct')" "60" "the dangling rung relieves the disk"
+    test_teardown
+}
+
+test_dangling_rung_shares_the_build_guard() {
+    CURRENT_TEST_NAME="C-b: dangling_prune is skipped while a build runs, forced at the ceiling"
+    _setup_ladder 92 90 85
+    _ledger '[{"key":"build-pr1-77","kind":"image_build","weight":"medium"}]'
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(_guard_logged "$logged")
+    assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "dangling prune must NOT run under a build"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "rung 3 records why it was skipped"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "dangling_prune skipped (build_running)" "the skip is logged"
+    assert_eq "$(echo "$out" | jq -r '.rungs[3].rung')" "volume_prune" "the ladder continues to volume_prune"
+    test_teardown
+    _setup_ladder 96 96 96 60
+    _ledger '[{"key":"build-pr1-77","kind":"image_build","weight":"medium"}]'
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    assert_contains "$(cat "$DOCKER_LOG")" "image prune -f --filter until=6h" "96% >= ceiling forces the dangling rung"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced // false')" "true" "the forced run is recorded"
+    test_teardown
+}
+
+test_dangling_rung_age_knob() {
+    CURRENT_TEST_NAME="C-c: RL_DANGLING_PRUNE_AGE sets the dangling cut-off; dry run lists the rung"
+    _setup_ladder 97 96 95 60
+    RL_DANGLING_PRUNE_AGE=2h
+    assert_contains "$(disk_pressure::rung_cmd dangling_prune)" "until=2h" "the knob is honoured"
+    RL_DANGLING_PRUNE_AGE=6h
+    RL_DISK_PRUNE_DRY_RUN=1
+    local out
+    out=$(disk_pressure::guard 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '[.rungs[] | select(.would_run) | .rung] | join(",")')" \
+        "builder_prune,image_prune,dangling_prune,volume_prune" "dry run lists all four rungs"
+    assert_eq "$(_docker_calls)" "0" "dry run invokes no docker"
+    RL_DISK_PRUNE_DRY_RUN=0
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -614,5 +673,8 @@ run_test "b-e-ceiling-forces-builder" test_builder_ceiling_overrides_the_guard
 run_test "b-f-idle-ledger-runs-builder" test_builder_runs_with_no_tasks
 run_test "b-g-own-key-excluded" test_builder_guard_excludes_own_key
 run_test "b-h-acquire-disk-honours-guard" test_acquire_disk_force_ladder_honours_guard
+run_test "c-a-dangling-rung" test_dangling_rung_prunes_young_untagged_images_only
+run_test "c-b-dangling-build-guard" test_dangling_rung_shares_the_build_guard
+run_test "c-c-dangling-age-knob" test_dangling_rung_age_knob
 
 print_test_summary
