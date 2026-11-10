@@ -105,7 +105,10 @@ export class QuestProgressReadService {
       this.queryManualRows(eventId, userId),
       this.catalogueImportedAt(),
     ]);
-    return { ...buildViewerPrereqs(forever, member, mine), questDataImportedAt };
+    return {
+      ...buildViewerPrereqs(forever, member, mine),
+      questDataImportedAt,
+    };
   }
 
   /**

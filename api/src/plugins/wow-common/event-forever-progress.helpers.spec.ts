@@ -159,3 +159,24 @@ describe('buildViewerPrereqs — same-name variants (ROK-1758)', () => {
     expect(out.neededTotal).toBe(4);
   });
 });
+
+describe('buildViewerPrereqs — quest-log date (ROK-2144 AC10)', () => {
+  it('carries the snapshot quest-log capture time as inProgressAsOf', () => {
+    const base = member([10]);
+    const m: ForeverMember = {
+      ...base,
+      snapshot: {
+        ...base.snapshot,
+        inProgressAsOf: '2026-11-09T00:00:00.000Z',
+      },
+    };
+    const out = buildViewerPrereqs(progress(m), m, []);
+    expect(out.asOf).toBe('2026-10-01T00:00:00.000Z');
+    expect(out.inProgressAsOf).toBe('2026-11-09T00:00:00.000Z');
+  });
+
+  it('is null when the snapshot carries one date (no separate log time)', () => {
+    const m = member([10]);
+    expect(buildViewerPrereqs(progress(m), m, []).inProgressAsOf).toBeNull();
+  });
+});
