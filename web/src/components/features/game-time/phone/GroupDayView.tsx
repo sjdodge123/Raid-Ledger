@@ -5,7 +5,7 @@ import { formatHour } from '../game-time-grid.utils';
 import { computeHeatmapBg, computeHeatmapLabel } from '../grid-cell.utils';
 import { votedLabel, type SlotMark } from '../slot-marks.utils';
 import { eventHourRuns } from '../week/viewer-week-events';
-import { BUSY_EDGE_5 } from '../week/group-marks.classes';
+import { BUSY_EDGE_5, COUNT_CHIP } from '../week/group-marks.classes';
 import { DayEventBlock, SlotBlock } from './GroupDayMarks';
 import {
     blockGeometry, groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
@@ -178,11 +178,12 @@ function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
     );
 }
 
-/** The right-aligned count — free/stale in the foreground, busy in purple. */
-function GroupCellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element {
+/** The right-aligned count on its surface chip (ROK-2167) — free/stale in the foreground, busy in purple. */
+function GroupCellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element | null {
     const busyLabel = groupCellBusyLabel(cell);
+    if (!cell) return null;
     return (
-        <span className="absolute right-1.5 top-1 z-10 text-[11px] leading-none text-foreground/80">
+        <span className={`absolute right-1.5 top-1 z-10 text-[11px] leading-none text-foreground/80 ${COUNT_CHIP}`}>
             {groupCellShortLabel(cell)}
             {busyLabel && <b className="font-medium text-busy">{busyLabel}</b>}
         </span>

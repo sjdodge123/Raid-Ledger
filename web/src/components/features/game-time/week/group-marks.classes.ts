@@ -28,6 +28,16 @@ export const PICKED_MARK = 'ring-2 ring-inset ring-success';
 /** A cell that cannot be picked (Reschedule: past, or the current start). */
 export const DISABLED_MARK = 'cursor-not-allowed opacity-50';
 
+/**
+ * ROK-2167: the chip the "N free · N busy" count sits on, in the desktop week
+ * cell AND the phone day cell — the ROK-2165 `bg-surface/NN` label-chip pattern.
+ * Straight on the strongest heat fills the count was 3.5:1 (busy down to ~1.5:1)
+ * in dark. Truncates rather than overflowing a narrow cell; `py-px` keeps the
+ * descenders inside the clip box at `leading-none`.
+ * Measured by `heatmap-count-chip.guard.test.ts`.
+ */
+export const COUNT_CHIP = 'max-w-[calc(100%-10px)] truncate rounded bg-surface/80 px-1 py-px';
+
 /** Flags a week cell's classes derive from. */
 export interface WeekCellFlags {
     busy: boolean;

@@ -3,7 +3,7 @@ import type { HeatmapCellData } from '../game-time-grid.types';
 import { computeHeatmapBg } from '../grid-cell.utils';
 import { groupCellBusyLabel, groupCellShortLabel } from '../phone/group-day.utils';
 import { groupCellAriaLabel, votedLabel } from '../slot-marks.utils';
-import { weekCellClass } from './group-marks.classes';
+import { COUNT_CHIP, weekCellClass } from './group-marks.classes';
 
 export interface GroupWeekCellProps {
     dayOfWeek: number;
@@ -18,11 +18,12 @@ export interface GroupWeekCellProps {
     onPick?: ((dayOfWeek: number, hour: number) => void) | undefined;
 }
 
-/** "5 free · 1 stale" top-right, the busy clause in purple. */
-function CellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element {
+/** "5 free · 1 stale" top-right on its surface chip (ROK-2167), the busy clause in purple. */
+function CellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element | null {
     const busyLabel = groupCellBusyLabel(cell);
+    if (!cell) return null;
     return (
-        <span className="absolute right-[5px] top-1 text-[11px] leading-none text-foreground/85">
+        <span className={`absolute right-[5px] top-1 text-[11px] leading-none text-foreground/85 ${COUNT_CHIP}`}>
             {groupCellShortLabel(cell)}
             {busyLabel && <b className="font-medium text-busy">{busyLabel}</b>}
         </span>
