@@ -27,6 +27,9 @@ import * as signupCancel from '../events/signup-cancel-batch.helpers';
 import { at } from '../common/testing/narrow';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 
+import * as ownerStatus from '../plugins/wow-common/addon-import/external-id.owner-status';
+
+jest.mock('../plugins/wow-common/addon-import/external-id.owner-status');
 jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
 jest.mock('./users-delete.helpers');
@@ -42,6 +45,8 @@ jest.mock('../guilds/community/community-membership.queries', () => ({
 const kickUserById = writes.kickUserById as jest.Mock;
 const unkickUserById = writes.unkickUserById as jest.Mock;
 const banUserById = writes.banUserById as jest.Mock;
+const lockDeactivatedAt = ownerStatus.lockDeactivatedAt as jest.Mock;
+const auditOwnerDeactivated = ownerStatus.auditOwnerDeactivated as jest.Mock;
 const unbanUserById = writes.unbanUserById as jest.Mock;
 const insertAdminAction = audit.insertAdminAction as jest.Mock;
 const wipeUserData = wipe.wipeUserData as jest.Mock;
@@ -196,6 +201,29 @@ describe('runKick', () => {
 });
 
 describe('runBan', () => {
+  const banInput = {
+    userId: TARGET.id,
+    actorId: ACTOR,
+    wipeData: false,
+    kickFromDiscord: false,
+  };
+
+  it('ROK-2160: audits GUID releases when the ban is what deactivates the user', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    lockDeactivatedAt.mockResolvedValueOnce(null);
+    cancelAll.mockResolvedValue(0);
+    await runBan(makeDeps(), banInput);
+    expect(auditOwnerDeactivated).toHaveBeenCalledWith({}, TARGET.id, ACTOR);
+  });
+
+  it('ROK-2160: no GUID audit when the user was already deactivated', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    lockDeactivatedAt.mockResolvedValueOnce(new Date('2026-01-01'));
+    cancelAll.mockResolvedValue(0);
+    await runBan(makeDeps(), banInput);
+    expect(auditOwnerDeactivated).not.toHaveBeenCalled();
+  });
+
   it('non-wipe: lockout, audit, cancel signups, reassign pug slots (no wipe)', async () => {
     banUserById.mockResolvedValue({ ...TARGET });
     cancelAll.mockResolvedValue(2);

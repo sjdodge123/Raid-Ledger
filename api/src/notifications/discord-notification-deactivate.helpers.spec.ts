@@ -10,6 +10,11 @@ import {
 } from './discord-notification-deactivate.helpers';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
+import { auditOwnerDeactivated } from '../plugins/wow-common/addon-import/external-id.owner-status';
+
+jest.mock('../plugins/wow-common/addon-import/external-id.owner-status', () => ({
+  auditOwnerDeactivated: jest.fn(),
+}));
 
 async function runWith(reason?: DeactivationReason): Promise<jest.Mock> {
   const db = createDrizzleMock();
@@ -38,6 +43,17 @@ jest.mock('../guilds/community/community-membership.queries', () => ({
   ...jest.requireActual('../guilds/community/community-membership.queries'),
   refreshUserHubCounts: jest.fn(),
 }));
+
+describe('ROK-2160: GUID release audit on deactivation', () => {
+  it('audits the rows the user GUIDs stop holding, with no actor', async () => {
+    await runWith('manual');
+    expect(auditOwnerDeactivated).toHaveBeenCalledWith(
+      expect.anything(),
+      7,
+      null,
+    );
+  });
+});
 
 describe('deactivation reason (ROK-1749)', () => {
   it('renders the sweep reason into the admin notification', async () => {
