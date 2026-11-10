@@ -104,9 +104,16 @@ disk_pressure::free_gb() {
 # RL_BUILD_MIN_FREE_GB (~92% on the 245 GB host), which is BELOW the 95%
 # ceiling, and gates run back to back — so the guard alone left a band where
 # builds starve and nothing relieves it. Below the floor the rung is forced
-# unless an image_build entry is running: a prune under an image build failed
-# one on 2026-11-10 (`failed to commit: lease does not exist`), while an
-# ordinary gate only risks a cache miss.
+# while ordinary tasks run, unless an image_build entry is BUILDING (a prune
+# under one failed it on 2026-11-10: `failed to commit: lease does not exist`).
+# An image build parked on disk (`disk_parked`, set by acquire_disk) has not
+# started, so it does not block (review r2 MAJOR). A gate's own container
+# check (`--static` builds Dockerfile.allinone) is a `kind:task` entry the
+# ledger cannot tell from any other task, so it does not block either: in rare
+# cases a forced prune fails that gate's container step (TECH-DEBT-BACKLOG
+# 2026-10-30) — the `dangling_prune forced …` log line names the prune so the
+# failure can be attributed. Forcing only when nothing at all runs was rejected:
+# on a night of nonstop gates it would never fire.
 disk_pressure::rungs() {
     echo "builder_prune"
     echo "image_prune"
@@ -206,10 +213,11 @@ disk_pressure::build_busy_keys() {
             | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
 }
 
-# Keys of running IMAGE BUILDS in the ledger (kind == image_build, which both
-# task-start's admission and hold_image_build write — _admission.sh:160,
-# _admission_gc.sh:87), the caller's own keys excluded. Returns 2 when the
-# ledger is missing or unreadable.
+# Keys of image builds that are BUILDING (kind == image_build, which both
+# task-start's admission and hold_image_build write), the caller's own keys
+# excluded. An entry with disk_parked == true is parked in acquire_disk waiting
+# for free disk and has not started building, so it is left out (review r2).
+# Returns 2 when the ledger is missing or unreadable.
 disk_pressure::image_build_keys() {
     local ledger="${RL_ADMISSION_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/admission.json}"
     [[ -r "$ledger" ]] || return 2
@@ -218,6 +226,7 @@ disk_pressure::image_build_keys() {
         | [ (.heavy_running // [])[]
             | select((.key // "") as $k | ($mine | index($k)) == null)
             | select((.kind // "task") == "image_build")
+            | select(.disk_parked != true)
             | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
 }
 
@@ -242,15 +251,16 @@ disk_pressure::_builder_gate() {
     # dangling_prune only: forced below the image-build free floor unless an
     # image build is running. An unreadable ledger cannot tell, so stays skipped.
     local floor="${RL_BUILD_MIN_FREE_GB:-20}" free builds note=""
+    [[ "$floor" =~ ^[1-9][0-9]*$ ]] || floor=20
     if [[ "$rung" == "dangling_prune" && "$reason" == "build_running" ]]; then
         free="$(disk_pressure::free_gb)" || free=""
         if [[ "$free" =~ ^[0-9]+$ ]] && (( free < floor )); then
             builds=$(disk_pressure::image_build_keys) || builds="?"
             if [[ -z "$builds" ]]; then
-                disk_pressure::_log "disk ladder: ${rung} forced at ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} despite ${reason} (${keys}); no image build running"
+                disk_pressure::_log "disk ladder: ${rung} forced at ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} despite ${reason} (${keys}); no image build is building (disk-parked builds do not block)"
                 echo '{"forced":true,"forced_by":"free_floor"}'; return 0
             fi
-            note="; ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} but an image build is running (${builds})"
+            note="; ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} but an image build is building (${builds})"
         fi
     fi
     disk_pressure::_log "disk ladder: ${rung} skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%${note}"

@@ -545,6 +545,7 @@ test_builder_ceiling_overrides_the_guard() {
     out=$(_guard_logged "$logged")
     assert_contains "$(cat "$DOCKER_LOG")" "builder prune -af" "default ceiling 95: 96% forces the prune"
     assert_eq "$(echo "$out" | jq -r '.rungs[0].forced // false')" "true" "the rung records that the ceiling forced it"
+    assert_eq "$(echo "$out" | jq -r '.rungs[0].forced_by // "none"')" "ceiling" "builder_prune records forced_by ceiling"
     assert_contains "$(cat "$logged" 2>/dev/null)" "builder_prune forced" "the override is logged"
     test_teardown
     # The knob is honoured: ceiling 90 forces at 92%, an unreadable ledger too.
@@ -636,6 +637,7 @@ test_dangling_rung_shares_the_build_guard() {
     out=$(_guard_logged "$RL_STATE_DIR/log.txt")
     assert_contains "$(cat "$DOCKER_LOG")" "image prune -f --filter until=6h" "96% >= ceiling forces the dangling rung"
     assert_eq "$(echo "$out" | jq -r '.rungs[2].forced // false')" "true" "the forced run is recorded"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced_by // "none"')" "ceiling" "dangling_prune records forced_by ceiling"
     test_teardown
 }
 
@@ -687,7 +689,7 @@ test_dangling_floor_spares_image_build() {
     out=$(_guard_logged "$logged")
     assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "no dangling prune under a running image build"
     assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "rung 3 records the skip"
-    assert_contains "$(cat "$logged" 2>/dev/null)" "but an image build is running (build-pr1-77)" "the log names the image build that held the floor override back"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "but an image build is building (build-pr1-77)" "the log names the image build that held the floor override back"
     test_teardown
 }
 
@@ -700,6 +702,92 @@ test_dangling_above_floor_still_skips() {
     assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "30 GB free >= 20: the plain guard applies"
     assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "rung 3 skipped as before"
     assert_eq "$(echo "$out" | jq -r '.rungs[2].forced // false')" "false" "not forced"
+    test_teardown
+}
+
+# C-g (review r2 MINOR): below the floor an unreadable ledger, or an unreadable
+# free-GB reading, falls back to the plain skip — never a forced prune.
+test_dangling_floor_fail_safe() {
+    CURRENT_TEST_NAME="C-g: below the floor an unreadable ledger or free-GB reading still skips dangling_prune"
+    local out
+    _setup_ladder 92 92 92 92
+    echo 'not json{' > "$RL_ADMISSION_FILE"
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "unreadable ledger: no dangling prune"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "ledger_unreadable" "unreadable ledger: rung 3 skipped"
+    test_teardown
+    _setup_ladder 92 92 92 92
+    _ledger '[{"key":"local-vci-1","kind":"task","weight":"medium"}]'
+    out=$( disk_pressure::free_gb() { return 1; }; _guard_logged "$RL_STATE_DIR/log.txt" )
+    assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "unreadable free GB: no dangling prune"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "unreadable free GB: plain skip"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced // false')" "false" "unreadable free GB: not forced"
+    test_teardown
+}
+
+# C-h (review r2 MAJOR): an image build PARKED on disk (disk_parked, set by
+# acquire_disk) has not started building, so it does not block the floor
+# override for the sweeper / rl_fleet_prune (no self keys) — one parked build,
+# or two parked builds for a third caller. A building image build still does.
+test_dangling_floor_ignores_disk_parked_builds() {
+    CURRENT_TEST_NAME="C-h: disk-parked image builds do not block the free-floor override; a building one does"
+    local out
+    _setup_ladder 92 92 92 60
+    _ledger '[{"key":"local-b-1","kind":"image_build","disk_parked":true},{"key":"local-vci-1","kind":"task","weight":"medium"}]'
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced_by // "none"')" "free_floor" "one parked build: sweeper call forces the rung"
+    assert_contains "$(cat "$DOCKER_LOG")" "image prune -f --filter until=6h" "one parked build: dangling prune ran"
+    test_teardown
+    _setup_ladder 92 92 92 60
+    _ledger '[{"key":"local-b-1","kind":"image_build","disk_parked":true},{"key":"local-b-2","kind":"image_build","disk_parked":true}]'
+    out=$(RL_DISK_LADDER_SELF_KEYS="local-b-3"; _guard_logged "$RL_STATE_DIR/log.txt")
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced_by // "none"')" "free_floor" "two parked builds: a third caller forces the rung"
+    test_teardown
+    _setup_ladder 92 92 92 60
+    _ledger '[{"key":"local-b-1","kind":"image_build","disk_parked":true},{"key":"local-b-2","kind":"image_build"}]'
+    out=$(_guard_logged "$RL_STATE_DIR/log.txt")
+    assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "a building image build still blocks the floor override"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "building: rung 3 skipped"
+    assert_contains "$(cat "$RL_STATE_DIR/log.txt" 2>/dev/null)" "but an image build is building (local-b-2)" "the log names only the building one"
+    test_teardown
+}
+
+# C-i (review r2 MAJOR): acquire_disk sets disk_parked on its own entries while
+# it parks, and clears it when admitted and when it gives up; release (task end)
+# drops the entry. Other entries are untouched.
+test_acquire_disk_marks_and_clears_disk_parked() {
+    CURRENT_TEST_NAME="C-i: acquire_disk marks its entries disk_parked while parked and clears the marker on admit / end"
+    local adm="$TEST_DIR/../bin/_admission.sh" st="$TEST_DIR/../bin/_state.sh" seen="" outcome
+    for outcome in admit timeout; do
+        _setup_ladder 92 50
+        _ledger '[{"key":"local-t-1","kind":"image_build"},{"key":"build-x-9","kind":"image_build"},{"key":"local-vci-1","kind":"task"}]'
+        seen="$RL_STATE_DIR/seen.json"
+        ( source "$st" 2>/dev/null; source "$adm" 2>/dev/null; source "$LIB"
+          disk_pressure::force_ladder() {
+              cp "$RL_ADMISSION_FILE" "$seen"
+              [[ "$outcome" == "admit" ]] && echo 2 > "$DF_IDX"
+              echo '{}'
+          }
+          RL_ADMISSION_HELD="build-x-9" RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=0
+          admission::acquire_disk "local-t-1" "" "" >/dev/null 2>&1
+          echo "rc=$?" > "$RL_STATE_DIR/rc" )
+        assert_eq "$(jq -c '[.heavy_running[] | select(.disk_parked == true) | .key]' "$seen" 2>/dev/null)" \
+            '["local-t-1","build-x-9"]' "$outcome: while parked, its own two entries are disk_parked"
+        assert_eq "$(jq -c '[.heavy_running[] | select(has("disk_parked")) | .key]' "$RL_ADMISSION_FILE")" \
+            '[]' "$outcome: the marker is cleared when acquire_disk returns"
+        assert_eq "$(jq -r '.heavy_running | length' "$RL_ADMISSION_FILE")" "3" "$outcome: no entry dropped"
+        if [[ "$outcome" == "admit" ]]; then
+            assert_eq "$(cat "$RL_STATE_DIR/rc")" "rc=0" "admit: acquire_disk returns 0"
+        else
+            assert_eq "$(cat "$RL_STATE_DIR/rc")" "rc=1" "timeout: acquire_disk returns disk_pressure"
+        fi
+        test_teardown
+    done
+    # Task end: release drops the (still-parked) entry entirely.
+    _setup_ladder 92
+    _ledger '[{"key":"local-t-1","kind":"image_build","disk_parked":true},{"key":"local-vci-1","kind":"task"}]'
+    ( source "$st" 2>/dev/null; source "$adm" 2>/dev/null; admission::release "local-t-1" )
+    assert_eq "$(jq -c '[.heavy_running[].key]' "$RL_ADMISSION_FILE")" '["local-vci-1"]' "task end: release drops the parked entry"
     test_teardown
 }
 
@@ -731,5 +819,8 @@ run_test "c-c-dangling-age-knob" test_dangling_rung_age_knob
 run_test "c-d-free-floor-forces-dangling" test_dangling_forced_below_free_floor
 run_test "c-e-free-floor-spares-image-build" test_dangling_floor_spares_image_build
 run_test "c-f-above-floor-still-skips" test_dangling_above_floor_still_skips
+run_test "c-g-floor-fail-safe" test_dangling_floor_fail_safe
+run_test "c-h-floor-ignores-disk-parked" test_dangling_floor_ignores_disk_parked_builds
+run_test "c-i-acquire-disk-parked-marker" test_acquire_disk_marks_and_clears_disk_parked
 
 print_test_summary
