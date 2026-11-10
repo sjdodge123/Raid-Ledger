@@ -194,4 +194,12 @@ describe('reputation rewards (ROK-2161)', () => {
       reputationRewards: [{ factionName: 'Ironforge', amount: 150 }],
     });
   });
+
+  it('drops reputations whose faction name is blank after trim', () => {
+    const blank = { factionId: 72, name: '  ', value: 250 };
+    expect(reputationRewardFields([blank])).toEqual({});
+    expect(reputationRewardFields([blank, ironforge])).toEqual({
+      reputationRewards: [{ factionName: 'Ironforge', amount: 150 }],
+    });
+  });
 });

@@ -34,14 +34,15 @@ export type BlizzardQuestOverlay = Pick<
 >;
 
 /**
- * ROK-2161: `{ reputationRewards }` from the overlay's non-zero reputations,
- * or `{}` when none — spread it so the key is absent rather than undefined.
+ * ROK-2161: `{ reputationRewards }` from the overlay's non-zero reputations
+ * that carry a faction name (a blank name would render "+150 " with nothing
+ * after it), or `{}` when none — spread it so the key is absent rather than undefined.
  */
 export function reputationRewardFields(
   reputations: readonly BlizzardQuestReputation[],
 ): { reputationRewards?: QuestReputationReward[] } {
   const rewards = reputations
-    .filter((rep) => rep.value !== 0)
+    .filter((rep) => rep.value !== 0 && rep.name.trim() !== '')
     .map((rep) => ({ factionName: rep.name, amount: rep.value }));
   return rewards.length > 0 ? { reputationRewards: rewards } : {};
 }
