@@ -23,20 +23,30 @@
 #   RL_DISK_PRUNE_PCT       80     run the ladder at/above this used%
 #   RL_DISK_TARGET_PCT      65     stop as soon as used% is below this
 #   RL_IMAGE_PRUNE_AGE      48h    only prune images older than this
+#   RL_DANGLING_PRUNE_AGE   6h     dangling_prune: untagged images older than this
 #   RL_DISK_ROOT            /      filesystem to measure
 #   RL_DISK_STATE_FILE      $STATE_DIR/disk-pressure.json
 #   RL_DISK_PRUNE_DRY_RUN   0      1 = list the rungs, invoke no docker
 #                                  (DRY_RUN=1 is honoured as an alias)
-#   RL_DISK_BUILDER_FORCE_PCT 95   ROK-2111: run builder_prune at/above this
-#                                  used% even while a build is running
+#   RL_DISK_BUILDER_FORCE_PCT 95   ROK-2111: run builder_prune AND dangling_prune
+#                                  at/above this used% even while a build is
+#                                  running (one ceiling for both guarded rungs)
+#   RL_BUILD_MIN_FREE_GB    20     owned by _admission.sh (the image-build free
+#                                  floor; read here at call time, same default).
+#                                  dangling_prune is also forced below this many
+#                                  free GB unless an IMAGE BUILD is running
 #   RL_ADMISSION_FILE       $RL_STATE_DIR|$STATE_DIR/admission.json — the
 #                                  ledger the builder guard reads (at call time)
 #   RL_DISK_LADDER_SELF_KEYS ""    space-separated ledger keys of the CALLER,
 #                                  ignored by the guard (set by acquire_disk)
+#   RL_DISK_LADDER_LOCK_WAIT_S 600 bound on waiting for disk-ladder.lock (a ladder
+#                                  waiting for another, or a parked build waiting
+#                                  for a running clean-up); then proceed anyway
 
 RL_DISK_PRUNE_PCT="${RL_DISK_PRUNE_PCT:-80}"
 RL_DISK_TARGET_PCT="${RL_DISK_TARGET_PCT:-65}"
 RL_IMAGE_PRUNE_AGE="${RL_IMAGE_PRUNE_AGE:-48h}"
+RL_DANGLING_PRUNE_AGE="${RL_DANGLING_PRUNE_AGE:-6h}"
 RL_DISK_ROOT="${RL_DISK_ROOT:-/}"
 RL_DISK_STATE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/disk-pressure.json}"
 RL_DISK_PRUNE_DRY_RUN="${RL_DISK_PRUNE_DRY_RUN:-${DRY_RUN:-0}}"
@@ -77,9 +87,40 @@ disk_pressure::free_gb() {
 # protected by the running-container rule alone. RL_RUNNER_IMAGE cannot be
 # expressed as a prune filter (docker has no repo-name exclusion), which is
 # why the label is the mechanism.
+#
+# dangling_prune (2026-11-10): the runners build with the CLASSIC builder
+# (compose `DOCKER_BUILDKIT: "0"`), so a build leaves no BuildKit cache for
+# builder_prune to reclaim. It leaves untagged images instead — each
+# Dockerfile.allinone stage result, and the old `rl:ci-test` / env tag every
+# rebuild moves off. ~950 of them, all younger than 48h, filled the host on
+# 2026-11-10 while image_prune's `until=48h` skipped every one. Without `-a`
+# docker prunes DANGLING images only (untagged, no child image, no container
+# of any state using it), so tagged images, env images and runner images
+# stay — rung 2's protections (running/stopped container use, the runner
+# label) apply here unchanged. It shares builder_prune's build guard: a running
+# classic build can be mid-way through reusing an old stage image as cache.
+# `until` filters on the image's CREATION time, not its last use, so a stage
+# image first built more than RL_DANGLING_PRUNE_AGE ago is removed even if
+# every gate since has reused it (cost: one cache rebuild of that stage).
+#
+# Free-floor override (review r1 MAJOR): image builds park below
+# RL_BUILD_MIN_FREE_GB (~92% on the 245 GB host), which is BELOW the 95%
+# ceiling, and gates run back to back — so the guard alone left a band where
+# builds starve and nothing relieves it. Below the floor the rung is forced
+# while ordinary tasks run, unless an image_build entry is BUILDING (a prune
+# under one failed it on 2026-11-10: `failed to commit: lease does not exist`).
+# An image build parked on disk (`disk_parked`, set by acquire_disk) has not
+# started, so it does not block (review r2 MAJOR). A gate's own container
+# check (`--static` builds Dockerfile.allinone) is a `kind:task` entry the
+# ledger cannot tell from any other task, so it does not block either: in rare
+# cases a forced prune fails that gate's container step (TECH-DEBT-BACKLOG
+# 2026-10-30) — the `dangling_prune forced …` log line names the prune so the
+# failure can be attributed. Forcing only when nothing at all runs was rejected:
+# on a night of nonstop gates it would never fire.
 disk_pressure::rungs() {
     echo "builder_prune"
     echo "image_prune"
+    echo "dangling_prune"
     echo "volume_prune"
 }
 
@@ -92,11 +133,13 @@ disk_pressure::rung_cmd() {
         # neither, so the admission gate's ladder died on this rung every run
         # with `ERROR: driver not running`. The legacy CLI path is a plain
         # POST /build/prune (allowlisted), which the daemon serves by pruning
-        # its embedded BuildKit cache — the one the runners' `docker build`
-        # (buildx `docker` driver, no `buildx create` anywhere) fills. The
+        # its embedded BuildKit cache. The runners build with the classic
+        # builder (compose `DOCKER_BUILDKIT: "0"`), so this rung usually
+        # reclaims ~0B; their waste is untagged images (dangling_prune). The
         # gc-sweeper image has no buildx plugin, so it was on this path already.
         builder_prune) echo "DOCKER_BUILDKIT=0 docker builder prune -af" ;;
         image_prune)   echo "docker image prune -af --filter until=${RL_IMAGE_PRUNE_AGE} --filter label!=rl.role=runner" ;;
+        dangling_prune) echo "docker image prune -f --filter until=${RL_DANGLING_PRUNE_AGE} --filter label!=rl.role=runner" ;;
         # `volume prune` is anonymous-only from engine 23, but older engines
         # remove unattached NAMED volumes too — and traefik-acme /
         # registry-data / loki-data are unattached during any compose
@@ -173,11 +216,29 @@ disk_pressure::build_busy_keys() {
             | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
 }
 
-# Decide the builder rung at used% $1. Echoes a JSON fragment merged into the
-# rung record: {} = run, {forced:true} = run over the ceiling despite a build,
+# Keys of image builds that are BUILDING (kind == image_build, which both
+# task-start's admission and hold_image_build write), the caller's own keys
+# excluded. An entry with disk_parked == true is parked in acquire_disk waiting
+# for free disk and has not started building, so it is left out (review r2).
+# Returns 2 when the ledger is missing or unreadable.
+disk_pressure::image_build_keys() {
+    local ledger="${RL_ADMISSION_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/admission.json}"
+    [[ -r "$ledger" ]] || return 2
+    jq -er --arg self "${RL_DISK_LADDER_SELF_KEYS:-}" '
+        ($self | split(" ") | map(select(length > 0))) as $mine
+        | [ (.heavy_running // [])[]
+            | select((.key // "") as $k | ($mine | index($k)) == null)
+            | select((.kind // "task") == "image_build")
+            | select(.disk_parked != true)
+            | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
+}
+
+# Decide a build-guarded rung ($2, default builder_prune) at used% $1. Echoes a JSON fragment merged into the
+# rung record: {} = run, {forced:true, forced_by:"ceiling"|"free_floor"} = run
+# despite a build (free_floor: dangling_prune only, see disk_pressure::rungs),
 # {skipped:<reason>} = do not run. Logs every non-plain outcome.
 disk_pressure::_builder_gate() {
-    local pct="$1" keys rc=0 reason
+    local pct="$1" rung="${2:-builder_prune}" keys rc=0 reason
     keys=$(disk_pressure::build_busy_keys) || rc=$?
     if (( rc != 0 )); then
         reason="ledger_unreadable"
@@ -187,10 +248,25 @@ disk_pressure::_builder_gate() {
         echo '{}'; return 0
     fi
     if (( pct >= RL_DISK_BUILDER_FORCE_PCT )); then
-        disk_pressure::_log "disk ladder: builder_prune forced at ${pct}% >= RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}% despite ${reason}${keys:+ (${keys})}"
-        echo '{"forced":true}'; return 0
+        disk_pressure::_log "disk ladder: ${rung} forced at ${pct}% >= RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}% despite ${reason}${keys:+ (${keys})}"
+        echo '{"forced":true,"forced_by":"ceiling"}'; return 0
     fi
-    disk_pressure::_log "disk ladder: builder_prune skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%"
+    # dangling_prune only: forced below the image-build free floor unless an
+    # image build is running. An unreadable ledger cannot tell, so stays skipped.
+    local floor="${RL_BUILD_MIN_FREE_GB:-20}" free builds note=""
+    [[ "$floor" =~ ^[1-9][0-9]*$ ]] || floor=20
+    if [[ "$rung" == "dangling_prune" && "$reason" == "build_running" ]]; then
+        free="$(disk_pressure::free_gb)" || free=""
+        if [[ "$free" =~ ^[0-9]+$ ]] && (( free < floor )); then
+            builds=$(disk_pressure::image_build_keys) || builds="?"
+            if [[ -z "$builds" ]]; then
+                disk_pressure::_log "disk ladder: ${rung} forced at ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} despite ${reason} (${keys}); no image build is building (disk-parked builds do not block)"
+                echo '{"forced":true,"forced_by":"free_floor"}'; return 0
+            fi
+            note="; ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} but an image build is building (${builds})"
+        fi
+    fi
+    disk_pressure::_log "disk ladder: ${rung} skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%${note}"
     jq -nc --arg r "$reason" --arg k "$keys" \
         '{skipped:$r} + (if $k == "" then {} else {blocked_by:($k | split(" "))} end)'
 }
@@ -210,15 +286,73 @@ disk_pressure::_write_state() {
     rm -f "$tmp" 2>/dev/null || true
 }
 
+# The disk-ladder lock (review r3 MAJOR). _walk holds it EXCLUSIVE for the whole
+# ladder run; a build parked on disk takes it SHARED before it starts
+# (admission::_await_disk_ladder), so a forced dangling_prune that frees the
+# floor mid-run cannot have a parked build start `docker build` while the same
+# prune is still deleting the stage images that build may hit as cache. Same
+# directory as the ledger's own locks: the orchestrator's RL_LOCK_DIR, and the
+# sweeper's /state/locks (it sets RL_STATE_DIR=/state; ./state on the host).
+disk_pressure::ladder_lock_path() {
+    local dir="${RL_LOCK_DIR:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/locks}"
+    mkdir -p "$dir" 2>/dev/null || true
+    echo "$dir/disk-ladder.lock"
+}
+
+# Walk the ladder from $1 under the exclusive disk-ladder lock. Fails OPEN
+# (walks unlocked) when flock is missing, the lock file cannot be opened, or
+# the lock stays busy for RL_DISK_LADDER_LOCK_WAIT_S (600): freeing disk must
+# never wait forever on a stuck holder.
+#
+# Review r4: a ladder that QUEUED behind another re-reads used% once it holds
+# the lock (the other ladder may have freed the disk meanwhile) and walks from
+# that reading, or skips the walk when it is already below the target (or the
+# caller's alarm threshold). Lock outcomes other than "got it at once" are
+# recorded as a {rung:"ladder_lock"} entry at the head of the rung array, so
+# they reach the sweeper's audit, rl_fleet_prune and the build's task log
+# (both callers discard stderr).
+disk_pressure::_walk() {
+    local lock wait_s="${RL_DISK_LADDER_LOCK_WAIT_S:-600}"
+    lock="$(disk_pressure::ladder_lock_path)"
+    if ! command -v flock >/dev/null 2>&1 || ! { : >>"$lock"; } 2>/dev/null; then
+        disk_pressure::_walk_unlocked "$1"
+        return
+    fi
+    chmod 664 "$lock" 2>/dev/null || true
+    (
+        flock -x -n 203 && { disk_pressure::_walk_unlocked "$1"; exit 0; }
+        local t0 now note rungs
+        t0=$(date +%s)
+        disk_pressure::_log "disk ladder: waiting up to ${wait_s}s for disk-ladder.lock (another clean-up is running)"
+        if ! flock -x -w "$wait_s" 203; then
+            note=$(jq -nc --argjson w "$wait_s" --argjson b "$1" \
+                '{rung:"ladder_lock", lock:"timed_out", waited_s:$w, before_pct:$b, after_pct:$b}')
+            disk_pressure::_log "disk ladder: disk-ladder.lock still held after ${wait_s}s — walking unlocked"
+            jq -c --argjson n "$note" '[$n] + .' <<<"$(disk_pressure::_walk_unlocked "$1")"
+            exit 0
+        fi
+        now=$(disk_pressure::used_pct)
+        [[ "$now" =~ ^[0-9]+$ ]] || now="$1"
+        note=$(jq -nc --argjson w "$(( $(date +%s) - t0 ))" --argjson b "$1" --argjson a "$now" \
+            '{rung:"ladder_lock", lock:"waited", waited_s:$w, before_pct:$b, after_pct:$a}')
+        if (( now < RL_DISK_TARGET_PCT || now < RL_DISK_PRUNE_PCT )); then
+            disk_pressure::_log "disk ladder: ${now}% used after waiting for disk-ladder.lock — walk skipped"
+            jq -c '[. + {skipped:"no_longer_needed"}]' <<<"$note"
+            exit 0
+        fi
+        jq -c --argjson n "$note" '[$n] + .' <<<"$(disk_pressure::_walk_unlocked "$now")"
+    ) 203>>"$lock"
+}
+
 # Walk the ladder from $1 (the already-observed used%). Echoes the rung array.
 # ROK-2111: the builder rung passes _builder_gate first — both callers (the
 # sweeper's guard and a build's own admission via force_ladder) walk here.
-disk_pressure::_walk() {
+disk_pressure::_walk_unlocked() {
     local before="$1" rungs='[]' rung after gate
     for rung in $(disk_pressure::rungs); do
         gate='{}'
-        if [[ "$rung" == "builder_prune" ]]; then
-            gate=$(disk_pressure::_builder_gate "$before")
+        if [[ "$rung" == "builder_prune" || "$rung" == "dangling_prune" ]]; then
+            gate=$(disk_pressure::_builder_gate "$before" "$rung")
             [[ -n "$gate" ]] || gate='{"skipped":"guard_error"}'   # fail safe
         fi
         if [[ "$(jq -r '.skipped // empty' <<<"$gate")" != "" ]]; then
