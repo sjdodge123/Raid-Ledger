@@ -25,12 +25,25 @@ function provider(pluginSlug: string): HubClaimProvider {
   };
 }
 
-function registryWith(providers: HubClaimProvider[]): HubClaimRegistry {
-  const db: unknown = createDrizzleMock();
+/**
+ * Builds the registry the way boot does: providers register through the
+ * plugin host, and the host's active-plugin cache is loaded from `plugins`
+ * rows by its real `onModuleInit`. `getAdapter` hides an adapter whose owner
+ * is not active, so a harness that skips this step serves no provider at all.
+ */
+async function registryWith(
+  providers: HubClaimProvider[],
+): Promise<HubClaimRegistry> {
+  const mock = createDrizzleMock();
+  mock.from.mockResolvedValueOnce(
+    providers.map((p) => ({ slug: p.pluginSlug, active: true })),
+  );
+  const db: unknown = mock;
   const plugins = new PluginRegistryService(
     db as PostgresJsDatabase<typeof schema>,
     new EventEmitter2(),
   );
+  await plugins.onModuleInit();
   for (const p of providers) {
     plugins.registerAdapter(
       EXTENSION_POINTS.HUB_CLAIM_PROVIDER,
@@ -57,14 +70,15 @@ describe('HubClaimRegistry.forHub — provider conflict', () => {
 
   afterEach(() => errorSpy.mockRestore());
 
-  it('serves the single live provider without logging', () => {
+  it('serves the single live provider without logging', async () => {
     const only = provider('valheim');
-    expect(registryWith([only]).forHub(hub(1, 'game_community'))).toBe(only);
+    const reg = await registryWith([only]);
+    expect(reg.forHub(hub(1, 'game_community'))).toBe(only);
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('serves none on every request but logs once per kind + provider set', () => {
-    const reg = registryWith([provider('a'), provider('b')]);
+  it('serves none on every request but logs once per kind + provider set', async () => {
+    const reg = await registryWith([provider('a'), provider('b')]);
     for (let i = 0; i < 3; i += 1) {
       expect(reg.forHub(hub(10 + i, 'game_community'))).toBeUndefined();
     }
