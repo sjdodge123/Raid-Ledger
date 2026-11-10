@@ -354,6 +354,23 @@ describe('ForeverSettingsSection — quest import switch (ROK-2143)', () => {
 });
 
 /** ROK-2163: diagnostics are hidden on prod and shown only on DEMO_MODE sites. */
+/** Count GETs of the probe state; returns a reader for the count. */
+function countProbeGets(): () => number {
+    let count = 0;
+    server.use(
+        http.get(`${URL}-probe`, () => {
+            count += 1;
+            return HttpResponse.json({
+                result: null,
+                extraCandidates: [],
+                characterPath: null,
+                guildPath: null,
+            });
+        }),
+    );
+    return () => count;
+}
+
 describe('ForeverSettingsSection — DEMO_MODE-only diagnostics (ROK-2163)', () => {
     const neededControls = async (): Promise<void> => {
         expect(
@@ -388,6 +405,29 @@ describe('ForeverSettingsSection — DEMO_MODE-only diagnostics (ROK-2163)', () 
             expect(queryClient.getQueryState(['system', 'status'])?.status).toBe('success'),
         );
         expectNoDiagnostics();
+    });
+
+    it('never requests the probe state when demoMode is false', async () => {
+        const probeGets = countProbeGets();
+        server.use(
+            http.get(STATUS_URL, () =>
+                HttpResponse.json({ status: 'ok', claimRequired: false, demoMode: false }),
+            ),
+        );
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<ForeverSettingsSection />, { queryClient });
+        await neededControls();
+        await waitFor(() =>
+            expect(queryClient.getQueryState(['system', 'status'])?.status).toBe('success'),
+        );
+        expect(probeGets()).toBe(0);
+    });
+
+    it('requests the probe state when demoMode is true (spy control)', async () => {
+        const probeGets = countProbeGets();
+        serveDemoMode();
+        renderWithProviders(<ForeverSettingsSection />);
+        await waitFor(() => expect(probeGets()).toBeGreaterThan(0));
     });
 
     it('hides the diagnostics while system status is still loading', async () => {
