@@ -20,6 +20,7 @@ export function useForeverConfig(): {
             // The Add Character Armory gate reads the public capability — refresh it now.
             void queryClient.invalidateQueries({ queryKey: [...ARMORY_CAPABILITIES_KEY] });
             // ROK-2162: a save can start an automatic quest import server-side — re-read its status.
+            // Best effort: the kick is fire-and-forget; the panel's 30 s idle poll is the guarantee.
             void queryClient.invalidateQueries({ queryKey: [...FOREVER_QUEST_IMPORT_KEY] });
         },
     });

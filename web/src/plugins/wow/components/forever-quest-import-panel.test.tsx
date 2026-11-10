@@ -16,7 +16,7 @@ import {
 import {
     FOREVER_QUEST_IMPORT_IDLE_POLL_MS, FOREVER_QUEST_IMPORT_POLL_MS, questImportRefetchInterval,
 } from '../hooks/use-forever-quest-import';
-import { ForeverQuestImportPanel } from './forever-quest-import-panel';
+import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING } from './forever-quest-import-panel';
 
 const RUNNING = buildQuestImportReport({ status: 'running', runId: 'run-2', startedAt: '2026-11-09T11:00:00.000Z' });
 
@@ -131,10 +131,11 @@ describe('ForeverQuestImportPanel Re-import', () => {
         }
     });
 
+    // ROK-2162 review r3: a 409 always gets the plain copy, never the server sentence.
     it.each([
-        [409, 'A Forever quest import is already running'],
-        [403, 'The WoW Forever quest import is turned off'],
-    ] as const)('Re-import: a %i shows the server message', async (status, message) => {
+        [409, 'A Forever quest import is already running', QUEST_IMPORT_ALREADY_RUNNING],
+        [403, 'The WoW Forever quest import is turned off', 'The WoW Forever quest import is turned off'],
+    ] as const)('Re-import: a %i shows its alert copy', async (status, message, shown) => {
         server.use(
             foreverQuestImportGetHandler(buildQuestImportReport()),
             foreverQuestImportPostHandler({ status, message }),
@@ -142,7 +143,7 @@ describe('ForeverQuestImportPanel Re-import', () => {
         renderWithProviders(<ForeverQuestImportPanel />);
         await screen.findByText('The quest import has not run yet.');
         await userEvent.click(button());
-        expect(await screen.findByRole('alert')).toHaveTextContent(message);
+        expect(await screen.findByRole('alert')).toHaveTextContent(shown);
         expect(screen.getByText('The quest import has not run yet.')).toBeInTheDocument();
     });
 });

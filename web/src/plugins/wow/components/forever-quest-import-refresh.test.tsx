@@ -5,7 +5,7 @@
  * plain copy and re-reads the report.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { act, renderHook, screen } from '@testing-library/react';
+import { act, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { JSX, ReactNode } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -13,11 +13,11 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import {
-    buildQuestImportReport, foreverQuestImportGetHandler, foreverQuestImportPostHandler,
+    buildQuestImportReport, buildSucceededReport, foreverQuestImportGetHandler, foreverQuestImportPostHandler,
 } from '../../../test/mocks/forever-quest-import-handlers';
 import { useBlizzardSettings } from '../../../hooks/admin/use-blizzard-settings';
 import { useForeverConfig } from '../hooks/use-forever-config';
-import { FOREVER_QUEST_IMPORT_IDLE_POLL_MS } from '../hooks/use-forever-quest-import';
+import { FOREVER_QUEST_IMPORT_IDLE_POLL_MS, FOREVER_QUEST_IMPORT_KEY } from '../hooks/use-forever-quest-import';
 import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING } from './forever-quest-import-panel';
 
 const IDLE = buildQuestImportReport();
@@ -94,8 +94,24 @@ describe('a run the server starts by itself (ROK-2162)', () => {
         renderWithProviders(<ForeverQuestImportPanel />);
         await screen.findByText('The quest import has not run yet.');
         await userEvent.click(button());
-        expect(await screen.findByRole('alert')).toHaveTextContent(QUEST_IMPORT_ALREADY_RUNNING);
-        expect(screen.getByText('running').closest('p')).toHaveTextContent(/Import\s+running\s+since/);
+        expect(await screen.findByText(QUEST_IMPORT_ALREADY_RUNNING)).toHaveAttribute('role', 'alert');
+        expect((await screen.findByText('running')).closest('p')).toHaveTextContent(/Import\s+running\s+since/);
         expect(button()).toBeDisabled();
+    });
+
+    it('the 409 alert clears once the run it raced has finished', async () => {
+        server.use(
+            foreverQuestImportGetHandler(IDLE, RUNNING, buildSucceededReport()),
+            foreverQuestImportPostHandler({ status: 409, message: 'A Forever quest import is already running' }),
+        );
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<ForeverQuestImportPanel />, { queryClient });
+        await screen.findByText('The quest import has not run yet.');
+        await userEvent.click(button());
+        await screen.findByText('running');
+        expect(screen.getByRole('alert')).toHaveTextContent(QUEST_IMPORT_ALREADY_RUNNING);
+        await act(async () => { await queryClient.invalidateQueries({ queryKey: [...FOREVER_QUEST_IMPORT_KEY] }); });
+        await screen.findByText('succeeded');
+        await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     });
 });

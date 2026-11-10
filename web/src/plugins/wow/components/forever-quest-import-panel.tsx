@@ -7,7 +7,7 @@
  * weekly; the status names what started the last run and when the last
  * automatic run was. The button stays as the manual override.
  */
-import { useId, type JSX } from 'react';
+import { useEffect, useId, type JSX } from 'react';
 import type {
     ForeverQuestImportMismatchedArea, ForeverQuestImportReport, ForeverQuestImportStatus,
     ForeverQuestImportTrigger,
@@ -109,13 +109,22 @@ function ErrorList({ report }: { report: ForeverQuestImportReport }): JSX.Elemen
 /** ROK-2162: a Re-import that raced a run already in progress (409) gets plain copy, not the server text. */
 export const QUEST_IMPORT_ALREADY_RUNNING = 'An import is already running. The status above updates when it finishes.';
 
-function startErrorText(err: Error, running: boolean): string {
-    return isConflictError(err) && running ? QUEST_IMPORT_ALREADY_RUNNING : err.message;
+/** Any 409 gets the plain copy at once; it no longer waits for the refetched report to say `running`. */
+function startErrorText(err: Error): string {
+    return isConflictError(err) ? QUEST_IMPORT_ALREADY_RUNNING : err.message;
+}
+
+/** Clears a stale Re-import error (e.g. the 409 alert) once the report leaves `running`. */
+function useResetWhenNotRunning(status: ForeverQuestImportStatus | undefined, reset: () => void): void {
+    useEffect(() => {
+        if (status !== undefined && status !== 'running') reset();
+    }, [status, reset]);
 }
 
 /** Admin Forever quest import status + Re-import; renders nothing until the report has loaded. */
 export function ForeverQuestImportPanel(): JSX.Element | null {
     const { report, start } = useForeverQuestImport();
+    useResetWhenNotRunning(report.data?.status, start.reset);
     if (report.isError) return <p className="text-sm text-danger">Failed to load the quest import status.</p>;
     if (!report.data) return null;
     const running = report.data.status === 'running';
@@ -136,7 +145,7 @@ export function ForeverQuestImportPanel(): JSX.Element | null {
             <Counts report={report.data} />
             <MismatchedAreas report={report.data} />
             <ErrorList report={report.data} />
-            {start.isError && <p role="alert" className="text-sm text-danger">{startErrorText(start.error, running)}</p>}
+            {start.isError && <p role="alert" className="text-sm text-danger">{startErrorText(start.error)}</p>}
         </section>
     );
 }

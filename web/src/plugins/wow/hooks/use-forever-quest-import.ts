@@ -2,9 +2,10 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import type { ForeverQuestImportReport } from '@raid-ledger/contract';
 import { isConflictError } from '../../../lib/api/api-error';
 import { fetchForeverQuestImport, startForeverQuestImport } from '../forever-quest-import-api';
+import { BLIZZARD_DEPENDENT_QUERY_ROOT } from '../../../hooks/admin/use-blizzard-settings';
 
 /** TanStack Query key for the admin Forever quest import report (ROK-2143). */
-export const FOREVER_QUEST_IMPORT_KEY = ['admin', 'blizzard', 'forever-quest-import'] as const;
+export const FOREVER_QUEST_IMPORT_KEY = [...BLIZZARD_DEPENDENT_QUERY_ROOT, 'forever-quest-import'] as const;
 
 /** How often the report is re-read while a run is in progress. */
 export const FOREVER_QUEST_IMPORT_POLL_MS = 2_000;
