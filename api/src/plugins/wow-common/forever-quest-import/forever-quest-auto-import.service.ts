@@ -149,13 +149,24 @@ export class ForeverQuestAutoImportService implements OnApplicationBootstrap {
     return this.tryStart('auto-empty');
   }
 
-  /** The weekly job: start a `weekly` run and wait for it to finish. */
+  /**
+   * The weekly job: start a `weekly` run and wait for it to finish. A run
+   * that ends `failed` rejects, so the cron history records a failure. The
+   * importer already sent that run's error to Sentry, so it is not sent here.
+   */
   async runWeekly(): Promise<void> {
+    let started: boolean;
     try {
-      if (await this.tryStart('weekly')) await this.importer.currentRun;
+      started = await this.tryStart('weekly');
+      if (started) await this.importer.currentRun;
     } catch (err: unknown) {
       reportToSentry(err, 'weekly');
       throw err;
+    }
+    if (!started) return;
+    const final = await this.importer.getStatus();
+    if (final.status === 'failed') {
+      throw new Error(final.errors.at(-1) ?? 'Forever quest import failed');
     }
   }
 

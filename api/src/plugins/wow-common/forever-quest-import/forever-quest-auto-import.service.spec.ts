@@ -202,6 +202,42 @@ describe('ForeverQuestAutoImportService overlap guard (ROK-2162)', () => {
   });
 });
 
+describe('ForeverQuestAutoImportService weekly outcome (ROK-2162 park B)', () => {
+  /** start() sets currentRun; the run ends with `report` as the stored status. */
+  function runEndsWith(report: ForeverQuestImportReport): void {
+    importer.start.mockImplementation(() => {
+      importer.currentRun = Promise.resolve().then(() => {
+        lastReport = report;
+      });
+      return Promise.resolve({});
+    });
+  }
+
+  it('park B: runWeekly rejects when the weekly run it started ends failed', async () => {
+    runEndsWith({
+      ...finished('failed', 'weekly', 0),
+      errors: ['Blizzard returned 503'],
+    });
+    const svc = await build();
+    await expect(svc.runWeekly()).rejects.toThrow('Blizzard returned 503');
+    // The importer already sent the crawl error to Sentry; not sent twice.
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('park B: runWeekly resolves when the weekly run it started succeeds', async () => {
+    runEndsWith(finished('succeeded', 'weekly', 0));
+    const svc = await build();
+    await expect(svc.runWeekly()).resolves.toBeUndefined();
+  });
+
+  it('park B: a skipped weekly run (busy) resolves even if the last run failed', async () => {
+    lastReport = finished('failed', 'manual', MINUTE);
+    importer.start.mockRejectedValueOnce(new ConflictException('busy'));
+    const svc = await build();
+    await expect(svc.runWeekly()).resolves.toBeUndefined();
+  });
+});
+
 describe('ForeverQuestAutoImportService kicks (ROK-2162)', () => {
   it('does not query the overlay at boot or on a save when kicks are off', async () => {
     const svc = await buildHttp(false);
