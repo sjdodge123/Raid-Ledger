@@ -43,7 +43,7 @@ describe('QuestPrereqChain', () => {
     });
 
     it('marks a done step with text-success, a check glyph and sr-only "done"', () => {
-        render(<QuestPrereqChain quest={quest} state={makeState()} asOf="2026-10-01T12:00:00.000Z" />);
+        render(<QuestPrereqChain quest={quest} state={makeState()} />);
         const mark = screen.getByTestId('quest-prereq-mark-10');
         expect(mark).toHaveClass('text-success');
         expect(mark).toHaveTextContent('✓');
@@ -65,17 +65,10 @@ describe('QuestPrereqChain', () => {
         expect(container.querySelector('.quest-prereq__step--current')).toHaveTextContent('Final Step');
     });
 
-    it('shows the addon source line when any step came from the addon', () => {
-        render(<QuestPrereqChain quest={quest} state={makeState()} asOf="2026-10-01T12:00:00.000Z" />);
-        const line = screen.getByTestId('quest-prereq-source');
-        expect(line).toHaveTextContent('via addon · 1 Oct 2026');
-        expect(line).toHaveClass('text-xs', 'text-muted');
-    });
-
-    it('shows no source line when every step is manual', () => {
-        const steps = makeState().steps.map((s) => ({ ...s, source: 'manual' as const }));
-        render(<QuestPrereqChain quest={quest} state={makeState({ steps })} asOf="2026-10-01T12:00:00.000Z" />);
+    it('renders no per-card source line — the Quest Prep header dates the viewer progress once (ROK-2144)', () => {
+        const { container } = render(<QuestPrereqChain quest={quest} state={makeState()} />);
         expect(screen.queryByTestId('quest-prereq-source')).toBeNull();
+        expect(container.textContent, 'the chain must not repeat "via addon · <date>" on every card').not.toMatch(/via (addon|Armory)/);
     });
 });
 

@@ -13,9 +13,14 @@ import {
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 
+import { latestBlizzardOverlayFetchedAt } from './forever-quest-import/blizzard-quest.repo';
+
 jest.mock('./event-forever-progress.query');
+jest.mock('./forever-quest-import/blizzard-quest.repo');
 const mockLoad = jest.mocked(loadForeverEventProgress);
 const mockMember = jest.mocked(loadForeverMemberProgress);
+const mockLatest = jest.mocked(latestBlizzardOverlayFetchedAt);
+const IMPORTED = new Date('2026-11-09T08:30:00.000Z');
 
 const AT = new Date('2026-10-02T00:00:00.000Z');
 const CAPTURED = '2026-10-01T00:00:00.000Z';
@@ -72,6 +77,8 @@ beforeEach(async () => {
   mockDb = createDrizzleMock();
   mockLoad.mockReset().mockResolvedValue(null);
   mockMember.mockReset().mockResolvedValue(null);
+  mockLatest.mockReset().mockResolvedValue(null);
+  mockSettings.get.mockReset().mockResolvedValue(null);
   const module = await Test.createTestingModule({
     providers: [
       QuestProgressReadService,
@@ -190,5 +197,39 @@ describe('QuestProgressReadService — prereqs read scope (ROK-1758)', () => {
     );
     expect(mockLoad).not.toHaveBeenCalled();
     expect(out?.characterId).toBe('char-1');
+  });
+});
+
+describe('QuestProgressReadService — catalogue import date (ROK-2144 AC8)', () => {
+  beforeEach(() => {
+    mockMember.mockResolvedValue(forever());
+    mockDb.where.mockResolvedValueOnce([]);
+  });
+
+  it('returns the latest overlay fetch as ISO while the import is on', async () => {
+    mockLatest.mockResolvedValue(IMPORTED);
+    const out = await service.getPrereqsForViewer(10, 1);
+    expect(out?.questDataImportedAt).toBe('2026-11-09T08:30:00.000Z');
+    expect(mockLatest).toHaveBeenCalledWith(mockDb);
+  });
+
+  it('returns null when the overlay was never imported', async () => {
+    const out = await service.getPrereqsForViewer(10, 1);
+    expect(out).not.toBeNull();
+    expect(out?.questDataImportedAt).toBeNull();
+  });
+
+  it('returns null and skips the query when the import is switched off', async () => {
+    mockSettings.get.mockResolvedValue('false');
+    mockLatest.mockResolvedValue(IMPORTED);
+    const out = await service.getPrereqsForViewer(10, 1);
+    expect(out?.questDataImportedAt).toBeNull();
+    expect(mockLatest).not.toHaveBeenCalled();
+  });
+
+  it('a viewer without a Forever character gets a null response, no catalogue query', async () => {
+    mockLatest.mockResolvedValue(IMPORTED);
+    expect(await service.getPrereqsForViewer(10, 99)).toBeNull();
+    expect(mockLatest).not.toHaveBeenCalled();
   });
 });

@@ -161,6 +161,21 @@ describe('CharacterQuestsSection — summary + quest log', () => {
     });
 });
 
+describe('CharacterQuestsSection — quest-log date in the summary (ROK-2144)', () => {
+    it('appends the quest-log date when the log was captured on another day than the completed list (ROK-2144)', async () => {
+        body = { quests: makeQuests({ inProgressSyncedAt: '2026-11-09T12:00:00.000Z' }) };
+        await renderLoaded();
+        expect(screen.getByText('2 completed · 377 known · via addon · 1 Oct 2026 · log 9 Nov 2026 · 120 quests total')).toBeInTheDocument();
+    });
+
+    it('omits the log date when the log was captured the same day as the completed list (ROK-2144)', async () => {
+        body = { quests: makeQuests({ inProgressSyncedAt: '2026-10-01T12:30:00.000Z' }) };
+        await renderLoaded();
+        expect(screen.getByText('2 completed · 377 known · via addon · 1 Oct 2026 · 120 quests total')).toBeInTheDocument();
+        expect(screen.queryByText(/· log /)).not.toBeInTheDocument();
+    });
+});
+
 describe('CharacterQuestsSection — completed dungeon quests', () => {
     it('renders one collapsed group per instance titled "<Instance> · c/k"', async () => {
         await renderLoaded();

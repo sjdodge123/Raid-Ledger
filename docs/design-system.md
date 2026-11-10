@@ -606,6 +606,16 @@ same element. The chain row stays `flex-wrap` (no horizontal scroll at 375px). A
 (`quest-prep-needed-line.tsx`: `text-sm text-warning` "You need N more pre-reqs" / `text-success` "All pre-reqs
 done"); an addon-sourced state adds the shared `formatAddonSourceLine` (`plugins/wow/lib/addon-source-line.ts`)
 as `text-xs text-muted` under the chain. Without a state the chain renders exactly as before.
+**ROK-2144 supersedes the per-chain source line:** the chain no longer dates itself.
+
+**DO — panel-level "as of" lines (ROK-2144).** When every card in a panel would repeat the same viewer
+date, date it once under the panel header instead (`web/src/plugins/wow/slots/quest-prep-asof-line.tsx`,
+under the needed line): `text-xs text-muted` "Your progress: completed list via addon · 2 Nov 2026 · quest
+log 9 Nov 2026" (collapses to "Your progress: via addon · 2 Nov 2026" when both fall on the same day), and
+directly under it `text-xs text-dim` "Quest data via Blizzard · 9 Nov 2026" for app-wide data (one step
+quieter: it is context, not the viewer's state). Both use `formatDatedLine` / `formatSourceLine`
+(`plugins/wow/lib/addon-source-line.ts`) — never a second date formatter. Render nothing for an unknown date;
+no staleness colour. Per-member dates (the coverage line) stay on the card. Tokens only.
 
 **Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:737`) and border
 (`:781`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use

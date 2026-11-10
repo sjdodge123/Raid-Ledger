@@ -35,3 +35,34 @@ export function carriedCompletedDataSql(stored: AnyPgColumn): SQL {
   const quests = sql`((excluded.data -> 'quests') - 'completedTruncated') || jsonb_build_object('completed', ${storedQuests} -> 'completed') || ${storedFlag}`;
   return sql`CASE WHEN jsonb_typeof(${storedQuests} -> 'completed') = 'array' THEN jsonb_set(excluded.data, '{quests}', ${quests}) ELSE excluded.data END`;
 }
+
+/** The stored row's columns {@link carriedCompletedCapturedAtSql} reads. */
+export interface StoredCaptureColumns {
+  data: AnyPgColumn;
+  capturedAt: AnyPgColumn;
+  completedCapturedAt: AnyPgColumn;
+}
+
+/**
+ * ROK-2144: the `completed_captured_at` value of the conflict update for a
+ * log-only import — the carried list keeps ITS capture time (the stored one,
+ * or the stored `captured_at` for a pre-column row), never the incoming
+ * export's. NULL when the existing row holds no completed list. Reads the
+ * same row as {@link carriedCompletedDataSql}, in the same update.
+ */
+export function carriedCompletedCapturedAtSql(
+  stored: StoredCaptureColumns,
+): SQL {
+  return sql`CASE WHEN jsonb_typeof(${stored.data} -> 'quests' -> 'completed') = 'array' THEN COALESCE(${stored.completedCapturedAt}, ${stored.capturedAt}) ELSE NULL END`;
+}
+
+/**
+ * ROK-2144: `completed_captured_at` for a row written as sent — the export's
+ * capture time when it carries a completed list (empty included), else null.
+ */
+export function sentCompletedCapturedAt(
+  incoming: AddonCharSnapshotData,
+  capturedAt: Date,
+): Date | null {
+  return incoming.quests?.completed !== undefined ? capturedAt : null;
+}

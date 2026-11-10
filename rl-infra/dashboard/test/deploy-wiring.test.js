@@ -74,5 +74,6 @@ test('approvals have their own RW mount, created by deploy.sh before the dashboa
   assert.ok(gate > mk && gate < up, 'ownership/mode is checked before the dashboard is recreated');
   const block = code.slice(mk, code.indexOf('\nfi\n', gate)); // the approvals section only
   assert.match(block, /exit 1/, 'a wrong state/approvals stops the deploy');
+  assert.match(block, /chmod g-s state\/approvals/, 'setgid is cleared by name (a numeric mode keeps it on a directory)');
   assert.doesNotMatch(block, /WARN|2775|rl-fleet/, 'no rl-fleet group access, no warn-and-continue');
 });

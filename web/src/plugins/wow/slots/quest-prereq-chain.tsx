@@ -3,7 +3,6 @@
  * ROK-1748: with the viewer's chain state each step is marked done / needed.
  */
 import type { EnrichedDungeonQuestDto, QuestPrereqState, QuestPrereqStep } from '@raid-ledger/contract';
-import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 import { prerequisiteCount } from './quest-card-constants';
 
 interface ChainStep { questId: number; name: string }
@@ -23,40 +22,18 @@ function StepMark({ step }: { step: QuestPrereqStep }) {
 }
 
 /**
- * The snapshot the chain state came from: the completion's source, else the first
- * dated step's. Null for manual-only state (no source line). ROK-2109 adds the Armory.
- */
-function datedSourceOf(state: QuestPrereqState): DatedSource | null {
-    const completed = asDatedSource(state.completedSource);
-    if (completed) return completed;
-    for (const step of state.steps) {
-        const source = asDatedSource(step.source);
-        if (source) return source;
-    }
-    return null;
-}
-
-/**
  * Render a quest's prerequisite chain. Without `state` the markup is exactly the
  * pre-ROK-1748 render (Classic events, AC6). Nothing when no prerequisite sits
  * before the quest — it is never listed as its own prerequisite (ROK-2143).
+ * ROK-2144: no per-card source line — the Quest Prep header dates the viewer's
+ * progress once (`quest-prep-asof-line.tsx`).
  */
-export function QuestPrereqChain({ quest, state, asOf }: {
-    quest: EnrichedDungeonQuestDto; state?: QuestPrereqState | undefined; asOf?: string | null | undefined;
+export function QuestPrereqChain({ quest, state }: {
+    quest: EnrichedDungeonQuestDto; state?: QuestPrereqState | undefined;
 }) {
     const steps = quest.prerequisiteChain;
     if (!steps || prerequisiteCount(quest) === 0) return null;
-    const chain = <ChainLine quest={quest} steps={steps} state={state} />;
-    const source = state ? datedSourceOf(state) : null;
-    if (!source) return chain;
-    return (
-        <>
-            {chain}
-            <p className="mt-1 text-xs text-muted" data-testid="quest-prereq-source">
-                {formatSourceLine(source, asOf ?? '')}
-            </p>
-        </>
-    );
+    return <ChainLine quest={quest} steps={steps} state={state} />;
 }
 
 /** "Requires: A → B → C" with the current quest highlighted. */

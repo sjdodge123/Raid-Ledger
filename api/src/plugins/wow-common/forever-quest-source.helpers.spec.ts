@@ -184,3 +184,46 @@ describe('effectiveQuests — log-only with no Armory list (ROK-2125 review r1)'
     expect(effectiveQuests(emptyLog, null)).toBeNull();
   });
 });
+
+/**
+ * ROK-2144 D4: a log-only export carries an older completed list forward
+ * (ROK-2125), so the list is dated by `completedCapturedAt`, not the export.
+ */
+describe('effectiveQuests — the completed list keeps its own capture time (ROK-2144)', () => {
+  const carried = (completedCapturedAt: Date | null) => ({
+    ...addon([1], T1),
+    completedCapturedAt,
+  });
+
+  it('a carried addon list is dated by completedCapturedAt; the log keeps the export time', () => {
+    expect(effectiveQuests(carried(T0), null)).toEqual({
+      quests: { completed: [1], inProgress: LOG },
+      capturedAt: T0,
+      source: 'addon',
+      inProgressAsOf: T1,
+    });
+  });
+
+  it('a null completedCapturedAt (pre-column row) falls back to capturedAt', () => {
+    const eff = effectiveQuests(carried(null), null);
+    expect(eff?.capturedAt).toEqual(T1);
+    expect(eff?.inProgressAsOf).toEqual(T1);
+  });
+
+  it('an Armory list still wins with its own fetchedAt', () => {
+    const eff = effectiveQuests(carried(T0), armory([1, 2], MONTH_AGO));
+    expect(eff?.source).toBe('blizzard');
+    expect(eff?.capturedAt).toEqual(MONTH_AGO);
+    expect(eff?.inProgressAsOf).toEqual(T1);
+  });
+
+  it('the unknown-list case (no list anywhere) keeps the log time', () => {
+    const eff = effectiveQuests(
+      { ...logOnly(T1), completedCapturedAt: T0 },
+      null,
+    );
+    expect(eff?.quests.completedTruncated).toBe(true);
+    expect(eff?.capturedAt).toEqual(T1);
+    expect(eff?.inProgressAsOf).toEqual(T1);
+  });
+});

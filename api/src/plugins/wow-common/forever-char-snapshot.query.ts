@@ -39,6 +39,10 @@ export async function loadForeverCharSnapshot(
 /** Alias kept for ROK-1745 call sites that predate the rename. */
 export type CharSnapshot = ForeverCharSnapshot;
 
+/** ROK-2144: the batch row also carries the completed list's own capture time. */
+export type ForeverQuestCharSnapshot = ForeverCharSnapshot &
+  Pick<schema.CharacterAddonSnapshotSelect, 'completedCapturedAt'>;
+
 /**
  * ROK-1748: batch variant — the `char` snapshots of Forever characters, keyed
  * by character id (one row per character+section, so no newest-pick needed).
@@ -46,11 +50,16 @@ export type CharSnapshot = ForeverCharSnapshot;
 export async function loadForeverCharSnapshots(
   db: PostgresJsDatabase<typeof schema>,
   characterIds: string[],
-): Promise<Map<string, CharSnapshot>> {
+): Promise<Map<string, ForeverQuestCharSnapshot>> {
   if (characterIds.length === 0) return new Map();
   const snap = schema.characterAddonSnapshots;
   const rows = await db
-    .select({ id: snap.characterId, data: snap.data, at: snap.capturedAt })
+    .select({
+      id: snap.characterId,
+      data: snap.data,
+      capturedAt: snap.capturedAt,
+      completedCapturedAt: snap.completedCapturedAt,
+    })
     .from(snap)
     .innerJoin(schema.characters, eq(schema.characters.id, snap.characterId))
     .innerJoin(schema.games, eq(schema.games.id, schema.characters.gameId))
@@ -61,5 +70,5 @@ export async function loadForeverCharSnapshots(
         eq(schema.games.slug, WOW_FOREVER_GAME_SLUG),
       ),
     );
-  return new Map(rows.map((r) => [r.id, { data: r.data, capturedAt: r.at }]));
+  return new Map(rows.map(({ id, ...row }) => [id, row]));
 }
