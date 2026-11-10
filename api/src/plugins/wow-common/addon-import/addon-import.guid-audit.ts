@@ -15,7 +15,8 @@ export type GuidAuditAction =
 
 export interface GuidAuditEntry {
   action: GuidAuditAction;
-  actorId: number;
+  /** Null for a system path (ROK-2160: a guild rejoin reactivates). */
+  actorId: number | null;
   ownerId: number;
   characterId: string;
   guid: string;
@@ -25,9 +26,11 @@ export interface GuidAuditEntry {
   /**
    * ROK-2128: how the GUID was claimed — `roster_pick` = self-asserted from
    * the guild roster (FLAG 3); `admin_reassign` = an admin Change owner moved
-   * the GUID-linked row to a new owner (a fresh link for ROK-1794 grants).
+   * the GUID-linked row to a new owner (a fresh link for ROK-1794 grants);
+   * `owner_reactivated` = ROK-2160: the owner came back and their GUID won
+   * back a row staff granted while they were away (`external-id.owner-status.ts`).
    */
-  via?: 'roster_pick' | 'admin_reassign';
+  via?: 'roster_pick' | 'admin_reassign' | 'owner_reactivated';
 }
 
 export async function logGuidAudit(
