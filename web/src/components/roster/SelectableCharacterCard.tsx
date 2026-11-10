@@ -60,7 +60,7 @@ function CharacterInfo({ character, isMain }: { character: CharacterDto; isMain?
                 )}
                 {character.spec && (<><span>·</span><span>{character.spec}</span></>)}
                 {character.itemLevel && (
-                    <><span>·</span><span className="text-purple-400">{character.itemLevel} iLvl</span></>
+                    <><span>·</span><span className="text-item-level">{character.itemLevel} iLvl</span></>
                 )}
                 <ProfessionBadges professions={character.professions} />
             </div>

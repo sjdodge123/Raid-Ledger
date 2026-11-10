@@ -32,9 +32,9 @@ export function CharacterHeaderDemo(): JSX.Element {
                     ))}
                 </div>
             </StateFrame>
-            <StateFrame label="StatTile strip" note="Item Level on text-busy, Level on text-warning — tokens, so both families read.">
+            <StateFrame label="StatTile strip" note="Item Level on text-item-level, Level on text-warning — tokens, so both families read.">
                 <div data-testid="demo-stat-tiles" className="w-full grid grid-flow-col auto-cols-fr gap-2 text-center">
-                    <StatTile value={16} label="Item Level" valueClassName="text-busy" />
+                    <StatTile value={16} label="Item Level" valueClassName="text-item-level" />
                     <StatTile value={22} label="Level" valueClassName="text-warning" />
                     <StatTile value="26m" label="Updated" />
                 </div>

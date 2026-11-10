@@ -52,8 +52,10 @@
     /* slate, between 500 and 400: 5.57 surface / 4.57 panel (TDB:2050; slate-500 #64748b was 3.75 / 3.07) — overlay stays 3.23, accepted; still a visible step under muted — faint-decorative.guard.test.ts */
     --color-muted: #94a3b8;
     /* slate-400 */
-    --color-busy: #8b5cf6;
-    /* violet-500 — committed elsewhere (ROK-1584) */
+    --color-busy: #a78bfa;
+    /* violet-400 — committed elsewhere (ROK-1584); ROK-2165: violet-500 #8b5cf6 was 3.11:1 as text on its /10 tint, violet-400 worst 4.56 (default-dark tint) */
+    --color-item-level: #c180f7;
+    /* ROK-2165: a character's item level — WoW epic hue lifted to AA; worst 4.58 on the default-dark /10 tint */
     --color-slot: #22d3ee;
     /* cyan-400 — a poll slot someone proposed (ROK-1587/1588) */
     /* ROK-1815: WoW faction hues (categorical, not a status) — the guild hero's faction pill.
@@ -138,7 +140,10 @@ html {
     --color-dim: #5a697f;
     /* slate, 35% toward muted: 5.58 surface, 5.10 panel, 4.53 overlay (#64748b was 4.76 / 4.34 / 3.86) — faint-decorative.guard.test.ts */
     --color-muted: #475569;
-    --color-busy: #7c3aed;
+    --color-busy: #6d28d9;
+    /* violet-700 (ROK-2165): violet-600 #7c3aed was 3.71:1 worst as text; violet-700 worst 4.53 (celestial tint) */
+    --color-item-level: #7a1fb0;
+    /* ROK-2165: item level on light — worst 5.01 (celestial tint) */
     --color-slot: #0e7490;
     --color-faction-alliance: #1e40af;
     /* blue-800 — Alliance on light (ROK-1815) */

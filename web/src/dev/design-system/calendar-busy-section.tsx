@@ -49,7 +49,7 @@ export function CalendarBusySection(): JSX.Element {
         <Section
             id="calendar-busy"
             title="Pattern — own-calendar busy band and radio cards"
-            blurb="The viewer's OWN synced busy hours are a translucent bg-busy band with a border-busy edge and 'Busy · Google Calendar', above their blocks and pointer-events-none. Group views keep the left-edge marker. Radio cards are the list RadioGroup in a grid."
+            blurb="The viewer's OWN synced busy hours are a translucent bg-busy band with a border-busy edge and 'Busy · Google Calendar' on a bg-surface/70 chip (AA over the block), above their blocks and pointer-events-none. Group views keep the left-edge marker. Radio cards are the list RadioGroup in a grid."
         >
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <StateFrame label="Own busy band · CalendarBusyLayer" note="8–9 PM busy over a 7–10 PM free block.">
