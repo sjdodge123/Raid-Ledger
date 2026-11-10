@@ -42,8 +42,14 @@ import { SettingsService } from '../../../settings/settings.service';
 import { SETTINGS_EVENTS } from '../../../settings/settings.types';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_CONFIG_UPDATED } from '../forever.settings';
-import { isForeverQuestImportEnabled } from './forever-quest-import-switch';
-import { FOREVER_QUEST_IMPORT_SENTRY_CONTEXT } from './forever-quest-import.report';
+import {
+  FOREVER_QUEST_IMPORT_OFF_MESSAGE,
+  isForeverQuestImportEnabled,
+} from './forever-quest-import-switch';
+import {
+  FOREVER_QUEST_IMPORT_INTERRUPTED_MESSAGE,
+  FOREVER_QUEST_IMPORT_SENTRY_CONTEXT,
+} from './forever-quest-import.report';
 import { ForeverQuestImportService } from './forever-quest-import.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -64,8 +70,19 @@ export const FOREVER_QUEST_AUTO_IMPORT_KICKS = Symbol(
 export const FOREVER_QUEST_AUTO_RETRY_FLOOR_MS = 60 * 60 * 1000;
 
 /**
+ * Error lines that end a run without Blizzard failing it: boot recovery
+ * settling a run the process died in (review m4), and the kill switch's abort
+ * (review m5). Neither arms the floor — the next kick may retry at once.
+ */
+const NON_BLIZZARD_FAILURE_MESSAGES: readonly string[] = [
+  FOREVER_QUEST_IMPORT_INTERRUPTED_MESSAGE,
+  FOREVER_QUEST_IMPORT_OFF_MESSAGE,
+];
+
+/**
  * The stored report is a failed automatic run (`auto-empty` / `weekly`) that
  * finished less than the floor ago. Persisted, so it holds across restarts.
+ * A run settled by boot recovery or aborted by the switch does not count.
  */
 export function isRecentAutoFailure(
   report: ForeverQuestImportReport,
@@ -73,6 +90,9 @@ export function isRecentAutoFailure(
 ): boolean {
   if (report.status !== 'failed' || report.finishedAt === null) return false;
   if (report.trigger !== 'auto-empty' && report.trigger !== 'weekly') {
+    return false;
+  }
+  if (report.errors.some((e) => NON_BLIZZARD_FAILURE_MESSAGES.includes(e))) {
     return false;
   }
   const age = now.getTime() - Date.parse(report.finishedAt);

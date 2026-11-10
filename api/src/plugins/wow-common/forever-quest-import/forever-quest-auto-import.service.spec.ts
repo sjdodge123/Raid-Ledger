@@ -23,7 +23,9 @@ import {
 import {
   FOREVER_QUEST_IMPORT_SENTRY_CONTEXT,
   emptyQuestImportReport,
+  markQuestImportInterrupted,
 } from './forever-quest-import.report';
+import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
   FOREVER_QUEST_IMPORT_RUNNING_MESSAGE,
   ForeverQuestImportService,
@@ -283,6 +285,48 @@ describe('ForeverQuestAutoImportService retry floor (ROK-2162 review m1/m2)', ()
     await expect(svc.startIfEmpty(NOW)).resolves.toBe(false);
     expect(importer.start).not.toHaveBeenCalled();
   });
+});
+
+describe('ForeverQuestAutoImportService floor exemptions (ROK-2162 review m4/m5)', () => {
+  it('m4: a run boot recovery just settled as interrupted does not block the boot kick', async () => {
+    const running: ForeverQuestImportReport = {
+      ...emptyQuestImportReport(),
+      status: 'running',
+      trigger: 'auto-empty',
+      runId: 'run-1',
+      startedAt: new Date().toISOString(),
+    };
+    lastReport = markQuestImportInterrupted(running, new Date());
+    await buildHttp();
+    await flush();
+    expect(importer.start).toHaveBeenCalledWith('auto-empty');
+  });
+
+  it('m5: a run the switch aborted just now does not block the next kick', async () => {
+    lastReport = {
+      ...finished('failed', 'weekly', 1 * MINUTE),
+      errors: [FOREVER_QUEST_IMPORT_OFF_MESSAGE],
+    };
+    const svc = await build();
+    await expect(svc.startIfEmpty(NOW)).resolves.toBe(true);
+    expect(importer.start).toHaveBeenCalledWith('auto-empty');
+  });
+
+  it.each([
+    [10 * MINUTE, false],
+    [61 * MINUTE, true],
+  ] as const)(
+    'control: a genuine Blizzard failure %d ms ago -> started %s',
+    async (ageMs, started) => {
+      lastReport = {
+        ...finished('failed', 'auto-empty', ageMs),
+        errors: ['Blizzard returned HTTP 503'],
+      };
+      const svc = await build();
+      await expect(svc.startIfEmpty(NOW)).resolves.toBe(started);
+      expect(importer.start).toHaveBeenCalledTimes(started ? 1 : 0);
+    },
+  );
 });
 
 describe('ForeverQuestAutoImportService Sentry (ROK-2162 review m3)', () => {
