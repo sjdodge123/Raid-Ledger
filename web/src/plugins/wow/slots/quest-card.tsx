@@ -6,7 +6,7 @@ import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, Que
 import { getWowheadQuestUrl, getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import { ItemComparison } from '../components/item-comparison';
 import { WowItemCard } from '../components/wow-item-card';
-import { REWARD_TO_EQUIP_SLOT, formatGold, prerequisiteCount } from './quest-card-constants';
+import { REWARD_TO_EQUIP_SLOT, formatGold, formatReputationRewards, prerequisiteCount } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
@@ -247,11 +247,13 @@ function QuestRestrictions({ quest, hasPrereqs, coveredByMe, coveredByOthers, is
 }
 
 function QuestRewardsMeta({ quest }: { quest: EnrichedDungeonQuestDto }) {
-    if (!quest.rewardGold && !quest.rewardXp && !(quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1)) return null;
+    const reputation = formatReputationRewards(quest.reputationRewards);
+    if (!quest.rewardGold && !quest.rewardXp && !reputation && !(quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1)) return null;
     return (
         <div className="quest-reward-meta">
             {quest.rewardGold && quest.rewardGold > 0 && <span className="quest-reward-gold">&#x1FA99; {formatGold(quest.rewardGold)}</span>}
             {quest.rewardXp && quest.rewardXp > 0 && <span className="quest-reward-xp">&#x2B50; {quest.rewardXp.toLocaleString()} XP</span>}
+            {reputation && <span className="text-success" data-testid="quest-reward-reputation">{reputation}</span>}
             {quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1 && <span className="quest-reward-choice">Choose one reward</span>}
         </div>
     );

@@ -147,3 +147,37 @@ describe('QuestCard — prerequisite not in our data (ROK-2143)', () => {
         expect(screen.queryByTestId('quest-prereq-missing')).toBeNull();
     });
 });
+
+describe('QuestCard — reputation rewards (ROK-2161)', () => {
+    function renderExpanded(overrides: Partial<EnrichedDungeonQuestDto>) {
+        return render(
+            <QuestCard quest={createQuest(overrides)} questCoverage={undefined} currentUserId={1} eventId={1}
+                wowheadVariant="classic" isExpanded pendingQuestId={null} equippedBySlot={new Map()}
+                charClass={null} characterId={undefined} onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />,
+        );
+    }
+
+    it('shows the reputation line next to the XP reward', () => {
+        renderExpanded({
+            rewardXp: 1150,
+            reputationRewards: [{ factionName: 'Ironforge', amount: 150 }, { factionName: 'Gnomeregan', amount: -25 }],
+        });
+        const line = screen.getByTestId('quest-reward-reputation');
+        expect(line).toHaveTextContent('+150 Ironforge, -25 Gnomeregan');
+        expect(line).toHaveClass('text-success');
+        expect(line.closest('.quest-reward-meta'), 'sits in the XP / money reward row').not.toBeNull();
+    });
+
+    it('renders a reputation-only quest reward row', () => {
+        renderExpanded({ reputationRewards: [{ factionName: 'Ironforge', amount: 150 }] });
+        expect(screen.getByTestId('quest-reward-reputation')).toHaveTextContent('+150 Ironforge');
+    });
+
+    it('renders no reputation line when the field is absent or empty', () => {
+        const { unmount } = renderExpanded({ rewardXp: 1150 });
+        expect(screen.queryByTestId('quest-reward-reputation')).toBeNull();
+        unmount();
+        renderExpanded({ rewardXp: 1150, reputationRewards: [] });
+        expect(screen.queryByTestId('quest-reward-reputation')).toBeNull();
+    });
+});
