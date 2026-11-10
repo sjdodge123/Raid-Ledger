@@ -30,7 +30,7 @@ function serveCharacter(data: CharacterGuild['data']): { addonCalls: () => numbe
         http.get(`${API}/by-character/${CHAR_ID}`, () => HttpResponse.json({ data })),
         http.get(`${API}/11/addons`, () => {
             hits += 1;
-            return HttpResponse.json({ pinned: [{ name: 'LedgerLink', url: 'https://github.com/sjdodge123/ledger-link', note: null, requirement: 'required', flavors: [] }], addons: [] });
+            return HttpResponse.json({ pinned: [{ name: 'LedgerLink', url: 'https://www.curseforge.com/wow/addons/ledger-link', note: null, requirement: 'required', flavors: [] }], addons: [] });
         }),
     );
     return { addonCalls: () => hits };

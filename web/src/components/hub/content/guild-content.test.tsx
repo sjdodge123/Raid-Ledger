@@ -200,7 +200,7 @@ describe('Resources: rules and links', () => {
 });
 
 const list: GuildAddonList = {
-    pinned: [{ name: 'LedgerLink', url: 'https://github.com/sjdodge123/ledger-link', note: null, requirement: 'required', flavors: [] }],
+    pinned: [{ name: 'LedgerLink', url: 'https://www.curseforge.com/wow/addons/ledger-link', note: null, requirement: 'required', flavors: [] }],
     addons: [addon(1, 'DBM', { requirement: 'required' }), addon(2, 'Details')],
 };
 
