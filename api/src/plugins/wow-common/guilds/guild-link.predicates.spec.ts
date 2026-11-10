@@ -23,6 +23,12 @@ describe('guidLink (arm A)', () => {
     expect(text).toContain('"characters"."game_id" = "guilds"."game_id"');
     expect(text).toContain('"characters"."region" is null');
   });
+
+  it('only counts an active owner (ROK-2160)', () => {
+    expect(render(guidLink())).toContain(
+      '"users"."id" = "characters"."user_id" and "users"."deactivated_at" is null',
+    );
+  });
 });
 
 describe('blizzardIdLink (arm B)', () => {
@@ -46,6 +52,12 @@ describe('blizzardIdLink (arm B)', () => {
     );
     expect(text).toContain(
       '"link_guid_holder"."addon_guid" = "guild_members"."guid"',
+    );
+  });
+
+  it('a deactivated GUID holder does not block it (ROK-2160)', () => {
+    expect(text).toContain(
+      '"users"."id" = "link_guid_holder"."user_id" and "users"."deactivated_at" is null',
     );
   });
 

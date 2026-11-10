@@ -7,6 +7,7 @@ import {
   not,
   or,
   sql,
+  type AnyColumn,
   type SQL,
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -22,11 +23,14 @@ import * as schema from '../../../drizzle/schema';
  * Arm B ({@link blizzardIdLink}): the character's `external_id` (Armory
  * import) equals the row's `blizzard_character_id` (same game, strictly the
  * guild's region — Blizzard ids are per region). GUID wins: arm B is off for
- * a row some character GUID-holds, and for a character that GUID-links to
- * another live row of the same guild (no double rows). No name fallback.
+ * a row some ACTIVE owner's character GUID-holds, and for a character that
+ * GUID-links to another live row of the same guild (no double rows). No name
+ * fallback. ROK-2160: a deactivated owner's character never holds a row by
+ * GUID — arm A skips it and it does not block arm B, so the row links to the
+ * active Blizzard-id holder (one character per row).
  */
 
-const { guilds, guildMembers, characters } = schema;
+const { guilds, guildMembers, characters, users } = schema;
 
 /** The row's GUID holder (Ruling 3) — aliased so it never clashes with the outer join. */
 const guidHolder = alias(characters, 'link_guid_holder');
@@ -54,7 +58,19 @@ export function sameRegionOrUnknown(): SQL | undefined {
   );
 }
 
-/** Arm A: the member's GUID on a character of the guild's game and region. */
+/**
+ * ROK-2160: the owner (`users.id` = `ownerId`) is not deactivated. A
+ * correlated sub-select, so it never clashes with an outer `users` join.
+ */
+export function ownerActive(ownerId: AnyColumn): SQL {
+  return sql`exists (select 1 from ${users}
+    where ${users.id} = ${ownerId} and ${users.deactivatedAt} is null)`;
+}
+
+/**
+ * Arm A: the member's GUID on an ACTIVE owner's character of the guild's
+ * game and region (ROK-2160).
+ */
 export function guidLink(): SQL {
   return (
     and(
@@ -62,17 +78,22 @@ export function guidLink(): SQL {
       eq(characters.addonGuid, guildMembers.guid),
       eq(characters.gameId, guilds.gameId),
       sameRegionOrUnknown(),
+      ownerActive(characters.userId),
     ) ?? sql`false`
   );
 }
 
-/** Some character of the guild's game (region rule as arm A) holds the row's GUID. */
+/**
+ * An ACTIVE owner's character of the guild's game (rules as arm A) holds the
+ * row's GUID. ROK-2160: a deactivated holder does not block arm B.
+ */
 function rowHasGuidHolder(): SQL {
   return sql`exists (select 1 from ${characters} as ${guidHolder}
     where ${guidHolder.addonGuid} = ${guildMembers.guid}
       and ${guidHolder.gameId} = ${guilds.gameId}
       and (${guidHolder.region} is null
-        or lower(${guidHolder.region}) = lower(${guilds.region})))`;
+        or lower(${guidHolder.region}) = lower(${guilds.region}))
+      and ${ownerActive(guidHolder.userId)})`;
 }
 
 /** The character GUID-links to ANOTHER live row of the same guild. */

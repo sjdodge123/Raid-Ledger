@@ -1,3 +1,4 @@
+import type { SQL } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { AddonImportTx } from './addon-import-apply.types';
 
@@ -15,7 +16,8 @@ export type GuidAuditAction =
 
 export interface GuidAuditEntry {
   action: GuidAuditAction;
-  actorId: number;
+  /** Null for a system path (ROK-2160: a guild rejoin reactivates). */
+  actorId: number | null;
   ownerId: number;
   characterId: string;
   guid: string;
@@ -25,21 +27,31 @@ export interface GuidAuditEntry {
   /**
    * ROK-2128: how the GUID was claimed — `roster_pick` = self-asserted from
    * the guild roster (FLAG 3); `admin_reassign` = an admin Change owner moved
-   * the GUID-linked row to a new owner (a fresh link for ROK-1794 grants).
+   * the GUID-linked row to a new owner (a fresh link for ROK-1794 grants);
+   * `owner_reactivated` = ROK-2160: the owner came back and their GUID won
+   * back a row staff granted while they were away (`external-id.owner-status.ts`).
    */
-  via?: 'roster_pick' | 'admin_reassign';
+  via?: 'roster_pick' | 'admin_reassign' | 'owner_reactivated';
+  /**
+   * ROK-2160 review r2 M4: the audit's `created_at`. Default (unset) is the
+   * column default, NOW() = tx start; owner-status audits pass
+   * `clock_timestamp()` so a grant whose tx began during a long
+   * deactivation tx does not post-date the audit.
+   */
+  createdAt?: SQL;
 }
 
 export async function logGuidAudit(
   tx: AddonImportTx,
   entry: GuidAuditEntry,
 ): Promise<void> {
-  const { action, actorId, ownerId, ...rest } = entry;
+  const { action, actorId, ownerId, createdAt, ...rest } = entry;
   await tx.insert(schema.activityLog).values({
     entityType: GUID_AUDIT_ENTITY,
     entityId: ownerId,
     action,
     actorId,
     metadata: { ...rest, ownerId },
+    ...(createdAt ? { createdAt } : {}),
   });
 }

@@ -1,6 +1,7 @@
+import { sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { AddonImportTx } from './addon-import-apply.types';
-import { GUID_AUDIT_ENTITY } from './addon-import.guid-audit';
+import { GUID_AUDIT_ENTITY, logGuidAudit } from './addon-import.guid-audit';
 import {
   EXTERNAL_ID_LINKED_ACTION,
   isExternalIdLinkChange,
@@ -87,6 +88,47 @@ describe('logExternalIdLinked (ROK-2115 Ruling 5)', () => {
     await logExternalIdLinked(tx, job, null);
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({ actorId: null }),
+    );
+  });
+});
+
+describe('audit created_at override (ROK-2160 review r2 M4)', () => {
+  const at = sql`clock_timestamp()`;
+
+  it('logExternalIdLinked writes createdAt as a column, not metadata', async () => {
+    const { tx, values } = recordingTx();
+    await logExternalIdLinked(tx, { ...entry, createdAt: at }, null);
+    const row: unknown = values.mock.calls[0]?.[0];
+    expect(row).toEqual(expect.objectContaining({ createdAt: at }));
+    expect(row).toEqual(
+      expect.objectContaining({
+        metadata: expect.not.objectContaining({ createdAt: expect.anything() }),
+      }),
+    );
+  });
+
+  it('logExternalIdLinked leaves createdAt to the column default when unset', async () => {
+    const { tx, values } = recordingTx();
+    await logExternalIdLinked(tx, entry, null);
+    expect(values.mock.calls[0]?.[0]).not.toHaveProperty('createdAt');
+  });
+
+  it('logGuidAudit writes createdAt as a column', async () => {
+    const { tx, values } = recordingTx();
+    await logGuidAudit(tx, {
+      action: 'addon_guid_claimed',
+      actorId: null,
+      ownerId: 7,
+      characterId: 'char-1',
+      guid: 'Player-1-2',
+      name: 'Bob',
+      gameId: 3,
+      region: 'us',
+      via: 'owner_reactivated',
+      createdAt: at,
+    });
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({ createdAt: at }),
     );
   });
 });

@@ -3,7 +3,7 @@ import { and, eq, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot } from './guild-link.predicates';
+import { inLatestSnapshot, ownerActive } from './guild-link.predicates';
 
 /**
  * ROK-2115 Ruling 3 — a live roster row whose LedgerLink GUID holder and
@@ -25,12 +25,16 @@ const byGuid = alias(schema.characters, 'disagree_guid_char');
 const byBlizzard = alias(schema.characters, 'disagree_blizzard_char');
 const logger = new Logger('GuildLinkDisagreement');
 
-/** The row's GUID holder — arm A's rule. */
+/**
+ * The row's GUID holder — arm A's rule, active owner included (ROK-2160): a
+ * deactivated holder does not win, so it is no disagreement.
+ */
 function guidHolderJoin() {
   return and(
     eq(byGuid.addonGuid, guildMembers.guid),
     eq(byGuid.gameId, guilds.gameId),
     sql`(${byGuid.region} is null or lower(${byGuid.region}) = lower(${guilds.region}))`,
+    ownerActive(byGuid.userId),
   );
 }
 

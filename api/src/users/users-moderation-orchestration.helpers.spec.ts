@@ -27,6 +27,9 @@ import * as signupCancel from '../events/signup-cancel-batch.helpers';
 import { at } from '../common/testing/narrow';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 
+import * as ownerStatus from '../plugins/wow-common/addon-import/external-id.owner-status';
+
+jest.mock('../plugins/wow-common/addon-import/external-id.owner-status');
 jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
 jest.mock('./users-delete.helpers');
@@ -42,6 +45,8 @@ jest.mock('../guilds/community/community-membership.queries', () => ({
 const kickUserById = writes.kickUserById as jest.Mock;
 const unkickUserById = writes.unkickUserById as jest.Mock;
 const banUserById = writes.banUserById as jest.Mock;
+const lockDeactivatedAt = ownerStatus.lockDeactivatedAt as jest.Mock;
+const auditOwnerDeactivated = ownerStatus.auditOwnerDeactivated as jest.Mock;
 const unbanUserById = writes.unbanUserById as jest.Mock;
 const insertAdminAction = audit.insertAdminAction as jest.Mock;
 const wipeUserData = wipe.wipeUserData as jest.Mock;
@@ -196,6 +201,29 @@ describe('runKick', () => {
 });
 
 describe('runBan', () => {
+  const banInput = {
+    userId: TARGET.id,
+    actorId: ACTOR,
+    wipeData: false,
+    kickFromDiscord: false,
+  };
+
+  it('ROK-2160: audits GUID releases when the ban is what deactivates the user', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    lockDeactivatedAt.mockResolvedValueOnce(null);
+    cancelAll.mockResolvedValue(0);
+    await runBan(makeDeps(), banInput);
+    expect(auditOwnerDeactivated).toHaveBeenCalledWith({}, TARGET.id, ACTOR);
+  });
+
+  it('ROK-2160: no GUID audit when the user was already deactivated', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    lockDeactivatedAt.mockResolvedValueOnce('2026-01-01 00:00:00');
+    cancelAll.mockResolvedValue(0);
+    await runBan(makeDeps(), banInput);
+    expect(auditOwnerDeactivated).not.toHaveBeenCalled();
+  });
+
   it('non-wipe: lockout, audit, cancel signups, reassign pug slots (no wipe)', async () => {
     banUserById.mockResolvedValue({ ...TARGET });
     cancelAll.mockResolvedValue(2);
@@ -237,7 +265,21 @@ describe('runBan', () => {
   it('wipe: runs wipeUserData inside a transaction instead of reassign-only', async () => {
     banUserById.mockResolvedValue({ ...TARGET });
     cancelAll.mockResolvedValue(0);
-    const deps = makeDeps();
+    lockDeactivatedAt.mockResolvedValueOnce(null);
+    // Two transactions, as on main where the ban was a bare statement and the
+    // wipe ran in its OWN tx (§9.6): ROK-2160 wraps the ban + its GUID audit,
+    // which must commit (lockout) BEFORE the wipe's tx opens.
+    const banTx = { tx: 'ban' };
+    const wipeTx = { tx: 'wipe' };
+    const transaction = jest
+      .fn()
+      .mockImplementationOnce((cb: (tx: unknown) => unknown) =>
+        Promise.resolve(cb(banTx)),
+      )
+      .mockImplementationOnce((cb: (tx: unknown) => unknown) =>
+        Promise.resolve(cb(wipeTx)),
+      );
+    const deps = makeDeps({ db: { transaction } as never });
 
     await runBan(deps, {
       userId: TARGET.id,
@@ -246,12 +288,19 @@ describe('runBan', () => {
       kickFromDiscord: false,
     });
 
-    expect(deps.db.transaction).toHaveBeenCalledTimes(1);
-    expect(wipeUserData).toHaveBeenCalledWith(
-      expect.anything(),
-      TARGET.id,
-      ACTOR,
-    );
+    expect(transaction).toHaveBeenCalledTimes(2);
+    // Tx 1: the ban write and its owner audit; nothing of the wipe.
+    expect(lockDeactivatedAt).toHaveBeenCalledWith(banTx, TARGET.id);
+    expect(banUserById).toHaveBeenCalledWith(banTx, TARGET.id, undefined);
+    expect(auditOwnerDeactivated).toHaveBeenCalledWith(banTx, TARGET.id, ACTOR);
+    // Tx 2: the screenshot select and the wipe; nothing of the ban.
+    expect(selectShots).toHaveBeenCalledWith(wipeTx, TARGET.id);
+    expect(wipeUserData).toHaveBeenCalledWith(wipeTx, TARGET.id, ACTOR);
+    // Order: ban tx → lockout → wipe tx.
+    const order = (m: jest.Mock) => at(m.mock.invocationCallOrder, 0);
+    expect(order(banUserById)).toBeLessThan(order(invalidateAuthUser));
+    expect(order(invalidateAuthUser)).toBeLessThan(order(selectShots));
+    expect(order(selectShots)).toBeLessThan(order(wipeUserData));
     expect(reassignPugSlots).not.toHaveBeenCalled();
     expect(insertAdminAction).toHaveBeenCalledWith(
       deps.db,

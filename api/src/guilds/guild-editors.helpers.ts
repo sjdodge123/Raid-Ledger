@@ -101,15 +101,42 @@ export async function insertGrant(
   input: CreateGuildEditorInput,
   grantedBy: number,
 ): Promise<number> {
-  const values =
-    input.kind === 'rank'
-      ? { guildId, kind: 'rank', rankIndex: input.rankIndex, grantedBy }
-      : {
-          guildId,
-          kind: 'member',
-          guildMemberId: input.guildMemberId,
-          grantedBy,
-        };
+  if (input.kind === 'rank') {
+    const { rankIndex } = input;
+    return insertRow(db, { guildId, kind: 'rank', rankIndex, grantedBy });
+  }
+  const { guildMemberId } = input;
+  return db.transaction((tx) =>
+    insertMemberGrant(tx, guildId, guildMemberId, grantedBy),
+  );
+}
+
+/**
+ * ROK-2160 (review r3 m1) — a member grant, on the CALLER's tx, after a
+ * `FOR SHARE` lock on its roster row. Owner deactivation / reactivation
+ * `FOR UPDATE` the same row before deciding who a grant confirms, so the two
+ * writers serialise: a grant can never commit between that decision and its
+ * commit (which would hand B's grant to A without a staff action).
+ */
+export async function insertMemberGrant(
+  tx: Db,
+  guildId: number,
+  guildMemberId: number,
+  grantedBy: number,
+): Promise<number> {
+  await tx
+    .select({ id: guildMembers.id })
+    .from(guildMembers)
+    .where(eq(guildMembers.id, guildMemberId))
+    .for('share');
+  const kind = 'member';
+  return insertRow(tx, { guildId, kind, guildMemberId, grantedBy });
+}
+
+async function insertRow(
+  db: Db,
+  values: typeof ge.$inferInsert,
+): Promise<number> {
   const [row] = await db.insert(ge).values(values).returning({ id: ge.id });
   if (!row) throw new Error('guild_editors insert returned no row');
   return row.id;

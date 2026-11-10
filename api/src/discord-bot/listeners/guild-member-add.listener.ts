@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Events, type GuildMember } from 'discord.js';
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -12,6 +12,7 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 import { invalidateAuthUser } from '../../auth/auth-user-cache';
 import { refreshUserHubCounts } from '../../guilds/community/community-membership.queries';
+import { reactivateOnGuildRejoin } from '../../users/users-reactivate.helpers';
 
 /**
  * Re-activate users when they rejoin the Discord guild (ROK-1260).
@@ -89,17 +90,7 @@ export class GuildMemberAddListener {
     // ROK-313: a BANNED user rejoining the guild must NOT be reactivated —
     // ban keeps deactivated_at set so they stay out of the Players list (auth is
     // separately blocked by banned_at). The `banned_at IS NULL` guard skips them.
-    const [row] = await this.db
-      .update(schema.users)
-      .set({ deactivatedAt: null })
-      .where(
-        and(
-          eq(schema.users.discordId, discordId),
-          isNotNull(schema.users.deactivatedAt),
-          isNull(schema.users.bannedAt),
-        ),
-      )
-      .returning({ id: schema.users.id, username: schema.users.username });
+    const row = await reactivateOnGuildRejoin(this.db, discordId);
     if (!row) return;
     // ROK-1870: the user's community hubs count them again (M11).
     await refreshUserHubCounts(this.db, row.id);
