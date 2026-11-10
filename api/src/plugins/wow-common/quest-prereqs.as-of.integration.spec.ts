@@ -56,8 +56,8 @@ const exportAt = (
   secs: number,
 ): string =>
   buildImportString({ ...payload, exportedAt: FIXTURE_EXPORTED_AT + secs });
-/** Migration 0292's backfill UPDATE, verbatim — keep the two in step. */
-const BACKFILL_0292 = sql`UPDATE "character_addon_snapshots" SET "completed_captured_at" = "captured_at" WHERE "section" = 'char' AND jsonb_typeof("data" -> 'quests' -> 'completed') = 'array'`;
+/** Migration 0293's backfill UPDATE, verbatim — keep the two in step. */
+const BACKFILL_0293 = sql`UPDATE "character_addon_snapshots" SET "completed_captured_at" = "captured_at" WHERE "section" = 'char' AND jsonb_typeof("data" -> 'quests' -> 'completed') = 'array'`;
 
 const FULL_T1 = (): string => fixture('char-forever-quests');
 const LOG_ONLY_T2 = exportAt(buildForeverQuestsLogOnlyPayload(), 1200);
@@ -349,20 +349,20 @@ describe('ROK-2144 — pre-column rows (completed_captured_at NULL) and the back
   });
 
   // The migration itself runs only in the fleet's migration step.
-  it('the 0292 backfill stamps a row with a completed list', async () => {
+  it('the 0293 backfill stamps a row with a completed list', async () => {
     const full = await memberWithChar('asof7');
     await importPaste(full, FULL_T1());
     await nullOutColumn(full.charId);
-    await testApp.db.execute(BACKFILL_0292);
+    await testApp.db.execute(BACKFILL_0293);
     expect((await storedTimes(full.charId)).completedCapturedAt).toBe(
       T1.toISOString(),
     );
   });
 
-  it('the 0292 backfill leaves a log-only row (no completed list) NULL', async () => {
+  it('the 0293 backfill leaves a log-only row (no completed list) NULL', async () => {
     const v = await memberWithChar('asof8');
     await importPaste(v, fixture('char-forever-quests-log-only'));
-    await testApp.db.execute(BACKFILL_0292);
+    await testApp.db.execute(BACKFILL_0293);
     expect((await storedTimes(v.charId)).completedCapturedAt).toBeNull();
   });
 });
