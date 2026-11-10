@@ -169,8 +169,9 @@ function questChipRows(): Array<readonly [string, string, string, string]> {
     const dark: Array<[string, (t: string) => string | null]> = [['default-dark', (t) => declaredValue(themeBlock, t)]];
     for (const [, name, body] of css.matchAll(/(?:^|\n)\[data-scheme="([a-z-]+)"\]\s*\{([^}]*)\}/g)) {
         const scheme = defined(name, 'scheme name');
-        if (LIGHT_NAMES.has(scheme) || declaredValue(defined(body, 'scheme body'), 'overlay') === null) continue;
-        dark.push([scheme, (t) => declaredValue(body as string, t) ?? declaredValue(themeBlock, t)]);
+        const block = defined(body, 'scheme body');
+        if (LIGHT_NAMES.has(scheme) || declaredValue(block, 'overlay') === null) continue;
+        dark.push([scheme, (t) => declaredValue(block, t) ?? declaredValue(themeBlock, t)]);
     }
     const light = lightSchemes(css).map(({ name }) => [name, (t: string) =>
         ownLightBlocks(name).map((b) => declaredValue(b, t)).find((v) => v !== null) ?? declaredValue(lightBlock, t)] as const);
@@ -364,6 +365,15 @@ describe('Quest Prep reputation reward chip on every scheme (ROK-2161)', () => {
     it('reads the nine dark and six light schemes out of index.css', () => {
         expect(new Set(QUEST_CHIP_TEXT.map(([, name]) => name)).size).toBe(15);
         expect(QUEST_CHIP_TEXT).toHaveLength(15 * 2 * 2);
+    });
+
+    it('measures the alpha the shipped REPUTATION_CHIP class actually uses', () => {
+        const source = stripComments(readFileSync(resolve(__dirname, '../plugins/wow/slots/quest-card.tsx'), 'utf-8'));
+        const match = /const REPUTATION_CHIP = '([^']*)'/.exec(source);
+        expect(match, 'quest-card.tsx no longer declares the REPUTATION_CHIP class constant').not.toBeNull();
+        const chipClass = defined(match?.[1], 'REPUTATION_CHIP class string');
+        const expected = `bg-surface/${Math.round(QUEST_CHIP_ALPHA * 100)}`;
+        expect(chipClass.split(/\s+/), `REPUTATION_CHIP "${chipClass}" does not contain ${expected}`).toContain(expected);
     });
 
     it.each(QUEST_CHIP_TEXT)('text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
