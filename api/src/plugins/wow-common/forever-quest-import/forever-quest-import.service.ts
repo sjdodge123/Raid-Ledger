@@ -1,8 +1,10 @@
 /**
  * ROK-2143: admin-triggered background import of classic dungeon quest data
  * from the Blizzard WoW: Forever API into the `wow_dungeon_quest_blizzard`
- * overlay. Manual only (no cron). One run at a time (in-memory flag + the
- * persisted `running` marker); the report lives in a plugin setting.
+ * overlay. Started by the admin button, automatically when the overlay is
+ * empty, and weekly (ROK-2162, `ForeverQuestAutoImportService`). One run at a
+ * time (in-memory flag + the persisted `running` marker) whatever the trigger;
+ * the report lives in a plugin setting.
  */
 import {
   ConflictException,
@@ -44,6 +46,7 @@ import {
   pushQuestImportError,
   type ForeverQuestImportReport,
 } from './forever-quest-import.report';
+import type { ForeverQuestImportTrigger } from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -110,12 +113,14 @@ export class ForeverQuestImportService implements OnModuleInit {
    * Start a run in the background and return its `running` report.
    * @throws ForbiddenException kill switch off; ConflictException unconfigured / already running.
    */
-  async start(): Promise<ForeverQuestImportReport> {
+  async start(
+    trigger: ForeverQuestImportTrigger = 'manual',
+  ): Promise<ForeverQuestImportReport> {
     if (this.busy)
       throw new ConflictException(FOREVER_QUEST_IMPORT_RUNNING_MESSAGE);
     this.busy = true;
     try {
-      const report = await this.prepare();
+      const report = await this.prepare(trigger);
       this.active = report;
       this.inFlight = this.execute(report).finally(() => {
         this.active = null;
@@ -129,21 +134,28 @@ export class ForeverQuestImportService implements OnModuleInit {
     }
   }
 
-  private async prepare(): Promise<ForeverQuestImportReport> {
+  private async prepare(
+    trigger: ForeverQuestImportTrigger,
+  ): Promise<ForeverQuestImportReport> {
     if (!(await isForeverQuestImportEnabled(this.settings))) {
       throw new ForbiddenException(FOREVER_QUEST_IMPORT_OFF_MESSAGE);
     }
     if (!(await this.settings.isBlizzardConfigured())) {
       throw new ConflictException(FOREVER_QUEST_IMPORT_UNCONFIGURED_MESSAGE);
     }
-    if (isLiveRunningMarker(await this.readReport(), new Date())) {
+    const previous = await this.readReport();
+    if (isLiveRunningMarker(previous, new Date())) {
       throw new ConflictException(FOREVER_QUEST_IMPORT_RUNNING_MESSAGE);
     }
+    const startedAt = new Date().toISOString();
     const report: ForeverQuestImportReport = {
       ...emptyQuestImportReport(),
       status: 'running',
       runId: randomUUID(),
-      startedAt: new Date().toISOString(),
+      startedAt,
+      trigger,
+      lastAutoRunAt:
+        trigger === 'manual' ? (previous?.lastAutoRunAt ?? null) : startedAt,
     };
     await this.persist(report);
     return report;

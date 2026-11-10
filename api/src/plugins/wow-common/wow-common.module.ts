@@ -11,6 +11,10 @@ import { ForeverNamespaceProbeController } from './forever-namespace-probe.contr
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { ForeverQuestImportController } from './forever-quest-import/forever-quest-import.controller';
 import { ForeverQuestImportService } from './forever-quest-import/forever-quest-import.service';
+import {
+  FOREVER_QUEST_AUTO_IMPORT_KICKS,
+  ForeverQuestAutoImportService,
+} from './forever-quest-import/forever-quest-auto-import.service';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
 import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
@@ -95,8 +99,12 @@ import { NotificationModule } from '../../notifications/notification.module';
     BlizzardAuthService,
     ForeverConfigService,
     ForeverNamespaceProbeService,
-    // ROK-2143: manual Forever quest import (admin POST; no cron).
+    // ROK-2143: Forever quest import (admin POST); ROK-2162: also automatic
+    // when the overlay is empty + weekly (registrar job).
     ForeverQuestImportService,
+    ForeverQuestAutoImportService,
+    // The integration TestApp overrides this to false (no surprise runs).
+    { provide: FOREVER_QUEST_AUTO_IMPORT_KICKS, useValue: true },
     ForeverRealmRulesetsService,
     ForeverRulesetLookupService,
     BlizzardCharacterSyncAdapter,

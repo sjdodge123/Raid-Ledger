@@ -5,13 +5,15 @@ import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
 import { RosterArmoryService } from './forever-armory-snapshot/roster-armory.service';
+import { ForeverQuestAutoImportService } from './forever-quest-import/forever-quest-auto-import.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 
 /**
  * Registers cron jobs for WoW character auto-sync, boss data refresh, the
  * Forever guild roster sync (ROK-1928), the Forever Armory auto-link
- * (ROK-2124) and the roster Armory pass (ROK-2133). Only active when the
+ * (ROK-2124), the roster Armory pass (ROK-2133) and the weekly Forever quest
+ * import refresh (ROK-2162). Only active when the
  * plugin is enabled. The Forever namespace probe (ROK-1716) is NOT scheduled:
  * it runs only from the admin "Run now" button (ROK-2163).
  * The auto-sync includes Armory-imported WoW: Forever rows (realm NULL,
@@ -29,6 +31,7 @@ export class WowCronRegistrar implements CronRegistrar {
     private readonly rosterSync: BlizzardRosterSyncJob,
     private readonly autoLink: ForeverAutoLinkService,
     private readonly rosterArmory: RosterArmoryService,
+    private readonly questImport: ForeverQuestAutoImportService,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -57,6 +60,13 @@ export class WowCronRegistrar implements CronRegistrar {
         handler: () => this.rosterSync.run().then(() => undefined),
       },
       ...this.foreverArmoryJobs(),
+      {
+        name: 'forever-quest-import',
+        // Wednesdays at 6:30 AM — refresh Forever quest XP/money from
+        // Blizzard (ROK-2162); skipped when a run is already in progress.
+        cronExpression: '0 30 6 * * 3',
+        handler: () => this.questImport.runWeekly(),
+      },
     ];
   }
 

@@ -7,7 +7,8 @@
  * "retired" when its plugin's registrar was synced successfully on the latest
  * sync and its name is not in that registrar's job list. Rows of plugins whose
  * registrar was not synced (inactive, or it threw) and core rows are never
- * retired.
+ * retired. A plugin-named job in the SchedulerRegistry (a `@Cron('slug:x')`
+ * outside the registrar) counts as live too (ROK-2162).
  */
 import type * as schema from '../drizzle/schema';
 
@@ -34,4 +35,27 @@ export class RetiredPluginJobs {
     const live = this.liveBySlug.get(row.pluginSlug);
     return live !== undefined && !live.has(row.name);
   }
+}
+
+/** The plugin slug of a plugin-named scheduler job (`slug:x`, not `core:`). */
+function pluginSlugOf(name: string): string | null {
+  if (!name.includes(':') || name.startsWith('core:')) return null;
+  return name.slice(0, name.indexOf(':'));
+}
+
+/**
+ * Add the plugin-named SchedulerRegistry jobs to the registrars' live names,
+ * for plugins whose registrar was synced (others are never hidden anyway).
+ */
+export function withRegistryPluginJobs(
+  liveBySlug: Map<string, ReadonlySet<string>>,
+  registryJobs: ReadonlyMap<string, unknown>,
+): Map<string, ReadonlySet<string>> {
+  const out = new Map<string, Set<string>>();
+  for (const [slug, names] of liveBySlug) out.set(slug, new Set(names));
+  for (const name of registryJobs.keys()) {
+    const slug = pluginSlugOf(name);
+    if (slug !== null) out.get(slug)?.add(name);
+  }
+  return out;
 }
