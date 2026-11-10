@@ -59,10 +59,15 @@ export interface ClaimHubCandidateInput {
 
 export type HubClaimedCallback = (result: HubClaimResult, qc: QueryClient) => void | Promise<void>;
 
-/** Refetch everything a claim changes: my characters, the hub page (status included), memberships. */
+/**
+ * Refetch everything a claim changes: my characters, every public profile (its
+ * character list, as the other character mutations do), the hub page (status
+ * included), memberships.
+ */
 export async function invalidateAfterClaim(qc: QueryClient, guildId: number, result: HubClaimResult): Promise<void> {
     await Promise.all([
         qc.invalidateQueries({ queryKey: MY_CHARACTERS_KEY }),
+        qc.invalidateQueries({ queryKey: ['userProfile'] }),
         qc.invalidateQueries({ queryKey: guildPageKey(guildId) }),
         ...(result.becameMember ? [invalidateAllHubMemberships(qc)] : []),
     ]);

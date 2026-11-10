@@ -1,7 +1,7 @@
 /**
  * ROK-2153 — the claim status query (keyed under the hub page, so a page
  * invalidation refetches it; 4xx never retried) and the claim mutation's
- * invalidations: my characters, the hub page, and every hub membership only
+ * invalidations: my characters, every public profile, the hub page, and every hub membership only
  * when the claim made the viewer a member; then the provider's `onClaimed`.
  */
 import { createElement, type ReactNode } from 'react';
@@ -79,7 +79,7 @@ describe('useHubClaim', () => {
 });
 
 describe('useClaimHubCandidate', () => {
-    it('POSTs options, invalidates characters + the hub page, not memberships, then calls onClaimed', async () => {
+    it('POSTs options, invalidates characters + public profiles + the hub page, not memberships, then calls onClaimed', async () => {
         const calls: HubClaimCall[] = [];
         const claimed = buildHubClaimResult({ becameMember: false });
         server.use(hubClaimPostHandler(claimed, calls));
@@ -90,6 +90,8 @@ describe('useClaimHubCandidate', () => {
         await act(() => result.current.mutateAsync({ candidateId: '12:Generic:Human:1', options: { ruleset: 'hardcore' } }));
         expect(calls).toEqual([{ hubId: 7, candidateId: '12:Generic:Human:1', body: { options: { ruleset: 'hardcore' } } }]);
         expect(invalidated()).toEqual(expect.arrayContaining([JSON.stringify(MY_CHARACTERS_KEY), JSON.stringify(guildPageKey(7))]));
+        // A public profile visited earlier lists the claimed character straight away.
+        expect(invalidated()).toContain(JSON.stringify(['userProfile']));
         expect(invalidated()).not.toContain(JSON.stringify(['hubs-directory']));
         expect(onClaimed).toHaveBeenCalledWith(claimed, client);
     });
