@@ -16,11 +16,12 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { HubClaimCandidate, HubClaimStatus } from '@raid-ledger/contract';
 import { toast } from '../../../lib/toast';
 import { Button } from '../../ui/button';
-import { useHubOnboarding, type HubOnboardingPrompt } from '../onboarding/use-hub-onboarding';
+import type { HubOnboardingPrompt } from '../onboarding/use-hub-onboarding';
 import { HubClaimCandidateList, HubClaimErrorBanner, HubClaimIdentity, type HubClaimOptionsState } from './hub-claim-candidate-list';
 import { HUB_CLAIM_TEXT, hubClaimErrorView, resolveHubClaimCopy, type HubClaimErrorView, type ResolvedHubClaimCopy } from './hub-claim-copy';
 import type { HubClaimProvider, HubClaimProviderRegistration } from './hub-claim-providers';
-import { hubClaimKey, useClaimHubCandidate, useHubClaim } from './use-hub-claim';
+import { hubClaimKey, useClaimHubCandidate } from './use-hub-claim';
+import { useClaimDismissal } from './use-claim-dismissal';
 import { canClaimFromCore, shouldShowClaimPrompt } from './hub-claim-gate';
 
 const CALLOUT = 'relative flex flex-col gap-3 rounded-lg border border-edge bg-overlay/30 p-4 md:col-span-2 lg:col-span-3';
@@ -175,8 +176,7 @@ interface HubClaimPromptProps {
 
 /** Lazy-loaded by `hub-claim-prompt-cell.tsx` once the cheap gates passed; key it by hub. */
 export function HubClaimPrompt({ guildId, registration, onShowingChange }: HubClaimPromptProps): JSX.Element | null {
-    const prompt = useHubOnboarding('claim-character', guildId);
-    const { data: status, isError } = useHubClaim(guildId, prompt.visible);
+    const { prompt, status, isError } = useClaimDismissal(guildId, registration);
     const misconfigured = status !== undefined && !canClaimFromCore(status, registration.provider);
     useEffect(() => {
         if (misconfigured) console.error(`[hub-claim] ${registration.pluginSlug}: the claim needs options but the provider has no OptionsStep; not offering it.`);

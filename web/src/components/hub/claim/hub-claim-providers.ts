@@ -50,6 +50,13 @@ export interface HubClaimProvider {
     readonly OptionsStep?: ComponentType<HubClaimOptionsStepProps>;
     /** Extra cache work after a successful claim (core invalidations already ran). */
     readonly onClaimed?: (result: HubClaimResult, qc: QueryClient) => void | Promise<void>;
+    /**
+     * ROK-2153 N4 — the server reports `dismissScope` (BG3: the campaign), so
+     * a dismissal holds only for that round: core reads the status before it
+     * judges a dismissal. Omit it and nothing changes — the onboarding state
+     * is read first and a dismissed member makes no status request.
+     */
+    readonly scopedDismissal?: true;
 }
 
 export interface HubClaimProviderRegistration {
