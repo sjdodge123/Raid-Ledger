@@ -35,11 +35,9 @@ export function prerequisiteCount(quest: { questId: number; prerequisiteChain: {
 }
 
 /**
- * ROK-2161: Blizzard reputation rewards as one line, e.g. "+150 Ironforge,
- * -25 Gnomeregan". Empty string when there are none (the card then renders nothing).
+ * ROK-2161: one Blizzard reputation reward, e.g. "+150 Ironforge" or "-25 Gnomeregan"
+ * (the sign stays in the text so colour is never the only gain/loss cue).
  */
-export function formatReputationRewards(rewards: { factionName: string; amount: number }[] | undefined): string {
-    return (rewards ?? [])
-        .map((r) => `${r.amount > 0 ? '+' : ''}${r.amount.toLocaleString()} ${r.factionName}`)
-        .join(', ');
+export function formatReputationReward(reward: { factionName: string; amount: number }): string {
+    return `${reward.amount > 0 ? '+' : ''}${reward.amount.toLocaleString()} ${reward.factionName}`;
 }

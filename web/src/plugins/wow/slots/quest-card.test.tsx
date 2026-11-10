@@ -164,7 +164,11 @@ describe('QuestCard — reputation rewards (ROK-2161)', () => {
         });
         const line = screen.getByTestId('quest-reward-reputation');
         expect(line).toHaveTextContent('+150 Ironforge, -25 Gnomeregan');
-        expect(line).toHaveClass('text-success');
+        const [gain, loss] = screen.getAllByTestId('quest-reward-reputation-entry');
+        expect(gain, 'a gain uses the success token').toHaveClass('text-success');
+        expect(gain).not.toHaveClass('text-danger');
+        expect(loss, 'a loss uses the danger token, never success').toHaveClass('text-danger');
+        expect(loss).not.toHaveClass('text-success');
         expect(line.closest('.quest-reward-meta'), 'sits in the XP / money reward row').not.toBeNull();
     });
 
