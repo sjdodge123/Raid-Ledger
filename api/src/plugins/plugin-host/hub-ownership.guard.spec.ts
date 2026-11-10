@@ -52,6 +52,7 @@ const HUB_POINT_NAMES = [
   'EVENT_GUILD_TAGGER',
   'GAME_LOG_PARSER',
   'CRON_REGISTRAR',
+  'HUB_CLAIM_PROVIDER',
 ] as const;
 
 function registry(): PluginRegistryService {

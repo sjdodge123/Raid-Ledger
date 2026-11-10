@@ -26,6 +26,9 @@ import type {
   UpdateCharacterDto,
   GuildKind,
   GuildPage,
+  HubClaimCandidate,
+  HubClaimOptionsKind,
+  HubClaimResult,
   GuildRaidsDto,
   LadderRole,
   UserRole,
@@ -372,6 +375,46 @@ export interface HubMineRank {
   rankName: string | null;
 }
 
+/** ROK-2153: the hub a claim provider is asked about (guild ⨝ game). */
+export interface HubClaimHubRef {
+  id: number;
+  kind: GuildKind;
+  gameSlug: string | null;
+  gameIgdbId: number | null;
+}
+
+/** ROK-2153: who is asking, about which hub, and whether core sees them as a member. */
+export interface HubClaimContext {
+  actor: { id: number; role: UserRole };
+  hub: HubClaimHubRef;
+  viewerIsMember: boolean;
+}
+
+/** ROK-2153: a provider's raw status — core caps, ranks (`suggested`) and validates it. */
+export interface HubClaimProviderStatus {
+  viewerHasClaim: boolean;
+  unclaimedCount: number;
+  candidates: HubClaimCandidate[];
+  claimOptions: HubClaimOptionsKind;
+}
+
+/**
+ * ROK-2153: one "claim your character" provider per plugin, keyed by plugin
+ * slug under `EXTENSION_POINTS.HUB_CLAIM_PROVIDER`. Core serves
+ * `guilds/:id/claim` through the single active provider whose `supports` is
+ * true. Providers throw `HubClaimError(code)` (`api/src/guilds/claim/`).
+ */
+export interface HubClaimProvider {
+  readonly pluginSlug: string;
+  supports(hub: HubClaimHubRef): boolean;
+  status(ctx: HubClaimContext): Promise<HubClaimProviderStatus>;
+  claim(
+    ctx: HubClaimContext,
+    candidateId: string,
+    options: Record<string, unknown> | undefined,
+  ): Promise<HubClaimResult>;
+}
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -386,6 +429,7 @@ export const EXTENSION_POINTS = {
   EVENT_GUILD_TAGGER: 'event-guild-tagger',
   GAME_LOG_PARSER: 'game-log-parser',
   HUB_KIND: 'hub-kind',
+  HUB_CLAIM_PROVIDER: 'hub-claim-provider',
 } as const;
 
 /**
@@ -397,6 +441,7 @@ export const HUB_EXTENSION_POINTS = [
   EXTENSION_POINTS.EVENT_GUILD_TAGGER,
   EXTENSION_POINTS.GAME_LOG_PARSER,
   EXTENSION_POINTS.CRON_REGISTRAR,
+  EXTENSION_POINTS.HUB_CLAIM_PROVIDER,
 ] as const;
 
 /** One of {@link HUB_EXTENSION_POINTS}. */
