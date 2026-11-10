@@ -67,9 +67,16 @@ describe("HubClaimCandidateIdSchema", () => {
     expect(HubClaimCandidateIdSchema.safeParse(id).success).toBe(true);
   });
 
-  it.each([["a/b"], [""], ["x".repeat(201)]])("rejects %j", (id) => {
-    expect(HubClaimCandidateIdSchema.safeParse(id).success).toBe(false);
+  it.each(["a.b", "..x", "v1.2:slot"])("accepts dotted id %s", (id) => {
+    expect(HubClaimCandidateIdSchema.safeParse(id).success).toBe(true);
   });
+
+  it.each([["a/b"], [""], ["x".repeat(201)], ["."], [".."], ["..."]])(
+    "rejects %j",
+    (id) => {
+      expect(HubClaimCandidateIdSchema.safeParse(id).success).toBe(false);
+    },
+  );
 });
 
 describe("HubClaimCandidateSchema", () => {
@@ -88,6 +95,50 @@ describe("HubClaimCandidateSchema", () => {
     const b = candidate({ match: null, matchReason: "same_name" });
     expect(HubClaimCandidateSchema.safeParse(a).success).toBe(false);
     expect(HubClaimCandidateSchema.safeParse(b).success).toBe(false);
+  });
+
+  it.each(["/characters/12", "/hubs/3?tab=members", "/", "/a#b"])(
+    "detailPath accepts site path %j",
+    (detailPath) => {
+      const r = HubClaimCandidateSchema.safeParse(candidate({ detailPath }));
+      expect(r.success).toBe(true);
+    },
+  );
+
+  it.each([
+    "/\\evil.com",
+    "/\t/evil.com",
+    "/\n/evil.com",
+    "//evil.com",
+    "/a b",
+    "/x\\y",
+    "https://evil.com",
+  ])("detailPath rejects %j (open redirect)", (detailPath) => {
+    const r = HubClaimCandidateSchema.safeParse(candidate({ detailPath }));
+    expect(r.success).toBe(false);
+  });
+
+  it.each([
+    "https://cdn.discordapp.com/avatars/1/a.png",
+    "https://render.worldofwarcraft.com/a.jpg?x=1",
+    "/api/hub-media/7/avatar.png",
+  ])("avatarUrl accepts %j", (avatarUrl) => {
+    const r = HubClaimCandidateSchema.safeParse(candidate({ avatarUrl }));
+    expect(r.success).toBe(true);
+  });
+
+  it.each([
+    "http://cdn.example/a.png",
+    "javascript:alert(1)",
+    "data:image/png;base64,AAAA",
+    "//evil.com/a.png",
+    "/\\evil.com/a.png",
+    "https:///a.png",
+    "https://evil.com/a b.png",
+    "a.png",
+  ])("avatarUrl rejects %j", (avatarUrl) => {
+    const r = HubClaimCandidateSchema.safeParse(candidate({ avatarUrl }));
+    expect(r.success).toBe(false);
   });
 
   it("pins the field limits", () => {

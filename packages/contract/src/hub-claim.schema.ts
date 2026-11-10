@@ -14,9 +14,11 @@ export const MAX_HUB_CLAIM_CANDIDATES = 50;
 /**
  * Candidate ids are opaque and provider-scoped (WoW roster member id, a
  * Valheim armory character id, BG3 `<campaignId>:<slotKey>` e.g.
- * `12:Generic:Human:1`). The charset keeps them safe as one URL path segment.
+ * `12:Generic:Human:1`). The charset keeps them safe as one URL path segment;
+ * an all-dots id (`.`, `..`) is refused because URL normalisation would
+ * rewrite `…/claim/..` onto another route.
  */
-export const HUB_CLAIM_CANDIDATE_ID_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
+export const HUB_CLAIM_CANDIDATE_ID_RE = /^(?!\.+$)[A-Za-z0-9_.:-]{1,200}$/;
 export const HubClaimCandidateIdSchema = z
   .string()
   .regex(HUB_CLAIM_CANDIDATE_ID_RE, "Invalid candidate id");
@@ -33,8 +35,18 @@ export const HubClaimMatchReasonSchema = z.enum([
 ]);
 export type HubClaimMatchReason = z.infer<typeof HubClaimMatchReasonSchema>;
 
-/** A site-relative path (`/…`), never protocol-relative (`//host`). */
-const DETAIL_PATH_RE = /^\/(?!\/)/;
+/**
+ * A site-relative path (`/…`): one leading slash, never `//host`, and no
+ * backslash or whitespace anywhere — browsers turn a backslash into `/` and
+ * drop tab/CR/LF, so `/\evil.com` or `/<tab>/evil.com` would become `//evil.com`.
+ */
+const SITE_PATH_RE = /^\/(?![\/\\])[^\s\\]*$/;
+
+/** An absolute `https:` URL, or a site-relative path under `SITE_PATH_RE`. */
+function isSafeAvatarUrl(v: string): boolean {
+  if (SITE_PATH_RE.test(v)) return true;
+  return /^https:\/\/[^\s\\/?#]+(?:[/?#][^\s\\]*)?$/.test(v);
+}
 
 /** `match` and `matchReason` are both set or both null. */
 function matchPairConsistent(c: {
@@ -50,9 +62,14 @@ export const HubClaimCandidateSchema = z
     name: z.string().min(1).max(100),
     /** Provider-formatted, e.g. "Lv 60 Warrior · 412 ilvl". */
     subtitle: z.string().max(160).nullable(),
-    avatarUrl: z.string().max(500).nullable(),
+    /** `https:` URL or site-relative path — never `http:`, `data:`, `javascript:`. */
+    avatarUrl: z
+      .string()
+      .max(500)
+      .refine(isSafeAvatarUrl, "avatarUrl must be https: or site-relative")
+      .nullable(),
     /** In-app page for this character, when the provider has one. */
-    detailPath: z.string().max(300).regex(DETAIL_PATH_RE).nullable(),
+    detailPath: z.string().max(300).regex(SITE_PATH_RE).nullable(),
     match: HubClaimMatchSchema.nullable(),
     matchReason: HubClaimMatchReasonSchema.nullable(),
   })
