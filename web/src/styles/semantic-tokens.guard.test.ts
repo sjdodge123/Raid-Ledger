@@ -155,6 +155,37 @@ function lightTextRows(): Array<readonly [string, string, string, string]> {
 
 const LIGHT_TEXT = lightTextRows();
 
+/** ROK-2161: the ROK-2165 label chip — `bg-surface/70` behind a reward line on the Quest Prep card. */
+const QUEST_CHIP_ALPHA = 0.7;
+
+/**
+ * ROK-2161: `.quest-card` is filled with `--color-overlay` (and `--color-faint` on hover,
+ * `quest-prep-panel.css`), fills the rows above never measure. Reputation reward text
+ * (`text-success` gain / `text-danger` loss) sits on a `bg-surface/70` chip over that fill;
+ * straight on it, default-dark was 4.08 / 3.74 at rest and 2.99 / 2.74 on hover.
+ * Every scheme (dark and light) is measured with its own token values, shared block as fallback.
+ */
+function questChipRows(): Array<readonly [string, string, string, string]> {
+    const dark: Array<[string, (t: string) => string | null]> = [['default-dark', (t) => declaredValue(themeBlock, t)]];
+    for (const [, name, body] of css.matchAll(/(?:^|\n)\[data-scheme="([a-z-]+)"\]\s*\{([^}]*)\}/g)) {
+        const scheme = defined(name, 'scheme name');
+        if (LIGHT_NAMES.has(scheme) || declaredValue(defined(body, 'scheme body'), 'overlay') === null) continue;
+        dark.push([scheme, (t) => declaredValue(body as string, t) ?? declaredValue(themeBlock, t)]);
+    }
+    const light = lightSchemes(css).map(({ name }) => [name, (t: string) =>
+        ownLightBlocks(name).map((b) => declaredValue(b, t)).find((v) => v !== null) ?? declaredValue(lightBlock, t)] as const);
+    return [...dark, ...light].flatMap(([name, pick]) => (['success', 'danger'] as const).flatMap((token) => {
+        const tok = (t: string) => defined(pick(t) ?? undefined, `${name} --color-${t}`);
+        const chip = (fill: string) => composite(tok('surface'), tok(fill), QUEST_CHIP_ALPHA);
+        return [
+            [token, name, 'bg-surface/70 chip over --color-overlay (quest card at rest)', `${tok(token)}|${chip('overlay')}`],
+            [token, name, 'bg-surface/70 chip over --color-faint (quest card hover)', `${tok(token)}|${chip('faint')}`],
+        ] as const;
+    }));
+}
+
+const QUEST_CHIP_TEXT = questChipRows();
+
 const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
     lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
 );
@@ -326,5 +357,19 @@ describe('busy band label on its chip (ROK-2165)', () => {
         const ratio = contrastRatio(fg, bg);
         expect(ratio, `${family} "Busy · Google Calendar" (${fg}) is ${ratio}:1 on band over ${state} emerald block (${bg}) — `
             + `needs ${AA_SMALL_TEXT}:1; the label needs its bg-surface/70 chip`).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+describe('Quest Prep reputation reward chip on every scheme (ROK-2161)', () => {
+    it('reads the nine dark and six light schemes out of index.css', () => {
+        expect(new Set(QUEST_CHIP_TEXT.map(([, name]) => name)).size).toBe(15);
+        expect(QUEST_CHIP_TEXT).toHaveLength(15 * 2 * 2);
+    });
+
+    it.each(QUEST_CHIP_TEXT)('text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
+        const [fg, bg] = pair.split('|') as [string, string];
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio, `--color-${token} ${fg} as text is ${ratio}:1 on ${name} ${bgLabel} (${bg}) — needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });

@@ -172,6 +172,18 @@ describe('QuestCard — reputation rewards (ROK-2161)', () => {
         expect(line.closest('.quest-reward-meta'), 'sits in the XP / money reward row').not.toBeNull();
     });
 
+    it('puts every reputation entry on the bg-surface/70 label chip (overlay card fill is below AA)', () => {
+        renderExpanded({
+            reputationRewards: [{ factionName: 'Ironforge', amount: 150 }, { factionName: 'Gnomeregan', amount: -25 }],
+        });
+        const entries = screen.getAllByTestId('quest-reward-reputation-entry');
+        expect(entries).toHaveLength(2);
+        const chip = ['inline-block', 'max-w-full', 'truncate', 'rounded-sm', 'bg-surface/70', 'px-1'];
+        for (const entry of entries) expect(entry, `${entry.textContent} sits on the label chip`).toHaveClass(...chip);
+        expect(entries[0], 'the gain chip keeps the success token').toHaveClass('text-success');
+        expect(entries[1], 'the loss chip keeps the danger token').toHaveClass('text-danger');
+    });
+
     it('renders a reputation-only quest reward row', () => {
         renderExpanded({ reputationRewards: [{ factionName: 'Ironforge', amount: 150 }] });
         expect(screen.getByTestId('quest-reward-reputation')).toHaveTextContent('+150 Ironforge');
