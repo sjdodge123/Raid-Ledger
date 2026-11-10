@@ -1,8 +1,8 @@
 /**
  * Semantic colour tokens for /dev/design-system (ROK-1586 §5.1).
  *
- * `success` / `warning` / `danger` became tokens in ROK-1586; `busy` and `slot`
- * already were (ROK-1584 / ROK-1587). Every swatch paints via the exact class
+ * `success` / `warning` / `danger` became tokens in ROK-1586; `busy`, `slot` and `item-level`
+ * followed (ROK-1584 / ROK-1587). Every swatch paints via the exact class
  * named in its own row, so a wrong claim shows up visually. Class strings are
  * spelled out literally (Tailwind only generates classes it sees verbatim).
  *
@@ -32,7 +32,9 @@ const SEMANTIC_ROWS: SemanticRow[] = [
     { name: 'danger', solid: 'bg-danger', border: 'border-danger/30', tint: 'bg-danger/10', text: 'text-danger',
         dark: '#f87171', light: '#b91c1c', role: 'Conflict · destructive · "few free"' },
     { name: 'busy', solid: 'bg-busy', border: 'border-busy/30', tint: 'bg-busy/10', text: 'text-busy',
-        dark: '#8b5cf6', light: '#7c3aed', role: 'Someone is committed elsewhere this hour' },
+        dark: '#a78bfa', light: '#6d28d9', role: 'Someone is committed elsewhere this hour' },
+    { name: 'item-level', solid: 'bg-item-level', border: 'border-item-level/30', tint: 'bg-item-level/10', text: 'text-item-level',
+        dark: '#c180f7', light: '#7a1fb0', role: 'A character\'s item level (ROK-2165) — Blizzard tooltips keep their quality yellow' },
     { name: 'slot', solid: 'bg-slot', border: 'border-slot/30', tint: 'bg-slot/10', text: 'text-slot',
         dark: '#22d3ee', light: '#0e7490', role: 'A time someone already proposed in a poll' },
     { name: 'faction-alliance', solid: 'bg-faction-alliance', border: 'border-faction-alliance/30', tint: 'bg-faction-alliance/10',

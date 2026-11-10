@@ -48,7 +48,7 @@ Reviewers treat a missing update as a MINOR finding. See CLAUDE.md "Reference de
    `index.css:106` (`:is(light, quest-log, sky, dawn, holy, celestial)`), then `:199` `sky`, `:251` `dawn`,
    `:303` `holy`, `:355` `celestial`: those four re-declare the surface/text/edge set, so a surface token
    added only to the shared block is unthemed in them. **Scheme-agnostic accents are the exception** —
-   `--color-busy`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger`, the two
+   `--color-busy`, `--color-item-level`, `--color-slot`, `--color-success`, `--color-warning`, `--color-danger`, the two
    `--color-faction-*` hues (ROK-1815) and the nine `--color-class-*` dots (ROK-1173) live in exactly
    two blocks, `@theme` and the shared light block, and inherit into the four per-scheme blocks (ROK-1586
    OQ-1). The dark defaults live on `@theme` (`:32`) and `html` (`:96`) — the root only, which is §6.8.
@@ -86,7 +86,8 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-edge` | `border-edge` | `#334155` | `#cbd5e1` | Default border |
 | `--color-edge-strong` | `border-edge-strong` | `#475569` | `#94a3b8` | Emphasised border |
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
-| `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
+| `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#a78bfa` | `#6d28d9` | Someone is committed elsewhere in this hour (ROK-1584); lifted to AA as text in ROK-2165 |
+| `--color-item-level` | `bg-item-level` `text-item-level` `border-item-level/30` | `#c180f7` | `#7a1fb0` | A character's item level (ROK-2165) — every surface except Blizzard item tooltips, which keep their quality yellow (`text-yellow-400`). Item level only; not a status |
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
 | `--color-faction-alliance` | `bg-faction-alliance/10` `border-faction-alliance/30` `text-faction-alliance` | `#60a5fa` | `#1e40af` | WoW Alliance — categorical, not a status: the guild hero's faction pill (`Pill tone="faction-alliance"`, ROK-1815). The label always names the faction |
 | `--color-faction-horde` | `bg-faction-horde/10` `border-faction-horde/30` `text-faction-horde` | `#f87171` | `#991b1b` | WoW Horde — same rules (ROK-1815). Light is red-800 so it clears AA on every light scheme's /10 tint (red-700 fails on celestial / quest-log). Any other faction (Neutral) stays a neutral pill |
@@ -934,9 +935,11 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `ACTION_TILE_CLASS` (`components/shared/character-header-layout.tsx`) — a 60px tile, 20px icon stacked over a
   `text-xs` label; overflow actions go behind a "More" tile that opens a `BottomSheet` of `ActionMenuList` rows.
   Its stat strip is `StatTile` (`bg-surface rounded-lg`, bold value over a muted label) from the same file; a
-  coloured value takes a token (`text-busy` for item level, `text-warning` for level), never a raw hue. The
+  coloured value takes a token (`text-item-level` for item level, `text-warning` for level), never a raw hue. The
   hero portrait is 72px through the portrait seam's `phone` size (`CharacterPortraitSize`), 80px (`lg`) at ≥ `sm`.
   Demo: "Action tiles" + "StatTile strip" in the Primitives section of `/dev/design-system`.
+  **DON'T** paint item level with a raw purple or amber, or borrow `text-busy`/`text-warning` for it (ROK-2165);
+  Blizzard item tooltips are the one exception and keep their quality yellow.
 
 **Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
 `<button>` outside `components/ui` and `dev` at `form-primitives.baseline.json`. The list only shrinks: a new
