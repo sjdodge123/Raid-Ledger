@@ -44,7 +44,9 @@ export function membersHashFor(state: WowMemberFilterState): string {
 /**
  * Keep the address bar in step with the filter (replace, no history entry and
  * no hashchange). Only touches a Members hash, so a retired alias (`#roster`)
- * is left for `useHashTab` to rewrite.
+ * is left for `useHashTab` to rewrite. It rewrites the WHOLE query: any other
+ * `#members?…` parameter (none today) is dropped, and must be added to
+ * `membersHashFor` before it ships.
  */
 export function syncMembersHash(state: WowMemberFilterState): void {
     const current = window.location.hash;
