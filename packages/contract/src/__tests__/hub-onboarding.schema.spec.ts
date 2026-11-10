@@ -73,6 +73,19 @@ describe("scoped keys", () => {
     expect([...HUB_ONBOARDING_SCOPED_KEYS]).toEqual(["claim-character"]);
   });
 
+  it("every scoped key plus a max-length scope fits the varchar(64) key column", () => {
+    // Stored as `<key>:<scope>` in `hub_onboarding_dismissals.key varchar(64)`
+    // (api/src/drizzle/schema/hub-onboarding-dismissals.ts); an overflow is a
+    // Postgres 22001, i.e. a 500 instead of a 400.
+    const KEY_COLUMN_LENGTH = 64;
+    const maxScope = "x".repeat(40);
+    expect(HubOnboardingDismissScopeSchema.safeParse(maxScope).success).toBe(true);
+    expect(HubOnboardingDismissScopeSchema.safeParse(`${maxScope}x`).success).toBe(false);
+    for (const k of HUB_ONBOARDING_SCOPED_KEYS) {
+      expect(`${k}:${maxScope}`.length, `scoped key "${k}"`).toBeLessThanOrEqual(KEY_COLUMN_LENGTH);
+    }
+  });
+
   it("rejects scope for every other key", () => {
     const others = HUB_ONBOARDING_KEYS.filter((k) => k !== "claim-character");
     expect(others.length).toBeGreaterThan(0);
