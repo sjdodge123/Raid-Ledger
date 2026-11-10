@@ -9,8 +9,10 @@ import type { AddonCharSnapshotData } from '@raid-ledger/contract';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { characterAddonSnapshots } from '../../../drizzle/schema';
 import {
+  carriedCompletedCapturedAtSql,
   carriedCompletedDataSql,
   needsCompletedCarry,
+  sentCompletedCapturedAt,
 } from './addon-import-char.quests-carry';
 
 const LOG = [{ questId: 9 }];
@@ -71,5 +73,42 @@ describe('carriedCompletedDataSql (ROK-2125 review r1)', () => {
     expect(text).toContain(
       `${stored} -> 'quests' -> 'completedTruncated' = 'true'::jsonb`,
     );
+  });
+});
+
+describe('carriedCompletedCapturedAtSql (ROK-2144 AC3)', () => {
+  const { sql: text, params } = new PgDialect().sqlToQuery(
+    carriedCompletedCapturedAtSql(characterAddonSnapshots),
+  );
+  const col = (name: string) => `"character_addon_snapshots"."${name}"`;
+
+  it('is one expression over the existing row — no bound values, never `excluded`', () => {
+    expect(params).toEqual([]);
+    expect(text).not.toContain('excluded');
+  });
+
+  it('keeps the stored list date, else the stored captured_at, only when a list is stored', () => {
+    expect(text).toBe(
+      `CASE WHEN jsonb_typeof(${col('data')} -> 'quests' -> 'completed') = 'array' THEN COALESCE(${col('completed_captured_at')}, ${col('captured_at')}) ELSE NULL END`,
+    );
+  });
+});
+
+describe('sentCompletedCapturedAt (ROK-2144 AC2)', () => {
+  const AT = new Date('2026-11-02T12:00:00.000Z');
+
+  it('stamps the export time on a full export — an empty list included', () => {
+    for (const completed of [[], [7]]) {
+      expect(
+        sentCompletedCapturedAt(incoming({ completed, inProgress: LOG }), AT),
+      ).toEqual(AT);
+    }
+  });
+
+  it('is null when the export carries no completed list', () => {
+    expect(
+      sentCompletedCapturedAt(incoming({ inProgress: LOG }), AT),
+    ).toBeNull();
+    expect(sentCompletedCapturedAt(incoming(undefined), AT)).toBeNull();
   });
 });

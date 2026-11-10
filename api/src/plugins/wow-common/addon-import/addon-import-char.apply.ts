@@ -129,22 +129,27 @@ export async function applyChar(
   return { status: decideLostRace(await loadStored(ctx), ctx.sha256), summary };
 }
 
+/** The row as sent (insert values; the update set unless carrying). */
+function charValues(ctx: AddonApplyContext, payload: DecodedAddonCharExport) {
+  const capturedAt = fromUnix(payload.exportedAt);
+  return {
+    schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
+    data: payload.data,
+    capturedAt,
+    // ROK-2144: a log-only insert has no list → null; the conflict carry in
+    // `upsertChar` keeps the stored list's own date instead.
+    completedCapturedAt: sentCompletedCapturedAt(payload.data, capturedAt),
+    importedAt: new Date(),
+    payloadSha256: ctx.sha256,
+  };
+}
+
 /** True when a row was inserted or updated. */
 async function upsertChar(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
 ): Promise<boolean> {
-  const capturedAt = fromUnix(payload.exportedAt);
-  const values = {
-    schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
-    data: payload.data,
-    capturedAt,
-    // ROK-2144: a log-only insert has no list → null; the carry below keeps
-    // the stored list's own date on conflict.
-    completedCapturedAt: sentCompletedCapturedAt(payload.data, capturedAt),
-    importedAt: new Date(),
-    payloadSha256: ctx.sha256,
-  };
+  const values = charValues(ctx, payload);
   const t = characterAddonSnapshots;
   const set = needsCompletedCarry(payload.data)
     ? {
