@@ -46,15 +46,16 @@ import { readMember, type ClaimMember } from './roster-claim.tx';
 import { parseCandidateId, toCandidate } from './wow-hub-claim.helpers';
 import { findClaimableGuildGameId } from './wow-hub-claim.queries';
 
-/** The Blizzard plugin's slug — provider key and owner. */
-export const WOW_CLAIM_PROVIDER_SLUG = WOW_COMMON_MANIFEST.id;
-
 const gone = () =>
-  new HubClaimError('HUB_CLAIM_CANDIDATE_GONE', 'That roster character is gone');
+  new HubClaimError(
+    'HUB_CLAIM_CANDIDATE_GONE',
+    'That roster character is gone',
+  );
 
 @Injectable()
 export class WowHubClaimProvider implements HubClaimProvider, OnModuleInit {
-  readonly pluginSlug = WOW_CLAIM_PROVIDER_SLUG;
+  /** The Blizzard plugin's slug — provider key and owner. */
+  readonly pluginSlug = WOW_COMMON_MANIFEST.id;
 
   constructor(
     private readonly registry: PluginRegistryService,
@@ -67,9 +68,9 @@ export class WowHubClaimProvider implements HubClaimProvider, OnModuleInit {
   onModuleInit(): void {
     this.registry.registerAdapter(
       EXTENSION_POINTS.HUB_CLAIM_PROVIDER,
-      WOW_CLAIM_PROVIDER_SLUG,
+      WOW_COMMON_MANIFEST.id,
       this,
-      { ownerPluginId: WOW_CLAIM_PROVIDER_SLUG },
+      { ownerPluginId: WOW_COMMON_MANIFEST.id },
     );
   }
 

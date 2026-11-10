@@ -196,7 +196,10 @@ describe('WowHubClaimProvider.claim', () => {
       hubKind.isMember.mockResolvedValue(hadClaim);
       roster.claim.mockResolvedValue(character);
       const res = await provider.claim(ctx, '5', RULESET);
-      expect(roster.claim).toHaveBeenCalledWith(42, 5, RULESET);
+      expect(roster.claim).toHaveBeenCalledWith(42, 5, {
+        ...RULESET,
+        isMain: false,
+      });
       expect(res).toEqual({
         claimed: expect.objectContaining({ id: '5', name: 'Brannok' }),
         becameMember,
