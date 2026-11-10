@@ -27,7 +27,7 @@ function crossBreakpoint(phone: boolean): void {
     act(() => { state.phone = phone; state.listeners.forEach((cb) => cb()); });
 }
 vi.mock('../hooks/use-character-detail', () => ({
-    useCharacterDetail: () => ({ data: { ...CHARACTER, equippedItemLevel: state.equippedItemLevel }, isLoading: false, error: null }),
+    useCharacterDetail: () => ({ data: withEquipped(state.equippedItemLevel), isLoading: false, error: null }),
 }));
 vi.mock('../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../hooks/use-auth')>()),
@@ -40,6 +40,12 @@ const CHARACTER = {
     lastSyncedAt: new Date(Date.now() - 26 * 60 * 1000).toISOString(), equipment: null, avatarUrl: null, isMain: true,
     effectiveRole: 'tank', roleOverride: null, profileUrl: null, addonLinked: true, rosterClaimed: false,
 } as unknown as CharacterDto;
+
+/** The fixture, plus synced equipment carrying `equippedItemLevel` when a test sets one. */
+function withEquipped(equippedItemLevel: number | null): CharacterDto {
+    if (equippedItemLevel == null) return CHARACTER;
+    return { ...CHARACTER, equipment: { equippedItemLevel, items: [], syncedAt: CHARACTER.lastSyncedAt ?? '' } };
+}
 
 function renderPage() {
     renderWithProviders(
