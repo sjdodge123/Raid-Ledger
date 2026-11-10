@@ -13,13 +13,15 @@
  * Timestamps sit DAYS apart: `characters.created_at` / `deactivated_at` are
  * naive timestamps compared against timestamptz grants and audits.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { waitFor } from '../../../common/testing/integration-helpers';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { DiscordNotificationService } from '../../../notifications/discord-notification.service';
 import { UsersService } from '../../../users/users.service';
 import { UsersModerationService } from '../../../users/users-moderation.service';
+import { reactivateOnGuildRejoin } from '../../../users/users-reactivate.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { hasConfirmedMemberGrant } from './guild-delegation.helpers';
 import { findLinkedMemberRows } from './guild-membership.helpers';
@@ -279,5 +281,70 @@ describe('ROK-2160 Codex P1: a member grant never changes hands without staff', 
     await reactivate(s.ownerA);
     expect(await granted(s.ownerA, s, 'guid')).toBe(true);
     expect(await linkAudits(s.ownerA)).toEqual([]);
+  });
+});
+
+async function discordIdOf(userId: number): Promise<string> {
+  const [u] = nonEmpty(
+    await testApp.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId)),
+    'user',
+  );
+  if (u.discordId === null) throw new Error(`user ${userId} has no discordId`);
+  return u.discordId;
+}
+
+async function userState(userId: number) {
+  const [u] = nonEmpty(
+    await testApp.db
+      .select({
+        deactivatedAt: schema.users.deactivatedAt,
+        bannedAt: schema.users.bannedAt,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId)),
+    'user',
+  );
+  return u;
+}
+
+/** Backends of this database blocked on a row lock right now. */
+async function lockWaiters(): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(
+    sql`select count(*)::int as n from pg_stat_activity
+        where datname = current_database() and wait_event_type = 'Lock'`,
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
+describe('ROK-2160 guild rejoin path (reactivateOnGuildRejoin)', () => {
+  it('5. a ban that commits while rejoin waits on the row lock keeps the user deactivated', async () => {
+    const s = await seed(T1);
+    await deactivate(s.ownerA);
+    const discordId = await discordIdOf(s.ownerA);
+    let pending: ReturnType<typeof reactivateOnGuildRejoin> | undefined;
+    await testApp.db.transaction(async (tx) => {
+      await tx
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.id, s.ownerA))
+        .for('update');
+      pending = reactivateOnGuildRejoin(testApp.db, discordId);
+      await waitFor(
+        async () => expect(await lockWaiters()).toBeGreaterThan(0),
+        5000,
+      );
+      await tx
+        .update(schema.users)
+        .set({ bannedAt: sql`NOW()` })
+        .where(eq(schema.users.id, s.ownerA));
+    });
+    if (!pending) throw new Error('rejoin never started');
+    expect(await pending).toBeUndefined();
+    const after = await userState(s.ownerA);
+    expect(after.bannedAt).not.toBeNull();
+    expect(after.deactivatedAt).not.toBeNull();
   });
 });

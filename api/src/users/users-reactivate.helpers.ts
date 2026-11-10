@@ -45,6 +45,11 @@ export async function reactivateUserById(
  * that staff granted while they were away, so that grant (made for someone
  * else) is not inherited. No actor: admin reactivation and guild rejoin both
  * arrive without one.
+ *
+ * The target is picked by a LOCKING select on the full `where`, and the
+ * UPDATE repeats it: a ban committing while we wait for the row lock makes
+ * Postgres re-check `banned_at IS NULL` on the new row version, so a rejoin
+ * never un-deactivates a just-banned user (ROK-313 guard, review r2 M1).
  */
 async function clearDeactivation(
   db: Db,
@@ -55,13 +60,14 @@ async function clearDeactivation(
       .select({ id: schema.users.id })
       .from(schema.users)
       .where(where)
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (!target) return undefined;
     const since = await lockDeactivatedAt(tx, target.id);
     const [row] = await tx
       .update(schema.users)
       .set({ deactivatedAt: null, updatedAt: new Date() })
-      .where(eq(schema.users.id, target.id))
+      .where(and(eq(schema.users.id, target.id), where))
       .returning();
     if (row && since) await auditOwnerReactivated(tx, row.id, since, null);
     return row;
