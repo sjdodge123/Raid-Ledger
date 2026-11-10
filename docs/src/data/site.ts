@@ -16,7 +16,8 @@ export const LINKS = {
   releases: `${REPO}/releases`,
   issues: `${REPO}/issues`,
   license: `${REPO}/blob/main/LICENSE`,
-  ledgerLink: 'https://github.com/sjdodge123/ledger-link',
+  // The install link readers follow (ROK-2134); source lives on GitHub.
+  ledgerLink: 'https://www.curseforge.com/wow/addons/ledger-link',
 } as const;
 
 export const SITE = {

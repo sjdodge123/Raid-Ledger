@@ -3,6 +3,15 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-11-09 — new reject code `CHARACTER_MOVED` — **additive**
+
+- `AddonImportErrorCodeSchema` gains `CHARACTER_MOVED` (ROK-2159; stays v1):
+  an apply whose Raid Ledger character changed owner (admin Change owner)
+  while the import ran is rejected with **HTTP 409** and nothing is written.
+  An apply-time check, not an addon-format bug — the string is unchanged.
+- No payload, fixture or `schema.json` change. Through the companion bridge
+  it surfaces as `invalid_payload` like every other apply-time code.
+
 ## v1 — 2026-11-09 — `char` `addons` installed-addon list — **additive**
 
 - The `char` section's `data` gains one **optional** key, `addons`

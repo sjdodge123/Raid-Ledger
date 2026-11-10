@@ -11,6 +11,18 @@ import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { nonEmpty } from '../../../../common/testing/narrow';
 import * as schema from '../../../../drizzle/schema';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
+import type { AddonBindingResult } from '../../addon-import/addon-import.binding';
+import { decodeImportPaste } from '../../addon-import/addon-import.decoder';
+import { AddonImportError } from '../../addon-import/addon-import.errors';
+import {
+  loadImportCharacter,
+  runForCharacter,
+} from '../../addon-import/addon-import.run';
+import {
+  FIXTURE_EXPORTED_AT,
+  buildCharPayload,
+  buildImportString,
+} from '../../addon-import/testing/addon-fixture.builder';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const SNAPSHOT = new Date('2026-11-01T00:00:00Z');
@@ -353,6 +365,47 @@ describe('PUT /admin/plugins/wow/characters/:id/owner (ROK-2128 D6)', () => {
       404,
     );
     expect((await reassign(admin.token, id, { userId: 'x' })).status).toBe(400);
+  });
+});
+
+/** A binding that writes nothing itself (the char section still runs). */
+const NO_BINDING: AddonBindingResult = {
+  errors: [],
+  warnings: [],
+  diff: {},
+  pinGuid: null,
+};
+
+describe('PUT …/owner — an addon import loaded before the move (ROK-2159)', () => {
+  it("the old owner's apply is rejected 409 CHARACTER_MOVED and writes no snapshot", async () => {
+    const from = await makeUser('l3import');
+    const to = await makeUser('l3importto');
+    const id = await addCharacter(from.id, 'Ana Forever', true);
+    // The import's pre-tx owner check + load ran while `from` owned it.
+    const stale = await loadImportCharacter(testApp.db, id);
+    expect((await reassign(admin.token, id, { userId: to.id })).status).toBe(
+      200,
+    );
+    const paste = decodeImportPaste(
+      buildImportString(buildCharPayload({ exportedAt: FIXTURE_EXPORTED_AT })),
+      FIXTURE_EXPORTED_AT * 1000,
+    );
+    const outcome = await testApp.db
+      .transaction((tx) =>
+        runForCharacter(tx, from.id, stale, paste, NO_BINDING, {
+          dryRun: false,
+        }),
+      )
+      .then(
+        (res) => res.status,
+        (e: unknown) => (e instanceof AddonImportError ? e.code : e),
+      );
+    expect(outcome).toBe('CHARACTER_MOVED');
+    const snapshots = await testApp.db
+      .select({ id: schema.characterAddonSnapshots.characterId })
+      .from(schema.characterAddonSnapshots)
+      .where(eq(schema.characterAddonSnapshots.characterId, id));
+    expect(snapshots).toEqual([]);
   });
 });
 
