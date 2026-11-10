@@ -11,8 +11,14 @@ import { asDatedSource, formatCaptureDate, formatDatedLine, formatSourceLine, ty
 
 type Prereqs = NonNullable<EventQuestPrereqsResponse>;
 
-/** The completed list's source: the first dated completion, else the first dated step. */
+/**
+ * The completed list's source: the server's `asOfSource` (ROK-2144 MINOR-1 — set even
+ * when the viewer has completed none of this event's quests), else inferred from the
+ * first dated completion, else the first dated step (an older api without the field).
+ */
 function completedListSource(prereqs: Prereqs): DatedSource | null {
+    const declared = asDatedSource(prereqs.asOfSource);
+    if (declared) return declared;
     for (const state of prereqs.quests) {
         const source = asDatedSource(state.completedSource);
         if (source) return source;

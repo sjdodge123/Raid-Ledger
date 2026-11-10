@@ -61,6 +61,21 @@ describe('QuestPrepAsOfLine — your progress', () => {
         expect(screen.getByTestId('quest-prep-progress-asof')).toHaveTextContent('completed list via addon · 2 Nov 2026');
     });
 
+    it('keeps "via addon" when the viewer has completed none of the quests (asOfSource)', () => {
+        const state: QuestPrereqState = {
+            questId: 20, neededCount: 1, completed: false, completedSource: null,
+            steps: [{ questId: 10, name: 'First Step', done: false, source: null }],
+        };
+        render(<QuestPrepAsOfLine prereqs={makeResponse({ quests: [state], asOfSource: 'addon' })} />);
+        expect(screen.getByTestId('quest-prep-progress-asof'))
+            .toHaveTextContent(/^Your progress: completed list via addon · 2 Nov 2026 · quest log 9 Nov 2026$/);
+    });
+
+    it('names the Armory from asOfSource with no quest states to infer from', () => {
+        render(<QuestPrepAsOfLine prereqs={makeResponse({ quests: [], asOfSource: 'blizzard', inProgressAsOf: null })} />);
+        expect(screen.getByTestId('quest-prep-progress-asof')).toHaveTextContent(/^Your progress: via Armory · 2 Nov 2026$/);
+    });
+
     it('renders no progress line without a snapshot date (asOf null)', () => {
         render(<QuestPrepAsOfLine prereqs={makeResponse({ asOf: null })} />);
         expect(screen.queryByTestId('quest-prep-progress-asof')).toBeNull();

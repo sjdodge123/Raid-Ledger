@@ -85,6 +85,8 @@ export const EventQuestPrereqsResponseSchema = z.object({
     neededTotal: z.number().int(),
     /** ROK-2144: the viewer's quest-log capture time (null = same as `asOf`). */
     inProgressAsOf: z.string().datetime().nullable().optional(),
+    /** ROK-2144: which source won the completed list dated by `asOf`. */
+    asOfSource: z.enum(['addon', 'blizzard']).nullable().optional(),
     /**
      * ROK-2144: latest Blizzard quest-catalogue fetch (ROK-2143 overlay);
      * null = never imported or the import switched off.

@@ -175,6 +175,18 @@ describe('buildViewerPrereqs — quest-log date (ROK-2144 AC10)', () => {
     expect(out.inProgressAsOf).toBe('2026-11-09T00:00:00.000Z');
   });
 
+  it('names the completed list source as asOfSource (addon default, Armory when it won)', () => {
+    const m = member([10]);
+    expect(buildViewerPrereqs(progress(m), m, []).asOfSource).toBe('addon');
+    const armory: ForeverMember = {
+      ...m,
+      snapshot: { ...m.snapshot, source: 'blizzard' },
+    };
+    expect(buildViewerPrereqs(progress(armory), armory, []).asOfSource).toBe(
+      'blizzard',
+    );
+  });
+
   it('is null when the snapshot carries one date (no separate log time)', () => {
     const m = member([10]);
     expect(buildViewerPrereqs(progress(m), m, []).inProgressAsOf).toBeNull();
