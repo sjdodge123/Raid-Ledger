@@ -23,6 +23,9 @@
  * Recent dings card as the member: two rows, a link vs plain text, and the
  * out-of-window ding absent.
  *
+ * ROK-2172: a case clicks the Overview tank pill and expects the Members tab
+ * filtered to the one seeded tank, then clears it from the Members band pill.
+ *
  * ROK-1916: a third case seeds `withPresence: true` — Aldren + Brisa online at
  * the export, Corvin / Dainel / Elowen away 1 / 9 / 34 days — and asserts the
  * Last seen card as the member: "2 online at last export" and Elowen first
@@ -390,6 +393,29 @@ test.describe('WoW: Forever guild hub widgets (ROK-1905)', () => {
             await expectRoleBreakdown(page, insights);
             await expectProfessions(page);
             await expectWhosSaved(page, insights);
+        } finally {
+            await removeUsers(token, guild);
+        }
+    });
+
+    test('Overview: a role pill opens Members filtered to that role; the band pill clears it (ROK-2172)', async ({ page }, testInfo) => {
+        const token = await getAdminToken();
+        const guild = await seedGuild(token, testInfo, {});
+        try {
+            await signInOnboardedMember(page, guild.users.member.userId);
+            await page.goto(`/hubs/${guild.guildId}`);
+            const pill = page.getByTestId('guild-members-summary').getByTestId('guild-role-filter-tank');
+            await expect(pill, 'the Overview tank pill is a link to the filtered Members tab').toHaveAttribute('href', '#members?role=tank', { timeout: 15_000 });
+            await pill.click();
+            await expect(page).toHaveURL(/#members\?role=tank$/);
+            const band = page.getByTestId('guild-members').getByTestId('guild-role-filter-tank');
+            await expect(band, 'the Members band shows the tank filter pressed').toHaveAttribute('aria-pressed', 'true');
+            const rows = page.getByTestId('guild-member-row');
+            await expect(rows, 'only the seeded tank (the GM) is listed').toHaveCount(1);
+            await band.click();
+            await expect(band, 'a second click clears the role').toHaveAttribute('aria-pressed', 'false');
+            await expect.poll(() => rows.count(), { message: 'the whole roster is listed again' }).toBeGreaterThan(1);
+            await expect(page).toHaveURL(/#members$/);
         } finally {
             await removeUsers(token, guild);
         }
