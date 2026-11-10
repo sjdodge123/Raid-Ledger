@@ -18,13 +18,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "json-bigint": "^1.0.0",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/json-bigint": "^1.0.4",
     "@types/node": "^26.6.6",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   }
 }
