@@ -426,6 +426,54 @@ describe('GET guilds/:id/claim — ranking and contract', () => {
   });
 });
 
+/**
+ * ROK-2153 N4 — a provider may report the round a prompt dismissal belongs to
+ * (BG3: the active campaign). Core passes it through untouched and OMITS the
+ * key when the provider gives none, so every unscoped hub's body is unchanged.
+ */
+describe('GET guilds/:id/claim — dismissScope pass-through', () => {
+  it('returns the provider scope as dismissScope', async () => {
+    const id = await servedHub({
+      status: { ...plainStatus([cand('a')]), dismissScope: 'campaign-7' },
+    });
+    const res = await getStatus(id, 'member');
+    expect(res.status).toBe(200);
+    expect(res.body.dismissScope).toBe('campaign-7');
+    expect(HubClaimStatusSchema.safeParse(res.body).success).toBe(true);
+  });
+
+  it('a new campaign reports a different scope for the same hub', async () => {
+    const id = await servedHub({
+      status: { ...plainStatus([cand('a')]), dismissScope: 'campaign-1' },
+    });
+    expect((await getStatus(id, 'member')).body.dismissScope).toBe(
+      'campaign-1',
+    );
+    fake.table.set(id, {
+      status: { ...plainStatus([cand('a')]), dismissScope: 'campaign-2' },
+    });
+    expect((await getStatus(id, 'member')).body.dismissScope).toBe(
+      'campaign-2',
+    );
+  });
+
+  it('omits dismissScope entirely (no null) when the provider reports none', async () => {
+    const id = await servedHub({ status: plainStatus([cand('a')]) });
+    const res = await getStatus(id, 'member');
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty('dismissScope');
+  });
+
+  it('500 when the provider scope is malformed (a colon would break storage)', async () => {
+    const id = await servedHub({
+      status: { ...plainStatus([cand('a')]), dismissScope: 'a:b' },
+    });
+    const res = await getStatus(id, 'member');
+    expect(res.status).toBe(500);
+    expect(res.body.dismissScope).toBeUndefined();
+  });
+});
+
 describe('GET guilds/:id/claim — suggested is judged before the 50 cap', () => {
   it('suggested is null when a second strong match sits past the 50 cap', async () => {
     const list = Array.from({ length: 51 }, (_, i) =>
