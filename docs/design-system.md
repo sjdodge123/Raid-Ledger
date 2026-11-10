@@ -737,6 +737,15 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   The admin integration forms use it (IGDB, ITAD, Steam, Co-Optimus, Discord Bot/OAuth, Blizzard; ROK-1652
   ruling 9). A provider's brand appears only as a logo tile (`admin-settings-integration-cards.tsx`'s
   `bg-[#148EFF]`), never as a callout fill.
+- **Claim your character (ROK-2153)** is the core adopter on hubs: `HubClaimPrompt`
+  (`components/hub/claim/`) is a neutral instruction callout `<section aria-label="Claim your character">`
+  with an `h2` (`text-base font-semibold text-foreground`), a `text-secondary` body (a shorter one below
+  768px), inventory `Button`s and a ghost `iconOnly` × pinned top-right through a positioned wrapper. With a
+  server `suggested` match it leads with the candidate (avatar or initial disc, name, `text-muted` subtitle)
+  and a one-click primary "Claim <Name>" plus secondary "Not me? Pick another"; otherwise one primary "Pick
+  my character". The list opens in `Modal max-w-lg` at ≥1024px, `BottomSheet maxHeight="85vh"` below (§4.4).
+  A failed claim is a `warning` (stale list: taken, gone, already claimed; the status refetches) or `danger`
+  status banner inline, never a toast.
 
 **DON'T** stack per-phase banners. `/dev/wireframes/simplify` §U1 documents exactly this failure ("Same
 job · 4 different shapes") as the thing Cycle 4 removes.
@@ -1852,6 +1861,15 @@ colour**); the body is `MarkdownBlock` instructions, "Where it goes on the serve
 Pelican" with a `text-xs text-dim` coming-later line (ROK-1975). A `server_secret` row adds a placeholder-only
 `pre`, "The value is issued in Raid Ledger and never shown here", and an "Issue token…" `buttonClass` link to
 Integrations › Pelican Panel. Unmet steps never disable Install/Activate.
+
+**Core claim prompt (ROK-2153) is not a plugin widget.** It is a core cell rendered by `hub-overview.tsx`
+right after the Companion prompt, so a leader's `widgetPrefs` cannot hide or move it. A plugin takes part
+through `PluginHandle.registerHubClaimProvider({ games, kinds, copy?, OptionsStep?, onClaimed? })`
+(`components/hub/claim/hub-claim-providers.ts`), gated like a widget (plugin active, game, kind) and declared
+as a manifest `claim-provider` behaviour; membership, "no claim yet" and "something unclaimed" come from the
+server status (`GET /guilds/:id/claim`), and the × stores the per-hub onboarding key `claim-character`
+(server-side, permanent). Shown only on Overview. The per-game claim-banner widgets above move onto it in
+their own phases.
 
 ### 4.28 Arrange list — reorder, hide and add the cells of a configurable grid (ROK-1918)
 
