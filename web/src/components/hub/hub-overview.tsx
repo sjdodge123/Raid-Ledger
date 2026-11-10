@@ -13,6 +13,7 @@
  * order and its span, and starts right under the card above it
  * (`layout/use-masonry-rows`), so a short card no longer leaves a row-tall hole.
  * ROK-2056: a plugin-declared "install the Companion" card sits first.
+ * ROK-2153: the core "claim your character" prompt follows it.
  */
 import { Fragment, lazy, Suspense, useRef, useState, type JSX, type ReactNode } from 'react';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
@@ -23,6 +24,7 @@ import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-c
 import { resolveHubLayout } from './layout/resolve-hub-layout';
 import { MASONRY_GRID_CLASS, useMasonryRows } from './layout/use-masonry-rows';
 import { HubCompanionPromptCell } from './companion/hub-companion-prompt-cell';
+import { HubClaimPromptCell } from './claim/hub-claim-prompt-cell';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -111,6 +113,8 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
         <OverviewGrid hidden={arranging}>
             {/* ROK-2056 L4: first, full width; renders nothing unless a plugin asks and every gate passes. */}
             <HubCompanionPromptCell ctx={ctx} />
+            {/* ROK-2153: core claim prompt; renders nothing unless a claim provider serves this hub and every gate passes. */}
+            <HubClaimPromptCell ctx={ctx} />
             <SetupChecklistCell ctx={ctx} mods={mods} />
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </OverviewGrid>
