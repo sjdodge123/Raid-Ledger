@@ -2042,8 +2042,15 @@
     {
       "idx": 292,
       "version": "7",
+      "when": 1794202047823,
+      "tag": "0292_games_igdb_itad_pair_merge",
+      "breakpoints": true
+    },
+    {
+      "idx": 293,
+      "version": "7",
       "when": 1794271698664,
-      "tag": "0292_addon_snapshot_completed_captured_at",
+      "tag": "0293_addon_snapshot_completed_captured_at",
       "breakpoints": true
     }
   ]
