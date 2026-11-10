@@ -220,6 +220,8 @@ describe('GroupDayView — already suggested', () => {
         renderView({ slotMarks: MARKS });
         const count = screen.getByTestId(`phone-group-cell-${DAY}-20`).querySelector('span');
         expect(count?.className).toContain('z-10');
+        // ROK-2167: the count sits on the surface chip (contrast: heatmap-count-chip.guard.test.ts).
+        expect(count?.className).toContain('bg-surface/80');
         expect(screen.getByTestId('phone-group-day').className).toContain('isolate');
     });
 

@@ -66,6 +66,7 @@ describe('GroupWeekView — layout', () => {
         renderView();
         expect(cell(WED, 20)).toHaveTextContent('5 free · 1 busy');
         expect(within(cell(WED, 20)).getByText(/1 busy/)).toHaveClass('text-busy');
+        expect(within(cell(WED, 20)).getByText(/5 free/), 'ROK-2167 count chip').toHaveClass('bg-surface/80', 'truncate');
         expect(cell(WED, 21)).toHaveTextContent('3 free · 1 stale');
         expect(cell(1, 18).textContent).toBe('');
     });

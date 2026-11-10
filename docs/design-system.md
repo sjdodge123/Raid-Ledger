@@ -635,7 +635,10 @@ when every token passes alone. Wrap the text in `inline-block max-w-full truncat
 `semantic-tokens.guard.test.ts` does for the own-calendar busy band (§4.16 NP-1). Adopters: the busy band label
 (ROK-2165) and the Quest Prep card's reputation rewards (ROK-2161: `REPUTATION_CHIP` in `quest-card.tsx`,
 `text-success` / `text-danger` over the `.quest-card` `--color-overlay` fill, `--color-faint` on hover; guard
-rows on all fifteen schemes).
+rows on all fifteen schemes) and the group heatmap's "N free · N busy" count (ROK-2167: `COUNT_CHIP` in
+`week/group-marks.classes.ts`, `bg-surface/80` — one step stronger because the heat fills reach 65% alpha —
+shared by `GroupWeekCell` and `GroupDayView`; `heatmap-count-chip.guard.test.ts` composites `text-busy` and
+the `text-foreground/80`/`/85` count over the chip over each hue's strongest `computeHeatmapBg` fill, both families).
 
 **Roster member pill (ROK-2149).** The read-only roster-member page marks a guild roster member with no Raid
 Ledger character with a `StatusChip tone="neutral"` "Roster member" (title "A guild roster member without a Raid Ledger
@@ -1165,7 +1168,9 @@ it is untouched. Classes live in `web/src/components/features/game-time/week/gro
 The label is a **count clause**, never a standalone badge: the busy part is appended to the free count as
 `" · N busy"` (`groupCellBusyLabel`, `group-day.utils.ts:57-66`; long form `N free · N stale · N busy · N unknown`,
 `grid-cell.utils.ts:84-99`) and rendered in `<b className="font-medium text-busy">` beside the foreground
-free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`.
+free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`. The whole count sits on
+the `COUNT_CHIP` surface chip (ROK-2167 — the label-chip pattern, "a label on a tinted/translucent fill" above),
+because no text token clears AA straight on the strongest dark heat fills.
 
 **DON'T** paint a busy hour purple **in a group view** (the poll heatmap, the group week, the group day), drop
 the clause into a pill, or hand-write another `before:` edge. The one exception is the viewer's OWN grid,
