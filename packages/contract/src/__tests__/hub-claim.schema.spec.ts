@@ -231,6 +231,38 @@ describe("HubClaimStatusSchema", () => {
     const opt = { ...status(), claimOptions: "bg3_party" };
     expect(HubClaimStatusSchema.safeParse(opt).success).toBe(false);
   });
+  // ROK-2153 N4 — optional provider dismissal round.
+  it("accepts a status with a valid dismissScope", () => {
+    const parsed = HubClaimStatusSchema.safeParse(
+      status({ dismissScope: "campaign-12" }),
+    );
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.dismissScope).toBe("campaign-12");
+  });
+
+  it("parses a status without dismissScope exactly as before", () => {
+    const parsed = HubClaimStatusSchema.safeParse(status());
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).not.toHaveProperty("dismissScope");
+  });
+
+  it.each([
+    ["contains a colon", "a:b"],
+    ["is empty", ""],
+    ["is 41 chars", "x".repeat(41)],
+    ["contains a space", "x y"],
+  ])("rejects a dismissScope that %s", (_label, dismissScope) => {
+    expect(
+      HubClaimStatusSchema.safeParse({ ...status(), dismissScope }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a null dismissScope (omitted, never null)", () => {
+    expect(
+      HubClaimStatusSchema.safeParse({ ...status(), dismissScope: null })
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe("HubClaimRequestSchema / HubClaimResultSchema", () => {

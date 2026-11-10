@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { HubOnboardingDismissScopeSchema } from "./hub-onboarding.schema.js";
 
 /**
  * ROK-2153 — one claim path for every hub. A hub plugin (Valheim, WoW, BG3…)
@@ -121,6 +122,12 @@ export const HubClaimStatusSchema = z
     candidates: z.array(HubClaimCandidateSchema).max(MAX_HUB_CLAIM_CANDIDATES),
     truncated: z.boolean(),
     claimOptions: HubClaimOptionsKindSchema,
+    /**
+     * ROK-2153 N4 — the provider's dismissal round (e.g. a BG3 campaign,
+     * `campaign-12`). A `claim-character` dismissal hides the prompt only for
+     * the same scope. Omitted (never null) = once per hub, permanent.
+     */
+    dismissScope: HubOnboardingDismissScopeSchema.optional(),
   })
   .strict()
   .refine(suggestedIsStrongCandidate, {
