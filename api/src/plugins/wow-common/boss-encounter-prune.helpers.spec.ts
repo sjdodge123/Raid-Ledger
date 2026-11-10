@@ -1,18 +1,34 @@
 import {
   findStaleClassicBossIds,
   findStaleClassicLootIds,
+  MIN_BUNDLED_CLASSIC_BOSSES,
+  MIN_BUNDLED_CLASSIC_LOOT,
   pruneClassicRows,
+  type BossJsonKey,
   type BossKeyRow,
   type LootKeyRow,
 } from './boss-encounter-prune.helpers';
 
-const json = [
+/** `n` classic bosses on a filler instance, present in both JSON and DB. */
+const fillerJson = (n: number, from = 0): BossJsonKey[] =>
+  Array.from({ length: n }, (_, i) => ({
+    instanceId: 9000,
+    name: `Filler ${from + i}`,
+    expansion: 'classic',
+  }));
+const fillerRows = (keys: BossJsonKey[], firstId: number): BossKeyRow[] =>
+  keys.map((k, i) => ({ id: firstId + i, ...k }));
+
+const baseJson: BossJsonKey[] = [
   { instanceId: 238, name: 'Targorr the Dread', expansion: 'classic' },
   { instanceId: 238, name: 'Hamhock', expansion: 'classic' },
   { instanceId: 238, name: 'Kam Deepfury', expansion: 'classic' },
   { instanceId: 238, name: 'Bazil Thredd', expansion: 'classic' },
   { instanceId: 249, name: 'Prince Malchezaar', expansion: 'tbc' },
 ];
+// Padded to the absolute floor so the small fixture is a "complete" file.
+const padding = fillerJson(MIN_BUNDLED_CLASSIC_BOSSES);
+const json = [...baseJson, ...padding];
 
 const rows: BossKeyRow[] = [
   { id: 1, instanceId: 238, name: 'Targorr the Dread', expansion: 'classic' },
@@ -23,6 +39,7 @@ const rows: BossKeyRow[] = [
   { id: 5, instanceId: 999, name: 'Some SoD Boss', expansion: 'sod' },
   // Same name, other instance: keyed by (instanceId, name), so stale.
   { id: 6, instanceId: 63, name: 'Hamhock', expansion: 'classic' },
+  ...fillerRows(padding, 1000),
 ];
 
 describe('findStaleClassicBossIds (ROK-2142)', () => {
@@ -45,13 +62,49 @@ describe('findStaleClassicBossIds (ROK-2142)', () => {
     ).toEqual([]);
   });
 
-  it('skips with a warning when the JSON classic count is below 80% of the DB (truncated-file floor, review r1)', () => {
+  it('skips with a warning when the JSON is below the absolute floor even if the DB is smaller (truncated file, ROK-2168)', () => {
     const warn = jest.fn();
-    // 2 classic JSON rows vs 4 classic DB rows → 50% < 80%.
-    expect(findStaleClassicBossIds(rows, json.slice(0, 2), warn)).toEqual([]);
+    // 150 classic JSON rows vs 160 stored: the old 80% ratio (150 >= 128)
+    // would have pruned the 10 rows missing from the cut file.
+    const cut = fillerJson(150);
+    const stored = fillerRows(fillerJson(160), 1);
+    expect(findStaleClassicBossIds(stored, cut, warn)).toEqual([]);
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('2 classic bosses'),
+      expect.stringContaining('150 classic bosses (minimum 200)'),
     );
+  });
+});
+
+describe('findStaleClassicBossIds on a production-shaped DB (ROK-2168)', () => {
+  // The bundled 1.12 Stockade list (instance 238).
+  const stockade112 = [
+    'Targorr the Dread',
+    'Kam Deepfury',
+    'Hamhock',
+    'Bazil Thredd',
+    'Dextren Ward',
+  ].map((name) => ({ instanceId: 238, name, expansion: 'classic' }));
+  // 220 bundled classic bosses: the five Stockade rows + 215 others.
+  const bundled = [...stockade112, ...fillerJson(215)];
+  // Old retail-journal Stockade rows left by pre-2142 seeds.
+  const retail = ['Hogger', 'Lord Overheat', 'Randolph Moloch'].map(
+    (name, i) => ({ id: 501 + i, instanceId: 238, name, expansion: 'classic' }),
+  );
+  // 64 more orphans (map-id rows, other retail leftovers): 220 + 3 + 64 = 287.
+  const orphans = fillerRows(
+    fillerJson(64, 5000).map((k) => ({ ...k, instanceId: 409 })),
+    600,
+  );
+  const stored = [...fillerRows(bundled, 1), ...retail, ...orphans];
+
+  it('prunes the retail Stockade bosses and keeps the five 1.12 bosses', () => {
+    expect(stored.filter((r) => r.expansion === 'classic')).toHaveLength(287);
+    const warn = jest.fn();
+    const stale = findStaleClassicBossIds(stored, bundled, warn);
+    expect(stale).toEqual(expect.arrayContaining([501, 502, 503]));
+    expect(stale).toHaveLength(67);
+    for (const id of [1, 2, 3, 4, 5]) expect(stale).not.toContain(id);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
@@ -62,10 +115,18 @@ const loot: LootKeyRow[] = [
   { id: 13, bossId: 4, itemId: 300, expansion: 'tbc' }, // other expansion
   { id: 14, bossId: 5, itemId: 400, expansion: 'classic' }, // non-classic boss
 ];
+// Filler loot on boss 1, present in both JSON and DB, padding the fixture
+// to the absolute floor.
+const lootPadding = Array.from(
+  { length: MIN_BUNDLED_CLASSIC_LOOT },
+  (_, i) => ({ bossId: 1, itemId: 50_000 + i, expansion: 'classic' }),
+);
+loot.push(...lootPadding.map((l, i) => ({ id: 10_000 + i, ...l })));
 const wantedLoot = [
   { bossId: 1, itemId: 100, expansion: 'classic' },
   { bossId: 6, itemId: 200, expansion: 'classic' },
   { bossId: 4, itemId: 999, expansion: 'tbc' },
+  ...lootPadding,
 ];
 const classicBossIds = new Set([1, 2, 3, 6]);
 
@@ -79,14 +140,40 @@ describe('findStaleClassicLootIds (ROK-2142 review r1)', () => {
   it('returns nothing when the JSON has no classic loot', () => {
     const warn = jest.fn();
     expect(
-      findStaleClassicLootIds(loot, wantedLoot.slice(2), classicBossIds, warn),
+      findStaleClassicLootIds(
+        loot,
+        wantedLoot.filter((l) => l.expansion !== 'classic'),
+        classicBossIds,
+        warn,
+      ),
     ).toEqual([]);
     expect(warn).toHaveBeenCalled();
   });
 
-  it('skips with a warning when the JSON classic loot is below 50% of the DB', () => {
+  it('prunes when the DB holds far more loot than the JSON (accumulated history, ROK-2168)', () => {
+    // 2000 old classic loot rows on boss 2 (a stale boss still live in this
+    // call): the old 50% ratio skipped once stored > 2x wanted.
+    const history = Array.from({ length: 2000 }, (_, i) => ({
+      id: 20_000 + i,
+      bossId: 2,
+      itemId: 70_000 + i,
+      expansion: 'classic',
+    }));
     const warn = jest.fn();
-    // 1 wanted vs 3 classic-boss classic loot rows → 33% < 50%.
+    const stale = findStaleClassicLootIds(
+      [...loot, ...history],
+      wantedLoot,
+      classicBossIds,
+      warn,
+    );
+    expect(stale).toHaveLength(2001);
+    expect(stale).toContain(11);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('skips with a warning when the JSON classic loot is below the absolute floor', () => {
+    const warn = jest.fn();
+    // 1 wanted classic row, below the 600-row floor.
     expect(
       findStaleClassicLootIds(
         loot,
@@ -96,7 +183,7 @@ describe('findStaleClassicLootIds (ROK-2142 review r1)', () => {
       ),
     ).toEqual([]);
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('1 classic loot rows'),
+      expect.stringContaining('1 classic loot rows (minimum 600)'),
     );
   });
 });
