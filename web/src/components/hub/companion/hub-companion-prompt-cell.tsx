@@ -12,11 +12,17 @@ import { gatedHubCompanionPrompt } from './hub-companion-prompts';
 
 const CompanionInstallPrompt = lazy(() => import('./companion-install-prompt').then((m) => ({ default: m.CompanionInstallPrompt })));
 
-/** Reads only `ctx.page`, so it takes just that slice of the hub context. */
-export function HubCompanionPromptCell({ ctx }: { ctx: Pick<HubCtx, 'page'> }): JSX.Element | null {
+interface HubCompanionPromptCellProps {
+    /** Reads only `ctx.page`, so it takes just that slice of the hub context. */
+    ctx: Pick<HubCtx, 'page'>;
+    /** Another Overview banner is showing (§4.7 one banner at a time): render nothing for now. */
+    suppressed?: boolean | undefined;
+}
+
+export function HubCompanionPromptCell({ ctx, suppressed = false }: HubCompanionPromptCellProps): JSX.Element | null {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
     const registration = gatedHubCompanionPrompt(ctx.page, activeSlugs);
-    if (registration === undefined) return null;
+    if (registration === undefined || suppressed) return null;
     const guildId = ctx.page.guild.id;
     return (
         <Suspense fallback={null}>

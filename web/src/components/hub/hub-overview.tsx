@@ -92,6 +92,22 @@ interface HubOverviewProps {
     mods: ModsState;
 }
 
+/**
+ * The plugin-asked prompts, first and full width. §4.7 one banner at a time:
+ * while the claim prompt (ROK-2153, the earlier step) shows, the Companion
+ * prompt (ROK-2056 L4) waits; once claimed or dismissed it shows as before.
+ * Each renders nothing unless a plugin asks and every gate passes.
+ */
+export function OverviewPrompts({ ctx }: { ctx: Pick<HubCtx, 'page'> }): JSX.Element {
+    const [claimShowing, setClaimShowing] = useState(false);
+    return (
+        <>
+            <HubCompanionPromptCell ctx={ctx} suppressed={claimShowing} />
+            <HubClaimPromptCell ctx={ctx} onShowingChange={setClaimShowing} />
+        </>
+    );
+}
+
 export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
@@ -111,10 +127,7 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
         <OverviewGrid hidden={arranging}>
-            {/* ROK-2056 L4: first, full width; renders nothing unless a plugin asks and every gate passes. */}
-            <HubCompanionPromptCell ctx={ctx} />
-            {/* ROK-2153: core claim prompt; renders nothing unless a claim provider serves this hub and every gate passes. */}
-            <HubClaimPromptCell ctx={ctx} />
+            <OverviewPrompts ctx={ctx} />
             <SetupChecklistCell ctx={ctx} mods={mods} />
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </OverviewGrid>

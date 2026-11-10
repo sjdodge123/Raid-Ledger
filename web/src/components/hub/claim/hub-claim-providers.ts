@@ -22,7 +22,10 @@ export interface HubClaimCopy {
     readonly body?: string;
     /** Shorter body on phone (<768px). Default: `body`. */
     readonly shortBody?: string;
-    /** Label of the claim button. */
+    /**
+     * Label of the button that opens the candidate list (default "Pick my character").
+     * The one-click "Claim <Name>" for a suggested match is not overridable.
+     */
     readonly cta?: string;
 }
 

@@ -7,9 +7,10 @@
  * game + kind): not dismissed for THIS hub (server onboarding key
  * `claim-character`, Q4) → the status says the viewer is a member with no
  * claim and something is unclaimed. The status is fetched only once the
- * dismissal state is known and clear.
+ * dismissal state is known and clear. A hub whose claim needs options its
+ * provider cannot collect is not offered at all (fail closed).
  */
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { HubClaimCandidate, HubClaimStatus } from '@raid-ledger/contract';
@@ -20,7 +21,7 @@ import { HubClaimCandidateList, HubClaimErrorBanner, HubClaimIdentity, type HubC
 import { HUB_CLAIM_TEXT, hubClaimErrorView, resolveHubClaimCopy, type HubClaimErrorView, type ResolvedHubClaimCopy } from './hub-claim-copy';
 import type { HubClaimProvider, HubClaimProviderRegistration } from './hub-claim-providers';
 import { hubClaimKey, useClaimHubCandidate, useHubClaim } from './use-hub-claim';
-import { shouldShowClaimPrompt } from './hub-claim-gate';
+import { canClaimFromCore, shouldShowClaimPrompt } from './hub-claim-gate';
 
 const CALLOUT = 'relative flex flex-col gap-3 rounded-lg border border-edge bg-overlay/30 p-4 md:col-span-2 lg:col-span-3';
 
@@ -64,18 +65,22 @@ function useClaimSubmit(guildId: number, provider: HubClaimProvider, onDone: (ok
 }
 
 function useClaimFlow(guildId: number, provider: HubClaimProvider, status: HubClaimStatus): ClaimFlow {
-    const [open, setOpen] = useState(false);
+    const [open, setRawOpen] = useState(false);
     const [optionsFor, setOptionsFor] = useState<HubClaimCandidate | null>(null);
     const { pendingId, error, clearError, submit } = useClaimSubmit(guildId, provider, (ok) => {
         setOptionsFor(null);
-        if (ok) setOpen(false);
+        if (ok) setRawOpen(false);
     });
+    // Opening or closing the overlay starts fresh: the list, never a stale options step or error.
+    const setOpen = (next: boolean): void => { setRawOpen(next); setOptionsFor(null); clearError(); };
     const Step = provider.OptionsStep;
     const claim = (candidate: HubClaimCandidate): void => {
-        if (status.claimOptions === 'none' || Step === undefined) { submit(candidate); return; }
+        if (status.claimOptions === 'none') { submit(candidate); return; }
+        // Fail closed: `canClaimFromCore` keeps the card unrendered without an options step.
+        if (Step === undefined) return;
         clearError();
         setOptionsFor(candidate);
-        setOpen(true);
+        setRawOpen(true);
     };
     const options = optionsFor === null || Step === undefined ? null
         : { candidate: optionsFor, OptionsStep: Step, onSubmit: (o: Record<string, unknown>) => { submit(optionsFor, o); }, onCancel: () => { setOptionsFor(null); } };
@@ -145,10 +150,28 @@ function ClaimCard({ guildId, status, provider, prompt }: CardProps): JSX.Elemen
     );
 }
 
+/** Reports whether the card is showing (the Overview lets it win over the Companion prompt, §4.7). */
+function useReportShowing(showing: boolean, onShowingChange: ((showing: boolean) => void) | undefined): void {
+    useEffect(() => { onShowingChange?.(showing); }, [showing, onShowingChange]);
+    useEffect(() => () => { onShowingChange?.(false); }, [onShowingChange]);
+}
+
+interface HubClaimPromptProps {
+    guildId: number;
+    registration: HubClaimProviderRegistration;
+    onShowingChange?: ((showing: boolean) => void) | undefined;
+}
+
 /** Lazy-loaded by `hub-claim-prompt-cell.tsx` once the cheap gates passed; key it by hub. */
-export function HubClaimPrompt({ guildId, registration }: { guildId: number; registration: HubClaimProviderRegistration }): JSX.Element | null {
+export function HubClaimPrompt({ guildId, registration, onShowingChange }: HubClaimPromptProps): JSX.Element | null {
     const prompt = useHubOnboarding('claim-character', guildId);
     const { data: status } = useHubClaim(guildId, prompt.visible);
-    if (!prompt.visible || status === undefined || !shouldShowClaimPrompt(status)) return null;
+    const misconfigured = status !== undefined && !canClaimFromCore(status, registration.provider);
+    useEffect(() => {
+        if (misconfigured) console.error(`[hub-claim] ${registration.pluginSlug}: the claim needs options but the provider has no OptionsStep; not offering it.`);
+    }, [misconfigured, registration.pluginSlug]);
+    const showing = prompt.visible && status !== undefined && !misconfigured && shouldShowClaimPrompt(status);
+    useReportShowing(showing, onShowingChange);
+    if (!showing) return null;
     return <ClaimCard guildId={guildId} status={status} provider={registration.provider} prompt={prompt} />;
 }

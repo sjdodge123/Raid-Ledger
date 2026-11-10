@@ -12,15 +12,21 @@ import { gatedHubClaimProvider } from './hub-claim-providers';
 
 const HubClaimPrompt = lazy(() => import('./hub-claim-prompt').then((m) => ({ default: m.HubClaimPrompt })));
 
-/** Reads only `ctx.page`, so it takes just that slice of the hub context. */
-export function HubClaimPromptCell({ ctx }: { ctx: Pick<HubCtx, 'page'> }): JSX.Element | null {
+interface HubClaimPromptCellProps {
+    /** Reads only `ctx.page`, so it takes just that slice of the hub context. */
+    ctx: Pick<HubCtx, 'page'>;
+    /** Told whether the card is showing, so the Overview shows one banner at a time (§4.7). */
+    onShowingChange?: ((showing: boolean) => void) | undefined;
+}
+
+export function HubClaimPromptCell({ ctx, onShowingChange }: HubClaimPromptCellProps): JSX.Element | null {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
     const registration = gatedHubClaimProvider(ctx.page, activeSlugs);
     if (registration === undefined) return null;
     const guildId = ctx.page.guild.id;
     return (
         <Suspense fallback={null}>
-            <HubClaimPrompt key={guildId} guildId={guildId} registration={registration} />
+            <HubClaimPrompt key={guildId} guildId={guildId} registration={registration} onShowingChange={onShowingChange} />
         </Suspense>
     );
 }
