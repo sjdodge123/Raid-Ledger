@@ -30,7 +30,9 @@ import {
 } from './addon-import-binding.apply';
 import type { AddonBindingResult } from './addon-import.binding';
 import { applyChar } from './addon-import-char.apply';
-import { decodeImportString } from './addon-import.decoder';
+import { decodeImportPaste, decodeImportString } from './addon-import.decoder';
+import { AddonImportError } from './addon-import.errors';
+import { loadImportCharacter, runForCharacter } from './addon-import.run';
 import {
   FIXTURE_EXPORTED_AT,
   FIXTURE_GUID,
@@ -337,6 +339,14 @@ const pinOnly = (guid: string): AddonBindingResult => ({
   pinGuid: guid,
 });
 
+/** A binding that writes nothing itself (the char section still runs). */
+const NO_BINDING: AddonBindingResult = {
+  errors: [],
+  warnings: [],
+  diff: {},
+  pinGuid: null,
+};
+
 /** Any backend waiting on a heavyweight lock (advisory or row/tx). */
 async function lockWaiters(): Promise<number> {
   const rows = await testApp.db.execute<{ n: number }>(sql`
@@ -399,9 +409,13 @@ describe('addon import — same GUID into two characters, concurrently (Codex P2
 });
 
 describe('addon import — admin Change owner racing an apply (ROK-2159)', () => {
-  it('the apply waits on the moved row, then 409 CHARACTER_MOVED — no snapshot', async () => {
-    const token = await memberToken('anamoved');
-    const id = await createChar(token);
+  // Drives `runForCharacter` directly (no route, so no audit-row FK insert
+  // that would block BEFORE the tx): the only thing that can make the apply
+  // wait is its own owner re-check row lock. Revert `.for(...)` → the stale
+  // read passes, the snapshot writes after the commit → 'applied'.
+  it('the apply blocks on its row-lock re-check, then 409 CHARACTER_MOVED — no snapshot', async () => {
+    const id = await createChar(await memberToken('anamoved'));
+    const anaId = (await charRow(id)).userId;
     await memberToken('bobmoved');
     const [bob] = nonEmpty(
       await testApp.db
@@ -410,12 +424,18 @@ describe('addon import — admin Change owner racing an apply (ROK-2159)', () =>
         .where(eq(schema.users.username, 'bobmoved')),
       'bob',
     );
+    // The import's pre-tx owner check + load ran while Ana owned the row.
+    const stale = await loadImportCharacter(testApp.db, id);
+    const paste = decodeImportPaste(
+      charAt(FIXTURE_EXPORTED_AT),
+      FIXTURE_EXPORTED_AT * 1000,
+    );
     let release = (): void => undefined;
     const gate = new Promise<void>((r) => (release = r));
     let locked = (): void => undefined;
     const moved = new Promise<void>((r) => (locked = r));
     // Change owner locks GUID → name → row FOR UPDATE, moves it to Bob and
-    // holds its tx open (uncommitted) — Ana's owner pre-check still passes.
+    // holds its tx open (uncommitted).
     const change = testApp.db.transaction(async (tx) => {
       await reassignWithin(tx, {
         adminId: bob.id,
@@ -426,13 +446,19 @@ describe('addon import — admin Change owner racing an apply (ROK-2159)', () =>
       locked();
       await gate;
     });
-    let importing:
-      Promise<{ status: number; body: { code?: unknown } }> | undefined;
+    let importing: Promise<unknown> | undefined;
     try {
       await moved;
-      importing = Promise.resolve(
-        apply(token, id, charAt(FIXTURE_EXPORTED_AT)),
-      );
+      importing = testApp.db
+        .transaction((tx) =>
+          runForCharacter(tx, anaId, stale, paste, NO_BINDING, {
+            dryRun: false,
+          }),
+        )
+        .then(
+          (res) => res.status,
+          (e: unknown) => (e instanceof AddonImportError ? e.code : e),
+        );
       await waitFor(async () => {
         expect(await lockWaiters()).toBeGreaterThan(0);
       }, 5000);
@@ -440,11 +466,7 @@ describe('addon import — admin Change owner racing an apply (ROK-2159)', () =>
       release();
     }
     await change;
-    const res = await importing;
-    expect({ status: res?.status, code: res?.body.code }).toEqual({
-      status: 409,
-      code: 'CHARACTER_MOVED',
-    });
+    expect(await importing).toBe('CHARACTER_MOVED');
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(0);
     expect((await charRow(id)).userId).toBe(bob.id);
   });
