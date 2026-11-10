@@ -79,12 +79,12 @@ Open `/hubs/<id>` for the guild from 3.4. Check each row of the go/no-go table i
 
 ### 3.7 Run the ROK-1716 namespace discovery probe — Lead session asks, Operator clicks
 
-The probe is **not scheduled** (ROK-2163, operator ruling 2026-11-10). The former `forever-namespace-probe` (daily) and `forever-namespace-probe-launch` (launch window) cron jobs were removed from `api/src/plugins/wow-common/wow-cron-registrar.ts`: the Forever API is live and the namespace prefix is known. It runs only when an admin presses **Run now**.
+The probe is **not scheduled** (ROK-2163, operator ruling 2026-11-10). The former `forever-namespace-probe` (daily) and `forever-namespace-probe-launch` (launch window) cron jobs were removed from `api/src/plugins/wow-common/wow-cron-registrar.ts`: the Forever API is live and the namespace prefix is known. It runs only when an admin asks for it. Its old cron rows stay in the database but are hidden from the cron jobs page, and their admin endpoints answer 404 (ROK-2163).
 
 On launch day:
 
 1. Nothing to check on the cron jobs page for the probe.
-2. To run it now, use the probe panel on the Blizzard integration card (`web/src/plugins/wow/components/forever-probe-panel.tsx`, rendered by `forever-settings-section.tsx`). The API route is `POST /api/admin/plugins/blizzard/forever-probe/run` (`forever-namespace-probe.controller.ts:29,42`). `GET` on the same base returns the last result.
+2. To run it now **on prod**, call `POST /api/admin/plugins/blizzard/forever-probe/run` as an admin (`forever-namespace-probe.controller.ts:29,42`); `GET` on the same base returns the last result. The probe panel on the Blizzard integration card (`web/src/plugins/wow/components/forever-probe-panel.tsx`) shows only on a DEMO_MODE site, so use it on a fleet test site, not on prod.
 3. The probe only **reports**. It never flips the Forever settings (`forever-namespace-probe.controller.ts:24-27`). If it finds a live namespace, file the follow-up (ROK-1920 / ROK-1928). Don't turn on Armory import on launch day.
 
 ### 3.8 Schedule the ROK-1748 D2 dungeon-quest dataset import — Lead session
