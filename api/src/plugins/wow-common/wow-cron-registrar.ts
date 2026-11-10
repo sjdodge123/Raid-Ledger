@@ -1,20 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
-import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
 import { RosterArmoryService } from './forever-armory-snapshot/roster-armory.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
-import type { ForeverProbeResultDto } from '@raid-ledger/contract';
 
 /**
- * Registers cron jobs for WoW character auto-sync, boss data refresh and the
- * Forever namespace probe (ROK-1716) and the Forever guild roster sync
- * (ROK-1928) and the Forever Armory auto-link (ROK-2124) and the roster
- * Armory pass (ROK-2133). Only active when the plugin is enabled.
+ * Registers cron jobs for WoW character auto-sync, boss data refresh, the
+ * Forever guild roster sync (ROK-1928), the Forever Armory auto-link
+ * (ROK-2124) and the roster Armory pass (ROK-2133). Only active when the
+ * plugin is enabled. The Forever namespace probe (ROK-1716) is NOT scheduled:
+ * it runs only from the admin "Run now" button (ROK-2163).
  * The auto-sync includes Armory-imported WoW: Forever rows (realm NULL,
  * ruleset set, game_variant set); manual Forever rows are skipped (ROK-1722).
  */
@@ -26,7 +25,6 @@ export class WowCronRegistrar implements CronRegistrar {
   constructor(
     private readonly charactersService: CharactersService,
     private readonly bossDataRefresh: BossDataRefreshService,
-    private readonly foreverProbe: ForeverNamespaceProbeService,
     private readonly itemMeta: WowItemMetaService,
     private readonly rosterSync: BlizzardRosterSyncJob,
     private readonly autoLink: ForeverAutoLinkService,
@@ -46,7 +44,6 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 0 4 * * 0',
         handler: () => this.handleBossDataRefresh(),
       },
-      ...this.foreverProbeJobs(),
       {
         name: 'wowhead-item-retry',
         // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
@@ -77,25 +74,6 @@ export class WowCronRegistrar implements CronRegistrar {
         // Hourly at :50 — Armory snapshots of roster members (ROK-2133 D3)
         cronExpression: '0 50 * * * *',
         handler: () => this.rosterArmory.runDue().then(() => undefined),
-      },
-    ];
-  }
-
-  /** The daily + launch-window Forever namespace probe jobs (ROK-1716 D7). */
-  private foreverProbeJobs(): CronJobDefinition[] {
-    return [
-      {
-        name: 'forever-namespace-probe',
-        // Daily at 5:00 AM (ROK-1716 D7)
-        cronExpression: '0 0 5 * * *',
-        handler: async () => throwOnProbeError(await this.foreverProbe.run()),
-      },
-      {
-        name: 'forever-namespace-probe-launch',
-        // Hourly at :30; the service no-ops outside the launch window (D7)
-        cronExpression: '0 30 * * * *',
-        handler: async () =>
-          throwOnProbeError(await this.foreverProbe.runIfInLaunchWindow()),
       },
     ];
   }
@@ -131,15 +109,5 @@ export class WowCronRegistrar implements CronRegistrar {
     } catch (err) {
       this.logger.error(`Boss data refresh failed: ${err}`);
     }
-  }
-}
-
-/**
- * Fail the cron run (so the admin cron table shows it) when the probe errored.
- * `skipped` (no Blizzard creds) and null (outside the launch window) succeed.
- */
-function throwOnProbeError(result: ForeverProbeResultDto | null): void {
-  if (result?.status === 'error') {
-    throw new Error('Forever namespace probe failed (see API logs)');
   }
 }

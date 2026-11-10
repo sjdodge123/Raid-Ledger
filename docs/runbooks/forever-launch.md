@@ -79,17 +79,13 @@ Open `/hubs/<id>` for the guild from 3.4. Check each row of the go/no-go table i
 
 ### 3.7 Run the ROK-1716 namespace discovery probe — Lead session asks, Operator clicks
 
-The probe is already **scheduled**. Two cron jobs exist (`api/src/plugins/wow-common/wow-cron-registrar.ts:39-51`):
-
-- `forever-namespace-probe` — daily at 05:00.
-- `forever-namespace-probe-launch` — hourly at :30, but only inside the launch window `2026-11-04T00:00Z` to `2026-11-19T00:00Z` (`forever-namespace-probe.helpers.ts:38-39`).
+The probe is **not scheduled** (ROK-2163, operator ruling 2026-11-10). The former `forever-namespace-probe` (daily) and `forever-namespace-probe-launch` (launch window) cron jobs were removed from `api/src/plugins/wow-common/wow-cron-registrar.ts`: the Forever API is live and the namespace prefix is known. It runs only when an admin presses **Run now**.
 
 On launch day:
 
-1. Open **Admin Settings → General → Cron jobs** (`/admin/settings/general/cron-jobs`). Confirm both jobs exist and the last `forever-namespace-probe-launch` run did not fail. A failed probe fails the cron run on purpose (`wow-cron-registrar.ts:96-101`).
+1. Nothing to check on the cron jobs page for the probe.
 2. To run it now, use the probe panel on the Blizzard integration card (`web/src/plugins/wow/components/forever-probe-panel.tsx`, rendered by `forever-settings-section.tsx`). The API route is `POST /api/admin/plugins/blizzard/forever-probe/run` (`forever-namespace-probe.controller.ts:29,42`). `GET` on the same base returns the last result.
 3. The probe only **reports**. It never flips the Forever settings (`forever-namespace-probe.controller.ts:24-27`). If it finds a live namespace, file the follow-up (ROK-1920 / ROK-1928). Don't turn on Armory import on launch day.
-4. **UNVERIFIED:** the cron timezone (server time vs ET).
 
 ### 3.8 Schedule the ROK-1748 D2 dungeon-quest dataset import — Lead session
 
@@ -134,7 +130,7 @@ There is **no global per-widget kill switch** on main. These are the real levers
 1. **It hides itself.** Every Forever widget has a `useVisible` gate (§4). No data means no card. Nothing to do.
 2. **Hide it on one hub.** A page editor (granted by name under **Page editors**; Guild Master rank alone is not enough, `GM_RANK_IMPLIES_EDIT = false` in `api/src/plugins/wow-common/guilds/wow-hub-kind.adapter.ts`) or an admin uses **arrange mode** on the hub Overview to hide the widget (ROK-1918). API: `PATCH /api/guilds/:id/widget-prefs` (`api/src/guilds/hub.controller.ts:99`; service `api/src/guilds/hub-widget-prefs.service.ts`, guarded by `GuildEditorGuard`). Owner: Officer, or the Operator as admin.
 3. **Revert the commit** that broke it. It reaches prod at the next 5 AM pull (§1.1). Do not stack a second fix (§1.2). Owner: Lead session opens the revert PR, Operator approves.
-4. **Last resort: deactivate the `blizzard` plugin** (`POST /api/admin/plugins/blizzard/deactivate`, `api/src/plugins/plugin-host/plugin-admin.controller.ts:77`; UI at `/admin/settings/plugins`). This hides **every** WoW guild-hub widget and stops its cron jobs, the probe included (`forever-namespace-probe.controller.ts:30-31`, `RequirePlugin('blizzard')`). Only the Operator decides this.
+4. **Last resort: deactivate the `blizzard` plugin** (`POST /api/admin/plugins/blizzard/deactivate`, `api/src/plugins/plugin-host/plugin-admin.controller.ts:77`; UI at `/admin/settings/plugins`). This hides **every** WoW guild-hub widget and stops its cron jobs and the manual probe endpoint (`forever-namespace-probe.controller.ts:30-31`, `RequirePlugin('blizzard')`). Only the Operator decides this.
 
 ---
 
@@ -147,7 +143,7 @@ There is **no global per-widget kill switch** on main. These are the real levers
 | Sentry: roster-insights errors | Sentry, route `GET plugins/wow/guilds/:id/roster-insights` (`api/src/plugins/wow-common/guilds/guilds.controller.ts:118`) | Lead session | Any new issue |
 | Sentry: quest-readiness errors | Sentry, `event-quest-readiness.controller.ts` | Lead session | Any new issue |
 | LedgerLink import reject rate | 4xx (422) from the import route; the clock-window rule is `addon-import.clock.ts` | Lead session | A cluster of rejects from one guild |
-| Probe run result | Cron jobs page, `forever-namespace-probe-launch` | Lead session | A failed run |
+| Probe run result | Blizzard card probe panel (manual **Run now**) | Lead session | A failed run |
 
 Sentry is wired app-wide (`api/src/app.module.ts:109-110`, `SentryModule.forRoot()`). **UNVERIFIED:** whether import 4xx rejects reach Sentry at all. 4xx are usually not captured, so the reject rate may need log queries instead. **UNVERIFIED:** a ready-made Sentry saved search or alert for these routes.
 
@@ -177,6 +173,6 @@ Paste into `rl_test_plan_create` on a main-built env. Seed **after** the fleet g
 | 5 | Visitor view. | Dungeon quests is hidden for the visitor. Nothing errors. | `outsider` | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 6 | Arrange mode: hide Recent dings, then show it again. | The card disappears and comes back. **reset_hint:** show the widget again. | `officer` (the seeded editor; `gm` has no Arrange until staff grant them by name) | `https://slot-N.gamernight.net/hubs/<guildId>` |
 | 7 | Admin: open the Blizzard card, add a realm ruleset row, run the probe. | The row saves. The probe returns a result with no 500. **reset_hint:** delete the row. | `admin@local` | `https://slot-N.gamernight.net/admin/settings/integrations` |
-| 8 | Admin: cron jobs page. | `forever-namespace-probe` and `forever-namespace-probe-launch` are listed. | `admin@local` | `https://slot-N.gamernight.net/admin/settings/general/cron-jobs` |
+| 8 | Admin: cron jobs page. | No `forever-namespace-probe*` job is listed (manual-only since ROK-2163). | `admin@local` | `https://slot-N.gamernight.net/admin/settings/general/cron-jobs` |
 
 **UNVERIFIED:** whether the seeded content event in step 4 is upcoming and has Forever dungeon content; check the seed reply's `raids` and `content` first.
