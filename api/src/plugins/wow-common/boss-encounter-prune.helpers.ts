@@ -7,8 +7,8 @@
  *
  * Scope guard: only rows with `expansion = 'classic'` are ever candidates.
  * Floor guard: the step is skipped (with a warning) when the bundled JSON
- * carries no classic rows, or clearly fewer than the database already holds —
- * a truncated file must never wipe the table.
+ * carries fewer classic rows than an absolute minimum — a truncated file must
+ * never wipe the table.
  */
 import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -18,19 +18,24 @@ import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
 export const PRUNED_EXPANSION = 'classic';
 
 /**
- * Bosses: the curated JSON is a complete list, so it must cover at least 80%
- * of the classic rows already stored. ROK-2142 itself grows the list
- * (181 → 220) while pruning ~a dozen stale rows, so a real update stays well
- * above the line and a half-written file falls far below it.
+ * Why an absolute floor and not a ratio against the stored rows (ROK-2168):
+ * before ROK-2142 the seeder never deleted, so old databases hold every
+ * classic key from every JSON version ever seeded. Production held 287
+ * classic bosses against a complete 220-boss file — the old 80% ratio read
+ * that as a truncated file and skipped the prune forever. A ratio punishes
+ * exactly the databases that most need the prune, so the floor is on the
+ * bundled count alone.
+ *
+ * Bosses: the curated 1.12 list is 220 bosses (ROK-2142). A file with fewer
+ * than 200 classic bosses is treated as truncated.
  */
-export const BOSS_PRUNE_FLOOR_RATIO = 0.8;
+export const MIN_BUNDLED_CLASSIC_BOSSES = 200;
 
 /**
- * Loot: ROK-2142 legitimately drops the classic loot list from 856 to 695
- * rows (−19%, retail items removed), so the floor is looser — a file with
- * less than half the stored rows is treated as truncated.
+ * Loot: the curated classic loot list is 695 rows (ROK-2142). A file with
+ * fewer than 600 classic rows is treated as truncated.
  */
-export const LOOT_PRUNE_FLOOR_RATIO = 0.5;
+export const MIN_BUNDLED_CLASSIC_LOOT = 600;
 
 /** Receives the reason a prune step was skipped. */
 export type PruneWarn = (message: string) => void;
@@ -64,26 +69,29 @@ export interface LootWantedKey {
 const isClassic = (r: { expansion: string }): boolean =>
   r.expansion === PRUNED_EXPANSION;
 
-/** True when `wanted` is empty or below `ratio` of the stored count. */
-function belowFloor(wanted: number, stored: number, ratio: number): boolean {
-  return wanted === 0 || wanted < stored * ratio;
+/** True when the bundled classic count is below the absolute `min`. */
+function belowFloor(wanted: number, min: number): boolean {
+  return wanted === 0 || wanted < min;
 }
 
 /**
  * Ids of seeded `classic` boss rows whose (instanceId, name) is no longer in
- * the bundled JSON. Returns [] (and warns) when the JSON fails the floor.
+ * the bundled JSON. Returns [] (and warns) when the JSON has fewer classic
+ * bosses than `minBundled` (production: `MIN_BUNDLED_CLASSIC_BOSSES`; specs
+ * with small fixtures pass their own floor).
  */
 export function findStaleClassicBossIds(
   dbRows: readonly BossKeyRow[],
   jsonBosses: readonly BossJsonKey[],
   warn?: PruneWarn,
+  minBundled = MIN_BUNDLED_CLASSIC_BOSSES,
 ): number[] {
   const key = (b: BossJsonKey): string => `${b.instanceId}::${b.name}`;
   const wanted = new Set(jsonBosses.filter(isClassic).map(key));
   const stored = dbRows.filter(isClassic);
-  if (belowFloor(wanted.size, stored.length, BOSS_PRUNE_FLOOR_RATIO)) {
+  if (belowFloor(wanted.size, minBundled)) {
     warn?.(
-      `Skipping classic boss prune: JSON has ${wanted.size} classic bosses vs ${stored.length} stored`,
+      `Skipping classic boss prune: JSON has ${wanted.size} classic bosses (minimum ${minBundled}) vs ${stored.length} stored`,
     );
     return [];
   }
@@ -92,23 +100,24 @@ export function findStaleClassicBossIds(
 
 /**
  * Ids of `classic` loot rows on classic bosses whose (bossId, itemId) is no
- * longer in the bundled JSON. Returns [] (and warns) when the JSON fails the
- * floor.
+ * longer in the bundled JSON. Returns [] (and warns) when the JSON has fewer
+ * classic loot rows than `minBundled` (production: `MIN_BUNDLED_CLASSIC_LOOT`).
  */
 export function findStaleClassicLootIds(
   lootRows: readonly LootKeyRow[],
   wantedLoot: readonly LootWantedKey[],
   classicBossIds: ReadonlySet<number>,
   warn?: PruneWarn,
+  minBundled = MIN_BUNDLED_CLASSIC_LOOT,
 ): number[] {
   const key = (l: LootWantedKey): string => `${l.bossId}::${l.itemId}`;
   const wanted = new Set(wantedLoot.filter(isClassic).map(key));
   const stored = lootRows.filter(
     (r) => isClassic(r) && classicBossIds.has(r.bossId),
   );
-  if (belowFloor(wanted.size, stored.length, LOOT_PRUNE_FLOOR_RATIO)) {
+  if (belowFloor(wanted.size, minBundled)) {
     warn?.(
-      `Skipping classic loot prune: JSON has ${wanted.size} classic loot rows vs ${stored.length} stored`,
+      `Skipping classic loot prune: JSON has ${wanted.size} classic loot rows (minimum ${minBundled}) vs ${stored.length} stored`,
     );
     return [];
   }

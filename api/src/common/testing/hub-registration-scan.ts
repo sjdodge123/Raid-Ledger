@@ -33,6 +33,7 @@ export const HUB_POINT_KINDS: Readonly<Record<string, HubBehaviourKind>> = {
   EVENT_GUILD_TAGGER: 'event-tagger',
   GAME_LOG_PARSER: 'log-parser',
   CRON_REGISTRAR: 'scheduled-job',
+  HUB_CLAIM_PROVIDER: 'claim-provider',
 };
 
 /** Kinds this scan has a live-registration scanner for. */

@@ -1,8 +1,8 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { HubOnboardingDismissalDto } from '@raid-ledger/contract';
-import { HubOnboardingKeySchema } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { fromStorageKey } from './hub-onboarding.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -35,14 +35,17 @@ export async function listDismissals(
     .orderBy(t.dismissedAt, t.id);
   // Parsed, not cast: the column is text, and a key the enum no longer knows
   // (a retired prompt left behind by an older release) must not be handed to
-  // the web as a valid one — it is dropped instead.
+  // the web as a valid one — it is dropped instead. ROK-2153 N4: a scoped row
+  // (`claim-character:<scope>`) is split back into `{ key, scope }`; `scope`
+  // is emitted only when present.
   return rows.flatMap((row) => {
-    const key = HubOnboardingKeySchema.safeParse(row.key);
-    if (!key.success) return [];
+    const parsed = fromStorageKey(row.key);
+    if (parsed === null) return [];
     return [
       {
-        key: key.data,
+        key: parsed.key,
         guildId: row.guildId,
+        ...(parsed.scope !== null ? { scope: parsed.scope } : {}),
         dismissedAt: row.dismissedAt.toISOString(),
       },
     ];

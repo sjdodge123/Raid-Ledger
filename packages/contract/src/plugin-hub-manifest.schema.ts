@@ -26,6 +26,8 @@ export const HUB_BEHAVIOUR_KINDS = [
   'media-subject',
   /** ROK-1959 — hides one Gallery source per hub at read time (e.g. a spoiler toggle). */
   'media-gate',
+  /** ROK-2153 — serves the hub's "claim your character" list (`GET/POST /guilds/:id/claim`). */
+  'claim-provider',
 ] as const;
 export const HubBehaviourKindSchema = z.enum(HUB_BEHAVIOUR_KINDS);
 export type HubBehaviourKind = z.infer<typeof HubBehaviourKindSchema>;

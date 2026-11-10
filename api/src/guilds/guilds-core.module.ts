@@ -31,6 +31,9 @@ import { HubPostsService } from './posts/hub-posts.service';
 import { HubSessionNoteController } from './session-note/hub-session-note.controller';
 import { HubSessionNoteService } from './session-note/hub-session-note.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
+import { HubClaimController } from './claim/hub-claim.controller';
+import { HubClaimRegistry } from './claim/hub-claim.registry';
+import { HubClaimService } from './claim/hub-claim.service';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
@@ -62,6 +65,7 @@ import {
     GuildDiscordController,
     HubPostsController,
     HubSessionNoteController,
+    HubClaimController,
   ],
   providers: [
     GuildAccessService,
@@ -83,6 +87,8 @@ import {
     HubPostsService,
     HubSessionNoteService,
     CommunityHubKindAdapter,
+    HubClaimRegistry,
+    HubClaimService,
   ],
   exports: [
     GuildAccessService,
@@ -97,6 +103,7 @@ import {
     HubVisibleGuard,
     HubPostsService,
     CommunityHubKindAdapter,
+    HubClaimRegistry,
   ],
 })
 export class GuildsCoreModule implements OnModuleInit {

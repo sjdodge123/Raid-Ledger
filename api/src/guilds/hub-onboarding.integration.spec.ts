@@ -309,35 +309,149 @@ describe('HubOnboardingService companion-install key (integration)', () => {
 });
 
 /**
+ * ROK-2153 N4 — a `claim-character` dismissal can be narrowed to a provider
+ * round (`?scope=`, a BG3 campaign). Each scope is its own row
+ * (`claim-character:<scope>` in the key column), so dismissing campaign 1
+ * leaves campaign 2's prompt free to show, while an unscoped dismissal keeps
+ * working exactly as before (once per hub, permanent).
+ */
+const CLAIM = 'claim-character';
+
+/** Raw `key` column values, so the `<key>:<scope>` encoding is pinned. */
+async function storedKeys(userId: number): Promise<string[]> {
+  const rows = await testApp.db
+    .select({ key: schema.hubOnboardingDismissals.key })
+    .from(schema.hubOnboardingDismissals)
+    .where(eq(schema.hubOnboardingDismissals.userId, userId));
+  return rows.map((r) => r.key).sort();
+}
+
+describe('HubOnboardingService scoped claim-character (integration)', () => {
+  it('stores a scoped dismissal and lists it split back into key + scope', async () => {
+    const guildId = await seedGuild('Scoped Hub');
+    const plain = await seedGuildMember(guildId, 'scoped-a', { editor: false });
+    const q = { guildId: String(guildId), scope: 'campaign-1' };
+
+    await onboarding.dismiss(plain, CLAIM, q);
+    const again = await onboarding.dismiss(plain, CLAIM, q);
+
+    expect(again.dismissed).toEqual([
+      expect.objectContaining({ key: CLAIM, guildId, scope: 'campaign-1' }),
+    ]);
+    expect(await storedKeys(plain.id)).toEqual(['claim-character:campaign-1']);
+  });
+
+  it('does not count a campaign-1 dismissal as a campaign-2 one', async () => {
+    const guildId = await seedGuild('Two Campaigns');
+    const plain = await seedGuildMember(guildId, 'scoped-b', { editor: false });
+
+    const after = await onboarding.dismiss(plain, CLAIM, {
+      guildId: String(guildId),
+      scope: 'campaign-1',
+    });
+
+    const scopes = after.dismissed.map((d) => d.scope);
+    expect(scopes).toEqual(['campaign-1']);
+    expect(scopes).not.toContain('campaign-2');
+  });
+
+  it('keeps unscoped, campaign-1 and campaign-2 rows apart; restore removes one', async () => {
+    const guildId = await seedGuild('Three Rows');
+    const plain = await seedGuildMember(guildId, 'scoped-c', { editor: false });
+    const g = String(guildId);
+    await onboarding.dismiss(plain, CLAIM, { guildId: g });
+    await onboarding.dismiss(plain, CLAIM, { guildId: g, scope: 'campaign-1' });
+    await onboarding.dismiss(plain, CLAIM, { guildId: g, scope: 'campaign-2' });
+    expect(await rowCount(plain.id)).toBe(3);
+
+    const after = await onboarding.restore(plain, CLAIM, {
+      guildId: g,
+      scope: 'campaign-1',
+    });
+
+    expect(await storedKeys(plain.id)).toEqual([
+      'claim-character',
+      'claim-character:campaign-2',
+    ]);
+    const unscoped = after.dismissed.find((d) => d.scope === undefined);
+    expect(unscoped).toEqual(expect.objectContaining({ key: CLAIM, guildId }));
+    expect(unscoped).not.toHaveProperty('scope');
+  });
+});
+
+describe('HubOnboardingService scoped claim-character refusals (integration)', () => {
+  it('refuses a scope on another key, without guildId, or malformed — no row', async () => {
+    const guildId = await seedGuild('Bad Scopes');
+    const plain = await seedGuildMember(guildId, 'scoped-d', { editor: false });
+    const g = String(guildId);
+    const bad: Array<[string, Record<string, string>]> = [
+      ['companion-install', { guildId: g, scope: 'campaign-1' }],
+      [CLAIM, { scope: 'campaign-1' }],
+      [CLAIM, { guildId: g, scope: 'a:b' }],
+      [CLAIM, { guildId: g, scope: 'x'.repeat(41) }],
+    ];
+    for (const [key, query] of bad) {
+      await expect(onboarding.dismiss(plain, key, query)).rejects.toThrow(
+        BadRequestException,
+      );
+    }
+    expect(await rowCount(plain.id)).toBe(0);
+  });
+
+  it('answers 404 for a scoped dismissal on a hub the caller cannot see', async () => {
+    const guildId = await seedGuild('Hidden Scoped Hub');
+    const outsiderId = await seedUser('scoped-outsider');
+
+    await expect(
+      onboarding.dismiss(member(outsiderId), CLAIM, {
+        guildId: String(guildId),
+        scope: 'campaign-1',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    expect(await rowCount(outsiderId)).toBe(0);
+  });
+});
+
+/** A local-credential user and their bearer token. */
+async function seedLogin(
+  username: string,
+  role: 'member' | 'admin' = 'member',
+): Promise<{
+  id: number;
+  token: string;
+}> {
+  const id = await seedUser(username);
+  if (role !== 'member') {
+    await testApp.db
+      .update(schema.users)
+      .set({ role })
+      .where(eq(schema.users.id, id));
+  }
+  const email = `${username}@onboarding.test`;
+  await testApp.db.insert(schema.localCredentials).values({
+    email,
+    passwordHash: await bcrypt.hash(PASSWORD, 4),
+    userId: id,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: PASSWORD });
+  // `/auth/local` answers 200, not Nest's POST-default 201 — same as
+  // `auth.integration.spec.ts` and `loginAsAdmin` in integration-helpers.
+  expect(res.status).toBe(200);
+  const token = (res.body as { access_token?: string }).access_token;
+  if (typeof token !== 'string') {
+    throw new Error(`no access_token in login response for ${username}`);
+  }
+  return { id, token };
+}
+
+/**
  * PR-3 review: every case above talks to the service. These two go through
  * the real HTTP stack, so deleting `@UseGuards(AuthGuard('jwt'))` or reading
  * the user id from anywhere but `req.user` turns them red.
  */
 describe('GET /guilds/onboarding (HTTP)', () => {
-  async function seedLogin(username: string): Promise<{
-    id: number;
-    token: string;
-  }> {
-    const id = await seedUser(username);
-    const email = `${username}@onboarding.test`;
-    await testApp.db.insert(schema.localCredentials).values({
-      email,
-      passwordHash: await bcrypt.hash(PASSWORD, 4),
-      userId: id,
-    });
-    const res = await testApp.request
-      .post('/auth/local')
-      .send({ email, password: PASSWORD });
-    // `/auth/local` answers 200, not Nest's POST-default 201 — same as
-    // `auth.integration.spec.ts` and `loginAsAdmin` in integration-helpers.
-    expect(res.status).toBe(200);
-    const token = (res.body as { access_token?: string }).access_token;
-    if (typeof token !== 'string') {
-      throw new Error(`no access_token in login response for ${username}`);
-    }
-    return { id, token };
-  }
-
   it('refuses an anonymous caller', async () => {
     const res = await testApp.request.get('/guilds/onboarding');
     expect(res.status).toBe(401);
@@ -361,5 +475,33 @@ describe('GET /guilds/onboarding (HTTP)', () => {
     expect(own.status).toBe(200);
     expect((own.body as { dismissed: unknown[] }).dismissed).toHaveLength(1);
     expect(await rowCount(theirs.id)).toBe(1);
+  });
+});
+
+describe('POST /guilds/onboarding/claim-character/dismiss?scope= (HTTP)', () => {
+  // ROK-2153 N4: `?scope=` travels through the controller's @Query().
+  it('stores ?scope= over HTTP and 400s it without guildId', async () => {
+    // Staff see every hub, so the hub needs no member seeding here.
+    const mine = await seedLogin('http-scoped', 'admin');
+    const guildId = await seedGuild('HTTP Scoped Hub');
+
+    const bad = await testApp.request
+      .post('/guilds/onboarding/claim-character/dismiss?scope=campaign-1')
+      .set('Authorization', `Bearer ${mine.token}`);
+    expect(bad.status).toBe(400);
+
+    const res = await testApp.request
+      .post(
+        `/guilds/onboarding/claim-character/dismiss?guildId=${guildId}&scope=campaign-3`,
+      )
+      .set('Authorization', `Bearer ${mine.token}`);
+    expect(res.status).toBe(200);
+    expect((res.body as { dismissed: unknown[] }).dismissed).toContainEqual(
+      expect.objectContaining({
+        key: 'claim-character',
+        guildId,
+        scope: 'campaign-3',
+      }),
+    );
   });
 });

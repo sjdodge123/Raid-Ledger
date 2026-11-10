@@ -17,8 +17,10 @@ import {
   type GuildActor,
 } from './guild-access.service';
 import {
+  assertScopeAllowed,
   parseOnboardingKey,
   parseOnboardingScope,
+  toStorageKey,
 } from './hub-onboarding.helpers';
 import {
   deleteDismissal,
@@ -61,8 +63,12 @@ export class HubOnboardingService {
     rawKey: unknown,
     rawQuery: unknown,
   ): Promise<HubOnboardingStateDto> {
-    const { key, guildId } = await this.resolveScope(actor, rawKey, rawQuery);
-    await insertDismissal(this.db, actor.id, key, guildId);
+    const { storageKey, guildId } = await this.resolveScope(
+      actor,
+      rawKey,
+      rawQuery,
+    );
+    await insertDismissal(this.db, actor.id, storageKey, guildId);
     return this.state(actor.id);
   }
 
@@ -72,21 +78,31 @@ export class HubOnboardingService {
     rawKey: unknown,
     rawQuery: unknown,
   ): Promise<HubOnboardingStateDto> {
-    const { key, guildId } = await this.resolveScope(actor, rawKey, rawQuery);
-    await deleteDismissal(this.db, actor.id, key, guildId);
+    const { storageKey, guildId } = await this.resolveScope(
+      actor,
+      rawKey,
+      rawQuery,
+    );
+    await deleteDismissal(this.db, actor.id, storageKey, guildId);
     return this.state(actor.id);
   }
 
-  /** Parse the request, then authorize the hub scope when there is one. */
+  /**
+   * Parse the request, then authorize the hub scope when there is one. A
+   * `?scope=` (ROK-2153 N4, `claim-character` only, needs `guildId`) is
+   * folded into the stored key as `<key>:<scope>`; authorization stays keyed
+   * on the base key.
+   */
   private async resolveScope(
     actor: GuildActor,
     rawKey: unknown,
     rawQuery: unknown,
-  ): Promise<{ key: HubOnboardingKey; guildId: number | null }> {
+  ): Promise<{ storageKey: string; guildId: number | null }> {
     const key = parseOnboardingKey(rawKey);
-    const guildId = parseOnboardingScope(rawQuery);
+    const { guildId, scope } = parseOnboardingScope(rawQuery);
+    assertScopeAllowed(key, scope);
     if (guildId !== null) await this.authorizeScope(actor, key, guildId);
-    return { key, guildId };
+    return { storageKey: toStorageKey(key, scope), guildId };
   }
 
   /**
