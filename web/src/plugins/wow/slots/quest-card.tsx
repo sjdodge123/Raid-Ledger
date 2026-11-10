@@ -262,10 +262,10 @@ function QuestRewardsMeta({ quest }: { quest: EnrichedDungeonQuestDto }) {
 /** ROK-2161: the ROK-2165 label chip — the `.quest-card` overlay fill is below AA for bare semantic text. */
 const REPUTATION_CHIP = 'inline-block max-w-full truncate rounded-sm bg-surface/70 px-1';
 
-/** ROK-2161: one chip per faction — `text-success` for a gain, `text-danger` for a loss. */
+/** ROK-2161: one chip per faction — `text-success` for a gain, `text-danger` for a loss. `min-w-0` lets the flex item shrink so a long chip truncates. */
 function QuestReputationRewards({ rewards }: { rewards: { factionName: string; amount: number }[] }) {
     return (
-        <span data-testid="quest-reward-reputation">
+        <span className="min-w-0 max-w-full" data-testid="quest-reward-reputation">
             {rewards.map((reward, i) => (
                 <span key={`${reward.factionName}-${i}`}>
                     {i > 0 && ', '}

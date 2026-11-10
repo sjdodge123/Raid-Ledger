@@ -182,6 +182,8 @@ describe('QuestCard — reputation rewards (ROK-2161)', () => {
         for (const entry of entries) expect(entry, `${entry.textContent} sits on the label chip`).toHaveClass(...chip);
         expect(entries[0], 'the gain chip keeps the success token').toHaveClass('text-success');
         expect(entries[1], 'the loss chip keeps the danger token').toHaveClass('text-danger');
+        expect(screen.getByTestId('quest-reward-reputation'), 'the wrapper can shrink, so a long chip truncates inside the card')
+            .toHaveClass('min-w-0', 'max-w-full');
     });
 
     it('renders a reputation-only quest reward row', () => {
