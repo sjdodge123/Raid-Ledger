@@ -13,6 +13,8 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { CronJobService } from './cron-job.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { nonEmpty } from '../common/testing/narrow';
@@ -140,6 +142,20 @@ function describeRetiredPluginJobs() {
     expect(names).toContain('fakeplug:live');
     expect(names).toContain('test:core-job');
     expect((await pauseJob(testApp, adminToken, coreId)).status).toBe(200);
+  });
+
+  it('keeps listing a plugin-named @Cron job outside the registrar (ROK-2162)', async () => {
+    const scheduler = testApp.app.get(SchedulerRegistry);
+    const name = 'fakeplug:registry-only';
+    scheduler.addCronJob(name, new CronJob(HOURLY, () => undefined));
+    try {
+      await syncWith(new Map([['fakeplug', liveRegistrar]]));
+      const names = await listedNames(testApp, adminToken);
+      expect(names).toContain(name);
+      expect(names).toContain('fakeplug:live');
+    } finally {
+      scheduler.deleteCronJob(name);
+    }
   });
 
   it('leaves rows of an un-synced plugin and of a throwing registrar alone', async () => {

@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import type { ForeverProbeConfigDto, ForeverProbeResultDto, ForeverProbeStateDto } from '@raid-ledger/contract';
 import { fetchForeverProbe, runForeverProbe, updateForeverProbeConfig } from '../api-client';
+import { BLIZZARD_DEPENDENT_QUERY_ROOT } from '../../../hooks/admin/use-blizzard-settings';
 
 /** TanStack Query key for the admin Forever namespace probe state (ROK-1716). */
-export const FOREVER_PROBE_KEY = ['admin', 'blizzard', 'forever-probe'] as const;
+export const FOREVER_PROBE_KEY = [...BLIZZARD_DEPENDENT_QUERY_ROOT, 'forever-probe'] as const;
 
 /** Admin Forever namespace probe (ROK-1716): latest state, a Run now mutation and a config save. */
 export function useForeverProbe(): {

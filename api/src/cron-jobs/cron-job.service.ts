@@ -37,7 +37,10 @@ import {
   updateJobSchedule,
   findPluginHandler,
 } from './cron-job.admin-helpers';
-import { RetiredPluginJobs } from './cron-job.retired-plugin-jobs';
+import {
+  RetiredPluginJobs,
+  withRegistryPluginJobs,
+} from './cron-job.retired-plugin-jobs';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 
@@ -171,7 +174,10 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       );
       if (live) liveBySlug.set(slug, live);
     }
-    this.retired.replace(liveBySlug);
+    // A plugin's own named @Cron('slug:x') outside its registrar is live too.
+    this.retired.replace(
+      withRegistryPluginJobs(liveBySlug, this.schedulerRegistry.getCronJobs()),
+    );
   }
 
   /**

@@ -1,17 +1,38 @@
 /**
- * "You need N more pre-reqs" line under the Quest Prep header (ROK-1748).
+ * The to-do lines under the Quest Prep header (ROK-1748, reworked ROK-2169):
+ * how many sharable quests someone still has to grab, and how many quest
+ * chains each player has to complete, with the viewer's own progress.
  */
-import type { EventQuestPrereqsResponse } from '@raid-ledger/contract';
+import type { QuestPrepTodo, ViewerChainProgress } from './quest-prep-todo';
 
-/**
- * Summarise the viewer's outstanding pre-req steps. Renders nothing without a
- * state or without an addon snapshot (R-3: we cannot know what is needed).
- */
-export function QuestPrepNeededLine({ prereqs }: { prereqs: EventQuestPrereqsResponse | undefined }) {
-    if (!prereqs || prereqs.asOf === null) return null;
-    if (prereqs.neededTotal > 0) {
-        const noun = prereqs.neededTotal === 1 ? 'pre-req' : 'pre-reqs';
-        return <p className="text-sm text-warning">You need {prereqs.neededTotal} more {noun}</p>;
-    }
-    return <p className="text-sm text-success">All pre-reqs done</p>;
+const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
+
+function SharableLine({ count }: { count: number }) {
+    return (
+        <p className="text-sm text-warning break-words" data-testid="quest-prep-sharable-line">
+            Someone needs to grab {count} sharable {plural(count, 'quest', 'quests')}
+        </p>
+    );
+}
+
+function ChainsLine({ count, viewer }: { count: number; viewer: ViewerChainProgress }) {
+    const done = viewer.status === 'done';
+    return (
+        <p className={`text-sm break-words ${done ? 'text-muted' : 'text-warning'}`} data-testid="quest-prep-chains-line">
+            Each player needs to complete {count} quest {plural(count, 'chain', 'chains')}
+            {viewer.status === 'missing' && ` · you still need ${viewer.steps} more ${plural(viewer.steps, 'step', 'steps')}`}
+            {done && <span className="text-success"> · yours are done</span>}
+        </p>
+    );
+}
+
+/** Renders nothing when there is nothing left to grab and no chain to complete. */
+export function QuestPrepNeededLine({ todo }: { todo: QuestPrepTodo }) {
+    if (todo.sharableToGrab <= 0 && todo.chains <= 0) return null;
+    return (
+        <>
+            {todo.sharableToGrab > 0 && <SharableLine count={todo.sharableToGrab} />}
+            {todo.chains > 0 && <ChainsLine count={todo.chains} viewer={todo.viewer} />}
+        </>
+    );
 }

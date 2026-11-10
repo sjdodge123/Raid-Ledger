@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import type { AggregateGameTimeCell } from '@raid-ledger/contract';
 import type { HeatmapCellData } from '../../game-time-grid.types';
 import {
-    groupBandKind, groupBandShares, groupCellBusyLabel, groupCellKey, groupCellShortLabel,
+    groupBandKind, groupBandShares, groupCellCountClauses, groupCellKey,
     groupStripLabel, suggestedBlock, toGroupCellMap, type GroupBandShare,
 } from '../group-day.utils';
 
@@ -45,33 +45,31 @@ describe('toGroupCellMap', () => {
     });
 });
 
-describe('groupCellShortLabel', () => {
+describe('groupCellCountClauses', () => {
+    const texts = (cell?: HeatmapCellData): string[] => groupCellCountClauses(cell).map((c) => c.text);
+
     it('reads the free count, and the stale count only when there is one', () => {
-        expect(groupCellShortLabel({ available: 4, total: 4, stale: 0, unknown: 0 })).toBe('4 free');
-        expect(groupCellShortLabel({ available: 3, total: 4, stale: 1, unknown: 0 })).toBe('3 free · 1 stale');
+        expect(texts({ available: 4, total: 4, stale: 0, unknown: 0 })).toEqual(['4 free']);
+        expect(texts({ available: 3, total: 4, stale: 1, unknown: 0 })).toEqual(['3 free', '1 stale']);
     });
 
     it('says "0 free" for a cell nobody is free in', () => {
-        expect(groupCellShortLabel({ available: 0, total: 4, stale: 0, unknown: 4 })).toBe('0 free');
+        expect(texts({ available: 0, total: 4, stale: 0, unknown: 4 })).toEqual(['0 free']);
     });
 
     it('says nothing at all when there is no cell', () => {
-        expect(groupCellShortLabel(undefined)).toBe('');
-    });
-});
-
-describe('groupCellBusyLabel', () => {
-    it('is the purple clause of the label — "· 1 busy" — only when someone is busy', () => {
-        expect(groupCellBusyLabel({ available: 2, total: 4, stale: 0, unknown: 0, busy: 1 }))
-            .toBe(' · 1 busy');
-        expect(groupCellBusyLabel({ available: 0, total: 4, stale: 0, unknown: 2, busy: 2 }))
-            .toBe(' · 2 busy');
+        expect(groupCellCountClauses(undefined)).toEqual([]);
     });
 
-    it('is empty when nobody is busy, when the field is absent, and when there is no cell', () => {
-        expect(groupCellBusyLabel({ available: 2, total: 4, busy: 0 })).toBe('');
-        expect(groupCellBusyLabel({ available: 2, total: 4 })).toBe('');
-        expect(groupCellBusyLabel(undefined)).toBe('');
+    it('puts busy right after free, before stale (ROK-2167 ruling, option A)', () => {
+        expect(groupCellCountClauses({ available: 0, total: 17, stale: 8, unknown: 8, busy: 1 })).toEqual([
+            { kind: 'free', text: '0 free' }, { kind: 'busy', text: '1 busy' }, { kind: 'stale', text: '8 stale' },
+        ]);
+    });
+
+    it('omits the busy clause when nobody is busy or the field is absent', () => {
+        expect(texts({ available: 2, total: 4, busy: 0 })).toEqual(['2 free']);
+        expect(texts({ available: 2, total: 4 })).toEqual(['2 free']);
     });
 });
 

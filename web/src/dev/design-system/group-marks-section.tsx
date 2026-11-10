@@ -7,6 +7,7 @@
  * exactly as `GroupWeekCell` does. Nothing here is a hand-drawn approximation.
  */
 import type { JSX } from 'react';
+import { GroupWeekCell } from '../../components/features/game-time/week/GroupWeekCell';
 import { GroupWeekLegend } from '../../components/features/game-time/week/GroupWeekLegend';
 import {
     weekCellClass,
@@ -45,6 +46,35 @@ function SampleCell({ example }: { example: CellExample }): JSX.Element {
     );
 }
 
+/** ROK-2167: the REAL cell at each hue's strongest fill — the count reads on its COUNT_CHIP. */
+const CHIP_FILLS = [
+    { id: 'green', label: 'Count chip · everyone free', cell: { available: 5, total: 5, busy: 1 } },
+    { id: 'yellow', label: 'Count chip · most free', cell: { available: 11, total: 12, busy: 1 } },
+    { id: 'red', label: 'Count chip · half free', cell: { available: 2, total: 4, busy: 2 } },
+] as const;
+
+/** ROK-2167 option A: three counts do not fit one line, so the chip wraps between clauses and clears "Suggested". */
+const FULL_CELL = { available: 0, total: 17, stale: 8, unknown: 8, busy: 1 } as const;
+
+function CountChipExamples(): JSX.Element {
+    return (
+        <StateGrid>
+            {CHIP_FILLS.map(({ id, label, cell }) => (
+                <StateFrame key={id} label={label}>
+                    <div data-testid={`ds-count-chip-${id}`} className="w-28 bg-surface">
+                        <GroupWeekCell dayOfWeek={3} hour={20} cell={cell} picked={false} current={false} disabled={false} />
+                    </div>
+                </StateFrame>
+            ))}
+            <StateFrame label="Count chip · free · busy · stale, wrapped" note="Never truncated; the two-line chip clears the corner label.">
+                <div data-testid="ds-count-chip-full" className="w-32 bg-surface">
+                    <GroupWeekCell dayOfWeek={3} hour={20} cell={FULL_CELL} picked current={false} disabled={false} />
+                </div>
+            </StateFrame>
+        </StateGrid>
+    );
+}
+
 function LegendExamples(): JSX.Element {
     return (
         <div className="flex flex-col gap-3 mb-6">
@@ -64,12 +94,13 @@ export function GroupMarksSection(): JSX.Element {
         <Section
             id="group-marks"
             title="Pattern — group marks and legend"
-            blurb="Busy is a left edge, not a fill (4px desktop, 5px phone), and a text-busy count clause after the free count. Suggested is a dashed slot outline; the viewer's pick is a success ring."
+            blurb="Busy is a left edge, not a fill (4px desktop, 5px phone), and a text-busy count clause straight after the free count (free · busy · stale), the whole count on a bg-surface/80 chip that wraps between clauses, never truncating (ROK-2167). Suggested is a dashed slot outline; the viewer's pick is a success ring."
         >
             <LegendExamples />
             <StateGrid>
                 {CELL_EXAMPLES.map((ex) => <SampleCell key={ex.id} example={ex} />)}
             </StateGrid>
+            <CountChipExamples />
         </Section>
     );
 }

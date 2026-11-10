@@ -602,9 +602,12 @@ is known (no viewer state → no pill, never a "Not done" pill).
 (`web/src/plugins/wow/slots/quest-prereq-chain.tsx`) prefixes each step with a glyph on an INNER span:
 done → `text-success` ✓ + `sr-only` "done", needed → `text-warning` ○ + `sr-only` "needed". The token class
 goes on the inner span because the unlayered `.quest-prereq__step` colour rule beats a Tailwind utility on the
-same element. The chain row stays `flex-wrap` (no horizontal scroll at 375px). A summary line pairs with it
-(`quest-prep-needed-line.tsx`: `text-sm text-warning` "You need N more pre-reqs" / `text-success` "All pre-reqs
-done"); an addon-sourced state adds the shared `formatAddonSourceLine` (`plugins/wow/lib/addon-source-line.ts`)
+same element. The chain row stays `flex-wrap` (no horizontal scroll at 375px). Summary lines pair with it
+under the Quest Prep header (`quest-prep-needed-line.tsx`, counts in `quest-prep-todo.ts`, ROK-2169):
+`text-sm text-warning` "Someone needs to grab X sharable quests" (only while X > 0) and "Each player needs to
+complete Y quest chains" with the viewer's " · you still need N more steps" (warning) or a `text-success`
+" · yours are done" on a `text-muted` line; no snapshot or an unknown step → no suffix. Nothing renders when
+both counts are zero, never an "all done" line; an addon-sourced state adds the shared `formatAddonSourceLine` (`plugins/wow/lib/addon-source-line.ts`)
 as `text-xs text-muted` under the chain. Without a state the chain renders exactly as before.
 **ROK-2144 supersedes the per-chain source line:** the chain no longer dates itself.
 
@@ -632,7 +635,10 @@ when every token passes alone. Wrap the text in `inline-block max-w-full truncat
 `semantic-tokens.guard.test.ts` does for the own-calendar busy band (§4.16 NP-1). Adopters: the busy band label
 (ROK-2165) and the Quest Prep card's reputation rewards (ROK-2161: `REPUTATION_CHIP` in `quest-card.tsx`,
 `text-success` / `text-danger` over the `.quest-card` `--color-overlay` fill, `--color-faint` on hover; guard
-rows on all fifteen schemes).
+rows on all fifteen schemes) and the group heatmap's "N free · N busy · N stale" count (ROK-2167: `COUNT_CHIP` in
+`week/group-marks.classes.ts`, `bg-surface/80` — one step stronger because the heat fills reach 65% alpha —
+shared by `GroupWeekCell` and `GroupDayView`; `heatmap-count-chip.guard.test.ts` composites `text-busy` and
+the `text-foreground/80`/`/85` count over the chip over each hue's strongest `computeHeatmapBg` fill, both families).
 
 **Roster member pill (ROK-2149).** The read-only roster-member page marks a guild roster member with no Raid
 Ledger character with a `StatusChip tone="neutral"` "Roster member" (title "A guild roster member without a Raid Ledger
@@ -1159,10 +1165,20 @@ it is untouched. Classes live in `web/src/components/features/game-time/week/gro
 `outline-slot`, inset 3px), `PICKED_MARK` (`ring-success`), `DISABLED_MARK` — composed by
 `weekCellClass`.
 
-The label is a **count clause**, never a standalone badge: the busy part is appended to the free count as
-`" · N busy"` (`groupCellBusyLabel`, `group-day.utils.ts:57-66`; long form `N free · N stale · N busy · N unknown`,
-`grid-cell.utils.ts:84-99`) and rendered in `<b className="font-medium text-busy">` beside the foreground
-free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`.
+The label is a **count clause**, never a standalone badge: the count line is `free · busy · stale` — busy
+straight after the free count, so a narrow cell never loses it (ROK-2167 ruling 2026-11-10, option A) —
+built by `groupCellCountClauses` (`group-day.utils.ts:58-66`; long form `N free · N busy · N stale · N unknown`,
+`grid-cell.utils.ts:90-102`, and the desktop aria-label "5 free, 1 busy, 1 stale" follow the same order) and
+rendered by `GroupCountClauses` (`GroupCountClauses.tsx:10` paints the busy clause
+`font-medium text-busy`) inside the desktop and phone chips (`GroupWeekCell.tsx:32`, `GroupDayView.tsx:188`).
+It reads `2 free · 1 busy · 3 stale`. The whole count sits on the `COUNT_CHIP` surface chip (ROK-2167 — the
+label-chip pattern, "a label on a tinted/translucent fill" above), because no text token clears AA straight on
+the strongest dark heat fills. **The chip wraps, it never truncates:** each clause is a `whitespace-nowrap`
+span and the clauses are joined by a plain space, so a line wider than the chip's `max-w-[calc(100%-10px)]`
+breaks BETWEEN clauses (the second line starts `· 8 stale`), never inside `8 stale`. A full desktop cell gets
+a two-line chip (24px); the cell stays `h-10`. The desktop chip sits at `top-0.5` (`GroupWeekCell.tsx:31`), so a
+two-line chip spans y 3–27 and clears both the picked ring / slot outline above it and the `CornerLabel`
+("Suggested" / "N voted", `bottom-[3px]`, y 27–37, `:39`) below it.
 
 **DON'T** paint a busy hour purple **in a group view** (the poll heatmap, the group week, the group day), drop
 the clause into a pill, or hand-write another `before:` edge. The one exception is the viewer's OWN grid,
