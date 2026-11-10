@@ -263,3 +263,46 @@ describe('light semantic text on every light scheme (TDB:1770, 2026-10-08)', () 
             .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });
+
+/**
+ * ROK-2165: the own-calendar busy band's "Busy · Google Calendar" label (`CalendarBusyLayer.tsx`).
+ * The text is `--color-foreground` at 10px over a stack: grid cell (`bg-panel/50` over surface) →
+ * slot block (`bg-emerald-500/70`, `/95` when selected, `SlotBlockLayer.tsx`) → `bg-busy/30` band →
+ * the label's own `bg-surface/NN` chip. Alphas are read from the component source, so dropping the
+ * chip (white alone is 3.91:1 dark-unselected, 2.89:1 selected) fails these rows.
+ */
+const EMERALD_500 = '#00bc7d'; // Tailwind v4 theme.css --color-emerald-500 oklch(69.6% .17 162.48) in sRGB
+const busyLayerSrc = readFileSync(resolve(__dirname, '../components/features/game-time/CalendarBusyLayer.tsx'), 'utf-8');
+
+/** Alpha of `<prefix>/NN` on the first className containing `marker`, or 0 when that class is absent. */
+function classAlpha(marker: string, prefix: string): number {
+    const cls = [...busyLayerSrc.matchAll(/className="([^"]*)"/g)].map((m) => m[1] ?? '').find((c) => c.includes(marker)) ?? '';
+    const hit = new RegExp(`(?:^|\\s)${prefix}/(\\d+)(?:\\s|$)`).exec(cls);
+    return hit === null ? 0 : Number(hit[1]) / 100;
+}
+
+function busyLabelRows(): Array<readonly [string, string, string]> {
+    const [band, chip] = [classAlpha('border-busy', 'bg-busy'), classAlpha('text-foreground', 'bg-surface')];
+    const families: Array<[string, string]> = [['default-dark', themeBlock], ['default-light', lightBlock]];
+    return families.flatMap(([family, block]) => {
+        const get = (t: string) => defined(declaredValue(block, t) ?? declaredValue(themeBlock, t) ?? undefined, `--color-${t}`);
+        const cell = composite(get('panel'), get('surface'), 0.5);
+        return ([['unselected', 0.7], ['selected', 0.95]] as const).map(([state, slotAlpha]) => {
+            const under = composite(get('busy'), composite(EMERALD_500, cell, slotAlpha), band);
+            return [family, state, `${get('foreground')}|${composite(get('surface'), under, chip)}`] as const;
+        });
+    });
+}
+
+describe('busy band label on its chip (ROK-2165)', () => {
+    it('reads the band fill from CalendarBusyLayer.tsx', () => {
+        expect(classAlpha('border-busy', 'bg-busy'), 'bg-busy/NN not found on the band').toBeGreaterThan(0);
+    });
+
+    it.each(busyLabelRows())('%s: label clears AA over a %s slot block', (family, state, pair) => {
+        const [fg, bg] = pair.split('|') as [string, string];
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio, `${family} "Busy · Google Calendar" (${fg}) is ${ratio}:1 on band over ${state} emerald block (${bg}) — `
+            + `needs ${AA_SMALL_TEXT}:1; the label needs its bg-surface/70 chip`).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
