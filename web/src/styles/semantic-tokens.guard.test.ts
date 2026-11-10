@@ -268,11 +268,19 @@ describe('light semantic text on every light scheme (TDB:1770, 2026-10-08)', () 
  * ROK-2165: the own-calendar busy band's "Busy · Google Calendar" label (`CalendarBusyLayer.tsx`).
  * The text is `--color-foreground` at 10px over a stack: grid cell (`bg-panel/50` over surface) →
  * slot block (`bg-emerald-500/70`, `/95` when selected, `SlotBlockLayer.tsx`) → `bg-busy/30` band →
- * the label's own `bg-surface/NN` chip. Alphas are read from the component source, so dropping the
- * chip (white alone is 3.91:1 dark-unselected, 2.89:1 selected) fails these rows.
+ * the label's own `bg-surface/NN` chip. The band, chip and both slot-block alphas are read from the
+ * comment-stripped component sources, so dropping the chip (white alone is 3.91:1 dark-unselected,
+ * 2.89:1 selected) fails these rows. Only the emerald hue is a constant (see EMERALD_500).
  */
-const EMERALD_500 = '#00bc7d'; // Tailwind v4 theme.css --color-emerald-500 oklch(69.6% .17 162.48) in sRGB
-const busyLayerSrc = readFileSync(resolve(__dirname, '../components/features/game-time/CalendarBusyLayer.tsx'), 'utf-8');
+// Tailwind v4 theme.css --color-emerald-500 oklch(69.6% .17 162.48) in sRGB — a Tailwind palette
+// colour, not one of our tokens, and the guard has no oklch→sRGB converter, so it stays a constant.
+const EMERALD_500 = '#00bc7d';
+/** Block comments (incl. JSX `{/* … *\/}`) and whole-line `//` comments removed. */
+const stripTsxComments = (src: string): string => stripComments(src).replace(/^\s*\/\/.*$/gm, '');
+const gameTimeSrc = (file: string): string =>
+    stripTsxComments(readFileSync(resolve(__dirname, `../components/features/game-time/${file}`), 'utf-8'));
+const busyLayerSrc = gameTimeSrc('CalendarBusyLayer.tsx');
+const slotLayerSrc = gameTimeSrc('SlotBlockLayer.tsx');
 
 /** Alpha of `<prefix>/NN` on the first className containing `marker`, or 0 when that class is absent. */
 function classAlpha(marker: string, prefix: string): number {
@@ -281,14 +289,23 @@ function classAlpha(marker: string, prefix: string): number {
     return hit === null ? 0 : Number(hit[1]) / 100;
 }
 
+/** Alpha of `bg-emerald-500/NN` in the SlotBlockLayer class literal containing `marker`; throws when absent. */
+function slotAlpha(marker: string): number {
+    const lit = [...slotLayerSrc.matchAll(/'([^']*)'/g)].map((m) => m[1] ?? '').find((c) => c.includes(marker)) ?? '';
+    const hit = /(?:^|\s)bg-emerald-500\/(\d+)(?:\s|$)/.exec(lit);
+    if (hit === null) throw new Error(`SlotBlockLayer.tsx: no bg-emerald-500/NN on the '${marker}' slot-block class`);
+    return Number(hit[1]) / 100;
+}
+
 function busyLabelRows(): Array<readonly [string, string, string]> {
     const [band, chip] = [classAlpha('border-busy', 'bg-busy'), classAlpha('text-foreground', 'bg-surface')];
+    const slots = [['unselected', slotAlpha('cursor-pointer')], ['selected', slotAlpha('cursor-grab')]] as const;
     const families: Array<[string, string]> = [['default-dark', themeBlock], ['default-light', lightBlock]];
     return families.flatMap(([family, block]) => {
         const get = (t: string) => defined(declaredValue(block, t) ?? declaredValue(themeBlock, t) ?? undefined, `--color-${t}`);
         const cell = composite(get('panel'), get('surface'), 0.5);
-        return ([['unselected', 0.7], ['selected', 0.95]] as const).map(([state, slotAlpha]) => {
-            const under = composite(get('busy'), composite(EMERALD_500, cell, slotAlpha), band);
+        return slots.map(([state, alpha]) => {
+            const under = composite(get('busy'), composite(EMERALD_500, cell, alpha), band);
             return [family, state, `${get('foreground')}|${composite(get('surface'), under, chip)}`] as const;
         });
     });
@@ -297,6 +314,11 @@ function busyLabelRows(): Array<readonly [string, string, string]> {
 describe('busy band label on its chip (ROK-2165)', () => {
     it('reads the band fill from CalendarBusyLayer.tsx', () => {
         expect(classAlpha('border-busy', 'bg-busy'), 'bg-busy/NN not found on the band').toBeGreaterThan(0);
+    });
+
+    it('reads both slot-block alphas from SlotBlockLayer.tsx', () => {
+        expect(slotAlpha('cursor-pointer'), 'unselected bg-emerald-500/NN').toBeGreaterThan(0);
+        expect(slotAlpha('cursor-grab'), 'selected bg-emerald-500/NN').toBeGreaterThan(0);
     });
 
     it.each(busyLabelRows())('%s: label clears AA over a %s slot block', (family, state, pair) => {
