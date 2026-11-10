@@ -29,7 +29,7 @@ import {
   getAdminToken,
   pollForCondition,
 } from "./api-helpers";
-import { signInContextAs } from "./browser-session";
+import { signInAsAdmin, signInContextAs } from "./browser-session";
 import { expectHubTabReachable } from "./hub-tabs";
 
 const FIXTURE = "/admin/test/valheim/claim-drive-fixture";
@@ -161,8 +161,9 @@ async function bootOnOverview(
     (r) => r.request().method() === "POST" && path(r).endsWith("/auth/refresh"),
     { timeout: 15_000 },
   );
-  await openOverview(page, f, opts);
-  const res = await refresh;
+  // Awaited together: a slow boot fails on its first real error, not on an
+  // orphaned refresh rejection that cuts the h1 wait short ("Test ended").
+  const [res] = await Promise.all([refresh, openOverview(page, f, opts)]);
   const body = (await res.json().catch(() => null)) as {
     access_token?: unknown;
   } | null;
@@ -247,6 +248,27 @@ async function freshPageAs(
 }
 
 test.describe("Valheim hub — claim prompt (ROK-1933, ROK-2153 S4)", () => {
+  // The first navigation on a freshly spun env pays the cold start (assets,
+  // first API paths) — once per worker, outside the asserted boot budget.
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // Hook budget only (CI's 30 s test timeout would cut the 45 s wait short).
+    test.setTimeout(60_000);
+    const baseURL = testInfo.project.use.baseURL;
+    const ctx = await browser.newContext({
+      ...(baseURL === undefined ? {} : { baseURL }),
+      storageState: { cookies: [], origins: [] },
+    });
+    await signInAsAdmin(ctx);
+    const page = await ctx.newPage();
+    const refresh = page.waitForResponse(
+      (r) => r.request().method() === "POST" && path(r).endsWith("/auth/refresh"),
+      { timeout: 45_000 },
+    );
+    const [boot] = await Promise.all([refresh, page.goto("/")]);
+    expect(boot.status(), "warm-up boot refresh").toBe(200);
+    await ctx.close();
+  });
+
   test("B sees the suggested match and claims it in one click", async ({
     page,
   }, testInfo) => {
