@@ -96,6 +96,14 @@ describe('viewerChainProgress', () => {
         expect(viewerChainProgress(chains, state)).toEqual({ status: 'unknown' });
     });
 
+    it('is unknown, never done, when the prev quest is missing from our data (no resolvable step)', () => {
+        const orphan = [chainQuest(20, 10, { prerequisiteChain: null })];
+        const state = prereqs({ quests: [
+            { questId: 20, steps: [], neededCount: 0, completed: false, completedSource: null },
+        ] });
+        expect(viewerChainProgress(orphan, state)).toEqual({ status: 'unknown' });
+    });
+
     it('is unknown when a chain quest has no state at all', () => {
         const state = prereqs({ quests: [
             { questId: 20, steps: [step(10, true)], neededCount: 0, completed: false, completedSource: null },
@@ -105,6 +113,13 @@ describe('viewerChainProgress', () => {
 });
 
 describe('summariseQuestPrep', () => {
+    it('counts a sharable listed under two dungeons once: one quest to grab (multi-dungeon)', () => {
+        const usable = [quest({ questId: 1, dungeonInstanceId: 1 }), quest({ questId: 2, dungeonInstanceId: 2 })];
+        // The panel passes the flattened, questId-deduplicated list; quest 1 sat under both dungeons.
+        expect(summariseQuestPrep(usable, new Map(), undefined).sharableToGrab).toBe(2);
+        expect(summariseQuestPrep(usable, coverage([[1, [3]]]), undefined).sharableToGrab).toBe(1);
+    });
+
     it('counts chain quests in both location groups', () => {
         const quests = [quest({ questId: 1 }), chainQuest(20, 10), chainQuest(40, 30, { startsInsideDungeon: true })];
         expect(summariseQuestPrep(quests, new Map(), undefined)).toEqual({

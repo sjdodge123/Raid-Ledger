@@ -94,7 +94,7 @@ describe('QuestPrepPanel — pre-req progress (ROK-1748)', () => {
         setup();
         renderPanel(FOREVER);
         expect(await screen.findByText(NEEDED_LINE)).toHaveClass('text-warning');
-        expect(screen.getByTestId('quest-prep-sharable-line')).toHaveTextContent('Someone needs to grab 1 sharable quest');
+        expect(screen.getByTestId('quest-prep-sharable-line')).toHaveTextContent(/^Someone needs to grab 1 sharable quest$/);
         expect(screen.getByText('Done')).toBeInTheDocument();
     });
 

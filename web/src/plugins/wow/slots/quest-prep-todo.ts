@@ -24,7 +24,12 @@ export interface QuestPrepTodo {
 const isSharable = (q: EnrichedDungeonQuestDto): boolean => q.sharable && !q.prevQuestId;
 const isChain = (q: EnrichedDungeonQuestDto): boolean => !!q.prevQuestId;
 
-/** Uncovered = nobody (viewer or anyone else) has marked it picked up — the card's ⚠. */
+/**
+ * Uncovered = nobody (viewer or anyone else) has marked it picked up — the card's ⚠.
+ * Counted per quest id: in a multi-dungeon event a quest listed under two dungeons
+ * shows two ⚠ marks, but it is one quest to grab and one pick-up covers both
+ * (coverage is keyed by quest id), so `quests` must already be deduplicated.
+ */
 export function countSharableToGrab(
     quests: EnrichedDungeonQuestDto[],
     coverageMap: Map<number, QuestCoverageEntry>,
@@ -41,8 +46,11 @@ export function countSharableToGrab(
 function allStepsKnown(chainQuests: EnrichedDungeonQuestDto[], prereqs: NonNullable<EventQuestPrereqsResponse>): boolean {
     const byQuest = new Map(prereqs.quests.map((s) => [s.questId, s]));
     return chainQuests.every((q) => {
+        // A prev quest missing from our data gives 0 resolvable steps: unknown, not done.
+        // Assumes the client chain is at least as long as the server's walk (see handover).
+        const prereqCount = prerequisiteCount(q);
         const state = byQuest.get(q.questId);
-        return state !== undefined && state.steps.length >= prerequisiteCount(q);
+        return state !== undefined && prereqCount > 0 && state.steps.length >= prereqCount;
     });
 }
 
