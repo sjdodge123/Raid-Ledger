@@ -19,6 +19,8 @@ import { CharacterOwnerAdminController } from './roster-claim/character-owner.ad
 import { CharacterOwnerAdminService } from './roster-claim/character-owner.admin.service';
 import { RosterClaimController } from './roster-claim/roster-claim.controller';
 import { RosterClaimService } from './roster-claim/roster-claim.service';
+import { RosterMemberController } from './roster-member/roster-member.controller';
+import { RosterMemberService } from './roster-member/roster-member.service';
 
 /** Hub page/content/roster routes + ROK-2128 Add character → Guild roster + ROK-2136 in-game text + ROK-2148 contributions. */
 export const CONTROLLERS = [
@@ -30,6 +32,7 @@ export const CONTROLLERS = [
   ...rosterSync.CONTROLLERS,
   RosterClaimController,
   CharacterOwnerAdminController,
+  RosterMemberController,
 ];
 
 /** Hub services + the Blizzard roster sync + ROK-2128 roster claim + ROK-2136 in-game text + ROK-2148 contributions. */
@@ -44,4 +47,5 @@ export const PROVIDERS = [
   RosterClaimService,
   CharacterOwnerAdminService,
   JoinGateService,
+  RosterMemberService,
 ];

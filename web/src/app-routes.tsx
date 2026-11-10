@@ -163,6 +163,8 @@ export function AppRoutes() {
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
         <Route path="/hubs/:id" element={<GuildPage />} />
+        {/* ROK-2149: a roster member with no character — the same page, read-only. */}
+        <Route path="/hubs/:id/members/:memberId" element={<CharacterDetailPage />} />
         <Route path="/valheim/characters/:id" element={<ValheimCharacterPage />} />
         <Route path="/players" element={<PlayersPage />} />
         {/* ROK-1955: Companion device approval; `#code=` may pre-fill it. */}

@@ -175,7 +175,9 @@ describe('generic slots', () => {
         ['components/layout/more-drawer.tsx', '<PluginSlot name="nav:drawer-top" context={{ onClose }} />'],
         ['pages/players-page.tsx', '<PluginSlot name="players:header-cards" />'],
         ['pages/game-detail-page.tsx', '<PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />'],
-        ['pages/character-detail-header.tsx', 'name="character-detail:header-badges" context={{ characterId: character.id,'],
+        ['pages/character-detail-header.tsx', 'name="character-detail:header-badges" context={{ ...badgeContext(props),'],
+        // ROK-2149: the slot context is built in badgeContext; an owned character still passes its id (read-only drops it).
+        ['pages/character-detail-header.tsx', 'characterId: readOnly ? undefined : character.id'],
     ])('%s hosts its slot', (file, snippet) => {
         const src = readFileSync(resolve(__dirname, '../../..', file), 'utf8');
         expect(src.includes(snippet), `${file} is missing: ${snippet}`).toBe(true);

@@ -13,6 +13,7 @@ import { BossLootPanel } from './slots/boss-loot-panel';
 import { CharacterVariantBadge } from './slots/character-variant-badge';
 import { CharacterDetailOwnerActions } from './slots/character-detail-owner-actions';
 import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
+import { CharacterDetailReadOnlyActions } from './slots/character-detail-read-only-actions';
 import { CharacterCreateHeaderActions } from './slots/character-create-header-actions';
 import { PlayersGuildCard } from './slots/players-guild-card';
 import { foreverIdentityProvider } from './forever-identity-provider';
@@ -31,6 +32,7 @@ import { WOW_FOREVER_GAME_SLUG } from './lib/forever-identity';
 import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 import { guildTextWidget } from './hub-widgets/guild-text.register';
 import { contributionsWidget } from './hub-widgets/contributions.register';
+import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -43,6 +45,7 @@ blizzard.registerSlot('character-detail:sections', CharacterDetailSections);
 blizzard.registerSlot('character-detail:header-badges', CharacterDetailHeaderBadges);
 blizzard.registerSlot('character-detail:owner-actions', CharacterDetailOwnerActions);
 blizzard.registerSlot('character-detail:admin-actions', CharacterDetailAdminActions);
+blizzard.registerSlot('character-detail:read-only-actions', CharacterDetailReadOnlyActions);
 blizzard.registerSlot('character-create:header-actions', CharacterCreateHeaderActions);
 blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
 blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
@@ -70,6 +73,8 @@ blizzard.registerHubWidget(gearReadinessWidget);
 blizzard.registerHubWidget(raidProgressWidget);
 blizzard.registerHubWidget(guildTextWidget);
 blizzard.registerHubWidget(contributionsWidget);
+// ROK-2151 — the staff non-member "Claim your character" banner atop a claimable Forever guild's Overview.
+registerClaimBannerWidget(blizzard);
 
 // ROK-2056 L4 — the hub Overview's "install the Companion" card on Forever guild
 // hubs (the same game scope as every Forever widget). Requirement

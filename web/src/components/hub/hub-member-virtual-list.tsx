@@ -18,7 +18,7 @@ import type { HubMemberColumn, HubMemberRow } from '../../plugins/hub-module';
 import type { HubMemberBand } from './hub-members.helpers';
 import { HubMemberCards, HubMemberTable } from './hub-member-table';
 import { FOCUS_RING } from '../ui/form-classes';
-import { CARD_METRICS, TABLE_METRICS, virtualSlice } from './hub-member-virtual.helpers';
+import { cardMetrics, TABLE_METRICS, virtualSlice } from './hub-member-virtual.helpers';
 
 /** Share of the window height the list box may take (matches `max-h-[70vh]`). */
 const VIEWPORT_SHARE = 0.7;
@@ -75,7 +75,8 @@ export function HubMemberVirtualList({ bands, columns, rowClass, desktop }: Prop
     const ref = useRef<HTMLDivElement>(null);
     const [scrollTop, setScrollTop] = useState(0);
     const viewport = useViewportHeight();
-    const metrics = desktop ? TABLE_METRICS : CARD_METRICS;
+    // ROK-2155: the card height follows the columns (a third line for `cardLine: 'own'`), same function the cards draw with.
+    const metrics = useMemo(() => (desktop ? TABLE_METRICS : cardMetrics(columns)), [desktop, columns]);
     const slice = useMemo(
         () => virtualSlice(bands, metrics, scrollTop, viewport, OVERSCAN),
         [bands, metrics, scrollTop, viewport],

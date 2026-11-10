@@ -167,7 +167,7 @@ export function CharacterCreateImportForm({
                 : <BlizzardNotConfigured />)}
             {activeTab === 'roster' && showRoster && gameId !== undefined && (
                 <RosterClaimList key={charactersLoading ? 'loading' : 'ready'} gameId={gameId} existingCharacters={existingCharacters} armoryAvailable={armoryOk && blizzardConfigured}
-                    guildId={rosterGuildId} onClaimed={onClose} onSwitchTab={onTabChange} />
+                    guildId={rosterGuildId} onClaimed={onClose} onSwitchTab={onTabChange} onNavigate={onClose} />
             )}
         </>
     );

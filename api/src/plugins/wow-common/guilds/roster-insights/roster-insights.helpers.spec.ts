@@ -124,13 +124,19 @@ describe('roster-insights classes', () => {
 });
 
 describe('roster-insights roles', () => {
-  it('counts one role per linked user (main wins) and skips unlinked rows', () => {
+  it('counts one role per linked user (main wins) plus each unlinked row (ROK-2158)', () => {
     const got = computeRoles([
       row('alt', { userId: 1, level: 60, role: 'dps' }),
       row('main', { userId: 1, level: 60, role: 'tank', isMain: true }),
       row('pug', { level: 60, role: 'healer' }),
     ]);
-    expect(got.raid).toEqual({ tank: 1, healer: 0, dps: 0, unknown: 0 });
+    expect(got.raid).toEqual({ tank: 1, healer: 1, dps: 0, unknown: 0 });
+  });
+
+  it('counts an unlinked roster member once per memberId (ROK-2158)', () => {
+    const pug = { ...row('pug', { level: 60, role: 'healer' }), memberId: 42 };
+    const got = computeRoles([pug, { ...pug }]);
+    expect(got.raid).toEqual({ tank: 0, healer: 1, dps: 0, unknown: 0 });
   });
 
   it('splits dungeon-eligible (≥ lowest instance min) from raid-eligible (cap)', () => {
@@ -194,6 +200,80 @@ describe('roster-insights professions + freshness', () => {
         ],
       },
     ]);
+  });
+
+  /** `base` holding one Blacksmithing entry as a blizzard fact. */
+  function smith(
+    base: InsightRow,
+    extra: Partial<InsightRow> = {},
+  ): InsightRow {
+    const entry = {
+      id: 164,
+      slug: 'blacksmithing',
+      name: 'Blacksmithing',
+      skillLevel: 150,
+      maxSkillLevel: 225,
+      tiers: [],
+    };
+    return {
+      ...base,
+      ...extra,
+      facts: {
+        ...EMPTY,
+        professions: {
+          value: {
+            primary: [entry],
+            secondary: [],
+            syncedAt: AS_OF.toISOString(),
+          },
+          source: 'blizzard',
+          asOf: AS_OF,
+        },
+      },
+    };
+  }
+
+  it('emits an unclaimed member from its snapshot with characterId null + memberId (ROK-2149 AC-13)', () => {
+    const got = computeProfessions([smith(row('pug'), { memberId: 77 })]);
+    expect(got).toEqual([
+      {
+        name: 'Blacksmithing',
+        members: [
+          {
+            characterId: null,
+            memberId: 77,
+            name: 'pug',
+            skill: 150,
+            maxSkill: 225,
+            source: 'blizzard',
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('a linked row keeps its characterId and also carries its memberId (ROK-2149)', () => {
+    const linked = row('owner', { userId: 3 });
+    const got = computeProfessions([smith(linked, { memberId: 12 })]);
+    expect(got[0]?.members).toEqual([
+      expect.objectContaining({
+        characterId: linked.characterId,
+        memberId: 12,
+      }),
+    ]);
+  });
+
+  it('drops a row with neither a character nor a roster member id (ROK-2149)', () => {
+    const orphan = smith(row('ghost'), { memberId: null });
+    expect(computeProfessions([orphan])).toEqual([]);
+  });
+
+  it('counts linked and snapshot-only members under one profession (ROK-2149)', () => {
+    const got = computeProfessions([
+      smith(row('owner', { userId: 3 })),
+      smith(row('pug'), { memberId: 5 }),
+    ]);
+    expect(got[0]?.members.map((m) => m.name)).toEqual(['owner', 'pug']);
   });
 
   it('reports the oldest roster fact and per-character sources', () => {

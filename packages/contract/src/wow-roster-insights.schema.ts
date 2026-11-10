@@ -63,22 +63,34 @@ export const WowRosterLevelsSchema = z
   })
   .strict();
 
+/**
+ * ROK-2149 (Q4=A) — a profession member is a linked character OR an unclaimed
+ * roster member known from its Armory snapshot (`characterId: null`). Such a
+ * member always carries its `guild_members.id` (`memberId`) so readers can key
+ * it (`characterId ?? 'm' + memberId`). `memberId` is optional (old payloads
+ * have none) and may also ride on linked members.
+ */
+const WowRosterProfessionMemberSchema = z
+  .object({
+    characterId: characterId.nullable(),
+    memberId: z.number().int().positive().optional(),
+    name: z.string().max(64),
+    skill: z.number().int().nonnegative().nullable(),
+    maxSkill: z.number().int().nonnegative().nullable(),
+    source: HubFactSourceSchema,
+  })
+  .strict()
+  .refine((m) => m.characterId !== null || m.memberId !== undefined, {
+    message: "an unlinked profession member needs a memberId",
+  });
+export type WowRosterProfessionMemberDto = z.infer<
+  typeof WowRosterProfessionMemberSchema
+>;
+
 export const WowRosterProfessionSchema = z
   .object({
     name: z.string().max(64),
-    members: z
-      .array(
-        z
-          .object({
-            characterId,
-            name: z.string().max(64),
-            skill: z.number().int().nonnegative().nullable(),
-            maxSkill: z.number().int().nonnegative().nullable(),
-            source: HubFactSourceSchema,
-          })
-          .strict(),
-      )
-      .max(MAX_ROSTER),
+    members: z.array(WowRosterProfessionMemberSchema).max(MAX_ROSTER),
   })
   .strict();
 

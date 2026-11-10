@@ -176,3 +176,37 @@ describe('groupRoster viewerId (ROK-1173)', () => {
     expect(anon?.members.filter((m) => m.isViewer)).toEqual([]);
   });
 });
+
+describe('effectiveRole — Armory role (ROK-2158)', () => {
+  it('an unlinked member resolves to its Armory snapshot role', () => {
+    const r = row({ characterId: null, armoryRole: 'healer' });
+    expect(effectiveRole(r)).toBe('healer');
+  });
+
+  it('a linked character with no manual role uses the Armory role over its own role', () => {
+    expect(effectiveRole(row({ armoryRole: 'healer' }))).toBe('healer');
+    expect(effectiveRole(row({ role: 'dps', armoryRole: 'tank' }))).toBe(
+      'tank',
+    );
+  });
+
+  it('the manual override beats the Armory role', () => {
+    const r = row({ roleOverride: 'dps', armoryRole: 'healer', role: 'tank' });
+    expect(effectiveRole(r)).toBe('dps');
+  });
+
+  it('an invalid or null Armory role falls through to the character role', () => {
+    expect(effectiveRole(row({ armoryRole: 'bard', role: 'tank' }))).toBe(
+      'tank',
+    );
+    expect(effectiveRole(row({ armoryRole: null, role: 'dps' }))).toBe('dps');
+    expect(effectiveRole(row({ armoryRole: 'bard' }))).toBeNull();
+  });
+
+  it('the Members row role uses the same resolution', () => {
+    const [group] = groupRoster([
+      row({ characterId: null, armoryRole: 'healer', rankIndex: 2 }),
+    ]);
+    expect(group?.members[0]?.effectiveRole).toBe('healer');
+  });
+});

@@ -309,6 +309,7 @@ export * from './wow-event-raid-readiness.schema.js';
 export * from './wow-roster-claim.schema.js';
 // ROK-2132: WoW: Forever guild join gate (HUB_NOT_MEMBER + gate summary).
 export * from './wow-guild-join-gate.schema.js';
+export * from './wow-roster-member-character.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
 export * from './discord-join-post.schema.js';

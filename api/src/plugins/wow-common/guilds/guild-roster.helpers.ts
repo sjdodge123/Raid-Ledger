@@ -59,10 +59,22 @@ export interface RawRosterRow extends ArmoryFieldsRow {
   avatarUrl?: string | null;
 }
 
-/** `roleOverride ?? role`, narrowed to the contract's role enum. */
-export function effectiveRole(row: RawRosterRow): CharacterRole | null {
-  const parsed = CharacterRoleSchema.safeParse(row.roleOverride ?? row.role);
-  return parsed.success ? parsed.data : null;
+/**
+ * ROK-2158 — a roster member's role, the ONE resolver behind the Members
+ * row's `effectiveRole` and the guild's `roleCounts`: the manual
+ * `roleOverride`, else the Armory role (`armoryRole` — an Armory-synced
+ * character's own, else the member's verified snapshot), else the linked
+ * character's `role`. Each is narrowed to the contract's role enum; an
+ * invalid or missing value falls through. Null = no known role.
+ */
+export function effectiveRole(
+  row: Pick<RawRosterRow, 'roleOverride' | 'role' | 'armoryRole'>,
+): CharacterRole | null {
+  for (const candidate of [row.roleOverride, row.armoryRole, row.role]) {
+    const parsed = CharacterRoleSchema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
 }
 
 /** STAFF-ONLY roster link details, by linked character id (ROK-1794). */

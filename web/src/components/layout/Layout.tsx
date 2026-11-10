@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { BottomTabBar } from './bottom-tab-bar';
+import { hidesBottomTabBar } from './bottom-tab-bar-routes';
 import { MoreDrawer } from './more-drawer';
 import { LiveRegionProvider } from './live-region-provider';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
@@ -28,6 +29,13 @@ const NoShellFloorGate = lazy(() => import('../../dev/NoShellFloorGate').then((m
  * chrome or `useShellHeight` at all. The page gates itself on DEMO_MODE.
  */
 const BARE_PATHS: ReadonlySet<string> = new Set(['/dev/viewport-probe']);
+
+/**
+ * ROK-2156: below 768px the fixed bottom tab bar (+ its raised Hubs circle) and a Filters FAB overlay the
+ * page end, and the footer is hidden, so the shell — not each page — pads `<main>` past them. From 768px
+ * there is no bar. Pages must not add this clearance again (`bottom-nav-clearance.guard.test.ts`).
+ */
+const MAIN_TAB_BAR_CLEARANCE = 'pb-[max(calc(var(--bottom-nav-clearance)+1rem),var(--filter-fab-clearance))] md:pb-0';
 
 /**
  * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
@@ -159,7 +167,7 @@ export function Layout({ children }: LayoutProps) {
             <ImpersonationBanner />
             <DiscordJoinBanner />
             <Header onMenuClick={openMoreDrawer} />
-            <main id="main-content" className="flex-1">{children}</main>
+            <main id="main-content" className={hidesBottomTabBar(pathname) ? 'flex-1' : `flex-1 ${MAIN_TAB_BAR_CLEARANCE}`}>{children}</main>
             <Footer />
             <BottomTabBar />
             <MoreDrawer isOpen={moreDrawerOpen} onClose={closeMoreDrawer} onFeedbackClick={handleFeedbackClick} />
