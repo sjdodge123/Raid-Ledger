@@ -10,7 +10,10 @@ import {
 import type { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import type { ValheimArmoryReadRepository } from '../read/valheim-armory-read.repository';
 import type { ValheimArmoryClaimsService } from './valheim-armory-claims.service';
-import { ValheimHubClaimProvider } from './valheim-hub-claim.provider';
+import {
+  VALHEIM_CLAIM_SCAN_LIMIT,
+  ValheimHubClaimProvider,
+} from './valheim-hub-claim.provider';
 import { findHubServerId, findViewerFacts } from './valheim-hub-claim.queries';
 
 jest.mock('./valheim-hub-claim.queries');
@@ -169,6 +172,44 @@ describe('ValheimHubClaimProvider.status', () => {
     await expect(provider.status(ctx)).rejects.toMatchObject({
       code: 'HUB_CLAIM_UNAVAILABLE',
     });
+  });
+});
+
+// Codex P2 (S4): a scan that hit its limit may hide a second strong match,
+// so "exactly one strong" would be decided on partial data.
+describe('ValheimHubClaimProvider.status scan limit', () => {
+  function scanOf(size: number) {
+    const others = Array.from({ length: size - 1 }, (_, i) =>
+      row(i + 10, `Sigrid${i}`),
+    );
+    return [row(1, 'Brannok'), ...others];
+  }
+
+  it('a scan at the limit reports no strong match, so core suggests nothing', async () => {
+    const { provider, reads } = setup();
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: false,
+      unclaimedCount: 900,
+    });
+    reads.listProfiles.mockResolvedValue(scanOf(VALHEIM_CLAIM_SCAN_LIMIT));
+    const s = await provider.status(ctx);
+    expect(s.candidates.filter((c) => c.match === 'strong')).toEqual([]);
+    expect([s.candidates[0]?.match, s.candidates[0]?.matchReason]).toEqual([
+      'possible',
+      'same_name',
+    ]);
+    expect(pickSuggested(s.candidates)).toBeNull();
+  });
+
+  it('a scan below the limit keeps its strong match', async () => {
+    const { provider, reads } = setup();
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: false,
+      unclaimedCount: VALHEIM_CLAIM_SCAN_LIMIT - 1,
+    });
+    reads.listProfiles.mockResolvedValue(scanOf(VALHEIM_CLAIM_SCAN_LIMIT - 1));
+    const s = await provider.status(ctx);
+    expect(pickSuggested(s.candidates)?.id).toBe('1');
   });
 });
 

@@ -14,7 +14,7 @@ import {
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
-import type { HubClaimResult } from '@raid-ledger/contract';
+import type { HubClaimCandidate, HubClaimResult } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import type * as schema from '../../../../drizzle/schema';
@@ -39,6 +39,21 @@ import { findHubServerId, findViewerFacts } from './valheim-hub-claim.queries';
 
 /** Unclaimed rows read per status call; core caps the response at 50. */
 export const VALHEIM_CLAIM_SCAN_LIMIT = 500;
+
+/**
+ * A scan that hit its limit may hide a second strong match (Codex P2), so core
+ * must not decide "exactly one strong" on it: demote strong to possible (same
+ * reason) and the member picks from the list instead.
+ */
+function capStrength(
+  candidates: HubClaimCandidate[],
+  partial: boolean,
+): HubClaimCandidate[] {
+  if (!partial) return candidates;
+  return candidates.map((c): HubClaimCandidate =>
+    c.match === 'strong' ? { ...c, match: 'possible' } : c,
+  );
+}
 
 const gone = () =>
   new HubClaimError('HUB_CLAIM_CANDIDATE_GONE', 'No such character');
@@ -84,7 +99,10 @@ export class ValheimHubClaimProvider implements HubClaimProvider, OnModuleInit {
       viewerHasClaim: counts.viewerHasClaim,
       // Two reads: never report fewer unclaimed than the list we return.
       unclaimedCount: Math.max(counts.unclaimedCount, rows.length),
-      candidates: rows.map((r) => toCandidate(r, viewer)),
+      candidates: capStrength(
+        rows.map((r) => toCandidate(r, viewer)),
+        rows.length >= VALHEIM_CLAIM_SCAN_LIMIT,
+      ),
       claimOptions: 'none',
     };
   }
