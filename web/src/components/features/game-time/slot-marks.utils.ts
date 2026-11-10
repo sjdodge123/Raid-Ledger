@@ -114,8 +114,8 @@ function countClauses(cell: HeatmapCellData | undefined): string[] {
         return [`${cell.available} of ${cell.total} free`];
     }
     const clauses = [`${cell.available} free`];
-    if ((cell.stale ?? 0) > 0) clauses.push(`${cell.stale} stale`);
     if ((cell.busy ?? 0) > 0) clauses.push(`${cell.busy} busy`);
+    if ((cell.stale ?? 0) > 0) clauses.push(`${cell.stale} stale`);
     return clauses;
 }
 
@@ -129,7 +129,7 @@ function extraClauses(extras: GroupCellAriaExtras): string[] {
 }
 
 /**
- * The desktop week cell's aria-label: "Wed 8 PM: 5 free, 1 stale, 1 busy,
+ * The desktop week cell's aria-label: "Wed 8 PM: 5 free, 1 busy, 1 stale,
  * 2 voted" for the poll's freshness aggregate, "Wed 8 PM: 4 of 5 free" for the
  * legacy (events) aggregate, "Wed 8 PM: no data" for a missing cell; then
  * "", suggested" / ", current time" as flagged.

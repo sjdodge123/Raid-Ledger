@@ -81,7 +81,7 @@ describe('groupCellAriaLabel', () => {
   });
 
   it('adds the stale clause when someone is stale', () => {
-    expect(groupCellAriaLabel(3, 20, { ...fresh, stale: 1 }, {})).toBe('Wed 8 PM: 5 free, 1 stale, 1 busy');
+    expect(groupCellAriaLabel(3, 20, { ...fresh, stale: 1 }, {})).toBe('Wed 8 PM: 5 free, 1 busy, 1 stale');
   });
 
   it('omits zero stale / busy clauses and absent votes', () => {

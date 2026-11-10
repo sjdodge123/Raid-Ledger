@@ -4,7 +4,7 @@
  * events drawn on top (no "you" mark — operator ruling 2026-09-17).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { computeHeatmapBg } from '../../grid-cell.utils';
 import { toGroupCellMap } from '../group-day.utils';
@@ -69,6 +69,20 @@ describe('GroupDayView — cells', () => {
         expect(screen.getByTestId(`phone-group-cell-${DAY}-21`))
             .toHaveAttribute('aria-label', '3 free · 1 stale · 0 unknown');
         expect(screen.getByTestId(`phone-group-cell-${DAY}-22`)).toHaveTextContent('0 free');
+    });
+
+    it('orders a full count free · busy · stale, wrapping between clauses, never truncating (ROK-2167 option A)', () => {
+        renderView({ cells: toGroupCellMap([
+            { dayOfWeek: DAY, hour: 20, availableCount: 0, totalCount: 17, staleCount: 8, unknownCount: 8, busyCount: 1 },
+        ]) });
+        const phoneCell = screen.getByTestId(`phone-group-cell-${DAY}-20`);
+        const chip = within(phoneCell).getByTestId('group-count-chip');
+        expect(chip).toHaveTextContent('0 free · 1 busy · 8 stale');
+        expect(chip, 'the chip must wrap, never ellipsize').not.toHaveClass('truncate');
+        expect(Array.from(chip.children).map((c) => c.textContent)).toEqual(['0 free', '· 1 busy', '· 8 stale']);
+        expect(phoneCell).toHaveAttribute('aria-label', '0 free · 1 busy · 8 stale · 8 unknown');
+        expect(within(screen.getByTestId(`phone-group-cell-${DAY}-17`)).queryByTestId('group-count-chip'),
+            'no-data cell draws no empty chip').toBeNull();
     });
 
     it('says an hour the aggregate does not carry has no data', () => {
@@ -168,7 +182,7 @@ describe('GroupDayView — busy', () => {
         renderView({ cells: BUSY_CELLS });
         const busy = screen.getByTestId(`phone-group-cell-${DAY}-20`);
         expect(busy).toHaveTextContent('1 free · 2 busy');
-        expect(busy.querySelector('.text-busy')?.textContent).toBe(' · 2 busy');
+        expect(busy.querySelector('.text-busy')?.textContent).toBe('· 2 busy');
     });
 
     it('leaves a cell nobody is busy in exactly as it was', () => {
@@ -220,6 +234,8 @@ describe('GroupDayView — already suggested', () => {
         renderView({ slotMarks: MARKS });
         const count = screen.getByTestId(`phone-group-cell-${DAY}-20`).querySelector('span');
         expect(count?.className).toContain('z-10');
+        // ROK-2167: the count sits on the surface chip (contrast: heatmap-count-chip.guard.test.ts).
+        expect(count?.className).toContain('bg-surface/80');
         expect(screen.getByTestId('phone-group-day').className).toContain('isolate');
     });
 
