@@ -24,6 +24,14 @@ export interface DungeonQuestDto {
   rewardXp: number | null;
   rewardGold: number | null;
   rewardType: string | null;
+  /** ROK-2161: non-zero Blizzard reputation rewards; key absent when none. */
+  reputationRewards?: QuestReputationReward[];
+}
+
+/** One reputation reward on a quest card (ROK-2161). */
+export interface QuestReputationReward {
+  factionName: string;
+  amount: number;
 }
 
 export interface EnrichedDungeonQuestDto extends DungeonQuestDto {

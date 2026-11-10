@@ -1,6 +1,7 @@
 import type { DungeonQuestDto } from '../dungeon-quests.types';
 import {
   mergeBlizzardOverlay,
+  reputationRewardFields,
   type BlizzardQuestOverlay,
 } from './blizzard-quest-overlay.merge';
 
@@ -39,6 +40,7 @@ function overlay(
     rewardXp: 3100,
     rewardMoneyCopper: 1800,
     rewardItems: [{ id: 918, name: 'Deviate Hide Pack' }],
+    reputations: [],
     requirementsRaw: {},
     ...overrides,
   };
@@ -155,5 +157,41 @@ describe('mergeBlizzardOverlay', () => {
       overlay({ requirementsRaw: { quests: { conditions: [{ id: 1486 }] } } }),
     );
     expect(merged.prevQuestId).toBeNull();
+  });
+});
+
+describe('reputation rewards (ROK-2161)', () => {
+  const ironforge = { factionId: 47, name: 'Ironforge', value: 150 };
+
+  it('maps non-zero reputations to { factionName, amount }', () => {
+    const merged = mergeBlizzardOverlay(
+      curated(),
+      overlay({
+        reputations: [
+          ironforge,
+          { factionId: 54, name: 'Gnomeregan', value: -25 },
+        ],
+      }),
+    );
+    expect(merged.reputationRewards).toEqual([
+      { factionName: 'Ironforge', amount: 150 },
+      { factionName: 'Gnomeregan', amount: -25 },
+    ]);
+  });
+
+  it('omits the key when the overlay has no reputations', () => {
+    const merged = mergeBlizzardOverlay(
+      curated(),
+      overlay({ reputations: [] }),
+    );
+    expect('reputationRewards' in merged).toBe(false);
+  });
+
+  it('drops zero-value reputations and omits the key when none remain', () => {
+    const zero = { factionId: 47, name: 'Ironforge', value: 0 };
+    expect(reputationRewardFields([zero])).toEqual({});
+    expect(reputationRewardFields([zero, ironforge])).toEqual({
+      reputationRewards: [{ factionName: 'Ironforge', amount: 150 }],
+    });
   });
 });
