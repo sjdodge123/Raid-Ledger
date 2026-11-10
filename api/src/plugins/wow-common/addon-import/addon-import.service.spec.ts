@@ -49,7 +49,14 @@ jest.mock('./addon-import-char.apply', () => ({
 const CHAR_ID = '00000000-0000-4000-8000-000000000001';
 const SUMMARY = { gearCount: 1, avgIlvl: 80, talentNodes: 1, lockouts: 0 };
 /** The run's tx: apply takes THE import locks on it (ROK-1794 lock order). */
-const TX = { execute: jest.fn(() => Promise.resolve(undefined)) };
+const TX = {
+  execute: jest.fn(() => Promise.resolve(undefined)),
+  // ROK-2159: apply re-reads the owner `FOR UPDATE` on the tx (user 1 owns it).
+  select: jest.fn().mockReturnThis(),
+  from: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  for: jest.fn().mockResolvedValue([{ userId: 1 }]),
+};
 
 function makeDb() {
   const row = {
