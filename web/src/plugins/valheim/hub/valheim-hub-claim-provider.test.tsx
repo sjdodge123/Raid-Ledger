@@ -14,6 +14,7 @@ import { createTestQueryClient, renderWithProviders } from '../../../test/render
 import { buildHubClaimCandidate, buildHubClaimResult, buildHubClaimStatus, hubClaimPostHandler, type HubClaimCall } from '../../../test/mocks/hub-claim-handlers';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { HubClaimPromptCell } from '../../../components/hub/claim/hub-claim-prompt-cell';
+import { HUB_CLAIM_DEFAULT_COPY } from '../../../components/hub/claim/hub-claim-copy';
 import { valheimArmoryKeys } from '../lib/valheim-armory-api';
 import { CLAIM_BANNER_COPY } from './valheim-claim-banner.helpers';
 import { invalidateAfterHubClaim } from './valheim-hub-claim-provider';
@@ -66,7 +67,10 @@ describe('Valheim hub — core claim prompt (ROK-2153 S4)', () => {
 
         const prompt = await screen.findByTestId('hub-claim-prompt');
         expect(within(prompt).getByRole('heading', { name: CLAIM_BANNER_COPY.linkHeading(CLAIM_BANNER_COPY.fallbackServer) })).toBeInTheDocument();
-        expect(within(prompt).getByTestId('hub-claim-prompt-body')).toHaveTextContent(CLAIM_BANNER_COPY.linkBody);
+        // The prompt has no Link Steam action, so it keeps the core body + phone body.
+        expect(within(prompt).getByTestId('hub-claim-prompt-body')).toHaveTextContent(HUB_CLAIM_DEFAULT_COPY.body);
+        expect(within(prompt).getByText(HUB_CLAIM_DEFAULT_COPY.shortBody)).toBeInTheDocument();
+        expect(within(prompt).queryByText(CLAIM_BANNER_COPY.linkBody)).toBeNull();
 
         await userEvent.click(within(await screen.findByTestId('hub-claim-suggested')).getByRole('button', { name: 'Claim Ask' }));
         await waitFor(() => { expect(calls).toEqual([{ hubId: 4, candidateId: '12', body: {} }]); });
@@ -75,7 +79,16 @@ describe('Valheim hub — core claim prompt (ROK-2153 S4)', () => {
         });
     });
 
-    it('renders nothing and fetches no claim status while the Valheim plugin is inactive', async () => {
+    it('renders the prompt while the Valheim plugin is active, and nothing (no claim fetch) once it is inactive', async () => {
+        // Active first: proves the Valheim registration is what makes the prompt
+        // appear, so the inactive half below cannot pass merely for want of a provider.
+        usePluginStore.setState({ activeSlugs: new Set(['core', 'valheim']), initialized: true });
+        const active = renderWithProviders(<HubClaimPromptCell ctx={{ page: page() }} />);
+        expect(await screen.findByTestId('hub-claim-prompt'), 'the Valheim provider shows the core prompt while active').toBeInTheDocument();
+        expect(hits.claim).toBeGreaterThan(0);
+        active.unmount();
+
+        hits.claim = 0;
         usePluginStore.setState({ activeSlugs: new Set(['core']), initialized: true });
         const { container } = renderWithProviders(<HubClaimPromptCell ctx={{ page: page() }} />);
         // Flush any lazy chunk / effect before asserting the absence.

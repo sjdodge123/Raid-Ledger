@@ -1,8 +1,11 @@
 /**
  * ROK-2153 S4 — Valheim on the core "claim your character" prompt. The api
  * provider (`valheim-hub-claim.provider.ts`) serves the candidates and the
- * one-click suggested match; this is the web half: Valheim's approved copy
- * (ROK-1933 `CLAIM_BANNER_COPY`) and the Valheim caches a claim refreshes.
+ * one-click suggested match; this is the web half: Valheim's heading (ROK-1933
+ * `CLAIM_BANNER_COPY`) and the Valheim caches a claim refreshes. The body (and
+ * the phone body) stay the core default: the prompt has no Link Steam action,
+ * so Valheim's "Link Steam and ..." banner copy would ask for something it
+ * cannot do. That copy stays on the Characters-tab banner, which has the button.
  * Replaces the retired Overview `claim-banner` widget (spec resolution 1).
  */
 import type { QueryClient } from '@tanstack/react-query';
@@ -27,7 +30,6 @@ export const valheimHubClaimProvider: HubClaimProvider = {
     kinds: ['game_server'],
     copy: {
         heading: COPY.linkHeading(COPY.fallbackServer),
-        body: COPY.linkBody,
         cta: COPY.pick,
     },
     onClaimed: invalidateAfterHubClaim,

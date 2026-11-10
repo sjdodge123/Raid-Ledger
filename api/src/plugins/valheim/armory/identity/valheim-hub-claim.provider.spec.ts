@@ -129,6 +129,24 @@ describe('ValheimHubClaimProvider.status', () => {
     expect(pickSuggested(s.candidates)?.id).toBe('2');
   });
 
+  it("a viewer whose Steam differs from the character's gets no match even with the exact name", async () => {
+    viewerMock.mockResolvedValue({
+      names: ['Brannok'],
+      steamId: '76561190000000009',
+    });
+    const { provider, reads } = setup();
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: false,
+      unclaimedCount: 1,
+    });
+    reads.listProfiles.mockResolvedValue([row(1, 'Brannok')]);
+    const s = await provider.status(ctx);
+    expect(s.candidates.map((c) => [c.id, c.match, c.matchReason])).toEqual([
+      ['1', null, null],
+    ]);
+    expect(pickSuggested(s.candidates)).toBeNull();
+  });
+
   it('passes through an already-claimed viewer', async () => {
     const { provider, reads } = setup();
     reads.claimStatus.mockResolvedValue({
