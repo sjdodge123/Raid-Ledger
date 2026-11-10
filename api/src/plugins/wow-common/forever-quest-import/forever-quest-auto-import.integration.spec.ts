@@ -148,7 +148,8 @@ describe('Forever quest auto-import (ROK-2162)', () => {
     const before = await overlayRows();
     expect(before.length).toBeGreaterThan(0);
     overrides.set('quest/index', [503, {}]);
-    await auto().runWeekly();
+    // The weekly run rejects so the scheduler records the failure.
+    await expect(auto().runWeekly()).rejects.toThrow();
     const report = await importer().getStatus();
     expect(report).toMatchObject({ status: 'failed', trigger: 'weekly' });
     const after = await overlayRows();
