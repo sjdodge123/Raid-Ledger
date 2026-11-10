@@ -31,6 +31,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 
 // ── Test fixtures ───────────────────────────────────────────────────────────
 
@@ -297,8 +298,15 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
       expect(mockDb.set).toHaveBeenCalledWith({
         guildMemberSeenAt: expect.any(Date),
       });
-      // The reactivate write still carries only the deactivated_at clear.
-      expect(mockDb.set).toHaveBeenCalledWith({ deactivatedAt: null });
+      // ROK-2160: the deactivated_at clear lives in reactivateOnGuildRejoin
+      // (mocked here; the real clear is pinned by
+      // guild-member-add.reactivate-ban.integration.spec.ts). The listener's
+      // only own write is the stamp, made BEFORE the reactivate attempt.
+      expect(mockDb.set).toHaveBeenCalledTimes(1);
+      expect(reactivate).toHaveBeenCalledWith(mockDb, '123456789012345678');
+      expect(at(mockDb.set.mock.invocationCallOrder, 0)).toBeLessThan(
+        at(reactivate.mock.invocationCallOrder, 0),
+      );
     });
   });
 });
