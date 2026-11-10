@@ -629,7 +629,10 @@ no staleness colour. Per-member dates (the coverage line) stay on the card. Toke
 fill) reads against the composite, which no single token controls, so it can fall below AA in one family even
 when every token passes alone. Wrap the text in `inline-block max-w-full truncate rounded-sm bg-surface/70 px-1`
 (keep its text token); the chip flips with the family. Measure the full stack in a guard test, as
-`semantic-tokens.guard.test.ts` does for the own-calendar busy band (§4.16 NP-1).
+`semantic-tokens.guard.test.ts` does for the own-calendar busy band (§4.16 NP-1). Adopters: the busy band label
+(ROK-2165) and the Quest Prep card's reputation rewards (ROK-2161: `REPUTATION_CHIP` in `quest-card.tsx`,
+`text-success` / `text-danger` over the `.quest-card` `--color-overlay` fill, `--color-faint` on hover; guard
+rows on all fifteen schemes).
 
 **Roster member pill (ROK-2149).** The read-only roster-member page marks a guild roster member with no Raid
 Ledger character with a `StatusChip tone="neutral"` "Roster member" (title "A guild roster member without a Raid Ledger
