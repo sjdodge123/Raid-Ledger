@@ -39,6 +39,9 @@
 #                                  ledger the builder guard reads (at call time)
 #   RL_DISK_LADDER_SELF_KEYS ""    space-separated ledger keys of the CALLER,
 #                                  ignored by the guard (set by acquire_disk)
+#   RL_DISK_LADDER_LOCK_WAIT_S 600 bound on waiting for disk-ladder.lock (a ladder
+#                                  waiting for another, or a parked build waiting
+#                                  for a running clean-up); then proceed anyway
 
 RL_DISK_PRUNE_PCT="${RL_DISK_PRUNE_PCT:-80}"
 RL_DISK_TARGET_PCT="${RL_DISK_TARGET_PCT:-65}"
@@ -283,10 +286,42 @@ disk_pressure::_write_state() {
     rm -f "$tmp" 2>/dev/null || true
 }
 
+# The disk-ladder lock (review r3 MAJOR). _walk holds it EXCLUSIVE for the whole
+# ladder run; a build parked on disk takes it SHARED before it starts
+# (admission::_await_disk_ladder), so a forced dangling_prune that frees the
+# floor mid-run cannot have a parked build start `docker build` while the same
+# prune is still deleting the stage images that build may hit as cache. Same
+# directory as the ledger's own locks: the orchestrator's RL_LOCK_DIR, and the
+# sweeper's /state/locks (it sets RL_STATE_DIR=/state; ./state on the host).
+disk_pressure::ladder_lock_path() {
+    local dir="${RL_LOCK_DIR:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/locks}"
+    mkdir -p "$dir" 2>/dev/null || true
+    echo "$dir/disk-ladder.lock"
+}
+
+# Walk the ladder from $1 under the exclusive disk-ladder lock. Fails OPEN
+# (walks unlocked) when flock is missing, the lock file cannot be opened, or
+# the lock stays busy for RL_DISK_LADDER_LOCK_WAIT_S (600): freeing disk must
+# never wait forever on a stuck holder.
+disk_pressure::_walk() {
+    local lock wait_s="${RL_DISK_LADDER_LOCK_WAIT_S:-600}"
+    lock="$(disk_pressure::ladder_lock_path)"
+    if ! command -v flock >/dev/null 2>&1 || ! { : >>"$lock"; } 2>/dev/null; then
+        disk_pressure::_walk_unlocked "$1"
+        return
+    fi
+    chmod 664 "$lock" 2>/dev/null || true
+    (
+        flock -x -w "$wait_s" 203 \
+            || echo "[disk_pressure] disk-ladder.lock still held after ${wait_s}s — walking unlocked" >&2
+        disk_pressure::_walk_unlocked "$1"
+    ) 203>>"$lock"
+}
+
 # Walk the ladder from $1 (the already-observed used%). Echoes the rung array.
 # ROK-2111: the builder rung passes _builder_gate first — both callers (the
 # sweeper's guard and a build's own admission via force_ladder) walk here.
-disk_pressure::_walk() {
+disk_pressure::_walk_unlocked() {
     local before="$1" rungs='[]' rung after gate
     for rung in $(disk_pressure::rungs); do
         gate='{}'

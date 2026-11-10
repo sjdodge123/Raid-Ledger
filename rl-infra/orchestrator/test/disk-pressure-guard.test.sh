@@ -34,6 +34,8 @@
 #        rl:ci-test predecessors), never with -a, behind the same build guard;
 #        C-d..f: below RL_BUILD_MIN_FREE_GB it is forced unless an IMAGE BUILD
 #        is running (review r1 MAJOR — the 92–95% starvation band)
+#   C-j  a parked build freed mid-clean-up waits (bounded) on disk-ladder.lock,
+#        which _walk holds exclusive for the whole ladder (review r3 MAJOR)
 
 set -uo pipefail
 
@@ -791,6 +793,82 @@ test_acquire_disk_marks_and_clears_disk_parked() {
     test_teardown
 }
 
+# C-j needs a REAL flock(2): macOS ships no flock(1), and _state.sh's shim is a
+# no-op. This perl stand-in takes the same `[-x|-s] [-n] [-w secs] <fd>` form
+# and locks the caller's open fd (inherited), exactly as util-linux flock does.
+# On Linux the real binary is used.
+if ! command -v flock >/dev/null 2>&1 || [[ "$(type -t flock)" == "function" ]]; then
+    flock() {
+        perl -MFcntl=:flock -MTime::HiRes=sleep,time -e '
+            my ($op, $nb, $w, $fd) = (LOCK_EX, 0, -1, undef);
+            while (@ARGV) { my $a = shift;
+                if ($a eq "-x") { $op = LOCK_EX } elsif ($a eq "-s") { $op = LOCK_SH }
+                elsif ($a eq "-n") { $nb = 1 } elsif ($a eq "-w") { $w = shift } else { $fd = $a } }
+            open(my $fh, ">>&=", $fd) or exit 1;
+            exit(flock($fh, $op | LOCK_NB) ? 0 : 1) if $nb;
+            my $end = $w < 0 ? undef : time + $w;
+            until (flock($fh, $op | LOCK_NB)) { exit 1 if defined $end && time >= $end; sleep 0.05 }
+            exit 0;' -- "$@"
+    }
+fi
+
+# Bounded poll (≤10s) for a condition string; 1 when it never held.
+_poll_until() {
+    local i
+    for i in $(seq 1 200); do eval "$1" && return 0; sleep 0.05; done
+    return 1
+}
+
+# C-j (review r3 MAJOR): the forced dangling_prune frees the floor while a build
+# is parked; the build re-polls, sees free disk and must NOT start while that
+# prune is still deleting. _walk holds disk-ladder.lock exclusive for the whole
+# ladder; the parked build waits on it (bounded, logged) before returning 0.
+test_parked_build_waits_for_running_ladder() {
+    CURRENT_TEST_NAME="C-j: a parked build freed mid-clean-up waits for the disk ladder lock before it starts"
+    local adm="$TEST_DIR/../bin/_admission.sh" st="$TEST_DIR/../bin/_state.sh" ev log lock holder build probe wait_s
+    for wait_s in 30 1; do
+        _setup_ladder 92 50
+        _ledger '[{"key":"local-t-1","kind":"image_build"}]'
+        ev="$RL_STATE_DIR/events"; log="$RL_STATE_DIR/task.log"; lock="$RL_LOCK_DIR/disk-ladder.lock"
+        : > "$ev"; : > "$log"
+        # The sweeper's forced ladder, mid-prune: holds the lock until "go".
+        ( exec 203>>"$lock"; flock -x 203; : > "$RL_STATE_DIR/held"
+          _poll_until "[[ -e '$RL_STATE_DIR/go' ]]"; echo prune-done >> "$ev" ) &
+        holder=$!
+        _poll_until "[[ -e '$RL_STATE_DIR/held' ]]"
+        # The parked build: its first poll is under the floor, then the disk is free.
+        ( source "$st" 2>/dev/null; source "$adm" 2>/dev/null; source "$LIB"
+          disk_pressure::force_ladder() { echo 2 > "$DF_IDX"; echo '{}'; }
+          RL_BUILD_MIN_FREE_GB=20 RL_BUILD_DISK_WAIT_S=60 RL_DISK_LADDER_LOCK_WAIT_S="$wait_s"
+          admission::acquire_disk "local-t-1" "" "$log" >/dev/null 2>&1
+          echo "admitted rc=$?" >> "$ev" ) &
+        build=$!
+        if [[ "$wait_s" == 30 ]]; then
+            _poll_until "grep -q 'disk-ladder.lock' '$log' || grep -q admitted '$ev'"
+            : > "$RL_STATE_DIR/go"; wait "$holder" "$build"
+            assert_eq "$(paste -sd, "$ev")" "prune-done,admitted rc=0" \
+                "the build starts only after the running clean-up finished"
+            assert_contains "$(cat "$log")" "waiting up to 30s for the running disk clean-up (disk-ladder.lock)" "the wait is logged"
+            assert_contains "$(cat "$log")" "disk clean-up finished after" "the end of the wait is logged"
+        else
+            wait "$build"; : > "$RL_STATE_DIR/go"; wait "$holder"
+            assert_eq "$(paste -sd, "$ev")" "admitted rc=0,prune-done" \
+                "bounded: a stuck clean-up does not block the build past RL_DISK_LADDER_LOCK_WAIT_S"
+            assert_contains "$(cat "$log")" "still running after 1s — build admitted anyway" "the give-up is logged"
+        fi
+        test_teardown
+    done
+    # _walk itself holds the lock exclusive while a rung runs.
+    _setup_ladder 92 50
+    probe="$RL_STATE_DIR/probe"; lock="$RL_LOCK_DIR/disk-ladder.lock"
+    ( source "$LIB"
+      eval "_orig_docker() $(declare -f docker | tail -n +2)"
+      docker() { ( flock -s -n 203 ) 203>>"$lock" && echo free >> "$probe" || echo busy >> "$probe"; _orig_docker "$@"; }
+      disk_pressure::guard >/dev/null 2>&1 )
+    assert_eq "$(sort -u "$probe" | paste -sd, -)" "busy" "every rung runs with disk-ladder.lock held exclusive"
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -822,5 +900,6 @@ run_test "c-f-above-floor-still-skips" test_dangling_above_floor_still_skips
 run_test "c-g-floor-fail-safe" test_dangling_floor_fail_safe
 run_test "c-h-floor-ignores-disk-parked" test_dangling_floor_ignores_disk_parked_builds
 run_test "c-i-acquire-disk-parked-marker" test_acquire_disk_marks_and_clears_disk_parked
+run_test "c-j-parked-build-waits-for-ladder" test_parked_build_waits_for_running_ladder
 
 print_test_summary

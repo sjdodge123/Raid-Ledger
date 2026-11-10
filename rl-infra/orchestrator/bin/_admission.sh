@@ -644,6 +644,29 @@ admission::_set_disk_parked() {
               else del(.disk_parked) end ]' 2>/dev/null || true
 }
 
+# Wait (bounded) for a running disk ladder to finish: take disk-ladder.lock
+# SHARED, then drop it. Only a build that PARKED calls this — the floor override
+# lets a forced dangling_prune run while it is parked, and that prune is what
+# freed the disk it now sees. Its own force_ladder is synchronous and already
+# done here, so it never waits on itself. Fails open; never blocks forever.
+admission::_await_disk_ladder() {
+    local log_path="$1" lock wait_s="${RL_DISK_LADDER_LOCK_WAIT_S:-600}" t0
+    declare -F disk_pressure::ladder_lock_path >/dev/null 2>&1 || return 0
+    command -v flock >/dev/null 2>&1 || return 0
+    lock="$(disk_pressure::ladder_lock_path)"
+    { : >>"$lock"; } 2>/dev/null || return 0
+    ( flock -s -n 203 ) 203>>"$lock" 2>/dev/null && return 0
+    t0=$(date +%s)
+    admission::_log "$log_path" \
+        "[admission] waiting up to ${wait_s}s for the running disk clean-up (disk-ladder.lock) before starting the build"
+    if ( flock -s -w "$wait_s" 203 ) 203>>"$lock" 2>/dev/null; then
+        admission::_log "$log_path" "[admission] disk clean-up finished after $(( $(date +%s) - t0 ))s — build admitted"
+    else
+        admission::_log "$log_path" "[admission] disk clean-up still running after ${wait_s}s — build admitted anyway"
+    fi
+    return 0
+}
+
 admission::_acquire_disk_wait() {
     local task_id="$1" json_path="${2:-}" log_path="${3:-}" abort_cmd="${4:-}"
     declare -F disk_pressure::free_gb >/dev/null 2>&1 || return 0
@@ -660,7 +683,12 @@ admission::_acquire_disk_wait() {
             admission::_log "$log_path" "[admission] free disk unreadable — build admitted ungated"
             return 0
         fi
-        (( free >= need )) && return 0
+        if (( free >= need )); then
+            # Parked, then freed: the disk may have been freed by a clean-up
+            # that is still deleting. Wait for it before building (r3 MAJOR).
+            (( _disk_parked == 0 )) || admission::_await_disk_ladder "$log_path"
+            return 0
+        fi
         if (( _disk_parked == 0 )); then
             _disk_parked=1
             admission::_set_disk_parked true "$_disk_parked_keys"
