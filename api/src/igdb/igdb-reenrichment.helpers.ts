@@ -14,6 +14,10 @@ import type { IgdbApiGame } from './igdb.constants';
 import { IGDB_CONFIG } from './igdb.constants';
 import { escapeApicalypseString } from './igdb-api.helpers';
 import {
+  findOtherIgdbIdOwner,
+  reportDuplicatePair,
+} from './games-key-owner.helpers';
+import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
 } from './igdb-itad-enrich.helpers';
@@ -139,9 +143,11 @@ async function enrichSingleCandidate(
   try {
     const byId = await queryIgdb(buildExternalGamesQuery(candidate.steamAppId));
     const first = byId[0];
-    if (first !== undefined) return handleSuccess(db, candidate, first);
+    // ROK-2120: `await` keeps a rejected UPDATE inside this try, so the
+    // catch logs it and bumps the retry count.
+    if (first !== undefined) return await handleSuccess(db, candidate, first);
     const byName = await searchByName(queryIgdb, candidate.name);
-    if (byName) return handleSuccess(db, candidate, byName);
+    if (byName) return await handleSuccess(db, candidate, byName);
     return handleNotFound(db, candidate);
   } catch (err) {
     await handleError(db, candidate, err);
@@ -207,7 +213,14 @@ async function handleSuccess(
   db: Db,
   candidate: Candidate,
   igdbGame: IgdbApiGame,
-): Promise<'enriched'> {
+): Promise<SingleResult> {
+  // ROK-2120: never write an igdb_id another row holds — report the pair for
+  // the dedup sweep and count the attempt as a miss (bounded by MAX_RETRIES).
+  const owner = await findOtherIgdbIdOwner(db, igdbGame.id, candidate.id);
+  if (owner != null) {
+    reportDuplicatePair(owner, candidate.id, 'igdb_id');
+    return handleNotFound(db, candidate);
+  }
   const data = parseIgdbEnrichment({ ...igdbGame, id: igdbGame.id });
   const videos = data.videos?.map((v) => ({
     name: v.name ?? '',

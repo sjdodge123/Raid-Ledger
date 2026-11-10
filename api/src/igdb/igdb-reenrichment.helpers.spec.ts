@@ -7,6 +7,7 @@
  *
  * The function under test does NOT exist yet. All tests must FAIL.
  */
+import { Logger } from '@nestjs/common';
 import { reEnrichGamesWithIgdb } from './igdb-reenrichment.helpers';
 import type { IgdbApiGame } from './igdb.constants';
 
@@ -31,7 +32,12 @@ function createReenrichMockDb(
   const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
   const update = jest.fn().mockReturnValue({ set: updateSet });
 
-  const selectWhere = jest.fn().mockResolvedValue(candidates);
+  // First SELECT = candidate query; later SELECTs = the ROK-2120 igdb_id
+  // owner pre-check, which finds no other owner by default.
+  const selectWhere = jest
+    .fn()
+    .mockResolvedValueOnce(candidates)
+    .mockResolvedValue([]);
   const selectFrom = jest.fn().mockReturnValue({ where: selectWhere });
   const select = jest.fn().mockReturnValue({ from: selectFrom });
 
@@ -62,6 +68,7 @@ function makeIgdbApiGame(
 }
 
 afterEach(() => {
+  jest.restoreAllMocks();
   jest.clearAllMocks();
 });
 
@@ -334,6 +341,106 @@ describe('reEnrichGamesWithIgdb', () => {
 
       expect(result.attempted).toBe(0);
       expect(mockQueryIgdb).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ROK-2120: a failing enrichment UPDATE is caught, logged and counted', () => {
+    it('logs "IGDB re-enrichment failed" and bumps igdb_enrichment_retry_count when the UPDATE rejects', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      const candidates = [
+        {
+          id: 31,
+          name: 'Dup Game',
+          steamAppId: 4242,
+          igdbEnrichmentRetryCount: 1,
+        },
+      ];
+      const mockDb = createReenrichMockDb(candidates);
+      mockDb.updateWhere.mockRejectedValueOnce(
+        new Error('duplicate key value violates unique constraint'),
+      );
+      const mockQueryIgdb = jest
+        .fn<Promise<IgdbApiGame[]>, [string]>()
+        .mockResolvedValue([makeIgdbApiGame({ id: 777 })]);
+
+      const result = await reEnrichGamesWithIgdb(
+        mockDb as never,
+        mockQueryIgdb,
+      );
+
+      expect(result.failed).toBe(1);
+      expect(mockDb.updateSet).toHaveBeenLastCalledWith({
+        igdbEnrichmentStatus: 'failed',
+        igdbEnrichmentRetryCount: 2,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('IGDB re-enrichment failed for game 31'),
+      );
+    });
+  });
+
+  describe('ROK-2120: igdb_id already owned by another row', () => {
+    it('reports the duplicate pair and never writes the colliding igdb_id', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      const candidates = [
+        {
+          id: 40,
+          name: 'Itad Copy',
+          steamAppId: 5151,
+          igdbEnrichmentRetryCount: 0,
+        },
+      ];
+      const mockDb = createReenrichMockDb(candidates);
+      mockDb.selectWhere.mockReset();
+      mockDb.selectWhere
+        .mockResolvedValueOnce(candidates)
+        .mockResolvedValueOnce([{ id: 9 }]);
+      const mockQueryIgdb = jest
+        .fn<Promise<IgdbApiGame[]>, [string]>()
+        .mockResolvedValue([makeIgdbApiGame({ id: 888 })]);
+
+      const result = await reEnrichGamesWithIgdb(
+        mockDb as never,
+        mockQueryIgdb,
+      );
+
+      expect(result.enriched).toBe(0);
+      expect(warn).toHaveBeenCalledWith(
+        'IGDB duplicate pair skipped: keep=9 dup=40 key=igdb_id',
+      );
+      expect(mockDb.updateSet).not.toHaveBeenCalledWith(
+        expect.objectContaining({ igdbId: 888 }),
+      );
+      expect(mockDb.updateSet).toHaveBeenCalledWith({
+        igdbEnrichmentStatus: 'pending',
+        igdbEnrichmentRetryCount: 1,
+      });
+    });
+
+    it('exhausts the row once the clash has used the last retry', async () => {
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      const candidates = [
+        { id: 41, steamAppId: 5152, igdbEnrichmentRetryCount: 2 },
+      ];
+      const mockDb = createReenrichMockDb(candidates);
+      mockDb.selectWhere.mockReset();
+      mockDb.selectWhere
+        .mockResolvedValueOnce(candidates)
+        .mockResolvedValueOnce([{ id: 9 }]);
+      const mockQueryIgdb = jest
+        .fn<Promise<IgdbApiGame[]>, [string]>()
+        .mockResolvedValue([makeIgdbApiGame({ id: 889 })]);
+
+      const result = await reEnrichGamesWithIgdb(
+        mockDb as never,
+        mockQueryIgdb,
+      );
+
+      expect(result.exhausted).toBe(1);
+      expect(mockDb.updateSet).toHaveBeenCalledWith({
+        igdbEnrichmentStatus: 'not_found',
+        igdbEnrichmentRetryCount: 3,
+      });
     });
   });
 });
