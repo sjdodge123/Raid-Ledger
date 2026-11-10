@@ -56,6 +56,8 @@ const prereqs: EventQuestPrereqsResponse = {
         neededCount: 2, completed: true, completedSource: 'addon',
     }],
     neededTotal: 2,
+    asOfSource: 'addon',
+    inProgressAsOf: '2026-11-09T12:00:00.000Z',
 };
 
 function setup(): { prereqCalls: () => number } {
@@ -87,6 +89,13 @@ describe('QuestPrepPanel — pre-req progress (ROK-1748)', () => {
         renderPanel(FOREVER);
         expect(await screen.findByText('You need 2 more pre-reqs')).toBeInTheDocument();
         expect(screen.getByText('Done')).toBeInTheDocument();
+    });
+
+    it('mounts the "Your progress" as-of line under the header (ROK-2144 AC6)', async () => {
+        setup();
+        renderPanel(FOREVER);
+        expect(await screen.findByTestId('quest-prep-progress-asof'))
+            .toHaveTextContent('Your progress: completed list via addon · 1 Oct 2026 · quest log 9 Nov 2026');
     });
 
     it('passes the per-quest state to the chain when the card is expanded', async () => {
