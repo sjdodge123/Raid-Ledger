@@ -83,5 +83,12 @@ export const EventQuestPrereqsResponseSchema = z.object({
     asOf: z.string().datetime().nullable(),
     quests: z.array(QuestPrereqStateSchema),
     neededTotal: z.number().int(),
+    /** ROK-2144: the viewer's quest-log capture time (null = same as `asOf`). */
+    inProgressAsOf: z.string().datetime().nullable().optional(),
+    /**
+     * ROK-2144: latest Blizzard quest-catalogue fetch (ROK-2143 overlay);
+     * null = never imported or the import switched off.
+     */
+    questDataImportedAt: z.string().datetime().nullable().optional(),
 }).nullable();
 export type EventQuestPrereqsResponse = z.infer<typeof EventQuestPrereqsResponseSchema>;

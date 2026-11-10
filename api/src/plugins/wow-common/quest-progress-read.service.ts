@@ -16,6 +16,8 @@ import {
   loadForeverMemberProgress,
 } from './event-forever-progress.query';
 import type { QuestOverlayDeps } from './dungeon-quests.overlay';
+import { latestBlizzardOverlayFetchedAt } from './forever-quest-import/blizzard-quest.repo';
+import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import {
   buildViewerPrereqs,
   groupCoverage,
@@ -85,7 +87,8 @@ export class QuestProgressReadService {
   /**
    * The viewer's pre-req chain state (D11). Null when the event is not
    * Forever or the viewer has no signed-up character with a quests snapshot.
-   * Reads only the viewer's snapshot and manual rows (ROK-1758).
+   * Reads only the viewer's snapshot and manual rows (ROK-1758), plus the
+   * catalogue import date (ROK-2144).
    */
   async getPrereqsForViewer(
     eventId: number,
@@ -98,8 +101,21 @@ export class QuestProgressReadService {
     );
     const member = forever?.members.find((m) => m.userId === userId);
     if (!forever || !member) return null;
-    const mine = await this.queryManualRows(eventId, userId);
-    return buildViewerPrereqs(forever, member, mine);
+    const [mine, questDataImportedAt] = await Promise.all([
+      this.queryManualRows(eventId, userId),
+      this.catalogueImportedAt(),
+    ]);
+    return { ...buildViewerPrereqs(forever, member, mine), questDataImportedAt };
+  }
+
+  /**
+   * ROK-2144 AC8: the latest Blizzard catalogue fetch as ISO, or null when
+   * never imported or the import is switched off (overlay not applied).
+   */
+  private async catalogueImportedAt(): Promise<string | null> {
+    if (!(await isForeverQuestImportEnabled(this.settings))) return null;
+    const latest = await latestBlizzardOverlayFetchedAt(this.db);
+    return latest ? latest.toISOString() : null;
   }
 
   /** Coverage source rows: Forever merges addon rows, Classic is manual only. */
