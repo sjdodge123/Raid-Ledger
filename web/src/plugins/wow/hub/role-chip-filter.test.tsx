@@ -39,9 +39,9 @@ function mockDesktop(): void {
     });
 }
 
-function renderPage(hash: string): void {
+function renderPage(hash: string, page: GuildPageDto = PAGE): void {
     window.location.hash = hash;
-    server.use(http.get(BASE, () => HttpResponse.json(PAGE)));
+    server.use(http.get(BASE, () => HttpResponse.json(page)));
     renderWithProviders(<Routes><Route path="/hubs/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/hubs/7'] });
 }
 
@@ -106,6 +106,9 @@ describe('Role chips filter the Members list (ROK-2172)', () => {
         expect(window.location.hash).toBe('#members');
     });
 
+});
+
+describe('Role filter follows the hash while Members is mounted (ROK-2172)', () => {
     it('the Members tab (plain #members) clears a role while Members is mounted', async () => {
         renderPage('#members?role=tank');
         await waitFor(() => expect(bandPill('Tank')).toHaveAttribute('aria-pressed', 'true'));
@@ -127,5 +130,24 @@ describe('Role chips filter the Members list (ROK-2172)', () => {
         await waitFor(() => expect(bandPill('DPS'), 'a hand-edited ?role= re-applies').toHaveAttribute('aria-pressed', 'true'));
         expect(bandPill('Heal'), 'the hash role replaces the previous one').toHaveAttribute('aria-pressed', 'false');
         expect(window.location.hash).toBe('#members?role=dps');
+    });
+});
+
+/** A visitor's view of a members-first hub: role counts, but no member rows. */
+const VISITOR_PAGE: GuildPageDto = { ...PAGE, ranks: [] };
+
+describe('Role pills for a viewer with no member rows (ROK-2172)', () => {
+    it('the Overview pills are read-only: no link to an empty list', async () => {
+        renderPage('', VISITOR_PAGE);
+        await screen.findByTestId('guild-members-summary');
+        expect(screen.getByTestId('guild-role-count-tank')).toHaveTextContent('1Tank');
+        expect(screen.queryByRole('link', { name: /^Show \d+ .* members$/ }), 'a visitor gets no role-filter links').toBeNull();
+    });
+
+    it('the Members band is read-only: no toggles over zero rows', async () => {
+        renderPage('#members', VISITOR_PAGE);
+        await screen.findByTestId('guild-members');
+        expect(screen.getByTestId('guild-role-count-healer')).toHaveTextContent('1Heal');
+        expect(screen.queryByRole('button', { name: /^Show \d+ .* members$/ }), 'a visitor gets no role toggles').toBeNull();
     });
 });

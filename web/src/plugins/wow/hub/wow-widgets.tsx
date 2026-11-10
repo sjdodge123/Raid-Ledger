@@ -12,6 +12,7 @@ import { GuildRoleComposition } from './role-composition';
 import { RoleSummary } from './role-bits';
 import { rankLabel } from './wow-guild.helpers';
 import { roleFilterHref } from './wow-role-filter.helpers';
+import { wowMemberRows } from './wow-members.helpers';
 
 function RankCounts({ page }: HubCtx): JSX.Element {
     return (
@@ -38,10 +39,12 @@ function SeeMembersLink(): JSX.Element {
 
 export function WowMembersSummary(ctx: HubCtx): JSX.Element {
     const { page } = ctx;
+    // A viewer with no member rows (visitor on a members-first hub) gets read-only pills: no link to an empty list.
+    const linkable = wowMemberRows(page).length > 0;
     return (
         <WidgetCard id="members-summary" title={`Members · ${page.guild.memberCount}`} action={<SeeMembersLink />}>
             <div className="flex flex-col gap-3" data-testid="guild-members-summary">
-                <RoleSummary counts={page.roleCounts} hrefFor={roleFilterHref} />
+                <RoleSummary counts={page.roleCounts} {...(linkable ? { hrefFor: roleFilterHref } : {})} />
                 <RankCounts {...ctx} />
             </div>
         </WidgetCard>

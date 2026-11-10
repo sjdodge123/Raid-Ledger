@@ -62,7 +62,10 @@ export function useWowMemberFilters(ctx: HubCtx, rows: readonly HubMemberRow[]):
         matches,
         clearAll,
         controls: createElement(WowMemberFilterControls, { state, options, professions: coverage, onChange: setState }),
-        summary: createElement(RoleSummary, { counts: ctx.page.roleCounts, selected: state.roles, onToggle: toggleRole }),
+        // No rows (a visitor on a members-first hub): read-only pills, nothing to toggle over.
+        summary: createElement(RoleSummary, rows.length > 0
+            ? { counts: ctx.page.roleCounts, selected: state.roles, onToggle: toggleRole }
+            : { counts: ctx.page.roleCounts }),
         lead: createElement(WowProfessionCoverage, { rows, professions: coverage, index, selected: state.professions, onToggle: toggleProfession }),
     };
 }
