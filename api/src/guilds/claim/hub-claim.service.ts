@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
@@ -19,6 +20,7 @@ import type {
   HubClaimProvider,
 } from '../../plugins/plugin-host/extension-points';
 import type { GuildActor } from '../guild-access.service';
+import { HUB_NOT_FOUND } from '../hub-hidden.helpers';
 import { HubKindRegistry } from '../hub-kind.registry';
 import { HubClaimError } from './hub-claim.errors';
 import {
@@ -36,7 +38,9 @@ interface Resolved {
 
 /**
  * ROK-2153 — the core "claim your character" path for every hub. Resolves
- * the single active provider for the hub (none ⇒ 404 `HUB_CLAIM_UNAVAILABLE`),
+ * the single active provider for the hub (none ⇒ 404 `HUB_CLAIM_UNAVAILABLE`;
+ * a guild that does not exist ⇒ the SAME plain 404 `HubVisibleGuard` gives a
+ * hidden hub, so the two cannot be told apart),
  * runs it, and validates what it returns against the contract so a provider
  * bug is a logged 500, never a malformed body.
  */
@@ -88,9 +92,10 @@ export class HubClaimService {
 
   private async resolve(actor: GuildActor, guildId: number): Promise<Resolved> {
     const hub = await findHubClaimRef(this.db, guildId);
-    const provider = hub ? this.registry.forHub(hub) : undefined;
-    const kind = hub ? this.hubKinds.resolve(hub.kind) : undefined;
-    if (!hub || !provider || !kind) {
+    if (hub === null) throw new NotFoundException(HUB_NOT_FOUND);
+    const provider = this.registry.forHub(hub);
+    const kind = this.hubKinds.resolve(hub.kind);
+    if (!provider || !kind) {
       throw new HubClaimError(
         'HUB_CLAIM_UNAVAILABLE',
         'No character claim is available for this hub',

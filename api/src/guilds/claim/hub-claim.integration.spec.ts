@@ -4,7 +4,8 @@
  * skips spec files). The fake is owned by Pelican so the inactive-plugin path
  * is real: `afterEach` deactivates Pelican, `beforeEach` re-activates it.
  * Every test builds its own community hub; the providers only `supports` the
- * hub ids registered in their tables, so nothing leaks into other suites.
+ * hub ids registered in their tables, and `afterAll` empties those tables
+ * (memory only) so a reused guild id in a later suite is never served.
  * No afterAll DB work: the shared setup closes the pool.
  */
 import { eq } from 'drizzle-orm';
@@ -163,6 +164,11 @@ afterEach(async () => {
   }
 });
 
+afterAll(() => {
+  fake.table.clear();
+  rival.table.clear();
+});
+
 /** A live community hub with `member` as a plain member. */
 async function communityHub(): Promise<number> {
   seq += 1;
@@ -221,10 +227,11 @@ describe('GET guilds/:id/claim — availability', () => {
     expect(res.body.code).toBe('HUB_CLAIM_UNAVAILABLE');
   });
 
-  it('404 HUB_CLAIM_UNAVAILABLE for a guild id that does not exist', async () => {
+  it('a guild id that does not exist answers the plain guard 404 (no claim code)', async () => {
     const res = await getStatus(2_000_000_000);
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe('HUB_CLAIM_UNAVAILABLE');
+    expect(res.body.code).toBeUndefined();
+    expect(res.body.message).toBe('Guild not found');
   });
 
   it("404 while the provider's owner plugin is inactive, 200 once re-activated", async () => {
@@ -258,6 +265,26 @@ describe('GET guilds/:id/claim — availability', () => {
     expect(hidden.status).toBe(404);
     expect(hidden.body.code).toBeUndefined();
     expect((await getStatus(id, 'admin')).status).toBe(200);
+  });
+});
+
+describe('guilds/:id/claim — hidden hub is indistinguishable from missing', () => {
+  it('hidden hub and missing guild give byte-identical 404 bodies (GET + POST)', async () => {
+    const id = await servedHub({ status: plainStatus([cand('a')]) });
+    await testApp.db
+      .update(schema.guilds)
+      .set({ hiddenAt: new Date() })
+      .where(eq(schema.guilds.id, id));
+    const missing = 2_000_000_001;
+    const [hGet, mGet] = [await getStatus(id), await getStatus(missing)];
+    expect([hGet.status, mGet.status]).toEqual([404, 404]);
+    expect(mGet.text).toBe(hGet.text);
+    const [hPost, mPost] = [
+      await postClaim(id, 'a'),
+      await postClaim(missing, 'a'),
+    ];
+    expect([hPost.status, mPost.status]).toEqual([404, 404]);
+    expect(mPost.text).toBe(hPost.text);
   });
 
   it('401 without a JWT', async () => {
