@@ -614,6 +614,13 @@ as `text-xs text-muted` under the chain. Without a state the chain renders exact
 
 **Row accent for a missing required item (ROK-2147).** A list row that needs the viewer's action (a Required addon reported Missing) takes `border-l-2 border-l-warning bg-warning/10 pl-2` next to a `warning` `Pill`. Tokens only, so it holds in every theme; use it only for a row the viewer must act on, never as decoration.
 
+**DO — a label on a tinted/translucent fill sits on a `bg-surface/70` chip (ROK-2165).** Text drawn over a
+`bg-x/NN` layer that itself sits over another coloured layer (a band over a slot block, a mark over a heat
+fill) reads against the composite, which no single token controls, so it can fall below AA in one family even
+when every token passes alone. Wrap the text in `inline-block max-w-full truncate rounded-sm bg-surface/70 px-1`
+(keep its text token); the chip flips with the family. Measure the full stack in a guard test, as
+`semantic-tokens.guard.test.ts` does for the own-calendar busy band (§4.16 NP-1).
+
 **Roster member pill (ROK-2149).** The read-only roster-member page marks a guild roster member with no Raid
 Ledger character with a `StatusChip tone="neutral"` "Roster member" (title "A guild roster member without a Raid Ledger
 character") in the header, where an owned character shows its variant/main marks. Neutral, not `info`: it is a fact,
@@ -1163,7 +1170,11 @@ lines up; `dayOfWeek` is the display convention (0 = Sunday). The day header app
 grammar as above: `DayPager` reads `3h free · 1h busy` with ` · Nh busy` in `text-busy`. Why a fill here and
 an edge in group views: the group edge says "someone else is committed", layered over a heat fill that must
 stay readable; on your own grid there is no heat fill, and the band IS the information. Render exactly what
-`calendarBusy` says; own-copy dedupe is server-side. Rendered: `/dev/design-system` → *Pattern — own-calendar
+`calendarBusy` says; own-copy dedupe is server-side. **The label sits on a chip** (ROK-2165): `inline-block
+max-w-full truncate rounded-sm bg-surface/70 px-1`, clipped by the band's `overflow-hidden`. Why: the band always
+sits on an emerald slot block, on which `text-foreground` alone is 4.17:1 in dark (2.67 selected) and under the
+busy fill 3.91 / 2.89 — no busy alpha or hue reaches AA. On the chip it is ≥10.8:1 in both families;
+`semantic-tokens.guard.test.ts` composites the whole stack. Rendered: `/dev/design-system` → *Pattern — own-calendar
 busy band and radio cards* (`calendar-busy-section.tsx`).
 
 ### 4.17 The hours window
