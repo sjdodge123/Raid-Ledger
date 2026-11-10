@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { eq, type SQL } from 'drizzle-orm';
 import type {
   AddonImportRequestDto,
@@ -145,17 +146,50 @@ export async function runForCharacter(
     region: character.binding.region as WowRegion,
     pendingGuid: binding.pinGuid,
   };
-  // ROK-1794 — THE lock order (GUID, then guild) before any section runs.
-  if (!request.dryRun) {
-    const { gameId, region } = ctx;
-    await lockImportScope(tx, { gameId, region, guid: binding.pinGuid, paste });
-  }
+  // Lock order: GUID → guild (ROK-1794) → character row (ROK-2159).
+  if (!request.dryRun) await lockAndRecheckOwner(ctx, character, paste);
   const runs = withPendingBindingStatus(
     await runPaste(ctx, paste, request.dryRun),
     binding,
     request.dryRun,
   );
   return finishRun({ ...ctx, sha256: '' }, runs, binding, request.dryRun);
+}
+
+/**
+ * ROK-2159 — take THE import locks, then `FOR NO KEY UPDATE` the character
+ * row and re-check its owner on the SAME tx. NO KEY UPDATE still conflicts
+ * with the `FOR UPDATE` that Change owner and unlink take (Postgres row-lock
+ * table: FOR UPDATE conflicts with every mode), so the race serialises the
+ * same; unlike FOR UPDATE it lets FOR KEY SHARE through, so FK inserts that
+ * reference this character (signups, audit rows) are not blocked meanwhile.
+ * The pre-tx owner check
+ * (`characters.findOne`) races an admin Change owner, which locks GUID →
+ * name → row (`character-owner.admin.tx.ts::lockCharacter`): without this
+ * the import waited on that row lock and then wrote the old owner's
+ * snapshot onto the moved character. The GUID locked is the one the apply
+ * pins, else the one the row already carries, so both sides queue on the
+ * same lock (1) before the row lock — never row-then-GUID.
+ */
+async function lockAndRecheckOwner(
+  ctx: Pick<
+    AddonApplyContext,
+    'tx' | 'userId' | 'gameId' | 'region' | 'pendingGuid'
+  >,
+  character: LoadedCharacter,
+  paste: DecodedAddonPaste,
+): Promise<void> {
+  const { tx, gameId, region } = ctx;
+  const guid = ctx.pendingGuid ?? character.binding.addonGuid;
+  await lockImportScope(tx, { gameId, region, guid, paste });
+  const [row] = await tx
+    .select({ userId: schema.characters.userId })
+    .from(schema.characters)
+    .where(eq(schema.characters.id, character.id))
+    .for('no key update');
+  // Deleted meanwhile: the same 404 the pre-tx owner check gives (findOneOwned).
+  if (!row) throw new NotFoundException(`Character ${character.id} not found`);
+  if (row.userId !== ctx.userId) throw new AddonImportError('CHARACTER_MOVED');
 }
 
 /**
