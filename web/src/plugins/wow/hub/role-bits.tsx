@@ -8,6 +8,7 @@ import type { JSX } from 'react';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { RoleIcon } from '../../../components/shared/RoleIcon';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { FILTER_CHIP_ON_FILL } from '../../../components/ui/filter-chip-classes';
 import { ROLE_META, ROLE_ORDER } from './wow-guild.helpers';
 
 /** Read-only role pill: role-coloured border + the shared role icon + a neutral label. */
@@ -24,7 +25,7 @@ export function CharRoleBadge({ role }: { role: CharacterRole }): JSX.Element {
 const PILL = 'inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border px-2.5';
 /** §4.3 toggle fills (`FilterChip` OFF / ON); the border stays the role colour. */
 const PILL_OFF = 'bg-panel hover:bg-overlay';
-const PILL_ON = 'bg-amber-500/10 hover:bg-amber-500/20';
+const PILL_ON = FILTER_CHIP_ON_FILL;
 
 export interface RoleSummaryProps {
     counts: Record<CharacterRole, number>;
