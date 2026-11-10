@@ -79,7 +79,7 @@ describe('QuestCardHeader — keyboard handler (ROK-881)', () => {
 });
 
 describe('QuestCardHeader — Done pill (ROK-1748)', () => {
-    function renderCard(prereqs?: { state: QuestPrereqState; asOf: string | null }) {
+    function renderCard(prereqs?: { state: QuestPrereqState }) {
         return render(
             <QuestCard quest={createQuest()} questCoverage={undefined} currentUserId={1} eventId={1}
                 wowheadVariant="classic" isExpanded={false} pendingQuestId={null}
@@ -90,12 +90,12 @@ describe('QuestCardHeader — Done pill (ROK-1748)', () => {
     const base: QuestPrereqState = { questId: 100, steps: [], neededCount: 0, completed: true, completedSource: 'addon' };
 
     it('shows a text-success "Done" pill when the viewer completed the quest', () => {
-        renderCard({ state: base, asOf: null });
+        renderCard({ state: base });
         expect(screen.getByText('Done')).toHaveClass('text-success');
     });
 
     it('shows no pill when the quest is not completed', () => {
-        renderCard({ state: { ...base, completed: false }, asOf: null });
+        renderCard({ state: { ...base, completed: false } });
         expect(screen.queryByText('Done')).toBeNull();
     });
 

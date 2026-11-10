@@ -42,7 +42,13 @@ export interface EffectiveQuests {
 /** The addon side: a snapshot's `data` + capture time. */
 export interface AddonQuestInput {
   data: unknown;
+  /** Export time — dates the in-progress log. */
   capturedAt: Date;
+  /**
+   * ROK-2144: capture time of the completed list (a log-only export carries
+   * an older list). Null/absent → `capturedAt` (pre-column rows).
+   */
+  completedCapturedAt?: Date | null;
 }
 
 /**
@@ -70,7 +76,11 @@ function addonFact(
   const value: Completed = completedTruncated
     ? { completed, completedTruncated }
     : { completed };
-  return { value, source: 'addon', asOf: addon.capturedAt };
+  return {
+    value,
+    source: 'addon',
+    asOf: addon.completedCapturedAt ?? addon.capturedAt,
+  };
 }
 
 /**
