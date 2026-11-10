@@ -52,10 +52,6 @@ export const FOREVER_PROBE_TIMEOUT_MS = 10_000;
 /** Requests in flight at once. */
 const PROBE_CONCURRENCY = 4;
 
-/** Forever launch window `[start, end)` for the hourly job (D7). */
-const LAUNCH_WINDOW_START = Date.parse('2026-11-04T00:00:00Z');
-const LAUNCH_WINDOW_END = Date.parse('2026-11-19T00:00:00Z');
-
 const PREFIX_RE = /^[a-z0-9]{2,32}$/;
 const SKYBORNE_RE = /skyborne/i;
 
@@ -211,12 +207,6 @@ export function summariseShape(body: unknown): ShapeSummary {
     entryCount: list?.length ?? 0,
     sample: (list ?? []).slice(0, 3).map(sampleEntry),
   };
-}
-
-/** True inside `[2026-11-04T00:00Z, 2026-11-19T00:00Z)` (D7). */
-export function isInLaunchWindow(now: Date): boolean {
-  const t = now.getTime();
-  return t >= LAUNCH_WINDOW_START && t < LAUNCH_WINDOW_END;
 }
 
 /** Map with at most `limit` promises pending; results keep input order. */

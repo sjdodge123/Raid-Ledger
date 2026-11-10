@@ -130,17 +130,15 @@ function MatrixTable({ result, regions }: { result: ForeverProbeResultDto; regio
     );
 }
 
-/** The match list plus the collapsed candidate x region status matrix for the latest probe run. */
+/** The collapsed match list + candidate x region status matrix for the latest probe run (ROK-2163: matches inside). */
 export function ForeverProbeMatrix({ result }: { result: ForeverProbeResultDto }): JSX.Element {
     const regions = regionsOf(result.cells);
     const probed = ENDPOINT_ORDER.filter((e) => result.cells.some((c) => c.endpoint === e)).map((e) => ENDPOINT_LABEL[e]);
     return (
-        <>
+        <ScrollCollapsible title={`Probe matrix (${result.cells.length} checks)`} className="text-sm">
             <MatchList matches={result.matches} />
-            <ScrollCollapsible title={`Probe matrix (${result.cells.length} checks)`} className="text-sm">
-                <p className="mb-2 text-xs text-muted">Each cell: {probed.join(' · ')} status, in that order.</p>
-                <MatrixTable result={result} regions={regions} />
-            </ScrollCollapsible>
-        </>
+            <p className="my-2 text-xs text-muted">Each cell: {probed.join(' · ')} status, in that order.</p>
+            <MatrixTable result={result} regions={regions} />
+        </ScrollCollapsible>
     );
 }

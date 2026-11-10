@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import {
     renderWithProviders,
@@ -51,8 +51,20 @@ beforeEach(() => {
 const prefixInput = () =>
     screen.findByRole('textbox', { name: /namespace prefix/i });
 
+const STATUS_URL = 'http://localhost:3000/system/status';
+
+/** ROK-2163: the namespace diagnostics render only on DEMO_MODE sites. */
+function serveDemoMode(): void {
+    server.use(
+        http.get(STATUS_URL, () =>
+            HttpResponse.json({ status: 'ok', claimRequired: false, demoMode: true }),
+        ),
+    );
+}
+
 describe('ForeverSettingsSection (ROK-1717)', () => {
     it('saves the typed prefix with the current Armory flag', async () => {
+        serveDemoMode();
         const user = userEvent.setup();
         renderWithProviders(<ForeverSettingsSection />);
         const input = await prefixInput();
@@ -70,6 +82,7 @@ describe('ForeverSettingsSection (ROK-1717)', () => {
     });
 
     it('blocks an invalid prefix with an inline error and sends nothing', async () => {
+        serveDemoMode();
         const user = userEvent.setup();
         renderWithProviders(<ForeverSettingsSection />);
         const input = await prefixInput();
@@ -115,6 +128,7 @@ describe('ForeverSettingsSection (ROK-1717)', () => {
 });
 
 describe('ForeverSettingsSection probe panel (ROK-1716)', () => {
+    beforeEach(serveDemoMode);
     it('renders the namespace probe panel inside the section', async () => {
         renderWithProviders(<ForeverSettingsSection />);
         expect(
@@ -177,6 +191,7 @@ describe('ForeverSettingsSection — Wowhead item lookup switch (ROK-1727)', () 
 
 /** ROK-2102: `forever` is the default; the status line reads the latest probe result. */
 describe('ForeverSettingsSection — namespace status (ROK-2102)', () => {
+    beforeEach(serveDemoMode);
     const FOREVER_CONFIG = { ...DEFAULT_CONFIG, namespacePrefix: 'forever' };
     const probeState = (matchPrefix: string | null) => ({
         result: {
@@ -335,5 +350,109 @@ describe('ForeverSettingsSection — quest import switch (ROK-2143)', () => {
                 },
             ]),
         );
+    });
+});
+
+/** ROK-2163: diagnostics are hidden on prod and shown only on DEMO_MODE sites. */
+/** Count GETs of the probe state; returns a reader for the count. */
+function countProbeGets(): () => number {
+    let count = 0;
+    server.use(
+        http.get(`${URL}-probe`, () => {
+            count += 1;
+            return HttpResponse.json({
+                result: null,
+                extraCandidates: [],
+                characterPath: null,
+                guildPath: null,
+            });
+        }),
+    );
+    return () => count;
+}
+
+describe('ForeverSettingsSection — DEMO_MODE-only diagnostics (ROK-2163)', () => {
+    const neededControls = async (): Promise<void> => {
+        expect(
+            await screen.findByRole('switch', { name: /armory import for wow forever/i }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole('switch', { name: /quest import from the blizzard api/i }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('switch', { name: /wowhead item lookup/i })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'WoW Forever' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Re-import quests' })).toBeInTheDocument();
+    };
+
+    const expectNoDiagnostics = (): void => {
+        expect(screen.queryByRole('textbox', { name: /namespace prefix/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('heading', { name: /namespace probe/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Forever namespace:/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox', { name: /extra candidates/i })).not.toBeInTheDocument();
+    };
+
+    it('hides the diagnostics once system status says demoMode is false', async () => {
+        server.use(
+            http.get(STATUS_URL, () =>
+                HttpResponse.json({ status: 'ok', claimRequired: false, demoMode: false }),
+            ),
+        );
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<ForeverSettingsSection />, { queryClient });
+        await neededControls();
+        await waitFor(() =>
+            expect(queryClient.getQueryState(['system', 'status'])?.status).toBe('success'),
+        );
+        expectNoDiagnostics();
+    });
+
+    it('never requests the probe state when demoMode is false', async () => {
+        const probeGets = countProbeGets();
+        server.use(
+            http.get(STATUS_URL, () =>
+                HttpResponse.json({ status: 'ok', claimRequired: false, demoMode: false }),
+            ),
+        );
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<ForeverSettingsSection />, { queryClient });
+        await neededControls();
+        await waitFor(() =>
+            expect(queryClient.getQueryState(['system', 'status'])?.status).toBe('success'),
+        );
+        expect(probeGets()).toBe(0);
+    });
+
+    it('requests the probe state when demoMode is true (spy control)', async () => {
+        const probeGets = countProbeGets();
+        serveDemoMode();
+        renderWithProviders(<ForeverSettingsSection />);
+        await waitFor(() => expect(probeGets()).toBeGreaterThan(0));
+    });
+
+    it('hides the diagnostics while system status is still loading', async () => {
+        server.use(
+            http.get(STATUS_URL, async () => {
+                await delay('infinite');
+                return HttpResponse.json({});
+            }),
+        );
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<ForeverSettingsSection />, { queryClient });
+        await neededControls();
+        expect(queryClient.getQueryState(['system', 'status'])?.status).toBe('pending');
+        expectNoDiagnostics();
+    });
+
+    it('shows the diagnostics next to the needed controls when demoMode is true', async () => {
+        serveDemoMode();
+        renderWithProviders(<ForeverSettingsSection />);
+        await neededControls();
+        expect(await prefixInput()).toBeInTheDocument();
+        expect(
+            await screen.findByRole('heading', { name: /namespace probe/i }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+        expect(await screen.findByText(/^Forever namespace:/)).toBeInTheDocument();
     });
 });

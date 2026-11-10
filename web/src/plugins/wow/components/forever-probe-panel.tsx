@@ -2,7 +2,7 @@
  * ROK-1716: the WoW Forever namespace probe panel inside the admin "WoW
  * Forever" section — last run + status, a found banner, the collapsed
  * candidate x region matrix, Run now, and the probe's own settings. It only
- * reports: flipping the prefix / Armory switch stays with the controls above.
+ * reports. ROK-2163: rendered only on DEMO_MODE sites (`forever-diagnostics`).
  */
 import type { JSX } from 'react';
 import type { ForeverProbeResultDto } from '@raid-ledger/contract';
@@ -31,7 +31,7 @@ function LastRun({ result }: { result: ForeverProbeResultDto | null }): JSX.Elem
 
 function FoundBanner({ result }: { result: ForeverProbeResultDto | null }): JSX.Element | null {
     if (!result?.found) return null;
-    const message = `Forever namespace found: ${result.found.prefix} — set it above and enable Armory when ready.`;
+    const message = `Forever namespace found: ${result.found.prefix}.`;
     return <TestResultBanner result={{ success: true, message }} />;
 }
 
