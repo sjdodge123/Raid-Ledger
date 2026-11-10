@@ -7,6 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { count, eq, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
@@ -29,7 +30,9 @@ import {
 } from './addon-import-binding.apply';
 import type { AddonBindingResult } from './addon-import.binding';
 import { applyChar } from './addon-import-char.apply';
-import { decodeImportString } from './addon-import.decoder';
+import { decodeImportPaste, decodeImportString } from './addon-import.decoder';
+import { AddonImportError } from './addon-import.errors';
+import { loadImportCharacter, runForCharacter } from './addon-import.run';
 import {
   FIXTURE_EXPORTED_AT,
   FIXTURE_GUID,
@@ -39,6 +42,7 @@ import {
   buildWho,
 } from './testing/addon-fixture.builder';
 import { pinExportClock } from './testing/pin-export-clock';
+import { reassignWithin } from '../guilds/roster-claim/character-owner.admin.tx';
 
 pinExportClock();
 
@@ -335,6 +339,14 @@ const pinOnly = (guid: string): AddonBindingResult => ({
   pinGuid: guid,
 });
 
+/** A binding that writes nothing itself (the char section still runs). */
+const NO_BINDING: AddonBindingResult = {
+  errors: [],
+  warnings: [],
+  diff: {},
+  pinGuid: null,
+};
+
 /** Any backend waiting on a heavyweight lock (advisory or row/tx). */
 async function lockWaiters(): Promise<number> {
   const rows = await testApp.db.execute<{ n: number }>(sql`
@@ -393,6 +405,70 @@ describe('addon import — same GUID into two characters, concurrently (Codex P2
     });
     expect((await charRow(ana)).addonGuid).toBe(FIXTURE_GUID);
     expect((await charRow(bob)).addonGuid).toBeNull();
+  });
+});
+
+describe('addon import — admin Change owner racing an apply (ROK-2159)', () => {
+  // Drives `runForCharacter` directly (no route, so no audit-row FK insert
+  // that would block BEFORE the tx): the only thing that can make the apply
+  // wait is its own owner re-check row lock. Revert `.for(...)` → the stale
+  // read passes, the snapshot writes after the commit → 'applied'.
+  it('the apply blocks on its row-lock re-check, then 409 CHARACTER_MOVED — no snapshot', async () => {
+    const id = await createChar(await memberToken('anamoved'));
+    const anaId = (await charRow(id)).userId;
+    await memberToken('bobmoved');
+    const [bob] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.username, 'bobmoved')),
+      'bob',
+    );
+    // The import's pre-tx owner check + load ran while Ana owned the row.
+    const stale = await loadImportCharacter(testApp.db, id);
+    const paste = decodeImportPaste(
+      charAt(FIXTURE_EXPORTED_AT),
+      FIXTURE_EXPORTED_AT * 1000,
+    );
+    let release = (): void => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    let locked = (): void => undefined;
+    const moved = new Promise<void>((r) => (locked = r));
+    // Change owner locks GUID → name → row FOR UPDATE, moves it to Bob and
+    // holds its tx open (uncommitted).
+    const change = testApp.db.transaction(async (tx) => {
+      await reassignWithin(tx, {
+        adminId: bob.id,
+        characterId: id,
+        toUserId: bob.id,
+        logger: new Logger('rok-2159'),
+      });
+      locked();
+      await gate;
+    });
+    let importing: Promise<unknown> | undefined;
+    try {
+      await moved;
+      importing = testApp.db
+        .transaction((tx) =>
+          runForCharacter(tx, anaId, stale, paste, NO_BINDING, {
+            dryRun: false,
+          }),
+        )
+        .then(
+          (res) => res.status,
+          (e: unknown) => (e instanceof AddonImportError ? e.code : e),
+        );
+      await waitFor(async () => {
+        expect(await lockWaiters()).toBeGreaterThan(0);
+      }, 5000);
+    } finally {
+      release();
+    }
+    await change;
+    expect(await importing).toBe('CHARACTER_MOVED');
+    expect(await rowCount(schema.characterAddonSnapshots)).toBe(0);
+    expect((await charRow(id)).userId).toBe(bob.id);
   });
 });
 

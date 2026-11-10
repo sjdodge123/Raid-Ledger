@@ -31,12 +31,15 @@ const DEFAULT_MESSAGES: Record<AddonImportErrorCode, string> = {
   RULESET_REQUIRED: 'Choose which ruleset this character plays on.',
   RULESET_CONFIRM_STALE:
     "The realm's ruleset changed since your preview — preview again and confirm the new value.",
+  CHARACTER_MOVED:
+    'This character now belongs to another member, so this import was not applied.',
 };
 
-/** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, everything else 422 (contract). */
+/** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, 409 `CHARACTER_MOVED`, else 422. */
 export function addonImportStatus(code: AddonImportErrorCode): number {
   if (code === 'TOO_LARGE') return HttpStatus.PAYLOAD_TOO_LARGE;
   if (code === 'RATE_LIMITED') return HttpStatus.TOO_MANY_REQUESTS;
+  if (code === 'CHARACTER_MOVED') return HttpStatus.CONFLICT;
   return HttpStatus.UNPROCESSABLE_ENTITY;
 }
 

@@ -83,7 +83,7 @@ export const AddonImportNewRequestSchema = AddonImportRequestSchema.extend({
 export type AddonImportNewRequestDto = z.infer<typeof AddonImportNewRequestSchema>;
 export type AddonImportNewRequestInput = z.input<typeof AddonImportNewRequestSchema>;
 
-/** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, everything else 422. */
+/** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, 409 `CHARACTER_MOVED`, everything else 422. */
 export const AddonImportErrorCodeSchema = z.enum([
     'TOO_LARGE',
     'BAD_HEADER',
@@ -104,6 +104,8 @@ export const AddonImportErrorCodeSchema = z.enum([
     'CHARACTER_CLAIMED',
     /** ROK-1738 — create route: the export has no ruleset and none was picked. */
     'RULESET_REQUIRED',
+    /** ROK-2159 — apply: the character changed owner (admin Change owner) after the import started. HTTP 409; nothing was written. */
+    'CHARACTER_MOVED',
 ]);
 export type AddonImportErrorCode = z.infer<typeof AddonImportErrorCodeSchema>;
 

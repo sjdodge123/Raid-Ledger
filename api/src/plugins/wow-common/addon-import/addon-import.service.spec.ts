@@ -5,7 +5,7 @@
  * `addon-import.integration.spec.ts`.
  */
 import type { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import type { CharactersService } from '../../../characters/characters.service';
@@ -49,7 +49,14 @@ jest.mock('./addon-import-char.apply', () => ({
 const CHAR_ID = '00000000-0000-4000-8000-000000000001';
 const SUMMARY = { gearCount: 1, avgIlvl: 80, talentNodes: 1, lockouts: 0 };
 /** The run's tx: apply takes THE import locks on it (ROK-1794 lock order). */
-const TX = { execute: jest.fn(() => Promise.resolve(undefined)) };
+const TX = {
+  execute: jest.fn(() => Promise.resolve(undefined)),
+  // ROK-2159: apply re-reads the owner `FOR UPDATE` on the tx (user 1 owns it).
+  select: jest.fn().mockReturnThis(),
+  from: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  for: jest.fn().mockResolvedValue([{ userId: 1 }]),
+};
 
 function makeDb() {
   const row = {
@@ -169,6 +176,27 @@ describe('AddonImportService', () => {
       expect.objectContaining({ tx: TX, characterId: CHAR_ID }),
       expect.objectContaining({ pinGuid: 'Player-1-A' }),
     );
+  });
+
+  describe('owner re-check under the row lock (ROK-2159)', () => {
+    it('a character now owned by another member → CHARACTER_MOVED, nothing applied', async () => {
+      const { service } = setup();
+      TX.for.mockResolvedValueOnce([{ userId: 2 }]);
+      await expect(
+        service.importString(1, CHAR_ID, body),
+      ).rejects.toMatchObject({ code: 'CHARACTER_MOVED' });
+      expect(TX.for).toHaveBeenCalledWith('no key update');
+      expect(applyChar).not.toHaveBeenCalled();
+    });
+
+    it('a character deleted meanwhile → 404 like the pre-check, not CHARACTER_MOVED', async () => {
+      const { service } = setup();
+      TX.for.mockResolvedValueOnce([]);
+      await expect(
+        service.importString(1, CHAR_ID, body),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(applyChar).not.toHaveBeenCalled();
+    });
   });
 
   describe('roster-insights invalidation (ROK-1913)', () => {

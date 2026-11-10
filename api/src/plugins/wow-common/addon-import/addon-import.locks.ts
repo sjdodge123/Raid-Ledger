@@ -10,6 +10,8 @@ import type { DecodedAddonPaste } from './addon-import.decoder';
  *   2. the guild-import lock `hashtext('guild-import:game:region:nameKey')`
  *   3. the roster-claim name lock `(ADDON_GUID_LOCK_CLASS, hashtext('claim-name:game:region:lower(name)'))`
  *      — taken only by the ROK-2128 roster claim, after (1); no import takes it.
+ *   4. the character row `FOR NO KEY UPDATE` (ROK-2159 owner re-check) — a
+ *      row lock, not advisory: after (1)/(2), per-character apply only.
  *
  * Both apply routes (per-character and create) take them up front, in this
  * order, through `lockImportScope`, before any section runs. The later
