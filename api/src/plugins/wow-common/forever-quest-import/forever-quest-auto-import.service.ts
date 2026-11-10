@@ -4,7 +4,15 @@
  * - **Empty overlay:** after boot, and whenever the Blizzard keys or the
  *   Forever config (the quest-import switch) are saved, a run starts when
  *   `wow_dungeon_quest_blizzard` has no rows. Fire-and-forget: boot never
- *   waits on it, and a failure is logged (the run itself reports to Sentry).
+ *   waits on it, and a failure is logged and sent to Sentry.
+ *   It also starts when the last run did not succeed (a run that failed
+ *   after writing some rows leaves the table non-empty), but not within
+ *   `FOREVER_QUEST_AUTO_RETRY_FLOOR_MS` of a failed automatic run, so a
+ *   crash loop or repeated saves do not hammer Blizzard. Manual runs are
+ *   never throttled.
+ * - **HTTP server only:** scripts that build the full `AppModule` with
+ *   `createApplicationContext` (no HTTP adapter) never kick — a CLI exiting
+ *   mid-run would leave a `running` marker behind.
  * - **Weekly:** the `forever-quest-import` job in `WowCronRegistrar`.
  *
  * Every trigger goes through `ForeverQuestImportService.start`, so the
@@ -20,9 +28,14 @@ import {
   Logger,
   OnApplicationBootstrap,
 } from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { ForeverQuestImportTrigger } from '@raid-ledger/contract';
+import type {
+  ForeverQuestImportReport,
+  ForeverQuestImportTrigger,
+} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
@@ -30,6 +43,7 @@ import { SETTINGS_EVENTS } from '../../../settings/settings.types';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_CONFIG_UPDATED } from '../forever.settings';
 import { isForeverQuestImportEnabled } from './forever-quest-import-switch';
+import { FOREVER_QUEST_IMPORT_SENTRY_CONTEXT } from './forever-quest-import.report';
 import { ForeverQuestImportService } from './forever-quest-import.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -46,6 +60,25 @@ export const FOREVER_QUEST_AUTO_IMPORT_KICKS = Symbol(
   'FOREVER_QUEST_AUTO_IMPORT_KICKS',
 );
 
+/** No automatic retry within this long of a failed automatic run. */
+export const FOREVER_QUEST_AUTO_RETRY_FLOOR_MS = 60 * 60 * 1000;
+
+/**
+ * The stored report is a failed automatic run (`auto-empty` / `weekly`) that
+ * finished less than the floor ago. Persisted, so it holds across restarts.
+ */
+export function isRecentAutoFailure(
+  report: ForeverQuestImportReport,
+  now: Date,
+): boolean {
+  if (report.status !== 'failed' || report.finishedAt === null) return false;
+  if (report.trigger !== 'auto-empty' && report.trigger !== 'weekly') {
+    return false;
+  }
+  const age = now.getTime() - Date.parse(report.finishedAt);
+  return age < FOREVER_QUEST_AUTO_RETRY_FLOOR_MS;
+}
+
 @Injectable()
 export class ForeverQuestAutoImportService implements OnApplicationBootstrap {
   private readonly logger = new Logger(ForeverQuestAutoImportService.name);
@@ -55,6 +88,7 @@ export class ForeverQuestAutoImportService implements OnApplicationBootstrap {
     private readonly settings: SettingsService,
     private readonly registry: PluginRegistryService,
     private readonly importer: ForeverQuestImportService,
+    private readonly adapterHost: HttpAdapterHost,
     @Inject(FOREVER_QUEST_AUTO_IMPORT_KICKS)
     private readonly kicksEnabled: boolean,
   ) {}
@@ -77,17 +111,32 @@ export class ForeverQuestAutoImportService implements OnApplicationBootstrap {
   }
 
   /**
-   * Start an `auto-empty` run when the overlay table has no rows.
+   * Start an `auto-empty` run when the overlay table has no rows or the last
+   * run failed — unless a failed automatic run finished within the floor.
    * @returns true when a run was started.
    */
-  async startIfEmpty(): Promise<boolean> {
-    if (!(await this.isOverlayEmpty())) return false;
+  async startIfEmpty(now: Date = new Date()): Promise<boolean> {
+    const last = await this.importer.getStatus();
+    if (isRecentAutoFailure(last, now)) {
+      this.logger.log(
+        'Forever quest auto-import skipped: an automatic run failed within the last hour',
+      );
+      return false;
+    }
+    if (last.status !== 'failed' && !(await this.isOverlayEmpty())) {
+      return false;
+    }
     return this.tryStart('auto-empty');
   }
 
   /** The weekly job: start a `weekly` run and wait for it to finish. */
   async runWeekly(): Promise<void> {
-    if (await this.tryStart('weekly')) await this.importer.currentRun;
+    try {
+      if (await this.tryStart('weekly')) await this.importer.currentRun;
+    } catch (err: unknown) {
+      reportToSentry(err, 'weekly');
+      throw err;
+    }
   }
 
   /**
@@ -124,12 +173,27 @@ export class ForeverQuestAutoImportService implements OnApplicationBootstrap {
     return rows.length === 0;
   }
 
+  /** True only in the HTTP server; `createApplicationContext` has no adapter. */
+  private isHttpServer(): boolean {
+    const adapter: unknown = this.adapterHost.httpAdapter;
+    return adapter !== undefined && adapter !== null;
+  }
+
   private kick(reason: string): void {
-    if (!this.kicksEnabled) return;
+    if (!this.kicksEnabled || !this.isHttpServer()) return;
     this.startIfEmpty().catch((err: unknown) => {
       this.logger.warn(
         `Forever quest auto-import check (${reason}) failed: ${String(err)}`,
       );
+      reportToSentry(err, reason);
     });
   }
+}
+
+/** A failure before a run starts (the run itself reports its own failures). */
+function reportToSentry(err: unknown, reason: string): void {
+  Sentry.captureException(err, {
+    tags: { context: FOREVER_QUEST_IMPORT_SENTRY_CONTEXT },
+    extra: { stage: 'auto-import check', reason },
+  });
 }

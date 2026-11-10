@@ -18,6 +18,7 @@ import * as Sentry from '@sentry/nestjs';
 import { randomUUID } from 'node:crypto';
 import { isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { ForeverQuestImportTrigger } from '@raid-ledger/contract';
 import { bestEffortInit } from '../../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -46,7 +47,6 @@ import {
   pushQuestImportError,
   type ForeverQuestImportReport,
 } from './forever-quest-import.report';
-import type { ForeverQuestImportTrigger } from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 

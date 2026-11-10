@@ -62,7 +62,8 @@ export class WowCronRegistrar implements CronRegistrar {
       ...this.foreverArmoryJobs(),
       {
         name: 'forever-quest-import',
-        // Wednesdays at 6:30 AM — refresh Forever quest XP/money from
+        // Wednesdays at 06:30 server time (UTC in the container; no timeZone
+        // is set on the job) — refresh Forever quest XP/money from
         // Blizzard (ROK-2162); skipped when a run is already in progress.
         cronExpression: '0 30 6 * * 3',
         handler: () => this.questImport.runWeekly(),
