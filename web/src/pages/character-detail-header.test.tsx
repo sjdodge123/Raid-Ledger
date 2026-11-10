@@ -12,7 +12,9 @@ import { activateWowPlugin } from '../test/activate-wow-plugin';
 import { renderWithProviders } from '../test/render-helpers';
 import { CharacterDetailPage } from './character-detail-page';
 
-const state = vi.hoisted(() => ({ phone: false, role: 'admin', userId: 5, listeners: new Set<() => void>() }));
+const state = vi.hoisted(() => ({
+    phone: false, role: 'admin', userId: 5, equippedItemLevel: null as number | null, listeners: new Set<() => void>(),
+}));
 // A subscribable stand-in for the media query, so a test can cross the breakpoint mid-render.
 vi.mock('../hooks/use-media-query', async () => {
     const { useSyncExternalStore } = await import('react');
@@ -25,7 +27,7 @@ function crossBreakpoint(phone: boolean): void {
     act(() => { state.phone = phone; state.listeners.forEach((cb) => cb()); });
 }
 vi.mock('../hooks/use-character-detail', () => ({
-    useCharacterDetail: () => ({ data: CHARACTER, isLoading: false, error: null }),
+    useCharacterDetail: () => ({ data: { ...CHARACTER, equippedItemLevel: state.equippedItemLevel }, isLoading: false, error: null }),
 }));
 vi.mock('../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../hooks/use-auth')>()),
@@ -46,7 +48,7 @@ function renderPage() {
 }
 
 describe('character header at phone width — Option B (ROK-2140)', () => {
-    beforeEach(() => { activateWowPlugin(); state.phone = true; state.role = 'admin'; state.userId = 5; });
+    beforeEach(() => { activateWowPlugin(); state.phone = true; state.role = 'admin'; state.userId = 5; state.equippedItemLevel = null; });
 
     it('renders the centred hero with three stat tiles: Item Level, Level, Updated', () => {
         renderPage();
@@ -59,7 +61,7 @@ describe('character header at phone width — Option B (ROK-2140)', () => {
     it('colours the Item Level and Level tiles with flipping tokens, never a raw hue', () => {
         renderPage();
         const values = screen.getAllByTestId('character-stat-tile').map((t) => t.firstElementChild?.className ?? '');
-        expect(values[0]).toContain('text-busy');
+        expect(values[0]).toContain('text-item-level');
         expect(values[1]).toContain('text-warning');
         expect(values.join(' ')).not.toMatch(/(purple|amber)-\d/);
     });
@@ -105,7 +107,17 @@ describe('character header at phone width — Option B (ROK-2140)', () => {
 });
 
 describe('character header at ≥ sm (ROK-2140 shared fixes)', () => {
-    beforeEach(() => { activateWowPlugin(); state.phone = false; state.role = 'admin'; state.userId = 5; });
+    beforeEach(() => { activateWowPlugin(); state.phone = false; state.role = 'admin'; state.userId = 5; state.equippedItemLevel = null; });
+
+    it('paints both Item Level and Equipped with the item-level token, never a raw purple (ROK-2165)', () => {
+        state.equippedItemLevel = 18;
+        renderPage();
+        const line = screen.getByTestId('character-stat-line');
+        expect(line).toHaveTextContent('Item Level 16 · Equipped 18 · Updated 26m ago');
+        expect(within(line).getByText('16')).toHaveClass('text-item-level');
+        expect(within(line).getByText('18')).toHaveClass('text-item-level');
+        expect(line.innerHTML).not.toMatch(/(purple|amber)-\d/);
+    });
 
     it('keeps the desktop row, a labelled Sync and a one-line item level + updated', () => {
         renderPage();
@@ -133,7 +145,7 @@ describe('character header at ≥ sm (ROK-2140 shared fixes)', () => {
 });
 
 describe('crossing the 640px breakpoint (ROK-2140 Codex P2)', () => {
-    beforeEach(() => { activateWowPlugin(); state.role = 'admin'; state.userId = 5; });
+    beforeEach(() => { activateWowPlugin(); state.role = 'admin'; state.userId = 5; state.equippedItemLevel = null; });
 
     it.each([
         ['phone → desktop', true],

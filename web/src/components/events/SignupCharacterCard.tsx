@@ -50,7 +50,7 @@ function CharacterStats({ character }: { character: CharacterDto }) {
             {character.level && character.class && <span className="shrink-0">·</span>}
             {character.class && <span className="truncate">{character.class}</span>}
             {character.spec && <><span className="shrink-0">·</span><span className="truncate">{character.spec}</span></>}
-            {character.itemLevel && <><span className="shrink-0">·</span><span className="shrink-0 text-purple-400">{character.itemLevel} iLvl</span></>}
+            {character.itemLevel && <><span className="shrink-0">·</span><span className="shrink-0 text-item-level">{character.itemLevel} iLvl</span></>}
         </div>
     );
 }

@@ -115,7 +115,7 @@ function CharacterFooterStats({ preview }: { preview: BlizzardCharacterPreviewDt
             {preview.itemLevel && (
                 <div className="text-sm">
                     <span className="text-muted">iLvl </span>
-                    <span className="text-amber-400 font-medium">{preview.itemLevel}</span>
+                    <span className="text-item-level font-medium">{preview.itemLevel}</span>
                 </div>
             )}
             {armoryUrl && (
