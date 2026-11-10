@@ -17,6 +17,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { insertMemberGrant } from '../../../guilds/guild-editors.helpers';
 import * as schema from '../../../drizzle/schema';
 import { DiscordNotificationService } from '../../../notifications/discord-notification.service';
 import { UsersService } from '../../../users/users.service';
@@ -334,14 +335,21 @@ async function userState(userId: number) {
   return u;
 }
 
-/** Backends of this database blocked on a row lock right now. */
-async function lockWaiters(): Promise<number> {
+/**
+ * Other backends of this database blocked on a lock right now, running a
+ * query matching `like` — only the backend the case means (review r3 N1).
+ */
+async function lockWaiters(like: string): Promise<number> {
   const rows = await testApp.db.execute<{ n: number }>(
     sql`select count(*)::int as n from pg_stat_activity
-        where datname = current_database() and wait_event_type = 'Lock'`,
+        where datname = current_database() and wait_event_type = 'Lock'
+          and pid <> pg_backend_pid() and query ilike ${like}`,
   );
   return Number(rows[0]?.n ?? 0);
 }
+
+const USERS_LOCK = '%from "users"%for update%';
+const ROSTER_LOCK = '%from "guild_members"%for update%';
 
 const rejoin = async (userId: number) =>
   reactivateOnGuildRejoin(testApp.db, await discordIdOf(userId));
@@ -368,27 +376,65 @@ describe('ROK-2160 guild rejoin path (reactivateOnGuildRejoin)', () => {
     await deactivate(s.ownerA);
     const discordId = await discordIdOf(s.ownerA);
     let pending: ReturnType<typeof reactivateOnGuildRejoin> | undefined;
-    await testApp.db.transaction(async (tx) => {
-      await tx
-        .select({ id: schema.users.id })
-        .from(schema.users)
-        .where(eq(schema.users.id, s.ownerA))
-        .for('update');
-      pending = reactivateOnGuildRejoin(testApp.db, discordId);
-      await waitFor(
-        async () => expect(await lockWaiters()).toBeGreaterThan(0),
-        5000,
-      );
-      await tx
-        .update(schema.users)
-        .set({ bannedAt: sql`NOW()` })
-        .where(eq(schema.users.id, s.ownerA));
-    });
+    try {
+      await testApp.db.transaction(async (tx) => {
+        await tx
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.id, s.ownerA))
+          .for('update');
+        pending = reactivateOnGuildRejoin(testApp.db, discordId);
+        await waitFor(
+          async () => expect(await lockWaiters(USERS_LOCK)).toBeGreaterThan(0),
+          5000,
+        );
+        await tx
+          .update(schema.users)
+          .set({ bannedAt: sql`NOW()` })
+          .where(eq(schema.users.id, s.ownerA));
+      });
+    } finally {
+      // A waitFor throw rolls the tx back; still settle the rejoin.
+      if (pending) await Promise.allSettled([pending]);
+    }
     if (!pending) throw new Error('rejoin never started');
     expect(await pending).toBeUndefined();
     const after = await userState(s.ownerA);
     expect(after.bannedAt).not.toBeNull();
     expect(after.deactivatedAt).not.toBeNull();
+  });
+});
+
+describe('ROK-2160 a staff grant and a rejoin serialise on the roster row', () => {
+  it('11. a staff grant for B still open when A rejoins is seen by the rejoin (review r3 m1)', async () => {
+    const s = await seed(null);
+    await deactivate(s.ownerA);
+    const discordId = await discordIdOf(s.ownerA);
+    const staff = testApp.seed.adminUser.id;
+    const waited = 'rejoin waited on the roster row';
+    let pending: ReturnType<typeof reactivateOnGuildRejoin> | undefined;
+    let order = 'grant tx never ran';
+    try {
+      await testApp.db.transaction(async (tx) => {
+        // Staff grant B on R (B wins it while A is away); not committed yet.
+        await insertMemberGrant(tx, s.guildId, s.memberId, staff);
+        const rejoining = reactivateOnGuildRejoin(testApp.db, discordId);
+        pending = rejoining;
+        order = await Promise.race([
+          rejoining.then(() => 'rejoin finished while the grant was open'),
+          waitFor(
+            async () => expect(await lockWaiters(ROSTER_LOCK)).toBe(1),
+            5000,
+          ).then(() => waited),
+        ]);
+      });
+    } finally {
+      if (pending) await Promise.allSettled([pending]);
+    }
+    expect(order).toBe(waited);
+    if (!pending) throw new Error('rejoin never started');
+    expect(await pending).toBeDefined();
+    await expectANotGranted(s);
   });
 });
 
