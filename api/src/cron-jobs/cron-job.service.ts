@@ -37,6 +37,7 @@ import {
   updateJobSchedule,
   findPluginHandler,
 } from './cron-job.admin-helpers';
+import { RetiredPluginJobs } from './cron-job.retired-plugin-jobs';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 
@@ -47,6 +48,8 @@ type CronJobRow = typeof schema.cronJobs.$inferSelect;
 export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(CronJobService.name);
   private readonly jobCache = new Map<string, CronJobRow>();
+  // ROK-2163: plugin rows no longer registered are hidden, never deleted.
+  private readonly retired = new RetiredPluginJobs();
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   // ROK-1058: deferred sync timers, cancelled in onModuleDestroy.
   private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
@@ -157,15 +160,18 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       this.pluginRegistry.getAdaptersForExtensionPoint<CronRegistrar>(
         EXTENSION_POINTS.CRON_REGISTRAR,
       );
+    const liveBySlug = new Map<string, ReadonlySet<string>>();
     for (const [slug, reg] of registrars) {
-      await syncOnePluginRegistrar(
+      const live = await syncOnePluginRegistrar(
         this.db,
         slug,
         reg,
         syncedNames,
         this.logger,
       );
+      if (live) liveBySlug.set(slug, live);
     }
+    this.retired.replace(liveBySlug);
   }
 
   /**
@@ -263,10 +269,12 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       .select()
       .from(schema.cronJobs)
       .orderBy(schema.cronJobs.name);
-    return rows.map((row) => ({
-      ...row,
-      usesAi: CORE_JOB_METADATA[row.name]?.usesAi ?? false,
-    }));
+    return rows
+      .filter((row) => !this.retired.isRetired(row))
+      .map((row) => ({
+        ...row,
+        usesAi: CORE_JOB_METADATA[row.name]?.usesAi ?? false,
+      }));
   }
 
   /** Manually trigger a cron job by its DB id. */
@@ -276,7 +284,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       .from(schema.cronJobs)
       .where(eq(schema.cronJobs.id, id))
       .limit(1);
-    if (!job) return null;
+    if (!job || this.retired.isRetired(job)) return null;
     await this.fireTrigger(job);
     const [updated] = await this.db
       .select()
@@ -307,6 +315,17 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
+  /** True when the row with this id is a retired plugin job (ROK-2163). */
+  private async isRetiredId(id: number): Promise<boolean> {
+    if (this.retired.isEmpty) return false;
+    const [job] = await this.db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, id))
+      .limit(1);
+    return job !== undefined && this.retired.isRetired(job);
+  }
+
   /** Get execution history for a specific job. */
   async getExecutionHistory(jobId: number, limit = 50) {
     return getExecutionHistory(this.db, jobId, limit);
@@ -314,6 +333,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Pause a cron job. Future executions will log "skipped". */
   async pauseJob(id: number) {
+    if (await this.isRetiredId(id)) return undefined;
     const updated = await setPaused(this.db, id, true);
     if (updated) this.jobCache.set(updated.name, updated);
     return updated;
@@ -321,6 +341,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Resume a paused cron job. */
   async resumeJob(id: number) {
+    if (await this.isRetiredId(id)) return undefined;
     const updated = await setPaused(this.db, id, false);
     if (updated) this.jobCache.set(updated.name, updated);
     return updated;
@@ -328,6 +349,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Update schedule (cron expression) for a job. */
   async updateSchedule(id: number, cronExpression: string) {
+    if (await this.isRetiredId(id)) return undefined;
     const updated = await updateJobSchedule(
       this.db,
       this.schedulerRegistry,

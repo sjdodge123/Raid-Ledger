@@ -178,19 +178,6 @@ describe('ForeverNamespaceProbeService.run — gating', () => {
     await service.run();
     expect(runProbeMock).toHaveBeenCalledTimes(2);
   });
-
-  it('runIfInLaunchWindow no-ops outside the window and runs inside', async () => {
-    const { service } = setup();
-    expect(
-      await service.runIfInLaunchWindow(new Date('2026-11-19T00:00:00Z')),
-    ).toBeNull();
-    expect(runProbeMock).not.toHaveBeenCalled();
-    const inside = await service.runIfInLaunchWindow(
-      new Date('2026-11-04T00:00:00Z'),
-    );
-    expect(inside?.status).toBe('ok');
-    expect(runProbeMock).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe('ForeverNamespaceProbeService config + state', () => {

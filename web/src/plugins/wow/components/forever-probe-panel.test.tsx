@@ -110,6 +110,8 @@ describe('ForeverProbePanel (ROK-1716)', () => {
         expect(
             await screen.findByText(/forever namespace found: classicforever/i),
         ).toBeInTheDocument();
+        // ROK-2163: Armory is on by default now — the banner no longer says to enable it.
+        expect(screen.queryByText(/enable armory/i)).not.toBeInTheDocument();
         const table = screen.getByRole('table', { hidden: true });
         const classicRow = within(table).getByRole('row', {
             name: /^classic\b/i,
