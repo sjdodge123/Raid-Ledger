@@ -146,7 +146,7 @@ export async function runForCharacter(
     region: character.binding.region as WowRegion,
     pendingGuid: binding.pinGuid,
   };
-  // ROK-1794 — THE lock order (GUID, then guild) → row (ROK-2159) first.
+  // Lock order: GUID → guild (ROK-1794) → character row (ROK-2159).
   if (!request.dryRun) await lockAndRecheckOwner(ctx, character, paste);
   const runs = withPendingBindingStatus(
     await runPaste(ctx, paste, request.dryRun),
@@ -162,7 +162,8 @@ export async function runForCharacter(
  * with the `FOR UPDATE` that Change owner and unlink take (Postgres row-lock
  * table: FOR UPDATE conflicts with every mode), so the race serialises the
  * same; unlike FOR UPDATE it lets FOR KEY SHARE through, so FK inserts that
- * reference this character (signups, audit rows) are not blocked meanwhile. The pre-tx owner check
+ * reference this character (signups, audit rows) are not blocked meanwhile.
+ * The pre-tx owner check
  * (`characters.findOne`) races an admin Change owner, which locks GUID →
  * name → row (`character-owner.admin.tx.ts::lockCharacter`): without this
  * the import waited on that row lock and then wrote the old owner's
