@@ -17,15 +17,25 @@ export function pickSuggested(
   return strong.length === 1 ? (strong[0] ?? null) : null;
 }
 
-/** First `MAX_HUB_CLAIM_CANDIDATES` candidates plus whether any were cut. */
-export function capCandidates(list: readonly HubClaimCandidate[]): {
+/**
+ * First `MAX_HUB_CLAIM_CANDIDATES` candidates plus whether any were cut. Pass
+ * the `suggested` pick (computed over the FULL list) as `keep`: when it sits
+ * past the cutoff it takes the last slot, so the schema's "suggested is in
+ * candidates" refine holds and the client can still show it.
+ */
+export function capCandidates(
+  list: readonly HubClaimCandidate[],
+  keep: HubClaimCandidate | null = null,
+): {
   candidates: HubClaimCandidate[];
   truncated: boolean;
 } {
-  return {
-    candidates: list.slice(0, MAX_HUB_CLAIM_CANDIDATES),
-    truncated: list.length > MAX_HUB_CLAIM_CANDIDATES,
-  };
+  const head = list.slice(0, MAX_HUB_CLAIM_CANDIDATES);
+  const candidates =
+    keep === null || head.includes(keep)
+      ? head
+      : [...head.slice(0, MAX_HUB_CLAIM_CANDIDATES - 1), keep];
+  return { candidates, truncated: list.length > MAX_HUB_CLAIM_CANDIDATES };
 }
 
 /** The POST body, or `HUB_CLAIM_BAD_OPTIONS` (400). A missing body is `{}`. */

@@ -58,13 +58,16 @@ export class HubClaimService {
   async status(actor: GuildActor, guildId: number): Promise<HubClaimStatus> {
     const { provider, ctx } = await this.resolve(actor, guildId);
     const raw = await provider.status(ctx);
-    const { candidates } = capCandidates(raw.candidates);
+    // Uniqueness of the strong match is judged over the provider's FULL list
+    // (a second strong past the cap makes it ambiguous), THEN the list is capped.
+    const suggested = pickSuggested(raw.candidates);
+    const { candidates } = capCandidates(raw.candidates, suggested);
     const parsed = HubClaimStatusSchema.safeParse({
       provider: provider.pluginSlug,
       viewerIsMember: ctx.viewerIsMember,
       viewerHasClaim: raw.viewerHasClaim,
       unclaimedCount: raw.unclaimedCount,
-      suggested: pickSuggested(candidates),
+      suggested,
       candidates,
       truncated: raw.unclaimedCount > candidates.length,
       claimOptions: raw.claimOptions,

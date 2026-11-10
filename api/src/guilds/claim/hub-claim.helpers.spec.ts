@@ -56,6 +56,22 @@ describe('capCandidates', () => {
     const list = Array.from({ length: 50 }, (_, i) => cand(`c${i}`));
     expect(capCandidates(list)).toEqual({ candidates: list, truncated: false });
   });
+
+  it('keeps a pick that sits past the cutoff in the last slot', () => {
+    const list = Array.from({ length: 51 }, (_, i) => cand(`c${i}`));
+    const keep = list[50] ?? null;
+    const out = capCandidates(list, keep);
+    expect(out.candidates).toHaveLength(50);
+    expect(out.candidates[49]?.id).toBe('c50');
+    expect(out.candidates[48]?.id).toBe('c48');
+    expect(out.truncated).toBe(true);
+  });
+
+  it('leaves the list alone when the pick is already inside the cap', () => {
+    const list = Array.from({ length: 51 }, (_, i) => cand(`c${i}`));
+    const out = capCandidates(list, list[3] ?? null);
+    expect(out.candidates).toEqual(list.slice(0, 50));
+  });
 });
 
 describe('parseClaimBody', () => {

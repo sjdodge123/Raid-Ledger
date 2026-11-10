@@ -426,6 +426,34 @@ describe('GET guilds/:id/claim — ranking and contract', () => {
   });
 });
 
+describe('GET guilds/:id/claim — suggested is judged before the 50 cap', () => {
+  it('suggested is null when a second strong match sits past the 50 cap', async () => {
+    const list = Array.from({ length: 51 }, (_, i) =>
+      cand(`c${i}`, i === 0 || i === 50 ? 'strong' : null),
+    );
+    const id = await servedHub({ status: plainStatus(list) });
+    const res = await getStatus(id);
+    expect(res.status).toBe(200);
+    expect(res.body.suggested).toBeNull();
+    expect(res.body.candidates).toHaveLength(50);
+    expect(res.body.truncated).toBe(true);
+  });
+
+  it('the only strong match, past the 50 cap, is suggested and returned', async () => {
+    const list = Array.from({ length: 51 }, (_, i) =>
+      cand(`c${i}`, i === 50 ? 'strong' : null),
+    );
+    const id = await servedHub({ status: plainStatus(list) });
+    const res = await getStatus(id);
+    expect(res.status).toBe(200);
+    expect(res.body.suggested?.id).toBe('c50');
+    const ids = (res.body.candidates as HubClaimCandidate[]).map((c) => c.id);
+    expect(ids).toHaveLength(50);
+    expect(ids).toContain('c50');
+    expect(res.body.truncated).toBe(true);
+  });
+});
+
 describe('POST guilds/:id/claim/:candidateId', () => {
   it('200 with a schema-valid result, no-store; options reach the provider', async () => {
     const id = await servedHub({
