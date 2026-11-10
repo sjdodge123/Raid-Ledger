@@ -265,7 +265,21 @@ describe('runBan', () => {
   it('wipe: runs wipeUserData inside a transaction instead of reassign-only', async () => {
     banUserById.mockResolvedValue({ ...TARGET });
     cancelAll.mockResolvedValue(0);
-    const deps = makeDeps();
+    lockDeactivatedAt.mockResolvedValueOnce(null);
+    // Two transactions, as on main where the ban was a bare statement and the
+    // wipe ran in its OWN tx (§9.6): ROK-2160 wraps the ban + its GUID audit,
+    // which must commit (lockout) BEFORE the wipe's tx opens.
+    const banTx = { tx: 'ban' };
+    const wipeTx = { tx: 'wipe' };
+    const transaction = jest
+      .fn()
+      .mockImplementationOnce((cb: (tx: unknown) => unknown) =>
+        Promise.resolve(cb(banTx)),
+      )
+      .mockImplementationOnce((cb: (tx: unknown) => unknown) =>
+        Promise.resolve(cb(wipeTx)),
+      );
+    const deps = makeDeps({ db: { transaction } as never });
 
     await runBan(deps, {
       userId: TARGET.id,
@@ -274,12 +288,19 @@ describe('runBan', () => {
       kickFromDiscord: false,
     });
 
-    expect(deps.db.transaction).toHaveBeenCalledTimes(1);
-    expect(wipeUserData).toHaveBeenCalledWith(
-      expect.anything(),
-      TARGET.id,
-      ACTOR,
-    );
+    expect(transaction).toHaveBeenCalledTimes(2);
+    // Tx 1: the ban write and its owner audit; nothing of the wipe.
+    expect(lockDeactivatedAt).toHaveBeenCalledWith(banTx, TARGET.id);
+    expect(banUserById).toHaveBeenCalledWith(banTx, TARGET.id, undefined);
+    expect(auditOwnerDeactivated).toHaveBeenCalledWith(banTx, TARGET.id, ACTOR);
+    // Tx 2: the screenshot select and the wipe; nothing of the ban.
+    expect(selectShots).toHaveBeenCalledWith(wipeTx, TARGET.id);
+    expect(wipeUserData).toHaveBeenCalledWith(wipeTx, TARGET.id, ACTOR);
+    // Order: ban tx → lockout → wipe tx.
+    const order = (m: jest.Mock) => at(m.mock.invocationCallOrder, 0);
+    expect(order(banUserById)).toBeLessThan(order(invalidateAuthUser));
+    expect(order(invalidateAuthUser)).toBeLessThan(order(selectShots));
+    expect(order(selectShots)).toBeLessThan(order(wipeUserData));
     expect(reassignPugSlots).not.toHaveBeenCalled();
     expect(insertAdminAction).toHaveBeenCalledWith(
       deps.db,
