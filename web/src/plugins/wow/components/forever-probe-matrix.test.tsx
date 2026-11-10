@@ -40,7 +40,7 @@ describe('ForeverProbeMatrix per-id chips (ROK-2143)', () => {
             <ForeverProbeMatrix
                 result={{
                     ...result,
-                    matches: [{ prefix: 'forever', region: 'us', signal: 'ruleset' }],
+                    matches: [{ prefix: 'forever', region: 'us', raceName: null, signal: 'ruleset' }],
                 }}
             />,
         );
