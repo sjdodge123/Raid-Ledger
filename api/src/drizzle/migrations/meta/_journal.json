@@ -2052,6 +2052,13 @@
       "when": 1794271698664,
       "tag": "0293_addon_snapshot_completed_captured_at",
       "breakpoints": true
+    },
+    {
+      "idx": 294,
+      "version": "7",
+      "when": 1794323249793,
+      "tag": "0294_guid_release_backfill_deactivated_owners",
+      "breakpoints": true
     }
   ]
 }
