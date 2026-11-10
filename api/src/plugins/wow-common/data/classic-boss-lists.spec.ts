@@ -5,6 +5,10 @@
  */
 import bossEncounterData from './boss-encounter-data.json';
 import bossLootData from './boss-loot-data.json';
+import {
+  MIN_BUNDLED_CLASSIC_BOSSES,
+  MIN_BUNDLED_CLASSIC_LOOT,
+} from '../boss-encounter-prune.helpers';
 
 interface BossEntry {
   instanceId: number;
@@ -116,5 +120,18 @@ describe('classic boss lists (ROK-2142)', () => {
       return orders.some((o, i) => o !== i + 1);
     });
     expect(bad).toEqual([]);
+  });
+
+  // ROK-2168: below these minimums the seeder's stale-row prune skips itself
+  // with only a boot warning. A re-curation that drops the bundled lists under
+  // them must fail here — lower MIN_BUNDLED_CLASSIC_* in
+  // boss-encounter-prune.helpers.ts deliberately instead.
+  it('bundled classic boss count meets the prune floor (MIN_BUNDLED_CLASSIC_BOSSES)', () => {
+    expect(classic.length).toBeGreaterThanOrEqual(MIN_BUNDLED_CLASSIC_BOSSES);
+  });
+
+  it('bundled classic loot count meets the prune floor (MIN_BUNDLED_CLASSIC_LOOT)', () => {
+    const classicLoot = loot.filter((l) => l.expansion === 'classic');
+    expect(classicLoot.length).toBeGreaterThanOrEqual(MIN_BUNDLED_CLASSIC_LOOT);
   });
 });
