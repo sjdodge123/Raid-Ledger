@@ -66,9 +66,27 @@ describe('GroupWeekView — layout', () => {
         renderView();
         expect(cell(WED, 20)).toHaveTextContent('5 free · 1 busy');
         expect(within(cell(WED, 20)).getByText(/1 busy/)).toHaveClass('text-busy');
-        expect(within(cell(WED, 20)).getByText(/5 free/), 'ROK-2167 count chip').toHaveClass('bg-surface/80', 'truncate');
+        expect(within(cell(WED, 20)).getByTestId('group-count-chip'), 'ROK-2167 count chip').toHaveClass('bg-surface/80');
         expect(cell(WED, 21)).toHaveTextContent('3 free · 1 stale');
         expect(cell(1, 18).textContent).toBe('');
+        expect(within(cell(1, 18)).queryByTestId('group-count-chip'), 'no-data cell draws no empty chip').toBeNull();
+    });
+
+    it('orders a full count free · busy · stale on a chip that wraps instead of truncating (ROK-2167 option A)', () => {
+        renderView({ cells: toGroupCellMap([
+            { dayOfWeek: WED, hour: 20, availableCount: 0, totalCount: 17, staleCount: 8, unknownCount: 8, busyCount: 1 },
+        ]) });
+        const chip = within(cell(WED, 20)).getByTestId('group-count-chip');
+        expect(chip).toHaveTextContent('0 free · 1 busy · 8 stale');
+        expect(chip, 'the chip must wrap, never ellipsize').not.toHaveClass('truncate');
+        expect(chip).toHaveClass('whitespace-normal');
+        const clauses = Array.from(chip.children).map((c) => [c.textContent, c.className]);
+        expect(clauses, 'each clause is one unbreakable span, the separator leads the next').toEqual([
+            ['0 free', 'whitespace-nowrap'],
+            ['· 1 busy', 'whitespace-nowrap font-medium text-busy'],
+            ['· 8 stale', 'whitespace-nowrap'],
+        ]);
+        expect(cell(WED, 20)).toHaveAttribute('aria-label', expect.stringContaining('0 free, 1 busy, 8 stale'));
     });
 
     it('fills each cell with computeHeatmapBg', () => {

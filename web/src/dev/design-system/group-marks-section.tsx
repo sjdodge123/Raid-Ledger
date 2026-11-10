@@ -53,6 +53,9 @@ const CHIP_FILLS = [
     { id: 'red', label: 'Count chip · half free', cell: { available: 2, total: 4, busy: 2 } },
 ] as const;
 
+/** ROK-2167 option A: three counts do not fit one line, so the chip wraps between clauses and clears "Suggested". */
+const FULL_CELL = { available: 0, total: 17, stale: 8, unknown: 8, busy: 1 } as const;
+
 function CountChipExamples(): JSX.Element {
     return (
         <StateGrid>
@@ -63,6 +66,11 @@ function CountChipExamples(): JSX.Element {
                     </div>
                 </StateFrame>
             ))}
+            <StateFrame label="Count chip · free · busy · stale, wrapped" note="Never truncated; the two-line chip clears the corner label.">
+                <div data-testid="ds-count-chip-full" className="w-32 bg-surface">
+                    <GroupWeekCell dayOfWeek={3} hour={20} cell={FULL_CELL} picked current={false} disabled={false} />
+                </div>
+            </StateFrame>
         </StateGrid>
     );
 }
@@ -86,7 +94,7 @@ export function GroupMarksSection(): JSX.Element {
         <Section
             id="group-marks"
             title="Pattern — group marks and legend"
-            blurb="Busy is a left edge, not a fill (4px desktop, 5px phone), and a text-busy count clause after the free count, the whole count on a bg-surface/80 chip (ROK-2167). Suggested is a dashed slot outline; the viewer's pick is a success ring."
+            blurb="Busy is a left edge, not a fill (4px desktop, 5px phone), and a text-busy count clause straight after the free count (free · busy · stale), the whole count on a bg-surface/80 chip that wraps between clauses, never truncating (ROK-2167). Suggested is a dashed slot outline; the viewer's pick is a success ring."
         >
             <LegendExamples />
             <StateGrid>

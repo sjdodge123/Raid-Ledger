@@ -8,8 +8,9 @@ import { eventHourRuns } from '../week/viewer-week-events';
 import { BUSY_EDGE_5, COUNT_CHIP } from '../week/group-marks.classes';
 import { DayEventBlock, SlotBlock } from './GroupDayMarks';
 import {
-    blockGeometry, groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
+    blockGeometry, groupCellKey, suggestedBlock,
 } from './group-day.utils';
+import { GroupCountClauses } from '../GroupCountClauses';
 
 /** Width of the hour gutter — the comp's 52px, same as `DayBlockEditor`. */
 const GUTTER = 52;
@@ -146,7 +147,7 @@ function HourLabel({ hour }: { hour: number }): JSX.Element {
  * The fill is `computeHeatmapBg`'s rgba — an inline style rather than a class
  * because the alpha encodes the fresh share, which no Tailwind class can carry.
  * The count sits top-right inside the cell; the aria-label carries the full
- * `N free · N stale · N busy · N unknown` copy so nothing is lost to the short form,
+ * `N free · N busy · N stale · N unknown` copy so nothing is lost to the short form,
  * plus `, N voted` when a poll slot starts in this hour (1587-6).
  */
 function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
@@ -178,14 +179,13 @@ function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
     );
 }
 
-/** The right-aligned count on its surface chip (ROK-2167) — free/stale in the foreground, busy in purple. */
+/** The right-aligned count on its surface chip (ROK-2167) — free · busy · stale, busy in purple. */
 function GroupCellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element | null {
-    const busyLabel = groupCellBusyLabel(cell);
     if (!cell) return null;
     return (
-        <span className={`absolute right-1.5 top-1 z-10 text-[11px] leading-none text-foreground/80 ${COUNT_CHIP}`}>
-            {groupCellShortLabel(cell)}
-            {busyLabel && <b className="font-medium text-busy">{busyLabel}</b>}
+        <span data-testid="group-count-chip"
+            className={`absolute right-1.5 top-1 z-10 text-[11px] leading-none text-foreground/80 ${COUNT_CHIP}`}>
+            <GroupCountClauses cell={cell} />
         </span>
     );
 }

@@ -81,8 +81,9 @@ export function computeHeatmapBg(
 
 /**
  * Cell label/tooltip copy (ROK-1560, ROK-1584). Reads
- * `3 free · 2 stale · 1 busy · 4 unknown` once the poll aggregate supplies the
- * freshness counts — the stale and busy parts only when non-zero — and keeps
+ * `3 free · 1 busy · 2 stale · 4 unknown` once the poll aggregate supplies the
+ * freshness counts — the busy and stale parts only when non-zero, busy first
+ * to match the cell's visible count line (ROK-2167) — and keeps
  * the legacy `N of M players available` copy for aggregates that omit them
  * (events), busy count or not.
  */
@@ -97,7 +98,7 @@ export function computeHeatmapLabel(
     const busy = heatmapData.busy ?? 0;
     const staleCopy = stale > 0 ? ` · ${stale} stale` : '';
     const busyCopy = busy > 0 ? ` · ${busy} busy` : '';
-    return `${heatmapData.available} free${staleCopy}${busyCopy} · ${heatmapData.unknown ?? 0} unknown`;
+    return `${heatmapData.available} free${busyCopy}${staleCopy} · ${heatmapData.unknown ?? 0} unknown`;
 }
 
 /**

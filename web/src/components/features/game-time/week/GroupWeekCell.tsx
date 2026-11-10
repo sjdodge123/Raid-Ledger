@@ -1,7 +1,7 @@
 import { memo, type JSX } from 'react';
 import type { HeatmapCellData } from '../game-time-grid.types';
 import { computeHeatmapBg } from '../grid-cell.utils';
-import { groupCellBusyLabel, groupCellShortLabel } from '../phone/group-day.utils';
+import { GroupCountClauses } from '../GroupCountClauses';
 import { groupCellAriaLabel, votedLabel } from '../slot-marks.utils';
 import { COUNT_CHIP, weekCellClass } from './group-marks.classes';
 
@@ -18,14 +18,18 @@ export interface GroupWeekCellProps {
     onPick?: ((dayOfWeek: number, hour: number) => void) | undefined;
 }
 
-/** "5 free · 1 stale" top-right on its surface chip (ROK-2167), the busy clause in purple. */
+/**
+ * "5 free · 1 busy · 1 stale" top-right on its surface chip (ROK-2167), the busy
+ * clause in purple. `top-0.5`: a wrapped two-line chip (24px) then spans y 3–27
+ * of the 40px cell — clear of the picked ring / slot outline above (y 1–3) and
+ * of the `CornerLabel` below (y 27–37, `bottom-[3px]`), without overlapping either.
+ */
 function CellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element | null {
-    const busyLabel = groupCellBusyLabel(cell);
     if (!cell) return null;
     return (
-        <span className={`absolute right-[5px] top-1 text-[11px] leading-none text-foreground/85 ${COUNT_CHIP}`}>
-            {groupCellShortLabel(cell)}
-            {busyLabel && <b className="font-medium text-busy">{busyLabel}</b>}
+        <span data-testid="group-count-chip"
+            className={`absolute right-[5px] top-0.5 text-[11px] leading-none text-foreground/85 ${COUNT_CHIP}`}>
+            <GroupCountClauses cell={cell} />
         </span>
     );
 }
