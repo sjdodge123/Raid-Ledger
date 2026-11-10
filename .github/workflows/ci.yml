@@ -728,7 +728,14 @@ jobs:
     # shards, which died on their 51st file with "JavaScript heap out of
     # memory". ~39 files per shard restores the headroom without touching the
     # heap size or the leak itself.
-    timeout-minutes: 25
+    #
+    # 2026-11-10: 25 -> 35. The suite has grown to ~140 suites per shard at a
+    # ~9 s floor each, so a healthy shard now takes 19-24 min (main run
+    # 42759711478). Two shards were cancelled at the 25 min wall in one night
+    # with every suite passing (main 42755215335, PR #2057 run 42765184922).
+    # The durable fix is more shards; this keeps a slow runner from failing a
+    # green shard meanwhile.
+    timeout-minutes: 35
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
