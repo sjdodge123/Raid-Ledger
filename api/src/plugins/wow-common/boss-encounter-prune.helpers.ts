@@ -76,19 +76,22 @@ function belowFloor(wanted: number, min: number): boolean {
 
 /**
  * Ids of seeded `classic` boss rows whose (instanceId, name) is no longer in
- * the bundled JSON. Returns [] (and warns) when the JSON fails the floor.
+ * the bundled JSON. Returns [] (and warns) when the JSON has fewer classic
+ * bosses than `minBundled` (production: `MIN_BUNDLED_CLASSIC_BOSSES`; specs
+ * with small fixtures pass their own floor).
  */
 export function findStaleClassicBossIds(
   dbRows: readonly BossKeyRow[],
   jsonBosses: readonly BossJsonKey[],
   warn?: PruneWarn,
+  minBundled = MIN_BUNDLED_CLASSIC_BOSSES,
 ): number[] {
   const key = (b: BossJsonKey): string => `${b.instanceId}::${b.name}`;
   const wanted = new Set(jsonBosses.filter(isClassic).map(key));
   const stored = dbRows.filter(isClassic);
-  if (belowFloor(wanted.size, MIN_BUNDLED_CLASSIC_BOSSES)) {
+  if (belowFloor(wanted.size, minBundled)) {
     warn?.(
-      `Skipping classic boss prune: JSON has ${wanted.size} classic bosses (minimum ${MIN_BUNDLED_CLASSIC_BOSSES}) vs ${stored.length} stored`,
+      `Skipping classic boss prune: JSON has ${wanted.size} classic bosses (minimum ${minBundled}) vs ${stored.length} stored`,
     );
     return [];
   }
@@ -97,23 +100,24 @@ export function findStaleClassicBossIds(
 
 /**
  * Ids of `classic` loot rows on classic bosses whose (bossId, itemId) is no
- * longer in the bundled JSON. Returns [] (and warns) when the JSON fails the
- * floor.
+ * longer in the bundled JSON. Returns [] (and warns) when the JSON has fewer
+ * classic loot rows than `minBundled` (production: `MIN_BUNDLED_CLASSIC_LOOT`).
  */
 export function findStaleClassicLootIds(
   lootRows: readonly LootKeyRow[],
   wantedLoot: readonly LootWantedKey[],
   classicBossIds: ReadonlySet<number>,
   warn?: PruneWarn,
+  minBundled = MIN_BUNDLED_CLASSIC_LOOT,
 ): number[] {
   const key = (l: LootWantedKey): string => `${l.bossId}::${l.itemId}`;
   const wanted = new Set(wantedLoot.filter(isClassic).map(key));
   const stored = lootRows.filter(
     (r) => isClassic(r) && classicBossIds.has(r.bossId),
   );
-  if (belowFloor(wanted.size, MIN_BUNDLED_CLASSIC_LOOT)) {
+  if (belowFloor(wanted.size, minBundled)) {
     warn?.(
-      `Skipping classic loot prune: JSON has ${wanted.size} classic loot rows (minimum ${MIN_BUNDLED_CLASSIC_LOOT}) vs ${stored.length} stored`,
+      `Skipping classic loot prune: JSON has ${wanted.size} classic loot rows (minimum ${minBundled}) vs ${stored.length} stored`,
     );
     return [];
   }

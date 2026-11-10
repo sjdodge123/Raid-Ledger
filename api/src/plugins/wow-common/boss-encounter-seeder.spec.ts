@@ -122,10 +122,28 @@ describe('BossEncounterSeeder', () => {
     });
 
     it('prunes classic loot rows no longer in the JSON on kept bosses (review r1)', async () => {
+      // The fake JSON is 2 bosses / 1 loot row, far below the production
+      // floors (ROK-2168), so this test runs the REAL stale-row helpers with
+      // a floor of 1. The production floors are pinned in
+      // boss-encounter-prune.helpers.spec.ts and data/classic-boss-lists.spec.ts.
+      const realBoss = pruneHelpers.findStaleClassicBossIds;
+      const realLoot = pruneHelpers.findStaleClassicLootIds;
+      const bossSpy = jest
+        .spyOn(pruneHelpers, 'findStaleClassicBossIds')
+        .mockImplementation((rows, json, warn) =>
+          realBoss(rows, json, warn, 1),
+        );
+      const lootSpy = jest
+        .spyOn(pruneHelpers, 'findStaleClassicLootIds')
+        .mockImplementation((rows, wanted, ids, warn) =>
+          realLoot(rows, wanted, ids, warn, 1),
+        );
       const prune = jest.spyOn(pruneHelpers, 'pruneClassicRows');
       await seeder.seed();
       expect(prune).toHaveBeenCalledWith(mockDb, [], [11]);
       prune.mockRestore();
+      bossSpy.mockRestore();
+      lootSpy.mockRestore();
     });
   });
 
