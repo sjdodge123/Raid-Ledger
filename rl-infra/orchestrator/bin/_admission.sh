@@ -616,8 +616,62 @@ admission::_mark_waiting_disk() {
 # interval instead of being noticed only after the disk frees — otherwise a
 # cancelled image build would start the moment a prune succeeded (Codex P2).
 #
+# While parked, this build's own ledger entries (task-start's TASK_ID,
+# hold_image_build's RL_ADMISSION_HELD) carry disk_parked=true, so the
+# dangling_prune free-floor override (disk_pressure::image_build_keys) does not
+# count a build that has not started as one a prune could break (review r2
+# MAJOR). The marker is cleared on every return: admitted, disk_pressure or
+# aborted. The entry itself goes at release (task end / EXIT trap).
+#
 # admission::acquire_disk <task_id> [json_path] [log_path] [abort_cmd]
 admission::acquire_disk() {
+    local _disk_parked_keys="$1 ${RL_ADMISSION_HELD:-}" _disk_parked=0 rc=0
+    admission::_acquire_disk_wait "$@" || rc=$?
+    (( _disk_parked == 0 )) || admission::_set_disk_parked false "$_disk_parked_keys"
+    return "$rc"
+}
+
+# Set (true) or clear (false) disk_parked on the heavy_running entries whose
+# key is in the space-separated list $2. Other entries are left byte-identical.
+admission::_set_disk_parked() {
+    local on="$1" keys="$2"
+    [[ -s "$RL_ADMISSION_FILE" ]] || return 0
+    state::mutate "$RL_ADMISSION_FILE" --arg ks "$keys" --argjson on "$on" '
+        ($ks | split(" ") | map(select(length > 0))) as $mine
+        | .heavy_running = [ (.heavy_running // [])[]
+            | if ((.key // "") as $k | $mine | index($k)) == null then .
+              elif $on then .disk_parked = true
+              else del(.disk_parked) end ]' 2>/dev/null || true
+}
+
+# Wait (bounded) for a running disk ladder to finish: take disk-ladder.lock
+# SHARED, then drop it. Only a build that PARKED calls this — the floor override
+# lets a forced dangling_prune run while it is parked, and that prune is what
+# freed the disk it now sees. Its own force_ladder is synchronous and already
+# done here, so it never waits on itself. Fails open; never blocks forever.
+admission::_await_disk_ladder() {
+    local log_path="$1" lock wait_s="${RL_DISK_LADDER_LOCK_WAIT_S:-600}" t0
+    declare -F disk_pressure::ladder_lock_path >/dev/null 2>&1 || return 0
+    command -v flock >/dev/null 2>&1 || return 0
+    lock="$(disk_pressure::ladder_lock_path)"
+    if ! { : >>"$lock"; } 2>/dev/null; then
+        admission::_log "$log_path" \
+            "[admission] disk-ladder.lock not openable ($lock) — not waiting for a running disk clean-up"
+        return 0
+    fi
+    ( flock -s -n 203 ) 203>>"$lock" 2>/dev/null && return 0
+    t0=$(date +%s)
+    admission::_log "$log_path" \
+        "[admission] waiting up to ${wait_s}s for the running disk clean-up (disk-ladder.lock) before starting the build"
+    if ( flock -s -w "$wait_s" 203 ) 203>>"$lock" 2>/dev/null; then
+        admission::_log "$log_path" "[admission] disk clean-up finished after $(( $(date +%s) - t0 ))s — build admitted"
+    else
+        admission::_log "$log_path" "[admission] disk clean-up still running after ${wait_s}s — build admitted anyway"
+    fi
+    return 0
+}
+
+admission::_acquire_disk_wait() {
     local task_id="$1" json_path="${2:-}" log_path="${3:-}" abort_cmd="${4:-}"
     declare -F disk_pressure::free_gb >/dev/null 2>&1 || return 0
     local need="$RL_BUILD_MIN_FREE_GB" free pruned=0
@@ -633,7 +687,16 @@ admission::acquire_disk() {
             admission::_log "$log_path" "[admission] free disk unreadable — build admitted ungated"
             return 0
         fi
-        (( free >= need )) && return 0
+        if (( free >= need )); then
+            # Parked, then freed: the disk may have been freed by a clean-up
+            # that is still deleting. Wait for it before building (r3 MAJOR).
+            (( _disk_parked == 0 )) || admission::_await_disk_ladder "$log_path"
+            return 0
+        fi
+        if (( _disk_parked == 0 )); then
+            _disk_parked=1
+            admission::_set_disk_parked true "$_disk_parked_keys"
+        fi
         admission::_mark_waiting_disk "$json_path" "$free" "$need"
         admission::_log "$log_path" "[admission] waiting for disk: free=${free}GB need=${need}GB"
         if (( pruned == 0 )); then
