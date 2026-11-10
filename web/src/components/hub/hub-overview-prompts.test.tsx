@@ -75,22 +75,35 @@ describe('Overview prompts — one banner at a time (§4.7)', () => {
 
     it('while the claim status is loading the Companion prompt waits, then shows when there is nothing to claim', async () => {
         serve();
+        // The Companion card is lazy (hub-companion-prompt-cell.tsx). Load its chunk
+        // first so it resolves on the first render: a card that is not suppressed
+        // then mounts and sends its devices GET before the claim GET goes out,
+        // instead of being absent only because its chunk is still loading.
+        await import('./companion/companion-install-prompt');
         let release: () => void = () => undefined;
         const held = new Promise<void>((resolve) => { release = resolve; });
         let claimRequested = false;
-        server.use(http.get(`${API}/guilds/:id/claim`, async () => {
-            claimRequested = true;
-            await held;
-            return HttpResponse.json(buildHubClaimStatus({ candidates: [], unclaimedCount: 0 }));
-        }));
+        let devices = 0;
+        server.use(
+            http.get(`${API}/guilds/:id/claim`, async () => {
+                claimRequested = true;
+                await held;
+                return HttpResponse.json(buildHubClaimStatus({ candidates: [], unclaimedCount: 0 }));
+            }),
+            http.get(`${API}/companion/v1/devices`, () => { devices += 1; return HttpResponse.json({ data: [] }); }),
+        );
         const { queryClient } = renderWithProviders(<OverviewPrompts ctx={{ page: page() }} />);
-        // Onboarding and devices have settled; only the held claim GET is in flight.
+        // Everything else has been answered; only the held claim GET is in flight.
+        // An unsuppressed Companion card would by now have sent and had its devices
+        // GET answered (devices === 1) and be on screen.
         await waitFor(() => { expect(claimRequested).toBe(true); });
         await waitFor(() => { expect(queryClient.isFetching()).toBe(1); });
         expect(screen.queryByTestId(COMPANION)).toBeNull();
+        expect(devices).toBe(0);
         expect(screen.queryByTestId(CLAIM)).toBeNull();
         release();
         expect(await screen.findByTestId(COMPANION)).toBeInTheDocument();
+        expect(devices).toBe(1);
         expect(screen.queryByTestId(CLAIM)).toBeNull();
     });
 
