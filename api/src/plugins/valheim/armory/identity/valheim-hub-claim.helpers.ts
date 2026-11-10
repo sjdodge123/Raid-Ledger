@@ -11,7 +11,10 @@ import type {
   HubClaimMatch,
   HubClaimMatchReason,
 } from '@raid-ledger/contract';
-import { nameStrength, type NameStrength } from './valheim-claim-suggest.helpers';
+import {
+  nameStrength,
+  type NameStrength,
+} from './valheim-claim-suggest.helpers';
 
 /** What the provider knows about the viewer for matching. */
 export interface ValheimClaimViewer {
@@ -56,8 +59,10 @@ export function matchFor(
     return { match: 'strong', matchReason: 'steam_link' };
   }
   const rank = bestName(row, viewer.names);
-  if (rank === RANK.strong) return { match: 'strong', matchReason: 'same_name' };
-  if (rank === RANK.medium) return { match: 'possible', matchReason: 'same_name' };
+  if (rank === RANK.strong)
+    return { match: 'strong', matchReason: 'same_name' };
+  if (rank === RANK.medium)
+    return { match: 'possible', matchReason: 'same_name' };
   return NO_MATCH;
 }
 

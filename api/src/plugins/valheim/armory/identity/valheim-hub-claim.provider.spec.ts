@@ -65,15 +65,22 @@ describe('ValheimHubClaimProvider registration + supports', () => {
   it('serves only Valheim game_server hubs', () => {
     const { provider } = setup();
     expect(provider.supports(ctx.hub)).toBe(true);
-    expect(provider.supports({ ...ctx.hub, gameSlug: 'enshrouded' })).toBe(false);
-    expect(provider.supports({ ...ctx.hub, kind: 'game_community' })).toBe(false);
+    expect(provider.supports({ ...ctx.hub, gameSlug: 'enshrouded' })).toBe(
+      false,
+    );
+    expect(provider.supports({ ...ctx.hub, kind: 'game_community' })).toBe(
+      false,
+    );
   });
 });
 
 describe('ValheimHubClaimProvider.status', () => {
   it('marks the exact-name character strong so core suggests it', async () => {
     const { provider, reads } = setup();
-    reads.claimStatus.mockResolvedValue({ viewerHasClaim: false, unclaimedCount: 2 });
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: false,
+      unclaimedCount: 2,
+    });
     reads.listProfiles.mockResolvedValue([row(1, 'Brannök'), row(2, 'Sigrid')]);
     const s = await provider.status(ctx);
     expect(reads.listProfiles).toHaveBeenCalledWith(
@@ -85,30 +92,49 @@ describe('ValheimHubClaimProvider.status', () => {
     ]);
     expect(pickSuggested(s.candidates)?.id).toBe('1');
     expect(s.candidates[0]?.detailPath).toBe('/valheim/characters/1');
-    expect(s).toMatchObject({ viewerHasClaim: false, unclaimedCount: 2, claimOptions: 'none' });
+    expect(s).toMatchObject({
+      viewerHasClaim: false,
+      unclaimedCount: 2,
+      claimOptions: 'none',
+    });
   });
 
   it('has no suggestion when nothing matches the viewer', async () => {
     const { provider, reads } = setup();
-    reads.claimStatus.mockResolvedValue({ viewerHasClaim: false, unclaimedCount: 1 });
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: false,
+      unclaimedCount: 1,
+    });
     reads.listProfiles.mockResolvedValue([row(2, 'Sigrid')]);
     const s = await provider.status(ctx);
     expect(pickSuggested(s.candidates)).toBeNull();
   });
 
   it('a verified Steam match is strong; a different Steam is never a match', async () => {
-    viewerMock.mockResolvedValue({ names: ['Brannok'], steamId: '76561190000000002' });
+    viewerMock.mockResolvedValue({
+      names: ['Brannok'],
+      steamId: '76561190000000002',
+    });
     const { provider, reads } = setup();
-    reads.claimStatus.mockResolvedValue({ viewerHasClaim: false, unclaimedCount: 2 });
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: false,
+      unclaimedCount: 2,
+    });
     reads.listProfiles.mockResolvedValue([row(1, 'Brannok'), row(2, 'Sigrid')]);
     const s = await provider.status(ctx);
-    expect(s.candidates.map((c) => c.matchReason)).toEqual([null, 'steam_link']);
+    expect(s.candidates.map((c) => c.matchReason)).toEqual([
+      null,
+      'steam_link',
+    ]);
     expect(pickSuggested(s.candidates)?.id).toBe('2');
   });
 
   it('passes through an already-claimed viewer', async () => {
     const { provider, reads } = setup();
-    reads.claimStatus.mockResolvedValue({ viewerHasClaim: true, unclaimedCount: 0 });
+    reads.claimStatus.mockResolvedValue({
+      viewerHasClaim: true,
+      unclaimedCount: 0,
+    });
     reads.listProfiles.mockResolvedValue([]);
     const s = await provider.status(ctx);
     expect(s).toEqual({
@@ -145,7 +171,11 @@ describe('ValheimHubClaimProvider.claim', () => {
   it.each([
     ['a non-numeric id', 'abc', null],
     ['an unknown character', '9', null],
-    ['a character on another server', '1', { ...row(1, 'B'), pelicanServerId: 99 }],
+    [
+      'a character on another server',
+      '1',
+      { ...row(1, 'B'), pelicanServerId: 99 },
+    ],
   ])('%s is CANDIDATE_GONE', async (_l, id, found) => {
     const { provider, reads, claims } = setup();
     reads.findProfile.mockResolvedValue(found);
@@ -162,7 +192,9 @@ describe('ValheimHubClaimProvider.claim', () => {
     const { provider, reads, claims } = setup();
     reads.findProfile.mockResolvedValue(row(1, 'Brannok'));
     claims.claim.mockRejectedValue(thrown);
-    const err: unknown = await provider.claim(ctx, '1').catch((e: unknown) => e);
+    const err: unknown = await provider
+      .claim(ctx, '1')
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(HubClaimError);
     expect(err).toMatchObject({ code });
   });
