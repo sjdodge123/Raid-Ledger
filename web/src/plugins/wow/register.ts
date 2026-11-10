@@ -78,8 +78,9 @@ blizzard.registerHubWidget(contributionsWidget);
 registerClaimBannerWidget(blizzard);
 
 // ROK-2153 S5 — the web half of the api `blizzard` hub claim provider (Forever guild
-// hubs). No OptionsStep: membership IS a claimed roster row, so the core prompt never
-// shows on a WoW hub; the staff banner above and the join gate keep the claim action.
+// hubs). `overviewPrompt: false`: membership IS a claimed roster row, so the Overview
+// never mounts the core prompt on a WoW hub; the staff banner above and the join gate
+// keep the claim action.
 blizzard.registerHubClaimProvider(wowHubClaimProvider);
 
 // ROK-2056 L4 — the hub Overview's "install the Companion" card on Forever guild

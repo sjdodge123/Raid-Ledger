@@ -57,6 +57,12 @@ export interface HubClaimProvider {
      * is read first and a dismissed member makes no status request.
      */
     readonly scopedDismissal?: true;
+    /**
+     * Default `true`. `false` = this plugin answers the core claim route but never
+     * shows the Overview prompt (its claim surfaces live elsewhere): the Overview
+     * gate treats it as "no provider" (no status GET, no cell, Companion not held).
+     */
+    readonly overviewPrompt?: boolean;
 }
 
 export interface HubClaimProviderRegistration {
@@ -85,13 +91,15 @@ export function clearHubClaimProviders(): void {
 /**
  * The one provider this hub may show (first registered wins — a hub has one
  * game, so at most one plugin matches in practice): plugin active, game and
- * kind match. Membership is NOT checked here — the claim status carries
+ * kind match, and the provider wants the Overview prompt (`overviewPrompt`
+ * not `false`). Membership is NOT checked here — the claim status carries
  * `viewerIsMember` (api D4) and the cell gates on it.
  */
 export function gatedHubClaimProvider(page: GuildPage, active: ReadonlySet<string>): HubClaimProviderRegistration | undefined {
     const gameSlug = page.guild.gameSlug;
     if (gameSlug === undefined) return undefined;
-    return getHubClaimProviderRegistrations().find((r) => isSlugActive(active, r.pluginSlug)
+    return getHubClaimProviderRegistrations().find((r) => r.provider.overviewPrompt !== false
+        && isSlugActive(active, r.pluginSlug)
         && r.provider.games.includes(gameSlug)
         && r.provider.kinds.includes(page.guild.kind));
 }

@@ -1882,8 +1882,11 @@ Integrations › Pelican Panel. Unmet steps never disable Install/Activate.
 
 **Core claim prompt (ROK-2153) is not a plugin widget.** It is a core cell rendered by `hub-overview.tsx`
 right after the Companion prompt, so a leader's `widgetPrefs` cannot hide or move it. A plugin takes part
-through `PluginHandle.registerHubClaimProvider({ games, kinds, copy?, OptionsStep?, onClaimed? })`
-(`components/hub/claim/hub-claim-providers.ts`), gated like a widget (plugin active, game, kind) and declared
+through `PluginHandle.registerHubClaimProvider({ games, kinds, copy?, OptionsStep?, onClaimed?, overviewPrompt? })`
+(`components/hub/claim/hub-claim-providers.ts`), gated like a widget (plugin active, game, kind).
+`overviewPrompt: false` (default `true`) registers a provider that
+answers the core claim route but never shows the Overview prompt: the Overview treats it as no provider (no
+status GET, no cell, the Companion prompt is not held). WoW: Forever uses it (ROK-2153 S5). Declared
 as a manifest `claim-provider` behaviour; membership, "no claim yet" and "something unclaimed" come from the
 server status (`GET /guilds/:id/claim`), and the × stores the per-hub onboarding key `claim-character`
 (server-side, permanent). Shown only on Overview. Adopters: Valheim (ROK-2153 S4, `plugins/valheim/hub/valheim-hub-claim-provider.ts`,

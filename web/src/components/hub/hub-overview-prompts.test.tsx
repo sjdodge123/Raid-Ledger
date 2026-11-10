@@ -14,6 +14,9 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { buildHubClaimStatus } from '../../test/mocks/hub-claim-handlers';
 import { usePluginStore } from '../../stores/plugin-store';
 import '../../plugins/bg3/register';
+import '../../plugins/wow/register';
+import { wowHubClaimProvider } from '../../plugins/wow/hub/wow-hub-claim-provider';
+import { WOW_FOREVER_GAME_SLUG } from '../../plugins/wow/lib/forever-identity';
 import { addHubClaimProvider, clearHubClaimProviders } from './claim/hub-claim-providers';
 import { OverviewPrompts } from './hub-overview';
 
@@ -112,6 +115,32 @@ describe('Overview prompts — one banner at a time (§4.7)', () => {
         serve();
         renderWithProviders(<OverviewPrompts ctx={{ page: page() }} />);
         expect(await screen.findByTestId(COMPANION)).toBeInTheDocument();
+        expect(screen.queryByTestId(CLAIM)).toBeNull();
+    });
+});
+
+describe('Overview prompts on a WoW: Forever guild hub (ROK-2153 S5)', () => {
+    it('the Companion prompt shows for a member without any claim status being served', async () => {
+        // The real WoW registration (re-added: afterEach clears the claim registry).
+        addHubClaimProvider('blizzard', wowHubClaimProvider);
+        usePluginStore.setState({ activeSlugs: new Set(['core', 'blizzard']), initialized: true });
+        await import('./companion/companion-install-prompt');
+        const claimRequests: string[] = [];
+        let devices = 0;
+        serve();
+        server.use(
+            // Never answered: a Companion card held for the claim status would never mount.
+            http.get(`${API}/guilds/:id/claim`, async ({ params }) => {
+                claimRequests.push(String(params.id));
+                await new Promise<never>(() => undefined);
+            }),
+            http.get(`${API}/companion/v1/devices`, () => { devices += 1; return HttpResponse.json({ data: [] }); }),
+        );
+        const wowPage: GuildPage = { ...page(), guild: { ...page().guild, kind: 'wow_guild', gameSlug: WOW_FOREVER_GAME_SLUG } };
+        renderWithProviders(<OverviewPrompts ctx={{ page: wowPage }} />);
+        await waitFor(() => { expect(devices, 'the Companion card mounted without waiting for a claim status').toBe(1); });
+        expect(await screen.findByTestId(COMPANION)).toBeInTheDocument();
+        expect(claimRequests, 'no GET guilds/:id/claim on a WoW hub').toEqual([]);
         expect(screen.queryByTestId(CLAIM)).toBeNull();
     });
 });
