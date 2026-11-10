@@ -326,6 +326,8 @@ export * from './guild-discord.schema.js';
 
 // Guild hub onboarding prompts — server-side per-user dismissals (ROK-1830 S5).
 export * from './hub-onboarding.schema.js';
+// One claim path for every hub — candidates, claim request/result, error codes (ROK-2153).
+export * from './hub-claim.schema.js';
 // Game-server community hub — join, Quick Play list, hide (ROK-1831).
 export * from './hub-server.schema.js';
 // Hub media store + Gallery widget — pictures with a source kind (ROK-1942).

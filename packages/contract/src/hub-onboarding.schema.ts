@@ -19,6 +19,8 @@ export const HubOnboardingKeySchema = z.enum([
     'hub-setup-checklist',
     /** ROK-2056 — the hub Overview's "install the Companion" card, dismissed per hub. */
     'companion-install',
+    /** ROK-2153 — the hub Overview's "claim your character" prompt, dismissed per hub. */
+    'claim-character',
 ]);
 export type HubOnboardingKey = z.infer<typeof HubOnboardingKeySchema>;
 
