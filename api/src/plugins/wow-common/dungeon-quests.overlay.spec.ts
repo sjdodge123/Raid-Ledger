@@ -249,4 +249,19 @@ describe('overlay-only quests (m5 type gate, m6 reward type, L6 requirements)', 
       requiredLevel: null,
     });
   });
+
+  it('carries non-zero reputation rewards onto an overlay-only quest (ROK-2161)', async () => {
+    listOverlay.mockResolvedValue(new Map());
+    const reputations = [{ factionId: 47, name: 'Ironforge', value: 150 }];
+    const d = deps(null, [overlay(386, 238, { reputations }), overlay(387)]);
+    const [withRep, withoutRep] = await applyInstanceOverlay(
+      d.value,
+      [],
+      SCOPE,
+    );
+    expect(withRep?.reputationRewards).toEqual([
+      { factionName: 'Ironforge', amount: 150 },
+    ]);
+    expect(withoutRep && 'reputationRewards' in withoutRep).toBe(false);
+  });
 });

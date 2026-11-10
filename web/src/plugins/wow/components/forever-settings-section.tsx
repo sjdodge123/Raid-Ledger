@@ -1,143 +1,19 @@
 /**
  * ROK-1717: the WoW Forever controls inside the Blizzard API integration card.
  *
- * The Forever namespace prefix is known (`forever`, confirmed by the ROK-2102
- * probe), so the prefix field is an override only. A one-line status reads the
- * latest probe result to say whether the configured prefix is confirmed live.
- * The prefix is a form field saved with its button; the switches (Armory,
- * quest import — ROK-2143 — and Wowhead lookup) apply
- * immediately with the saved prefix (design-system: a Switch is for settings
- * that apply at once).
+ * Every admin sees the switches (Armory, quest import — ROK-2143 — and Wowhead
+ * lookup), which apply immediately with the saved prefix (design-system: a
+ * Switch is for settings that apply at once), and the quest-import status.
+ * ROK-2163: the namespace diagnostics (status line, prefix override, probe
+ * panel) render only on DEMO_MODE test/dev sites — see `forever-diagnostics`.
  */
-import { useId, useState, type FormEvent, type JSX } from 'react';
-import {
-    WowForeverNamespacePrefixSchema,
-    type WowForeverConfigResponseDto,
-} from '@raid-ledger/contract';
-import { toast } from '../../../lib/toast';
-import { Button } from '../../../components/ui/button';
-import { Field } from '../../../components/ui/field';
-import { Input } from '../../../components/ui/input';
+import { useId, type JSX } from 'react';
+import type { WowForeverConfigResponseDto } from '@raid-ledger/contract';
 import { Switch } from '../../../components/ui/switch';
 import { useForeverConfig } from '../hooks/use-forever-config';
-import { useForeverProbe } from '../hooks/use-forever-probe';
-import { ForeverProbePanel } from './forever-probe-panel';
+import { ForeverDiagnostics } from './forever-diagnostics';
 import { ForeverQuestImportPanel } from './forever-quest-import-panel';
-
-type SaveFn = ReturnType<typeof useForeverConfig>['update']['mutateAsync'];
-type SaveDto = Parameters<SaveFn>[0];
-
-/** The saved config as a PUT body, so one switch never resets another setting. */
-function savedDto(
-    saved: WowForeverConfigResponseDto,
-    patch: Partial<SaveDto>,
-): SaveDto {
-    const dto: SaveDto = {
-        namespacePrefix: saved.namespacePrefix,
-        armoryImportEnabled: saved.armoryImportEnabled,
-        ...(saved.wowheadResolverEnabled !== undefined && {
-            wowheadResolverEnabled: saved.wowheadResolverEnabled,
-        }),
-        ...(saved.questImportEnabled !== undefined && {
-            questImportEnabled: saved.questImportEnabled,
-        }),
-        ...patch,
-    };
-    return dto;
-}
-
-async function save(
-    mutate: SaveFn,
-    dto: SaveDto,
-    success: string,
-): Promise<void> {
-    try {
-        await mutate(dto);
-        toast.success(success);
-    } catch (err) {
-        toast.error(
-            err instanceof Error
-                ? err.message
-                : 'Failed to save WoW Forever settings',
-        );
-    }
-}
-
-function PrefixForm({
-    saved,
-    mutate,
-    pending,
-}: {
-    saved: WowForeverConfigResponseDto;
-    mutate: SaveFn;
-    pending: boolean;
-}): JSX.Element {
-    const [prefix, setPrefix] = useState(saved.namespacePrefix);
-    const [error, setError] = useState<string | undefined>();
-    const onSubmit = (e: FormEvent): void => {
-        e.preventDefault();
-        const parsed = WowForeverNamespacePrefixSchema.safeParse(prefix);
-        if (!parsed.success) {
-            setError(parsed.error.issues[0]?.message ?? 'Invalid prefix');
-            return;
-        }
-        setError(undefined);
-        void save(
-            mutate,
-            savedDto(saved, { namespacePrefix: parsed.data }),
-            'WoW Forever namespace saved',
-        );
-    };
-    return (
-        <form onSubmit={onSubmit} noValidate className="space-y-3">
-            <Field
-                label="Namespace prefix"
-                error={error}
-                hint="Blizzard namespace without the static-/dynamic-/profile- part and region"
-            >
-                <Input
-                    type="text"
-                    value={prefix}
-                    onChange={(e) => setPrefix(e.target.value)}
-                    placeholder="forever"
-                    fieldSize="lg"
-                />
-            </Field>
-            <Button
-                type="submit"
-                variant="secondary"
-                loading={pending}
-                loadingLabel="Saving..."
-                aria-label="Save Forever settings"
-            >
-                Save
-            </Button>
-        </form>
-    );
-}
-
-/** One-line status: is the configured prefix a match in the latest probe run? (ROK-2102) */
-function NamespaceStatus({ prefix }: { prefix: string }): JSX.Element | null {
-    const { probe } = useForeverProbe();
-    if (probe.isPending) return null;
-    const live =
-        probe.data?.result?.matches.some((m) => m.prefix === prefix) ?? false;
-    if (live) {
-        return (
-            <p className="text-sm text-secondary">
-                Forever namespace: <span className="text-foreground">live</span>{' '}
-                — prefix <code>{prefix}</code>
-            </p>
-        );
-    }
-    return (
-        <p className="text-sm text-secondary">
-            Forever namespace:{' '}
-            <span className="text-foreground">not confirmed</span> — prefix{' '}
-            <code>{prefix}</code>. Run the probe below.
-        </p>
-    );
-}
+import { save, savedDto, type SaveFn } from './forever-settings-save';
 
 /** One setting that applies at once: label + hint on the left, a Switch on the right. */
 interface SwitchRowProps {
@@ -266,13 +142,6 @@ export function ForeverSettingsSection(): JSX.Element | null {
             >
                 WoW Forever
             </h3>
-            <NamespaceStatus prefix={config.data.namespacePrefix} />
-            <PrefixForm
-                key={config.data.namespacePrefix}
-                saved={config.data}
-                mutate={update.mutateAsync}
-                pending={update.isPending}
-            />
             <ArmoryToggle
                 saved={config.data}
                 mutate={update.mutateAsync}
@@ -288,7 +157,11 @@ export function ForeverSettingsSection(): JSX.Element | null {
                 mutate={update.mutateAsync}
                 pending={update.isPending}
             />
-            <ForeverProbePanel />
+            <ForeverDiagnostics
+                saved={config.data}
+                mutate={update.mutateAsync}
+                pending={update.isPending}
+            />
             <ForeverQuestImportPanel />
         </section>
     );

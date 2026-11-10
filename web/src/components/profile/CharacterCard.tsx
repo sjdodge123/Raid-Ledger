@@ -73,7 +73,7 @@ function CharacterMetaRow({ character }: { character: CharacterDto }) {
             {character.itemLevel && (
                 <>
                     <span>•</span>
-                    <span className="text-purple-400 whitespace-nowrap">{character.itemLevel} iLvl</span>
+                    <span className="text-item-level whitespace-nowrap">{character.itemLevel} iLvl</span>
                 </>
             )}
         </div>

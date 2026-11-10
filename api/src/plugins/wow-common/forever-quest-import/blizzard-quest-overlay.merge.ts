@@ -10,9 +10,15 @@
  * its race list). Every other field — `startsInsideDungeon` (ROK-2142
  * allowlist), `questGiverNpc`, `questGiverZone`, `objectives`, `sharable`,
  * `rewardType`, `requiredLevel` (Blizzard serves no level) — stays curated.
+ * ROK-2161: non-zero `reputations` become `reputationRewards` (the key is
+ * omitted when there are none).
  * A null overlay (no row, or the kill switch off) returns the row unchanged.
  */
-import type { WowDungeonQuestBlizzardRow } from '../../../drizzle/schema/dungeon-quest-blizzard';
+import type {
+  BlizzardQuestReputation,
+  WowDungeonQuestBlizzardRow,
+} from '../../../drizzle/schema/dungeon-quest-blizzard';
+import type { QuestReputationReward } from '../dungeon-quests.types';
 import { requirementFields } from './blizzard-quest.requirements';
 
 /** The overlay columns the merge reads. */
@@ -23,8 +29,23 @@ export type BlizzardQuestOverlay = Pick<
   | 'rewardXp'
   | 'rewardMoneyCopper'
   | 'rewardItems'
+  | 'reputations'
   | 'requirementsRaw'
 >;
+
+/**
+ * ROK-2161: `{ reputationRewards }` from the overlay's non-zero reputations
+ * that carry a faction name (a blank name would render "+150 " with nothing
+ * after it), or `{}` when none — spread it so the key is absent rather than undefined.
+ */
+export function reputationRewardFields(
+  reputations: readonly BlizzardQuestReputation[],
+): { reputationRewards?: QuestReputationReward[] } {
+  const rewards = reputations
+    .filter((rep) => rep.value !== 0 && rep.name.trim() !== '')
+    .map((rep) => ({ factionName: rep.name, amount: rep.value }));
+  return rewards.length > 0 ? { reputationRewards: rewards } : {};
+}
 
 /** The quest fields Blizzard may override (DB row and DTO both satisfy it). */
 export interface OverlayableQuestFields {
@@ -59,5 +80,6 @@ export function mergeBlizzardOverlay<T extends OverlayableQuestFields>(
     prevQuestId: req.prevQuestId ?? row.prevQuestId,
     classRestriction: req.classRestriction ?? row.classRestriction,
     raceRestriction: req.raceRestriction ?? row.raceRestriction,
+    ...reputationRewardFields(overlay.reputations),
   };
 }

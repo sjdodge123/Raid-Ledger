@@ -6,15 +6,15 @@ import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, Que
 import { getWowheadQuestUrl, getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import { ItemComparison } from '../components/item-comparison';
 import { WowItemCard } from '../components/wow-item-card';
-import { REWARD_TO_EQUIP_SLOT, formatGold, prerequisiteCount } from './quest-card-constants';
+import { REWARD_TO_EQUIP_SLOT, formatGold, formatReputationReward, prerequisiteCount } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
 /**
- * The viewer's chain state for this quest + its quest data date: addon
- * snapshot or Armory list (ROK-1748, ROK-2109).
+ * The viewer's chain state for this quest (ROK-1748, ROK-2109); the capture date
+ * now sits once under the Quest Prep header (ROK-2144).
  */
-export interface QuestCardPrereqs { state: QuestPrereqState; asOf: string | null }
+export interface QuestCardPrereqs { state: QuestPrereqState }
 
 interface QuestCardProps {
     quest: EnrichedDungeonQuestDto;
@@ -174,7 +174,7 @@ function QuestCardBody({ quest, hasPrevQuest, prereqTotal, coveredByMe, coveredB
 function QuestPrereqSection({ quest, hasPrevQuest, prereqTotal, prereqs }: {
     quest: EnrichedDungeonQuestDto; hasPrevQuest: boolean; prereqTotal: number; prereqs: QuestCardPrereqs | undefined;
 }) {
-    if (prereqTotal > 0) return <QuestPrereqChain quest={quest} state={prereqs?.state} asOf={prereqs?.asOf} />;
+    if (prereqTotal > 0) return <QuestPrereqChain quest={quest} state={prereqs?.state} />;
     if (!hasPrevQuest) return null;
     return <p className="text-xs text-muted" data-testid="quest-prereq-missing">Prerequisite not in data</p>;
 }
@@ -247,13 +247,34 @@ function QuestRestrictions({ quest, hasPrereqs, coveredByMe, coveredByOthers, is
 }
 
 function QuestRewardsMeta({ quest }: { quest: EnrichedDungeonQuestDto }) {
-    if (!quest.rewardGold && !quest.rewardXp && !(quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1)) return null;
+    const reputation = quest.reputationRewards ?? [];
+    if (!quest.rewardGold && !quest.rewardXp && reputation.length === 0 && !(quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1)) return null;
     return (
         <div className="quest-reward-meta">
             {quest.rewardGold && quest.rewardGold > 0 && <span className="quest-reward-gold">&#x1FA99; {formatGold(quest.rewardGold)}</span>}
             {quest.rewardXp && quest.rewardXp > 0 && <span className="quest-reward-xp">&#x2B50; {quest.rewardXp.toLocaleString()} XP</span>}
+            {reputation.length > 0 && <QuestReputationRewards rewards={reputation} />}
             {quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1 && <span className="quest-reward-choice">Choose one reward</span>}
         </div>
+    );
+}
+
+/** ROK-2161: the ROK-2165 label chip — the `.quest-card` overlay fill is below AA for bare semantic text. */
+const REPUTATION_CHIP = 'inline-block max-w-full truncate rounded-sm bg-surface/70 px-1';
+
+/** ROK-2161: one chip per faction — `text-success` for a gain, `text-danger` for a loss. `min-w-0` lets the flex item shrink so a long chip truncates. */
+function QuestReputationRewards({ rewards }: { rewards: { factionName: string; amount: number }[] }) {
+    return (
+        <span className="min-w-0 max-w-full" data-testid="quest-reward-reputation">
+            {rewards.map((reward, i) => (
+                <span key={`${reward.factionName}-${i}`}>
+                    {i > 0 && ', '}
+                    <span className={`${REPUTATION_CHIP} ${reward.amount > 0 ? 'text-success' : 'text-danger'}`} data-testid="quest-reward-reputation-entry">
+                        {formatReputationReward(reward)}
+                    </span>
+                </span>
+            ))}
+        </span>
     );
 }
 

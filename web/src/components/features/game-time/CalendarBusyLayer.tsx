@@ -61,7 +61,10 @@ function BusyBand({ run, gridDims, col, startHour }: {
             data-testid={`calendar-busy-band-${run.dayOfWeek}-${startHour}`}
             title={label}
         >
-            <span className="block truncate text-[10px] font-medium leading-tight text-foreground">{label}</span>
+            {/* ROK-2165: the label sits on a bg-surface/70 chip. White on the band over an emerald block is 3.9:1 in dark. */}
+            <span className="inline-block max-w-full truncate rounded-sm bg-surface/70 px-1 align-top text-[10px] font-medium leading-tight text-foreground">
+                {label}
+            </span>
         </div>
     );
 }

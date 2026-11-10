@@ -9,7 +9,7 @@ in both families at once.
 
 **The one-paragraph version.** Six of the fifteen schemes are light (`default-light`,
 `quest-log`, `sky`, `dawn`, `holy`, `celestial`). Tokens (`--color-*`) flip for free —
-including the accent tokens `--color-success` / `-warning` / `-danger` / `-busy` / `-slot`.
+including the accent tokens `--color-success` / `-warning` / `-danger` / `-busy` / `-item-level` / `-slot`.
 Raw Tailwind accents do not — `index.css` repaints them for the light family: text bumps
 from a `-400` to a `-600`/`-700`, tinted fills collapse to a `-100` wash, borders to a
 `-300`. Two shades were never given an override and are unreadable on light (see the
@@ -31,7 +31,8 @@ every utility and every opacity modifier follows. Declared in `@theme` (`:50-66`
 | `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:62` / `:126` |
 | `bg-danger` / `text-danger` / `bg-danger/50` … | `#f87171` red-400, 5.29:1 on panel (6.45 surface, ≥4.62 own /10 tint on every dark scheme; red-500 `#ef4444` was 3.89 on panel — TDB:1770 ruling 2026-10-08). White on a solid dark `bg-danger` is 2.77:1, so a solid danger label takes `--color-status-solid-label` | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint); celestial (`:366`) and quest-log (`:1316`) declare red-800 `#991b1b` — 6.80 / 6.15 / 5.25 and 7.50 / 6.58 / 5.58 on their surface / panel / /10 tint; `#b91c1c` was 4.12 / 4.39 on those tints (TDB:1770) | `:64` / `:128` |
 | `text-white` on a solid `bg-success` / `bg-warning` / `bg-danger` | `--color-status-solid-label` `#0f172a`, 7.04 / 8.31 / 6.45:1 (white 2.54 / 2.15 / 2.77) | `#ffffff`, 7.68 / 7.09 / 6.47:1 | `:66` / `:130`, rule `:858-869` |
-| `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:118` |
+| `bg-busy` / `text-busy` | `#a78bfa` violet-400 (was violet-500 `#8b5cf6`, lifted to AA as text — ROK-2165) | `#6d28d9` violet-700 (was violet-600 `#7c3aed`) | `:55` / `:143` |
+| `bg-item-level` / `text-item-level` (ROK-2165) | `#c180f7` | `#7a1fb0` | `:57` / `:145` |
 | `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:119` |
 | `bg-faction-alliance/10` / `text-faction-alliance` (ROK-1815) | `#60a5fa` blue-400 | `#1e40af` blue-800 | `@theme` / shared light block |
 | `bg-faction-horde/10` / `text-faction-horde` (ROK-1815) | `#f87171` red-400 | `#991b1b` red-800 (AA on every light scheme's /10 tint) | `@theme` / shared light block |
@@ -232,7 +233,7 @@ the strip is a raw hue or a literal rgba.
 
 ### Busy marker (§4.16)
 
-`before:bg-busy` edges and the `text-busy` clause flip with the family (`#8b5cf6` dark → `#7c3aed`
+`before:bg-busy` edges and the `text-busy` clause flip with the family (`#a78bfa` dark → `#6d28d9`
 light), as do `outline-slot` and `ring-success`. The heat fill UNDER the edge does not: it is
 `computeHeatmapBg`'s inline rgba (its alpha encodes the fresh share), identical in both families by
 design — the §2.2 exemption. The legend's "More people free" swatch uses the same rgba, so it matches

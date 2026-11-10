@@ -381,6 +381,17 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         mockUseSystemStatus.mockReset();
     });
 
+    it('paints item-level in its own token and shows busy at the lifted AA values (ROK-2165)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        // ROK-2165: item level has its own token, both hexes shown; busy carries the lifted AA values.
+        const itemLevel = screen.getByTestId('ds-semantic-item-level');
+        expect(within(itemLevel).getByTitle('text-item-level')).toHaveClass('text-item-level');
+        expect(within(itemLevel).getByText('#c180f7')).toBeInTheDocument();
+        expect(within(itemLevel).getByText('#7a1fb0')).toBeInTheDocument();
+        expect(within(screen.getByTestId('ds-semantic-busy')).getByText('#a78bfa')).toBeInTheDocument();
+    });
+
     it('paints each semantic token in the class it documents, with both hexes', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);

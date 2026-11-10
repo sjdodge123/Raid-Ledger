@@ -35,32 +35,49 @@ interface PluginCronSource {
   getCronJobs(): { name: string; cronExpression: string }[];
 }
 
-/** Sync jobs from a single plugin CronRegistrar. */
+/** Upsert one plugin job row. */
+async function upsertPluginJob(
+  db: Db,
+  slug: string,
+  name: string,
+  cronExpression: string,
+): Promise<void> {
+  await upsertJob(db, {
+    name,
+    source: 'plugin',
+    pluginSlug: slug,
+    cronExpression,
+    description: null,
+    category: 'Plugin',
+    nextRunAt: computeNextRun(cronExpression),
+  });
+}
+
+/**
+ * Sync jobs from a single plugin CronRegistrar. Returns the registrar's full
+ * set of job names, or null when it threw (its stale rows then stay visible).
+ */
 export async function syncOnePluginRegistrar(
   db: Db,
   slug: string,
   reg: PluginCronSource,
   syncedNames: Set<string>,
   logger: Logger,
-): Promise<void> {
+): Promise<Set<string> | null> {
   try {
+    const liveNames = new Set<string>();
     for (const pJob of reg.getCronJobs()) {
       const name = `${slug}:${pJob.name}`;
+      liveNames.add(name);
       if (syncedNames.has(name)) continue;
-      await upsertJob(db, {
-        name,
-        source: 'plugin',
-        pluginSlug: slug,
-        cronExpression: pJob.cronExpression,
-        description: null,
-        category: 'Plugin',
-        nextRunAt: computeNextRun(pJob.cronExpression),
-      });
+      await upsertPluginJob(db, slug, name, pJob.cronExpression);
       syncedNames.add(name);
       logger.log(`Synced plugin cron job: ${name}`);
     }
+    return liveNames;
   } catch (err) {
     logger.error(`Failed to sync plugin cron registrar for ${slug}: ${err}`);
+    return null;
   }
 }
 

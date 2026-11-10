@@ -59,8 +59,11 @@ function declaredValue(block: string, token: string): string | null {
 const themeBlock = extractBlock(css, /@theme\s*\{/);
 const lightBlock = extractBlock(css, /:is\(\[data-scheme="light"\][^)]*\)\s*\{/);
 
-/** Semantic roles plus `--color-busy`, the shipped token whose 2-block shape they copy. */
-const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy', 'faction-alliance', 'faction-horde'] as const;
+/**
+ * Semantic roles plus the 2-block accent tokens that copy their shape: `--color-busy`
+ * and (ROK-2165) `--color-item-level`, a character's item level.
+ */
+const SEMANTIC_TOKENS = ['success', 'warning', 'danger', 'busy', 'item-level', 'faction-alliance', 'faction-horde'] as const;
 
 /** `--color-surface` of the shared light block — what light-family text sits on. */
 const LIGHT_SURFACE = '#ffffff';
@@ -84,8 +87,10 @@ function lightBackgrounds(token: string): Array<[string, string]> {
 /**
  * Roles measured on every real background of the shared light block. ROK-1815: the
  * faction hues are read as pill text on a /10 tint, so they are held to the same bar.
+ * ROK-2165: `busy` (Scheduling badge, group-view busy clause) and `item-level` (StatTile)
+ * are read as text too, so they join — every dark and light scheme, surface/panel//10 tint.
  */
-const SEMANTIC_ROLES = ['success', 'warning', 'danger', 'faction-alliance', 'faction-horde'] as const;
+const SEMANTIC_ROLES = ['success', 'warning', 'danger', 'busy', 'item-level', 'faction-alliance', 'faction-horde'] as const;
 
 /**
  * TDB:1793 (ruling D:1714): light success is #065f46 so it clears AA as text on every
@@ -149,6 +154,38 @@ function lightTextRows(): Array<readonly [string, string, string, string]> {
 }
 
 const LIGHT_TEXT = lightTextRows();
+
+/** ROK-2161: the ROK-2165 label chip — `bg-surface/70` behind a reward line on the Quest Prep card. */
+const QUEST_CHIP_ALPHA = 0.7;
+
+/**
+ * ROK-2161: `.quest-card` is filled with `--color-overlay` (and `--color-faint` on hover,
+ * `quest-prep-panel.css`), fills the rows above never measure. Reputation reward text
+ * (`text-success` gain / `text-danger` loss) sits on a `bg-surface/70` chip over that fill;
+ * straight on it, default-dark was 4.08 / 3.74 at rest and 2.99 / 2.74 on hover.
+ * Every scheme (dark and light) is measured with its own token values, shared block as fallback.
+ */
+function questChipRows(): Array<readonly [string, string, string, string]> {
+    const dark: Array<[string, (t: string) => string | null]> = [['default-dark', (t) => declaredValue(themeBlock, t)]];
+    for (const [, name, body] of css.matchAll(/(?:^|\n)\[data-scheme="([a-z-]+)"\]\s*\{([^}]*)\}/g)) {
+        const scheme = defined(name, 'scheme name');
+        const block = defined(body, 'scheme body');
+        if (LIGHT_NAMES.has(scheme) || declaredValue(block, 'overlay') === null) continue;
+        dark.push([scheme, (t) => declaredValue(block, t) ?? declaredValue(themeBlock, t)]);
+    }
+    const light = lightSchemes(css).map(({ name }) => [name, (t: string) =>
+        ownLightBlocks(name).map((b) => declaredValue(b, t)).find((v) => v !== null) ?? declaredValue(lightBlock, t)] as const);
+    return [...dark, ...light].flatMap(([name, pick]) => (['success', 'danger'] as const).flatMap((token) => {
+        const tok = (t: string) => defined(pick(t) ?? undefined, `${name} --color-${t}`);
+        const chip = (fill: string) => composite(tok('surface'), tok(fill), QUEST_CHIP_ALPHA);
+        return [
+            [token, name, 'bg-surface/70 chip over --color-overlay (quest card at rest)', `${tok(token)}|${chip('overlay')}`],
+            [token, name, 'bg-surface/70 chip over --color-faint (quest card hover)', `${tok(token)}|${chip('faint')}`],
+        ] as const;
+    }));
+}
+
+const QUEST_CHIP_TEXT = questChipRows();
 
 const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
     lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
@@ -245,16 +282,104 @@ describe('dark semantic text on every dark scheme (TDB:1770 ruling 2026-10-08)',
 });
 
 describe('light semantic text on every light scheme (TDB:1770, 2026-10-08)', () => {
-    it('reads the six light schemes × five roles × three backgrounds out of index.css', () => {
+    it('reads the six light schemes × seven roles × three backgrounds out of index.css', () => {
         expect(new Set(LIGHT_TEXT.map(([, name]) => name))).toEqual(new Set(['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial']));
         expect(LIGHT_TEXT).toHaveLength(6 * SEMANTIC_ROLES.length * 3);
-        expect(SEMANTIC_ROLES).toHaveLength(5);
+        expect(SEMANTIC_ROLES).toHaveLength(7);
     });
 
     it.each(LIGHT_TEXT)('light text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
         const [fg, bg] = pair.split('|') as [string, string];
         const ratio = contrastRatio(fg, bg);
         expect(ratio, `light --color-${token} ${fg} as text is ${ratio}:1 on ${name} ${bgLabel} (${bg}) — needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+/**
+ * ROK-2165: the own-calendar busy band's "Busy · Google Calendar" label (`CalendarBusyLayer.tsx`).
+ * The text is `--color-foreground` at 10px over a stack: grid cell (`bg-panel/50` over surface) →
+ * slot block (`bg-emerald-500/70`, `/95` when selected, `SlotBlockLayer.tsx`) → `bg-busy/30` band →
+ * the label's own `bg-surface/NN` chip. The band, chip and both slot-block alphas are read from the
+ * comment-stripped component sources, so dropping the chip (white alone is 3.91:1 dark-unselected,
+ * 2.89:1 selected) fails these rows. Only the emerald hue is a constant (see EMERALD_500).
+ */
+// Tailwind v4 theme.css --color-emerald-500 oklch(69.6% .17 162.48) in sRGB — a Tailwind palette
+// colour, not one of our tokens, and the guard has no oklch→sRGB converter, so it stays a constant.
+const EMERALD_500 = '#00bc7d';
+/** Block comments (incl. JSX `{/* … *\/}`) and whole-line `//` comments removed. */
+const stripTsxComments = (src: string): string => stripComments(src).replace(/^\s*\/\/.*$/gm, '');
+const gameTimeSrc = (file: string): string =>
+    stripTsxComments(readFileSync(resolve(__dirname, `../components/features/game-time/${file}`), 'utf-8'));
+const busyLayerSrc = gameTimeSrc('CalendarBusyLayer.tsx');
+const slotLayerSrc = gameTimeSrc('SlotBlockLayer.tsx');
+
+/** Alpha of `<prefix>/NN` on the first className containing `marker`, or 0 when that class is absent. */
+function classAlpha(marker: string, prefix: string): number {
+    const cls = [...busyLayerSrc.matchAll(/className="([^"]*)"/g)].map((m) => m[1] ?? '').find((c) => c.includes(marker)) ?? '';
+    const hit = new RegExp(`(?:^|\\s)${prefix}/(\\d+)(?:\\s|$)`).exec(cls);
+    return hit === null ? 0 : Number(hit[1]) / 100;
+}
+
+/** Alpha of `bg-emerald-500/NN` in the SlotBlockLayer class literal containing `marker`; throws when absent. */
+function slotAlpha(marker: string): number {
+    const lit = [...slotLayerSrc.matchAll(/'([^']*)'/g)].map((m) => m[1] ?? '').find((c) => c.includes(marker)) ?? '';
+    const hit = /(?:^|\s)bg-emerald-500\/(\d+)(?:\s|$)/.exec(lit);
+    if (hit === null) throw new Error(`SlotBlockLayer.tsx: no bg-emerald-500/NN on the '${marker}' slot-block class`);
+    return Number(hit[1]) / 100;
+}
+
+function busyLabelRows(): Array<readonly [string, string, string]> {
+    const [band, chip] = [classAlpha('border-busy', 'bg-busy'), classAlpha('text-foreground', 'bg-surface')];
+    const slots = [['unselected', slotAlpha('cursor-pointer')], ['selected', slotAlpha('cursor-grab')]] as const;
+    const families: Array<[string, string]> = [['default-dark', themeBlock], ['default-light', lightBlock]];
+    return families.flatMap(([family, block]) => {
+        const get = (t: string) => defined(declaredValue(block, t) ?? declaredValue(themeBlock, t) ?? undefined, `--color-${t}`);
+        const cell = composite(get('panel'), get('surface'), 0.5);
+        return slots.map(([state, alpha]) => {
+            const under = composite(get('busy'), composite(EMERALD_500, cell, alpha), band);
+            return [family, state, `${get('foreground')}|${composite(get('surface'), under, chip)}`] as const;
+        });
+    });
+}
+
+describe('busy band label on its chip (ROK-2165)', () => {
+    it('reads the band fill from CalendarBusyLayer.tsx', () => {
+        expect(classAlpha('border-busy', 'bg-busy'), 'bg-busy/NN not found on the band').toBeGreaterThan(0);
+    });
+
+    it('reads both slot-block alphas from SlotBlockLayer.tsx', () => {
+        expect(slotAlpha('cursor-pointer'), 'unselected bg-emerald-500/NN').toBeGreaterThan(0);
+        expect(slotAlpha('cursor-grab'), 'selected bg-emerald-500/NN').toBeGreaterThan(0);
+    });
+
+    it.each(busyLabelRows())('%s: label clears AA over a %s slot block', (family, state, pair) => {
+        const [fg, bg] = pair.split('|') as [string, string];
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio, `${family} "Busy · Google Calendar" (${fg}) is ${ratio}:1 on band over ${state} emerald block (${bg}) — `
+            + `needs ${AA_SMALL_TEXT}:1; the label needs its bg-surface/70 chip`).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+describe('Quest Prep reputation reward chip on every scheme (ROK-2161)', () => {
+    it('reads the nine dark and six light schemes out of index.css', () => {
+        expect(new Set(QUEST_CHIP_TEXT.map(([, name]) => name)).size).toBe(15);
+        expect(QUEST_CHIP_TEXT).toHaveLength(15 * 2 * 2);
+    });
+
+    it('measures the alpha the shipped REPUTATION_CHIP class actually uses', () => {
+        const source = stripComments(readFileSync(resolve(__dirname, '../plugins/wow/slots/quest-card.tsx'), 'utf-8'));
+        const match = /const REPUTATION_CHIP = '([^']*)'/.exec(source);
+        expect(match, 'quest-card.tsx no longer declares the REPUTATION_CHIP class constant').not.toBeNull();
+        const chipClass = defined(match?.[1], 'REPUTATION_CHIP class string');
+        const expected = `bg-surface/${Math.round(QUEST_CHIP_ALPHA * 100)}`;
+        expect(chipClass.split(/\s+/), `REPUTATION_CHIP "${chipClass}" does not contain ${expected}`).toContain(expected);
+    });
+
+    it.each(QUEST_CHIP_TEXT)('text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
+        const [fg, bg] = pair.split('|') as [string, string];
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio, `--color-${token} ${fg} as text is ${ratio}:1 on ${name} ${bgLabel} (${bg}) — needs ${AA_SMALL_TEXT}:1`)
             .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });

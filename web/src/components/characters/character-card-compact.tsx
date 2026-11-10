@@ -116,7 +116,7 @@ function MetadataRow({ level, race, charClass, spec, role, itemLevel, profession
             )}
             {spec && <span className="truncate max-w-[80px] sm:max-w-none">• {spec}</span>}
             {role && <span className={`px-1.5 py-0.5 rounded text-xs text-foreground flex-shrink-0 ${ROLE_COLORS[role] ?? 'bg-faint'}`}>{role.toUpperCase()}</span>}
-            {itemLevel != null && itemLevel > 0 && <><span>•</span><span className="text-purple-400 whitespace-nowrap">{itemLevel} iLvl</span></>}
+            {itemLevel != null && itemLevel > 0 && <><span>•</span><span className="text-item-level whitespace-nowrap">{itemLevel} iLvl</span></>}
             <ProfessionBadges professions={professions ?? null} separator="•" />
         </div>
     );

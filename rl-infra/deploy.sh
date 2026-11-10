@@ -61,6 +61,11 @@ APPROVALS_GID=1004
 # Owner-side repair needs no sudo when this deploy runs as uid 1000.
 if [[ "$(stat -c '%u' state/approvals 2>/dev/null)" == "$APPROVALS_UID" ]]; then
     chmod 0700 state/approvals 2>/dev/null || true
+    # A numeric mode never clears setgid on a directory (GNU chmod and install
+    # both keep it), and a dir created under a setgid parent inherits the bit,
+    # so `-m 0700` leaves 2700 and the check below can never pass (hit on the
+    # 2026-11-10 deploy). Clear it by name.
+    chmod g-s state/approvals 2>/dev/null || true
 fi
 approvals_have="$(stat -c '%u %a' state/approvals 2>/dev/null || echo missing)"
 if [[ "$approvals_have" != "$APPROVALS_UID 700" ]]; then
@@ -68,6 +73,7 @@ if [[ "$approvals_have" != "$APPROVALS_UID 700" ]]; then
     echo "Repair once as root on the VM, then re-run deploy.sh:" >&2
     echo "  sudo install -d -o $APPROVALS_UID -g $APPROVALS_GID -m 0700 /srv/rl-infra/state/approvals" >&2
     echo "  sudo chown -R $APPROVALS_UID:$APPROVALS_GID /srv/rl-infra/state/approvals" >&2
+    echo "  sudo chmod g-s /srv/rl-infra/state/approvals" >&2
     exit 1
 fi
 # ROK-1469: same treatment for the settings bundle rl-agent must READ. rsync

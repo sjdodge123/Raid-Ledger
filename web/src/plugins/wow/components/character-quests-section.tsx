@@ -6,7 +6,7 @@
  */
 import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { useCharacterQuests } from '../hooks/use-character-quests';
-import { formatSourceLine } from '../lib/addon-source-line';
+import { formatCaptureDate, formatSourceLine } from '../lib/addon-source-line';
 import { plural } from '../lib/plural';
 import { CharacterQuestLog } from './character-quest-log';
 import { CharacterCompletedQuests } from './character-completed-quests';
@@ -19,13 +19,20 @@ import '../slots/quest-prep-panel.css';
  * ROK-2145: with no completed quests (a log-only export and no Armory sync, or a
  * synced list that is genuinely empty — the API cannot tell them apart) the line
  * says none are recorded yet instead of "0 completed … 0 quests total".
+ * ROK-2144: "· log <date>" follows the source when the log is from another day.
  */
 function questsSummaryLine(quests: CharacterQuestsDto): string {
     const { completedKnown, knownTotal, completedTotal } = quests.counts;
-    if (completedTotal === 0) {
-        return `No completed quests recorded yet · ${formatSourceLine(quests.source, quests.syncedAt)}`;
-    }
-    return `${completedKnown} completed · ${knownTotal} known · ${formatSourceLine(quests.source, quests.syncedAt)} · ${plural(completedTotal, 'quest')} total`;
+    const dated = `${formatSourceLine(quests.source, quests.syncedAt)}${logDateSuffix(quests)}`;
+    if (completedTotal === 0) return `No completed quests recorded yet · ${dated}`;
+    return `${completedKnown} completed · ${knownTotal} known · ${dated} · ${plural(completedTotal, 'quest')} total`;
+}
+
+/** ROK-2144: " · log 9 Nov 2026" when the quest log was captured on another day than the completed list. */
+function logDateSuffix(quests: CharacterQuestsDto): string {
+    const logDate = formatCaptureDate(quests.inProgressSyncedAt);
+    if (!logDate || logDate === formatCaptureDate(quests.syncedAt)) return '';
+    return ` · log ${logDate}`;
 }
 
 /** The Quests card; chrome matches the Talents section. */

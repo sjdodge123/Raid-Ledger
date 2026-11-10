@@ -34,4 +34,20 @@ describe('ForeverProbeMatrix per-id chips (ROK-2143)', () => {
         expect(screen.getByTitle('quest:166: 404')).toHaveTextContent('166:404');
         expect(screen.getByTitle('realm: 200')).toHaveTextContent(/^200$/);
     });
+
+    it('renders the match list inside the collapsed Probe matrix, not above it (ROK-2163)', () => {
+        render(
+            <ForeverProbeMatrix
+                result={{
+                    ...result,
+                    matches: [{ prefix: 'forever', region: 'us', raceName: null, signal: 'ruleset' }],
+                }}
+            />,
+        );
+        const list = screen.getByRole('list', { name: 'Probe matches', hidden: true });
+        expect(list).toHaveTextContent('forever/us: ruleset index');
+        const details = list.closest('details');
+        expect(details?.querySelector('summary')).toHaveTextContent('Probe matrix (3 checks)');
+        expect(details).not.toHaveAttribute('open');
+    });
 });

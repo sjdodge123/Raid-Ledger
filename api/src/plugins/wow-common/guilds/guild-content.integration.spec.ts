@@ -401,7 +401,28 @@ describe('addons — list, scope, delete', () => {
   it('lists pinned addons before the guild list', async () => {
     await seedPair();
     const res = await call('get', `/${guildId}/addons`, 'plain');
-    expect(res.body.pinned[0]).toMatchObject({ requirement: 'required' });
+    const pinned = res.body.pinned as {
+      name: string;
+      url: string;
+      requirement: string;
+      flavors: string[];
+    }[];
+    expect(
+      pinned.map((p) => [p.name, p.url, p.requirement, p.flavors]),
+    ).toEqual([
+      [
+        'LedgerLink',
+        'https://www.curseforge.com/wow/addons/ledger-link',
+        'required',
+        [],
+      ],
+      [
+        'Mailworthy',
+        'https://www.curseforge.com/wow/addons/mailworthy',
+        'optional',
+        ['forever'],
+      ],
+    ]);
     expect(res.body.addons).toHaveLength(2);
   });
 

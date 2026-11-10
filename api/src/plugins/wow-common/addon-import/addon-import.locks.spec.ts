@@ -53,7 +53,17 @@ function recorder() {
     events.push(isGuid ? `guid ${key}` : `guild ${key}`);
     return Promise.resolve(undefined);
   });
-  const tx = { execute } as unknown as AddonImportTx;
+  // ROK-2159 owner re-check: select → from → where → for('no key update').
+  const ownerRow = {
+    from: () => ownerRow,
+    where: () => ownerRow,
+    for: () => {
+      events.push('row');
+      return Promise.resolve([{ userId: 1 }]);
+    },
+  };
+  const select = jest.fn(() => ownerRow);
+  const tx = { execute, select } as unknown as AddonImportTx;
   jest.mocked(runPaste).mockImplementation(() => {
     events.push('sections');
     return Promise.resolve([]);
@@ -115,13 +125,13 @@ describe('lockImportScope', () => {
   });
 });
 
-describe('both apply routes lock GUID → guild before anything runs', () => {
+describe('both apply routes lock GUID → guild → character row before anything runs', () => {
   it('existing-character route (runForCharacter, apply)', async () => {
     const { events, tx } = recorder();
     const binding = { errors: [], warnings: [], pinGuid: GUID } as never;
     const request = { dryRun: false, confirm: undefined };
     await runForCharacter(tx, 1, character, guildPaste(), binding, request);
-    expect(events).toEqual([GUID_KEY, GUILD_KEY, 'sections']);
+    expect(events).toEqual([GUID_KEY, GUILD_KEY, 'row', 'sections']);
   });
 
   it('existing-character route takes no lock on a preview', async () => {
@@ -157,6 +167,7 @@ describe('both apply routes lock GUID → guild before anything runs', () => {
       'resolve',
       GUID_KEY,
       GUILD_KEY,
+      'row',
       'sections',
     ]);
   });

@@ -59,8 +59,8 @@ function BadgeChips({ characterId, faction, profileUrl }: Pick<CharacterDetailHe
 /** ≥ sm: ONE text size for item level, equipped and updated, separated only between present parts (ROK-2140). */
 function StatLine({ itemLevel, equippedItemLevel, lastSyncedAt }: StatProps): JSX.Element | null {
     const parts: Array<[string, ReactNode]> = [];
-    if (itemLevel) parts.push(['ilvl', <>Item Level <span className="text-purple-400 font-semibold">{itemLevel}</span></>]);
-    if (equippedItemLevel && equippedItemLevel !== itemLevel) parts.push(['eq', <>Equipped <span className="text-purple-300 font-semibold">{equippedItemLevel}</span></>]);
+    if (itemLevel) parts.push(['ilvl', <>Item Level <span className="text-item-level font-semibold">{itemLevel}</span></>]);
+    if (equippedItemLevel && equippedItemLevel !== itemLevel) parts.push(['eq', <>Equipped <span className="text-item-level font-semibold">{equippedItemLevel}</span></>]);
     if (lastSyncedAt) parts.push(['upd', <>Updated {timeAgo(lastSyncedAt)}</>]);
     if (parts.length === 0) return null;
     return (
@@ -70,11 +70,11 @@ function StatLine({ itemLevel, equippedItemLevel, lastSyncedAt }: StatProps): JS
     );
 }
 
-/** Below sm: the Option B stat strip — Item Level, Level, Updated tiles. Values use flipping tokens (violet `busy`, amber `warning`) so both colour families read. */
+/** Below sm: the Option B stat strip — Item Level, Level, Updated tiles. Values use flipping tokens (`item-level`, amber `warning`) so both colour families read. */
 function StatTiles({ itemLevel, level, lastSyncedAt }: StatProps): JSX.Element {
     return (
         <>
-            {itemLevel ? <StatTile value={itemLevel} label="Item Level" valueClassName="text-busy" /> : null}
+            {itemLevel ? <StatTile value={itemLevel} label="Item Level" valueClassName="text-item-level" /> : null}
             {level ? <StatTile value={level} label="Level" valueClassName="text-warning" /> : null}
             {lastSyncedAt ? <StatTile value={timeAgo(lastSyncedAt).replace(/ ago$/, '')} label="Updated" /> : null}
         </>

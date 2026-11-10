@@ -18,7 +18,6 @@ import { BlizzardAuthService } from './blizzard-auth.service';
 import {
   FOREVER_PROBE_REGIONS,
   buildCandidateList,
-  isInLaunchWindow,
   runProbe,
   type ProbeFetch,
   type ProbeRun,
@@ -62,14 +61,6 @@ export class ForeverNamespaceProbeService {
       });
     }
     return this.inFlight;
-  }
-
-  /** Hourly launch-window job: runs only inside the window, else null (D7). */
-  async runIfInLaunchWindow(
-    now: Date = new Date(),
-  ): Promise<ForeverProbeResultDto | null> {
-    if (!isInLaunchWindow(now)) return null;
-    return this.run();
   }
 
   /** Last stored result (null = never ran) plus the admin probe config. */

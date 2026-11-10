@@ -82,6 +82,38 @@ describe('AddonSnapshotFactSource', () => {
     expect(facts?.role).toEqual({ value: 'tank', source: 'addon', asOf: T });
   });
 
+  it('ROK-2144: dates the quests fact by the completed list capture, not the export', async () => {
+    const listAt = new Date('2026-10-20T10:00:00.000Z');
+    db.where.mockResolvedValue([
+      {
+        characterId: 'c1',
+        data,
+        capturedAt: T,
+        completedCapturedAt: listAt,
+        schema: 2,
+        class: null,
+      },
+    ]);
+    const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
+    expect(got.get('m1')?.quests?.asOf).toEqual(listAt);
+    expect(got.get('m1')?.gear?.asOf).toEqual(T);
+  });
+
+  it('ROK-2144: falls back to capturedAt when the completed capture is NULL', async () => {
+    db.where.mockResolvedValue([
+      {
+        characterId: 'c1',
+        data,
+        capturedAt: T,
+        completedCapturedAt: null,
+        schema: 2,
+        class: null,
+      },
+    ]);
+    const got = await new AddonSnapshotFactSource(db as never).load([ref(1)]);
+    expect(got.get('m1')?.quests?.asOf).toEqual(T);
+  });
+
   it('gives no role hint when the class is unknown', async () => {
     db.where.mockResolvedValue([
       { characterId: 'c1', data, capturedAt: T, schema: 2, class: null },

@@ -47,6 +47,14 @@ describe('CalendarBusyLayer', () => {
         expect(screen.getByTestId('calendar-busy-layer').className).toContain('pointer-events-none');
     });
 
+    it('puts the label on a bg-surface/70 chip that truncates inside the band (ROK-2165 AA)', () => {
+        render(<CalendarBusyLayer busy={[busy(2, 18, 20)]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
+        const label = screen.getByText('Busy · Google Calendar');
+        expect(label.className, 'the chip semantic-tokens.guard.test.ts measures at AA').toMatch(/\bbg-surface\/70\b/);
+        expect(label).toHaveClass('inline-block', 'max-w-full', 'truncate', 'rounded-sm', 'text-foreground', 'text-[10px]');
+        expect(screen.getByTestId('calendar-busy-band-2-18')).toHaveClass('overflow-hidden');
+    });
+
     it('draws nothing when calendarBusy is absent or empty', () => {
         const { rerender } = render(<CalendarBusyLayer busy={undefined} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         expect(screen.queryByTestId('calendar-busy-layer')).not.toBeInTheDocument();

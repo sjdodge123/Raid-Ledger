@@ -33,3 +33,11 @@ export function prerequisiteCount(quest: { questId: number; prerequisiteChain: {
     const idx = quest.prerequisiteChain?.findIndex((step) => step.questId === quest.questId) ?? -1;
     return idx > 0 ? idx : 0;
 }
+
+/**
+ * ROK-2161: one Blizzard reputation reward, e.g. "+150 Ironforge" or "-25 Gnomeregan"
+ * (the sign stays in the text so colour is never the only gain/loss cue).
+ */
+export function formatReputationReward(reward: { factionName: string; amount: number }): string {
+    return `${reward.amount > 0 ? '+' : ''}${reward.amount.toLocaleString()} ${reward.factionName}`;
+}
