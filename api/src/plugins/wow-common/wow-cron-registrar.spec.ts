@@ -7,6 +7,7 @@ import { at } from '../../common/testing/narrow';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
 import { ForeverAutoLinkService } from './forever-auto-link/forever-auto-link.service';
 import { RosterArmoryService } from './forever-armory-snapshot/roster-armory.service';
+import { ForeverQuestAutoImportService } from './forever-quest-import/forever-quest-auto-import.service';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
@@ -15,6 +16,7 @@ let mockItemMeta: { retryDue: jest.Mock };
 let mockRosterJob: { run: jest.Mock };
 let mockAutoLink: { runDue: jest.Mock };
 let mockRosterArmory: { runDue: jest.Mock };
+let mockQuestImport: { runWeekly: jest.Mock };
 
 async function setupEach() {
   mockCharactersService = {
@@ -27,6 +29,7 @@ async function setupEach() {
   mockRosterJob = { run: jest.fn().mockResolvedValue(null) };
   mockAutoLink = { runDue: jest.fn().mockResolvedValue(null) };
   mockRosterArmory = { runDue: jest.fn().mockResolvedValue(null) };
+  mockQuestImport = { runWeekly: jest.fn().mockResolvedValue(undefined) };
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -37,6 +40,7 @@ async function setupEach() {
       { provide: BlizzardRosterSyncJob, useValue: mockRosterJob },
       { provide: ForeverAutoLinkService, useValue: mockAutoLink },
       { provide: RosterArmoryService, useValue: mockRosterArmory },
+      { provide: ForeverQuestAutoImportService, useValue: mockQuestImport },
     ],
   }).compile();
 
@@ -69,7 +73,7 @@ describe('WowCronRegistrar — getCronJobs', () => {
 
   it('should return cron jobs for character sync and boss data refresh', () => {
     const jobs = registrar.getCronJobs();
-    expect(jobs).toHaveLength(6);
+    expect(jobs).toHaveLength(7);
     expect(jobs[0]?.name).toBe('character-auto-sync');
     expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
     expect(typeof at(jobs, 0).handler).toBe('function');
@@ -90,7 +94,20 @@ describe('WowCronRegistrar — getCronJobs', () => {
       'forever-guild-roster-sync',
       'forever-armory-autolink',
       'forever-roster-armory',
+      'forever-quest-import',
     ]);
+  });
+
+  it('registers the weekly Forever quest import refresh once (ROK-2162)', async () => {
+    const jobs = registrar.getCronJobs();
+    expect(jobs.filter((j) => j.name === 'forever-quest-import')).toHaveLength(
+      1,
+    );
+    const job = jobs[6];
+    expect(job?.name).toBe('forever-quest-import');
+    expect(job?.cronExpression).toBe('0 30 6 * * 3');
+    await expect(job?.handler()).resolves.toBeUndefined();
+    expect(mockQuestImport.runWeekly).toHaveBeenCalledTimes(1);
   });
 
   it('registers the daily Wowhead item retry job (ROK-1727)', async () => {
