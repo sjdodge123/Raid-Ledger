@@ -18,7 +18,7 @@ import {
 import { useBlizzardSettings } from '../../../hooks/admin/use-blizzard-settings';
 import { useForeverConfig } from '../hooks/use-forever-config';
 import { FOREVER_QUEST_IMPORT_IDLE_POLL_MS, FOREVER_QUEST_IMPORT_KEY } from '../hooks/use-forever-quest-import';
-import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING } from './forever-quest-import-panel';
+import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING, QUEST_IMPORT_RUNNING_CODE } from './forever-quest-import-panel';
 
 const IDLE = buildQuestImportReport();
 const RUNNING = buildQuestImportReport({ status: 'running', runId: 'auto-1', startedAt: '2026-11-09T11:00:00.000Z', trigger: 'auto-empty' });
@@ -89,7 +89,7 @@ describe('a run the server starts by itself (ROK-2162)', () => {
     it('a Re-import that races the run (409) says so plainly and re-reads the report', async () => {
         server.use(
             foreverQuestImportGetHandler(IDLE, RUNNING),
-            foreverQuestImportPostHandler({ status: 409, message: 'A Forever quest import is already running' }),
+            foreverQuestImportPostHandler({ status: 409, message: 'A Forever quest import is already running', code: QUEST_IMPORT_RUNNING_CODE }),
         );
         renderWithProviders(<ForeverQuestImportPanel />);
         await screen.findByText('The quest import has not run yet.');
@@ -102,7 +102,7 @@ describe('a run the server starts by itself (ROK-2162)', () => {
     it('the 409 alert clears once the run it raced has finished', async () => {
         server.use(
             foreverQuestImportGetHandler(IDLE, RUNNING, buildSucceededReport()),
-            foreverQuestImportPostHandler({ status: 409, message: 'A Forever quest import is already running' }),
+            foreverQuestImportPostHandler({ status: 409, message: 'A Forever quest import is already running', code: QUEST_IMPORT_RUNNING_CODE }),
         );
         const queryClient = createTestQueryClient();
         renderWithProviders(<ForeverQuestImportPanel />, { queryClient });
