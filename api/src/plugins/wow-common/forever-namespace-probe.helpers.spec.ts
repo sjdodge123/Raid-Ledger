@@ -5,7 +5,6 @@ import {
   buildCandidateList,
   buildProbeUrls,
   hasSkyborne,
-  isInLaunchWindow,
   probeOne,
   runProbe,
   summariseShape,
@@ -163,17 +162,6 @@ describe('summariseShape', () => {
       entryCount: 0,
       sample: [],
     });
-  });
-});
-
-describe('isInLaunchWindow', () => {
-  it.each([
-    ['2026-11-03T23:59:00Z', false],
-    ['2026-11-04T00:00:00Z', true],
-    ['2026-11-18T23:59:59Z', true],
-    ['2026-11-19T00:00:00Z', false],
-  ])('%s -> %s', (iso, expected) => {
-    expect(isInLaunchWindow(new Date(iso))).toBe(expected);
   });
 });
 
