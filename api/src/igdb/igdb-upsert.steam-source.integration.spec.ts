@@ -145,6 +145,21 @@ describe.each(PATHS)('ROK-1680 IGDB steam_app_id_source — %s', (_, write) => {
     expect(row.steamAppIdSource).toBe('itad');
   });
 
+  it("(g) keeps a 'manual' Steam id when IGDB carries a different one (ROK-2120 Q2)", async () => {
+    const id = await seedGame({
+      igdbId: IGDB_ID,
+      steamAppId: STEAM_Y,
+      steamAppIdSource: 'manual',
+    });
+
+    await write(igdbGame(STEAM_X));
+
+    const row = await readGame({ id });
+    expect(row.summary).toBe(IGDB_SUMMARY);
+    expect(row.steamAppId).toBe(STEAM_Y);
+    expect(row.steamAppIdSource).toBe('manual');
+  });
+
   it('(f) keeps id and source when IGDB carries no Steam id', async () => {
     const id = await seedStored('steam');
 
