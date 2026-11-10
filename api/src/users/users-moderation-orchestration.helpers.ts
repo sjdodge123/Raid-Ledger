@@ -34,6 +34,10 @@ import {
 } from './users-moderation.helpers';
 import { reassignPugSlots, wipeUserData } from './users-delete.helpers';
 import { revokeGameRoleGrants } from './users-moderation-game-roles.helpers';
+import {
+  auditOwnerDeactivated,
+  lockDeactivatedAt,
+} from '../plugins/wow-common/addon-import/external-id.owner-status';
 import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-lifecycle.helpers';
 import {
   deleteUserScreenshotsBestEffort,
@@ -270,6 +274,22 @@ async function applyBanDataChanges(
   }
 }
 
+/** The ban write + ROK-2160 (Codex P1): when the ban is what deactivates the
+ * user, audit the rows their GUIDs stop holding (same tx) so no member grant
+ * moves to another user. A prior guild-leave already audited them. */
+async function banWithGuidAudit(
+  db: Db,
+  input: BanInput,
+): Promise<ModerationRow | undefined> {
+  return db.transaction(async (tx) => {
+    const wasActive = (await lockDeactivatedAt(tx, input.userId)) === null;
+    const row = await banUserById(tx, input.userId, input.reason);
+    if (row && wasActive)
+      await auditOwnerDeactivated(tx, row.id, input.actorId);
+    return row;
+  });
+}
+
 /** Ban: lockout-first (write → cache drop → revoke), then the best-effort data
  * changes, then the optional Discord kick, then audit with the TRUE dataWiped +
  * discordKicked results (so a rolled-back wipe / failed kick is never recorded as
@@ -278,7 +298,7 @@ export async function runBan(
   deps: ModerationDeps,
   input: BanInput,
 ): Promise<ModerationResult> {
-  const row = await banUserById(deps.db, input.userId, input.reason);
+  const row = await banWithGuidAudit(deps.db, input);
   if (!row) return { success: true, message: 'User is already banned.' };
   invalidateAuthUser(row.id);
   await revokeTokens(deps, row.id);

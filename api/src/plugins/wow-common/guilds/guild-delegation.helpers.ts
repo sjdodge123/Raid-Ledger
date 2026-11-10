@@ -12,6 +12,8 @@ import type { LinkedMemberRow } from './guild-membership.helpers';
  * at a delegated rank. Same treatment as `GM_RANK_IMPLIES_EDIT = false`.
  * Flip once ownership is verified (the parked half of ROK-1794).
  */
+// ROK-2160: flipping this lets rank-derived edit follow the roster row to a
+// new winner with no staff action; add the owner-status audits first.
 export const RANK_GRANTS_CONFER_EDIT = false;
 
 type Db = PostgresJsDatabase<typeof schema>;

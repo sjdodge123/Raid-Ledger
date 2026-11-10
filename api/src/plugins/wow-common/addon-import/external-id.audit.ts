@@ -1,3 +1,4 @@
+import type { SQL } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { AddonImportTx } from './addon-import-apply.types';
 import { GUID_AUDIT_ENTITY } from './addon-import.guid-audit';
@@ -32,6 +33,13 @@ export interface ExternalIdLinkEntry {
   gameId: number;
   region: string | null;
   via: ExternalIdLinkVia;
+  /**
+   * ROK-2160 review r2 M4: the audit's `created_at`. Default (unset) is the
+   * column default, NOW() = tx start; owner-status audits pass
+   * `clock_timestamp()` so a grant whose tx began during a long
+   * deactivation tx does not post-date the audit.
+   */
+  createdAt?: SQL;
 }
 
 /**
@@ -56,13 +64,14 @@ export async function logExternalIdLinked(
   previous: string | null | undefined,
 ): Promise<boolean> {
   if (!isExternalIdLinkChange(entry.externalId, previous)) return false;
-  const { actorId, ownerId, ...rest } = entry;
+  const { actorId, ownerId, createdAt, ...rest } = entry;
   await tx.insert(schema.activityLog).values({
     entityType: GUID_AUDIT_ENTITY,
     entityId: ownerId,
     action: EXTERNAL_ID_LINKED_ACTION,
     actorId,
     metadata: { ...rest, ownerId },
+    ...(createdAt ? { createdAt } : {}),
   });
   return true;
 }

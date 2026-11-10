@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import { blizzardIdLink } from '../guilds/guild-link.predicates';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -68,6 +68,27 @@ function rowsOf(r: ReleasedGuid): SQL | undefined {
 }
 
 /**
+ * ROK-2160 (review r3 m1/N2) — `FOR UPDATE` every roster row the released
+ * GUIDs could hold, ordered by id. Lock order on every owner-status path:
+ * the `users` row first (the caller's UPDATE / `lockDeactivatedAt`), then
+ * these `guild_members` rows by ascending id. `insertMemberGrant` takes only
+ * one `guild_members` row, so no cycle is possible.
+ */
+export async function lockReleasedRows(
+  tx: AddonImportTx,
+  released: ReleasedGuid[],
+): Promise<void> {
+  if (released.length === 0) return;
+  await tx
+    .select({ id: guildMembers.id })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .where(or(...released.map(rowsOf)))
+    .orderBy(asc(guildMembers.id))
+    .for('update', { of: guildMembers });
+}
+
+/**
  * Write `external_id_linked` for every character that now wins a row the
  * released GUID held through the Blizzard-id arm. @returns rows written.
  */
@@ -75,6 +96,7 @@ export async function auditGuidRelease(
   tx: AddonImportTx,
   released: ReleasedGuid | null,
   actorId: number | null,
+  createdAt?: SQL,
 ): Promise<number> {
   if (released === null) return 0;
   const winners = await tx
@@ -92,7 +114,9 @@ export async function auditGuidRelease(
   for (const w of winners) {
     const { id, userId, ...rest } = w;
     const entry = { ...rest, actorId, ownerId: userId, characterId: id };
-    await logExternalIdLinked(tx, { ...entry, via: 'guid_released' }, null);
+    const at = createdAt ? { createdAt } : {};
+    const linked = { ...entry, ...at, via: 'guid_released' as const };
+    await logExternalIdLinked(tx, linked, null);
   }
   return winners.length;
 }
@@ -102,6 +126,7 @@ export async function auditGuidReleases(
   tx: AddonImportTx,
   released: ReleasedGuid[],
   actorId: number | null,
+  createdAt?: SQL,
 ): Promise<void> {
-  for (const r of released) await auditGuidRelease(tx, r, actorId);
+  for (const r of released) await auditGuidRelease(tx, r, actorId, createdAt);
 }

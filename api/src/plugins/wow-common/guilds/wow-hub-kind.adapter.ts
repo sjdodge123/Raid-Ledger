@@ -47,6 +47,8 @@ export const GM_RANK_INDEX = 0;
  * can act as the GM and edit or upload the crest. Staff can remove an upload
  * (`DELETE guilds/:id/crest/upload`); the operator accepted this risk.
  */
+// ROK-2160: flipping this lets rank-derived edit follow the roster row to a
+// new winner with no staff action; add the owner-status audits first.
 export const GM_RANK_IMPLIES_EDIT = false;
 
 /**

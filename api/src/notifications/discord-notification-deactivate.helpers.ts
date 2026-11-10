@@ -11,6 +11,7 @@ import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
+import { auditOwnerDeactivated } from '../plugins/wow-common/addon-import/external-id.owner-status';
 
 /**
  * ROK-1749: why a user was deactivated — rendered into the admin notification
@@ -171,11 +172,7 @@ export async function deactivateUserOrchestrated(
   reason: DeactivationReason = 'unknown',
   guard: DeactivationGuard = {},
 ): Promise<void> {
-  const [row] = await deps.db
-    .update(schema.users)
-    .set({ deactivatedAt: sql`NOW()` })
-    .where(deactivationTarget(userId, guard))
-    .returning({ id: schema.users.id, username: schema.users.username });
+  const row = await markDeactivated(deps.db, userId, guard);
   if (!row) {
     deps.logger.debug(
       `ROK-1260: deactivateUser(${userId}) — already deactivated (or seen in the guild since the sweep's fetch), skipping cascade`,
@@ -195,6 +192,27 @@ export async function deactivateUserOrchestrated(
   );
   await runCascade(deps, row.id);
   await writeAdminNotification(deps, row, reason);
+}
+
+/**
+ * Step 1 + ROK-2160 (Codex P1): set `deactivated_at` and, in the same tx,
+ * audit the rows the user's GUIDs stop holding so no member grant moves to
+ * the Blizzard-id character that now wins them.
+ */
+async function markDeactivated(
+  db: PostgresJsDatabase<typeof schema>,
+  userId: number,
+  guard: DeactivationGuard,
+): Promise<{ id: number; username: string } | undefined> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(schema.users)
+      .set({ deactivatedAt: sql`NOW()` })
+      .where(deactivationTarget(userId, guard))
+      .returning({ id: schema.users.id, username: schema.users.username });
+    if (row) await auditOwnerDeactivated(tx, row.id, null);
+    return row;
+  });
 }
 
 /** ROK-1353: best-effort revoke of all refresh tokens for a deactivated user. */

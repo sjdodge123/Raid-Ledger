@@ -26,10 +26,12 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 // imports below resolve and the assertions become the failure surface.
 
 import { GuildMemberAddListener } from './guild-member-add.listener';
+import { reactivateOnGuildRejoin } from '../../users/users-reactivate.helpers';
 import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 
 // ── Test fixtures ───────────────────────────────────────────────────────────
 
@@ -102,6 +104,11 @@ function buildListener(deps: {
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
+
+jest.mock('../../users/users-reactivate.helpers', () => ({
+  reactivateOnGuildRejoin: jest.fn(),
+}));
+const reactivate = reactivateOnGuildRejoin as jest.Mock;
 
 jest.mock('../../guilds/community/community-membership.queries', () => ({
   ...jest.requireActual('../../guilds/community/community-membership.queries'),
@@ -214,9 +221,7 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
 
     it('clears deactivated_at and writes the admin reactivation notification for a deactivated returner', async () => {
       // Simulate: the UPDATE … RETURNING returns ONE row → transition fired.
-      mockDb.returning.mockResolvedValueOnce([
-        { id: 42, username: 'returner' },
-      ]);
+      reactivate.mockResolvedValueOnce({ id: 42, username: 'returner' });
 
       const listener = buildListener({
         db: mockDb,
@@ -234,7 +239,7 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
 
       // The dev's UPDATE call should mutate the users table (we don't
       // assert on the exact set values — just that update() was used).
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(reactivate).toHaveBeenCalledWith(mockDb, '123456789012345678');
       // And the admin notification creator must have been invoked exactly once.
       expect(mockNotifs.create).toHaveBeenCalledTimes(1);
       // Targeted at the admin returned by usersService.findAdmin().
@@ -243,7 +248,7 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
 
     it('is a no-op when GuildMemberAdd fires for a user with no matching row (UPDATE … RETURNING returns 0 rows)', async () => {
       // Simulate: no DB row matched (unknown Discord ID).
-      mockDb.returning.mockResolvedValueOnce([]);
+      reactivate.mockResolvedValueOnce(undefined);
 
       const listener = buildListener({
         db: mockDb,
@@ -262,7 +267,7 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
     it('is a no-op when the matching user is already active (deactivated_at IS NULL — UPDATE … RETURNING returns 0 rows due to the IS NOT NULL guard)', async () => {
       // The UPDATE predicate (`WHERE discord_id = $1 AND deactivated_at IS NOT NULL`)
       // means an already-active user yields zero RETURNING rows.
-      mockDb.returning.mockResolvedValueOnce([]);
+      reactivate.mockResolvedValueOnce(undefined);
 
       const listener = buildListener({
         db: mockDb,
@@ -278,7 +283,7 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
     });
 
     it('ROK-1749: stamps guild_member_seen_at on join, even when nothing is reactivated', async () => {
-      mockDb.returning.mockResolvedValueOnce([]);
+      reactivate.mockResolvedValueOnce(undefined);
       const listener = buildListener({
         db: mockDb,
         clientService: mockClientService,
@@ -293,8 +298,15 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
       expect(mockDb.set).toHaveBeenCalledWith({
         guildMemberSeenAt: expect.any(Date),
       });
-      // The reactivate write still carries only the deactivated_at clear.
-      expect(mockDb.set).toHaveBeenCalledWith({ deactivatedAt: null });
+      // ROK-2160: the deactivated_at clear lives in reactivateOnGuildRejoin
+      // (mocked here; the real clear is pinned by
+      // guild-member-add.reactivate-ban.integration.spec.ts). The listener's
+      // only own write is the stamp, made BEFORE the reactivate attempt.
+      expect(mockDb.set).toHaveBeenCalledTimes(1);
+      expect(reactivate).toHaveBeenCalledWith(mockDb, '123456789012345678');
+      expect(at(mockDb.set.mock.invocationCallOrder, 0)).toBeLessThan(
+        at(reactivate.mock.invocationCallOrder, 0),
+      );
     });
   });
 });
