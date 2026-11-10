@@ -38,6 +38,19 @@ updates:
       # ruling. Minor and patch msw 2.x updates still flow.
       - dependency-name: "msw"
         update-types: ["version-update:semver-major"]
+      # Playwright is pinned in two places that must move together: the
+      # lockfile and the fleet runner image (`rl-infra/runner/Dockerfile`
+      # `FROM mcr.microsoft.com/playwright:vX.Y.Z-jammy`). The
+      # `runner-playwright-pin` guard in scripts-tests fails on any drift, so
+      # a Dependabot-only bump can never go green (#2040: 1.64.1 -> 1.65.0
+      # failed scripts-tests + tools-tests). The runner image only changes on
+      # an operator rl-infra VM deploy. Operator ruling 2026-11-10: hold
+      # Playwright out of the automatic bumps; bump it by hand in ONE PR with
+      # the runner Dockerfile, then rebuild the runner at the next rl-infra
+      # deploy.
+      - dependency-name: "@playwright/test"
+      - dependency-name: "playwright"
+      - dependency-name: "playwright-core"
     groups:
       nestjs:
         patterns:
