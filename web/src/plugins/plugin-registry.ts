@@ -9,6 +9,9 @@ import { addHubGameTab, clearHubGameTabs } from './hub-game-tabs';
 import {
     addHubCompanionPrompt, clearHubCompanionPrompts, type HubCompanionPrompt,
 } from '../components/hub/companion/hub-companion-prompts';
+import {
+    addHubClaimProvider, clearHubClaimProviders, type HubClaimProvider,
+} from '../components/hub/claim/hub-claim-providers';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -92,6 +95,12 @@ export interface PluginHandle {
      * must name a setup requirement in this plugin's manifest that carries `rlCompanion`.
      */
     registerHubCompanionPrompt(prompt: HubCompanionPrompt): void;
+    /**
+     * Serve the core "claim your character" prompt on every hub of `provider.games` ×
+     * `provider.kinds` while this plugin is active (ROK-2153). One per plugin; the manifest
+     * must declare a `claim-provider` behaviour and the api must register the matching provider.
+     */
+    registerHubClaimProvider(provider: HubClaimProvider): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -169,6 +178,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerHubWidget: (widget) => addHubGameWidget(slug, widget),
         registerHubGameTab: (gameSlugs, tab) => addHubGameTab(slug, gameSlugs, tab),
         registerHubCompanionPrompt: (prompt) => addHubCompanionPrompt(slug, prompt),
+        registerHubClaimProvider: (provider) => addHubClaimProvider(slug, provider),
     };
 }
 
@@ -227,6 +237,7 @@ export function clearRegistry(): void {
     clearHubGameWidgets();
     clearHubGameTabs();
     clearHubCompanionPrompts();
+    clearHubClaimProviders();
     layersFrozen = false;
     clearGameServerProviders();
     clearEventReportLinkPredicates();

@@ -13,8 +13,10 @@
  * order and its span, and starts right under the card above it
  * (`layout/use-masonry-rows`), so a short card no longer leaves a row-tall hole.
  * ROK-2056: a plugin-declared "install the Companion" card sits first.
+ * ROK-2153: the core "claim your character" prompt follows it.
  */
-import { Fragment, lazy, Suspense, useRef, useState, type JSX, type ReactNode } from 'react';
+import { Fragment, lazy, Suspense, useCallback, useRef, useState, type JSX, type ReactNode } from 'react';
+import type { GuildPage } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { useHubSettings } from './settings/hub-settings-context';
 import { usePluginStore } from '../../stores/plugin-store';
@@ -23,6 +25,9 @@ import { buildHubWidgetCatalog, type HubWidgetCell } from './layout/hub-widget-c
 import { resolveHubLayout } from './layout/resolve-hub-layout';
 import { MASONRY_GRID_CLASS, useMasonryRows } from './layout/use-masonry-rows';
 import { HubCompanionPromptCell } from './companion/hub-companion-prompt-cell';
+import { HubClaimPromptCell } from './claim/hub-claim-prompt-cell';
+import { gatedHubClaimProvider } from './claim/hub-claim-providers';
+import type { HubClaimShowing } from './claim/hub-claim-prompt';
 
 /**
  * ROK-1830 S5: lazy, and mounted only for an editor. The checklist, its step
@@ -90,6 +95,41 @@ interface HubOverviewProps {
     mods: ModsState;
 }
 
+/**
+ * Whether the Companion prompt waits for the claim prompt. A hub with no gated
+ * claim provider never waits (no request, no delay). One that has one waits
+ * while the claim card is `pending` (its chunk, onboarding or status GET still
+ * loading) or `showing`, so Companion never paints and then vanishes. The
+ * report is keyed by hub: a hub switch starts at `pending` again.
+ */
+function useCompanionSuppressed(page: GuildPage): { suppressed: boolean; report: (state: HubClaimShowing) => void } {
+    const activeSlugs = usePluginStore((s) => s.activeSlugs);
+    const gated = gatedHubClaimProvider(page, activeSlugs) !== undefined;
+    const guildId = page.guild.id;
+    const [reported, setReported] = useState<{ guildId: number; state: HubClaimShowing } | null>(null);
+    const report = useCallback((state: HubClaimShowing) => { setReported({ guildId, state }); }, [guildId]);
+    if (!gated) return { suppressed: false, report };
+    const state = reported !== null && reported.guildId === guildId ? reported.state : 'pending';
+    return { suppressed: state !== 'hidden', report };
+}
+
+/**
+ * The plugin-asked prompts, first and full width. §4.7 one banner at a time:
+ * while the claim prompt (ROK-2153, the earlier step) shows or is still
+ * deciding, the Companion prompt (ROK-2056 L4) waits; once claimed, dismissed
+ * or nothing to claim it shows as before. Each renders nothing unless a plugin
+ * asks and every gate passes.
+ */
+export function OverviewPrompts({ ctx }: { ctx: Pick<HubCtx, 'page'> }): JSX.Element {
+    const { suppressed, report } = useCompanionSuppressed(ctx.page);
+    return (
+        <>
+            <HubCompanionPromptCell ctx={ctx} suppressed={suppressed} />
+            <HubClaimPromptCell ctx={ctx} onShowingChange={report} />
+        </>
+    );
+}
+
 export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
@@ -109,8 +149,7 @@ export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.E
     // the editor chunk loading and leaving arrange mode never remount a widget.
     const grid = (
         <OverviewGrid hidden={arranging}>
-            {/* ROK-2056 L4: first, full width; renders nothing unless a plugin asks and every gate passes. */}
-            <HubCompanionPromptCell ctx={ctx} />
+            <OverviewPrompts ctx={ctx} />
             <SetupChecklistCell ctx={ctx} mods={mods} />
             {layout.visible.map((c) => <WidgetCell key={c.id} cell={c} />)}
         </OverviewGrid>

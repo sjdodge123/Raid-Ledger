@@ -23,7 +23,7 @@
  * garbage-collected — this is a per-session UI flag, not shared state.
  */
 import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contract';
-import type { HubOnboardingScope } from './hub-onboarding-api';
+import type { HubOnboardingDismissScope, HubOnboardingScope } from './hub-onboarding-api';
 
 export interface PendingPair {
     /** Dismiss writes for this pair that have not settled yet. */
@@ -41,8 +41,11 @@ export type PendingDismissals = Readonly<Record<string, PendingPair>>;
 
 const EMPTY: PendingPair = { inFlight: 0, confirmed: false, preExisting: false, restoring: 0 };
 
-export function pairId(key: HubOnboardingKey, guildId: HubOnboardingScope): string {
-    return `${key}:${guildId ?? 'global'}`;
+/** One id per (key, hub, dismissal round); an unscoped pair keeps its pre-N4 id. */
+export function pairId(
+    key: HubOnboardingKey, guildId: HubOnboardingScope, scope: HubOnboardingDismissScope = null,
+): string {
+    return `${key}:${guildId ?? 'global'}${scope === null ? '' : `:${scope}`}`;
 }
 
 /** Store `pair`, or forget the id entirely once it says nothing. */
@@ -125,10 +128,10 @@ export function mergePending(
     map: PendingDismissals,
 ): HubOnboardingStateDto {
     const restoring = (id: string): boolean => (map[id]?.restoring ?? 0) > 0;
-    const server = fresh.dismissed.filter((d) => !restoring(pairId(d.key, d.guildId)));
-    const known = new Set(server.map((d) => pairId(d.key, d.guildId)));
+    const server = fresh.dismissed.filter((d) => !restoring(pairId(d.key, d.guildId, d.scope ?? null)));
+    const known = new Set(server.map((d) => pairId(d.key, d.guildId, d.scope ?? null)));
     const kept = (current?.dismissed ?? []).filter((d) => {
-        const id = pairId(d.key, d.guildId);
+        const id = pairId(d.key, d.guildId, d.scope ?? null);
         const pending = map[id];
         if (pending === undefined || known.has(id) || pending.restoring > 0) return false;
         return pending.inFlight > 0 || pending.confirmed;

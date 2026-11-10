@@ -11,10 +11,12 @@
  * then disappears because the server already had the dismissal is worse than
  * one that appears a beat late.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contract';
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
-import { dismissHubOnboarding, fetchHubOnboarding, type HubOnboardingScope } from './hub-onboarding-api';
+import {
+    dismissHubOnboarding, fetchHubOnboarding, type HubOnboardingDismissScope, type HubOnboardingScope,
+} from './hub-onboarding-api';
 import {
     mergePending, pairId, pendingLedger, type PendingDismissals,
 } from './hub-onboarding-pending';
@@ -34,27 +36,48 @@ export function hubOnboardingPendingKey(viewer: number | 'anon'): readonly unkno
     return ['guilds', 'onboarding-pending', viewer] as const;
 }
 
-/** Pure: does this state already hold a dismissal for exactly this scope? */
+/**
+ * Pure: does this state already hold a dismissal for exactly this scope and
+ * round? (ROK-2153 N4: a row's absent `scope` is `null`, so an unscoped row
+ * never hides a scoped prompt, nor one round another's.)
+ */
 export function isPromptDismissed(
     state: HubOnboardingStateDto | undefined, key: HubOnboardingKey, guildId: HubOnboardingScope,
+    scope: HubOnboardingDismissScope = null,
 ): boolean {
-    return (state?.dismissed ?? []).some((d) => d.key === key && d.guildId === guildId);
+    return (state?.dismissed ?? []).some((d) => d.key === key && d.guildId === guildId && (d.scope ?? null) === scope);
 }
 
 /** The state with this dismissal removed — the rollback of one optimistic add. */
 export function withoutDismissal(
     state: HubOnboardingStateDto | undefined, key: HubOnboardingKey, guildId: HubOnboardingScope,
+    scope: HubOnboardingDismissScope = null,
 ): HubOnboardingStateDto {
-    return { dismissed: (state?.dismissed ?? []).filter((d) => !(d.key === key && d.guildId === guildId)) };
+    return {
+        dismissed: (state?.dismissed ?? []).filter((d) => !(d.key === key && d.guildId === guildId && (d.scope ?? null) === scope)),
+    };
 }
 
 /** The state with this dismissal added — what the optimistic update writes. */
 export function withDismissal(
     state: HubOnboardingStateDto | undefined, key: HubOnboardingKey, guildId: HubOnboardingScope, at: string,
+    scope: HubOnboardingDismissScope = null,
 ): HubOnboardingStateDto {
     const current = state?.dismissed ?? [];
-    if (isPromptDismissed(state, key, guildId)) return { dismissed: [...current] };
-    return { dismissed: [...current, { key, guildId, dismissedAt: at }] };
+    if (isPromptDismissed(state, key, guildId, scope)) return { dismissed: [...current] };
+    return { dismissed: [...current, { key, guildId, ...(scope === null ? {} : { scope }), dismissedAt: at }] };
+}
+
+/** The viewer's whole dismissal state — one shared query, so a second observer costs no request. */
+export function useHubOnboardingState(): UseQueryResult<HubOnboardingStateDto, Error> {
+    const { isAuthenticated } = useAuth();
+    const viewer = useViewerCacheScope();
+    return useQuery({
+        queryKey: hubOnboardingKey(viewer),
+        queryFn: fetchHubOnboarding,
+        enabled: isAuthenticated,
+        retry: false,
+    });
 }
 
 export interface HubOnboardingDismissOptions {
@@ -74,32 +97,31 @@ export interface HubOnboardingPrompt {
     dismiss: (options?: HubOnboardingDismissOptions) => void;
     /** The last dismiss failed; the prompt is back on screen. */
     failed: boolean;
+    /** The dismissal state is known, failed to load, or will never load (signed out). */
+    settled: boolean;
 }
 
-export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingScope = null): HubOnboardingPrompt {
+export function useHubOnboarding(
+    key: HubOnboardingKey, guildId: HubOnboardingScope = null, scope: HubOnboardingDismissScope = null,
+): HubOnboardingPrompt {
     const { isAuthenticated } = useAuth();
     const viewer = useViewerCacheScope();
     const queryClient = useQueryClient();
     const queryKey = hubOnboardingKey(viewer);
-    const state = useQuery({
-        queryKey,
-        queryFn: fetchHubOnboarding,
-        enabled: isAuthenticated,
-        retry: false,
-    });
+    const state = useHubOnboardingState();
     const pendingKey = hubOnboardingPendingKey(viewer);
     const ledger = pendingLedger(
         () => queryClient.getQueryData<PendingDismissals>(pendingKey) ?? {},
         (map) => { queryClient.setQueryData(pendingKey, map); },
-        pairId(key, guildId),
+        pairId(key, guildId, scope),
     );
     const mutation = useMutation<HubOnboardingStateDto, Error, void>({
-        mutationFn: () => dismissHubOnboarding(key, guildId),
+        mutationFn: () => dismissHubOnboarding(key, guildId, scope),
         onMutate: async () => {
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<HubOnboardingStateDto>(queryKey);
-            ledger.begin(isPromptDismissed(previous, key, guildId));
-            queryClient.setQueryData(queryKey, withDismissal(previous, key, guildId, new Date().toISOString()));
+            ledger.begin(isPromptDismissed(previous, key, guildId, scope));
+            queryClient.setQueryData(queryKey, withDismissal(previous, key, guildId, new Date().toISOString(), scope));
         },
         // Rollback puts the prompt back rather than leaving it hidden on a
         // dismissal the server never stored — it would silently return on the
@@ -109,7 +131,7 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         onError: () => {
             if (!ledger.settle('error')) return;
             queryClient.setQueryData<HubOnboardingStateDto>(
-                queryKey, (cur) => withoutDismissal(cur, key, guildId),
+                queryKey, (cur) => withoutDismissal(cur, key, guildId, scope),
             );
         },
         // Merge, don't replace: the response only knows about rows the server
@@ -134,8 +156,9 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
     };
     const known = isAuthenticated && state.data !== undefined;
     return {
-        visible: known && !isPromptDismissed(state.data, key, guildId),
+        visible: known && !isPromptDismissed(state.data, key, guildId, scope),
         dismiss,
         failed: mutation.isError,
+        settled: !isAuthenticated || state.data !== undefined || state.isError,
     };
 }
