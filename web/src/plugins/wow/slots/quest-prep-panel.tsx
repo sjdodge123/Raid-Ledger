@@ -11,7 +11,8 @@ import { useEnrichedQuests, useQuestCoverage, useQuestPrereqs, useUpdateQuestPro
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { slugToContentVariant } from '../lib/wow-variant-config';
 import { QuestCard, type QuestCardPrereqs } from './quest-card';
-import { QuestPrepNeededLine } from './quest-prep-needed-line';
+import { QuestPrepNeededLine, useQuestPrepTodo } from './quest-prep-needed-line';
+import type { QuestPrepTodo } from './quest-prep-todo';
 import { QuestPrepAsOfLine } from './quest-prep-asof-line';
 import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
 import './quest-prep-panel.css';
@@ -189,9 +190,10 @@ function QuestPrepBody({ instances, questMap, allUsable, character, shared, prer
     instances: ParsedInstance[]; questMap: Map<number, EnrichedDungeonQuestDto[]>; prereqs: EventQuestPrereqsResponse | undefined;
     allUsable: EnrichedDungeonQuestDto[]; character: ReturnType<typeof useCharacterDetail>['data']; shared: SharedQuestProps;
 }) {
+    const todo = useQuestPrepTodo(allUsable, shared.coverageMap, prereqs);
     return (
         <div className="quest-prep-panel">
-            <QuestPrepHeader count={allUsable.length} prereqs={prereqs} />
+            <QuestPrepHeader count={allUsable.length} prereqs={prereqs} todo={todo} />
             {instances.length > 1
                 ? instances.map((inst) => (
                     <InstanceQuestSection key={inst.id} instance={inst} quests={questMap.get(inst.id) ?? []} character={character} {...shared} />
@@ -202,7 +204,8 @@ function QuestPrepBody({ instances, questMap, allUsable, character, shared, prer
     );
 }
 
-function QuestPrepHeader({ count, prereqs }: { count: number; prereqs: EventQuestPrereqsResponse | undefined }) {
+/** Header + the ROK-2169 to-do lines (sharables to grab, chains to complete) + the as-of line. */
+function QuestPrepHeader({ count, prereqs, todo }: { count: number; prereqs: EventQuestPrereqsResponse | undefined; todo: QuestPrepTodo }) {
     return (
         <>
         <div className="quest-prep-panel__header">
@@ -212,7 +215,7 @@ function QuestPrepHeader({ count, prereqs }: { count: number; prereqs: EventQues
             </h2>
             <span className="text-xs text-muted">{count} quests</span>
         </div>
-        <QuestPrepNeededLine prereqs={prereqs} />
+        <QuestPrepNeededLine todo={todo} />
         <QuestPrepAsOfLine prereqs={prereqs} />
         </>
     );
