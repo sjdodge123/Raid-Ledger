@@ -7,8 +7,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { RoleSummary } from './role-bits';
-import { filterStateFromHash, membersHashFor, roleFilterHref, roleFromHash } from './wow-role-filter.helpers';
-import { EMPTY_WOW_MEMBER_FILTERS } from './wow-member-filters.helpers';
+import { filterStateFromHash, followMembersHash, membersHashFor, roleFilterHref, roleFromHash } from './wow-role-filter.helpers';
+import { EMPTY_WOW_MEMBER_FILTERS, type WowMemberFilterState } from './wow-member-filters.helpers';
 import { FILTER_CHIP_ON_EDGE, FILTER_CHIP_ON_FILL, FILTER_CHIP_ON_LABEL } from '../../../components/ui/filter-chip-classes';
 
 const COUNTS: Record<CharacterRole, number> = { tank: 2, healer: 4, dps: 12 };
@@ -66,5 +66,15 @@ describe('role filter hash (ROK-2172)', () => {
         expect(membersHashFor({ ...EMPTY_WOW_MEMBER_FILTERS, roles: ['tank'] })).toBe('#members?role=tank');
         expect(membersHashFor({ ...EMPTY_WOW_MEMBER_FILTERS, roles: ['tank'], linkedOnly: true })).toBe('#members');
         expect(membersHashFor({ ...EMPTY_WOW_MEMBER_FILTERS, roles: ['tank', 'dps'] })).toBe('#members');
+    });
+
+    it('follows a Members hash change, keeping a state that already maps to it', () => {
+        const tank: WowMemberFilterState = { ...EMPTY_WOW_MEMBER_FILTERS, roles: ['tank'] };
+        const twoRoles: WowMemberFilterState = { ...EMPTY_WOW_MEMBER_FILTERS, roles: ['tank', 'dps'] };
+        expect(followMembersHash(tank, '#members'), 'plain #members clears a single role').toEqual(EMPTY_WOW_MEMBER_FILTERS);
+        expect(followMembersHash(twoRoles, '#members'), 'a state already shown as #members is kept').toBe(twoRoles);
+        expect(followMembersHash(tank, '#members?role=tank'), 'our own write does not re-seed').toBe(tank);
+        expect(followMembersHash(tank, '#members?role=healer')).toEqual({ ...EMPTY_WOW_MEMBER_FILTERS, roles: ['healer'] });
+        expect(followMembersHash(tank, '#overview'), 'another tab leaves the state alone').toBe(tank);
     });
 });

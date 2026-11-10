@@ -105,4 +105,27 @@ describe('Role chips filter the Members list (ROK-2172)', () => {
         expect(listedNames()).toEqual(['Grimtusk', 'Stormcall', 'Nolina']);
         expect(window.location.hash).toBe('#members');
     });
+
+    it('the Members tab (plain #members) clears a role while Members is mounted', async () => {
+        renderPage('#members?role=tank');
+        await waitFor(() => expect(bandPill('Tank')).toHaveAttribute('aria-pressed', 'true'));
+        const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
+        await userEvent.click(within(nav).getByRole('link', { name: 'Members' }));
+        await waitFor(() => expect(bandPill('Tank'), 'a hashchange to plain #members clears the role').toHaveAttribute('aria-pressed', 'false'));
+        expect(listedNames()).toEqual(['Grimtusk', 'Stormcall', 'Nolina']);
+        expect(window.location.hash).toBe('#members');
+    });
+
+    it('Back/Forward (popstate) and a hand-edited ?role= re-apply the hash role while Members is mounted', async () => {
+        renderPage('#members');
+        await screen.findByTestId('guild-members');
+        window.history.replaceState(window.history.state, '', '#members?role=healer');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        await waitFor(() => expect(bandPill('Heal'), 'popstate re-applies the hash role').toHaveAttribute('aria-pressed', 'true'));
+        expect(listedNames()).toEqual(['Stormcall']);
+        window.location.hash = '#members?role=dps';
+        await waitFor(() => expect(bandPill('DPS'), 'a hand-edited ?role= re-applies').toHaveAttribute('aria-pressed', 'true'));
+        expect(bandPill('Heal'), 'the hash role replaces the previous one').toHaveAttribute('aria-pressed', 'false');
+        expect(window.location.hash).toBe('#members?role=dps');
+    });
 });

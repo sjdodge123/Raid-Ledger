@@ -52,3 +52,16 @@ export function syncMembersHash(state: WowMemberFilterState): void {
     const next = membersHashFor(state);
     if (next !== current) window.history.replaceState(window.history.state, '', next);
 }
+
+/**
+ * The state after a `hashchange` / `popstate` while Members is mounted (a
+ * Members tab click, Back/Forward, a hand-edited `?role=`): keep `prev` while
+ * it already maps to the same Members hash (so a multi-filter state survives
+ * a plain `#members`, and our own `replaceState` write never echoes), else
+ * re-seed from the hash. Off a Members hash it leaves `prev` alone.
+ */
+export function followMembersHash(prev: WowMemberFilterState, hash: string): WowMemberFilterState {
+    if (hash.split('?')[0] !== MEMBERS_HASH) return prev;
+    const next = filterStateFromHash(hash);
+    return membersHashFor(next) === membersHashFor(prev) ? prev : next;
+}
