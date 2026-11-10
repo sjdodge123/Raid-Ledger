@@ -38,10 +38,10 @@ export function useWowMemberFilters(ctx: HubCtx, rows: readonly HubMemberRow[]):
     const coverage = useMemo(() => (raw === undefined ? undefined : professionCoverage(raw)), [raw]);
     const options = useMemo(() => wowFilterOptions(rows), [rows]);
     const matches = useCallback((row: HubMemberRow) => wowMemberMatches(state, row, index), [state, index]);
-    const clearAll = useCallback(() => setState(EMPTY_WOW_MEMBER_FILTERS), []);
+    const clearAll = useCallback(() => setState(EMPTY_WOW_MEMBER_FILTERS), [setState]);
     const toggleProfession = useCallback(
         (name: string) => setState((s) => ({ ...s, professions: toggleValue(s.professions, name) })),
-        [],
+        [setState],
     );
     return {
         activeCount: countActiveWowFilters(state),
