@@ -203,6 +203,15 @@ async function linkAudits(ownerId: number) {
 
 const deactivate = (userId: number) =>
   testApp.app.get(DiscordNotificationService).deactivateUser(userId, 'manual');
+const ban = async (userId: number) => {
+  const res = await testApp.app
+    .get(UsersModerationService)
+    .banUser(testApp.seed.adminUser.id, userId, {
+      wipeData: false,
+      kickFromDiscord: false,
+    });
+  expect(res.success).toBe(true);
+};
 const reactivate = (userId: number) =>
   testApp.app.get(UsersService).reactivateUser(userId);
 
@@ -214,6 +223,45 @@ async function expectBNotGranted(s: Seed): Promise<void> {
     [
       'external_id_linked',
       expect.objectContaining({ characterId: s.charB, via: 'guid_released' }),
+    ],
+  ]);
+}
+
+/**
+ * A away since T1 (backdated, with B's release audit), then staff grant B
+ * at T2 inside the away window — B holds the grant.
+ */
+async function awayWhileStaffGrantsB(s: Seed): Promise<void> {
+  await deactivate(s.ownerA);
+  // Move the away window into the past so the staff grant sits inside it.
+  await testApp.db
+    .update(schema.users)
+    .set({ deactivatedAt: T1 })
+    .where(eq(schema.users.id, s.ownerA));
+  await testApp.db
+    .update(schema.activityLog)
+    .set({ createdAt: T1 })
+    .where(
+      and(
+        eq(schema.activityLog.entityType, 'addon_guid'),
+        eq(schema.activityLog.entityId, s.ownerB),
+      ),
+    );
+  await grant(s.guildId, s.memberId, T2);
+  expect(await granted(s.ownerB, s, 'blizzard')).toBe(true);
+}
+
+/** A won R back but not B's grant: one `owner_reactivated` audit. */
+async function expectANotGranted(s: Seed): Promise<void> {
+  expect(await granted(s.ownerA, s, 'guid')).toBe(false);
+  const audits = await linkAudits(s.ownerA);
+  expect(audits.map((a) => [a.action, a.metadata])).toEqual([
+    [
+      'addon_guid_claimed',
+      expect.objectContaining({
+        characterId: s.charA,
+        via: 'owner_reactivated',
+      }),
     ],
   ]);
 }
@@ -240,43 +288,15 @@ describe('ROK-2160 Codex P1: a member grant never changes hands without staff', 
   it('2. A is banned: B does not inherit A grant', async () => {
     const s = await seed(T1);
     expect(await granted(s.ownerA, s, 'guid')).toBe(true);
-    const res = await testApp.app
-      .get(UsersModerationService)
-      .banUser(testApp.seed.adminUser.id, s.ownerA, {
-        wipeData: false,
-        kickFromDiscord: false,
-      });
-    expect(res.success).toBe(true);
+    await ban(s.ownerA);
     await expectBNotGranted(s);
   });
 
   it('3. mirror: A comes back after staff granted B; A does not inherit B grant', async () => {
     const s = await seed(null);
-    await deactivate(s.ownerA);
-    // Move the away window into the past so the staff grant sits inside it.
-    await testApp.db
-      .update(schema.users)
-      .set({ deactivatedAt: T1 })
-      .where(eq(schema.users.id, s.ownerA));
-    await testApp.db
-      .update(schema.activityLog)
-      .set({ createdAt: T1 })
-      .where(eq(schema.activityLog.entityId, s.ownerB));
-    await grant(s.guildId, s.memberId, T2);
-    expect(await granted(s.ownerB, s, 'blizzard')).toBe(true);
-
+    await awayWhileStaffGrantsB(s);
     await reactivate(s.ownerA);
-    expect(await granted(s.ownerA, s, 'guid')).toBe(false);
-    const audits = await linkAudits(s.ownerA);
-    expect(audits.map((a) => [a.action, a.metadata])).toEqual([
-      [
-        'addon_guid_claimed',
-        expect.objectContaining({
-          characterId: s.charA,
-          via: 'owner_reactivated',
-        }),
-      ],
-    ]);
+    await expectANotGranted(s);
   });
 
   it('4. control: A away and back with no grant meanwhile keeps A own grant', async () => {
@@ -323,7 +343,26 @@ async function lockWaiters(): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
+const rejoin = async (userId: number) =>
+  reactivateOnGuildRejoin(testApp.db, await discordIdOf(userId));
+
 describe('ROK-2160 guild rejoin path (reactivateOnGuildRejoin)', () => {
+  it('7. a banned rejoiner stays deactivated and wins nothing back', async () => {
+    const s = await seed(T1);
+    await ban(s.ownerA);
+    expect(await rejoin(s.ownerA)).toBeUndefined();
+    expect((await userState(s.ownerA)).deactivatedAt).not.toBeNull();
+    expect(await linkAudits(s.ownerA)).toEqual([]);
+    await expectBNotGranted(s);
+  });
+
+  it('8. rejoin after staff granted B: A does not inherit B grant', async () => {
+    const s = await seed(null);
+    await awayWhileStaffGrantsB(s);
+    expect(await rejoin(s.ownerA)).toBeDefined();
+    await expectANotGranted(s);
+  });
+
   it('5. a ban that commits while rejoin waits on the row lock keeps the user deactivated', async () => {
     const s = await seed(T1);
     await deactivate(s.ownerA);
@@ -381,5 +420,39 @@ describe('ROK-2160 away window under a non-UTC session time zone', () => {
       return auditOwnerReactivated(tx, s.ownerA, since, null);
     });
     expect(written).toBe(1);
+  });
+});
+
+describe('ROK-2160 sweep guard and repeated cycles', () => {
+  it('9. sweep: a user seen after the member fetch is not deactivated and nothing is audited', async () => {
+    const s = await seed(T1);
+    await testApp.db
+      .update(schema.users)
+      .set({ guildMemberSeenAt: new Date(NOW - DAY) })
+      .where(eq(schema.users.id, s.ownerA));
+    await testApp.app
+      .get(DiscordNotificationService)
+      .deactivateUser(s.ownerA, 'reconciliation-sweep', {
+        seenBefore: new Date(NOW - 2 * DAY),
+      });
+    expect((await userState(s.ownerA)).deactivatedAt).toBeNull();
+    expect(await linkAudits(s.ownerB)).toEqual([]);
+    expect(await granted(s.ownerA, s, 'guid')).toBe(true);
+  });
+
+  it('10. two away-and-back cycles with no grant meanwhile keep A own grant', async () => {
+    const s = await seed(T1);
+    for (let i = 0; i < 2; i += 1) {
+      await deactivate(s.ownerA);
+      expect(await granted(s.ownerB, s, 'blizzard')).toBe(false);
+      await reactivate(s.ownerA);
+    }
+    expect(await granted(s.ownerA, s, 'guid')).toBe(true);
+    expect(await linkAudits(s.ownerA)).toEqual([]);
+    const released = await linkAudits(s.ownerB);
+    expect(released.map((a) => a.action)).toEqual([
+      'external_id_linked',
+      'external_id_linked',
+    ]);
   });
 });
