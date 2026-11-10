@@ -1712,7 +1712,7 @@ renders its own card or heading.
   header slot) around a `Suspense` whose fallback is a `h-24 animate-pulse rounded-md bg-panel` skeleton.
   The body is `lazy` (keeps plugin `register.ts` files and the app entry light).
   `chrome: 'none'` (ROK-1933) skips the `WidgetCard` for a body that is itself one framed landmark — the
-  Valheim claim banner, a §4.7 instruction callout with its own `section` and heading. Core keeps the cell id,
+  WoW: Forever claim banner, a §4.7 instruction callout with its own `section` and heading. Core keeps the cell id,
   span, Suspense and both boundaries; `title` is then unused on screen. Use it only for a callout, never to
   draw a bespoke card.
 - **Containment.** An error boundary inside the card swaps a throwing body for a `role="alert"` `text-sm
@@ -1736,8 +1736,7 @@ owning `HubModule.overviewWidgets`.
 
 **Adopters.** WoW: Forever (`web/src/plugins/wow/hub-widgets/claim-banner.register.ts`): the staff non-member
 claim banner (`chrome: 'none'`, order 5, ROK-2151 — a §4.7 neutral callout opening the join gate's roster claim
-modal; × dismisses for the browser session). Valheim (`web/src/plugins/valheim/register.ts`): the claim
-banner (`chrome: 'none'`, order 5, ROK-1933) and **Deaths** (ROK-1930, order 45 — after the core cards): a ranked `<ol>` of at most 8 rows, each a
+modal; × dismisses for the browser session). Valheim (`web/src/plugins/valheim/register.ts`): **Deaths** (ROK-1930, order 45 — after the core cards): a ranked `<ol>` of at most 8 rows, each a
 name + `tabular-nums` count line over a §3.2 `GuildMeter` scaled to the top row. ROK-2029: when the row has a
 target, the **name** and the **count + `MapPinIcon`** are two separate 44px `Link`s (`hover:underline`, distinct
 accessible names — "Open <name>'s character page" / "Show <name>'s N deaths on the map"), never one row-wide link;
@@ -1887,8 +1886,10 @@ through `PluginHandle.registerHubClaimProvider({ games, kinds, copy?, OptionsSte
 (`components/hub/claim/hub-claim-providers.ts`), gated like a widget (plugin active, game, kind) and declared
 as a manifest `claim-provider` behaviour; membership, "no claim yet" and "something unclaimed" come from the
 server status (`GET /guilds/:id/claim`), and the × stores the per-hub onboarding key `claim-character`
-(server-side, permanent). Shown only on Overview. The per-game claim-banner widgets above move onto it in
-their own phases.
+(server-side, permanent). Shown only on Overview. Adopters: Valheim (ROK-2153 S4, `plugins/valheim/hub/valheim-hub-claim-provider.ts`,
+copy from its ROK-1933 `CLAIM_BANNER_COPY`; its Overview `claim-banner` widget is retired with no
+`LEGACY_HUB_WIDGET_IDS` alias, and the Characters tab keeps its own banner with Link Steam). The WoW: Forever
+claim-banner widget above moves onto it in its own phase.
 
 ### 4.28 Arrange list — reorder, hide and add the cells of a configurable grid (ROK-1918)
 

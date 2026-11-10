@@ -1,10 +1,6 @@
-/** ROK-1933 Part 1 — who sees the claim banner, which variant, and the Overview dismiss memory. */
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-    claimBannerVariant,
-    readClaimBannerDismissed,
-    writeClaimBannerDismissed,
-} from './valheim-claim-banner.helpers';
+/** ROK-1933 Part 1 — who sees the claim banner and which variant. */
+import { describe, expect, it } from 'vitest';
+import { claimBannerVariant } from './valheim-claim-banner.helpers';
 
 const VIEWER = 9;
 const open = { viewerHasClaim: false, unclaimedCount: 1 };
@@ -40,25 +36,5 @@ describe('claimBannerVariant', () => {
     it('shows on a server with more characters than one list page (D1)', () => {
         const status = { viewerHasClaim: false, unclaimedCount: 120 };
         expect(claimBannerVariant({ ...base, status })).toBe('link-steam');
-    });
-});
-
-describe('Overview dismiss memory', () => {
-    afterEach(() => {
-        localStorage.clear();
-        vi.restoreAllMocks();
-    });
-
-    it('remembers a dismiss per server', () => {
-        writeClaimBannerDismissed(7);
-        expect(readClaimBannerDismissed(7)).toBe(true);
-        expect(readClaimBannerDismissed(8)).toBe(false);
-    });
-
-    it('treats a throwing localStorage as not dismissed', () => {
-        vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
-            throw new Error('denied');
-        });
-        expect(readClaimBannerDismissed(7)).toBe(false);
     });
 });

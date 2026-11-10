@@ -61,7 +61,6 @@ const core = {
 
 const valheim = {
   widgets: [
-    { id: 'claim-banner', title: 'Claim your character', layoutKey: 'plugin' },
     { id: 'deaths', title: 'Deaths', layoutKey: 'plugin' },
   ],
   tabs: [
