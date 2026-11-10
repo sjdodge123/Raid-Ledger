@@ -24,7 +24,6 @@ import { usePluginStore } from '../../../stores/plugin-store';
 import { NOT_LINKED_WARNING } from './wow-join-gate.helpers';
 import { joinGateKey } from './use-join-gate';
 import { CLAIM_BANNER_COPY } from './wow-claim-banner.helpers';
-import { buildHubClaimStatus } from '../../../test/mocks/hub-claim-handlers';
 
 const VIEWER = 1;
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -97,14 +96,6 @@ function serve(id: number, isStaff: boolean, gameSlug: string): void {
             gateCalls.push(id);
             const member = gateMember.get(id) ?? null;
             return member === null ? HttpResponse.json({ message: 'Hub not found' }, { status: 404 }) : HttpResponse.json(gateDto(id, member));
-        }),
-        http.get(`${API}/guilds/onboarding`, () => HttpResponse.json({ dismissed: [] })),
-        // ROK-2153 S5: the core claim cell on a Forever hub's Overview reads the core status (same rule, same membership).
-        http.get(`${API}/guilds/${id}/claim`, () => {
-            const member = gateMember.get(id) ?? null;
-            return member === null
-                ? HttpResponse.json({ message: 'Hub not found', code: 'HUB_CLAIM_UNAVAILABLE' }, { status: 404 })
-                : HttpResponse.json(buildHubClaimStatus({ provider: 'blizzard', viewerIsMember: member, viewerHasClaim: member, claimOptions: 'wow_ruleset' }));
         }),
     );
 }
