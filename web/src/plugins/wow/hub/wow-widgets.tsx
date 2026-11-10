@@ -11,6 +11,7 @@ import { WidgetCard } from '../../../components/hub/hub-bits';
 import { GuildRoleComposition } from './role-composition';
 import { RoleSummary } from './role-bits';
 import { rankLabel } from './wow-guild.helpers';
+import { roleFilterHref } from './wow-role-filter.helpers';
 
 function RankCounts({ page }: HubCtx): JSX.Element {
     return (
@@ -40,7 +41,7 @@ export function WowMembersSummary(ctx: HubCtx): JSX.Element {
     return (
         <WidgetCard id="members-summary" title={`Members · ${page.guild.memberCount}`} action={<SeeMembersLink />}>
             <div className="flex flex-col gap-3" data-testid="guild-members-summary">
-                <RoleSummary counts={page.roleCounts} />
+                <RoleSummary counts={page.roleCounts} hrefFor={roleFilterHref} />
                 <RankCounts {...ctx} />
             </div>
         </WidgetCard>

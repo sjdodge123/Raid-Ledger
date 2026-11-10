@@ -169,6 +169,8 @@ export interface HubMemberFilters {
     controls: ReactNode;
     /** Optional block between the toolbar and the list (WoW: the profession coverage strip). */
     lead?: ReactNode;
+    /** Optional band above the toolbar built from the filter state; replaces `membersSummary` when set (WoW: role pills that toggle the Role filter, ROK-2172). */
+    summary?: ReactNode;
 }
 
 export interface HubModule {

@@ -163,7 +163,7 @@ function MembersFrame({ ctx, mod }: { ctx: HubCtx; mod: HubModule | undefined })
         <section id="members" className="scroll-mt-4" data-testid="guild-members">
             <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? memberCountLabel(page.guild.memberCount)} />
             <Card className="flex flex-col gap-3">
-                {Summary && <Summary {...ctx} />}
+                {v.filters.summary ?? (Summary && <Summary {...ctx} />)}
                 <MemberTools {...membersTools(v, hasFilters)} />
                 {hasFilters && (
                     <FilterEntry activeCount={v.filters.activeCount} isOpen={v.open} onOpenChange={v.setOpen} onClearAll={v.filters.clearAll}>
