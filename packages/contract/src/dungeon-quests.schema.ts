@@ -25,6 +25,10 @@ export const DungeonQuestDtoSchema = z.object({
     rewardXp: z.number().nullable(),
     rewardGold: z.number().nullable(),
     rewardType: z.string().nullable(),
+    /** ROK-2161: Blizzard reputation rewards (non-zero only); absent when none. */
+    reputationRewards: z
+        .array(z.object({ factionName: z.string(), amount: z.number().int() }))
+        .optional(),
 });
 
 export type DungeonQuestDto = z.infer<typeof DungeonQuestDtoSchema>;

@@ -88,6 +88,7 @@ function overlayRow(questId: number, title: string): Record<string, unknown> {
     rewardXp: null,
     rewardMoneyCopper: null,
     rewardItems: [],
+    reputations: [],
     requirementsRaw: null,
   };
 }

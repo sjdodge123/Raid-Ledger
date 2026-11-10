@@ -18,7 +18,10 @@ import type { SettingsService } from '../../settings/settings.service';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 import { MAX_CHAIN_DEPTH } from './dungeon-quests.helpers';
 import { listBlizzardOverlay } from './forever-quest-import/blizzard-quest.repo';
-import { mergeBlizzardOverlay } from './forever-quest-import/blizzard-quest-overlay.merge';
+import {
+  mergeBlizzardOverlay,
+  reputationRewardFields,
+} from './forever-quest-import/blizzard-quest-overlay.merge';
 import { requirementFields } from './forever-quest-import/blizzard-quest.requirements';
 import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import type { DungeonQuestDto } from './dungeon-quests.types';
@@ -43,6 +46,7 @@ const OVERLAY_COLUMNS = {
   rewardXp: t.rewardXp,
   rewardMoneyCopper: t.rewardMoneyCopper,
   rewardItems: t.rewardItems,
+  reputations: t.reputations,
   requirementsRaw: t.requirementsRaw,
 };
 
@@ -112,6 +116,7 @@ export function overlayOnlyDto(row: OverlayQuestRow): DungeonQuestDto {
     rewardXp: row.rewardXp,
     rewardGold: row.rewardMoneyCopper,
     rewardType: itemIds.length > 0 ? 'choice' : 'none',
+    ...reputationRewardFields(row.reputations),
   };
 }
 

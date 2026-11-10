@@ -147,3 +147,55 @@ describe('QuestCard — prerequisite not in our data (ROK-2143)', () => {
         expect(screen.queryByTestId('quest-prereq-missing')).toBeNull();
     });
 });
+
+describe('QuestCard — reputation rewards (ROK-2161)', () => {
+    function renderExpanded(overrides: Partial<EnrichedDungeonQuestDto>) {
+        return render(
+            <QuestCard quest={createQuest(overrides)} questCoverage={undefined} currentUserId={1} eventId={1}
+                wowheadVariant="classic" isExpanded pendingQuestId={null} equippedBySlot={new Map()}
+                charClass={null} characterId={undefined} onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />,
+        );
+    }
+
+    it('shows the reputation line next to the XP reward', () => {
+        renderExpanded({
+            rewardXp: 1150,
+            reputationRewards: [{ factionName: 'Ironforge', amount: 150 }, { factionName: 'Gnomeregan', amount: -25 }],
+        });
+        const line = screen.getByTestId('quest-reward-reputation');
+        expect(line).toHaveTextContent('+150 Ironforge, -25 Gnomeregan');
+        const [gain, loss] = screen.getAllByTestId('quest-reward-reputation-entry');
+        expect(gain, 'a gain uses the success token').toHaveClass('text-success');
+        expect(gain).not.toHaveClass('text-danger');
+        expect(loss, 'a loss uses the danger token, never success').toHaveClass('text-danger');
+        expect(loss).not.toHaveClass('text-success');
+        expect(line.closest('.quest-reward-meta'), 'sits in the XP / money reward row').not.toBeNull();
+    });
+
+    it('puts every reputation entry on the bg-surface/70 label chip (overlay card fill is below AA)', () => {
+        renderExpanded({
+            reputationRewards: [{ factionName: 'Ironforge', amount: 150 }, { factionName: 'Gnomeregan', amount: -25 }],
+        });
+        const entries = screen.getAllByTestId('quest-reward-reputation-entry');
+        expect(entries).toHaveLength(2);
+        const chip = ['inline-block', 'max-w-full', 'truncate', 'rounded-sm', 'bg-surface/70', 'px-1'];
+        for (const entry of entries) expect(entry, `${entry.textContent} sits on the label chip`).toHaveClass(...chip);
+        expect(entries[0], 'the gain chip keeps the success token').toHaveClass('text-success');
+        expect(entries[1], 'the loss chip keeps the danger token').toHaveClass('text-danger');
+        expect(screen.getByTestId('quest-reward-reputation'), 'the wrapper can shrink, so a long chip truncates inside the card')
+            .toHaveClass('min-w-0', 'max-w-full');
+    });
+
+    it('renders a reputation-only quest reward row', () => {
+        renderExpanded({ reputationRewards: [{ factionName: 'Ironforge', amount: 150 }] });
+        expect(screen.getByTestId('quest-reward-reputation')).toHaveTextContent('+150 Ironforge');
+    });
+
+    it('renders no reputation line when the field is absent or empty', () => {
+        const { unmount } = renderExpanded({ rewardXp: 1150 });
+        expect(screen.queryByTestId('quest-reward-reputation')).toBeNull();
+        unmount();
+        renderExpanded({ rewardXp: 1150, reputationRewards: [] });
+        expect(screen.queryByTestId('quest-reward-reputation')).toBeNull();
+    });
+});
