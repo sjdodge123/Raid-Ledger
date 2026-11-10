@@ -23,6 +23,10 @@ import { UsersService } from '../../../users/users.service';
 import { UsersModerationService } from '../../../users/users-moderation.service';
 import { reactivateOnGuildRejoin } from '../../../users/users-reactivate.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import {
+  auditOwnerReactivated,
+  lockDeactivatedAt,
+} from '../addon-import/external-id.owner-status';
 import { hasConfirmedMemberGrant } from './guild-delegation.helpers';
 import { findLinkedMemberRows } from './guild-membership.helpers';
 
@@ -346,5 +350,36 @@ describe('ROK-2160 guild rejoin path (reactivateOnGuildRejoin)', () => {
     const after = await userState(s.ownerA);
     expect(after.bannedAt).not.toBeNull();
     expect(after.deactivatedAt).not.toBeNull();
+  });
+});
+
+describe('ROK-2160 away window under a non-UTC session time zone', () => {
+  it('6. a grant made 2h into the away window is caught when the session is UTC+14', async () => {
+    const s = await seed(null);
+    const grantAt = new Date(T1.getTime() + 2 * 3_600_000);
+    const written = await testApp.db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL TIME ZONE 'Pacific/Kiritimati'`);
+      // What NOW() writes in this session: the +14 wall clock, naive.
+      await tx
+        .update(schema.users)
+        .set({
+          deactivatedAt: sql`(${T1.toISOString()}::timestamptz)::timestamp`,
+        })
+        .where(eq(schema.users.id, s.ownerA));
+      await tx.insert(schema.guildEditors).values({
+        guildId: s.guildId,
+        kind: 'member',
+        guildMemberId: s.memberId,
+        createdAt: grantAt,
+      });
+      const since = await lockDeactivatedAt(tx, s.ownerA);
+      if (typeof since !== 'string') throw new Error('A has no deactivated_at');
+      await tx
+        .update(schema.users)
+        .set({ deactivatedAt: null })
+        .where(eq(schema.users.id, s.ownerA));
+      return auditOwnerReactivated(tx, s.ownerA, since, null);
+    });
+    expect(written).toBe(1);
   });
 });

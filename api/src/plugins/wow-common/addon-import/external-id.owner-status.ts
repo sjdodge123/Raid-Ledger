@@ -32,21 +32,27 @@ export async function auditOwnerDeactivated(
   await auditGuidReleases(tx, await heldGuidsOf(tx, userId), actorId);
 }
 
-/** The user's `deactivated_at`, row-locked; undefined = no such user. */
+/**
+ * The user's `deactivated_at`, row-locked, as Postgres text; undefined = no
+ * such user. Text, not a JS Date: the column is a naive `timestamp` written by
+ * `NOW()` in the session time zone, and is compared to timestamptz grants in
+ * SQL with the same session cast (review r2 M2) — a JS round-trip reads it as
+ * UTC and is wrong whenever the session time zone is not UTC.
+ */
 export async function lockDeactivatedAt(
   tx: AddonImportTx,
   userId: number,
-): Promise<Date | null | undefined> {
+): Promise<string | null | undefined> {
   const [row] = await tx
-    .select({ at: users.deactivatedAt })
+    .select({ at: sql<string | null>`${users.deactivatedAt}::text` })
     .from(users)
     .where(eq(users.id, userId))
     .for('update');
   return row ? row.at : undefined;
 }
 
-/** A member grant on the row made after `since`. */
-function grantedSince(tx: AddonImportTx, since: Date) {
+/** A member grant on the row made after `since` (naive timestamp text). */
+function grantedSince(tx: AddonImportTx, since: string) {
   return exists(
     tx
       .select({ one: sql`1` })
@@ -55,20 +61,21 @@ function grantedSince(tx: AddonImportTx, since: Date) {
         and(
           eq(guildEditors.guildMemberId, guildMembers.id),
           eq(guildEditors.kind, 'member'),
-          gt(guildEditors.createdAt, since),
+          gt(guildEditors.createdAt, sql`${since}::timestamp`),
         ),
       ),
   );
 }
 
 /**
- * Call after `deactivated_at` is cleared (same tx), with the value it had.
+ * Call after `deactivated_at` is cleared (same tx), with the value it had
+ * ({@link lockDeactivatedAt}'s text).
  * @returns audits written.
  */
 export async function auditOwnerReactivated(
   tx: AddonImportTx,
   userId: number,
-  deactivatedAt: Date,
+  deactivatedAt: string,
   actorId: number | null,
 ): Promise<number> {
   const won = await tx

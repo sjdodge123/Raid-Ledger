@@ -218,7 +218,7 @@ describe('runBan', () => {
 
   it('ROK-2160: no GUID audit when the user was already deactivated', async () => {
     banUserById.mockResolvedValue({ ...TARGET });
-    lockDeactivatedAt.mockResolvedValueOnce(new Date('2026-01-01'));
+    lockDeactivatedAt.mockResolvedValueOnce('2026-01-01 00:00:00');
     cancelAll.mockResolvedValue(0);
     await runBan(makeDeps(), banInput);
     expect(auditOwnerDeactivated).not.toHaveBeenCalled();
