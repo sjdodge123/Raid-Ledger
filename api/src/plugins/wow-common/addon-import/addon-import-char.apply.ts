@@ -13,8 +13,10 @@ import {
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
 import {
+  carriedCompletedCapturedAtSql,
   carriedCompletedDataSql,
   needsCompletedCarry,
+  sentCompletedCapturedAt,
 } from './addon-import-char.quests-carry';
 
 /** ROK-1724 §4.3 Apply — section `char`: one snapshot row per character. */
@@ -132,16 +134,24 @@ async function upsertChar(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
 ): Promise<boolean> {
+  const capturedAt = fromUnix(payload.exportedAt);
   const values = {
     schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
     data: payload.data,
-    capturedAt: fromUnix(payload.exportedAt),
+    capturedAt,
+    // ROK-2144: a log-only insert has no list → null; the carry below keeps
+    // the stored list's own date on conflict.
+    completedCapturedAt: sentCompletedCapturedAt(payload.data, capturedAt),
     importedAt: new Date(),
     payloadSha256: ctx.sha256,
   };
   const t = characterAddonSnapshots;
   const set = needsCompletedCarry(payload.data)
-    ? { ...values, data: carriedCompletedDataSql(t.data) }
+    ? {
+        ...values,
+        data: carriedCompletedDataSql(t.data),
+        completedCapturedAt: carriedCompletedCapturedAtSql(t),
+      }
     : values;
   const rows = await ctx.tx
     .insert(t)
