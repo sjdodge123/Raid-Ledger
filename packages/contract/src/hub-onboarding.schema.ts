@@ -19,12 +19,40 @@ export const HubOnboardingKeySchema = z.enum([
     'hub-setup-checklist',
     /** ROK-2056 — the hub Overview's "install the Companion" card, dismissed per hub. */
     'companion-install',
+    /** ROK-2153 — the hub Overview's "claim your character" prompt, dismissed per hub. */
+    'claim-character',
 ]);
 export type HubOnboardingKey = z.infer<typeof HubOnboardingKeySchema>;
 
 /** Every key the server accepts, for exhaustive web-side switches. */
 export const HUB_ONBOARDING_KEYS: readonly HubOnboardingKey[] =
     HubOnboardingKeySchema.options;
+
+/**
+ * ROK-2153 N4 — keys whose dismissal may carry a `scope` (a provider's
+ * dismissal round, e.g. a BG3 campaign). A scoped dismissal is stored as
+ * `<key>:<scope>` in the `varchar(64)` key column, so the scope never contains
+ * `:` (the split is on the first `:`) and is at most 40 chars
+ * (`'claim-character:'` is 16, 16 + 40 = 56 <= 64).
+ */
+export const HUB_ONBOARDING_SCOPED_KEYS = [
+    'claim-character',
+] as const satisfies readonly HubOnboardingKey[];
+export type HubOnboardingScopedKey =
+    (typeof HUB_ONBOARDING_SCOPED_KEYS)[number];
+
+/** True when `key` may carry a dismissal `scope` (the api 400s any other). */
+export function isHubOnboardingScopedKey(
+    key: HubOnboardingKey,
+): key is HubOnboardingScopedKey {
+    return HUB_ONBOARDING_SCOPED_KEYS.some((k) => k === key);
+}
+
+/** 1-40 chars of `[A-Za-z0-9_.-]` — no `:`, no space. */
+export const HUB_ONBOARDING_SCOPE_RE = /^[A-Za-z0-9_.-]{1,40}$/;
+export const HubOnboardingDismissScopeSchema = z
+    .string()
+    .regex(HUB_ONBOARDING_SCOPE_RE, 'scope must be 1-40 chars of [A-Za-z0-9_.-]');
 
 /**
  * One dismissal. `guildId` is null for a global prompt (the Players card) and
@@ -34,6 +62,8 @@ export const HUB_ONBOARDING_KEYS: readonly HubOnboardingKey[] =
 export const HubOnboardingDismissalSchema = z.object({
     key: HubOnboardingKeySchema,
     guildId: z.number().int().positive().nullable(),
+    /** ROK-2153 N4 — present only on a scoped key's dismissal. */
+    scope: HubOnboardingDismissScopeSchema.optional(),
     dismissedAt: z.string(),
 });
 export type HubOnboardingDismissalDto = z.infer<
@@ -78,8 +108,17 @@ const guildIdQuery = z
 export const HubOnboardingScopeQuerySchema = z
     .object({
         guildId: guildIdQuery,
+        /**
+         * ROK-2153 N4 — a dismissal round for a scoped key (see
+         * `HUB_ONBOARDING_SCOPED_KEYS`); the api rejects it for any other key.
+         */
+        scope: HubOnboardingDismissScopeSchema.optional(),
     })
-    .strict();
+    .strict()
+    .refine((q) => q.scope === undefined || q.guildId !== undefined, {
+        message: 'scope requires guildId',
+        path: ['scope'],
+    });
 export type HubOnboardingScopeQuery = z.infer<
     typeof HubOnboardingScopeQuerySchema
 >;
