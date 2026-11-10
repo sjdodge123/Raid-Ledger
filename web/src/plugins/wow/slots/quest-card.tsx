@@ -14,7 +14,7 @@ import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-
  * The viewer's chain state for this quest + its quest data date: addon
  * snapshot or Armory list (ROK-1748, ROK-2109).
  */
-export interface QuestCardPrereqs { state: QuestPrereqState; asOf: string | null }
+export interface QuestCardPrereqs { state: QuestPrereqState }
 
 interface QuestCardProps {
     quest: EnrichedDungeonQuestDto;
@@ -174,7 +174,7 @@ function QuestCardBody({ quest, hasPrevQuest, prereqTotal, coveredByMe, coveredB
 function QuestPrereqSection({ quest, hasPrevQuest, prereqTotal, prereqs }: {
     quest: EnrichedDungeonQuestDto; hasPrevQuest: boolean; prereqTotal: number; prereqs: QuestCardPrereqs | undefined;
 }) {
-    if (prereqTotal > 0) return <QuestPrereqChain quest={quest} state={prereqs?.state} asOf={prereqs?.asOf} />;
+    if (prereqTotal > 0) return <QuestPrereqChain quest={quest} state={prereqs?.state} />;
     if (!hasPrevQuest) return null;
     return <p className="text-xs text-muted" data-testid="quest-prereq-missing">Prerequisite not in data</p>;
 }
