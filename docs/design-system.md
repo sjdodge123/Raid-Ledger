@@ -602,9 +602,12 @@ is known (no viewer state → no pill, never a "Not done" pill).
 (`web/src/plugins/wow/slots/quest-prereq-chain.tsx`) prefixes each step with a glyph on an INNER span:
 done → `text-success` ✓ + `sr-only` "done", needed → `text-warning` ○ + `sr-only` "needed". The token class
 goes on the inner span because the unlayered `.quest-prereq__step` colour rule beats a Tailwind utility on the
-same element. The chain row stays `flex-wrap` (no horizontal scroll at 375px). A summary line pairs with it
-(`quest-prep-needed-line.tsx`: `text-sm text-warning` "You need N more pre-reqs" / `text-success` "All pre-reqs
-done"); an addon-sourced state adds the shared `formatAddonSourceLine` (`plugins/wow/lib/addon-source-line.ts`)
+same element. The chain row stays `flex-wrap` (no horizontal scroll at 375px). Summary lines pair with it
+under the Quest Prep header (`quest-prep-needed-line.tsx`, counts in `quest-prep-todo.ts`, ROK-2169):
+`text-sm text-warning` "Someone needs to grab X sharable quests" (only while X > 0) and "Each player needs to
+complete Y quest chains" with the viewer's " · you still need N more steps" (warning) or a `text-success`
+" · yours are done" on a `text-muted` line; no snapshot or an unknown step → no suffix. Nothing renders when
+both counts are zero, never an "all done" line; an addon-sourced state adds the shared `formatAddonSourceLine` (`plugins/wow/lib/addon-source-line.ts`)
 as `text-xs text-muted` under the chain. Without a state the chain renders exactly as before.
 **ROK-2144 supersedes the per-chain source line:** the chain no longer dates itself.
 

@@ -10,7 +10,8 @@ import { ForeverQuestImportService } from './forever-quest-import.service';
 
 /**
  * ROK-2143: WoW: Forever classic quest import admin routes. Admin-only and
- * plugin-gated, like the Forever namespace probe. Manual only — no cron.
+ * plugin-gated, like the Forever namespace probe. The import also runs on
+ * its own when the overlay is empty and weekly (ROK-2162).
  */
 @Controller('admin/plugins/blizzard/forever-quests/import')
 @RequirePlugin('blizzard')
