@@ -17,6 +17,7 @@ import {
 import {
   BLIZZARD_QUEST_UPSERT_CHUNK,
   blizzardQuestConflictSet,
+  latestBlizzardOverlayFetchedAt,
   listBlizzardOverlay,
   listStaleQuestIds,
   upsertBlizzardQuests,
@@ -137,5 +138,27 @@ describe('listStaleQuestIds', () => {
     db.orderBy.mockResolvedValueOnce([{ questId: 3 }, { questId: 9 }]);
     expect(await listStaleQuestIds(asDb(db), 'run-2')).toEqual([3, 9]);
     expect(db.where).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('latestBlizzardOverlayFetchedAt (ROK-2144 AC8)', () => {
+  it('returns the newest fetched_at over the whole overlay', async () => {
+    const db = createDrizzleMock();
+    db.from.mockResolvedValueOnce([{ latest: NOW }]);
+    expect(await latestBlizzardOverlayFetchedAt(asDb(db))).toEqual(NOW);
+    expect(db.from).toHaveBeenCalledWith(wowDungeonQuestBlizzard);
+    expect(db.where).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the overlay is empty (never imported)', async () => {
+    const db = createDrizzleMock();
+    db.from.mockResolvedValueOnce([{ latest: null }]);
+    expect(await latestBlizzardOverlayFetchedAt(asDb(db))).toBeNull();
+  });
+
+  it('returns null when the driver yields no row', async () => {
+    const db = createDrizzleMock();
+    db.from.mockResolvedValueOnce([]);
+    expect(await latestBlizzardOverlayFetchedAt(asDb(db))).toBeNull();
   });
 });

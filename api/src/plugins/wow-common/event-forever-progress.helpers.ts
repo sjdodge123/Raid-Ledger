@@ -194,6 +194,8 @@ export function buildViewerPrereqs(
   return {
     characterId: member.characterId,
     asOf: member.snapshot.capturedAt,
+    asOfSource: member.snapshot.source ?? 'addon',
+    inProgressAsOf: member.snapshot.inProgressAsOf ?? null,
     quests,
     neededTotal: countNeeded(quests, (id) => doneFn(id).unknown),
   };

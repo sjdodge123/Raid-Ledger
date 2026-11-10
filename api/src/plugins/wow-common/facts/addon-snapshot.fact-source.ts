@@ -26,6 +26,8 @@ interface SnapshotRow {
   characterId: string;
   data: AddonCharSnapshotData;
   capturedAt: Date;
+  /** Completed list's own capture time (ROK-2144); null = use `capturedAt`. */
+  completedCapturedAt: Date | null;
   /** Snapshot schema; enchant ids are stored from schema 2 (ROK-1915). */
   schema: number;
   class: string | null;
@@ -34,7 +36,11 @@ interface SnapshotRow {
 /** Snapshot schema whose gear items carry `enchantId` (ROK-1915). */
 const ENCHANTS_SCHEMA = 2;
 
-/** One LedgerLink `char` snapshot as facts; asOf = its capture time. */
+/**
+ * One LedgerLink `char` snapshot as facts; asOf = its capture time, except the
+ * quests fact, dated by the completed list's own capture (a log-only export
+ * carries an older list forward — ROK-2144, same rule as `addonFact`).
+ */
 function toCandidates(row: SnapshotRow): WowFactCandidates {
   const { data, capturedAt: asOf } = row;
   const out: WowFactCandidates = {
@@ -47,7 +53,10 @@ function toCandidates(row: SnapshotRow): WowFactCandidates {
   }
   const ilvl = averageIlvl(data.gear);
   if (ilvl !== null) out.ilvl = fact(ilvl, 'addon', asOf);
-  if (data.quests) out.quests = fact(data.quests, 'addon', asOf);
+  if (data.quests) {
+    const questsAsOf = row.completedCapturedAt ?? asOf;
+    out.quests = fact(data.quests, 'addon', questsAsOf);
+  }
   const role = talentRoleHint(row.class, data.talents);
   if (role) out.role = fact(role, 'addon', asOf);
   return out;
@@ -86,6 +95,7 @@ export class AddonSnapshotFactSource implements WowFactSource {
         characterId: snap.characterId,
         data: snap.data,
         capturedAt: snap.capturedAt,
+        completedCapturedAt: snap.completedCapturedAt,
         schema: snap.schema,
         class: c.class,
       })

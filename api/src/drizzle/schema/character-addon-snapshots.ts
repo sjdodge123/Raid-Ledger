@@ -35,6 +35,15 @@ export const characterAddonSnapshots = pgTable(
     data: jsonb('data').$type<AddonCharSnapshotData>().notNull(),
     /** The addon's `exportedAt` — the in-game capture time. */
     capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    /**
+     * ROK-2144: capture time of the stored `data.quests.completed` list. A
+     * log-only export (ROK-2125 carry) advances `captured_at` but keeps the
+     * older list, so the list's own date lives here. NULL = no completed list
+     * stored (readers fall back to `captured_at` for pre-column rows).
+     */
+    completedCapturedAt: timestamp('completed_captured_at', {
+      withTimezone: true,
+    }),
     importedAt: timestamp('imported_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

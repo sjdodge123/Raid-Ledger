@@ -12,6 +12,7 @@ import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { slugToContentVariant } from '../lib/wow-variant-config';
 import { QuestCard, type QuestCardPrereqs } from './quest-card';
 import { QuestPrepNeededLine } from './quest-prep-needed-line';
+import { QuestPrepAsOfLine } from './quest-prep-asof-line';
 import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
 import './quest-prep-panel.css';
 
@@ -71,7 +72,7 @@ function useCoverageMap(coverage: QuestCoverageEntry[] | undefined) {
 /** ROK-1748: index the viewer's chain state by questId for the cards. */
 function usePrereqsByQuest(prereqs: EventQuestPrereqsResponse | undefined) {
     return useMemo(() => new Map<number, QuestCardPrereqs>(
-        (prereqs?.quests ?? []).map((state) => [state.questId, { state, asOf: prereqs?.asOf ?? null }]),
+        (prereqs?.quests ?? []).map((state) => [state.questId, { state }]),
     ), [prereqs]);
 }
 
@@ -212,6 +213,7 @@ function QuestPrepHeader({ count, prereqs }: { count: number; prereqs: EventQues
             <span className="text-xs text-muted">{count} quests</span>
         </div>
         <QuestPrepNeededLine prereqs={prereqs} />
+        <QuestPrepAsOfLine prereqs={prereqs} />
         </>
     );
 }

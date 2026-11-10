@@ -5,7 +5,7 @@
  * surface through `listStaleQuestIds`. One statement per chunk — no
  * catch-and-retry.
  */
-import { asc, inArray, ne, sql, type SQL } from 'drizzle-orm';
+import { asc, inArray, max, ne, sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
@@ -98,4 +98,15 @@ export async function listStaleQuestIds(
     .where(ne(t.runId, runId))
     .orderBy(asc(t.questId));
   return rows.map((row) => row.questId);
+}
+
+/**
+ * ROK-2144: when the catalogue players see was last fetched from Blizzard —
+ * the newest `fetched_at` across the overlay. Null when never imported.
+ */
+export async function latestBlizzardOverlayFetchedAt(
+  db: Db,
+): Promise<Date | null> {
+  const rows = await db.select({ latest: max(t.fetchedAt) }).from(t);
+  return rows[0]?.latest ?? null;
 }
