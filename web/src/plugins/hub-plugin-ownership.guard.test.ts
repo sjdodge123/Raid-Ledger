@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getHubGameWidgetRegistrations, type HubGameWidget } from './hub-game-widgets';
 import { collectCompanionPrompts, companionPromptDrift, type CompanionPromptRegistration } from '../test/hub-companion-prompt-ownership';
+import { claimProviderDrift, collectClaimProviders, type ClaimProviderRegistration } from '../test/hub-claim-provider-ownership';
 
 /** Every plugin folder's `register.ts`, discovered — a new plugin is checked automatically (review M2). */
 const PLUGIN_REGISTERS = import.meta.glob('./*/register.ts', { eager: true });
@@ -198,5 +199,47 @@ describe('W7 — every Companion prompt names its own rlCompanion requirement, a
         expect(companionPromptDrift(regs, HUB_PLUGIN_MANIFESTS)).toEqual([
             'HUB_PLUGIN_MANIFESTS.blizzard.setup requirement "ledgerlink-companion" carries rlCompanion but no companion prompt registers it',
         ]);
+    });
+});
+
+/**
+ * ROK-2153 — claim providers. Two-way, like W7: a web claim provider belongs to a plugin
+ * whose manifest declares a `claim-provider` behaviour (the api guard pins the api adapter
+ * to the same declaration) and stays inside its gameSlugs; a declared `claim-provider`
+ * with no web registration is reported — its claim path would never reach a member.
+ */
+describe('W8 — every claim provider is declared as a claim-provider behaviour, and back', () => {
+    const providers = collectClaimProviders();
+    const declared = withManifest('valheim', (v) => ({ ...v, behaviours: [...v.behaviours, { id: 'valheim', kind: 'claim-provider', label: 'Claim a character' }] }));
+    const provider = (over: Partial<ClaimProviderRegistration>): ClaimProviderRegistration =>
+        ({ owner: 'valheim', games: ['valheim'], kinds: ['game_server'], ...over });
+
+    it('finds no drift between the live registry and the manifests', () => {
+        expect(claimProviderDrift(providers, HUB_PLUGIN_MANIFESTS)).toEqual([]);
+    });
+
+    it('accepts a provider whose plugin declares claim-provider inside its gameSlugs', () => {
+        expect(claimProviderDrift([...providers, provider({})], declared)).toEqual([]);
+    });
+
+    it('names a provider whose plugin declares no claim-provider, or has no manifest', () => {
+        expect(claimProviderDrift([...providers, provider({})], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['claim provider valheim is registered but HUB_PLUGIN_MANIFESTS.valheim.behaviours declares no claim-provider']);
+        expect(claimProviderDrift([...providers, provider({ owner: 'ghost' })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['claim provider ghost has no HUB_PLUGIN_MANIFESTS.ghost']);
+        expect(claimProviderDrift([...providers, provider({ owner: '' })], HUB_PLUGIN_MANIFESTS))
+            .toEqual(['claim provider (no owner) has no HUB_PLUGIN_MANIFESTS.(no owner)']);
+    });
+
+    it('names a provider outside its plugin gameSlugs, or with no games or kinds', () => {
+        expect(claimProviderDrift([...providers, provider({ games: ['enshrouded'] })], declared))
+            .toEqual(['claim provider valheim targets game "enshrouded", not in HUB_PLUGIN_MANIFESTS.valheim.gameSlugs']);
+        expect(claimProviderDrift([...providers, provider({ games: [], kinds: [] })], declared))
+            .toEqual(['claim provider valheim lists no games', 'claim provider valheim lists no hub kinds']);
+    });
+
+    it('names a declared claim-provider no web provider registers', () => {
+        expect(claimProviderDrift(providers.filter((p) => p.owner !== 'valheim'), declared))
+            .toEqual(['HUB_PLUGIN_MANIFESTS.valheim declares a claim-provider behaviour but no web claim provider registers it']);
     });
 });
