@@ -4,6 +4,7 @@
  * Validates ITAD enrichment during IGDB sync: lookup, DB update,
  * tag population via getGameInfo, and error handling.
  */
+import { Logger } from '@nestjs/common';
 import { enrichSyncedGamesWithItad } from './igdb-sync.helpers';
 import type { ItadGame } from '../itad/itad.constants';
 
@@ -25,7 +26,12 @@ function createEnrichMockDb(
   const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
   const update = jest.fn().mockReturnValue({ set: updateSet });
 
-  const selectWhere = jest.fn().mockResolvedValue(gamesWithSteamId);
+  // First SELECT = the games-with-steam-id query; later SELECTs = the
+  // ROK-2120 itad_game_id owner pre-check, which finds no other owner.
+  const selectWhere = jest
+    .fn()
+    .mockResolvedValueOnce(gamesWithSteamId)
+    .mockResolvedValue([]);
   const selectFrom = jest.fn().mockReturnValue({ where: selectWhere });
   const select = jest.fn().mockReturnValue({ from: selectFrom });
 
@@ -41,7 +47,14 @@ function createEnrichMockDb(
     cb(tx),
   );
 
-  return { select, update, updateSet, updateWhere, transaction };
+  return {
+    select,
+    update,
+    updateSet,
+    updateWhere,
+    selectWhere,
+    transaction,
+  };
 }
 
 function makeItadGame(overrides: Partial<ItadGame> = {}): ItadGame {
@@ -359,5 +372,33 @@ describe('AC: getGameInfo failure degrades gracefully — game still enriched', 
     );
     // A rate-limited/failed info call must not wipe tags stored earlier.
     expect(mockDb.updateSet.mock.calls[0][0]).not.toHaveProperty('itadTags');
+  });
+});
+
+describe('ROK-2120: itad_game_id already held by another row', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('reports the duplicate pair and never writes the colliding itad_game_id', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const mockDb = createEnrichMockDb([{ id: 12, steamAppId: 4040 }]);
+    mockDb.selectWhere.mockReset();
+    mockDb.selectWhere
+      .mockResolvedValueOnce([{ id: 12, steamAppId: 4040 }])
+      .mockResolvedValueOnce([{ id: 3 }]);
+    const onGameChanged = jest.fn();
+
+    const count = await enrichSyncedGamesWithItad(
+      mockDb as never,
+      jest.fn().mockResolvedValue(makeItadGame({ id: 'uuid-dup' })),
+      jest.fn().mockResolvedValue(null),
+      onGameChanged,
+    );
+
+    expect(count).toBe(0);
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(onGameChanged).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      'IGDB duplicate pair skipped: keep=3 dup=12 key=itad_game_id',
+    );
   });
 });

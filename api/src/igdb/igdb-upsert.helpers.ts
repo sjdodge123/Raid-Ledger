@@ -5,10 +5,12 @@ import * as schema from '../drizzle/schema';
 import { GameDetailDto } from '@raid-ledger/contract';
 import { IGDB_CONFIG, type IgdbApiGame } from './igdb.constants';
 import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
+import { findGameIdsByNormalizedName } from './igdb-name-dedup.helpers';
 import {
-  findGameByNormalizedName,
-  findGameIdsByNormalizedName,
-} from './igdb-name-dedup.helpers';
+  batchMergeBysteamAppId,
+  findByNormalizedName,
+  findBySteamAppId,
+} from './igdb-merge-targets.helpers';
 import { withGameNameLock } from './games-name-lock.helpers';
 import { withTasteInputDiff } from './taste-input-change.helpers';
 import {
@@ -17,6 +19,13 @@ import {
 } from './igdb-upsert-sets.helpers';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
 import { fetchCoversInChunks } from './igdb-cover-backfill.helpers';
+import {
+  classifyMerge,
+  guardInsertRows,
+  loadKeyOwners,
+  recordOwner,
+  type KeyOwners,
+} from './igdb-upsert-collisions.helpers';
 
 const logger = new Logger('IgdbUpsertHelpers');
 
@@ -50,65 +59,47 @@ async function upsertSingleGameRowLocked(
   tx: PostgresJsDatabase<typeof schema>,
   row: ReturnType<typeof mapApiGameToDbRow>,
 ): Promise<number | null> {
-  if (row.steamAppId) {
-    const bySteam = await mergeBysteamAppId(tx, row);
-    if (bySteam != null) return bySteam;
+  // ROK-2120: classify every write against the current key owners first, so
+  // a twin row holding the igdb_id/slug/steam id is reported, not violated.
+  const owners = await loadKeyOwners(tx, [row]);
+  const target = await findSingleMergeTarget(tx, row);
+  if (target != null) {
+    const verdict = classifyMerge(target.id, row, owners);
+    if (verdict === 'skip') return null;
+    if (verdict === 'merge') {
+      await applyIgdbMergeToRow(tx, target.id, row, target.reason);
+      return target.id;
+    }
   }
-  const byName = await mergeByNormalizedName(tx, row);
-  if (byName != null) return byName;
-
+  const [guarded] = guardInsertRows([row], owners);
+  if (guarded === undefined) return null;
   // RETURNING covers both branches of the upsert, replacing the follow-up
   // SELECT the pre-ROK-1438 code needed to resolve the id.
   const inserted = await tx
     .insert(schema.games)
-    .values(row)
+    .values(guarded)
     .onConflictDoUpdate({
       target: schema.games.igdbId,
-      set: buildUpsertSet(row),
+      set: buildUpsertSet(guarded),
     })
     .returning({ id: schema.games.id });
   return inserted[0]?.id ?? null;
 }
 
-/**
- * Merge IGDB data into an existing row whose canonical name matches (ROK-1113).
- * Returns the merged row id, or null when no row matched.
- *
- * Skip if the existing row has a *different* non-null igdbId — IGDB ids are
- * canonical, so a mismatch signals a sequel/variant we should NOT collapse.
- */
-async function mergeByNormalizedName(
-  tx: PostgresJsDatabase<typeof schema>,
-  row: ReturnType<typeof mapApiGameToDbRow>,
-): Promise<number | null> {
-  const match = await findGameByNormalizedName(tx, row.name);
-  if (!match) return null;
-  if (match.igdbId != null && match.igdbId !== row.igdbId) return null;
-  await applyIgdbMergeToRow(tx, match.id, row);
-  return match.id;
-}
+/** Why a row was merged into an existing one — named in the merge log. */
+type MergeReason = 'steamAppId' | 'normalized name';
 
-/**
- * Merge IGDB data into an existing ITAD-sourced game by steamAppId.
- * Returns the merged row id, or null when no row matched.
- */
-async function mergeBysteamAppId(
+/** Existing row the single path should merge into (steam first, then name). */
+async function findSingleMergeTarget(
   tx: PostgresJsDatabase<typeof schema>,
-  row: ReturnType<typeof mapApiGameToDbRow>,
-): Promise<number | null> {
-  const [existing] = await tx
-    .select({ id: schema.games.id })
-    .from(schema.games)
-    .where(
-      and(
-        eq(schema.games.steamAppId, row.steamAppId!),
-        isNull(schema.games.igdbId),
-      ),
-    )
-    .limit(1);
-  if (!existing) return null;
-  await applyIgdbMergeToRow(tx, existing.id, row);
-  return existing.id;
+  row: GameRow,
+): Promise<{ id: number; reason: MergeReason } | null> {
+  if (row.steamAppId) {
+    const bySteam = await findBySteamAppId(tx, row.steamAppId);
+    if (bySteam != null) return { id: bySteam, reason: 'steamAppId' };
+  }
+  const byName = await findByNormalizedName(tx, row);
+  return byName == null ? null : { id: byName, reason: 'normalized name' };
 }
 
 /** Filter out banned games from API results. */
@@ -133,41 +124,12 @@ async function filterBannedGames(
 /** Row type produced by mapApiGameToDbRow. */
 type GameRow = ReturnType<typeof mapApiGameToDbRow>;
 
-/**
- * Batch pre-check: find existing ITAD-sourced game rows matching any of the
- * provided steamAppIds (no igdbId set). Returns a map of steamAppId -> row id
- * so the caller can merge instead of insert.
- * Replaces per-row SELECTs with ONE IN-clause SELECT (ROK-1024).
- */
-async function batchMergeBysteamAppId(
-  db: PostgresJsDatabase<typeof schema>,
-  steamAppIds: number[],
-): Promise<Map<number, number>> {
-  const map = new Map<number, number>();
-  if (steamAppIds.length === 0) return map;
-  const existing = await db
-    .select({
-      id: schema.games.id,
-      steamAppId: schema.games.steamAppId,
-    })
-    .from(schema.games)
-    .where(
-      and(
-        inArray(schema.games.steamAppId, steamAppIds),
-        isNull(schema.games.igdbId),
-      ),
-    );
-  for (const row of existing) {
-    if (row.steamAppId != null) map.set(row.steamAppId, row.id);
-  }
-  return map;
-}
-
-/** Apply IGDB data onto an existing ITAD-sourced row identified by internal id. */
+/** Apply IGDB data onto an existing row; the log names the real `reason`. */
 async function applyIgdbMergeToRow(
   db: PostgresJsDatabase<typeof schema>,
   existingId: number,
   row: GameRow,
+  reason: MergeReason,
 ): Promise<void> {
   await db
     .update(schema.games)
@@ -179,7 +141,7 @@ async function applyIgdbMergeToRow(
     })
     .where(eq(schema.games.id, existingId));
   logger.log(
-    `Merged IGDB ${row.igdbId} into existing game ${existingId} by steamAppId`,
+    `Merged IGDB ${row.igdbId} into existing game ${existingId} by ${reason}`,
   );
 }
 
@@ -308,8 +270,11 @@ async function mergeExistingRows(
     normalizeForDedup,
   );
 
-  await applyMergesInIdOrder(db, merges, nameMerges);
-  return insertsAfterName;
+  // ROK-2120: owners are read before any merge so a colliding write is never
+  // issued; rerouted rows join the insert, which is guarded the same way.
+  const owners = await loadKeyOwners(db, rows);
+  const rerouted = await applyMergesInIdOrder(db, merges, nameMerges, owners);
+  return guardInsertRows([...insertsAfterName, ...rerouted], owners);
 }
 
 /**
@@ -327,17 +292,21 @@ async function applyMergesInIdOrder(
   db: PostgresJsDatabase<typeof schema>,
   merges: Array<{ id: number; row: GameRow }>,
   nameMerges: Array<{ id: number; row: GameRow }>,
-): Promise<void> {
-  const byName = new Set(nameMerges.map((m) => m.id));
-  const ordered = [...merges, ...nameMerges].sort((a, b) => a.id - b.id);
-  for (const { id, row } of ordered) {
-    await applyIgdbMergeToRow(db, id, row);
-    if (byName.has(id)) {
-      logger.log(
-        `Merged IGDB ${row.igdbId} into existing game ${id} by normalized name`,
-      );
-    }
+  owners: KeyOwners,
+): Promise<GameRow[]> {
+  const ordered = [
+    ...merges.map((m) => ({ ...m, reason: 'steamAppId' as const })),
+    ...nameMerges.map((m) => ({ ...m, reason: 'normalized name' as const })),
+  ].sort((a, b) => a.id - b.id);
+  const rerouted: GameRow[] = [];
+  for (const { id, row, reason } of ordered) {
+    const verdict = classifyMerge(id, row, owners);
+    if (verdict === 'reroute') rerouted.push(row);
+    if (verdict !== 'merge') continue;
+    await applyIgdbMergeToRow(db, id, row, reason);
+    recordOwner(owners, id, row);
   }
+  return rerouted;
 }
 
 /** Fetch games with missing cover art from the database. */
