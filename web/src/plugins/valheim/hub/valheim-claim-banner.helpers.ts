@@ -1,6 +1,6 @@
 /**
- * ROK-1933 Part 1 — the claim banner's copy, visibility rule and the Overview
- * dismiss memory. Pure helpers so the rule is unit-tested apart from the UI.
+ * ROK-1933 Part 1 — the claim banner's copy and visibility rule.
+ * Pure helpers so the rule is unit-tested apart from the UI.
  */
 import type { GuildViewerAccess } from '@raid-ledger/contract';
 import { hubBellVisible } from '../../../components/hub/hub-notify-bell.helpers';
@@ -59,27 +59,6 @@ export function claimBannerVariant(
     if (viewerId === null || status === null) return null;
     if (status.viewerHasClaim || status.unclaimedCount === 0) return null;
     return steamLinked ? 'pick-only' : 'link-steam';
-}
-
-const dismissKey = (serverId: number): string =>
-    `rl:valheim-claim-banner-dismissed:${serverId}`;
-
-/** Whether this browser dismissed the Overview banner for this server. */
-export function readClaimBannerDismissed(serverId: number): boolean {
-    try {
-        return localStorage.getItem(dismissKey(serverId)) === '1';
-    } catch {
-        return false;
-    }
-}
-
-/** Remember an Overview dismiss in this browser (storage refusal is ignored). */
-export function writeClaimBannerDismissed(serverId: number): void {
-    try {
-        localStorage.setItem(dismissKey(serverId), '1');
-    } catch {
-        // Private mode / quota: the dismiss lasts for this render only.
-    }
 }
 
 /**

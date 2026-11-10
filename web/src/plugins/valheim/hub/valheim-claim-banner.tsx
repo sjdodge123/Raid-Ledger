@@ -1,19 +1,15 @@
 /**
  * ROK-1933 Part 1 — the hub claim banner: a §4.7 neutral instruction callout
  * (D2) asking a viewer with no claim on this server to link Steam or pick
- * their character. Always shown on the Characters tab; dismissible on the
- * Overview (ITEM.md Q3 recommendation, remembered per browser).
+ * their character. Shown on the Characters tab; the Overview uses the core
+ * claim prompt instead (ROK-2153 S4).
  */
 import type { JSX } from 'react';
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../../components/ui/button';
 import { useSteamLink } from '../../../hooks/use-steam-link';
 import { useValheimCharacters } from '../hooks/use-valheim-characters';
-import {
-    useClaimBannerDismissed,
-    useClaimBannerVariant,
-} from '../hooks/use-valheim-claim-banner';
+import { useClaimBannerVariant } from '../hooks/use-valheim-claim-banner';
 import {
     CLAIM_BANNER_COPY as COPY,
     withUnclaimedParam,
@@ -26,8 +22,6 @@ export interface ValheimClaimBannerViewProps {
     onPick: () => void;
     onLinkSteam?: (() => void) | undefined;
     linkPending?: boolean | undefined;
-    /** Present = the × is drawn (Overview only). */
-    onDismiss?: (() => void) | undefined;
 }
 
 function BannerActions(props: ValheimClaimBannerViewProps): JSX.Element {
@@ -47,45 +41,24 @@ function BannerActions(props: ValheimClaimBannerViewProps): JSX.Element {
 /** §4.7 neutral instruction callout (spec Part 1 "Look"); the desktop actions top-align with the copy (approved mockup). */
 const CALLOUT_CLS = 'relative flex flex-col gap-3 rounded-lg border border-edge bg-overlay/30 p-4 lg:flex-row lg:items-start';
 
-/**
- * The Overview ×, pinned to the callout's top-right corner. The wrapper is what
- * is positioned: `Button` carries its own `relative`, which would beat an
- * `absolute` passed in `className` and drop the × into the flow.
- */
-function DismissCorner({ onDismiss }: { onDismiss: () => void }): JSX.Element {
-    return (
-        <div className="absolute right-1 top-1" data-testid="claim-banner-dismiss">
-            <Button iconOnly aria-label={COPY.dismiss} variant="ghost" size="sm" onClick={onDismiss}>
-                <XMarkIcon className="h-4 w-4" aria-hidden="true" />
-            </Button>
-        </div>
-    );
-}
-
 /** The callout itself — copy and buttons only, no data. */
 export function ValheimClaimBannerView(
     props: ValheimClaimBannerViewProps,
 ): JSX.Element {
-    const { variant, serverName, onDismiss } = props;
+    const { variant, serverName } = props;
     const link = variant === 'link-steam';
-    // The Overview card is chromeless (`chrome: 'none'`), so this callout is the
-    // one "Claim your character" landmark on both surfaces. With the × in the
-    // corner, phone reserves room beside the copy only (the stacked buttons keep
-    // the full width); ≥1024px reserves it beside the button row.
-    const reserve = onDismiss ? { root: 'lg:pr-12', copy: 'pr-10 lg:pr-0' } : { root: 'mb-4', copy: '' };
     return (
         <section
             aria-label="Claim your character"
-            className={`${CALLOUT_CLS} ${reserve.root}`}
+            className={`${CALLOUT_CLS} mb-4`}
         >
-            <div className={`min-w-0 flex-1 ${reserve.copy}`}>
+            <div className="min-w-0 flex-1">
                 <h3 className="text-base font-semibold text-foreground">
                     {link ? COPY.linkHeading(serverName) : COPY.pickHeading(serverName)}
                 </h3>
                 <p className="mt-1 text-sm text-secondary">{link ? COPY.linkBody : COPY.pickBody}</p>
             </div>
             <BannerActions {...props} />
-            {onDismiss && <DismissCorner onDismiss={onDismiss} />}
         </section>
     );
 }
@@ -103,20 +76,17 @@ function pickUnclaimed(navigate: NavigateFunction, search: string, hash: string)
 
 export interface ValheimClaimBannerProps {
     serverId: number;
-    /** Overview: draw the × and honour a remembered dismiss. */
-    dismissible?: boolean | undefined;
 }
 
 /** The wired banner: derives its variant, links Steam, jumps to the unclaimed list. */
-export function ValheimClaimBanner({ serverId, dismissible = false }: ValheimClaimBannerProps): JSX.Element | null {
+export function ValheimClaimBanner({ serverId }: ValheimClaimBannerProps): JSX.Element | null {
     const variant = useClaimBannerVariant(serverId);
     // Page 1 is cached with the Characters tab's own first page; only its server name is read.
     const serverName = useValheimCharacters(serverId).data?.[0]?.serverName;
-    const [dismissed, dismiss] = useClaimBannerDismissed(serverId);
     const { linkSteam, isLinkPending } = useSteamLink();
     const navigate = useNavigate();
     const { pathname, search, hash } = useLocation();
-    if (variant === null || (dismissible && dismissed)) return null;
+    if (variant === null) return null;
     return (
         <ValheimClaimBannerView
             variant={variant}
@@ -124,7 +94,6 @@ export function ValheimClaimBanner({ serverId, dismissible = false }: ValheimCla
             onLinkSteam={() => linkSteam(`${pathname}#characters`)}
             linkPending={isLinkPending}
             onPick={() => pickUnclaimed(navigate, withUnclaimedParam(search, true), hash)}
-            onDismiss={dismissible ? dismiss : undefined}
         />
     );
 }

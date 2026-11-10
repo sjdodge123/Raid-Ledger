@@ -223,7 +223,9 @@ describe('W8 — every claim provider is declared as a claim-provider behaviour,
     });
 
     it('names a provider whose plugin declares no claim-provider, or has no manifest', () => {
-        expect(claimProviderDrift([...providers, provider({})], HUB_PLUGIN_MANIFESTS))
+        // Valheim declares a claim-provider since S4, so the fixture strips it rather than lean on the live manifest.
+        const undeclared = withManifest('valheim', (v) => ({ ...v, behaviours: v.behaviours.filter((b) => b.kind !== 'claim-provider') }));
+        expect(claimProviderDrift([...providers.filter((p) => p.owner !== 'valheim'), provider({})], undeclared))
             .toEqual(['claim provider valheim is registered but HUB_PLUGIN_MANIFESTS.valheim.behaviours declares no claim-provider']);
         expect(claimProviderDrift([...providers, provider({ owner: 'ghost' })], HUB_PLUGIN_MANIFESTS))
             .toEqual(['claim provider ghost has no HUB_PLUGIN_MANIFESTS.ghost']);

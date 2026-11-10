@@ -9,6 +9,7 @@ import {
     type QueryClient,
 } from '@tanstack/react-query';
 import type { ValheimClaimEvent } from '@raid-ledger/contract';
+import { invalidateAllHubClaims } from '../../../components/hub/claim/use-hub-claim';
 import { valheimArmoryKeys } from '../lib/valheim-armory-api';
 import {
     assignValheimOwner,
@@ -38,6 +39,8 @@ export async function invalidateOwnership(
         qc.invalidateQueries({ queryKey: valheimMaterialsKeys.all }),
         // ROK-1854: the plan nets personal chests, which follow the owner too.
         qc.invalidateQueries({ queryKey: valheimRecipesKeys.all }),
+        // ROK-2153 S4 (Codex P2): the core Overview claim prompt of every hub.
+        invalidateAllHubClaims(qc),
     ]);
 }
 

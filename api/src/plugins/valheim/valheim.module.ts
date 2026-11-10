@@ -30,6 +30,7 @@ import { VALHEIM_PROFILE_UPSERTED_HOOK } from './armory/valheim-armory-profile.h
 import { ValheimArmoryClaimsController } from './armory/identity/valheim-armory-claims.controller';
 import { ValheimArmoryClaimsService } from './armory/identity/valheim-armory-claims.service';
 import { ValheimClaimSuggestService } from './armory/identity/valheim-claim-suggest.service';
+import { ValheimHubClaimProvider } from './armory/identity/valheim-hub-claim.provider';
 import { ValheimClaimSuggestCron } from './armory/identity/valheim-claim-suggest.cron';
 import { ValheimClaimSuggestDemoController } from './armory/identity/valheim-claim-suggest-demo.controller';
 import { NotificationModule } from '../../notifications/notification.module';
@@ -130,6 +131,8 @@ import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.modu
     ValheimIdentityService,
     ValheimSteamLinkListener,
     ValheimArmoryClaimsService,
+    // ROK-2153 S4: the core claim-your-character provider.
+    ValheimHubClaimProvider,
     // ROK-1933 L2 suggested-claim DM scan.
     ValheimClaimSuggestService,
     ValheimClaimSuggestCron,

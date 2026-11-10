@@ -61,7 +61,6 @@ const core = {
 
 const valheim = {
   widgets: [
-    { id: 'claim-banner', title: 'Claim your character', layoutKey: 'plugin' },
     { id: 'deaths', title: 'Deaths', layoutKey: 'plugin' },
   ],
   tabs: [
@@ -75,6 +74,7 @@ const valheim = {
     { id: 'valheim', kind: 'scheduled-job', label: 'Imports characters and the map from the server' },
     { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
     { id: 'valheim-death', kind: 'media-subject', label: "Shows one player's death pictures in the Gallery" },
+    { id: 'valheim', kind: 'claim-provider', label: 'Lets players claim their Valheim character on the hub' },
   ],
   gameSlugs: ['valheim'],
   setup: VALHEIM_SETUP,

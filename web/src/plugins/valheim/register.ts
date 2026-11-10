@@ -5,8 +5,7 @@ import { LazyValheimCharactersHubTab } from './hub/valheim-characters-hub-tab-la
 import { LazyValheimMapHubTab } from './hub/valheim-map-hub-tab-lazy';
 import { LazyValheimMaterialsHubTab } from './hub/valheim-materials-hub-tab-lazy';
 import { LazyValheimPlannerHubTab } from './hub/valheim-planner-hub-tab-lazy';
-import { LazyValheimClaimBannerWidget } from './hub/valheim-claim-banner-widget-lazy';
-import { useClaimBannerWidgetVisible } from './hooks/use-valheim-claim-banner';
+import { valheimHubClaimProvider } from './hub/valheim-hub-claim-provider';
 import { LazyValheimDeathsWidget } from './hub/valheim-deaths-widget-lazy';
 import { ValheimDeathsShowAll } from './hub/valheim-deaths-show-all';
 import { useDeathsWidgetVisible } from './hooks/use-valheim-deaths-visible';
@@ -63,20 +62,9 @@ valheim.registerHubGameTab(['valheim'], {
     visible: hasServer,
 });
 
-// ROK-1933 Part 1 — the claim banner on the Overview (dismissible, Q3); members only, server hubs only.
-valheim.registerHubWidget({
-    id: 'claim-banner',
-    title: 'Claim your character',
-    games: ['valheim'],
-    kinds: ['game_server'],
-    order: 5,
-    span: 3,
-    audience: 'members',
-    // The banner is its own §4.7 callout + landmark — no WidgetCard heading over it.
-    chrome: 'none',
-    component: LazyValheimClaimBannerWidget,
-    useVisible: useClaimBannerWidgetVisible,
-});
+// ROK-2153 S4 — "claim your character" on the core Overview prompt (replaces the ROK-1933 Overview
+// claim-banner widget); server hubs only. The Characters tab keeps its own banner.
+valheim.registerHubClaimProvider(valheimHubClaimProvider);
 
 // ROK-1930 — per-player death counts on the Overview, after the core cards (Q7); members + staff
 // (staff resolve as Leader). The route also 404s visitors server-side (D6); hidden with no deaths.

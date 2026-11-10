@@ -22,6 +22,20 @@ export function hubClaimKey(guildId: number): readonly unknown[] {
     return [...guildPageKey(guildId), 'claim'];
 }
 
+/** Where the `'claim'` segment sits in a `hubClaimKey` (right after the hub id). */
+const CLAIM_SEGMENT = guildPageKey(0).length;
+
+/**
+ * Refetch the claim status of EVERY hub — for a claim or owner change made
+ * outside the core prompt (a plugin's own sheet), which does not know the hub.
+ */
+export async function invalidateAllHubClaims(qc: QueryClient): Promise<void> {
+    await qc.invalidateQueries({
+        queryKey: guildPageKey(0).slice(0, -1),
+        predicate: (q) => q.queryKey[CLAIM_SEGMENT] === 'claim',
+    });
+}
+
 /** `['me', 'characters']` — the viewer's character list, which a claim adds to. */
 export const MY_CHARACTERS_KEY = ['me', 'characters'] as const;
 
