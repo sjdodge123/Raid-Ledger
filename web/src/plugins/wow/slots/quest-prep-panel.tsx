@@ -11,7 +11,8 @@ import { useEnrichedQuests, useQuestCoverage, useQuestPrereqs, useUpdateQuestPro
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { slugToContentVariant } from '../lib/wow-variant-config';
 import { QuestCard, type QuestCardPrereqs } from './quest-card';
-import { QuestPrepNeededLine, useQuestPrepTodo } from './quest-prep-needed-line';
+import { QuestPrepNeededLine } from './quest-prep-needed-line';
+import { useQuestPrepTodo } from './use-quest-prep-todo';
 import type { QuestPrepTodo } from './quest-prep-todo';
 import { QuestPrepAsOfLine } from './quest-prep-asof-line';
 import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';

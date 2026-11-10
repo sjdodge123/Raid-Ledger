@@ -3,20 +3,9 @@
  * how many sharable quests someone still has to grab, and how many quest
  * chains each player has to complete, with the viewer's own progress.
  */
-import { useMemo } from 'react';
-import type { EnrichedDungeonQuestDto, EventQuestPrereqsResponse, QuestCoverageEntry } from '@raid-ledger/contract';
-import { summariseQuestPrep, type QuestPrepTodo, type ViewerChainProgress } from './quest-prep-todo';
+import type { QuestPrepTodo, ViewerChainProgress } from './quest-prep-todo';
 
 const plural = (n: number, one: string, many: string): string => (n === 1 ? one : many);
-
-/** Memoised to-do counts for the panel's usable quests. */
-export function useQuestPrepTodo(
-    quests: EnrichedDungeonQuestDto[],
-    coverageMap: Map<number, QuestCoverageEntry>,
-    prereqs: EventQuestPrereqsResponse | undefined,
-): QuestPrepTodo {
-    return useMemo(() => summariseQuestPrep(quests, coverageMap, prereqs), [quests, coverageMap, prereqs]);
-}
 
 function SharableLine({ count }: { count: number }) {
     return (
