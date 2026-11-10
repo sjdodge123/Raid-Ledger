@@ -7,8 +7,8 @@
  * "retired" when its plugin's registrar was synced successfully on the latest
  * sync and its name is not in that registrar's job list. Rows of plugins whose
  * registrar was not synced (inactive, or it threw) and core rows are never
- * retired. A plugin-named job in the SchedulerRegistry (a `@Cron('slug:x')`
- * outside the registrar) counts as live too (ROK-2162).
+ * retired. A plugin-named job in the SchedulerRegistry (a job the plugin
+ * declares with the Cron decorator under the name 'slug:x', outside the registrar) counts as live too (ROK-2162).
  */
 import type * as schema from '../drizzle/schema';
 
