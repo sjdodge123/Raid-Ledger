@@ -73,6 +73,27 @@ describe('Overview prompts — one banner at a time (§4.7)', () => {
         await waitFor(() => { expect(screen.queryByTestId(CLAIM)).toBeNull(); });
     });
 
+    it('while the claim status is loading the Companion prompt waits, then shows when there is nothing to claim', async () => {
+        serve();
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        let claimRequested = false;
+        server.use(http.get(`${API}/guilds/:id/claim`, async () => {
+            claimRequested = true;
+            await held;
+            return HttpResponse.json(buildHubClaimStatus({ candidates: [], unclaimedCount: 0 }));
+        }));
+        const { queryClient } = renderWithProviders(<OverviewPrompts ctx={{ page: page() }} />);
+        // Onboarding and devices have settled; only the held claim GET is in flight.
+        await waitFor(() => { expect(claimRequested).toBe(true); });
+        await waitFor(() => { expect(queryClient.isFetching()).toBe(1); });
+        expect(screen.queryByTestId(COMPANION)).toBeNull();
+        expect(screen.queryByTestId(CLAIM)).toBeNull();
+        release();
+        expect(await screen.findByTestId(COMPANION)).toBeInTheDocument();
+        expect(screen.queryByTestId(CLAIM)).toBeNull();
+    });
+
     it('with no claim provider for the hub, the Companion prompt shows as before', async () => {
         clearHubClaimProviders();
         serve();

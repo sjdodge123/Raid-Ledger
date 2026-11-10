@@ -74,6 +74,8 @@ export interface HubOnboardingPrompt {
     dismiss: (options?: HubOnboardingDismissOptions) => void;
     /** The last dismiss failed; the prompt is back on screen. */
     failed: boolean;
+    /** The dismissal state is known, failed to load, or will never load (signed out). */
+    settled: boolean;
 }
 
 export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingScope = null): HubOnboardingPrompt {
@@ -137,5 +139,6 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         visible: known && !isPromptDismissed(state.data, key, guildId),
         dismiss,
         failed: mutation.isError,
+        settled: !isAuthenticated || state.data !== undefined || state.isError,
     };
 }

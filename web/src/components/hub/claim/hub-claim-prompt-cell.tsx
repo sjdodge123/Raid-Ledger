@@ -9,14 +9,15 @@ import { lazy, Suspense, type JSX } from 'react';
 import type { HubCtx } from '../../../plugins/hub-module';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { gatedHubClaimProvider } from './hub-claim-providers';
+import type { HubClaimShowing } from './hub-claim-prompt';
 
 const HubClaimPrompt = lazy(() => import('./hub-claim-prompt').then((m) => ({ default: m.HubClaimPrompt })));
 
 interface HubClaimPromptCellProps {
     /** Reads only `ctx.page`, so it takes just that slice of the hub context. */
     ctx: Pick<HubCtx, 'page'>;
-    /** Told whether the card is showing, so the Overview shows one banner at a time (§4.7). */
-    onShowingChange?: ((showing: boolean) => void) | undefined;
+    /** Told whether the card is pending, showing or hidden, so the Overview shows one banner at a time (§4.7). */
+    onShowingChange?: ((state: HubClaimShowing) => void) | undefined;
 }
 
 export function HubClaimPromptCell({ ctx, onShowingChange }: HubClaimPromptCellProps): JSX.Element | null {

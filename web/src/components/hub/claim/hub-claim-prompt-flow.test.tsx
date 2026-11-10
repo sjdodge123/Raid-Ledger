@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { useQuery } from '@tanstack/react-query';
 import type { GuildPage, HubClaimStatus } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -29,9 +28,9 @@ const CONTROL_ID = 9;
 const THRALL = buildHubClaimCandidate();
 const JAINA = buildHubClaimCandidate({ id: 'c-2', name: 'Jaina', subtitle: null, match: 'strong', matchReason: 'steam_link' });
 
-function page(id = 7): GuildPage {
+function page(id = 7, gameSlug = 'valheim'): GuildPage {
     return {
-        guild: { id, gameId: 1, kind: 'game_server', name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null, gameSlug: 'valheim' },
+        guild: { id, gameId: 1, kind: 'game_server', name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null, gameSlug },
         importedBy: null,
         viewer: { role: 'member', canEdit: false, canManageEditors: false },
         ranks: [],
@@ -48,11 +47,11 @@ function register(over: Partial<HubClaimProvider> = {}): void {
 }
 
 /** Counts every claim-status and onboarding GET for the subject hub (the control hub, id 9, always shows). */
-const hits = { claim: 0, onboarding: 0 };
+const hits = { claim: 0, onboarding: 0, control: 0 };
 function serveStatus(subject: HubClaimStatus): void {
     server.use(
         http.get(`${API}/guilds/:id/claim`, ({ params }) => {
-            if (Number(params['id']) === CONTROL_ID) return HttpResponse.json(buildHubClaimStatus());
+            if (Number(params['id']) === CONTROL_ID) { hits.control += 1; return HttpResponse.json(buildHubClaimStatus()); }
             hits.claim += 1;
             return HttpResponse.json(subject);
         }),
@@ -68,25 +67,23 @@ async function openListAndClaimThrall(): Promise<void> {
 beforeEach(() => {
     hits.claim = 0;
     hits.onboarding = 0;
+    hits.control = 0;
     vi.mocked(toast.success).mockClear();
     usePluginStore.setState({ activeSlugs: new Set(['core', 'valheim']), initialized: true });
 });
 afterEach(() => { clearHubClaimProviders(); server.resetHandlers(); vi.restoreAllMocks(); });
 
 describe('claim prompt — no provider (AC1)', () => {
-    /** Settles once a query issued in the same render has completed, so any fetch the cell started is counted. */
-    function Probe() {
-        const { data } = useQuery({ queryKey: ['probe'], queryFn: async () => (await fetch(`${API}/__probe`)).json() as Promise<{ ok: boolean }> });
-        return data?.ok === true ? <p>probed</p> : null;
-    }
-
     it('a hub with no claim provider registered fetches nothing and renders nothing', async () => {
+        // Positive control: a provider for another game, so the control hub goes
+        // through the same lazy chunk + onboarding + status path the subject would.
+        register({ games: ['wow'] });
         serveStatus(buildHubClaimStatus());
-        server.use(http.get(`${API}/__probe`, () => HttpResponse.json({ ok: true })));
-        renderWithProviders(<><HubClaimPromptCell ctx={{ page: page() }} /><Probe /></>);
-        expect(await screen.findByText('probed')).toBeInTheDocument();
-        expect(screen.queryByTestId(PROMPT)).toBeNull();
-        expect(hits).toEqual({ claim: 0, onboarding: 0 });
+        renderWithProviders(<><HubClaimPromptCell ctx={{ page: page() }} /><HubClaimPromptCell ctx={{ page: page(CONTROL_ID, 'wow') }} /></>);
+        expect(await screen.findByTestId(PROMPT)).toBeInTheDocument();
+        await waitFor(() => { expect(hits.control).toBe(1); });
+        expect(screen.getAllByTestId(PROMPT)).toHaveLength(1);
+        expect(hits.claim).toBe(0);
     });
 });
 

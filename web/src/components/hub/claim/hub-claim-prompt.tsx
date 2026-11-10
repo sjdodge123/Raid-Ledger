@@ -150,28 +150,39 @@ function ClaimCard({ guildId, status, provider, prompt }: CardProps): JSX.Elemen
     );
 }
 
-/** Reports whether the card is showing (the Overview lets it win over the Companion prompt, §4.7). */
-function useReportShowing(showing: boolean, onShowingChange: ((showing: boolean) => void) | undefined): void {
-    useEffect(() => { onShowingChange?.(showing); }, [showing, onShowingChange]);
-    useEffect(() => () => { onShowingChange?.(false); }, [onShowingChange]);
+/** Where the card stands: still deciding, on screen, or not showing (ROK-2153 r2 MINOR 1). */
+export type HubClaimShowing = 'pending' | 'showing' | 'hidden';
+
+/** Reports the card's state (the Overview holds the Companion prompt until it is `hidden`, §4.7). */
+function useReportShowing(state: HubClaimShowing, onShowingChange: ((state: HubClaimShowing) => void) | undefined): void {
+    useEffect(() => { onShowingChange?.(state); }, [state, onShowingChange]);
+    useEffect(() => () => { onShowingChange?.('hidden'); }, [onShowingChange]);
+}
+
+/** Pending only while a load is in flight: an errored or disabled query settles to `hidden`. */
+function claimShowingState(prompt: HubOnboardingPrompt, claim: { status: HubClaimStatus | undefined; isError: boolean; enabled: boolean }, showing: boolean): HubClaimShowing {
+    if (showing) return 'showing';
+    if (!prompt.settled) return 'pending';
+    const waiting = prompt.visible && claim.enabled && claim.status === undefined && !claim.isError;
+    return waiting ? 'pending' : 'hidden';
 }
 
 interface HubClaimPromptProps {
     guildId: number;
     registration: HubClaimProviderRegistration;
-    onShowingChange?: ((showing: boolean) => void) | undefined;
+    onShowingChange?: ((state: HubClaimShowing) => void) | undefined;
 }
 
 /** Lazy-loaded by `hub-claim-prompt-cell.tsx` once the cheap gates passed; key it by hub. */
 export function HubClaimPrompt({ guildId, registration, onShowingChange }: HubClaimPromptProps): JSX.Element | null {
     const prompt = useHubOnboarding('claim-character', guildId);
-    const { data: status } = useHubClaim(guildId, prompt.visible);
+    const { data: status, isError } = useHubClaim(guildId, prompt.visible);
     const misconfigured = status !== undefined && !canClaimFromCore(status, registration.provider);
     useEffect(() => {
         if (misconfigured) console.error(`[hub-claim] ${registration.pluginSlug}: the claim needs options but the provider has no OptionsStep; not offering it.`);
     }, [misconfigured, registration.pluginSlug]);
     const showing = prompt.visible && status !== undefined && !misconfigured && shouldShowClaimPrompt(status);
-    useReportShowing(showing, onShowingChange);
+    useReportShowing(claimShowingState(prompt, { status, isError, enabled: guildId > 0 }, showing), onShowingChange);
     if (!showing) return null;
     return <ClaimCard guildId={guildId} status={status} provider={registration.provider} prompt={prompt} />;
 }
