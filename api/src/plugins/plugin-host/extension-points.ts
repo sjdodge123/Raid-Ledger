@@ -396,6 +396,12 @@ export interface HubClaimProviderStatus {
   unclaimedCount: number;
   candidates: HubClaimCandidate[];
   claimOptions: HubClaimOptionsKind;
+  /**
+   * ROK-2153 N4: the provider's dismissal round (BG3: the active campaign,
+   * e.g. `campaign-12`). A prompt dismissal hides the prompt only within the
+   * same round. Omit for "dismissed once per hub, permanently".
+   */
+  dismissScope?: string;
 }
 
 /**

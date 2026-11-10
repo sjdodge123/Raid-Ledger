@@ -71,6 +71,11 @@ export class HubClaimService {
       candidates,
       truncated: raw.unclaimedCount > candidates.length,
       claimOptions: raw.claimOptions,
+      // N4-D5: omitted (never null) when the provider reports no round, so
+      // every unscoped hub's body stays byte-identical.
+      ...(raw.dismissScope !== undefined
+        ? { dismissScope: raw.dismissScope }
+        : {}),
     });
     if (parsed.success) return parsed.data;
     throw this.providerBug(provider, 'status', parsed.error.message);
