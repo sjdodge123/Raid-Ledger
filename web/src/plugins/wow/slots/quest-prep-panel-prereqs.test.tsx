@@ -60,13 +60,19 @@ const prereqs: EventQuestPrereqsResponse = {
     inProgressAsOf: '2026-11-09T12:00:00.000Z',
 };
 
+const NEEDED_LINE = 'Each player needs to complete 1 quest chain · you still need 2 more steps';
+
 function setup(): { prereqCalls: () => number } {
     let calls = 0;
+    let pickedUp = false;
     server.use(
         http.get(`${API}/plugins/wow-classic/instances/:id/quests/enriched`, () => HttpResponse.json(quests)),
-        http.get(`${API}/plugins/wow-classic/events/:eventId/quest-coverage`, () => HttpResponse.json([])),
-        http.put(`${API}/plugins/wow-classic/events/:eventId/quest-progress`, () =>
-            HttpResponse.json({ id: 1, eventId: 7, userId: 1, username: 'me', questId: 5, pickedUp: true, completed: false })),
+        http.get(`${API}/plugins/wow-classic/events/:eventId/quest-coverage`, () => HttpResponse.json(
+            pickedUp ? [{ questId: 5, coveredBy: [{ userId: 1, username: 'me' }] }] : [])),
+        http.put(`${API}/plugins/wow-classic/events/:eventId/quest-progress`, () => {
+            pickedUp = true;
+            return HttpResponse.json({ id: 1, eventId: 7, userId: 1, username: 'me', questId: 5, pickedUp: true, completed: false });
+        }),
         http.get(`${API}/plugins/wow-classic/events/:eventId/quest-prereqs/me`, () => {
             calls += 1;
             return HttpResponse.json(prereqs);
@@ -84,11 +90,22 @@ function renderPanel(gameSlug: string) {
 describe('QuestPrepPanel — pre-req progress (ROK-1748)', () => {
     beforeEach(() => server.resetHandlers());
 
-    it('shows the needed line and the Done pill for a Forever event', async () => {
+    it('shows the sharables and chains lines and the Done pill for a Forever event (ROK-2169)', async () => {
         setup();
         renderPanel(FOREVER);
-        expect(await screen.findByText('You need 2 more pre-reqs')).toBeInTheDocument();
+        expect(await screen.findByText(NEEDED_LINE)).toHaveClass('text-warning');
+        expect(screen.getByTestId('quest-prep-sharable-line')).toHaveTextContent('Someone needs to grab 1 sharable quest');
         expect(screen.getByText('Done')).toBeInTheDocument();
+    });
+
+    it('drops the sharables line once someone marks the quest picked up (ROK-2169)', async () => {
+        setup();
+        renderPanel(FOREVER);
+        await screen.findByText(NEEDED_LINE);
+        expect(screen.getByTestId('quest-prep-sharable-line')).toBeInTheDocument();
+        fireEvent.click(screen.getByTitle('I have this quest'));
+        await waitFor(() => expect(screen.queryByTestId('quest-prep-sharable-line')).toBeNull());
+        expect(screen.getByText(NEEDED_LINE)).toBeInTheDocument();
     });
 
     it('mounts the "Your progress" as-of line under the header (ROK-2144 AC6)', async () => {
@@ -101,7 +118,7 @@ describe('QuestPrepPanel — pre-req progress (ROK-1748)', () => {
     it('passes the per-quest state to the chain when the card is expanded', async () => {
         setup();
         renderPanel(FOREVER);
-        await screen.findByText('You need 2 more pre-reqs');
+        await screen.findByText(NEEDED_LINE);
         fireEvent.click(screen.getByText('Chain Finale'));
         expect(await screen.findByTestId('quest-prereq-mark-10')).toHaveClass('text-success');
     });
@@ -110,14 +127,15 @@ describe('QuestPrepPanel — pre-req progress (ROK-1748)', () => {
         const { prereqCalls } = setup();
         renderPanel('wow-classic-era');
         expect(await screen.findByText('Chain Finale')).toBeInTheDocument();
-        expect(screen.queryByText(/more pre-reqs|All pre-reqs done/)).toBeNull();
+        expect(screen.getByTestId('quest-prep-chains-line'))
+            .toHaveTextContent(/^Each player needs to complete 1 quest chain$/);
         expect(prereqCalls()).toBe(0);
     });
 
     it('refetches pre-req state after a progress update settles', async () => {
         const { prereqCalls } = setup();
         renderPanel(FOREVER);
-        await screen.findByText('You need 2 more pre-reqs');
+        await screen.findByText(NEEDED_LINE);
         expect(prereqCalls()).toBe(1);
         fireEvent.click(screen.getByTitle('I have this quest'));
         await waitFor(() => expect(prereqCalls()).toBe(2));
