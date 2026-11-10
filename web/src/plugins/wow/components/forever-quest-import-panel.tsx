@@ -13,6 +13,7 @@ import type {
     ForeverQuestImportTrigger,
 } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
+import { isConflictError } from '../../../lib/api/api-error';
 import { useForeverQuestImport } from '../hooks/use-forever-quest-import';
 import { useRowCap } from '../hooks/use-row-cap';
 import { ShowAllToggle } from './show-all-toggle';
@@ -105,6 +106,13 @@ function ErrorList({ report }: { report: ForeverQuestImportReport }): JSX.Elemen
     );
 }
 
+/** ROK-2162: a Re-import that raced a run already in progress (409) gets plain copy, not the server text. */
+export const QUEST_IMPORT_ALREADY_RUNNING = 'An import is already running. The status above updates when it finishes.';
+
+function startErrorText(err: Error, running: boolean): string {
+    return isConflictError(err) && running ? QUEST_IMPORT_ALREADY_RUNNING : err.message;
+}
+
 /** Admin Forever quest import status + Re-import; renders nothing until the report has loaded. */
 export function ForeverQuestImportPanel(): JSX.Element | null {
     const { report, start } = useForeverQuestImport();
@@ -122,13 +130,13 @@ export function ForeverQuestImportPanel(): JSX.Element | null {
                     <StatusLine report={report.data} />
                     <LastAutoRun report={report.data} />
                 </div>
-                <Button variant="secondary" loading={start.isPending || running} loadingLabel="Importing quests..."
-                    onClick={() => start.mutate()}>Re-import quests</Button>
+                <Button variant="secondary" loading={start.isPending || running} disabled={running}
+                    loadingLabel="Importing quests..." onClick={() => start.mutate()}>Re-import quests</Button>
             </div>
             <Counts report={report.data} />
             <MismatchedAreas report={report.data} />
             <ErrorList report={report.data} />
-            {start.isError && <p role="alert" className="text-sm text-danger">{start.error.message}</p>}
+            {start.isError && <p role="alert" className="text-sm text-danger">{startErrorText(start.error, running)}</p>}
         </section>
     );
 }

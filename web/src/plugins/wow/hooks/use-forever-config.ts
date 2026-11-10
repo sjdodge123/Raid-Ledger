@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import type { WowForeverConfigDto, WowForeverConfigResponseDto } from '@raid-ledger/contract';
 import { fetchForeverConfig, updateForeverConfig } from '../api-client';
 import { ARMORY_CAPABILITIES_KEY } from './use-armory-capabilities';
+import { FOREVER_QUEST_IMPORT_KEY } from './use-forever-quest-import';
 
 const FOREVER_CONFIG_KEY = ['admin', 'plugins', 'blizzard', 'forever'] as const;
 
@@ -18,6 +19,8 @@ export function useForeverConfig(): {
             queryClient.setQueryData([...FOREVER_CONFIG_KEY], saved);
             // The Add Character Armory gate reads the public capability — refresh it now.
             void queryClient.invalidateQueries({ queryKey: [...ARMORY_CAPABILITIES_KEY] });
+            // ROK-2162: a save can start an automatic quest import server-side — re-read its status.
+            void queryClient.invalidateQueries({ queryKey: [...FOREVER_QUEST_IMPORT_KEY] });
         },
     });
     return { config, update };

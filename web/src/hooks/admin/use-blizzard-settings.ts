@@ -25,6 +25,9 @@ function useBlizzardMutations() {
     const invalidateBlizzard = () => {
         queryClient.invalidateQueries({ queryKey: [...BLIZZARD_KEY] });
         queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        // ROK-2162: saved keys can start the WoW Forever quest import server-side; this
+        // prefix re-reads its status (FOREVER_QUEST_IMPORT_KEY in the wow plugin).
+        queryClient.invalidateQueries({ queryKey: ['admin', 'blizzard'] });
     };
 
     const updateBlizzard = useMutation<ApiResponse, Error, BlizzardConfigDto>({

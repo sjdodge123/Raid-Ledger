@@ -13,7 +13,9 @@ import {
     foreverQuestImportGetHandler,
     foreverQuestImportPostHandler,
 } from '../../../test/mocks/forever-quest-import-handlers';
-import { FOREVER_QUEST_IMPORT_POLL_MS, questImportRefetchInterval } from '../hooks/use-forever-quest-import';
+import {
+    FOREVER_QUEST_IMPORT_IDLE_POLL_MS, FOREVER_QUEST_IMPORT_POLL_MS, questImportRefetchInterval,
+} from '../hooks/use-forever-quest-import';
 import { ForeverQuestImportPanel } from './forever-quest-import-panel';
 
 const RUNNING = buildQuestImportReport({ status: 'running', runId: 'run-2', startedAt: '2026-11-09T11:00:00.000Z' });
@@ -38,6 +40,7 @@ describe('ForeverQuestImportPanel status', () => {
         const state = await screen.findByText('running');
         expect(state.closest('p')).toHaveTextContent(/Import\s+running\s+since/);
         expect(button()).toHaveAttribute('aria-busy', 'true');
+        expect(button()).toBeDisabled();
     });
 
     it('succeeded: shows the finish time, counts and no mismatches', async () => {
@@ -189,10 +192,11 @@ describe('ForeverQuestImportPanel automatic runs (ROK-2162)', () => {
 });
 
 describe('questImportRefetchInterval', () => {
-    it('polls only while the report is running', () => {
+    it('polls fast while the report is running, slowly otherwise (ROK-2162: a server-started run shows up)', () => {
         expect(questImportRefetchInterval(RUNNING)).toBe(FOREVER_QUEST_IMPORT_POLL_MS);
-        expect(questImportRefetchInterval(buildSucceededReport())).toBe(false);
-        expect(questImportRefetchInterval(buildQuestImportReport())).toBe(false);
-        expect(questImportRefetchInterval(undefined)).toBe(false);
+        expect(questImportRefetchInterval(buildSucceededReport())).toBe(FOREVER_QUEST_IMPORT_IDLE_POLL_MS);
+        expect(questImportRefetchInterval(buildQuestImportReport())).toBe(FOREVER_QUEST_IMPORT_IDLE_POLL_MS);
+        expect(questImportRefetchInterval(undefined)).toBe(FOREVER_QUEST_IMPORT_IDLE_POLL_MS);
+        expect(FOREVER_QUEST_IMPORT_IDLE_POLL_MS).toBeGreaterThan(FOREVER_QUEST_IMPORT_POLL_MS);
     });
 });
