@@ -28,8 +28,13 @@
 #   RL_DISK_STATE_FILE      $STATE_DIR/disk-pressure.json
 #   RL_DISK_PRUNE_DRY_RUN   0      1 = list the rungs, invoke no docker
 #                                  (DRY_RUN=1 is honoured as an alias)
-#   RL_DISK_BUILDER_FORCE_PCT 95   ROK-2111: run builder_prune at/above this
-#                                  used% even while a build is running
+#   RL_DISK_BUILDER_FORCE_PCT 95   ROK-2111: run builder_prune AND dangling_prune
+#                                  at/above this used% even while a build is
+#                                  running (one ceiling for both guarded rungs)
+#   RL_BUILD_MIN_FREE_GB    20     owned by _admission.sh (the image-build free
+#                                  floor; read here at call time, same default).
+#                                  dangling_prune is also forced below this many
+#                                  free GB unless an IMAGE BUILD is running
 #   RL_ADMISSION_FILE       $RL_STATE_DIR|$STATE_DIR/admission.json — the
 #                                  ledger the builder guard reads (at call time)
 #   RL_DISK_LADDER_SELF_KEYS ""    space-separated ledger keys of the CALLER,
@@ -88,8 +93,20 @@ disk_pressure::free_gb() {
 # 2026-11-10 while image_prune's `until=48h` skipped every one. Without `-a`
 # docker prunes DANGLING images only (untagged, no child image, no container
 # of any state using it), so tagged images, env images and runner images
-# stay. It shares builder_prune's build guard: a running classic build can be
-# mid-way through reusing an old stage image as cache.
+# stay — rung 2's protections (running/stopped container use, the runner
+# label) apply here unchanged. It shares builder_prune's build guard: a running
+# classic build can be mid-way through reusing an old stage image as cache.
+# `until` filters on the image's CREATION time, not its last use, so a stage
+# image first built more than RL_DANGLING_PRUNE_AGE ago is removed even if
+# every gate since has reused it (cost: one cache rebuild of that stage).
+#
+# Free-floor override (review r1 MAJOR): image builds park below
+# RL_BUILD_MIN_FREE_GB (~92% on the 245 GB host), which is BELOW the 95%
+# ceiling, and gates run back to back — so the guard alone left a band where
+# builds starve and nothing relieves it. Below the floor the rung is forced
+# unless an image_build entry is running: a prune under an image build failed
+# one on 2026-11-10 (`failed to commit: lease does not exist`), while an
+# ordinary gate only risks a cache miss.
 disk_pressure::rungs() {
     echo "builder_prune"
     echo "image_prune"
@@ -106,8 +123,9 @@ disk_pressure::rung_cmd() {
         # neither, so the admission gate's ladder died on this rung every run
         # with `ERROR: driver not running`. The legacy CLI path is a plain
         # POST /build/prune (allowlisted), which the daemon serves by pruning
-        # its embedded BuildKit cache — the one the runners' `docker build`
-        # (buildx `docker` driver, no `buildx create` anywhere) fills. The
+        # its embedded BuildKit cache. The runners build with the classic
+        # builder (compose `DOCKER_BUILDKIT: "0"`), so this rung usually
+        # reclaims ~0B; their waste is untagged images (dangling_prune). The
         # gc-sweeper image has no buildx plugin, so it was on this path already.
         builder_prune) echo "DOCKER_BUILDKIT=0 docker builder prune -af" ;;
         image_prune)   echo "docker image prune -af --filter until=${RL_IMAGE_PRUNE_AGE} --filter label!=rl.role=runner" ;;
@@ -188,8 +206,24 @@ disk_pressure::build_busy_keys() {
             | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
 }
 
+# Keys of running IMAGE BUILDS in the ledger (kind == image_build, which both
+# task-start's admission and hold_image_build write — _admission.sh:160,
+# _admission_gc.sh:87), the caller's own keys excluded. Returns 2 when the
+# ledger is missing or unreadable.
+disk_pressure::image_build_keys() {
+    local ledger="${RL_ADMISSION_FILE:-${RL_STATE_DIR:-${STATE_DIR:-/state}}/admission.json}"
+    [[ -r "$ledger" ]] || return 2
+    jq -er --arg self "${RL_DISK_LADDER_SELF_KEYS:-}" '
+        ($self | split(" ") | map(select(length > 0))) as $mine
+        | [ (.heavy_running // [])[]
+            | select((.key // "") as $k | ($mine | index($k)) == null)
+            | select((.kind // "task") == "image_build")
+            | (.key // "?") ] | join(" ")' "$ledger" 2>/dev/null || return 2
+}
+
 # Decide a build-guarded rung ($2, default builder_prune) at used% $1. Echoes a JSON fragment merged into the
-# rung record: {} = run, {forced:true} = run over the ceiling despite a build,
+# rung record: {} = run, {forced:true, forced_by:"ceiling"|"free_floor"} = run
+# despite a build (free_floor: dangling_prune only, see disk_pressure::rungs),
 # {skipped:<reason>} = do not run. Logs every non-plain outcome.
 disk_pressure::_builder_gate() {
     local pct="$1" rung="${2:-builder_prune}" keys rc=0 reason
@@ -203,9 +237,23 @@ disk_pressure::_builder_gate() {
     fi
     if (( pct >= RL_DISK_BUILDER_FORCE_PCT )); then
         disk_pressure::_log "disk ladder: ${rung} forced at ${pct}% >= RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}% despite ${reason}${keys:+ (${keys})}"
-        echo '{"forced":true}'; return 0
+        echo '{"forced":true,"forced_by":"ceiling"}'; return 0
     fi
-    disk_pressure::_log "disk ladder: ${rung} skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%"
+    # dangling_prune only: forced below the image-build free floor unless an
+    # image build is running. An unreadable ledger cannot tell, so stays skipped.
+    local floor="${RL_BUILD_MIN_FREE_GB:-20}" free builds note=""
+    if [[ "$rung" == "dangling_prune" && "$reason" == "build_running" ]]; then
+        free="$(disk_pressure::free_gb)" || free=""
+        if [[ "$free" =~ ^[0-9]+$ ]] && (( free < floor )); then
+            builds=$(disk_pressure::image_build_keys) || builds="?"
+            if [[ -z "$builds" ]]; then
+                disk_pressure::_log "disk ladder: ${rung} forced at ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} despite ${reason} (${keys}); no image build running"
+                echo '{"forced":true,"forced_by":"free_floor"}'; return 0
+            fi
+            note="; ${free}GB free < RL_BUILD_MIN_FREE_GB=${floor} but an image build is running (${builds})"
+        fi
+    fi
+    disk_pressure::_log "disk ladder: ${rung} skipped (${reason}) at ${pct}%${keys:+ — running: ${keys}}; below RL_DISK_BUILDER_FORCE_PCT=${RL_DISK_BUILDER_FORCE_PCT}%${note}"
     jq -nc --arg r "$reason" --arg k "$keys" \
         '{skipped:$r} + (if $k == "" then {} else {blocked_by:($k | split(" "))} end)'
 }

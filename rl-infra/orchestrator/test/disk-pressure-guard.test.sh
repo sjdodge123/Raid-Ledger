@@ -15,7 +15,7 @@
 # Covered:
 #   A-a  below RL_DISK_PRUNE_PCT the ladder runs NOTHING (and still records state)
 #   A-b  the ladder stops at the FIRST rung that reaches RL_DISK_TARGET_PCT
-#   A-c  it walks all three rungs when earlier ones don't reach the target
+#   A-c  it walks all four rungs when earlier ones don't reach the target
 #   A-d  disk-pressure.json is written with used_pct / free_gb / last_prune_at / last_rungs
 #   A-e  dry-run reports the rungs it WOULD run without invoking docker
 #   A-f  sweep.sh resolves the ladder under the path compose actually mounts
@@ -31,7 +31,9 @@
 #        is at/above RL_DISK_BUILDER_FORCE_PCT; a caller's own key is excluded
 #   C-*  2026-11-10: a dangling_prune rung removes untagged images younger than
 #        RL_IMAGE_PRUNE_AGE (classic-builder stage results, retagged
-#        rl:ci-test predecessors), never with -a, behind the same build guard
+#        rl:ci-test predecessors), never with -a, behind the same build guard;
+#        C-d..f: below RL_BUILD_MIN_FREE_GB it is forced unless an IMAGE BUILD
+#        is running (review r1 MAJOR — the 92–95% starvation band)
 
 set -uo pipefail
 
@@ -40,7 +42,9 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$TEST_DIR/test_helpers.sh"
 
-LIB="$(cd "$TEST_DIR/../bin" && pwd)/_disk_pressure.sh"
+# DISK_PRESSURE_LIB_UNDER_TEST lets a reviewer run the suite against another
+# copy of the library (e.g. `git show HEAD:…` in a temp file) to prove red.
+LIB="${DISK_PRESSURE_LIB_UNDER_TEST:-$(cd "$TEST_DIR/../bin" && pwd)/_disk_pressure.sh}"
 SWEEP_SCRIPT="$(cd "$TEST_DIR/../../gc-sweeper" && pwd)/sweep.sh"
 COMPOSE_FILE="$(cd "$TEST_DIR/../../" && pwd)/docker-compose.yml"
 
@@ -160,7 +164,7 @@ test_ladder_walks_all_rungs() {
     assert_contains "$log" "image prune -af" "rung 2 prunes unused images"
     assert_contains "$log" "until=48h" "rung 2 honours RL_IMAGE_PRUNE_AGE"
     assert_contains "$log" "label!=rl.role=runner" "rung 2 must never prune a runner image"
-    assert_contains "$log" "volume prune -f" "rung 3 prunes anonymous volumes"
+    assert_contains "$log" "volume prune -f" "rung 4 prunes anonymous volumes"
     assert_eq "$(echo "$out" | jq -r '.rungs | length')" "4" "four rungs recorded"
     assert_eq "$(echo "$out" | jq -r '.rungs[3].rung')" "volume_prune" "last rung is volume_prune"
     assert_eq "$(echo "$out" | jq -r '.after_pct')" "39" "final percentage after the last rung"
@@ -651,6 +655,54 @@ test_dangling_rung_age_knob() {
     test_teardown
 }
 
+# C-d..f (review r1 MAJOR): image builds park below RL_BUILD_MIN_FREE_GB, which
+# sits BELOW the 95% ceiling. With gates running back to back the guard alone
+# never let the dangling rung relieve that band. df stub: free GB = (100-pct)*2,
+# so 92% = 16 GB (< 20) and 85% = 30 GB.
+test_dangling_forced_below_free_floor() {
+    CURRENT_TEST_NAME="C-d: below the free floor dangling_prune runs although a non-build task holds the ledger"
+    _setup_ladder 92 92 92 60
+    _ledger '[{"key":"local-vci-1","kind":"task","weight":"medium"}]'
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(_guard_logged "$logged")
+    assert_eq "$(grep -c 'builder prune' "$DOCKER_LOG" | tr -d ' ')" "0" "builder_prune keeps its plain guard below 95%"
+    assert_contains "$(cat "$DOCKER_LOG")" "image prune -f --filter until=6h" "16 GB free < 20 forces the dangling rung"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced_by // "none"')" "free_floor" "the rung records the floor forced it"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "dangling_prune forced at 16GB free" "the floor override is logged"
+    test_teardown
+    # A parked image build's own force_ladder: its own key is excluded, so the
+    # rung is forced beside another (non-build) gate — the starvation case.
+    _setup_ladder 92 92 92 60
+    _ledger '[{"key":"build-me-1","kind":"image_build"},{"key":"local-vci-9","kind":"task","weight":"heavy"}]'
+    out=$(RL_DISK_LADDER_SELF_KEYS="local-me build-me-1"; disk_pressure::guard 2>/dev/null)
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced_by // "none"')" "free_floor" "a parked build's own entry does not block the floor override"
+    test_teardown
+}
+
+test_dangling_floor_spares_image_build() {
+    CURRENT_TEST_NAME="C-e: below the free floor dangling_prune stays skipped while an image build runs"
+    _setup_ladder 92 92 92 60
+    _ledger '[{"key":"build-pr1-77","kind":"image_build","weight":"medium"},{"key":"local-vci-1","kind":"task","weight":"medium"}]'
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(_guard_logged "$logged")
+    assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "no dangling prune under a running image build"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "rung 3 records the skip"
+    assert_contains "$(cat "$logged" 2>/dev/null)" "but an image build is running (build-pr1-77)" "the log names the image build that held the floor override back"
+    test_teardown
+}
+
+test_dangling_above_floor_still_skips() {
+    CURRENT_TEST_NAME="C-f: above the free floor a running task still skips dangling_prune"
+    _setup_ladder 85 85 85 85
+    _ledger '[{"key":"local-vci-1","kind":"task","weight":"medium"}]'
+    local logged="$RL_STATE_DIR/log.txt" out
+    out=$(_guard_logged "$logged")
+    assert_eq "$(grep -c 'image prune -f ' "$DOCKER_LOG" | tr -d ' ')" "0" "30 GB free >= 20: the plain guard applies"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].skipped // "none"')" "build_running" "rung 3 skipped as before"
+    assert_eq "$(echo "$out" | jq -r '.rungs[2].forced // false')" "false" "not forced"
+    test_teardown
+}
+
 run_test "a-a-below-threshold" test_below_threshold_runs_nothing
 run_test "a-b-stops-at-first-rung" test_ladder_stops_at_first_rung_that_hits_target
 run_test "a-c-walks-all-rungs" test_ladder_walks_all_rungs
@@ -676,5 +728,8 @@ run_test "b-h-acquire-disk-honours-guard" test_acquire_disk_force_ladder_honours
 run_test "c-a-dangling-rung" test_dangling_rung_prunes_young_untagged_images_only
 run_test "c-b-dangling-build-guard" test_dangling_rung_shares_the_build_guard
 run_test "c-c-dangling-age-knob" test_dangling_rung_age_knob
+run_test "c-d-free-floor-forces-dangling" test_dangling_forced_below_free_floor
+run_test "c-e-free-floor-spares-image-build" test_dangling_floor_spares_image_build
+run_test "c-f-above-floor-still-skips" test_dangling_above_floor_still_skips
 
 print_test_summary
