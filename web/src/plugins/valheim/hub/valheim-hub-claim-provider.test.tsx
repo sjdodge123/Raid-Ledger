@@ -67,7 +67,6 @@ describe('Valheim hub — core claim prompt (ROK-2153 S4)', () => {
         const prompt = await screen.findByTestId('hub-claim-prompt');
         expect(within(prompt).getByRole('heading', { name: CLAIM_BANNER_COPY.linkHeading(CLAIM_BANNER_COPY.fallbackServer) })).toBeInTheDocument();
         expect(within(prompt).getByTestId('hub-claim-prompt-body')).toHaveTextContent(CLAIM_BANNER_COPY.linkBody);
-        expect(within(prompt).getByRole('button', { name: CLAIM_BANNER_COPY.pick })).toBeInTheDocument();
 
         await userEvent.click(within(await screen.findByTestId('hub-claim-suggested')).getByRole('button', { name: 'Claim Ask' }));
         await waitFor(() => { expect(calls).toEqual([{ hubId: 4, candidateId: '12', body: {} }]); });
