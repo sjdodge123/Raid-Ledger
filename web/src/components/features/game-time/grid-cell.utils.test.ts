@@ -61,9 +61,9 @@ describe('computeHeatmapLabel (ROK-1560)', () => {
 });
 
 describe('computeHeatmapLabel — busy members (ROK-1584)', () => {
-    it('names the busy members between the stale and unknown parts', () => {
+    it('names the busy members right after the free part, before stale (ROK-2167 order)', () => {
         expect(computeHeatmapLabel({ available: 3, total: 9, stale: 2, busy: 1, unknown: 4 }))
-            .toBe('3 free · 2 stale · 1 busy · 4 unknown');
+            .toBe('3 free · 1 busy · 2 stale · 4 unknown');
     });
 
     it('reads the busy part even when nobody is stale', () => {

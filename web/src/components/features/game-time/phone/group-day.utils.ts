@@ -39,30 +39,30 @@ export function toGroupCellMap(cells: AggregateGameTimeCell[]): Map<string, Heat
     return map;
 }
 
-/**
- * The count that sits right-aligned inside a cell — "4 free", "3 free · 1
- * stale", "0 free" (operator ruling 2026-09-16: counts on the right).
- *
- * Deliberately shorter than `computeHeatmapLabel`: the unknown count is the
- * aria-label's job, because a phone cell is 44px tall and a third clause makes
- * the row unreadable.
- */
-export function groupCellShortLabel(cell?: HeatmapCellData): string {
-    if (!cell) return '';
-    const stale = cell.stale ?? 0;
-    return stale > 0 ? `${cell.available} free · ${stale} stale` : `${cell.available} free`;
+/** One clause of a cell's count line; only `busy` is painted in the busy colour. */
+export interface GroupCountClause {
+    kind: 'free' | 'busy' | 'stale';
+    text: string;
 }
 
 /**
- * The busy clause of a cell's label — `' · 2 busy'`, or `''` when nobody is.
+ * The count that sits inside a cell, as clauses — "4 free", "3 free · 1 busy ·
+ * 2 stale" (operator ruling 2026-09-16: counts on the right). Order is
+ * free · busy · stale (ROK-2167 ruling 2026-11-10, option A): busy is the one
+ * clause a narrow cell must never lose, so it follows the free count.
  *
- * Separate from `groupCellShortLabel` because the design (§2) paints only this
- * clause in the busy colour: "2 free" stays foreground, "· 2 busy" is purple.
- * Rendered next to the short label, the cell still reads `2 free · 2 busy`.
+ * Deliberately shorter than `computeHeatmapLabel`: the unknown count is the
+ * aria-label's job, because a phone cell is 44px tall and a third clause makes
+ * the row unreadable. Zero busy / stale clauses are omitted; no cell, no clauses.
  */
-export function groupCellBusyLabel(cell?: HeatmapCellData): string {
-    const busy = cell?.busy ?? 0;
-    return busy > 0 ? ` · ${busy} busy` : '';
+export function groupCellCountClauses(cell?: HeatmapCellData): GroupCountClause[] {
+    if (!cell) return [];
+    const clauses: GroupCountClause[] = [{ kind: 'free', text: `${cell.available} free` }];
+    const busy = cell.busy ?? 0;
+    const stale = cell.stale ?? 0;
+    if (busy > 0) clauses.push({ kind: 'busy', text: `${busy} busy` });
+    if (stale > 0) clauses.push({ kind: 'stale', text: `${stale} stale` });
+    return clauses;
 }
 
 /** Members the group knows about in a cell — free now or free on a stale week. */
