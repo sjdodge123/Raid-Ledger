@@ -12,9 +12,12 @@ import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import { refreshUserHubCounts } from '../guilds/community/community-membership.queries';
 import { auditOwnerDeactivated } from '../plugins/wow-common/addon-import/external-id.owner-status';
 
-jest.mock('../plugins/wow-common/addon-import/external-id.owner-status', () => ({
-  auditOwnerDeactivated: jest.fn(),
-}));
+jest.mock(
+  '../plugins/wow-common/addon-import/external-id.owner-status',
+  () => ({
+    auditOwnerDeactivated: jest.fn(),
+  }),
+);
 
 async function runWith(reason?: DeactivationReason): Promise<jest.Mock> {
   const db = createDrizzleMock();
