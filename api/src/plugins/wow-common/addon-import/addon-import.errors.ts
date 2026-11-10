@@ -32,7 +32,7 @@ const DEFAULT_MESSAGES: Record<AddonImportErrorCode, string> = {
   RULESET_CONFIRM_STALE:
     "The realm's ruleset changed since your preview — preview again and confirm the new value.",
   CHARACTER_MOVED:
-    'This character now belongs to another member. Re-open it and try again.',
+    'This character now belongs to another member, so this import was not applied.',
 };
 
 /** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, 409 `CHARACTER_MOVED`, else 422. */
