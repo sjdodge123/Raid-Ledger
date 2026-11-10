@@ -15,9 +15,10 @@ import { buildHubClaimCandidate, buildHubClaimResult, buildHubClaimStatus, hubCl
 import { usePluginStore } from '../../../stores/plugin-store';
 import { HubClaimPromptCell } from '../../../components/hub/claim/hub-claim-prompt-cell';
 import { HUB_CLAIM_DEFAULT_COPY } from '../../../components/hub/claim/hub-claim-copy';
+import { gatedHubClaimProvider } from '../../../components/hub/claim/hub-claim-providers';
 import { valheimArmoryKeys } from '../lib/valheim-armory-api';
 import { CLAIM_BANNER_COPY } from './valheim-claim-banner.helpers';
-import { invalidateAfterHubClaim } from './valheim-hub-claim-provider';
+import { invalidateAfterHubClaim, valheimHubClaimProvider } from './valheim-hub-claim-provider';
 // The real registration, exactly as the app loads it.
 import '../register';
 
@@ -82,6 +83,8 @@ describe('Valheim hub — core claim prompt (ROK-2153 S4)', () => {
     it('renders the prompt while the Valheim plugin is active, and nothing (no claim fetch) once it is inactive', async () => {
         // Active first: proves the Valheim registration is what makes the prompt
         // appear, so the inactive half below cannot pass merely for want of a provider.
+        expect(gatedHubClaimProvider(page(), new Set(['core', 'valheim']))?.provider, 'the Valheim registration serves a Valheim server hub while the plugin is active').toBe(valheimHubClaimProvider);
+        expect(gatedHubClaimProvider(page(), new Set(['core']))).toBeUndefined();
         usePluginStore.setState({ activeSlugs: new Set(['core', 'valheim']), initialized: true });
         const active = renderWithProviders(<HubClaimPromptCell ctx={{ page: page() }} />);
         expect(await screen.findByTestId('hub-claim-prompt'), 'the Valheim provider shows the core prompt while active').toBeInTheDocument();
