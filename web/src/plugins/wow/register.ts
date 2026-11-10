@@ -33,6 +33,7 @@ import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 import { guildTextWidget } from './hub-widgets/guild-text.register';
 import { contributionsWidget } from './hub-widgets/contributions.register';
 import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
+import { wowHubClaimProvider } from './hub/wow-hub-claim-provider';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -75,6 +76,11 @@ blizzard.registerHubWidget(guildTextWidget);
 blizzard.registerHubWidget(contributionsWidget);
 // ROK-2151 — the staff non-member "Claim your character" banner atop a claimable Forever guild's Overview.
 registerClaimBannerWidget(blizzard);
+
+// ROK-2153 S5 — the web half of the api `blizzard` hub claim provider (Forever guild
+// hubs). No OptionsStep: membership IS a claimed roster row, so the core prompt never
+// shows on a WoW hub; the staff banner above and the join gate keep the claim action.
+blizzard.registerHubClaimProvider(wowHubClaimProvider);
 
 // ROK-2056 L4 — the hub Overview's "install the Companion" card on Forever guild
 // hubs (the same game scope as every Forever widget). Requirement

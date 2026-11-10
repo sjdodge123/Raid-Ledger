@@ -177,7 +177,9 @@ interface HubClaimPromptProps {
 /** Lazy-loaded by `hub-claim-prompt-cell.tsx` once the cheap gates passed; key it by hub. */
 export function HubClaimPrompt({ guildId, registration, onShowingChange }: HubClaimPromptProps): JSX.Element | null {
     const { prompt, status, isError } = useClaimDismissal(guildId, registration);
-    const misconfigured = status !== undefined && !canClaimFromCore(status, registration.provider);
+    // Only a status that WOULD show the prompt is a misconfiguration worth logging: a WoW
+    // member always has a claim (ROK-2153 S5), so a WoW hub must not log on every load.
+    const misconfigured = status !== undefined && shouldShowClaimPrompt(status) && !canClaimFromCore(status, registration.provider);
     useEffect(() => {
         if (misconfigured) console.error(`[hub-claim] ${registration.pluginSlug}: the claim needs options but the provider has no OptionsStep; not offering it.`);
     }, [misconfigured, registration.pluginSlug]);
