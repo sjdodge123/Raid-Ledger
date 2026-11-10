@@ -13,7 +13,7 @@ import type {
     ForeverQuestImportTrigger,
 } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
-import { isConflictError } from '../../../lib/api/api-error';
+import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { useForeverQuestImport } from '../hooks/use-forever-quest-import';
 import { useRowCap } from '../hooks/use-row-cap';
 import { ShowAllToggle } from './show-all-toggle';
@@ -109,9 +109,13 @@ function ErrorList({ report }: { report: ForeverQuestImportReport }): JSX.Elemen
 /** ROK-2162: a Re-import that raced a run already in progress (409) gets plain copy, not the server text. */
 export const QUEST_IMPORT_ALREADY_RUNNING = 'An import is already running. The status above updates when it finishes.';
 
-/** Any 409 gets the plain copy at once; it no longer waits for the refetched report to say `running`. */
+/** The api's machine `code` on the busy 409 (`FOREVER_QUEST_IMPORT_RUNNING_CODE`); the unconfigured 409 has none. */
+export const QUEST_IMPORT_RUNNING_CODE = 'FOREVER_QUEST_IMPORT_RUNNING';
+
+/** Only the busy 409 gets the plain copy, at once; any other error (e.g. the unconfigured 409) shows the server's message. */
 function startErrorText(err: Error): string {
-    return isConflictError(err) ? QUEST_IMPORT_ALREADY_RUNNING : err.message;
+    const busy = isConflictError(err) && errorBodyOf(err)?.['code'] === QUEST_IMPORT_RUNNING_CODE;
+    return busy ? QUEST_IMPORT_ALREADY_RUNNING : err.message;
 }
 
 /** Clears a stale Re-import error (e.g. the 409 alert) once the report leaves `running`. */

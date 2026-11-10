@@ -40,10 +40,10 @@ export function foreverQuestImportGetHandler(...reports: ForeverQuestImportRepor
 
 /** POST answers 202 with `report`, or the given error status + server message. */
 export function foreverQuestImportPostHandler(
-    result: ForeverQuestImportReport | { status: 403 | 409; message: string },
+    result: ForeverQuestImportReport | { status: 403 | 409; message: string; code?: string },
 ) {
     return http.post(FOREVER_QUEST_IMPORT_URL, () => ('message' in result
-        ? HttpResponse.json({ statusCode: result.status, message: result.message }, { status: result.status })
+        ? HttpResponse.json({ statusCode: result.status, message: result.message, ...(result.code ? { code: result.code } : {}) }, { status: result.status })
         : HttpResponse.json(result, { status: 202 })));
 }
 

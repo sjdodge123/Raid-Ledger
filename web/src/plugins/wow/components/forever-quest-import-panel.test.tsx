@@ -16,7 +16,7 @@ import {
 import {
     FOREVER_QUEST_IMPORT_IDLE_POLL_MS, FOREVER_QUEST_IMPORT_POLL_MS, questImportRefetchInterval,
 } from '../hooks/use-forever-quest-import';
-import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING } from './forever-quest-import-panel';
+import { ForeverQuestImportPanel, QUEST_IMPORT_ALREADY_RUNNING, QUEST_IMPORT_RUNNING_CODE } from './forever-quest-import-panel';
 
 const RUNNING = buildQuestImportReport({ status: 'running', runId: 'run-2', startedAt: '2026-11-09T11:00:00.000Z' });
 
@@ -131,14 +131,16 @@ describe('ForeverQuestImportPanel Re-import', () => {
         }
     });
 
-    // ROK-2162 review r3: a 409 always gets the plain copy, never the server sentence.
+    // ROK-2162: only the busy 409 (its `code`) gets the plain copy; any other 409 or 403 shows the server sentence.
+    const UNCONFIGURED = 'Blizzard API credentials are not configured. Add them on the Blizzard plugin page, then run the quest import again.';
     it.each([
-        [409, 'A Forever quest import is already running', QUEST_IMPORT_ALREADY_RUNNING],
-        [403, 'The WoW Forever quest import is turned off', 'The WoW Forever quest import is turned off'],
-    ] as const)('Re-import: a %i shows its alert copy', async (status, message, shown) => {
+        ['busy 409', 409, 'A Forever quest import is already running', QUEST_IMPORT_RUNNING_CODE, QUEST_IMPORT_ALREADY_RUNNING],
+        ['unconfigured 409', 409, UNCONFIGURED, undefined, UNCONFIGURED],
+        ['403', 403, 'The WoW Forever quest import is turned off', undefined, 'The WoW Forever quest import is turned off'],
+    ] as const)('Re-import: a %s shows its alert copy', async (_label, status, message, code, shown) => {
         server.use(
             foreverQuestImportGetHandler(buildQuestImportReport()),
-            foreverQuestImportPostHandler({ status, message }),
+            foreverQuestImportPostHandler({ status, message, ...(code ? { code } : {}) }),
         );
         renderWithProviders(<ForeverQuestImportPanel />);
         await screen.findByText('The quest import has not run yet.');

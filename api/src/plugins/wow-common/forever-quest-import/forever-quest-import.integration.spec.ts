@@ -22,6 +22,7 @@ import { PluginRegistryService } from '../../plugin-host/plugin-registry.service
 import { WOW_FOREVER_QUEST_IMPORT_KEY } from '../forever.settings';
 import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
+  FOREVER_QUEST_IMPORT_RUNNING_CODE,
   FOREVER_QUEST_IMPORT_RUNNING_MESSAGE,
   FOREVER_QUEST_IMPORT_UNCONFIGURED_MESSAGE,
   ForeverQuestImportService,
@@ -274,6 +275,7 @@ describe('POST /admin/plugins/blizzard/forever-quests/import (ROK-2143)', () => 
     const second = await testApp.request.post(ROUTE).set(auth(adminToken));
     expect(second.status).toBe(409);
     expect(second.body.message).toBe(FOREVER_QUEST_IMPORT_RUNNING_MESSAGE);
+    expect(second.body.code).toBe(FOREVER_QUEST_IMPORT_RUNNING_CODE);
     release();
     await service().currentRun;
   });
@@ -285,6 +287,7 @@ describe('POST /admin/plugins/blizzard/forever-quests/import (ROK-2143)', () => 
     const res = await testApp.request.post(ROUTE).set(auth(adminToken));
     expect(res.status).toBe(409);
     expect(res.body.message).toBe(FOREVER_QUEST_IMPORT_UNCONFIGURED_MESSAGE);
+    expect(res.body.code).toBeUndefined();
   });
 
   it('403 with the off copy when the kill switch is off', async () => {

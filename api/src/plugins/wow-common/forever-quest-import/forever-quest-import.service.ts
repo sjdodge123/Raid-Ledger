@@ -54,6 +54,16 @@ export const FOREVER_QUEST_IMPORT_UNCONFIGURED_MESSAGE =
   'Blizzard API credentials are not configured. Add them on the Blizzard plugin page, then run the quest import again.';
 export const FOREVER_QUEST_IMPORT_RUNNING_MESSAGE =
   'A WoW: Forever quest import is already running';
+/** Machine code on the busy 409 only, so the web tells it from the unconfigured 409. */
+export const FOREVER_QUEST_IMPORT_RUNNING_CODE = 'FOREVER_QUEST_IMPORT_RUNNING';
+
+function runningConflict(): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    message: FOREVER_QUEST_IMPORT_RUNNING_MESSAGE,
+    code: FOREVER_QUEST_IMPORT_RUNNING_CODE,
+  });
+}
 
 @Injectable()
 export class ForeverQuestImportService implements OnModuleInit {
@@ -116,8 +126,7 @@ export class ForeverQuestImportService implements OnModuleInit {
   async start(
     trigger: ForeverQuestImportTrigger = 'manual',
   ): Promise<ForeverQuestImportReport> {
-    if (this.busy)
-      throw new ConflictException(FOREVER_QUEST_IMPORT_RUNNING_MESSAGE);
+    if (this.busy) throw runningConflict();
     this.busy = true;
     try {
       const report = await this.prepare(trigger);
@@ -145,7 +154,7 @@ export class ForeverQuestImportService implements OnModuleInit {
     }
     const previous = await this.readReport();
     if (isLiveRunningMarker(previous, new Date())) {
-      throw new ConflictException(FOREVER_QUEST_IMPORT_RUNNING_MESSAGE);
+      throw runningConflict();
     }
     const startedAt = new Date().toISOString();
     const report: ForeverQuestImportReport = {
