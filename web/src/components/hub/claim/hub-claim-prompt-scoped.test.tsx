@@ -18,6 +18,7 @@ import { buildHubClaimStatus } from '../../../test/mocks/hub-claim-handlers';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { addHubClaimProvider, clearHubClaimProviders } from './hub-claim-providers';
 import { HubClaimPromptCell } from './hub-claim-prompt-cell';
+import type { HubClaimShowing } from './hub-claim-prompt';
 
 vi.mock('../../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
@@ -67,15 +68,30 @@ function serve(subject: HubClaimStatus, dismissed: HubOnboardingDismissalDto[]):
     );
 }
 
-function renderBoth(): void {
+function renderBoth(onSubjectShowing?: (state: HubClaimShowing) => void): void {
     renderWithProviders(<>
-        <HubClaimPromptCell ctx={{ page: page(SUBJECT_ID) }} />
+        <HubClaimPromptCell ctx={{ page: page(SUBJECT_ID) }} onShowingChange={onSubjectShowing} />
         <HubClaimPromptCell ctx={{ page: page(CONTROL_ID) }} />
     </>);
 }
 
 async function expectPrompts(count: number): Promise<void> {
     await waitFor(() => { expect(screen.queryAllByTestId(PROMPT)).toHaveLength(count); });
+}
+
+/**
+ * The subject's card reports 'pending' until its dismissal and status queries
+ * have settled, so waiting for 'hidden' (not for the status request to have
+ * been made) proves the hidden state is the settled answer for this round.
+ */
+async function expectSubjectSettledHidden(): Promise<void> {
+    const showing = vi.fn<(state: HubClaimShowing) => void>();
+    renderBoth(showing);
+    await waitFor(() => { expect(showing).toHaveBeenLastCalledWith('hidden'); });
+    expect(showing).not.toHaveBeenCalledWith('showing');
+    expect(subjectHits).toBe(1);
+    await expectPrompts(1); // the control hub's card; the subject's stays absent
+    expect(showing).toHaveBeenLastCalledWith('hidden');
 }
 
 beforeEach(() => {
@@ -96,10 +112,7 @@ describe('claim prompt — scoped dismissal (provider opted in)', () => {
     it('stays hidden when the dismissal is for the current round', async () => {
         register(true);
         serve(buildHubClaimStatus({ dismissScope: 'campaign-2' }), [row('campaign-2')]);
-        renderBoth();
-        await expectPrompts(1);
-        await waitFor(() => { expect(subjectHits).toBe(1); });
-        expect(screen.getAllByTestId(PROMPT)).toHaveLength(1);
+        await expectSubjectSettledHidden();
     });
 
     it('an unscoped dismissal does not hide a scoped prompt', async () => {
@@ -112,10 +125,7 @@ describe('claim prompt — scoped dismissal (provider opted in)', () => {
     it('a provider that reports no scope behaves as unscoped', async () => {
         register(true);
         serve(buildHubClaimStatus(), [row()]);
-        renderBoth();
-        await expectPrompts(1);
-        await waitFor(() => { expect(subjectHits).toBe(1); });
-        expect(screen.getAllByTestId(PROMPT)).toHaveLength(1);
+        await expectSubjectSettledHidden();
     });
 
     it('the × dismisses this round only (scope sent) and hides the card', async () => {
