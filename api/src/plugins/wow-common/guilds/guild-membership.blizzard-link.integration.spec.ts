@@ -259,6 +259,69 @@ describe('ROK-2115 GUID wins (Ruling 3)', () => {
   });
 });
 
+/** [characterId, userId] per roster row, as the roster page reads it. */
+async function rosterLinks(guildId: number): Promise<unknown[][]> {
+  const rows = await loadRosterRows(testApp.db, guildId);
+  return rows.map((r) => [r.characterId, r.userId]);
+}
+
+describe('ROK-2160 a deactivated GUID holder does not win the row', () => {
+  it('case 2160-1: deactivated GUID holder + active Blizzard-id holder → the active one', async () => {
+    const guildId = await insertGuild();
+    const [gone, active] = [await insertUser(true), await insertUser()];
+    const [g, id] = [guid(), blizzardId()];
+    const goneChar = await insertChar(gone, { addonGuid: g });
+    const activeChar = await insertChar(active, { externalId: String(id) });
+    const memberId = await insertRow(guildId, { guid: g, blizzardId: id });
+
+    expect(await findLinkedMemberRows(testApp.db, active, guildId)).toEqual([
+      {
+        guildId,
+        memberId,
+        rankIndex: 3,
+        characterId: activeChar,
+        via: 'blizzard',
+      },
+    ]);
+    expect(await findLinkedMemberUserIds(testApp.db, guildId)).toEqual([
+      active,
+    ]);
+    expect(await rosterLinks(guildId)).toEqual([[activeChar, active]]);
+    // Not a disagreement: the deactivated holder never wins the row.
+    expect(await findLinkDisagreements(testApp.db, guildId)).toEqual([]);
+    expect(goneChar).not.toEqual(activeChar);
+  });
+
+  it('case 2160-2: an ACTIVE GUID holder still beats the Blizzard-id holder', async () => {
+    const guildId = await insertGuild();
+    const [guidUser, blizzUser] = [await insertUser(), await insertUser()];
+    const [g, id] = [guid(), blizzardId()];
+    const guidChar = await insertChar(guidUser, { addonGuid: g });
+    await insertChar(blizzUser, { externalId: String(id) });
+    await insertRow(guildId, { guid: g, blizzardId: id });
+
+    expect(await findLinkedMemberUserIds(testApp.db, guildId)).toEqual([
+      guidUser,
+    ]);
+    expect(await findLinkedMemberRows(testApp.db, blizzUser, guildId)).toEqual(
+      [],
+    );
+    expect(await rosterLinks(guildId)).toEqual([[guidChar, guidUser]]);
+  });
+
+  it('case 2160-3: deactivated GUID holder and no active holder → unlinked', async () => {
+    const guildId = await insertGuild();
+    const gone = await insertUser(true);
+    const [g, id] = [guid(), blizzardId()];
+    await insertChar(gone, { addonGuid: g });
+    await insertRow(guildId, { guid: g, blizzardId: id });
+
+    expect(await findLinkedMemberRows(testApp.db, gone, guildId)).toEqual([]);
+    expect(await findLinkedMemberUserIds(testApp.db, guildId)).toEqual([]);
+    expect(await rosterLinks(guildId)).toEqual([[null, null]]);
+  });
+});
+
 describe('ROK-2115 existing membership rules apply to arm B', () => {
   it('case 5: a Blizzard row outside the latest snapshot confers nothing', async () => {
     const guildId = await insertGuild();
