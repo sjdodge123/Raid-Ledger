@@ -27,9 +27,10 @@ describe('QuestPrepNeededLine', () => {
         expect(screen.getByText('You need 1 more pre-req')).toHaveClass('text-warning');
     });
 
-    it('says all pre-reqs are done in text-success when none are needed', () => {
-        render(<QuestPrepNeededLine prereqs={makeResponse(0)} />);
-        expect(screen.getByText('All pre-reqs done')).toHaveClass('text-success');
+    it('renders nothing when no pre-reqs are needed (ROK-2169)', () => {
+        const { container } = render(<QuestPrepNeededLine prereqs={makeResponse(0)} />);
+        expect(container).toBeEmptyDOMElement();
+        expect(screen.queryByText('All pre-reqs done')).toBeNull();
     });
 
     it('renders nothing without a state', () => {
