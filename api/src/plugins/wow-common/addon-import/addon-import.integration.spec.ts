@@ -7,6 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { count, eq, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
@@ -39,6 +40,7 @@ import {
   buildWho,
 } from './testing/addon-fixture.builder';
 import { pinExportClock } from './testing/pin-export-clock';
+import { reassignWithin } from '../guilds/roster-claim/character-owner.admin.tx';
 
 pinExportClock();
 
@@ -393,6 +395,58 @@ describe('addon import — same GUID into two characters, concurrently (Codex P2
     });
     expect((await charRow(ana)).addonGuid).toBe(FIXTURE_GUID);
     expect((await charRow(bob)).addonGuid).toBeNull();
+  });
+});
+
+describe('addon import — admin Change owner racing an apply (ROK-2159)', () => {
+  it('the apply waits on the moved row, then 409 CHARACTER_MOVED — no snapshot', async () => {
+    const token = await memberToken('anamoved');
+    const id = await createChar(token);
+    await memberToken('bobmoved');
+    const [bob] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.username, 'bobmoved')),
+      'bob',
+    );
+    let release = (): void => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    let locked = (): void => undefined;
+    const moved = new Promise<void>((r) => (locked = r));
+    // Change owner locks GUID → name → row FOR UPDATE, moves it to Bob and
+    // holds its tx open (uncommitted) — Ana's owner pre-check still passes.
+    const change = testApp.db.transaction(async (tx) => {
+      await reassignWithin(tx, {
+        adminId: bob.id,
+        characterId: id,
+        toUserId: bob.id,
+        logger: new Logger('rok-2159'),
+      });
+      locked();
+      await gate;
+    });
+    let importing:
+      Promise<{ status: number; body: { code?: unknown } }> | undefined;
+    try {
+      await moved;
+      importing = Promise.resolve(
+        apply(token, id, charAt(FIXTURE_EXPORTED_AT)),
+      );
+      await waitFor(async () => {
+        expect(await lockWaiters()).toBeGreaterThan(0);
+      }, 5000);
+    } finally {
+      release();
+    }
+    await change;
+    const res = await importing;
+    expect({ status: res?.status, code: res?.body.code }).toEqual({
+      status: 409,
+      code: 'CHARACTER_MOVED',
+    });
+    expect(await rowCount(schema.characterAddonSnapshots)).toBe(0);
+    expect((await charRow(id)).userId).toBe(bob.id);
   });
 });
 
