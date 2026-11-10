@@ -14,6 +14,16 @@ export const ForeverQuestImportStatusSchema = z.enum([
     'failed',
 ]);
 
+/**
+ * What started a run (ROK-2162): the admin button, the automatic run when the
+ * overlay table is empty (boot / keys or switch saved), or the weekly refresh.
+ */
+export const ForeverQuestImportTriggerSchema = z.enum([
+    'manual',
+    'auto-empty',
+    'weekly',
+]);
+
 export const ForeverQuestImportCountsSchema = z.object({
     requests: z.number(),
     areasImported: z.number(),
@@ -76,10 +86,17 @@ export const ForeverQuestImportReportSchema = z.object({
         })
         .nullable(),
     errors: z.array(z.string()),
+    /** ROK-2162 (additive): what started this run; absent on pre-2162 reports. */
+    trigger: ForeverQuestImportTriggerSchema.optional(),
+    /** ROK-2162 (additive): start time of the latest automatic run (`auto-empty` / `weekly`), carried across manual runs; null = never. */
+    lastAutoRunAt: z.string().nullable().optional(),
 });
 
 export type ForeverQuestImportStatus = z.infer<
     typeof ForeverQuestImportStatusSchema
+>;
+export type ForeverQuestImportTrigger = z.infer<
+    typeof ForeverQuestImportTriggerSchema
 >;
 export type ForeverQuestImportCounts = z.infer<
     typeof ForeverQuestImportCountsSchema

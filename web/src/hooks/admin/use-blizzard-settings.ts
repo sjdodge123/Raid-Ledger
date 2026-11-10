@@ -10,6 +10,15 @@ import type {
 
 const BLIZZARD_KEY = ['admin', 'settings', 'blizzard'] as const;
 
+/**
+ * ROK-2162: root of the query keys whose server state depends on the Blizzard
+ * API keys. Core owns it; plugin keys build on it (plugin imports core, never
+ * the reverse), so a save's invalidation cannot drift from them. A save
+ * re-reads everything under it, the WoW plugin's quest import report and
+ * namespace probe state included.
+ */
+export const BLIZZARD_DEPENDENT_QUERY_ROOT = ['admin', 'blizzard'] as const;
+
 function useBlizzardStatusQuery() {
     return useQuery<BlizzardStatusResponse>({
         queryKey: [...BLIZZARD_KEY],
@@ -25,6 +34,10 @@ function useBlizzardMutations() {
     const invalidateBlizzard = () => {
         queryClient.invalidateQueries({ queryKey: [...BLIZZARD_KEY] });
         queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        // ROK-2162: saved keys can start the WoW Forever quest import server-side. Best effort:
+        // the server kick is fire-and-forget, so this refetch may still read idle; the panel's
+        // 30 s idle poll is what reliably catches the run.
+        queryClient.invalidateQueries({ queryKey: [...BLIZZARD_DEPENDENT_QUERY_ROOT] });
     };
 
     const updateBlizzard = useMutation<ApiResponse, Error, BlizzardConfigDto>({
