@@ -144,6 +144,50 @@ describe('ForeverQuestImportPanel Re-import', () => {
     });
 });
 
+describe('ForeverQuestImportPanel automatic runs (ROK-2162)', () => {
+    it.each([
+        ['manual', 'manual'],
+        ['auto-empty', 'automatic (first import)'],
+        ['weekly', 'automatic (weekly)'],
+    ] as const)('names the %s trigger next to the last run time', async (trigger, label) => {
+        const report = buildSucceededReport({ trigger, lastAutoRunAt: null });
+        server.use(foreverQuestImportGetHandler(report));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        const line = (await screen.findByText('succeeded')).closest('p');
+        const time = new Date(report.finishedAt ?? '').toLocaleString().replace(/\s+/g, ' ');
+        expect(line).toHaveTextContent(`Last run ${time} · ${label} · succeeded`);
+        expect(line).not.toHaveTextContent('auto-empty');
+    });
+
+    it('shows the last automatic run time', async () => {
+        const at = '2026-11-04T06:30:00.000Z';
+        server.use(foreverQuestImportGetHandler(buildSucceededReport({ trigger: 'manual', lastAutoRunAt: at })));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        expect(await screen.findByTestId('forever-quest-import-last-auto')).toHaveTextContent(
+            `Last automatic run: ${new Date(at).toLocaleString().replace(/\s+/g, ' ')}`,
+        );
+    });
+
+    it('an old report without trigger or last automatic run renders cleanly', async () => {
+        server.use(foreverQuestImportGetHandler(buildSucceededReport()));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        const line = (await screen.findByText('succeeded')).closest('p');
+        expect(line).toHaveTextContent(/^Last run .+ · succeeded$/);
+        expect(line).not.toHaveTextContent(/manual|automatic/);
+        expect(screen.getByTestId('forever-quest-import-last-auto')).toHaveTextContent('Last automatic run: never');
+        expect(document.body).not.toHaveTextContent(/undefined|Invalid Date/);
+    });
+
+    it('says the import runs by itself, with Re-import as the manual override', async () => {
+        server.use(foreverQuestImportGetHandler(buildQuestImportReport()));
+        renderWithProviders(<ForeverQuestImportPanel />);
+        expect(await screen.findByText(
+            'Imports automatically when there is no quest data yet, then every week. Re-import quests runs it now.',
+        )).toBeInTheDocument();
+        expect(screen.queryByTestId('forever-quest-import-last-auto')).not.toBeInTheDocument();
+    });
+});
+
 describe('questImportRefetchInterval', () => {
     it('polls only while the report is running', () => {
         expect(questImportRefetchInterval(RUNNING)).toBe(FOREVER_QUEST_IMPORT_POLL_MS);
