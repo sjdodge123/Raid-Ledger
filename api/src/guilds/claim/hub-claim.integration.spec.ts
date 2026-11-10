@@ -202,8 +202,31 @@ async function servedHub(scenario: Scenario): Promise<number> {
   return id;
 }
 
-/** Response headers minus the ones that legitimately vary per request. */
-const VARYING_HEADERS = new Set(['date', 'x-request-id', 'x-correlation-id']);
+/**
+ * Response headers minus the ones that legitimately vary per request.
+ * `x-ratelimit-remaining` is the throttler's per-client counter: every request
+ * decrements it whatever the outcome, so two back-to-back 404s always differ by
+ * one. `x-ratelimit-reset` is seconds left in the throttle window and ticks with
+ * the wall clock. Neither depends on whether the hub exists or is hidden, so
+ * neither is an oracle; `throttleSteps` pins that both requests counted alike.
+ */
+const VARYING_HEADERS = new Set([
+  'date',
+  'x-request-id',
+  'x-correlation-id',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+]);
+
+/** How far the throttle counter moved between two consecutive responses. */
+function throttleSteps(
+  first: Record<string, unknown>,
+  second: Record<string, unknown>,
+): number {
+  const left = (h: Record<string, unknown>) =>
+    Number(h['x-ratelimit-remaining']);
+  return left(first) - left(second);
+}
 function stableHeaders(
   headers: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -307,12 +330,14 @@ describe('guilds/:id/claim — hidden hub is indistinguishable from missing', ()
     const [hGet, mGet] = [await getStatus(id), await getStatus(missing)];
     expect([hGet.status, mGet.status]).toEqual([404, 404]);
     expect(stableHeaders(mGet.headers)).toEqual(stableHeaders(hGet.headers));
+    expect(throttleSteps(hGet.headers, mGet.headers)).toBe(1);
     const [hPost, mPost] = [
       await postClaim(id, 'a'),
       await postClaim(missing, 'a'),
     ];
     expect([hPost.status, mPost.status]).toEqual([404, 404]);
     expect(stableHeaders(mPost.headers)).toEqual(stableHeaders(hPost.headers));
+    expect(throttleSteps(hPost.headers, mPost.headers)).toBe(1);
   });
 
   it('401 without a JWT', async () => {
