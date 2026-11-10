@@ -75,6 +75,7 @@ export async function auditGuidRelease(
   tx: AddonImportTx,
   released: ReleasedGuid | null,
   actorId: number | null,
+  createdAt?: SQL,
 ): Promise<number> {
   if (released === null) return 0;
   const winners = await tx
@@ -92,7 +93,9 @@ export async function auditGuidRelease(
   for (const w of winners) {
     const { id, userId, ...rest } = w;
     const entry = { ...rest, actorId, ownerId: userId, characterId: id };
-    await logExternalIdLinked(tx, { ...entry, via: 'guid_released' }, null);
+    const at = createdAt ? { createdAt } : {};
+    const linked = { ...entry, ...at, via: 'guid_released' as const };
+    await logExternalIdLinked(tx, linked, null);
   }
   return winners.length;
 }
@@ -102,6 +105,7 @@ export async function auditGuidReleases(
   tx: AddonImportTx,
   released: ReleasedGuid[],
   actorId: number | null,
+  createdAt?: SQL,
 ): Promise<void> {
-  for (const r of released) await auditGuidRelease(tx, r, actorId);
+  for (const r of released) await auditGuidRelease(tx, r, actorId, createdAt);
 }

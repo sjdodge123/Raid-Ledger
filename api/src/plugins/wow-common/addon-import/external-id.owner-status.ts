@@ -29,7 +29,8 @@ export async function auditOwnerDeactivated(
   userId: number,
   actorId: number | null,
 ): Promise<void> {
-  await auditGuidReleases(tx, await heldGuidsOf(tx, userId), actorId);
+  const held = await heldGuidsOf(tx, userId);
+  await auditGuidReleases(tx, held, actorId, sql`clock_timestamp()`);
 }
 
 /**
@@ -94,7 +95,8 @@ export async function auditOwnerReactivated(
   for (const { guid, ...rest } of won) {
     if (guid === null) continue;
     const via = 'owner_reactivated' as const;
-    const entry = { ...rest, guid, actorId, ownerId: userId, via };
+    const createdAt = sql`clock_timestamp()`;
+    const entry = { ...rest, guid, actorId, ownerId: userId, via, createdAt };
     await logGuidAudit(tx, { action: 'addon_guid_claimed', ...entry });
     written += 1;
   }
