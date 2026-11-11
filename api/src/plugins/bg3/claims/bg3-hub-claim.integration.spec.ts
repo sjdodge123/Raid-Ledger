@@ -260,7 +260,10 @@ describe('GET guilds/:id/claim — BG3 provider status', () => {
     await insertClaim(campaignId, HUMAN, 'member2');
     const res = await getStatus(hubId, 'member');
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ viewerHasClaim: false, unclaimedCount: 3 });
+    expect(res.body).toMatchObject({
+      viewerHasClaim: false,
+      unclaimedCount: 3,
+    });
     expect(ids(res.body)).toEqual(
       [WOOD_ELF, DUERGAR, TIEFLING].map((s) => cid(campaignId, s)).sort(),
     );
@@ -307,7 +310,10 @@ describe('POST guilds/:id/claim/:candidateId — BG3 party claim', () => {
     ]);
     const after = await getStatus(hubId);
     expect(after.status).toBe(200);
-    expect(after.body).toMatchObject({ viewerHasClaim: true, unclaimedCount: 3 });
+    expect(after.body).toMatchObject({
+      viewerHasClaim: true,
+      unclaimedCount: 3,
+    });
     expect(ids(after.body)).not.toContain(cid(campaignId, HUMAN));
   });
 
@@ -344,6 +350,9 @@ describe('POST guilds/:id/claim/:candidateId — BG3 party claim', () => {
     expect(await claimsIn(campaignId)).toEqual([]);
   });
 
+});
+
+describe('guilds/:id/claim — BG3 non-member', () => {
   it('a non-member → 403 on GET and POST, nothing stored', async () => {
     const { hubId, campaignId } = await seedHub();
     const res = await getStatus(hubId, 'outsider');
@@ -383,7 +392,7 @@ describe('guilds/:id/claim — BG3 active campaign switch', () => {
     ]);
   });
 
-  it("a candidate of a campaign no longer active → 404 CANDIDATE_GONE; neither campaign gets a claim", async () => {
+  it('a candidate of a campaign no longer active → 404 CANDIDATE_GONE; neither campaign gets a claim', async () => {
     const { hubId, campaignId: first } = await seedHub();
     const second = await createCampaign(hubId);
     await setActive(hubId, second);
