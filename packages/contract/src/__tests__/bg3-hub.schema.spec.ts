@@ -76,6 +76,7 @@ describe('BG3_HUB_MANIFEST (D-16 / D-17)', () => {
       'media-gate/bg3-save',
       'ingest-source/bg3-screenshot',
       'media-gate/bg3-screenshot',
+      'claim-provider/bg3',
     ]);
     expect(BG3_HUB_MANIFEST.widgets.map((w) => `${w.layoutKey}/${w.id}`)).toEqual([
       'plugin/where-we-are', 'plugin/party', 'plugin/session-history',

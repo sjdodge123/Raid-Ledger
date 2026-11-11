@@ -6,7 +6,8 @@
  *    the GitHub releases page in a new tab, three steps, unsigned-build note),
  *    scrolled into view for `#companion` and `#companion-devices`.
  * 2. Hub Overview: a BG3 hub member with no linked computer sees the "install
- *    the Companion" card first in the grid; "Not now" stores a per-hub
+ *    the Companion" card first in the grid, once the "claim your character"
+ *    prompt (ROK-2153 S6, one banner at a time) is dismissed; "Not now" stores a per-hub
  *    dismissal server-side, so it stays hidden after a reload. A visitor
  *    (non-member) never sees it.
  * 3. The BG3 Party `no-saves` empty state carries the one-line install link.
@@ -123,12 +124,19 @@ test.describe('Companion install entry points (ROK-2060)', () => {
         await expect(card, '#companion-devices scrolls the card into view').toBeInViewport();
     });
 
-    test('Hub Overview: the install card shows first for a member; "Not now" keeps it hidden after reload', async ({ page }, testInfo) => {
+    test('Hub Overview: the install card follows the claim prompt for a member; "Not now" keeps it hidden after reload', async ({ page }, testInfo) => {
         const seed = await seedHub(testInfo, 'default');
         const jwt = await signInOnboardedMember(page, seed.users.member.userId);
         await restoreDismissal(jwt, seed.hubId);
         try {
             await page.goto(`/hubs/${seed.hubId}`);
+            // ROK-2153 S6: one Overview banner at a time. The seeded member has no claimed character, so the
+            // claim prompt asks first and the install card waits until that prompt is answered.
+            const claim = page.getByTestId('hub-claim-prompt');
+            await expect(claim, 'the claim prompt shows first').toBeVisible({ timeout: 20_000 });
+            await expect(page.getByTestId('companion-install-prompt'), 'the install card waits for the claim prompt').toHaveCount(0);
+            await claim.getByTestId('hub-claim-prompt-dismiss').click();
+            await expect(claim, 'the claim prompt is dismissed').toHaveCount(0);
             const prompt = page.getByTestId('companion-install-prompt');
             await expect(prompt.getByRole('heading', { name: PROMPT_HEADING }), 'the BG3 prompt heading').toBeVisible({ timeout: 20_000 });
             const firstCell = page.getByTestId('guild-overview').locator(':scope > *').first();

@@ -71,7 +71,8 @@ export interface ClaimHubCandidateInput {
     readonly options?: Record<string, unknown>;
 }
 
-export type HubClaimedCallback = (result: HubClaimResult, qc: QueryClient) => void | Promise<void>;
+/** `guildId` = the hub the claim was made on (BG3 refreshes that hub's party). */
+export type HubClaimedCallback = (result: HubClaimResult, qc: QueryClient, guildId: number) => void | Promise<void>;
 
 /**
  * Refetch everything a claim changes: my characters, every public profile (its
@@ -98,7 +99,7 @@ export function useClaimHubCandidate(
             postHubClaim(guildId, candidateId, options === undefined ? {} : { options }),
         onSuccess: async (result) => {
             await invalidateAfterClaim(qc, guildId, result);
-            if (onClaimed !== undefined) await onClaimed(result, qc);
+            if (onClaimed !== undefined) await onClaimed(result, qc, guildId);
         },
     });
 }

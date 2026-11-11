@@ -32,7 +32,6 @@ export const BG3_ADD_SAVES_DEFAULT_LABEL = 'Also put my other unfiled saves and 
 
 export interface Bg3AddSavesSheetProps {
     readonly isOpen: boolean;
-    readonly hubId: number;
     readonly campaignId: number;
     readonly campaignName: string;
     readonly onClose: () => void;
@@ -85,8 +84,8 @@ interface AddSavesBind {
 }
 
 /** The bind with the cross-hub confirm: a hold asks (no toast); Move here re-runs with that key confirmed. */
-function useBg3AddSavesMoveConfirm(hubId: number): AddSavesBind {
-    const bind = useBindBg3Saves(hubId);
+function useBg3AddSavesMoveConfirm(): AddSavesBind {
+    const bind = useBindBg3Saves();
     const move = useBg3MoveCheck();
     const run = (vars: Bg3BindSavesVars, onDone: () => void): void => bind.mutate(vars, {
         onSuccess: onDone,
@@ -99,13 +98,13 @@ function useBg3AddSavesMoveConfirm(hubId: number): AddSavesBind {
     return { run, move, pending: bind.isPending };
 }
 
-export function Bg3AddSavesSheet({ isOpen, hubId, campaignId, campaignName, onClose }: Bg3AddSavesSheetProps): JSX.Element {
+export function Bg3AddSavesSheet({ isOpen, campaignId, campaignName, onClose }: Bg3AddSavesSheetProps): JSX.Element {
     const query = useBg3MyUnassignedSaves(isOpen);
     const playthroughs = groupByPlaythrough((query.data?.saves ?? []).filter((s) => s.campaignId === null));
     const capped = (query.data?.nextCursor ?? null) !== null;
     const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
     const [alsoDefault, setAlsoDefault] = useState(false);
-    const bind = useBg3AddSavesMoveConfirm(hubId);
+    const bind = useBg3AddSavesMoveConfirm();
     const close = (): void => { bind.move.cancel(); setSelected(new Set()); setAlsoDefault(false); onClose(); };
     const picked = playthroughs.filter((p) => selected.has(p.campaignKey));
     const guard = useDirtyCloseGuard(picked.length > 0 || alsoDefault, close);

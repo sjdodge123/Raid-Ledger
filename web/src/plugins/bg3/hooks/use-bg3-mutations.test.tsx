@@ -14,8 +14,10 @@ import {
     bg3CreateCampaignHandler,
     bg3DefaultCampaignHandler,
     bg3Error,
+    bg3HubSettingsHandler,
     bg3RemoveSavesHandler,
     bg3SnapshotHandler,
+    bg3UnclaimHandler,
 } from '../../../test/mocks/bg3-handlers';
 import { BG3_CAMPAIGN_ID, BG3_HUB_ID, buildBg3CampaignSummary, buildBg3Claim, buildBg3Snapshot } from '../../../test/factories/bg3';
 import { toast } from '../../../lib/toast';
@@ -28,8 +30,14 @@ import {
     useClaimBg3Slot,
     useCreateBg3Campaign,
     useRemoveBg3Saves,
+    useUnclaimBg3Slot,
+    useUpdateBg3HubSettings,
 } from './use-bg3-mutations';
+import { hubClaimKey } from '../../../components/hub/claim/use-hub-claim';
 import { hubMediaKeys } from '../../../lib/hub-media-query';
+import { useBg3UploadSave } from '../upload/use-bg3-upload-save';
+import { companionBg3MessageHandler, companionBlobHandler } from '../../../test/mocks/bg3-companion-handlers';
+import { buildBg3ParsedSave } from '../../../test/factories/bg3-upload';
 
 vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -77,7 +85,7 @@ describe('use-bg3-mutations', () => {
             bg3BindKeyHandler((b, p) => calls.push(`key:${String(p['campaignKey']).slice(0, 1)}:${JSON.stringify(b)}`)),
             bg3DefaultCampaignHandler((b) => calls.push(`default:${JSON.stringify(b)}`)),
         );
-        const { result } = renderHook(() => useBindBg3Saves(BG3_HUB_ID), { wrapper });
+        const { result } = renderHook(() => useBindBg3Saves(), { wrapper });
         await act(() => result.current.mutateAsync({
             campaignKeys: ['a'.repeat(64), 'b'.repeat(64), 'a'.repeat(64)], campaignId: BG3_CAMPAIGN_ID, alsoDefault: true,
         }));
@@ -118,7 +126,7 @@ describe('useBindBg3Saves cross-hub hold (ROK-1960, operator ruling 2026-10-31)'
             bg3BindKeyCrossHubHandler(move, (b, p) => calls.push(`key:${String(p['campaignKey']).slice(0, 1)}:${JSON.stringify(b)}`)),
             bg3DefaultCampaignHandler((b) => calls.push(`default:${JSON.stringify(b)}`)),
         );
-        const { result } = renderHook(() => useBindBg3Saves(BG3_HUB_ID), { wrapper });
+        const { result } = renderHook(() => useBindBg3Saves(), { wrapper });
         const vars = { campaignKeys: ['a'.repeat(64)], campaignId: BG3_CAMPAIGN_ID, alsoDefault: true };
         const failure = await result.current.mutateAsync(vars).then(() => null, (e: unknown) => e);
         expect(failure).toBeInstanceOf(Bg3BindCrossHubHold);
@@ -155,5 +163,99 @@ describe('ROK-2068 useRemoveBg3Saves', () => {
         expect(qc.getQueryState([...hubMediaKeys.all(BG3_HUB_ID + 1), 'pages'])?.isInvalidated).toBe(true);
         // The picture bytes are immutable and cached forever: refetching them would flicker every picture (fix-1 MINOR-1).
         expect(qc.getQueryState(PICTURE_KEY)?.isInvalidated, 'a cached picture file must not be invalidated').toBe(false);
+    });
+
+});
+
+describe('BG3 mutations refresh the shared claim prompt (ROK-2153 S6)', () => {
+    /** Seed the core claim status as `useHubClaim` caches it (viewer last). */
+    function seedClaimStatus(qc: ReturnType<typeof setup>['qc']): readonly unknown[] {
+        const key = [...hubClaimKey(BG3_HUB_ID), 'viewer-33'];
+        qc.setQueryData(key, { candidates: [] });
+        expect(qc.getQueryState(key)?.isInvalidated).toBe(false);
+        return key;
+    }
+
+    it('after a Party-card claim settles', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        server.use(bg3ClaimHandler(204));
+        const { result } = renderHook(() => useClaimBg3Slot(BG3_HUB_ID, VIEWER), { wrapper });
+        act(() => result.current.mutate({ campaignId: BG3_CAMPAIGN_ID, slotKey: SLOT }));
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+    });
+
+    it('after an unclaim settles', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        server.use(bg3UnclaimHandler(204));
+        const { result } = renderHook(() => useUnclaimBg3Slot(BG3_HUB_ID), { wrapper });
+        act(() => result.current.mutate({ campaignId: BG3_CAMPAIGN_ID, slotKey: SLOT }));
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+    });
+
+    it('after an active-campaign switch settles, and not for another hub', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        const otherHub = [...hubClaimKey(BG3_HUB_ID + 1), 'viewer-33'];
+        qc.setQueryData(otherHub, { candidates: [] });
+        server.use(bg3HubSettingsHandler({ hideLocationAndScreenshots: true, activeCampaignId: BG3_CAMPAIGN_ID }));
+        const { result } = renderHook(() => useUpdateBg3HubSettings(BG3_HUB_ID), { wrapper });
+        act(() => result.current.mutate({ activeCampaignId: BG3_CAMPAIGN_ID }));
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+        expect(qc.getQueryState(otherHub)?.isInvalidated).toBe(false);
+    });
+
+    it('after a save removal settles, on every hub', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        const otherHub = [...hubClaimKey(BG3_HUB_ID + 1), 'viewer-33'];
+        qc.setQueryData(otherHub, { candidates: [] });
+        server.use(bg3RemoveSavesHandler({ removed: { saves: 1, campaignKeys: 1, thumbnailRefs: 0, galleryPictures: 0 } }));
+        const { result } = renderHook(() => useRemoveBg3Saves(), { wrapper });
+        await act(async () => { await result.current.mutateAsync(['b'.repeat(64)]); });
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+        expect(qc.getQueryState(otherHub)?.isInvalidated, 'a removal may span hubs').toBe(true);
+    });
+
+    /** Seed hub B (not the mutation's hub): its claim status and its BG3 snapshot, both fresh. */
+    function seedOtherHub(qc: ReturnType<typeof setup>['qc']): { claim: readonly unknown[]; snapshot: readonly unknown[] } {
+        const claim = [...hubClaimKey(BG3_HUB_ID + 1), 'viewer-33'];
+        const snapshot = bg3Keys.snapshot(BG3_HUB_ID + 1);
+        qc.setQueryData(claim, { candidates: [] });
+        qc.setQueryData(snapshot, buildBg3Snapshot());
+        return { claim, snapshot };
+    }
+
+    function expectOtherHubStale(qc: ReturnType<typeof setup>['qc'], other: ReturnType<typeof seedOtherHub>): void {
+        expect(qc.getQueryState(other.claim)?.isInvalidated, 'the hub the saves moved OUT of: claim status').toBe(true);
+        expect(qc.getQueryState(other.snapshot)?.isInvalidated, 'the hub the saves moved OUT of: BG3 snapshot').toBe(true);
+    }
+
+    it('after a confirmed cross-hub bind settles, on the hub the saves left too', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        const other = seedOtherHub(qc);
+        server.use(bg3BindKeyHandler());
+        const { result } = renderHook(() => useBindBg3Saves(), { wrapper });
+        await act(() => result.current.mutateAsync({
+            campaignKeys: ['c'.repeat(64)], campaignId: BG3_CAMPAIGN_ID, alsoDefault: false, confirmCrossHub: ['c'.repeat(64)],
+        }));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+        expectOtherHubStale(qc, other);
+    });
+
+    it('after an upload with Move here settles, on the hub the saves left too', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        const other = seedOtherHub(qc);
+        server.use(bg3BindKeyHandler(), companionBlobHandler('stored'), companionBg3MessageHandler('accepted'));
+        const { result } = renderHook(() => useBg3UploadSave(), { wrapper });
+        await act(() => result.current.mutateAsync({ save: buildBg3ParsedSave(), campaignId: BG3_CAMPAIGN_ID, confirmCrossHub: true }));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+        expectOtherHubStale(qc, other);
     });
 });

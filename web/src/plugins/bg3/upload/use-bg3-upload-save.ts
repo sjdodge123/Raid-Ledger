@@ -5,13 +5,13 @@
  * picked campaign. The bind goes FIRST because it is the step that can stop
  * for the cross-hub confirm (409 `cross_hub_move`): nothing — not even the
  * thumbnail — leaves the browser before the user agrees. A failed bind aborts
- * before anything is sent. Then invalidate every bg3 query of the hub. Every
+ * before anything is sent. Then invalidate every hub's bg3 queries. Every
  * failure rejects with a `Bg3UploadError`.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Bg3SaveMessage } from '@raid-ledger/contract';
 import { bindBg3CampaignKey } from '../api/bg3-api';
-import { invalidateBg3Hub } from '../hooks/bg3-keys';
+import { invalidateBg3Everywhere } from '../hooks/bg3-keys';
 import { buildBg3SaveMessage, postBg3SaveMessage, putBg3Thumbnail, type Bg3ParsedSave } from './bg3-upload-api';
 import { Bg3UploadError, crossHubMoveOf, toBg3UploadError } from './bg3-upload-errors';
 
@@ -61,11 +61,14 @@ export async function uploadBg3Save(vars: Bg3UploadVars, now: number = Date.now(
     }
 }
 
-/** The sheet's Upload button (D-6 step 5: invalidate snapshot, campaigns and my saves on settle). */
-export function useBg3UploadSave(hubId: number) {
+/**
+ * The sheet's Upload button (D-6 step 5). On settle EVERY hub's BG3 queries and
+ * claim status refresh: a confirmed "Move here" empties another hub (ROK-2153 S6).
+ */
+export function useBg3UploadSave() {
     const qc = useQueryClient();
     return useMutation<Bg3UploadResult, Bg3UploadError, Bg3UploadVars>({
         mutationFn: (vars) => uploadBg3Save(vars),
-        onSettled: () => invalidateBg3Hub(qc, hubId),
+        onSettled: () => invalidateBg3Everywhere(qc),
     });
 }

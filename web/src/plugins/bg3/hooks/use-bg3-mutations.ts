@@ -20,7 +20,7 @@ import {
     updateBg3HubSettings,
     type Bg3UpdateCampaignInput,
 } from '../api/bg3-api';
-import { bg3Keys, invalidateBg3Hub } from './bg3-keys';
+import { bg3Keys, invalidateBg3Everywhere, invalidateBg3Hub } from './bg3-keys';
 
 export const BG3_CLAIM_CONFLICT_TOAST = 'Someone claimed this character first.';
 export const BG3_CLAIM_ERROR_TOAST = "Couldn't update the claim.";
@@ -109,7 +109,7 @@ async function bindKey(key: string, campaignId: number, confirmed: boolean): Pro
  * with that key), then the optional default. A 409 `cross_hub_move` rejects
  * with `Bg3BindCrossHubHold`; re-binding an already-bound key is a no-op.
  */
-export function useBindBg3Saves(hubId: number) {
+export function useBindBg3Saves() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: async (v: Bg3BindSavesVars) => {
@@ -117,22 +117,24 @@ export function useBindBg3Saves(hubId: number) {
             for (const key of new Set(v.campaignKeys)) await bindKey(key, v.campaignId, confirmed.has(key));
             if (v.alsoDefault) await setBg3DefaultCampaign(v.campaignId);
         },
-        onSettled: () => invalidateBg3Hub(qc, hubId),
+        // A confirmed cross-hub move empties the OTHER hub's party too (ROK-2153 S6).
+        onSettled: () => invalidateBg3Everywhere(qc),
     });
 }
 
 /**
  * ROK-2068 — remove the caller's saves of the picked playthroughs (keys). The
  * saves may be filed in any hub and the server tombstones their pictures on
- * every hub, so on settle EVERY hub's BG3 queries and Gallery refresh (review
- * MINOR-4); removal is rare, so the extra refetches cost little.
+ * every hub, so on settle EVERY hub's BG3 queries, Gallery and claim status
+ * refresh (review MINOR-4; ROK-2153 S6: a removed playthrough's party slots
+ * must leave the Overview prompt); removal is rare, so the refetches cost little.
  */
 export function useRemoveBg3Saves() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: (campaignKeys: readonly string[]) => removeBg3Saves([...new Set(campaignKeys)]),
         onSettled: () => Promise.all([
-            qc.invalidateQueries({ queryKey: bg3Keys.all }),
+            invalidateBg3Everywhere(qc),
             qc.invalidateQueries({ predicate: isHubGalleryListQuery }),
         ]),
     });
