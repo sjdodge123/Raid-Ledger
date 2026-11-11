@@ -18,13 +18,18 @@ const NEW = `sha256:${'b'.repeat(64)}`;
 /**
  * `rl:ci-test` points at OLD until `moveTag()`. opts: oldTags (OLD's RepoTags
  * after the move), stallSnapshot (the first GET of rl:ci-test never answers),
- * onContainers (hook run when the container list is read).
+ * onContainers (hook run when the container list is read), oldTagsByInspect
+ * (OLD's RepoTags per successive inspect by ID), holdDelete (DELETE answers only
+ * after releaseDelete()).
  */
 async function fakeDaemon(opts = {}) {
   const sock = path.join(fs.mkdtempSync(path.join(scratch, 'd-')), 'd.sock');
   const seen = [];
   let current = OLD;
   let snapshots = 0;
+  let oldInspects = 0;
+  let releaseDelete;
+  const deleteHeld = new Promise((r) => { releaseDelete = r; });
   const send = (res, status, body) => { res.statusCode = status; res.end(JSON.stringify(body)); };
   const daemon = http.createServer((req, res) => {
     const url = decodeURIComponent(req.url ?? '');
@@ -35,17 +40,22 @@ async function fakeDaemon(opts = {}) {
       return send(res, 200, { Id: current, RepoTags: ['rl:ci-test'], Config: { Labels: {} } });
     }
     if (req.method === 'GET' && url === `/images/${OLD}/json`) {
-      return send(res, 200, { Id: OLD, RepoTags: opts.oldTags ?? [], Config: { Labels: {} } });
+      oldInspects += 1;
+      const tags = opts.oldTagsByInspect?.[oldInspects - 1] ?? opts.oldTags ?? [];
+      return send(res, 200, { Id: OLD, RepoTags: tags, Config: { Labels: {} } });
     }
     if (url.startsWith('/containers/json')) {
       opts.onContainers?.();
       return send(res, 200, []);
     }
-    if (req.method === 'DELETE') return send(res, 200, [{ Deleted: OLD }]);
+    if (req.method === 'DELETE') {
+      if (opts.holdDelete) return deleteHeld.then(() => send(res, 200, [{ Deleted: OLD }]));
+      return send(res, 200, [{ Deleted: OLD }]);
+    }
     send(res, 404, { message: 'no such object' });
   });
   await new Promise((r) => daemon.listen(sock, r));
-  return { sock, seen, moveTag: () => { current = NEW; }, close: () => { daemon.closeAllConnections(); daemon.close(); } };
+  return { sock, seen, moveTag: () => { current = NEW; }, releaseDelete: () => releaseDelete(), close: () => { daemon.closeAllConnections(); daemon.close(); } };
 }
 
 const deletes = (d) => d.seen.filter((s) => s.startsWith('DELETE'));
@@ -110,4 +120,35 @@ test('end() called twice drops the in-flight count once', async () => {
   await end(false);
   await end(false);
   assert.equal(buildsInFlight(), before);
+});
+
+test('Codex P2: a build that begins while the DELETE runs is admitted only after it finishes', async () => {
+  const d = await fakeDaemon({ holdDelete: true });
+  const lines = [];
+  let admitted = false;
+  let next = null;
+  try {
+    const end = await beginBuild(d.sock, ['rl:ci-test'], (m) => lines.push(m));
+    d.moveTag();
+    const removal = end(true);
+    for (let i = 0; i < 400 && deletes(d).length === 0; i += 1) await new Promise((r) => setTimeout(r, 5));
+    assert.deepEqual(deletes(d), [`DELETE /images/${OLD}`], 'the DELETE was dispatched');
+    next = beginBuild('/nonexistent.sock', ['rl:other'], () => {}).then((e) => { admitted = true; return e; });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(admitted, false, 'a build admitted while the DELETE (and its cache-parent removal) is still running');
+    d.releaseDelete();
+    await removal;
+    (await next)(false);
+    assert.equal(admitted, true, 'the waiting build is admitted once the DELETE finished');
+  } finally { d.releaseDelete(); d.close(); }
+  assert.deepEqual(lines, [`RECLAIM removed previous rl:ci-test ${OLD}`]);
+  assert.equal(buildsInFlight(), 0);
+});
+
+test('delta minor: a tag added to the previous image during the checks keeps it, no DELETE', async () => {
+  const d = await fakeDaemon({ oldTagsByInspect: [[], ['registry.rl.lan:5000/rl-allinone:rok-9']] });
+  const lines = [];
+  try { await rebuild(d, lines); } finally { d.close(); }
+  assert.deepEqual(deletes(d), [], `re-inspected right before DELETE, the new tag must keep it; saw ${JSON.stringify(d.seen)}`);
+  assert.deepEqual(lines, [`RECLAIM kept previous rl:ci-test ${OLD}: still tagged registry.rl.lan:5000/rl-allinone:rok-9`]);
 });

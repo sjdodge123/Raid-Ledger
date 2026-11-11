@@ -29,9 +29,17 @@ export const RECLAIM_TAGS = new Set(['docker.io/library/rl:ci-test']);
 const RUNNER_ROLE = 'runner';
 
 const DEFAULT_SNAPSHOT_TIMEOUT_MS = 4000;
-let snapshotTimeoutMs = Number(process.env.RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS) || DEFAULT_SNAPSHOT_TIMEOUT_MS;
+/** A positive timeout, else the default (a negative or non-numeric env value is ignored). */
+function positiveMs(v) {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_SNAPSHOT_TIMEOUT_MS;
+}
+let snapshotTimeoutMs = positiveMs(process.env.RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS);
 let inFlight = 0;
 let settled = Promise.resolve();
+// Codex P2: the DELETE in progress (it may recursively remove untagged cache
+// parents). beginBuild() waits for it before admitting a build.
+let deleting = Promise.resolve();
 
 /** Builds the guard is currently forwarding (for tests). */
 export function buildsInFlight() {
@@ -40,7 +48,7 @@ export function buildsInFlight() {
 
 /** Override the snapshot timeout (tests); a non-positive value restores the default. */
 export function setSnapshotTimeoutMs(ms) {
-  snapshotTimeoutMs = ms > 0 ? ms : DEFAULT_SNAPSHOT_TIMEOUT_MS;
+  snapshotTimeoutMs = positiveMs(ms);
 }
 
 /** Resolves once the most recent post-build removal attempt has finished (for tests). */
@@ -83,8 +91,16 @@ async function removePrevious(socket, tag, oldId, log) {
   const users = await containersUsing(socket, oldId);
   if (users === null) return kept('container list unreadable');
   if (users > 0) return kept(`${users} container(s) use it`);
+  // Delta-review minor: a tag added during the checks above keeps the image.
+  const last = (await imageInfo(socket, oldId)).info;
+  if (last === null) return;
+  if (last.tags.length > 0) return kept(`still tagged ${last.tags.join(', ')}`);
   if (inFlight > 0) return kept(busy()); // m3: a build may have started during the checks
-  const { status, json } = await dockerJson(socket, 'DELETE', `/images/${encodeURIComponent(oldId)}`);
+  // No await between the check above and publishing `deleting`: any build that
+  // begins after the check waits in beginBuild() until the DELETE has finished.
+  const del = dockerJson(socket, 'DELETE', `/images/${encodeURIComponent(oldId)}`);
+  deleting = del.then(() => {}, () => {});
+  const { status, json } = await del;
   if (status === 200) return log(`RECLAIM removed previous ${tag} ${oldId}`);
   kept(`DELETE ${status} ${json?.message ?? ''}`.trimEnd());
 }
@@ -100,12 +116,15 @@ async function snapshot(socket, tag, log) {
  * Call before forwarding a /build; it counts the build in flight synchronously.
  * Resolves to `end(finished)`, to call when the guard's response closes
  * (`finished`: it completed); repeat calls are no-ops, so the count drops once.
+ * It resolves only after any removal already dispatched has finished, so a new
+ * build never runs alongside a DELETE (Codex P2).
  */
 export async function beginBuild(socket, tags, log) {
   inFlight += 1;
   let tag = null;
   let oldId = null;
   try {
+    await deleting; // Codex P2: never overlap a removal still in progress
     tag = reclaimableTag(tags ?? []);
     if (tag !== null) oldId = await snapshot(socket, tag, log);
   } catch (e) {
