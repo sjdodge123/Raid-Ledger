@@ -7,6 +7,7 @@ import { REDIS_CLIENT } from '../../redis/redis.module';
 let service: BossEncountersService;
 let mockSeeder: { seed: jest.Mock; drop: jest.Mock };
 let mockDb: { select: jest.Mock };
+let mockOrderBy: jest.Mock;
 let mockRedis: {
   get: jest.Mock;
   setex: jest.Mock;
@@ -21,7 +22,7 @@ async function setupEach() {
   };
 
   // Build a fluent mock for Drizzle queries: db.select().from().where().orderBy()
-  const mockOrderBy = jest.fn().mockResolvedValue([]);
+  mockOrderBy = jest.fn().mockResolvedValue([]);
   const mockWhere = jest.fn().mockReturnValue({ orderBy: mockOrderBy });
   const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
 
@@ -108,6 +109,55 @@ describe('BossEncountersService — variant and queries', () => {
       const result = await service.getLootForBoss(999, 'classic_era');
       expect(result).toEqual([]);
     });
+  });
+});
+
+/** A stored loot row as the DB returns it (ROK-2170). */
+function lootRow(id: number, expansion: string) {
+  return {
+    id,
+    bossId: 7,
+    itemId: 1000 + id,
+    itemName: `Item ${id}`,
+    slot: null,
+    quality: 'Rare',
+    itemLevel: null,
+    dropRate: null,
+    expansion,
+    classRestrictions: null,
+    iconUrl: null,
+    itemSubclass: null,
+  };
+}
+
+describe('BossEncountersService — Forever loot read rule (ROK-2170)', () => {
+  beforeEach(() => setupEach());
+
+  it('returns only the forever rows under wow_forever when the boss has any', async () => {
+    mockOrderBy.mockResolvedValue([
+      lootRow(1, 'classic'),
+      lootRow(2, 'forever'),
+    ]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result.map((l) => [l.id, l.expansion])).toEqual([[2, 'forever']]);
+  });
+
+  it('falls back to the classic rows under wow_forever when no forever row exists', async () => {
+    mockOrderBy.mockResolvedValue([
+      lootRow(1, 'classic'),
+      lootRow(3, 'classic'),
+    ]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result.map((l) => l.id)).toEqual([1, 3]);
+  });
+
+  it('never returns forever rows under classic_era', async () => {
+    mockOrderBy.mockResolvedValue([lootRow(1, 'classic')]);
+    const result = await service.getLootForBoss(7, 'classic_era');
+    expect(result.map((l) => l.expansion)).toEqual(['classic']);
+    expect(service.getExpansionsForVariant('classic_era')).not.toContain(
+      'forever',
+    );
   });
 });
 
