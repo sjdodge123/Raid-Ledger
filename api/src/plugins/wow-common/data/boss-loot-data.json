@@ -78008,19 +78008,6 @@
     "itemSubclass": "Sword"
   },
   {
-    "bossName": "Avatar of Hakkar",
-    "expansion": "forever",
-    "itemId": 12462,
-    "itemName": "Embrace of the Wind Serpent",
-    "slot": "Chest",
-    "quality": "Epic",
-    "itemLevel": 55,
-    "dropRate": null,
-    "classRestrictions": null,
-    "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_chest_cloth_42.jpg",
-    "itemSubclass": "Cloth"
-  },
-  {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
     "itemId": 13398,
