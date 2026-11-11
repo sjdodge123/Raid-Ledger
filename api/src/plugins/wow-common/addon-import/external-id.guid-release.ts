@@ -88,6 +88,11 @@ export async function lockReleasedRows(
     .for('update', { of: guildMembers });
 }
 
+/** ROK-2175: drop one user's own characters; no filter when unset. */
+function notOwnedBy(ownerId: number | undefined): SQL | undefined {
+  return ownerId === undefined ? undefined : ne(characters.userId, ownerId);
+}
+
 /**
  * Write `external_id_linked` for every character that now wins a row the
  * released GUID held through the Blizzard-id arm. @returns rows written.
@@ -116,14 +121,7 @@ export async function auditGuidRelease(
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .innerJoin(characters, blizzardIdLink())
-    .where(
-      and(
-        rowsOf(released),
-        excludeOwnerId === undefined
-          ? undefined
-          : ne(characters.userId, excludeOwnerId),
-      ),
-    );
+    .where(and(rowsOf(released), notOwnedBy(excludeOwnerId)));
   for (const w of winners) {
     const { id, userId, ...rest } = w;
     const entry = { ...rest, actorId, ownerId: userId, characterId: id };
