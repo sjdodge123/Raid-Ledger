@@ -11,6 +11,7 @@
  * Do NOT "fix" a value here. Diacritics are deliberately NOT folded, numerals
  * above VIII are deliberately NOT converted, and an unspaced dash is kept —
  * a changed literal is a behaviour change, and belongs in its own story.
+ * (ROK-2164 was one: em/en dashes now fold like a spaced ASCII " - ".)
  *
  * Plain literals rather than `toMatchSnapshot`: the api jest `ci` default
  * refuses to write snapshots on CI, so a missing snapshot would not be caught.
@@ -106,7 +107,8 @@ export const NORMALIZE_GOLDEN: Readonly<Record<string, string>> = {
   'Game: Subtitle': 'game subtitle',
   'Game:Subtitle': 'game subtitle',
   'Game - Subtitle': 'game subtitle',
-  'Game — Subtitle': 'game — subtitle',
+  // ROK-2164: deliberate behaviour change — the em dash now folds like " - ".
+  'Game — Subtitle': 'game subtitle',
   'Half-Life 2': 'half-life 2',
   "Baldur's Gate 3": "baldur's gate 3",
   'S.T.A.L.K.E.R.': 's.t.a.l.k.e.r.',

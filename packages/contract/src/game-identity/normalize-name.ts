@@ -39,6 +39,11 @@ export function normalizeForDedup(name: string): string {
   result = result.replace(/\s*:\s*/g, ' ');
   // Strip dashes acting as subtitle separators (surrounded by whitespace)
   result = result.replace(/\s+-\s+/g, ' ');
+  // ROK-2164: em dash (U+2014) and en dash (U+2013) are subtitle separators
+  // too ("Asgard's Fall — Viking Survivors" vs "Asgard's Fall: Viking
+  // Survivors"). Folded spaced OR unspaced: unlike the ASCII hyphen, neither
+  // is ever word-internal in a title ("Half-Life" keeps its hyphen).
+  result = result.replace(/\s*[–—]\s*/g, ' ');
   // Collapse whitespace
   result = result.replace(/\s+/g, ' ').trim();
   return result;
