@@ -102,7 +102,7 @@ async function seedAll(): Promise<void> {
     if (!eventId) throw new Error('event create returned no id');
     await apiPost(token, `/events/${eventId}/signup`, { characterId });
     // The create API leaves gameVariant null, and Armory gear is only decorated for vanilla-era variants.
-    const seeded = (await apiPost(token, '/admin/test/wow/seed-item-tooltips', { items: SEED_ITEMS, characterId, equipment: SEED_GEAR, gameVariant: 'classic_era' })) as { itemIds?: number[] } | null;
+    const seeded = (await apiPost(token, '/admin/test/wow/seed-item-tooltips', { items: SEED_ITEMS, characterId, equipment: SEED_GEAR, gameVariant: VARIANT })) as { itemIds?: number[] } | null;
     if (!seeded?.itemIds?.length) throw new Error('seed-item-tooltips returned no itemIds (DEMO_MODE off?)');
     await waitForSeededLoot();
 }

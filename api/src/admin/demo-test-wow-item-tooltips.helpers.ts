@@ -140,7 +140,7 @@ async function writeEquipment(
   db: Db,
   characterId: string,
   equipment: CharacterEquipmentDto,
-  gameVariant: string | undefined,
+  gameVariant: SeedItemTooltipsInput['gameVariant'],
 ): Promise<void> {
   const updated = await db
     .update(schema.characters)
