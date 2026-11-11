@@ -59,19 +59,20 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
 
   /**
    * ROK-1727: Forever characters display their addon snapshot gear.
-   * ROK-2176: for vanilla-era variants that gear, else the stored Armory
+   * ROK-2176: that gear, else (vanilla-era variants only) the stored Armory
    * gear, comes back as a copy carrying each item's stored Wowhead tooltip
-   * (undefined = no gear at all). Retail / progression Classic / no variant
-   * keep the pre-2176 result: Wowhead envs 16/4 only serve vanilla items.
+   * (undefined = no gear at all). Addon gear is Forever by definition, so it
+   * is decorated even when the character's `gameVariant` is null (manual /
+   * roster-created). Armory gear of retail / progression Classic / TBC
+   * Anniversary / no variant keeps the pre-2176 result.
    */
   async resolveDisplayEquipment(
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
     const addon = await this.foreverEquipment.resolve(row);
-    if (!isTooltipVariant(row.gameVariant)) return addon;
-    const gear = addon ?? row.equipment;
-    if (!gear) return undefined;
-    return this.tooltips.decorate(row, gear);
+    if (addon) return this.tooltips.decorate(row, addon);
+    if (!isTooltipVariant(row.gameVariant) || !row.equipment) return undefined;
+    return this.tooltips.decorate(row, row.equipment);
   }
 
   /** ROK-1744: Forever talents from the LedgerLink snapshot. */

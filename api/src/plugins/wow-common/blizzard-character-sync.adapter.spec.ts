@@ -325,6 +325,18 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', 
     expect(decorate).not.toHaveBeenCalled();
   });
 
+  // Codex P2: addon gear is Forever by definition — a manual / roster-created
+  // Forever character can keep gameVariant null and still gets tooltips.
+  it('decorates addon gear even when the character has no variant', async () => {
+    const addon = gear(1);
+    const decorated = { ...addon, equippedItemLevel: 1 };
+    equipmentResolve.mockResolvedValue(addon);
+    decorate.mockResolvedValue(decorated);
+    const input = { ...row(null), gameVariant: null };
+    expect(await adapter.resolveDisplayEquipment(input)).toBe(decorated);
+    expect(decorate).toHaveBeenCalledWith(input, addon);
+  });
+
   // Review MAJOR 2: Wowhead envs 16/4 only describe vanilla-era items.
   it.each(['wow_forever', 'classic_era'])(
     'decorates %s Armory gear',
