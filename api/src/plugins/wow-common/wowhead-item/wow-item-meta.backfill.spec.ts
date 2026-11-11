@@ -3,6 +3,8 @@
  * SQL) and the service step that enqueues the ids and drops the loot cache.
  * The real-DB proof of the query lands with L4's integration spec.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SettingsService } from '../../../settings/settings.service';
@@ -17,9 +19,28 @@ import {
   WOWHEAD_RETRY_BATCH,
 } from './wow-item-meta.service';
 import { createWowheadLimiter } from './wowhead-item.limiter';
-import type { WowheadFetch } from './wowhead-item.types';
+import {
+  WOWHEAD_TOOLTIP_PARSE_VERSION,
+  type WowheadFetch,
+} from './wowhead-item.types';
 
 const NOW = new Date('2026-11-11T05:15:00Z');
+/** Captured Wowhead tooltip HTML (Demonic Gauntlet, env 16). */
+const TOOLTIP_HTML = (
+  JSON.parse(
+    readFileSync(
+      join(
+        __dirname,
+        '..',
+        'testing',
+        'fixtures',
+        'wowhead',
+        'item-234819-env16.json',
+      ),
+      'utf8',
+    ),
+  ) as { tooltip: string }
+).tooltip;
 
 /** `selectDistinct` chain stub returning `ids`; records the limit. */
 function lootDb(ids: number[]) {
@@ -50,7 +71,13 @@ function service(db: object, status: number, setting: string | null = null) {
   const fetchFn: WowheadFetch = () =>
     Promise.resolve({
       status,
-      json: () => Promise.resolve({ name: 'Drop', quality: 4, icon: 'a' }),
+      json: () =>
+        Promise.resolve({
+          name: 'Drop',
+          quality: 4,
+          icon: 'a',
+          tooltip: TOOLTIP_HTML,
+        }),
     });
   const clearCache = jest.fn(() => Promise.resolve());
   const svc = new WowItemMetaService(
@@ -91,10 +118,10 @@ describe('backfillWhere (ROK-2176)', () => {
 describe('bossLootBackfillIds (ROK-2176)', () => {
   it('returns the distinct item ids, capped at the limit', async () => {
     const { db, limit } = lootDb([19019, 16921]);
-    await expect(bossLootBackfillIds(db as never, 500)).resolves.toEqual([
+    await expect(bossLootBackfillIds(db as never, 7)).resolves.toEqual([
       19019, 16921,
     ]);
-    expect(limit).toHaveBeenCalledWith(500);
+    expect(limit).toHaveBeenCalledWith(7);
   });
 
   it('a zero limit runs no query', async () => {
@@ -111,6 +138,11 @@ describe('WowItemMetaService.backfillBossLoot (ROK-2176)', () => {
     await expect(svc.backfillBossLoot()).resolves.toBe(2);
     expect(limit).toHaveBeenCalledWith(WOWHEAD_RETRY_BATCH);
     expect(writes).toHaveLength(2);
+    expect(writes[0]).toMatchObject({
+      status: 'resolved',
+      tooltip: { env: 16, slotLabel: 'Hands', armor: 133 },
+      tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
+    });
     expect(clearCache).toHaveBeenCalledTimes(1);
   });
 
