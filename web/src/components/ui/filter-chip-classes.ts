@@ -7,8 +7,14 @@
 /** §4.3 chip geometry shared by both states. */
 export const FILTER_CHIP_BASE =
     'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+/** §4.3 pressed (ON) fill alone — for a pressed toggle that keeps its own border (ROK-2172 role pills). */
+export const FILTER_CHIP_ON_FILL = 'bg-amber-500/10 hover:bg-amber-500/20';
+/** §4.3 pressed (ON) border colour alone (pair with a `border` width). */
+export const FILTER_CHIP_ON_EDGE = 'border-amber-500/30';
+/** §4.3 pressed (ON) label colour alone — repainted for the light family in index.css. */
+export const FILTER_CHIP_ON_LABEL = 'text-amber-400';
 /** §4.3 pressed (ON) state — amber tint, `text-amber-400` label. */
-export const FILTER_CHIP_ON = 'bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20';
+export const FILTER_CHIP_ON = `${FILTER_CHIP_ON_FILL} border ${FILTER_CHIP_ON_EDGE} ${FILTER_CHIP_ON_LABEL}`;
 /** §4.3 unpressed (OFF) state — panel tokens. */
 export const FILTER_CHIP_OFF = 'bg-panel border border-edge text-secondary hover:bg-overlay';
 

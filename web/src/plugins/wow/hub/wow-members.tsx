@@ -1,16 +1,16 @@
 /**
- * ROK-1830 — the WoW guild's Members cells: the role summary band and the
- * per-row cells (character link, level + class, rank, the
- * Main pill and the raid-role badge). Core owns the section, card and collapse frame.
+ * ROK-1830 — the WoW guild's Members per-row cells (character link, level +
+ * class, rank, the Main pill and the raid-role badge); the role band moved to
+ * `useWowMemberFilters().summary` (ROK-2172). Core owns the section, card and collapse frame.
  * ROK-1173: the avatar + "You" pill (AC9/AC11), the class dot (AC12) and the
  * professions cell (AC8). Rows have a FIXED height (windowed list), so every
  * cell stays on one line and truncates instead of wrapping.
  */
 import type { JSX } from 'react';
-import type { HubCtx, HubMemberRow } from '../../hub-module';
+import type { HubMemberRow } from '../../hub-module';
 import { Pill } from '../../../components/hub/hub-bits';
 import { CharacterLink } from '../../../components/hub/character-link';
-import { CharRoleBadge, RoleSummary } from './role-bits';
+import { CharRoleBadge } from './role-bits';
 import { rankLabel } from './wow-guild.helpers';
 import { ProfessionBadges } from '../components/ProfessionBadges';
 import { classDotClass, useRowProfessions } from './wow-member-professions';
@@ -86,8 +86,4 @@ export function RankCell({ row }: { row: HubMemberRow }): JSX.Element {
 
 export function RoleCell({ row }: { row: HubMemberRow }): JSX.Element | null {
     return row.effectiveRole ? <CharRoleBadge role={row.effectiveRole} /> : null;
-}
-
-export function WowRoleSummaryBand({ page }: HubCtx): JSX.Element {
-    return <RoleSummary counts={page.roleCounts} />;
 }

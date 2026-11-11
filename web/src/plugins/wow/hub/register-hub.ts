@@ -9,7 +9,6 @@ import type { HubModule } from '../../hub-module';
 import { HiddenTab, WowRaidsTab } from './wow-tabs';
 import { WowFactionPill, WowViewerRolePills, WowWhereFact } from './wow-hero';
 import { wowHeroNote } from './wow-hero.helpers';
-import { WowRoleSummaryBand } from './wow-members';
 import {
     WOW_MEMBERS_EMPTY,
     WOW_MEMBER_COLUMNS,
@@ -57,7 +56,7 @@ export const wowHubModule: HubModule = {
     memberSorts: WOW_MEMBER_SORTS,
     /** ROK-1173: Class / Role / Rank / Level / Linked / Profession filters + the profession coverage strip. */
     useMemberFilters: useWowMemberFilters,
-    membersSummary: WowRoleSummaryBand,
+    /** ROK-2172: no `membersSummary` — the role band comes from `useMemberFilters().summary` so its pills toggle the Role filter. */
     membersBlurb: wowMembersBlurb,
     membersEmpty: WOW_MEMBERS_EMPTY,
     memberRowClass: wowMemberRowClass,
