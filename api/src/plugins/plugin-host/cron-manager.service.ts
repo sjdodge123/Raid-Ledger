@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { PluginRegistryService } from './plugin-registry.service';
+import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { PLUGIN_EVENTS } from './plugin-manifest.interface';
 import { EXTENSION_POINTS } from './extension-points';
 import type { CronRegistrar } from './extension-points';
@@ -14,6 +15,7 @@ export class CronManagerService implements OnApplicationBootstrap {
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly pluginRegistry: PluginRegistryService,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /**
@@ -74,7 +76,7 @@ export class CronManagerService implements OnApplicationBootstrap {
       try {
         const cronJob = CronJob.from({
           cronTime: job.cronExpression,
-          onTick: job.handler,
+          onTick: () => this.runTracked(jobName, job.handler),
           start: true,
         });
         this.schedulerRegistry.addCronJob(jobName, cronJob);
@@ -83,6 +85,29 @@ export class CronManagerService implements OnApplicationBootstrap {
         this.logger.error(`Failed to register cron job ${jobName}: ${err}`);
       }
     }
+  }
+
+  /**
+   * Run one scheduled tick through the shared job tracker (ROK-2166), so the
+   * admin Jobs page's Pause applies and the run leaves an execution row —
+   * the same path "Run now" takes. A tracker failure never stops the job: if
+   * the row lookup fails or there is no row, the tracker runs the handler
+   * untracked (one warning); a paused row is a skip; a handler error or a
+   * failed history write after the handler ran is logged, never re-run.
+   * This catch only keeps an error that still escapes (for example an
+   * untracked handler throwing) from becoming an unhandled rejection.
+   * Overlap behaviour is unchanged: ticks are not serialised.
+   */
+  private runTracked(
+    jobName: string,
+    handler: () => void | Promise<void>,
+  ): void {
+    this.cronJobService
+      .executeWithTracking(jobName, async () => handler())
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Cron job ${jobName} tick failed: ${msg}`);
+      });
   }
 
   @OnEvent(PLUGIN_EVENTS.DEACTIVATED)
