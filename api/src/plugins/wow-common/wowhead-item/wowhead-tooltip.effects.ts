@@ -6,78 +6,48 @@ import type { ItemTooltipStat } from '@raid-ledger/contract';
  * 2026-11-11). Anything not on the whitelist stays text-only.
  */
 
-interface EffectRule {
-  key: string;
-  name: string;
-  unit: 'flat' | 'percent';
-  re: RegExp;
-}
+/** [key, display name, unit, regex capturing the number]. */
+type EffectRule = readonly [string, string, 'flat' | 'percent', RegExp];
 
-/** First matching rule wins; each regex captures the number. */
+/** First matching rule wins. Spell crit / spell hit / dodge stay text-only. */
 const EFFECT_RULES: readonly EffectRule[] = [
-  {
-    key: 'ATTACK_POWER',
-    name: 'Attack Power',
-    unit: 'flat',
-    re: /^\+(\d+) Attack Power\.?$/,
-  },
-  {
-    key: 'CRIT_PCT',
-    name: 'Critical Strike',
-    unit: 'percent',
-    re: /critical strike by (\d+)%/,
-  },
-  {
-    key: 'HIT_PCT',
-    name: 'Hit',
-    unit: 'percent',
-    re: /chance to hit by (\d+)%/,
-  },
-  {
-    key: 'SPELL_POWER',
-    name: 'Spell Power',
-    unit: 'flat',
-    re: /damage and healing done by magical spells and effects by up to (\d+)/,
-  },
-  {
-    key: 'HEALING',
-    name: 'Healing',
-    unit: 'flat',
-    re: /healing done by spells and effects by up to (\d+)/,
-  },
-  {
-    key: 'MP5',
-    name: 'Mana per 5 sec',
-    unit: 'flat',
-    re: /Restores (\d+) mana per 5 sec/,
-  },
-  {
-    key: 'DEFENSE',
-    name: 'Defense',
-    unit: 'flat',
-    re: /Increased Defense \+(\d+)/,
-  },
+  ['ATTACK_POWER', 'Attack Power', 'flat', /^\+(\d+) Attack Power\.?$/],
+  ['CRIT_PCT', 'Critical Strike', 'percent', /critical strike by (\d+)%/],
+  ['HIT_PCT', 'Hit', 'percent', /chance to hit by (\d+)%/],
+  [
+    'SPELL_POWER',
+    'Spell Power',
+    'flat',
+    /damage and healing done by magical spells and effects by up to (\d+)/,
+  ],
+  [
+    'HEALING',
+    'Healing',
+    'flat',
+    /healing done by spells and effects by up to (\d+)/,
+  ],
+  ['MP5', 'Mana per 5 sec', 'flat', /Restores (\d+) mana per 5 sec/],
+  ['DEFENSE', 'Defense', 'flat', /Increased Defense \+(\d+)/],
 ];
 
 const EFFECT_SPAN_RE =
   /<span[^>]*class="q2">(Equip|Use|Chance on hit): (.*?)<\/span>/g;
 
-const ENTITIES: Record<string, string> = {
-  '&amp;': '&',
-  '&lt;': '<',
-  '&gt;': '>',
-  '&quot;': '"',
-  '&#39;': "'",
-  '&#039;': "'",
-  '&nbsp;': ' ',
-};
+const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>' };
+
+function decodeEntity(match: string, name: string): string {
+  if (name.startsWith('#')) return String.fromCharCode(Number(name.slice(1)));
+  if (name === 'quot') return '"';
+  if (name === 'nbsp') return ' ';
+  return ENTITIES[name] ?? match;
+}
 
 /** Tags and comments stripped, common entities decoded, whitespace collapsed. */
 export function htmlToText(html: string): string {
   return html
     .replace(/<!--.*?-->/g, '')
     .replace(/<[^>]+>/g, '')
-    .replace(/&(?:amp|lt|gt|quot|#0?39|nbsp);/g, (m) => ENTITIES[m] ?? m)
+    .replace(/&(#\d{1,5}|[a-z]+);/g, decodeEntity)
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -96,16 +66,9 @@ export function parseEffects(html: string): string[] {
 export function effectToStat(effect: string): ItemTooltipStat | null {
   if (!effect.startsWith('Equip: ')) return null;
   const text = effect.slice('Equip: '.length);
-  for (const rule of EFFECT_RULES) {
-    const m = rule.re.exec(text);
-    if (m?.[1] !== undefined) {
-      return {
-        key: rule.key,
-        name: rule.name,
-        value: Number(m[1]),
-        unit: rule.unit,
-      };
-    }
+  for (const [key, name, unit, re] of EFFECT_RULES) {
+    const m = re.exec(text);
+    if (m?.[1] !== undefined) return { key, name, value: Number(m[1]), unit };
   }
   return null;
 }
