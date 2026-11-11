@@ -48,6 +48,7 @@ import * as rosterArmory from './forever-armory-snapshot/roster-armory.registrat
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
+import { WowDisplayTooltipService } from './wow-display-tooltip.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
@@ -129,6 +130,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     // Empty partial ⇒ real defaults; the integration TestApp overrides it.
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
     ForeverDisplayEquipmentService,
+    // ROK-2176: stored Wowhead tooltips on displayed gear (Armory + addon).
+    WowDisplayTooltipService,
     ForeverDisplayTalentsService,
     ForeverDisplayLockoutsService,
     CharacterQuestsService,

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
+import { WowDisplayTooltipService } from './wow-display-tooltip.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardService } from './blizzard.service';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
@@ -9,6 +10,8 @@ import { ALL_WOW_GAME_SLUGS } from './manifest';
 let adapter: BlizzardCharacterSyncAdapter;
 let talentsResolve: jest.Mock;
 let lockoutsResolve: jest.Mock;
+let equipmentResolve: jest.Mock;
+let decorate: jest.Mock;
 let mockBlizzardService: {
   fetchCharacterProfile: jest.Mock;
   fetchCharacterSpecializations: jest.Mock;
@@ -25,14 +28,17 @@ async function setupEach() {
   };
   talentsResolve = jest.fn();
   lockoutsResolve = jest.fn();
+  equipmentResolve = jest.fn();
+  decorate = jest.fn();
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       BlizzardCharacterSyncAdapter,
       { provide: BlizzardService, useValue: mockBlizzardService },
       {
         provide: ForeverDisplayEquipmentService,
-        useValue: { resolve: jest.fn() },
+        useValue: { resolve: equipmentResolve },
       },
+      { provide: WowDisplayTooltipService, useValue: { decorate } },
       {
         provide: ForeverDisplayTalentsService,
         useValue: { resolve: talentsResolve },
@@ -265,5 +271,57 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayLockouts (ROK-1743)', (
     const row = { id: 'c1', gameVariant: 'wow_forever' };
     await expect(adapter.resolveDisplayLockouts(row)).resolves.toBe(dto);
     expect(lockoutsResolve).toHaveBeenCalledWith(row);
+  });
+});
+
+describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', () => {
+  beforeEach(() => setupEach());
+
+  const gear = (itemId: number) => ({
+    equippedItemLevel: null,
+    items: [
+      {
+        slot: 'HEAD',
+        name: 'Helm',
+        itemId,
+        quality: 'EPIC',
+        itemLevel: 66,
+        itemSubclass: null,
+        enchantments: [],
+        sockets: [],
+      },
+    ],
+    syncedAt: '2026-11-01T00:00:00Z',
+  });
+  const row = (equipment: ReturnType<typeof gear> | null) => ({
+    id: 'char-1',
+    gameVariant: 'wow_forever',
+    equipment,
+  });
+
+  it('decorates the addon gear when the Forever resolver returns some', async () => {
+    const addon = gear(1);
+    const decorated = { ...addon, equippedItemLevel: 1 };
+    equipmentResolve.mockResolvedValue(addon);
+    decorate.mockResolvedValue(decorated);
+    const input = row(gear(2));
+    expect(await adapter.resolveDisplayEquipment(input)).toBe(decorated);
+    expect(decorate).toHaveBeenCalledWith(input, addon);
+  });
+
+  it('decorates the stored Armory gear when the Forever resolver has no opinion', async () => {
+    const armory = gear(2);
+    const decorated = { ...armory, equippedItemLevel: 2 };
+    equipmentResolve.mockResolvedValue(undefined);
+    decorate.mockResolvedValue(decorated);
+    const input = row(armory);
+    expect(await adapter.resolveDisplayEquipment(input)).toBe(decorated);
+    expect(decorate).toHaveBeenCalledWith(input, armory);
+  });
+
+  it('is undefined (keep the stored value) with no addon and no Armory gear', async () => {
+    equipmentResolve.mockResolvedValue(undefined);
+    expect(await adapter.resolveDisplayEquipment(row(null))).toBeUndefined();
+    expect(decorate).not.toHaveBeenCalled();
   });
 });

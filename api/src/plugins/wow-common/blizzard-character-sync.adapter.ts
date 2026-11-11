@@ -12,6 +12,7 @@ import type {
   ForeverTalentsDto,
 } from '@raid-ledger/contract';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
+import { WowDisplayTooltipService } from './wow-display-tooltip.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import type {
@@ -37,13 +38,20 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     private readonly foreverEquipment: ForeverDisplayEquipmentService,
     private readonly foreverTalents: ForeverDisplayTalentsService,
     private readonly foreverLockouts: ForeverDisplayLockoutsService,
+    private readonly tooltips: WowDisplayTooltipService,
   ) {}
 
-  /** ROK-1727: Forever characters display their addon snapshot gear. */
-  resolveDisplayEquipment(
+  /**
+   * ROK-1727: Forever characters display their addon snapshot gear.
+   * ROK-2176: that gear, else the stored Armory gear, comes back as a copy
+   * carrying each item's stored Wowhead tooltip (undefined = no gear at all).
+   */
+  async resolveDisplayEquipment(
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
-    return this.foreverEquipment.resolve(row);
+    const gear = (await this.foreverEquipment.resolve(row)) ?? row.equipment;
+    if (!gear) return undefined;
+    return this.tooltips.decorate(row, gear);
   }
 
   /** ROK-1744: Forever talents from the LedgerLink snapshot. */
