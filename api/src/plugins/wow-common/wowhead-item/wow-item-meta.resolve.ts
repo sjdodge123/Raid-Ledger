@@ -165,6 +165,8 @@ export async function resolveItem(
     itemId,
     status: 'not_found',
     ...EMPTY,
+    // Probed by this parser: a miss must not leave a stale found row due.
+    tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
     fetchedAt,
     nextRetryAt,
     attempts: misses,

@@ -5,7 +5,9 @@
  * `resolved` (env 16) > `classic_fallback` (env 4) > `not_found`. A lower
  * outcome still refreshes the retry bookkeeping, so the row is not re-probed
  * on every cron run. One statement — no catch-and-retry. The parsed tooltip
- * (ROK-2176) is content: it follows the same protection as name/icon.
+ * (ROK-2176) is content: it follows the same protection as name/icon. Its
+ * `tooltip_version` is NOT: every non-error outcome stamps "probed by parser
+ * vN", so a lower-ranked re-probe of a stale row does not leave it due.
  */
 import { sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
@@ -38,7 +40,6 @@ function guardedContent(protect: readonly string[]): Record<string, SQL> {
     quality: keepIfProtected(protect, t.quality),
     icon: keepIfProtected(protect, t.icon),
     tooltip: keepIfProtected(protect, t.tooltip),
-    tooltipVersion: keepIfProtected(protect, t.tooltipVersion),
   };
 }
 
@@ -65,5 +66,9 @@ export function conflictSet(row: WowItemMetaInsert): Record<string, unknown> {
       tooltipVersion,
     };
   }
-  return { ...retry, ...guardedContent(protect) };
+  return {
+    ...retry,
+    ...guardedContent(protect),
+    tooltipVersion: row.tooltipVersion ?? null,
+  };
 }

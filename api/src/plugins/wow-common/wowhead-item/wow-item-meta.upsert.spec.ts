@@ -11,16 +11,8 @@ import type { WowItemMetaInsert } from './wowhead-item.types';
 
 const NOW = new Date('2026-10-09T12:00:00Z');
 const dialect = new PgDialect();
-/** Content columns guarded by the CASE; tooltip + version since ROK-2176. */
-const CONTENT_COLS = [
-  'status',
-  'env',
-  'name',
-  'quality',
-  'icon',
-  'tooltip',
-  'tooltipVersion',
-];
+/** Content columns guarded by the CASE; tooltip since ROK-2176. */
+const CONTENT_COLS = ['status', 'env', 'name', 'quality', 'icon', 'tooltip'];
 
 function insert(over: Partial<WowItemMetaInsert>): WowItemMetaInsert {
   return {
@@ -70,6 +62,17 @@ describe('conflictSet (ROK-1727)', () => {
       expect(protectedStatuses(set[col])).toEqual(['resolved']);
     }
   });
+
+  // Review MAJOR 1: the parser version is "probed by vN", not content — a
+  // lower-ranked outcome stamps it even where the tooltip stays protected.
+  it.each(['not_found', 'classic_fallback'] as const)(
+    '%s arriving: stamps tooltipVersion unguarded, tooltip stays guarded',
+    (status) => {
+      const set = conflictSet(insert({ status, tooltipVersion: 1 }));
+      expect(set.tooltipVersion).toBe(1);
+      expect(protectedStatuses(set.tooltip)).not.toEqual([]);
+    },
+  );
 
   it('resolved arriving: unconditional — upgrades a classic_fallback in place', () => {
     const row = insert({

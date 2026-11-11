@@ -31,7 +31,10 @@ function hasStaleTooltip(row: DueCheckRow): boolean {
 
 /**
  * No row, a due `next_retry_at`, a found row with a stale tooltip, or a
- * young `error` row past the floor.
+ * young `error` row past the floor. A stale tooltip only jumps the queue
+ * while the row has no failed probe on record (`attempts === 0`): a re-probe
+ * that errored (429/5xx) or missed bumps `attempts`, and the row then waits
+ * for its backoff `next_retry_at` like any other (ROK-2176 review MAJOR 1).
  */
 export function isMetaDue(
   row: DueCheckRow | undefined,
@@ -41,7 +44,7 @@ export function isMetaDue(
   if (row.nextRetryAt !== null && row.nextRetryAt.getTime() <= nowMs) {
     return true;
   }
-  if (hasStaleTooltip(row)) return true;
+  if (hasStaleTooltip(row) && row.attempts === 0) return true;
   return (
     row.status === 'error' &&
     row.attempts < ERROR_VIEW_FLOOR_MAX_ATTEMPTS &&

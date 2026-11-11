@@ -82,4 +82,15 @@ describe('isMetaDue — stale tooltip parse (ROK-2176)', () => {
   it('a not_found row with no tooltip waits for its backoff', () => {
     expect(isMetaDue(found('not_found', null), NOW)).toBe(false);
   });
+
+  // Review MAJOR 1: a 429/5xx (or miss) re-probe bumps `attempts` and keeps
+  // the stale version; the row must then wait for its backoff, not re-fire.
+  it.each(['resolved', 'classic_fallback'] as const)(
+    'a stale %s row whose re-probe failed waits for its backoff next_retry_at',
+    (status) => {
+      const row = { ...found(status, null), attempts: 1 };
+      expect(isMetaDue(row, NOW)).toBe(false);
+      expect(isMetaDue({ ...row, attempts: 4 }, NOW)).toBe(false);
+    },
+  );
 });
