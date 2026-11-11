@@ -10,7 +10,7 @@ export const BossEncounterDtoSchema = z.object({
     instanceId: z.number(),
     name: z.string(),
     order: z.number(),
-    expansion: z.enum(['classic', 'tbc', 'wotlk', 'cata', 'sod']),
+    expansion: z.enum(['classic', 'tbc', 'wotlk', 'cata', 'sod', 'forever']),
     sodModified: z.boolean(),
 });
 
@@ -33,7 +33,7 @@ export const BossLootDtoSchema = z.object({
     ]),
     itemLevel: z.number().nullable(),
     dropRate: z.string().nullable(),
-    expansion: z.enum(['classic', 'tbc', 'wotlk', 'cata', 'sod']),
+    expansion: z.enum(['classic', 'tbc', 'wotlk', 'cata', 'sod', 'forever']),
     classRestrictions: z.array(z.string()).nullable(),
     iconUrl: z.string().nullable(),
     itemSubclass: z.string().nullable(),

@@ -67,7 +67,7 @@ export const WOWHEAD_RETAIL_DOMAIN: WowheadDomain = RETAIL_WOWHEAD;
 
 /**
  * Loot-item expansion key → Wowhead domain (boss loot panels). `forever` is
- * web-only until ROK-1719 adds it to the contract's expansion enum (D4).
+ * in the contract's expansion enum since ROK-2170.
  */
 export const WOWHEAD_EXPANSION_DOMAINS: Readonly<Record<string, WowheadDomain>> = {
     tbc: { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' },

@@ -27,6 +27,20 @@ interface BossEntry {
   sodModified: boolean;
 }
 
+/**
+ * Boss FK for a loot entry. ROK-2170: a `forever` loot row hangs off a
+ * `forever` boss row when one exists, else off the classic boss of the same
+ * name — boss rows are not duplicated for Forever.
+ */
+function resolveLootBossId(
+  lookup: Map<string, number>,
+  l: { bossName: string; expansion: string },
+): number | undefined {
+  const own = lookup.get(`${l.bossName}::${l.expansion}`);
+  if (own !== undefined || l.expansion !== 'forever') return own;
+  return lookup.get(`${l.bossName}::classic`);
+}
+
 interface LootEntry {
   bossName: string;
   expansion: string;
@@ -180,7 +194,7 @@ export class BossEncounterSeeder {
   ) {
     return entries
       .map((l) => {
-        const bossId = bossLookup.get(`${l.bossName}::${l.expansion}`);
+        const bossId = resolveLootBossId(bossLookup, l);
         if (!bossId) {
           this.logger.warn(
             `Skipping loot "${l.itemName}" — boss "${l.bossName}" (${l.expansion}) not found`,

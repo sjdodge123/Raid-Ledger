@@ -1,49 +1,31 @@
 /**
  * ROK-2142: classic bosses added when the retail-journal boss lists were
- * replaced with the 1.12 lists. They ship WITHOUT loot on purpose — WoW:
- * Forever loot differs from Classic Era and both variants read the shared
- * `classic` rows, so a follow-up story sources the loot (possibly as
- * Forever-specific rows). The loot specs exempt exactly these names and
- * fail once one of them gains loot, so this list only ever shrinks.
+ * replaced with the 1.12 lists. A name here means the boss has NO loot rows
+ * of any kind yet (neither `classic` nor `forever`). ROK-2170 fills them with
+ * Forever rows (`expansion: 'forever'`), dungeon by dungeon. The loot specs
+ * exempt exactly these names and fail once one of them gains loot of either
+ * kind, so this list only ever shrinks.
  */
 export const LOOT_PENDING_CLASSIC_BOSSES: ReadonlySet<string> = new Set([
   'Agathelos the Raging',
   'Aggem Thorncurse',
   "Atal'alarion",
-  'Baron Aquanis',
-  'Baron Silverlaine',
-  'Bazil Thredd',
-  'Bazzalan',
-  'Captain Greenskin',
-  'Commander Springvale',
-  'Cookie',
   'Darkmaster Gandling',
   'Death Speaker Jargba',
-  'Dextren Ward',
   'Doctor Theolen Krastinov',
-  'Fenrus the Devourer',
-  'Gilnid',
   'Gizrul the Slavener',
   'Glutton',
   'Halycon',
-  'Hamhock',
   'Highlord Omokk',
   'Instructor Malicia',
   'Jandice Barov',
-  'Jergosh the Invoker',
-  'Kam Deepfury',
   'Kirtonos the Herald',
   'Lady Illucia Barov',
   'Lord Alexei Barov',
   'Lorekeeper Polkelt',
-  'Lorgus Jett',
   'Marduk Blackpool',
   'Mother Smolderweb',
-  'Mr. Smite',
-  'Odo the Blindwatcher',
-  'Oggleflint',
   'Ogom the Wretched',
-  "Old Serra'kis",
   'Overlord Ramtusk',
   'Overlord Wyrmthalak',
   'Plaguemaw the Rotting',
@@ -51,15 +33,9 @@ export const LOOT_PENDING_CLASSIC_BOSSES: ReadonlySet<string> = new Set([
   'Quartermaster Zigris',
   'Ras Frostwhisper',
   'Rattlegore',
-  'Razorclaw the Butcher',
-  'Rethilgore',
-  "Rhahk'Zor",
   "Shadow Hunter Vosh'gajin",
-  "Sneed's Shredder",
   'Solakar Flamewreath',
   'Spawn of Hakkar',
-  'Taragaman the Hungerer',
-  'Targorr the Dread',
   'The Beast',
   'The Ravenian',
   "Tuten'kash",
@@ -67,5 +43,4 @@ export const LOOT_PENDING_CLASSIC_BOSSES: ReadonlySet<string> = new Set([
   'Vectus',
   'War Master Voone',
   'Warchief Rend Blackhand',
-  'Wolf Master Nandos',
 ]);

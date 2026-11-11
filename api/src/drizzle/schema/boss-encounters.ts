@@ -26,7 +26,7 @@ export const wowClassicBosses = pgTable(
     name: varchar('name', { length: 255 }).notNull(),
     /** Boss ordering within the instance */
     order: integer('order').notNull(),
-    /** Expansion: 'classic' | 'tbc' | 'wotlk' | 'cata' | 'sod' */
+    /** Expansion: 'classic' | 'tbc' | 'wotlk' | 'cata' | 'sod' | 'forever' */
     expansion: varchar('expansion', { length: 20 }).notNull(),
     /** Whether this is a SoD-modified version of a Classic encounter */
     sodModified: boolean('sod_modified').default(false).notNull(),

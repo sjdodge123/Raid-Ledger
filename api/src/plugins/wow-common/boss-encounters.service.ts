@@ -27,9 +27,20 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic_anniversary: ['classic', 'tbc'],
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
-  // ROK-1719: vanilla content plus Forever's own (no 'forever' rows seeded yet).
+  // ROK-1719: vanilla content plus Forever's own; ROK-2170: a boss's forever
+  // loot rows replace its classic ones (see preferForeverLoot).
   wow_forever: ['classic', 'forever'],
 };
+
+/**
+ * ROK-2170: when a boss has its own Forever loot rows, they replace the
+ * Classic table (per boss). Without any, the rows pass through unchanged —
+ * variants whose expansion set lacks 'forever' never load such rows.
+ */
+function preferForeverLoot<T extends { expansion: string }>(rows: T[]): T[] {
+  const forever = rows.filter((r) => r.expansion === 'forever');
+  return forever.length > 0 ? forever : rows;
+}
 
 /**
  * Sub-instance wing-to-boss mapping for multi-wing dungeons.
@@ -178,7 +189,7 @@ export class BossEncountersService {
       )
       .orderBy(wowClassicBossLoot.quality);
 
-    return rows.map((row) => this.toLootDto(row));
+    return preferForeverLoot(rows).map((row) => this.toLootDto(row));
   }
 
   /**

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -38,12 +39,15 @@ const fakeLoot = [
   },
 ];
 
+/** Extra JSON loot rows a test appends (ROK-2170 Forever fallback cases). */
+const extraLoot: Array<Record<string, unknown>> = [];
+
 jest.mock('fs/promises', () => ({
   readFile: jest.fn().mockImplementation((path: string) => {
     if (path.includes('boss-encounter-data'))
       return Promise.resolve(JSON.stringify(fakeBosses));
     if (path.includes('boss-loot-data'))
-      return Promise.resolve(JSON.stringify(fakeLoot));
+      return Promise.resolve(JSON.stringify([...fakeLoot, ...extraLoot]));
     return Promise.reject(new Error(`Unexpected readFile: ${path}`));
   }),
 }));
@@ -53,6 +57,9 @@ const storedBosses = [
   { id: 2, instanceId: 409, name: 'Lucifron', expansion: 'classic' },
 ];
 
+/** Extra stored boss rows a test appends (ROK-2170). */
+const extraBosses: Array<Record<string, unknown>> = [];
+
 const storedLoot = [
   { id: 10, bossId: 1, itemId: 17182, expansion: 'classic' },
   // Retail leftover on a KEPT boss — no longer in boss-loot-data.json.
@@ -60,6 +67,7 @@ const storedLoot = [
 ];
 
 let seeder: BossEncounterSeeder;
+let mockValues: jest.Mock;
 let mockDb: {
   insert: jest.Mock;
   delete: jest.Mock;
@@ -72,7 +80,7 @@ async function setupEach() {
   const mockOnConflictDoUpdate = jest
     .fn()
     .mockReturnValue({ returning: mockReturning });
-  const mockValues = jest
+  mockValues = jest
     .fn()
     .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
 
@@ -81,7 +89,11 @@ async function setupEach() {
   const mockFrom = jest
     .fn()
     .mockImplementation((table: unknown) =>
-      Promise.resolve(table === wowClassicBossLoot ? storedLoot : storedBosses),
+      Promise.resolve(
+        table === wowClassicBossLoot
+          ? storedLoot
+          : [...storedBosses, ...extraBosses],
+      ),
     );
 
   mockDb = {
@@ -154,5 +166,56 @@ describe('BossEncounterSeeder', () => {
       // delete() called twice: loot first, then bosses
       expect(mockDb.delete).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe('BossEncounterSeeder — Forever loot (ROK-2170)', () => {
+  beforeEach(() => setupEach());
+
+  const foreverRow = (bossName: string) => ({
+    ...fakeLoot[0],
+    bossName,
+    expansion: 'forever',
+    itemId: 99001,
+    itemName: 'Forever Blade',
+  });
+  /** The loot batch handed to insert().values() (second insert call). */
+  const insertedLoot = (): Array<Record<string, unknown>> =>
+    (mockValues.mock.calls[1]?.[0] ?? []) as Array<Record<string, unknown>>;
+
+  afterEach(() => {
+    extraLoot.length = 0;
+    extraBosses.length = 0;
+  });
+
+  it('attaches a forever loot row to the classic boss of the same name', async () => {
+    extraLoot.push(foreverRow('Lucifron'));
+    await seeder.seed();
+    const row = insertedLoot().find((l) => l.itemId === 99001);
+    expect(row).toMatchObject({ bossId: 2, expansion: 'forever' });
+  });
+
+  it('prefers a forever boss row over the classic one when both exist', async () => {
+    extraBosses.push({
+      id: 3,
+      instanceId: 409,
+      name: 'Lucifron',
+      expansion: 'forever',
+    });
+    extraLoot.push(foreverRow('Lucifron'));
+    await seeder.seed();
+    const row = insertedLoot().find((l) => l.itemId === 99001);
+    expect(row).toMatchObject({ bossId: 3, expansion: 'forever' });
+  });
+
+  it('skips and warns on a forever row for an unknown boss', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    extraLoot.push(foreverRow('Nobody'));
+    await seeder.seed();
+    expect(insertedLoot().map((l) => l.itemId)).not.toContain(99001);
+    expect(warn).toHaveBeenCalledWith(
+      'Skipping loot "Forever Blade" — boss "Nobody" (forever) not found',
+    );
+    warn.mockRestore();
   });
 });
