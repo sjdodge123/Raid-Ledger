@@ -1,6 +1,6 @@
 /** ROK-1958 D-14 — BG3 query keys. Every key starts `['bg3', …]`. */
 import type { QueryClient } from '@tanstack/react-query';
-import { hubClaimKey } from '../../../components/hub/claim/use-hub-claim';
+import { hubClaimKey, invalidateAllHubClaims } from '../../../components/hub/claim/use-hub-claim';
 
 export const bg3Keys = {
     all: ['bg3'] as const,
@@ -27,4 +27,14 @@ export async function invalidateBg3Hub(qc: QueryClient, hubId: number): Promise<
         }),
         qc.invalidateQueries({ queryKey: hubClaimKey(hubId) }),
     ]);
+}
+
+/**
+ * Invalidate EVERY hub's BG3 queries and claim status (ROK-2153 S6). For any
+ * path that can change BG3 data of a hub other than the one it was started
+ * from: a key bind or an upload can move saves out of another hub (cross-hub
+ * move), a removal can span hubs. Hub-scoped paths use `invalidateBg3Hub`.
+ */
+export async function invalidateBg3Everywhere(qc: QueryClient): Promise<void> {
+    await Promise.all([qc.invalidateQueries({ queryKey: bg3Keys.all }), invalidateAllHubClaims(qc)]);
 }

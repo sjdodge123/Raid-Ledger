@@ -26,7 +26,7 @@ export function Bg3PartyDialogs({ open, onClose, hubId, campaignId, campaignName
             {open === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={onClose} />}
             {open === 'upload' && <Bg3UploadSaveSheet isOpen hubId={hubId} onClose={onClose} />}
             {open === 'add-saves' && campaignId !== null && campaignName !== null && (
-                <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={campaignId}
+                <Bg3AddSavesSheet isOpen campaignId={campaignId}
                     campaignName={campaignName} onClose={onClose} />
             )}
         </>

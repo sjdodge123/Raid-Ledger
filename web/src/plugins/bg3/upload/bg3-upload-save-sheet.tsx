@@ -80,7 +80,7 @@ export function Bg3UploadSaveSheet({ isOpen, hubId, onClose }: Bg3UploadSaveShee
     const mine = useBg3MyUnassignedSaves();
     const list = campaigns.data?.campaigns ?? [];
     const defaultId = mine.data?.defaultCampaignId ?? null;
-    const flow = useBg3UploadFlow(hubId, bg3InitialUploadCampaign(list, defaultId, campaigns.data?.settings.activeCampaignId ?? null));
+    const flow = useBg3UploadFlow(bg3InitialUploadCampaign(list, defaultId, campaigns.data?.settings.activeCampaignId ?? null));
     const [starting, setStarting] = useState(false);
     const guard = useDirtyCloseGuard(flow.parsed !== null && flow.result === null, onClose);
     const closeGuard = flow.uploading ? { ...guard, requestClose: noop } : guard;

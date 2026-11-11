@@ -24,7 +24,7 @@ const record = (b: unknown): void => { calls.push(JSON.stringify(b).includes('co
 
 /** Opens the sheet, ticks QuickSave_2's playthrough (optionally the default box) and presses Add. */
 async function addOne(user: ReturnType<typeof userEvent.setup>, alsoDefault = false): Promise<HTMLElement> {
-    renderWithProviders(<Bg3AddSavesSheet isOpen hubId={BG3_HUB_ID} campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
+    renderWithProviders(<Bg3AddSavesSheet isOpen campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
     const sheet = await screen.findByTestId('bg3-add-saves');
     await user.click(await within(sheet).findByRole('checkbox', { name: /QuickSave_2/ }));
     if (alsoDefault) await user.click(within(sheet).getByRole('checkbox', { name: BG3_ADD_SAVES_DEFAULT_LABEL }));
@@ -103,7 +103,7 @@ describe('Add my saves — several holds, and failures that are not a hold', () 
             keyed.push(`${String(p['campaignKey']).slice(0, 1)}${JSON.stringify(b).includes('confirmCrossHub') ? '+' : ''}`);
         }));
         const user = userEvent.setup();
-        renderWithProviders(<Bg3AddSavesSheet isOpen hubId={BG3_HUB_ID} campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
+        renderWithProviders(<Bg3AddSavesSheet isOpen campaignId={BG3_CAMPAIGN_ID} campaignName="Tactician run" onClose={onClose} />);
         const sheet = await screen.findByTestId('bg3-add-saves');
         await user.click(await within(sheet).findByRole('checkbox', { name: /QuickSave_2/ }));
         await user.click(within(sheet).getByRole('checkbox', { name: /AutoSave_9/ }));
