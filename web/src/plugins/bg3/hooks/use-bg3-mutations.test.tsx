@@ -205,4 +205,16 @@ describe('BG3 mutations refresh the shared claim prompt (ROK-2153 S6)', () => {
         await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
         expect(qc.getQueryState(otherHub)?.isInvalidated).toBe(false);
     });
+
+    it('after a save removal settles, on every hub', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        const otherHub = [...hubClaimKey(BG3_HUB_ID + 1), 'viewer-33'];
+        qc.setQueryData(otherHub, { candidates: [] });
+        server.use(bg3RemoveSavesHandler({ removed: { saves: 1, campaignKeys: 1, thumbnailRefs: 0, galleryPictures: 0 } }));
+        const { result } = renderHook(() => useRemoveBg3Saves(), { wrapper });
+        await act(async () => { await result.current.mutateAsync(['b'.repeat(64)]); });
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+        expect(qc.getQueryState(otherHub)?.isInvalidated, 'a removal may span hubs').toBe(true);
+    });
 });

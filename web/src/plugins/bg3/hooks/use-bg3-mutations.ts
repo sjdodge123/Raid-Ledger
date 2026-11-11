@@ -8,6 +8,7 @@ import type { Bg3CrossHubMove, Bg3HubSettingsBody, Bg3PartyClaim, Bg3SnapshotRes
 import { errorBodyOf, isConflictError } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import { isHubGalleryListQuery } from '../../../lib/hub-media-query';
+import { invalidateAllHubClaims } from '../../../components/hub/claim/use-hub-claim';
 import { crossHubMoveOf } from '../upload/bg3-upload-errors';
 import {
     bindBg3CampaignKey,
@@ -124,8 +125,9 @@ export function useBindBg3Saves(hubId: number) {
 /**
  * ROK-2068 — remove the caller's saves of the picked playthroughs (keys). The
  * saves may be filed in any hub and the server tombstones their pictures on
- * every hub, so on settle EVERY hub's BG3 queries and Gallery refresh (review
- * MINOR-4); removal is rare, so the extra refetches cost little.
+ * every hub, so on settle EVERY hub's BG3 queries, Gallery and claim status
+ * refresh (review MINOR-4; ROK-2153 S6: a removed playthrough's party slots
+ * must leave the Overview prompt); removal is rare, so the refetches cost little.
  */
 export function useRemoveBg3Saves() {
     const qc = useQueryClient();
@@ -134,6 +136,7 @@ export function useRemoveBg3Saves() {
         onSettled: () => Promise.all([
             qc.invalidateQueries({ queryKey: bg3Keys.all }),
             qc.invalidateQueries({ predicate: isHubGalleryListQuery }),
+            invalidateAllHubClaims(qc),
         ]),
     });
 }
