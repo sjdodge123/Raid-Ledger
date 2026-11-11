@@ -8,7 +8,9 @@
  *   3. mirror: staff grant B while A is away, A comes back → A does NOT
  *      inherit B's grant;
  *   4. control: A away and back with no grant meanwhile → A's own earlier
- *      grant still holds.
+ *      grant still holds;
+ *   4b. same when A's character holds BOTH the GUID and the row's Blizzard
+ *      id (ROK-2175): it re-wins R through arm B, which is no transfer.
  *
  * Timestamps sit DAYS apart: `characters.created_at` / `deactivated_at` are
  * naive timestamps compared against timestamptz grants and audits.
@@ -158,14 +160,21 @@ async function grant(guildId: number, memberId: number, at: Date) {
 /**
  * Row R (GUID G + Blizzard id X): A's character holds G and wins R; B's
  * Armory character (external_id X, created before any grant) is suppressed.
+ * `aBothIds`: A's character also carries X (LedgerLink-pinned AND
+ * Armory-imported, ROK-2175).
  */
-async function seed(grantAt: Date | null) {
+async function seed(grantAt: Date | null, aBothIds = false) {
   const guildId = await insertGuild();
   const id = 920_000_000 + next();
   const guid = `Player-2160-${next()}`;
   const memberId = await insertRow(guildId, guid, id);
   const ownerA = await insertUser();
-  const charA = await insertChar(ownerA, { addonGuid: guid });
+  const charA = await insertChar(
+    ownerA,
+    aBothIds
+      ? { addonGuid: guid, externalId: String(id) }
+      : { addonGuid: guid },
+  );
   const ownerB = await insertUser();
   const charB = await insertChar(ownerB, { externalId: String(id) });
   if (grantAt) await grant(guildId, memberId, grantAt);
@@ -303,6 +312,19 @@ describe('ROK-2160 Codex P1: a member grant never changes hands without staff', 
   it('4. control: A away and back with no grant meanwhile keeps A own grant', async () => {
     const s = await seed(T1);
     await deactivate(s.ownerA);
+    await reactivate(s.ownerA);
+    expect(await granted(s.ownerA, s, 'guid')).toBe(true);
+    expect(await linkAudits(s.ownerA)).toEqual([]);
+  });
+
+  it('4b. ROK-2175: A holding both the GUID and the Blizzard id keeps A own grant', async () => {
+    const s = await seed(T1, true);
+    expect(await granted(s.ownerA, s, 'guid')).toBe(true);
+    await deactivate(s.ownerA);
+    // A's unchanged character got no fresh link audit on deactivation...
+    expect(await linkAudits(s.ownerA)).toEqual([]);
+    // ...while B (another user) still did: the opposite hole stays shut.
+    await expectBNotGranted(s);
     await reactivate(s.ownerA);
     expect(await granted(s.ownerA, s, 'guid')).toBe(true);
     expect(await linkAudits(s.ownerA)).toEqual([]);

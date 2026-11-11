@@ -6,13 +6,18 @@ import { eq, and, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
-  type InMemorySession,
-  snapshotSessionForFlush,
   toVoiceSessionDto,
   buildAttendanceSummary,
 } from './voice-attendance.helpers';
 import { findActiveEventsByEphemeralChannel } from './voice-attendance-ephemeral.helpers';
 import { unionSeriesEvents } from './voice-attendance-series.helpers';
+
+// ROK-2174: the flush writes (now one batched upsert per tick) live in
+// voice-attendance-flush-write.helpers.ts; re-exported so callers are unchanged.
+export {
+  flushSingleSession,
+  flushDirtySessions,
+} from './voice-attendance-flush-write.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -20,64 +25,6 @@ type Logger = {
   debug: (msg: string, ...args: unknown[]) => void;
   warn: (msg: string, ...args: unknown[]) => void;
 };
-
-/** Flush a single in-memory session to the database. */
-export async function flushSingleSession(
-  db: Db,
-  session: InMemorySession,
-  logger: Logger,
-): Promise<void> {
-  try {
-    const snapshot = snapshotSessionForFlush(session);
-    await upsertSessionRow(db, session, snapshot);
-    session.dirty = false;
-  } catch (err) {
-    logger.error(
-      `Failed to flush session ${session.eventId}:${session.discordUserId}: ${err}`,
-    );
-  }
-}
-
-/** Build the conflict-update column set for voice session upserts. */
-function buildUpsertSet(
-  session: InMemorySession,
-  snapshot: ReturnType<typeof snapshotSessionForFlush>,
-) {
-  return {
-    userId: session.userId,
-    discordUsername: session.discordUsername,
-    lastLeaveAt: session.lastLeaveAt,
-    totalDurationSec: snapshot.totalDurationSec,
-    segments: snapshot.segments,
-  };
-}
-
-/** Upsert a voice session row into the database. */
-async function upsertSessionRow(
-  db: Db,
-  session: InMemorySession,
-  snapshot: ReturnType<typeof snapshotSessionForFlush>,
-): Promise<void> {
-  await db
-    .insert(schema.eventVoiceSessions)
-    .values({
-      eventId: session.eventId,
-      userId: session.userId,
-      discordUserId: session.discordUserId,
-      discordUsername: session.discordUsername,
-      firstJoinAt: session.firstJoinAt,
-      lastLeaveAt: session.lastLeaveAt,
-      totalDurationSec: snapshot.totalDurationSec,
-      segments: snapshot.segments,
-    })
-    .onConflictDoUpdate({
-      target: [
-        schema.eventVoiceSessions.eventId,
-        schema.eventVoiceSessions.discordUserId,
-      ],
-      set: buildUpsertSet(session, snapshot),
-    });
-}
 
 /** Query active scheduled events, optionally filtered by gameId. */
 export async function queryActiveEvents(
@@ -120,18 +67,6 @@ export async function queryActiveEventsMultiGame(
     .from(schema.events)
     .where(and(...conditions));
   return rows.map((e) => ({ eventId: e.id, gameId: e.gameId }));
-}
-
-/** Flush all dirty/active sessions to the DB. */
-export async function flushDirtySessions(
-  db: Db,
-  sessions: Map<string, InMemorySession>,
-  logger: Logger,
-): Promise<void> {
-  const dirty = [...sessions.values()].filter((s) => s.dirty || s.isActive);
-  if (dirty.length === 0) return;
-  for (const s of dirty) await flushSingleSession(db, s, logger);
-  logger.debug(`Flushed ${dirty.length} voice session(s) to DB`);
 }
 
 /** Fetch ended events within lookback window. */

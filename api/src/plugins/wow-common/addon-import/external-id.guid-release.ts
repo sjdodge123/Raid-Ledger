@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import { blizzardIdLink } from '../guilds/guild-link.predicates';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -88,15 +88,26 @@ export async function lockReleasedRows(
     .for('update', { of: guildMembers });
 }
 
+/** ROK-2175: drop one user's own characters; no filter when unset. */
+function notOwnedBy(ownerId: number | undefined): SQL | undefined {
+  return ownerId === undefined ? undefined : ne(characters.userId, ownerId);
+}
+
 /**
  * Write `external_id_linked` for every character that now wins a row the
  * released GUID held through the Blizzard-id arm. @returns rows written.
+ *
+ * ROK-2175: `excludeOwnerId` skips that user's own characters. A deactivated
+ * owner's character holding BOTH the GUID and the row's Blizzard id re-wins
+ * the row through arm B; that is no transfer to another person, so it must
+ * not get a fresh link audit (it would void the owner's own earlier grant).
  */
 export async function auditGuidRelease(
   tx: AddonImportTx,
   released: ReleasedGuid | null,
   actorId: number | null,
   createdAt?: SQL,
+  excludeOwnerId?: number,
 ): Promise<number> {
   if (released === null) return 0;
   const winners = await tx
@@ -110,7 +121,7 @@ export async function auditGuidRelease(
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .innerJoin(characters, blizzardIdLink())
-    .where(rowsOf(released));
+    .where(and(rowsOf(released), notOwnedBy(excludeOwnerId)));
   for (const w of winners) {
     const { id, userId, ...rest } = w;
     const entry = { ...rest, actorId, ownerId: userId, characterId: id };
@@ -127,6 +138,9 @@ export async function auditGuidReleases(
   released: ReleasedGuid[],
   actorId: number | null,
   createdAt?: SQL,
+  excludeOwnerId?: number,
 ): Promise<void> {
-  for (const r of released) await auditGuidRelease(tx, r, actorId, createdAt);
+  for (const r of released) {
+    await auditGuidRelease(tx, r, actorId, createdAt, excludeOwnerId);
+  }
 }

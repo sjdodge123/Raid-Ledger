@@ -441,13 +441,14 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
     mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
     return service.flushToDb().then(() => {
       // The upsert should have been called with totalDurationSec = 120
-      expect(mockDb.values).toHaveBeenCalledWith(
+      // ROK-2174: the flush writes one multi-row upsert, so values() gets an array.
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({
           totalDurationSec: 120,
           eventId: 1,
           discordUserId: 'discord-acc',
         }),
-      );
+      ]);
     });
   });
 
@@ -466,7 +467,7 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
     await service.flushToDb();
 
     // Should only have one segment with totalDurationSec = 60
-    const valuesCall = mockDb.values.mock.calls[0][0];
+    const valuesCall = mockDb.values.mock.calls[0][0][0];
     expect(valuesCall.totalDurationSec).toBe(60);
     expect(valuesCall.segments).toHaveLength(1);
   });
@@ -495,7 +496,7 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
     mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
     await service.flushToDb();
 
-    const valuesCall = mockDb.values.mock.calls[0][0];
+    const valuesCall = mockDb.values.mock.calls[0][0][0];
     // Should include the active segment's current duration (90s)
     expect(valuesCall.totalDurationSec).toBeGreaterThanOrEqual(90);
     // The last segment should have leaveAt === null (still active)
@@ -530,18 +531,15 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
     jest.setSystemTime(new Date('2026-02-28T20:02:00Z'));
     service.handleLeave(1, 'discord-B');
 
-    mockDb.onConflictDoUpdate
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
+    mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
     await service.flushToDb();
 
-    // Both sessions should have been flushed
-    expect(mockDb.values).toHaveBeenCalledTimes(2);
+    // ROK-2174: both sessions are flushed in ONE multi-row upsert
+    expect(mockDb.values).toHaveBeenCalledTimes(1);
 
-    const calls = mockDb.values.mock.calls;
-    const discordIds = calls.map(
-      (c: [Record<string, unknown>]) => c[0].discordUserId,
-    );
+    const rows: Array<Record<string, unknown>> = mockDb.values.mock.calls[0][0];
+    expect(rows).toHaveLength(2);
+    const discordIds = rows.map((r) => r.discordUserId);
     expect(discordIds).toContain('discord-A');
     expect(discordIds).toContain('discord-B');
   });
