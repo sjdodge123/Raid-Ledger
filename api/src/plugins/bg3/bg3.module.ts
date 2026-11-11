@@ -19,6 +19,7 @@ import { Bg3MeController } from './campaigns/bg3-me.controller';
 import { Bg3ClaimsController } from './claims/bg3-claims.controller';
 import { Bg3ClaimsRepository } from './claims/bg3-claims.repository';
 import { Bg3ClaimsService } from './claims/bg3-claims.service';
+import { Bg3HubClaimProvider } from './claims/bg3-hub-claim.provider';
 import { Bg3HistoryRetentionCron } from './history/bg3-retention.cron';
 import { Bg3RetentionRepository } from './history/bg3-retention.repository';
 import { Bg3SaveHandler } from './ingest/bg3-save.handler';
@@ -65,6 +66,7 @@ import { Bg3SavesReadRepository } from './read/bg3-saves.read.repository';
     Bg3CampaignsService,
     Bg3ClaimsRepository,
     Bg3ClaimsService,
+    Bg3HubClaimProvider,
     Bg3RetentionRepository,
     Bg3HistoryRetentionCron,
     Bg3ReadRepository,

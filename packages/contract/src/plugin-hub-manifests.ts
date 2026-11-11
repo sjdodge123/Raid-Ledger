@@ -153,6 +153,7 @@ export const BG3_HUB_MANIFEST = {
     { id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures while the hub hides spoilers' },
     { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'ingest-source', label: 'Adds the BG3 screenshots players send from the Companion to the hub Gallery' },
     { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'media-gate', label: 'Hides Companion screenshots while the hub hides spoilers' },
+    { id: 'bg3', kind: 'claim-provider', label: 'Lets players claim their party character' },
   ],
   gameSlugs: [...BG3_GAME_SLUGS],
   setup: BG3_SETUP,
