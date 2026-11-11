@@ -55,6 +55,9 @@ const SOURCE_ALIASES = {
   Sneed: "Sneed's Shredder",
   // Spelling: Wowhead has a lower-case r, the bundled boss row does not.
   'Ghamoo-ra': 'Ghamoo-Ra',
+  // The Shade of Hakkar is the first form of the Avatar of Hakkar encounter;
+  // the boss list has one row for it.
+  'Shade of Hakkar': 'Avatar of Hakkar',
 };
 
 /** Wowhead slot label → the slot vocabulary the loot file already uses. */
@@ -80,6 +83,7 @@ const SLOT_MAP = {
   Ranged: 'Ranged',
   Thrown: 'Ranged',
   Relic: 'Relic',
+  Ammo: null,
   Bag: null,
 };
 
@@ -115,6 +119,10 @@ const TYPE_MAP = {
   'Blacksmithing Plans': 'Blacksmithing',
   'Engineering Schematic': 'Engineering',
   'Leatherworking Pattern': 'Leatherworking',
+  'Tailoring Pattern': 'Tailoring',
+  'Enchanting Formula': 'Enchanting',
+  Book: 'Book',
+  Arrow: 'Arrow',
   'Cooking Recipe': 'Cooking',
   'First Aid Book': 'First Aid',
   'Fishing Book': 'Fishing',
