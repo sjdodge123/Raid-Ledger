@@ -326,7 +326,7 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', 
   });
 
   // Review MAJOR 2: Wowhead envs 16/4 only describe vanilla-era items.
-  it.each(['wow_forever', 'classic_era', 'classic_anniversary'])(
+  it.each(['wow_forever', 'classic_era'])(
     'decorates %s Armory gear',
     async (gameVariant) => {
       equipmentResolve.mockResolvedValue(undefined);
@@ -337,7 +337,8 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', 
     },
   );
 
-  it.each(['retail', 'classic', null])(
+  // Codex P2: classic_anniversary realms are TBC — envs 16/4 never serve it.
+  it.each(['retail', 'classic', 'classic_anniversary', null])(
     'leaves %s gear undecorated (no tooltip read, no Wowhead enqueue)',
     async (gameVariant) => {
       equipmentResolve.mockResolvedValue(undefined);

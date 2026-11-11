@@ -27,12 +27,13 @@ import { ALL_WOW_GAME_SLUGS } from './manifest';
 /**
  * ROK-2176 review MAJOR 2: the vanilla-era `characters.game_variant` values
  * (`WowGameVariantSchema`) whose gear Wowhead dataEnv 16 / 4 can describe.
- * `retail` and `classic` (Cata/MoP progression) are excluded.
+ * `retail`, `classic` (Cata/MoP progression) and `classic_anniversary` (its
+ * realms are in TBC — envs 16/4 serve no TBC items, so every probe would be
+ * a guaranteed miss on the shared ≤1 req/s queue) are excluded.
  */
 const TOOLTIP_VARIANTS: ReadonlySet<string> = new Set([
   'wow_forever',
   'classic_era',
-  'classic_anniversary',
 ]);
 
 function isTooltipVariant(variant: string | null): boolean {
