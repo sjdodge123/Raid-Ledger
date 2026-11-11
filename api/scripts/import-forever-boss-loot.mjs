@@ -139,6 +139,14 @@ function mapped(table, value, kind, drop) {
 }
 
 function toRow(bossName, drop) {
+  if (!Number.isInteger(drop.itemId) || drop.itemId <= 0) {
+    fail(
+      `item ${JSON.stringify(drop.itemId)} on ${bossName} is not a positive integer id`,
+    );
+  }
+  if (typeof drop.name !== 'string' || drop.name.trim() === '') {
+    fail(`item ${drop.itemId} on ${bossName} has an empty name`);
+  }
   const quality = QUALITY_NAMES[drop.quality];
   if (quality === undefined) {
     fail(`item ${drop.itemId} (${drop.name}) has no valid quality`);
