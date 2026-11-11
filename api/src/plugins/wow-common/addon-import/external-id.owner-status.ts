@@ -15,8 +15,10 @@ import {
  * Either flip changes which character wins a row, and a ROK-1794 member grant
  * must never move to another user without a staff action:
  *
- * - Deactivation: every Blizzard-id character that now wins a row the owner's
- *   GUIDs held gets a fresh `external_id_linked` (the ROK-2115 release audit).
+ * - Deactivation: every OTHER user's Blizzard-id character that now wins a
+ *   row the owner's GUIDs held gets a fresh `external_id_linked` (the
+ *   ROK-2115 release audit). The owner's own characters are skipped: one
+ *   holding both ids re-wins the row unchanged (ROK-2175).
  * - Reactivation: the owner's GUID character gets a fresh `addon_guid_claimed`
  *   (via `owner_reactivated`) only for rows with a member grant made while the
  *   owner was deactivated — that grant confirmed someone else. The owner's own
@@ -36,7 +38,8 @@ export async function auditOwnerDeactivated(
   const held = await heldGuidsOf(tx, userId);
   // Serialise with a staff grant on the same rows (review r3 N2).
   await lockReleasedRows(tx, held);
-  await auditGuidReleases(tx, held, actorId, sql`clock_timestamp()`);
+  // ROK-2175: the owner's own both-ids character re-winning R is no transfer.
+  await auditGuidReleases(tx, held, actorId, sql`clock_timestamp()`, userId);
 }
 
 /**
