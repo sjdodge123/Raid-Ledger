@@ -179,7 +179,8 @@ test.describe('ROK-2176: Boss & Loot compare popup', () => {
 
         await row.getByRole('link', { name: LOOT.legs.name, exact: true }).click();
         const dialog = await expectOneCompareDialog(page, LOOT.legs.name, EQUIPPED_LEGS);
-        const lootDeltas = dialog.getByTestId('compare-loot-column').getByTestId('line-delta');
+        // Desktop puts the deltas in the table's Δ column, phone inside the loot block: count them dialog-wide.
+        const lootDeltas = dialog.getByTestId('line-delta');
         await expect.poll(() => lootDeltas.count(), 'a delta beside every stat line plus the iLvl delta').toBeGreaterThanOrEqual(LEGS_DELTA_COUNT + 1);
         await expect(dialog.locator('[data-testid="line-delta"][data-tone="up"]').first(), 'the upgrade lines are toned up').toBeVisible();
         await closeVia(page, 'x');
@@ -192,10 +193,10 @@ test.describe('ROK-2176: Boss & Loot compare popup', () => {
     test('a drop without stored stats shows the "stats not synced" note', async ({ page }) => {
         await openBossLoot(page);
         await lootRow(page, LOOT.noStats.name).getByRole('link', { name: LOOT.noStats.name, exact: true }).click();
-        await expect(page.locator('[role="dialog"]'), 'one popup').toHaveCount(1);
-        const loot = page.getByTestId('compare-loot-column');
-        await expect(loot, 'the statless drop is in the popup').toContainText(LOOT.noStats.name);
-        await expect(loot.getByTestId('stats-not-synced'), 'the statless drop says so').toBeVisible();
+        const dialog = page.locator('[role="dialog"]');
+        await expect(dialog, 'one popup').toHaveCount(1);
+        await expect(page.getByTestId('compare-loot-column'), 'the statless drop is in the popup').toContainText(LOOT.noStats.name);
+        await expect(dialog.locator('[data-testid="stats-not-synced"][data-side="loot"]'), 'the statless drop says so').toBeVisible();
         await closeVia(page, 'escape');
     });
 
@@ -206,7 +207,8 @@ test.describe('ROK-2176: Boss & Loot compare popup', () => {
         await link.focus();
         await page.keyboard.press('Enter');
         const dialog = await expectOneCompareDialog(page, LOOT.legs.name, EQUIPPED_LEGS);
-        const wowhead = dialog.getByRole('button', { name: /View on Wowhead/ }).first();
+        // Phone: "View on Wowhead"; desktop: "Loot on Wowhead" / "Equipped on Wowhead".
+        const wowhead = dialog.getByRole('button', { name: /on Wowhead/ }).first();
         await expect(wowhead, 'the Wowhead control is a button, not a tooltip-bound link').toBeVisible();
         const [popup] = await Promise.all([context.waitForEvent('page'), wowhead.click()]);
         await popup.close();
