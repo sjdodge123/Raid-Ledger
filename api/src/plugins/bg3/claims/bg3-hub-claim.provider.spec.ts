@@ -192,9 +192,8 @@ describe('Bg3HubClaimProvider.status edge cases', () => {
       expect(warn).toHaveBeenCalledTimes(1);
       const message = String(warn.mock.calls[0]?.[0]);
       expect(message).toContain(`hub ${HUB} campaign 12`);
-      expect(message, 'no save contents in the log').not.toContain(
-        'SecretName',
-      );
+      // No save contents in the log.
+      expect(message).not.toContain('SecretName');
     } finally {
       warn.mockRestore();
     }
