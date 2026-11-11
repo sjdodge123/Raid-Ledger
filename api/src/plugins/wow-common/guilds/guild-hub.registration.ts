@@ -19,6 +19,7 @@ import { CharacterOwnerAdminController } from './roster-claim/character-owner.ad
 import { CharacterOwnerAdminService } from './roster-claim/character-owner.admin.service';
 import { RosterClaimController } from './roster-claim/roster-claim.controller';
 import { RosterClaimService } from './roster-claim/roster-claim.service';
+import { WowHubClaimProvider } from './roster-claim/wow-hub-claim.provider';
 import { RosterMemberController } from './roster-member/roster-member.controller';
 import { RosterMemberService } from './roster-member/roster-member.service';
 
@@ -45,6 +46,8 @@ export const PROVIDERS = [
   GuildBlizzardRosterService,
   ...rosterSync.PROVIDERS,
   RosterClaimService,
+  // ROK-2153 S5: the core "claim your character" provider for WoW guild hubs.
+  WowHubClaimProvider,
   CharacterOwnerAdminService,
   JoinGateService,
   RosterMemberService,
