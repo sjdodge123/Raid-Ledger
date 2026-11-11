@@ -62,6 +62,18 @@ describe('SeedItemTooltipsSchema', () => {
     ).toBe(true);
   });
 
+  // Codex P1: the create API leaves gameVariant null, which skips decoration.
+  it('accepts a vanilla-era gameVariant alongside the character', () => {
+    const characterId = '7d3c8f8e-3d55-4b0b-9a1d-2a8f0b4c6e11';
+    const parsed = SeedItemTooltipsSchema.safeParse({
+      characterId,
+      equipment: GEAR,
+      gameVariant: 'classic_era',
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.gameVariant).toBe('classic_era');
+  });
+
   it.each([
     ['an empty body', {}],
     ['gear without a character', { equipment: GEAR }],
@@ -72,6 +84,18 @@ describe('SeedItemTooltipsSchema', () => {
     ['a missing tooltip key', { items: [{ itemId: 1 }] }],
     ['an off-shape tooltip', { items: [{ itemId: 1, tooltip: { env: 99 } }] }],
     ['an unknown key', { items: [{ itemId: 1, tooltip: null }], extra: 1 }],
+    [
+      'a variant without a character',
+      { items: [{ itemId: 1, tooltip: null }], gameVariant: 'classic_era' },
+    ],
+    [
+      'an unknown variant',
+      {
+        characterId: '7d3c8f8e-3d55-4b0b-9a1d-2a8f0b4c6e11',
+        equipment: GEAR,
+        gameVariant: 'tbc',
+      },
+    ],
     [
       'a lower-case slot',
       {

@@ -10,6 +10,9 @@
  *   (`characters.equipment`, no `source` key ⇒ Armory), e.g. FINGER_1/FINGER_2,
  *   MAIN_HAND, OFF_HAND, LEGS. Tooltips are never stored on it; the character
  *   read attaches them from `wow_item_meta`.
+ * - `gameVariant` (with `characterId`) stamps the character's variant: the
+ *   create API leaves it null, and Armory gear is only decorated for
+ *   vanilla-era variants (`wow_forever`, `classic_era`).
  */
 import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -18,6 +21,7 @@ import { z } from 'zod';
 import {
   CharacterEquipmentSchema,
   ItemTooltipSchema,
+  WowGameVariantSchema,
   type CharacterEquipmentDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -64,6 +68,7 @@ export const SeedItemTooltipsSchema = z
     items: z.array(SeedTooltipItemSchema).min(1).max(50).optional(),
     characterId: z.string().uuid().optional(),
     equipment: z.array(SeedEquipmentItemSchema).min(1).max(19).optional(),
+    gameVariant: WowGameVariantSchema.optional(),
   })
   .strict()
   .refine(
@@ -74,6 +79,9 @@ export const SeedItemTooltipsSchema = z
   )
   .refine((b) => b.items !== undefined || b.equipment !== undefined, {
     message: 'items or equipment is required',
+  })
+  .refine((b) => b.gameVariant === undefined || b.characterId !== undefined, {
+    message: 'gameVariant needs a characterId',
   });
 export type SeedItemTooltipsInput = z.infer<typeof SeedItemTooltipsSchema>;
 
@@ -132,10 +140,11 @@ async function writeEquipment(
   db: Db,
   characterId: string,
   equipment: CharacterEquipmentDto,
+  gameVariant: string | undefined,
 ): Promise<void> {
   const updated = await db
     .update(schema.characters)
-    .set({ equipment })
+    .set(gameVariant === undefined ? { equipment } : { equipment, gameVariant })
     .where(eq(schema.characters.id, characterId))
     .returning({ id: schema.characters.id });
   if (updated.length === 0)
@@ -162,6 +171,6 @@ export async function seedItemTooltips(
     return { itemIds, characterId: null, equipment: null };
   }
   const equipment = seedArmoryEquipment(input.equipment, now);
-  await writeEquipment(db, input.characterId, equipment);
+  await writeEquipment(db, input.characterId, equipment, input.gameVariant);
   return { itemIds, characterId: input.characterId, equipment };
 }
