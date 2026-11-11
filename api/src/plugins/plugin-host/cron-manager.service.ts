@@ -99,9 +99,10 @@ export class CronManagerService implements OnApplicationBootstrap {
   ): void {
     this.cronJobService
       .executeWithTracking(jobName, async () => handler())
-      .catch((err: unknown) =>
-        this.logger.error(`Cron job ${jobName} tick failed: ${err}`),
-      );
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Cron job ${jobName} tick failed: ${msg}`);
+      });
   }
 
   @OnEvent(PLUGIN_EVENTS.DEACTIVATED)
