@@ -54,9 +54,14 @@ function bandPill(label: string): HTMLElement {
     return screen.getByRole('button', { name: `Show 1 ${label} members` });
 }
 
-/** The Filters panel's Role chip (opens the inline panel first). */
+/**
+ * The Filters panel's Role chip (opens the inline panel first). The collapsed
+ * panel stays mounted but `inert` + `aria-hidden`, so open state is read from
+ * the trigger's `aria-expanded`, not from the fieldset's presence.
+ */
 async function roleChip(label: string): Promise<HTMLElement> {
-    if (!screen.queryByTestId('wow-filter-role')) await userEvent.click(screen.getByTestId('filter-panel-trigger'));
+    const trigger = screen.getByTestId('filter-panel-trigger');
+    if (trigger.getAttribute('aria-expanded') !== 'true') await userEvent.click(trigger);
     return within(screen.getByTestId('wow-filter-role')).getByRole('button', { name: label });
 }
 
