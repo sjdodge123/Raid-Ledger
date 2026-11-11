@@ -145,14 +145,9 @@ function mapWeapon(w: WeaponData | undefined) {
   const damageMax = w?.damage?.max_value;
   const attackSpeed = w?.attack_speed?.value;
   const dps = w?.dps?.value;
-  if (
-    typeof damageMin !== 'number' ||
-    typeof damageMax !== 'number' ||
-    typeof attackSpeed !== 'number' ||
-    typeof dps !== 'number'
-  ) {
-    return undefined;
-  }
+  // `== null` also rejects a JSON null, not only a missing key.
+  if (damageMin == null || damageMax == null) return undefined;
+  if (attackSpeed == null || dps == null) return undefined;
   return { damageMin, damageMax, attackSpeed, dps };
 }
 
