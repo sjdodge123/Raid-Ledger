@@ -93,7 +93,7 @@ describe('useClaimHubCandidate', () => {
         // A public profile visited earlier lists the claimed character straight away.
         expect(invalidated()).toContain(JSON.stringify(['userProfile']));
         expect(invalidated()).not.toContain(JSON.stringify(['hubs-directory']));
-        expect(onClaimed).toHaveBeenCalledWith(claimed, client);
+        expect(onClaimed).toHaveBeenCalledWith(claimed, client, 7);
     });
 
     it('sends an empty body without options, and refreshes every hub membership when becameMember', async () => {

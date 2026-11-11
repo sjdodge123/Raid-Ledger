@@ -756,6 +756,10 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   **Priority on the hub Overview:** while the claim prompt shows, the Companion install prompt is not rendered
   (claiming is the earlier step); once claimed or dismissed, the Companion prompt shows as before
   (`OverviewPrompts` in `hub-overview.tsx`, the claim cell reports `onShowingChange`).
+  **Adopters:** Valheim server hubs (S4; one-click suggested match); BG3 community hubs (S6,
+  `plugins/bg3/hub/bg3-hub-claim-provider.ts`: the active campaign's party slots, list only, BG3 heading
+  "Playing in this campaign?", `scopedDismissal` so a dismissal holds for that campaign only — a new active
+  campaign asks again). WoW registers with `overviewPrompt: false` (claiming is the join gate).
 
 **DON'T** stack per-phase banners. `/dev/wireframes/simplify` §U1 documents exactly this failure ("Same
 job · 4 different shapes") as the thing Cycle 4 removes.

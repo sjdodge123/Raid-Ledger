@@ -48,8 +48,8 @@ export interface HubClaimProvider {
     readonly copy?: HubClaimCopy;
     /** Shown after a candidate is picked when the status says `claimOptions !== 'none'`. */
     readonly OptionsStep?: ComponentType<HubClaimOptionsStepProps>;
-    /** Extra cache work after a successful claim (core invalidations already ran). */
-    readonly onClaimed?: (result: HubClaimResult, qc: QueryClient) => void | Promise<void>;
+    /** Extra cache work after a successful claim on hub `guildId` (core invalidations already ran). */
+    readonly onClaimed?: (result: HubClaimResult, qc: QueryClient, guildId: number) => void | Promise<void>;
     /**
      * ROK-2153 N4 — the server reports `dismissScope` (BG3: the campaign), so
      * a dismissal holds only for that round: core reads the status before it
