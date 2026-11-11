@@ -66,10 +66,21 @@ function fromArmory(item: StatSource): StatsView | null {
     };
 }
 
+/** The L3 pick: the tooltip, unless missing or a random-enchant item (then Armory). */
+function comparableTooltip(item: StatSource): ItemTooltip | null {
+    return item.tooltip && !item.tooltip.randomEnchant ? item.tooltip : null;
+}
+
 /** L3 source pick; `null` = no stats known for this item. */
 export function itemStatsView(item: StatSource): StatsView | null {
-    if (item.tooltip && !item.tooltip.randomEnchant) return fromTooltip(item.tooltip);
-    return fromArmory(item);
+    const t = comparableTooltip(item);
+    return t ? fromTooltip(t) : fromArmory(item);
+}
+
+/** The weapon line `itemStatsView` reads its DPS from — display it, so the shown DPS and its delta agree. */
+export function itemStatsWeapon(item: StatSource): ItemTooltip['weapon'] {
+    const t = comparableTooltip(item);
+    return t ? t.weapon : (item.weapon ?? null);
 }
 
 function addStat(into: Map<string, StatLine>, s: StatLine): void {

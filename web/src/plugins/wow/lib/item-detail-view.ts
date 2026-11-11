@@ -3,10 +3,11 @@
  * character's equipped item (Armory or addon gear) or a boss-loot drop. Stats,
  * armor and DPS come from `itemStatsView` (spec L3: the Wowhead tooltip wins,
  * Armory stats are the fallback), so the popup shows the same numbers the
- * deltas were computed from.
+ * deltas were computed from — the equipped weapon line included
+ * (`itemStatsWeapon`).
  */
 import type { BossLootDto, EquipmentItemDto } from '@raid-ledger/contract';
-import { itemStatsView, type StatLine } from './item-stat-diff';
+import { itemStatsView, itemStatsWeapon, type StatLine } from './item-stat-diff';
 import { getWowheadItemUrl, getWowheadItemUrlForExpansion } from './wowhead-urls';
 import { isClassicFallbackItem, itemWowheadVariant } from './item-wowhead-variant';
 
@@ -81,7 +82,7 @@ function fromEquipped(item: EquipmentItemDto, gameVariant: string | null): Detai
         name: item.name, quality: item.quality.toUpperCase(), itemLevel: item.itemLevel,
         iconUrl: item.iconUrl ?? null, binding, slotLabel: equipSlotLabel(item.slot),
         subclass: item.itemSubclass ?? t?.subclass ?? null, armor: view?.armor ?? null,
-        weapon: item.weapon ?? t?.weapon ?? null, stats: view?.stats ?? null, effects: t?.effects ?? [],
+        weapon: itemStatsWeapon(item), stats: view?.stats ?? null, effects: t?.effects ?? [],
         enchantments: (item.enchantments ?? []).map((e) => e.displayString),
         sockets: (item.sockets ?? []).map((s) => ({ socketType: s.socketType, filled: s.itemId != null })),
         requiredLevel: item.requiredLevel ?? t?.requiredLevel ?? null,
