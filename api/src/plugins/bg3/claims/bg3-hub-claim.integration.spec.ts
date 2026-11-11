@@ -349,7 +349,6 @@ describe('POST guilds/:id/claim/:candidateId — BG3 party claim', () => {
     expect(res.body.code).toBe('HUB_CLAIM_CANDIDATE_GONE');
     expect(await claimsIn(campaignId)).toEqual([]);
   });
-
 });
 
 describe('guilds/:id/claim — BG3 non-member', () => {
