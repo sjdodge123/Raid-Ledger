@@ -9,8 +9,11 @@
  * `@raid-ledger/contract` provably changes nothing.
  *
  * Do NOT "fix" a value here. Diacritics are deliberately NOT folded, numerals
- * above VIII are deliberately NOT converted, and an unspaced dash is kept —
- * a changed literal is a behaviour change, and belongs in its own story.
+ * above VIII are deliberately NOT converted, and an unspaced ASCII hyphen is
+ * kept — a changed literal is a behaviour change, and belongs in its own story.
+ * (ROK-2164 was one: the Unicode separator dashes U+2012..U+2015 — figure,
+ * en, em dash, horizontal bar — now fold to a single space whether spaced,
+ * unspaced or one-sided; the ASCII hyphen still folds only when spaced.)
  *
  * Plain literals rather than `toMatchSnapshot`: the api jest `ci` default
  * refuses to write snapshots on CI, so a missing snapshot would not be caught.
@@ -106,7 +109,8 @@ export const NORMALIZE_GOLDEN: Readonly<Record<string, string>> = {
   'Game: Subtitle': 'game subtitle',
   'Game:Subtitle': 'game subtitle',
   'Game - Subtitle': 'game subtitle',
-  'Game — Subtitle': 'game — subtitle',
+  // ROK-2164: deliberate behaviour change — the em dash now folds to a space.
+  'Game — Subtitle': 'game subtitle',
   'Half-Life 2': 'half-life 2',
   "Baldur's Gate 3": "baldur's gate 3",
   'S.T.A.L.K.E.R.': 's.t.a.l.k.e.r.',
