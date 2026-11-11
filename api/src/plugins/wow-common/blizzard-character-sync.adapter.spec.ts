@@ -324,4 +324,26 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', 
     expect(await adapter.resolveDisplayEquipment(row(null))).toBeUndefined();
     expect(decorate).not.toHaveBeenCalled();
   });
+
+  // Review MAJOR 2: Wowhead envs 16/4 only describe vanilla-era items.
+  it.each(['wow_forever', 'classic_era', 'classic_anniversary'])(
+    'decorates %s Armory gear',
+    async (gameVariant) => {
+      equipmentResolve.mockResolvedValue(undefined);
+      decorate.mockResolvedValue(gear(9));
+      const input = { ...row(gear(2)), gameVariant };
+      expect(await adapter.resolveDisplayEquipment(input)).toEqual(gear(9));
+      expect(decorate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['retail', 'classic', null])(
+    'leaves %s gear undecorated (no tooltip read, no Wowhead enqueue)',
+    async (gameVariant) => {
+      equipmentResolve.mockResolvedValue(undefined);
+      const input = { ...row(gear(2)), gameVariant };
+      expect(await adapter.resolveDisplayEquipment(input)).toBeUndefined();
+      expect(decorate).not.toHaveBeenCalled();
+    },
+  );
 });

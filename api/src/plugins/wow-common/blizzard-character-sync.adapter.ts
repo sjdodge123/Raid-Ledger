@@ -25,6 +25,21 @@ import type {
 import { ALL_WOW_GAME_SLUGS } from './manifest';
 
 /**
+ * ROK-2176 review MAJOR 2: the vanilla-era `characters.game_variant` values
+ * (`WowGameVariantSchema`) whose gear Wowhead dataEnv 16 / 4 can describe.
+ * `retail` and `classic` (Cata/MoP progression) are excluded.
+ */
+const TOOLTIP_VARIANTS: ReadonlySet<string> = new Set([
+  'wow_forever',
+  'classic_era',
+  'classic_anniversary',
+]);
+
+function isTooltipVariant(variant: string | null): boolean {
+  return variant !== null && TOOLTIP_VARIANTS.has(variant);
+}
+
+/**
  * Adapter bridging CharacterSyncAdapter interface to BlizzardService.
  * The `gameVariant` parameter now carries the game's apiNamespacePrefix
  * (null for retail, e.g. 'classic1x', 'classicann').
@@ -43,13 +58,17 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
 
   /**
    * ROK-1727: Forever characters display their addon snapshot gear.
-   * ROK-2176: that gear, else the stored Armory gear, comes back as a copy
-   * carrying each item's stored Wowhead tooltip (undefined = no gear at all).
+   * ROK-2176: for vanilla-era variants that gear, else the stored Armory
+   * gear, comes back as a copy carrying each item's stored Wowhead tooltip
+   * (undefined = no gear at all). Retail / progression Classic / no variant
+   * keep the pre-2176 result: Wowhead envs 16/4 only serve vanilla items.
    */
   async resolveDisplayEquipment(
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
-    const gear = (await this.foreverEquipment.resolve(row)) ?? row.equipment;
+    const addon = await this.foreverEquipment.resolve(row);
+    if (!isTooltipVariant(row.gameVariant)) return addon;
+    const gear = addon ?? row.equipment;
     if (!gear) return undefined;
     return this.tooltips.decorate(row, gear);
   }
