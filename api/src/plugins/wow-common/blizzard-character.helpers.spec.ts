@@ -167,7 +167,10 @@ describe('mapEquipmentItems — sparse weapon data (ROK-2173)', () => {
 
   it.each([
     ['attack_speed', { damage: fullWeapon.damage, dps: fullWeapon.dps }],
-    ['dps', { damage: fullWeapon.damage, attack_speed: fullWeapon.attack_speed }],
+    [
+      'dps',
+      { damage: fullWeapon.damage, attack_speed: fullWeapon.attack_speed },
+    ],
   ])('keeps the item but drops weapon when %s is missing', (_field, weapon) => {
     const items = mapEquipmentItems([weaponItem(weapon)], new Map());
     expect(items.map((i) => i.name)).toEqual(['Axe']);
