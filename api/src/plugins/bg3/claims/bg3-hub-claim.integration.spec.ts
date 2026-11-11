@@ -10,7 +10,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import {
   BG3_GAME_SLUG,
   Bg3CampaignSummarySchema,
@@ -26,7 +26,7 @@ import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
 
-type Who = 'host' | 'member' | 'member2' | 'outsider';
+type Who = 'host' | 'member' | 'member2' | 'outsider' | 'staff';
 
 const PARTY: Bg3PartyMember[] = Bg3SaveMessageSchema.parse(
   JSON.parse(
@@ -83,7 +83,14 @@ async function findOrCreateBg3Game(): Promise<number> {
 
 beforeAll(async () => {
   testApp = await getTestApp();
-  for (const who of ['host', 'member', 'member2', 'outsider'] as const) {
+  for (const who of [
+    'host',
+    'member',
+    'member2',
+    'outsider',
+    'staff',
+  ] as const) {
+    const role = who === 'staff' ? 'admin' : 'member';
     const [u] = nonEmpty(
       await testApp.db
         .insert(schema.users)
@@ -91,7 +98,7 @@ beforeAll(async () => {
           discordId: `local:bg3hc-${who}@bg3-hub-claim.test`,
           username: `bg3hc-${who}`,
           displayName: `Hub claim ${who}`,
-          role: 'member',
+          role,
         })
         .returning(),
       `user ${who}`,
@@ -102,7 +109,7 @@ beforeAll(async () => {
       await signTestAccessToken(testApp, {
         sub: u.id,
         username: u.username,
-        role: 'member',
+        role,
       }),
     );
   }
@@ -400,6 +407,47 @@ describe('guilds/:id/claim — BG3 active campaign switch', () => {
     expect(res.body.code).toBe('HUB_CLAIM_CANDIDATE_GONE');
     expect(await claimsIn(first)).toEqual([]);
     expect(await claimsIn(second)).toEqual([]);
+  });
+});
+
+// ── cross-hub (review m1) ───────────────────────────────────────────────────
+
+describe("guilds/:id/claim — another hub's campaign", () => {
+  it("hub A refuses a candidate of hub B's active campaign → 404 CANDIDATE_GONE; neither campaign gets a claim", async () => {
+    const a = await seedHub();
+    const b = await seedHub();
+    const res = await postClaim(a.hubId, cid(b.campaignId, HUMAN));
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('HUB_CLAIM_CANDIDATE_GONE');
+    expect(await claimsIn(a.campaignId)).toEqual([]);
+    expect(await claimsIn(b.campaignId)).toEqual([]);
+  });
+
+  it("a member of hub A only cannot claim hub B's slot through hub A", async () => {
+    const a = await seedHub();
+    const b = await seedHub();
+    const m = schema.hubCommunityMembers;
+    await testApp.db
+      .delete(m)
+      .where(and(eq(m.guildId, b.hubId), eq(m.userId, userId('member'))));
+    const res = await postClaim(a.hubId, cid(b.campaignId, HUMAN));
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('HUB_CLAIM_CANDIDATE_GONE');
+    expect(await claimsIn(a.campaignId)).toEqual([]);
+    expect(await claimsIn(b.campaignId)).toEqual([]);
+  });
+});
+
+// ── staff (review m2: operator ruling pending — flip when ruled) ───────────
+
+describe('guilds/:id/claim — staff who are not hub members', () => {
+  it('TODAY: an admin non-member CAN claim a party slot through the core route (m2 — flip to 403 if the operator rules members-only)', async () => {
+    const { hubId, campaignId } = await seedHub();
+    const res = await postClaim(hubId, cid(campaignId, HUMAN), 'staff');
+    expect(res.status).toBe(200);
+    expect(await claimsIn(campaignId)).toEqual([
+      { slotKey: HUMAN, userId: userId('staff') },
+    ]);
   });
 });
 
