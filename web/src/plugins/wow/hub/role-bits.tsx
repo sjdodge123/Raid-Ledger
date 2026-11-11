@@ -7,6 +7,7 @@
 import type { JSX } from 'react';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { RoleIcon } from '../../../components/shared/RoleIcon';
+import { Button } from '../../../components/ui/button';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { FILTER_CHIP_ON_EDGE, FILTER_CHIP_ON_FILL, FILTER_CHIP_ON_LABEL } from '../../../components/ui/filter-chip-classes';
 import { ROLE_META, ROLE_ORDER } from './wow-guild.helpers';
@@ -22,7 +23,8 @@ export function CharRoleBadge({ role }: { role: CharacterRole }): JSX.Element {
     );
 }
 
-const PILL = 'inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border px-2.5';
+const PILL_GAP = 'inline-flex items-center gap-1.5';
+const PILL = `${PILL_GAP} min-h-[36px] rounded-lg border px-2.5`;
 /** §4.3 `FilterChip` OFF fill; an unpressed pill keeps its role-coloured border. */
 const PILL_OFF = 'bg-panel hover:bg-overlay';
 /** §4.3 `FilterChip` ON treatment (fill + border + label), so pressed reads like the panel's chips. */
@@ -53,11 +55,12 @@ function RolePill({ role, count, hrefFor, onToggle, selected }: Omit<RoleSummary
     const base = `${PILL} transition-colors ${FOCUS_RING}`;
     if (onToggle) {
         const pressed = selected?.includes(role) ?? false;
+        // `bare` supplies the focus ring; one wrapper keeps the pill's own gap-1.5 inside Button's gap-2 label span.
         return (
-            <button type="button" aria-pressed={pressed} aria-label={name} data-testid={`guild-role-filter-${role}`}
-                onClick={() => onToggle(role)} className={`${base} ${pressed ? PILL_ON : `${ROLE_META[role].cls} ${PILL_OFF}`}`}>
-                <PillBody role={role} count={count} pressed={pressed} />
-            </button>
+            <Button variant="bare" aria-pressed={pressed} aria-label={name} data-testid={`guild-role-filter-${role}`}
+                onClick={() => onToggle(role)} className={`${PILL} transition-colors ${pressed ? PILL_ON : `${ROLE_META[role].cls} ${PILL_OFF}`}`}>
+                <span className={PILL_GAP}><PillBody role={role} count={count} pressed={pressed} /></span>
+            </Button>
         );
     }
     if (hrefFor) {
