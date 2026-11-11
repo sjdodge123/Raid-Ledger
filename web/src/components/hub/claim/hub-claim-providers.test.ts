@@ -65,4 +65,13 @@ describe('gatedHubClaimProvider', () => {
         const active = new Set(['valheim', 'bg3']);
         expect(gatedHubClaimProvider(page('baldurs-gate-3', 'game_community'), active)?.pluginSlug).toBe('bg3');
     });
+
+    it('treats an overviewPrompt:false provider as no provider; default and true are unchanged (ROK-2153 S5)', () => {
+        registerPlugin('valheim', BADGE).registerHubClaimProvider({ ...valheim, overviewPrompt: false });
+        registerPlugin('bg3', BADGE).registerHubClaimProvider({ games: ['baldurs-gate-3'], kinds: ['game_community'], overviewPrompt: true });
+        const active = new Set(['valheim', 'bg3']);
+        expect(gatedHubClaimProvider(page('valheim'), active), 'overviewPrompt:false never reaches the Overview gate').toBeUndefined();
+        expect(gatedHubClaimProvider(page('baldurs-gate-3', 'game_community'), active)?.pluginSlug, 'overviewPrompt:true is gated as before').toBe('bg3');
+        expect(getHubClaimProviderRegistrations().map((r) => r.pluginSlug), 'the registration itself is kept (ownership guard)').toEqual(['valheim', 'bg3']);
+    });
 });
