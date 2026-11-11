@@ -76,12 +76,10 @@ function setup(
   };
   const access = { isMember: jest.fn().mockResolvedValue(opts.member ?? true) };
   const reads = {
-    settings: jest
-      .fn()
-      .mockResolvedValue({
-        hideLocationAndScreenshots: false,
-        activeCampaignId: active,
-      }),
+    settings: jest.fn().mockResolvedValue({
+      hideLocationAndScreenshots: false,
+      activeCampaignId: active,
+    }),
     claims: jest.fn().mockResolvedValue([]),
   };
   const claimsRepo = {
@@ -177,7 +175,9 @@ describe('Bg3HubClaimProvider.status', () => {
       (await setup({ active: 13 }).provider.status(ctx)).dismissScope,
     ).toBe('campaign-13');
   });
+});
 
+describe('Bg3HubClaimProvider.status edge cases', () => {
   it('a stored party that fails re-parse offers nothing', async () => {
     const status = await setup({ party: [{ origin: 'x' }] }).provider.status(
       ctx,
