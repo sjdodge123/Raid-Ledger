@@ -7,7 +7,13 @@
 # it (log line + audit entry, never a failure) when:
 #   - the env row has no image, or the image is not present locally;
 #   - another env row names the same tag (any registry-prefix spelling, as
-#     registry_gc::_tags_of compares them);
+#     registry_gc::_tags_of compares them), or the env registry is unreadable
+#     or not an array;
+#   - another env row pinned by digest (`…@sha256:…`) resolves to the same
+#     image ID — removing the last tag of a repository drops its digest
+#     references too — or that row's image cannot be inspected;
+#   - `docker image inspect` fails for any reason other than "No such image"
+#     (no such image = nothing to remove, silently);
 #   - the image is labelled rl.role=runner;
 #   - any container, running or stopped, was created from it — or `docker ps`
 #     cannot say;
@@ -40,18 +46,47 @@ local_image_gc::_build_busy() {
     [[ "$n" == "0" ]] || echo busy
 }
 
+# Image ID of `ref` on stdout. Returns 1 for "No such image", 2 (error text on
+# stdout) for any other inspect failure.
+local_image_gc::_image_id() {
+    local out
+    if out=$(docker image inspect --format '{{.Id}}' "$1" 2>&1); then echo "$out"; return 0; fi
+    grep -qi 'no such image' <<<"$out" && return 1
+    echo "${out//$'\n'/ }"; return 2
+}
+
+# Why another env's digest-pinned row keeps image `id`; empty = none does.
+local_image_gc::_digest_keep() {
+    local id="$1" others="$2" pin pid rc
+    while IFS= read -r pin; do
+        [[ "$pin" == *@sha256:* ]] || continue
+        pid=$(local_image_gc::_image_id "$pin"); rc=$?
+        (( rc == 1 )) && continue
+        (( rc == 2 )) && { echo "cannot inspect digest-pinned $pin: $pid"; return 0; }
+        [[ "$pid" == "$id" ]] && { echo "another env pins the same image as $pin"; return 0; }
+    done <<<"$others"
+    return 0
+}
+
 # Why the local image `ref` of env `slug` must be kept; empty = remove it.
 local_image_gc::_keep_reason() {
-    local slug="$1" ref="$2" tag others role users
+    local slug="$1" ref="$2" tag others info rc id role users why
     tag=$(registry_gc::_tags_of <<<"$ref")
-    others=$(jq -r --arg s "$slug" '.[]? | select(.slug != $s) | .image // empty' "$RL_ENVS_FILE" 2>/dev/null) \
-        || { echo "env registry unreadable"; return 0; }
-    if [[ -n "$tag" ]] && registry_gc::_tags_of <<<"$others" | grep -qxF "$tag"; then
+    others=$(jq -r --arg s "$slug" \
+        'if type == "array" then .[] | select(.slug != $s) | .image // empty else error("not an array") end' \
+        "$RL_ENVS_FILE" 2>/dev/null) || { echo "env registry unreadable"; return 0; }
+    if [[ -n "$tag" ]] && grep -qxF "$tag" <<<"$(registry_gc::_tags_of <<<"$others")"; then
         echo "another env uses tag $tag"; return 0
     fi
     grep -qxF "$ref" <<<"$others" && { echo "another env uses $ref"; return 0; }
-    role=$(docker image inspect --format '{{ index .Config.Labels "rl.role" }}' "$ref" 2>/dev/null) \
-        || { echo "absent"; return 0; }
+    info=$(docker image inspect --format '{{.Id}} {{ index .Config.Labels "rl.role" }}' "$ref" 2>&1); rc=$?
+    if (( rc != 0 )); then
+        grep -qi 'no such image' <<<"$info" && { echo "absent"; return 0; }
+        echo "docker image inspect failed: ${info//$'\n'/ }"; return 0
+    fi
+    id=${info%% *}; role=${info#* }
+    why=$(local_image_gc::_digest_keep "$id" "$others")
+    [[ -n "$why" ]] && { echo "$why"; return 0; }
     [[ "$role" == "runner" ]] && { echo "labelled rl.role=runner"; return 0; }
     users=$(docker ps -aq --filter "ancestor=$ref" 2>/dev/null) || { echo "docker ps unreadable"; return 0; }
     [[ -n "$users" ]] && { echo "$(wc -l <<<"$users" | tr -d ' ') container(s) use it"; return 0; }
