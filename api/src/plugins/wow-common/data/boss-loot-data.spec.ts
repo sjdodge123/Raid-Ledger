@@ -39,6 +39,8 @@ interface LootEntry {
 
 const bosses = bossEncounterData as BossEntry[];
 const loot = bossLootData as LootEntry[];
+/** Every `name::expansion` boss key in boss-encounter-data.json. */
+const BOSS_KEYS = new Set(bosses.map((b) => `${b.name}::${b.expansion}`));
 
 const VALID_QUALITIES = [
   'Common',
@@ -49,12 +51,14 @@ const VALID_QUALITIES = [
 ] as const;
 
 /**
- * ROK-2170: a `forever` loot row hangs off the CLASSIC boss of the same name
- * (the seeder's fallback). Every other expansion must match its own boss row.
+ * ROK-2170: like the seeder's `resolveLootBossId`, a `forever` loot row hangs
+ * off the `forever` boss of the same name when one exists, else the CLASSIC
+ * boss. Every other expansion must match its own boss row.
  */
 function bossKeyForLoot(l: LootEntry): string {
-  const expansion = l.expansion === 'forever' ? 'classic' : l.expansion;
-  return `${l.bossName}::${expansion}`;
+  const own = `${l.bossName}::${l.expansion}`;
+  if (l.expansion !== 'forever' || BOSS_KEYS.has(own)) return own;
+  return `${l.bossName}::classic`;
 }
 
 /** Classic boss names with any loot: `classic` rows OR `forever` rows. */
@@ -594,13 +598,14 @@ describe('boss-loot-data.json — Forever rows (ROK-2170)', () => {
     expect(bossesWithoutForeverLoot(DEADMINES_FORMERLY_PENDING)).toEqual([]);
   });
 
-  it('no Forever row names a boss outside classic', () => {
-    const classicNames = new Set(
-      bosses.filter((b) => b.expansion === 'classic').map((b) => b.name),
+  it('every Forever row names a boss that has a forever or classic boss row', () => {
+    // Mirrors the seeder: `name::forever` first, then `name::classic`. A name
+    // with only a SoD/TBC boss row is rejected.
+    const bad = foreverLoot.filter(
+      (l) =>
+        !BOSS_KEYS.has(`${l.bossName}::forever`) &&
+        !BOSS_KEYS.has(`${l.bossName}::classic`),
     );
-    // A name shared with a SoD/TBC boss is still a classic boss (SoD reuses
-    // classic names), so only a name with NO classic boss row is rejected.
-    const bad = foreverLoot.filter((l) => !classicNames.has(l.bossName));
     expect(bad.map(describeRow)).toEqual([]);
   });
 });
