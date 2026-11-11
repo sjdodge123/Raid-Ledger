@@ -8,7 +8,8 @@ import { WowItemCard } from '../components/wow-item-card';
 import { ItemComparison } from '../components/item-comparison';
 import { getWowheadItemUrlForExpansion, getWowheadDataSuffixForExpansion } from '../lib/wowhead-urls';
 import { isUsableByClass } from './boss-loot-constants';
-import { lootComparison, type LootComparison } from '../lib/loot-compare-model';
+import { lootComparison } from '../lib/loot-compare-model';
+import { ItemCompareDialog, type ItemCompareDialogProps } from '../components/item-compare-dialog';
 
 /** Props for BossLootBody */
 export interface BossLootBodyProps {
@@ -69,14 +70,8 @@ function LootItemMeta({ item }: { item: BossLootDto }) {
     );
 }
 
-/**
- * ROK-2176 seam for L6: the compare popup a row mounts while `open`. L6 passes
- * `ItemCompareDialog` here (or renders it in `LootItemRow` directly) with
- * `{ loot, comparison, gameVariant, onClose }`.
- */
-export interface LootCompareDialogProps {
-    loot: BossLootDto; comparison: LootComparison; gameVariant: string; onClose: () => void;
-}
+/** ROK-2176: the compare popup a row mounts while `open` (`ItemCompareDialog`). */
+export type LootCompareDialogProps = ItemCompareDialogProps;
 
 /** Single loot item row with comparison and metadata */
 function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlot, characterClass, hasCharacter }: {
@@ -84,7 +79,7 @@ function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlo
     wowheadVariant: string; equippedBySlot: Map<string, EquipmentItemDto>;
     characterClass?: string | null | undefined; hasCharacter: boolean;
 }) {
-    const [, setOpen] = useState(false); // L6: read `open` and mount the dialog with LootCompareDialogProps
+    const [open, setOpen] = useState(false);
     const comparison = useMemo(() => lootComparison(item, equippedBySlot), [item, equippedBySlot]);
     const onOpen = hasCharacter ? () => setOpen(true) : undefined;
     return (
@@ -102,6 +97,7 @@ function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlo
                     statsNote={comparison.note} onOpen={onOpen} />
             )}
             <LootItemMeta item={item} />
+            {open && <ItemCompareDialog loot={item} comparison={comparison} gameVariant={wowheadVariant} onClose={() => setOpen(false)} />}
         </div>
     );
 }
