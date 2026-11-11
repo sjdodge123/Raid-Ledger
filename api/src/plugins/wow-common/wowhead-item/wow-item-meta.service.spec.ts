@@ -56,6 +56,8 @@ function row(over: Partial<WowItemMetaRow>): WowItemMetaRow {
     fetchedAt: NOW,
     nextRetryAt: null,
     attempts: 0,
+    tooltip: null,
+    tooltipVersion: null,
     ...over,
   };
 }
