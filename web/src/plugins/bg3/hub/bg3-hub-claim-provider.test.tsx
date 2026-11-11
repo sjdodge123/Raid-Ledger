@@ -16,6 +16,7 @@ import { buildHubClaimCandidate, buildHubClaimResult, buildHubClaimStatus, hubCl
 import { usePluginStore } from '../../../stores/plugin-store';
 import { HubClaimPromptCell } from '../../../components/hub/claim/hub-claim-prompt-cell';
 import { gatedHubClaimProvider } from '../../../components/hub/claim/hub-claim-providers';
+import { hubClaimKey } from '../../../components/hub/claim/use-hub-claim';
 import type { HubClaimShowing } from '../../../components/hub/claim/hub-claim-prompt';
 import { bg3Keys } from '../hooks/bg3-keys';
 import { BG3_HUB_CLAIM_COPY, bg3HubClaimProvider } from './bg3-hub-claim-provider';
@@ -125,7 +126,13 @@ describe('BG3 hub — core claim prompt (ROK-2153 S6)', () => {
     it('shows nothing when every party slot is claimed (unclaimedCount 0)', async () => {
         serve(bg3Status({ candidates: [], unclaimedCount: 0 }));
         const showing = vi.fn<(state: HubClaimShowing) => void>();
-        renderWithProviders(<HubClaimPromptCell ctx={{ page: page() }} onShowingChange={showing} />);
+        const queryClient = createTestQueryClient();
+        renderWithProviders(<HubClaimPromptCell ctx={{ page: page() }} onShowingChange={showing} />, { queryClient });
+        // The status reply must be in the cache before "nothing showed" means anything.
+        await waitFor(() => {
+            const loaded = queryClient.getQueriesData<HubClaimStatus>({ queryKey: hubClaimKey(HUB) });
+            expect(loaded.map(([, data]) => data?.unclaimedCount), 'the claim status reply was applied').toEqual([0]);
+        });
         await waitFor(() => { expect(showing).toHaveBeenLastCalledWith('hidden'); });
         expect(hits.claim).toBeGreaterThan(0);
         expect(showing).not.toHaveBeenCalledWith('showing');
