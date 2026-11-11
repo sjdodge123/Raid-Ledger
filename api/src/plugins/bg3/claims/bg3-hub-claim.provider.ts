@@ -124,7 +124,12 @@ export class Bg3HubClaimProvider implements HubClaimProvider, OnModuleInit {
   /** Hub member or staff (`assertBg3HubReader`), mapped to core codes. */
   private async assertReader(ctx: HubClaimContext): Promise<void> {
     try {
-      await assertBg3HubReader(this.campaigns, this.access, ctx.hub.id, ctx.actor);
+      await assertBg3HubReader(
+        this.campaigns,
+        this.access,
+        ctx.hub.id,
+        ctx.actor,
+      );
     } catch (err) {
       if (err instanceof ForbiddenException)
         throw new HubClaimError('HUB_CLAIM_FORBIDDEN', 'Hub members only');
