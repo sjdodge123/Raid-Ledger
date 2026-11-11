@@ -160,3 +160,10 @@ export function formatDelta(d: StatDelta): string {
     const unit = d.unit === 'percent' ? '%' : '';
     return d.value > 0 ? `▲ +${num}${unit} ${d.name}` : `▼ −${num}${unit} ${d.name}`;
 }
+
+/** "+12", "-10", "+1%" — signed by the value; `signed: false` prints the magnitude with "+". */
+export function formatStatValue(value: number, unit: StatUnit, signed = true): string {
+    const abs = Math.abs(value);
+    const num = Number.isInteger(abs) ? String(abs) : abs.toFixed(1);
+    return `${signed && value < 0 ? '-' : '+'}${num}${unit === 'percent' ? '%' : ''}`;
+}

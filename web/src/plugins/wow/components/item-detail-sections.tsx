@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from 'react';
 import { CLASSIC_FALLBACK_HINT } from '../lib/item-wowhead-variant';
-import { ARMOR_KEY, DPS_KEY, deltaTone, type StatDelta } from '../lib/item-stat-diff';
+import { ARMOR_KEY, DPS_KEY, deltaTone, formatStatValue, type StatDelta } from '../lib/item-stat-diff';
 import type { DetailItem } from '../lib/item-detail-view';
 import { Button } from '../../../components/ui/button';
 
@@ -28,6 +28,9 @@ const QUALITY_BORDER: Record<string, string> = {
 };
 
 const TONE_CLASS = { up: 'text-success font-semibold', down: 'text-danger font-semibold', eq: 'text-muted font-medium' } as const;
+
+/** The game tooltip's stat / effect / enchant green — one categorical hue (semantic-hue guard). */
+export const TOOLTIP_GREEN = 'text-green-400';
 
 export type DeltaByKey = ReadonlyMap<string, StatDelta>;
 
@@ -82,8 +85,9 @@ export function ItemCombatInfo({ item, deltas }: { item: DetailItem; deltas?: De
     );
 }
 
-function statText(s: StatDelta): string {
-    return `+${formatNumber(Math.abs(s.value))}${s.unit === 'percent' ? '%' : ''} ${s.name}`;
+/** Own lines keep the stat's sign; struck-through equipped-only lines show the lost magnitude. */
+function statText(s: StatDelta, signed: boolean): string {
+    return `${formatStatValue(s.value, s.unit, signed)} ${s.name}`;
 }
 
 /** Stat lines; with `deltas`, equipped-only stats follow struck through (a loss). */
@@ -94,8 +98,8 @@ export function ItemStatLines({ item, deltas }: { item: DetailItem; deltas?: Del
     if (stats.length === 0 && lost.length === 0) return null;
     return (
         <div className="space-y-0.5" data-testid="item-stat-lines">
-            {stats.map((s) => <DeltaLine key={s.key} delta={deltas?.get(s.key)} className="text-green-400">{statText(s)}</DeltaLine>)}
-            {lost.map((d) => <DeltaLine key={d.key} delta={d} className="text-muted"><s>{statText(d)}</s> (equipped only)</DeltaLine>)}
+            {stats.map((s) => <DeltaLine key={s.key} delta={deltas?.get(s.key)} className={TOOLTIP_GREEN}>{statText(s, true)}</DeltaLine>)}
+            {lost.map((d) => <DeltaLine key={d.key} delta={d} className="text-muted"><s>{statText(d, false)}</s> (equipped only)</DeltaLine>)}
         </div>
     );
 }
@@ -103,8 +107,8 @@ export function ItemStatLines({ item, deltas }: { item: DetailItem; deltas?: Del
 export function ItemEnhancements({ item }: { item: DetailItem }) {
     return (
         <>
-            {item.effects.length > 0 && <div className="space-y-0.5">{item.effects.map((e, i) => <div key={i} className="text-sm text-green-400">{e}</div>)}</div>}
-            {item.enchantments.length > 0 && <div className="space-y-0.5">{item.enchantments.map((e, i) => <div key={i} className="text-sm text-green-400">{e}</div>)}</div>}
+            {item.effects.length > 0 && <div className="space-y-0.5">{item.effects.map((e, i) => <div key={i} className={`text-sm ${TOOLTIP_GREEN}`}>{e}</div>)}</div>}
+            {item.enchantments.length > 0 && <div className="space-y-0.5">{item.enchantments.map((e, i) => <div key={i} className={`text-sm ${TOOLTIP_GREEN}`}>{e}</div>)}</div>}
             {item.sockets.length > 0 && (
                 <div className="flex items-center gap-1.5">
                     {item.sockets.map((s, i) => <span key={i} className={`w-4 h-4 rounded-full border-2 ${s.filled ? 'bg-blue-500/40 border-blue-500/60' : 'bg-faint border-edge'}`} title={`${s.socketType}${s.filled ? ' (filled)' : ' (empty)'}`} />)}
