@@ -210,9 +210,11 @@ function planCapture(capture, bosses) {
       fail(`${capture.zone}: override boss ${boss} is not listed for the instance`);
     }
   }
+  const overridden = new Set();
   for (const drop of capture.drops) {
     const override = overrides[drop.itemId];
     if (override) {
+      overridden.add(String(drop.itemId));
       rows.push(toRow(override, drop));
       continue;
     }
@@ -223,6 +225,12 @@ function planCapture(capture, bosses) {
     const hits = sources.filter((s) => listed.includes(s));
     if (hits.length === 0) skipped.push(drop);
     for (const boss of hits) rows.push(toRow(boss, drop));
+  }
+  // A mistyped override id would otherwise do nothing, silently.
+  for (const itemId of Object.keys(overrides)) {
+    if (!overridden.has(itemId)) {
+      fail(`${capture.zone}: override item ${itemId} is not in the capture`);
+    }
   }
   return { zone: capture.zone, listed, rows, skipped };
 }

@@ -609,3 +609,23 @@ describe('boss-loot-data.json — Forever rows (ROK-2170)', () => {
     expect(bad.map(describeRow)).toEqual([]);
   });
 });
+
+/**
+ * The seeder resolves a Forever loot row's boss by NAME (`name::forever`,
+ * then `name::classic`). A name shared by two such boss rows would make the
+ * resolved boss depend on row order, and the Forever prune would then delete
+ * and re-insert the rows on every boot.
+ */
+function resolvableBossCount(name: string): number {
+  const named = bosses.filter((b) => b.name === name);
+  const forever = named.filter((b) => b.expansion === 'forever').length;
+  if (forever > 0) return forever;
+  return named.filter((b) => b.expansion === 'classic').length;
+}
+
+describe('boss-loot-data.json — Forever rows resolve to one boss (ROK-2170)', () => {
+  it('no Forever loot boss name matches two boss rows', () => {
+    const names = [...new Set(foreverLoot.map((l) => l.bossName))];
+    expect(names.filter((n) => resolvableBossCount(n) !== 1)).toEqual([]);
+  });
+});
