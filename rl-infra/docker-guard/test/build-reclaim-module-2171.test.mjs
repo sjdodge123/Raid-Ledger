@@ -8,7 +8,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { beginBuild, buildsInFlight, setSnapshotTimeoutMs } from '../src/build-reclaim.mjs';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { beginBuild, buildsInFlight, setSnapshotTimeoutMs, setDeleteTimeoutMs } from '../src/build-reclaim.mjs';
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'reclaim-2171-'));
 after(() => fs.rmSync(scratch, { recursive: true, force: true }));
@@ -151,4 +153,119 @@ test('delta minor: a tag added to the previous image during the checks keeps it,
   try { await rebuild(d, lines); } finally { d.close(); }
   assert.deepEqual(deletes(d), [], `re-inspected right before DELETE, the new tag must keep it; saw ${JSON.stringify(d.seen)}`);
   assert.deepEqual(lines, [`RECLAIM kept previous rl:ci-test ${OLD}: still tagged registry.rl.lan:5000/rl-allinone:rok-9`]);
+});
+
+// ---- Fix 3 (delta review + Codex r2): every in-flight DELETE, bounded DELETE, env fallbacks ----
+const MID = `sha256:${'c'.repeat(64)}`;
+const tick = (ms) => new Promise((r) => { setTimeout(r, ms); });
+async function until(cond, what) {
+  for (let i = 0; i < 400 && !cond(); i += 1) await tick(5);
+  assert.ok(cond(), `timed out waiting for ${what}`);
+}
+
+/**
+ * `rl:ci-test` points at `current`; every image ID inspects untagged. DELETEs
+ * answer only after release(id) (or never, with neverAnswerDelete); the FIRST
+ * container-list read answers only after releaseContainers().
+ */
+async function holdingDaemon(opts = {}) {
+  const sock = path.join(fs.mkdtempSync(path.join(scratch, 'h-')), 'd.sock');
+  const seen = [];
+  let current = OLD;
+  const holds = new Map();
+  const hold = (id) => { if (!holds.has(id)) { let r; holds.set(id, { p: new Promise((x) => { r = x; }), r }); } return holds.get(id); };
+  let releaseContainers;
+  const containersHeld = new Promise((r) => { releaseContainers = r; });
+  let containerReads = 0;
+  const send = (res, status, body) => { res.statusCode = status; res.end(JSON.stringify(body)); };
+  const daemon = http.createServer((req, res) => {
+    const url = decodeURIComponent(req.url ?? '');
+    seen.push(`${req.method} ${url}`);
+    if (req.method === 'GET' && url === '/images/rl:ci-test/json') return send(res, 200, { Id: current, RepoTags: ['rl:ci-test'], Config: { Labels: {} } });
+    const m = /^\/images\/(sha256:[a-f0-9]+)(\/json)?$/.exec(url);
+    if (req.method === 'GET' && m) return send(res, 200, { Id: m[1], RepoTags: [], Config: { Labels: {} } });
+    if (url.startsWith('/containers/json')) {
+      containerReads += 1;
+      if (opts.holdFirstContainers && containerReads === 1) return containersHeld.then(() => send(res, 200, []));
+      return send(res, 200, []);
+    }
+    if (req.method === 'DELETE' && m) {
+      if (opts.neverAnswerDelete) return undefined;
+      return hold(m[1]).p.then(() => send(res, 200, [{ Deleted: m[1] }]));
+    }
+    return send(res, 404, { message: 'no such object' });
+  });
+  await new Promise((r) => daemon.listen(sock, r));
+  return {
+    sock, seen,
+    setCurrent: (id) => { current = id; },
+    release: (id) => hold(id).r(),
+    releaseContainers: () => releaseContainers(),
+    close: () => { for (const h of holds.values()) h.r(); releaseContainers(); daemon.closeAllConnections(); daemon.close(); },
+  };
+}
+
+test('fix 3: a build waits for EVERY in-flight DELETE, not only the last one dispatched', async () => {
+  const d = await holdingDaemon({ holdFirstContainers: true });
+  const lines = [];
+  const log = (m) => lines.push(m);
+  let admitted = false;
+  try {
+    const endA = await beginBuild(d.sock, ['rl:ci-test'], log); // snapshot OLD
+    d.setCurrent(MID);
+    const remA = endA(true); // removal of OLD parks on the container list
+    await until(() => d.seen.some((s) => s.startsWith('GET /containers/json')), 'A to reach the container check');
+    const endB = await beginBuild(d.sock, ['rl:ci-test'], log); // snapshot MID
+    d.setCurrent(NEW);
+    const remB = endB(true); // DELETE MID dispatched first, held
+    await until(() => deletes(d).includes(`DELETE /images/${MID}`), 'the DELETE of MID');
+    d.releaseContainers(); // A goes on: DELETE OLD dispatched second, held
+    await until(() => deletes(d).includes(`DELETE /images/${OLD}`), 'the DELETE of OLD');
+    d.release(OLD); // the LAST dispatched DELETE finishes, MID's is still running
+    await remA;
+    const next = beginBuild('/nonexistent.sock', ['rl:other'], () => {}).then((e) => { admitted = true; return e; });
+    await tick(50);
+    assert.equal(admitted, false, 'a build was admitted while an earlier DELETE (MID) was still running');
+    d.release(MID);
+    await remB;
+    (await next)(false);
+    assert.equal(admitted, true, 'the waiting build is admitted once every DELETE finished');
+  } finally { d.close(); }
+  assert.deepEqual(lines.sort(), [`RECLAIM removed previous rl:ci-test ${MID}`, `RECLAIM removed previous rl:ci-test ${OLD}`].sort());
+  assert.equal(buildsInFlight(), 0);
+});
+
+test('fix 3: a DELETE that never answers is bounded; it is logged as kept and later builds go on', async () => {
+  const d = await holdingDaemon({ neverAnswerDelete: true });
+  const lines = [];
+  setDeleteTimeoutMs(50);
+  let outcome;
+  try {
+    const stalled = new Promise((r) => { setTimeout(() => r('still waiting after 2000 ms'), 2000).unref(); });
+    const run = async () => {
+      const end = await beginBuild(d.sock, ['rl:ci-test'], (m) => lines.push(m));
+      d.setCurrent(NEW);
+      await end(true);
+      (await beginBuild('/nonexistent.sock', ['rl:other'], () => {}))(false);
+      return 'finished';
+    };
+    outcome = await Promise.race([run(), stalled]);
+  } finally { setDeleteTimeoutMs(0); d.close(); }
+  assert.equal(outcome, 'finished', 'a stalled removal DELETE must not wedge the next guarded build');
+  assert.deepEqual(deletes(d), [`DELETE /images/${OLD}`]);
+  assert.deepEqual(lines, [`RECLAIM kept previous rl:ci-test ${OLD}: DELETE unanswered after 50 ms (timeout or daemon error; dangling_prune reclaims it)`]);
+  assert.equal(buildsInFlight(), 0);
+});
+
+test('fix 3: a negative, zero or non-numeric timeout env value falls back to the default', () => {
+  const mod = fileURLToPath(new URL('../src/build-reclaim.mjs', import.meta.url));
+  const script = `const m = await import(${JSON.stringify(mod)}); console.log(JSON.stringify(m.reclaimTimeouts()));`;
+  for (const v of ['-5', '0', 'soon']) {
+    const env = { ...process.env, RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS: v, RL_GUARD_RECLAIM_DELETE_TIMEOUT_MS: v };
+    const got = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' }));
+    assert.deepEqual(got, { snapshotMs: 4000, deleteMs: 60000 }, `env value ${JSON.stringify(v)} must fall back to the defaults`);
+  }
+  const env = { ...process.env, RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS: '250', RL_GUARD_RECLAIM_DELETE_TIMEOUT_MS: '9000' };
+  const got = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' }));
+  assert.deepEqual(got, { snapshotMs: 250, deleteMs: 9000 }, 'a positive env value is used');
 });

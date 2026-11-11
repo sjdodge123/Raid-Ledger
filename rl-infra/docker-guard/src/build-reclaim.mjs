@@ -29,17 +29,25 @@ export const RECLAIM_TAGS = new Set(['docker.io/library/rl:ci-test']);
 const RUNNER_ROLE = 'runner';
 
 const DEFAULT_SNAPSHOT_TIMEOUT_MS = 4000;
-/** A positive timeout, else the default (a negative or non-numeric env value is ignored). */
-function positiveMs(v) {
+const DEFAULT_DELETE_TIMEOUT_MS = 60000;
+/** A positive timeout, else `def` (a negative or non-numeric env value is ignored). */
+function positiveMs(v, def) {
   const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_SNAPSHOT_TIMEOUT_MS;
+  return Number.isFinite(n) && n > 0 ? n : def;
 }
-let snapshotTimeoutMs = positiveMs(process.env.RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS);
+let snapshotTimeoutMs = positiveMs(process.env.RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS, DEFAULT_SNAPSHOT_TIMEOUT_MS);
+// Fix 3: how long a removal DELETE (and so every build waiting on it) may take.
+// A bounded wait is preferred over waiting forever: once it fires, a later build
+// may overlap a DELETE Docker is still finishing, which at worst makes that build
+// re-pull or rebuild layers (a cache miss), whereas one stalled cleanup with no
+// bound would wedge every later guarded build on the runner indefinitely.
+let deleteTimeoutMs = positiveMs(process.env.RL_GUARD_RECLAIM_DELETE_TIMEOUT_MS, DEFAULT_DELETE_TIMEOUT_MS);
 let inFlight = 0;
 let settled = Promise.resolve();
-// Codex P2: the DELETE in progress (it may recursively remove untagged cache
-// parents). beginBuild() waits for it before admitting a build.
-let deleting = Promise.resolve();
+// Codex P2 + fix 3: every DELETE in progress (each may recursively remove
+// untagged cache parents). Concurrent reclamations each add one; beginBuild()
+// waits for ALL of them, and each leaves the set only once it has settled.
+const deletions = new Set();
 
 /** Builds the guard is currently forwarding (for tests). */
 export function buildsInFlight() {
@@ -48,7 +56,17 @@ export function buildsInFlight() {
 
 /** Override the snapshot timeout (tests); a non-positive value restores the default. */
 export function setSnapshotTimeoutMs(ms) {
-  snapshotTimeoutMs = positiveMs(ms);
+  snapshotTimeoutMs = positiveMs(ms, DEFAULT_SNAPSHOT_TIMEOUT_MS);
+}
+
+/** Override the removal DELETE timeout (tests); a non-positive value restores the default. */
+export function setDeleteTimeoutMs(ms) {
+  deleteTimeoutMs = positiveMs(ms, DEFAULT_DELETE_TIMEOUT_MS);
+}
+
+/** The timeouts in effect (tests). */
+export function reclaimTimeouts() {
+  return { snapshotMs: snapshotTimeoutMs, deleteMs: deleteTimeoutMs };
 }
 
 /** Resolves once the most recent post-build removal attempt has finished (for tests). */
@@ -96,12 +114,15 @@ async function removePrevious(socket, tag, oldId, log) {
   if (last === null) return;
   if (last.tags.length > 0) return kept(`still tagged ${last.tags.join(', ')}`);
   if (inFlight > 0) return kept(busy()); // m3: a build may have started during the checks
-  // No await between the check above and publishing `deleting`: any build that
-  // begins after the check waits in beginBuild() until the DELETE has finished.
-  const del = dockerJson(socket, 'DELETE', `/images/${encodeURIComponent(oldId)}`);
-  deleting = del.then(() => {}, () => {});
+  // No await between the check above and adding to `deletions`: any build that
+  // begins after the check waits in beginBuild() until the DELETE has finished
+  // or timed out (status 0, see deleteTimeoutMs).
+  const del = dockerJson(socket, 'DELETE', `/images/${encodeURIComponent(oldId)}`, undefined, { timeoutMs: deleteTimeoutMs });
+  const done = del.then(() => {}, () => {}).finally(() => deletions.delete(done));
+  deletions.add(done);
   const { status, json } = await del;
   if (status === 200) return log(`RECLAIM removed previous ${tag} ${oldId}`);
+  if (status === 0) return kept(`DELETE unanswered after ${deleteTimeoutMs} ms (timeout or daemon error; dangling_prune reclaims it)`);
   kept(`DELETE ${status} ${json?.message ?? ''}`.trimEnd());
 }
 
@@ -116,15 +137,15 @@ async function snapshot(socket, tag, log) {
  * Call before forwarding a /build; it counts the build in flight synchronously.
  * Resolves to `end(finished)`, to call when the guard's response closes
  * (`finished`: it completed); repeat calls are no-ops, so the count drops once.
- * It resolves only after any removal already dispatched has finished, so a new
- * build never runs alongside a DELETE (Codex P2).
+ * It resolves only after every removal already dispatched has finished or timed
+ * out, so a new build never runs alongside a DELETE (Codex P2, fix 3).
  */
 export async function beginBuild(socket, tags, log) {
   inFlight += 1;
   let tag = null;
   let oldId = null;
   try {
-    await deleting; // Codex P2: never overlap a removal still in progress
+    await Promise.all([...deletions]); // Codex P2 + fix 3: wait out EVERY removal in progress
     tag = reclaimableTag(tags ?? []);
     if (tag !== null) oldId = await snapshot(socket, tag, log);
   } catch (e) {
