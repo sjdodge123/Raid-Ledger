@@ -43,7 +43,7 @@ export function normalizeForDedup(name: string): string {
   // too ("Asgard's Fall — Viking Survivors" vs "Asgard's Fall: Viking
   // Survivors"). Folded spaced OR unspaced: unlike the ASCII hyphen, neither
   // is ever word-internal in a title ("Half-Life" keeps its hyphen).
-  result = result.replace(/\s*[–—]\s*/g, ' ');
+  result = result.replace(/\s*[\u2013\u2014]\s*/g, ' ');
   // Collapse whitespace
   result = result.replace(/\s+/g, ' ').trim();
   return result;
