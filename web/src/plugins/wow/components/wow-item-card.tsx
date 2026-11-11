@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { Modal } from '../../../components/ui/modal';
 import './wow-item-card.css';
+import { Button } from '../../../components/ui/button';
 
 /** Slot label display names */
 const SLOT_LABELS: Record<string, string> = {
@@ -146,11 +147,11 @@ function ItemMobileModal({ name, qKey, iconUrl, itemLevel, slotLabel, subclass, 
                 {wowheadUrl && (
                     <div className="pt-2 border-t border-edge">
                         {/* ROK-2176: a button, not <a href=wowhead…> — Wowhead's global tooltips.js binds to those links and spawned a second overlay over this modal. */}
-                        <button type="button" onClick={() => window.open(wowheadUrl, '_blank', 'noopener,noreferrer')}
-                            className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
+                        <Button variant="bare" onClick={() => window.open(wowheadUrl, '_blank', 'noopener,noreferrer')}
+                            className="text-sm text-blue-400 hover:underline">
                             View on Wowhead
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </button>
+                        </Button>
                     </div>
                 )}
             </div>

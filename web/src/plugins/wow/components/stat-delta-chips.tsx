@@ -7,6 +7,7 @@
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { deltaTone, formatDelta, nonZeroDeltas, topDeltas, type StatDelta } from '../lib/item-stat-diff';
 import './item-comparison.css';
+import { Button } from '../../../components/ui/button';
 
 const PHONE_CHIP_COUNT = 3;
 
@@ -20,10 +21,10 @@ function MoreChip({ more, onOpen }: { more: number; onOpen?: (() => void) | unde
     const label = `+${more} more`;
     if (!onOpen) return <span className="stat-delta-chip stat-delta-chip--more">{label}</span>;
     return (
-        <button type="button" className="stat-delta-chip stat-delta-chip--more" onClick={onOpen}
+        <Button variant="bare" className="stat-delta-chip stat-delta-chip--more" onClick={onOpen}
             aria-label={`${label} stat changes — open comparison`}>
             {label}
-        </button>
+        </Button>
     );
 }
 

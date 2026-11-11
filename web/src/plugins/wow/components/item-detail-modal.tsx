@@ -3,6 +3,7 @@ import type { EquipmentItemDto } from '@raid-ledger/contract';
 import { Modal } from '../../../components/ui/modal';
 import { equipSlotLabel } from '../lib/item-detail-view';
 import { ItemDetailBody } from './item-detail-body';
+import { Button } from '../../../components/ui/button';
 
 interface ItemDetailModalProps {
     isOpen: boolean;
@@ -31,13 +32,13 @@ const NAV_BUTTON = 'p-2 text-muted hover:text-foreground transition-colors round
 function ItemModalPager({ currentIndex, total, onNavigate }: { currentIndex: number; total: number; onNavigate: (i: number) => void }) {
     return (
         <div className="flex items-center justify-between pb-3 mb-3 border-b border-edge">
-            <button type="button" onClick={() => onNavigate((currentIndex - 1 + total) % total)} className={NAV_BUTTON} aria-label="Previous item">
+            <Button variant="bare" onClick={() => onNavigate((currentIndex - 1 + total) % total)} className={NAV_BUTTON} aria-label="Previous item">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </button>
+            </Button>
             <span className="text-sm text-muted">{currentIndex + 1} / {total}</span>
-            <button type="button" onClick={() => onNavigate((currentIndex + 1) % total)} className={NAV_BUTTON} aria-label="Next item">
+            <Button variant="bare" onClick={() => onNavigate((currentIndex + 1) % total)} className={NAV_BUTTON} aria-label="Next item">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
+            </Button>
         </div>
     );
 }

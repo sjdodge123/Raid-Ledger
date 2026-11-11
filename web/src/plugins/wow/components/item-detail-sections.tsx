@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { CLASSIC_FALLBACK_HINT } from '../lib/item-wowhead-variant';
 import { ARMOR_KEY, DPS_KEY, deltaTone, type StatDelta } from '../lib/item-stat-diff';
 import type { DetailItem } from '../lib/item-detail-view';
+import { Button } from '../../../components/ui/button';
 
 const QUALITY_COLORS: Record<string, string> = {
     POOR: 'text-gray-500',
@@ -122,10 +123,10 @@ export function ItemFooter({ item }: { item: DetailItem }) {
             {item.classicHint && <p className="text-xs text-muted">{CLASSIC_FALLBACK_HINT}</p>}
             <div className="pt-2 border-t border-edge">
                 {/* ROK-2176: a button, not <a href=wowhead…> — Wowhead's tooltips.js binds to those links and spawns a second overlay. */}
-                <button type="button" onClick={() => window.open(item.wowheadUrl, '_blank', 'noopener,noreferrer')}
-                    className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
+                <Button variant="bare" onClick={() => window.open(item.wowheadUrl, '_blank', 'noopener,noreferrer')}
+                    className="text-sm text-blue-400 hover:underline">
                     View on Wowhead <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                </button>
+                </Button>
             </div>
         </>
     );
