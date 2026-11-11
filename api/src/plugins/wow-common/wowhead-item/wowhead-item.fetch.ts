@@ -22,7 +22,9 @@ const TooltipSchema = z.object({
   name: z.string().min(1).max(255),
   quality: z.number().int().min(0).max(7),
   icon: z.string().optional(),
-  tooltip: z.string().max(65536).optional(),
+  // Any shape: `parseTooltipHtml` type-checks it and enforces the 64 KB cap,
+  // so an odd or oversized tooltip costs only the stats, never name/icon.
+  tooltip: z.unknown().optional(),
 });
 
 /** The tooltip URL for one item in one Wowhead data env. */

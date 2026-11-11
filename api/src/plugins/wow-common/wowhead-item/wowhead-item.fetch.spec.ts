@@ -146,10 +146,22 @@ describe('parseWowheadTooltip', () => {
     });
   });
 
-  it('a tooltip over 64 KB makes the body off-shape (ROK-2176)', () => {
-    const body = { name: 'X', quality: 2, tooltip: 'a'.repeat(65537) };
-    expect(parseWowheadTooltip(body, 4)).toEqual({ kind: 'not_found' });
-  });
+  it.each([
+    ['over 64 KB', `<!--ilvl-->60${'a'.repeat(65537)}`],
+    ['not a string', { html: 1 }],
+  ])(
+    'a tooltip %s keeps name/icon with a null tooltip (ROK-2176)',
+    (_label, tooltip) => {
+      const body = { name: 'X', quality: 2, icon: 'a', tooltip };
+      expect(parseWowheadTooltip(body, 4)).toEqual({
+        kind: 'found',
+        name: 'X',
+        quality: 2,
+        icon: 'a',
+        tooltip: null,
+      });
+    },
+  );
 
   it('unparseable tooltip HTML keeps the item with a null tooltip (ROK-2176)', () => {
     const body = { name: 'X', quality: 2, icon: 'a', tooltip: 'no markers' };
