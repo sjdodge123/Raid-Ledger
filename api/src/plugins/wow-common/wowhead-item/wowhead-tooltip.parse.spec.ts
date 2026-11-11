@@ -90,7 +90,9 @@ describe('parseTooltipHtml — fixtures', () => {
       flat('ATTACK_POWER', 'Attack Power', 30),
     ]);
   });
+});
 
+describe('parseTooltipHtml — fixtures with armor and effects', () => {
   it('16922 env4: armor, two resistances, healing + mp5, set name', () => {
     const t = parsed(16922, 4);
     expect(t).toMatchObject({
@@ -252,8 +254,17 @@ describe('parseTooltipHtml — unusable input', () => {
     const html = fixtureHtml(17182, 4);
     for (const cut of [200, 600, 900, 1400]) {
       const t = parseTooltipHtml(html.slice(0, cut), 4);
+      expect(t).not.toBeNull();
       expect(() => ItemTooltipSchema.parse(t)).not.toThrow();
     }
+  });
+
+  it('two whitelisted effects with the same key are summed into one stat', () => {
+    const ap = (n: number) =>
+      `<span class="q2">Equip: <a href="/x">+${n} Attack Power.</a></span>`;
+    const t = parseTooltipHtml(`<!--ilvl-->10${ap(20)}${ap(14)}`, 4);
+    expect(t?.stats).toEqual([flat('ATTACK_POWER', 'Attack Power', 34)]);
+    expect(t?.effects).toHaveLength(2);
   });
 
   it('a weapon line without dps → weapon null', () => {
