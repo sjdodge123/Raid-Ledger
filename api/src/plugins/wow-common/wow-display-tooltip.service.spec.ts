@@ -107,7 +107,7 @@ describe('WowDisplayTooltipService.decorate (ROK-2176)', () => {
   it('returns the equipment undecorated when the cache read fails', async () => {
     getMeta.mockRejectedValue(new Error('db down'));
     const stored = gear(1);
-    expect(await service.decorate(ROW, stored)).toBe(stored);
+    await expect(service.decorate(ROW, stored)).resolves.toBe(stored);
     expect(enqueue).not.toHaveBeenCalled();
   });
 
