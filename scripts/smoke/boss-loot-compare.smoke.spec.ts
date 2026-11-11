@@ -126,7 +126,7 @@ async function openBossLoot(page: Page): Promise<void> {
 async function expectOneCompareDialog(page: Page, lootName: string, equippedName: string): Promise<Locator> {
     await expect(page.locator('[role="dialog"]'), 'one dialog, never a second overlay').toHaveCount(1);
     const body = page.getByTestId('item-compare-dialog');
-    await expect(body, 'phone stacks, wider viewports use two columns').toHaveAttribute('data-layout', isPhoneWidth(page) ? 'stacked' : 'columns');
+    await expect(body, 'phone stacks, wider viewports use the aligned compare table').toHaveAttribute('data-layout', isPhoneWidth(page) ? 'stacked' : 'table');
     await expect(body.getByTestId('compare-loot-column'), 'the drop is in the popup').toContainText(lootName);
     await expect(body.getByTestId('compare-equipped-column'), 'the equipped item is in the popup').toContainText(equippedName);
     return page.locator('[role="dialog"]');
