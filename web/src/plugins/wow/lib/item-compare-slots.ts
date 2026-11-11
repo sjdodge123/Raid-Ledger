@@ -60,7 +60,9 @@ function weaponTarget(lootSlot: string, eq: Map<string, EquipmentItemDto>): Comp
     const mh = eq.get('MAIN_HAND');
     const oh = eq.get('OFF_HAND');
     if (lootSlot === 'Two-Hand' && oh) {
-        return { items: mh ? [mh, oh] : [oh], label: 'vs Main Hand + Off Hand', mode: 'sum' };
+        return mh
+            ? { items: [mh, oh], label: 'vs Main Hand + Off Hand', mode: 'sum' }
+            : { items: [oh], label: 'vs Off Hand', mode: 'sum' };
     }
     if (MAIN_HAND_LOOT.has(lootSlot) && isTwoHander(mh)) {
         return { items: [mh], label: 'vs your two-hander', mode: 'vs-two-hander' };

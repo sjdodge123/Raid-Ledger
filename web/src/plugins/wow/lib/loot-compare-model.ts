@@ -23,6 +23,8 @@ export interface LootComparison {
 }
 
 function deltasFor(loot: BossLootDto, target: CompareTarget): { deltas: StatDelta[] | null; note: string | null } {
+    // Relic / null slot: nothing to compare against, so no fake "gains".
+    if (target.mode === 'none') return { deltas: null, note: null };
     if (NO_STATS_EXPANSIONS.has(loot.expansion)) return { deltas: null, note: NOTE_EXPANSION_UNSUPPORTED };
     const lootView = itemStatsView(loot);
     if (!lootView) return { deltas: null, note: NOTE_STATS_NOT_SYNCED };
@@ -35,4 +37,17 @@ function deltasFor(loot: BossLootDto, target: CompareTarget): { deltas: StatDelt
 export function lootComparison(loot: BossLootDto, equippedBySlot: Map<string, EquipmentItemDto>): LootComparison {
     const target = compareTarget(loot.slot, equippedBySlot);
     return { target, shownItem: target.items[0], ...deltasFor(loot, target) };
+}
+
+/** Whether the drop's own stats are unknown, and why (the popup's muted note). */
+export function lootNote(loot: BossLootDto, comparison: LootComparison): string | null {
+    if (comparison.note === NOTE_EXPANSION_UNSUPPORTED) return NOTE_EXPANSION_UNSUPPORTED;
+    return itemStatsView(loot) ? null : NOTE_STATS_NOT_SYNCED;
+}
+
+/** Drop iLvl − shown equipped iLvl; undefined when either is unknown. */
+export function ilvlDelta(loot: BossLootDto, comparison: LootComparison): StatDelta | undefined {
+    const eq = comparison.shownItem;
+    if (loot.itemLevel == null || !eq || eq.itemLevel <= 0) return undefined;
+    return { key: 'ILVL', name: 'iLvl', value: loot.itemLevel - eq.itemLevel, unit: 'flat' };
 }

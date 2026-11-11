@@ -9,7 +9,7 @@ import { ItemComparison } from '../components/item-comparison';
 import { getWowheadItemUrlForExpansion, getWowheadDataSuffixForExpansion } from '../lib/wowhead-urls';
 import { isUsableByClass } from './boss-loot-constants';
 import { lootComparison } from '../lib/loot-compare-model';
-import { ItemCompareDialog, type ItemCompareDialogProps } from '../components/item-compare-dialog';
+import { ItemCompareDialog } from '../components/item-compare-dialog';
 
 /** Props for BossLootBody */
 export interface BossLootBodyProps {
@@ -69,9 +69,6 @@ function LootItemMeta({ item }: { item: BossLootDto }) {
         </div>
     );
 }
-
-/** ROK-2176: the compare popup a row mounts while `open` (`ItemCompareDialog`). */
-export type LootCompareDialogProps = ItemCompareDialogProps;
 
 /** Single loot item row with comparison and metadata */
 function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlot, characterClass, hasCharacter }: {
