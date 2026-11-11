@@ -306,7 +306,9 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', 
     decorate.mockResolvedValue(decorated);
     const input = row(gear(2));
     expect(await adapter.resolveDisplayEquipment(input)).toBe(decorated);
-    expect(decorate).toHaveBeenCalledWith(input, addon);
+    expect(decorate).toHaveBeenCalledWith(input, addon, {
+      enqueueDue: false,
+    });
   });
 
   it('decorates the stored Armory gear when the Forever resolver has no opinion', async () => {
@@ -334,7 +336,9 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayEquipment (ROK-2176)', 
     decorate.mockResolvedValue(decorated);
     const input = { ...row(null), gameVariant: null };
     expect(await adapter.resolveDisplayEquipment(input)).toBe(decorated);
-    expect(decorate).toHaveBeenCalledWith(input, addon);
+    expect(decorate).toHaveBeenCalledWith(input, addon, {
+      enqueueDue: false,
+    });
   });
 
   // Review MAJOR 2: Wowhead envs 16/4 only describe vanilla-era items.

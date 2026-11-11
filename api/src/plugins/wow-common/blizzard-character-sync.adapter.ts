@@ -36,6 +36,9 @@ const TOOLTIP_VARIANTS: ReadonlySet<string> = new Set([
   'classic_era',
 ]);
 
+/** Addon gear: `ForeverDisplayEquipmentService.resolve` owns its enqueue. */
+const ADDON_DECORATE = { enqueueDue: false } as const;
+
 function isTooltipVariant(variant: string | null): boolean {
   return variant !== null && TOOLTIP_VARIANTS.has(variant);
 }
@@ -65,12 +68,14 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
    * is decorated even when the character's `gameVariant` is null (manual /
    * roster-created). Armory gear of retail / progression Classic / TBC
    * Anniversary / no variant keeps the pre-2176 result.
+   * The Forever resolver already enqueued the addon gear's due ids, so the
+   * addon branch decorates without a second enqueue (one per id per read).
    */
   async resolveDisplayEquipment(
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
     const addon = await this.foreverEquipment.resolve(row);
-    if (addon) return this.tooltips.decorate(row, addon);
+    if (addon) return this.tooltips.decorate(row, addon, ADDON_DECORATE);
     if (!isTooltipVariant(row.gameVariant) || !row.equipment) return undefined;
     return this.tooltips.decorate(row, row.equipment);
   }

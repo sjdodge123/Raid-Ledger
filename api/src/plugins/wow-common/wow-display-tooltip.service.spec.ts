@@ -135,6 +135,16 @@ describe('WowDisplayTooltipService.decorate (ROK-2176)', () => {
     expect(enqueue).toHaveBeenCalledWith([2, 3]);
   });
 
+  // Gate fix: addon gear's due ids are enqueued by the Forever resolver on
+  // the same read — a second enqueue here doubled every call.
+  it('enqueueDue: false still decorates but never enqueues', async () => {
+    getMeta.mockResolvedValue(new Map([[1, metaRow(1)]]));
+    const out = await service.decorate(ROW, gear(1, 2), { enqueueDue: false });
+    expect(out.items[0]?.tooltip).toEqual(TOOLTIP);
+    expect(getMeta).toHaveBeenCalledWith([1, 2]);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
   it('a failing enqueue never fails the read', async () => {
     enqueue.mockRejectedValue(new Error('limiter'));
     const out = await service.decorate(ROW, gear(5));

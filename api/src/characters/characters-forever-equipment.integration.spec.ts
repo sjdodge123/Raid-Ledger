@@ -5,6 +5,17 @@
  * `last_synced_at` are never written; stored Armory gear wins regardless of
  * age and the addon only fills the gap (ROK-2138);
  * unknown item ids are enqueued fire-and-forget; other variants unchanged.
+ *
+ * ROK-2176 (rulings Q6 + spec §4.5): the read path now also decorates gear
+ * with stored Wowhead tooltips, so two expectations moved on purpose:
+ * - "fresh" means resolved AND probed by the current tooltip parser
+ *   (`WOWHEAD_TOOLTIP_PARSE_VERSION`); a resolved row with an older/no
+ *   parser version is due again (`isMetaDue`), so it is re-enqueued.
+ * - Stored Armory gear of a vanilla-era character (`wow_forever`,
+ *   `classic_era`) now goes through Wowhead too: its unknown ids are
+ *   enqueued (exactly once) — the addon snapshot's ids never are.
+ * Each due id is enqueued once per read: the addon branch's enqueue belongs
+ * to the Forever resolver, the tooltip decoration does not repeat it.
  */
 import { eq } from 'drizzle-orm';
 import type { CharacterEquipmentDto } from '@raid-ledger/contract';
@@ -17,6 +28,7 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { WowItemMetaService } from '../plugins/wow-common/wowhead-item/wow-item-meta.service';
+import { WOWHEAD_TOOLTIP_PARSE_VERSION } from '../plugins/wow-common/wowhead-item/wowhead-item.types';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const CAPTURED_AT = new Date('2026-09-15T12:00:00.000Z');
@@ -136,7 +148,8 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
     });
   }
 
-  async function seedResolvedMeta(): Promise<void> {
+  /** A resolved 19019 row; `fresh` = probed by the current tooltip parser. */
+  async function seedResolvedMeta(fresh = true): Promise<void> {
     await testApp.db.insert(schema.wowItemMeta).values({
       itemId: 19019,
       status: 'resolved',
@@ -145,6 +158,7 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
       quality: 5,
       icon: 'inv_sword_39',
       fetchedAt: new Date(),
+      tooltipVersion: fresh ? WOWHEAD_TOOLTIP_PARSE_VERSION : null,
     });
   }
 
@@ -201,6 +215,21 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
       expect(enqueue).toHaveBeenCalledWith([16921]);
       return Promise.resolve();
     });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-enqueues a resolved row with a stale tooltip parse, once per read (ROK-2176)', async () => {
+    const id = await seedCharacter({ slug: FOREVER_SLUG });
+    await seedSnapshot(id);
+    await seedResolvedMeta(false);
+
+    expect((await get(id)).status).toBe(200);
+
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledWith([19019, 16921]);
+      return Promise.resolve();
+    });
+    expect(enqueue).toHaveBeenCalledTimes(1);
   });
 
   it('Blizzard primary (ROK-2138): an older Armory sync still beats a newer addon snapshot', async () => {
@@ -215,7 +244,9 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
     const res = await get(id);
 
     expect(res.body.equipment).toEqual(armory);
-    expect(enqueue).not.toHaveBeenCalled();
+    // ROK-2176 Q6: Armory ids go through Wowhead; the snapshot's never do.
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith([11111]);
   });
 
   it('a newer Armory sync keeps the Armory gear', async () => {
@@ -230,7 +261,9 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
     const res = await get(id);
 
     expect(res.body.equipment).toEqual(armory);
-    expect(enqueue).not.toHaveBeenCalled();
+    // ROK-2176 Q6: Armory ids go through Wowhead; the snapshot's never do.
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith([11111]);
   });
 
   it('a Classic character keeps its stored equipment even with a snapshot row', async () => {
@@ -246,7 +279,9 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.equipment).toEqual(armory);
-    expect(enqueue).not.toHaveBeenCalled();
+    // ROK-2176 Q6: Armory ids go through Wowhead; the snapshot's never do.
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith([11111]);
   });
 
   it("a Forever character without a snapshot keeps today's output", async () => {

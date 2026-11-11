@@ -38,19 +38,27 @@ export class WowDisplayTooltipService {
 
   constructor(private readonly itemMeta: WowItemMetaService) {}
 
-  /** A copy of `equipment` with stored tooltips attached; never throws. */
+  /**
+   * A copy of `equipment` with stored tooltips attached; never throws.
+   * `enqueueDue: false` skips the background enqueue — for addon gear, whose
+   * due ids `ForeverDisplayEquipmentService.resolve` already enqueued on the
+   * same read (one enqueue per id per read).
+   */
   async decorate(
     row: Pick<DisplayEquipmentRow, 'id'>,
     equipment: CharacterEquipmentDto,
+    opts: { enqueueDue?: boolean } = {},
   ): Promise<CharacterEquipmentDto> {
     try {
       const ids = equipmentItemIds(equipment);
       if (ids.length === 0) return equipment;
       const meta = await this.itemMeta.getMeta(ids);
       const now = Date.now();
-      this.enqueueInBackground(
-        ids.filter((id) => isMetaDue(meta.get(id), now)),
-      );
+      if (opts.enqueueDue !== false) {
+        this.enqueueInBackground(
+          ids.filter((id) => isMetaDue(meta.get(id), now)),
+        );
+      }
       const items = equipment.items.map((item) =>
         withTooltip(item, meta.get(item.itemId)),
       );
