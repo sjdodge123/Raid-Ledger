@@ -11,7 +11,9 @@ import {
   PRUNED_EXPANSION,
   findStaleClassicBossIds,
   findStaleClassicLootIds,
-  pruneClassicRows,
+  findStaleForeverLootIds,
+  pruneStaleRows,
+  type PruneWarn,
   type BossKeyRow,
   type LootKeyRow,
   type LootWantedKey,
@@ -79,7 +81,8 @@ export class BossEncounterSeeder {
    * files are applied to existing rows on restart.
    *
    * ROK-2142: after the upsert, classic boss rows and classic loot rows no
-   * longer in the JSON are deleted in one transaction — see
+   * longer in the JSON are deleted in one transaction; ROK-2170 D7 adds
+   * forever loot rows to the same transaction — see
    * `boss-encounter-prune.helpers.ts` (scope + truncated-file floor).
    */
   async seed(): Promise<{ bossesInserted: number; lootInserted: number }> {
@@ -92,28 +95,47 @@ export class BossEncounterSeeder {
     const stale = new Set(staleBossIds);
     const live = rows.filter((r) => !stale.has(r.id));
     const loot = await this.seedLootItems(this.buildBossLookup(live));
-    const classicBossIds = new Set(
-      live.filter((r) => r.expansion === PRUNED_EXPANSION).map((r) => r.id),
+    const staleLoot = await this.findStaleLoot(live, loot.wanted, warn);
+    await pruneStaleRows(this.db, staleBossIds, [
+      ...staleLoot.classic,
+      ...staleLoot.forever,
+    ]);
+    this.logPrune(
+      staleBossIds.length,
+      staleLoot.classic.length,
+      staleLoot.forever.length,
     );
-    const lootRows: LootKeyRow[] = await this.db
-      .select()
-      .from(wowClassicBossLoot);
-    const staleLootIds = findStaleClassicLootIds(
-      lootRows,
-      loot.wanted,
-      classicBossIds,
-      warn,
-    );
-    await pruneClassicRows(this.db, staleBossIds, staleLootIds);
-    this.logPrune(staleBossIds.length, staleLootIds.length);
     return { bossesInserted, lootInserted: loot.inserted };
   }
 
+  /**
+   * Stale classic loot (on live classic bosses) and, ROK-2170 D7, stale
+   * forever loot (on ANY live boss — Forever loot hangs off classic boss rows).
+   * `wanted` carries each JSON row with its resolved bossId and own expansion.
+   */
+  private async findStaleLoot(
+    live: readonly BossKeyRow[],
+    wanted: readonly LootWantedKey[],
+    warn: PruneWarn,
+  ): Promise<{ classic: number[]; forever: number[] }> {
+    const classicBossIds = new Set(
+      live.filter((r) => r.expansion === PRUNED_EXPANSION).map((r) => r.id),
+    );
+    const liveBossIds = new Set(live.map((r) => r.id));
+    const lootRows: LootKeyRow[] = await this.db
+      .select()
+      .from(wowClassicBossLoot);
+    return {
+      classic: findStaleClassicLootIds(lootRows, wanted, classicBossIds, warn),
+      forever: findStaleForeverLootIds(lootRows, wanted, liveBossIds, warn),
+    };
+  }
+
   /** Log what the stale-row prune removed (silent when nothing). */
-  private logPrune(bosses: number, loot: number): void {
-    if (bosses + loot === 0) return;
+  private logPrune(bosses: number, loot: number, forever: number): void {
+    if (bosses + loot + forever === 0) return;
     this.logger.log(
-      `Pruned ${bosses} stale classic boss encounters and ${loot} stale classic loot rows`,
+      `Pruned ${bosses} stale classic boss encounters, ${loot} stale classic loot rows and ${forever} stale forever loot rows`,
     );
   }
 

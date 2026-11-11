@@ -8,6 +8,7 @@ import bossLootData from './boss-loot-data.json';
 import {
   MIN_BUNDLED_CLASSIC_BOSSES,
   MIN_BUNDLED_CLASSIC_LOOT,
+  MIN_BUNDLED_FOREVER_LOOT,
 } from '../boss-encounter-prune.helpers';
 
 interface BossEntry {
@@ -133,5 +134,13 @@ describe('classic boss lists (ROK-2142)', () => {
   it('bundled classic loot count meets the prune floor (MIN_BUNDLED_CLASSIC_LOOT)', () => {
     const classicLoot = loot.filter((l) => l.expansion === 'classic');
     expect(classicLoot.length).toBeGreaterThanOrEqual(MIN_BUNDLED_CLASSIC_LOOT);
+  });
+});
+
+describe('bundled Forever loot (ROK-2170 D7)', () => {
+  // ROK-2170 D7: same floor for the Forever loot prune.
+  it('bundled forever loot count meets the prune floor (MIN_BUNDLED_FOREVER_LOOT)', () => {
+    const foreverLoot = loot.filter((l) => l.expansion === 'forever');
+    expect(foreverLoot.length).toBeGreaterThanOrEqual(MIN_BUNDLED_FOREVER_LOOT);
   });
 });
