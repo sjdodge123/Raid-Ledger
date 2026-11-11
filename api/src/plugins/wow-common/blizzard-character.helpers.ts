@@ -108,10 +108,11 @@ export async function fetchCharacterMedia(
 type EnchantmentEntry = { display_string: string; enchantment_id?: number };
 type SocketEntry = { socket_type: { type: string }; item?: { id: number } };
 type StatEntry = { type: { type: string; name: string }; value: number };
+/** Every level optional: Blizzard omits stats on some weapons (ROK-2173). */
 type WeaponData = {
-  damage: { min_value: number; max_value: number };
-  attack_speed: { value: number };
-  dps: { value: number };
+  damage?: { min_value?: number; max_value?: number };
+  attack_speed?: { value?: number };
+  dps?: { value?: number };
 };
 
 /** Extract typed fields from a raw equipment item. */
@@ -134,16 +135,20 @@ function extractItemFields(item: Record<string, unknown>) {
   };
 }
 
-/** Map weapon data to the output format. */
+/**
+ * Map weapon data to the output format. The contract needs all four numbers,
+ * so a weapon missing any of them drops the `weapon` block instead of
+ * throwing and costing the whole equipment fetch (ROK-2173).
+ */
 function mapWeapon(w: WeaponData | undefined) {
-  return w
-    ? {
-        damageMin: w.damage.min_value,
-        damageMax: w.damage.max_value,
-        attackSpeed: w.attack_speed.value,
-        dps: w.dps.value,
-      }
-    : undefined;
+  const damageMin = w?.damage?.min_value;
+  const damageMax = w?.damage?.max_value;
+  const attackSpeed = w?.attack_speed?.value;
+  const dps = w?.dps?.value;
+  // `== null` also rejects a JSON null, not only a missing key.
+  if (damageMin == null || damageMax == null) return undefined;
+  if (attackSpeed == null || dps == null) return undefined;
+  return { damageMin, damageMax, attackSpeed, dps };
 }
 
 /** Optional fields with their `undefined` holes dropped (exactOptionalPropertyTypes). */
@@ -207,7 +212,15 @@ export function mapEquipmentItems(
   rawItems: Array<Record<string, unknown>>,
   iconUrls: Map<number, string>,
 ): BlizzardEquipmentItem[] {
-  return rawItems.map((item) => mapSingleItem(item, iconUrls));
+  // One malformed item skips that slot, never the whole equipment (ROK-2173).
+  return rawItems.flatMap((item) => {
+    try {
+      return [mapSingleItem(item, iconUrls)];
+    } catch (err) {
+      logger.warn(`Skipped malformed equipment item: ${err}`);
+      return [];
+    }
+  });
 }
 
 /** Build equipment result from raw API data and icon URLs. */
