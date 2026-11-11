@@ -108,14 +108,16 @@ export class WowItemMetaService {
   /**
    * Cron (ROK-2176 §4.4): resolve up to {@link WOWHEAD_RETRY_BATCH} boss-loot
    * items with no tooltip yet, then drop the boss-loot cache so the 24 h
-   * loot SWR entries pick the new stats up.
-   * @returns how many rows were written.
+   * loot SWR entries pick the new stats up. `retriedWrites` = rows the same
+   * cron run's `retryDue()` wrote: those can refill loot items the backfill
+   * then skips, so they drop the cache too (ROK-2176 review MINOR 4).
+   * @returns how many rows the backfill wrote.
    */
-  async backfillBossLoot(): Promise<number> {
+  async backfillBossLoot(retriedWrites = 0): Promise<number> {
     if (!(await this.isEnabled())) return 0;
     const ids = await bossLootBackfillIds(this.db, WOWHEAD_RETRY_BATCH);
     const written = await this.enqueue(ids);
-    if (written > 0) await this.bossEncounters.clearCache();
+    if (written + retriedWrites > 0) await this.bossEncounters.clearCache();
     return written;
   }
 

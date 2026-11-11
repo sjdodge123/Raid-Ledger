@@ -131,6 +131,12 @@ describe('WowCronRegistrar — getCronJobs', () => {
     expect(retryOrder).toBeLessThan(backfillOrder ?? 0);
   });
 
+  it('hands the re-probe write count to the backfill so it can drop the loot cache (review MINOR 4)', async () => {
+    mockItemMeta.retryDue.mockResolvedValue(4);
+    await registrar.getCronJobs()[2]?.handler();
+    expect(mockItemMeta.backfillBossLoot).toHaveBeenCalledWith(4);
+  });
+
   it('registers the 6-hourly Forever guild roster sync (ROK-1928 C1)', async () => {
     const job = registrar.getCronJobs()[3];
     expect(job?.name).toBe('forever-guild-roster-sync');

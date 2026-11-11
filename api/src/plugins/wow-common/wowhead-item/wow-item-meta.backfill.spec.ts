@@ -153,6 +153,13 @@ describe('WowItemMetaService.backfillBossLoot (ROK-2176)', () => {
     expect(clearCache).not.toHaveBeenCalled();
   });
 
+  it('nothing to backfill but retryDue wrote rows → the loot cache is dropped (review MINOR 4)', async () => {
+    const { db } = lootDb([]);
+    const { svc, clearCache } = service(db, 200);
+    await expect(svc.backfillBossLoot(3)).resolves.toBe(0);
+    expect(clearCache).toHaveBeenCalledTimes(1);
+  });
+
   it('kill switch off → no query, no fetch, cache kept', async () => {
     const { db, selectDistinct } = lootDb([19019]);
     const { svc, clearCache } = service(db, 200, 'false');

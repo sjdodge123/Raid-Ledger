@@ -92,8 +92,8 @@ export class WowCronRegistrar implements CronRegistrar {
 
   /** Due re-probes first, then the boss-loot tooltip backfill (ROK-2176). */
   private async handleWowheadItemRetry(): Promise<void> {
-    await this.itemMeta.retryDue();
-    await this.itemMeta.backfillBossLoot();
+    const retried = await this.itemMeta.retryDue();
+    await this.itemMeta.backfillBossLoot(retried);
   }
 
   private async handleAutoSync(): Promise<void> {
