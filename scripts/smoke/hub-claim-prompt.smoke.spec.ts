@@ -327,10 +327,13 @@ test.describe("Hub claim prompt — BG3 (ROK-2153 S6/S7)", () => {
     await expect(prompt(page)).toHaveCount(0);
 
     // The Party card refetched (no reload): the picked slot now names the viewer.
+    // The tile's text is "Wood Elf · Level 8 · Barbarian (Berserker)", not the
+    // candidate name, so match it by slot key (candidate id = `<campaign>:<slotKey>`).
+    const slotKey = pick.id.slice(pick.id.indexOf(":") + 1);
     const tile = page
       .getByRole("list", { name: "Party", exact: true })
-      .getByTestId("bg3-party-slot")
-      .filter({ hasText: pick.name });
+      .locator(`[data-testid="bg3-party-slot"][data-slot-key="${slotKey}"]`);
+    await expect(tile, `one Party tile for slot ${slotKey}`).toHaveCount(1);
     await expect(tile.getByTestId("bg3-claim-control")).toContainText("You", {
       timeout: 15_000,
     });
