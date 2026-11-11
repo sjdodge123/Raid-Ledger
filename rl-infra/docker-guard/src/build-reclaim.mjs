@@ -8,13 +8,19 @@
 // once the build response finished and the tag points at a NEW image, deletes
 // the old one. Safety, each a "keep" with a log line, never an error:
 //   - another build is in flight through the guard (the old image's layers may
-//     be its classic-builder cache parent);
+//     be its classic-builder cache parent) — checked again right before DELETE;
+//   - the old image still carries ANY tag after the move (fix M1: Docker's
+//     DELETE by ID, without force, still removes an image that has exactly one
+//     other tag — e.g. an env image built `-t rl:ci-test -t …/rl-allinone:<slug>`
+//     and not spun yet);
 //   - the old image carries `rl.role=runner`;
 //   - any container (running or stopped) was created from it, or that list is
 //     unreadable;
 //   - the daemon refuses the DELETE (no `force`, so Docker's own 409 checks for
 //     containers and child images still apply).
-// Nothing here can fail the build: the response is already sent.
+// Nothing here can fail the build: the response is already sent. The snapshot
+// before the build is bounded by the snapshot timeout; on a timeout or daemon
+// error the build goes ahead and nothing is reclaimed after it.
 import { dockerJson } from './docker-client.mjs';
 import { parseImageRef } from './image-refs.mjs';
 
@@ -22,12 +28,19 @@ import { parseImageRef } from './image-refs.mjs';
 export const RECLAIM_TAGS = new Set(['docker.io/library/rl:ci-test']);
 const RUNNER_ROLE = 'runner';
 
+const DEFAULT_SNAPSHOT_TIMEOUT_MS = 4000;
+let snapshotTimeoutMs = Number(process.env.RL_GUARD_RECLAIM_SNAPSHOT_TIMEOUT_MS) || DEFAULT_SNAPSHOT_TIMEOUT_MS;
 let inFlight = 0;
 let settled = Promise.resolve();
 
 /** Builds the guard is currently forwarding (for tests). */
 export function buildsInFlight() {
   return inFlight;
+}
+
+/** Override the snapshot timeout (tests); a non-positive value restores the default. */
+export function setSnapshotTimeoutMs(ms) {
+  snapshotTimeoutMs = ms > 0 ? ms : DEFAULT_SNAPSHOT_TIMEOUT_MS;
 }
 
 /** Resolves once the most recent post-build removal attempt has finished (for tests). */
@@ -43,10 +56,11 @@ function reclaimableTag(tags) {
   return null;
 }
 
-async function imageInfo(socket, ref) {
-  const { status, json } = await dockerJson(socket, 'GET', `/images/${encodeURIComponent(ref)}/json`);
-  if (status !== 200 || typeof json?.Id !== 'string') return null;
-  return { id: json.Id, labels: json?.Config?.Labels ?? {} };
+async function imageInfo(socket, ref, opts) {
+  const { status, json } = await dockerJson(socket, 'GET', `/images/${encodeURIComponent(ref)}/json`, undefined, opts);
+  if (status !== 200 || typeof json?.Id !== 'string') return { status, info: null };
+  const tags = Array.isArray(json.RepoTags) ? json.RepoTags.filter((t) => typeof t === 'string' && t !== '<none>:<none>') : [];
+  return { status, info: { id: json.Id, labels: json?.Config?.Labels ?? {}, tags } };
 }
 
 /** Containers of any state created from `id`; null when the list is unreadable. */
@@ -57,23 +71,35 @@ async function containersUsing(socket, id) {
 }
 
 async function removePrevious(socket, tag, oldId, log) {
-  const now = await imageInfo(socket, tag);
+  const kept = (why) => log(`RECLAIM kept previous ${tag} ${oldId}: ${why}`);
+  const busy = () => `${inFlight} other build(s) in flight (dangling_prune reclaims it)`;
+  const now = (await imageInfo(socket, tag)).info;
   if (now === null || now.id === oldId) return; // build failed or produced the same image
-  if (inFlight > 0) return log(`RECLAIM kept previous ${tag} ${oldId}: ${inFlight} other build(s) in flight (dangling_prune reclaims it)`);
-  const old = await imageInfo(socket, oldId);
+  if (inFlight > 0) return kept(busy());
+  const old = (await imageInfo(socket, oldId)).info;
   if (old === null) return; // already gone
-  if (old.labels['rl.role'] === RUNNER_ROLE) return log(`RECLAIM kept previous ${tag} ${oldId}: labelled rl.role=runner`);
+  if (old.tags.length > 0) return kept(`still tagged ${old.tags.join(', ')}`);
+  if (old.labels['rl.role'] === RUNNER_ROLE) return kept('labelled rl.role=runner');
   const users = await containersUsing(socket, oldId);
-  if (users === null) return log(`RECLAIM kept previous ${tag} ${oldId}: container list unreadable`);
-  if (users > 0) return log(`RECLAIM kept previous ${tag} ${oldId}: ${users} container(s) use it`);
+  if (users === null) return kept('container list unreadable');
+  if (users > 0) return kept(`${users} container(s) use it`);
+  if (inFlight > 0) return kept(busy()); // m3: a build may have started during the checks
   const { status, json } = await dockerJson(socket, 'DELETE', `/images/${encodeURIComponent(oldId)}`);
   if (status === 200) return log(`RECLAIM removed previous ${tag} ${oldId}`);
-  log(`RECLAIM kept previous ${tag} ${oldId}: DELETE ${status} ${json?.message ?? ''}`.trimEnd());
+  kept(`DELETE ${status} ${json?.message ?? ''}`.trimEnd());
+}
+
+/** The tag's current image ID, or null (absent, timed out, unreadable — then nothing is reclaimed). */
+async function snapshot(socket, tag, log) {
+  const { status, info } = await imageInfo(socket, tag, { timeoutMs: snapshotTimeoutMs });
+  if (status === 0) log(`RECLAIM snapshot of ${tag} unavailable (timeout or daemon error): nothing reclaimed after this build`);
+  return info?.id ?? null;
 }
 
 /**
- * Call before forwarding a /build. Returns `end(finished)`, to call exactly once
- * when the guard's response closes; `finished` is true when it completed.
+ * Call before forwarding a /build; it counts the build in flight synchronously.
+ * Resolves to `end(finished)`, to call when the guard's response closes
+ * (`finished`: it completed); repeat calls are no-ops, so the count drops once.
  */
 export async function beginBuild(socket, tags, log) {
   inFlight += 1;
@@ -81,7 +107,7 @@ export async function beginBuild(socket, tags, log) {
   let oldId = null;
   try {
     tag = reclaimableTag(tags ?? []);
-    if (tag !== null) oldId = (await imageInfo(socket, tag))?.id ?? null;
+    if (tag !== null) oldId = await snapshot(socket, tag, log);
   } catch (e) {
     log(`RECLAIM snapshot failed: ${e.message}`);
   }

@@ -164,8 +164,11 @@ async function forwardEvents(req, res) {
 async function forwardBuild(req, res, plan) {
   // ROK-2171: counted in flight from here; on close, a finished build that
   // moved `rl:ci-test` removes the image it replaced (build-reclaim.mjs).
-  const endBuild = await beginBuild(SOCKET, plan.tags, log);
-  res.once('close', () => { endBuild(res.writableFinished); });
+  // m1: the close listener is attached BEFORE the snapshot is awaited, so a
+  // runner that hangs up during it still brings the in-flight count back down.
+  const pending = beginBuild(SOCKET, plan.tags, log);
+  res.once('close', () => { pending.then((end) => end(res.writableFinished)); });
+  await pending;
   let gone = false;
   const onGone = () => { gone = true; };
   res.on('close', onGone);

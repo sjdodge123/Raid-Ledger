@@ -2,7 +2,11 @@
 import http from 'node:http';
 import { COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL, INFRA_PROJECT } from './infra-project.mjs';
 
-export function dockerJson(socketPath, method, path, body) {
+/**
+ * One Engine API call. `opts.timeoutMs` (optional): give up after that long
+ * idle and resolve `{ status: 0 }`, the same as a socket error.
+ */
+export function dockerJson(socketPath, method, path, body, opts = {}) {
   return new Promise((resolve) => {
     const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
     const headers = payload ? { Host: 'docker', 'Content-Type': 'application/json', 'Content-Length': String(payload.length) } : { Host: 'docker' };
@@ -20,6 +24,7 @@ export function dockerJson(socketPath, method, path, body) {
       });
     });
     req.on('error', () => resolve({ status: 0, json: null }));
+    if (opts.timeoutMs > 0) req.setTimeout(opts.timeoutMs, () => req.destroy(new Error('timeout')));
     req.end(payload ?? undefined);
   });
 }
