@@ -5,7 +5,7 @@
 import { join } from 'path';
 import { readFile } from 'fs/promises';
 import { Logger } from '@nestjs/common';
-import { inArray } from 'drizzle-orm';
+import { and, inArray, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EnrichedQuestReward } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -192,17 +192,39 @@ export async function loadRewardItemLookup(): Promise<
   }
 }
 
+type LootRewardRow = EnrichedQuestReward & { expansion: string };
+
+/**
+ * ROK-2170: one loot row per item id. Classic variants drop `forever` rows;
+ * under Forever a `forever` row wins over any other row, whatever DB order.
+ */
+export function pickLootRows(
+  rows: LootRewardRow[],
+  preferForever: boolean,
+): EnrichedQuestReward[] {
+  const picked = new Map<number, LootRewardRow>();
+  for (const row of rows) {
+    const isForever = row.expansion === 'forever';
+    if (isForever && !preferForever) continue;
+    const held = picked.get(row.itemId);
+    if (!held || (isForever && held.expansion !== 'forever')) {
+      picked.set(row.itemId, row);
+    }
+  }
+  return [...picked.values()].map((row) => ({
+    itemId: row.itemId,
+    itemName: row.itemName,
+    quality: row.quality,
+    slot: row.slot,
+    itemLevel: row.itemLevel,
+    iconUrl: row.iconUrl,
+    itemSubclass: row.itemSubclass,
+  }));
+}
+
 /** Merge loot table rows into the item details map, filling gaps. */
 function mergeLootRows(
-  lootRows: Array<{
-    itemId: number;
-    itemName: string;
-    quality: string;
-    slot: string | null;
-    itemLevel: number | null;
-    iconUrl: string | null;
-    itemSubclass: string | null;
-  }>,
+  lootRows: EnrichedQuestReward[],
   map: Map<number, EnrichedQuestReward>,
 ): void {
   for (const row of lootRows) {
@@ -214,14 +236,42 @@ function mergeLootRows(
   }
 }
 
+/** Boss-loot rows for the reward ids; Forever rows only when preferred. */
+async function selectLootRows(
+  db: PostgresJsDatabase<typeof schema>,
+  itemIds: number[],
+  preferForever: boolean,
+): Promise<LootRewardRow[]> {
+  const t = wowClassicBossLoot;
+  return db
+    .select({
+      itemId: t.itemId,
+      itemName: t.itemName,
+      quality: t.quality,
+      slot: t.slot,
+      itemLevel: t.itemLevel,
+      iconUrl: t.iconUrl,
+      itemSubclass: t.itemSubclass,
+      expansion: t.expansion,
+    })
+    .from(t)
+    .where(
+      preferForever
+        ? inArray(t.itemId, itemIds)
+        : and(inArray(t.itemId, itemIds), ne(t.expansion, 'forever')),
+    );
+}
+
 /**
  * Build item details map from Wowhead JSON, then the boss loot table, then
  * the `wow_item_meta` cache for ids still unresolved (Forever rewards).
+ * `preferForever`: the variant reads Forever data (ROK-2170).
  */
 export async function buildItemDetailsMap(
   db: PostgresJsDatabase<typeof schema>,
   allItemIds: Set<number>,
   rewardItemLookup: Record<string, EnrichedQuestReward>,
+  preferForever: boolean,
 ): Promise<Map<number, EnrichedQuestReward>> {
   const itemDetailsMap = new Map<number, EnrichedQuestReward>();
   for (const itemId of allItemIds) {
@@ -230,19 +280,8 @@ export async function buildItemDetailsMap(
   }
   const lootLookupIds = [...allItemIds];
   if (lootLookupIds.length > 0) {
-    const lootRows = await db
-      .select({
-        itemId: wowClassicBossLoot.itemId,
-        itemName: wowClassicBossLoot.itemName,
-        quality: wowClassicBossLoot.quality,
-        slot: wowClassicBossLoot.slot,
-        itemLevel: wowClassicBossLoot.itemLevel,
-        iconUrl: wowClassicBossLoot.iconUrl,
-        itemSubclass: wowClassicBossLoot.itemSubclass,
-      })
-      .from(wowClassicBossLoot)
-      .where(inArray(wowClassicBossLoot.itemId, lootLookupIds));
-    mergeLootRows(lootRows, itemDetailsMap);
+    const rows = await selectLootRows(db, lootLookupIds, preferForever);
+    mergeLootRows(pickLootRows(rows, preferForever), itemDetailsMap);
   }
   await mergeItemMetaFallback(db, allItemIds, itemDetailsMap);
   return itemDetailsMap;

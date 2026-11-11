@@ -181,6 +181,7 @@ export class DungeonQuestsService {
       this.db,
       allItemIds,
       rewardItemLookup,
+      this.getExpansionsForVariant(variant).includes('forever'),
     );
     const chainMap = await this.batchGetQuestChains(quests);
 
