@@ -192,12 +192,27 @@ describe('WowItemMetaService — due selection + kill switch (ROK-1727)', () => 
   it('enqueue skips rows not yet due and de-dupes ids', async () => {
     const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
     const existing = [
-      row({ itemId: 1, status: 'resolved', nextRetryAt: after(HOUR) }),
+      row({
+        itemId: 1,
+        status: 'resolved',
+        nextRetryAt: after(HOUR),
+        tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
+      }),
       row({ itemId: 2, nextRetryAt: after(-HOUR) }),
     ];
     const { service, writes } = setup({ fetch, existing });
     await expect(service.enqueue([1, 2, 2, 3, 0])).resolves.toBe(2);
     expect(writes.map((w) => w.row.itemId).sort()).toEqual([2, 3]);
+  });
+
+  it('enqueue re-probes a cached resolved row with no parsed tooltip (ROK-2176)', async () => {
+    const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
+    const existing = [
+      row({ itemId: 1, status: 'resolved', nextRetryAt: after(HOUR) }),
+    ];
+    const { service, writes } = setup({ fetch, existing });
+    await expect(service.enqueue([1])).resolves.toBe(1);
+    expect(writes[0]?.row.tooltipVersion).toBe(WOWHEAD_TOOLTIP_PARSE_VERSION);
   });
 
   it('retryDue re-probes the due rows', async () => {
