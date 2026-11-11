@@ -12,7 +12,7 @@ import { Button } from '../../../components/ui/button';
 import { ARMOR_KEY, DPS_KEY, formatStatValue, itemStatsView, sumViews, type StatDelta, type StatLine, type StatsView } from '../lib/item-stat-diff';
 import { toDetailItem, type DetailItem } from '../lib/item-detail-view';
 import { NOTE_STATS_NOT_SYNCED, ilvlDelta, lootNote, type LootComparison } from '../lib/loot-compare-model';
-import { ItemHeader, LineDelta, TOOLTIP_GREEN, type DeltaByKey } from './item-detail-sections';
+import { ItemHeader, LineDelta, TOOLTIP_GREEN, WOWHEAD_LINK, type DeltaByKey } from './item-detail-sections';
 
 export const COMPARE_TAG = 'text-[0.625rem] font-bold uppercase tracking-wider text-dim';
 const TD = 'px-2 py-1.5 border-b border-edge align-top text-left';
@@ -189,7 +189,7 @@ function Heads({ sides, target }: { sides: Sides; target: LootComparison['target
 
 function WowheadButton({ item, label }: { item: DetailItem; label: string }) {
     return (
-        <Button variant="bare" onClick={() => window.open(item.wowheadUrl, '_blank', 'noopener,noreferrer')} className="text-sm text-blue-400 hover:underline">
+        <Button variant="bare" onClick={() => window.open(item.wowheadUrl, '_blank', 'noopener,noreferrer')} className={`text-sm ${WOWHEAD_LINK} hover:underline`}>
             {label} <span aria-hidden="true">↗</span>
         </Button>
     );

@@ -23,7 +23,7 @@ export type DueCheckRow = Pick<
   'status' | 'fetchedAt' | 'nextRetryAt' | 'attempts' | 'tooltipVersion'
 >;
 
-/** A found row whose tooltip was parsed by an older (or no) parser (ROK-2176). */
+/** A found row last probed by an older (or no) tooltip parser version (ROK-2176). */
 function hasStaleTooltip(row: DueCheckRow): boolean {
   const found = row.status === 'resolved' || row.status === 'classic_fallback';
   return found && row.tooltipVersion !== WOWHEAD_TOOLTIP_PARSE_VERSION;
