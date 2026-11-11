@@ -1,3 +1,5 @@
+import type { ItemTooltip } from '@raid-ledger/contract';
+
 /**
  * ROK-1727: shared types for the Wowhead item resolver.
  * The endpoint is Wowhead's public tooltip backend — undocumented, not a
@@ -27,7 +29,14 @@ export type WowItemMetaStatus =
 
 /** Outcome of one tooltip request for one (item, env). */
 export type WowheadFetchResult =
-  | { kind: 'found'; name: string; quality: number; icon: string | null }
+  | {
+      kind: 'found';
+      name: string;
+      quality: number;
+      icon: string | null;
+      /** ROK-2176: parsed tooltip HTML; null when absent or unparseable. */
+      tooltip: ItemTooltip | null;
+    }
   | { kind: 'not_found' }
   /** 429 / 5xx / network or timeout (status null) — back off and retry. */
   | { kind: 'retryable'; status: number | null };

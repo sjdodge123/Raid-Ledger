@@ -4,7 +4,8 @@
  * never lets a lower-ranked outcome replace better metadata already stored:
  * `resolved` (env 16) > `classic_fallback` (env 4) > `not_found`. A lower
  * outcome still refreshes the retry bookkeeping, so the row is not re-probed
- * on every cron run. One statement — no catch-and-retry.
+ * on every cron run. One statement — no catch-and-retry. The parsed tooltip
+ * (ROK-2176) is content: it follows the same protection as name/icon.
  */
 import { sql, type SQL } from 'drizzle-orm';
 import type { PgColumn } from 'drizzle-orm/pg-core';
@@ -38,8 +39,8 @@ export function conflictSet(row: WowItemMetaInsert): Record<string, unknown> {
   if (row.status === 'error') return retry;
   const protect = PROTECTED_FROM[row.status] ?? [];
   if (protect.length === 0) {
-    const { status, env, name, quality, icon } = row;
-    return { ...retry, status, env, name, quality, icon };
+    const { status, env, name, quality, icon, tooltip, tooltipVersion } = row;
+    return { ...retry, status, env, name, quality, icon, tooltip, tooltipVersion };
   }
   const t = wowItemMeta;
   return {
@@ -49,5 +50,7 @@ export function conflictSet(row: WowItemMetaInsert): Record<string, unknown> {
     name: keepIfProtected(protect, t.name),
     quality: keepIfProtected(protect, t.quality),
     icon: keepIfProtected(protect, t.icon),
+    tooltip: keepIfProtected(protect, t.tooltip),
+    tooltipVersion: keepIfProtected(protect, t.tooltipVersion),
   };
 }

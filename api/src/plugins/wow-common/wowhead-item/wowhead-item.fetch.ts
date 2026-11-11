@@ -4,6 +4,7 @@ import type {
   WowheadFetch,
   WowheadFetchResult,
 } from './wowhead-item.types';
+import { parseTooltipHtml } from './wowhead-tooltip.parse';
 
 /** Same UA string as `admin/settings-oauth.helpers.ts`. */
 export const WOWHEAD_USER_AGENT =
@@ -13,14 +14,15 @@ export const WOWHEAD_FETCH_TIMEOUT_MS = 10_000;
 const ICON_RE = /^[a-z0-9_]+$/;
 
 /**
- * A hit (HTTP 200) carries `name`, `quality`, `icon` plus `tooltip` HTML and
- * `spells`, which are ignored. A miss is HTTP 404 `{"error":"Entity not found"}`
+ * A hit (HTTP 200) carries `name`, `quality`, `icon`, `tooltip` HTML (parsed
+ * into stats, ROK-2176) and `spells`, which is ignored. A miss is HTTP 404 `{"error":"Entity not found"}`
  * (fixtures `testing/fixtures/wowhead/`, captured 2026-10-09).
  */
 const TooltipSchema = z.object({
   name: z.string().min(1).max(255),
   quality: z.number().int().min(0).max(7),
   icon: z.string().optional(),
+  tooltip: z.string().max(65536).optional(),
 });
 
 /** The tooltip URL for one item in one Wowhead data env. */
@@ -36,11 +38,20 @@ export function sanitizeIcon(icon: string | undefined): string | null {
 }
 
 /** Parse a 200 body; anything off-shape is a miss for that env. */
-export function parseWowheadTooltip(body: unknown): WowheadFetchResult {
+export function parseWowheadTooltip(
+  body: unknown,
+  env: WowheadEnv,
+): WowheadFetchResult {
   const parsed = TooltipSchema.safeParse(body);
   if (!parsed.success) return { kind: 'not_found' };
-  const { name, quality, icon } = parsed.data;
-  return { kind: 'found', name, quality, icon: sanitizeIcon(icon) };
+  const { name, quality, icon, tooltip } = parsed.data;
+  return {
+    kind: 'found',
+    name,
+    quality,
+    icon: sanitizeIcon(icon),
+    tooltip: parseTooltipHtml(tooltip, env) ?? null,
+  };
 }
 
 /** 429 and 5xx are worth retrying; any other non-200 is a miss. */
@@ -65,7 +76,7 @@ export async function fetchWowheadItem(
     });
     if (res.status !== 200) return classifyStatus(res.status);
     const body = await res.json().catch(() => null);
-    return parseWowheadTooltip(body);
+    return parseWowheadTooltip(body, env);
   } catch {
     return { kind: 'retryable', status: null };
   } finally {

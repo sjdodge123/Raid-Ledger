@@ -49,9 +49,10 @@ export class WowCronRegistrar implements CronRegistrar {
       },
       {
         name: 'wowhead-item-retry',
-        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
+        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727),
+        // then backfill boss-loot tooltips (ROK-2176)
         cronExpression: '0 15 5 * * *',
-        handler: () => this.itemMeta.retryDue().then(() => undefined),
+        handler: () => this.handleWowheadItemRetry(),
       },
       {
         name: 'forever-guild-roster-sync',
@@ -87,6 +88,12 @@ export class WowCronRegistrar implements CronRegistrar {
         handler: () => this.rosterArmory.runDue().then(() => undefined),
       },
     ];
+  }
+
+  /** Due re-probes first, then the boss-loot tooltip backfill (ROK-2176). */
+  private async handleWowheadItemRetry(): Promise<void> {
+    await this.itemMeta.retryDue();
+    await this.itemMeta.backfillBossLoot();
   }
 
   private async handleAutoSync(): Promise<void> {

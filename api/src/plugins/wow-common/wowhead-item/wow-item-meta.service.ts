@@ -22,6 +22,8 @@ import { isMetaDue } from './wow-item-meta.due';
 import { ResolverOutcomeLog } from './wow-item-meta.outcome-log';
 import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
 import { isWowheadResolverEnabled } from './wowhead-resolver.settings';
+import { bossLootBackfillIds } from './wow-item-meta.backfill';
+import { BossEncountersService } from '../boss-encounters.service';
 
 /** Max rows one `retryDue()` run re-probes (≤2 req each at ≤1 req/s). */
 export const WOWHEAD_RETRY_BATCH = 500;
@@ -49,6 +51,7 @@ export class WowItemMetaService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
+    private readonly bossEncounters: BossEncountersService,
     @Optional()
     @Inject(WOWHEAD_RESOLVER_DEPS)
     deps?: Partial<WowheadResolverDeps>,
@@ -100,6 +103,20 @@ export class WowItemMetaService {
       .limit(WOWHEAD_RETRY_BATCH);
     const meta = new Map(rows.map((r) => [r.itemId, r]));
     return this.resolveAll([...meta.keys()], meta);
+  }
+
+  /**
+   * Cron (ROK-2176 §4.4): resolve up to {@link WOWHEAD_RETRY_BATCH} boss-loot
+   * items with no tooltip yet, then drop the boss-loot cache so the 24 h
+   * loot SWR entries pick the new stats up.
+   * @returns how many rows were written.
+   */
+  async backfillBossLoot(): Promise<number> {
+    if (!(await this.isEnabled())) return 0;
+    const ids = await bossLootBackfillIds(this.db, WOWHEAD_RETRY_BATCH);
+    const written = await this.enqueue(ids);
+    if (written > 0) await this.bossEncounters.clearCache();
+    return written;
   }
 
   private async resolveAll(
