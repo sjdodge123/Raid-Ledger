@@ -80,6 +80,7 @@ const SLOT_MAP = {
   Ranged: 'Ranged',
   Thrown: 'Ranged',
   Relic: 'Relic',
+  Ammo: null,
   Bag: null,
 };
 
@@ -115,6 +116,10 @@ const TYPE_MAP = {
   'Blacksmithing Plans': 'Blacksmithing',
   'Engineering Schematic': 'Engineering',
   'Leatherworking Pattern': 'Leatherworking',
+  'Tailoring Pattern': 'Tailoring',
+  'Enchanting Formula': 'Enchanting',
+  Book: 'Book',
+  Arrow: 'Arrow',
   'Cooking Recipe': 'Cooking',
   'First Aid Book': 'First Aid',
   'Fishing Book': 'Fishing',
