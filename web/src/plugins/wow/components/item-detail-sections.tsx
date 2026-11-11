@@ -93,11 +93,21 @@ function statText(s: StatDelta, signed: boolean): string {
     return `${formatStatValue(s.value, s.unit, signed)} ${s.name}`;
 }
 
-/** Stat lines; with `deltas`, equipped-only stats follow struck through (a loss). */
+/** ARMOR / DPS deltas already sit on the item's own armor / weapon line (`ItemCombatInfo`). */
+function hasOwnLine(item: DetailItem, key: string): boolean {
+    if (key === ARMOR_KEY) return item.armor != null && item.armor > 0;
+    if (key === DPS_KEY) return item.weapon !== null;
+    return false;
+}
+
+/**
+ * Stat lines; with `deltas`, equipped-only stats follow struck through (a
+ * loss) — so do armor / DPS when this item has no armor / weapon line.
+ */
 export function ItemStatLines({ item, deltas }: { item: DetailItem; deltas?: DeltaByKey | undefined }) {
     const stats = item.stats ?? [];
     const own = new Set(stats.map((s) => s.key));
-    const lost = [...(deltas?.values() ?? [])].filter((d) => !own.has(d.key) && d.key !== ARMOR_KEY && d.key !== DPS_KEY);
+    const lost = [...(deltas?.values() ?? [])].filter((d) => !own.has(d.key) && !hasOwnLine(item, d.key));
     if (stats.length === 0 && lost.length === 0) return null;
     return (
         <div className="space-y-0.5" data-testid="item-stat-lines">

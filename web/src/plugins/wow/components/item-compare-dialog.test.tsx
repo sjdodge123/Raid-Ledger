@@ -136,6 +136,17 @@ describe('ItemCompareDialog (ROK-2176 layout A)', () => {
         expect(deltaTexts(equippedColumn())).toEqual([]);
     });
 
+    // Codex P2: a drop with no armor / weapon line must still show the equipped armor / DPS it loses.
+    it('phone: equipped-only armor and DPS show as struck-through losses', () => {
+        media.phone = true;
+        const weapon = { damageMin: 40, damageMax: 60, attackSpeed: 2, dps: 25 };
+        renderDialog({ ...LOOT, tooltip: tooltip({ armor: null, stats: [] }) },
+            new Map([['LEGS', { ...EQUIPPED, tooltip: tooltip({ armor: 90, weapon, stats: [] }) }]]));
+        const lost = within(lootColumn()).queryAllByText(/\(equipped only\)/).map((el) => el.textContent);
+        expect(lost).toEqual(['+90 Armor (equipped only)', '+25 DPS (equipped only)']);
+        expect(deltaTexts(lootColumn())).toEqual(['▲ +6 iLvl', '▼ −90', '▼ −25']);
+    });
+
     it('closes via × and via Escape', async () => {
         const onClose = renderDialog();
         await userEvent.click(screen.getByRole('button', { name: 'Close modal' }));
