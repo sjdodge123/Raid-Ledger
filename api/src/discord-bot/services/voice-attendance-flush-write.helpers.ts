@@ -132,6 +132,17 @@ async function flushChunk(
   }
 }
 
+/**
+ * Fixed row order for every flush: (eventId, discordUserId). Two overlapping
+ * flushes then take their row locks in the same order and cannot deadlock,
+ * even when a key was deleted and re-added (moving it in Map order) between them.
+ */
+function compareFlushOrder(a: InMemorySession, b: InMemorySession): number {
+  if (a.eventId !== b.eventId) return a.eventId - b.eventId;
+  if (a.discordUserId === b.discordUserId) return 0;
+  return a.discordUserId < b.discordUserId ? -1 : 1;
+}
+
 /** Flush all dirty/active sessions to the DB — one statement per chunk. */
 export async function flushDirtySessions(
   db: Db,
@@ -140,6 +151,7 @@ export async function flushDirtySessions(
 ): Promise<void> {
   const dirty = [...sessions.values()].filter((s) => s.dirty || s.isActive);
   if (dirty.length === 0) return;
+  dirty.sort(compareFlushOrder);
   for (let i = 0; i < dirty.length; i += FLUSH_UPSERT_CHUNK) {
     await flushChunk(db, dirty.slice(i, i + FLUSH_UPSERT_CHUNK), logger);
   }

@@ -100,6 +100,24 @@ describe('flushDirtySessions — batched upsert (ROK-2174)', () => {
     expect(mockDb.values.mock.calls[1][0]).toHaveLength(1);
   });
 
+  it('writes rows in (eventId, discordUserId) order whatever the Map order', async () => {
+    const sessions = [
+      makeSession(1, { eventId: 2, discordUserId: 'a' }),
+      makeSession(2, { eventId: 1, discordUserId: 'c' }),
+      makeSession(3, { eventId: 1, discordUserId: 'b' }),
+    ];
+    await flushDirtySessions(mockDb as never, toMap(sessions), logger);
+
+    expect(mockDb.values).toHaveBeenCalledTimes(1);
+    const rows: Array<{ eventId: number; discordUserId: string }> =
+      mockDb.values.mock.calls[0]?.[0] ?? [];
+    expect(rows.map((r) => `${r.eventId}:${r.discordUserId}`)).toEqual([
+      '1:b',
+      '1:c',
+      '2:a',
+    ]);
+  });
+
   it('falls back to one upsert per row when the batch fails; good rows still land', async () => {
     mockDb.onConflictDoUpdate
       .mockRejectedValueOnce(new Error('batch boom')) // the batch
