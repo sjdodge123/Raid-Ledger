@@ -162,46 +162,47 @@ describe('ROK-2068 useRemoveBg3Saves', () => {
         expect(qc.getQueryState(PICTURE_KEY)?.isInvalidated, 'a cached picture file must not be invalidated').toBe(false);
     });
 
-    describe('refreshes the shared claim prompt (ROK-2153 S6)', () => {
-        /** Seed the core claim status as `useHubClaim` caches it (viewer last). */
-        function seedClaimStatus(qc: ReturnType<typeof setup>['qc']): readonly unknown[] {
-            const key = [...hubClaimKey(BG3_HUB_ID), 'viewer-33'];
-            qc.setQueryData(key, { candidates: [] });
-            expect(qc.getQueryState(key)?.isInvalidated).toBe(false);
-            return key;
-        }
+});
 
-        it('after a Party-card claim settles', async () => {
-            const { qc, wrapper } = setup();
-            const key = seedClaimStatus(qc);
-            server.use(bg3ClaimHandler(204));
-            const { result } = renderHook(() => useClaimBg3Slot(BG3_HUB_ID, VIEWER), { wrapper });
-            act(() => result.current.mutate({ campaignId: BG3_CAMPAIGN_ID, slotKey: SLOT }));
-            await waitFor(() => expect(result.current.isSuccess).toBe(true));
-            await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
-        });
+describe('BG3 mutations refresh the shared claim prompt (ROK-2153 S6)', () => {
+    /** Seed the core claim status as `useHubClaim` caches it (viewer last). */
+    function seedClaimStatus(qc: ReturnType<typeof setup>['qc']): readonly unknown[] {
+        const key = [...hubClaimKey(BG3_HUB_ID), 'viewer-33'];
+        qc.setQueryData(key, { candidates: [] });
+        expect(qc.getQueryState(key)?.isInvalidated).toBe(false);
+        return key;
+    }
 
-        it('after an unclaim settles', async () => {
-            const { qc, wrapper } = setup();
-            const key = seedClaimStatus(qc);
-            server.use(bg3UnclaimHandler(204));
-            const { result } = renderHook(() => useUnclaimBg3Slot(BG3_HUB_ID), { wrapper });
-            act(() => result.current.mutate({ campaignId: BG3_CAMPAIGN_ID, slotKey: SLOT }));
-            await waitFor(() => expect(result.current.isSuccess).toBe(true));
-            await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
-        });
+    it('after a Party-card claim settles', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        server.use(bg3ClaimHandler(204));
+        const { result } = renderHook(() => useClaimBg3Slot(BG3_HUB_ID, VIEWER), { wrapper });
+        act(() => result.current.mutate({ campaignId: BG3_CAMPAIGN_ID, slotKey: SLOT }));
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+    });
 
-        it('after an active-campaign switch settles, and not for another hub', async () => {
-            const { qc, wrapper } = setup();
-            const key = seedClaimStatus(qc);
-            const otherHub = [...hubClaimKey(BG3_HUB_ID + 1), 'viewer-33'];
-            qc.setQueryData(otherHub, { candidates: [] });
-            server.use(bg3HubSettingsHandler({ hideLocationAndScreenshots: true, activeCampaignId: BG3_CAMPAIGN_ID }));
-            const { result } = renderHook(() => useUpdateBg3HubSettings(BG3_HUB_ID), { wrapper });
-            act(() => result.current.mutate({ activeCampaignId: BG3_CAMPAIGN_ID }));
-            await waitFor(() => expect(result.current.isSuccess).toBe(true));
-            await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
-            expect(qc.getQueryState(otherHub)?.isInvalidated).toBe(false);
-        });
+    it('after an unclaim settles', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        server.use(bg3UnclaimHandler(204));
+        const { result } = renderHook(() => useUnclaimBg3Slot(BG3_HUB_ID), { wrapper });
+        act(() => result.current.mutate({ campaignId: BG3_CAMPAIGN_ID, slotKey: SLOT }));
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+    });
+
+    it('after an active-campaign switch settles, and not for another hub', async () => {
+        const { qc, wrapper } = setup();
+        const key = seedClaimStatus(qc);
+        const otherHub = [...hubClaimKey(BG3_HUB_ID + 1), 'viewer-33'];
+        qc.setQueryData(otherHub, { candidates: [] });
+        server.use(bg3HubSettingsHandler({ hideLocationAndScreenshots: true, activeCampaignId: BG3_CAMPAIGN_ID }));
+        const { result } = renderHook(() => useUpdateBg3HubSettings(BG3_HUB_ID), { wrapper });
+        act(() => result.current.mutate({ activeCampaignId: BG3_CAMPAIGN_ID }));
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        await waitFor(() => expect(qc.getQueryState(key)?.isInvalidated).toBe(true));
+        expect(qc.getQueryState(otherHub)?.isInvalidated).toBe(false);
     });
 });
