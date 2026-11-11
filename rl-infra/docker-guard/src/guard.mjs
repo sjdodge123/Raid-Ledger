@@ -168,10 +168,17 @@ async function forwardBuild(req, res, plan) {
   // runner that hangs up during it still brings the in-flight count back down.
   const pending = beginBuild(SOCKET, plan.tags, log);
   res.once('close', () => { pending.then((end) => end(res.writableFinished)); });
-  await pending;
   let gone = false;
   const onGone = () => { gone = true; };
   res.on('close', onGone);
+  await pending;
+  // Codex P2: a runner that aborted DURING the snapshot already fired its
+  // close/error events; spooling now would wait on them forever and leak the
+  // temporary context and its write stream.
+  if (gone || res.destroyed || req.destroyed) {
+    res.off('close', onGone);
+    return log('DROP /build: the client went away during the reclaim snapshot');
+  }
   // c5: the dockerfile= value classify() decoded (Go's table) — never re-parsed.
   const ctx = await spoolBuildContext(req, plan.dockerfile ?? '', TMPDIR, { pull: plan.pull === true });
   res.off('close', onGone);

@@ -94,9 +94,9 @@ async function seenRequest(d, prefix) {
 }
 
 /** Run `fn(port)` against a guard over `daemon`; resolves once a RECLAIM line (or none) settles. */
-async function withGuard(daemon, fn) {
+async function withGuard(daemon, fn, tmpDir = fs.mkdtempSync(path.join(scratch, 'ctx-'))) {
   const lines = [];
-  const guard = createGuardServer({ socket: daemon.sock, tmpDir: fs.mkdtempSync(path.join(scratch, 'ctx-')), logger: (m) => lines.push(m) });
+  const guard = createGuardServer({ socket: daemon.sock, tmpDir, logger: (m) => lines.push(m) });
   await new Promise((r) => guard.listen(0, '127.0.0.1', r));
   try {
     await fn(guard.address().port);
@@ -226,6 +226,21 @@ test('m1: a client that hangs up during the snapshot still brings the in-flight 
   // withGuard asserted buildsInFlight() === 0 ('a build never closed').
   assert.equal(buildsInFlight(), 0);
   assert.deepEqual(deletes(d), []);
+});
+
+test('Codex P2: a client that aborts during the snapshot never starts a spool (no leaked context)', async () => {
+  const d = await fakeDaemon({ holdSnapshot: true });
+  const ctxDir = fs.mkdtempSync(path.join(scratch, 'ctx-'));
+  await withGuard(d, async (port) => {
+    const req = startBuild(port, 'rl:ci-test');
+    await seenRequest(d, 'GET /images/rl:ci-test/json');
+    req.destroy();
+    // Let the guard observe the hang-up before the snapshot answers.
+    await new Promise((r) => setTimeout(r, 50));
+    d.release();
+  }, ctxDir);
+  assert.deepEqual(fs.readdirSync(ctxDir), [], 'a spool started on the aborted upload left its temporary context behind');
+  assert.ok(!d.seen.some((s) => s.startsWith('POST /build')), 'nothing forwarded for an aborted upload');
 });
 
 test('two concurrent rl:ci-test builds: the first to finish keeps, the last removes OLD once', async () => {
