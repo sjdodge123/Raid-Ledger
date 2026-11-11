@@ -2,12 +2,13 @@
  * Loot table body rendered under an expanded boss row.
  * Uses the same WowItemCard + ItemComparison pattern as quest prep rewards.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { BossLootDto, EquipmentItemDto } from '@raid-ledger/contract';
 import { WowItemCard } from '../components/wow-item-card';
 import { ItemComparison } from '../components/item-comparison';
 import { getWowheadItemUrlForExpansion, getWowheadDataSuffixForExpansion } from '../lib/wowhead-urls';
-import { LOOT_TO_EQUIP_SLOT, isUsableByClass } from './boss-loot-constants';
+import { isUsableByClass } from './boss-loot-constants';
+import { lootComparison, type LootComparison } from '../lib/loot-compare-model';
 
 /** Props for BossLootBody */
 export interface BossLootBodyProps {
@@ -68,24 +69,37 @@ function LootItemMeta({ item }: { item: BossLootDto }) {
     );
 }
 
+/**
+ * ROK-2176 seam for L6: the compare popup a row mounts while `open`. L6 passes
+ * `ItemCompareDialog` here (or renders it in `LootItemRow` directly) with
+ * `{ loot, comparison, gameVariant, onClose }`.
+ */
+export interface LootCompareDialogProps {
+    loot: BossLootDto; comparison: LootComparison; gameVariant: string; onClose: () => void;
+}
+
 /** Single loot item row with comparison and metadata */
 function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlot, characterClass, hasCharacter }: {
     item: BossLootDto; usable: boolean; filterUsable: boolean;
     wowheadVariant: string; equippedBySlot: Map<string, EquipmentItemDto>;
     characterClass?: string | null | undefined; hasCharacter: boolean;
 }) {
-    const equipSlot = item.slot ? LOOT_TO_EQUIP_SLOT[item.slot] ?? item.slot : null;
-    const equippedItem = equipSlot ? equippedBySlot.get(equipSlot) : undefined;
+    const [, setOpen] = useState(false); // L6: read `open` and mount the dialog with LootCompareDialogProps
+    const comparison = useMemo(() => lootComparison(item, equippedBySlot), [item, equippedBySlot]);
+    const onOpen = hasCharacter ? () => setOpen(true) : undefined;
     return (
         <div className={`quest-reward-item-wrapper ${!usable && !filterUsable ? 'quest-card--dimmed' : ''}`}>
             <WowItemCard itemId={item.itemId} name={item.itemName} quality={item.quality}
                 slot={item.slot} itemLevel={item.itemLevel} iconUrl={item.iconUrl}
                 wowheadUrl={getWowheadItemUrlForExpansion(item.itemId, item.expansion)}
-                wowheadData={`item=${item.itemId}&${getWowheadDataSuffixForExpansion(item.expansion)}`} />
-            {equipSlot && hasCharacter && (
-                <ItemComparison rewardItemLevel={item.itemLevel} equippedItem={equippedItem}
+                wowheadData={`item=${item.itemId}&${getWowheadDataSuffixForExpansion(item.expansion)}`}
+                onOpen={onOpen} />
+            {comparison.target.mode !== 'none' && hasCharacter && (
+                <ItemComparison rewardItemLevel={item.itemLevel} equippedItem={comparison.shownItem}
                     gameVariant={wowheadVariant} characterClass={characterClass}
-                    lootItemSubclass={item.itemSubclass} lootSlot={item.slot} />
+                    lootItemSubclass={item.itemSubclass} lootSlot={item.slot}
+                    compareLabel={comparison.target.label} deltas={comparison.deltas}
+                    statsNote={comparison.note} onOpen={onOpen} />
             )}
             <LootItemMeta item={item} />
         </div>

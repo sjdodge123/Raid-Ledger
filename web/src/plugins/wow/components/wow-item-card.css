@@ -157,3 +157,7 @@
         display: none !important;
     }
 }
+/* ROK-2176: the card opens the compare popup when given onOpen */
+.wow-item-card--clickable {
+    cursor: pointer;
+}
