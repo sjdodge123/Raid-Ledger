@@ -9,6 +9,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -30,7 +31,10 @@ import {
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { isBg3Game } from '../bg3-game-match.helpers';
 import { BG3_PLUGIN_ID } from '../bg3.constants';
-import { Bg3CampaignsRepository } from '../campaigns/bg3-campaigns.repository';
+import {
+  Bg3CampaignsRepository,
+  type Bg3CampaignRow,
+} from '../campaigns/bg3-campaigns.repository';
 import { pickCanonical } from '../history/bg3-canonical.helpers';
 import { assertBg3HubReader } from '../read/bg3-hub-access.helpers';
 import { Bg3ReadRepository } from '../read/bg3-read.repository';
@@ -52,6 +56,7 @@ const PartySchema = z.array(Bg3PartyMemberSchema);
 @Injectable()
 export class Bg3HubClaimProvider implements HubClaimProvider, OnModuleInit {
   readonly pluginSlug = BG3_PLUGIN_ID;
+  private readonly logger = new Logger(Bg3HubClaimProvider.name);
 
   constructor(
     private readonly registry: PluginRegistryService,
@@ -104,6 +109,8 @@ export class Bg3HubClaimProvider implements HubClaimProvider, OnModuleInit {
     if (parsed === null) throw bg3Gone();
     await this.assertReader(ctx);
     const active = await this.activeCampaign(ctx.hub.id);
+    // A switch after this check lands the claim in another campaign of this
+    // same hub — still valid, as on the BG3 route (review n2).
     if (active?.id !== parsed.campaignId) throw bg3Gone();
     const slot = bg3Slots(await this.party(active)).find(
       (s) => s.slotKey === parsed.slotKey,
@@ -140,7 +147,7 @@ export class Bg3HubClaimProvider implements HubClaimProvider, OnModuleInit {
   }
 
   /** The hub's active campaign (`bg3_hub_settings`), or null. */
-  private async activeCampaign(hubId: number) {
+  private async activeCampaign(hubId: number): Promise<Bg3CampaignRow | null> {
     const { activeCampaignId } = await this.reads.settings(hubId);
     if (activeCampaignId === null) return null;
     const campaign = await this.campaigns.findCampaign(activeCampaignId);
@@ -148,13 +155,16 @@ export class Bg3HubClaimProvider implements HubClaimProvider, OnModuleInit {
   }
 
   /** The newest canonical save's party — the slots `claim` accepts. */
-  private async party(campaign: {
-    id: number;
-    hostUserId: number | null;
-  }): Promise<Bg3PartyMember[]> {
+  private async party(campaign: Bg3CampaignRow): Promise<Bg3PartyMember[]> {
     const rows = await this.claimsRepo.newestSaves(campaign.id);
     const [newest] = pickCanonical(rows, campaign.hostUserId);
     const party = PartySchema.safeParse(newest?.party);
-    return party.success ? party.data : [];
+    if (party.success) return party.data;
+    // Stricter than Bg3ClaimsService's parse: say why the prompt is gone.
+    if (newest !== undefined)
+      this.logger.warn(
+        `bg3 hub ${campaign.guildId} campaign ${campaign.id}: newest save's party fails re-parse; hub claim prompt offers nothing`,
+      );
+    return [];
   }
 }

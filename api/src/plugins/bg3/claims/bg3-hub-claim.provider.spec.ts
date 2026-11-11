@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { HubClaimError } from '../../../guilds/claim/hub-claim.errors';
@@ -178,12 +179,37 @@ describe('Bg3HubClaimProvider.status', () => {
 });
 
 describe('Bg3HubClaimProvider.status edge cases', () => {
-  it('a stored party that fails re-parse offers nothing', async () => {
-    const status = await setup({ party: [{ origin: 'x' }] }).provider.status(
-      ctx,
-    );
-    expect(status.unclaimedCount).toBe(0);
-    expect(status.candidates).toEqual([]);
+  it('a stored party that fails re-parse offers nothing, and says so', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const status = await setup({
+        party: [{ origin: 'SecretName' }],
+      }).provider.status(ctx);
+      expect(status.unclaimedCount).toBe(0);
+      expect(status.candidates).toEqual([]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      const message = String(warn.mock.calls[0]?.[0]);
+      expect(message).toContain(`hub ${HUB} campaign 12`);
+      expect(message, 'no save contents in the log').not.toContain(
+        'SecretName',
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a party that parses logs no warning', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      await setup().provider.status(ctx);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('a signed-in non-member gets HUB_CLAIM_FORBIDDEN', async () => {
