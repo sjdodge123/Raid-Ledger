@@ -3,6 +3,7 @@ import type { EquipmentItemDto } from '@raid-ledger/contract';
 import { Modal } from '../../../components/ui/modal';
 import { equipSlotLabel } from '../lib/item-detail-view';
 import { ItemDetailBody } from './item-detail-body';
+import { useHideWowheadTooltips } from '../lib/use-hide-wowhead-tooltips';
 import { Button } from '../../../components/ui/button';
 
 interface ItemDetailModalProps {
@@ -45,6 +46,7 @@ function ItemModalPager({ currentIndex, total, onNavigate }: { currentIndex: num
 
 /** Character-page item popup (ROK-2176: on the shared Modal; body shared with the loot compare popup). */
 export function ItemDetailModal({ isOpen, onClose, items, currentIndex, onNavigate, gameVariant }: ItemDetailModalProps) {
+    useHideWowheadTooltips(isOpen);
     useArrowPaging(isOpen, items.length, currentIndex, onNavigate);
     const item = items[currentIndex];
     if (!item) return null;
