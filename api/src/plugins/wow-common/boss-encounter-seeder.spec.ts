@@ -159,55 +159,6 @@ describe('BossEncounterSeeder', () => {
     });
   });
 
-  describe('seed() — Forever loot (ROK-2170)', () => {
-    const foreverRow = (bossName: string) => ({
-      ...fakeLoot[0],
-      bossName,
-      expansion: 'forever',
-      itemId: 99001,
-      itemName: 'Forever Blade',
-    });
-    /** The loot batch handed to insert().values() (second insert call). */
-    const insertedLoot = (): Array<Record<string, unknown>> =>
-      (mockValues.mock.calls[1]?.[0] ?? []) as Array<Record<string, unknown>>;
-
-    afterEach(() => {
-      extraLoot.length = 0;
-      extraBosses.length = 0;
-    });
-
-    it('attaches a forever loot row to the classic boss of the same name', async () => {
-      extraLoot.push(foreverRow('Lucifron'));
-      await seeder.seed();
-      const row = insertedLoot().find((l) => l.itemId === 99001);
-      expect(row).toMatchObject({ bossId: 2, expansion: 'forever' });
-    });
-
-    it('prefers a forever boss row over the classic one when both exist', async () => {
-      extraBosses.push({
-        id: 3,
-        instanceId: 409,
-        name: 'Lucifron',
-        expansion: 'forever',
-      });
-      extraLoot.push(foreverRow('Lucifron'));
-      await seeder.seed();
-      const row = insertedLoot().find((l) => l.itemId === 99001);
-      expect(row).toMatchObject({ bossId: 3, expansion: 'forever' });
-    });
-
-    it('skips and warns on a forever row for an unknown boss', async () => {
-      const warn = jest.spyOn(Logger.prototype, 'warn');
-      extraLoot.push(foreverRow('Nobody'));
-      await seeder.seed();
-      expect(insertedLoot().map((l) => l.itemId)).not.toContain(99001);
-      expect(warn).toHaveBeenCalledWith(
-        'Skipping loot "Forever Blade" — boss "Nobody" (forever) not found',
-      );
-      warn.mockRestore();
-    });
-  });
-
   describe('drop()', () => {
     it('should delete loot and boss data', async () => {
       await seeder.drop();
@@ -215,5 +166,56 @@ describe('BossEncounterSeeder', () => {
       // delete() called twice: loot first, then bosses
       expect(mockDb.delete).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe('BossEncounterSeeder — Forever loot (ROK-2170)', () => {
+  beforeEach(() => setupEach());
+
+  const foreverRow = (bossName: string) => ({
+    ...fakeLoot[0],
+    bossName,
+    expansion: 'forever',
+    itemId: 99001,
+    itemName: 'Forever Blade',
+  });
+  /** The loot batch handed to insert().values() (second insert call). */
+  const insertedLoot = (): Array<Record<string, unknown>> =>
+    (mockValues.mock.calls[1]?.[0] ?? []) as Array<Record<string, unknown>>;
+
+  afterEach(() => {
+    extraLoot.length = 0;
+    extraBosses.length = 0;
+  });
+
+  it('attaches a forever loot row to the classic boss of the same name', async () => {
+    extraLoot.push(foreverRow('Lucifron'));
+    await seeder.seed();
+    const row = insertedLoot().find((l) => l.itemId === 99001);
+    expect(row).toMatchObject({ bossId: 2, expansion: 'forever' });
+  });
+
+  it('prefers a forever boss row over the classic one when both exist', async () => {
+    extraBosses.push({
+      id: 3,
+      instanceId: 409,
+      name: 'Lucifron',
+      expansion: 'forever',
+    });
+    extraLoot.push(foreverRow('Lucifron'));
+    await seeder.seed();
+    const row = insertedLoot().find((l) => l.itemId === 99001);
+    expect(row).toMatchObject({ bossId: 3, expansion: 'forever' });
+  });
+
+  it('skips and warns on a forever row for an unknown boss', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    extraLoot.push(foreverRow('Nobody'));
+    await seeder.seed();
+    expect(insertedLoot().map((l) => l.itemId)).not.toContain(99001);
+    expect(warn).toHaveBeenCalledWith(
+      'Skipping loot "Forever Blade" — boss "Nobody" (forever) not found',
+    );
+    warn.mockRestore();
   });
 });
