@@ -54,7 +54,7 @@ function joined(items: DetailItem[], pick: (d: DetailItem) => string | number | 
 
 function Cell({ value, className = '' }: { value: ReactNode; className?: string }) {
     const empty = value === null || value === undefined;
-    return <td className={`${TD} tabular-nums ${empty ? 'text-faint' : className}`}>{empty ? '—' : value}</td>;
+    return <td className={`${TD} tabular-nums ${empty ? 'text-dim' : className}`}>{empty ? '—' : value}</td>;
 }
 
 interface RowProps { id: string; label: string; loot: ReactNode; equipped: ReactNode; delta?: StatDelta | undefined; className?: string }
