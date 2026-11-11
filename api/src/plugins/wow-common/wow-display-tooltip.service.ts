@@ -43,9 +43,9 @@ export class WowDisplayTooltipService {
     row: Pick<DisplayEquipmentRow, 'id'>,
     equipment: CharacterEquipmentDto,
   ): Promise<CharacterEquipmentDto> {
-    const ids = equipmentItemIds(equipment);
-    if (ids.length === 0) return equipment;
     try {
+      const ids = equipmentItemIds(equipment);
+      if (ids.length === 0) return equipment;
       const meta = await this.itemMeta.getMeta(ids);
       const now = Date.now();
       this.enqueueInBackground(

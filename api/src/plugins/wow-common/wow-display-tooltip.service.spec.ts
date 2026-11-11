@@ -104,6 +104,13 @@ describe('WowDisplayTooltipService.decorate (ROK-2176)', () => {
     expect(stored.items[0]).not.toHaveProperty('tooltip');
   });
 
+  it('returns a malformed equipment (null item) undecorated instead of throwing', async () => {
+    const bad = gear(1);
+    Object.assign(bad, { items: [null] });
+    await expect(service.decorate(ROW, bad)).resolves.toBe(bad);
+    expect(getMeta).not.toHaveBeenCalled();
+  });
+
   it('returns the equipment undecorated when the cache read fails', async () => {
     getMeta.mockRejectedValue(new Error('db down'));
     const stored = gear(1);
