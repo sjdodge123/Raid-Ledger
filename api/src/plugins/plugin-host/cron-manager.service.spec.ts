@@ -52,7 +52,9 @@ async function setupEach() {
       { provide: PluginRegistryService, useValue: mockPluginRegistry },
       {
         provide: CronJobService,
-        useValue: { executeWithTracking: jest.fn() },
+        useValue: {
+          executeWithTracking: jest.fn().mockResolvedValue(undefined),
+        },
       },
     ],
   }).compile();
@@ -280,7 +282,9 @@ describe('CronManagerService — runtime install', () => {
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
         {
           provide: CronJobService,
-          useValue: { executeWithTracking: jest.fn() },
+          useValue: {
+            executeWithTracking: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

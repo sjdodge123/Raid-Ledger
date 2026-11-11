@@ -215,12 +215,17 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   // ─── Execution tracking ─────────────────────────────────────────
 
-  /** Execute a cron handler with tracking. */
+  /**
+   * Execute a cron handler with tracking. Fails open (ROK-2166): when there is
+   * no `cron_jobs` row, or the row lookup itself throws (a DB error before the
+   * row is cached), the handler runs once, untracked. A row that says paused
+   * is a skip. Errors after the handler ran are recorded, never re-run it.
+   */
   async executeWithTracking(
     jobName: string,
     fn: () => Promise<void | boolean | { degraded: true }>,
   ): Promise<void> {
-    const job = await this.resolveJob(jobName);
+    const job = await this.resolveJobOrWarn(jobName);
     if (!job) {
       await fn();
       return;
@@ -236,6 +241,19 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       return;
     }
     await this.runTracked(job, jobName, fn);
+  }
+
+  /** resolveJob, but a lookup error logs one warning and yields null. */
+  private async resolveJobOrWarn(jobName: string): Promise<CronJobRow | null> {
+    try {
+      return await this.resolveJob(jobName);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Cron job "${jobName}" tracker lookup failed (${msg}); running this tick untracked`,
+      );
+      return null;
+    }
   }
 
   /** Resolve a job from cache or DB. */

@@ -6,6 +6,7 @@
  * Uses the real CronManagerService + the real CronJobService on the shared
  * drizzle mock; the tick is fired with the cron library's own `fireOnTick`.
  */
+import { Logger } from '@nestjs/common';
 import { CronJob } from 'cron';
 import {
   createDrizzleMock,
@@ -96,9 +97,16 @@ function executionStatuses(db: MockDb): unknown[] {
 
 describe('CronManagerService scheduled plugin ticks (ROK-2166)', () => {
   let harness: Harness | null = null;
+  let warn: jest.SpyInstance;
+  let error: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+  });
   afterEach(async () => {
     await harness?.tracker.onModuleDestroy();
     harness = null;
+    jest.restoreAllMocks();
   });
 
   it('a paused plugin job: the tick does not call the handler and records a skip', async () => {
@@ -123,7 +131,7 @@ describe('CronManagerService scheduled plugin ticks (ROK-2166)', () => {
     expect(executionStatuses(harness.db)).toEqual(['completed']);
   });
 
-  it('a throwing handler is recorded as failed and the tick does not reject', async () => {
+  it('a tracked throwing handler is recorded as failed and the tick does not reject', async () => {
     const handler = jest.fn().mockRejectedValue(new Error('bnet 503'));
     harness = setup(handler);
     harness.db.limit.mockResolvedValueOnce([jobRow(false)]);
@@ -132,5 +140,58 @@ describe('CronManagerService scheduled plugin ticks (ROK-2166)', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(executionStatuses(harness.db)).toEqual(['failed']);
+  });
+
+  it('the tracker lookup throws: the handler still runs once, untracked, with one warning', async () => {
+    const handler = jest.fn().mockResolvedValue(undefined);
+    harness = setup(handler);
+    harness.db.limit.mockRejectedValueOnce(new Error('db down'));
+
+    await tick(harness.cronJob);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(executionStatuses(harness.db)).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/wow:forever-quest-import.*db down.*untracked/),
+    );
+  });
+
+  it('no cron_jobs row for the job: the handler runs once, untracked', async () => {
+    const handler = jest.fn().mockResolvedValue(undefined);
+    harness = setup(handler);
+    harness.db.limit.mockResolvedValueOnce([]);
+
+    await tick(harness.cronJob);
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(executionStatuses(harness.db)).toEqual([]);
+  });
+
+  it('the history write fails after the handler ran: the handler ran exactly once and the tick does not reject', async () => {
+    const handler = jest.fn().mockResolvedValue(undefined);
+    harness = setup(handler);
+    harness.db.limit.mockResolvedValueOnce([jobRow(false)]);
+    const writeErr = new Error('history write failed');
+    harness.db.values
+      .mockRejectedValueOnce(writeErr)
+      .mockRejectedValueOnce(writeErr);
+
+    await expect(tick(harness.cronJob)).resolves.toBeUndefined();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('an untracked handler that throws is caught and logged by the tick, not left unhandled', async () => {
+    const handler = jest.fn().mockRejectedValue(new Error('bnet 503'));
+    harness = setup(handler);
+    harness.db.limit.mockResolvedValueOnce([]);
+
+    await expect(tick(harness.cronJob)).resolves.toBeUndefined();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      'Cron job wow:forever-quest-import tick failed: bnet 503',
+    );
   });
 });

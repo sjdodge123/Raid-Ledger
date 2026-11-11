@@ -90,8 +90,13 @@ export class CronManagerService implements OnApplicationBootstrap {
   /**
    * Run one scheduled tick through the shared job tracker (ROK-2166), so the
    * admin Jobs page's Pause applies and the run leaves an execution row —
-   * the same path "Run now" takes. A failure is recorded by the tracker; this
-   * catch only keeps a tracker/DB error from becoming an unhandled rejection.
+   * the same path "Run now" takes. A tracker failure never stops the job: if
+   * the row lookup fails or there is no row, the tracker runs the handler
+   * untracked (one warning); a paused row is a skip; a handler error or a
+   * failed history write after the handler ran is logged, never re-run.
+   * This catch only keeps an error that still escapes (for example an
+   * untracked handler throwing) from becoming an unhandled rejection.
+   * Overlap behaviour is unchanged: ticks are not serialised.
    */
   private runTracked(
     jobName: string,
