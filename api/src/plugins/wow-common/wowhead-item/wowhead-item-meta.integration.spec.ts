@@ -23,6 +23,7 @@ const HIT: WowheadFetchResult = {
   name: 'Thunderfury',
   quality: 5,
   icon: 'inv_sword_39',
+  tooltip: null,
 };
 
 /** Item 19019 lives in env 16; 16921 only in env 4; 16922 nowhere. */

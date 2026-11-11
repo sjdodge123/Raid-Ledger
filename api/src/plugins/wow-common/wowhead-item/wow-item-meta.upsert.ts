@@ -28,6 +28,20 @@ function keepIfProtected(protect: readonly string[], col: PgColumn): SQL {
   return sql`CASE WHEN ${wowItemMeta.status} IN (${list}) THEN ${col} ELSE excluded.${sql.identifier(col.name)} END`;
 }
 
+/** Every content column behind the CASE guard for `protect`. */
+function guardedContent(protect: readonly string[]): Record<string, SQL> {
+  const t = wowItemMeta;
+  return {
+    status: keepIfProtected(protect, t.status),
+    env: keepIfProtected(protect, t.env),
+    name: keepIfProtected(protect, t.name),
+    quality: keepIfProtected(protect, t.quality),
+    icon: keepIfProtected(protect, t.icon),
+    tooltip: keepIfProtected(protect, t.tooltip),
+    tooltipVersion: keepIfProtected(protect, t.tooltipVersion),
+  };
+}
+
 /** The guarded conflict set for `row` (see file header). */
 export function conflictSet(row: WowItemMetaInsert): Record<string, unknown> {
   const retry = {
@@ -40,17 +54,16 @@ export function conflictSet(row: WowItemMetaInsert): Record<string, unknown> {
   const protect = PROTECTED_FROM[row.status] ?? [];
   if (protect.length === 0) {
     const { status, env, name, quality, icon, tooltip, tooltipVersion } = row;
-    return { ...retry, status, env, name, quality, icon, tooltip, tooltipVersion };
+    return {
+      ...retry,
+      status,
+      env,
+      name,
+      quality,
+      icon,
+      tooltip,
+      tooltipVersion,
+    };
   }
-  const t = wowItemMeta;
-  return {
-    ...retry,
-    status: keepIfProtected(protect, t.status),
-    env: keepIfProtected(protect, t.env),
-    name: keepIfProtected(protect, t.name),
-    quality: keepIfProtected(protect, t.quality),
-    icon: keepIfProtected(protect, t.icon),
-    tooltip: keepIfProtected(protect, t.tooltip),
-    tooltipVersion: keepIfProtected(protect, t.tooltipVersion),
-  };
+  return { ...retry, ...guardedContent(protect) };
 }

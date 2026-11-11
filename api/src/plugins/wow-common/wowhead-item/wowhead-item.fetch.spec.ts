@@ -55,6 +55,11 @@ describe('fetchWowheadItem against captured Wowhead responses', () => {
       name: 'Demonic Gauntlet',
       quality: 4,
       icon: 'inv_gauntlets_84',
+      tooltip: expect.objectContaining({
+        env: 16,
+        slotLabel: 'Hands',
+        armor: 133,
+      }),
     });
     const [url, init] = fetchFn.mock.calls[0] ?? [];
     expect(url).toBe(buildWowheadItemUrl(234819, 16));
@@ -69,6 +74,11 @@ describe('fetchWowheadItem against captured Wowhead responses', () => {
       name: 'Leggings of Transcendence',
       quality: 4,
       icon: 'inv_pants_08',
+      tooltip: expect.objectContaining({
+        env: 4,
+        slotLabel: 'Legs',
+        armor: 101,
+      }),
     });
   });
 
@@ -121,13 +131,33 @@ describe('parseWowheadTooltip', () => {
     ['quality out of range', { name: 'X', quality: 9, icon: 'a' }],
     ['empty name', { name: '', quality: 1, icon: 'a' }],
   ])('rejects %s as not_found', (_label, body) => {
-    expect(parseWowheadTooltip(body)).toEqual({ kind: 'not_found' });
+    expect(parseWowheadTooltip(body, 16)).toEqual({ kind: 'not_found' });
   });
 
   it('keeps the item but drops an unsafe icon slug', () => {
     expect(
-      parseWowheadTooltip({ name: 'X', quality: 2, icon: '../evil.jpg?x' }),
-    ).toEqual({ kind: 'found', name: 'X', quality: 2, icon: null });
+      parseWowheadTooltip({ name: 'X', quality: 2, icon: '../evil.jpg?x' }, 16),
+    ).toEqual({
+      kind: 'found',
+      name: 'X',
+      quality: 2,
+      icon: null,
+      tooltip: null,
+    });
+  });
+
+  it('a tooltip over 64 KB makes the body off-shape (ROK-2176)', () => {
+    const body = { name: 'X', quality: 2, tooltip: 'a'.repeat(65537) };
+    expect(parseWowheadTooltip(body, 4)).toEqual({ kind: 'not_found' });
+  });
+
+  it('unparseable tooltip HTML keeps the item with a null tooltip (ROK-2176)', () => {
+    const body = { name: 'X', quality: 2, icon: 'a', tooltip: 'no markers' };
+    expect(parseWowheadTooltip(body, 4)).toMatchObject({
+      kind: 'found',
+      name: 'X',
+      tooltip: null,
+    });
   });
 });
 

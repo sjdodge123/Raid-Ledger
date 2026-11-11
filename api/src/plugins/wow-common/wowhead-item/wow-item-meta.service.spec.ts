@@ -13,6 +13,8 @@ import {
 import { RECHECK_TTL_MS, RESOLVED_TTL_MS } from './wow-item-meta.resolve';
 import { ERROR_VIEW_RETRY_FLOOR_MS } from './wow-item-meta.due';
 import { createWowheadLimiter } from './wowhead-item.limiter';
+import type { BossEncountersService } from '../boss-encounters.service';
+import { WOWHEAD_TOOLTIP_PARSE_VERSION } from './wowhead-item.types';
 import type {
   WowheadFetch,
   WowItemMetaInsert,
@@ -90,6 +92,7 @@ function setup(opts: {
   const service = new WowItemMetaService(
     db as never,
     settings as unknown as SettingsService,
+    { clearCache: jest.fn() } as unknown as BossEncountersService,
     {
       fetchFn: opts.fetch.fn,
       limiter: createWowheadLimiter({ minIntervalMs: 0 }),
@@ -115,6 +118,8 @@ describe('WowItemMetaService.enqueue — resolution (ROK-1727)', () => {
       status: 'resolved',
       env: 16,
       ...HIT,
+      tooltip: null,
+      tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
       fetchedAt: NOW,
       nextRetryAt: after(RESOLVED_TTL_MS),
       attempts: 0,
