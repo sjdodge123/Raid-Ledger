@@ -80,9 +80,12 @@ test('m2: a stalled snapshot gives up after the timeout; the build goes on and n
   const d = await fakeDaemon({ stallSnapshot: true });
   const lines = [];
   setSnapshotTimeoutMs(50);
-  const t0 = Date.now();
-  try { await rebuild(d, lines); } finally { setSnapshotTimeoutMs(0); d.close(); }
-  assert.ok(Date.now() - t0 < 2000, `the snapshot must be bounded, took ${Date.now() - t0} ms`);
+  let outcome;
+  try {
+    const stalled = new Promise((r) => { setTimeout(() => r('still waiting after 2000 ms'), 2000).unref(); });
+    outcome = await Promise.race([rebuild(d, lines).then(() => 'finished'), stalled]);
+  } finally { setSnapshotTimeoutMs(0); d.close(); }
+  assert.equal(outcome, 'finished', 'the snapshot must be bounded by its timeout, not wait on a stalled daemon');
   assert.deepEqual(deletes(d), [], 'no snapshot, no reclaim');
   assert.match(lines.join('\n'), /RECLAIM snapshot of rl:ci-test unavailable \(timeout or daemon error\)/);
   assert.equal(buildsInFlight(), 0);
