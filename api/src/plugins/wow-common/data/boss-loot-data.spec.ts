@@ -48,6 +48,24 @@ const VALID_QUALITIES = [
   'Legendary',
 ] as const;
 
+/**
+ * ROK-2170: a `forever` loot row hangs off the CLASSIC boss of the same name
+ * (the seeder's fallback). Every other expansion must match its own boss row.
+ */
+function bossKeyForLoot(l: LootEntry): string {
+  const expansion = l.expansion === 'forever' ? 'classic' : l.expansion;
+  return `${l.bossName}::${expansion}`;
+}
+
+/** Classic boss names with any loot: `classic` rows OR `forever` rows. */
+function classicOrForeverLootBossNames(): Set<string> {
+  return new Set(
+    loot
+      .filter((l) => l.expansion === 'classic' || l.expansion === 'forever')
+      .map((l) => l.bossName),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Schema / structure
 // ---------------------------------------------------------------------------
@@ -161,7 +179,14 @@ describe('boss-loot-data.json — schema', () => {
     });
 
     it('expansion values are limited to known WoW expansion identifiers', () => {
-      const VALID_EXPANSIONS = ['classic', 'tbc', 'wotlk', 'cata', 'sod'];
+      const VALID_EXPANSIONS = [
+        'classic',
+        'tbc',
+        'wotlk',
+        'cata',
+        'sod',
+        'forever',
+      ];
       const bad = loot.filter((l) => !VALID_EXPANSIONS.includes(l.expansion));
       expect(bad).toHaveLength(0);
     });
@@ -229,10 +254,9 @@ function testExpansionConsistency() {
   const encounterMap = new Map<string, string>(
     bosses.map((b) => [`${b.name}::${b.expansion}`, b.expansion]),
   );
-  const mismatched = loot.filter((l) => {
-    const key = `${l.bossName}::${l.expansion}`;
-    return encounterMap.get(key) === undefined;
-  });
+  const mismatched = loot.filter(
+    (l) => encounterMap.get(bossKeyForLoot(l)) === undefined,
+  );
   expect(mismatched).toHaveLength(0);
 }
 
@@ -277,7 +301,7 @@ function testScarletMonasteryLoot() {
 // ---------------------------------------------------------------------------
 
 describe('boss-loot-data.json — completeness against boss-encounter-data.json', () => {
-  const lootIndex = new Set(loot.map((l) => `${l.bossName}::${l.expansion}`));
+  const lootIndex = new Set(loot.map(bossKeyForLoot));
 
   describe('cross-reference integrity', () => {
     it('covers all seeded bosses (no boss has zero loot entries)', () => {
@@ -299,16 +323,14 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
         bosses.map((b) => `${b.name}::${b.expansion}`),
       );
       const orphans = loot.filter(
-        (l) => !encounterIndex.has(`${l.bossName}::${l.expansion}`),
+        (l) => !encounterIndex.has(bossKeyForLoot(l)),
       );
       expect(orphans).toHaveLength(0);
     });
 
     it('all Classic bosses have at least one loot item', () => {
       const classicBosses = bosses.filter((b) => b.expansion === 'classic');
-      const classicLootBosses = new Set(
-        loot.filter((l) => l.expansion === 'classic').map((l) => l.bossName),
-      );
+      const classicLootBosses = classicOrForeverLootBossNames();
       const missing = classicBosses.filter(
         (b) =>
           !classicLootBosses.has(b.name) &&
@@ -317,13 +339,11 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
       expect(missing).toHaveLength(0);
     });
 
-    it('the ROK-2142 loot-pending list only names classic bosses still without loot', () => {
+    it('the ROK-2142 loot-pending list only names classic bosses with no classic or forever loot', () => {
       const classicNames = new Set(
         bosses.filter((b) => b.expansion === 'classic').map((b) => b.name),
       );
-      const classicLootBosses = new Set(
-        loot.filter((l) => l.expansion === 'classic').map((l) => l.bossName),
-      );
+      const classicLootBosses = classicOrForeverLootBossNames();
       const stale = [...LOOT_PENDING_CLASSIC_BOSSES].filter(
         (n) => !classicNames.has(n) || classicLootBosses.has(n),
       );
@@ -503,5 +523,84 @@ describe('boss-loot-data.json — regression (existing loot not removed)', () =>
       const classicLoot = loot.filter((l) => l.expansion === 'classic');
       expect(classicLoot.length).toBeGreaterThanOrEqual(109);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-2170 — WoW: Forever loot rows (expansion 'forever')
+// ---------------------------------------------------------------------------
+
+const foreverLoot = loot.filter((l) => l.expansion === 'forever');
+const FOREVER_ICON_PREFIX = 'https://wow.zamimg.com/';
+const STOCKADE_BOSSES = [
+  'Targorr the Dread',
+  'Kam Deepfury',
+  'Hamhock',
+  'Bazil Thredd',
+  'Dextren Ward',
+];
+const DEADMINES_FORMERLY_PENDING = [
+  "Rhahk'Zor",
+  "Sneed's Shredder",
+  'Gilnid',
+  'Mr. Smite',
+  'Captain Greenskin',
+  'Cookie',
+];
+
+function bossesWithoutForeverLoot(names: string[]): string[] {
+  const covered = new Set(foreverLoot.map((l) => l.bossName));
+  return names.filter((n) => !covered.has(n));
+}
+
+function describeRow(l: LootEntry): string {
+  return `${l.bossName}::${l.itemId}`;
+}
+
+describe('boss-loot-data.json — Forever rows (ROK-2170)', () => {
+  it('has Forever rows', () => {
+    expect(foreverLoot.length).toBeGreaterThan(0);
+  });
+
+  it('every Forever row has a non-null quality', () => {
+    const bad = foreverLoot.filter((l) => l.quality == null);
+    expect(bad.map(describeRow)).toEqual([]);
+  });
+
+  it('every Forever row has a positive itemLevel', () => {
+    const bad = foreverLoot.filter(
+      (l) => l.itemLevel === null || !(l.itemLevel > 0),
+    );
+    expect(bad.map(describeRow)).toEqual([]);
+  });
+
+  it('every Forever row has an https wow.zamimg.com iconUrl', () => {
+    const bad = foreverLoot.filter(
+      (l) => l.iconUrl === null || !l.iconUrl.startsWith(FOREVER_ICON_PREFIX),
+    );
+    expect(bad.map(describeRow)).toEqual([]);
+  });
+
+  it('every Forever row has a null dropRate (Wowhead shows no Forever rates)', () => {
+    const bad = foreverLoot.filter((l) => l.dropRate !== null);
+    expect(bad.map(describeRow)).toEqual([]);
+  });
+
+  it('each Stockade boss has at least one Forever row', () => {
+    expect(bossesWithoutForeverLoot(STOCKADE_BOSSES)).toEqual([]);
+  });
+
+  it('each formerly pending Deadmines boss has at least one Forever row', () => {
+    expect(bossesWithoutForeverLoot(DEADMINES_FORMERLY_PENDING)).toEqual([]);
+  });
+
+  it('no Forever row names a boss outside classic', () => {
+    const classicNames = new Set(
+      bosses.filter((b) => b.expansion === 'classic').map((b) => b.name),
+    );
+    // A name shared with a SoD/TBC boss is still a classic boss (SoD reuses
+    // classic names), so only a name with NO classic boss row is rejected.
+    const bad = foreverLoot.filter((l) => !classicNames.has(l.bossName));
+    expect(bad.map(describeRow)).toEqual([]);
   });
 });
