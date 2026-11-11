@@ -141,7 +141,7 @@ const truthy = (v) => v !== null && !['', '0', 'no', 'false', 'none'].includes(v
 
 /** What /build's context inspection needs from the (already policy-checked) query. */
 function buildFacts(query) {
-  return { context: true, dockerfile: query.get('dockerfile') ?? '', pull: truthy(query.get('pull')) };
+  return { context: true, dockerfile: query.get('dockerfile') ?? '', pull: truthy(query.get('pull')), tags: query.getAll('t') };
 }
 
 /**

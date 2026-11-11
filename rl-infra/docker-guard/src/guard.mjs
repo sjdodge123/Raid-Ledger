@@ -23,6 +23,7 @@ import { connectNetworkRefs, containerCreateNetworkRefs, resolveNetworkRefs } fr
 import { pinConnect, pinContainerCreate } from './network-pin.mjs';
 import { reservedVolumeReason } from './volume-reserve.mjs';
 import { scopedEventsUrl } from './events-scope.mjs';
+import { beginBuild } from './build-reclaim.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 415: 'Unsupported Media Type', 500: 'Internal Server Error', 502: 'Bad Gateway', 507: 'Insufficient Storage' };
@@ -161,6 +162,10 @@ async function forwardEvents(req, res) {
  * cancels while the spool finishes gets nothing forwarded and its context removed.
  */
 async function forwardBuild(req, res, plan) {
+  // ROK-2171: counted in flight from here; on close, a finished build that
+  // moved `rl:ci-test` removes the image it replaced (build-reclaim.mjs).
+  const endBuild = await beginBuild(SOCKET, plan.tags, log);
+  res.once('close', () => { endBuild(res.writableFinished); });
   let gone = false;
   const onGone = () => { gone = true; };
   res.on('close', onGone);
