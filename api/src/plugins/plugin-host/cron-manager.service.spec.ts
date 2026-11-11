@@ -7,6 +7,7 @@ import { PluginRegistryService } from './plugin-registry.service';
 import { EXTENSION_POINTS } from './extension-points';
 import type { CronRegistrar } from './extension-points';
 import { PLUGIN_EVENTS } from './plugin-manifest.interface';
+import { CronJobService } from '../../cron-jobs/cron-job.service';
 
 let service: CronManagerService;
 const createdJobs: CronJob[] = [];
@@ -49,6 +50,10 @@ async function setupEach() {
       CronManagerService,
       { provide: SchedulerRegistry, useValue: mockSchedulerRegistry },
       { provide: PluginRegistryService, useValue: mockPluginRegistry },
+      {
+        provide: CronJobService,
+        useValue: { executeWithTracking: jest.fn() },
+      },
     ],
   }).compile();
 
@@ -273,6 +278,10 @@ describe('CronManagerService — runtime install', () => {
         CronManagerService,
         { provide: SchedulerRegistry, useValue: mockSchedulerRegistry },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: CronJobService,
+          useValue: { executeWithTracking: jest.fn() },
+        },
       ],
     }).compile();
     await app.init();
