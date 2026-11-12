@@ -6,7 +6,7 @@
  * unverified empty sentence and the close seam.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { GuildPage, WowAttunementResultDto, WowRosterAttunementsDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -89,7 +89,22 @@ describe('AttunementsDetail', () => {
         expect(names()).toEqual(['Brakkor']);
         expect(screen.getByRole('row', { name: /Brakkor/ })).toHaveTextContent('4/7What the Wind Carries');
     });
+});
 
+describe('AttunementsDetail — chip group a11y', () => {
+    it('names the chip group and ties every chip to the rows it filters (S3)', async () => {
+        renderDetail(section());
+        await screen.findByTestId('attunements-detail');
+        expect(screen.getByRole('group', { name: 'Choose an attunement' })).toBeInTheDocument();
+        const tableId = screen.getByRole('table', { name: 'Molten Core attunement by member' }).id;
+        expect(tableId).not.toBe('');
+        for (const chip of [screen.getByTestId('attunement-tab-mc'), screen.getByTestId('attunement-tab-onyxia')]) {
+            expect(chip, 'each chip aria-controls the member table').toHaveAttribute('aria-controls', tableId);
+        }
+    });
+});
+
+describe('AttunementsDetail — rows', () => {
     it('lists rows on phone as name + chip, then "steps · next"', async () => {
         media.width = 375;
         renderDetail(section());
@@ -133,9 +148,9 @@ describe('AttunementsWidget → detail seam', () => {
         renderWithProviders(<AttunementsWidget page={page} />);
         await screen.findByTestId('attunements');
         expect(screen.queryByRole('dialog')).toBeNull();
-        useAttunementsDetail.getState().open(8);
+        act(() => useAttunementsDetail.getState().open(8));
         expect(screen.queryByRole('dialog')).toBeNull();
-        useAttunementsDetail.getState().open(7);
+        act(() => useAttunementsDetail.getState().open(7));
         expect(await screen.findByTestId('attunements-detail')).toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Close modal' }));
         expect(useAttunementsDetail.getState().guildId).toBeNull();

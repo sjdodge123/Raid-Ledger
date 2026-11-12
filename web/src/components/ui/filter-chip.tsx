@@ -23,14 +23,17 @@ export interface FilterChipProps {
     disabled?: boolean;
     className?: string;
     testId?: string;
+    /** Id of the region the chip filters (`aria-controls`). */
+    controls?: string;
 }
 
 /** A `<button type="button" aria-pressed>` toggle chip with the §4.3 geometry. */
-export function FilterChip({ label, pressed, onPressedChange, icon: Icon, disabled, className, testId }: FilterChipProps): JSX.Element {
+export function FilterChip({ label, pressed, onPressedChange, icon: Icon, disabled, className, testId, controls }: FilterChipProps): JSX.Element {
     return (
         <button
             type="button"
             aria-pressed={pressed}
+            aria-controls={controls}
             disabled={disabled}
             data-testid={testId}
             onClick={() => onPressedChange(!pressed)}

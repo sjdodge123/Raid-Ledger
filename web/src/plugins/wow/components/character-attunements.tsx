@@ -6,6 +6,7 @@
  * with a "Next" warning chip, the rest `text-muted`). In-progress rows start open.
  * `[]` (nothing Blizzard-confirmed for this character) → the §7 unverified sentence.
  */
+import { useId } from 'react';
 import type { WowCharacterAttunementDto } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { ATTUNEMENT_CHIP, belowLevelNote } from '../hub-widgets/attunement-detail.helpers';
@@ -16,7 +17,7 @@ interface Props {
     attunements: readonly WowCharacterAttunementDto[];
     /** The character's level, for "Level 52 — needs 55"; null when unknown. */
     level: number | null;
-    /** "via Armory · 9 Nov 2026" — the quests source line. */
+    /** "as of 2 days ago via Armory" — mockup F7's source line. */
     sourceLine: string;
 }
 
@@ -51,8 +52,10 @@ function AttunementRow({ attunement, level }: { attunement: WowCharacterAttuneme
     const note = attunement.belowLevel ? belowLevelNote(level, attunement.requiredLevel) : null;
     return (
         <li data-testid="character-attunement" data-state={attunement.state}>
-            <details open={attunement.state === 'in_progress' || undefined}>
-                <summary className="flex min-h-[44px] cursor-pointer select-none flex-wrap items-center gap-2 text-sm font-medium text-foreground">
+            <details className="group/att" open={attunement.state === 'in_progress' || undefined}>
+                <summary className="flex min-h-[44px] cursor-pointer select-none list-none flex-wrap items-center gap-2 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
+                    {/* The repo's disclosure chevron (plugin-setup-checklist.tsx): the flex summary drops the native marker. */}
+                    <span aria-hidden="true" data-testid="attunement-chevron" className="text-dim transition-transform group-open/att:rotate-90">▸</span>
                     <span className="min-w-0 flex-1">{attunementRowTitle(attunement)}</span>
                     <StatusChip tone={chip.tone} title={chip.title}>{chip.label}</StatusChip>
                 </summary>
@@ -67,9 +70,10 @@ function AttunementRow({ attunement, level }: { attunement: WowCharacterAttuneme
 
 /** The block; the caller renders it only when the api sent `attunements`. */
 export function CharacterAttunements({ attunements, level, sourceLine }: Props) {
+    const headingId = useId();
     return (
-        <section aria-labelledby="character-attunements-heading" data-testid="character-attunements">
-            <h3 id="character-attunements-heading" className="mb-2 text-lg font-semibold text-foreground">Attunements</h3>
+        <section aria-labelledby={headingId} data-testid="character-attunements">
+            <h3 id={headingId} className="mb-2 text-lg font-semibold text-foreground">Attunements</h3>
             {attunements.length === 0 ? (
                 <p className="text-sm text-muted">{ATTUNEMENTS_UNVERIFIED_COPY}</p>
             ) : (

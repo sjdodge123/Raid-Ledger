@@ -1,13 +1,14 @@
 /**
  * ROK-1927 — the "Attunements" card's header action: a ghost `sm` "See who"
  * (44px on phone via `buttonClass`) that opens the per-member detail. Hidden
- * while the dataset has nothing verified (there is nobody to list). Imported
+ * while the dataset has no trackable attunement (there is nobody to list). Imported
  * eagerly by `attunements.register.ts`: it reads only the shared roster
  * insights query and the detail store, never the detail chunk.
  */
 import type { JSX } from 'react';
 import { Button } from '../../../components/ui/button';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
+import { attunementTabs } from './attunement-detail.helpers';
 import { useAttunementsDetail } from './attunements-detail-store';
 import { useRosterInsights } from './use-roster-insights';
 
@@ -26,6 +27,7 @@ export function AttunementsAction({ page }: Pick<HubWidgetCtx, 'page'>): JSX.Ele
     const { data } = useRosterInsights(guildId, false);
     const open = useAttunementsDetail((s) => s.open);
     const attunements = data?.attunements;
-    if (attunements === undefined || attunements.attunements.length === 0) return null;
+    // Only trackable groups have members to list (an all-untracked payload is the §7 empty state).
+    if (attunements === undefined || attunementTabs(attunements.attunements).length === 0) return null;
     return <SeeWhoButton onOpenDetail={() => open(guildId)} />;
 }

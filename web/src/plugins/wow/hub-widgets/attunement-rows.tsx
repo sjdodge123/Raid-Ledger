@@ -19,6 +19,8 @@ interface RowsProps {
     wide: boolean;
     /** Accessible name of the table / list. */
     label: string;
+    /** Id for the table / list (the tab chips' `aria-controls`); generated when absent. */
+    listId?: string;
 }
 
 const TH = 'px-2 py-1 text-left text-xs font-medium text-muted';
@@ -46,7 +48,7 @@ function Notes({ row }: { row: AttunementMemberRow }): JSX.Element | null {
     );
 }
 
-function DetailTable({ rows, label, listId }: Omit<RowsProps, 'wide'> & { listId: string }): JSX.Element {
+function DetailTable({ rows, label, listId }: Omit<RowsProps, 'wide' | 'listId'> & { listId: string }): JSX.Element {
     return (
         <div className="overflow-x-auto">
             <table id={listId} className="w-full text-sm">
@@ -72,7 +74,7 @@ function DetailTable({ rows, label, listId }: Omit<RowsProps, 'wide'> & { listId
     );
 }
 
-function DetailList({ rows, label, listId }: Omit<RowsProps, 'wide'> & { listId: string }): JSX.Element {
+function DetailList({ rows, label, listId }: Omit<RowsProps, 'wide' | 'listId'> & { listId: string }): JSX.Element {
     return (
         <ul id={listId} aria-label={label} className="divide-y divide-edge">
             {rows.map((row) => (
@@ -105,9 +107,10 @@ function MoreToggle({ hidden, open, listId, onToggle }: { hidden: number; open: 
 }
 
 /** Sorted member rows (table or list), capped at 10 with a disclosure for the rest. */
-export function AttunementRows({ rows, wide, label }: RowsProps): JSX.Element {
+export function AttunementRows({ rows, wide, label, listId: givenId }: RowsProps): JSX.Element {
     const [open, setOpen] = useState(false);
-    const listId = useId();
+    const ownId = useId();
+    const listId = givenId ?? ownId;
     const hidden = rows.length - ATTUNEMENT_ROWS;
     const shown = open || hidden <= 0 ? rows : rows.slice(0, ATTUNEMENT_ROWS);
     const View = wide ? DetailTable : DetailList;

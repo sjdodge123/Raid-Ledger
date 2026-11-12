@@ -5,7 +5,7 @@
  * tabs are a `FilterChip` group (exactly one pressed); the rows reuse the
  * roster-insights query the card already loaded. Default export for `React.lazy`.
  */
-import { useState, type JSX, type ReactNode } from 'react';
+import { useId, useState, type JSX, type ReactNode } from 'react';
 import type { WowRosterAttunementsDto } from '@raid-ledger/contract';
 import { Modal } from '../../../components/ui/modal';
 import { BottomSheet } from '../../../components/ui/bottom-sheet';
@@ -37,11 +37,13 @@ function Loading(): JSX.Element {
     );
 }
 
-function Tabs({ tabs, selected, onSelect }: { tabs: readonly AttunementTab[]; selected: string; onSelect: (key: string) => void }): JSX.Element {
+interface TabsProps { tabs: readonly AttunementTab[]; selected: string; onSelect: (key: string) => void; controls: string }
+
+function Tabs({ tabs, selected, onSelect, controls }: TabsProps): JSX.Element {
     return (
-        <div role="group" aria-label="Attunement" className="mb-3 flex flex-wrap gap-2">
+        <div role="group" aria-label="Choose an attunement" className="mb-3 flex flex-wrap gap-2">
             {tabs.map((tab) => (
-                <FilterChip key={tab.groupKey} label={tab.instance} pressed={tab.groupKey === selected}
+                <FilterChip key={tab.groupKey} label={tab.instance} pressed={tab.groupKey === selected} controls={controls}
                     testId={`attunement-tab-${tab.groupKey}`} onPressedChange={() => onSelect(tab.groupKey)} />
             ))}
         </div>
@@ -52,13 +54,14 @@ function Loaded({ section }: { section: WowRosterAttunementsDto }): JSX.Element 
     const wide = useMediaQuery(MATRIX_MQ);
     const tabs = attunementTabs(section.attunements);
     const [picked, setPicked] = useState<string | null>(null);
+    const listId = useId();
     const tab = tabs.find((t) => t.groupKey === picked) ?? tabs[0];
     if (tab === undefined) return <QuietEmpty testId="attunements-detail-unverified">{ATTUNEMENTS_UNVERIFIED_COPY}</QuietEmpty>;
     return (
         <div data-testid="attunements-detail">
-            <Tabs tabs={tabs} selected={tab.groupKey} onSelect={setPicked} />
+            <Tabs tabs={tabs} selected={tab.groupKey} onSelect={setPicked} controls={listId} />
             {/* Keyed by tab so the "N more" disclosure folds again on a tab switch. */}
-            <AttunementRows key={tab.groupKey} rows={attunementRows(tab, section.members)} wide={wide}
+            <AttunementRows key={tab.groupKey} rows={attunementRows(tab, section.members)} wide={wide} listId={listId}
                 label={`${tab.instance} attunement by member`} />
         </div>
     );

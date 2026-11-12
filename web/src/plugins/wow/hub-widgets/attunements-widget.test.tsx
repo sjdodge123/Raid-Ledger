@@ -156,6 +156,18 @@ describe('Attunements visibility and the See who seam', () => {
     });
 });
 
+describe('an all-untracked payload (S1)', () => {
+    it('shows the §7 empty state and no "See who" when no group is trackable', async () => {
+        serve(buildAttunementsSection({ attunements: [
+            buildAttunementDef('naxx', { instance: 'Naxxramas', trackable: false, untrackedReason: 'needs reputation data' }),
+        ] }));
+        renderWithProviders(<><AttunementsAction {...ctx()} /><AttunementsWidget {...ctx()} /></>);
+        const body = await screen.findByTestId(/^attunements(-unverified)?$/);
+        expect(body, 'a lone untracked group is the unverified empty state, not a card').toHaveAttribute('data-testid', 'attunements-unverified');
+        expect(screen.queryByRole('button', { name: 'See who' })).toBeNull();
+    });
+});
+
 describe('attunementsWidget registration', () => {
     it('is the Forever guild "Attunements" card at order 90, span 1, with the See who action', () => {
         expect(attunementsWidget).toMatchObject({

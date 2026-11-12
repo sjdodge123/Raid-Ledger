@@ -3,13 +3,13 @@
  * page Quests section: step checklist kinds, state chip, below-level note, the
  * unverified sentence for `[]`, and the section hiding it when the key is absent.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, render, within } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { screen, render, within, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { CharacterQuestsDto, CharacterQuestsResponse } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { buildCharacterAttunement } from '../../../test/factories/forever-attunements';
+import { buildCharacterAttunement, daysAgo } from '../../../test/factories/forever-attunements';
 import { CharacterAttunements } from './character-attunements';
 import { attunementRowTitle, attunementStepViews } from './character-attunements.helpers';
 import { CharacterQuestsSection } from './character-quests-section';
@@ -36,6 +36,32 @@ describe('attunement own-view helpers', () => {
     it('has no next step once attuned or without data', () => {
         const noData = buildCharacterAttunement({ state: 'no_data', nextStep: null, steps: [{ label: 'a', done: false }] });
         expect(attunementStepViews(noData).map((s) => s.kind)).toEqual(['rest']);
+    });
+});
+
+describe('CharacterAttunements — disclosure and ids', () => {
+    it('draws the disclosure chevron at the start of every row, collapsed ones included (mockup F7, W1)', () => {
+        const { container } = render(<CharacterAttunements level={60} sourceLine={SOURCE} attunements={[
+            buildCharacterAttunement({ key: 'ony-horde' }),
+            buildCharacterAttunement({ key: 'mc-horde', instance: 'Molten Core', state: 'done', nextStep: null }),
+        ]} />);
+        const summaries = [...container.querySelectorAll('summary')];
+        expect(summaries).toHaveLength(2);
+        for (const summary of summaries) {
+            const chevron = summary.firstElementChild;
+            expect(chevron?.getAttribute('data-testid'), 'the row opens with a chevron').toBe('attunement-chevron');
+            expect(chevron?.getAttribute('aria-hidden')).toBe('true');
+        }
+    });
+
+    it('gives each block its own heading id so aria-labelledby never collides (S2)', () => {
+        render(<>
+            <CharacterAttunements level={60} sourceLine={SOURCE} attunements={[]} />
+            <CharacterAttunements level={60} sourceLine={SOURCE} attunements={[]} />
+        </>);
+        const ids = screen.getAllByRole('heading', { name: 'Attunements' }).map((h) => h.id);
+        expect(new Set(ids).size, `heading ids ${ids.join(', ')} are unique`).toBe(2);
+        expect(screen.getAllByRole('region', { name: 'Attunements' })).toHaveLength(2);
     });
 });
 
@@ -110,10 +136,30 @@ describe('CharacterQuestsSection — Attunements block', () => {
     });
 
     it('renders the checklists with the character level in the note', async () => {
-        body = { quests: quests({ attunements: [buildCharacterAttunement({ belowLevel: true, requiredLevel: 55 })] }) };
+        body = { quests: quests({ syncedAt: daysAgo(2), attunements: [buildCharacterAttunement({ belowLevel: true, requiredLevel: 55 })] }) };
         renderWithProviders(<CharacterQuestsSection characterId={CHAR_ID} variant="wow_forever" level={52} />);
         await screen.findByRole('heading', { name: 'Attunements' });
         expect(screen.getByTestId('character-attunement-level')).toHaveTextContent('Level 52 — needs 55');
-        expect(screen.getByText('via Armory · 9 Nov 2026')).toBeInTheDocument();
+        // Mockup F7's relative source line (N1).
+        expect(screen.getByText('as of 2 days ago via Armory')).toBeInTheDocument();
+    });
+
+    it('lands the /characters/:id#quests deep link on the section once it has loaded (Codex P2)', async () => {
+        const scrollSpy = vi.fn();
+        const original = Element.prototype.scrollIntoView;
+        Element.prototype.scrollIntoView = scrollSpy;
+        try {
+            body = { quests: quests({ attunements: [] }) };
+            const { container } = renderWithProviders(<CharacterQuestsSection characterId={CHAR_ID} variant="wow_forever" />, {
+                initialEntries: [`/characters/${CHAR_ID}#quests`],
+            });
+            await screen.findByRole('heading', { name: 'Quests' });
+            const section = container.querySelector('#quests');
+            expect(section, 'the Quests card carries id="quests"').not.toBeNull();
+            await waitFor(() => expect(scrollSpy).toHaveBeenCalledTimes(1));
+            expect(scrollSpy.mock.contexts[0], 'the Quests card is the element scrolled into view').toBe(section);
+        } finally {
+            Element.prototype.scrollIntoView = original;
+        }
     });
 });

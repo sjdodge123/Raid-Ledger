@@ -79,11 +79,13 @@ function stepsText(result: WowAttunementResultDto, def: WowRosterAttunementDto):
     return result.state === 'no_data' ? '—' : `${result.stepsDone}/${def.steps.length}`;
 }
 
-function nextText(result: WowAttunementResultDto): string {
+function nextText(result: WowAttunementResultDto, def: WowRosterAttunementDto): string {
     if (result.noDataReason === 'not_claimed') return 'Not claimed';
     if (result.nextStep === null) return '—';
-    // In progress with no completed step can only come from the quest log.
-    const inLog = result.state === 'in_progress' && result.stepsDone === 0;
+    // In progress with no completed step comes from the quest log, but the DTO does not say
+    // WHICH step is logged and `nextStep` is the chain's first open step — so the annotation
+    // is only true for a one-step chain (Codex P2, ROK-1927).
+    const inLog = result.state === 'in_progress' && result.stepsDone === 0 && def.steps.length === 1;
     return inLog ? `${result.nextStep} (in quest log)` : result.nextStep;
 }
 
@@ -98,7 +100,7 @@ function toRow(member: WowRosterAttunementMemberDto, result: WowAttunementResult
     return {
         rowKey: member.rowKey, name: member.name, characterId: member.characterId, state: result.state,
         tone: chip.tone, label: chip.label, title: chipTitle(result), steps: stepsText(result, def),
-        next: nextText(result), levelNote, asOf: member.asOf === null ? null : `as of ${syncedAgo(member.asOf, now)}`,
+        next: nextText(result, def), levelNote, asOf: member.asOf === null ? null : `as of ${syncedAgo(member.asOf, now)}`,
         stale: isStale(member.asOf, now),
     };
 }

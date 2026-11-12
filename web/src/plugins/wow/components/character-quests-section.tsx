@@ -7,7 +7,8 @@
  */
 import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { useCharacterQuests } from '../hooks/use-character-quests';
-import { formatCaptureDate, formatSourceLine } from '../lib/addon-source-line';
+import { useHashScrollIntoView } from '../../../hooks/use-hash-scroll-into-view';
+import { formatAsOfSourceLine, formatCaptureDate, formatSourceLine } from '../lib/addon-source-line';
 import { plural } from '../lib/plural';
 import { CharacterQuestLog } from './character-quest-log';
 import { CharacterCompletedQuests } from './character-completed-quests';
@@ -44,12 +45,17 @@ interface SectionProps {
     level?: number | null;
 }
 
+/** The `#quests` anchor: the Attunements detail links members to `/characters/:id#quests` (ROK-1927). */
+export const QUESTS_SECTION_ID = 'quests';
+
 /** The Quests card; chrome matches the Talents section. */
 export function CharacterQuestsSection({ characterId, variant, level = null }: SectionProps) {
     const { quests, isError } = useCharacterQuests(characterId, variant);
+    // The section loads behind a query, so scroll once it has rendered.
+    useHashScrollIntoView(QUESTS_SECTION_ID, Boolean(quests) && !isError);
     if (isError || !quests) return null;
     return (
-        <div className="bg-panel border border-edge rounded-lg p-6">
+        <div id={QUESTS_SECTION_ID} className="bg-panel border border-edge rounded-lg p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">Quests</h2>
             <p className="-mt-3 mb-4 text-xs text-muted">{questsSummaryLine(quests)}</p>
             <div className="space-y-6">
@@ -57,7 +63,7 @@ export function CharacterQuestsSection({ characterId, variant, level = null }: S
                 <CharacterCompletedQuests groups={quests.completedKnown} knownTotal={quests.counts.knownTotal} />
                 {quests.attunements !== undefined && (
                     <CharacterAttunements attunements={quests.attunements} level={level}
-                        sourceLine={formatSourceLine(quests.source, quests.syncedAt)} />
+                        sourceLine={formatAsOfSourceLine(quests.source, quests.syncedAt)} />
                 )}
             </div>
         </div>

@@ -42,7 +42,7 @@ function AttunementsBody({ guildId }: { guildId: number }): JSX.Element | null {
     const section = data.attunements;
     if (section === undefined) return null;
     const rows = groupAttunements(section.attunements);
-    if (rows.length === 0) return <QuietEmpty testId="attunements-unverified">{ATTUNEMENTS_UNVERIFIED_COPY}</QuietEmpty>;
+    if (!rows.some((r) => r.trackable)) return <QuietEmpty testId="attunements-unverified">{ATTUNEMENTS_UNVERIFIED_COPY}</QuietEmpty>;
     const nobody = nobodyHasQuestData(rows);
     return (
         <div data-testid="attunements" className="flex flex-col">

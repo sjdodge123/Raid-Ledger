@@ -72,7 +72,8 @@ describe('attunementRows', () => {
             buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, asOf: daysAgo(20), results: [result('ony-horde', { belowLevel: true })] }),
         ];
         const [thundrel, mogrash] = attunementRows(onyTab(), members, now);
-        expect(thundrel?.next).toBe('For The Horde! (in quest log)');
+        // A 7-step chain: the DTO cannot say which step is logged, so no "(in quest log)" claim (Codex P2).
+        expect(thundrel?.next).toBe('For The Horde!');
         expect(thundrel?.levelNote).toBeNull();
         expect(thundrel?.stale).toBe(false);
         expect(mogrash?.levelNote).toBe('Level 52 — below the required level');
@@ -85,6 +86,24 @@ describe('attunementRows', () => {
             buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, results: [result('ony-horde', { belowLevel: true, requiredLevel: 55 })] }),
         ];
         expect(attunementRows(onyTab(), members)[0]?.levelNote).toBe('Level 52 — needs 55');
+    });
+});
+
+describe('the "(in quest log)" annotation (Codex P2)', () => {
+    it('marks a log-only start only on a one-step chain, where the logged quest IS the next step', () => {
+        const tab = attunementTabs([buildAttunementDef('mc-horde', { groupKey: 'mc' })])[0];
+        if (tab === undefined) throw new Error('expected a Molten Core tab');
+        const members = [
+            buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('mc-horde', { state: 'in_progress', nextStep: 'Attunement to the Core' })] }),
+        ];
+        expect(attunementRows(tab, members)[0]?.next).toBe('Attunement to the Core (in quest log)');
+    });
+
+    it('never names the first step of a longer chain as the logged one', () => {
+        const members = [
+            buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('ony-horde', { state: 'in_progress', stepsDone: 0, nextStep: 's1' })] }),
+        ];
+        expect(attunementRows(onyTab(), members)[0]?.next, 'a log-only start in a 7-step chain makes no quest-log claim').toBe('s1');
     });
 });
 
