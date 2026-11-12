@@ -1,9 +1,11 @@
 import {
   findStaleClassicBossIds,
   findStaleClassicLootIds,
+  findStaleForeverLootIds,
   MIN_BUNDLED_CLASSIC_BOSSES,
   MIN_BUNDLED_CLASSIC_LOOT,
-  pruneClassicRows,
+  MIN_BUNDLED_FOREVER_LOOT,
+  pruneStaleRows,
   type BossJsonKey,
   type BossKeyRow,
   type LootKeyRow,
@@ -188,6 +190,88 @@ describe('findStaleClassicLootIds (ROK-2142 review r1)', () => {
   });
 });
 
+// Forever loot hangs off the CLASSIC boss rows (1, 6); 4 is a tbc boss.
+const liveBossIds = new Set([1, 4, 6]);
+// Bundled forever rows on classic boss 1, padded to the absolute floor.
+const bundled = Array.from({ length: MIN_BUNDLED_FOREVER_LOOT }, (_, i) => ({
+  bossId: 1,
+  itemId: 80_000 + i,
+  expansion: 'forever',
+}));
+const storedBundled: LootKeyRow[] = bundled.map((l, i) => ({
+  id: 30_000 + i,
+  ...l,
+}));
+const classicOnBoss1: LootKeyRow[] = [
+  { id: 40, bossId: 1, itemId: 100, expansion: 'classic' },
+  { id: 41, bossId: 1, itemId: 151403, expansion: 'classic' },
+];
+
+describe('findStaleForeverLootIds (ROK-2170 D7)', () => {
+  it('prunes nothing when every stored forever row is bundled on its classic boss', () => {
+    const warn = jest.fn();
+    const stored = [...classicOnBoss1, ...storedBundled];
+    expect(findStaleForeverLootIds(stored, bundled, liveBossIds, warn)).toEqual(
+      [],
+    );
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('prunes an extra stored forever row on a live boss and leaves the classic rows on it alone', () => {
+    const stray = [
+      { id: 50, bossId: 1, itemId: 99_999, expansion: 'forever' },
+      { id: 51, bossId: 4, itemId: 99_998, expansion: 'forever' },
+    ];
+    const stored = [...classicOnBoss1, ...storedBundled, ...stray];
+    expect(findStaleForeverLootIds(stored, bundled, liveBossIds)).toEqual([
+      50, 51,
+    ]);
+  });
+
+  it('ignores forever rows on a boss that is not live', () => {
+    const orphan = { id: 52, bossId: 77, itemId: 1, expansion: 'forever' };
+    expect(
+      findStaleForeverLootIds([...storedBundled, orphan], bundled, liveBossIds),
+    ).toEqual([]);
+  });
+
+  it('skips with a warning when the JSON forever loot is below the absolute floor', () => {
+    const warn = jest.fn();
+    const stray = { id: 50, bossId: 1, itemId: 99_999, expansion: 'forever' };
+    expect(
+      findStaleForeverLootIds(
+        [...storedBundled, stray],
+        bundled.slice(0, 5),
+        liveBossIds,
+        warn,
+      ),
+    ).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('5 forever loot rows (minimum 200)'),
+    );
+  });
+
+  it('never crosses expansions: classic rows are not forever candidates and vice versa', () => {
+    // Same (bossId, itemId) stored under both expansions; wanted lists only
+    // carry the OTHER expansion's key for the cross-check.
+    const both: LootKeyRow[] = [
+      { id: 60, bossId: 1, itemId: 555, expansion: 'classic' },
+      { id: 61, bossId: 1, itemId: 555, expansion: 'forever' },
+      ...storedBundled,
+      ...loot,
+    ];
+    const foreverStale = findStaleForeverLootIds(both, bundled, liveBossIds);
+    expect(foreverStale).toEqual([61]);
+    const classicStale = findStaleClassicLootIds(
+      both,
+      [...wantedLoot, ...bundled],
+      classicBossIds,
+    );
+    expect(classicStale).toEqual([60, 11]);
+    expect(classicStale.some((id) => id >= 30_000 && id < 40_000)).toBe(false);
+  });
+});
+
 function mockDb() {
   const where = jest.fn().mockResolvedValue(undefined);
   const del = jest.fn().mockReturnValue({ where });
@@ -196,17 +280,17 @@ function mockDb() {
   return { db: { transaction, delete: jest.fn() } as never, transaction, del };
 }
 
-describe('pruneClassicRows (ROK-2142)', () => {
+describe('pruneStaleRows (ROK-2142)', () => {
   it('deletes stale loot and bosses inside ONE transaction', async () => {
     const { db, transaction, del } = mockDb();
-    await pruneClassicRows(db, [2, 3], [11]);
+    await pruneStaleRows(db, [2, 3], [11]);
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(del).toHaveBeenCalledTimes(2);
   });
 
   it('opens no transaction when nothing is stale', async () => {
     const { db, transaction } = mockDb();
-    await pruneClassicRows(db, [], []);
+    await pruneStaleRows(db, [], []);
     expect(transaction).not.toHaveBeenCalled();
   });
 });

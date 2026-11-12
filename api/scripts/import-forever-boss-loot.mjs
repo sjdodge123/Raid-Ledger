@@ -55,6 +55,22 @@ const SOURCE_ALIASES = {
   Sneed: "Sneed's Shredder",
   // Spelling: Wowhead has a lower-case r, the bundled boss row does not.
   'Ghamoo-ra': 'Ghamoo-Ra',
+  // Gyth is Rend's mount; the boss list has one row for the encounter.
+  Gyth: 'Warchief Rend Blackhand',
+};
+
+/**
+ * Drops filed under exactly one boss whatever their Wowhead source says,
+ * keyed by the capture's zone id. Operator ruling 2026-11-11: Wowhead's
+ * Forever page does not attribute these to the Avatar of Hakkar.
+ */
+const ITEM_BOSS_OVERRIDES = {
+  1477: {
+    10838: 'Avatar of Hakkar', // Might of Hakkar
+    10844: 'Avatar of Hakkar', // Spire of Hakkar
+    10845: 'Avatar of Hakkar', // Warrior's Embrace
+    12462: 'Avatar of Hakkar', // Embrace of the Wind Serpent
+  },
 };
 
 /** Wowhead slot label → the slot vocabulary the loot file already uses. */
@@ -188,7 +204,20 @@ function planCapture(capture, bosses) {
     .map((b) => b.name);
   const rows = [];
   const skipped = [];
+  const overrides = ITEM_BOSS_OVERRIDES[capture.zoneId] ?? {};
+  for (const boss of Object.values(overrides)) {
+    if (!listed.includes(boss)) {
+      fail(`${capture.zone}: override boss ${boss} is not listed for the instance`);
+    }
+  }
+  const overridden = new Set();
   for (const drop of capture.drops) {
+    const override = overrides[drop.itemId];
+    if (override) {
+      overridden.add(String(drop.itemId));
+      rows.push(toRow(override, drop));
+      continue;
+    }
     const sources = String(drop.source ?? '')
       .split('|')
       .map((s) => s.trim())
@@ -196,6 +225,12 @@ function planCapture(capture, bosses) {
     const hits = sources.filter((s) => listed.includes(s));
     if (hits.length === 0) skipped.push(drop);
     for (const boss of hits) rows.push(toRow(boss, drop));
+  }
+  // A mistyped override id would otherwise do nothing, silently.
+  for (const itemId of Object.keys(overrides)) {
+    if (!overridden.has(itemId)) {
+      fail(`${capture.zone}: override item ${itemId} is not in the capture`);
+    }
   }
   return { zone: capture.zone, listed, rows, skipped };
 }
