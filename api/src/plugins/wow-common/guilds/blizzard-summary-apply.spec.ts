@@ -3,7 +3,11 @@
  * covered by `blizzard-summary-sync.integration.spec.ts` on the fleet).
  */
 import type { SummaryFetch } from '../blizzard-forever-guild-summary.helpers';
-import { DISBANDED_AFTER_MS, summaryPatch } from './blizzard-summary-apply';
+import {
+  DISBANDED_AFTER_MS,
+  summaryPatch,
+  type SummaryState,
+} from './blizzard-summary-apply';
 
 const NOW = new Date('2026-11-12T12:00:00Z');
 const FOUNDED = new Date('2024-03-05T00:00:00Z');
@@ -15,10 +19,16 @@ const found = (
   summary: { blizzardGuildId, foundedAt: FOUNDED, faction },
 });
 const notFound: SummaryFetch = { kind: 'not_found' };
+type Status = SummaryState['blizzardSummaryStatus'];
 const state = (
   blizzardGuildId: number | null,
   blizzardNotFoundSince: Date | null = null,
-) => ({ blizzardGuildId, blizzardNotFoundSince });
+  blizzardSummaryStatus: Status = blizzardGuildId === null ? null : 'ok',
+): SummaryState => ({
+  blizzardGuildId,
+  blizzardNotFoundSince,
+  blizzardSummaryStatus,
+});
 const ago = (ms: number): Date => new Date(NOW.getTime() - ms);
 
 describe('summaryPatch — 200', () => {
@@ -109,5 +119,42 @@ describe('summaryPatch — 404 two-strike', () => {
 
   it('DISBANDED_AFTER_MS is six hours', () => {
     expect(DISBANDED_AFTER_MS).toBe(6 * 60 * 60 * 1000);
+  });
+});
+
+describe('summaryPatch — 404 after a 200 that carried no guild id', () => {
+  it('the first 404 after an id-less 200 stamps since = now', () => {
+    expect(summaryPatch(state(null, null, 'ok'), notFound, NOW).patch).toEqual({
+      blizzardSummaryStatus: 'not_found',
+      blizzardNotFoundSince: NOW,
+    });
+  });
+
+  it('a second 404 at least 6h later is disbanded', () => {
+    const since = ago(DISBANDED_AFTER_MS);
+    const patch = summaryPatch(
+      state(null, since, 'not_found'),
+      notFound,
+      NOW,
+    ).patch;
+    expect(patch).toEqual({ blizzardSummaryStatus: 'disbanded' });
+  });
+
+  it('a 404 on an already-disbanded id-less guild stays disbanded', () => {
+    const since = ago(DISBANDED_AFTER_MS * 2);
+    const patch = summaryPatch(
+      state(null, since, 'disbanded'),
+      notFound,
+      NOW,
+    ).patch;
+    expect(patch).toEqual({ blizzardSummaryStatus: 'disbanded' });
+  });
+
+  it('never-200 (not_found, error or null status) never stamps since', () => {
+    for (const status of ['not_found', 'error', null] as const) {
+      expect(
+        summaryPatch(state(null, null, status), notFound, NOW).patch,
+      ).toEqual({ blizzardSummaryStatus: 'not_found' });
+    }
   });
 });

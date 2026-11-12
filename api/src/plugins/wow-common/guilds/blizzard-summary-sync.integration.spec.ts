@@ -273,6 +273,34 @@ describe('ROK-1170 — summary 404 two-strike', () => {
   });
 });
 
+describe('ROK-1170 — 404s after a 200 that carried no guild id', () => {
+  it('(5b) an id-less 200 then two 404s 6h apart ends disbanded', async () => {
+    const id = await insertGuild();
+    summarySpy.mockResolvedValue(found(null));
+    await sync(id);
+    expect(await summaryCols(id)).toMatchObject({
+      blizzardGuildId: null,
+      status: 'ok',
+    });
+    summarySpy.mockResolvedValue(NOT_FOUND);
+    await sync(id);
+    const first = await summaryCols(id);
+    expect(first.status).toBe('not_found');
+    expect(first.notFoundSince).not.toBeNull();
+    const since = hoursAgo(7);
+    await testApp.db
+      .update(schema.guilds)
+      .set({ blizzardNotFoundSince: since })
+      .where(eq(schema.guilds.id, id));
+    await sync(id);
+    expect(await summaryCols(id)).toMatchObject({
+      blizzardGuildId: null,
+      status: 'disbanded',
+      notFoundSince: since.toISOString(),
+    });
+  });
+});
+
 describe('ROK-1170 — summary vs roster independence (AC6)', () => {
   it('(8) a summary 502 leaves the roster result and status unchanged', async () => {
     const id = await insertGuild();

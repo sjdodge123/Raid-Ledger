@@ -20,6 +20,7 @@ export const DISBANDED_AFTER_MS = 6 * 60 * 60 * 1000;
 export interface SummaryState {
   blizzardGuildId: number | null;
   blizzardNotFoundSince: Date | null;
+  blizzardSummaryStatus: schema.GuildInsert['blizzardSummaryStatus'] | null;
 }
 
 /** Which guild, under which slug (a write only lands while it still holds). */
@@ -75,10 +76,23 @@ export function summaryPatch(
   return { patch, mismatch: false };
 }
 
+/**
+ * Has this guild ever answered 200? Not just a stored id: a 200 whose payload
+ * carried no usable id still lands as `ok`, and from then on its not-found
+ * run (`since`) or `disbanded` state is the only trace of it.
+ */
+function hadSummary200(state: SummaryState): boolean {
+  return (
+    state.blizzardGuildId !== null ||
+    state.blizzardSummaryStatus === 'ok' ||
+    state.blizzardSummaryStatus === 'disbanded' ||
+    state.blizzardNotFoundSince !== null
+  );
+}
+
 /** 404: never-200 → `not_found`; else two strikes ≥6h apart → `disbanded`. */
 function notFoundPatch(state: SummaryState, now: Date): SummaryPatch {
-  if (state.blizzardGuildId === null)
-    return { blizzardSummaryStatus: 'not_found' };
+  if (!hadSummary200(state)) return { blizzardSummaryStatus: 'not_found' };
   const since = state.blizzardNotFoundSince;
   if (since === null) {
     return { blizzardSummaryStatus: 'not_found', blizzardNotFoundSince: now };
@@ -124,7 +138,7 @@ async function writePatch(
     .where(and(eq(g.id, target.id), eq(g.guildSlug, target.slug)));
 }
 
-/** The two rule columns, read fresh after the fetch; null when gone. */
+/** The rule columns, read fresh after the fetch; null when gone. */
 async function readState(
   db: Db,
   guildId: number,
@@ -134,6 +148,7 @@ async function readState(
     .select({
       blizzardGuildId: g.blizzardGuildId,
       blizzardNotFoundSince: g.blizzardNotFoundSince,
+      blizzardSummaryStatus: g.blizzardSummaryStatus,
     })
     .from(g)
     .where(eq(g.id, guildId))
