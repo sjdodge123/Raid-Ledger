@@ -78,6 +78,7 @@ const core = {
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
     { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
+    { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
     ...ggCoreCards,
   ],
   setup: CORE_SETUP,
