@@ -68,7 +68,10 @@ export class GgComputeService {
     return {
       schemaVersion: 1,
       year,
-      window: { from: window.start.toISOString(), to: window.end.toISOString() },
+      window: {
+        from: window.start.toISOString(),
+        to: window.end.toISOString(),
+      },
       tier,
       computedAt: now.toISOString(),
       cards,

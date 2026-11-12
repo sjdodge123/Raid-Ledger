@@ -28,11 +28,7 @@ import { NotDeactivatedGuard } from '../../../auth/not-deactivated.guard';
 import type { AuthenticatedRequest } from '../../../auth/types';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
-import {
-  toGgArchiveDto,
-  toGgOwnerDto,
-  toGgShareState,
-} from './gg-dto.helpers';
+import { toGgArchiveDto, toGgOwnerDto, toGgShareState } from './gg-dto.helpers';
 import {
   findGgSnapshot,
   listGgArchive,
@@ -74,7 +70,10 @@ export class GgController {
       listGgArchive(this.db, req.user.id),
     ]);
     if (!row) throw new NotFoundException(`No GG ${year} for this user`);
-    return toGgOwnerDto(row, archive.map((a) => a.year));
+    return toGgOwnerDto(
+      row,
+      archive.map((a) => a.year),
+    );
   }
 
   /** `PUT /gg/:year/share` — on keeps/mints a slug; off nulls it (Q5). */
@@ -88,7 +87,12 @@ export class GgController {
     const year = parseYear(rawYear);
     const parsed = GgShareToggleDtoSchema.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
-    const row = await setGgShare(this.db, req.user.id, year, parsed.data.shared);
+    const row = await setGgShare(
+      this.db,
+      req.user.id,
+      year,
+      parsed.data.shared,
+    );
     if (!row) throw new NotFoundException(`No GG ${year} for this user`);
     return toGgShareState(row);
   }
