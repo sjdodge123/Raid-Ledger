@@ -18,6 +18,8 @@ import { GgComputeService } from './gg-compute.service';
 import { GgDeliveryService } from './gg-delivery.service';
 import { GgAdminController } from './gg-admin.controller';
 import { ggAnnounceKey } from './gg-delivery.schedule';
+import { GG_DELIVERY_JOB_NAME } from './gg-delivery.cron';
+import { NotificationService } from '../../../notifications/notification.service';
 
 const YEAR = new Date().getUTCFullYear();
 const LATER = (): Date => new Date(Date.now() + 16 * 60_000);
@@ -80,6 +82,19 @@ async function enable(on = true): Promise<void> {
   await settings.set(SETTING_KEYS.GG_DELIVERY_HOUR, '0');
   await settings.set(SETTING_KEYS.GG_DM_OFFSET_MINUTES, '15');
   await settings.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, 'gg-chan');
+  // YEAR is UTC; pin the community tz so New Year never splits the two.
+  await settings.set(SETTING_KEYS.DEFAULT_TIMEZONE, 'UTC');
+}
+
+async function snapshotRow(
+  userId: number,
+): Promise<{ claimed: boolean; sent: boolean }> {
+  const [row] = Array.from(
+    await testApp.db.execute<{ claimed: boolean; sent: boolean }>(sql`
+      SELECT dm_claimed_at IS NOT NULL AS claimed, dm_sent_at IS NOT NULL AS sent
+      FROM gg_snapshots WHERE user_id = ${userId} AND year = ${YEAR}`),
+  );
+  return { claimed: row?.claimed === true, sent: row?.sent === true };
 }
 
 beforeAll(async () => {
@@ -183,6 +198,75 @@ describe('GG delivery — DM wave (AC3, AC4, AC14)', () => {
     expect(await ggNotifications(gone)).toBe(0);
     expect(await ggNotifications(optedOut)).toBe(0);
     expect(await ggNotifications(noDiscord)).toBe(1);
+  });
+});
+
+describe('GG delivery — claim release + stale reclaim', () => {
+  it('a throwing send releases the claim; the next tick sends exactly once', async () => {
+    await enable();
+    const id = await insertUser();
+    await insertSnapshot(id);
+    await service.runTick(new Date());
+    const create = jest
+      .spyOn(testApp.app.get(NotificationService), 'create')
+      .mockRejectedValueOnce(new Error('dm down'));
+    const failed = await service.runTick(LATER());
+    expect('dm' in failed ? failed.dm : null).toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+    });
+    expect(await snapshotRow(id)).toEqual({ claimed: false, sent: false });
+    create.mockRestore();
+    await service.runTick(LATER());
+    expect(await snapshotRow(id)).toEqual({ claimed: true, sent: true });
+    expect(await ggNotifications(id)).toBe(1);
+  });
+
+  it('reclaims a claim older than 30 min, never a fresh one', async () => {
+    await enable();
+    const stale = await insertUser();
+    const fresh = await insertUser();
+    for (const id of [stale, fresh]) await insertSnapshot(id);
+    await testApp.db.execute(sql`
+      UPDATE gg_snapshots SET dm_claimed_at = CASE user_id
+        WHEN ${stale} THEN now() - interval '31 minutes'
+        ELSE now() - interval '5 minutes' END
+      WHERE year = ${YEAR}`);
+    await service.runTick(new Date());
+    const wave = await service.runTick(LATER());
+    expect('dm' in wave ? wave.dm.claimed : -1).toBe(1);
+    expect(await ggNotifications(stale)).toBe(1);
+    expect(await ggNotifications(fresh)).toBe(0);
+  });
+});
+
+describe('GG admin — send-now (AC11, pacing)', () => {
+  it('is refused while the job is paused on the Jobs page', async () => {
+    await enable();
+    await testApp.db.execute(sql`
+      INSERT INTO cron_jobs (name, source, cron_expression, paused)
+      VALUES (${GG_DELIVERY_JOB_NAME}, 'core', '0 */5 * * * *', true)
+      ON CONFLICT (name) DO UPDATE SET paused = true`);
+    const admin = testApp.app.get(GgAdminController);
+    await expect(admin.sendNow()).rejects.toBeInstanceOf(ConflictException);
+    expect(sendEmbed).not.toHaveBeenCalled();
+    await testApp.db.execute(
+      sql`UPDATE cron_jobs SET paused = false WHERE name = ${GG_DELIVERY_JOB_NAME}`,
+    );
+  });
+
+  it('announces but never runs the DM wave, even past the offset', async () => {
+    await enable();
+    const id = await insertUser();
+    await insertSnapshot(id);
+    const admin = testApp.app.get(GgAdminController);
+    await admin.sendNow();
+    await testApp.db.execute(sql`
+      UPDATE notification_dedup SET created_at = created_at - interval '20 minutes'
+      WHERE dedup_key = ${ggAnnounceKey(YEAR)}`);
+    expect((await admin.sendNow()).status).toBe('announced');
+    expect(await ggNotifications(id)).toBe(0);
   });
 });
 
