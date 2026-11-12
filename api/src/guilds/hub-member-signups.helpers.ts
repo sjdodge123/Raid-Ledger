@@ -1,6 +1,7 @@
 import { and, inArray, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildEventCardDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
 /**
@@ -44,4 +45,18 @@ export async function countMemberSignups(
     counts.set(r.eventId, (counts.get(r.eventId) ?? 0) + 1);
   }
   return counts;
+}
+
+/**
+ * The cards with `memberSignupCount` filled (0 when no member signed up), so
+ * the client can tell "none" from an old server that never sent it.
+ */
+export async function withMemberSignupCounts(
+  db: Db,
+  cards: GuildEventCardDto[],
+  memberUserIds: readonly number[],
+): Promise<GuildEventCardDto[]> {
+  const ids = cards.map((c) => c.id);
+  const counts = await countMemberSignups(db, ids, memberUserIds);
+  return cards.map((c) => ({ ...c, memberSignupCount: counts.get(c.id) ?? 0 }));
 }

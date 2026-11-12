@@ -20,6 +20,7 @@ jest.mock('../../../guilds/community/community-events.queries', () => ({
   loadCommunityHubEvents: jest.fn(),
 }));
 
+const MEMBERS = [3, 4];
 let db: MockDb;
 let adapter: PelicanHubKindAdapter;
 
@@ -59,9 +60,10 @@ describe('PelicanHubKindAdapter.raids — events tagged to a server hub', () => 
 
   it("returns the hub's tagged events from the shared loader, not a hard-coded empty list", async () => {
     db.limit.mockResolvedValueOnce([{ id: 1 }]);
+    jest.spyOn(adapter, 'memberUserIds').mockResolvedValue(MEMBERS);
     jest.mocked(loadCommunityHubEvents).mockResolvedValueOnce(events);
     await expect(adapter.raids(actor, 1)).resolves.toBe(events);
-    expect(loadCommunityHubEvents).toHaveBeenCalledWith(db, 1, 7);
+    expect(loadCommunityHubEvents).toHaveBeenCalledWith(db, 1, 7, MEMBERS);
   });
 
   it('404s an unknown hub without loading events', async () => {

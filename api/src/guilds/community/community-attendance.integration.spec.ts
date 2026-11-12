@@ -152,6 +152,7 @@ describe('community hub attendance leaderboard — ranking (ROK-2062)', () => {
       testApp.db,
       hubId,
       alpha,
+      [],
     );
 
     expect(attendance.windowWeeks).toBe(8);
@@ -214,6 +215,7 @@ describe('community hub attendance leaderboard — exclusions (ROK-2062)', () =>
       testApp.db,
       hubId,
       lead,
+      [],
     );
 
     expect(attendance.rows).toEqual([
@@ -237,6 +239,7 @@ describe('community hub attendance leaderboard — exclusions (ROK-2062)', () =>
       testApp.db,
       hubId,
       lead,
+      [],
     );
 
     expect(attendance).toEqual({ windowWeeks: 8, rows: [] });

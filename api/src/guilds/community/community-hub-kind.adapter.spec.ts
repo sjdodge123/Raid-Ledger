@@ -19,6 +19,7 @@ jest.mock('./community-events.queries', () => ({
   loadCommunityHubEvents: jest.fn(),
 }));
 
+const MEMBERS = [3, 4];
 let db: MockDb;
 let adapter: CommunityHubKindAdapter;
 
@@ -79,6 +80,7 @@ describe('ROK-1870 CommunityHubKindAdapter', () => {
   });
 
   it('raids 404s a missing hub, else reads the hub-tagged events', async () => {
+    jest.spyOn(adapter, 'memberUserIds').mockResolvedValue(MEMBERS);
     jest
       .mocked(loadCommunityHubEvents)
       .mockResolvedValue(EMPTY_COMMUNITY_HUB_RAIDS);
@@ -89,6 +91,6 @@ describe('ROK-1870 CommunityHubKindAdapter', () => {
     await expect(adapter.raids({ id: 1, role: 'member' }, 7)).resolves.toEqual(
       EMPTY_COMMUNITY_HUB_RAIDS,
     );
-    expect(loadCommunityHubEvents).toHaveBeenCalledWith(db, 7, 1);
+    expect(loadCommunityHubEvents).toHaveBeenCalledWith(db, 7, 1, MEMBERS);
   });
 });

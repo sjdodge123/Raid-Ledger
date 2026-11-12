@@ -116,7 +116,8 @@ export class PelicanHubKindAdapter implements HubKindAdapter {
     if (!(await findGuild(this.db, guildId))) {
       throw new NotFoundException('Guild not found');
     }
-    return loadCommunityHubEvents(this.db, guildId, actor.id);
+    const members = await this.memberUserIds(guildId);
+    return loadCommunityHubEvents(this.db, guildId, actor.id, members);
   }
 
   // No `mineRanks`: server hubs have no ranks, and answering null for every

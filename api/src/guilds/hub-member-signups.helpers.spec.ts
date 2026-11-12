@@ -3,7 +3,10 @@
  * belong to the hub's member set. One select, counted in JS.
  */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
-import { countMemberSignups } from './hub-member-signups.helpers';
+import {
+  countMemberSignups,
+  withMemberSignupCounts,
+} from './hub-member-signups.helpers';
 
 type Db = Parameters<typeof countMemberSignups>[0];
 
@@ -39,5 +42,31 @@ describe('countMemberSignups', () => {
     const counts = await countMemberSignups(db, [10], []);
     expect(counts.size).toBe(0);
     expect(mock.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('withMemberSignupCounts', () => {
+  it('stamps each card with its member count, 0 when none', async () => {
+    mock.where.mockResolvedValueOnce([{ eventId: 10, userId: 1 }]);
+    const base = {
+      title: 't',
+      startTime: '2026-11-13T20:00:00.000Z',
+      endTime: '2026-11-13T23:00:00.000Z',
+      signupCount: 2,
+      needed: null,
+      viewerStatus: null,
+    };
+    const cards = await withMemberSignupCounts(
+      db,
+      [
+        { ...base, id: 10 },
+        { ...base, id: 11 },
+      ],
+      [1],
+    );
+    expect(cards.map((c) => [c.id, c.memberSignupCount])).toEqual([
+      [10, 1],
+      [11, 0],
+    ]);
   });
 });
