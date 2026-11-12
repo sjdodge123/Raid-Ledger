@@ -38,6 +38,21 @@ function logDateSuffix(quests: CharacterQuestsDto): string {
     return ` · log ${logDate}`;
 }
 
+/**
+ * The attunement footer, "as of 2 days ago via Armory" (mockup F7). Codex P2:
+ * a verdict can be `in_progress` only because of the quest log, and Armory
+ * supplies none — so when any attunement is in progress and the log is OLDER
+ * than the completed list (the roster rule, `roster-insights.attunements.ts`
+ * `freshness`), the log's own provenance follows: " · quest log as of 9 days ago via addon".
+ */
+function attunementSourceLine(quests: CharacterQuestsDto, now: number = Date.now()): string {
+    const line = formatAsOfSourceLine(quests.source, quests.syncedAt, now);
+    const log = quests.inProgressSyncedAt;
+    const inProgress = quests.attunements?.some((a) => a.state === 'in_progress') ?? false;
+    if (!inProgress || !log || Date.parse(log) >= Date.parse(quests.syncedAt)) return line;
+    return `${line} · quest log ${formatAsOfSourceLine('addon', log, now)}`;
+}
+
 interface SectionProps {
     characterId: string;
     variant: string | null;
@@ -63,7 +78,7 @@ export function CharacterQuestsSection({ characterId, variant, level = null }: S
                 <CharacterCompletedQuests groups={quests.completedKnown} knownTotal={quests.counts.knownTotal} />
                 {quests.attunements !== undefined && (
                     <CharacterAttunements attunements={quests.attunements} level={level}
-                        sourceLine={formatAsOfSourceLine(quests.source, quests.syncedAt)} />
+                        sourceLine={attunementSourceLine(quests)} />
                 )}
             </div>
         </div>

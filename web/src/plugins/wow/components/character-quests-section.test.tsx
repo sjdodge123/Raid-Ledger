@@ -9,6 +9,7 @@ import type { CharacterQuestsDto, CharacterQuestsResponse } from '@raid-ledger/c
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { CharacterQuestsSection } from './character-quests-section';
+import { buildCharacterAttunement, daysAgo } from '../../../test/factories/forever-attunements';
 
 const CHAR_ID = '11111111-1111-4111-8111-111111111111';
 const URL = `http://localhost:3000/plugins/wow/characters/${CHAR_ID}/quests`;
@@ -254,5 +255,35 @@ describe('CharacterQuestsSection — 5-row caps', () => {
         expect(container.querySelectorAll('[data-quest-row]')).toHaveLength(5);
         expect(container.querySelectorAll('[data-completed-quest-row]')).toHaveLength(5);
         expect(screen.queryByRole('button', { name: /^Show (all|fewer)/ })).toBeNull();
+    });
+});
+
+describe('CharacterQuestsSection — attunement footer provenance (ROK-1927 Codex P2)', () => {
+    function armoryWithLog(state: 'in_progress' | 'not_started', logDays: number): CharacterQuestsDto {
+        return makeQuests({
+            source: 'blizzard', syncedAt: daysAgo(2), inProgressSyncedAt: daysAgo(logDays),
+            attunements: [buildCharacterAttunement({ state })],
+        });
+    }
+
+    it('adds the older quest log\'s own date and source when an attunement is in progress', async () => {
+        body = { quests: armoryWithLog('in_progress', 9) };
+        await renderLoaded();
+        const block = await screen.findByTestId('character-attunements');
+        expect(within(block).getByText('as of 2 days ago via Armory · quest log as of 9 days ago via addon')).toBeInTheDocument();
+    });
+
+    it('keeps the completed list\'s line alone when no attunement is in progress', async () => {
+        body = { quests: armoryWithLog('not_started', 9) };
+        await renderLoaded();
+        const block = await screen.findByTestId('character-attunements');
+        expect(within(block).getByText('as of 2 days ago via Armory')).toBeInTheDocument();
+    });
+
+    it('keeps the completed list\'s line alone when the log is newer than the list', async () => {
+        body = { quests: armoryWithLog('in_progress', 1) };
+        await renderLoaded();
+        const block = await screen.findByTestId('character-attunements');
+        expect(within(block).getByText('as of 2 days ago via Armory')).toBeInTheDocument();
     });
 });
