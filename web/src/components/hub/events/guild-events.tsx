@@ -11,7 +11,7 @@ import { hubCopy } from '../hub-copy';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle, WidgetCard } from '../hub-bits';
 import { GuildMeter } from './guild-meter';
-import { dateTile, dayLabel, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
+import { dateTile, dayLabel, memberSignupLabel, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
 import { JumpLink, QuietEmpty } from '../card-bits';
 
 const SUBHEAD = 'mb-2 text-xs font-semibold uppercase tracking-wider text-muted';
@@ -24,18 +24,19 @@ function StatusMark({ e }: { e: GuildEventCardDto }): JSX.Element {
     return <Link to={`/events/${e.id}`} className={SIGN_UP_LINK} aria-label={`Sign up for ${e.title}`}>Sign up</Link>;
 }
 
-function SignupMeter({ e }: { e: GuildEventCardDto }): JSX.Element {
+function SignupMeter({ e, kind }: { e: GuildEventCardDto; kind: GuildKind | undefined }): JSX.Element {
+    const members = memberSignupLabel(e, kind);
     return (
         <div className="flex items-center gap-2">
             {e.needed !== null && (
                 <div className="w-24"><GuildMeter pct={percent(e.signupCount, e.needed)} label={`${e.title}: ${signupLabel(e)}`} /></div>
             )}
-            <span className="text-xs text-muted">{signupLabel(e)}</span>
+            <span className="text-xs text-muted">{members === null ? signupLabel(e) : `${signupLabel(e)} · ${members}`}</span>
         </div>
     );
 }
 
-function UpcomingCard({ e }: { e: GuildEventCardDto }): JSX.Element {
+function UpcomingCard({ e, kind }: { e: GuildEventCardDto; kind: GuildKind | undefined }): JSX.Element {
     const tile = dateTile(e.startTime);
     return (
         <li data-testid="guild-upcoming-event" className="flex items-center gap-3 rounded-lg border border-edge bg-surface p-3">
@@ -49,7 +50,7 @@ function UpcomingCard({ e }: { e: GuildEventCardDto }): JSX.Element {
                     <span className="text-xs text-muted">{dayLabel(e.startTime)} · {timeRange(e.startTime, e.endTime)}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <SignupMeter e={e} />
+                    <SignupMeter e={e} kind={kind} />
                     <StatusMark e={e} />
                 </div>
             </div>
@@ -83,7 +84,7 @@ function EventLists({ raids, compact, kind }: { raids: GuildRaidsDto; compact: b
             <h4 className={SUBHEAD}>Upcoming</h4>
             {upcoming.length === 0
                 ? <QuietEmpty>{copy.upcomingEmpty}</QuietEmpty>
-                : <ul aria-label={`Upcoming ${copy.noun} events`} className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} />)}</ul>}
+                : <ul aria-label={`Upcoming ${copy.noun} events`} className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} kind={kind} />)}</ul>}
             <h4 className={SUBHEAD}>Recent</h4>
             {recent.length === 0
                 ? <QuietEmpty>{copy.recentEmpty}</QuietEmpty>
