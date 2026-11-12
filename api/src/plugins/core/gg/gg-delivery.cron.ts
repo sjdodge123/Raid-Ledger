@@ -25,7 +25,9 @@ export class GgDeliveryCron {
       GG_DELIVERY_JOB_NAME,
       async () => {
         const outcome = await this.delivery.runTick(new Date());
-        return outcome.status === 'dm-wave' || outcome.status === 'waiting-offset';
+        return (
+          outcome.status === 'dm-wave' || outcome.status === 'waiting-offset'
+        );
       },
     );
   }

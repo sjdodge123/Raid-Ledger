@@ -26,7 +26,11 @@ describe('parseGgDate', () => {
     expect(parseGgDate('2026-13-01')).toBeNull();
     expect(parseGgDate('nope')).toBeNull();
     expect(parseGgDate(null)).toBeNull();
-    expect(parseGgDate('2026-12-07')).toEqual({ year: 2026, month: 12, day: 7 });
+    expect(parseGgDate('2026-12-07')).toEqual({
+      year: 2026,
+      month: 12,
+      day: 7,
+    });
   });
 });
 
@@ -34,24 +38,36 @@ describe('isGgDeliveryDue', () => {
   const tz = 'America/New_York';
   // 18:00 New York on 2026-12-07 = 23:00Z.
   it('is false the hour before, true at and after the slot', () => {
-    expect(isGgDeliveryDue(new Date('2026-12-07T22:59:00Z'), '2026-12-07', 18, tz)).toBe(false);
-    expect(isGgDeliveryDue(new Date('2026-12-07T23:00:00Z'), '2026-12-07', 18, tz)).toBe(true);
-    expect(isGgDeliveryDue(new Date('2026-12-20T10:00:00Z'), '2026-12-07', 18, tz)).toBe(true);
+    expect(
+      isGgDeliveryDue(new Date('2026-12-07T22:59:00Z'), '2026-12-07', 18, tz),
+    ).toBe(false);
+    expect(
+      isGgDeliveryDue(new Date('2026-12-07T23:00:00Z'), '2026-12-07', 18, tz),
+    ).toBe(true);
+    expect(
+      isGgDeliveryDue(new Date('2026-12-20T10:00:00Z'), '2026-12-07', 18, tz),
+    ).toBe(true);
   });
 
   it('never fires in the next calendar year from a stale date', () => {
-    expect(isGgDeliveryDue(new Date('2027-01-05T12:00:00Z'), '2026-12-07', 18, tz)).toBe(false);
+    expect(
+      isGgDeliveryDue(new Date('2027-01-05T12:00:00Z'), '2026-12-07', 18, tz),
+    ).toBe(false);
   });
 
   it('is false for a malformed date', () => {
-    expect(isGgDeliveryDue(new Date('2026-12-20T10:00:00Z'), 'bad', 18, tz)).toBe(false);
+    expect(
+      isGgDeliveryDue(new Date('2026-12-20T10:00:00Z'), 'bad', 18, tz),
+    ).toBe(false);
   });
 });
 
 describe('isGgDmWaveOpen', () => {
   const at = new Date('2026-12-07T23:00:00Z');
   it('opens exactly offset minutes after the announcement', () => {
-    expect(isGgDmWaveOpen(new Date('2026-12-07T23:14:59Z'), at, 15)).toBe(false);
+    expect(isGgDmWaveOpen(new Date('2026-12-07T23:14:59Z'), at, 15)).toBe(
+      false,
+    );
     expect(isGgDmWaveOpen(new Date('2026-12-07T23:15:00Z'), at, 15)).toBe(true);
   });
 });

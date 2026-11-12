@@ -41,14 +41,12 @@ export async function loadGgUserFacets(
   }));
 }
 
-/** Tally the dry run from facets + a live per-user compute. */
-export async function tallyGgDryRun(
-  facets: readonly GgUserFacet[],
-  computeFor: (userId: number) => Promise<GgSnapshotV1 | null>,
+/** All-zero dry run for `year`. */
+function emptyGgDryRun(
   year: number,
   announcedAt: Date | null,
-): Promise<GgAdminDryRunDto> {
-  const dto: GgAdminDryRunDto = {
+): GgAdminDryRunDto {
+  return {
     year,
     usersComputed: 0,
     short: 0,
@@ -57,6 +55,16 @@ export async function tallyGgDryRun(
     announcedAt: announcedAt?.toISOString() ?? null,
     skipped: { deactivated: 0, optedOut: 0, noDiscord: 0, noActivity: 0 },
   };
+}
+
+/** Tally the dry run from facets + a live per-user compute. */
+export async function tallyGgDryRun(
+  facets: readonly GgUserFacet[],
+  computeFor: (userId: number) => Promise<GgSnapshotV1 | null>,
+  year: number,
+  announcedAt: Date | null,
+): Promise<GgAdminDryRunDto> {
+  const dto = emptyGgDryRun(year, announcedAt);
   for (const user of facets) {
     if (user.deactivated) {
       dto.skipped.deactivated += 1;

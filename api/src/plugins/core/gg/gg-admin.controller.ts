@@ -35,7 +35,10 @@ import type { AuthenticatedRequest } from '../../../auth/types';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
-import { GgComputeService, type GgComputeAllResult } from './gg-compute.service';
+import {
+  GgComputeService,
+  type GgComputeAllResult,
+} from './gg-compute.service';
 import {
   GgDeliveryService,
   type GgDeliveryOutcome,

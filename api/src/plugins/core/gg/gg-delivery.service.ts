@@ -47,8 +47,7 @@ export type GgDeliveryOutcome =
     };
 
 type AnnounceResult =
-  | { announcedAt: Date }
-  | { status: 'not-connected' | 'no-channel' };
+  { announcedAt: Date } | { status: 'not-connected' | 'no-channel' };
 
 @Injectable()
 export class GgDeliveryService {
