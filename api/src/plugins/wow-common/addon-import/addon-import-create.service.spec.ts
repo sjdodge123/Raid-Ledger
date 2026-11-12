@@ -459,3 +459,64 @@ describe('Wowhead gear enqueue on the create route (ROK-1727)', () => {
     expect(itemMeta.enqueue).not.toHaveBeenCalled();
   });
 });
+
+describe('post-import housekeeping off the ack path (ROK-2179)', () => {
+  /** Flushes queued promise callbacks (no timers involved). */
+  const drain = () => new Promise<void>((r) => setImmediate(r));
+
+  function gated() {
+    const s = setup(who());
+    let release: () => void = () => undefined;
+    s.insightsCache.invalidateForCharacter.mockReturnValue(
+      new Promise<void>((r) => {
+        release = r;
+      }),
+    );
+    return { ...s, release: () => release() };
+  }
+
+  it('deferHousekeeping: resolves BEFORE the audit finalise, which then lands with the result', async () => {
+    const s = gated();
+    const res = await s.service.importNew(1, body(false), {
+      deferHousekeeping: true,
+    });
+    expect(res.status).toBe('applied');
+    expect(s.audit.recordAttempt).not.toHaveBeenCalled();
+    s.release();
+    await drain();
+    expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
+    expect(audited(s.audit)).toMatchObject({
+      characterId: NEW_ID,
+      result: 'applied',
+    });
+  });
+
+  it('the paste route (default) still finalises the audit before it resolves', async () => {
+    const s = setup(who());
+    await s.service.importNew(1, body(false));
+    expect(audited(s.audit)).toMatchObject({ result: 'applied' });
+  });
+
+  it('a deferred reject still finalises its audit row with the code', async () => {
+    const s = setup(who());
+    s.audit.reserveAttempt.mockRejectedValueOnce(
+      new AddonImportError('RATE_LIMITED'),
+    );
+    const got = await codeOf(
+      s.service.importNew(1, body(false), { deferHousekeeping: true }),
+    );
+    expect(got.code).toBe('RATE_LIMITED');
+    await drain();
+    expect(audited(s.audit)).toMatchObject({ result: 'RATE_LIMITED' });
+  });
+
+  it('a deferred housekeeping failure is logged, never thrown', async () => {
+    const s = setup(who());
+    s.audit.recordAttempt.mockRejectedValueOnce(new Error('db down'));
+    await expect(
+      s.service.importNew(1, body(false), { deferHousekeeping: true }),
+    ).resolves.toMatchObject({ status: 'applied' });
+    await drain();
+    expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
+  });
+});

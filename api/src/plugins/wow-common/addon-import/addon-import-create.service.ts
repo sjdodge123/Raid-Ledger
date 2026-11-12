@@ -50,6 +50,18 @@ import { ForeverAutoLinkService } from '../forever-auto-link/forever-auto-link.s
 import { nudgeAutoLink } from './addon-import.autolink-nudge';
 import type { PullScope } from '../guilds/roster-insights/roster-insights.pull-scope';
 
+/** How `importNew` runs its post-import housekeeping. */
+export interface ImportNewOptions {
+  /**
+   * ROK-2179: the companion path acks (202) without waiting for the roster
+   * insights invalidation, the roster-change flag and the audit finalise —
+   * they run after, logged (never thrown) on failure. The reserved audit row
+   * stays PENDING meanwhile and already counts against the limit. The paste
+   * route leaves this off and awaits them, as before.
+   */
+  deferHousekeeping?: boolean;
+}
+
 /**
  * ROK-1738 — `POST /plugins/wow/characters/addon-import`: import a
  * LedgerLink export WITHOUT a character id. Same order as the per-character
@@ -76,31 +88,66 @@ export class AddonImportCreateService {
   async importNew(
     userId: number,
     body: unknown,
+    opts: ImportNewOptions = {},
   ): Promise<AddonImportNewResultDto> {
-    const facts = rawFacts(body);
     const outcome: AttemptOutcome = {
       userId,
       characterId: null,
-      facts,
+      facts: rawFacts(body),
       result: 'ERROR',
       perSection: [],
     };
+    let applied: AddonImportNewResultDto | null = null;
     try {
       const res = await this.attempt(userId, body, outcome);
       outcome.result = res.status;
       outcome.perSection = (res.sections ?? []).map((s) => s.status);
       outcome.characterId = res.target.characterId;
-      // ROK-1913: AFTER the tx committed, with the created/updated id (a
-      // create's id only exists once `attempt` resolved).
-      if (!facts.dryRun) {
-        await this.afterApply(res.target.characterId, readRaidPullScope(res));
-        // ROK-2066: a wholesale roster change applied — tell staff.
-        await flagIfRosterChanged(this.db, userId, res, this.logger);
-      }
+      if (!outcome.facts.dryRun) applied = res;
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) outcome.result = err.code;
       throw err;
+    } finally {
+      await this.settle(this.housekeep(outcome, applied), userId, opts);
+    }
+  }
+
+  /** Awaits the housekeeping, or (deferred) detaches it with a log on failure. */
+  private async settle(
+    done: Promise<void>,
+    userId: number,
+    opts: ImportNewOptions,
+  ): Promise<void> {
+    if (opts.deferHousekeeping !== true) return done;
+    void done.catch((err: unknown) => {
+      this.logger.warn(
+        `addon-import housekeeping failed userId=${userId}: ${String(err)}`,
+      );
+    });
+  }
+
+  /**
+   * AFTER the tx committed (ROK-1913: with the created/updated id — a
+   * create's id only exists once `attempt` resolved), on every outcome: the
+   * applied import's follow-ups, then the audit row(s) finalised.
+   */
+  private async housekeep(
+    outcome: AttemptOutcome,
+    applied: AddonImportNewResultDto | null,
+  ): Promise<void> {
+    try {
+      if (applied) {
+        const { characterId } = applied.target;
+        await this.afterApply(characterId, readRaidPullScope(applied));
+        // ROK-2066: a wholesale roster change applied — tell staff.
+        await flagIfRosterChanged(
+          this.db,
+          outcome.userId,
+          applied,
+          this.logger,
+        );
+      }
     } finally {
       await finishAttempt(this.audit, outcome);
     }

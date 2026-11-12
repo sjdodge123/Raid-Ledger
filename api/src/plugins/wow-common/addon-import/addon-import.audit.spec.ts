@@ -138,3 +138,58 @@ describe('recordAttempt', () => {
     );
   });
 });
+
+describe('recordSections (ROK-2179)', () => {
+  const sections = [
+    { ...ROW, section: 'char', result: 'applied' },
+    { ...ROW, section: 'guild', result: 'applied' },
+    { ...ROW, section: 'raid', result: 'applied' },
+  ];
+
+  /** A db whose writes are only legal inside its one transaction. */
+  function txOnlyDb() {
+    const writes: string[] = [];
+    const tx = {
+      update: () => ({
+        set: () => ({
+          where: () => {
+            writes.push('tx.update');
+            return Promise.resolve();
+          },
+        }),
+      }),
+      insert: () => ({
+        values: (v: unknown[]) => {
+          writes.push(`tx.insert x${v.length}`);
+          return Promise.resolve();
+        },
+      }),
+    };
+    const outside = jest.fn(() => {
+      writes.push('autocommit');
+      return { set: () => ({ where: jest.fn() }), values: jest.fn() };
+    });
+    const db = {
+      transaction: jest.fn((fn: (t: typeof tx) => Promise<void>) => fn(tx)),
+      update: outside,
+      insert: outside,
+    };
+    const service = new AddonImportAuditService(
+      db as unknown as PostgresJsDatabase<typeof schema>,
+    );
+    return { service, db, writes };
+  }
+
+  it('a mixed paste finalises the reserved row and inserts the extras in ONE transaction', async () => {
+    const { service, db, writes } = txOnlyDb();
+    await service.recordSections(sections, 41);
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(writes).toEqual(['tx.update', 'tx.insert x2']);
+  });
+
+  it('a failed transaction is logged, never thrown (best effort)', async () => {
+    const { service, db } = txOnlyDb();
+    db.transaction.mockRejectedValueOnce(new Error('down'));
+    await expect(service.recordSections(sections, 41)).resolves.toBe(undefined);
+  });
+});
