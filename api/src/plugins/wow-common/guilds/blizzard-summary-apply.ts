@@ -13,8 +13,12 @@ import type { SummaryFetch } from '../blizzard-forever-guild-summary.helpers';
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { warn: (msg: string) => void };
 
-/** Two 404s at least this far apart (from the first) mean `disbanded`. */
-export const DISBANDED_AFTER_MS = 6 * 60 * 60 * 1000;
+/**
+ * A 404 run must last at least this long (first 404 to a later one, no 200 in
+ * between) before the guild is `disbanded`. A week, so a Blizzard Armory
+ * outage of a day or two never flags a live guild (operator ruling 2026-11-12).
+ */
+export const DISBANDED_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The guild columns the two-strike and id-change rules read. */
 export interface SummaryState {
@@ -90,7 +94,7 @@ function hadSummary200(state: SummaryState): boolean {
   );
 }
 
-/** 404: never-200 → `not_found`; else two strikes ≥6h apart → `disbanded`. */
+/** 404: never-200 → `not_found`; else a 404 run of ≥7 days → `disbanded`. */
 function notFoundPatch(state: SummaryState, now: Date): SummaryPatch {
   if (!hadSummary200(state)) return { blizzardSummaryStatus: 'not_found' };
   const since = state.blizzardNotFoundSince;
