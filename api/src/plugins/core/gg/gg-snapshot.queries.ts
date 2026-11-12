@@ -109,6 +109,8 @@ export async function setGgShare(
 export interface GgPublicRow {
   year: number;
   payload: GgSnapshotRow['payload'];
+  /** Cache key for the share PNG — the frozen snapshot's compute time. */
+  computedAt: Date;
   displayName: string | null;
   username: string;
   avatar: string | null;
@@ -124,6 +126,7 @@ export async function findGgPublic(
     .select({
       year: ggSnapshots.year,
       payload: ggSnapshots.payload,
+      computedAt: ggSnapshots.computedAt,
       displayName: users.displayName,
       username: users.username,
       avatar: users.avatar,
