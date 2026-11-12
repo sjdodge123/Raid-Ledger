@@ -132,13 +132,21 @@ test('Events tab: Show more pages back through every ended event, then goes away
     });
 });
 
-test('Events tab: a visitor (non-member) on a WoW guild gets no Show more', async ({ page, world }, testInfo) => {
+/**
+ * A WoW guild hub is members-only: `GET /guilds/:id` is 403 for a non-member, so
+ * the page never renders (no Events tab) and the WoW module's join gate stands
+ * in its place — even with 36 ended events behind it, nothing pages. (A visitor
+ * on an OPEN community hub may page — `canPagePastEvents`, covered in vitest.)
+ */
+test('Events tab: a non-member on a WoW guild gets the join gate, not the events or Show more', async ({ page, world }, testInfo) => {
     await withGuild(testInfo, async (token, guild) => {
         await seedPastEvents(token, guild, world);
-        await openEvents(page, guild, 'outsider');
-        const rows = page.getByTestId('guild-events-tab').getByTestId('guild-recent-event');
-        await expect(rows.first(), 'the visitor still sees the recent list').toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('guild-past-events-more'), 'a WoW guild is members-only (canReadOverview)').toHaveCount(0);
+        await signInOnboardedMember(page, guild.users.outsider.userId);
+        await page.goto(`/hubs/${guild.guildId}#events`);
+        await expect(page.getByTestId('wow-join-gate'), 'a non-member sees the join gate').toBeVisible({ timeout: 20_000 });
+        await expect(page.getByTestId('guild-events-tab'), 'no Events tab renders behind the gate').toHaveCount(0);
+        await expect(page.getByTestId('guild-recent-event'), 'no ended event leaks to a non-member').toHaveCount(0);
+        await expect(page.getByTestId('guild-past-events-more'), 'no Show more for a non-member').toHaveCount(0);
     });
 });
 
