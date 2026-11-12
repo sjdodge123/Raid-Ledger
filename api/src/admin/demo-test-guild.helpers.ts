@@ -138,6 +138,21 @@ export async function findWowGameId(db: Db, slug: string): Promise<number> {
   return game.id;
 }
 
+/** The columns a re-seed re-stamps, incl. the ROK-1170 summary overrides (picked, never spread). */
+function seedGuildSet(
+  seed: SeedGuildSummaryOverrides,
+  now: Date,
+): Partial<typeof schema.guilds.$inferInsert> {
+  return {
+    foundedAt: seed.foundedAt,
+    blizzardSummaryStatus: seed.blizzardSummaryStatus,
+    memberCount: SEED_GUILD_ROSTER.length,
+    rawRealm: SEED_GUILD_REALM,
+    lastSnapshotAt: now,
+    updatedAt: now,
+  };
+}
+
 /** Upsert the realm-less guild, re-stamping its snapshot (and summary overrides) to `now`. */
 export async function upsertGuild(
   db: Db,
@@ -145,14 +160,8 @@ export async function upsertGuild(
   seed: Pick<SeedGuildInput, 'name' | 'foundedAt' | 'blizzardSummaryStatus'>,
   now: Date,
 ): Promise<number> {
-  const { name, ...summary } = seed;
-  const set = {
-    ...summary,
-    memberCount: SEED_GUILD_ROSTER.length,
-    rawRealm: SEED_GUILD_REALM,
-    lastSnapshotAt: now,
-    updatedAt: now,
-  };
+  const { name } = seed;
+  const set = seedGuildSet(seed, now);
   const region = SEED_GUILD_REGION;
   const values = { gameId, region, name, sourceName: name, ...set };
   const [row] = await db
