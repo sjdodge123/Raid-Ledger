@@ -4,7 +4,7 @@
  * (`gg-mascot.controller.ts`). All routes are AdminGuard'ed.
  */
 import type {
-    GgAdminDryRunDto, GgAdminRecomputeDto, GgAdminSettingsDto, GgAdminSettingsUpdateDto,
+    GgAdminDryRunDto, GgAdminPreviewDto, GgAdminRecomputeDto, GgAdminSettingsDto, GgAdminSettingsUpdateDto,
     GgMascot, GgMascotOptionsDto, GgMascotSelectDto,
 } from '@raid-ledger/contract';
 import { fetchApi, fetchWithAuth } from './fetch-api';
@@ -23,6 +23,11 @@ export function updateGgAdminSettings(body: GgAdminSettingsUpdateDto): Promise<G
 /** What a compute + DM wave for `year` would do. */
 export function getGgDryRun(year: number): Promise<GgAdminDryRunDto> {
     return fetchApi(`/admin/gg/dry-run?year=${year}`);
+}
+
+/** The admin's OWN GG for `year`, computed live and never stored (404 = no activity). */
+export function getGgPreview(year: number): Promise<GgAdminPreviewDto> {
+    return fetchApi(`/admin/gg/preview?year=${year}`);
 }
 
 /** Recompute every snapshot for a year (refused after announce unless `force`). */

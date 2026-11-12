@@ -11,9 +11,10 @@ import { ggPublicPageUrl, ggShareImageUrl } from '../../lib/api/gg-api';
 import { useGgStory } from './gg-story-context';
 
 /** The toggle + link + image preview for the story's year. */
-export function GgSharePanel(): JSX.Element {
-    const { year, share } = useGgStory();
+export function GgSharePanel(): JSX.Element | null {
+    const { year, share, preview } = useGgStory();
     const toggle = useSetGgShare(year);
+    if (preview) return null;
     const slug = share.shared ? share.slug : null;
     return (
         <div className="w-full rounded-xl border border-edge bg-panel/80 p-3">

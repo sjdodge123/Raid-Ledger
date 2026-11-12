@@ -248,6 +248,9 @@ export const CronJobsPanel = lazyWithRetry(() =>
 export const GgPanel = lazyWithRetry(() =>
     import('./pages/admin/gg-panel').then((m) => ({ default: m.GgPanel })),
 );
+export const GgPreviewPage = lazyWithRetry(() =>
+    import('./pages/admin/gg/gg-preview-page').then((m) => ({ default: m.GgPreviewPage })),
+);
 export const BackupsPanel = lazyWithRetry(() =>
     import('./pages/admin/backups-panel').then((m) => ({ default: m.BackupsPanel })),
 );

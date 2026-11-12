@@ -6,11 +6,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import type {
-    GgAdminDryRunDto, GgAdminSettingsDto, GgAdminSettingsUpdateDto,
+    GgAdminDryRunDto, GgAdminPreviewDto, GgAdminSettingsDto, GgAdminSettingsUpdateDto,
     GgMascot, GgMascotOptionsDto, GgMascotSelectDto,
 } from '@raid-ledger/contract';
 import {
-    getGgAdminSettings, getGgDryRun, getGgMascot, getGgMascotOptions,
+    getGgAdminSettings, getGgDryRun, getGgPreview, getGgMascot, getGgMascotOptions,
     selectGgMascot, updateGgAdminSettings,
 } from '../../lib/api/gg-admin-api';
 
@@ -35,6 +35,17 @@ export function useUpdateGgAdminSettings(): UseMutationResult<GgAdminSettingsDto
 /** Dry-run counts for `year` — fetched only when the admin asks. */
 export function useGgDryRun(year: number, enabled: boolean): UseQueryResult<GgAdminDryRunDto> {
     return useQuery({ queryKey: [...ROOT, 'dry-run', year], queryFn: () => getGgDryRun(year), enabled });
+}
+
+/** The admin's own live GG for `year` (preview only — a 404 is an answer, not retried). */
+export function useGgPreview(year: number | null): UseQueryResult<GgAdminPreviewDto> {
+    return useQuery({
+        queryKey: [...ROOT, 'preview', year],
+        queryFn: () => getGgPreview(year ?? 0),
+        enabled: year !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
 }
 
 /** The saved mascot. */

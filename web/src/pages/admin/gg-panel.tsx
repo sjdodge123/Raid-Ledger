@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { GgDeliverySettings } from './gg/gg-delivery-settings';
 import { GgMascotSection } from './gg/gg-mascot-section';
 import { GgAdminActions } from './gg/gg-admin-actions';
+import { GgPreviewLauncher } from './gg/gg-preview-launcher';
 
 /** Admin → General → GG (ROK-2187): delivery, community mascot, dry run / send. */
 export function GgPanel(): JSX.Element {
@@ -14,6 +15,7 @@ export function GgPanel(): JSX.Element {
             </div>
             <GgDeliverySettings />
             <GgMascotSection />
+            <GgPreviewLauncher />
             <GgAdminActions year={year} />
         </div>
     );

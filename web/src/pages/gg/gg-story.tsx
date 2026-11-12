@@ -16,9 +16,22 @@ import type { GgOwnerSnapshot } from '../../lib/api/gg-api';
 import { buildGgSlides, topGameMedia, useGgBackdrops } from './gg-slides';
 import { ggPrefersLowData } from '../../components/gg/gg-low-data';
 
-function HeaderExtra({ snapshot, audio }: { snapshot: GgOwnerSnapshot; audio: GgStoryContextValue['audio'] }): JSX.Element {
+interface HeaderExtraProps { snapshot: GgOwnerSnapshot; audio: GgStoryContextValue['audio']; preview: boolean }
+
+/** The admin preview's marker — the story itself is identical (ROK-2187 L10d). */
+function PreviewBanner(): JSX.Element {
+    return (
+        <span role="status" data-testid="gg-preview-banner"
+            className="max-w-[9rem] rounded-md border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-medium leading-tight text-warning sm:max-w-none">
+            Preview — not saved, not shared
+        </span>
+    );
+}
+
+function HeaderExtra({ snapshot, audio, preview }: HeaderExtraProps): JSX.Element {
     return (
         <div className="flex items-center gap-1">
+            {preview && <PreviewBanner />}
             {snapshot.archiveYears.length > 1 && (
                 <Link to="/gg/archive" className="rounded-md px-2 py-1 text-xs font-medium text-secondary hover:text-foreground">Past years</Link>
             )}
@@ -49,8 +62,15 @@ function useGgRun(gated: boolean, audio: GgStoryContextValue['audio'], mascot: G
     return { started, start, replay, run };
 }
 
+interface GgStoryProps {
+    snapshot: GgOwnerSnapshot;
+    onClose: () => void;
+    /** Admin preview: banner on, share panel off (ROK-2187 L10d). */
+    preview?: boolean;
+}
+
 /** The full-screen story for `snapshot`. */
-export function GgStory({ snapshot, onClose }: { snapshot: GgOwnerSnapshot; onClose: () => void }): JSX.Element {
+export function GgStory({ snapshot, onClose, preview = false }: GgStoryProps): JSX.Element {
     const active = usePluginStore((s) => s.activeSlugs);
     const cards = useMemo(() => resolveGgCards(snapshot.cards, active), [snapshot.cards, active]);
     const audio = useGgAudio();
@@ -61,13 +81,13 @@ export function GgStory({ snapshot, onClose }: { snapshot: GgOwnerSnapshot; onCl
     const backdrops = useGgBackdrops(media);
     const slides = useMemo(() => buildGgSlides(cards, snapshot.year, backdrops, started, still), [cards, snapshot.year, backdrops, started, still]);
     const ctx = useMemo<GgStoryContextValue>(() => ({
-        year: snapshot.year, tier: snapshot.tier, share: snapshot.share, mascot, started, start, replay, audio,
-    }), [snapshot.year, snapshot.tier, snapshot.share, mascot, started, start, replay, audio]);
+        year: snapshot.year, tier: snapshot.tier, share: snapshot.share, mascot, started, start, replay, audio, preview,
+    }), [snapshot.year, snapshot.tier, snapshot.share, mascot, started, start, replay, audio, preview]);
     return (
         <GgStoryContext.Provider value={ctx}>
             <StoryViewer key={run} title={`GG ${snapshot.year}`} slides={slides} onClose={onClose} paused={!started}
                 onIndexChange={(i) => { if (i > 0) start(); }}
-                headerExtra={<HeaderExtra snapshot={snapshot} audio={audio} />} />
+                headerExtra={<HeaderExtra snapshot={snapshot} audio={audio} preview={preview} />} />
         </GgStoryContext.Provider>
     );
 }

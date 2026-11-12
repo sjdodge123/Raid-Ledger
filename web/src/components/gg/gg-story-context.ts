@@ -19,13 +19,15 @@ export interface GgStoryContextValue {
     /** Play the story again from the intro (the Summary's Replay button). */
     replay: () => void;
     audio: GgAudio;
+    /** Admin preview (ROK-2187 L10d): not saved, no slug — nothing to share. */
+    preview?: boolean;
 }
 
 const NOOP_AUDIO: GgAudio = { muted: true, toggleMute: () => {}, start: () => {}, pauseMusic: () => {}, resumeMusic: () => {} };
 
 export const GgStoryContext = createContext<GgStoryContextValue>({
     year: new Date().getFullYear(), tier: 'full', share: { shared: false, slug: null, sharedAt: null },
-    mascot: null, started: true, start: () => {}, replay: () => {}, audio: NOOP_AUDIO,
+    mascot: null, started: true, start: () => {}, replay: () => {}, audio: NOOP_AUDIO, preview: false,
 });
 
 /** The enclosing GG story. */

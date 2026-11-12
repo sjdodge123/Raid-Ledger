@@ -26,7 +26,7 @@ import {
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
-  CronJobsPanel, GgPanel, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
+  CronJobsPanel, GgPanel, GgPreviewPage, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage, DiscordLifecyclePage,
@@ -85,6 +85,16 @@ function AdminIntegrationRoutes() {
   );
 }
 
+/** Admin → General → GG and its admin-only "Preview my GG" story (ROK-2187). */
+function GgAdminRoutes() {
+  return (
+    <>
+      <Route path="general/gg" element={<GgPanel />} />
+      <Route path="general/gg/preview/:year" element={<GgPreviewPage />} />
+    </>
+  );
+}
+
 function AdminSettingsRoutes() {
   return (
     <Route path="/admin/settings" element={<AdminSettingsLayout />}>
@@ -93,7 +103,7 @@ function AdminSettingsRoutes() {
       <Route path="general/data" element={<NasOnlyRoute><DemoDataPanel /></NasOnlyRoute>} />
       <Route path="general/lineup" element={<Navigate to="/admin/settings/general" replace />} />
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
-      <Route path="general/gg" element={<GgPanel />} />
+      {GgAdminRoutes()}
       <Route path="general/backups" element={<BackupsPanel />} />
       <Route path="general/logs" element={<LogsPanel />} />
       <Route path="general/hubs" element={<HubsPanel />} />
