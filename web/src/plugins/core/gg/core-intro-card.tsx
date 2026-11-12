@@ -39,7 +39,7 @@ function TapToStart({ onStart, muted }: { onStart: () => void; muted: boolean })
     return (
         <button type="button" onClick={onStart} data-testid="gg-tap-to-start"
             className="absolute inset-0 z-10 flex flex-col items-center justify-end gap-2 pb-20">
-            <span className="rounded-full bg-emerald-600 px-8 py-3 text-lg font-semibold text-foreground shadow-lg">Tap to start</span>
+            <span className="rounded-full bg-success px-8 py-3 text-lg font-semibold text-white shadow-lg">Tap to start</span>
             <span className="flex items-center gap-1.5 text-sm text-secondary">
                 <SpeakerWaveIcon aria-hidden="true" className="h-4 w-4" />
                 {muted ? 'Sound is muted' : 'This plays sound'}

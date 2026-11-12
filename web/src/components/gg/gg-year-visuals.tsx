@@ -1,30 +1,13 @@
 /**
  * The approved mockup's year visuals (ROK-2187): a 12-month events histogram
  * (busiest month highlighted) and a 52-week attendance strip with the longest
- * streak highlighted. Tokens only; bars grow with `animate-[grow…]` skipped
- * under reduced motion via `motion-reduce:animate-none`.
+ * streak highlighted. Tokens only; static bars (no animation).
  */
 import type { JSX } from 'react';
+import { ggLongestRun, peakIndex } from './gg-year-visuals.helpers';
 
 const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'] as const;
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] as const;
-
-/** The longest run of `true` weeks (first one on a tie); length 0 when none. */
-export function ggLongestRun(weeks: readonly boolean[]): { start: number; length: number } {
-    let best = { start: 0, length: 0 };
-    let start = 0;
-    weeks.forEach((on, i) => {
-        if (!on) { start = i + 1; return; }
-        const length = i - start + 1;
-        if (length > best.length) best = { start, length };
-    });
-    return best;
-}
-
-/** Index of the largest count (first on a tie). */
-function peakIndex(counts: readonly number[]): number {
-    return counts.reduce((best, v, i, all) => (v > (all[best] ?? 0) ? i : best), 0);
-}
 
 /** Twelve monthly bars, the busiest one in the accent. */
 export function GgMonthHistogram({ counts }: { counts: readonly number[] }): JSX.Element {

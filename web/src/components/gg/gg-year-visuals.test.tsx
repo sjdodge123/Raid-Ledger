@@ -1,7 +1,8 @@
 /** ROK-2187 — the mockup's month histogram and 52-week streak strip. */
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { GgMonthHistogram, GgWeekStreak, ggLongestRun } from './gg-year-visuals';
+import { GgMonthHistogram, GgWeekStreak } from './gg-year-visuals';
+import { ggLongestRun } from './gg-year-visuals.helpers';
 
 describe('ggLongestRun', () => {
     it('finds the longest run of attended weeks', () => {

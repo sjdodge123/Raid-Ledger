@@ -15,14 +15,14 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 }));
 
 const NOOP = (): void => {};
-const ctx = (tier: 'full' | 'short'): GgStoryContextValue => ({
-    year: 2026, tier, share: { shared: false, slug: null, sharedAt: null }, mascot: null, started: true,
+const ctx = (tier: 'full' | 'short', started = true): GgStoryContextValue => ({
+    year: 2026, tier, share: { shared: false, slug: null, sharedAt: null }, mascot: null, started,
     start: NOOP, replay: NOOP, audio: { muted: false, toggleMute: NOOP, start: NOOP, pauseMusic: NOOP, resumeMusic: NOOP, reset: NOOP },
 });
 
-function renderIntro(tier: 'full' | 'short'): void {
+function renderIntro(tier: 'full' | 'short', started = true): void {
     renderWithProviders(
-        <GgStoryContext.Provider value={ctx(tier)}><GgIntroCardView payload={{}} year={2026} /></GgStoryContext.Provider>,
+        <GgStoryContext.Provider value={ctx(tier, started)}><GgIntroCardView payload={{}} year={2026} /></GgStoryContext.Provider>,
     );
 }
 
@@ -36,5 +36,13 @@ describe('GG intro card (ROK-2187)', () => {
     it('uses the short-GG line for the short tier', async () => {
         renderIntro('short');
         expect(await screen.findByText('Kestrel, this was the year you joined the party.')).toBeInTheDocument();
+    });
+
+    it('Tap to start uses the success token with a white label — no raw palette fill (legible on light and dark)', () => {
+        renderIntro('full', false);
+        const pill = screen.getByText('Tap to start');
+        expect(pill.className).toContain('bg-success');
+        expect(pill.className).toContain('text-white');
+        expect(pill.className).not.toMatch(/emerald|text-foreground/);
     });
 });
