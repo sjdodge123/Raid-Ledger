@@ -131,6 +131,42 @@ async function ev(e: Ev): Promise<number> {
 }
 
 /**
+ * A real standalone lineup + `scheduling` match — a valid FK target for
+ * `events.reschedulingPollId` (pattern from the ROK-1370 reschedule-cycle
+ * spec's `createPollMatch`). Returns the match id.
+ */
+async function seedPollMatch(): Promise<number> {
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Past Hub Reschedule Poll',
+        status: 'decided',
+        createdBy: users.member.id,
+        publicSlug: `pastpoll${Math.random().toString(36).slice(2, 10)}`,
+        publicShareEnabled: false,
+        phaseDurationOverride: { standalone: true },
+      })
+      .returning(),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: lineup.id,
+        gameId: testApp.seed.game.id,
+        status: 'scheduling',
+        thresholdMet: true,
+        voteCount: 0,
+      })
+      .returning(),
+    'poll match',
+  );
+  return match.id;
+}
+
+/**
  * 25 ended hub events: 24 daily ones, two of which (#19, #20) end at the
  * same instant so the page boundary falls inside a tie (id breaks it), plus
  * one 100 days old — far past the 8-week `raids.recent` window.
@@ -153,7 +189,7 @@ async function seedEvents(): Promise<void> {
   excluded.poll = await ev({
     title: 'rescheduling-poll',
     startMs: base - 1 * HOUR,
-    pollId: 987654,
+    pollId: await seedPollMatch(),
   });
   excluded.other = await ev({
     title: 'other-hub',
