@@ -206,6 +206,12 @@ export interface HubModule {
     /** Line under the hero's next-event chip (WoW: the LedgerLink import line). */
     heroNote?: (ctx: HubCtx) => string | null;
     /**
+     * ROK-1170 — a persistent, hub-wide status banner rendered directly under
+     * the hero, full width, on every tab (WoW: the disbanded-guild warning).
+     * It decides itself whether to render; unset = nothing between hero and tabs.
+     */
+    heroBanner?: ComponentType<HubCtx>;
+    /**
      * Tab id the hero's next-event chip jumps to. Core's own Events tab owns
      * the Overview "All events" jump (ROK-1830 S3c); this is only the chip, so
      * a module can send "Next raid" at its own tab — WoW points at `raids`,

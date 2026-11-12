@@ -59,3 +59,31 @@ describe("GuildBlizzardRosterUpdateSchema (ROK-1928)", () => {
     expect(GuildBlizzardRosterUpdateSchema.safeParse(body).success).toBe(false);
   });
 });
+
+describe("GuildSummarySchema.blizzardGuild (ROK-1170)", () => {
+  it("parses an older summary without blizzardGuild", () => {
+    const parsed = GuildSummarySchema.parse(OLD_SUMMARY);
+    expect(parsed.blizzardGuild).toBeUndefined();
+  });
+
+  it("parses a summary carrying blizzardGuild", () => {
+    const blizzardGuild = {
+      foundedAt: "2024-03-14T18:00:00.000Z",
+      state: "disbanded",
+    };
+    const parsed = GuildSummarySchema.parse({ ...OLD_SUMMARY, blizzardGuild });
+    expect(parsed.blizzardGuild).toEqual(blizzardGuild);
+  });
+
+  it("parses nulls (never synced)", () => {
+    const blizzardGuild = { foundedAt: null, state: null };
+    const parsed = GuildSummarySchema.parse({ ...OLD_SUMMARY, blizzardGuild });
+    expect(parsed.blizzardGuild).toEqual(blizzardGuild);
+  });
+
+  it("rejects an unknown guild state", () => {
+    const blizzardGuild = { foundedAt: null, state: "gone" };
+    const result = GuildSummarySchema.safeParse({ ...OLD_SUMMARY, blizzardGuild });
+    expect(result.success).toBe(false);
+  });
+});

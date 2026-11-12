@@ -7,7 +7,8 @@
 import { lazy } from 'react';
 import type { HubModule } from '../../hub-module';
 import { HiddenTab, WowRaidsTab } from './wow-tabs';
-import { WowFactionPill, WowViewerRolePills, WowWhereFact } from './wow-hero';
+import { WowFactionPill, WowFoundedPill, WowViewerRolePills, WowWhereFact } from './wow-hero';
+import { WowGuildStateBanner } from './wow-guild-state-banner';
 import { wowHeroNote } from './wow-hero.helpers';
 import {
     WOW_MEMBERS_EMPTY,
@@ -49,7 +50,9 @@ export const wowHubModule: HubModule = {
         { id: 'members-summary', order: 60, component: WowMembersSummary },
     ],
     memberColumns: WOW_MEMBER_COLUMNS,
-    heroPills: [WowWhereFact, WowFactionPill, WowViewerRolePills],
+    heroPills: [WowWhereFact, WowFactionPill, WowFoundedPill, WowViewerRolePills],
+    /** ROK-1170: the §4.7 warning banner under the hero once Blizzard reports the guild disbanded. */
+    heroBanner: WowGuildStateBanner,
     memberRows: wowMemberRows,
     memberSearch: wowMemberSearch,
     /** ROK-1173: Level high→low / low→high and Last seen after core's Rank + Name sorts. */
