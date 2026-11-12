@@ -23,11 +23,15 @@ function lootQuality(quality: string): BossLootDto['quality'] {
     return QUALITIES.find((q) => q.toLowerCase() === quality.toLowerCase()) ?? 'Common';
 }
 
-/** Map one quest reward onto the loot DTO shape (no boss, no drop rate). */
+/**
+ * Map one quest reward onto the loot DTO shape (no boss, no drop rate). A
+ * metadata-only reward has no slot; its cached tooltip's slot label (already
+ * a loot slot name, e.g. "Two-Hand") stands in so it still gets a compare target.
+ */
 export function questRewardAsLoot(reward: QuestRewardItem, expansion: EnrichedDungeonQuestDto['expansion']): BossLootDto {
     return {
         id: reward.itemId, bossId: 0, itemId: reward.itemId, itemName: reward.itemName,
-        slot: reward.slot ? (QUEST_TO_LOOT_SLOT[reward.slot] ?? reward.slot) : null,
+        slot: reward.slot ? (QUEST_TO_LOOT_SLOT[reward.slot] ?? reward.slot) : (reward.tooltip?.slotLabel ?? null),
         quality: lootQuality(reward.quality), itemLevel: reward.itemLevel, dropRate: null, expansion,
         classRestrictions: null, iconUrl: reward.iconUrl, itemSubclass: reward.itemSubclass,
         tooltip: reward.tooltip ?? null,

@@ -13,10 +13,12 @@ export interface ItemDetailBodyProps {
     item: DetailSource;
     gameVariant: string | null;
     deltas?: StatDelta[] | null | undefined;
+    /** Overrides a loot item's expansion-derived Wowhead link (ROK-2186). */
+    lootUrl?: string | undefined;
 }
 
-export function ItemDetailBody({ item, gameVariant, deltas }: ItemDetailBodyProps) {
-    const detail = useMemo(() => toDetailItem(item, gameVariant), [item, gameVariant]);
+export function ItemDetailBody({ item, gameVariant, deltas, lootUrl }: ItemDetailBodyProps) {
+    const detail = useMemo(() => toDetailItem(item, gameVariant, lootUrl), [item, gameVariant, lootUrl]);
     const byKey = useMemo(() => (deltas ? new Map(deltas.map((d) => [d.key, d])) : undefined), [deltas]);
     return (
         <div className="space-y-3" data-testid="item-detail-body">

@@ -25,7 +25,7 @@ export interface ItemCompareRowProps {
     characterClass?: string | null | undefined;
     /** Without a character there is nothing to compare against: no block, no popup. */
     hasCharacter: boolean;
-    /** Overrides the expansion-derived Wowhead link (quest rewards link by game variant). */
+    /** Overrides the expansion-derived Wowhead link — card AND popup (quest rewards link by game variant). */
     links?: ItemRowLinks | undefined;
     className?: string | undefined;
     /** Trailing per-surface metadata (e.g. boss loot's class badge + drop rate). */
@@ -57,7 +57,7 @@ export function ItemCompareRow({ item, wowheadVariant, equippedBySlot, character
                     statsNote={comparison.note} onOpen={onOpen} />
             )}
             {children}
-            {open && <ItemCompareDialog loot={item} comparison={comparison} gameVariant={wowheadVariant} onClose={() => setOpen(false)} />}
+            {open && <ItemCompareDialog loot={item} comparison={comparison} gameVariant={wowheadVariant} lootUrl={links?.url} onClose={() => setOpen(false)} />}
         </div>
     );
 }

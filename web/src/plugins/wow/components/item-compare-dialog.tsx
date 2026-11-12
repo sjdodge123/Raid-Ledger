@@ -23,7 +23,7 @@ export interface ItemCompareDialogProps extends ItemCompareTableProps {
     onClose: () => void;
 }
 
-function LootColumn({ loot, comparison, gameVariant }: ItemCompareTableProps) {
+function LootColumn({ loot, comparison, gameVariant, lootUrl }: ItemCompareTableProps) {
     const note = lootNote(loot, comparison);
     return (
         <section data-testid="compare-loot-column" aria-label="This drop">
@@ -31,7 +31,7 @@ function LootColumn({ loot, comparison, gameVariant }: ItemCompareTableProps) {
                 <span className={COMPARE_TAG}>This drop</span>
                 <LineDelta delta={ilvlDelta(loot, comparison)} suffix=" iLvl" />
             </div>
-            <ItemDetailBody item={loot} gameVariant={gameVariant} deltas={comparison.deltas} />
+            <ItemDetailBody item={loot} gameVariant={gameVariant} deltas={comparison.deltas} lootUrl={lootUrl} />
             {note && <StatsUnknown text={note} side="loot" className="mt-2" />}
         </section>
     );
@@ -57,10 +57,10 @@ function EquippedColumn({ comparison, gameVariant }: { comparison: LootCompariso
 }
 
 /** Phone (prototype A phone): the drop with its deltas, then the equipped item(s). */
-function Stacked({ loot, comparison, gameVariant }: ItemCompareTableProps) {
+function Stacked({ loot, comparison, gameVariant, lootUrl }: ItemCompareTableProps) {
     return (
         <div className="space-y-5 pb-2" data-testid="item-compare-dialog" data-layout="stacked">
-            <LootColumn loot={loot} comparison={comparison} gameVariant={gameVariant} />
+            <LootColumn loot={loot} comparison={comparison} gameVariant={gameVariant} lootUrl={lootUrl} />
             {comparison.target.mode !== 'none' && <EquippedColumn comparison={comparison} gameVariant={gameVariant} />}
         </div>
     );
