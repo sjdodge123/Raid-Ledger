@@ -169,13 +169,31 @@ export function evaluateAttunement(
     cutoff !== undefined && v.steps.some((s) => s.questId > cutoff);
   if (unknown && !inLog) return noDataVerdict('truncated');
   const stepsDone = v.steps.filter((s) => done.has(s.questId)).length;
-  const next = v.steps.find((s) => !done.has(s.questId));
+  const next =
+    loggedStep(v, quests, done) ?? v.steps.find((s) => !done.has(s.questId));
   return {
     state: inLog || stepsDone > 0 ? 'in_progress' : 'not_started',
     noDataReason: null,
     stepsDone,
     nextStep: next?.label ?? null,
   };
+}
+
+/**
+ * The furthest not-done step that sits in the quest log (Codex P2): a log
+ * holding a later step proves the earlier ones are behind the character even
+ * when the completed list does not show them, so that step is the next one.
+ */
+function loggedStep(
+  v: VisibleDef,
+  quests: EffectiveQuests,
+  done: ReadonlySet<number>,
+): AttunementQuestStep | undefined {
+  const log = new Set(quests.quests.inProgress.map((q) => q.questId));
+  let found: AttunementQuestStep | undefined;
+  for (const s of v.steps)
+    if (log.has(s.questId) && !done.has(s.questId)) found = s;
+  return found;
 }
 
 /**

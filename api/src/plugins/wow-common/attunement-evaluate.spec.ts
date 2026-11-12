@@ -66,6 +66,20 @@ describe('evaluateAttunement', () => {
     expect(r.nextStep).toBe('Step two');
   });
 
+  it('a log-only import names the logged step, not the chain start (Codex P2)', () => {
+    const q = quests([], { inProgress: [{ questId: 200 }] });
+    expect(evaluateAttunement(visible(), q)).toMatchObject({
+      state: 'in_progress',
+      stepsDone: 0,
+      nextStep: 'Step two',
+    });
+  });
+
+  it('two logged steps → the furthest one is next', () => {
+    const q = quests([], { inProgress: [{ questId: 100 }, { questId: 200 }] });
+    expect(evaluateAttunement(visible(), q).nextStep).toBe('Step two');
+  });
+
   it('is in progress when a step sits in the quest log only', () => {
     const q = quests([], { inProgress: [{ questId: 100 }] });
     expect(evaluateAttunement(visible(), q).state).toBe('in_progress');

@@ -23,7 +23,13 @@ type Who = 'orc' | 'undead' | 'outsider';
 let testApp: TestApp;
 let gameId: number;
 let guildId: number;
-const tokens = {} as Record<Who, string>;
+const tokens: Partial<Record<Who, string>> = {};
+
+function tokenOf(who: Who): string {
+  const token = tokens[who];
+  if (token === undefined) throw new Error(`no token for ${who}`);
+  return token;
+}
 
 async function ensureForeverGame(): Promise<number> {
   const [existing] = await testApp.db
@@ -102,7 +108,9 @@ async function seedUser(
   const res = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
-  tokens[who] = res.body.access_token as string;
+  const token: unknown = res.body.access_token;
+  if (typeof token !== 'string') throw new Error(`login failed for ${who}`);
+  tokens[who] = token;
   return char.id;
 }
 
@@ -125,7 +133,7 @@ async function seedConfirmedQuests(): Promise<void> {
 const insights = (who: Who) =>
   testApp.request
     .get(`/plugins/wow/guilds/${guildId}/roster-insights`)
-    .set('Authorization', `Bearer ${tokens[who]}`);
+    .set('Authorization', `Bearer ${tokenOf(who)}`);
 
 beforeAll(async () => {
   testApp = await getTestApp();

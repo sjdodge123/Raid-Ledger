@@ -30,6 +30,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 export const SEEDED_ATTUNEMENT_KEY = 'ony-horde';
 /** Quests the `inProgress` character has completed. */
 export const IN_PROGRESS_STEPS = 3;
+/** Typed empty list (no `as` cast). */
+const NONE: number[] = [];
 const SEED_RACE = 'Orc';
 const SEED_FACTION = 'horde';
 const SEED_RUN_ID = 'demo-test-attunements';
@@ -70,7 +72,7 @@ export function attunementSeedPlan() {
     completed: {
       done: ids,
       inProgress: ids.slice(0, IN_PROGRESS_STEPS),
-      notStarted: [] as number[],
+      notStarted: NONE,
     },
   };
 }
