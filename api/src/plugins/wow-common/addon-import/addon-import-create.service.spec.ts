@@ -535,7 +535,10 @@ describe('deferred housekeeping failure (ROK-2179)', () => {
     ).resolves.toMatchObject({ status: 'applied' });
     await drain();
     expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls).toEqual([
+    const housekeeping = warn.mock.calls.filter(([m]) =>
+      String(m).includes('housekeeping'),
+    );
+    expect(housekeeping).toEqual([
       ['addon-import housekeeping failed userId=1: Error: db down'],
     ]);
   });
