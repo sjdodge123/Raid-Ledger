@@ -107,12 +107,8 @@ export function castEntryPlan(entry: AttunementCastEntry, now: Date) {
 
 type CastPlan = ReturnType<typeof castEntryPlan>;
 
-/** Upsert the `char` snapshot's `quests` slice, keeping gear/lockouts. */
-async function upsertQuestLog(
-  db: Db,
-  characterId: string,
-  log: NonNullable<CastPlan['questLog']>,
-): Promise<void> {
+/** A fresh log-only `char` snapshot's columns. */
+function questLogRow(log: NonNullable<CastPlan['questLog']>) {
   const quests = { inProgress: log.inProgress };
   const data: AddonCharSnapshotData = {
     gear: [],
@@ -120,7 +116,6 @@ async function upsertQuestLog(
     lockouts: [],
     quests,
   };
-  const snap = schema.characterAddonSnapshots;
   const row = {
     capturedAt: log.capturedAt,
     completedCapturedAt: null,
@@ -129,6 +124,17 @@ async function upsertQuestLog(
       .update(JSON.stringify(data))
       .digest('hex'),
   };
+  return { quests, data, row };
+}
+
+/** Upsert the `char` snapshot's `quests` slice, keeping gear/lockouts. */
+async function upsertQuestLog(
+  db: Db,
+  characterId: string,
+  log: NonNullable<CastPlan['questLog']>,
+): Promise<void> {
+  const { quests, data, row } = questLogRow(log);
+  const snap = schema.characterAddonSnapshots;
   await db
     .insert(snap)
     .values({
