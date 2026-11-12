@@ -31,6 +31,28 @@ export const GuildBlizzardRosterSchema = z
   .strict();
 export type GuildBlizzardRoster = z.infer<typeof GuildBlizzardRosterSchema>;
 
+/**
+ * ROK-1170 — state of the Forever guild summary (`guilds.blizzard_summary_status`).
+ * `disbanded` = two 404s at least 6 h apart for a slug that once returned 200.
+ */
+export const BLIZZARD_GUILD_STATES = [
+  "ok",
+  "not_found",
+  "disbanded",
+  "error",
+] as const;
+export const BlizzardGuildStateSchema = z.enum(BLIZZARD_GUILD_STATES);
+export type BlizzardGuildState = z.infer<typeof BlizzardGuildStateSchema>;
+
+/** `GuildSummary.blizzardGuild` — sent only on Forever `wow_guild` hub pages. */
+export const GuildBlizzardSummarySchema = z
+  .object({
+    foundedAt: isoDate.nullable(),
+    state: BlizzardGuildStateSchema.nullable(),
+  })
+  .strict();
+export type GuildBlizzardSummary = z.infer<typeof GuildBlizzardSummarySchema>;
+
 /** `PATCH /plugins/wow/guilds/:id/blizzard-roster` body; null = stop syncing. */
 export const GuildBlizzardRosterUpdateSchema = z
   .object({
