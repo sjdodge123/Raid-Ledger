@@ -14,7 +14,9 @@ import { GgModule } from './gg/gg.module';
  * a failed install only hides it from `GET /admin/plugins` until next boot.
  */
 // ROK-2187: GgCardModule is @Global — every plugin registers its GG cards.
-@Module({ imports: [CoreSteamStatsModule, GgCardModule, GgModule] })
+@Module({
+  imports: [CoreSteamStatsModule, GgCardModule, GgModule, GgMascotModule],
+})
 export class CorePluginModule implements OnModuleInit {
   private readonly logger = new Logger(CorePluginModule.name);
 
