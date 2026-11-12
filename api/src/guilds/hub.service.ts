@@ -166,16 +166,17 @@ export class HubService {
 
   /**
    * ROK-2185 item 3 — one page of the hub's ended events, any kind. Core
-   * owns events (D8-B), so no adapter dispatch. Members and staff only
-   * (`canView`), 403 before the cursor is read.
-   * @throws ForbiddenException not a member; BadRequestException bad cursor
+   * owns events (D8-B), so no adapter dispatch. Same read rule as the
+   * overview (`canReadOverview`): members and staff, plus any signed-in
+   * visitor on an open community hub. 403 before the cursor is read.
+   * @throws ForbiddenException may not read the hub; BadRequestException bad cursor
    */
   async pastEvents(
     actor: GuildActor,
     guildId: number,
     query: unknown,
   ): Promise<GuildPastEventsPageDto> {
-    if (!(await this.access.canView(actor, guildId))) {
+    if (!(await this.access.canReadOverview(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
     const cursor = parsePastEventsQuery(query);

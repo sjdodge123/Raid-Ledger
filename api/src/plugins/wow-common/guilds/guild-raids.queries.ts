@@ -17,6 +17,7 @@ import {
   recentFields,
   type RecentRow,
 } from '../../../guilds/hub-recent-event.fields';
+import { LIVE_SIGNUP } from '../../../guilds/hub-member-signups.helpers';
 import type {
   CompositionEvent,
   ScheduleSourceRow,
@@ -34,12 +35,6 @@ const { events, eventSignups, rosterAssignments, characters, users } = schema;
 
 /** Upcoming/recent list length (P6). */
 const LIST_LIMIT = 10;
-
-/**
- * Signup states that count as "signed up" on a live (upcoming/running) card.
- * `departed` is excluded, matching the core event signup count.
- */
-const LIVE_SIGNED = sql`('signed_up', 'tentative')`;
 
 /**
  * The outer `events.id`, table-qualified. Drizzle strips the table from a
@@ -86,7 +81,7 @@ export function upcomingFields(viewerId: number) {
     slotConfig: events.slotConfig,
     maxAttendees: events.maxAttendees,
     contentInstances: events.contentInstances,
-    signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${LIVE_SIGNED})`,
+    signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and ${LIVE_SIGNUP})`,
     viewerStatus: sql<
       string | null
     >`(select s.status from ${eventSignups} s where s.event_id = ${outerEventId} and s.user_id = ${viewerId} limit 1)`,

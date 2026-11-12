@@ -1,9 +1,11 @@
 /**
  * ROK-2185 item 3 — `GET /guilds/:id/events/past` through the real HTTP stack
  * and DB: keyset paging over the hub's FULL ended history (Q4 = A), the
- * hub-event filter (cancelled, future and other-hub events excluded), the
- * members-only gate and cursor validation.
+ * hub-event filter (cancelled, future, rescheduling-poll and other-hub events
+ * excluded), microsecond end times, the overview-read gate (an open community
+ * hub's visitor may page; a members-only hub's may not) and cursor validation.
  */
+import { eq, sql } from 'drizzle-orm';
 import { signTestAccessToken } from '../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { nonEmpty } from '../common/testing/narrow';
@@ -29,6 +31,9 @@ interface PastPage {
 let testApp: TestApp;
 let guildId: number;
 let otherGuildId: number;
+let microGuildId: number;
+let communityGuildId: number;
+const microIds: number[] = [];
 const users = {} as Record<Who, { id: number; charId: string; token: string }>;
 const endedIds: number[] = [];
 const excluded: Record<string, number> = {};
@@ -102,6 +107,7 @@ interface Ev {
   startMs: number;
   guild?: number;
   cancelled?: boolean;
+  pollId?: number;
 }
 
 async function ev(e: Ev): Promise<number> {
@@ -116,6 +122,7 @@ async function ev(e: Ev): Promise<number> {
         duration: [start, new Date(start.getTime() + 3 * HOUR)],
         guildId: e.guild ?? guildId,
         cancelledAt: e.cancelled ? new Date() : null,
+        reschedulingPollId: e.pollId ?? null,
       })
       .returning(),
     e.title,
@@ -143,6 +150,11 @@ async function seedEvents(): Promise<void> {
     cancelled: true,
   });
   excluded.future = await ev({ title: 'future', startMs: Date.now() + DAY });
+  excluded.poll = await ev({
+    title: 'rescheduling-poll',
+    startMs: base - 1 * HOUR,
+    pollId: 987654,
+  });
   excluded.other = await ev({
     title: 'other-hub',
     startMs: base - 3 * HOUR,
@@ -150,9 +162,62 @@ async function seedEvents(): Promise<void> {
   });
 }
 
-function getPast(token: string, cursor?: string) {
+/** An open (active, unhidden) community hub with one ended event. */
+async function seedCommunityHub(): Promise<void> {
+  const [h] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId: testApp.seed.game.id,
+        kind: 'game_community',
+        region: 'community',
+        source: 'community',
+        name: 'Past Open Commons',
+        nameKey: 'past open commons',
+        status: 'active',
+      })
+      .returning({ id: schema.guilds.id }),
+    'community hub',
+  );
+  communityGuildId = h.id;
+  await ev({ title: 'commons-past', startMs: Date.now() - DAY, guild: h.id });
+}
+
+/**
+ * 21 events in one hub whose ends fall in the SAME millisecond, a distinct
+ * microsecond apart — the cursor (a JS Date) can only carry the millisecond.
+ */
+async function seedMicroHub(): Promise<void> {
+  microGuildId = await insertGuild('Micro Keepers');
+  await testApp.db.insert(schema.guildMembers).values({
+    guildId: microGuildId,
+    guid: 'Player-7-past-member',
+    characterName: 'pastmember',
+    rankIndex: 1,
+    rankName: 'Rank 1',
+    source: 'addon_import',
+    lastSeenAt: new Date(),
+  });
+  const endMs = Math.floor((Date.now() - DAY) / 1000) * 1000 + 123;
+  for (let k = 1; k <= 21; k++) {
+    const id = await ev({
+      title: `micro-${k}`,
+      startMs: endMs - 3 * HOUR,
+      guild: microGuildId,
+    });
+    microIds.push(id);
+    await testApp.db
+      .update(schema.events)
+      .set({
+        duration: sql`tsrange(lower(duration), upper(duration) + make_interval(secs => ${k / 1e6}), '[)')`,
+      })
+      .where(eq(schema.events.id, id));
+  }
+}
+
+function getPast(token: string, cursor?: string, hub = guildId) {
   const req = testApp.request
-    .get(`/guilds/${guildId}/events/past`)
+    .get(`/guilds/${hub}/events/past`)
     .set('Authorization', `Bearer ${token}`);
   return cursor === undefined ? req : req.query({ cursor });
 }
@@ -167,6 +232,8 @@ beforeAll(async () => {
   await seedUser('member', true);
   await seedUser('outsider', false);
   await seedEvents();
+  await seedCommunityHub();
+  await seedMicroHub();
 });
 
 describe('GET /guilds/:id/events/past — paging', () => {
@@ -192,16 +259,45 @@ describe('GET /guilds/:id/events/past — paging', () => {
     expect(all.at(-1)?.title).toBe('past-ancient');
   });
 
-  it('excludes cancelled, future and other-hub events', async () => {
+  it('excludes cancelled, future, rescheduling-poll and other-hub events', async () => {
     const p1 = (await getPast(users.member.token)).body as PastPage;
     const ids = p1.events.map((e) => e.id);
     expect(ids).not.toContain(excluded.cancelled);
+    expect(ids).not.toContain(excluded.poll);
     expect(ids).not.toContain(excluded.future);
     expect(ids).not.toContain(excluded.other);
   });
 });
 
+describe('GET /guilds/:id/events/past — microsecond end times', () => {
+  it('pages 21 ends inside one millisecond as 20 + 1 with no skip or duplicate', async () => {
+    const p1 = (await getPast(users.member.token, undefined, microGuildId))
+      .body as PastPage;
+    expect(p1.events).toHaveLength(20);
+    const p2 = (
+      await getPast(users.member.token, p1.nextCursor ?? '', microGuildId)
+    ).body as PastPage;
+    expect(p2.nextCursor).toBeNull();
+    const ids = [...p1.events, ...p2.events].map((e) => e.id);
+    expect(ids).toHaveLength(21);
+    expect([...ids].sort((a, b) => a - b)).toEqual(
+      [...microIds].sort((a, b) => a - b),
+    );
+  });
+});
+
 describe('GET /guilds/:id/events/past — access and validation', () => {
+  it('is 200 for a signed-in visitor on an open community hub (same rule as the overview)', async () => {
+    const res = await getPast(
+      users.outsider.token,
+      undefined,
+      communityGuildId,
+    );
+    expect(res.status).toBe(200);
+    const titles = (res.body as PastPage).events.map((e) => e.title);
+    expect(titles).toEqual(['commons-past']);
+  });
+
   it('is 403 for a visitor on a members-only hub', async () => {
     const res = await getPast(users.outsider.token);
     expect(res.status).toBe(403);
