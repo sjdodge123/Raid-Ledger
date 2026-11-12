@@ -20,10 +20,22 @@
 #   - no container of any state was created from its image ID (`docker ps -a
 #     --filter ancestor=<id>`); an unreadable container list keeps it;
 #   - it is not labelled rl.role=runner;
+#   - no env row pins its bare image ID (`sha256:<hex>`, env-spin's re-spin of
+#     an unclaimed slot records that form);
 #   - its newest of Created and Metadata.LastTagTime (a cached rebuild keeps an
 #     old Created but re-tags) is older than RL_ENV_IMAGE_GC_MIN_AGE_HOURS, so
 #     a freshly built image is not removed before its env is spun; an
 #     unparseable age keeps it;
+#   - its release grace is over: RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS since the
+#     tag was released, i.e. since env-destroy recorded it
+#     (env_image_gc::mark_env_released; env-destroy also deletes the registry
+#     tag, so this local copy is the only source for a destroy → re-spin with
+#     the same --image) or, when no release time is recorded, since the first
+#     sweep that found it unused (that sweep records it and keeps the image).
+#     A tag an env row or container uses has its record cleared, so its next
+#     release starts a fresh grace. Records: one file per tag holding the epoch,
+#     in RL_ENV_IMAGE_GC_RELEASED_DIR (default env-image-released/ beside the
+#     env registry); written in dry run too;
 #   - a `registry_gc`-kind entry (key RL_ENV_IMAGE_GC_KEY) is held in the
 #     admission ledger for the whole removal pass: taken under the ledger flock
 #     only when no image build runs or waits, and while held no image build is
@@ -35,11 +47,13 @@
 # and child-image checks still apply, and another tag on the same image ID
 # keeps the layers (Docker only untags). A `--static` gate's container build
 # runs as kind:task, which does not block the pass (same trade-off as
-# dangling_prune). A spin racing the removal re-pulls on `docker run`.
+# dangling_prune).
 #
 # Env knobs:
 #   RL_ENV_IMAGE_GC_REPO              registry.rl.lan:5000/rl-allinone
-#   RL_ENV_IMAGE_GC_MIN_AGE_HOURS     2    age floor
+#   RL_ENV_IMAGE_GC_MIN_AGE_HOURS     2    age floor (image build/tag time)
+#   RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS 2  grace after release; 0 = off
+#   RL_ENV_IMAGE_GC_RELEASED_DIR      <dir of RL_ENVS_FILE>/env-image-released
 #   RL_ENV_IMAGE_GC_DRY_RUN           1    report only; 0 = remove
 #   RL_ENV_IMAGE_GC_TIMEOUT_SECONDS   600  ledger-entry lifetime (renewed per image)
 #   RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS 120 bound on one `docker image rm`
@@ -47,6 +61,7 @@
 
 RL_ENV_IMAGE_GC_REPO="${RL_ENV_IMAGE_GC_REPO:-registry.rl.lan:5000/rl-allinone}"
 RL_ENV_IMAGE_GC_MIN_AGE_HOURS="${RL_ENV_IMAGE_GC_MIN_AGE_HOURS:-2}"
+RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS="${RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS:-2}"
 RL_ENV_IMAGE_GC_DRY_RUN="${RL_ENV_IMAGE_GC_DRY_RUN:-1}"
 RL_ENV_IMAGE_GC_TIMEOUT_SECONDS="${RL_ENV_IMAGE_GC_TIMEOUT_SECONDS:-600}"
 RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS="${RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS:-120}"
@@ -60,10 +75,58 @@ fi
 env_image_gc::_log() { echo "$*" >&2; }
 env_image_gc::_now() { echo "${RL_ENV_IMAGE_GC_NOW:-$(date +%s)}"; }
 
-# Every env row's .image, one per line; 1 when unreadable or not an array.
+# Every env row's .image, one per line; 1 unless the file is exactly one JSON
+# array document (`[]` is fine). Slurped, because jq given an empty,
+# whitespace-only file runs no filter and exits 0 (Codex P2).
 env_image_gc::_rows() {
-    jq -r 'if type == "array" then .[] | .image // empty else error("not an array") end' \
-        "$RL_ENVS_FILE" 2>/dev/null
+    jq -rs 'if length == 1 and (.[0] | type) == "array" then .[0][] | .image // empty
+            else error("not one array document") end' "$RL_ENVS_FILE" 2>/dev/null
+}
+
+env_image_gc::_released_dir() {
+    echo "${RL_ENV_IMAGE_GC_RELEASED_DIR:-$(dirname "${RL_ENVS_FILE:-/state/env-registry.json}")/env-image-released}"
+}
+env_image_gc::_valid_tag() { [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; }
+
+# Record that tag $1 was released at epoch $2 (default now). Best-effort.
+env_image_gc::mark_released() {
+    local tag="$1" at="${2:-$(env_image_gc::_now)}" dir
+    env_image_gc::_valid_tag "$tag" || return 0
+    dir=$(env_image_gc::_released_dir)
+    mkdir -p "$dir" 2>/dev/null || return 0
+    { printf '%s\n' "$at" > "$dir/.$tag.$$" && mv -f "$dir/.$tag.$$" "$dir/$tag"; } 2>/dev/null \
+        || rm -f "$dir/.$tag.$$" 2>/dev/null
+    return 0
+}
+
+env_image_gc::_clear_released() {
+    env_image_gc::_valid_tag "$1" && rm -f "$(env_image_gc::_released_dir)/$1" 2>/dev/null
+    return 0
+}
+
+# env-destroy hook (call BEFORE the row is removed): the slug's image tag is
+# released now. Best-effort, always 0, no Docker access.
+env_image_gc::mark_env_released() {
+    local tag
+    tag=$(jq -r --arg s "$1" '[.[]? | select(.slug == $s)][0].image // empty' "$RL_ENVS_FILE" 2>/dev/null \
+        | registry_gc::_tags_of)
+    [[ -n "$tag" ]] && env_image_gc::mark_released "$tag"
+    return 0
+}
+
+# Why tag $1 is still in its release grace at time $2; empty = grace over.
+# No readable record → record now and keep (MAJOR-1: unknown = just released).
+env_image_gc::_release_keep() {
+    local tag="$1" now="$2" hours="$RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS" at
+    [[ "$hours" =~ ^[0-9]+$ ]] || hours=2
+    (( hours > 0 )) || return 0
+    at=$(cat "$(env_image_gc::_released_dir)/$tag" 2>/dev/null)
+    if ! [[ "$at" =~ ^[0-9]+$ ]]; then
+        env_image_gc::mark_released "$tag" "$now"
+        echo "release time unknown: ${hours}h grace starts now"; return 0
+    fi
+    (( now - at < hours * 3600 )) && echo "released less than ${hours}h ago"
+    return 0
 }
 
 # Local refs of the repo (untagged ones excluded); 1 when docker cannot list.
@@ -105,21 +168,26 @@ env_image_gc::_keep_reason() {
     local ref="$1" rows="$2" now="$3" tag info rc id role age why users
     tag=$(registry_gc::_tags_of <<<"$ref")
     if [[ -n "$tag" ]] && grep -qxF "$tag" <<<"$(registry_gc::_tags_of <<<"$rows")"; then
-        echo "an env uses tag $tag"; return 0
+        env_image_gc::_clear_released "$tag"; echo "an env uses tag $tag"; return 0
     fi
-    grep -qxF "$ref" <<<"$rows" && { echo "an env uses $ref"; return 0; }
+    grep -qxF "$ref" <<<"$rows" && { env_image_gc::_clear_released "$tag"; echo "an env uses $ref"; return 0; }
     info=$(env_image_gc::_inspect "$ref"); rc=$?
     (( rc == 1 )) && { echo absent; return 0; }
     (( rc != 0 )) && { echo "docker image inspect failed: $info"; return 0; }
     IFS='|' read -r id role age <<<"$info"
+    # Review MINOR-1: a row pinned to the bare image ID (env-spin re-spin).
+    grep -qxF "$id" <<<"$rows" && { env_image_gc::_clear_released "$tag"; echo "an env pins image id $id"; return 0; }
     [[ "$role" == "runner" ]] && { echo "labelled rl.role=runner"; return 0; }
     [[ "$age" =~ ^-?[0-9]+$ ]] || { echo "age unknown"; return 0; }
     (( now - age < RL_ENV_IMAGE_GC_MIN_AGE_HOURS * 3600 )) \
         && { echo "younger than ${RL_ENV_IMAGE_GC_MIN_AGE_HOURS}h"; return 0; }
     why=$(env_image_gc::_digest_keep "$id" "$rows")
-    [[ -n "$why" ]] && { echo "$why"; return 0; }
+    [[ -n "$why" ]] && { env_image_gc::_clear_released "$tag"; echo "$why"; return 0; }
     users=$(docker ps -aq --filter "ancestor=$id" 2>/dev/null) || { echo "docker ps unreadable"; return 0; }
-    [[ -n "$users" ]] && { echo "$(grep -c . <<<"$users") container(s) use it"; return 0; }
+    if [[ -n "$users" ]]; then
+        env_image_gc::_clear_released "$tag"; echo "$(grep -c . <<<"$users") container(s) use it"; return 0
+    fi
+    env_image_gc::_release_keep "$tag" "$now"
     return 0
 }
 
@@ -148,6 +216,7 @@ env_image_gc::_remove_held() {
         if [[ -n "$why" ]]; then kept+="$ref"$'\t'"$why"$'\n'; continue; fi
         if err=$(timeout "$RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS" docker image rm "$ref" 2>&1 >/dev/null); then
             removed+="$ref"$'\n'; env_image_gc::_log "removed $ref"
+            env_image_gc::_clear_released "$(registry_gc::_tags_of <<<"$ref")"
         else
             failed+="$ref"$'\t'"${err//$'\n'/ }"$'\n'; env_image_gc::_log "rm failed $ref: ${err//$'\n'/ }"
         fi

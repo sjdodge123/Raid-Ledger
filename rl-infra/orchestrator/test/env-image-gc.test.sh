@@ -25,6 +25,13 @@
 #       reservation)
 #   E12 an image build cannot be admitted while the removal runs
 #   E13 sweep.sh runs it before registry GC; run-tests.sh runs us
+#   E14 an empty, whitespace-only, truncated, object or multi-document env
+#       registry aborts (Codex P2); `[]` is a valid empty registry
+#   E15 a row pinned to the bare image ID keeps it (review MINOR-1)
+#   E16 release grace (review MAJOR-1): kept until RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS
+#       after env-destroy recorded the release; no record → recorded now and
+#       kept; an unwritable record dir keeps it; use clears the record
+#   E17 env-destroy records the release before it removes the row
 
 set -uo pipefail
 CURRENT_TEST_FILE="env-image-gc.test.sh"
@@ -80,6 +87,7 @@ _setup() {
     CALL_LOG="$RL_STATE_DIR/calls.log"; : > "$CALL_LOG"
     export RL_ENVS_FILE="$RL_STATE_DIR/env-registry.json" RL_ADMISSION_FILE="$RL_STATE_DIR/admission.json"
     export RL_ENV_IMAGE_GC_NOW=$NOW RL_ENV_IMAGE_GC_DRY_RUN=0 RL_ENV_IMAGE_GC_MIN_AGE_HOURS=2
+    export RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS=0   # E16 turns it on; release-grace records live beside RL_ENVS_FILE
     printf 'MemTotal:       16777216 kB\nMemAvailable:   16000000 kB\n' > "$RL_STATE_DIR/meminfo"
     export RL_MEMINFO_PATH="$RL_STATE_DIR/meminfo" RL_HEAVY_TASK_SETTLE_SECONDS=0 RL_DISK_GATE=0
     export RL_HEAVY_TASK_POLL_SECONDS=1 RL_LEDGER_ADMISSION_TIMEOUT_SECONDS=2 RL_HEAVY_TASK_ADMISSION_TIMEOUT_SECONDS=2
@@ -247,6 +255,68 @@ test_wiring() {
     assert_contains "$(cat "$TEST_DIR/run-tests.sh")" "env-image-gc.test.sh" "E13: run-tests.sh runs us"
 }
 
+test_registry_must_be_one_array() {
+    _setup
+    local doc
+    for doc in "" "   " $'\n\t\n' '[{"slug":"live","image":' '{}' '[] []'; do
+        printf '%s' "$doc" > "$RL_ENVS_FILE"; : > "$CALL_LOG"
+        assert_eq "$(env_image_gc::sweep 2>/dev/null)" '{"error":"env_registry_unreadable"}' \
+            "E14: env registry $(jq -Rc . <<<"$doc") aborts the sweep"
+        assert_eq "$(_rm_refs)" "" "E14: nothing removed for $(jq -Rc . <<<"$doc")"
+    done
+    echo '[]' > "$RL_ENVS_FILE"; : > "$CALL_LOG"
+    env_image_gc::sweep >/dev/null 2>&1
+    assert_eq "$(_rm_refs)" "$REPO:gone" "E14: [] is a valid empty registry"
+}
+
+test_bare_id_pin_keeps() {
+    _setup
+    META="$REPO:gone|sha256:0b5e55ed"
+    echo '[{"slug":"respun","image":"sha256:0b5e55ed"}]' > "$RL_ENVS_FILE"
+    local out; out=$(env_image_gc::sweep 2>/dev/null)
+    assert_eq "$(_rm_refs)" "" "E15: a row pinned to the bare image id keeps it"
+    assert_contains "$(jq -c .kept <<<"$out")" "an env pins image id sha256:0b5e55ed" "E15: reason reported"
+}
+
+_rec() { cat "$RL_STATE_DIR/env-image-released/$1" 2>/dev/null; }
+test_release_grace() {
+    _setup
+    export RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS=2
+    local out; out=$(env_image_gc::sweep 2>/dev/null)
+    assert_eq "$(_rm_refs)" "" "E16: no release record → kept"
+    assert_contains "$(jq -c .kept <<<"$out")" "release time unknown: 2h grace starts now" "E16: reason reported"
+    assert_eq "$(_rec gone)" "$NOW" "E16: the first unused sighting records the release"
+    env_image_gc::mark_released gone $((NOW - 600)); : > "$CALL_LOG"
+    out=$(env_image_gc::sweep 2>/dev/null)
+    assert_eq "$(_rm_refs)" "" "E16: released 10 min ago (image itself old) → kept"
+    assert_contains "$(jq -c .kept <<<"$out")" "released less than 2h ago" "E16: grace reason"
+    env_image_gc::mark_released gone $((NOW - 3 * 3600)); : > "$CALL_LOG"
+    env_image_gc::sweep >/dev/null 2>&1
+    assert_eq "$(_rm_refs)" "$REPO:gone" "E16: released 3h ago → removed"
+    assert_eq "$(_rec gone)" "" "E16: the record goes with the image"
+    # destroy → re-spin: env-destroy records the release, the sweep in between keeps it.
+    LOCAL_REFS="$REPO:live"; env_image_gc::mark_released live $((NOW - 9 * 3600))
+    : > "$CALL_LOG"; env_image_gc::sweep >/dev/null 2>&1
+    assert_eq "$(_rec live)" "" "E16: a tag an env row uses has its stale record cleared"
+    env_image_gc::mark_env_released live
+    assert_eq "$(_rec live)" "$NOW" "E16: mark_env_released records the row's tag"
+    echo '[]' > "$RL_ENVS_FILE"; : > "$CALL_LOG"; env_image_gc::sweep >/dev/null 2>&1
+    assert_eq "$(_rm_refs)" "" "E16: a sweep right after the destroy keeps the image for the re-spin"
+    rm -rf "$RL_STATE_DIR/env-image-released"; : > "$CALL_LOG"
+    RL_ENV_IMAGE_GC_RELEASED_DIR=/dev/null/nope env_image_gc::sweep >/dev/null 2>&1
+    assert_eq "$(_rm_refs)" "" "E16: an unwritable record dir keeps it"
+}
+
+test_destroy_records_release() {
+    local destroy="$BIN/env-destroy" mark del drop
+    mark=$(grep -n 'env_image_gc::mark_env_released "$SLUG"' "$destroy" | head -1 | cut -d: -f1)
+    del=$(grep -n 'registry_gc::delete_env_tag "$SLUG"' "$destroy" | head -1 | cut -d: -f1)
+    drop=$(grep -n "state::mutate \"\$RL_ENVS_FILE\" --arg slug \"\$SLUG\" 'map(select(.slug != \$slug))'" "$destroy" | head -1 | cut -d: -f1)
+    assert_neq "${mark:-}" "" "E17: env-destroy records the release"
+    assert_eq "$(( ${mark:-0} > ${del:-99999} && ${mark:-99999} < ${drop:-0} ))" "1" \
+        "E17: after the registry tag delete ($del), before the row is removed ($drop): $mark"
+}
+
 run_test "e1-removes-orphan" test_removes_orphan
 run_test "e2-env-row-keeps" test_env_row_keeps
 run_test "e3-container-keeps" test_container_keeps
@@ -260,4 +330,8 @@ run_test "e10-lock-lost" test_lock_lost_stops
 run_test "e11-recheck" test_recheck_under_reservation
 run_test "e12-build-blocked" test_build_blocked_during_rm
 run_test "e13-wiring" test_wiring
+run_test "e14-registry-one-array" test_registry_must_be_one_array
+run_test "e15-bare-id-pin" test_bare_id_pin_keeps
+run_test "e16-release-grace" test_release_grace
+run_test "e17-destroy-records-release" test_destroy_records_release
 print_test_summary
