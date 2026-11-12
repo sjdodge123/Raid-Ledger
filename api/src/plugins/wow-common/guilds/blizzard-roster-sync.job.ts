@@ -9,7 +9,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { GuildBlizzardRosterSyncResult } from '@raid-ledger/contract';
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -95,7 +95,11 @@ export class BlizzardRosterSyncJob {
     }
   }
 
-  /** Forever `wow_guild`s with a slug, not hidden, least-recently synced first. */
+  /**
+   * Forever `wow_guild`s with a slug, not hidden, least-recently synced first.
+   * ROK-1170 F5: a `disbanded` guild is skipped — only an editor's Sync now
+   * (`syncNow`, which never reads this list) re-checks it.
+   */
   async listDueGuildIds(): Promise<number[]> {
     const g = schema.guilds;
     const rows = await this.db
@@ -108,6 +112,10 @@ export class BlizzardRosterSyncJob {
           eq(g.kind, 'wow_guild'),
           eq(schema.games.slug, WOW_FOREVER_GAME_SLUG),
           isNull(g.hiddenAt),
+          or(
+            isNull(g.blizzardSummaryStatus),
+            ne(g.blizzardSummaryStatus, 'disbanded'),
+          ),
         ),
       )
       .orderBy(sql`${g.blizzardRosterSyncedAt} ASC NULLS FIRST`, g.id);

@@ -1,0 +1,16 @@
+{
+  "_note": "UNVERIFIED synthetic shape, ROK-1170 — Retail guild-summary shape minus crest",
+  "_links": { "self": { "href": "https://us.api.blizzard.com/data/wow/guild/example-guild?namespace=profile-forever-us" } },
+  "id": 900101,
+  "name": "Example Guild",
+  "faction": { "type": "ALLIANCE", "name": "Alliance" },
+  "achievement_points": 900,
+  "member_count": 9,
+  "roster": { "href": "https://us.api.blizzard.com/data/wow/guild/example-guild/roster?namespace=profile-forever-us" },
+  "achievements": { "href": "https://us.api.blizzard.com/data/wow/guild/example-guild/achievements?namespace=profile-forever-us" },
+  "created_timestamp": 1735689600000,
+  "activity": { "href": "https://us.api.blizzard.com/data/wow/guild/example-guild/activity?namespace=profile-forever-us" },
+  "slug": "example-guild",
+  "ruleset": { "key": { "href": "https://us.api.blizzard.com/data/wow/ruleset/900201?namespace=dynamic-forever-us" }, "id": 900201 },
+  "name_search": "example guild"
+}
