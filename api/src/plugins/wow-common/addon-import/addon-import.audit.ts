@@ -114,6 +114,8 @@ export class AddonImportAuditService {
    * ROK-1737 — a mixed paste: one row per section. The first finalises the
    * reserved row; the rest copy its `created_at`, so the paste still counts
    * as ONE attempt against the limit. Best effort, like `recordAttempt`.
+   * ROK-2179: update + insert in ONE transaction — one commit, not two (each
+   * pays the NAS fsync), and the paste's rows land together or not at all.
    */
   async recordSections(
     rows: AddonImportAuditInsert[],
@@ -126,16 +128,18 @@ export class AddonImportAuditService {
       return;
     }
     try {
-      await this.db
-        .update(addonImportAudit)
-        .set({ ...outcomeOf(first), sizeBytes: first.sizeBytes })
-        .where(eq(addonImportAudit.id, reservedId));
-      if (rest.length === 0) return;
-      // Copied in SQL — a JS Date would drop the microseconds.
-      const reservedAt = sql`(SELECT created_at FROM addon_import_audit WHERE id = ${reservedId})`;
-      await this.db
-        .insert(addonImportAudit)
-        .values(rest.map((r) => ({ ...r, createdAt: reservedAt })));
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(addonImportAudit)
+          .set({ ...outcomeOf(first), sizeBytes: first.sizeBytes })
+          .where(eq(addonImportAudit.id, reservedId));
+        if (rest.length === 0) return;
+        // Copied in SQL — a JS Date would drop the microseconds.
+        const reservedAt = sql`(SELECT created_at FROM addon_import_audit WHERE id = ${reservedId})`;
+        await tx
+          .insert(addonImportAudit)
+          .values(rest.map((r) => ({ ...r, createdAt: reservedAt })));
+      });
     } catch (err) {
       this.logger.warn(
         `addon-import audit write failed userId=${first.userId} sections=${rows.length}: ${String(err)}`,
