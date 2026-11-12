@@ -13,6 +13,10 @@ import {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildCompositionDto } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
+import {
+  recentFields,
+  type RecentRow,
+} from '../../../guilds/hub-recent-event.fields';
 import type {
   CompositionEvent,
   ScheduleSourceRow,
@@ -36,12 +40,6 @@ const LIST_LIMIT = 10;
  * `departed` is excluded, matching the core event signup count.
  */
 const LIVE_SIGNED = sql`('signed_up', 'tentative')`;
-
-/**
- * Signup states that count as "signed up" on an ended card. A departed
- * member did raid (attendance resolves `departed` → attended), so it stays.
- */
-const SIGNED = sql`('signed_up', 'tentative', 'departed')`;
 
 /**
  * The outer `events.id`, table-qualified. Drizzle strips the table from a
@@ -157,28 +155,8 @@ function toScheduleSource(r: ScheduleQueryRow): ScheduleSourceRow[] {
   ];
 }
 
-export interface RecentRow {
-  id: number;
-  title: string;
-  duration: [Date, Date];
-  signedUp: number;
-  recorded: number;
-  attended: number;
-}
-
-/** Ended card columns; exported for the subquery-correlation guard. */
-export function recentFields() {
-  const s = sql`${eventSignups} s where s.event_id = ${outerEventId}`;
-  return {
-    id: events.id,
-    title: events.title,
-    duration: events.duration,
-    signedUp: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED})`,
-    recorded: sql<number>`(select count(*)::int from ${s} and s.attendance_status is not null)`,
-    // Only signed-up attendees, so `attended` never exceeds `signedUp`.
-    attended: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED} and s.attendance_status = 'attended')`,
-  };
-}
+/** ROK-2185: the ended-card columns moved to core; re-exported for callers. */
+export { recentFields, type RecentRow };
 
 /** Guild events that ended in the window, newest first (P6). */
 export async function loadRecent(

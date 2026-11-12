@@ -9,7 +9,6 @@ import {
   GuildViewerStatusSchema,
   type GuildEventCardDto,
   type GuildRaidsDto,
-  type GuildRecentEventDto,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -33,12 +32,12 @@ import {
   loadScheduleRows,
   loadUpcoming,
   type CompositionSource,
-  type RecentRow,
   type UpcomingRow,
 } from './guild-raids.queries';
 import { loadRosterRows } from './guild-roster.helpers';
 import { toContentInstanceCards } from '../../../events/event-content-cards.helpers';
 import { withMemberSignupCounts } from '../../../guilds/hub-member-signups.helpers';
+import { toRecentCard } from '../../../guilds/hub-recent-event.fields';
 import { findLinkedMemberUserIds } from './guild-membership.helpers';
 
 const WEEK_MS = 7 * 24 * 3600 * 1000;
@@ -54,16 +53,6 @@ function toCard(row: UpcomingRow): GuildEventCardDto {
     needed: neededFor(row.slotConfig, row.maxAttendees),
     viewerStatus: status.success ? status.data : null,
     contentInstances: toContentInstanceCards(row.contentInstances),
-  };
-}
-
-function toRecent(row: RecentRow): GuildRecentEventDto {
-  return {
-    id: row.id,
-    title: row.title,
-    startTime: row.duration[0].toISOString(),
-    signedUp: row.signedUp,
-    attended: row.recorded > 0 ? row.attended : null,
   };
 }
 
@@ -102,7 +91,7 @@ export class GuildRaidsService {
     const cards = upcoming;
     return {
       upcoming: cards,
-      recent: recent.map(toRecent),
+      recent: recent.map(toRecentCard),
       schedule: toSchedule(schedule),
       composition: compositionOf(comp),
       attendance: {
