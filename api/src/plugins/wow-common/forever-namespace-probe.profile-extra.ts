@@ -190,11 +190,45 @@ export function summariseNestedDeepKeys(body: unknown): DeepKeysShapeSummary {
   return shape;
 }
 
+/**
+ * ROK-1170: the guild summary's deep-keys shape plus `objectKeyTypes` — the
+ * JS type of each top-level value and of each key one level inside a plain
+ * object (`faction.type → string`, `created_timestamp → number`,
+ * `member_count → number`). Types only, never a value.
+ */
+export type GuildSummaryShapeSummary = DeepKeysShapeSummary & {
+  objectKeyTypes: Record<string, string>;
+};
+
+/** `typeof`, with `null` and `array` told apart from `object`. */
+function typeName(value: unknown): string {
+  if (value === null) return 'null';
+  return Array.isArray(value) ? 'array' : typeof value;
+}
+
+/** {@link summariseDeepKeys} plus dotted key → type, two levels deep. */
+export function summariseGuildSummaryKeys(
+  body: unknown,
+): GuildSummaryShapeSummary {
+  const objectKeyTypes: Record<string, string> = {};
+  const entries = isPlainObject(body) ? Object.entries(body) : [];
+  for (const [key, value] of entries) {
+    objectKeyTypes[key] = typeName(value);
+    if (!isPlainObject(value)) continue;
+    for (const [sub, inner] of Object.entries(value)) {
+      objectKeyTypes[`${key}.${sub}`] = typeName(inner);
+    }
+  }
+  return { ...summariseDeepKeys(body), objectKeyTypes };
+}
+
 /** The deep-keys summary for an endpoint {@link isDeepKeysEndpoint} accepts. */
 export function summariseDeepKeysFor(
   endpoint: ForeverProbeEndpoint,
   body: unknown,
-): DeepKeysShapeSummary {
+): DeepKeysShapeSummary &
+  Partial<Pick<GuildSummaryShapeSummary, 'objectKeyTypes'>> {
+  if (endpoint === 'guild-summary') return summariseGuildSummaryKeys(body);
   return NESTED_DEEP_KEYS_ENDPOINTS.has(endpoint)
     ? summariseNestedDeepKeys(body)
     : summariseDeepKeys(body);

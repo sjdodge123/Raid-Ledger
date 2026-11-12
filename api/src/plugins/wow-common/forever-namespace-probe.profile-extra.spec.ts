@@ -11,6 +11,7 @@ import {
   firstRulesetId,
   isDeepKeysEndpoint,
   summariseDeepKeys,
+  summariseDeepKeysFor,
 } from './forever-namespace-probe.profile-extra';
 import { summariseCustomShape } from './forever-namespace-probe.static';
 
@@ -242,5 +243,64 @@ describe('runProbe — ROK-2108 extras that fail', () => {
         arrayKeys: {},
       });
     }
+  });
+});
+
+describe('guild-summary object key types (ROK-1170)', () => {
+  const body = {
+    id: 900101,
+    name: 'Example Guild',
+    faction: { type: 'ALLIANCE', name: { en_US: 'Alliance' } },
+    member_count: 9,
+    created_timestamp: 1735689600000,
+    roster: { href: 'https://example.invalid/roster' },
+    ruleset: { key: { href: 'https://example.invalid/r' }, id: 900201 },
+    crest: null,
+    tags: ['x'],
+  };
+
+  it('maps dotted paths two levels deep to their JS types, never values', () => {
+    const shape = summariseDeepKeysFor('guild-summary', body);
+    expect(shape).toMatchObject({
+      topLevelKeys: Object.keys(body),
+      arrayKeys: { tags: [] },
+      arrayLengths: { tags: 1 },
+      objectKeyTypes: {
+        id: 'number',
+        name: 'string',
+        faction: 'object',
+        'faction.type': 'string',
+        'faction.name': 'object',
+        member_count: 'number',
+        created_timestamp: 'number',
+        roster: 'object',
+        'roster.href': 'string',
+        ruleset: 'object',
+        'ruleset.key': 'object',
+        'ruleset.id': 'number',
+        crest: 'null',
+        tags: 'array',
+      },
+    });
+    expect(Object.keys(shape)).toContain('objectKeyTypes');
+    expect(JSON.stringify(shape)).not.toMatch(
+      /Example|ALLIANCE|Alliance|900101|900201|1735689600000|example\.invalid|en_US/,
+    );
+  });
+
+  it('records no third level and an empty map for a non-object body', () => {
+    const shape = summariseDeepKeysFor('guild-summary', body);
+    expect(Object.keys(shape.objectKeyTypes ?? {})).not.toContain(
+      'ruleset.key.href',
+    );
+    expect(summariseDeepKeysFor('guild-summary', null)).toMatchObject({
+      objectKeyTypes: {},
+    });
+  });
+
+  it('adds object key types only for guild-summary', () => {
+    expect(summariseDeepKeysFor('ruleset-detail', body)).not.toHaveProperty(
+      'objectKeyTypes',
+    );
   });
 });
