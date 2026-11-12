@@ -18,12 +18,15 @@ import { ggPrefersLowData } from '../../components/gg/gg-low-data';
 
 interface HeaderExtraProps { snapshot: GgOwnerSnapshot; audio: GgStoryContextValue['audio']; preview: boolean }
 
-/** The admin preview's marker — the story itself is identical (ROK-2187 L10d). */
+const PREVIEW_FULL = 'Preview — not saved, not shared';
+
+/** The admin preview's marker (short "Preview" on phones, full text for AT and ≥640px) — the story itself is identical (ROK-2187 L10d). */
 function PreviewBanner(): JSX.Element {
     return (
-        <span role="status" data-testid="gg-preview-banner"
-            className="max-w-[9rem] rounded-md border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-medium leading-tight text-warning sm:max-w-none">
-            Preview — not saved, not shared
+        <span role="status" data-testid="gg-preview-banner" title={PREVIEW_FULL}
+            className="whitespace-nowrap rounded-md border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-medium leading-tight text-warning">
+            <span aria-hidden="true" className="sm:hidden">Preview</span>
+            <span className="sr-only sm:not-sr-only">{PREVIEW_FULL}</span>
         </span>
     );
 }

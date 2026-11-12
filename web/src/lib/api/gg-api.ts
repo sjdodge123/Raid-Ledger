@@ -5,26 +5,14 @@
  * only, anonymous) and the share image `GET /gg/public/:slug/card.png`.
  */
 import type {
-    GgArchiveDto, GgOwnerSnapshotDto, GgPublicSummaryDto, GgShareStateDto, GgShareToggleDto,
+    GgArchiveDto, GgOwnerMascot, GgOwnerSnapshotDto, GgPublicSummaryDto, GgShareStateDto, GgShareToggleDto,
 } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../config';
 import { fetchApi } from './fetch-api';
 import { encodePathSegment } from './path-segment';
 
-/**
- * The community mascot on the intro card (spec "Community mascot intro"). Read
- * defensively: the owner DTO gains `mascot` in the contract lane; until then it
- * is absent and the plain intro renders.
- */
-export interface GgMascotView {
-    emojiName: string;
-    imageUrl: string;
-    soundUrl: string | null;
-    volume: number;
-}
-
-/** The owner snapshot plus the optional mascot block. */
-export type GgOwnerSnapshot = GgOwnerSnapshotDto & { mascot?: GgMascotView | null };
+/** The owner snapshot (`mascot` absent/`null` = the plain intro). */
+export type GgOwnerSnapshot = GgOwnerSnapshotDto;
 
 /**
  * Mascot copies are served by the API at `/uploads/gg-mascot/…` (API-relative,
@@ -38,7 +26,7 @@ export function resolveGgAssetUrl(url: string): string {
 function withResolvedMascot(dto: GgOwnerSnapshot): GgOwnerSnapshot {
     const m = dto.mascot;
     if (!m) return dto;
-    const mascot: GgMascotView = {
+    const mascot: GgOwnerMascot = {
         ...m,
         imageUrl: resolveGgAssetUrl(m.imageUrl),
         soundUrl: m.soundUrl === null ? null : resolveGgAssetUrl(m.soundUrl),

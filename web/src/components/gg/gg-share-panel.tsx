@@ -19,7 +19,7 @@ export function GgSharePanel(): JSX.Element | null {
     return (
         <div className="w-full rounded-xl border border-edge bg-panel/80 p-3">
             <div className="flex items-center justify-between gap-3">
-                <span id="gg-share-label" className="text-sm font-medium text-foreground">Share my GG {year}</span>
+                <span aria-hidden="true" className="text-sm font-medium text-foreground">Share my GG {year}</span>
                 <Switch checked={share.shared} onChange={(on) => toggle.mutate(on)} disabled={toggle.isPending}
                     label={`Share my GG ${year} publicly`} aria-describedby="gg-share-help" />
             </div>

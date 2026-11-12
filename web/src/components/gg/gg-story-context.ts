@@ -3,15 +3,14 @@
  * the year, tier, share state, mascot, the intro gate and the audio controls.
  */
 import { createContext, useContext } from 'react';
-import type { GgActivityTier, GgShareStateDto } from '@raid-ledger/contract';
-import type { GgMascotView } from '../../lib/api/gg-api';
+import type { GgActivityTier, GgOwnerMascot, GgShareStateDto } from '@raid-ledger/contract';
 import type { GgAudio } from './use-gg-audio';
 
 export interface GgStoryContextValue {
     year: number;
     tier: GgActivityTier;
     share: GgShareStateDto;
-    mascot: GgMascotView | null;
+    mascot: GgOwnerMascot | null;
     /** True once "Tap to start" was pressed. */
     started: boolean;
     /** Leave the intro gate (plays sound unless muted). */

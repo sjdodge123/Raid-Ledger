@@ -6,7 +6,7 @@
  * payload parses with the renderer's schema — anything else is skipped, so a
  * stale or unknown card never breaks the story (short GG, R4).
  */
-import type { ComponentType, LazyExoticComponent } from 'react';
+import { createElement, type ComponentType, type JSX, type LazyExoticComponent } from 'react';
 import type { GgCardEnvelope } from '@raid-ledger/contract';
 import { isSlugActive } from '../stores/plugin-store';
 
@@ -59,9 +59,27 @@ const registry = new Map<string, GgCardOwnedRegistration>();
 
 const keyOf = (pluginSlug: string, cardId: string): string => `${pluginSlug}:${cardId}`;
 
+/**
+ * Erases `P` without a cast: the stored renderer re-narrows its payload with
+ * the card's own schema, so a `GgCardRegistration<P>` becomes a plain one.
+ */
+function eraseGgCard<P>(card: GgCardRegistration<P>): GgCardRegistration {
+    const Inner = card.Component;
+    const bg = card.backgroundSrc;
+    const Component = ({ payload, year }: GgCardProps): JSX.Element | null => {
+        const r = card.schema.safeParse(payload);
+        return r.success ? createElement(Inner, { payload: r.data, year }) : null;
+    };
+    return {
+        id: card.id, label: card.label, order: card.order, schema: card.schema, Component,
+        ...(bg ? { backgroundSrc: (raw: unknown) => { const r = card.schema.safeParse(raw); return r.success ? bg(r.data) : undefined; } } : {}),
+        ...(card.durationMs === undefined ? {} : { durationMs: card.durationMs }),
+    };
+}
+
 /** @internal Called by `PluginHandle.registerGgCard`. Re-registering a key replaces it (HMR). */
 export function addGgCard<P>(pluginSlug: string, card: GgCardRegistration<P>): void {
-    registry.set(keyOf(pluginSlug, card.id), { pluginSlug, card: card as unknown as GgCardRegistration });
+    registry.set(keyOf(pluginSlug, card.id), { pluginSlug, card: eraseGgCard(card) });
 }
 
 /** Every GG card registration, regardless of plugin status (the ownership guard reads this). */
