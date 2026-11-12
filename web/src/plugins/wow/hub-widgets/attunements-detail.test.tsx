@@ -12,7 +12,7 @@ import type { GuildPage, WowAttunementResultDto, WowRosterAttunementsDto } from 
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { createBareRosterInsights, rosterInsightsHandler } from '../../../test/handlers/forever-hub-widgets';
-import { buildAttunementMember, buildAttunementsSection } from '../../../test/factories/forever-attunements';
+import { buildAttunementMember, buildAttunementsSection, sampleAttunementDefs } from '../../../test/factories/forever-attunements';
 import AttunementsWidget from './attunements-widget';
 import AttunementsDetail from './attunements-detail';
 import { useAttunementsDetail } from './attunements-detail-store';
@@ -27,6 +27,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     useAuth: () => ({ user: { id: 1, role: 'member' }, isAuthenticated: true }),
 }));
 
+const ONY_STEPS = ['o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7'];
 const CLAIMED = '00000000-0000-4000-8000-0000000000aa';
 
 function res(key: string, overrides: Partial<WowAttunementResultDto> = {}): WowAttunementResultDto {
@@ -37,7 +38,10 @@ function section(extra = 0): WowRosterAttunementsDto {
     const filler = Array.from({ length: extra }, (_, i) => buildAttunementMember({
         rowKey: `f${i}`, name: `Filler ${String(i).padStart(2, '0')}`, results: [res('mc-horde')],
     }));
+    // Onyxia is a 7-step chain (mockup F6 "4/7").
+    const attunements = sampleAttunementDefs().map((d) => (d.groupKey === 'onyxia' ? { ...d, steps: ONY_STEPS } : d));
     return buildAttunementsSection({
+        attunements,
         members: [
             buildAttunementMember({ rowKey: 'z', name: 'Zinny', characterId: null, results: [res('mc-horde', { state: 'no_data', noDataReason: 'not_claimed', nextStep: null })] }),
             buildAttunementMember({ rowKey: 'b', name: 'Brakkor', characterId: CLAIMED, results: [res('mc-horde', { state: 'done', stepsDone: 1, nextStep: null }), res('ony-horde', { state: 'in_progress', stepsDone: 4, nextStep: 'What the Wind Carries' })] }),
