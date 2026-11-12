@@ -18,7 +18,10 @@ import {
   type WowLedgerlinkMessage,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
+import {
+  truncateAllTables,
+  waitFor,
+} from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -35,6 +38,7 @@ import {
   buildWho,
 } from '../addon-import/testing/addon-fixture.builder';
 import { pinExportClock } from '../addon-import/testing/pin-export-clock';
+import { ADDON_IMPORT_PENDING } from '../addon-import/addon-import.audit';
 import { WOW_LEDGERLINK_EXPORT_PATH } from './wow-ledgerlink.errors';
 
 pinExportClock();
@@ -105,8 +109,23 @@ beforeAll(async () => {
 
 beforeEach(setup);
 
+/**
+ * ROK-2179: the companion path finalises the audit AFTER the 202, so a
+ * message's audit row may still be PENDING when the response arrives. Wait
+ * for none before reading results or truncating (no stray late writes).
+ */
+async function settledAudit(): Promise<string[]> {
+  let results: string[] = [];
+  await waitFor(async () => {
+    results = await auditResults();
+    expect(results).not.toContain(ADDON_IMPORT_PENDING);
+  }, 10_000);
+  return results;
+}
+
 // No afterAll DB work: the shared integration-setup afterAll closes the pool.
 afterEach(async () => {
+  await settledAudit();
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
@@ -214,6 +233,7 @@ describe('collector message → same result as a paste (AC)', () => {
     const viaCompanion = await importedState();
     expect(viaCompanion.snapshots).toHaveLength(1);
 
+    await settledAudit();
     testApp.seed = await truncateAllTables(testApp.db);
     await setup();
     const b = await makeUser(testApp, 'll-paster');
@@ -254,6 +274,27 @@ describe('sections, replays and staleness', () => {
     expect(await rowCount(schema.guildMembers)).toBe(600);
   });
 
+  it('ROK-2179: a mixed message acks, then its audit rows reach their final result (one per section)', async () => {
+    const a = await member('ll-audit');
+    expectAccepted(
+      await post(a.token, companionFixture('mixed-char-guild3-raid-shuffled')),
+    );
+    expect(await settledAudit()).toEqual(['applied', 'applied', 'applied']);
+    const rows = await testApp.db
+      .select({
+        section: schema.addonImportAudit.section,
+        createdAt: schema.addonImportAudit.createdAt,
+      })
+      .from(schema.addonImportAudit);
+    // The extras copy the reservation's instant — the paste counts once.
+    expect(new Set(rows.map((r) => r.createdAt.getTime())).size).toBe(1);
+    expect(rows.map((r) => r.section).sort()).toEqual([
+      'char',
+      'guild',
+      'raid',
+    ]);
+  });
+
   it('a guild-only export (3 pages) creates the character from the envelope and applies the guild', async () => {
     const a = await member('ll-guild');
     expectAccepted(await post(a.token, companionFixture('guild-3-pages')));
@@ -267,7 +308,7 @@ describe('sections, replays and staleness', () => {
     const before = await snapshots();
     expectAccepted(await post(a.token, msg));
     expect(await snapshots()).toEqual(before);
-    expect(await auditResults()).toEqual(['applied', 'noop']);
+    expect(await settledAudit()).toEqual(['applied', 'noop']);
   });
 
   it('an older export after a newer one → 202 accepted, import stale, stored snapshot unchanged', async () => {
@@ -279,7 +320,7 @@ describe('sections, replays and staleness', () => {
     expect(before).toHaveLength(1);
     expectAccepted(await post(a.token, at(FIXTURE_EXPORTED_AT)));
     expect(await snapshots()).toEqual(before);
-    expect(await auditResults()).toEqual(['applied', 'stale']);
+    expect(await settledAudit()).toEqual(['applied', 'stale']);
   });
 });
 
@@ -293,7 +334,7 @@ describe('ROK-2066 — a member without a guild grant', () => {
     );
     expectAccepted(res);
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(1);
-    expect(await auditResults()).not.toContain('NOT_IN_GUILD');
+    expect(await settledAudit()).not.toContain('NOT_IN_GUILD');
   });
 });
 
@@ -328,7 +369,7 @@ describe('rejects → pinned companion codes, nothing written', () => {
       { path: WOW_LEDGERLINK_EXPORT_PATH, code: 'RULESET_REQUIRED' },
     ]);
     expect(await written()).toEqual(NOTHING);
-    expect(await auditResults()).toEqual(['RULESET_REQUIRED']);
+    expect(await settledAudit()).toEqual(['RULESET_REQUIRED']);
   });
 
   it('an export over the contract cap → 400 invalid_payload too_big (never imported)', async () => {
@@ -339,14 +380,14 @@ describe('rejects → pinned companion codes, nothing written', () => {
     expect(res.body.issues).toEqual([
       { path: WOW_LEDGERLINK_EXPORT_PATH, code: 'too_big' },
     ]);
-    expect(await auditResults()).toEqual([]);
+    expect(await settledAudit()).toEqual([]);
   });
 
   it(`a body over ${COMPANION_MESSAGE_MAX_BYTES} bytes → 413 payload_too_large`, async () => {
     const a = await member('ll-toolarge');
     const huge = message('x'.repeat(COMPANION_MESSAGE_MAX_BYTES + 1));
     expectError(await post(a.token, huge), 413, 'payload_too_large');
-    expect(await auditResults()).toEqual([]);
+    expect(await settledAudit()).toEqual([]);
   });
 });
 
@@ -384,7 +425,7 @@ describe('auth and plugin gating', () => {
       const res = await post(a.token, companionFixture('char-normal'));
       expectError(res, 404, 'unknown_contract');
       expect(await written()).toEqual(NOTHING);
-      expect(await auditResults()).toEqual([]);
+      expect(await settledAudit()).toEqual([]);
     } finally {
       // deactivate() drops the Forever identity provider (ROK-1733); only
       // activate() re-registers it. Without this, a later test's Forever
