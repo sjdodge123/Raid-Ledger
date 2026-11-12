@@ -26,9 +26,29 @@ export interface GgMascotView {
 /** The owner snapshot plus the optional mascot block. */
 export type GgOwnerSnapshot = GgOwnerSnapshotDto & { mascot?: GgMascotView | null };
 
-/** The viewer's own frozen snapshot for `year`. */
+/**
+ * Mascot copies are served by the API at `/uploads/gg-mascot/…` (API-relative,
+ * like the branding logo) — prefix `API_BASE_URL` so `<img>` / `Audio` load
+ * them from the API host, not the web host. Absolute URLs pass through.
+ */
+export function resolveGgAssetUrl(url: string): string {
+    return /^https?:\/\//.test(url) ? url : `${API_BASE_URL}${url}`;
+}
+
+function withResolvedMascot(dto: GgOwnerSnapshot): GgOwnerSnapshot {
+    const m = dto.mascot;
+    if (!m) return dto;
+    const mascot: GgMascotView = {
+        ...m,
+        imageUrl: resolveGgAssetUrl(m.imageUrl),
+        soundUrl: m.soundUrl === null ? null : resolveGgAssetUrl(m.soundUrl),
+    };
+    return { ...dto, mascot };
+}
+
+/** The viewer's own frozen snapshot for `year` (mascot URLs made absolute). */
 export async function getGgYear(year: number): Promise<GgOwnerSnapshot> {
-    return fetchApi(`/gg/${year}`);
+    return withResolvedMascot(await fetchApi<GgOwnerSnapshot>(`/gg/${year}`));
 }
 
 /** Every year the viewer has a GG for (R5). */
