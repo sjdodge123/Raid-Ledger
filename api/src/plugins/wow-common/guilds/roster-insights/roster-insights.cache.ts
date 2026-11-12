@@ -1,75 +1,140 @@
-import { Inject, Injectable, type Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
-import { memorySwr, type MemoryCacheEntry } from '../../../../common/swr-cache';
+import type { MemoryCacheEntry } from '../../../../common/swr-cache';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import * as schema from '../../../../drizzle/schema';
 import { liveMemberPredicate } from '../../../../guilds/community/community-membership.queries';
 import { characterLink } from '../guild-link.predicates';
 import { pullScopeHubIds, type PullScope } from './roster-insights.pull-scope';
+import { InsightsFlights } from './roster-insights.cache-flight';
+import type { InsightsAudience } from './roster-insights.types';
 
 /** 5 minutes, the quest-coverage pattern (ROK-1748 D10). */
 export const ROSTER_INSIGHTS_TTL_MS = 5 * 60 * 1000;
+/** `memorySwr`'s default: an entry turns stale in its last 20%. */
+const STALE_RATIO = 0.2;
 
 /**
  * ROK-1913 — in-memory SWR of roster insights keyed by guild + audience (+
  * the mains-only flag). An addon import drops every entry of each guild the
  * imported character sits in, so a guild or char import shows on next read.
+ * ROK-2178: the dropped keys that were READ within the TTL are recomputed in
+ * the background (`registerRecompute`), so the next viewer after an import
+ * gets a hit; every compute of a key runs through one coordinator
+ * (`InsightsFlights`: one in flight per key, warms capped process-wide).
  */
 @Injectable()
-export class RosterInsightsCache {
+export class RosterInsightsCache implements OnModuleDestroy {
   private readonly cache = new Map<
     string,
     MemoryCacheEntry<WowRosterInsightsDto>
   >();
-  /**
-   * Per-key generation, bumped by every invalidation of the key's guild. A
-   * fetch that started under an older generation is stale: its result is
-   * dropped and the fetch re-runs, so an in-flight refresh can never write
-   * pre-invalidation data back into the cache.
-   */
-  private readonly generations = new Map<string, number>();
+  /** Last `get` per key (a warm is not a read): only these keys re-warm. */
+  private readonly lastReadAt = new Map<string, number>();
+  private readonly flights = new InsightsFlights({
+    store: (key, data) => this.store(key, data),
+    isCached: (key) => this.isLive(key),
+  });
+  private recompute: InsightsRecompute | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
-  /** Cached insights, or `fetcher` on a miss/expiry (refreshed when stale). */
-  get(
+  /**
+   * Register the uncached compute that warms dropped keys (the service does
+   * it on init — a callback, so the cache never imports the service).
+   */
+  registerRecompute(fn: InsightsRecompute): void {
+    this.recompute = fn;
+  }
+
+  /** Stop warming; wait for running computes before the pool closes. */
+  async onModuleDestroy(): Promise<void> {
+    await this.flights.close();
+  }
+
+  /**
+   * Cached insights; stale → served and refreshed in the background; missing
+   * or expired → computed, joining any compute of the key in flight (a failed
+   * joined warm falls back to this caller's own `fetcher`).
+   */
+  async get(
     key: string,
     fetcher: () => Promise<WowRosterInsightsDto>,
   ): Promise<WowRosterInsightsDto> {
-    return memorySwr({
-      cache: this.cache,
-      key,
-      ttlMs: ROSTER_INSIGHTS_TTL_MS,
-      fetcher: () => this.fetchCurrent(key, fetcher),
-    });
+    const now = Date.now();
+    this.lastReadAt.set(key, now);
+    const entry = this.cache.get(key);
+    if (entry && now < entry.expiresAt) {
+      if (now >= entry.staleAt) this.flights.refresh(key, fetcher);
+      return entry.data;
+    }
+    const joined = this.flights.isRunning(key);
+    try {
+      return (await this.flights.run(key, fetcher)).data;
+    } catch (err) {
+      if (!joined) throw err;
+      return (await this.flights.run(key, fetcher)).data;
+    }
   }
 
-  /** Drop every cached entry of one guild (all audiences); bump generations. */
+  /**
+   * Drop every cached entry of one guild (all audiences), supersede its
+   * in-flight computes, then queue a warm of each of its keys read within
+   * the TTL (never awaited).
+   */
   invalidateGuild(guildId: number): void {
     const prefix = `${INSIGHTS_KEY_PREFIX}${guildId}:`;
-    for (const key of [...this.cache.keys()]) {
+    for (const key of [...this.cache.keys()])
       if (key.startsWith(prefix)) this.cache.delete(key);
-    }
-    for (const [key, gen] of this.generations) {
-      if (key.startsWith(prefix)) this.generations.set(key, gen + 1);
-    }
+    this.flights.bumpPrefix(prefix);
+    for (const key of this.recentlyRead(prefix)) this.scheduleWarm(key);
   }
 
-  /** Run `fetcher`; re-run once when the key was invalidated meanwhile. */
-  private async fetchCurrent(
-    key: string,
-    fetcher: () => Promise<WowRosterInsightsDto>,
-  ): Promise<WowRosterInsightsDto> {
-    const gen = this.generations.get(key) ?? 0;
-    this.generations.set(key, gen);
-    const data = await fetcher();
-    if ((this.generations.get(key) ?? 0) === gen) return data;
-    return fetcher();
+  /** Keys under `prefix` read within the TTL; older read stamps are pruned. */
+  private recentlyRead(prefix: string): string[] {
+    const cutoff = Date.now() - ROSTER_INSIGHTS_TTL_MS;
+    const keys: string[] = [];
+    for (const [key, at] of this.lastReadAt) {
+      if (!key.startsWith(prefix)) continue;
+      if (at > cutoff) keys.push(key);
+      else this.lastReadAt.delete(key);
+    }
+    return keys;
+  }
+
+  private scheduleWarm(key: string): void {
+    const recompute = this.recompute;
+    const params = parseInsightsKey(key);
+    if (!recompute || !params) return;
+    this.flights.scheduleWarm(key, () =>
+      recompute(params.guildId, params.audience, params.onlyMains),
+    );
+  }
+
+  /** True when `key` holds an unexpired entry. */
+  private isLive(key: string): boolean {
+    const entry = this.cache.get(key);
+    return entry !== undefined && Date.now() < entry.expiresAt;
+  }
+
+  /** Write a fresh entry with `memorySwr`'s TTL and stale window. */
+  private store(key: string, data: WowRosterInsightsDto): void {
+    const now = Date.now();
+    this.cache.set(key, {
+      data,
+      expiresAt: now + ROSTER_INSIGHTS_TTL_MS,
+      staleAt: now + ROSTER_INSIGHTS_TTL_MS * (1 - STALE_RATIO),
+    });
   }
 
   /**
@@ -107,9 +172,16 @@ export class RosterInsightsCache {
   }
 }
 
+/** The uncached compute behind one key (the service's `compute`). */
+export type InsightsRecompute = (
+  guildId: number,
+  audience: InsightsAudience,
+  onlyMains: boolean,
+) => Promise<WowRosterInsightsDto>;
+
 /**
- * Namespace of every insights key: `memorySwr`'s in-flight refresh tracker is
- * module-wide and shared by every cache, so a bare `${guild}:` could collide.
+ * Namespace of every insights key (they once shared `memorySwr`'s module-wide
+ * in-flight tracker; the prefix also scopes `invalidateGuild`).
  */
 export const INSIGHTS_KEY_PREFIX = 'ri:';
 
@@ -120,6 +192,21 @@ export function insightsKey(
   mainsOnly: boolean,
 ): string {
   return `${INSIGHTS_KEY_PREFIX}${guildId}:${audience}:${mainsOnly ? 'mains' : 'all'}`;
+}
+
+/** Inverse of `insightsKey`; null for a key it did not build. */
+export function parseInsightsKey(key: string): {
+  guildId: number;
+  audience: InsightsAudience;
+  onlyMains: boolean;
+} | null {
+  const [ns, guild, audience, mains] = key.split(':');
+  const guildId = Number(guild);
+  if (`${ns}:` !== INSIGHTS_KEY_PREFIX || !Number.isInteger(guildId))
+    return null;
+  if (audience !== 'member' && audience !== 'visitor') return null;
+  if (mains !== 'mains' && mains !== 'all') return null;
+  return { guildId, audience, onlyMains: mains === 'mains' };
 }
 
 /**
