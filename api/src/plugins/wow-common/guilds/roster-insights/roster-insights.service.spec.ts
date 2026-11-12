@@ -11,13 +11,20 @@ import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import { GuildAccessService } from '../../../../guilds/guild-access.service';
 import { HubKindRegistry } from '../../../../guilds/hub-kind.registry';
 import { WowFactsService } from '../../facts/wow-facts.service';
-import { RosterInsightsCache } from './roster-insights.cache';
+import {
+  RosterInsightsCache,
+  type InsightsRecompute,
+} from './roster-insights.cache';
 import { RosterInsightsService } from './roster-insights.service';
 import {
   loadInsightsHubRow,
   type InsightsHubRow,
 } from './roster-insights.hub-row';
-import { loadGuildRows, loadInsightRawRows } from './roster-insights.refs';
+import {
+  emptyInsights,
+  loadGuildRows,
+  loadInsightRawRows,
+} from './roster-insights.refs';
 import { loadRaidProgress } from './roster-insights.raid-progress';
 
 jest.mock('./roster-insights.hub-row', () => ({
@@ -89,6 +96,8 @@ const resolveKind = jest.fn((kind: string): FakeAdapter | undefined => ({
 type FactsResult = Awaited<ReturnType<WowFactsService['resolveFacts']>>;
 const resolveFacts = jest.fn();
 
+const registerRecompute = jest.fn<void, [InsightsRecompute]>();
+
 async function makeService(): Promise<RosterInsightsService> {
   const mod = await Test.createTestingModule({
     providers: [
@@ -96,7 +105,7 @@ async function makeService(): Promise<RosterInsightsService> {
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: WowFactsService, useValue: { resolveFacts } },
       { provide: GuildAccessService, useValue: {} },
-      { provide: RosterInsightsCache, useValue: {} },
+      { provide: RosterInsightsCache, useValue: { registerRecompute } },
       {
         provide: HubKindRegistry,
         useValue: { forGuild, resolve: resolveKind },
@@ -188,5 +197,20 @@ describe('RosterInsightsService.compute — hub kind from the hub row (ROK-2178)
     await svc.compute(3, 'member', false);
     expect(rawRowsMock).toHaveBeenCalledWith({}, undefined, 3);
     expect(resolveFacts).toHaveBeenCalledWith([]);
+  });
+});
+
+describe('RosterInsightsService — cache warm wiring (ROK-2178 R2)', () => {
+  it('registers its uncached compute with the cache on init', async () => {
+    const svc = await makeService();
+    const compute = jest
+      .spyOn(svc, 'compute')
+      .mockResolvedValue(emptyInsights());
+    svc.onModuleInit();
+    expect(registerRecompute).toHaveBeenCalledTimes(1);
+    const fn = registerRecompute.mock.calls[0]?.[0];
+    if (!fn) throw new Error('no recompute registered');
+    await fn(4, 'visitor', true);
+    expect(compute).toHaveBeenCalledWith(4, 'visitor', true);
   });
 });

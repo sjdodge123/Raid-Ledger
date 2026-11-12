@@ -30,7 +30,10 @@ const VISITOR_MAINS = insightsKey(1, 'visitor', true);
 
 /** A cache with `keys` already cached and `recompute` registered. */
 async function seeded(
-  recompute: jest.Mock<ReturnType<InsightsRecompute>, Parameters<InsightsRecompute>>,
+  recompute: jest.Mock<
+    ReturnType<InsightsRecompute>,
+    Parameters<InsightsRecompute>
+  >,
   keys: string[],
 ): Promise<RosterInsightsCache> {
   const cache = new RosterInsightsCache(

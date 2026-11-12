@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   WowRosterInsightsDto,
@@ -57,7 +57,7 @@ import type { InsightRow, InsightsAudience } from './roster-insights.types';
  * `emptyInsights()` (Q1 = A) — community membership is RL-private.
  */
 @Injectable()
-export class RosterInsightsService {
+export class RosterInsightsService implements OnModuleInit {
   private readonly logger = new Logger(RosterInsightsService.name);
 
   constructor(
@@ -68,6 +68,13 @@ export class RosterInsightsService {
     private readonly cache: RosterInsightsCache,
     private readonly hubKinds: HubKindRegistry,
   ) {}
+
+  /** ROK-2178 (R2): let the cache re-warm the keys an import drops. */
+  onModuleInit(): void {
+    this.cache.registerRecompute((guildId, audience, onlyMains) =>
+      this.compute(guildId, audience, onlyMains),
+    );
+  }
 
   /** The viewer's insights (the hub view guard already ran). */
   async insights(
@@ -89,7 +96,7 @@ export class RosterInsightsService {
   /**
    * Build the DTO for one guild + audience (uncached). ROK-2178: the reads run
    * in as few sequential round trips as their inputs allow — hub row ∥ guild
-   * roster, then facts ∥ raid pulls. R2 (cache warm) may call this directly.
+   * roster, then facts ∥ raid pulls. R2: also the cache's background warm.
    */
   async compute(
     guildId: number,
