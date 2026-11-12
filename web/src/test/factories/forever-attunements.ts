@@ -36,9 +36,9 @@ export function buildAttunementMember(
     };
 }
 
-/** An ISO timestamp `days` days before now. */
-export function daysAgo(days: number): string {
-    return new Date(Date.now() - days * 86_400_000).toISOString();
+/** An ISO timestamp `days` days before `now` (pass the test's own `now` when it also feeds the code under test). */
+export function daysAgo(days: number, now: number = Date.now()): string {
+    return new Date(now - days * 86_400_000).toISOString();
 }
 
 /** The mockup F1 definitions (faction variants split). */
