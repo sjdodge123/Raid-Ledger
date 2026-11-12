@@ -49,6 +49,31 @@ export const GuildRecentEventSchema = z.object({
 });
 export type GuildRecentEventDto = z.infer<typeof GuildRecentEventSchema>;
 
+/**
+ * ROK-2185 item 3 — `GET /guilds/:id/events/past` pages back through the
+ * hub's FULL ended-event history (operator ruling Q4 = A), newest first,
+ * a fixed 20 per page. Cards reuse the `raids.recent` shape.
+ */
+export const GUILD_PAST_EVENTS_PAGE_SIZE = 20;
+
+/** Opaque keyset cursor; the server alone knows its encoding. */
+const PastEventsCursorSchema = z.string().min(1).max(200);
+
+/** Query of `GET /guilds/:id/events/past`; no cursor = the newest page. */
+export const GuildPastEventsQuerySchema = z.object({
+  cursor: PastEventsCursorSchema.optional(),
+});
+export type GuildPastEventsQueryDto = z.infer<
+  typeof GuildPastEventsQuerySchema
+>;
+
+/** One page of ended hub events; `nextCursor` null = no older events. */
+export const GuildPastEventsPageSchema = z.object({
+  events: z.array(GuildRecentEventSchema).max(GUILD_PAST_EVENTS_PAGE_SIZE),
+  nextCursor: PastEventsCursorSchema.nullable(),
+});
+export type GuildPastEventsPageDto = z.infer<typeof GuildPastEventsPageSchema>;
+
 /** One recurring raid night = the next occurrence of a recurrence group. */
 export const GuildScheduleNightSchema = z.object({
   recurrenceGroupId: z.string().uuid(),
