@@ -1,4 +1,4 @@
-import { Inject, Injectable, type Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
@@ -12,11 +12,17 @@ import type { InsightsAudience } from './roster-insights.types';
 
 /** 5 minutes, the quest-coverage pattern (ROK-1748 D10). */
 export const ROSTER_INSIGHTS_TTL_MS = 5 * 60 * 1000;
+/** `memorySwr`'s default: an entry turns stale in its last 20%. */
+const STALE_RATIO = 0.2;
+/** A warm superseded this many times in a row gives up (the key stays absent). */
+const MAX_WARM_ATTEMPTS = 3;
 
 /**
  * ROK-1913 — in-memory SWR of roster insights keyed by guild + audience (+
  * the mains-only flag). An addon import drops every entry of each guild the
  * imported character sits in, so a guild or char import shows on next read.
+ * ROK-2178 (R2): the dropped keys are then recomputed in the background
+ * (`registerRecompute`), so the next viewer after an import gets a hit.
  */
 @Injectable()
 export class RosterInsightsCache {
@@ -32,23 +38,34 @@ export class RosterInsightsCache {
    */
   private readonly generations = new Map<string, number>();
 
+  /** Background recompute in flight per key (at most one; see `warm`). */
+  private readonly warming = new Map<string, Promise<void>>();
   private recompute: InsightsRecompute | null = null;
+  private readonly logger = new Logger(RosterInsightsCache.name);
 
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
-  /** STUB (red) — register the uncached compute used to warm keys. */
+  /**
+   * Register the uncached compute that warms dropped keys (the service does
+   * it on init — a callback, so the cache never imports the service).
+   */
   registerRecompute(fn: InsightsRecompute): void {
     this.recompute = fn;
   }
 
-  /** Cached insights, or `fetcher` on a miss/expiry (refreshed when stale). */
-  get(
+  /**
+   * Cached insights, or `fetcher` on a miss/expiry (refreshed when stale). A
+   * miss while the key is being warmed waits for that warm instead.
+   */
+  async get(
     key: string,
     fetcher: () => Promise<WowRosterInsightsDto>,
   ): Promise<WowRosterInsightsDto> {
+    const warming = this.warming.get(key);
+    if (warming && !this.cache.has(key)) await warming;
     return memorySwr({
       cache: this.cache,
       key,
@@ -57,15 +74,65 @@ export class RosterInsightsCache {
     });
   }
 
-  /** Drop every cached entry of one guild (all audiences); bump generations. */
+  /**
+   * Drop every cached entry of one guild (all audiences), bump generations,
+   * then warm the dropped keys in the background (never awaited).
+   */
   invalidateGuild(guildId: number): void {
     const prefix = `${INSIGHTS_KEY_PREFIX}${guildId}:`;
-    for (const key of [...this.cache.keys()]) {
-      if (key.startsWith(prefix)) this.cache.delete(key);
-    }
+    const dropped = [...this.cache.keys()].filter((k) => k.startsWith(prefix));
+    for (const key of dropped) this.cache.delete(key);
     for (const [key, gen] of this.generations) {
       if (key.startsWith(prefix)) this.generations.set(key, gen + 1);
     }
+    for (const key of dropped) this.scheduleWarm(key);
+  }
+
+  /** Start a warm of `key` unless one is in flight (it re-runs on its own). */
+  private scheduleWarm(key: string): void {
+    const recompute = this.recompute;
+    const params = parseInsightsKey(key);
+    if (!recompute || !params || this.warming.has(key)) return;
+    const run = (): Promise<WowRosterInsightsDto> =>
+      recompute(params.guildId, params.audience, params.onlyMains);
+    this.warming.set(key, this.warm(key, run));
+  }
+
+  /**
+   * Recompute `key` and store it only if no invalidation landed meanwhile
+   * (generation guard); a superseded result is dropped and the compute
+   * re-runs. Failures are logged and leave the key absent. The in-flight
+   * marker is cleared in the same tick as the final check, so a later
+   * invalidation always schedules a fresh warm.
+   */
+  private async warm(
+    key: string,
+    run: () => Promise<WowRosterInsightsDto>,
+  ): Promise<void> {
+    try {
+      for (let attempt = 0; attempt < MAX_WARM_ATTEMPTS; attempt++) {
+        const gen = this.generations.get(key) ?? 0;
+        const data = await run();
+        if ((this.generations.get(key) ?? 0) !== gen) continue;
+        this.store(key, data);
+        return;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`roster-insights warm failed for ${key}: ${msg}`);
+    } finally {
+      this.warming.delete(key);
+    }
+  }
+
+  /** Write a fresh entry with `memorySwr`'s TTL and stale window. */
+  private store(key: string, data: WowRosterInsightsDto): void {
+    const now = Date.now();
+    this.cache.set(key, {
+      data,
+      expiresAt: now + ROSTER_INSIGHTS_TTL_MS,
+      staleAt: now + ROSTER_INSIGHTS_TTL_MS * (1 - STALE_RATIO),
+    });
   }
 
   /** Run `fetcher`; re-run once when the key was invalidated meanwhile. */
@@ -135,6 +202,21 @@ export function insightsKey(
   mainsOnly: boolean,
 ): string {
   return `${INSIGHTS_KEY_PREFIX}${guildId}:${audience}:${mainsOnly ? 'mains' : 'all'}`;
+}
+
+/** Inverse of `insightsKey`; null for a key it did not build. */
+export function parseInsightsKey(key: string): {
+  guildId: number;
+  audience: InsightsAudience;
+  onlyMains: boolean;
+} | null {
+  const [ns, guild, audience, mains] = key.split(':');
+  const guildId = Number(guild);
+  if (`${ns}:` !== INSIGHTS_KEY_PREFIX || !Number.isInteger(guildId))
+    return null;
+  if (audience !== 'member' && audience !== 'visitor') return null;
+  if (mains !== 'mains' && mains !== 'all') return null;
+  return { guildId, audience, onlyMains: mains === 'mains' };
 }
 
 /**
