@@ -3,7 +3,7 @@
  * community (branding); its contract payload carries only `memberSince`.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { GgStoryContext } from '../../../components/gg/gg-story-context';
 import type { GgStoryContextValue } from '../../../components/gg/gg-story-context';
@@ -44,5 +44,17 @@ describe('GG intro card (ROK-2187)', () => {
         expect(pill.className).toContain('bg-success');
         expect(pill.className).toContain('text-white');
         expect(pill.className).not.toMatch(/emerald|text-foreground/);
+    });
+
+    it('after Tap to start unmounts, focus lands on the enclosing slide (never lost to <body>)', () => {
+        renderWithProviders(
+            <div role="group" aria-roledescription="slide" aria-label="1 of 3: Intro" tabIndex={-1}>
+                <GgStoryContext.Provider value={ctx('full', false)}><GgIntroCardView payload={{}} year={2026} /></GgStoryContext.Provider>
+            </div>,
+        );
+        const tap = screen.getByTestId('gg-tap-to-start');
+        tap.focus();
+        fireEvent.click(tap);
+        expect(document.activeElement).toBe(screen.getByRole('group', { name: '1 of 3: Intro' }));
     });
 });

@@ -44,3 +44,23 @@ describe('Core GG stat cards — year visuals', () => {
         expect(ggHubsBackdrop(hubs)).toBeUndefined();
     });
 });
+
+describe('Core GG stat cards — no zero values, singular counts', () => {
+    it('Events card hides the no-shows tile when there were none', () => {
+        render(<GgEventsCardView year={2026} payload={{ ...events, noShows: 0 }} />);
+        expect(screen.queryByText(/no-show/)).toBeNull();
+    });
+
+    it('Events card says "1 no-show" and "event" (singular) for counts of one', () => {
+        render(<GgEventsCardView year={2026} payload={{ ...events, attended: 1, noShows: 1 }} />);
+        expect(screen.getByText('no-show')).toBeInTheDocument();
+        expect(screen.getByText('event')).toBeInTheDocument();
+        expect(screen.queryByText('events')).toBeNull();
+    });
+
+    it('Events card keeps plurals for counts above one', () => {
+        render(<GgEventsCardView year={2026} payload={{ ...events, noShows: 2 }} />);
+        expect(screen.getByText('no-shows')).toBeInTheDocument();
+        expect(screen.getByText('events')).toBeInTheDocument();
+    });
+});

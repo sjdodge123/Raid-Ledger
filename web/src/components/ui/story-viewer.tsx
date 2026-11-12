@@ -19,7 +19,7 @@
  * slide is pressable while the empty space around it still pages.
  */
 import { createPortal } from 'react-dom';
-import { type JSX, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { useEscapeLayer } from '../../hooks/use-escape-layer';
@@ -72,13 +72,27 @@ export interface StoryViewerProps {
 const SLIDE_INTERACTIVE = '[&_:is(a,button,input,select,textarea,label,iframe)]:pointer-events-auto';
 const SLIDE_ENTER = 'animate-[story-slide-in_0.35s_var(--spring-smooth)_both]';
 
+/**
+ * Focus the slide when it mounts (each slide change remounts it) IF focus was
+ * lost — on `<body>` or on a control that left with the old slide. A side
+ * arrow or the × that moved it keeps focus.
+ */
+function useFocusSlideWhenLost(ref: RefObject<HTMLDivElement | null>): void {
+    useEffect(() => {
+        const active = document.activeElement;
+        if (active === null || active === document.body || !active.isConnected) ref.current?.focus({ preventScroll: true });
+    }, [ref]);
+}
+
 function SlideBody({ slide, index, count, reduced }: {
     slide: StorySlide; index: number; count: number; reduced: boolean;
 }): JSX.Element {
+    const ref = useRef<HTMLDivElement>(null);
+    useFocusSlideWhenLost(ref);
     const body = typeof slide.content === 'function' ? slide.content() : slide.content;
     return (
-        <div role="group" aria-roledescription="slide" aria-label={`${index + 1} of ${count}: ${slide.label}`}
-            className={`pointer-events-none absolute inset-0 z-20 flex flex-col gap-3 px-6 pb-7 pt-24 ${SLIDE_INTERACTIVE} ${reduced ? '' : SLIDE_ENTER}`}>
+        <div ref={ref} tabIndex={-1} role="group" aria-roledescription="slide" aria-label={`${index + 1} of ${count}: ${slide.label}`}
+            className={`outline-none pointer-events-none absolute inset-0 z-20 flex flex-col gap-3 px-6 pb-7 pt-24 ${SLIDE_INTERACTIVE} ${reduced ? '' : SLIDE_ENTER}`}>
             {body}
         </div>
     );

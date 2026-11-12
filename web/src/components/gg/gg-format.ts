@@ -1,6 +1,11 @@
 /** Formatting + copy helpers for "GG <year>" cards (ROK-2187). */
 import type { GgSuperlativeKey } from '@raid-ledger/contract';
 
+/** `one` when `n` is exactly 1, else `many` — "1 event", "2 events". */
+export function ggPlural(n: number, one: string, many: string): string {
+    return n === 1 ? one : many;
+}
+
 /** Whole hours, e.g. 1_368_000 → "380h". */
 export function ggHours(seconds: number): string {
     return `${Math.round(seconds / 3600).toLocaleString()}h`;

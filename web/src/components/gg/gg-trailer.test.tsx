@@ -36,4 +36,15 @@ describe('GgTrailerPlayer (ROK-2187)', () => {
         expect(audio.resumeMusic).toHaveBeenCalledTimes(1);
         expect(screen.queryByTitle('Valheim trailer')).toBeNull();
     });
+
+    it('the poster and the player themselves are at least 200×200 (not just the bordered frame)', () => {
+        setup();
+        const poster = screen.getByRole('button', { name: /Play trailer/ });
+        expect(poster.className).toContain('min-h-[200px]');
+        expect(poster.className).toContain('min-w-[200px]');
+        fireEvent.click(poster);
+        const player = screen.getByTitle('Valheim trailer');
+        expect(player.className).toContain('min-h-[200px]');
+        expect(player.className).toContain('min-w-[200px]');
+    });
 });

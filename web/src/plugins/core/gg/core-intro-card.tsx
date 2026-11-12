@@ -5,7 +5,7 @@
  * runs the colour conversion — an accent wash, skipped under reduced motion.
  * The sound warning is visible before the tap.
  */
-import type { JSX } from 'react';
+import { useRef, type JSX } from 'react';
 import { SpeakerWaveIcon } from '@heroicons/react/24/outline';
 import type { GgCardProps } from '../../gg-cards';
 import { GgCardBody, GgKicker, GgLede, GgTitle } from '../../../components/gg/gg-card-parts';
@@ -52,13 +52,23 @@ function TapToStart({ onStart, muted }: { onStart: () => void; muted: boolean })
     );
 }
 
+/** The slide this card sits on, e.g. for focus once "Tap to start" unmounts. */
+function enclosingSlide(el: HTMLElement | null): HTMLElement | null {
+    return el?.closest<HTMLElement>('[aria-roledescription="slide"]') ?? null;
+}
+
 /** The intro card body. */
 export function GgIntroCardView({ year }: GgCardProps): JSX.Element {
     const { started, start, mascot, audio, tier } = useGgStory();
+    const rootRef = useRef<HTMLDivElement>(null);
+    const onStart = (): void => {
+        start();
+        enclosingSlide(rootRef.current)?.focus({ preventScroll: true });
+    };
     const reduced = usePrefersReducedMotion();
     const { player, community } = useIntroNames();
     return (
-        <div className="relative h-full" data-testid="gg-intro" data-converted={started ? 'true' : 'false'}>
+        <div ref={rootRef} className="relative h-full" data-testid="gg-intro" data-converted={started ? 'true' : 'false'}>
             {started && !reduced && (
                 <div aria-hidden="true" data-testid="gg-conversion-wash"
                     className="pointer-events-none absolute left-1/2 top-1/3 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-success/40 animate-[gg-wash_1s_ease-out_both]" />
@@ -73,7 +83,7 @@ export function GgIntroCardView({ year }: GgCardProps): JSX.Element {
                 {community && <GgLede><strong>Your year in Raid Ledger</strong></GgLede>}
                 <GgLede>{introLede(tier === 'short' ? 'short' : 'full', player)}</GgLede>
             </GgCardBody>
-            {!started && <TapToStart onStart={start} muted={audio.muted} />}
+            {!started && <TapToStart onStart={onStart} muted={audio.muted} />}
         </div>
     );
 }

@@ -29,6 +29,9 @@ function useHoldWhilePlaying(playing: boolean): void {
     }, [playing]);
 }
 
+/** The player and poster themselves are ≥200×200 — the frame's 1px border sits outside them. */
+const MIN_200 = 'min-h-[200px] min-w-[200px]';
+
 /** The framed player for one YouTube video id. */
 export function GgTrailerPlayer({ videoId, title }: { videoId: string; title: string }): JSX.Element {
     const [playing, setPlaying] = useState(false);
@@ -39,10 +42,10 @@ export function GgTrailerPlayer({ videoId, title }: { videoId: string; title: st
             <div className={frame} data-testid="gg-trailer-frame">
                 {playing ? (
                     <iframe src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1&playsinline=1&rel=0`}
-                        title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-full w-full" />
+                        title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className={`h-full w-full ${MIN_200}`} />
                 ) : (
                     <Button variant="bare" onClick={() => setPlaying(true)}
-                        className="h-full w-full flex-col gap-1 text-foreground">
+                        className={`h-full w-full flex-col gap-1 text-foreground ${MIN_200}`}>
                         <PlayCircleIcon aria-hidden="true" className="h-14 w-14" />
                         <span className="font-semibold">Play trailer</span>
                         <span className="text-xs text-muted">{title} · plays with sound</span>

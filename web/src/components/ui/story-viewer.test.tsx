@@ -173,6 +173,30 @@ describe('StoryViewer — focus', () => {
         expect(document.activeElement).toBe(focusables[0]);
     });
 
+    it('the slide is programmatically focusable (tabIndex -1)', () => {
+        renderViewer();
+        expect(screen.getByRole('group', { name: '1 of 3: Intro' })).toHaveAttribute('tabindex', '-1');
+    });
+
+    it('moves focus to the new slide when the focused control left with the old slide', async () => {
+        renderViewer({ initialIndex: 2 });
+        await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+        screen.getByRole('button', { name: 'Share' }).focus();
+        key('ArrowLeft');
+        expect(document.activeElement).toBe(screen.getByRole('group', { name: '2 of 3: Events' }));
+    });
+
+    it('leaves focus on a side arrow that moved the slide', async () => {
+        matching = [DESKTOP];
+        renderViewer();
+        await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+        const next = screen.getByTestId('story-side-arrow-next');
+        next.focus();
+        fireEvent.click(next);
+        expect(live()).toBe('Slide 2 of 3: Events');
+        expect(document.activeElement).toBe(next);
+    });
+
     it('locks body scroll while open', () => {
         renderViewer();
         expect(document.body.style.overflow).toBe('hidden');
