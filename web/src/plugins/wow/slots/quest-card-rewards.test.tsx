@@ -11,10 +11,10 @@ import { EQUIPPED_LEGS, REWARD_LEGS, questWith, type RewardFixture } from '../co
 
 vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: () => false }));
 
-function renderQuest(rewards: RewardFixture[], equip: Map<string, EquipmentItemDto>, characterId: string | undefined = 'c1') {
+function renderQuest(rewards: RewardFixture[], equip: Map<string, EquipmentItemDto>, characterId: string | null = 'c1') {
     return render(<QuestCard quest={questWith(rewards)} questCoverage={undefined} currentUserId={1} eventId={1}
         wowheadVariant="classic_era" isExpanded pendingQuestId={null} equippedBySlot={equip} charClass="Mage"
-        characterId={characterId} onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />);
+        characterId={characterId ?? undefined} onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />);
 }
 
 const EQUIP = new Map([['LEGS', EQUIPPED_LEGS]]);
@@ -53,7 +53,7 @@ describe('QuestCard reward rows (ROK-2186)', () => {
     });
 
     it('no character or no slot: a plain item row, no compare block, never "undefined"', () => {
-        const { container } = renderQuest([REWARD_LEGS, NO_SLOT], EQUIP, undefined);
+        const { container } = renderQuest([REWARD_LEGS, NO_SLOT], EQUIP, null);
         expect(container.querySelector('.item-comparison')).toBeNull();
         expect(screen.getByText('Mystery Bag')).toBeInTheDocument();
         expect(container.textContent).not.toMatch(/undefined|null|NaN/);

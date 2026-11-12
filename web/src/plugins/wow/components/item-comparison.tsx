@@ -66,7 +66,7 @@ interface ItemComparisonProps {
     lootSlot?: string | null;
     /** ROK-2176: what the drop is compared against ("vs Ring 2 — your weaker ring"). */
     compareLabel?: string | null | undefined;
-    /** ROK-2176: per-stat deltas; `null` = a side has no stats (`statsNote` says why); absent = no chips (quest rewards). */
+    /** ROK-2176: per-stat deltas; `null` = a side has no stats (`statsNote` says why); absent = no chips. */
     deltas?: StatDelta[] | null | undefined;
     statsNote?: string | null | undefined;
     /** ROK-2176: opens the compare popup — the equipped card and "+N more" call it. */
