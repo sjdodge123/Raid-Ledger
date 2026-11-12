@@ -98,16 +98,16 @@ const mcAlliance = attunementQuestSteps(
 ).map((s) => s.questId);
 
 describe('POST /admin/test/wow/seed-attunements — cast', () => {
-  it('writes the Armory prefix, faction and an older quest log per entry', async () => {
+  it('writes the Armory list, faction and an older quest log holding the next quest', async () => {
     const guild = await seedGuild('Attune Cast Guild');
     const id = charId(guild, 'officer');
-    const next = nonEmpty(mcAlliance.slice(1, 2), 'mc step 2')[0];
+    const next = nonEmpty(mcAlliance, 'mc-alliance quest')[0];
     const res = await post('/admin/test/wow/seed-attunements', {
       cast: [
         {
           characterId: id,
           attunement: 'mc-alliance',
-          completedSteps: 1,
+          completedSteps: 0,
           questLog: [next],
           questLogCapturedAt: LOG_AT,
           completedAt: LIST_AT,
@@ -119,14 +119,14 @@ describe('POST /admin/test/wow/seed-attunements — cast', () => {
       expect.objectContaining({
         characterId: id,
         key: 'mc-alliance',
-        completedSteps: 1,
+        completedSteps: 0,
       }),
     ]);
     const row = await characterRow(id);
     expect(row?.faction).toBe('alliance');
     expect(row?.armoryQuests).toEqual({
       fetchedAt: LIST_AT,
-      completed: mcAlliance.slice(0, 1),
+      completed: [],
     });
     const snap = await snapshotRow(id);
     expect(snap?.data.quests).toEqual({ inProgress: [{ questId: next }] });
