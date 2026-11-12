@@ -19,6 +19,11 @@ export const GuildEventCardSchema = z.object({
   startTime: z.string().datetime(),
   endTime: z.string().datetime(),
   signupCount: z.number().int(),
+  /**
+   * ROK-2185 — how many of `signupCount` are members of the hub (the hub
+   * kind's member set). Optional: older payloads omit it.
+   */
+  memberSignupCount: z.number().int().min(0).optional(),
   /** Sum of slotConfig role counts, else maxAttendees; null = uncapped. */
   needed: z.number().int().nullable(),
   viewerStatus: GuildViewerStatusSchema,
