@@ -11,6 +11,11 @@ import {
 import {
   GgAdminDryRunDtoSchema,
   GgAdminSettingsDtoSchema,
+  GgAdminSettingsUpdateDtoSchema,
+  GgMascotOptionsDtoSchema,
+  GgMascotSchema,
+  GgMascotSelectDtoSchema,
+  GgOwnerMascotSchema,
   GgOwnerSnapshotDtoSchema,
   GgPublicSummaryDtoSchema,
   GgShareToggleDtoSchema,
@@ -165,5 +170,53 @@ describe('owner, share and admin DTOs', () => {
       skipped: { deactivated: 2, optedOut: 3, noDiscord: 5, noActivity: 9 },
     };
     expect(GgAdminDryRunDtoSchema.parse(dry)).toEqual(dry);
+  });
+});
+
+describe('GG mascot (community mascot intro)', () => {
+  const mascot = {
+    emojiId: '1234567890123', emojiName: 'wololo', animated: false,
+    imageUrl: '/uploads/gg-mascot/1234567890123.webp?v=ab12cd34',
+    soundId: '987654321', soundName: 'Wololo', soundUrl: '/uploads/gg-mascot/987654321.mp3',
+    volume: 0.8,
+  };
+
+  it('parses a stored mascot and allows a sound-less one', () => {
+    expect(GgMascotSchema.parse(mascot)).toEqual(mascot);
+    const silent = { ...mascot, soundId: null, soundName: null, soundUrl: null };
+    expect(GgMascotSchema.parse(silent)).toEqual(silent);
+  });
+
+  it('refuses a mascot url that is not our same-origin copy', () => {
+    expect(GgMascotSchema.safeParse({ ...mascot, imageUrl: 'https://cdn.discordapp.com/emojis/1.webp' }).success).toBe(false);
+    expect(GgMascotSchema.safeParse({ ...mascot, soundUrl: '/uploads/gg-mascot/../x.mp3' }).success).toBe(false);
+    expect(GgMascotSchema.safeParse({ ...mascot, volume: 1.5 }).success).toBe(false);
+  });
+
+  it('picks only emojiName, imageUrl, soundUrl and volume for the owner read', () => {
+    expect(GgOwnerMascotSchema.parse({ emojiName: 'wololo', imageUrl: mascot.imageUrl, soundUrl: null, volume: 1 }))
+      .toEqual({ emojiName: 'wololo', imageUrl: mascot.imageUrl, soundUrl: null, volume: 1 });
+    expect(GgOwnerMascotSchema.safeParse({ ...mascot }).success).toBe(false);
+  });
+
+  it('accepts a null mascot on admin settings but never via the settings PATCH', () => {
+    const settings = { enabled: true, deliveryDate: '2026-12-14', deliveryHour: 18, dmOffsetMinutes: 15, channelId: null, mascot: null };
+    expect(GgAdminSettingsDtoSchema.parse(settings)).toEqual(settings);
+    expect(GgAdminSettingsDtoSchema.parse({ ...settings, mascot })).toEqual({ ...settings, mascot });
+    expect(GgAdminSettingsUpdateDtoSchema.safeParse({ mascot: null }).success).toBe(false);
+  });
+
+  it('validates the select body as snowflakes or null', () => {
+    expect(GgMascotSelectDtoSchema.parse({ emojiId: null, soundId: null })).toEqual({ emojiId: null, soundId: null });
+    expect(GgMascotSelectDtoSchema.safeParse({ emojiId: '../etc', soundId: null }).success).toBe(false);
+    expect(GgMascotSelectDtoSchema.safeParse({ emojiId: '1' }).success).toBe(false);
+  });
+
+  it('parses the picker options', () => {
+    const options = {
+      emojis: [{ id: '1', name: 'wololo', animated: true, previewUrl: 'https://cdn.discordapp.com/emojis/1.gif' }],
+      sounds: [{ id: '2', name: 'Wololo', volume: 1, available: false, emojiName: null }],
+    };
+    expect(GgMascotOptionsDtoSchema.parse(options)).toEqual(options);
   });
 });

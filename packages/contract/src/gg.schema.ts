@@ -53,6 +53,62 @@ export type GgShareStateDto = z.infer<typeof GgShareStateDtoSchema>;
 export const GgShareToggleDtoSchema = z.strictObject({ shared: z.boolean() });
 export type GgShareToggleDto = z.infer<typeof GgShareToggleDtoSchema>;
 
+/** A Discord snowflake id (emoji / soundboard sound); also our copy's filename stem. */
+const snowflake = z.string().regex(/^\d{1,25}$/);
+/** A same-origin copy under `/uploads/gg-mascot/` (relative to the API base; `?v=` busts caches). */
+const mascotUploadUrl = z.string().regex(/^\/uploads\/gg-mascot\/\d{1,25}\.(png|webp|gif|mp3|ogg)(\?v=[a-f0-9]{1,16})?$/);
+
+/**
+ * ROK-2187 — the community's GG mascot (app-settings `GG_MASCOT`, JSON): a
+ * custom emoji + optional soundboard sound picked by the admin from its OWN
+ * Discord server and COPIED into `uploads/gg-mascot/` at save time.
+ */
+export const GgMascotSchema = z.strictObject({
+  emojiId: snowflake,
+  emojiName: z.string().min(1).max(64),
+  animated: z.boolean(),
+  imageUrl: mascotUploadUrl,
+  soundId: snowflake.nullable(),
+  soundName: z.string().min(1).max(64).nullable(),
+  soundUrl: mascotUploadUrl.nullable(),
+  /** Discord soundboard volume, 0–1. */
+  volume: z.number().min(0).max(1),
+});
+export type GgMascot = z.infer<typeof GgMascotSchema>;
+
+/** The owner-read slice of the mascot (`GET /gg/:year`). */
+export const GgOwnerMascotSchema = GgMascotSchema.pick({
+  emojiName: true, imageUrl: true, soundUrl: true, volume: true,
+});
+export type GgOwnerMascot = z.infer<typeof GgOwnerMascotSchema>;
+
+/** `PATCH /admin/gg/mascot` body — `emojiId: null` = no mascot (deletes the copies). */
+export const GgMascotSelectDtoSchema = z.strictObject({
+  emojiId: snowflake.nullable(),
+  soundId: snowflake.nullable(),
+});
+export type GgMascotSelectDto = z.infer<typeof GgMascotSelectDtoSchema>;
+
+/** `GET /admin/gg/mascot/options` — the guild's emojis + soundboard sounds. */
+export const GgMascotOptionsDtoSchema = z.strictObject({
+  emojis: z.array(z.strictObject({
+    id: snowflake,
+    name: z.string().min(1).max(64),
+    animated: z.boolean(),
+    /** Discord CDN preview (img-src allows cdn.discordapp.com). */
+    previewUrl: z.string().max(2048),
+  })),
+  sounds: z.array(z.strictObject({
+    id: snowflake,
+    name: z.string().min(1).max(64),
+    volume: z.number().min(0).max(1),
+    /** `false` when the guild lost the boost level for it — not selectable. */
+    available: z.boolean(),
+    emojiName: z.string().max(64).nullable(),
+  })),
+});
+export type GgMascotOptionsDto = z.infer<typeof GgMascotOptionsDtoSchema>;
+
 /** `GET /gg/:year` — the owner's frozen snapshot, never recomputed. */
 export const GgOwnerSnapshotDtoSchema = z.strictObject({
   year: GgYearSchema,
@@ -62,6 +118,8 @@ export const GgOwnerSnapshotDtoSchema = z.strictObject({
   share: GgShareStateDtoSchema,
   /** Every year this user has a snapshot for, newest first. */
   archiveYears: z.array(GgYearSchema),
+  /** Community mascot intro; absent/`null` = plain intro (live setting, not frozen). */
+  mascot: GgOwnerMascotSchema.nullable().optional(),
 });
 export type GgOwnerSnapshotDto = z.infer<typeof GgOwnerSnapshotDtoSchema>;
 
@@ -107,11 +165,13 @@ export const GgAdminSettingsDtoSchema = z.strictObject({
   dmOffsetMinutes: z.number().int().min(0).max(1440),
   /** Announcement channel override; `null` = the bot's default channel. */
   channelId: z.string().regex(/^\d{1,25}$/).nullable(),
+  /** Community mascot (`GG_MASCOT`); `null` = none. Changed only via `PATCH /admin/gg/mascot`. */
+  mascot: GgMascotSchema.nullable().optional(),
 });
 export type GgAdminSettingsDto = z.infer<typeof GgAdminSettingsDtoSchema>;
 
 /** `PATCH /admin/gg/settings` body — any subset. */
-export const GgAdminSettingsUpdateDtoSchema = GgAdminSettingsDtoSchema.partial();
+export const GgAdminSettingsUpdateDtoSchema = GgAdminSettingsDtoSchema.omit({ mascot: true }).partial();
 export type GgAdminSettingsUpdateDto = z.infer<typeof GgAdminSettingsUpdateDtoSchema>;
 
 /** `GET /admin/gg/dry-run` — what a compute + DM wave would do. */
