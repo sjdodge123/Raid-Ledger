@@ -11,8 +11,7 @@ import { SETTING_KEYS, type SettingKey } from '../../../drizzle/schema';
 import {
   GG_DEFAULT_DELIVERY_HOUR,
   GG_DEFAULT_DM_OFFSET_MINUTES,
-  defaultGgDeliveryDate,
-  parseGgDate,
+  effectiveGgDeliveryDate,
 } from './gg-delivery.schedule';
 
 /** The slice of `SettingsService` these helpers use. */
@@ -36,7 +35,10 @@ function intIn(
   return n >= min && n <= max ? n : fallback;
 }
 
-/** Current settings; `defaultYear` picks the default delivery date's year. */
+/**
+ * Current settings; `defaultYear` is the current community-tz year — the
+ * default date's year, and the floor below which a stored date is stale.
+ */
 export async function readGgDeliverySettings(
   store: Pick<GgSettingsStore, 'get'>,
   defaultYear: number,
@@ -52,9 +54,7 @@ export async function readGgDeliverySettings(
   const trimmedChannel = channel?.trim() ?? '';
   return {
     enabled: enabled === 'true',
-    deliveryDate: parseGgDate(date)
-      ? (date ?? '').trim()
-      : defaultGgDeliveryDate(defaultYear),
+    deliveryDate: effectiveGgDeliveryDate(date, defaultYear),
     deliveryHour: intIn(hour, 0, 23, GG_DEFAULT_DELIVERY_HOUR),
     dmOffsetMinutes: intIn(offset, 0, 1440, GG_DEFAULT_DM_OFFSET_MINUTES),
     channelId: trimmedChannel === '' ? null : trimmedChannel,

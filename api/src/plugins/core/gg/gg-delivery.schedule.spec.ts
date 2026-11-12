@@ -4,11 +4,14 @@
  */
 import {
   defaultGgDeliveryDate,
+  effectiveGgDeliveryDate,
   ggAnnounceKey,
   isGgDeliveryDue,
   isGgDmWaveOpen,
   parseGgDate,
 } from './gg-delivery.schedule';
+import { readGgDeliverySettings } from './gg-delivery.settings';
+import { SETTING_KEYS, type SettingKey } from '../../../drizzle/schema';
 
 describe('defaultGgDeliveryDate', () => {
   it.each([
@@ -62,6 +65,31 @@ describe('isGgDeliveryDue', () => {
   });
 });
 
+describe('effectiveGgDeliveryDate — a saved date never pins the year', () => {
+  const tz = 'America/New_York';
+  it('treats a date saved in a past year as unset → this year still ships', () => {
+    const date = effectiveGgDeliveryDate('2026-12-14', 2027);
+    expect(date).toBe('2027-12-06');
+    // 18:00 New York on 2027-12-13 = 23:00Z.
+    const now = new Date('2027-12-13T23:00:00Z');
+    expect(isGgDeliveryDue(now, date, 18, tz)).toBe(true);
+    expect(Number(date.slice(0, 4))).toBe(2027);
+  });
+
+  it('honours an explicit date for this year (and a later year)', () => {
+    expect(effectiveGgDeliveryDate('2027-12-14', 2027)).toBe('2027-12-14');
+    expect(effectiveGgDeliveryDate(' 2028-12-01 ', 2027)).toBe('2028-12-01');
+    expect(
+      isGgDeliveryDue(new Date('2027-12-13T23:00:00Z'), '2027-12-14', 18, tz),
+    ).toBe(false);
+  });
+
+  it('falls back to the default for unset or malformed values', () => {
+    expect(effectiveGgDeliveryDate(null, 2027)).toBe('2027-12-06');
+    expect(effectiveGgDeliveryDate('2027-13-01', 2027)).toBe('2027-12-06');
+  });
+});
+
 describe('isGgDmWaveOpen', () => {
   const at = new Date('2026-12-07T23:00:00Z');
   it('opens exactly offset minutes after the announcement', () => {
@@ -74,4 +102,20 @@ describe('isGgDmWaveOpen', () => {
 
 it('ggAnnounceKey is year-scoped', () => {
   expect(ggAnnounceKey(2026)).toBe('gg:2026:announce');
+});
+
+describe("readGgDeliverySettings — last year's saved panel draft", () => {
+  it("reads a stored past-year date as this year's default (GG 2027 ships)", async () => {
+    const stored: Partial<Record<SettingKey, string>> = {
+      [SETTING_KEYS.GG_ENABLED]: 'true',
+      [SETTING_KEYS.GG_DELIVERY_DATE]: '2026-12-14',
+    };
+    const store = {
+      get: (k: SettingKey): Promise<string | null> =>
+        Promise.resolve(stored[k] ?? null),
+    };
+    const cfg = await readGgDeliverySettings(store, 2027);
+    expect(cfg.enabled).toBe(true);
+    expect(cfg.deliveryDate).toBe('2027-12-06');
+  });
 });

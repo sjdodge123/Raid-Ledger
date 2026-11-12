@@ -46,6 +46,23 @@ export function parseGgDate(
 }
 
 /**
+ * The delivery date in force for `currentYear` (community tz). A stored date
+ * from an EARLIER year is treated as unset — the admin panel saves the whole
+ * draft, so last year's explicit date must not pin delivery to a past year
+ * and silently skip every later December. A malformed value falls back too.
+ */
+export function effectiveGgDeliveryDate(
+  stored: string | null | undefined,
+  currentYear: number,
+): string {
+  const parsed = parseGgDate(stored);
+  if (!parsed || parsed.year < currentYear) {
+    return defaultGgDeliveryDate(currentYear);
+  }
+  return (stored ?? '').trim();
+}
+
+/**
  * True when `now`, read in `timeZone`, is at or after `date` `hour`:00 AND
  * still in that calendar year — so a stale stored date never fires in
  * January, and a tick that missed the hour (bot offline) catches up later.
