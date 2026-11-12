@@ -41,8 +41,8 @@ function HeaderExtra({ snapshot, audio, preview }: HeaderExtraProps): JSX.Elemen
 }
 
 /**
- * The intro gate + replay: `started` flips on "Tap to start"; `replay` stops the
- * music, re-arms the gate and bumps `run` (the StoryViewer key → slide 1).
+ * The intro gate + replay: `started` flips on "Tap to start"; `replay` resets the
+ * audio (so the next tap plays again), re-arms the gate and bumps `run` (the StoryViewer key → slide 1).
  */
 interface GgRun { started: boolean; start: () => void; replay: () => void; run: number }
 
@@ -55,7 +55,7 @@ function useGgRun(gated: boolean, audio: GgStoryContextValue['audio'], mascot: G
         audio.start(mascot);
     }, [started, audio, mascot]);
     const replay = useCallback((): void => {
-        audio.pauseMusic();
+        audio.reset();
         setStarted(!gated);
         setRun((r) => r + 1);
     }, [audio, gated]);

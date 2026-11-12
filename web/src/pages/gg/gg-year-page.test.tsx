@@ -104,6 +104,16 @@ describe('GG year page — replay + Save-Data (ROK-2187)', () => {
         expect(screen.getByTestId('gg-tap-to-start')).toBeInTheDocument();
     });
 
+    it('Replay then Tap to start plays the mascot sound and the theme again', async () => {
+        renderYear(ggSnapshotFixture({ cards: pick('intro', 'events', 'summary'), mascot: MASCOT }));
+        fireEvent.click(await screen.findByTestId('gg-tap-to-start'));
+        key('ArrowRight'); key('ArrowRight');
+        fireEvent.click(await screen.findByTestId('gg-replay'));
+        play.mockClear();
+        fireEvent.click(await screen.findByTestId('gg-tap-to-start'));
+        expect(play).toHaveBeenCalledTimes(2);
+    });
+
     it('Save-Data: the top-games card shows no trailer player and the backdrops stay still', async () => {
         Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true } });
         try {

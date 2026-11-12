@@ -16,12 +16,17 @@ export interface GgAudio {
     muted: boolean;
     toggleMute: () => void;
     /** Plays the mascot sound (if any), then fades the music in. Only call from a user gesture. */
-    start: (mascot?: { soundUrl: string | null; volume: number } | null) => void;
+    start: (mascot?: GgMascotSound) => void;
     /** Hold the music (a trailer is playing). */
     pauseMusic: () => void;
     /** Release `pauseMusic()`. */
     resumeMusic: () => void;
+    /** Stop everything and re-arm `start()` (the Summary's Replay). */
+    reset: () => void;
 }
+
+/** The mascot clip `start()` plays before the music. */
+export type GgMascotSound = { soundUrl: string | null; volume: number } | null | undefined;
 
 function readMuted(): boolean {
     try { return window.localStorage.getItem(GG_MUTE_KEY) === '1'; } catch { return false; }
@@ -55,56 +60,89 @@ function useLazyMusic(tracks: readonly GgTrack[]): () => HTMLAudioElement | null
     }, [tracks]);
 }
 
-/** The persisted mute flag; `onMute` runs when it turns on. */
+/** The persisted mute flag; `onMute` runs when it turns on (side effects outside the state updater). */
 function useGgMute(onMute: () => void): [boolean, () => void] {
     const [muted, setMuted] = useState(readMuted);
     const toggle = useCallback((): void => {
-        setMuted((m) => {
-            const next = !m;
-            try { window.localStorage.setItem(GG_MUTE_KEY, next ? '1' : '0'); } catch { /* private mode */ }
-            if (next) onMute();
-            return next;
-        });
-    }, [onMute]);
+        const next = !muted;
+        try { window.localStorage.setItem(GG_MUTE_KEY, next ? '1' : '0'); } catch { /* private mode */ }
+        if (next) onMute();
+        setMuted(next);
+    }, [muted, onMute]);
     return [muted, toggle];
+}
+
+interface GgMascotPlayer { play: (m: GgMascotSound) => void; stop: () => void }
+
+/** The mascot clip, tracked so mute / replay can cut it off mid-play. */
+function useMascotSound(): GgMascotPlayer {
+    const ref = useRef<HTMLAudioElement | null>(null);
+    const stop = useCallback((): void => { ref.current?.pause(); ref.current = null; }, []);
+    const play = useCallback((m: GgMascotSound): void => {
+        if (!m?.soundUrl) return;
+        const s = new Audio(m.soundUrl);
+        s.volume = Math.min(Math.max(m.volume, 0), 1);
+        ref.current = s;
+        safePlay(s);
+    }, []);
+    useEffect(() => stop, [stop]);
+    return useMemo(() => ({ play, stop }), [play, stop]);
+}
+
+interface GgMusic {
+    /** Fades the music in — unless held or not yet started. */
+    play: () => void;
+    pause: () => void;
+    hold: (on: boolean) => void;
+    /** Marks the story started; false when it already was. */
+    begin: () => boolean;
+    /** Stops the music, releases the hold and un-starts. */
+    reset: () => void;
+}
+
+/** The GG theme's started / held state and fade. */
+function useGgMusic(tracks: readonly GgTrack[]): GgMusic {
+    const lazy = useLazyMusic(tracks);
+    const el = useRef<HTMLAudioElement | null>(null);
+    const flags = useRef({ started: false, held: false });
+    const fade = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => () => { if (fade.current) clearInterval(fade.current); }, []);
+    return useMemo((): GgMusic => {
+        const pause = (): void => { el.current?.pause(); };
+        const play = (): void => {
+            if (flags.current.held || !flags.current.started) return;
+            const a = lazy();
+            el.current = a;
+            if (a === null) return;
+            if (fade.current) clearInterval(fade.current);
+            fade.current = fadeIn(a);
+            safePlay(a);
+        };
+        const begin = (): boolean => {
+            if (flags.current.started) return false;
+            flags.current.started = true;
+            return true;
+        };
+        const hold = (on: boolean): void => { flags.current.held = on; };
+        return { play, pause, hold, begin, reset: () => { pause(); flags.current = { started: false, held: false }; } };
+    }, [lazy]);
 }
 
 /** Owns the GG audio elements for one story. */
 export function useGgAudio(tracks: readonly GgTrack[] = GG_MUSIC_TRACKS): GgAudio {
-    const existing = useRef<HTMLAudioElement | null>(null);
-    const [muted, toggleMute] = useGgMute(useCallback(() => existing.current?.pause(), []));
-    const started = useRef(false);
-    const held = useRef(false);
-    const music = useLazyMusic(tracks);
-    const fade = useRef<ReturnType<typeof setInterval> | null>(null);
-    useEffect(() => () => { if (fade.current) clearInterval(fade.current); }, []);
-
-    const playMusic = useCallback((): void => {
-        if (muted || held.current || !started.current) return;
-        const el = music();
-        existing.current = el;
-        if (el === null) return;
-        if (fade.current) clearInterval(fade.current);
-        fade.current = fadeIn(el);
-        safePlay(el);
-    }, [music, muted]);
-
-    useEffect(() => { if (!muted) playMusic(); }, [muted, playMusic]);
-
-    const start = useCallback((mascot?: { soundUrl: string | null; volume: number } | null): void => {
-        if (started.current) return;
-        started.current = true;
-        if (muted) return;
-        if (mascot?.soundUrl) {
-            const s = new Audio(mascot.soundUrl);
-            s.volume = Math.min(Math.max(mascot.volume, 0), 1);
-            safePlay(s);
-        }
+    const music = useGgMusic(tracks);
+    const mascot = useMascotSound();
+    const [muted, toggleMute] = useGgMute(useCallback(() => { music.pause(); mascot.stop(); }, [music, mascot]));
+    const playMusic = useCallback((): void => { if (!muted) music.play(); }, [muted, music]);
+    useEffect(() => { playMusic(); }, [playMusic]);
+    const start = useCallback((m?: GgMascotSound): void => {
+        if (!music.begin() || muted) return;
+        mascot.play(m);
         playMusic();
-    }, [muted, playMusic]);
-
-    const pauseMusic = useCallback((): void => { held.current = true; existing.current?.pause(); }, []);
-    const resumeMusic = useCallback((): void => { held.current = false; playMusic(); }, [playMusic]);
-
-    return useMemo(() => ({ muted, toggleMute, start, pauseMusic, resumeMusic }), [muted, toggleMute, start, pauseMusic, resumeMusic]);
+    }, [music, mascot, muted, playMusic]);
+    const pauseMusic = useCallback((): void => { music.hold(true); music.pause(); }, [music]);
+    const resumeMusic = useCallback((): void => { music.hold(false); playMusic(); }, [music, playMusic]);
+    const reset = useCallback((): void => { music.reset(); mascot.stop(); }, [music, mascot]);
+    return useMemo(() => ({ muted, toggleMute, start, pauseMusic, resumeMusic, reset }),
+        [muted, toggleMute, start, pauseMusic, resumeMusic, reset]);
 }

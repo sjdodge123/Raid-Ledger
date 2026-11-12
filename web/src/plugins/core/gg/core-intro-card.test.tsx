@@ -17,7 +17,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 const NOOP = (): void => {};
 const ctx = (tier: 'full' | 'short'): GgStoryContextValue => ({
     year: 2026, tier, share: { shared: false, slug: null, sharedAt: null }, mascot: null, started: true,
-    start: NOOP, replay: NOOP, audio: { muted: false, toggleMute: NOOP, start: NOOP, pauseMusic: NOOP, resumeMusic: NOOP },
+    start: NOOP, replay: NOOP, audio: { muted: false, toggleMute: NOOP, start: NOOP, pauseMusic: NOOP, resumeMusic: NOOP, reset: NOOP },
 });
 
 function renderIntro(tier: 'full' | 'short'): void {

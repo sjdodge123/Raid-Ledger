@@ -23,7 +23,7 @@ export interface GgStoryContextValue {
     preview?: boolean;
 }
 
-const NOOP_AUDIO: GgAudio = { muted: true, toggleMute: () => {}, start: () => {}, pauseMusic: () => {}, resumeMusic: () => {} };
+const NOOP_AUDIO: GgAudio = { muted: true, toggleMute: () => {}, start: () => {}, pauseMusic: () => {}, resumeMusic: () => {}, reset: () => {} };
 
 export const GgStoryContext = createContext<GgStoryContextValue>({
     year: new Date().getFullYear(), tier: 'full', share: { shared: false, slug: null, sharedAt: null },
