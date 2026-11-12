@@ -74,18 +74,27 @@ function patchUnsafe(sql: UnsafeOwner): void {
 function patchScopeOpener(sql: object, method: 'begin' | 'savepoint'): void {
   const original: unknown = Reflect.get(sql, method);
   if (typeof original !== 'function') return;
-  Reflect.set(sql, method, (...args: unknown[]): unknown =>
-    Reflect.apply(original, sql, args.map(wrapScopeCallback)),
-  );
+  Reflect.set(sql, method, (...args: unknown[]): unknown => {
+    const result: unknown = Reflect.apply(
+      original,
+      sql,
+      args.map(wrapScopeCallback),
+    );
+    return result;
+  });
 }
 
 function wrapScopeCallback(arg: unknown): unknown {
   if (typeof arg !== 'function') return arg;
   return (scoped: unknown): unknown => {
-    if (typeof scoped === 'function' || (typeof scoped === 'object' && scoped)) {
+    if (
+      typeof scoped === 'function' ||
+      (typeof scoped === 'object' && scoped)
+    ) {
       instrumentSql(scoped);
     }
-    return Reflect.apply(arg, undefined, [scoped]);
+    const result: unknown = Reflect.apply(arg, undefined, [scoped]);
+    return result;
   };
 }
 
