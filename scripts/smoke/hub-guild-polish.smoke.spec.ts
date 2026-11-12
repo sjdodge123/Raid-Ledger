@@ -6,7 +6,7 @@
  * outsider with no membership). No new fixture:
  *   - member phrase: the outsider signs the first "Molten Core Night" through
  *     `POST /admin/test/signup`, so the card has member AND non-member signups;
- *   - past paging: 25 ended events are created through the REAL `POST /events`
+ *   - past paging: 35 ended events are created through the REAL `POST /events`
  *     (tagged to the guild) and pushed into the past with
  *     `POST /admin/test/set-event-times`; titles carry `world.uid`, so the
  *     `world` fixture's prefix-scoped `reset-events` removes them;
@@ -32,7 +32,7 @@ interface UpcomingCard { id: number; signupCount: number; memberSignupCount?: nu
 
 const DAY = 86_400_000;
 /** Seeded ended events; with the fixture's own "Onyxia Clear" the hub has 26 ended (pages of 20: 20 + 6). */
-const PAST_COUNT = 25;
+const PAST_COUNT = 35;
 const TOTAL_ENDED = PAST_COUNT + 1;
 
 function guildName(testInfo: TestInfo): string {
@@ -124,21 +124,21 @@ test('Events tab: Show more pages back through every ended event, then goes away
         expect(before, 'the first rows are the 8-week recent list (1-10)').toBeGreaterThan(0);
         expect(before, 'the first rows are the 8-week recent list (1-10)').toBeLessThanOrEqual(10);
         await more.click();
-        await expect(rows, 'one click reveals the newest page of 20').toHaveCount(20);
+        await expect(rows, 'one click adds 20 rows not already shown (two pages: page 1 repeats recent)').toHaveCount(before + 20, { timeout: 15_000 });
         await expect(more).toBeEnabled({ timeout: 15_000 });
         await more.click();
-        await expect(rows, 'the second click loads the older page: every ended event').toHaveCount(TOTAL_ENDED, { timeout: 15_000 });
+        await expect(rows, 'the second click adds the rest (≤20): every ended event').toHaveCount(TOTAL_ENDED, { timeout: 15_000 });
         await expect(more, 'nothing older is left, so the button goes').toHaveCount(0);
     });
 });
 
-test('Events tab: a visitor (non-member) gets no Show more', async ({ page, world }, testInfo) => {
+test('Events tab: a visitor (non-member) on a WoW guild gets no Show more', async ({ page, world }, testInfo) => {
     await withGuild(testInfo, async (token, guild) => {
         await seedPastEvents(token, guild, world);
         await openEvents(page, guild, 'outsider');
         const rows = page.getByTestId('guild-events-tab').getByTestId('guild-recent-event');
         await expect(rows.first(), 'the visitor still sees the recent list').toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('guild-past-events-more'), 'the past route is members-only').toHaveCount(0);
+        await expect(page.getByTestId('guild-past-events-more'), 'a WoW guild is members-only (canReadOverview)').toHaveCount(0);
     });
 });
 
