@@ -89,7 +89,7 @@ describe('GG year page (ROK-2187)', () => {
         fireEvent.click(toggle);
         expect(await screen.findByTestId('gg-share-url')).toHaveTextContent('/w/abcdefghijklmnop1234');
         expect(screen.getByRole('img', { name: 'Share card preview for GG 2026' }).getAttribute('src'))
-            .toBe('http://localhost:3000/gg/public/abcdefghijklmnop1234/card.png');
+            .toBe('http://localhost:3000/gg/public/abcdefghijklmnop1234/card');
         await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
     });
 });
