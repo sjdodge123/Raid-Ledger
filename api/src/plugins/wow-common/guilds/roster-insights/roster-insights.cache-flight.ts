@@ -5,6 +5,8 @@ import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 export const MAX_COMPUTE_ATTEMPTS = 3;
 /** Background warms running at once, process-wide (the rest queue). */
 export const MAX_CONCURRENT_WARMS = 2;
+/** Longest `close()` waits for running computes before shutdown goes on. */
+export const CLOSE_WAIT_MS = 5_000;
 
 /** One uncached compute of a key. */
 export type InsightsCompute = () => Promise<WowRosterInsightsDto>;
@@ -77,16 +79,20 @@ export class InsightsFlights {
     this.drain();
   }
 
-  /** Stop warming and wait for every running compute to settle. */
+  /**
+   * Stop warming and wait for the running computes to settle, at most
+   * `CLOSE_WAIT_MS` (a compute stuck on a DB read must not hang shutdown).
+   */
   async close(): Promise<void> {
     this.closed = true;
     this.queued.clear();
-    await Promise.allSettled([...this.inFlight.values()]);
+    await settleWithin([...this.inFlight.values()], CLOSE_WAIT_MS);
   }
 
   /**
    * Run `compute` until a result lands under the generation it started in
-   * (stored), or `MAX_COMPUTE_ATTEMPTS` ran (returned, not stored). The
+   * (stored), or `MAX_COMPUTE_ATTEMPTS` ran, or the coordinator closed
+   * (returned, not stored — no new query once shutdown has begun). The
    * in-flight marker is cleared in the same tick as the final check, so a
    * later invalidation always finds the key free.
    */
@@ -98,7 +104,7 @@ export class InsightsFlights {
       let gen = this.generation(key);
       let data = await compute();
       for (let n = 1; n < MAX_COMPUTE_ATTEMPTS; n++) {
-        if (this.generation(key) === gen) break;
+        if (this.closed || this.generation(key) === gen) break;
         gen = this.generation(key);
         data = await compute();
       }
@@ -143,5 +149,25 @@ export class InsightsFlights {
     if (this.closed) return;
     const msg = err instanceof Error ? err.message : String(err);
     this.logger.warn(`${prefix}: ${msg}`);
+  }
+}
+
+/**
+ * Wait for `flights` to settle or for `ms` to pass, whichever is first. The
+ * cap timer is unref'd and always cleared, so no handle outlives the wait.
+ */
+async function settleWithin(
+  flights: Promise<unknown>[],
+  ms: number,
+): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const cap = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+    timer.unref();
+  });
+  try {
+    await Promise.race([Promise.allSettled(flights), cap]);
+  } finally {
+    clearTimeout(timer);
   }
 }
