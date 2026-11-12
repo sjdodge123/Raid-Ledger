@@ -30,6 +30,7 @@ import {
   type RaidHubRow,
 } from './roster-insights.raid-progress';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
+import { loadAttunements } from './roster-insights.attunements.query';
 import {
   emptyInsights,
   joinFacts,
@@ -106,6 +107,8 @@ export class RosterInsightsService {
             // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
             gear: computeGear(all),
             ...(await this.raidSection(hub, linkedUserIds)),
+            // ROK-1927: mains of the full roster (ruling D), never a visitor.
+            attunements: await loadAttunements(this.db, all),
           }
         : {}),
       freshness: computeFreshness(rows),
