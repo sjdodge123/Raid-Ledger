@@ -231,8 +231,8 @@ describe('ROK-1170 — summary 404 two-strike', () => {
     expect(since).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
-  it('(3) a second 404 at least 6h after the first is disbanded', async () => {
-    const since = hoursAgo(7);
+  it('(3) a 404 at least 7 days after the first is disbanded', async () => {
+    const since = hoursAgo(7 * 24 + 1);
     const id = await healthy({
       blizzardSummaryStatus: 'not_found',
       blizzardNotFoundSince: since,
@@ -245,8 +245,9 @@ describe('ROK-1170 — summary 404 two-strike', () => {
     });
   });
 
-  it('(4) a second 404 under 6h stays not_found, since unchanged', async () => {
-    const since = hoursAgo(1);
+  it('(4) a 404 under 7 days after the first stays not_found, since unchanged', async () => {
+    // A day-long Armory outage, and then some: still not disbanded.
+    const since = hoursAgo(6 * 24);
     const id = await healthy({
       blizzardSummaryStatus: 'not_found',
       blizzardNotFoundSince: since,
@@ -274,7 +275,7 @@ describe('ROK-1170 — summary 404 two-strike', () => {
 });
 
 describe('ROK-1170 — 404s after a 200 that carried no guild id', () => {
-  it('(5b) an id-less 200 then two 404s 6h apart ends disbanded', async () => {
+  it('(5b) an id-less 200 then two 404s 7 days apart ends disbanded', async () => {
     const id = await insertGuild();
     summarySpy.mockResolvedValue(found(null));
     await sync(id);
@@ -287,7 +288,7 @@ describe('ROK-1170 — 404s after a 200 that carried no guild id', () => {
     const first = await summaryCols(id);
     expect(first.status).toBe('not_found');
     expect(first.notFoundSince).not.toBeNull();
-    const since = hoursAgo(7);
+    const since = hoursAgo(7 * 24 + 1);
     await testApp.db
       .update(schema.guilds)
       .set({ blizzardNotFoundSince: since })
