@@ -3,10 +3,10 @@
  * (and its popup) reads — so quest rewards and boss drops share one slot
  * mapping, one stat diff and one popup. Missing fields degrade to null.
  */
-import type { BossLootDto, EnrichedDungeonQuestDto, EnrichedQuestReward, ItemTooltip } from '@raid-ledger/contract';
+import type { BossLootDto, EnrichedDungeonQuestDto, EnrichedQuestReward } from '@raid-ledger/contract';
 
-/** A reward as served; `tooltip` passes through when the API carries one. */
-export type QuestRewardItem = EnrichedQuestReward & { tooltip?: ItemTooltip | null | undefined };
+/** A reward as served; its `wow_item_meta` tooltip (when cached) passes through to the row. */
+export type QuestRewardItem = EnrichedQuestReward;
 
 /** Quest reward slots (UPPER_SNAKE) → the loot slot names `compareTarget` maps. */
 export const QUEST_TO_LOOT_SLOT: Record<string, string> = {

@@ -3,9 +3,8 @@
  * Renders a single quest with collapsible details.
  */
 import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, QuestPrereqState } from '@raid-ledger/contract';
-import { getWowheadQuestUrl, getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
-import { ItemCompareRow } from '../components/item-compare-row';
-import { questRewardAsLoot } from '../lib/quest-reward-loot';
+import { getWowheadQuestUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
+import { QuestRewardItems } from './quest-reward-items';
 import { formatGold, formatReputationReward, prerequisiteCount } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
@@ -275,23 +274,5 @@ function QuestReputationRewards({ rewards }: { rewards: { factionName: string; a
                 </span>
             ))}
         </span>
-    );
-}
-
-/** ROK-2186: choice + guaranteed rewards render through the boss-loot row (stat chips + compare popup). */
-function QuestRewardItems({ quest, wowheadSuffix, wowheadVariant, equippedBySlot, charClass, characterId }: {
-    quest: EnrichedDungeonQuestDto; wowheadSuffix: string; wowheadVariant: string;
-    equippedBySlot: Map<string, EquipmentItemDto>; charClass: string | null; characterId: string | undefined;
-}) {
-    if (!quest.rewards || quest.rewards.length === 0) return null;
-    return (
-        <div className="quest-rewards">
-            {quest.rewards.map((reward) => (
-                <ItemCompareRow key={reward.itemId} item={questRewardAsLoot(reward, quest.expansion)}
-                    wowheadVariant={wowheadVariant} equippedBySlot={equippedBySlot}
-                    characterClass={charClass} hasCharacter={!!characterId}
-                    links={{ url: getWowheadItemUrl(reward.itemId, wowheadVariant), data: `item=${reward.itemId}&${wowheadSuffix}` }} />
-            ))}
-        </div>
     );
 }

@@ -25,7 +25,7 @@ export const LOOT_LEGS: BossLootDto = {
 };
 
 /** A quest reward as the API may serve it — `tooltip` passes through when present. */
-export type RewardFixture = EnrichedQuestReward & { tooltip?: ItemTooltip | null };
+export type RewardFixture = EnrichedQuestReward;
 
 export const REWARD_LEGS: RewardFixture = {
     itemId: 2001, itemName: 'Questbound Leggings', quality: 'Uncommon', slot: 'LEGS', itemLevel: 28, iconUrl: null,

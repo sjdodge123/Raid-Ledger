@@ -2,8 +2,8 @@
  * ROK-2186 guard: quest rewards and boss loot render ONE row component
  * (`ItemCompareRow`) so their stat deltas + compare popup cannot fork again.
  */
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { BossLootBody } from '../slots/boss-loot-body';
@@ -17,10 +17,29 @@ const SHARED_IMPORT = /from '\.\.\/components\/item-compare-row'/;
 /** Row pieces only the shared row may compose. */
 const ROW_PIECES = [/from '\.\.\/components\/item-comparison'/, /from '\.\.\/components\/item-compare-dialog'/, /from '\.\.\/components\/wow-item-card'/];
 
-function source(file: string): string {
-    const raw = readFileSync(resolve(__dirname, '../slots', file), 'utf-8');
+/** File source with block and line comments stripped (a comment must not trip the scan). */
+function stripComments(raw: string): string {
     return raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
+
+function source(file: string): string {
+    return stripComments(readFileSync(resolve(__dirname, '../slots', file), 'utf-8'));
+}
+
+const WOW_ROOT = resolve(__dirname, '..');
+const TEST_FILE = /\.(test|spec)\.tsx?$/;
+
+/** Every non-test .ts/.tsx file under `web/src/plugins/wow`, relative to it. */
+function wowSourceFiles(dir: string = WOW_ROOT): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = resolve(dir, entry.name);
+        if (entry.isDirectory()) return wowSourceFiles(full);
+        return /\.tsx?$/.test(entry.name) && !TEST_FILE.test(entry.name) ? [relative(WOW_ROOT, full)] : [];
+    });
+}
+
+/** Modules only the shared row may import (any specifier form: `from`, side-effect, dynamic), wherever an importer lives. */
+const ROW_ONLY_MODULES = [/['"][^'"]*\/item-comparison['"]/, /['"][^'"]*\/item-compare-dialog['"]/];
 
 function rowOf(container: HTMLElement): HTMLElement {
     const rows = within(container).getAllByTestId('item-compare-row');
@@ -31,7 +50,17 @@ function rowOf(container: HTMLElement): HTMLElement {
 }
 
 describe('ItemCompareRow guard (ROK-2186)', () => {
-    it.each(['boss-loot-body.tsx', 'quest-card.tsx'])('%s imports the shared row and none of its pieces', (file) => {
+    it('across plugins/wow, ONLY components/item-compare-row.tsx imports item-comparison / item-compare-dialog', () => {
+        const files = wowSourceFiles();
+        expect(files).toContain('components/item-compare-row.tsx');
+        const importers = files.filter((file) => {
+            const src = stripComments(readFileSync(resolve(WOW_ROOT, file), 'utf-8'));
+            return ROW_ONLY_MODULES.some((piece) => piece.test(src));
+        });
+        expect(importers).toEqual(['components/item-compare-row.tsx']);
+    });
+
+    it.each(['boss-loot-body.tsx', 'quest-reward-items.tsx'])('%s imports the shared row and none of its pieces', (file) => {
         const src = source(file);
         expect(src).toMatch(SHARED_IMPORT);
         for (const piece of ROW_PIECES) expect(src).not.toMatch(piece);
