@@ -9,7 +9,7 @@ import type { WowAttunementResultDto } from '@raid-ledger/contract';
 import {
     buildAttunementDef, buildAttunementMember, daysAgo, sampleAttunementDefs,
 } from '../../../test/factories/forever-attunements';
-import { attunementRows, attunementTabs } from './attunement-detail.helpers';
+import { attunementRows, attunementTabs, belowLevelNote } from './attunement-detail.helpers';
 
 function result(key: string, overrides: Partial<WowAttunementResultDto> = {}): WowAttunementResultDto {
     return { key, state: 'not_started', noDataReason: null, stepsDone: 0, nextStep: 'Step one', belowLevel: false, ...overrides };
@@ -78,5 +78,21 @@ describe('attunementRows', () => {
         expect(mogrash?.levelNote).toBe('Level 52 — below the required level');
         expect(mogrash?.stale).toBe(true);
         expect(mogrash?.asOf).toMatch(/^as of 20 days ago$/);
+    });
+
+    it('says which level the chain needs when the api sends requiredLevel (ROK-1927 P5-web)', () => {
+        const members = [
+            buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, results: [result('ony-horde', { belowLevel: true, requiredLevel: 55 })] }),
+        ];
+        expect(attunementRows(onyTab(), members)[0]?.levelNote).toBe('Level 52 — needs 55');
+    });
+});
+
+describe('belowLevelNote', () => {
+    it('names the level and the gate, falls back without a gate, and drops the level when unknown', () => {
+        expect(belowLevelNote(52, 55)).toBe('Level 52 — needs 55');
+        expect(belowLevelNote(52, null)).toBe('Level 52 — below the required level');
+        expect(belowLevelNote(null, 55)).toBe('Needs level 55');
+        expect(belowLevelNote(null, null)).toBeNull();
     });
 });

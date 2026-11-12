@@ -6,7 +6,7 @@
  * are split into faction variants so grouping is exercised by default.
  */
 import type {
-    WowRosterAttunementDto, WowRosterAttunementMemberDto, WowRosterAttunementsDto,
+    WowCharacterAttunementDto, WowRosterAttunementDto, WowRosterAttunementMemberDto, WowRosterAttunementsDto,
 } from '@raid-ledger/contract';
 
 type Counts = WowRosterAttunementDto['counts'];
@@ -64,5 +64,20 @@ export function buildAttunementsSection(overrides: Partial<WowRosterAttunementsD
         members: [buildAttunementMember({ asOf })],
         oldestAsOf: asOf,
         ...overrides,
+    };
+}
+
+/** The own-view (§5.3) Onyxia checklist: 4 of 7 steps done, step 5 next. */
+export function buildCharacterAttunement(
+    overrides: Partial<WowCharacterAttunementDto> = {},
+): WowCharacterAttunementDto {
+    const labels = [
+        "Warlord's Command", "Eitrigg's Wisdom", 'For The Horde!', 'The Champion of the Horde',
+        'What the Wind Carries', 'Oculus Illusions', 'Blood of the Black Dragon Champion',
+    ];
+    return {
+        key: 'ony-horde', groupKey: 'onyxia', instance: "Onyxia's Lair", state: 'in_progress',
+        belowLevel: false, requiredLevel: null, nextStep: 'What the Wind Carries',
+        steps: labels.map((label, i) => ({ label, done: i < 4 })), ...overrides,
     };
 }
