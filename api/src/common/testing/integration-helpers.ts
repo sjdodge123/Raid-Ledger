@@ -217,6 +217,8 @@ async function obliterateAllQueues(): Promise<void> {
  * copy left behind makes the next test's first post read as a duplicate.
  * `hub-media-companion:` (ROK-1966) is the per-user screenshot window: user
  * ids repeat after a truncate, so a spent window would refuse a new user.
+ * `gg:` (ROK-2187) holds the GG yearly announce/DM dedup keys (`gg:<year>:…`):
+ * a key left from an earlier test reads as already announced.
  */
 export const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'lineup-',
@@ -231,6 +233,7 @@ export const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'igdb:search:itad:',
   'weekly-digest:',
   'hub-media-companion:',
+  'gg:',
 ];
 
 /**

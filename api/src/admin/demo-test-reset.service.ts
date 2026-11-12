@@ -81,6 +81,8 @@ export class DemoTestResetService {
       'recruitment-*',
       // game-alert:event:N (game-affinity-notification.service)
       'game-alert*',
+      // gg:<year>:announce / gg:<year>:dm:<userId> (ROK-2187 GG delivery dedup)
+      'gg:*',
     ];
     for (const pattern of patterns) {
       const keys = await this.redis.keys(pattern);
