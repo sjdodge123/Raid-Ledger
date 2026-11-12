@@ -18,6 +18,9 @@ const people = () => import('./core-people-cards');
 const coverOf = (p: { games: { coverUrl?: string | null | undefined }[] }): string | undefined =>
     p.games.find((g) => g.coverUrl)?.coverUrl ?? undefined;
 
+/** Hubs card backdrop: the first https game-art URL of the player's hubs, if any. */
+export const ggHubsBackdrop = (p: { pictures: number; backdropUrls?: string[] | undefined }): string | undefined => p.backdropUrls?.[0];
+
 /** Register every core GG card on the core plugin handle. */
 export function registerCoreGgCards(core: PluginHandle): void {
     core.registerGgCard({ id: 'intro', label: 'GG intro', order: 0, schema: GgIntroCardSchema, Component: lazy(() => import('./core-intro-card').then((m) => ({ default: m.GgIntroCardView }))) });
@@ -29,7 +32,7 @@ export function registerCoreGgCards(core: PluginHandle): void {
     core.registerGgCard({ id: 'new-games', label: 'New games', order: 60, schema: GgNewGamesCardSchema, backgroundSrc: coverOf, Component: lazy(() => games().then((m) => ({ default: m.GgNewGamesCardView }))) });
     core.registerGgCard({ id: 'voice', label: 'Voice', order: 70, schema: GgVoiceCardSchema, Component: lazy(() => stat().then((m) => ({ default: m.GgVoiceCardView }))) });
     core.registerGgCard({ id: 'people', label: 'Your people', order: 80, schema: GgPeopleCardSchema, Component: lazy(() => people().then((m) => ({ default: m.GgPeopleCardView }))) });
-    core.registerGgCard({ id: 'hubs', label: 'Hubs', order: 90, schema: GgHubsCardSchema, Component: lazy(() => stat().then((m) => ({ default: m.GgHubsCardView }))) });
+    core.registerGgCard({ id: 'hubs', label: 'Hubs', order: 90, schema: GgHubsCardSchema, backgroundSrc: ggHubsBackdrop, Component: lazy(() => stat().then((m) => ({ default: m.GgHubsCardView }))) });
     core.registerGgCard({ id: 'superlative', label: 'Your GG persona', order: 200, schema: GgSuperlativeCardSchema, Component: lazy(() => people().then((m) => ({ default: m.GgSuperlativeCardView }))) });
     core.registerGgCard({ id: 'summary', label: 'Summary', order: 210, schema: GgSummaryCardSchema, backgroundSrc: (p) => coverOf({ games: p.topGames }), Component: lazy(() => people().then((m) => ({ default: m.GgSummaryCardView }))) });
 }

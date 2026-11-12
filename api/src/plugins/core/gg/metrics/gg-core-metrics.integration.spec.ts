@@ -220,6 +220,40 @@ async function seedGameSessions(me: number): Promise<void> {
   );
 }
 
+/** Seed game gets https art; a left hub on another game must add nothing. */
+async function seedHubArt(me: number): Promise<string> {
+  const shot =
+    'https://images.igdb.com/igdb/image/upload/t_screenshot_med/s.jpg';
+  await testApp.db
+    .update(schema.games)
+    .set({ coverUrl: 'https://images.igdb.com/c.jpg', screenshots: [shot] })
+    .where(eq(schema.games.id, testApp.seed.game.id));
+  const [art] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'GG Left Game',
+        slug: 'gg-left-game',
+        coverUrl: 'https://images.igdb.com/left.jpg',
+      })
+      .returning({ id: schema.games.id }),
+    'left game',
+  );
+  const left = await insertGuild('GGL');
+  await testApp.db
+    .update(schema.guilds)
+    .set({ gameId: art.id })
+    .where(eq(schema.guilds.id, left));
+  await testApp.db.insert(schema.hubCommunityMembers).values({
+    guildId: left,
+    userId: me,
+    role: 'member',
+    joinedAt: new Date('2026-02-01T00:00:00Z'),
+    leftAt: new Date('2026-03-01T00:00:00Z'),
+  });
+  return shot;
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
 });
@@ -291,35 +325,7 @@ describe('Core GG hubs + superlative producers (integration, ROK-2187)', () => {
   it('hubs: backdrops are the https art of live hubs’ games, deduped; a left hub adds none', async () => {
     const me = await insertUser('gg-me');
     await seedHubs(me);
-    const shot =
-      'https://images.igdb.com/igdb/image/upload/t_screenshot_med/s.jpg';
-    await testApp.db
-      .update(schema.games)
-      .set({ coverUrl: 'https://images.igdb.com/c.jpg', screenshots: [shot] })
-      .where(eq(schema.games.id, testApp.seed.game.id));
-    const [art] = nonEmpty(
-      await testApp.db
-        .insert(schema.games)
-        .values({
-          name: 'GG Left Game',
-          slug: 'gg-left-game',
-          coverUrl: 'https://images.igdb.com/left.jpg',
-        })
-        .returning({ id: schema.games.id }),
-      'left game',
-    );
-    const left = await insertGuild('GGL');
-    await testApp.db
-      .update(schema.guilds)
-      .set({ gameId: art.id })
-      .where(eq(schema.guilds.id, left));
-    await testApp.db.insert(schema.hubCommunityMembers).values({
-      guildId: left,
-      userId: me,
-      role: 'member',
-      joinedAt: new Date('2026-02-01T00:00:00Z'),
-      leftAt: new Date('2026-03-01T00:00:00Z'),
-    });
+    const shot = await seedHubArt(me);
     expect((await produceHubsCard(ctxFor(me)))?.backdropUrls).toEqual([shot]);
   });
 

@@ -7,9 +7,10 @@ import type { JSX } from 'react';
 import type { GgEventsCard } from '@raid-ledger/contract';
 import type { GgCardProps } from '../../gg-cards';
 import { GgCardBody, GgChip, GgHuge, GgKicker, GgLede, GgStat, GgStats, GgTitle } from '../../../components/gg/gg-card-parts';
+import { GgMonthHistogram, GgWeekStreak } from '../../../components/gg/gg-year-visuals';
 import { ggDuration, ggHour, ggHours, ggMonth, ggPercent, ggWeekday } from '../../../components/gg/gg-format';
 
-interface OnTime { attended: number; onTime: number; onTimeRatio: number }
+interface OnTime { attended: number; onTime: number; onTimeRatio: number; weeksAttended?: boolean[] | undefined }
 interface Rhythm { busiestMonth: number; busiestMonthEvents: number; favouriteWeekday: number; favouriteHour: number }
 interface Hours { totalSeconds: number; gamesPlayed: number; nightOwlShare?: number | undefined }
 interface Voice { totalSeconds: number; sessions: number }
@@ -23,6 +24,7 @@ export function GgEventsCardView({ payload }: GgCardProps<GgEventsCard>): JSX.El
             <GgLede>You showed up to</GgLede>
             <GgHuge>{payload.attended}</GgHuge>
             <GgLede><strong>events</strong> out of {payload.signedUp} you signed up for.</GgLede>
+            {payload.eventsByMonth !== undefined && <GgMonthHistogram counts={payload.eventsByMonth} />}
             <GgStats>
                 <GgStat value={payload.noShows} label="no-shows" />
                 {payload.created !== undefined && <GgStat value={payload.created} label="events you created" />}
@@ -38,6 +40,7 @@ export function GgOnTimeCardView({ payload }: GgCardProps<OnTime>): JSX.Element 
             <GgKicker>Reliability</GgKicker>
             <GgTitle>{ggPercent(payload.onTimeRatio)} on time.</GgTitle>
             <GgLede>You were there for the start of <strong>{payload.onTime}</strong> of {payload.attended} events.</GgLede>
+            {payload.weeksAttended !== undefined && <GgWeekStreak weeks={payload.weeksAttended} />}
             {payload.onTimeRatio >= 0.9 && <GgChip>⏱ Always on time</GgChip>}
         </GgCardBody>
     );
