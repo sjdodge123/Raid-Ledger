@@ -5,6 +5,7 @@
 import { useState, type JSX } from 'react';
 import { Button } from '../../components/ui/button';
 import { StoryViewer, KenBurnsBackground, type StorySlide } from '../../components/ui/story-viewer';
+import { useStoryControls } from '../../components/ui/story-controls';
 
 function BigStat({ value, label }: { value: string; label: string }): JSX.Element {
     return (
@@ -15,10 +16,21 @@ function BigStat({ value, label }: { value: string; label: string }): JSX.Elemen
     );
 }
 
+/** Stands in for a trailer card: pauses auto-advance while "playing". */
+function FakeTrailer(): JSX.Element {
+    const { paused, pause, resume } = useStoryControls();
+    return (
+        <div className="mt-auto flex flex-col gap-3">
+            <BigStat value="Trailer" label="12 s on this card; the button pauses the story through useStoryControls()." />
+            <Button variant="secondary" onClick={paused ? resume : pause}>{paused ? 'Stop trailer' : 'Play trailer'}</Button>
+        </div>
+    );
+}
+
 const SLIDES: StorySlide[] = [
     {
         id: 'intro', label: 'Intro',
-        content: <BigStat value="GG 2026" label="Tap right (or →) to continue, left to go back." />,
+        content: <BigStat value="GG 2026" label="Moves on every 7 s. Hold to pause, Space or ⏸ toggles; tap right (or →) / left to page." />,
     },
     {
         id: 'events', label: 'Events',
@@ -30,6 +42,7 @@ const SLIDES: StorySlide[] = [
         background: <KenBurnsBackground />,
         content: () => <BigStat value="380h" label="no screenshot — the token gradient fallback" />,
     },
+    { id: 'trailer', label: 'Trailer', durationMs: 12_000, content: <FakeTrailer /> },
     {
         id: 'summary', label: 'Summary',
         content: (
@@ -47,7 +60,7 @@ export default function StoryViewerDemo(): JSX.Element {
     return (
         <div className="flex flex-col items-start gap-2">
             <Button variant="secondary" onClick={() => setOpen(true)}>Open the story viewer</Button>
-            <p className="text-xs text-muted">Phone below 1024px (full screen); a centred 9:16 card with side arrows from 1024px.</p>
+            <p className="text-xs text-muted">Phone below 1024px (full screen); a centred 9:16 card with side arrows from 1024px. Reduced motion = no auto-advance.</p>
             {open && <StoryViewer title="GG 2026" slides={SLIDES} onClose={() => setOpen(false)} />}
         </div>
     );
