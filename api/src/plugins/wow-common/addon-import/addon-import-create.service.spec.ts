@@ -6,7 +6,7 @@
  * lives in `addon-import-create.integration.spec.ts` (L3).
  */
 import type { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AddonWho } from '@raid-ledger/contract';
 import type * as schema from '../../../drizzle/schema';
@@ -518,8 +518,16 @@ describe('post-import housekeeping off the ack path (ROK-2179)', () => {
     await drain();
     expect(audited(s.audit)).toMatchObject({ result: 'RATE_LIMITED' });
   });
+});
 
-  it('a deferred housekeeping failure is logged, never thrown', async () => {
+describe('deferred housekeeping failure (ROK-2179)', () => {
+  const drain = () => new Promise<void>((r) => setImmediate(r));
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is logged with the step and the user id only, never thrown', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     const s = setup(who());
     s.audit.recordAttempt.mockRejectedValueOnce(new Error('db down'));
     await expect(
@@ -527,5 +535,8 @@ describe('post-import housekeeping off the ack path (ROK-2179)', () => {
     ).resolves.toMatchObject({ status: 'applied' });
     await drain();
     expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls).toEqual([
+      ['addon-import housekeeping failed userId=1: Error: db down'],
+    ]);
   });
 });

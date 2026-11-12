@@ -18,10 +18,7 @@ import {
   type WowLedgerlinkMessage,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import {
-  truncateAllTables,
-  waitFor,
-} from '../../../common/testing/integration-helpers';
+import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -38,7 +35,7 @@ import {
   buildWho,
 } from '../addon-import/testing/addon-fixture.builder';
 import { pinExportClock } from '../addon-import/testing/pin-export-clock';
-import { ADDON_IMPORT_PENDING } from '../addon-import/addon-import.audit';
+import { settledAudit as waitForSettledAudit } from '../addon-import/testing/settled-audit.test-fixtures';
 import { WOW_LEDGERLINK_EXPORT_PATH } from './wow-ledgerlink.errors';
 
 pinExportClock();
@@ -109,19 +106,8 @@ beforeAll(async () => {
 
 beforeEach(setup);
 
-/**
- * ROK-2179: the companion path finalises the audit AFTER the 202, so a
- * message's audit row may still be PENDING when the response arrives. Wait
- * for none before reading results or truncating (no stray late writes).
- */
-async function settledAudit(): Promise<string[]> {
-  let results: string[] = [];
-  await waitFor(async () => {
-    results = await auditResults();
-    expect(results).not.toContain(ADDON_IMPORT_PENDING);
-  }, 10_000);
-  return results;
-}
+/** ROK-2179: waits out the deferred audit finalise (see the helper). */
+const settledAudit = () => waitForSettledAudit(testApp.db);
 
 // No afterAll DB work: the shared integration-setup afterAll closes the pool.
 afterEach(async () => {
@@ -154,14 +140,6 @@ const written = async () => ({
   pulls: await rowCount(schema.addonEncounterPulls),
 });
 const NOTHING = { characters: 0, snapshots: 0, guilds: 0, pulls: 0 };
-
-const auditResults = async (): Promise<string[]> =>
-  (
-    await testApp.db
-      .select({ result: schema.addonImportAudit.result })
-      .from(schema.addonImportAudit)
-      .orderBy(schema.addonImportAudit.id)
-  ).map((r) => r.result);
 
 const snapshots = () =>
   testApp.db
