@@ -471,3 +471,34 @@ describe('POST /admin/test/wow/seed-guild — withArmorySnapshots (ROK-2149)', (
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST /admin/test/wow/seed-guild — summary overrides (ROK-1170)', () => {
+  const FOUNDED = '2024-03-15T12:00:00.000Z';
+
+  it('writes foundedAt + status; the page sends them; a plain re-seed clears them', async () => {
+    const out = await seedGuild('Founded Keepers', {
+      foundedAt: FOUNDED,
+      blizzardSummaryStatus: 'disbanded',
+    });
+    const token = await tokenFor(out.users.member);
+    const page = await viewGuild(out.guildId, token);
+    expect(page.status).toBe(200);
+    expect(page.body.guild.blizzardGuild).toEqual({
+      foundedAt: FOUNDED,
+      state: 'disbanded',
+    });
+    await seedGuild('Founded Keepers');
+    const cleared = await viewGuild(out.guildId, token);
+    expect(cleared.body.guild.blizzardGuild).toEqual({
+      foundedAt: null,
+      state: null,
+    });
+  });
+
+  it('is 400 for a non-ISO foundedAt and for an unknown status', async () => {
+    const bad = [{ foundedAt: 'March' }, { blizzardSummaryStatus: 'gone' }];
+    for (const extra of bad) {
+      expect((await seed({ name: 'Flag Founded', ...extra })).status).toBe(400);
+    }
+  });
+});

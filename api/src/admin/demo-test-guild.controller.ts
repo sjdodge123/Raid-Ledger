@@ -129,7 +129,7 @@ export class DemoTestGuildController {
     const gameId = await findWowGameId(this.db, input.gameSlug);
     await this.ensurePluginActive();
     const now = new Date();
-    const guildId = await upsertGuild(this.db, gameId, input.name, now);
+    const guildId = await upsertGuild(this.db, gameId, input, now);
     const hash = guildKeyHash(input.name.toLowerCase());
     const nameSuffix = input.rosterSuffix;
     const ctx: RosterCtx = { guildId, gameId, hash, now, nameSuffix };

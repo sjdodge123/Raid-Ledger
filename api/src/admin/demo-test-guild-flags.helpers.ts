@@ -29,7 +29,10 @@ export interface RawSeedFlags {
 /** The opt-in boolean flags; 400 on a non-boolean. */
 export function parseSeedFlags(
   raw: RawSeedFlags,
-): Omit<SeedGuildInput, 'name' | 'gameSlug' | 'rosterSuffix'> {
+): Omit<
+  SeedGuildInput,
+  'name' | 'gameSlug' | 'rosterSuffix' | 'foundedAt' | 'blizzardSummaryStatus'
+> {
   return {
     withContent: boolFlag(raw.withContent, 'withContent'),
     withLockouts: boolFlag(raw.withLockouts, 'withLockouts'),

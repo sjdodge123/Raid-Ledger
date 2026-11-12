@@ -25,6 +25,11 @@ import {
   parseRosterSuffix,
   type SeedRosterEntry,
 } from './demo-test-guild-roster-suffix.helpers';
+import {
+  parseSummaryOverrides,
+  type RawSummaryOverrides,
+  type SeedGuildSummaryOverrides,
+} from './demo-test-guild-summary.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -35,7 +40,8 @@ export const SEED_GUILD_REALM = 'Doomhowl';
 /** One seeded user role. `unlinked` has a member row but no RL user. */
 export type SeedGuildRole = 'gm' | 'officer' | 'member' | 'outsider';
 
-export interface SeedGuildInput {
+/** ROK-1170: `foundedAt` / `blizzardSummaryStatus` overrides (null = cleared). */
+export interface SeedGuildInput extends SeedGuildSummaryOverrides {
   name: string;
   gameSlug: string;
   /** ROK-1786: also seed the GM post, rules, links and two addons. */
@@ -88,12 +94,13 @@ const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{2,47}$/;
 
 /** Body → validated input; 400 on a bad name or a non-WoW slug. */
 export function parseSeedGuildBody(body: unknown): SeedGuildInput {
-  const raw = (body ?? {}) as RawSeedFlags & {
-    name?: unknown;
-    gameSlug?: unknown;
-    armoryProfessions?: unknown;
-    rosterSuffix?: unknown;
-  };
+  const raw = (body ?? {}) as RawSeedFlags &
+    RawSummaryOverrides & {
+      name?: unknown;
+      gameSlug?: unknown;
+      armoryProfessions?: unknown;
+      rosterSuffix?: unknown;
+    };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
       'name: 3-48 chars, letters/digits/space/_/- (starts alphanumeric)',
@@ -109,6 +116,7 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
     ...parseSeedFlags(raw),
     ...parseArmoryProfessionsFlag(raw),
     rosterSuffix: parseRosterSuffix(raw.rosterSuffix),
+    ...parseSummaryOverrides(raw),
   };
 }
 
@@ -130,14 +138,16 @@ export async function findWowGameId(db: Db, slug: string): Promise<number> {
   return game.id;
 }
 
-/** Upsert the realm-less guild, re-stamping its snapshot to `now`. */
+/** Upsert the realm-less guild, re-stamping its snapshot (and summary overrides) to `now`. */
 export async function upsertGuild(
   db: Db,
   gameId: number,
-  name: string,
+  seed: Pick<SeedGuildInput, 'name' | 'foundedAt' | 'blizzardSummaryStatus'>,
   now: Date,
 ): Promise<number> {
+  const { name, ...summary } = seed;
   const set = {
+    ...summary,
     memberCount: SEED_GUILD_ROSTER.length,
     rawRealm: SEED_GUILD_REALM,
     lastSnapshotAt: now,
