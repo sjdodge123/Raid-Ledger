@@ -3,8 +3,9 @@
  * database. The community tz is America/New_York, so the 2026 window is
  * [2026-01-01T05:00Z, 2027-01-01T05:00Z). Mutation map: drop the window's
  * `lt` → the Jan 1 2027 ding counts (case 1 red); drop `ownerActive` → the
- * deactivated owner gets a card (case 4 red); drop DISTINCT ON the event →
- * the two-character row counts each ding twice (case 5 red); join on GUID
+ * deactivated owner gets a card (case 4 red); drop BOTH event dedupes (the
+ * query's DISTINCT ON and `toWowLevelsCard`'s seen-set — either alone holds)
+ * → the two-character row counts each ding twice (case 5 red); join on GUID
  * only → case 2 red.
  */
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
