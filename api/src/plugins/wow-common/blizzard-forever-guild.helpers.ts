@@ -30,7 +30,8 @@ export interface ForeverGuildRoster {
   members: ForeverGuildMember[];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+/** True for a non-null, non-array object. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -74,17 +75,21 @@ export function mapForeverGuildRoster(body: unknown): ForeverGuildRoster {
   return { members };
 }
 
+/** Accepted guild slug shape (FLAG B4: rules unverified; letters/digits/hyphens, 2–64). */
+export const GUILD_SLUG_RE = /^[\p{L}\p{N}-]{2,64}$/u;
+
 /**
- * Build the roster URL under the Forever profile namespace.
+ * Build a realmless `data/wow/guild/<slug><suffix>` URL under the Forever
+ * profile namespace (shared by the roster and the summary, ROK-1170).
  * @param guildSlug - Guild slug as given (lowercased and encoded here).
  * @param region - Blizzard region (`us`, `eu`, ...).
+ * @param suffix - Sub-resource path (`/roster`), or `''` for the summary.
+ * @throws BadRequestException when the slug fails {@link GUILD_SLUG_RE}.
  */
-/** Accepted guild slug shape (FLAG B4: rules unverified; letters/digits/hyphens, 2–64). */
-const GUILD_SLUG_RE = /^[\p{L}\p{N}-]{2,64}$/u;
-
-export function buildForeverGuildRosterUrl(
+export function buildForeverGuildUrl(
   guildSlug: string,
   region: string,
+  suffix: string,
 ): string {
   const lowered = guildSlug.toLowerCase();
   // Letters, digits and hyphens only: `.`/`..` survive encodeURIComponent and
@@ -94,7 +99,19 @@ export function buildForeverGuildRosterUrl(
   }
   const { profile } = getNamespacePrefixes(FOREVER_NAMESPACE_ALIAS);
   const slug = encodeURIComponent(lowered);
-  return `https://${region}.api.blizzard.com/data/wow/guild/${slug}/roster?namespace=${profile}-${region}&locale=en_US`;
+  return `https://${region}.api.blizzard.com/data/wow/guild/${slug}${suffix}?namespace=${profile}-${region}&locale=en_US`;
+}
+
+/**
+ * Build the roster URL under the Forever profile namespace.
+ * @param guildSlug - Guild slug as given (lowercased and encoded here).
+ * @param region - Blizzard region (`us`, `eu`, ...).
+ */
+export function buildForeverGuildRosterUrl(
+  guildSlug: string,
+  region: string,
+): string {
+  return buildForeverGuildUrl(guildSlug, region, '/roster');
 }
 
 /**
