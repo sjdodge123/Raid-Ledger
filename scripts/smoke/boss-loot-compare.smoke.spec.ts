@@ -45,7 +45,7 @@ function tooltip(slotLabel: string, stats: Stat[], extra: Record<string, unknown
 }
 
 const SEED_ITEMS = [
-    { itemId: LOOT.legs.id, tooltip: tooltip('Legs', [['STAMINA', 'Stamina', 10], ['INTELLECT', 'Intellect', 8], ['SPIRIT', 'Spirit', 6], ['STRENGTH', 'Strength', 5], ['AGILITY', 'Agility', 4]], { armor: 60, subclass: 'Cloth' }) },
+    { itemId: LOOT.legs.id, tooltip: tooltip('Legs', [['STAMINA', 'Stamina', 10], ['INTELLECT', 'Intellect', 8], ['SPIRIT', 'Spirit', 6], ['STRENGTH', 'Strength', 5], ['AGILITY', 'Agility', 4]], { armor: 60, subclass: 'Plate' }) },
     { itemId: LOOT.twoHand.id, tooltip: tooltip('Two-Hand', [['STRENGTH', 'Strength', 12], ['STAMINA', 'Stamina', 8]], { subclass: 'Mace', weapon: { damageMin: 60, damageMax: 90, attackSpeed: 3.4, dps: 22.1 } }) },
     { itemId: LOOT.finger.id, tooltip: tooltip('Finger', [['STAMINA', 'Stamina', 6], ['SPIRIT', 'Spirit', 4]]) },
     // Found, but no stats: the row carries `tooltip: null` → "Stats not synced".
@@ -90,7 +90,7 @@ async function waitForSeededLoot(): Promise<void> {
 
 async function seedAll(): Promise<void> {
     const name = `Bl${Date.now().toString(36)}`;
-    const char = (await apiPost(token, '/users/me/characters', { gameId, name, class: 'Priest', role: 'healer' })) as { id?: string } | null;
+    const char = (await apiPost(token, '/users/me/characters', { gameId, name, class: 'Warrior', role: 'tank' })) as { id?: string } | null;
     characterId = char?.id ?? null;
     if (!characterId) throw new Error('character create returned no id');
     const start = new Date(Date.now() + 86_400_000).toISOString();
