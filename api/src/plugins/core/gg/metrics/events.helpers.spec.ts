@@ -43,6 +43,7 @@ function row(
     month: 3,
     weekday: 6,
     hour: 19,
+    week: 10,
     voiceLate: false,
     ...extra,
   };
@@ -78,7 +79,20 @@ describe('summarizeEvents', () => {
       created: 2,
       firstEventAt: '2026-01-01T05:30:00.000Z',
       lastEventAt: '2026-06-01T00:00:00.000Z',
+      eventsByMonth: [0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     });
+  });
+
+  it('buckets counted signups by community-tz month (declined rows excluded)', () => {
+    const rows = [
+      row({}, { month: 1 }),
+      row({}, { month: 12 }),
+      row({}, { month: 12 }),
+      row({ status: 'declined' }, { month: 6 }),
+    ];
+    expect(summarizeEvents(rows, 0)?.eventsByMonth).toEqual([
+      1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
+    ]);
   });
 
   it('omits the card when the user neither signed up nor created anything', () => {
@@ -99,7 +113,20 @@ describe('summarizeOnTime', () => {
       attended: 4,
       onTime: 2,
       onTimeRatio: 0.5,
+      weeksAttended: Array.from({ length: 52 }, (_, i) => i === 10),
     });
+  });
+
+  it('lights one flag per community-tz week attended; no-shows stay dark', () => {
+    const rows = [
+      row({ attendanceStatus: 'attended' }, { week: 0 }),
+      row({ attendanceStatus: 'attended' }, { week: 1 }),
+      row({ attendanceStatus: 'attended' }, { week: 51 }),
+      row({ attendanceStatus: 'no_show' }, { week: 2 }),
+    ];
+    const weeks = summarizeOnTime(rows)?.weeksAttended ?? [];
+    expect(weeks).toHaveLength(52);
+    expect(weeks.flatMap((on, i) => (on ? [i] : []))).toEqual([0, 1, 51]);
   });
 
   it('omits the card when nothing was attended', () => {

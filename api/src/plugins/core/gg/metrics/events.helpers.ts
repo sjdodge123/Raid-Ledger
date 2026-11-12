@@ -27,6 +27,8 @@ export interface GgSignupRow {
   weekday: number;
   /** 0–23 in the community tz. */
   hour: number;
+  /** 0–51: `(community-tz day-of-year − 1) / 7`, Dec 30/31 folded into 51. */
+  week: number;
   /** The user's voice session on that event was classified `late`. */
   voiceLate: boolean;
 }
@@ -67,6 +69,29 @@ function countStatus(rows: GgSignupRow[], status: AttendanceStatus): number {
   return rows.filter((r) => attendanceOf(r) === status).length;
 }
 
+/** Weeks in the GG week strip (52 cells; the year's last 1–2 days fold into 51). */
+export const GG_WEEKS = 52;
+
+/** Counted signups per community-tz month, Jan..Dec. */
+export function eventsByMonthOf(counted: readonly GgSignupRow[]): number[] {
+  const months = Array.from({ length: 12 }, () => 0);
+  for (const r of counted) {
+    const i = r.month - 1;
+    if (i >= 0 && i < 12) months[i] = (months[i] ?? 0) + 1;
+  }
+  return months;
+}
+
+/** One flag per community-tz week: the user attended at least one event. */
+export function weeksAttendedOf(rows: readonly GgSignupRow[]): boolean[] {
+  const weeks = Array.from({ length: GG_WEEKS }, () => false);
+  for (const r of rows) {
+    if (attendanceOf(r) !== 'attended') continue;
+    weeks[Math.min(GG_WEEKS - 1, Math.max(0, r.week))] = true;
+  }
+  return weeks;
+}
+
 /** Card 2 (metrics 1, 2, 4); `null` when nothing was signed up or created. */
 export function summarizeEvents(
   rows: GgSignupRow[],
@@ -84,6 +109,7 @@ export function summarizeEvents(
     created,
     firstEventAt: starts.length > 0 ? iso(Math.min(...starts)) : null,
     lastEventAt: starts.length > 0 ? iso(Math.max(...starts)) : null,
+    eventsByMonth: eventsByMonthOf(counted),
   };
 }
 
@@ -99,7 +125,12 @@ export function summarizeOnTime(rows: GgSignupRow[]): GgOnTimeCard | null {
   const attended = countStatus(rows, 'attended');
   if (attended === 0) return null;
   const onTime = rows.filter(isOnTime).length;
-  return { attended, onTime, onTimeRatio: onTime / attended };
+  return {
+    attended,
+    onTime,
+    onTimeRatio: onTime / attended,
+    weeksAttended: weeksAttendedOf(rows),
+  };
 }
 
 /** Card 4 (metric 2) over counted signups; `null` when there are none. */

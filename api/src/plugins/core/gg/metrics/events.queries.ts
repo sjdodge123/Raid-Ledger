@@ -50,6 +50,7 @@ export async function loadYearSignups(
       month: sql<number>`extract(month from ${local})::int`,
       weekday: sql<number>`extract(dow from ${local})::int`,
       hour: sql<number>`extract(hour from ${local})::int`,
+      week: sql<number>`least(51, (extract(doy from ${local})::int - 1) / 7)`,
       voiceLate,
     })
     .from(eventSignups)

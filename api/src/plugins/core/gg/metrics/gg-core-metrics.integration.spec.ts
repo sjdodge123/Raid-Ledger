@@ -5,6 +5,7 @@
  * 2026-12-10T12:00Z). Every seeded "previous year" row sits at Dec 31 23:30
  * local (04:30Z), which a UTC window would wrongly include.
  */
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
 import { truncateAllTables } from '../../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../../common/testing/narrow';
@@ -239,6 +240,7 @@ describe('Core GG metric producers (integration, ROK-2187)', () => {
       created: 2,
       firstEventAt: '2026-01-01T05:30:00.000Z',
       lastEventAt: '2026-03-14T00:00:00.000Z',
+      eventsByMonth: [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     });
   });
 
@@ -249,6 +251,8 @@ describe('Core GG metric producers (integration, ROK-2187)', () => {
       attended: 2,
       onTime: 1,
       onTimeRatio: 0.5,
+      // E1 = local Jan 1 (doy 1 → week 0), E2 = local Mar 6 (doy 65 → week 9).
+      weeksAttended: Array.from({ length: 52 }, (_, i) => i === 0 || i === 9),
     });
   });
 
@@ -282,6 +286,41 @@ describe('Core GG hubs + superlative producers (integration, ROK-2187)', () => {
       posts: 1,
       pictures: 1,
     });
+  });
+
+  it('hubs: backdrops are the https art of live hubs’ games, deduped; a left hub adds none', async () => {
+    const me = await insertUser('gg-me');
+    await seedHubs(me);
+    const shot =
+      'https://images.igdb.com/igdb/image/upload/t_screenshot_med/s.jpg';
+    await testApp.db
+      .update(schema.games)
+      .set({ coverUrl: 'https://images.igdb.com/c.jpg', screenshots: [shot] })
+      .where(eq(schema.games.id, testApp.seed.game.id));
+    const [art] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'GG Left Game',
+          slug: 'gg-left-game',
+          coverUrl: 'https://images.igdb.com/left.jpg',
+        })
+        .returning({ id: schema.games.id }),
+      'left game',
+    );
+    const left = await insertGuild('GGL');
+    await testApp.db
+      .update(schema.guilds)
+      .set({ gameId: art.id })
+      .where(eq(schema.guilds.id, left));
+    await testApp.db.insert(schema.hubCommunityMembers).values({
+      guildId: left,
+      userId: me,
+      role: 'member',
+      joinedAt: new Date('2026-02-01T00:00:00Z'),
+      leftAt: new Date('2026-03-01T00:00:00Z'),
+    });
+    expect((await produceHubsCard(ctxFor(me)))?.backdropUrls).toEqual([shot]);
   });
 
   it('superlative: night-owl from tz-local session hours; last year’s game is not new', async () => {
