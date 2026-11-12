@@ -2,12 +2,24 @@
  * Layout pieces every "GG <year>" card shares (ROK-2187, mockup
  * `design-ROK-2187/gg-2026-mockup.html`). Tokens only — both colour families.
  */
-import type { JSX, ReactNode } from 'react';
+import { useRef, type JSX, type ReactNode } from 'react';
+import { useOverflows } from './use-overflows';
 
-/** The card column: top-aligned stack with the mockup's rhythm. */
+const CENTERED = 'items-center text-center [&>*:first-child]:mt-auto [&>*:last-child]:mb-auto';
+
+/**
+ * The card column. The story's slide body already pads the stage, so this adds
+ * none of its own; it fills what is left and scrolls when a card is taller than
+ * a short viewport (375×667, landscape phone). Slide content ignores pointers so
+ * empty space pages the story — the body takes them back only while it
+ * overflows, so it can be scrolled to the controls at the bottom.
+ */
 export function GgCardBody({ children, center = false }: { children: ReactNode; center?: boolean }): JSX.Element {
+    const ref = useRef<HTMLDivElement>(null);
+    const scrollable = useOverflows(ref);
     return (
-        <div className={`flex h-full flex-col gap-3 px-6 pb-8 pt-16 ${center ? 'items-center justify-center text-center' : ''}`}>
+        <div ref={ref} data-testid="gg-card-body" data-scrollable={scrollable}
+            className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain [@media(min-height:760px)]:pt-6 ${scrollable ? 'pointer-events-auto' : ''} ${center ? CENTERED : ''}`}>
             {children}
         </div>
     );
