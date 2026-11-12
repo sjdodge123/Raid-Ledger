@@ -11,7 +11,7 @@
  *  3. Send now → `waiting-offset`; exactly one "GG <year> is here" embed lands
  *     in the channel. A repeat send-now keeps the same `announcedAt` and posts
  *     no second embed.
- *  4. Backdate the announcement past the offset; send-now only re-announces
+ *  4. Backdate the announcement past the offset; send-now answers
  *     (`announced`, no DM wave — pacing stays on the cron). Tick until the wave
  *     reaches the recipient (≤25 per pass, ordered by snapshot id).
  *  5. The DM itself cannot be read: the companion is a bot and Discord refuses
