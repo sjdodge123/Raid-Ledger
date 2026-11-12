@@ -69,7 +69,7 @@ describe('attunementRows', () => {
         const now = Date.now();
         const members = [
             buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('ony-horde', { state: 'in_progress', nextStep: 'For The Horde!' })] }),
-            buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, asOf: daysAgo(20), results: [result('ony-horde', { belowLevel: true })] }),
+            buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, asOf: daysAgo(20, now), results: [result('ony-horde', { belowLevel: true })] }),
         ];
         const [thundrel, mogrash] = attunementRows(onyTab(), members, now);
         // In progress with nothing done: the api's nextStep is the logged step (Codex P2).
