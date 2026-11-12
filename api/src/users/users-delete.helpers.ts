@@ -119,6 +119,13 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.playerIntensitySnapshots,
     column: schema.playerIntensitySnapshots.userId,
   },
+  // ROK-2187: the player's own GG <year> recap (CASCADE on delete). Personal —
+  // a ban+wipe keeps the users row, so it is wiped explicitly (and with it any
+  // public `/w/:slug` share of it).
+  {
+    table: schema.ggSnapshots,
+    column: schema.ggSnapshots.userId,
+  },
   {
     table: schema.communityLineupEntries,
     column: schema.communityLineupEntries.nominatedBy,
