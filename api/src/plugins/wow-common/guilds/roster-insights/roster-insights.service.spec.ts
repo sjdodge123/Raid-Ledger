@@ -1,9 +1,10 @@
 /**
  * ROK-2178 (R1) — a cache miss issues its reads with as few sequential round
- * trips as the data dependencies allow: the hub row and the guild roster are
- * both in flight before either resolves (hub row issued FIRST), the guild kind
- * comes from that hub row (no second `select kind`), and the raid pulls are
- * issued before the facts resolve.
+ * trips as the data dependencies allow, without breaking snapshot ordering:
+ * the hub row lands BEFORE the roster read is issued (snapshot time first),
+ * the guild kind comes from that hub row (no second `select kind`), the
+ * roster read is the one the resolved adapter picks (no speculative guild
+ * roster), and the raid pulls are issued before the facts resolve.
  */
 import { Test } from '@nestjs/testing';
 import type { GuildKind } from '@raid-ledger/contract';
@@ -120,26 +121,26 @@ beforeEach(() => {
   raidMock.mockResolvedValue(null);
 });
 
-describe('RosterInsightsService.compute — read concurrency (ROK-2178)', () => {
-  it('issues the hub row first, then the roster, before either resolves', async () => {
-    const order: string[] = [];
-    hubMock.mockImplementation(() => {
-      order.push('hub');
-      return deferred<never>().promise;
-    });
-    guildRowsMock.mockImplementation(() => {
-      order.push('roster');
-      return deferred<never>().promise;
-    });
+describe('RosterInsightsService.compute — read order (ROK-2178)', () => {
+  it('awaits the hub row before it issues the roster read (snapshot first)', async () => {
+    const hub = deferred<InsightsHubRow | null>();
+    hubMock.mockReturnValue(hub.promise);
+    rawRowsMock.mockResolvedValue([]);
+    resolveFacts.mockResolvedValue({ facts: new Map(), truncated: false });
     const svc = await makeService();
-    void svc.compute(3, 'member', false);
+    const done = svc.compute(3, 'member', false);
     await flush();
-    expect(order).toEqual(['hub', 'roster']);
+    expect(hubMock).toHaveBeenCalledTimes(1);
+    expect(rawRowsMock).not.toHaveBeenCalled();
+    expect(guildRowsMock).not.toHaveBeenCalled();
+    hub.resolve(hubRow('wow_guild'));
+    await done;
+    expect(rawRowsMock).toHaveBeenCalledTimes(1);
   });
 
   it('issues the raid pulls before the facts resolve', async () => {
     hubMock.mockResolvedValue(hubRow('wow_guild'));
-    guildRowsMock.mockResolvedValue([rawRow]);
+    rawRowsMock.mockResolvedValue([rawRow]);
     const facts = deferred<FactsResult>();
     resolveFacts.mockReturnValue(facts.promise);
     const svc = await makeService();
@@ -154,28 +155,33 @@ describe('RosterInsightsService.compute — read concurrency (ROK-2178)', () => 
 describe('RosterInsightsService.compute — hub kind from the hub row (ROK-2178)', () => {
   it('reads the guild kind once — from the hub row, not a second lookup', async () => {
     hubMock.mockResolvedValue(hubRow('wow_guild'));
-    guildRowsMock.mockResolvedValue([]);
+    rawRowsMock.mockResolvedValue([]);
     resolveFacts.mockResolvedValue({ facts: new Map(), truncated: false });
     const svc = await makeService();
     await svc.compute(3, 'member', false);
     expect(forGuild).not.toHaveBeenCalled();
     expect(hubMock).toHaveBeenCalledTimes(1);
+    expect(resolveKind).toHaveBeenCalledTimes(1);
     expect(resolveKind).toHaveBeenCalledWith('wow_guild');
+    expect(rawRowsMock).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ kind: 'wow_guild' }),
+      3,
+    );
   });
 
   it('never loads a community roster for a visitor (Q1 = A)', async () => {
     hubMock.mockResolvedValue(hubRow('game_community'));
-    guildRowsMock.mockResolvedValue([]);
     const svc = await makeService();
     const dto = await svc.compute(3, 'visitor', false);
     expect(rawRowsMock).not.toHaveBeenCalled();
+    expect(guildRowsMock).not.toHaveBeenCalled();
     expect(resolveFacts).not.toHaveBeenCalled();
     expect(dto).not.toHaveProperty('lastSeen');
   });
 
-  it('loads a community roster through its adapter for a member', async () => {
+  it('loads a community roster through its adapter, never the guild roster', async () => {
     hubMock.mockResolvedValue(hubRow('game_community'));
-    guildRowsMock.mockResolvedValue([rawRow]);
     rawRowsMock.mockResolvedValue([]);
     resolveFacts.mockResolvedValue({ facts: new Map(), truncated: false });
     const svc = await makeService();
@@ -185,17 +191,18 @@ describe('RosterInsightsService.compute — hub kind from the hub row (ROK-2178)
       expect.objectContaining({ kind: 'game_community' }),
       3,
     );
+    expect(guildRowsMock).not.toHaveBeenCalled();
   });
 
-  it('drops the speculative guild roster when the kind has no live adapter', async () => {
+  it('reads no guild roster when the kind has no live adapter', async () => {
     hubMock.mockResolvedValue(hubRow('wow_guild'));
     resolveKind.mockReturnValueOnce(undefined);
-    guildRowsMock.mockResolvedValue([rawRow]);
     rawRowsMock.mockResolvedValue([]);
     resolveFacts.mockResolvedValue({ facts: new Map(), truncated: false });
     const svc = await makeService();
     await svc.compute(3, 'member', false);
     expect(rawRowsMock).toHaveBeenCalledWith({}, undefined, 3);
+    expect(guildRowsMock).not.toHaveBeenCalled();
     expect(resolveFacts).toHaveBeenCalledWith([]);
   });
 });

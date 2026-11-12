@@ -41,7 +41,6 @@ import {
   emptyInsights,
   joinFacts,
   linkedOwners,
-  loadGuildRows,
   loadInsightRawRows,
   type InsightRawRow,
 } from './roster-insights.refs';
@@ -94,9 +93,9 @@ export class RosterInsightsService implements OnModuleInit {
   }
 
   /**
-   * Build the DTO for one guild + audience (uncached). ROK-2178: the reads run
-   * in as few sequential round trips as their inputs allow — hub row ∥ guild
-   * roster, then facts ∥ raid pulls. R2: also the cache's background warm.
+   * Build the DTO for one guild + audience (uncached). ROK-2178: the hub row
+   * (which carries the kind) then the roster, then facts ∥ raid pulls.
+   * R2: also the cache's background warm.
    */
   async compute(
     guildId: number,
@@ -124,28 +123,20 @@ export class RosterInsightsService implements OnModuleInit {
 
   /**
    * The hub row and the raw roster; `raw` null = a community VISITOR (Q1 = A).
-   * Snapshot time first: the hub row is ISSUED before the roster read, so if
-   * an import lands between them the footer shows presence as older than it
-   * is, never newer. The guild roster is issued speculatively alongside it
-   * (the kind is only known once the hub row lands) and dropped for any other
-   * kind; a community roster still waits for the kind, so it never loads for
-   * a visitor.
+   * The kind comes from the hub row, and the roster read is the one its
+   * adapter picks, so a community roster never loads for a visitor.
    */
   private async loadRoster(
     guildId: number,
     audience: InsightsAudience,
   ): Promise<{ hub: InsightsHubRow | null; raw: InsightRawRow[] | null }> {
-    const hubRead = loadInsightsHubRow(this.db, guildId);
-    const guildRead = handled(loadGuildRows(this.db, guildId));
-    const hub = await hubRead;
+    // Snapshot time first: if an import lands between the two reads, the
+    // footer shows presence as older than it is, never newer.
+    const hub = await loadInsightsHubRow(this.db, guildId);
     const adapter = hub ? this.hubKinds.resolve(hub.kind) : undefined;
     if (audience === 'visitor' && adapter?.kind === 'game_community')
       return { hub, raw: null };
-    const raw =
-      adapter?.kind === 'wow_guild'
-        ? await guildRead
-        : await loadInsightRawRows(this.db, adapter, guildId);
-    return { hub, raw };
+    return { hub, raw: await loadInsightRawRows(this.db, adapter, guildId) };
   }
 
   /** The members/staff-only keys (in their original order). */
@@ -154,7 +145,7 @@ export class RosterInsightsService implements OnModuleInit {
     rows: readonly InsightRow[],
     all: readonly InsightRow[],
     raid: Promise<{ raidProgress?: WowRosterRaidProgressDto }>,
-  ) {
+  ): Promise<Partial<WowRosterInsightsDto>> {
     const [raidKeys, attunementKeys] = await Promise.all([
       raid,
       // ROK-1927: mains of the full roster (ruling D), never a visitor.
