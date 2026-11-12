@@ -944,6 +944,36 @@ else
     log "disk: ladder library not found at $DISK_PRESSURE_LIB — skipping disk-pressure check"
 fi
 
+# 3b''. ROK-2171 — env-image GC. env-destroy drops the env's registry tag but
+# cannot remove the host's local copy (rl-docker-proxy refuses DELETE /images);
+# this sweeper holds the raw socket, so it removes local rl-allinone images no
+# env row or container uses, older than RL_ENV_IMAGE_GC_MIN_AGE_HOURS (2), never
+# rl.role=runner, while holding a `registry_gc`-kind entry in admission.json (no
+# image build admitted meanwhile). Runs BEFORE registry GC so a tag freed here
+# is no longer protected by its local copy. RL_ENV_IMAGE_GC_DRY_RUN defaults to
+# 1 (report only). Best-effort: the lib always returns 0 with a JSON summary.
+ENV_IMAGE_GC_LIB="${ENV_IMAGE_GC_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_env_image_gc.sh}"
+if [[ -r "$ENV_IMAGE_GC_LIB" ]]; then
+    # Read by the sourced lib (and _registry_gc.sh / _admission.sh it loads).
+    # shellcheck disable=SC2034
+    {
+        RL_ENVS_FILE="$ENVS"
+        RL_ADMISSION_FILE="${STATE_DIR}/admission.json"
+    }
+    # shellcheck disable=SC1090
+    source "$ENV_IMAGE_GC_LIB"
+    _eig_err=$(mktemp)
+    ENV_IMAGE_GC_RESULT=$(env_image_gc::sweep 2>"$_eig_err" || echo '{}')
+    while IFS= read -r _eig_line; do log "env-image: $_eig_line"; done < "$_eig_err"
+    rm -f "$_eig_err"
+    if [[ "$(jq -r '.idle // false' <<<"$ENV_IMAGE_GC_RESULT" 2>/dev/null)" != "true" ]]; then
+        audit env_image_gc "$ENV_IMAGE_GC_RESULT"
+        log "env-image: $(jq -rc '"removed=" + ((.removed // [])|length|tostring) + " would_remove=" + ((.would_remove // [])|length|tostring) + " kept=" + ((.kept // [])|length|tostring) + " " + (.skipped // .error // .stopped // "")' <<<"$ENV_IMAGE_GC_RESULT" 2>/dev/null || echo unknown)"
+    fi
+else
+    log "env-image: library not found at $ENV_IMAGE_GC_LIB — skipping env-image GC"
+fi
+
 # 3b'. 2026-10-26 — registry GC. rl-registry was never garbage-collected (424
 # rl-allinone tags, 134 GB, builds starved of disk). Deletes rl-allinone tags
 # that back no container/env, are older than RL_REGISTRY_RETENTION_HOURS (48)

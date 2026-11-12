@@ -192,6 +192,15 @@ bot_identity::release "${DESTROYED_SLOT:-}" "$SLUG"
 # stderr; stdout stays the JSON result.
 registry_gc::delete_env_tag "$SLUG" || true
 
+# ROK-2171 review MAJOR-1 — record that this env's image tag was released now,
+# so the gc-sweeper's env-image GC keeps the host's local copy for
+# RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS: with the registry tag just deleted above,
+# it is the only source for a destroy → re-spin with the same --image. Needs
+# the row (read before it is removed below); best-effort, no Docker access.
+# shellcheck source=SCRIPTDIR/_env_image_gc.sh
+source "$(dirname "$0")/_env_image_gc.sh"
+env_image_gc::mark_env_released "$SLUG" || true
+
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 
 # Test plan + attachments are NOT auto-cleaned on env-destroy anymore

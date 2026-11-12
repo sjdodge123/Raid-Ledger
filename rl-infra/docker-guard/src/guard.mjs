@@ -23,6 +23,7 @@ import { connectNetworkRefs, containerCreateNetworkRefs, resolveNetworkRefs } fr
 import { pinConnect, pinContainerCreate } from './network-pin.mjs';
 import { reservedVolumeReason } from './volume-reserve.mjs';
 import { scopedEventsUrl } from './events-scope.mjs';
+import { beginBuild } from './build-reclaim.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 415: 'Unsupported Media Type', 500: 'Internal Server Error', 502: 'Bad Gateway', 507: 'Insufficient Storage' };
@@ -161,9 +162,23 @@ async function forwardEvents(req, res) {
  * cancels while the spool finishes gets nothing forwarded and its context removed.
  */
 async function forwardBuild(req, res, plan) {
+  // ROK-2171: counted in flight from here; on close, a finished build that
+  // moved `rl:ci-test` removes the image it replaced (build-reclaim.mjs).
+  // m1: the close listener is attached BEFORE the snapshot is awaited, so a
+  // runner that hangs up during it still brings the in-flight count back down.
+  const pending = beginBuild(SOCKET, plan.tags, log);
+  res.once('close', () => { pending.then((end) => end(res.writableFinished)); });
   let gone = false;
   const onGone = () => { gone = true; };
   res.on('close', onGone);
+  await pending;
+  // Codex P2: a runner that aborted DURING the snapshot already fired its
+  // close/error events; spooling now would wait on them forever and leak the
+  // temporary context and its write stream.
+  if (gone || res.destroyed || req.destroyed) {
+    res.off('close', onGone);
+    return log('DROP /build: the client went away during the reclaim snapshot');
+  }
   // c5: the dockerfile= value classify() decoded (Go's table) — never re-parsed.
   const ctx = await spoolBuildContext(req, plan.dockerfile ?? '', TMPDIR, { pull: plan.pull === true });
   res.off('close', onGone);
