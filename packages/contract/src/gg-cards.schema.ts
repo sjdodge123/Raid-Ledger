@@ -31,6 +31,9 @@ export const GG_SUPERLATIVE_KEYS = [
 export const GgSuperlativeKeySchema = z.enum(GG_SUPERLATIVE_KEYS);
 export type GgSuperlativeKey = z.infer<typeof GgSuperlativeKeySchema>;
 
+/** A YouTube video id as IGDB lists it (top-games trailer card). */
+export const GG_YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{6,32}$/;
+
 const gameRef = z.strictObject({
   gameId: z.number().int().positive(),
   name: nameStr,
@@ -66,7 +69,13 @@ export const GgHoursCardSchema = z.strictObject({
 });
 /** Card 6 — top games + top game per month (metric 5). */
 export const GgTopGamesCardSchema = z.strictObject({
-  games: z.array(gameRef.extend({ seconds })).max(5),
+  games: z.array(gameRef.extend({
+    seconds,
+    /** IGDB screenshot URLs (https) for the Ken-Burns backdrop; absent = none stored. */
+    screenshots: z.array(z.string().max(2048)).max(4).optional(),
+    /** First IGDB-listed YouTube trailer id (visible framed player, Q2); null = none. */
+    trailerVideoId: z.string().regex(GG_YOUTUBE_ID_RE).nullable().optional(),
+  })).max(5),
   byMonth: z.array(gameRef.extend({ month: z.number().int().min(1).max(12), seconds })).max(12),
 });
 /** Card 7 — new games tried (metric 6). */
@@ -156,6 +165,10 @@ export function parseGgCardPayload(card: GgCardEnvelope): unknown {
 }
 
 export type GgEventsCard = z.infer<typeof GgEventsCardSchema>;
+export type GgHoursCard = z.infer<typeof GgHoursCardSchema>;
+export type GgTopGamesCard = z.infer<typeof GgTopGamesCardSchema>;
+export type GgNewGamesCard = z.infer<typeof GgNewGamesCardSchema>;
+export type GgIntroCard = z.infer<typeof GgIntroCardSchema>;
 export type GgSummaryCard = z.infer<typeof GgSummaryCardSchema>;
 export type GgPeopleCard = z.infer<typeof GgPeopleCardSchema>;
 export type GgValheimCard = z.infer<typeof GgValheimCardSchema>;
