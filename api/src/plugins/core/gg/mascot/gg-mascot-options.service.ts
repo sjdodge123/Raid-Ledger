@@ -1,6 +1,13 @@
 import { HttpException, HttpStatus, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { GgMascotOptionsDto } from '@raid-ledger/contract';
-import { GgMascotDiscordSource } from './gg-mascot-discord.source';
+
+/**
+ * DI token for where the guild's emojis + sounds come from (the bot client
+ * in prod, a fake in specs). `null` = the bot is offline.
+ */
+export abstract class GgMascotExpressionSource {
+  abstract fetchExpressions(): Promise<GgMascotOptionsDto | null>;
+}
 
 /** Options cache TTL (spec: one Discord call per 60 s). */
 export const GG_MASCOT_OPTIONS_TTL_MS = 60_000;
@@ -31,7 +38,7 @@ export class GgMascotOptionsService {
   private cache: { at: number; value: GgMascotOptionsDto } | null = null;
   private blockedUntil = 0;
 
-  constructor(private readonly source: GgMascotDiscordSource) {}
+  constructor(private readonly source: GgMascotExpressionSource) {}
 
   /** Cached options; 503 while the bot is offline. */
   async getOptions(now: number = Date.now()): Promise<GgMascotOptionsDto> {
@@ -48,6 +55,12 @@ export class GgMascotOptionsService {
       this.blockedUntil = now + wait;
       return this.staleOrTooMany(now);
     }
+  }
+
+  /** Drops the cache and any back-off (specs; a forced re-fetch). */
+  invalidate(): void {
+    this.cache = null;
+    this.blockedUntil = 0;
   }
 
   private staleOrTooMany(now: number): GgMascotOptionsDto {

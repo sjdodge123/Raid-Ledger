@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Guild } from 'discord.js';
 import type { GgMascotOptionsDto } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../../../../discord-bot/discord-bot-client.service';
+import { GgMascotExpressionSource } from './gg-mascot-options.service';
 
 /**
  * ROK-2187 — reads the bot's guild custom emojis and soundboard sounds via
@@ -45,8 +46,10 @@ async function fetchSounds(guild: Guild): Promise<GgMascotOptionsDto['sounds']> 
 }
 
 @Injectable()
-export class GgMascotDiscordSource {
-  constructor(private readonly bot: DiscordBotClientService) {}
+export class GgMascotDiscordSource extends GgMascotExpressionSource {
+  constructor(private readonly bot: DiscordBotClientService) {
+    super();
+  }
 
   /** The guild's selectable emojis + sounds; `null` while the bot is offline. */
   async fetchExpressions(): Promise<GgMascotOptionsDto | null> {
