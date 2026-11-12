@@ -11,8 +11,7 @@
  * in-context shortcut and only renders it when `onChangeChannel` is given, so
  * an Officer (who can still edit content) sees none.
  */
-import { useMemo, type JSX, type ReactNode } from 'react';
-import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
+import { useId, useMemo, useState, type JSX, type ReactNode } from 'react';
 import type {
     GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto, GuildKind, ThreadMessageMentionDto,
 } from '@raid-ledger/contract';
@@ -20,13 +19,11 @@ import { ThreadMessageRow } from '../../discord/ThreadMessageRow';
 import { DiscordMarkup } from '../../discord/DiscordMarkup';
 import type { DiscordChannelName } from '../../discord/discord-markup.parse';
 import { Button } from '../../ui/button';
-import { FOCUS_RING } from '../../ui/form-classes';
-import { Card, Pill, SectionTitle } from '../hub-bits';
-import { privateTagTitle } from '../hub-copy';
-import { latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
-import { useGuildDiscord } from './use-guild-discord';
+import { Card, SectionTitle } from '../hub-bits';
+import { canExpandMessages, isMirrorBound, mirrorBlurb, mirrorTitle, visibleMessages } from './guild-discord.helpers';
+import { MirrorError, MirrorFooter, MirrorHeaderAction, ShowMoreToggle } from './guild-discord-mirror.parts';
+import { useGuildDiscordMirror } from './use-guild-discord';
 import { httpStatusOf } from '../../../lib/api/api-error';
-import { safeHttpUrl } from '../../../lib/safe-http-url';
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
@@ -56,37 +53,28 @@ function MessageItem({ message, channels }: { message: GuildDiscordMessageDto; c
     );
 }
 
-function MessageList({ messages, channel }: { messages: GuildDiscordMessageDto[]; channel: OkMirror['channel'] }): JSX.Element {
+interface ListProps { messages: GuildDiscordMessageDto[]; channel: OkMirror['channel']; id: string }
+
+function MessageList({ messages, channel, id }: ListProps): JSX.Element {
     const channels = useMemo((): DiscordChannelName[] => [{ id: channel.id, name: channel.name }], [channel.id, channel.name]);
     return (
-        <ul aria-label={`Latest messages in #${channel.name}`} className="flex flex-col gap-2" data-testid="guild-discord-messages">
+        <ul id={id} aria-label={`Latest messages in #${channel.name}`} className="flex flex-col gap-2" data-testid="guild-discord-messages">
             {messages.map((m) => <MessageItem key={m.messageId} message={m} channels={channels} />)}
         </ul>
     );
 }
 
-function MirrorFooter({ url: rawUrl }: { url: string }): JSX.Element {
-    const url = safeHttpUrl(rawUrl);
-    return (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-edge pt-1">
-            <p className="inline-flex items-center gap-1.5 text-xs text-muted">
-                <LockClosedIcon className="h-3.5 w-3.5" aria-hidden="true" /> Read-only · reply in Discord
-            </p>
-            {url && <a href={url} target="_blank" rel="noopener noreferrer" data-testid="guild-discord-open"
-                className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-sm text-sm font-medium text-success hover:underline ${FOCUS_RING}`}>
-                Open in Discord <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden="true" />
-            </a>}
-        </div>
-    );
-}
-
+/** ROK-2185: newest 3 by default; Show more expands in-card to every fetched message (≤10). */
 function OkBody({ mirror }: { mirror: OkMirror }): JSX.Element {
-    const shown = latestMessages(mirror.messages);
+    const [expanded, setExpanded] = useState(false);
+    const listId = useId();
+    const shown = visibleMessages(mirror.messages, expanded);
     return (
         <>
             {shown.length > 0
-                ? <MessageList messages={shown} channel={mirror.channel} />
+                ? <MessageList messages={shown} channel={mirror.channel} id={listId} />
                 : <p className="py-6 text-center text-sm text-muted" data-testid="guild-discord-state-empty">No messages in #{mirror.channel.name} yet.</p>}
+            {canExpandMessages(mirror.messages) && <ShowMoreToggle expanded={expanded} controls={listId} onToggle={() => setExpanded((v) => !v)} />}
             <MirrorFooter url={mirror.channel.url} />
         </>
     );
@@ -119,34 +107,6 @@ function MirrorBody({ mirror, canEdit, onChoose }: BodyProps): JSX.Element {
     }
 }
 
-function MirrorError(): JSX.Element {
-    return <p role="alert" className="text-sm text-danger" data-testid="guild-discord-error">Couldn’t load the Discord channel. Try again later.</p>;
-}
-
-/** Spec D8/§UI: a private bound channel carries a "Private" tag on the card itself, for every viewer. */
-function PrivateTag({ kind }: { kind: GuildKind | undefined }): JSX.Element {
-    return (
-        <span data-testid="guild-discord-private" title={privateTagTitle(kind)}>
-            <Pill><LockClosedIcon className="h-3 w-3" aria-hidden="true" /> Private</Pill>
-        </span>
-    );
-}
-
-interface HeaderActionArgs {
-    mirror: GuildDiscordMirrorDto | undefined;
-    onChange: (() => void) | null;
-    kind: GuildKind | undefined;
-}
-
-function headerAction({ mirror, onChange, kind }: HeaderActionArgs): JSX.Element | undefined {
-    const isPrivate = mirror?.state === 'ok' && mirror.channel.visibility === 'private';
-    const change = onChange && mirror && mirror.state !== 'unset'
-        ? <Button variant="ghost" size="sm" onClick={onChange} data-testid="guild-discord-change">Change channel</Button>
-        : null;
-    if (!isPrivate && !change) return undefined;
-    return <div className="flex items-center gap-2">{isPrivate && <PrivateTag kind={kind} />}{change}</div>;
-}
-
 interface MirrorProps {
     guildId: number;
     /** Officers included — it only decides the "give the bot access again" hint copy. */
@@ -159,7 +119,7 @@ interface MirrorProps {
 
 /** Hidden while loading (no layout jump) and, while nothing is bound, for anyone who cannot pick. */
 export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null, kind }: MirrorProps): JSX.Element | null {
-    const query = useGuildDiscord(guildId);
+    const { query, refresh } = useGuildDiscordMirror(guildId);
     const mirror = query.data;
     // Gated on the affordance, not on `canEdit`: an Officer may edit content
     // but not pick a channel (D5-A), so an unset card would be a dead end.
@@ -167,13 +127,15 @@ export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null, k
     // ROK-1831: a 403 (a visitor on a members-first hub) hides the card — never a red error.
     if (httpStatusOf(query.error) === 403) return null;
     const open = onChangeChannel;
-    const action = headerAction({ mirror, onChange: open, kind });
+    const action = isMirrorBound(mirror)
+        ? <MirrorHeaderAction mirror={mirror} onChange={open} kind={kind} fetching={query.isFetching} onRefresh={() => void refresh()} />
+        : undefined;
     return (
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>
             <SectionTitle headingId="discord-mirror-title" title={mirror ? mirrorTitle(mirror) : 'Discord channel'}
                 blurb={mirrorBlurb(mirror, kind)} action={action} />
-            <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
+            <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError onRetry={() => void query.refetch()} />}</Card>
         </section>
     );
 }

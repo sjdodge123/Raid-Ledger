@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { GuildDiscordMirrorDto, GuildKind } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -222,3 +223,81 @@ describe('GuildDiscordMirror — the unset card follows the affordance (ROK-1830
         expect(screen.getByTestId('guild-discord-choose')).toBeInTheDocument();
     });
 });
+
+const rowCount = (): number => within(screen.getByTestId('guild-discord-messages')).getAllByTestId('thread-message-row').length;
+const tenMessages = (): ReturnType<typeof discordMessage>[] => Array.from({ length: 10 }, (_, i) => discordMessage(i + 1));
+
+describe('GuildDiscordMirror — ROK-2185 Retry', () => {
+    it('Retry refetches and replaces the error with the messages', async () => {
+        let calls = 0;
+        server.use(http.get(URL, () => {
+            calls += 1;
+            return calls === 1 ? HttpResponse.json({ message: 'boom' }, { status: 500 }) : HttpResponse.json(okMirror([discordMessage(1)]));
+        }));
+        renderCard(false);
+        expect(await screen.findByTestId('guild-discord-error')).toHaveTextContent('Couldn’t load the Discord channel.');
+        await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+        await waitFor(() => expect(calls).toBe(2));
+        expect(await screen.findByTestId('guild-discord-messages')).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-discord-error')).not.toBeInTheDocument();
+    });
+});
+
+describe('GuildDiscordMirror — ROK-2185 Show more / Show less', () => {
+    it('Show more reveals all 10 fetched messages, Show less returns to the newest 3', async () => {
+        serve(okMirror(tenMessages()));
+        renderCard(false);
+        await screen.findByTestId('guild-discord-messages');
+        expect(rowCount()).toBe(3);
+        const more = screen.getByRole('button', { name: 'Show more' });
+        expect(more).toHaveAttribute('aria-expanded', 'false');
+        await userEvent.click(more);
+        expect(rowCount()).toBe(10);
+        const less = screen.getByRole('button', { name: 'Show less' });
+        expect(less).toHaveAttribute('aria-expanded', 'true');
+        await userEvent.click(less);
+        expect(rowCount()).toBe(3);
+    });
+
+    it('has no toggle when 3 or fewer messages were fetched', async () => {
+        serve(okMirror([1, 2, 3].map((n) => discordMessage(n))));
+        renderCard(false);
+        await screen.findByTestId('guild-discord-messages');
+        expect(rowCount()).toBe(3);
+        expect(screen.queryByRole('button', { name: /Show (more|less)/ })).not.toBeInTheDocument();
+    });
+});
+
+describe('GuildDiscordMirror — ROK-2185 Refresh', () => {
+    it('asks the server to skip its cache (refresh=1) and is disabled while fetching', async () => {
+        const flags: (string | null)[] = [];
+        let release: () => void = () => undefined;
+        server.use(http.get(URL, async ({ request }) => {
+            const flag = new globalThis.URL(request.url).searchParams.get('refresh');
+            flags.push(flag);
+            if (flag === '1') await new Promise<void>((resolve) => { release = resolve; });
+            return HttpResponse.json(okMirror([discordMessage(1)]));
+        }));
+        renderCard(false);
+        const button = await screen.findByRole('button', { name: 'Refresh messages' });
+        expect(button).toBeEnabled();
+        await userEvent.click(button);
+        await waitFor(() => expect(flags).toEqual([null, '1']));
+        expect(screen.getByRole('button', { name: 'Refresh messages' })).toBeDisabled();
+        release();
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh messages' })).toBeEnabled());
+    });
+});
+
+describe('GuildDiscordMirror — ROK-2185 links (Q2 = A, regression)', () => {
+    it('a URL in a message renders as a working new-tab link', async () => {
+        serve(okMirror([discordMessage(1, { content: 'Signups: https://example.com/raid' })]));
+        renderCard(false);
+        const link = await screen.findByRole('link', { name: 'https://example.com/raid' });
+        expect(link).toHaveAttribute('href', 'https://example.com/raid');
+        expect(link).toHaveAttribute('target', '_blank');
+        expect(link.getAttribute('rel')).toContain('noopener');
+        expect(within(screen.getByTestId('discord-text')).getByRole('link')).toBe(link);
+    });
+});
+

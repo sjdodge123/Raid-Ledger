@@ -6,6 +6,7 @@
  * only while the tab is visible — `refetchIntervalInBackground: false` pauses
  * the interval in a hidden tab (stated explicitly, not left to the default).
  */
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import type { GuildDiscordChannelListDto, GuildDiscordMirrorDto, HubWelcomeResult, SetGuildDiscordChannelDto } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
@@ -26,16 +27,41 @@ export function guildDiscordChannelsKey(guildId: number): readonly unknown[] {
 }
 
 export function useGuildDiscord(guildId: number): UseQueryResult<GuildDiscordMirrorDto, Error> {
+    return useGuildDiscordMirror(guildId).query;
+}
+
+/** The mirror query plus a Refresh that skips the server's cache for its one fetch. */
+export interface GuildDiscordMirrorQuery {
+    query: UseQueryResult<GuildDiscordMirrorDto, Error>;
+    refresh: () => Promise<unknown>;
+}
+
+/**
+ * ROK-2185 — `refresh()` flags the NEXT fetch as `?refresh=1` and refetches,
+ * so the request still runs through this query (one `isFetching`, one error
+ * state). Polls and Retry stay plain cached reads.
+ */
+export function useGuildDiscordMirror(guildId: number): GuildDiscordMirrorQuery {
     const viewer = useViewerCacheScope();
-    return useQuery({
+    const skipCache = useRef(false);
+    const query = useQuery({
         queryKey: [...guildDiscordKey(guildId), viewer],
-        queryFn: () => fetchGuildDiscord(guildId),
+        queryFn: () => {
+            const refresh = skipCache.current;
+            skipCache.current = false;
+            return fetchGuildDiscord(guildId, refresh);
+        },
         enabled: guildId > 0,
         staleTime: GUILD_DISCORD_REFRESH_MS,
         refetchInterval: GUILD_DISCORD_REFRESH_MS,
         refetchIntervalInBackground: false,
         retry: false,
     });
+    const refresh = (): Promise<unknown> => {
+        skipCache.current = true;
+        return query.refetch();
+    };
+    return { query, refresh };
 }
 
 /** Editors only, and only while the picker is open. */
