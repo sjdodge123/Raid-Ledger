@@ -51,9 +51,17 @@ export const GgEventsCardSchema = z.strictObject({
   created: count.optional(),
   firstEventAt: isoDateTime.nullable(),
   lastEventAt: isoDateTime.nullable(),
+  /** Counted signups per community-tz month, Jan..Dec (month histogram); absent = older snapshot. */
+  eventsByMonth: z.array(count).length(12).optional(),
 });
 /** Card 3 — always on time (metric 3). */
-export const GgOnTimeCardSchema = z.strictObject({ attended: count, onTime: count, onTimeRatio: ratio });
+export const GgOnTimeCardSchema = z.strictObject({
+  attended: count,
+  onTime: count,
+  onTimeRatio: ratio,
+  /** One flag per community-tz week of the year (index = (day-of-year − 1) / 7): attended ≥1 event. */
+  weeksAttended: z.array(z.boolean()).max(53).optional(),
+});
 /** Card 4 — busiest month + favourite weekday/hour, community tz (metric 2). */
 export const GgRhythmCardSchema = z.strictObject({
   busiestMonth: z.number().int().min(1).max(12),
@@ -94,7 +102,13 @@ export const GgPeopleCardSchema = z.strictObject({
   playedWithCount: count,
 });
 /** Card 10 — hubs joined / posts / pictures (metric 10). */
-export const GgHubsCardSchema = z.strictObject({ joined: count, posts: count, pictures: count });
+export const GgHubsCardSchema = z.strictObject({
+  joined: count,
+  posts: count,
+  pictures: count,
+  /** https game art (IGDB screenshot/cover) of the player's live hubs, for the Ken-Burns backdrop. */
+  backdropUrls: z.array(z.string().max(2048).regex(/^https:\/\//)).max(4).optional(),
+});
 /** Card 11 — the superlative. */
 export const GgSuperlativeCardSchema = z.strictObject({ key: GgSuperlativeKeySchema, value: z.number().optional() });
 /** Card 12 — summary (+ the share toggle in the web). */
