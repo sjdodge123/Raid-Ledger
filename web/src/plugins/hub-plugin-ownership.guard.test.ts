@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { getHubGameWidgetRegistrations, type HubGameWidget } from './hub-game-widgets';
 import { collectCompanionPrompts, companionPromptDrift, type CompanionPromptRegistration } from '../test/hub-companion-prompt-ownership';
+import { collectGgCards, ggCardDrift } from '../test/gg-card-ownership';
 import { claimProviderDrift, collectClaimProviders, type ClaimProviderRegistration } from '../test/hub-claim-provider-ownership';
 
 /** Every plugin folder's `register.ts`, discovered — a new plugin is checked automatically (review M2). */
@@ -243,5 +244,23 @@ describe('W8 — every claim provider is declared as a claim-provider behaviour,
     it('names a declared claim-provider no web provider registers', () => {
         expect(claimProviderDrift(providers.filter((p) => p.owner !== 'valheim'), declared))
             .toEqual(['HUB_PLUGIN_MANIFESTS.valheim declares a claim-provider behaviour but no web claim provider registers it']);
+    });
+});
+
+/** ROK-2187 — GG card renderers. Two-way against the manifests' `gg-card` behaviours. */
+describe('W9 — every GG card renderer is a declared gg-card of its owner, and back', () => {
+    const cards = collectGgCards();
+
+    it('sees the Core, Valheim and Blizzard cards, and finds no drift', () => {
+        expect(cards.map((c) => `${c.owner}:${c.id}`)).toEqual(expect.arrayContaining(['core:intro', 'core:summary', 'valheim:valheim-year', 'blizzard:wow-levels']));
+        expect(ggCardDrift(cards, HUB_PLUGIN_MANIFESTS)).toEqual([]);
+    });
+
+    it('names an undeclared renderer and a declaration with no renderer', () => {
+        const rest = cards.filter((c) => !(c.owner === 'valheim' && c.id === 'valheim-year'));
+        expect(ggCardDrift([...rest, { owner: 'valheim', id: 'stray' }], HUB_PLUGIN_MANIFESTS)).toEqual([
+            'GG card valheim:stray is not declared as a gg-card behaviour of HUB_PLUGIN_MANIFESTS.valheim',
+            'HUB_PLUGIN_MANIFESTS.valheim declares gg-card "valheim-year" but no web renderer registers it',
+        ]);
     });
 });
