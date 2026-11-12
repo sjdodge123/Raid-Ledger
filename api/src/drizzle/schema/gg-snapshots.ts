@@ -56,10 +56,7 @@ export const ggSnapshots = pgTable(
     index('gg_snapshots_dm_pending_idx')
       .on(t.year)
       .where(sql`${t.dmClaimedAt} IS NULL`),
-    check(
-      'gg_snapshots_tier_chk',
-      sql`${t.activityTier} IN ('short', 'full')`,
-    ),
+    check('gg_snapshots_tier_chk', sql`${t.activityTier} IN ('short', 'full')`),
     check(
       'gg_snapshots_share_pair_chk',
       sql`(${t.shareSlug} IS NULL) = (${t.sharedAt} IS NULL)`,

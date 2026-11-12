@@ -45,8 +45,9 @@ describe('gg_snapshots schema', () => {
       (i) => i.config.name === 'gg_snapshots_user_year_uq',
     );
     expect(userYear?.config.unique).toBe(true);
-    expect(userYear?.config.columns.map((c) => ('name' in c ? c.name : '')))
-      .toEqual(['user_id', 'year']);
+    expect(
+      userYear?.config.columns.map((c) => ('name' in c ? c.name : '')),
+    ).toEqual(['user_id', 'year']);
     const slug = config.columns.find((c) => c.name === 'share_slug');
     expect(slug?.isUnique).toBe(true);
     expect(slug?.notNull).toBe(false);

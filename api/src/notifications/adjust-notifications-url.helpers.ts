@@ -51,6 +51,8 @@ const ADJUST_TARGET: Record<NotificationType, AdjustTarget> = {
   hub_proposal_submitted: 'settings',
   hub_proposal_reviewed: 'settings',
   valheim_claim_suggestion: 'settings',
+  // ROK-2187: the yearly GG DM → its own settings row.
+  gg_ready: 'settings',
   system: 'settings',
 };
 

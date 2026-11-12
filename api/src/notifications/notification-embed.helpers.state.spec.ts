@@ -53,6 +53,8 @@ const RULING_TABLE: ReadonlyArray<[NotificationType, EmbedState]> = [
   ['hub_proposal_reviewed', 'done'],
   // ROK-1933: an open ask — confirm a character is yours (like a pending proposal).
   ['valheim_claim_suggestion', 'needs_you'],
+  // ROK-2187: "your GG <year> is ready" — news, asks nothing.
+  ['gg_ready', 'announcing'],
   ['user_deactivated_discord', 'done'],
   ['user_reactivated_discord', 'done'],
   ['post_event_followup', 'done'],

@@ -239,6 +239,17 @@ export const SETTING_KEYS = {
   /** ROK-1771: Spotlight rotation memory — JSON array of ≤4
    *  `{ week: 'YYYY-Www', kind }`, newest first. Internal; no admin UI. */
   WEEKLY_DIGEST_SPOTLIGHT_HISTORY: 'weekly_digest_spotlight_history',
+  /** ROK-2187: GG <year> kill switch. Unset ⇒ off — nothing computes or sends. */
+  GG_ENABLED: 'gg_enabled',
+  /** ROK-2187: Delivery day, explicit YYYY-MM-DD. Unset ⇒ Monday of
+   *  December's second week of the current year (Q1). */
+  GG_DELIVERY_DATE: 'gg_delivery_date',
+  /** ROK-2187: Delivery hour '0'–'23', community timezone. Default '18'. */
+  GG_DELIVERY_HOUR: 'gg_delivery_hour',
+  /** ROK-2187: Minutes between the announcement and the first DM. Default '15' (R7). */
+  GG_DM_OFFSET_MINUTES: 'gg_dm_offset_minutes',
+  /** ROK-2187: Announcement channel; unset ⇒ DISCORD_BOT_DEFAULT_CHANNEL. */
+  GG_CHANNEL_ID: 'gg_channel_id',
   /** ROK-121: Pelican panel base URL (admin-supplied; server-side fetch). */
   PELICAN_PANEL_URL: 'pelican_panel_url',
   /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */
