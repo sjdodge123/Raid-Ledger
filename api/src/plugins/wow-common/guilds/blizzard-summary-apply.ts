@@ -64,7 +64,8 @@ export function summaryPatch(
   }
   const patch: SummaryPatch = {
     blizzardGuildId: blizzardGuildId ?? stored,
-    foundedAt,
+    // An unparseable founded date never erases a stored one (like faction).
+    ...(foundedAt !== null ? { foundedAt } : {}),
     // Blizzard wins on a 200; LedgerLink stays the fallback (Q10). Same
     // `Alliance`/`Horde` casing LedgerLink writes (F8).
     ...(faction !== null ? { faction } : {}),

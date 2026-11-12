@@ -41,6 +41,16 @@ describe('summaryPatch — 200', () => {
     expect(patch.blizzardSummaryStatus).toBe('ok');
   });
 
+  it('a null founded date leaves the stored founded date alone', () => {
+    const fetch: SummaryFetch = {
+      kind: 'found',
+      summary: { blizzardGuildId: 42, foundedAt: null, faction: 'Horde' },
+    };
+    const { patch } = summaryPatch(state(42), fetch, NOW);
+    expect(patch).not.toHaveProperty('foundedAt');
+    expect(patch.blizzardSummaryStatus).toBe('ok');
+  });
+
   it('a null mapped id keeps the stored id (not a mismatch)', () => {
     const res = summaryPatch(state(42), found(null), NOW);
     expect(res.mismatch).toBe(false);

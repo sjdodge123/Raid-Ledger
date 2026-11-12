@@ -3,7 +3,9 @@
  * id, disbanded state) riding the roster sync, against the real DB with a
  * stubbed `BlizzardService`. Spec Lane 2 item 7 cases 1–13, plus the F5
  * ruling: the scheduled due-list skips a `disbanded` guild (14) and an
- * editor's Sync now on one that gets a 200 clears it (15). Fleet-only.
+ * editor's Sync now on one that gets a 200 clears it (15); review follow-ups:
+ * a slug changed mid-fetch writes nothing (16), a community hub omits the
+ * summary (13c). Fleet-only.
  */
 import type * as SentryModule from '@sentry/nestjs';
 import { eq } from 'drizzle-orm';
@@ -343,6 +345,42 @@ describe('ROK-1170 — slug change and page DTO', () => {
     );
     const res = await auth(testApp.request.get(`/plugins/wow/guilds/${id}`));
     expect(res.status).toBe(200);
+    expect(res.body.guild).not.toHaveProperty('blizzardGuild');
+  });
+});
+
+describe('ROK-1170 — slug race and community hub', () => {
+  it('(16) a slug changed between fetch and write writes nothing', async () => {
+    const id = await insertGuild();
+    summarySpy.mockImplementation(async () => {
+      await testApp.db
+        .update(schema.guilds)
+        .set({ guildSlug: 'day-shift' })
+        .where(eq(schema.guilds.id, id));
+      return found(42);
+    });
+    await sync(id);
+    expect(summarySpy).toHaveBeenCalledWith('night-shift', 'us');
+    expect((await guildRow(id)).guildSlug).toBe('day-shift');
+    expect(await summaryCols(id)).toMatchObject({
+      blizzardGuildId: null,
+      foundedAt: null,
+      status: null,
+      notFoundSince: null,
+    });
+  });
+
+  it('(13c) a Forever game_community hub page omits blizzardGuild', async () => {
+    const id = await insertGuild({
+      kind: 'game_community',
+      source: 'community',
+      guildSlug: null,
+      foundedAt: FOUNDED,
+      blizzardSummaryStatus: 'ok',
+    });
+    const res = await auth(testApp.request.get(`/plugins/wow/guilds/${id}`));
+    expect(res.status).toBe(200);
+    expect(res.body.guild.kind).toBe('game_community');
     expect(res.body.guild).not.toHaveProperty('blizzardGuild');
   });
 });
