@@ -91,6 +91,22 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
         expect(screen.queryByTestId('module-widget')).not.toBeInTheDocument();
     });
 
+    it('renders the module heroBanner directly under the hero (ROK-1170)', async () => {
+        clearRegistry();
+        const Banner = ({ page }: HubCtx): JSX.Element => <p data-testid="module-hero-banner">{page.guild.name} is offline</p>;
+        registerPlugin(SLUG, { icon: '/x.png', color: 'blue', label: 'Test game' }).registerHubModule({ ...testModule, heroBanner: Banner });
+        renderPage();
+        const banner = await screen.findByTestId('module-hero-banner');
+        expect(banner).toHaveTextContent('Valheim Longhouse is offline');
+        expect(screen.getByTestId('guild-hero').nextElementSibling, 'the banner sits right under the hero').toBe(banner);
+    });
+
+    it('puts nothing between the hero and the tab nav when the module has no heroBanner', async () => {
+        renderPage();
+        const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
+        expect(screen.getByTestId('guild-hero').nextElementSibling).toBe(nav);
+    });
+
     it('draws a game widget from a plugin that does not own the kind (ROK-1909)', async () => {
         const Materials = lazy(() => Promise.resolve({ default: () => <p data-testid="plugin-game-widget">Materials</p> }));
         registerPlugin('valheim', { icon: '/x.png', color: 'blue', label: 'Valheim' }).registerHubWidget({

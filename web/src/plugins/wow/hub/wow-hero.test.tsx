@@ -1,12 +1,13 @@
 /**
  * ROK-1815 — the WoW guild hero's "Your role" chips (one case per viewer type)
  * and the faction pill (token tone per faction, neutral fallback, hidden on null).
+ * ROK-1170: the neutral "Founded <Mon YYYY>" pill (full date in `title`, hidden on null).
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { GuildPage } from '@raid-ledger/contract';
 import type { HubCtx } from '../../hub-module';
-import { WowFactionPill, WowViewerRolePills } from './wow-hero';
+import { WowFactionPill, WowFoundedPill, WowViewerRolePills } from './wow-hero';
 import { factionKey, heroRoleBadges } from './wow-hero.helpers';
 
 type Viewer = GuildPage['viewer'];
@@ -91,5 +92,30 @@ describe('WowFactionPill', () => {
         const { container } = render(<WowFactionPill {...ctx(PLAIN, null)} />);
         expect(container).toBeEmptyDOMElement();
         expect(factionKey(null)).toBeNull();
+    });
+});
+
+describe('WowFoundedPill (ROK-1170)', () => {
+    function founded(foundedAt: string | null, withSummary = true): HubCtx {
+        const base = ctx(PLAIN);
+        const blizzardGuild = withSummary ? { blizzardGuild: { foundedAt, state: 'ok' as const } } : {};
+        return { ...base, page: { ...base.page, guild: { ...base.page.guild, ...blizzardGuild } } };
+    }
+    const AT = '2024-03-15T12:00:00.000Z';
+
+    it('shows "Founded Mar 2024" as a neutral pill with the full date in its title', () => {
+        render(<WowFoundedPill {...founded(AT)} />);
+        const pill = screen.getByText('Founded Mar 2024');
+        expect(pill).toHaveAttribute('data-tone', 'neutral');
+        expect(pill).toHaveAttribute('title', new Date(AT).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }));
+        expect(pill.getAttribute('title'), 'the title carries the day, not just month + year').toMatch(/15/);
+    });
+
+    it.each([
+        ['a null founded date', founded(null)],
+        ['no Blizzard summary on the page (Classic / older payload)', founded(null, false)],
+    ])('renders nothing for %s', (_label, value) => {
+        const { container } = render(<WowFoundedPill {...value} />);
+        expect(container).toBeEmptyDOMElement();
     });
 });

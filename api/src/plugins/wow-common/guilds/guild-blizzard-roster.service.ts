@@ -27,10 +27,22 @@ import {
   isForeverArmoryImportEnabled,
 } from '../forever-armory-switch';
 import {
+  blizzardGuildFor,
   blizzardRosterFor,
   isForeverGuildHub,
   slugifyGuildName,
 } from './guild-slug.helpers';
+
+/**
+ * ROK-1170: a new slug is a new guild — it must not inherit "previously 200"
+ * (the two-strike rule) or the old guild's id, founded date and state.
+ */
+const SUMMARY_RESET = {
+  blizzardGuildId: null,
+  foundedAt: null,
+  blizzardSummaryStatus: null,
+  blizzardNotFoundSince: null,
+} as const;
 
 /**
  * ROK-1928 A2 — sets (or clears) the Blizzard guild slug a WoW: Forever
@@ -115,7 +127,11 @@ export class GuildBlizzardRosterService {
         guildSlug,
         updatedAt: new Date(),
         ...(changed
-          ? { blizzardRosterStatus: null, blizzardRosterSyncedAt: null }
+          ? {
+              blizzardRosterStatus: null,
+              blizzardRosterSyncedAt: null,
+              ...SUMMARY_RESET,
+            }
           : {}),
       })
       .where(eq(schema.guilds.id, current.id))
@@ -128,6 +144,7 @@ export class GuildBlizzardRosterService {
     return {
       ...hubSummaryFor(hub, false),
       ...blizzardRosterFor(hub.guild, hub.gameSlug),
+      ...blizzardGuildFor(hub.guild, hub.gameSlug),
     };
   }
 }

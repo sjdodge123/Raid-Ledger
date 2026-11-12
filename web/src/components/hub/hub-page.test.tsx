@@ -37,6 +37,10 @@ function makePage(canManageEditors = false): GuildPageDto {
     };
 }
 
+function disbanded(page: GuildPageDto): GuildPageDto {
+    return { ...page, guild: { ...page.guild, blizzardGuild: { foundedAt: null, state: 'disbanded' } } };
+}
+
 const RANK_EDITOR: GuildEditor = {
     id: 11, guildId: 7, kind: 'rank', rankIndex: 2, rankName: 'Raider', guildMemberId: null, memberName: null, grantedBy: 'Grimtusk', createdAt: '2026-10-14T10:00:00.000Z',
 };
@@ -378,5 +382,24 @@ describe('GuildPage — overview-only visitors never see the member-only Posts t
         expect(screen.queryByTestId('hub-posts-tab'), 'the Posts panel must not open for a visitor').toBeNull();
         expect(await screen.findByTestId('guild-gm-post-body')).toHaveTextContent('Raid night is Thursday.');
         expect(postRouteCalls, 'no member-only post route is requested').toBe(0);
+    });
+});
+
+describe('GuildPage — Blizzard guild state banner (ROK-1170)', () => {
+    it('shows a member the disbanded-guild banner under the hero, with no action (ROK-1170 AC5)', async () => {
+        serve(disbanded(makePage()));
+        renderPage();
+        const banner = await screen.findByTestId('wow-guild-state-banner');
+        expect(banner).toHaveTextContent('Blizzard no longer finds this guild');
+        expect(within(banner).queryByRole('button')).not.toBeInTheDocument();
+        expect(await screen.findByTestId('guild-members-summary'), 'the rest of the page still renders').toBeInTheDocument();
+    });
+
+    it('"Update the guild path" opens the settings sheet for the Leader (ROK-1170 F7)', async () => {
+        serve(disbanded(makePage(true)));
+        renderPage();
+        const banner = await screen.findByTestId('wow-guild-state-banner');
+        await userEvent.click(within(banner).getByRole('button', { name: 'Update the guild path' }));
+        expect(await screen.findByTestId('guild-settings-sheet')).toBeInTheDocument();
     });
 });
