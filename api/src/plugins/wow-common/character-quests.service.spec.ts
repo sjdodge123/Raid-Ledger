@@ -9,11 +9,13 @@ import { CharacterQuestsService } from './character-quests.service';
 import { effectiveQuests } from './forever-quest-source.helpers';
 import { loadForeverQuestSources } from './forever-quest-source.query';
 import { buildCharacterQuests } from './character-quests.helpers';
+import { loadCharacterAttunements } from './character-attunements';
 import { instanceName } from './dungeon-instance-names';
 import type { SettingsService } from '../../settings/settings.service';
 
 jest.mock('./forever-quest-source.query');
 jest.mock('./character-quests.helpers');
+jest.mock('./character-attunements');
 
 const CHAR_ID = '6f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f';
 const CAPTURED = new Date('2026-10-01T12:00:00.000Z');
@@ -140,11 +142,15 @@ describe('CharacterQuestsService.getForCharacter', () => {
     loader.mockResolvedValue(snapshot({ gear: [], quests: QUESTS }));
     const built = { marker: 'built' } as never;
     builder.mockReturnValue(built);
+    jest.mocked(loadCharacterAttunements).mockResolvedValue([]);
     const svc = new CharacterQuestsService(
       makeDb([{ id: CHAR_ID }], [KNOWN_ROW]),
       off(),
     );
-    await expect(svc.getForCharacter(CHAR_ID)).resolves.toBe(built);
+    await expect(svc.getForCharacter(CHAR_ID)).resolves.toEqual({
+      marker: 'built',
+      attunements: [],
+    });
     expect(sources).toHaveBeenCalledWith(expect.anything(), [CHAR_ID]);
     expect(builder).toHaveBeenCalledWith(
       {

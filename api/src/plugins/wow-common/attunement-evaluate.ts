@@ -109,6 +109,15 @@ export function noDataVerdict(
   };
 }
 
+function doneVerdict(v: VisibleDef): AttunementVerdict {
+  return {
+    state: 'done',
+    noDataReason: null,
+    stepsDone: v.steps.length,
+    nextStep: null,
+  };
+}
+
 /** One character's verdict on one trackable, visible def. */
 export function evaluateAttunement(
   v: VisibleDef,
@@ -118,13 +127,7 @@ export function evaluateAttunement(
     return noDataVerdict('no_quest_data');
   const { completed, inProgress } = quests.quests;
   const done = new Set(completed);
-  if (done.has(v.final.questId))
-    return {
-      state: 'done',
-      noDataReason: null,
-      stepsDone: v.steps.length,
-      nextStep: null,
-    };
+  if (done.has(v.final.questId)) return doneVerdict(v);
   const inLog = inProgress.some((q) =>
     v.steps.some((s) => s.questId === q.questId),
   );
