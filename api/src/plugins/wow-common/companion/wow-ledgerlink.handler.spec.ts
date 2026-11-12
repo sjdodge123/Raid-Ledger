@@ -86,10 +86,12 @@ describe('WowLedgerlinkHandler — import call (D2)', () => {
     const importNew = jest.fn().mockResolvedValue(result('applied'));
     await handlerWith(importNew).handle(ctx, msg);
     expect(importNew).toHaveBeenCalledTimes(1);
-    expect(importNew).toHaveBeenCalledWith(7, {
-      importString: EXPORT,
-      dryRun: false,
-    });
+    // ROK-2179: the companion path acks before the post-import housekeeping.
+    expect(importNew).toHaveBeenCalledWith(
+      7,
+      { importString: EXPORT, dryRun: false },
+      { deferHousekeeping: true },
+    );
   });
 
   it.each(['applied', 'noop', 'stale'] as const)(

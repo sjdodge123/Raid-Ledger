@@ -6,7 +6,7 @@
  * lives in `addon-import-create.integration.spec.ts` (L3).
  */
 import type { RosterInsightsCache } from '../guilds/roster-insights/roster-insights.cache';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AddonWho } from '@raid-ledger/contract';
 import type * as schema from '../../../drizzle/schema';
@@ -457,5 +457,89 @@ describe('Wowhead gear enqueue on the create route (ROK-1727)', () => {
     (decodeImportPaste as jest.Mock).mockReturnValue(withGear());
     await service.importNew(1, body(true, { ruleset: 'pvp' }));
     expect(itemMeta.enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe('post-import housekeeping off the ack path (ROK-2179)', () => {
+  /** Flushes queued promise callbacks (no timers involved). */
+  const drain = () => new Promise<void>((r) => setImmediate(r));
+
+  function gated() {
+    const s = setup(who());
+    let release: () => void = () => undefined;
+    s.insightsCache.invalidateForCharacter.mockReturnValue(
+      new Promise<void>((r) => {
+        release = r;
+      }),
+    );
+    return { ...s, release: () => release() };
+  }
+
+  it('deferHousekeeping: resolves BEFORE the audit finalise, which then lands with the result', async () => {
+    const s = gated();
+    let resolved = false;
+    const run = s.service
+      .importNew(1, body(false), { deferHousekeeping: true })
+      .then((res) => {
+        resolved = true;
+        return res;
+      });
+    await drain();
+    // Housekeeping is still held — the caller (the 202) must not wait on it.
+    expect({
+      resolved,
+      audited: s.audit.recordAttempt.mock.calls.length,
+    }).toEqual({ resolved: true, audited: 0 });
+    s.release();
+    expect((await run).status).toBe('applied');
+    await drain();
+    expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
+    expect(audited(s.audit)).toMatchObject({
+      characterId: NEW_ID,
+      result: 'applied',
+    });
+  });
+
+  it('the paste route (default) still finalises the audit before it resolves', async () => {
+    const s = setup(who());
+    await s.service.importNew(1, body(false));
+    expect(audited(s.audit)).toMatchObject({ result: 'applied' });
+  });
+
+  it('a deferred reject still finalises its audit row with the code', async () => {
+    const s = setup(who());
+    s.audit.reserveAttempt.mockRejectedValueOnce(
+      new AddonImportError('RATE_LIMITED'),
+    );
+    const got = await codeOf(
+      s.service.importNew(1, body(false), { deferHousekeeping: true }),
+    );
+    expect(got.code).toBe('RATE_LIMITED');
+    await drain();
+    expect(audited(s.audit)).toMatchObject({ result: 'RATE_LIMITED' });
+  });
+});
+
+describe('deferred housekeeping failure (ROK-2179)', () => {
+  const drain = () => new Promise<void>((r) => setImmediate(r));
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is logged with the step and the user id only, never thrown', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const s = setup(who());
+    s.audit.recordAttempt.mockRejectedValueOnce(new Error('db down'));
+    await expect(
+      s.service.importNew(1, body(false), { deferHousekeeping: true }),
+    ).resolves.toMatchObject({ status: 'applied' });
+    await drain();
+    expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
+    const housekeeping = warn.mock.calls.filter(([m]) =>
+      String(m).includes('housekeeping'),
+    );
+    expect(housekeeping).toEqual([
+      ['addon-import housekeeping failed userId=1: Error: db down'],
+    ]);
   });
 });

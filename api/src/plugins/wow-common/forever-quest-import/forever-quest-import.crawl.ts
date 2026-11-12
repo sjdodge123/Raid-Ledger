@@ -27,6 +27,7 @@ import {
   type BlizzardRef,
   type ParsedBlizzardQuest,
 } from './blizzard-quest.parse';
+import { toOverlayRow } from './forever-quest-import.overlay-row';
 import {
   CLASSIC_QUEST_AREAS,
   areaNameCandidates,
@@ -66,6 +67,12 @@ export interface QuestImportDeps {
   runId: string;
   /** Our bundled quests: quest id → dungeon instance id. */
   knownQuests: ReadonlyMap<number, number>;
+  /**
+   * ROK-1927: quest ids fetched besides the dungeon areas (the attunement
+   * chains, mostly open-world) so Blizzard confirms each; stored like
+   * prerequisites (no dungeon, area from the response).
+   */
+  extraQuestIds?: readonly number[];
   fetchJson(url: string): Promise<QuestImportResponse>;
   pause(ms: number): Promise<void>;
   isEnabled(): Promise<boolean>;
@@ -80,29 +87,8 @@ interface QueuedQuest {
   unlisted: boolean;
 }
 
-/** The overlay row for one parsed `quest/{id}` response. */
-export function toOverlayRow(
-  parsed: ParsedBlizzardQuest,
-  item: Pick<QueuedQuest, 'areaId' | 'instanceId'>,
-  runId: string,
-  fetchedAt: Date,
-): WowDungeonQuestBlizzardInsert {
-  return {
-    questId: parsed.questId,
-    areaId: parsed.area?.id ?? item.areaId,
-    dungeonInstanceId: item.instanceId,
-    title: parsed.title,
-    typeId: parsed.typeId,
-    rewardXp: parsed.rewardXp,
-    rewardMoneyCopper: parsed.rewardMoneyCopper,
-    rewardItems: parsed.rewardItems,
-    reputations: parsed.reputations,
-    requirementsRaw: parsed.requirementsRaw,
-    raw: parsed.raw,
-    fetchedAt,
-    runId,
-  };
-}
+/** An extra id's queue fields: area 0 is kept only when Blizzard names none. */
+const EXTRA_QUEST = { areaId: 0, depth: 0, unlisted: false } as const;
 
 export class QuestImportCrawl {
   private readonly seen = new Set<number>();
@@ -123,6 +109,7 @@ export class QuestImportCrawl {
     const imported = await this.listAreas(areas);
     this.assertSomeAreaMapped();
     this.enqueueUnlisted(imported);
+    this.enqueueExtra();
     for (let q = this.queue.shift(); q; q = this.queue.shift()) {
       await this.importQuest(q);
     }
@@ -279,6 +266,15 @@ export class QuestImportCrawl {
         depth: 0,
         unlisted: true,
       });
+    }
+  }
+
+  /** ROK-1927 extra ids (see {@link EXTRA_QUEST}). */
+  private enqueueExtra(): void {
+    const known = this.deps.knownQuests;
+    for (const questId of this.deps.extraQuestIds ?? []) {
+      const instanceId = known.get(questId) ?? null;
+      this.enqueue({ ...EXTRA_QUEST, questId, instanceId });
     }
   }
 

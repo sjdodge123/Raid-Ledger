@@ -83,7 +83,7 @@ function OwnedCharacterSections({
         ) : <EquipmentEmptyState isArmoryImported={isArmoryImported} gameVariant={variant} />,
         talents: isResolving ? null : <TalentSection talents={talents} isArmoryImported={isArmoryImported}
             characterClass={characterClass} gameVariant={variant} />,
-        quests: <CharacterQuestsSection characterId={characterId} variant={variant} />,
+        quests: <CharacterQuestsSection characterId={characterId} variant={variant} level={character?.level ?? null} />,
         professions: <CharacterProfessionsPanel professions={professions}
             isOwner={isOwner} characterId={characterId} gameId={gameId}
             source={professionsPillSource(variant, character?.professionsSource)} />,

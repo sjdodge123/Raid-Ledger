@@ -26,6 +26,7 @@ import { SettingsService } from '../../../settings/settings.service';
 import { BlizzardAuthService } from '../blizzard-auth.service';
 import { DungeonQuestsService } from '../dungeon-quests.service';
 import { WOW_FOREVER_QUEST_IMPORT_STATUS_KEY } from '../forever.settings';
+import { attunementExtraQuestIds } from '../data/forever-attunements';
 import { listStaleQuestIds, upsertBlizzardQuests } from './blizzard-quest.repo';
 import {
   FOREVER_QUEST_IMPORT_OFF_MESSAGE,
@@ -199,6 +200,7 @@ export class ForeverQuestImportService implements OnModuleInit {
       region,
       runId,
       knownQuests: await this.loadKnownQuests(),
+      extraQuestIds: attunementExtraQuestIds(),
       fetchJson: async (url) => {
         const res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },

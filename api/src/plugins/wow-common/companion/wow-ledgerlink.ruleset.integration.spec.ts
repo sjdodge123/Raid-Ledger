@@ -33,6 +33,7 @@ import {
   buildWho,
 } from '../addon-import/testing/addon-fixture.builder';
 import { pinExportClock } from '../addon-import/testing/pin-export-clock';
+import { settledAudit } from '../addon-import/testing/settled-audit.test-fixtures';
 import { BlizzardService } from '../blizzard.service';
 import type { ForeverRulesetFetchOutcome } from '../blizzard-forever-ruleset.fetch';
 import { WOW_FOREVER_ARMORY_IMPORT_KEY } from '../forever.settings';
@@ -88,6 +89,8 @@ beforeEach(async () => {
 
 // No afterAll DB work: the shared integration-setup afterAll closes the pool.
 afterEach(async () => {
+  // ROK-2179: the companion acks before its audit finalise — settle it first.
+  await settledAudit(testApp.db);
   jest.restoreAllMocks();
   testApp.seed = await truncateAllTables(testApp.db);
 });

@@ -39,7 +39,11 @@ export async function loadInsightRawRows(
   return [];
 }
 
-async function loadGuildRows(
+/**
+ * A `wow_guild` hub's roster rows (latest snapshot, one per member). ROK-2178:
+ * the service issues it alongside the hub row, before the kind is known.
+ */
+export async function loadGuildRows(
   db: Db,
   guildId: number,
 ): Promise<InsightRawRow[]> {
@@ -128,8 +132,13 @@ export function joinFacts(
       const resolved = facts.get(r.key);
       return resolved ? [toInsightRow(r, resolved)] : [];
     }),
-    linkedUserIds: raw.flatMap((r) => (r.userId === null ? [] : [r.userId])),
+    linkedUserIds: linkedOwners(raw),
   };
+}
+
+/** ROK-1917 Q1 — the owners of the raw roster's linked characters. */
+export function linkedOwners(raw: readonly InsightRawRow[]): number[] {
+  return raw.flatMap((r) => (r.userId === null ? [] : [r.userId]));
 }
 
 /**
