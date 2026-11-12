@@ -13,7 +13,7 @@ import { useGgAudio } from '../../components/gg/use-gg-audio';
 import { resolveGgCards } from '../../plugins/gg-cards';
 import { usePluginStore } from '../../stores/plugin-store';
 import type { GgOwnerSnapshot } from '../../lib/api/gg-api';
-import { buildGgSlides, topGameId, useGgBackdrops } from './gg-slides';
+import { buildGgSlides, topGameMedia, useGgBackdrops } from './gg-slides';
 
 function HeaderExtra({ snapshot, audio }: { snapshot: GgOwnerSnapshot; audio: GgStoryContextValue['audio'] }): JSX.Element {
     return (
@@ -39,7 +39,8 @@ export function GgStory({ snapshot, onClose }: { snapshot: GgOwnerSnapshot; onCl
         setStarted(true);
         audio.start(mascot);
     }, [started, audio, mascot]);
-    const backdrops = useGgBackdrops(topGameId(snapshot.cards));
+    const media = useMemo(() => topGameMedia(snapshot.cards), [snapshot.cards]);
+    const backdrops = useGgBackdrops(media);
     const slides = useMemo(() => buildGgSlides(cards, snapshot.year, backdrops, started), [cards, snapshot.year, backdrops, started]);
     const ctx = useMemo<GgStoryContextValue>(() => ({
         year: snapshot.year, tier: snapshot.tier, share: snapshot.share, mascot, started, start, audio,

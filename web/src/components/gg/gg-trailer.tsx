@@ -16,7 +16,7 @@ function useHoldWhilePlaying(playing: boolean): void {
     const controls = useStoryControls();
     const { audio } = useGgStory();
     const latest = useRef({ controls, audio });
-    latest.current = { controls, audio };
+    useEffect(() => { latest.current = { controls, audio }; });
     useEffect(() => {
         if (!playing) return undefined;
         latest.current.controls.pause();

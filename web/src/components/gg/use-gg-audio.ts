@@ -55,13 +55,27 @@ function useLazyMusic(tracks: readonly GgTrack[]): () => HTMLAudioElement | null
     }, [tracks]);
 }
 
+/** The persisted mute flag; `onMute` runs when it turns on. */
+function useGgMute(onMute: () => void): [boolean, () => void] {
+    const [muted, setMuted] = useState(readMuted);
+    const toggle = useCallback((): void => {
+        setMuted((m) => {
+            const next = !m;
+            try { window.localStorage.setItem(GG_MUTE_KEY, next ? '1' : '0'); } catch { /* private mode */ }
+            if (next) onMute();
+            return next;
+        });
+    }, [onMute]);
+    return [muted, toggle];
+}
+
 /** Owns the GG audio elements for one story. */
 export function useGgAudio(tracks: readonly GgTrack[] = GG_MUSIC_TRACKS): GgAudio {
-    const [muted, setMuted] = useState(readMuted);
+    const existing = useRef<HTMLAudioElement | null>(null);
+    const [muted, toggleMute] = useGgMute(useCallback(() => existing.current?.pause(), []));
     const started = useRef(false);
     const held = useRef(false);
     const music = useLazyMusic(tracks);
-    const existing = useRef<HTMLAudioElement | null>(null);
     const fade = useRef<ReturnType<typeof setInterval> | null>(null);
     useEffect(() => () => { if (fade.current) clearInterval(fade.current); }, []);
 
@@ -74,15 +88,6 @@ export function useGgAudio(tracks: readonly GgTrack[] = GG_MUSIC_TRACKS): GgAudi
         fade.current = fadeIn(el);
         safePlay(el);
     }, [music, muted]);
-
-    const toggleMute = useCallback((): void => {
-        setMuted((m) => {
-            const next = !m;
-            try { window.localStorage.setItem(GG_MUTE_KEY, next ? '1' : '0'); } catch { /* private mode */ }
-            if (next) existing.current?.pause();
-            return next;
-        });
-    }, []);
 
     useEffect(() => { if (!muted) playMusic(); }, [muted, playMusic]);
 
