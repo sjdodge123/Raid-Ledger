@@ -22,15 +22,40 @@ type UnsafeFn = Sql['unsafe'];
  * thenable; we wrap the `then` so duration is captured on the actual
  * settle of the query, regardless of which chained form Drizzle picks.
  *
+ * `db.transaction()` runs on the reserved `sql` postgres-js hands to the
+ * `begin()` callback (and nested ones on the `savepoint()` callback's `sql`),
+ * not on the pool client — so those scoped clients are instrumented the same
+ * way as they are created (ROK-2177). Only the callback's argument is touched;
+ * its return value, errors and the commit/rollback flow are passed through.
+ *
  * No-op (passes the client through unchanged) when DEBUG is not enabled,
  * to avoid any per-query overhead in production.
  */
 export function withQueryPerfLogging(client: Sql): Sql {
   if (!isPerfEnabled()) return client;
+  instrumentSql(client);
+  return client;
+}
 
-  const originalUnsafe = client.unsafe.bind(client);
+type UnsafeOwner = { unsafe: UnsafeFn };
 
-  const timedUnsafe = ((
+const instrumented = new WeakSet<object>();
+
+function hasUnsafe(sql: object): sql is UnsafeOwner {
+  return typeof Reflect.get(sql, 'unsafe') === 'function';
+}
+
+function instrumentSql(sql: object): void {
+  if (instrumented.has(sql) || !hasUnsafe(sql)) return;
+  instrumented.add(sql);
+  patchUnsafe(sql);
+  patchScopeOpener(sql, 'begin');
+  patchScopeOpener(sql, 'savepoint');
+}
+
+function patchUnsafe(sql: UnsafeOwner): void {
+  const originalUnsafe = sql.unsafe.bind(sql);
+  sql.unsafe = ((
     query: Parameters<UnsafeFn>[0],
     parameters?: Parameters<UnsafeFn>[1],
     queryOptions?: Parameters<UnsafeFn>[2],
@@ -39,10 +64,38 @@ export function withQueryPerfLogging(client: Sql): Sql {
       originalUnsafe(query, parameters, queryOptions) as unknown as Thenable,
       query,
     )) as UnsafeFn;
+}
 
-  (client as { unsafe: UnsafeFn }).unsafe = timedUnsafe;
+/**
+ * `begin(fn)` / `begin(options, fn)` / `savepoint(fn)` / `savepoint(name, fn)`:
+ * instrument the scoped `sql` each callback receives. Argument count and order
+ * are preserved (postgres-js branches on `arguments.length`).
+ */
+function patchScopeOpener(sql: object, method: 'begin' | 'savepoint'): void {
+  const original: unknown = Reflect.get(sql, method);
+  if (typeof original !== 'function') return;
+  Reflect.set(sql, method, (...args: unknown[]): unknown => {
+    const result: unknown = Reflect.apply(
+      original,
+      sql,
+      args.map(wrapScopeCallback),
+    );
+    return result;
+  });
+}
 
-  return client;
+function wrapScopeCallback(arg: unknown): unknown {
+  if (typeof arg !== 'function') return arg;
+  return (scoped: unknown): unknown => {
+    if (
+      typeof scoped === 'function' ||
+      (typeof scoped === 'object' && scoped)
+    ) {
+      instrumentSql(scoped);
+    }
+    const result: unknown = Reflect.apply(arg, undefined, [scoped]);
+    return result;
+  };
 }
 
 /**
