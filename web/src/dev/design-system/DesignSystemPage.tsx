@@ -22,6 +22,7 @@ import { MapViewportSection } from './map-viewport-section';
 import { SkillTrendSection } from './skill-trend-demo';
 import { FormsSection } from './forms-section';
 import { HubWidgetsSection } from './hub-widgets-section';
+import { HubHeroBannerSection } from './hub-hero-banner-section';
 import { ArrangeListSection } from './arrange-list-section';
 import { MasonryGridSection } from './masonry-grid-section';
 import { MemberListSection } from './member-list-section';
@@ -133,6 +134,7 @@ function FeatureSections(): JSX.Element {
             <MapViewportSection />
             <SkillTrendSection />
             <HubWidgetsSection />
+            <HubHeroBannerSection />
             <Suspense fallback={<SamplesLoading />}>
                 <MeterHistogramSection />
             </Suspense>

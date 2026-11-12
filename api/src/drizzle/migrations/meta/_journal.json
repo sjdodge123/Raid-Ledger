@@ -2066,6 +2066,13 @@
       "when": 1794429433052,
       "tag": "0295_wow_item_meta_tooltip",
       "breakpoints": true
+    },
+    {
+      "idx": 296,
+      "version": "7",
+      "when": 1794501677051,
+      "tag": "0296_guild_blizzard_summary",
+      "breakpoints": true
     }
   ]
 }
