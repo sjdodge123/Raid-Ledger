@@ -4285,3 +4285,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-12 — morning triage (operator ruling on TECH-DEBT-TRIAGE-2026-11-12 digest)
 
 - **nit (bookkeeping)** — digest rows 1–4 filed as Linear stories on the operator's ruling: ROK-2180 (gc-sweeper reclaim after ROK-2111), ROK-2181 (`sweep.sh` scoped prune skips preserved/pinned envs), ROK-2182 (`--scoped` mode-only diff + stale origin), ROK-2183 (Quest Prep XP/gold contrast on light). Five already-fixed entries struck above (backup sanitization race ×3, roster-insights role precedence, heatmap count contrast, plugin cron Pause/history). Suggested: none — record only.
+
+### 2026-11-12 — feat/rok-2186-quest-reward-rows (surfaced during review)
+- **nit** — `api/src/plugins/wow-common/wowhead-item/wow-item-meta.backfill.ts` quest-reward item-id `::int` cast: a non-numeric reward id in a cached quest payload would abort the whole backfill cron run. Not reachable from current producers (ids are numbers). Suggested: guard the cast with `jsonb_typeof(...) = 'number'`.
+- **low** — WoW Quest Prep in `default-light`: "No one has this yet" and the gold/XP text are amber `#fbbf24`-ish and nearly invisible; row item names keep `#60a5fa` from the shared `WowItemCard`. Pre-existing (not in this diff); overlaps ROK-2183. Suggested: fold into ROK-2183.
