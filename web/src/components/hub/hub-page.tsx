@@ -161,7 +161,8 @@ function useHubSettingsState(canManage: boolean, canPick: boolean) {
     const allowed = requested === 'picker' ? canPick : canManage;
     const overlay: HubOverlay = allowed ? requested : 'closed';
     const value: HubSettingsValue = useMemo(
-        () => ({ openChannelPicker: canPick ? openPicker : null }), [canPick, openPicker]);
+        () => ({ openChannelPicker: canPick ? openPicker : null, openSettings: canManage ? openSettings : null }),
+        [canPick, openPicker, canManage, openSettings]);
     return { overlay, openPicker, onClose, openSettings, value };
 }
 
@@ -177,6 +178,7 @@ interface FrameProps {
 /** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
 function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources, hasPosts);
+    const HeroBanner = mod?.heroBanner;
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
     const canManage = canOpenHubSettings(ctx.page);
     const s = useHubSettingsState(canManage, canUseHubChannelPicker(ctx.page));
@@ -190,6 +192,7 @@ function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProp
                             {canManage && <HubSettingsTrigger onOpen={s.openSettings} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
                         </div>
                     ) : null} />
+                {HeroBanner && <HeroBanner {...ctx} />}
                 <TabRow tabs={tabs} activeId={active} label={hubSectionsLabel(ctx.page.guild.kind)} className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} mods={mods} />
                 <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />

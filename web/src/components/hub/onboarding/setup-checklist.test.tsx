@@ -14,7 +14,7 @@ import { HubSettingsProvider } from '../settings/hub-settings-context';
 import { HubSetupChecklist } from './setup-checklist';
 
 /** A Leader/admin viewer: the channel picker exists, so that step is actionable. */
-const LEADER = { openChannelPicker: (): void => {} };
+const LEADER = { openChannelPicker: (): void => {}, openSettings: null };
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),

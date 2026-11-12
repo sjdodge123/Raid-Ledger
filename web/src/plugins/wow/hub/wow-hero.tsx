@@ -2,10 +2,8 @@
  * ROK-1830 — the WoW guild's hero contributions: the realm · region fact, the
  * faction pill, the viewer's role chips (ROK-1815) and the "Last imported
  * from LedgerLink" note under the next-raid chip. Core renders the crest, the
- * name and the member count.
- *
- * Founded date: deliberately not rendered — no source exists yet; the
- * Blizzard guild sync (ROK-1170) will add it.
+ * name and the member count. ROK-1170 adds the "Founded" pill from the
+ * Blizzard guild summary (`guild.blizzardGuild.foundedAt`).
  */
 import type { JSX } from 'react';
 import type { HubCtx } from '../../hub-module';
@@ -25,6 +23,18 @@ export function WowFactionPill({ page }: HubCtx): JSX.Element | null {
     const key = factionKey(faction);
     if (!key) return <Pill>{faction}</Pill>;
     return <Pill tone={`faction-${key}`}>{FACTION_LABEL[key]}</Pill>;
+}
+
+/**
+ * ROK-1170 — neutral "Founded Mar 2024" (month + year in the viewer's locale),
+ * the full date in `title`. Nothing when Blizzard gave no founded date.
+ */
+export function WowFoundedPill({ page }: HubCtx): JSX.Element | null {
+    const foundedAt = page.guild.blizzardGuild?.foundedAt;
+    if (!foundedAt) return null;
+    const at = new Date(foundedAt);
+    const full = at.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
+    return <Pill title={full}>Founded {at.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</Pill>;
 }
 
 /**
