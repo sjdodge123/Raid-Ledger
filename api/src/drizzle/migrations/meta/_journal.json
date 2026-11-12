@@ -2070,8 +2070,15 @@
     {
       "idx": 296,
       "version": "7",
+      "when": 1794501677051,
+      "tag": "0296_guild_blizzard_summary",
+      "breakpoints": true
+    },
+    {
+      "idx": 297,
+      "version": "7",
       "when": 1794503109378,
-      "tag": "0296_gg_snapshots",
+      "tag": "0297_gg_snapshots",
       "breakpoints": true
     }
   ]

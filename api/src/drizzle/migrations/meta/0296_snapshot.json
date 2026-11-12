@@ -1,5 +1,5 @@
 {
-  "id": "43111bf7-430d-453b-9f15-ef1990bdec98",
+  "id": "1d800a09-ad6f-439e-8e73-32eba0a92741",
   "prevId": "d12c8b70-4042-46cd-bbd8-b722f8b1bbb8",
   "version": "7",
   "dialect": "postgresql",
@@ -2612,7 +2612,7 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"slot_vacated\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"new_event\":{\"inApp\":true,\"push\":true,\"discord\":true},\"subscribed_game\":{\"inApp\":true,\"push\":true,\"discord\":true},\"achievement_unlocked\":{\"inApp\":true,\"push\":false,\"discord\":false},\"level_up\":{\"inApp\":true,\"push\":false,\"discord\":false},\"missed_event_nudge\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_rescheduled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_delayed\":{\"inApp\":true,\"push\":true,\"discord\":true},\"running_late\":{\"inApp\":true,\"push\":true,\"discord\":true},\"bench_promoted\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_cancelled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"roster_reassigned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"tentative_displaced\":{\"inApp\":true,\"push\":true,\"discord\":true},\"member_returned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"recruitment_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"role_gap_alert\":{\"inApp\":true,\"push\":true,\"discord\":true},\"lineup_steam_nudge\":{\"inApp\":true,\"push\":false,\"discord\":true},\"community_lineup\":{\"inApp\":true,\"push\":true,\"discord\":true},\"user_deactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"user_reactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"post_event_followup\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_player_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_leader_post\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_event_tagged\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_submitted\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_reviewed\":{\"inApp\":true,\"push\":false,\"discord\":true},\"valheim_claim_suggestion\":{\"inApp\":false,\"push\":false,\"discord\":true},\"gg_ready\":{\"inApp\":true,\"push\":false,\"discord\":true},\"system\":{\"inApp\":true,\"push\":false,\"discord\":false}}'::jsonb"
+          "default": "'{\"slot_vacated\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"new_event\":{\"inApp\":true,\"push\":true,\"discord\":true},\"subscribed_game\":{\"inApp\":true,\"push\":true,\"discord\":true},\"achievement_unlocked\":{\"inApp\":true,\"push\":false,\"discord\":false},\"level_up\":{\"inApp\":true,\"push\":false,\"discord\":false},\"missed_event_nudge\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_rescheduled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_delayed\":{\"inApp\":true,\"push\":true,\"discord\":true},\"running_late\":{\"inApp\":true,\"push\":true,\"discord\":true},\"bench_promoted\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_cancelled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"roster_reassigned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"tentative_displaced\":{\"inApp\":true,\"push\":true,\"discord\":true},\"member_returned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"recruitment_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"role_gap_alert\":{\"inApp\":true,\"push\":true,\"discord\":true},\"lineup_steam_nudge\":{\"inApp\":true,\"push\":false,\"discord\":true},\"community_lineup\":{\"inApp\":true,\"push\":true,\"discord\":true},\"user_deactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"user_reactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"post_event_followup\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_player_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_leader_post\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_event_tagged\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_submitted\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_reviewed\":{\"inApp\":true,\"push\":false,\"discord\":true},\"valheim_claim_suggestion\":{\"inApp\":false,\"push\":false,\"discord\":true},\"system\":{\"inApp\":true,\"push\":false,\"discord\":false}}'::jsonb"
         }
       },
       "indexes": {},
@@ -11636,6 +11636,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "founded_at": {
+          "name": "founded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blizzard_summary_status": {
+          "name": "blizzard_summary_status",
+          "type": "varchar(12)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "blizzard_not_found_since": {
+          "name": "blizzard_not_found_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "faction": {
           "name": "faction",
           "type": "varchar(20)",
@@ -12118,6 +12136,10 @@
         "guilds_blizzard_roster_status_check": {
           "name": "guilds_blizzard_roster_status_check",
           "value": "\"guilds\".\"blizzard_roster_status\" IS NULL OR \"guilds\".\"blizzard_roster_status\" IN ('ok', 'not_found', 'error', 'skipped_empty')"
+        },
+        "guilds_blizzard_summary_status_check": {
+          "name": "guilds_blizzard_summary_status_check",
+          "value": "\"guilds\".\"blizzard_summary_status\" IS NULL OR \"guilds\".\"blizzard_summary_status\" IN ('ok', 'not_found', 'disbanded', 'error')"
         },
         "guilds_name_override_kind_check": {
           "name": "guilds_name_override_kind_check",
@@ -21502,155 +21524,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.gg_snapshots": {
-      "name": "gg_snapshots",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "year": {
-          "name": "year",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "schema_version": {
-          "name": "schema_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "activity_tier": {
-          "name": "activity_tier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "computed_at": {
-          "name": "computed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "share_slug": {
-          "name": "share_slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shared_at": {
-          "name": "shared_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dm_claimed_at": {
-          "name": "dm_claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dm_sent_at": {
-          "name": "dm_sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "gg_snapshots_user_year_uq": {
-          "name": "gg_snapshots_user_year_uq",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "year",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "gg_snapshots_dm_pending_idx": {
-          "name": "gg_snapshots_dm_pending_idx",
-          "columns": [
-            {
-              "expression": "year",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"gg_snapshots\".\"dm_claimed_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "gg_snapshots_user_id_users_id_fk": {
-          "name": "gg_snapshots_user_id_users_id_fk",
-          "tableFrom": "gg_snapshots",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "gg_snapshots_share_slug_unique": {
-          "name": "gg_snapshots_share_slug_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "share_slug"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "gg_snapshots_tier_chk": {
-          "name": "gg_snapshots_tier_chk",
-          "value": "\"gg_snapshots\".\"activity_tier\" IN ('short', 'full')"
-        },
-        "gg_snapshots_share_pair_chk": {
-          "name": "gg_snapshots_share_pair_chk",
-          "value": "(\"gg_snapshots\".\"share_slug\" IS NULL) = (\"gg_snapshots\".\"shared_at\" IS NULL)"
-        }
-      },
       "isRLSEnabled": false
     }
   },
