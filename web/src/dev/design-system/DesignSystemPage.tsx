@@ -27,6 +27,7 @@ import { MasonryGridSection } from './masonry-grid-section';
 import { MemberListSection } from './member-list-section';
 import { WizardSubstepRailSection } from './wizard-substep-rail-section';
 import { CrestSection } from './crest-section';
+import { StoryViewerSection } from './story-viewer-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -68,6 +69,7 @@ const NAV = [
     { id: 'wizard-substep-rail', label: 'Wizard rail' },
     { id: 'crest', label: 'Crest' },
     { id: 'crest-picker', label: 'Crest picker' },
+    { id: 'story-viewer', label: 'Story viewer' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -144,6 +146,7 @@ function FeatureSections(): JSX.Element {
             <Suspense fallback={<SamplesLoading />}>
                 <CrestPickerSection />
             </Suspense>
+            <StoryViewerSection />
         </>
     );
 }
