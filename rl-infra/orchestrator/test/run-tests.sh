@@ -138,8 +138,6 @@ else
         "$TEST_DIR/registry-gc.test.sh"
         # ROK-2018 — registry GC holds the image-build admission lock.
         "$TEST_DIR/registry-gc-admission.test.sh"
-        # ROK-2171 — env-destroy removes the env's local image (safely).
-        "$TEST_DIR/local-image-gc.test.sh"
         # ROK-2111 — interval disk retention (sweeper step 3a): stopped
         # containers, unused images, idle-runner /tmp + npm cache; KEEP_N=15.
         "$TEST_DIR/disk-retention.test.sh"

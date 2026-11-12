@@ -13,9 +13,6 @@ source "$(dirname "$0")/_bot_identity.sh"
 source "$(dirname "$0")/_discord_sweep.sh"
 # 2026-10-26 — registry_gc::delete_env_tag (drop this env's rl-allinone tag).
 source "$(dirname "$0")/_registry_gc.sh"
-# ROK-2171 — local image removal on destroy.
-# shellcheck disable=SC1091
-source "$(dirname "$0")/_local_image_gc.sh"
 
 SLUG=""
 FORCE=0
@@ -194,12 +191,6 @@ bot_identity::release "${DESTROYED_SLOT:-}" "$SLUG"
 # Its log line (deleted / would delete under RL_REGISTRY_GC_DRY_RUN) goes to
 # stderr; stdout stays the JSON result.
 registry_gc::delete_env_tag "$SLUG" || true
-
-# ROK-2171 — remove this env's LOCAL image too (the registry delete above left
-# the host's copy). Keeps it when another env names the tag, a container of any
-# state uses it, it is a runner image, or an image build is in flight; never
-# fails the destroy. Needs the env row, so it runs before the row is dropped.
-local_image_gc::remove_env_image "$SLUG" || true
 
 state::mutate "$RL_ENVS_FILE" --arg slug "$SLUG" 'map(select(.slug != $slug))'
 
