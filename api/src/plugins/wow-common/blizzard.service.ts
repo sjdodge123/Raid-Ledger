@@ -24,6 +24,7 @@ import * as profH from './blizzard-professions.helpers';
 import * as questH from './blizzard-quests.helpers';
 import * as specH from './blizzard-spec.helpers';
 import * as guildH from './blizzard-forever-guild.helpers';
+import * as sumH from './blizzard-forever-guild-summary.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
 import {
@@ -210,6 +211,15 @@ export class BlizzardService {
       token,
       this.logger,
     );
+  }
+
+  /** Fetch a WoW: Forever guild summary (ROK-1170); `not_found` on 404. */
+  async fetchForeverGuildSummary(
+    guildSlug: string,
+    region: string,
+  ): Promise<sumH.SummaryFetch> {
+    const token = await this.auth.getAccessToken(region);
+    return sumH.fetchForeverGuildSummary(guildSlug, region, token, this.logger);
   }
 
   /** Fetch the realm list for a given region and namespace. */

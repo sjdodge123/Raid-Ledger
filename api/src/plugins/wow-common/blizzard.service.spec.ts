@@ -259,3 +259,29 @@ describe('BlizzardService.fetchCharacterQuests — Forever-only guard (ROK-2109)
     expect(getAccessToken).not.toHaveBeenCalled();
   });
 });
+
+describe('BlizzardService.fetchForeverGuildSummary (ROK-1170)', () => {
+  it('fetches the summary with a token for the region and maps a 200', async () => {
+    const { service, getAccessToken } = setup();
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 900101, faction: { type: 'HORDE' } }), {
+        status: 200,
+      }),
+    );
+    try {
+      await expect(
+        service.fetchForeverGuildSummary('example-guild', 'eu'),
+      ).resolves.toEqual({
+        kind: 'found',
+        summary: { blizzardGuildId: 900101, foundedAt: null, faction: 'Horde' },
+      });
+      expect(getAccessToken).toHaveBeenCalledWith('eu');
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('/data/wow/guild/example-guild?namespace='),
+        { headers: { Authorization: 'Bearer t' } },
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+});
