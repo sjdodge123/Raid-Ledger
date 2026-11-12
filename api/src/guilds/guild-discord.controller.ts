@@ -8,6 +8,7 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import type {
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { HubWelcomeService } from '../discord-bot/hub-welcome/hub-welcome.service';
+import { parseRefreshFlag } from './guild-discord.helpers';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildLeaderGuard } from './guild-leader.guard';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
@@ -41,13 +43,15 @@ export class GuildDiscordController {
     private readonly welcome: HubWelcomeService,
   ) {}
 
+  /** ROK-2185: `?refresh=1` skips the 60s mirror cache (15s floor). */
   @Get()
   @UseGuards(jwt, HubVisibleGuard)
   getMirror(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
+    @Query('refresh') refresh: unknown,
   ): Promise<GuildDiscordMirrorDto> {
-    return this.discord.getMirror(req.user, id);
+    return this.discord.getMirror(req.user, id, parseRefreshFlag(refresh));
   }
 
   @Get('channels')

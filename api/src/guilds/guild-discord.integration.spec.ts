@@ -301,7 +301,25 @@ describe('GET mirror states', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual(withMeta(READS[channelId], null));
     expect(res.body.state).toBe(state);
-    expect(mirror.readLatest).toHaveBeenCalledWith(channelId);
+    expect(mirror.readLatest).toHaveBeenCalledWith(channelId, {
+      refresh: false,
+    });
+  });
+
+  it('?refresh=1 asks the mirror to skip its cache (ROK-2185)', async () => {
+    await bindDirect(PUBLIC.id);
+    const res = await call('get', '/discord?refresh=1', 'plain');
+    expect(res.status).toBe(200);
+    expect(mirror.readLatest).toHaveBeenCalledWith(PUBLIC.id, {
+      refresh: true,
+    });
+  });
+
+  it('an unknown ?refresh value is a 400 (ROK-2185)', async () => {
+    await bindDirect(PUBLIC.id);
+    const res = await call('get', '/discord?refresh=yes', 'plain');
+    expect(res.status).toBe(400);
+    expect(mirror.readLatest).not.toHaveBeenCalled();
   });
 
   it('bot down → disconnected in-card state, not an error', async () => {

@@ -24,6 +24,7 @@ import {
   toMirrorPort,
 } from './channel-mirror.discord';
 import {
+  CHANNEL_MIRROR_REFRESH_MIN_MS,
   CHANNEL_MIRROR_TTL_MS,
   buildChannelUrl,
 } from './channel-mirror.helpers';
@@ -83,13 +84,20 @@ export class ChannelMirrorService {
 
   /**
    * The latest messages of a channel, cached 60s. Never throws. A down bot is
-   * `disconnected` and is NOT cached (checking it is free).
+   * `disconnected` and is NOT cached (checking it is free). ROK-2185:
+   * `refresh` skips the cache once the cached read is 15s old.
    */
-  readLatest(channelId: string): Promise<ChannelMirrorRead> {
+  readLatest(
+    channelId: string,
+    opts: { refresh?: boolean } = {},
+  ): Promise<ChannelMirrorRead> {
     const demo = this.demo.get(channelId);
     if (demo) return Promise.resolve(demo.read);
     const guild = this.client.getGuild();
     if (!guild) return Promise.resolve({ state: 'disconnected', channelId });
+    if (opts.refresh) {
+      this.cache.expireIfOlderThan(channelId, CHANNEL_MIRROR_REFRESH_MIN_MS);
+    }
     return this.cache.get(channelId, () =>
       readChannelMirror(toMirrorPort(guild, channelId), {
         channelId,
