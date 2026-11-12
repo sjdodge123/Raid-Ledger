@@ -4,27 +4,48 @@ import { COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL, INFRA_PROJECT } from './i
 
 /**
  * One Engine API call. `opts.timeoutMs` (optional): give up after that long
- * idle and resolve `{ status: 0 }`, the same as a socket error.
+ * idle and resolve `{ status: 0 }`, the same as a socket error; a wall-clock
+ * backstop of the same length settles it even if the socket closed first.
+ * Settles exactly once. A response the daemon cuts off after its headers but
+ * before the body ended (aborted, errored, closed early) resolves
+ * `{ status: 0 }` (ROK-2171 Codex P1: it used to never settle).
  */
 export function dockerJson(socketPath, method, path, body, opts = {}) {
   return new Promise((resolve) => {
+    let done = false;
+    let backstop = null;
+    const settle = (status, json) => {
+      if (done) return;
+      done = true;
+      if (backstop) clearTimeout(backstop);
+      resolve({ status, json });
+    };
+    const failed = () => settle(0, null);
     const payload = body === undefined ? null : Buffer.from(JSON.stringify(body));
     const headers = payload ? { Host: 'docker', 'Content-Type': 'application/json', 'Content-Length': String(payload.length) } : { Host: 'docker' };
     const req = http.request({ socketPath, method, path, headers }, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
+      res.on('aborted', failed);
+      res.on('error', failed);
+      res.on('close', () => { if (!res.complete) failed(); });
       res.on('end', () => {
+        if (!res.complete) return failed();
         let json = null;
         try {
           json = JSON.parse(Buffer.concat(chunks).toString('utf8'));
         } catch {
           json = null;
         }
-        resolve({ status: res.statusCode ?? 0, json });
+        settle(res.statusCode ?? 0, json);
       });
     });
-    req.on('error', () => resolve({ status: 0, json: null }));
-    if (opts.timeoutMs > 0) req.setTimeout(opts.timeoutMs, () => req.destroy(new Error('timeout')));
+    req.on('error', failed);
+    if (opts.timeoutMs > 0) {
+      req.setTimeout(opts.timeoutMs, () => req.destroy(new Error('timeout')));
+      backstop = setTimeout(() => { req.destroy(new Error('timeout')); failed(); }, opts.timeoutMs);
+      backstop.unref?.();
+    }
     req.end(payload ?? undefined);
   });
 }
