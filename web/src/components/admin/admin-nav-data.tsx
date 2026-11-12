@@ -120,6 +120,7 @@ const GENERAL_CHILDREN: NavItem[] = [
     { to: '/admin/settings/general/data', label: 'Demo Data' },
     { to: '/admin/settings/general/hubs', label: 'Hubs' },
     { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
+    { to: '/admin/settings/general/gg', label: 'GG Year in Review' },
     { to: '/admin/settings/general/backups', label: 'Backups' },
     { to: '/admin/settings/general/logs', label: 'Logs' },
 ];

@@ -326,10 +326,11 @@ describe('buildNavSections — part 1', () => {
         expect(sections[2]?.id).toBe('integrations');
     });
 
-    it('General section has 7 items (including Demo Data, Hubs and Logs)', () => {
+    it('General section has 8 items (including Demo Data, Hubs, Logs and GG — ROK-2187)', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children).toHaveLength(7);
+        expect(general.children).toHaveLength(8);
+        expect(general.children.map((c) => c.to)).toContain('/admin/settings/general/gg');
     });
 
     it('ROK-1870: General lists Hubs at /admin/settings/general/hubs, after Demo Data', () => {
@@ -394,10 +395,10 @@ describe('buildNavSections — part 2', () => {
         expect(bnetIdx).toBeLessThan(pluginsIdx);
     });
 
-    it('General section has 7 core nav items (ROK-1870 added Hubs)', () => {
+    it('General section has 8 core nav items (ROK-1870 added Hubs, ROK-2187 GG)', () => {
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), []);
         const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children.length).toBe(7);
+        expect(general.children.length).toBe(8);
     });
 
 });

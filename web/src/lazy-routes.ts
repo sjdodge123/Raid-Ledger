@@ -245,6 +245,9 @@ export const PluginIntegrationPanel = lazyWithRetry(() =>
 export const CronJobsPanel = lazyWithRetry(() =>
     import('./pages/admin/cron-jobs-panel').then((m) => ({ default: m.CronJobsPanel })),
 );
+export const GgPanel = lazyWithRetry(() =>
+    import('./pages/admin/gg-panel').then((m) => ({ default: m.GgPanel })),
+);
 export const BackupsPanel = lazyWithRetry(() =>
     import('./pages/admin/backups-panel').then((m) => ({ default: m.BackupsPanel })),
 );

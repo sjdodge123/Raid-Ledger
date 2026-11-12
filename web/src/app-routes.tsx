@@ -26,7 +26,7 @@ import {
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
-  CronJobsPanel, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
+  CronJobsPanel, GgPanel, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage, DiscordLifecyclePage,
@@ -93,6 +93,7 @@ function AdminSettingsRoutes() {
       <Route path="general/data" element={<NasOnlyRoute><DemoDataPanel /></NasOnlyRoute>} />
       <Route path="general/lineup" element={<Navigate to="/admin/settings/general" replace />} />
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
+      <Route path="general/gg" element={<GgPanel />} />
       <Route path="general/backups" element={<BackupsPanel />} />
       <Route path="general/logs" element={<LogsPanel />} />
       <Route path="general/hubs" element={<HubsPanel />} />
