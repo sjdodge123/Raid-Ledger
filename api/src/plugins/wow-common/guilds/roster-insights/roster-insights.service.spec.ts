@@ -6,13 +6,17 @@
  * issued before the facts resolve.
  */
 import { Test } from '@nestjs/testing';
+import type { GuildKind } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../../drizzle/drizzle.module';
 import { GuildAccessService } from '../../../../guilds/guild-access.service';
 import { HubKindRegistry } from '../../../../guilds/hub-kind.registry';
 import { WowFactsService } from '../../facts/wow-facts.service';
 import { RosterInsightsCache } from './roster-insights.cache';
 import { RosterInsightsService } from './roster-insights.service';
-import { loadInsightsHubRow } from './roster-insights.hub-row';
+import {
+  loadInsightsHubRow,
+  type InsightsHubRow,
+} from './roster-insights.hub-row';
 import { loadGuildRows, loadInsightRawRows } from './roster-insights.refs';
 import { loadRaidProgress } from './roster-insights.raid-progress';
 
@@ -47,7 +51,7 @@ const flush = (): Promise<void> =>
     setImmediate(r);
   });
 
-const hubRow = (kind: string) => ({
+const hubRow = (kind: GuildKind): InsightsHubRow => ({
   at: null,
   gameId: 1,
   region: 'us',
@@ -78,12 +82,11 @@ interface FakeAdapter {
   kind: string;
   memberUserIds: () => Promise<number[]>;
 }
-const resolveKind = jest.fn(
-  (kind: string): FakeAdapter | undefined => ({
-    kind,
-    memberUserIds: () => Promise.resolve([7]),
-  }),
-);
+const resolveKind = jest.fn((kind: string): FakeAdapter | undefined => ({
+  kind,
+  memberUserIds: () => Promise.resolve([7]),
+}));
+type FactsResult = Awaited<ReturnType<WowFactsService['resolveFacts']>>;
 const resolveFacts = jest.fn();
 
 async function makeService(): Promise<RosterInsightsService> {
@@ -128,7 +131,7 @@ describe('RosterInsightsService.compute — read concurrency (ROK-2178)', () => 
   it('issues the raid pulls before the facts resolve', async () => {
     hubMock.mockResolvedValue(hubRow('wow_guild'));
     guildRowsMock.mockResolvedValue([rawRow]);
-    const facts = deferred<{ facts: Map<string, never>; truncated: boolean }>();
+    const facts = deferred<FactsResult>();
     resolveFacts.mockReturnValue(facts.promise);
     const svc = await makeService();
     const done = svc.compute(3, 'member', false);
@@ -137,7 +140,9 @@ describe('RosterInsightsService.compute — read concurrency (ROK-2178)', () => 
     facts.resolve({ facts: new Map(), truncated: false });
     await expect(done).resolves.toHaveProperty('classes');
   });
+});
 
+describe('RosterInsightsService.compute — hub kind from the hub row (ROK-2178)', () => {
   it('reads the guild kind once — from the hub row, not a second lookup', async () => {
     hubMock.mockResolvedValue(hubRow('wow_guild'));
     guildRowsMock.mockResolvedValue([]);
