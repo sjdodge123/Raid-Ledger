@@ -32,6 +32,7 @@ export class CoreGgCardRegistration implements OnModuleInit {
   onModuleInit(): void {
     this.registerEventCards();
     this.registerPlayCards();
+    this.registerSocialCards();
   }
 
   /** Cards 1–4 (intro, events, on-time, rhythm). */
@@ -63,7 +64,7 @@ export class CoreGgCardRegistration implements OnModuleInit {
     );
   }
 
-  /** Cards 5–12 (hours … summary). */
+  /** Cards 5–8 (hours, top-games, new-games, voice). */
   private registerPlayCards(): void {
     const o = ggCoreCardOrder;
     this.ggCards.register(
@@ -90,6 +91,11 @@ export class CoreGgCardRegistration implements OnModuleInit {
       produceVoiceCard,
       o('voice'),
     );
+  }
+
+  /** Cards 9–12 (people, hubs, superlative, summary). */
+  private registerSocialCards(): void {
+    const o = ggCoreCardOrder;
     this.ggCards.register(
       CORE_PLUGIN_ID,
       'people',
