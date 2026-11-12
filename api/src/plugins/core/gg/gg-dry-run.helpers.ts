@@ -1,20 +1,23 @@
 /**
  * ROK-2187 — admin dry run: what a compute + DM wave would do for `year`,
- * computed live (nothing stored). Skip reasons: deactivated, opted out of
- * `gg_ready` in-app, no Discord (in-app only, Q6), no activity (R4).
+ * computed live (nothing stored). Buckets come from `ggRecipientBucket`, the
+ * same predicate delivery follows: deactivated, opted out of `gg_ready`
+ * in-app or Discord, no real Discord id (in-app only, Q6), no activity (R4).
  */
 import type { GgAdminDryRunDto, GgSnapshotV1 } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { userNotificationPreferences, users } from '../../../drizzle/schema';
+import {
+  ggRecipientBucket,
+  type GgRecipientBucket,
+} from './gg-eligibility.helpers';
 
-/** The per-user facts a dry run needs. */
+/** One user and the delivery bucket they land in (shared predicate). */
 export interface GgUserFacet {
   id: number;
-  deactivated: boolean;
-  hasDiscord: boolean;
-  optedOut: boolean;
+  bucket: GgRecipientBucket;
 }
 
 /** Every user with their deactivation, Discord link and `gg_ready` pref. */
@@ -35,9 +38,11 @@ export async function loadGgUserFacets(
     );
   return rows.map((r) => ({
     id: r.id,
-    deactivated: r.deactivatedAt !== null,
-    hasDiscord: r.discordId !== null,
-    optedOut: r.prefs?.gg_ready?.inApp === false,
+    bucket: ggRecipientBucket({
+      deactivatedAt: r.deactivatedAt,
+      discordId: r.discordId,
+      prefs: r.prefs,
+    }),
   }));
 }
 
@@ -66,7 +71,7 @@ export async function tallyGgDryRun(
 ): Promise<GgAdminDryRunDto> {
   const dto = emptyGgDryRun(year, announcedAt);
   for (const user of facets) {
-    if (user.deactivated) {
+    if (user.bucket === 'deactivated') {
       dto.skipped.deactivated += 1;
       continue;
     }
@@ -77,9 +82,8 @@ export async function tallyGgDryRun(
     }
     dto.usersComputed += 1;
     dto[snapshot.tier] += 1;
-    if (user.optedOut) dto.skipped.optedOut += 1;
-    else if (!user.hasDiscord) dto.skipped.noDiscord += 1;
-    else dto.wouldDm += 1;
+    if (user.bucket === 'dm') dto.wouldDm += 1;
+    else dto.skipped[user.bucket] += 1;
   }
   return dto;
 }
