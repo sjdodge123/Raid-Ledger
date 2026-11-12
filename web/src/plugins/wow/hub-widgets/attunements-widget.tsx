@@ -7,7 +7,7 @@
  * chrome and the "See who" header action (`attunements-action.tsx`); the
  * per-member detail (P5) opens through `attunements-detail-store.ts`.
  */
-import type { JSX } from 'react';
+import { lazy, Suspense, type JSX } from 'react';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { QuietEmpty } from '../../../components/hub/card-bits';
@@ -17,10 +17,26 @@ import {
     nobodyHasQuestData, rowNote, untrackedCopy, type AttunementGroupRow,
 } from './attunements.helpers';
 import { useRosterInsights } from './use-roster-insights';
+import { useAttunementsDetail } from './attunements-detail-store';
 
-/** The Attunements widget body (lazy-loaded). */
-export default function AttunementsWidget({ page }: Pick<HubWidgetCtx, 'page'>): JSX.Element | null {
-    const { data, isPending, isError } = useRosterInsights(page.guild.id, false);
+const AttunementsDetail = lazy(() => import('./attunements-detail'));
+
+/** The Attunements widget body (lazy-loaded); mounts the detail while "See who" has it open for this hub. */
+export default function AttunementsWidget({ page }: Pick<HubWidgetCtx, 'page'>): JSX.Element {
+    const openFor = useAttunementsDetail((s) => s.guildId);
+    const close = useAttunementsDetail((s) => s.close);
+    return (
+        <>
+            <AttunementsBody guildId={page.guild.id} />
+            {openFor === page.guild.id && (
+                <Suspense fallback={null}><AttunementsDetail guildId={page.guild.id} onClose={close} /></Suspense>
+            )}
+        </>
+    );
+}
+
+function AttunementsBody({ guildId }: { guildId: number }): JSX.Element | null {
+    const { data, isPending, isError } = useRosterInsights(guildId, false);
     if (isPending) return <div data-testid="attunements-loading" className="h-24 animate-pulse rounded-md bg-panel" />;
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load attunements.</p>;
     const section = data.attunements;
