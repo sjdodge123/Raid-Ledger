@@ -299,26 +299,27 @@ describe('GET /gg/public/:slug/og (crawler unfurl)', () => {
   });
 });
 
-describe('GgComputeService.computeAll', () => {
-  async function attendedEvent(userId: number): Promise<void> {
-    const start = new Date('2026-03-14T00:00:00Z');
-    const [e] = nonEmpty(
-      await testApp.db
-        .insert(schema.events)
-        .values({
-          title: `E ${userId}`,
-          creatorId: userId,
-          gameId: testApp.seed.game.id,
-          duration: [start, new Date(start.getTime() + 7_200_000)],
-        })
-        .returning({ id: schema.events.id }),
-      'event',
-    );
+/** One attended 2026 event, so compute finds activity for `userId`. */
+async function attendedEvent(userId: number): Promise<void> {
+  const start = new Date('2026-03-14T00:00:00Z');
+  const [e] = nonEmpty(
     await testApp.db
-      .insert(schema.eventSignups)
-      .values({ eventId: e.id, userId, attendanceStatus: 'attended' });
-  }
+      .insert(schema.events)
+      .values({
+        title: `E ${userId}`,
+        creatorId: userId,
+        gameId: testApp.seed.game.id,
+        duration: [start, new Date(start.getTime() + 7_200_000)],
+      })
+      .returning({ id: schema.events.id }),
+    'event',
+  );
+  await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId: e.id, userId, attendanceStatus: 'attended' });
+}
 
+describe('GgComputeService.computeAll', () => {
   async function rowsFor(userId: number) {
     return testApp.db
       .select()
@@ -356,5 +357,53 @@ describe('GgComputeService.computeAll', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.shareSlug).toBe(slug);
     expect(rows[0]?.computedAt.toISOString()).toBe('2026-12-11T12:00:00.000Z');
+  });
+});
+
+describe('GET /admin/gg/preview (admin-only, never stored)', () => {
+  async function snapshotRows() {
+    return testApp.db
+      .select({
+        userId: schema.ggSnapshots.userId,
+        shareSlug: schema.ggSnapshots.shareSlug,
+        computedAt: schema.ggSnapshots.computedAt,
+      })
+      .from(schema.ggSnapshots);
+  }
+
+  it('403s for a member and writes nothing', async () => {
+    const member = await insertUser('previewmember');
+    await attendedEvent(member.id);
+    const res = await testApp.request
+      .get('/admin/gg/preview?year=2026')
+      .set(auth(member));
+    expect(res.status).toBe(403);
+    expect(await snapshotRows()).toHaveLength(0);
+  });
+
+  it('admin preview computes live without touching the stored row or slug', async () => {
+    const me = await insertUser('previewadmin');
+    await testApp.db
+      .update(schema.users)
+      .set({ role: 'admin' })
+      .where(eq(schema.users.id, me.id));
+    const admin = {
+      id: me.id,
+      token: await signTestAccessToken(testApp, {
+        sub: me.id,
+        username: 'previewadmin',
+        role: 'admin',
+      }),
+    };
+    await attendedEvent(me.id);
+    await storeSnapshot(me.id, 2026);
+    await share(admin, 2026, true);
+    const before = await snapshotRows();
+    const res = await testApp.request
+      .get('/admin/gg/preview?year=2026')
+      .set(auth(admin));
+    expect(res.status).toBe(200);
+    expect(await snapshotRows()).toEqual(before);
+    expect(before).toHaveLength(1);
   });
 });
