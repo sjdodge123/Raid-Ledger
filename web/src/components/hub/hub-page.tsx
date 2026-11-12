@@ -94,7 +94,9 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
     if (active === 'events') {
         const Lead = mod?.eventsLead;
-        return <HubEventsTab query={ctx.raids} kind={page.guild.kind} lead={Lead && <Lead {...ctx} />} />;
+        // ROK-2185: the past-events route answers members and staff (staff resolve to leader); a visitor gets 403.
+        const past = { guildId: page.guild.id, canPage: page.viewer.role !== 'visitor' };
+        return <HubEventsTab query={ctx.raids} kind={page.guild.kind} lead={Lead && <Lead {...ctx} />} past={past} />;
     }
     if (active === 'posts') {
         return (

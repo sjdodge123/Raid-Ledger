@@ -18,22 +18,28 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { GuildKind, GuildRaidsDto } from '@raid-ledger/contract';
 import { hubCopy } from '../hub-copy';
 import { GuildAttendance } from './guild-attendance';
-import { GuildEvents } from './guild-events';
+import { GuildEvents, type PastPaging } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
 
-interface EventsTabProps { query: UseQueryResult<GuildRaidsDto, Error>; kind?: GuildKind | undefined; lead?: ReactNode }
+interface EventsTabProps {
+    query: UseQueryResult<GuildRaidsDto, Error>;
+    kind?: GuildKind | undefined;
+    lead?: ReactNode;
+    /** ROK-2185: page the Recent list back through the hub's full history. */
+    past?: PastPaging | undefined;
+}
 
-export function HubEventsTab({ query, kind, lead }: EventsTabProps): JSX.Element {
-    if (!lead) return <EventsBody query={query} kind={kind} />;
+export function HubEventsTab({ query, kind, lead, past }: EventsTabProps): JSX.Element {
+    if (!lead) return <EventsBody query={query} kind={kind} past={past} />;
     return (
         <div className="flex flex-col gap-8">
             {lead}
-            <EventsBody query={query} kind={kind} />
+            <EventsBody query={query} kind={kind} past={past} />
         </div>
     );
 }
 
-function EventsBody({ query, kind }: Omit<EventsTabProps, 'lead'>): JSX.Element {
+function EventsBody({ query, kind, past }: Omit<EventsTabProps, 'lead'>): JSX.Element {
     if (query.error) {
         return (
             <div className="py-12 text-center" data-testid="guild-events-error">
@@ -49,7 +55,7 @@ function EventsBody({ query, kind }: Omit<EventsTabProps, 'lead'>): JSX.Element 
                 <GuildRaidSchedule schedule={raids.schedule} kind={kind} />
                 <GuildAttendance attendance={raids.attendance} kind={kind} />
             </div>
-            <GuildEvents raids={raids} kind={kind} />
+            <GuildEvents raids={raids} kind={kind} past={past} />
         </div>
     );
 }
