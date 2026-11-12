@@ -133,14 +133,16 @@ env_image_gc::_renew() {
     RL_REGISTRY_GC_TIMEOUT_SECONDS="$RL_ENV_IMAGE_GC_TIMEOUT_SECONDS" admission::gc_renew "$RL_ENV_IMAGE_GC_KEY"
 }
 
-# The removal pass, run while the ledger entry is held. Re-reads the env rows
-# and re-checks each candidate; stops (lock_lost) once a renewal fails.
+# The removal pass, run while the ledger entry is held. Renews the entry, then
+# re-reads the env rows and re-checks each candidate before removing it; stops
+# (stopped: lock_lost | env_registry_unreadable) at the first failure.
 env_image_gc::_remove_held() {
     local now="$1"; shift
     local rows ref why err removed="" kept="" failed="" stop=""
-    rows=$(env_image_gc::_rows) || { echo '{"error":"env_registry_unreadable","removed":[]}'; return 1; }
     for ref in "$@"; do
         if ! env_image_gc::_renew; then stop=lock_lost; break; fi
+        # Re-read per image: a row written since the pre-pass must count.
+        rows=$(env_image_gc::_rows) || { stop=env_registry_unreadable; break; }
         why=$(env_image_gc::_keep_reason "$ref" "$rows" "$now")
         [[ "$why" == absent ]] && continue
         if [[ -n "$why" ]]; then kept+="$ref"$'\t'"$why"$'\n'; continue; fi
@@ -190,6 +192,8 @@ env_image_gc::sweep() {
     ) || true
     admission::release "$key"
     [[ -n "$out" ]] || out='{"error":"removal_pass_died"}'
-    echo "$out"
+    # Images the pre-pass already kept are reported too.
+    jq -c --argjson k "$(env_image_gc::_json <<<"$kept")" '.kept = ($k + (.kept // []))' <<<"$out" 2>/dev/null \
+        || echo "$out"
     return 0
 }
