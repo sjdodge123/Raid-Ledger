@@ -36,12 +36,16 @@ export interface ValheimYearDayRow {
 }
 
 /** skillId → last end − first start for one character's ordered days. */
-function characterGains(rows: readonly ValheimYearDayRow[]): Map<string, number> {
+function characterGains(
+  rows: readonly ValheimYearDayRow[],
+): Map<string, number> {
   const first = rows[0];
   const last = rows[rows.length - 1];
   const gains = new Map<string, number>();
   if (first === undefined || last === undefined) return gains;
-  const start = new Map(first.startSkills.map((s) => [s.id, effectiveLevel(s)]));
+  const start = new Map(
+    first.startSkills.map((s) => [s.id, effectiveLevel(s)]),
+  );
   for (const s of last.endSkills) {
     gains.set(s.id, effectiveLevel(s) - (start.get(s.id) ?? 0));
   }
@@ -49,9 +53,12 @@ function characterGains(rows: readonly ValheimYearDayRow[]): Map<string, number>
 }
 
 /** Rows grouped per character, each group in play-date order. */
-function byCharacter(rows: readonly ValheimYearDayRow[]): ValheimYearDayRow[][] {
+function byCharacter(
+  rows: readonly ValheimYearDayRow[],
+): ValheimYearDayRow[][] {
   const groups = new Map<number, ValheimYearDayRow[]>();
-  for (const r of rows) groups.set(r.profileId, [...(groups.get(r.profileId) ?? []), r]);
+  for (const r of rows)
+    groups.set(r.profileId, [...(groups.get(r.profileId) ?? []), r]);
   return [...groups.values()].map((g) =>
     [...g].sort((a, b) => (a.playDate < b.playDate ? -1 : 1)),
   );
@@ -73,7 +80,10 @@ export function toValheimYearCard(
     .filter(([, gained]) => gained >= SKILL_TREND_MIN_GAIN)
     .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_SKILLS)
-    .map(([skill, gained]) => ({ skill, gained: Math.round(gained * 100) / 100 }));
+    .map(([skill, gained]) => ({
+      skill,
+      gained: Math.round(gained * 100) / 100,
+    }));
   if (deathCount === 0 && skillGains.length === 0) return null;
   return { characters: characters.length, deaths: deathCount, skillGains };
 }
@@ -85,9 +95,17 @@ async function countYearDeaths(ctx: GgCardContext): Promise<number> {
     .from(deaths)
     .innerJoin(
       profiles,
-      and(eq(profiles.steamId, deaths.steamId), eq(profiles.claimedBy, ctx.userId)),
+      and(
+        eq(profiles.steamId, deaths.steamId),
+        eq(profiles.claimedBy, ctx.userId),
+      ),
     )
-    .where(and(gte(deaths.occurredAt, ctx.window.start), lt(deaths.occurredAt, ctx.window.end)));
+    .where(
+      and(
+        gte(deaths.occurredAt, ctx.window.start),
+        lt(deaths.occurredAt, ctx.window.end),
+      ),
+    );
   return Number(row?.deaths ?? 0);
 }
 

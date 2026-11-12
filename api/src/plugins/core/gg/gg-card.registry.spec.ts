@@ -36,12 +36,32 @@ const ctx: GgCardContext = {
 describe('GgCardRegistry (ROK-2187)', () => {
   it('returns each active producer’s valid card, sorted by order', async () => {
     const r = registryWith(['core', 'valheim']);
-    r.register('valheim', 'valheim-year', () => Promise.resolve(VALHEIM_CARD), GG_PLUGIN_CARD_ORDER_BASE);
-    r.register('core', 'voice', () => Promise.resolve({ totalSeconds: 60, sessions: 1 }), ggCoreCardOrder('voice'));
+    r.register(
+      'valheim',
+      'valheim-year',
+      () => Promise.resolve(VALHEIM_CARD),
+      GG_PLUGIN_CARD_ORDER_BASE,
+    );
+    r.register(
+      'core',
+      'voice',
+      () => Promise.resolve({ totalSeconds: 60, sessions: 1 }),
+      ggCoreCardOrder('voice'),
+    );
     const cards = await r.produceAll(ctx);
     expect(cards).toEqual([
-      { pluginSlug: 'core', cardId: 'voice', order: 800, payload: { totalSeconds: 60, sessions: 1 } },
-      { pluginSlug: 'valheim', cardId: 'valheim-year', order: 1100, payload: VALHEIM_CARD },
+      {
+        pluginSlug: 'core',
+        cardId: 'voice',
+        order: 800,
+        payload: { totalSeconds: 60, sessions: 1 },
+      },
+      {
+        pluginSlug: 'valheim',
+        cardId: 'valheim-year',
+        order: 1100,
+        payload: VALHEIM_CARD,
+      },
     ]);
   });
 
@@ -63,18 +83,36 @@ describe('GgCardRegistry (ROK-2187)', () => {
 
   it('skips a payload that fails its schema, and a card nobody declared', async () => {
     const r = registryWith(['valheim']);
-    r.register('valheim', 'valheim-year', () => Promise.resolve({ deaths: -1 }), 1100);
+    r.register(
+      'valheim',
+      'valheim-year',
+      () => Promise.resolve({ deaths: -1 }),
+      1100,
+    );
     r.register('valheim', 'stray', () => Promise.resolve({}), 1101);
     expect(await r.produceAll(ctx)).toEqual([]);
   });
 
   it('a throwing producer drops only its own card', async () => {
     const r = registryWith(['core', 'valheim']);
-    r.register('valheim', 'valheim-year', () => Promise.reject(new Error('boom')), 1100);
-    r.register('core', 'hubs', () => Promise.resolve({ joined: 1, posts: 0, pictures: 0 }), ggCoreCardOrder('hubs'));
+    r.register(
+      'valheim',
+      'valheim-year',
+      () => Promise.reject(new Error('boom')),
+      1100,
+    );
+    r.register(
+      'core',
+      'hubs',
+      () => Promise.resolve({ joined: 1, posts: 0, pictures: 0 }),
+      ggCoreCardOrder('hubs'),
+    );
     expect((await r.produceAll(ctx)).map((c) => c.cardId)).toEqual(['hubs']);
   });
 
+});
+
+describe('GgCardRegistry registration rules (ROK-2187)', () => {
   it('refuses a second producer for the same owner and card', () => {
     const r = registryWith([]);
     r.register('core', 'intro', () => Promise.resolve(null), 100);

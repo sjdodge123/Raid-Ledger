@@ -105,7 +105,12 @@ export class GgCardRegistry {
       return null;
     }
     if (payload === null) return null;
-    const card = { pluginSlug: p.ownerPluginId, cardId: p.cardId, order: p.order, payload };
+    const card = {
+      pluginSlug: p.ownerPluginId,
+      cardId: p.cardId,
+      order: p.order,
+      payload,
+    };
     const parsed = parseGgCardPayload(card);
     if (parsed === null) {
       this.logger.warn(`GG card ${key} payload failed its schema; skipped`);

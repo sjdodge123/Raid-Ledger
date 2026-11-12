@@ -35,7 +35,12 @@ describe('toValheimYearCard (ROK-2187)', () => {
   it('gain = last end − first start per character, summed per skill, biggest first', () => {
     const rows = [
       day(1, '2026-02-01', [sk('Swords', 10)], [sk('Swords', 11)]),
-      day(1, '2026-11-30', [sk('Swords', 11)], [sk('Swords', 14), sk('Run', 3)]),
+      day(
+        1,
+        '2026-11-30',
+        [sk('Swords', 11)],
+        [sk('Swords', 14), sk('Run', 3)],
+      ),
       day(2, '2026-06-01', [sk('Swords', 1)], [sk('Swords', 2)]),
     ];
     expect(toValheimYearCard(4, rows)).toEqual({
@@ -77,7 +82,10 @@ describe('valheimYearProducer (ROK-2187)', () => {
       db: db as unknown as PostgresJsDatabase<typeof schema>,
       userId: 42,
       year: 2026,
-      window: { start: new Date('2026-01-01T05:00:00Z'), end: new Date('2027-01-01T05:00:00Z') },
+      window: {
+        start: new Date('2026-01-01T05:00:00Z'),
+        end: new Date('2027-01-01T05:00:00Z'),
+      },
       tz: 'America/New_York',
     };
     expect(await valheimYearProducer(ctx)).toEqual({

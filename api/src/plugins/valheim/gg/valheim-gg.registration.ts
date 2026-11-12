@@ -12,6 +12,11 @@ export class ValheimGgCardRegistration implements OnModuleInit {
   constructor(private readonly ggCards: GgCardRegistry) {}
 
   onModuleInit(): void {
-    this.ggCards.register(VALHEIM_PLUGIN_ID, 'valheim-year', valheimYearProducer, GG_PLUGIN_CARD_ORDER_BASE);
+    this.ggCards.register(
+      VALHEIM_PLUGIN_ID,
+      'valheim-year',
+      valheimYearProducer,
+      GG_PLUGIN_CARD_ORDER_BASE,
+    );
   }
 }

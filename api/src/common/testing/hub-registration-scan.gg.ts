@@ -46,10 +46,7 @@ function cardsIn(
 }
 
 /** Every live `GgCardRegistry` registration outside the registry's own file. */
-export function ggCards(
-  all: readonly ScanSource[],
-  ctx: ScanContext,
-): Found[] {
+export function ggCards(all: readonly ScanSource[], ctx: ScanContext): Found[] {
   return all
     .filter(
       (s) =>

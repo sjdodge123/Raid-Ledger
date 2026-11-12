@@ -19,6 +19,11 @@ export class WowGgCardRegistration implements OnModuleInit {
   constructor(private readonly ggCards: GgCardRegistry) {}
 
   onModuleInit(): void {
-    this.ggCards.register(WOW_COMMON_MANIFEST.id, 'wow-levels', pending, GG_PLUGIN_CARD_ORDER_BASE + 10);
+    this.ggCards.register(
+      WOW_COMMON_MANIFEST.id,
+      'wow-levels',
+      pending,
+      GG_PLUGIN_CARD_ORDER_BASE + 10,
+    );
   }
 }

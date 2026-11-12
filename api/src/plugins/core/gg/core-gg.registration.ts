@@ -31,7 +31,12 @@ export class CoreGgCardRegistration implements OnModuleInit {
     this.ggCards.register(CORE_PLUGIN_ID, 'voice', pending, o('voice'));
     this.ggCards.register(CORE_PLUGIN_ID, 'people', pending, o('people'));
     this.ggCards.register(CORE_PLUGIN_ID, 'hubs', pending, o('hubs'));
-    this.ggCards.register(CORE_PLUGIN_ID, 'superlative', pending, o('superlative'));
+    this.ggCards.register(
+      CORE_PLUGIN_ID,
+      'superlative',
+      pending,
+      o('superlative'),
+    );
     this.ggCards.register(CORE_PLUGIN_ID, 'summary', pending, o('summary'));
   }
 }
