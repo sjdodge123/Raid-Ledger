@@ -6,11 +6,12 @@ import type { BossEncounterDto, BossLootDto } from '@raid-ledger/contract';
 import type Redis from 'ioredis';
 
 import * as schema from '../../drizzle/schema';
-import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
+import { wowClassicBosses } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { redisSwr } from '../../common/swr-cache';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
+import { loadBossLoot } from './boss-loot.query';
 
 /** Cache key prefix for WoW Classic boss data */
 const CACHE_PREFIX = 'wow:bosses';
@@ -28,19 +29,9 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
   // ROK-1719: vanilla content plus Forever's own; ROK-2170: a boss's forever
-  // loot rows replace its classic ones (see preferForeverLoot).
+  // loot rows replace its classic ones (see preferForeverLoot in boss-loot.query.ts).
   wow_forever: ['classic', 'forever'],
 };
-
-/**
- * ROK-2170: when a boss has its own Forever loot rows, they replace the
- * Classic table (per boss). Without any, the rows pass through unchanged —
- * variants whose expansion set lacks 'forever' never load such rows.
- */
-function preferForeverLoot<T extends { expansion: string }>(rows: T[]): T[] {
-  const forever = rows.filter((r) => r.expansion === 'forever');
-  return forever.length > 0 ? forever : rows;
-}
 
 /**
  * Sub-instance wing-to-boss mapping for multi-wing dungeons.
@@ -172,24 +163,11 @@ export class BossEncountersService {
     return result ?? [];
   }
 
-  private async fetchLootForBoss(
+  private fetchLootForBoss(
     bossId: number,
     variant: string,
   ): Promise<BossLootDto[]> {
-    const expansions = this.getExpansionsForVariant(variant);
-
-    const rows = await this.db
-      .select()
-      .from(wowClassicBossLoot)
-      .where(
-        and(
-          eq(wowClassicBossLoot.bossId, bossId),
-          inArray(wowClassicBossLoot.expansion, expansions),
-        ),
-      )
-      .orderBy(wowClassicBossLoot.quality);
-
-    return preferForeverLoot(rows).map((row) => this.toLootDto(row));
+    return loadBossLoot(this.db, bossId, this.getExpansionsForVariant(variant));
   }
 
   /**
@@ -238,23 +216,6 @@ export class BossEncountersService {
       order: row.order,
       expansion: row.expansion as BossEncounterDto['expansion'],
       sodModified: row.sodModified,
-    };
-  }
-
-  private toLootDto(row: typeof wowClassicBossLoot.$inferSelect): BossLootDto {
-    return {
-      id: row.id,
-      bossId: row.bossId,
-      itemId: row.itemId,
-      itemName: row.itemName,
-      slot: row.slot,
-      quality: row.quality as BossLootDto['quality'],
-      itemLevel: row.itemLevel,
-      dropRate: row.dropRate,
-      expansion: row.expansion as BossLootDto['expansion'],
-      classRestrictions: row.classRestrictions,
-      iconUrl: row.iconUrl,
-      itemSubclass: row.itemSubclass,
     };
   }
 }

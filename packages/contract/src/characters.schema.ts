@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { WowForeverNameSchema, WowForeverRulesetSchema, WowForeverSelectableRulesetSchema } from './blizzard.schema.js';
 import { CharacterLockoutsSchema } from './character-lockouts.schema.js';
+import { ItemTooltipSchema } from './wow-item-tooltip.schema.js';
 
 // ==========================================
 // Character Role Enum
@@ -54,6 +55,8 @@ export const EquipmentItemSchema = z.object({
     description: z.string().optional(),
     /** Set name if item is part of a set */
     setName: z.string().optional(),
+    /** ROK-2176: parsed Wowhead tooltip, attached at read time (never stored on characters.equipment). */
+    tooltip: ItemTooltipSchema.optional(),
     /** Item icon URL from Blizzard media API */
     iconUrl: z.string().optional(),
     /**

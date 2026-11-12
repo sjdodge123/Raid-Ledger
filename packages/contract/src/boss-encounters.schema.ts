@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ItemTooltipSchema } from './wow-item-tooltip.schema.js';
 
 /**
  * ROK-244: Boss encounter and loot table API schemas.
@@ -37,6 +38,8 @@ export const BossLootDtoSchema = z.object({
     classRestrictions: z.array(z.string()).nullable(),
     iconUrl: z.string().nullable(),
     itemSubclass: z.string().nullable(),
+    /** ROK-2176: parsed Wowhead tooltip; absent/null = not synced yet. */
+    tooltip: ItemTooltipSchema.nullable().optional(),
 });
 
 export type BossLootDto = z.infer<typeof BossLootDtoSchema>;

@@ -16,6 +16,7 @@ import {
 import {
   WOWHEAD_ENV_CLASSIC,
   WOWHEAD_ENV_FOREVER,
+  WOWHEAD_TOOLTIP_PARSE_VERSION,
   type WowheadEnv,
   type WowheadFetch,
   type WowheadFetchResult,
@@ -77,9 +78,20 @@ async function fetchWithRetry(
   return last;
 }
 
-const EMPTY = { env: null, name: null, quality: null, icon: null };
+const EMPTY = {
+  env: null,
+  name: null,
+  quality: null,
+  icon: null,
+  tooltip: null,
+  tooltipVersion: null,
+};
 
-/** Row for a hit: env 16 = `resolved` (30 d), env 4 = `classic_fallback` (24 h). */
+/**
+ * Row for a hit: env 16 = `resolved` (30 d), env 4 = `classic_fallback` (24 h).
+ * The tooltip is stamped with the parser version even when it parsed to null,
+ * so an unparseable item is not re-probed until the parser changes (ROK-2176).
+ */
 function foundRow(
   itemId: number,
   env: WowheadEnv,
@@ -95,6 +107,8 @@ function foundRow(
     name: res.name,
     quality: res.quality,
     icon: res.icon,
+    tooltip: res.tooltip,
+    tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
     fetchedAt,
     nextRetryAt: new Date(fetchedAt.getTime() + ttl),
     attempts: 0,
@@ -151,6 +165,8 @@ export async function resolveItem(
     itemId,
     status: 'not_found',
     ...EMPTY,
+    // Probed by this parser: a miss must not leave a stale found row due.
+    tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
     fetchedAt,
     nextRetryAt,
     attempts: misses,

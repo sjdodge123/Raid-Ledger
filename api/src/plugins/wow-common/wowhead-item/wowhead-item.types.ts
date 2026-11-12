@@ -1,3 +1,5 @@
+import type { ItemTooltip } from '@raid-ledger/contract';
+
 /**
  * ROK-1727: shared types for the Wowhead item resolver.
  * The endpoint is Wowhead's public tooltip backend — undocumented, not a
@@ -14,13 +16,27 @@ export type WowheadEnv = 16 | 4;
 export const WOWHEAD_ENV_FOREVER: WowheadEnv = 16;
 export const WOWHEAD_ENV_CLASSIC: WowheadEnv = 4;
 
+/**
+ * ROK-2176: version of the Wowhead tooltip parser. Bumping it makes every
+ * found row (`tooltip_version` below this) due for one re-probe, so a parser
+ * fix re-fills tooltips without a migration.
+ */
+export const WOWHEAD_TOOLTIP_PARSE_VERSION = 1;
+
 /** `wow_item_meta.status` values. */
 export type WowItemMetaStatus =
   'resolved' | 'classic_fallback' | 'not_found' | 'error';
 
 /** Outcome of one tooltip request for one (item, env). */
 export type WowheadFetchResult =
-  | { kind: 'found'; name: string; quality: number; icon: string | null }
+  | {
+      kind: 'found';
+      name: string;
+      quality: number;
+      icon: string | null;
+      /** ROK-2176: parsed tooltip HTML; null when absent or unparseable. */
+      tooltip: ItemTooltip | null;
+    }
   | { kind: 'not_found' }
   /** 429 / 5xx / network or timeout (status null) — back off and retry. */
   | { kind: 'retryable'; status: number | null };

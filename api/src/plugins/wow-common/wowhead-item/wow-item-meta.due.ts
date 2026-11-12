@@ -1,7 +1,10 @@
 /**
  * ROK-1760: when a cached `wow_item_meta` row should be re-resolved.
  */
-import type { WowItemMetaRow } from './wowhead-item.types';
+import {
+  WOWHEAD_TOOLTIP_PARSE_VERSION,
+  type WowItemMetaRow,
+} from './wowhead-item.types';
 
 /**
  * An `error` row is re-tried on enqueue (page view / import) once this long
@@ -17,10 +20,22 @@ export const ERROR_VIEW_FLOOR_MAX_ATTEMPTS = 3;
 
 export type DueCheckRow = Pick<
   WowItemMetaRow,
-  'status' | 'fetchedAt' | 'nextRetryAt' | 'attempts'
+  'status' | 'fetchedAt' | 'nextRetryAt' | 'attempts' | 'tooltipVersion'
 >;
 
-/** No row, a due `next_retry_at`, or a young `error` row past the floor. */
+/** A found row last probed by an older (or no) tooltip parser version (ROK-2176). */
+function hasStaleTooltip(row: DueCheckRow): boolean {
+  const found = row.status === 'resolved' || row.status === 'classic_fallback';
+  return found && row.tooltipVersion !== WOWHEAD_TOOLTIP_PARSE_VERSION;
+}
+
+/**
+ * No row, a due `next_retry_at`, a found row with a stale tooltip, or a
+ * young `error` row past the floor. A stale tooltip only jumps the queue
+ * while the row has no failed probe on record (`attempts === 0`): a re-probe
+ * that errored (429/5xx) or missed bumps `attempts`, and the row then waits
+ * for its backoff `next_retry_at` like any other (ROK-2176 review MAJOR 1).
+ */
 export function isMetaDue(
   row: DueCheckRow | undefined,
   nowMs: number,
@@ -29,6 +44,7 @@ export function isMetaDue(
   if (row.nextRetryAt !== null && row.nextRetryAt.getTime() <= nowMs) {
     return true;
   }
+  if (hasStaleTooltip(row) && row.attempts === 0) return true;
   return (
     row.status === 'error' &&
     row.attempts < ERROR_VIEW_FLOOR_MAX_ATTEMPTS &&

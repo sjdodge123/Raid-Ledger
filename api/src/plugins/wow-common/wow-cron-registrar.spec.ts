@@ -12,7 +12,7 @@ import { ForeverQuestAutoImportService } from './forever-quest-import/forever-qu
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
 let mockBossDataRefresh: { refresh: jest.Mock };
-let mockItemMeta: { retryDue: jest.Mock };
+let mockItemMeta: { retryDue: jest.Mock; backfillBossLoot: jest.Mock };
 let mockRosterJob: { run: jest.Mock };
 let mockAutoLink: { runDue: jest.Mock };
 let mockRosterArmory: { runDue: jest.Mock };
@@ -25,7 +25,10 @@ async function setupEach() {
   mockBossDataRefresh = {
     refresh: jest.fn(),
   };
-  mockItemMeta = { retryDue: jest.fn().mockResolvedValue(0) };
+  mockItemMeta = {
+    retryDue: jest.fn().mockResolvedValue(0),
+    backfillBossLoot: jest.fn().mockResolvedValue(0),
+  };
   mockRosterJob = { run: jest.fn().mockResolvedValue(null) };
   mockAutoLink = { runDue: jest.fn().mockResolvedValue(null) };
   mockRosterArmory = { runDue: jest.fn().mockResolvedValue(null) };
@@ -116,6 +119,22 @@ describe('WowCronRegistrar — getCronJobs', () => {
     expect(job?.cronExpression).toBe('0 15 5 * * *');
     await job?.handler();
     expect(mockItemMeta.retryDue).toHaveBeenCalledTimes(1);
+  });
+
+  it('the Wowhead retry job runs due re-probes, then the boss-loot backfill (ROK-2176)', async () => {
+    const job = registrar.getCronJobs()[2];
+    await job?.handler();
+    expect(mockItemMeta.backfillBossLoot).toHaveBeenCalledTimes(1);
+    const [retryOrder] = mockItemMeta.retryDue.mock.invocationCallOrder;
+    const [backfillOrder] =
+      mockItemMeta.backfillBossLoot.mock.invocationCallOrder;
+    expect(retryOrder).toBeLessThan(backfillOrder ?? 0);
+  });
+
+  it('hands the re-probe write count to the backfill so it can drop the loot cache (review MINOR 4)', async () => {
+    mockItemMeta.retryDue.mockResolvedValue(4);
+    await registrar.getCronJobs()[2]?.handler();
+    expect(mockItemMeta.backfillBossLoot).toHaveBeenCalledWith(4);
   });
 
   it('registers the 6-hourly Forever guild roster sync (ROK-1928 C1)', async () => {

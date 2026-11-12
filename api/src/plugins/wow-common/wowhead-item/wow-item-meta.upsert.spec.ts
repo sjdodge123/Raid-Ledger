@@ -11,6 +11,8 @@ import type { WowItemMetaInsert } from './wowhead-item.types';
 
 const NOW = new Date('2026-10-09T12:00:00Z');
 const dialect = new PgDialect();
+/** Content columns guarded by the CASE; tooltip since ROK-2176. */
+const CONTENT_COLS = ['status', 'env', 'name', 'quality', 'icon', 'tooltip'];
 
 function insert(over: Partial<WowItemMetaInsert>): WowItemMetaInsert {
   return {
@@ -39,7 +41,7 @@ describe('conflictSet (ROK-1727)', () => {
     expect(q).toMatch(
       /^CASE WHEN .*"status" IN \(\$1, \$2\) THEN .*"status" ELSE excluded\."status" END$/,
     );
-    for (const col of ['status', 'env', 'name', 'quality', 'icon']) {
+    for (const col of CONTENT_COLS) {
       expect(protectedStatuses(set[col])).toEqual([
         'resolved',
         'classic_fallback',
@@ -56,13 +58,30 @@ describe('conflictSet (ROK-1727)', () => {
     const set = conflictSet(
       insert({ status: 'classic_fallback', env: 4, name: 'Old' }),
     );
-    for (const col of ['status', 'env', 'name', 'quality', 'icon']) {
+    for (const col of CONTENT_COLS) {
       expect(protectedStatuses(set[col])).toEqual(['resolved']);
     }
   });
 
+  // Review MAJOR 1: the parser version is "probed by vN", not content — a
+  // lower-ranked outcome stamps it even where the tooltip stays protected.
+  it.each(['not_found', 'classic_fallback'] as const)(
+    '%s arriving: stamps tooltipVersion unguarded, tooltip stays guarded',
+    (status) => {
+      const set = conflictSet(insert({ status, tooltipVersion: 1 }));
+      expect(set.tooltipVersion).toBe(1);
+      expect(protectedStatuses(set.tooltip)).not.toEqual([]);
+    },
+  );
+
   it('resolved arriving: unconditional — upgrades a classic_fallback in place', () => {
-    const row = insert({ status: 'resolved', env: 16, name: 'Thunderfury' });
+    const row = insert({
+      status: 'resolved',
+      env: 16,
+      name: 'Thunderfury',
+      tooltip: null,
+      tooltipVersion: 1,
+    });
     expect(conflictSet(row)).toEqual({
       fetchedAt: NOW,
       nextRetryAt: NOW,
@@ -72,11 +91,14 @@ describe('conflictSet (ROK-1727)', () => {
       name: 'Thunderfury',
       quality: null,
       icon: null,
+      tooltip: null,
+      tooltipVersion: 1,
     });
   });
 
-  it('error arriving: bookkeeping only', () => {
-    expect(conflictSet(insert({ status: 'error', attempts: 2 }))).toEqual({
+  it('error arriving: bookkeeping only — never touches the tooltip', () => {
+    const row = insert({ status: 'error', attempts: 2, tooltipVersion: 1 });
+    expect(conflictSet(row)).toEqual({
       fetchedAt: NOW,
       nextRetryAt: NOW,
       attempts: 2,

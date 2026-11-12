@@ -157,3 +157,13 @@
         display: none !important;
     }
 }
+/* ROK-2176: no Wowhead hover tooltip above one of our item popups (any width) —
+   the popup sets this attribute while open (useHideWowheadTooltips). */
+body[data-wow-popup-open] .wowhead-tooltip {
+    display: none !important;
+}
+
+/* ROK-2176: the card opens the compare popup when given onOpen */
+.wow-item-card--clickable {
+    cursor: pointer;
+}

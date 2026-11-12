@@ -12,6 +12,7 @@ import type {
   ForeverTalentsDto,
 } from '@raid-ledger/contract';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
+import { WowDisplayTooltipService } from './wow-display-tooltip.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import type {
@@ -22,6 +23,25 @@ import type {
   ExternalCharacterQuests,
 } from '../plugin-host/extension-types';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
+
+/**
+ * ROK-2176 review MAJOR 2: the vanilla-era `characters.game_variant` values
+ * (`WowGameVariantSchema`) whose gear Wowhead dataEnv 16 / 4 can describe.
+ * `retail`, `classic` (Cata/MoP progression) and `classic_anniversary` (its
+ * realms are in TBC — envs 16/4 serve no TBC items, so every probe would be
+ * a guaranteed miss on the shared ≤1 req/s queue) are excluded.
+ */
+const TOOLTIP_VARIANTS: ReadonlySet<string> = new Set([
+  'wow_forever',
+  'classic_era',
+]);
+
+/** Addon gear: `ForeverDisplayEquipmentService.resolve` owns its enqueue. */
+const ADDON_DECORATE = { enqueueDue: false } as const;
+
+function isTooltipVariant(variant: string | null): boolean {
+  return variant !== null && TOOLTIP_VARIANTS.has(variant);
+}
 
 /**
  * Adapter bridging CharacterSyncAdapter interface to BlizzardService.
@@ -37,13 +57,27 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     private readonly foreverEquipment: ForeverDisplayEquipmentService,
     private readonly foreverTalents: ForeverDisplayTalentsService,
     private readonly foreverLockouts: ForeverDisplayLockoutsService,
+    private readonly tooltips: WowDisplayTooltipService,
   ) {}
 
-  /** ROK-1727: Forever characters display their addon snapshot gear. */
-  resolveDisplayEquipment(
+  /**
+   * ROK-1727: Forever characters display their addon snapshot gear.
+   * ROK-2176: that gear, else (vanilla-era variants only) the stored Armory
+   * gear, comes back as a copy carrying each item's stored Wowhead tooltip
+   * (undefined = no gear at all). Addon gear is Forever by definition, so it
+   * is decorated even when the character's `gameVariant` is null (manual /
+   * roster-created). Armory gear of retail / progression Classic / TBC
+   * Anniversary / no variant keeps the pre-2176 result.
+   * The Forever resolver already enqueued the addon gear's due ids, so the
+   * addon branch decorates without a second enqueue (one per id per read).
+   */
+  async resolveDisplayEquipment(
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
-    return this.foreverEquipment.resolve(row);
+    const addon = await this.foreverEquipment.resolve(row);
+    if (addon) return this.tooltips.decorate(row, addon, ADDON_DECORATE);
+    if (!isTooltipVariant(row.gameVariant) || !row.equipment) return undefined;
+    return this.tooltips.decorate(row, row.equipment);
   }
 
   /** ROK-1744: Forever talents from the LedgerLink snapshot. */
