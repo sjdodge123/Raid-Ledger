@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ItemTooltipSchema } from './wow-item-tooltip.schema.js';
 
 /**
  * ROK-245: Dungeon quest API schemas.
@@ -54,6 +55,8 @@ export const EnrichedQuestRewardSchema = z.object({
     itemLevel: z.number().nullable(),
     iconUrl: z.string().nullable(),
     itemSubclass: z.string().nullable(),
+    /** ROK-2186: parsed Wowhead tooltip from `wow_item_meta` (same schema as `BossLootDto.tooltip`); absent/null = not synced yet. */
+    tooltip: ItemTooltipSchema.nullable().optional(),
 });
 
 export type EnrichedQuestReward = z.infer<typeof EnrichedQuestRewardSchema>;

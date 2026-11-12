@@ -82,3 +82,27 @@ export async function mergeItemMetaFallback(
     if (reward) map.set(row.itemId, reward);
   }
 }
+
+/**
+ * ROK-2186: attach the parsed `wow_item_meta` tooltip to every reward in
+ * `map` — one batched select for all ids (no N+1). Entries are replaced, not
+ * mutated, because lookup objects are shared across requests. Ids with no
+ * parsed tooltip keep theirs absent ("Stats not synced" on the web).
+ */
+export async function attachItemTooltips(
+  db: PostgresJsDatabase<typeof schema>,
+  map: Map<number, EnrichedQuestReward>,
+): Promise<void> {
+  const ids = [...map.keys()];
+  if (ids.length === 0) return;
+  const rows = await db
+    .select({ itemId: wowItemMeta.itemId, tooltip: wowItemMeta.tooltip })
+    .from(wowItemMeta)
+    .where(
+      and(inArray(wowItemMeta.itemId, ids), isNotNull(wowItemMeta.tooltip)),
+    );
+  for (const { itemId, tooltip } of rows) {
+    const reward = map.get(itemId);
+    if (reward && tooltip) map.set(itemId, { ...reward, tooltip });
+  }
+}
