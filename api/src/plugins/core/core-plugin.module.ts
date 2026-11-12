@@ -5,6 +5,7 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { CORE_MANIFEST } from './core.manifest';
 import { CoreSteamStatsModule } from './steam-stats/core-steam-stats.module';
 import { GgCardModule } from './gg/gg-card.module';
+import { GgMascotModule } from './gg/mascot/gg-mascot.module';
 import { GgModule } from './gg/gg.module';
 
 /**

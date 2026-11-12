@@ -250,6 +250,9 @@ export const SETTING_KEYS = {
   GG_DM_OFFSET_MINUTES: 'gg_dm_offset_minutes',
   /** ROK-2187: Announcement channel; unset ⇒ DISCORD_BOT_DEFAULT_CHANNEL. */
   GG_CHANNEL_ID: 'gg_channel_id',
+  /** ROK-2187: Community mascot (JSON `GgMascot`: emoji + optional soundboard
+   *  sound copied into uploads/gg-mascot/). Unset ⇒ plain intro. */
+  GG_MASCOT: 'gg_mascot',
   /** ROK-121: Pelican panel base URL (admin-supplied; server-side fetch). */
   PELICAN_PANEL_URL: 'pelican_panel_url',
   /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */

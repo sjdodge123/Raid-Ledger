@@ -28,6 +28,10 @@ import type { LogLevelEnv } from './main.helpers';
 import { installValheimLinkBodyBypass } from './plugins/valheim/link/ingest/valheim-link-body-bypass';
 import { installCompanionBodyBypass } from './companion/ingest/companion-body-bypass';
 import {
+  GG_MASCOT_URL_PREFIX,
+  getGgMascotDir,
+} from './plugins/core/gg/mascot/gg-mascot.storage';
+import {
   GUILD_CREST_URL_PREFIX,
   getGuildCrestDir,
 } from './guilds/crest/hub-crest.paths';
@@ -50,6 +54,11 @@ function configureStaticAssets(
       : path.join(process.cwd(), 'uploads', 'branding'));
   app.useStaticAssets(brandingDir, {
     prefix: '/uploads/branding/',
+    maxAge: '1d',
+  });
+  // ROK-2187: community GG mascot copies (emoji + soundboard sound).
+  app.useStaticAssets(getGgMascotDir(), {
+    prefix: GG_MASCOT_URL_PREFIX,
     maxAge: '1d',
   });
   // ROK-1814 Q3: re-encoded, content-hashed guild crests are public static.
