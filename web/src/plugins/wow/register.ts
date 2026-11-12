@@ -32,6 +32,7 @@ import { WOW_FOREVER_GAME_SLUG } from './lib/forever-identity';
 import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 import { guildTextWidget } from './hub-widgets/guild-text.register';
 import { contributionsWidget } from './hub-widgets/contributions.register';
+import { attunementsWidget } from './hub-widgets/attunements.register';
 import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
 import { wowHubClaimProvider } from './hub/wow-hub-claim-provider';
 
@@ -74,6 +75,8 @@ blizzard.registerHubWidget(gearReadinessWidget);
 blizzard.registerHubWidget(raidProgressWidget);
 blizzard.registerHubWidget(guildTextWidget);
 blizzard.registerHubWidget(contributionsWidget);
+// ROK-1927 — the members-only "Attunements" Overview card (order 90).
+blizzard.registerHubWidget(attunementsWidget);
 // ROK-2151 — the staff non-member "Claim your character" banner atop a claimable Forever guild's Overview.
 registerClaimBannerWidget(blizzard);
 

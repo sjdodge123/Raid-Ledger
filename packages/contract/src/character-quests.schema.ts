@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WowCharacterAttunementsSchema } from './wow-character-attunements.schema.js';
 
 /**
  * ROK-1745: quest tracking section on the WoW: Forever character page.
@@ -71,6 +72,11 @@ export const CharacterQuestsDtoSchema = z.object({
         completedTotal: z.number().int(),
         inProgress: z.number().int(),
     }),
+    /**
+     * ROK-1927: the character's own attunement checklists (tracked, verified
+     * definitions of its faction). Absent on old bodies.
+     */
+    attunements: WowCharacterAttunementsSchema.optional(),
 });
 export type CharacterQuestsDto = z.infer<typeof CharacterQuestsDtoSchema>;
 

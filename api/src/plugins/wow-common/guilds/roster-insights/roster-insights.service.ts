@@ -30,13 +30,15 @@ import {
   type RaidHubRow,
 } from './roster-insights.raid-progress';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
+import { attunementsApply } from './roster-insights.attunements';
+import { loadAttunements } from './roster-insights.attunements.query';
 import {
   emptyInsights,
   joinFacts,
   loadInsightRawRows,
   type JoinedRoster,
 } from './roster-insights.refs';
-import type { InsightsAudience } from './roster-insights.types';
+import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
 /**
  * ROK-1913 (H5) — `GET plugins/wow/guilds/:id/roster-insights`. One roster
@@ -106,10 +108,21 @@ export class RosterInsightsService {
             // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
             gear: computeGear(all),
             ...(await this.raidSection(hub, linkedUserIds)),
+            // ROK-1927: mains of the full roster (ruling D), never a visitor.
+            ...(await this.attunementSection(hub, all)),
           }
         : {}),
       freshness: computeFreshness(rows),
     };
+  }
+
+  /** ROK-1927 — `{ attunements }` for a Forever guild hub, else nothing. */
+  private async attunementSection(
+    hub: { kind: string; gameSlug: string | null } | null,
+    all: readonly InsightRow[],
+  ) {
+    if (!attunementsApply(hub)) return {};
+    return { attunements: await loadAttunements(this.db, all) };
   }
 
   /** ROK-1917 — `{ raidProgress }` for a WoW guild hub, else nothing. */
@@ -128,7 +141,9 @@ export class RosterInsightsService {
    */
   private async loadHubRow(
     guildId: number,
-  ): Promise<(RaidHubRow & { at: string | null }) | null> {
+  ): Promise<
+    (RaidHubRow & { at: string | null; gameSlug: string | null }) | null
+  > {
     const g = schema.guilds;
     const [row] = await this.db
       .select({
@@ -137,8 +152,10 @@ export class RosterInsightsService {
         region: g.region,
         nameKey: g.nameKey,
         kind: g.kind,
+        gameSlug: schema.games.slug,
       })
       .from(g)
+      .leftJoin(schema.games, eq(schema.games.id, g.gameId))
       .where(eq(g.id, guildId))
       .limit(1);
     return row ? { ...row, at: row.at ? row.at.toISOString() : null } : null;

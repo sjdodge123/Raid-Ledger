@@ -11,6 +11,7 @@ import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
+import { loadCharacterAttunements } from './character-attunements';
 import { buildCharacterQuests } from './character-quests.helpers';
 import { instanceName } from './dungeon-instance-names';
 import { VARIANT_EXPANSIONS, toDto } from './dungeon-quests.helpers';
@@ -33,7 +34,11 @@ export class CharacterQuestsService {
   /** @returns the quest DTO, or null when the section is hidden (D2). */
   async getForCharacter(id: string): Promise<CharacterQuestsDto | null> {
     const [row] = await this.db
-      .select({ id: schema.characters.id })
+      .select({
+        race: schema.characters.race,
+        faction: schema.characters.faction,
+        level: schema.characters.level,
+      })
       .from(schema.characters)
       .where(eq(schema.characters.id, id))
       .limit(1);
@@ -46,7 +51,15 @@ export class CharacterQuestsService {
       source: eff.source,
       inProgressSyncedAt: eff.inProgressAsOf?.toISOString() ?? null,
     };
-    return buildCharacterQuests(input, await this.loadKnown(), instanceName);
+    const dto = buildCharacterQuests(
+      input,
+      await this.loadKnown(),
+      instanceName,
+    );
+    if (!dto) return null;
+    // ROK-1927: the own attunement checklists ride on the same visibility.
+    const attunements = await loadCharacterAttunements(this.db, row, eff);
+    return { ...dto, attunements };
   }
 
   /**

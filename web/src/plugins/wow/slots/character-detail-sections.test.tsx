@@ -9,6 +9,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import type { CharacterEquipmentDto, CharacterLockoutsDto } from '@raid-ledger/contract';
 import { CharacterDetailSections } from './character-detail-sections';
 import { FOREVER_ADDON_HINT_EQUIPMENT, FOREVER_ADDON_HINT_TALENTS } from '../lib/wow-variant-config';
@@ -47,9 +48,12 @@ function renderSections({ gameVariant, ruleset = null, isArmoryImported = false,
     if (!registryPending) client.setQueryData(['game-registry'], { data: gameSlug ? [{ id: 1, slug: gameSlug, name: 'WoW' }] : [] });
     const { container } = render(
         <QueryClientProvider client={client}>
-            <CharacterDetailSections equipment={equipment} talents={null} professions={null} gameVariant={gameVariant}
-                renderUrl={renderUrl} isArmoryImported={isArmoryImported} characterClass="Mage" isOwner={false}
-                characterId="char-1" gameId={1} />
+            {/* The Quests section reads the URL hash (ROK-1927 `#quests` links), so it needs a router. */}
+            <MemoryRouter>
+                <CharacterDetailSections equipment={equipment} talents={null} professions={null} gameVariant={gameVariant}
+                    renderUrl={renderUrl} isArmoryImported={isArmoryImported} characterClass="Mage" isOwner={false}
+                    characterId="char-1" gameId={1} />
+            </MemoryRouter>
         </QueryClientProvider>,
     );
     return container;

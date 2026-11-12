@@ -1,3 +1,5 @@
+import { syncedAgo } from '../../../lib/synced-ago';
+
 /** Snapshot sources that carry a capture date (ROK-2109: the Armory sync joins the addon). */
 export type DatedSource = 'addon' | 'blizzard';
 
@@ -24,6 +26,11 @@ export function formatDatedLine(label: string, iso: string | null | undefined): 
  */
 export function formatSourceLine(source: DatedSource, syncedAt: string): string {
     return formatDatedLine(`via ${SOURCE_WORD[source]}`, syncedAt);
+}
+
+/** "as of 2 days ago via Armory" — the relative form (ROK-1927 mockup F7, the own attunement checklists). */
+export function formatAsOfSourceLine(source: DatedSource, syncedAt: string, now: number = Date.now()): string {
+    return `as of ${syncedAgo(syncedAt, now)} via ${SOURCE_WORD[source]}`;
 }
 
 /** Addon-only wrapper kept for the Equipment / Lockouts callers. */
