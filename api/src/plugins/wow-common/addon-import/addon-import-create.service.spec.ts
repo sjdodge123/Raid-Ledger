@@ -477,12 +477,21 @@ describe('post-import housekeeping off the ack path (ROK-2179)', () => {
 
   it('deferHousekeeping: resolves BEFORE the audit finalise, which then lands with the result', async () => {
     const s = gated();
-    const res = await s.service.importNew(1, body(false), {
-      deferHousekeeping: true,
-    });
-    expect(res.status).toBe('applied');
-    expect(s.audit.recordAttempt).not.toHaveBeenCalled();
+    let resolved = false;
+    const run = s.service
+      .importNew(1, body(false), { deferHousekeeping: true })
+      .then((res) => {
+        resolved = true;
+        return res;
+      });
+    await drain();
+    // Housekeeping is still held — the caller (the 202) must not wait on it.
+    expect({
+      resolved,
+      audited: s.audit.recordAttempt.mock.calls.length,
+    }).toEqual({ resolved: true, audited: 0 });
     s.release();
+    expect((await run).status).toBe('applied');
     await drain();
     expect(s.audit.recordAttempt).toHaveBeenCalledTimes(1);
     expect(audited(s.audit)).toMatchObject({
