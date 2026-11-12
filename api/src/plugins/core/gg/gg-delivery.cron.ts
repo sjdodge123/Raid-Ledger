@@ -5,11 +5,26 @@
  */
 import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../../../drizzle/schema';
 import { CronJobService } from '../../../cron-jobs/cron-job.service';
 import { GgDeliveryService } from './gg-delivery.service';
 
 /** SchedulerRegistry name — matches the manifest + cron metadata. */
 export const GG_DELIVERY_JOB_NAME = 'GgDeliveryCron_tick';
+
+/** True when an admin paused `GgDeliveryCron_tick` on the Jobs page (AC11). */
+export async function isGgDeliveryJobPaused(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ paused: schema.cronJobs.paused })
+    .from(schema.cronJobs)
+    .where(eq(schema.cronJobs.name, GG_DELIVERY_JOB_NAME))
+    .limit(1);
+  return row?.paused === true;
+}
 
 @Injectable()
 export class GgDeliveryCron {
@@ -25,9 +40,8 @@ export class GgDeliveryCron {
       GG_DELIVERY_JOB_NAME,
       async () => {
         const outcome = await this.delivery.runTick(new Date());
-        return (
-          outcome.status === 'dm-wave' || outcome.status === 'waiting-offset'
-        );
+        if (outcome.status === 'dm-wave') return outcome.dm.claimed > 0;
+        return outcome.status === 'waiting-offset';
       },
     );
   }

@@ -34,6 +34,10 @@ import { parseDemoBody } from './demo-test.utils';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { GgComputeService } from '../plugins/core/gg/gg-compute.service';
 import { ggAnnounceKey } from '../plugins/core/gg/gg-delivery.schedule';
+import {
+  GgDeliveryService,
+  type GgDeliveryOutcome,
+} from '../plugins/core/gg/gg-delivery.service';
 import { resetGgDmState } from '../plugins/core/gg/gg-dm-wave.helpers';
 
 const YearBody = z.object({ year: GgYearSchema });
@@ -56,7 +60,18 @@ export class DemoTestGgController {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly dedup: NotificationDedupService,
     private readonly compute: GgComputeService,
+    private readonly delivery: GgDeliveryService,
   ) {}
+
+  /**
+   * One full delivery pass with the date gate skipped — the cron tick's DM
+   * wave on demand, since admin send-now only announces (smoke fixture).
+   */
+  @Post('tick')
+  @HttpCode(HttpStatus.OK)
+  tick(): Promise<GgDeliveryOutcome> {
+    return this.delivery.runTick(new Date(), { bypassDate: true });
+  }
 
   @Post('reset')
   @HttpCode(HttpStatus.OK)

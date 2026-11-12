@@ -11,7 +11,8 @@
  *  3. Send now → `waiting-offset`; exactly one "GG <year> is here" embed lands
  *     in the channel. A repeat send-now keeps the same `announcedAt` and posts
  *     no second embed.
- *  4. Backdate the announcement past the offset and send now until the wave
+ *  4. Backdate the announcement past the offset; send-now only re-announces
+ *     (`announced`, no DM wave — pacing stays on the cron). Tick until the wave
  *     reaches the recipient (≤25 per pass, ordered by snapshot id).
  *  5. The DM itself cannot be read: the companion is a bot and Discord refuses
  *     bot-to-bot DMs (50007 — see `dm-embed-render.test.ts`). The recipient's
@@ -65,6 +66,11 @@ function fail(msg: string): never {
 
 function sendNow(api: ApiClient): Promise<SendNowOutcome> {
   return api.post<SendNowOutcome>(SEND_NOW, {});
+}
+
+/** One cron-equivalent pass (date gate skipped) — send-now never runs the DM wave. */
+function tick(api: ApiClient): Promise<SendNowOutcome> {
+  return api.post<SendNowOutcome>("/admin/test/gg/tick", {});
 }
 
 function isAnnouncement(msg: SimpleMessage, year: number): boolean {
@@ -177,18 +183,22 @@ async function findReady(
   return rows.find((n) => !fence.has(n.id) && n.payload?.year === year);
 }
 
-/** Age the announcement past the offset, then send now until the wave reaches the recipient. */
+/** Age the announcement past the offset; send-now must NOT DM; ticks run the wave to the recipient. */
 async function runDmWave(ctx: TestContext, year: number, fence: Set<string>): Promise<GgNotification> {
   const aged = await ctx.api.post<{ aged: number }>("/admin/test/gg/age-announce", {
     year,
     minutes: DM_OFFSET_MINUTES + 1,
   });
   if (aged.aged !== 1) fail(`age-announce: expected 1 row, got ${JSON.stringify(aged)}`);
+  const announceOnly = await sendNow(ctx.api);
+  if (announceOnly.status !== "announced" || announceOnly.dm) {
+    fail(`send-now after the offset: expected "announced" with no DM wave, got ${JSON.stringify(announceOnly)}`);
+  }
   return pollForCondition(
     async () => {
-      const out = await sendNow(ctx.api);
+      const out = await tick(ctx.api);
       if (out.status !== "dm-wave" || !out.dm) {
-        fail(`send-now after the offset: expected "dm-wave", got ${JSON.stringify(out)}`);
+        fail(`tick after the offset: expected "dm-wave", got ${JSON.stringify(out)}`);
       }
       await awaitProcessing(ctx.api);
       const row = await findReady(ctx, year, fence);

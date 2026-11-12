@@ -37,8 +37,14 @@ import {
 
 /** What one pass did. */
 export type GgDeliveryOutcome =
-  | { status: 'disabled' | 'not-due' | 'not-connected' | 'no-channel' }
-  | { status: 'waiting-offset'; year: number; announcedAt: string }
+  | {
+      status: 'disabled' | 'not-due' | 'not-connected' | 'no-channel' | 'busy';
+    }
+  | {
+      status: 'waiting-offset' | 'announced';
+      year: number;
+      announcedAt: string;
+    }
   | {
       status: 'dm-wave';
       year: number;
@@ -46,12 +52,30 @@ export type GgDeliveryOutcome =
       dm: GgDmWaveResult;
     };
 
+/** `runTick` options — see `runTick`. */
+export interface GgTickOptions {
+  /** Skip the date/hour gate (admin send-now, DEMO fixture). */
+  bypassDate?: boolean;
+  /** Stop after the announcement; the DM wave stays on the cron cadence. */
+  announceOnly?: boolean;
+}
+
+/** One `computeAll` per year per window, even if the announce keeps failing. */
+export const GG_COMPUTE_TTL_SECONDS = 6 * 60 * 60;
+
+/** Dedup key guarding `year`'s pre-announce compute. */
+export function ggComputeKey(year: number): string {
+  return `gg:${year}:compute`;
+}
+
 type AnnounceResult =
   { announcedAt: Date } | { status: 'not-connected' | 'no-channel' };
 
 @Injectable()
 export class GgDeliveryService {
   private readonly logger = new Logger(GgDeliveryService.name);
+  /** In-process guard: a slow pass never overlaps the next tick/send-now. */
+  private running = false;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -80,12 +104,27 @@ export class GgDeliveryService {
   }
 
   /**
-   * One pass. `bypassDate` (admin send-now) skips only the date/hour gate —
-   * the kill switch, the once-per-year announce and the DM offset still hold.
+   * One pass; `busy` while another pass is still running. `bypassDate` skips
+   * only the date/hour gate — the kill switch, the once-per-year announce and
+   * the DM offset still hold. `announceOnly` (send-now) never runs a DM wave,
+   * so the ≤25-per-tick pacing holds however often an admin clicks.
    */
   async runTick(
     now: Date,
-    opts: { bypassDate?: boolean } = {},
+    opts: GgTickOptions = {},
+  ): Promise<GgDeliveryOutcome> {
+    if (this.running) return { status: 'busy' };
+    this.running = true;
+    try {
+      return await this.runPass(now, opts);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async runPass(
+    now: Date,
+    opts: GgTickOptions,
   ): Promise<GgDeliveryOutcome> {
     const cfg = await this.readSettings(now);
     if (!cfg.enabled) return { status: 'disabled' };
@@ -99,6 +138,7 @@ export class GgDeliveryService {
     if (!isGgDmWaveOpen(now, announced.announcedAt, cfg.dmOffsetMinutes)) {
       return { status: 'waiting-offset', year, announcedAt };
     }
+    if (opts.announceOnly) return { status: 'announced', year, announcedAt };
     const dm = await runGgDmWave(this.db, year, (claim) =>
       this.notifyReady(claim.userId, year),
     );
@@ -120,13 +160,29 @@ export class GgDeliveryService {
       await this.settings.getDiscordBotDefaultChannel(),
     );
     if (!channelId) return { status: 'no-channel' };
-    await this.compute.computeAll(year, now);
+    await this.computeOnce(year, now);
     const duplicate = await this.dedup.checkAndMarkSent(
       key,
       GG_ANNOUNCE_TTL_SECONDS,
     );
     if (!duplicate) await this.postAnnouncement(channelId, year, key);
     return { announcedAt: (await findGgAnnouncedAt(this.db, key)) ?? now };
+  }
+
+  /**
+   * `computeAll` at most once per `GG_COMPUTE_TTL_SECONDS`: a failed announce
+   * retries every tick without recomputing every player each time. A failed
+   * compute gives the claim back.
+   */
+  private async computeOnce(year: number, now: Date): Promise<void> {
+    const key = ggComputeKey(year);
+    if (await this.dedup.checkAndMarkSent(key, GG_COMPUTE_TTL_SECONDS)) return;
+    try {
+      await this.compute.computeAll(year, now);
+    } catch (error) {
+      await this.dedup.releaseKey(key).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async postAnnouncement(

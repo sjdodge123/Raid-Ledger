@@ -1,8 +1,8 @@
 /**
  * ROK-2187 — admin GG <year> tools: delivery settings, a live dry run, a
  * recompute (refused once announced unless `force`), a live preview of the
- * admin's own GG (not stored) and send-now (skips only the date gate — the
- * kill switch, once-per-year announce and DM pacing still hold).
+ * admin's own GG (not stored) and send-now (compute + announce, skipping only
+ * the date gate; refused while paused; DMs stay on the cron's ≤25/tick wave).
  */
 import {
   BadRequestException,
@@ -43,6 +43,7 @@ import {
   GgDeliveryService,
   type GgDeliveryOutcome,
 } from './gg-delivery.service';
+import { isGgDeliveryJobPaused } from './gg-delivery.cron';
 import { writeGgDeliverySettings } from './gg-delivery.settings';
 import { loadGgUserFacets, tallyGgDryRun } from './gg-dry-run.helpers';
 import { readGgMascot } from './mascot/gg-mascot.settings';
@@ -133,9 +134,21 @@ export class GgAdminController {
     return snapshot;
   }
 
+  /**
+   * Compute + announce now (date gate skipped). Refused while the job is
+   * paused on the Jobs page (AC11); the DM wave stays on the cron's pacing.
+   */
   @Post('send-now')
   @HttpCode(HttpStatus.OK)
-  sendNow(): Promise<GgDeliveryOutcome> {
-    return this.delivery.runTick(new Date(), { bypassDate: true });
+  async sendNow(): Promise<GgDeliveryOutcome> {
+    if (await isGgDeliveryJobPaused(this.db)) {
+      throw new ConflictException(
+        'GG delivery is paused on the Jobs page — resume it to send',
+      );
+    }
+    return this.delivery.runTick(new Date(), {
+      bypassDate: true,
+      announceOnly: true,
+    });
   }
 }
