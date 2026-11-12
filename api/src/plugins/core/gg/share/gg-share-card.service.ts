@@ -1,8 +1,9 @@
 /**
  * ROK-2187 lane 7 — the public share PNG + crawler OG page for `/w/:slug`.
  *
- * Cache: an in-process LRU (v1) keyed by `(slug, computed_at)`. The snapshot
- * is frozen, so a key's bytes never change; a revoked/rotated slug never
+ * Cache: an in-process LRU (v1) keyed by the slug + a hash of everything the
+ * card draws (the public DTO — snapshot data AND the live display name), so a
+ * rename or recompute re-renders; a revoked/rotated slug never
  * reaches the cache because every request re-runs the public lookup first
  * (unshared / rotated / deactivated owner → `null` → 404). Media-store
  * persistence was skipped for v1: a re-render after a restart costs ~100 ms.
@@ -42,7 +43,7 @@ export class GgShareCardService {
   async png(slug: string): Promise<GgShareCardPng | null> {
     const found = await this.lookup(slug);
     if (!found) return null;
-    const key = `${slug}:${found.computedAt.toISOString()}`;
+    const key = `${slug}:${modelHash(found.dto)}`;
     const hit = this.cache.get(key);
     if (hit) {
       this.cache.delete(key);
@@ -80,7 +81,8 @@ export class GgShareCardService {
       title: `${dto.displayName}'s GG ${dto.year}`,
       description: ogDescription(dto),
       url,
-      imageUrl: `${clientUrl}/api/gg/public/${enc}/card.png`,
+      // Extension-less: nginx's static regex would 404 a `.png` API path.
+      imageUrl: `${clientUrl}/api/gg/public/${enc}/card`,
     });
   }
 
@@ -99,6 +101,11 @@ export class GgShareCardService {
     if (this.cache.size > MAX_CACHED && !oldest.done)
       this.cache.delete(oldest.value);
   }
+}
+
+/** Hash of the rendered model — any field the card draws changes the key. */
+function modelHash(dto: GgPublicSummaryDto): string {
+  return createHash('sha256').update(JSON.stringify(dto)).digest('hex');
 }
 
 /** "42 events · 380h played · played with 17 people" — counts only. */

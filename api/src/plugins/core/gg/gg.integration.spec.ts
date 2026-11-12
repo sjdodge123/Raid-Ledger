@@ -213,20 +213,19 @@ describe('PUT /gg/:year/share + GET /gg/public/:slug', () => {
 
 /** Share PNG request — superagent buffers `image/*` bodies into a Buffer. */
 async function card(slug: string) {
-  return testApp.request.get(`/gg/public/${slug}/card.png`);
+  return testApp.request.get(`/gg/public/${slug}/card`);
 }
 
-describe('GET /gg/public/:slug/card.png + /og (share PNG, AC12)', () => {
-  it('serves an immutable 1200x630 PNG with an ETag while shared', async () => {
+describe('GET /gg/public/:slug/card + /og (share PNG, AC12)', () => {
+  it('serves a revalidating 1200x630 PNG with an ETag while shared', async () => {
     const me = await insertUser('pngsharer');
     await storeSnapshot(me.id, 2026);
     const slug = (await share(me, 2026, true)).body.slug as string;
     const res = await card(slug);
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('image/png');
-    expect(res.headers['cache-control']).toBe(
-      'public, max-age=31536000, immutable',
-    );
+    // Revalidate on every hit so a revoke 404s everywhere at once (AC8).
+    expect(res.headers['cache-control']).toBe('public, no-cache');
     const png = res.body as Buffer;
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     const meta = await sharp(png).metadata();
@@ -236,9 +235,23 @@ describe('GET /gg/public/:slug/card.png + /og (share PNG, AC12)', () => {
     const again = await card(slug);
     expect(again.headers['etag']).toBe(etag);
     const cond = await testApp.request
-      .get(`/gg/public/${slug}/card.png`)
-      .set('If-None-Match', etag);
+      .get(`/gg/public/${slug}/card`)
+      .set('If-None-Match', `W/"nope", ${etag}`);
     expect(cond.status).toBe(304);
+  });
+
+  it('a display-name change after compute re-renders with a new ETag', async () => {
+    const me = await insertUser('pngrenamer');
+    await storeSnapshot(me.id, 2026);
+    const slug = (await share(me, 2026, true)).body.slug as string;
+    const before = String((await card(slug)).headers['etag']);
+    await testApp.db
+      .update(schema.users)
+      .set({ displayName: 'Renamed Later' })
+      .where(eq(schema.users.id, me.id));
+    const after = await card(slug);
+    expect(after.status).toBe(200);
+    expect(String(after.headers['etag'])).not.toBe(before);
   });
 
   it('404s at once after revoke, and the old slug stays 404 after re-share', async () => {
@@ -274,7 +287,8 @@ describe('GET /gg/public/:slug/og (crawler unfurl)', () => {
     const og = await testApp.request.get(`/gg/public/${slug}/og`);
     expect(og.status).toBe(200);
     expect(og.headers['content-type']).toContain('text/html');
-    expect(og.text).toContain(`/api/gg/public/${slug}/card.png`);
+    expect(og.text).toContain(`/api/gg/public/${slug}/card"`);
+    expect(og.text).not.toContain('card.png');
     expect(og.text).toContain('ogsharer D&#39;s GG 2026');
     expect(og.text).not.toContain('SecretFriend');
     const generic = await testApp.request.get(

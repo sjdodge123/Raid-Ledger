@@ -150,10 +150,10 @@ test.describe('GG public share (ROK-2187, Q4/Q5)', () => {
         const slug = shareUrl.slice(shareUrl.lastIndexOf('/') + 1);
         expect(slug, 'share slug after toggling on').toMatch(/^[A-Za-z0-9_-]{16,64}$/);
 
-        const png = await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}/card.png`);
+        const png = await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}/card`);
         expect(png.status).toBe(200);
         expect(png.headers.get('content-type')).toBe('image/png');
-        expect(png.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+        expect(png.headers.get('cache-control')).toBe('public, no-cache');
         expect(png.headers.get('etag')).toMatch(/^"[0-9a-f]{32}"$/);
         const magic = Buffer.from(await png.arrayBuffer()).subarray(0, 8).toString('hex');
         expect(magic, 'PNG signature').toBe('89504e470d0a1a0a');

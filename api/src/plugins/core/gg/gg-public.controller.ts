@@ -39,10 +39,13 @@ export class GgPublicController {
   ) {}
 
   /**
-   * `GET /gg/public/:slug/card.png` — the 1200×630 share card (OG image).
-   * Immutable per (slug, computed_at); 404 the moment sharing is revoked.
+   * `GET /gg/public/:slug/card` — the 1200×630 share card (OG image), served
+   * as `image/png`. No file extension on purpose: nginx's static-extension
+   * regex location would otherwise catch `/api/…/card.png` and 404 it.
+   * `no-cache` + ETag: every hit revalidates against the live share lookup,
+   * so a revoke 404s at every cache at once (AC8) and a 304 stays cheap.
    */
-  @Get(':slug/card.png')
+  @Get(':slug/card')
   async card(
     @Param('slug') slug: string,
     @Req() req: Request,
@@ -50,9 +53,9 @@ export class GgPublicController {
   ): Promise<StreamableFile | undefined> {
     const card = await this.shareCard.png(slug);
     if (!card) throw new NotFoundException('GG not found');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Cache-Control', 'public, no-cache');
     res.setHeader('ETag', card.etag);
-    if (req.headers['if-none-match'] === card.etag) {
+    if (etagMatches(req.headers['if-none-match'], card.etag)) {
       res.status(304);
       return undefined;
     }
@@ -76,4 +79,13 @@ export class GgPublicController {
     if (!dto) throw new NotFoundException('GG not found');
     return dto;
   }
+}
+
+/** RFC 9110 `If-None-Match`: `*`, or a comma list whose entries may be `W/`. */
+function etagMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  return header
+    .split(',')
+    .map((t) => t.trim().replace(/^W\//, ''))
+    .some((t) => t === '*' || t === etag);
 }

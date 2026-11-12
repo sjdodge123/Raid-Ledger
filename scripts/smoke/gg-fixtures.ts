@@ -65,9 +65,9 @@ export async function publicGgStatus(slug: string): Promise<number> {
     return (await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}`)).status;
 }
 
-/** Anonymous `GET /gg/public/:slug/card.png` status (the share PNG). */
+/** Anonymous `GET /gg/public/:slug/card` status (the share PNG). */
 export async function publicGgCardStatus(slug: string): Promise<number> {
-    return (await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}/card.png`)).status;
+    return (await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}/card`)).status;
 }
 
 /** `GET /admin/gg/mascot/options` as the picker sees it — one emoji, one sound. */
