@@ -64,6 +64,7 @@ import { ValheimRecipesService } from './armory/read/valheim-recipes.service';
 import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { ValheimDeathsModule } from './armory/valheim-deaths.module';
 import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.module';
+import { ValheimGgCardRegistration } from './gg/valheim-gg.registration';
 
 /**
  * Valheim game plugin (ROK-1800) + Valheim Link token admin (ROK-1833) +
@@ -111,6 +112,8 @@ import { ValheimScreenshotsModule } from './screenshots/valheim-screenshots.modu
   ],
   providers: [
     ValheimAdapterRegistration,
+    // ROK-2187: the Valheim GG <year> card.
+    ValheimGgCardRegistration,
     // ROK-1833 Valheim Link: token lifecycle + ingest guards.
     ValheimLinkTokensRepository,
     ValheimLinkTokensService,
