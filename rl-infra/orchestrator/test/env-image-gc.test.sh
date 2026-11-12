@@ -32,6 +32,11 @@
 #       after env-destroy recorded the release; no record → recorded now and
 #       kept; an unwritable record dir keeps it; use clears the record
 #   E17 env-destroy records the release before it removes the row
+#   E18 review r2 MINOR-1: neither the sweep nor env-destroy creates the record
+#       dir; a missing dir is logged once per sweep and keeps every image; a
+#       failed env-destroy record write warns and still returns 0
+#   E19 review r2 MINOR-2: records with no local image, or older than grace +
+#       margin, are pruned; nothing is pruned when the image list is unreadable
 
 set -uo pipefail
 CURRENT_TEST_FILE="env-image-gc.test.sh"
@@ -278,10 +283,13 @@ test_bare_id_pin_keeps() {
     assert_contains "$(jq -c .kept <<<"$out")" "an env pins image id sha256:0b5e55ed" "E15: reason reported"
 }
 
-_rec() { cat "$RL_STATE_DIR/env-image-released/$1" 2>/dev/null; }
+_recdir() { echo "$RL_STATE_DIR/env-image-released"; }
+_rec() { cat "$(_recdir)/$1" 2>/dev/null; }
+_exists() { [[ -e "$1" ]] && echo created || echo absent; }
 test_release_grace() {
     _setup
     export RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS=2
+    mkdir -p "$(_recdir)"   # deploy provisions it (ensure-runner-dirs.sh)
     local out; out=$(env_image_gc::sweep 2>/dev/null)
     assert_eq "$(_rm_refs)" "" "E16: no release record → kept"
     assert_contains "$(jq -c .kept <<<"$out")" "release time unknown: 2h grace starts now" "E16: reason reported"
@@ -317,6 +325,46 @@ test_destroy_records_release() {
         "E17: after the registry tag delete ($del), before the row is removed ($drop): $mark"
 }
 
+test_record_dir_not_created() {
+    _setup
+    export RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS=2
+    rm -rf "$(_recdir)"; LOCAL_REFS="$REPO:gone"$'\n'"$REPO:gone2"
+    local out err="$RL_STATE_DIR/err" rc
+    out=$(env_image_gc::sweep 2>"$err")
+    assert_eq "$(_rm_refs)" "" "E18: missing record dir → nothing removed"
+    assert_eq "$(_exists "$(_recdir)")" "absent" "E18: the sweep never creates the record dir"
+    assert_eq "$(grep -c 'release-record dir .* is missing' "$err")" "1" "E18: the missing dir is logged once per sweep"
+    assert_contains "$(jq -c .kept <<<"$out")" "no release record and none can be written: kept" "E18: reason reported"
+    env_image_gc::mark_env_released live 2>"$err"; rc=$?
+    assert_eq "$rc" "0" "E18: the env-destroy hook returns 0 when the dir is missing"
+    assert_contains "$(cat "$err")" "WARNING could not record the release of live" "E18: missing dir → warning"
+    assert_eq "$(_exists "$(_recdir)")" "absent" "E18: env-destroy never creates the record dir"
+    mkdir -p "$(_recdir)"
+    mv() { return 1; }
+    env_image_gc::mark_env_released live 2>"$err"; rc=$?
+    unset -f mv
+    assert_eq "$rc" "0" "E18: a failed record write still returns 0"
+    assert_contains "$(cat "$err")" "WARNING could not record the release of live" "E18: a failed write → warning"
+    assert_eq "$(ls -A "$(_recdir)")" "" "E18: the failed write leaves no tmp file"
+}
+
+test_records_pruned() {
+    _setup
+    export RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS=2 RL_ENV_IMAGE_GC_DRY_RUN=1   # dry run: records outlive the grace
+    mkdir -p "$(_recdir)"; LOCAL_REFS="$REPO:gone"$'\n'"$REPO:old"$'\n'"$REPO:mid"
+    env_image_gc::mark_released gone $((NOW - 600)); env_image_gc::mark_released vanished $((NOW - 600))
+    env_image_gc::mark_released old $((NOW - 27 * 3600)); env_image_gc::mark_released mid $((NOW - 25 * 3600))
+    local err="$RL_STATE_DIR/err"; env_image_gc::sweep >/dev/null 2>"$err"
+    assert_eq "$(_rec gone)" "$((NOW - 600))" "E19: a fresh record of a local image survives"
+    assert_eq "$(_rec vanished)" "" "E19: a record whose image is no longer local is pruned"
+    assert_eq "$(_rec old)" "" "E19: a record older than grace + margin (2h + 24h) is pruned"
+    assert_eq "$(_rec mid)" "$((NOW - 25 * 3600))" "E19: a record inside grace + margin is kept"
+    assert_contains "$(cat "$err")" "pruned 2 stale release record(s)" "E19: the prune is logged"
+    env_image_gc::mark_released vanished $((NOW - 600)); LS_FAIL=1
+    env_image_gc::sweep >/dev/null 2>&1
+    assert_eq "$(_rec vanished)" "$((NOW - 600))" "E19: nothing is pruned when the image list is unreadable"
+}
+
 run_test "e1-removes-orphan" test_removes_orphan
 run_test "e2-env-row-keeps" test_env_row_keeps
 run_test "e3-container-keeps" test_container_keeps
@@ -334,4 +382,6 @@ run_test "e14-registry-one-array" test_registry_must_be_one_array
 run_test "e15-bare-id-pin" test_bare_id_pin_keeps
 run_test "e16-release-grace" test_release_grace
 run_test "e17-destroy-records-release" test_destroy_records_release
+run_test "e18-record-dir-provisioned-not-created" test_record_dir_not_created
+run_test "e19-records-pruned" test_records_pruned
 print_test_summary

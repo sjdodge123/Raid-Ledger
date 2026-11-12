@@ -157,6 +157,11 @@ done
 # discord.lock without sudo — the same class of defect one level down.
 ensure_dir "$ROOT/state"
 ensure_dir "$ROOT/state/locks"
+# ROK-2171 review r2 MINOR-1: env-destroy (rl-agent) writes image release
+# records here and the root gc-sweeper reads/prunes them. Neither creates it:
+# whichever did first would own it, and a root-owned 0755 dir silently drops
+# every env-destroy write.
+ensure_dir "$ROOT/state/env-image-released"
 
 if (( ${#FAILURES[@]} > 0 )); then
     echo "$LOG_PREFIX FATAL — ${#FAILURES[@]} runner dir(s) are not provisioned as ${WANT_OWNER}:${WANT_GROUP} $WANT_MODE:" >&2
@@ -171,5 +176,5 @@ if (( ${#FAILURES[@]} > 0 )); then
     exit "$RUNNER_DIRS_FATAL"
 fi
 
-echo "$LOG_PREFIX ok — slots 1-$MAX_SLOT + state/locks under $ROOT are ${WANT_OWNER}:${WANT_GROUP} $WANT_MODE."
+echo "$LOG_PREFIX ok — slots 1-$MAX_SLOT + state/locks + state/env-image-released under $ROOT are ${WANT_OWNER}:${WANT_GROUP} $WANT_MODE."
 exit 0

@@ -35,7 +35,13 @@
 #     A tag an env row or container uses has its record cleared, so its next
 #     release starts a fresh grace. Records: one file per tag holding the epoch,
 #     in RL_ENV_IMAGE_GC_RELEASED_DIR (default env-image-released/ beside the
-#     env registry); written in dry run too;
+#     env registry); written in dry run too. The dir is provisioned at deploy
+#     (runner/ensure-runner-dirs.sh, rl-agent:rl-fleet 2775) and never created
+#     here: whichever writer made it first would decide its owner (review r2
+#     MINOR-1). Missing dir → no records → every unused image is kept. After
+#     each sweep, records whose tag has no local image, and records older than
+#     grace + RL_ENV_IMAGE_GC_RECORD_MARGIN_HOURS, are pruned (MINOR-2); a
+#     pruned record never removes an image, it only restarts a full grace;
 #   - a `registry_gc`-kind entry (key RL_ENV_IMAGE_GC_KEY) is held in the
 #     admission ledger for the whole removal pass: taken under the ledger flock
 #     only when no image build runs or waits, and while held no image build is
@@ -54,6 +60,7 @@
 #   RL_ENV_IMAGE_GC_MIN_AGE_HOURS     2    age floor (image build/tag time)
 #   RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS 2  grace after release; 0 = off
 #   RL_ENV_IMAGE_GC_RELEASED_DIR      <dir of RL_ENVS_FILE>/env-image-released
+#   RL_ENV_IMAGE_GC_RECORD_MARGIN_HOURS 24 record kept this long past its grace
 #   RL_ENV_IMAGE_GC_DRY_RUN           1    report only; 0 = remove
 #   RL_ENV_IMAGE_GC_TIMEOUT_SECONDS   600  ledger-entry lifetime (renewed per image)
 #   RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS 120 bound on one `docker image rm`
@@ -62,6 +69,7 @@
 RL_ENV_IMAGE_GC_REPO="${RL_ENV_IMAGE_GC_REPO:-registry.rl.lan:5000/rl-allinone}"
 RL_ENV_IMAGE_GC_MIN_AGE_HOURS="${RL_ENV_IMAGE_GC_MIN_AGE_HOURS:-2}"
 RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS="${RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS:-2}"
+RL_ENV_IMAGE_GC_RECORD_MARGIN_HOURS="${RL_ENV_IMAGE_GC_RECORD_MARGIN_HOURS:-24}"
 RL_ENV_IMAGE_GC_DRY_RUN="${RL_ENV_IMAGE_GC_DRY_RUN:-1}"
 RL_ENV_IMAGE_GC_TIMEOUT_SECONDS="${RL_ENV_IMAGE_GC_TIMEOUT_SECONDS:-600}"
 RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS="${RL_ENV_IMAGE_GC_RM_TIMEOUT_SECONDS:-120}"
@@ -88,15 +96,21 @@ env_image_gc::_released_dir() {
 }
 env_image_gc::_valid_tag() { [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; }
 
-# Record that tag $1 was released at epoch $2 (default now). Best-effort.
+# Grace hours, a non-number read as the default 2.
+env_image_gc::_grace_hours() {
+    local h="$RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS"; [[ "$h" =~ ^[0-9]+$ ]] || h=2; echo "$h"
+}
+
+# Record that tag $1 was released at epoch $2 (default now). Never creates the
+# dir (deploy provisions it; MINOR-1). rc 1 = nothing written.
 env_image_gc::mark_released() {
     local tag="$1" at="${2:-$(env_image_gc::_now)}" dir
     env_image_gc::_valid_tag "$tag" || return 0
     dir=$(env_image_gc::_released_dir)
-    mkdir -p "$dir" 2>/dev/null || return 0
-    { printf '%s\n' "$at" > "$dir/.$tag.$$" && mv -f "$dir/.$tag.$$" "$dir/$tag"; } 2>/dev/null \
-        || rm -f "$dir/.$tag.$$" 2>/dev/null
-    return 0
+    [[ -d "$dir" ]] || return 1
+    { printf '%s\n' "$at" > "$dir/.$tag.$$" && mv -f "$dir/.$tag.$$" "$dir/$tag"; } 2>/dev/null && return 0
+    rm -f "$dir/.$tag.$$" 2>/dev/null
+    return 1
 }
 
 env_image_gc::_clear_released() {
@@ -110,20 +124,24 @@ env_image_gc::mark_env_released() {
     local tag
     tag=$(jq -r --arg s "$1" '[.[]? | select(.slug == $s)][0].image // empty' "$RL_ENVS_FILE" 2>/dev/null \
         | registry_gc::_tags_of)
-    [[ -n "$tag" ]] && env_image_gc::mark_released "$tag"
+    [[ -n "$tag" ]] || return 0
+    env_image_gc::mark_released "$tag" && return 0
+    env_image_gc::_log "env-image-gc: WARNING could not record the release of $tag in" \
+        "$(env_image_gc::_released_dir); the gc-sweeper starts its grace at its next sweep instead"
     return 0
 }
 
 # Why tag $1 is still in its release grace at time $2; empty = grace over.
 # No readable record → record now and keep (MAJOR-1: unknown = just released).
 env_image_gc::_release_keep() {
-    local tag="$1" now="$2" hours="$RL_ENV_IMAGE_GC_RELEASE_GRACE_HOURS" at
-    [[ "$hours" =~ ^[0-9]+$ ]] || hours=2
+    local tag="$1" now="$2" hours at
+    hours=$(env_image_gc::_grace_hours)
     (( hours > 0 )) || return 0
     at=$(cat "$(env_image_gc::_released_dir)/$tag" 2>/dev/null)
     if ! [[ "$at" =~ ^[0-9]+$ ]]; then
-        env_image_gc::mark_released "$tag" "$now"
-        echo "release time unknown: ${hours}h grace starts now"; return 0
+        if env_image_gc::mark_released "$tag" "$now"; then echo "release time unknown: ${hours}h grace starts now"
+        else echo "no release record and none can be written: kept"; fi
+        return 0
     fi
     (( now - at < hours * 3600 )) && echo "released less than ${hours}h ago"
     return 0
@@ -226,9 +244,43 @@ env_image_gc::_remove_held() {
         '{removed: $r, kept: $k, failed: $f} + (if $s == "" then {} else {stopped: $s} end)'
 }
 
+# Review r2 MINOR-2: drop records whose tag has no local image, or older than
+# grace + margin (an unused image goes one grace after its record, so an older
+# one is a leftover). Only when the image list is readable. Logs a count.
+env_image_gc::_prune_records() {
+    local dir refs tags now max f tag at n=0 margin="$RL_ENV_IMAGE_GC_RECORD_MARGIN_HOURS"
+    dir=$(env_image_gc::_released_dir); [[ -d "$dir" ]] || return 0
+    refs=$(env_image_gc::_local_refs) || return 0
+    tags=$(registry_gc::_tags_of <<<"$refs"); now=$(env_image_gc::_now)
+    [[ "$margin" =~ ^[0-9]+$ ]] || margin=24
+    max=$(( ($(env_image_gc::_grace_hours) + margin) * 3600 ))
+    for f in "$dir"/*; do
+        tag=${f##*/}
+        [[ -f "$f" ]] && env_image_gc::_valid_tag "$tag" || continue
+        at=$(cat "$f" 2>/dev/null)
+        grep -qxF "$tag" <<<"$tags" && [[ "$at" =~ ^[0-9]+$ ]] && (( now - at < max )) && continue
+        rm -f "$f" 2>/dev/null && n=$((n + 1))
+    done
+    (( n == 0 )) || env_image_gc::_log "env-image-gc: pruned $n stale release record(s)"
+    return 0
+}
+
 # env_image_gc::sweep — echoes a JSON summary; always returns 0. `idle:true`
-# means there was nothing to remove and no reservation was taken.
+# means there was nothing to remove and no reservation was taken. Release
+# records are pruned after the pass, so a candidate's record is still there
+# for the in-reservation re-check.
 env_image_gc::sweep() {
+    local dir; dir=$(env_image_gc::_released_dir)
+    if (( $(env_image_gc::_grace_hours) > 0 )) && [[ ! -d "$dir" ]]; then
+        env_image_gc::_log "env-image-gc: release-record dir $dir is missing (deploy creates it);" \
+            "no records, so every unused image is kept"
+    fi
+    env_image_gc::_sweep_once
+    env_image_gc::_prune_records
+    return 0
+}
+
+env_image_gc::_sweep_once() {
     local now rows refs ref why cands=() kept="" reason out key="$RL_ENV_IMAGE_GC_KEY"
     now=$(env_image_gc::_now)
     rows=$(env_image_gc::_rows) || { echo '{"error":"env_registry_unreadable"}'; return 0; }

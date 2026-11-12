@@ -178,6 +178,10 @@ test_ac2b_scaffold_covers_all_four_slots_and_the_lock_dir() {
         "scaffold must create the host side of the /state-locks bind mount, else Docker recreates it root-owned on next runner start"
     assert_eq "$(mode_of "$root/state/locks")" "$WANT_MODE" \
         "the lock dir must be group-writable + setgid so both rl and rl-agent can inspect the flock file"
+    assert_eq "$(exists_dir "$root/state/env-image-released")" "yes" \
+        "scaffold must create the env-image release-record dir (ROK-2171 MINOR-1), else the root gc-sweeper's first write makes it root 0755 and env-destroy can never record a release"
+    assert_eq "$(mode_of "$root/state/env-image-released")" "$WANT_MODE" \
+        "the release-record dir must be group-writable + setgid so rl-agent's env-destroy can write into it"
 }
 
 test_ac2c_unrepairable_ownership_is_named_not_silent() {
