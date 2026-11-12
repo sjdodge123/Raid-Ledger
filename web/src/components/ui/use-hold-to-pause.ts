@@ -29,17 +29,26 @@ export function useHoldToPause(): HoldToPause {
     const [held, setHeld] = useState(false);
     const timer = useRef<number | undefined>(undefined);
     const wasHeld = useRef(false);
+    const pressed = useRef(false);
     const clear = useCallback((): void => {
         window.clearTimeout(timer.current);
         timer.current = undefined;
     }, []);
     const onPointerDown = useCallback((): void => {
         clear();
+        pressed.current = true;
         wasHeld.current = false;
         timer.current = window.setTimeout(() => { wasHeld.current = true; setHeld(true); }, HOLD_MS);
     }, [clear]);
-    const onPointerUp = useCallback((): void => { clear(); setHeld(false); }, [clear]);
-    const abandon = useCallback((): void => { onPointerUp(); wasHeld.current = false; }, [onPointerUp]);
+    const onPointerUp = useCallback((): void => { clear(); pressed.current = false; setHeld(false); }, [clear]);
+    // Only a press abandoned while still down forgets the hold. Touch fires
+    // pointerup → pointerleave → click, so a leave AFTER the up must keep
+    // `wasHeld` for the click that follows (else a hold pages on phones).
+    const abandon = useCallback((): void => {
+        const stillDown = pressed.current;
+        onPointerUp();
+        if (stillDown) wasHeld.current = false;
+    }, [onPointerUp]);
     const consumeHold = useCallback((): boolean => {
         const was = wasHeld.current;
         wasHeld.current = false;

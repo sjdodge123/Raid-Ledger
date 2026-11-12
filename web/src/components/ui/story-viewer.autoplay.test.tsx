@@ -105,6 +105,17 @@ describe('StoryViewer — hold and tap', () => {
         expect(live()).toBe('Slide 2 of 3: Events');
     });
 
+    it('touch order (pointerup → pointerleave → click) after a hold does not navigate', () => {
+        renderViewer();
+        fireEvent.pointerDown(nextZone());
+        tick(250);
+        expect(state()).toBe('paused');
+        fireEvent.pointerUp(nextZone());
+        fireEvent.pointerLeave(nextZone());
+        fireEvent.click(nextZone());
+        expect(live()).toBe('Slide 1 of 3: Intro');
+    });
+
     it('a quick tap still navigates and restarts the timer on the new slide', () => {
         renderViewer();
         tick(5000);
