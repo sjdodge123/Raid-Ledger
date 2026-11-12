@@ -1,3 +1,5 @@
+import { BadRequestException } from '@nestjs/common';
+import { GuildPastEventsQuerySchema } from '@raid-ledger/contract';
 import { z } from 'zod';
 
 /**
@@ -35,4 +37,20 @@ export function decodePastCursor(raw: string): PastCursor | null {
   const parsed = PayloadSchema.safeParse(json);
   if (!parsed.success) return null;
   return { endsAt: new Date(parsed.data.e), id: parsed.data.i };
+}
+
+/**
+ * Validate the route's query: no cursor → null (newest page), a cursor this
+ * server issued → its key.
+ * @throws BadRequestException a malformed query or an undecodable cursor
+ */
+export function parsePastEventsQuery(query: unknown): PastCursor | null {
+  const parsed = GuildPastEventsQuerySchema.safeParse(query);
+  if (!parsed.success) {
+    throw new BadRequestException(parsed.error.flatten().fieldErrors);
+  }
+  if (parsed.data.cursor === undefined) return null;
+  const key = decodePastCursor(parsed.data.cursor);
+  if (key === null) throw new BadRequestException('Invalid cursor');
+  return key;
 }

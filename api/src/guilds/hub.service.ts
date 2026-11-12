@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -10,6 +11,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   HubHideSchema,
   type GuildPage,
+  type GuildPastEventsPageDto,
   type GuildRaidsDto,
   type MyGuild,
   type MyGuilds,
@@ -31,6 +33,8 @@ import { crestMediaIdFor } from './crest/hub-crest-media';
 import { findGuildKind } from './guild-core.queries';
 import { gmPostHeadlines } from './guild-profile.queries';
 import { hubGameIcons } from './hub-game-icons.queries';
+import { parsePastEventsQuery } from './hub-past-events.cursor';
+import { loadPastEventsPage } from './hub-past-events.queries';
 import { readWidgetPrefs } from './hub-widget-prefs.service';
 import {
   HUB_NOT_FOUND,
@@ -158,6 +162,24 @@ export class HubService {
   /** The Raids tab + Overview widgets, built by the guild kind's adapter. */
   async raids(actor: GuildActor, guildId: number): Promise<GuildRaidsDto> {
     return (await this.adapterFor(guildId)).raids(actor, guildId);
+  }
+
+  /**
+   * ROK-2185 item 3 — one page of the hub's ended events, any kind. Core
+   * owns events (D8-B), so no adapter dispatch. Members and staff only
+   * (`canView`), 403 before the cursor is read.
+   * @throws ForbiddenException not a member; BadRequestException bad cursor
+   */
+  async pastEvents(
+    actor: GuildActor,
+    guildId: number,
+    query: unknown,
+  ): Promise<GuildPastEventsPageDto> {
+    if (!(await this.access.canView(actor, guildId))) {
+      throw new ForbiddenException('Not a member of this guild');
+    }
+    const cursor = parsePastEventsQuery(query);
+    return loadPastEventsPage(this.db, guildId, cursor, new Date());
   }
 
   /** Every hub the viewer belongs to, across live kinds; hidden ones only for staff. */
