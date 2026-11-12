@@ -13,6 +13,11 @@
  *
  * Unclaimed roster rows keep no quests and take the roster's (Horde)
  * majority, so they read "No data — not claimed".
+ *
+ * Both halves of the body are optional (at least one is required):
+ * `characters` is the Onyxia trio above; `cast` picks, per character, any
+ * trackable def, its completed steps, the quest log and both capture times
+ * (`demo-test-attunements-cast.helpers.ts`).
  */
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -23,6 +28,12 @@ import {
   attunementQuestSteps,
 } from '../plugins/wow-common/data/forever-attunements';
 import { defined } from '../common/defined.helpers';
+import {
+  AttunementCastEntrySchema,
+  castEntryPlan,
+  seedCastEntry,
+  type SeededCastEntry,
+} from './demo-test-attunements-cast.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -44,9 +55,14 @@ export const SeedAttunementsSchema = z
         inProgress: z.string().uuid(),
         notStarted: z.string().uuid(),
       })
-      .strict(),
+      .strict()
+      .optional(),
+    cast: z.array(AttunementCastEntrySchema).min(1).max(20).optional(),
   })
-  .strict();
+  .strict()
+  .refine((b) => b.characters !== undefined || b.cast !== undefined, {
+    message: 'characters or cast is required',
+  });
 
 export type SeedAttunementsInput = z.infer<typeof SeedAttunementsSchema>;
 
@@ -56,6 +72,14 @@ export interface SeedAttunementsResult {
   /** Confirmed quest steps, in chain order (the checklist labels). */
   steps: string[];
   inProgressSteps: number;
+  /** One per `cast` entry, in body order (empty without `cast`). */
+  cast: SeededCastEntry[];
+}
+
+/** Every character id the body seeds (for the cache drop). */
+export function seededCharacterIds(input: SeedAttunementsInput): string[] {
+  const trio = input.characters ? Object.values(input.characters) : [];
+  return [...trio, ...(input.cast ?? []).map((c) => c.characterId)];
 }
 
 /** The confirmed def and the completed list each cast member gets. */
@@ -79,7 +103,7 @@ export function attunementSeedPlan() {
 
 async function confirmQuests(
   db: Db,
-  steps: ReturnType<typeof attunementSeedPlan>['steps'],
+  steps: ReadonlyArray<{ questId: number; label: string }>,
   now: Date,
 ): Promise<void> {
   const rows = steps.map((s) => ({
@@ -97,15 +121,13 @@ async function confirmQuests(
     .onConflictDoNothing();
 }
 
-/** Confirms the chain, then writes race + Armory quests on the cast. */
-export async function seedAttunements(
+/** Writes the Onyxia trio's race + Armory quests. */
+async function seedTrio(
   db: Db,
-  input: SeedAttunementsInput,
-  now: Date,
-): Promise<SeedAttunementsResult> {
-  const plan = attunementSeedPlan();
-  await confirmQuests(db, plan.steps, now);
-  const fetchedAt = now.toISOString();
+  characters: NonNullable<SeedAttunementsInput['characters']>,
+  plan: ReturnType<typeof attunementSeedPlan>,
+  fetchedAt: string,
+): Promise<void> {
   for (const role of ['done', 'inProgress', 'notStarted'] as const) {
     await db
       .update(schema.characters)
@@ -114,12 +136,32 @@ export async function seedAttunements(
         faction: SEED_FACTION,
         armoryQuests: { fetchedAt, completed: plan.completed[role] },
       })
-      .where(eq(schema.characters.id, input.characters[role]));
+      .where(eq(schema.characters.id, characters[role]));
+  }
+}
+
+/** Confirms each def's chain, then writes the trio and/or the cast. */
+export async function seedAttunements(
+  db: Db,
+  input: SeedAttunementsInput,
+  now: Date,
+): Promise<SeedAttunementsResult> {
+  const plan = attunementSeedPlan();
+  if (input.characters) {
+    await confirmQuests(db, plan.steps, now);
+    await seedTrio(db, input.characters, plan, now.toISOString());
+  }
+  const cast: SeededCastEntry[] = [];
+  for (const entry of input.cast ?? []) {
+    const entryPlan = castEntryPlan(entry, now);
+    await confirmQuests(db, entryPlan.steps, now);
+    cast.push(await seedCastEntry(db, entry, entryPlan));
   }
   return {
     key: plan.def.key,
     instance: plan.def.instance,
     steps: plan.steps.map((s) => s.label),
     inProgressSteps: IN_PROGRESS_STEPS,
+    cast,
   };
 }

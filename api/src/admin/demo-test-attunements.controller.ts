@@ -1,8 +1,10 @@
 /**
  * DemoTestAttunementsController (ROK-1927 P6) —
  * `POST /admin/test/wow/seed-attunements`
- * `{ characters: { done, inProgress, notStarted } }` (character uuids, e.g.
- * a `seed-guild` cast's gm / officer / member).
+ * `{ characters?: { done, inProgress, notStarted }, cast?: [{ characterId,
+ * attunement, completedSteps, questLog?, questLogCapturedAt?, completedAt?,
+ * faction?, level? }] }` (character uuids, e.g. a `seed-guild` cast's gm /
+ * officer / member; at least one of the two).
  *
  * Confirms the Horde Onyxia attunement chain and gives the three characters
  * Armory quest lists (see `demo-test-attunements.helpers.ts`), then drops the
@@ -32,6 +34,7 @@ import { parseDemoBody } from './demo-test.utils';
 import {
   SeedAttunementsSchema,
   seedAttunements,
+  seededCharacterIds,
   type SeedAttunementsResult,
 } from './demo-test-attunements.helpers';
 
@@ -52,7 +55,7 @@ export class DemoTestAttunementsController {
     const input = parseDemoBody(SeedAttunementsSchema, body);
     const result = await seedAttunements(this.db, input, new Date());
     const cache = this.moduleRef.get(RosterInsightsCache, { strict: false });
-    for (const id of Object.values(input.characters)) {
+    for (const id of seededCharacterIds(input)) {
       await cache.invalidateForCharacter(id);
     }
     return result;
