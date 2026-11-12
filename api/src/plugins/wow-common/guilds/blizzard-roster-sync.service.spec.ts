@@ -14,6 +14,7 @@ import {
   type RosterApplyResult,
 } from './blizzard-roster-sync.tx';
 import { RosterInsightsCache } from './roster-insights/roster-insights.cache';
+import { syncForeverGuildSummary } from './blizzard-summary-apply';
 
 jest.mock('./blizzard-roster-sync.tx', () => ({
   applyForeverRoster: jest.fn(),
@@ -32,6 +33,10 @@ jest.mock('../../../guilds/guild-core.queries', () => ({
       gameSlug: 'world-of-warcraft-forever',
     }),
   ),
+}));
+// ROK-1170: the summary has its own spec; here only WHEN it runs matters.
+jest.mock('./blizzard-summary-apply', () => ({
+  syncForeverGuildSummary: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('../forever-armory-switch', () => ({
   isForeverArmoryImportEnabled: jest.fn().mockResolvedValue(true),
@@ -64,6 +69,7 @@ beforeEach(async () => {
   order = [];
   statusWrites = [];
   invalidateGuild.mockClear();
+  jest.mocked(syncForeverGuildSummary).mockClear();
   const db = {
     update: jest.fn(() => ({
       set: jest.fn((values: unknown) => {
@@ -147,5 +153,35 @@ describe('BlizzardRosterSyncService post-apply wiring', () => {
       expect.objectContaining({ blizzardRosterStatus: 'error' }),
     ]);
     expect(invalidateGuild).not.toHaveBeenCalled();
+  });
+});
+
+describe('BlizzardRosterSyncService guild summary hook (ROK-1170)', () => {
+  const summaryTarget = { id: 7, region: 'us', slug: 'night-shift' };
+
+  it.each([
+    ['ok', applied({})],
+    ['stale', applied({ stale: true, updated: 0 })],
+    ['mismatch', applied({ mismatch: 'matched only 0 of 11', updated: 0 })],
+  ])('runs the summary after a %s roster apply', async (_label, res) => {
+    jest.mocked(applyForeverRoster).mockResolvedValue(res);
+    await service.syncForeverGuildRoster(GUILD.id);
+    expect(syncForeverGuildSummary).toHaveBeenCalledTimes(1);
+    expect(syncForeverGuildSummary).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Function),
+      summaryTarget,
+      expect.anything(),
+    );
+  });
+
+  it('does not run the summary after a superseded apply', async () => {
+    jest
+      .mocked(applyForeverRoster)
+      .mockResolvedValue(applied({ superseded: true, updated: 0 }));
+    expect(await service.syncForeverGuildRoster(GUILD.id)).toEqual({
+      status: 'superseded',
+    });
+    expect(syncForeverGuildSummary).not.toHaveBeenCalled();
   });
 });

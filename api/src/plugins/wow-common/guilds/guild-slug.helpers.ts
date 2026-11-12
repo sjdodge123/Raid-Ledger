@@ -45,6 +45,29 @@ export function blizzardRosterFor(
   };
 }
 
+/** The guild columns `blizzardGuildFor` reads. */
+export type BlizzardGuildRow = Pick<
+  GuildSelect,
+  'kind' | 'foundedAt' | 'blizzardSummaryStatus'
+>;
+
+/**
+ * ROK-1170 — `GuildSummary.blizzardGuild` (founded date + summary state) as a
+ * spreadable fragment; present only on a WoW: Forever `wow_guild` hub.
+ */
+export function blizzardGuildFor(
+  row: BlizzardGuildRow,
+  gameSlug: string | null,
+): Pick<GuildSummary, 'blizzardGuild'> {
+  if (!isForeverGuildHub(row.kind, gameSlug)) return {};
+  return {
+    blizzardGuild: {
+      foundedAt: row.foundedAt?.toISOString() ?? null,
+      state: row.blizzardSummaryStatus,
+    },
+  };
+}
+
 /** True when the hub is a WoW: Forever `wow_guild` (the roster sync's scope). */
 export function isForeverGuildHub(
   kind: GuildSelect['kind'],

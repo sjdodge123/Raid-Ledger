@@ -36,6 +36,7 @@ import {
   listGuildsOfGame,
   rankNamesByMemberId,
 } from './guild-queries.helpers';
+import { blizzardGuildFor } from './guild-slug.helpers';
 import { gmPostHeadlines } from '../../../guilds/guild-profile.queries';
 import { hubGameIcons } from '../../../guilds/hub-game-icons.queries';
 import {
@@ -149,7 +150,10 @@ export class GuildPageService {
       ? await loadRosterLinks(this.db, rows)
       : undefined;
     return {
-      guild: hubSummaryFor(hub, isStaff(actor)),
+      guild: {
+        ...hubSummaryFor(hub, isStaff(actor)),
+        ...blizzardGuildFor(hub.guild, hub.gameSlug),
+      },
       importedBy,
       viewer: {
         ...viewerAccess(role),

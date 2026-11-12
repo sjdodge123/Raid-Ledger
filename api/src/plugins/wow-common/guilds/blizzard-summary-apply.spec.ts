@@ -48,7 +48,11 @@ describe('summaryPatch — 200', () => {
   });
 
   it('a 200 after disbanded clears it to ok with since null', () => {
-    const res = summaryPatch(state(42, ago(DISBANDED_AFTER_MS * 2)), found(42), NOW);
+    const res = summaryPatch(
+      state(42, ago(DISBANDED_AFTER_MS * 2)),
+      found(42),
+      NOW,
+    );
     expect(res.patch.blizzardSummaryStatus).toBe('ok');
     expect(res.patch.blizzardNotFoundSince).toBeNull();
   });
@@ -76,12 +80,20 @@ describe('summaryPatch — 404 two-strike', () => {
   });
 
   it('a second 404 under 6h stays not_found and keeps since', () => {
-    const patch = summaryPatch(state(42, ago(DISBANDED_AFTER_MS - 1)), notFound, NOW).patch;
+    const patch = summaryPatch(
+      state(42, ago(DISBANDED_AFTER_MS - 1)),
+      notFound,
+      NOW,
+    ).patch;
     expect(patch).toEqual({ blizzardSummaryStatus: 'not_found' });
   });
 
   it('a second 404 at exactly 6h is disbanded', () => {
-    const patch = summaryPatch(state(42, ago(DISBANDED_AFTER_MS)), notFound, NOW).patch;
+    const patch = summaryPatch(
+      state(42, ago(DISBANDED_AFTER_MS)),
+      notFound,
+      NOW,
+    ).patch;
     expect(patch).toEqual({ blizzardSummaryStatus: 'disbanded' });
   });
 

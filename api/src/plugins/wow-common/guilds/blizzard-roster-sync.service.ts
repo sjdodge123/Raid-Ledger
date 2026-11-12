@@ -12,6 +12,7 @@ import { BlizzardService } from '../blizzard.service';
 import type { ForeverGuildRoster } from '../blizzard-forever-guild.helpers';
 import { isForeverArmoryImportEnabled } from '../forever-armory-switch';
 import { isEmptyRoster } from './blizzard-roster-sync.helpers';
+import { syncForeverGuildSummary } from './blizzard-summary-apply';
 import { RosterInsightsCache } from './roster-insights/roster-insights.cache';
 import {
   applyForeverRoster,
@@ -90,8 +91,36 @@ export class BlizzardRosterSyncService {
     return { guild: { id, gameId, region, nameKey }, slug: guildSlug };
   }
 
-  /** Step 3 (fetch OUTSIDE the transaction), then steps 4–10. */
+  /**
+   * The roster, then (ROK-1170) the guild summary — its own fetch and write,
+   * outside the roster transaction, never changing the roster's result. Not
+   * after `superseded`: the slug changed, so the summary would be the old one.
+   */
   private async fetchAndApply(target: {
+    guild: SyncGuild;
+    slug: string;
+  }): Promise<RosterSyncResult> {
+    const res = await this.syncRoster(target);
+    if (res.status !== 'superseded') await this.syncSummary(target);
+    return res;
+  }
+
+  /** ROK-1170 — never throws (failures → status `error` + Sentry). */
+  private async syncSummary(target: {
+    guild: SyncGuild;
+    slug: string;
+  }): Promise<void> {
+    const { guild, slug } = target;
+    await syncForeverGuildSummary(
+      this.db,
+      () => this.blizzard.fetchForeverGuildSummary(slug, guild.region),
+      { id: guild.id, region: guild.region, slug },
+      this.logger,
+    );
+  }
+
+  /** Step 3 (fetch OUTSIDE the transaction), then steps 4–10. */
+  private async syncRoster(target: {
     guild: SyncGuild;
     slug: string;
   }): Promise<RosterSyncResult> {

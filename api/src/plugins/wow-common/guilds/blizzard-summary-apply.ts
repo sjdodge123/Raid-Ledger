@@ -55,7 +55,11 @@ export function summaryPatch(
   }
   const { blizzardGuildId, foundedAt, faction } = fetch.summary;
   const stored = state.blizzardGuildId;
-  if (stored !== null && blizzardGuildId !== null && stored !== blizzardGuildId) {
+  if (
+    stored !== null &&
+    blizzardGuildId !== null &&
+    stored !== blizzardGuildId
+  ) {
     return { patch: { blizzardSummaryStatus: 'error' }, mismatch: true };
   }
   const patch: SummaryPatch = {
@@ -72,14 +76,16 @@ export function summaryPatch(
 
 /** 404: never-200 → `not_found`; else two strikes ≥6h apart → `disbanded`. */
 function notFoundPatch(state: SummaryState, now: Date): SummaryPatch {
-  if (state.blizzardGuildId === null) return { blizzardSummaryStatus: 'not_found' };
+  if (state.blizzardGuildId === null)
+    return { blizzardSummaryStatus: 'not_found' };
   const since = state.blizzardNotFoundSince;
   if (since === null) {
     return { blizzardSummaryStatus: 'not_found', blizzardNotFoundSince: now };
   }
   const elapsed = now.getTime() - since.getTime();
   return {
-    blizzardSummaryStatus: elapsed >= DISBANDED_AFTER_MS ? 'disbanded' : 'not_found',
+    blizzardSummaryStatus:
+      elapsed >= DISBANDED_AFTER_MS ? 'disbanded' : 'not_found',
   };
 }
 
@@ -118,7 +124,10 @@ async function writePatch(
 }
 
 /** The two rule columns, read fresh after the fetch; null when gone. */
-async function readState(db: Db, guildId: number): Promise<SummaryState | null> {
+async function readState(
+  db: Db,
+  guildId: number,
+): Promise<SummaryState | null> {
   const g = schema.guilds;
   const [row] = await db
     .select({
@@ -145,7 +154,12 @@ export async function syncForeverGuildSummary(
     const fetch = await fetchSummary();
     const state = await readState(db, target.id);
     if (state === null) return;
-    await applyForeverGuildSummary(db, { ...target, ...state }, fetch, new Date());
+    await applyForeverGuildSummary(
+      db,
+      { ...target, ...state },
+      fetch,
+      new Date(),
+    );
   } catch (err: unknown) {
     await recordSummaryFailure(db, target, err, logger);
   }
@@ -162,7 +176,9 @@ async function recordSummaryFailure(
     tags: { guildId: String(target.id), region: target.region },
   });
   const msg = err instanceof Error ? err.message : 'Unknown error';
-  logger.warn(`Forever guild summary sync failed for guild ${target.id}: ${msg}`);
+  logger.warn(
+    `Forever guild summary sync failed for guild ${target.id}: ${msg}`,
+  );
   try {
     await writePatch(db, target, { blizzardSummaryStatus: 'error' });
   } catch (e: unknown) {
