@@ -12,6 +12,7 @@ import { test, expect } from './base';
 import type { Page, Route } from '@playwright/test';
 import { API_BASE, getAdminToken } from './api-helpers';
 import { jwtSub } from './browser-session';
+import { isPhoneLayout } from './helpers';
 import {
     MASCOT_EMOJI_ID, MASCOT_OPTIONS, MASCOT_SOUND_ID, OWNER_MASCOT,
     ggCoPlayerName, ggSmokeYear, publicGgCardStatus, publicGgStatus, resetGgYear, seedGgSnapshot,
@@ -30,8 +31,10 @@ test.afterAll(async () => {
     if (token && year) await resetGgYear(token, year);
 });
 
-function isMobile(): boolean {
-    return test.info().project.name === 'mobile';
+/** Below 1024px (phone AND tablet projects, ROK-1584) StoryViewer renders its
+ * phone layout and both projects have touch, so they page by tap. */
+function phoneLayout(): boolean {
+    return isPhoneLayout(test.info());
 }
 
 /** The polite live region StoryViewer keeps current: "Slide n of m: label". */
@@ -46,7 +49,7 @@ async function openAndStart(page: Page): Promise<void> {
     await expect(gate).toBeVisible({ timeout: 15_000 });
     await expect(gate).toContainText('Tap to start');
     await expect(slideStatus(page)).toHaveText(/^Slide 1 of 4:/);
-    if (isMobile()) await gate.tap();
+    if (phoneLayout()) await gate.tap();
     else await gate.click();
     await expect(gate).toBeHidden();
     const pause = page.getByRole('button', { name: 'Pause story' });
@@ -55,7 +58,7 @@ async function openAndStart(page: Page): Promise<void> {
 
 /** Next card: ArrowRight on desktop, a tap on the right tap zone on a phone. */
 async function next(page: Page): Promise<void> {
-    if (isMobile()) await page.getByRole('button', { name: 'Next slide' }).tap();
+    if (phoneLayout()) await page.getByRole('button', { name: 'Next slide' }).tap();
     else await page.keyboard.press('ArrowRight');
 }
 
@@ -79,7 +82,7 @@ test.describe('GG year story (ROK-2187)', () => {
     });
 
     test('desktop: centred card with side arrows that page the story', async ({ page }) => {
-        test.skip(isMobile(), 'Desktop-only — phones page by tap zones, no side arrows');
+        test.skip(phoneLayout(), 'Desktop-only — below 1024px the story pages by tap zones, no side arrows');
         await openAndStart(page);
         await expect(page.getByTestId('story-viewer')).toHaveAttribute('data-layout', 'desktop');
         await expect(page.getByTestId('story-side-arrow-prev')).toBeVisible();
@@ -91,7 +94,7 @@ test.describe('GG year story (ROK-2187)', () => {
     });
 
     test('mobile: phone layout without side arrows', async ({ page }) => {
-        test.skip(!isMobile(), 'Phone-only layout assertion');
+        test.skip(!phoneLayout(), 'Phone-layout assertion (phone + tablet)');
         await openAndStart(page);
         await expect(page.getByTestId('story-viewer')).toHaveAttribute('data-layout', 'phone');
         await expect(page.getByTestId('story-side-arrow-next')).toHaveCount(0);
