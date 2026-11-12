@@ -30,6 +30,29 @@ import {
   VALHEIM_SETUP,
 } from './plugin-setup-requirements.js';
 import { BG3_SCREENSHOT_CONTRACT_ID } from './companion-bg3-screenshot.schema.js';
+import { GG_CORE_CARD_IDS, type GgCoreCardId } from './gg-cards.schema.js';
+
+/** ROK-2187 — install-sheet label of each core "GG <year>" card. */
+const GG_CORE_CARD_LABELS: Readonly<Record<GgCoreCardId, string>> = {
+  intro: 'GG <year>: the opening card',
+  events: 'GG <year>: events signed up, attended and planned',
+  'on-time': 'GG <year>: how often you showed up on time',
+  rhythm: 'GG <year>: your busiest month and favourite time slot',
+  hours: 'GG <year>: hours played',
+  'top-games': 'GG <year>: your top games, and the top game each month',
+  'new-games': 'GG <year>: new games you tried',
+  voice: 'GG <year>: time in event voice channels',
+  people: 'GG <year>: who you played with most (only you see names)',
+  hubs: 'GG <year>: hubs joined, posts and pictures',
+  superlative: 'GG <year>: your superlative',
+  summary: 'GG <year>: the summary card you can share',
+};
+
+const ggCoreCards = GG_CORE_CARD_IDS.map((id) => ({
+  id,
+  kind: 'gg-card' as const,
+  label: GG_CORE_CARD_LABELS[id],
+}));
 
 const core = {
   widgets: [
@@ -55,6 +78,7 @@ const core = {
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
     { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
+    ...ggCoreCards,
   ],
   setup: CORE_SETUP,
 } satisfies PluginHubManifest;
@@ -75,6 +99,7 @@ const valheim = {
     { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
     { id: 'valheim-death', kind: 'media-subject', label: "Shows one player's death pictures in the Gallery" },
     { id: 'valheim', kind: 'claim-provider', label: 'Lets players claim their Valheim character on the hub' },
+    { id: 'valheim-year', kind: 'gg-card', label: 'GG <year>: deaths and skills gained on your Valheim characters' },
   ],
   gameSlugs: ['valheim'],
   setup: VALHEIM_SETUP,
@@ -129,6 +154,8 @@ const blizzard = {
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     { id: 'wow-ledgerlink', kind: 'ingest-source', label: 'Reads LedgerLink exports the Companion uploads' },
     { id: 'blizzard', kind: 'claim-provider', label: 'Lets players claim their character from the guild roster' },
+    // ROK-2187 — produced from `api/src/plugins/wow-common/gg/` (this plugin's folder).
+    { id: 'wow-levels', kind: 'gg-card', label: 'GG <year>: levels your WoW characters dinged' },
   ],
   // Hub-widget game scope only (web guard W4) — the api manifest's own
   // `gameSlugs` (every WoW variant) is separate and unchanged.

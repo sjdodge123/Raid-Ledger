@@ -14,6 +14,7 @@ import {
   hubManifestFor,
   hubManifestProblems,
 } from '../plugin-hub-manifests.js';
+import { GG_CARD_PAYLOAD_SCHEMAS, GG_CORE_CARD_IDS } from '../gg-cards.schema.js';
 
 function must<T>(value: T | undefined, label: string): T {
   if (value === undefined) throw new Error(`missing ${label}`);
@@ -127,5 +128,34 @@ describe('hubManifestProblems (C2)', () => {
     expect(hubManifestProblems({ valheim: broken })).toEqual([
       'valheim: widgets.0.id Invalid id',
     ]);
+  });
+});
+
+describe('GG <year> cards (ROK-2187)', () => {
+  const ggCards = (slug: string): string[] =>
+    must(hubManifestFor(slug), slug)
+      .behaviours.filter((b) => b.kind === 'gg-card')
+      .map((b) => b.id);
+
+  it('knows the gg-card behaviour kind', () => {
+    expect(HUB_BEHAVIOUR_KINDS).toContain('gg-card');
+  });
+
+  it('declares every core card under core, in story order', () => {
+    expect(ggCards(CORE_PLUGIN_ID)).toEqual([...GG_CORE_CARD_IDS]);
+  });
+
+  it('declares the Valheim and WoW (blizzard plugin) cards', () => {
+    expect(ggCards('valheim')).toEqual(['valheim-year']);
+    expect(ggCards('blizzard')).toEqual(['wow-levels']);
+    expect(ggCards('pelican')).toEqual([]);
+    expect(ggCards('bg3')).toEqual([]);
+  });
+
+  it('has a payload schema for exactly the declared cards', () => {
+    const declared = Object.keys(HUB_PLUGIN_MANIFESTS).flatMap((slug) =>
+      ggCards(slug).map((id) => `${slug}:${id}`),
+    );
+    expect(declared.sort()).toEqual(Object.keys(GG_CARD_PAYLOAD_SCHEMAS).sort());
   });
 });
