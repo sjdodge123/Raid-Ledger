@@ -1,0 +1,82 @@
+/**
+ * ROK-1927 (W13) — the Attunements detail's pure helpers: tracked-only tabs
+ * with faction variants merged (AC5, AC8), the done → in progress → not
+ * started → no data sort, step/next-step text, the no-data reasons (AC3, AC4),
+ * the below-level note (AC6) and a stale capture (§7).
+ */
+import { describe, it, expect } from 'vitest';
+import type { WowAttunementResultDto } from '@raid-ledger/contract';
+import {
+    buildAttunementDef, buildAttunementMember, daysAgo, sampleAttunementDefs,
+} from '../../../test/factories/forever-attunements';
+import { attunementRows, attunementTabs } from './attunement-detail.helpers';
+
+function result(key: string, overrides: Partial<WowAttunementResultDto> = {}): WowAttunementResultDto {
+    return { key, state: 'not_started', noDataReason: null, stepsDone: 0, nextStep: 'Step one', belowLevel: false, ...overrides };
+}
+
+const ONY_STEPS = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'];
+
+function onyTab() {
+    const defs = [
+        buildAttunementDef('ony-horde', { groupKey: 'onyxia', instance: "Onyxia's Lair", faction: 'horde', steps: ONY_STEPS }),
+        buildAttunementDef('ony-alliance', { groupKey: 'onyxia', instance: "Onyxia's Lair", faction: 'alliance', steps: ['a1', 'a2'] }),
+    ];
+    const tab = attunementTabs(defs)[0];
+    if (tab === undefined) throw new Error('expected an Onyxia tab');
+    return tab;
+}
+
+describe('attunementTabs', () => {
+    it('gives one tab per tracked group and none to an untracked attunement', () => {
+        const tabs = attunementTabs(sampleAttunementDefs());
+        expect(tabs.map((t) => [t.groupKey, t.instance])).toEqual([
+            ['mc', 'Molten Core'], ['onyxia', "Onyxia's Lair"], ['bwl', 'Blackwing Lair'],
+        ]);
+        expect([...(tabs[1]?.defs.keys() ?? [])]).toEqual(['ony-horde', 'ony-alliance']);
+    });
+});
+
+describe('attunementRows', () => {
+    it('sorts done, in progress, not started, no data, then by name, across faction variants', () => {
+        const members = [
+            buildAttunementMember({ rowKey: 'z', name: 'Zinny', characterId: null, results: [result('ony-horde', { state: 'no_data', noDataReason: 'not_claimed', nextStep: null })] }),
+            buildAttunementMember({ rowKey: 'm', name: 'Mogrash', results: [result('ony-horde')] }),
+            buildAttunementMember({ rowKey: 'v', name: 'Velisha', results: [result('ony-alliance', { state: 'in_progress', stepsDone: 1, nextStep: 'a2' })] }),
+            buildAttunementMember({ rowKey: 'b', name: 'Brakkor', results: [result('ony-horde', { state: 'done', stepsDone: 7, nextStep: null })] }),
+            buildAttunementMember({ rowKey: 'x', name: 'Other', results: [result('bwl', { state: 'done' })] }),
+        ];
+        const rows = attunementRows(onyTab(), members);
+        expect(rows.map((r) => r.name)).toEqual(['Brakkor', 'Velisha', 'Mogrash', 'Zinny']);
+        expect(rows.map((r) => r.steps)).toEqual(['7/7', '1/2', '0/7', '—']);
+        expect(rows.map((r) => r.label)).toEqual(['Attuned', 'In progress', 'Not started', 'No data']);
+        expect(rows.map((r) => r.tone)).toEqual(['success', 'warning', 'neutral', 'neutral']);
+        expect(rows.map((r) => r.next)).toEqual(['—', 'a2', 'Step one', 'Not claimed']);
+    });
+
+    it('titles a no-data chip with its reason, never a colour alone', () => {
+        const members = [
+            buildAttunementMember({ rowKey: 'a', name: 'A', results: [result('ony-horde', { state: 'no_data', noDataReason: 'no_quest_data', nextStep: null })] }),
+            buildAttunementMember({ rowKey: 'b', name: 'B', results: [result('ony-horde', { state: 'no_data', noDataReason: 'truncated', nextStep: null })] }),
+            buildAttunementMember({ rowKey: 'c', name: 'C', characterId: null, results: [result('ony-horde', { state: 'no_data', noDataReason: 'not_claimed', nextStep: null })] }),
+        ];
+        expect(attunementRows(onyTab(), members).map((r) => r.title)).toEqual([
+            'No quest data shared', 'Quest list too long to read', 'Not claimed by a member',
+        ]);
+    });
+
+    it('marks a quest-log-only start, the below-level note and a stale capture', () => {
+        const now = Date.now();
+        const members = [
+            buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('ony-horde', { state: 'in_progress', nextStep: 'For The Horde!' })] }),
+            buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, asOf: daysAgo(20), results: [result('ony-horde', { belowLevel: true })] }),
+        ];
+        const [thundrel, mogrash] = attunementRows(onyTab(), members, now);
+        expect(thundrel?.next).toBe('For The Horde! (in quest log)');
+        expect(thundrel?.levelNote).toBeNull();
+        expect(thundrel?.stale).toBe(false);
+        expect(mogrash?.levelNote).toBe('Level 52 — below the required level');
+        expect(mogrash?.stale).toBe(true);
+        expect(mogrash?.asOf).toMatch(/^as of 20 days ago$/);
+    });
+});
