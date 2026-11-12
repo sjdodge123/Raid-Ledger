@@ -7,17 +7,28 @@
  * requests each for a miss. The real-DB proof of this query is ROK-2176
  * L4's integration spec.
  *
- * ROK-2186: quest reward ids (`wow_classic_dungeon_quests.rewards_json`) are
- * due on the same terms and resolve through the same Wowhead tooltip fetch
+ * ROK-2186: quest reward ids (`wow_classic_dungeon_quests.rewards_json`, plus
+ * the Blizzard overlay's `wow_dungeon_quest_blizzard.reward_items`, which the
+ * quest read path serves in their place) are due on the same terms and resolve through the same Wowhead tooltip fetch
  * (operator ruling 2026-11-11: the per-item tooltip endpoint is accepted).
  */
-import { and, eq, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  inArray,
+  isNull,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper,
+} from 'drizzle-orm';
 import { QueryBuilder } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import {
   wowClassicBossLoot,
   wowClassicDungeonQuests,
+  wowDungeonQuestBlizzard,
   wowItemMeta,
 } from '../../../drizzle/schema';
 import { WOWHEAD_TOOLTIP_PARSE_VERSION } from './wowhead-item.types';
@@ -46,16 +57,26 @@ export function backfillWhere(
   );
 }
 
+/** Subquery alias of {@link questRewardIdsQuery} inside the due query. */
+const REWARDS_ALIAS = 'quest_rewards';
+
+/** A jsonb column as an array; a non-array (null, object) becomes `[]`. */
+function jsonbArray(column: SQLWrapper): SQL {
+  return sql`CASE WHEN jsonb_typeof(${column}) = 'array' THEN ${column} ELSE '[]'::jsonb END`;
+}
+
 /**
- * One row per reward item id of a classic/sod/forever quest. A non-array
- * `rewards_json` (null, object) unnests to nothing instead of failing.
+ * One row per reward item id of a classic/sod/forever quest, UNION the
+ * overlay's reward ids (Codex P2 — the read path serves those in place of, or
+ * beside, `rewards_json`; the overlay is Forever/classic data). UNION dedups.
+ * A non-array jsonb unnests to nothing instead of failing.
  */
 export function questRewardIdsQuery() {
-  const rewards = wowClassicDungeonQuests.rewardsJson;
-  return new QueryBuilder()
+  const qb = new QueryBuilder();
+  const dataset = qb
     .select({
       itemId:
-        sql<number>`(jsonb_array_elements_text(CASE WHEN jsonb_typeof(${rewards}) = 'array' THEN ${rewards} ELSE '[]'::jsonb END))::int`.as(
+        sql<number>`(jsonb_array_elements_text(${jsonbArray(wowClassicDungeonQuests.rewardsJson)}))::int`.as(
           'item_id',
         ),
     })
@@ -63,6 +84,34 @@ export function questRewardIdsQuery() {
     .where(
       inArray(wowClassicDungeonQuests.expansion, [...BACKFILL_EXPANSIONS]),
     );
+  const overlay = qb
+    .select({
+      itemId:
+        sql<number>`(jsonb_array_elements(${jsonbArray(wowDungeonQuestBlizzard.rewardItems)}) ->> 'id')::int`.as(
+          'item_id',
+        ),
+    })
+    .from(wowDungeonQuestBlizzard);
+  return dataset.union(overlay);
+}
+
+/**
+ * The due-reward-id query. Every `item_id` is alias-qualified: the subquery's
+ * aliased field renders as a bare `"item_id"`, which Postgres rejects as
+ * ambiguous with `wow_item_meta.item_id` (Codex P1).
+ */
+export function questRewardDueQuery(
+  db: PostgresJsDatabase<typeof schema>,
+  limit: number,
+) {
+  const rewards = questRewardIdsQuery().as(REWARDS_ALIAS);
+  const itemId = sql<number>`${sql.identifier(REWARDS_ALIAS)}.${sql.identifier('item_id')}`;
+  return db
+    .selectDistinct({ itemId })
+    .from(rewards)
+    .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, itemId))
+    .where(metaDueClause(WOWHEAD_TOOLTIP_PARSE_VERSION))
+    .limit(limit);
 }
 
 /** Up to `limit` distinct boss-loot item ids due a tooltip backfill. */
@@ -86,13 +135,7 @@ export async function questRewardBackfillIds(
   limit: number,
 ): Promise<number[]> {
   if (limit <= 0) return [];
-  const rewards = questRewardIdsQuery().as('quest_rewards');
-  const rows = await db
-    .selectDistinct({ itemId: rewards.itemId })
-    .from(rewards)
-    .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, rewards.itemId))
-    .where(metaDueClause(WOWHEAD_TOOLTIP_PARSE_VERSION))
-    .limit(limit);
+  const rows = await questRewardDueQuery(db, limit);
   return rows.map((r) => r.itemId);
 }
 

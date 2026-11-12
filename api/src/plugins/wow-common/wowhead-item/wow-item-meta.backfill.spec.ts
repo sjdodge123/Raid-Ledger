@@ -9,6 +9,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import * as schema from '../../../drizzle/schema';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { BossEncountersService } from '../boss-encounters.service';
 import type { DungeonQuestsService } from '../dungeon-quests.service';
@@ -17,6 +19,7 @@ import {
   backfillWhere,
   bossLootBackfillIds,
   questRewardBackfillIds,
+  questRewardDueQuery,
   questRewardIdsQuery,
 } from './wow-item-meta.backfill';
 import {
@@ -187,12 +190,31 @@ describe('questRewardIdsQuery (ROK-2186)', () => {
   it('unnests rewards_json of classic/sod/forever quests only', () => {
     const { sql, params } = questRewardIdsQuery().toSQL();
     expect(sql).toMatch(
-      /jsonb_array_elements_text\(CASE WHEN jsonb_typeof\("rewards_json"\) = 'array' THEN "rewards_json" ELSE '\[\]'::jsonb END\)\)::int as "item_id" from "wow_classic_dungeon_quests"/,
+      /jsonb_array_elements_text\(CASE WHEN jsonb_typeof\("wow_classic_dungeon_quests"\."rewards_json"\) = 'array' THEN "wow_classic_dungeon_quests"\."rewards_json" ELSE '\[\]'::jsonb END\)\)::int as "item_id" from "wow_classic_dungeon_quests"/,
     );
     expect(sql).toMatch(
       /"wow_classic_dungeon_quests"\."expansion" in \(\$1, \$2, \$3\)/,
     );
     expect(params).toEqual([...BACKFILL_EXPANSIONS]);
+  });
+
+  it('also unnests the Blizzard overlay reward_items ids (Codex P2)', () => {
+    const { sql } = questRewardIdsQuery().toSQL();
+    expect(sql).toMatch(
+      /\) union \(select \(jsonb_array_elements\(CASE WHEN jsonb_typeof\("wow_dungeon_quest_blizzard"\."reward_items"\) = 'array' THEN "wow_dungeon_quest_blizzard"\."reward_items" ELSE '\[\]'::jsonb END\) ->> 'id'\)::int as "item_id" from "wow_dungeon_quest_blizzard"/,
+    );
+  });
+});
+
+describe('questRewardDueQuery (ROK-2186, Codex P1)', () => {
+  it('qualifies every item_id with its table/subquery alias (no ambiguous bare "item_id")', () => {
+    const { sql } = questRewardDueQuery(drizzle.mock({ schema }), 5).toSQL();
+    expect(sql).toMatch(/^select distinct "quest_rewards"\."item_id" from \(/);
+    expect(sql).toMatch(
+      /on "wow_item_meta"\."item_id" = "quest_rewards"\."item_id"/,
+    );
+    const outer = sql.slice(sql.lastIndexOf(') "quest_rewards"'));
+    expect(outer).not.toMatch(/[^.]"item_id"/);
   });
 });
 
