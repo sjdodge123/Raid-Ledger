@@ -29,6 +29,8 @@ import type { AuthenticatedRequest } from '../../../auth/types';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { toGgArchiveDto, toGgOwnerDto, toGgShareState } from './gg-dto.helpers';
+import { SettingsService } from '../../../settings/settings.service';
+import { readGgMascot, toOwnerMascot } from './mascot/gg-mascot.settings';
 import {
   findGgSnapshot,
   listGgArchive,
@@ -50,6 +52,7 @@ export class GgController {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly settings: SettingsService,
   ) {}
 
   /** `GET /gg/archive` — every year the viewer has a GG for (R5). */
@@ -65,15 +68,17 @@ export class GgController {
     @Req() req: AuthenticatedRequest,
   ): Promise<GgOwnerSnapshotDto> {
     const year = parseYear(rawYear);
-    const [row, archive] = await Promise.all([
+    const [row, archive, mascot] = await Promise.all([
       findGgSnapshot(this.db, req.user.id, year),
       listGgArchive(this.db, req.user.id),
+      readGgMascot(this.settings),
     ]);
     if (!row) throw new NotFoundException(`No GG ${year} for this user`);
-    return toGgOwnerDto(
+    const dto = toGgOwnerDto(
       row,
       archive.map((a) => a.year),
     );
+    return { ...dto, mascot: toOwnerMascot(mascot) };
   }
 
   /** `PUT /gg/:year/share` — on keeps/mints a slug; off nulls it (Q5). */
