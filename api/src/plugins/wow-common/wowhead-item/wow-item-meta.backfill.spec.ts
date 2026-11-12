@@ -2,6 +2,8 @@
  * ROK-2176 §4.4 — boss-loot tooltip backfill: the query's shape (rendered
  * SQL) and the service step that enqueues the ids and drops the loot cache.
  * The real-DB proof of the query lands with L4's integration spec.
+ * ROK-2186: quest reward ids top the same batch up through the same fetch
+ * path, and a write also drops the 24 h quest cache.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -9,10 +11,13 @@ import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { BossEncountersService } from '../boss-encounters.service';
+import type { DungeonQuestsService } from '../dungeon-quests.service';
 import {
   BACKFILL_EXPANSIONS,
   backfillWhere,
   bossLootBackfillIds,
+  questRewardBackfillIds,
+  questRewardIdsQuery,
 } from './wow-item-meta.backfill';
 import {
   WowItemMetaService,
@@ -42,11 +47,16 @@ const TOOLTIP_HTML = (
   ) as { tooltip: string }
 ).tooltip;
 
-/** `selectDistinct` chain stub returning `ids`; records the limit. */
-function lootDb(ids: number[]) {
-  const limit = jest.fn(() =>
-    Promise.resolve(ids.map((itemId) => ({ itemId }))),
-  );
+/**
+ * `selectDistinct` chain stub: the first query (boss loot) returns `ids`,
+ * the second (quest rewards) `questIds`; records each limit. `cached` = the
+ * `wow_item_meta` rows `getMeta` reads back.
+ */
+function lootDb(ids: number[], questIds: number[] = [], cached: object[] = []) {
+  const limit = jest
+    .fn()
+    .mockResolvedValueOnce(ids.map((itemId) => ({ itemId })))
+    .mockResolvedValueOnce(questIds.map((itemId) => ({ itemId })));
   const where = jest.fn(() => ({ limit }));
   const selectDistinct = jest.fn(() => ({
     from: () => ({ leftJoin: () => ({ where }) }),
@@ -54,7 +64,9 @@ function lootDb(ids: number[]) {
   const writes: unknown[] = [];
   const db = {
     selectDistinct,
-    select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+    select: () => ({
+      from: () => ({ where: () => Promise.resolve(cached) }),
+    }),
     insert: () => ({
       values: (r: unknown) => ({
         onConflictDoUpdate: () => {
@@ -80,10 +92,12 @@ function service(db: object, status: number, setting: string | null = null) {
         }),
     });
   const clearCache = jest.fn(() => Promise.resolve());
+  const clearQuests = jest.fn(() => Promise.resolve());
   const svc = new WowItemMetaService(
     db as never,
     { get: jest.fn().mockResolvedValue(setting) } as unknown as SettingsService,
     { clearCache } as unknown as BossEncountersService,
+    { clearCache: clearQuests } as unknown as DungeonQuestsService,
     {
       fetchFn,
       limiter: createWowheadLimiter({ minIntervalMs: 0 }),
@@ -91,7 +105,7 @@ function service(db: object, status: number, setting: string | null = null) {
       now: () => NOW,
     },
   );
-  return { svc, clearCache };
+  return { svc, clearCache, clearQuests };
 }
 
 describe('backfillWhere (ROK-2176)', () => {
@@ -166,5 +180,67 @@ describe('WowItemMetaService.backfillBossLoot (ROK-2176)', () => {
     await expect(svc.backfillBossLoot()).resolves.toBe(0);
     expect(selectDistinct).not.toHaveBeenCalled();
     expect(clearCache).not.toHaveBeenCalled();
+  });
+});
+
+describe('questRewardIdsQuery (ROK-2186)', () => {
+  it('unnests rewards_json of classic/sod/forever quests only', () => {
+    const { sql, params } = questRewardIdsQuery().toSQL();
+    expect(sql).toMatch(
+      /jsonb_array_elements_text\(CASE WHEN jsonb_typeof\("rewards_json"\) = 'array' THEN "rewards_json" ELSE '\[\]'::jsonb END\)\)::int as "item_id" from "wow_classic_dungeon_quests"/,
+    );
+    expect(sql).toMatch(
+      /"wow_classic_dungeon_quests"\."expansion" in \(\$1, \$2, \$3\)/,
+    );
+    expect(params).toEqual([...BACKFILL_EXPANSIONS]);
+  });
+});
+
+describe('questRewardBackfillIds (ROK-2186)', () => {
+  it('returns the distinct due reward ids, capped at the limit', async () => {
+    const { db, limit } = lootDb([7718, 7719]);
+    await expect(questRewardBackfillIds(db as never, 9)).resolves.toEqual([
+      7718, 7719,
+    ]);
+    expect(limit).toHaveBeenCalledWith(9);
+  });
+
+  it('a zero limit runs no query', async () => {
+    const { db, selectDistinct } = lootDb([1]);
+    await expect(questRewardBackfillIds(db as never, 0)).resolves.toEqual([]);
+    expect(selectDistinct).not.toHaveBeenCalled();
+  });
+});
+
+describe('WowItemMetaService.backfillBossLoot — quest rewards (ROK-2186)', () => {
+  it('tops the batch up with quest reward ids and drops both caches', async () => {
+    const { db, limit, writes } = lootDb([19019], [7718]);
+    const { svc, clearCache, clearQuests } = service(db, 200);
+    await expect(svc.backfillBossLoot()).resolves.toBe(2);
+    expect(limit.mock.calls).toEqual([
+      [WOWHEAD_RETRY_BATCH],
+      [WOWHEAD_RETRY_BATCH - 1],
+    ]);
+    expect(writes.map((w) => (w as { itemId: number }).itemId)).toEqual([
+      19019, 7718,
+    ]);
+    expect(clearCache).toHaveBeenCalledTimes(1);
+    expect(clearQuests).toHaveBeenCalledTimes(1);
+  });
+
+  it('a quest reward id already cached with a current tooltip is not fetched', async () => {
+    const fresh = {
+      itemId: 7718,
+      status: 'resolved',
+      fetchedAt: NOW,
+      nextRetryAt: null,
+      attempts: 0,
+      tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
+    };
+    const { db, writes } = lootDb([], [7718], [fresh]);
+    const { svc, clearQuests } = service(db, 200);
+    await expect(svc.backfillBossLoot()).resolves.toBe(0);
+    expect(writes).toEqual([]);
+    expect(clearQuests).not.toHaveBeenCalled();
   });
 });

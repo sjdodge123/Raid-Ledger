@@ -14,6 +14,7 @@ import { RECHECK_TTL_MS, RESOLVED_TTL_MS } from './wow-item-meta.resolve';
 import { ERROR_VIEW_RETRY_FLOOR_MS, isMetaDue } from './wow-item-meta.due';
 import { createWowheadLimiter } from './wowhead-item.limiter';
 import type { BossEncountersService } from '../boss-encounters.service';
+import type { DungeonQuestsService } from '../dungeon-quests.service';
 import { WOWHEAD_TOOLTIP_PARSE_VERSION } from './wowhead-item.types';
 import type {
   WowheadFetch,
@@ -93,6 +94,7 @@ function setup(opts: {
     db as never,
     settings as unknown as SettingsService,
     { clearCache: jest.fn() } as unknown as BossEncountersService,
+    { clearCache: jest.fn() } as unknown as DungeonQuestsService,
     {
       fetchFn: opts.fetch.fn,
       limiter: createWowheadLimiter({ minIntervalMs: 0 }),
