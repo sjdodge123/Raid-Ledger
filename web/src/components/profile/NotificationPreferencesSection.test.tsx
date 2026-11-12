@@ -30,6 +30,7 @@ const mockPreferences = {
         lfg_player_invite: { inApp: true, push: false, discord: true },
         // ROK-1933 default: Discord on, in-app and push off.
         valheim_claim_suggestion: { inApp: false, push: false, discord: true },
+        gg_ready: { inApp: true, push: false, discord: true },
     },
 };
 

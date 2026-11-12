@@ -38,6 +38,10 @@ import {
   ValheimCharacterPage,
   CompanionLinkPage,
   ClaimPage,
+  GgYearPage,
+  GgArchivePage,
+  GgLatestRedirect,
+  GgPublicPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -144,6 +148,7 @@ export function AppRoutes() {
       <Route path="/i/:code" element={<InvitePage />} />
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
       <Route path="/p/poll/:token" element={<PollSharePage />} />
+      <Route path="/w/:slug" element={<GgPublicPage />} />
       <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/claim" element={<ClaimPage />} />
@@ -155,6 +160,9 @@ export function AppRoutes() {
         <Route path="/onboarding" element={<OnboardingWizardPage />} />
         <Route path="/admin/setup" element={<AdminSetupWizard />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/gg" element={<GgLatestRedirect />} />
+        <Route path="/gg/archive" element={<GgArchivePage />} />
+        <Route path="/gg/:year" element={<GgYearPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/games/:id" element={<GameDetailPage />} />
         <Route path="/hubs" element={<HubsDirectoryPage />} />

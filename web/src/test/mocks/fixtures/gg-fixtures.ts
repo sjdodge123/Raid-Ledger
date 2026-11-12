@@ -24,7 +24,7 @@ export const ggFullCards: GgCardEnvelope[] = [
     card('core', 'hubs', 90, { joined: 3, posts: 64, pictures: 112 }),
     card('valheim', 'valheim-year', 100, { characters: 1, deaths: 12, skillGains: [{ skill: 'Swords', gained: 20 }] }),
     card('core', 'superlative', 200, { key: 'night-owl', value: 0.68 }),
-    card('core', 'summary', 210, { eventsAttended: 47, hoursPlayedSeconds: 1_368_000, topGames, playedWithCount: 38, superlative: 'night-owl' }),
+    card('core', 'summary', 210, { eventsAttended: 47, hoursPlayedSeconds: 1_368_000, topGames: topGames.map(({ seconds: _s, ...g }) => g), playedWithCount: 38, superlative: 'night-owl' }),
 ];
 
 /** The owner snapshot the routes read. */
