@@ -58,6 +58,9 @@ export class GgMascotController {
   async preview(@Param('id') id: string): Promise<StreamableFile> {
     if (!SNOWFLAKE.test(id)) throw new BadRequestException('Bad sound id');
     const asset = await this.mascot.previewSound(id);
-    return new StreamableFile(asset.buf, { type: MASCOT_CONTENT_TYPES[asset.ext], length: asset.buf.length });
+    return new StreamableFile(asset.buf, {
+      type: MASCOT_CONTENT_TYPES[asset.ext],
+      length: asset.buf.length,
+    });
   }
 }

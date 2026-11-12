@@ -26,10 +26,16 @@ const MP3_FRAME = Buffer.from([0xff, 0xfb, 0x90, 0x00]);
 
 describe('sniffMascotAsset', () => {
   it('recognises png, gif and webp images', () => {
-    expect([PNG, GIF, WEBP].map((b) => sniffMascotAsset(b, 'image'))).toEqual(['png', 'gif', 'webp']);
+    expect([PNG, GIF, WEBP].map((b) => sniffMascotAsset(b, 'image'))).toEqual([
+      'png',
+      'gif',
+      'webp',
+    ]);
   });
   it('recognises ogg, ID3 mp3 and frame-sync mp3 sounds', () => {
-    expect([OGG, ID3, MP3_FRAME].map((b) => sniffMascotAsset(b, 'sound'))).toEqual(['ogg', 'mp3', 'mp3']);
+    expect(
+      [OGG, ID3, MP3_FRAME].map((b) => sniffMascotAsset(b, 'sound')),
+    ).toEqual(['ogg', 'mp3', 'mp3']);
   });
   it('refuses a sound posing as an image and vice versa', () => {
     expect(sniffMascotAsset(OGG, 'image')).toBeNull();
@@ -45,22 +51,34 @@ describe('assertMascotAsset', () => {
   it('422s an image over 256 KB and a sound over 512 KB', () => {
     const bigImage = Buffer.concat([PNG, Buffer.alloc(MASCOT_IMAGE_MAX_BYTES)]);
     const bigSound = Buffer.concat([OGG, Buffer.alloc(MASCOT_SOUND_MAX_BYTES)]);
-    expect(() => assertMascotAsset(bigImage, 'image')).toThrow(UnprocessableEntityException);
-    expect(() => assertMascotAsset(bigSound, 'sound')).toThrow(UnprocessableEntityException);
+    expect(() => assertMascotAsset(bigImage, 'image')).toThrow(
+      UnprocessableEntityException,
+    );
+    expect(() => assertMascotAsset(bigSound, 'sound')).toThrow(
+      UnprocessableEntityException,
+    );
   });
   it('422s an empty or wrong-type asset', () => {
-    expect(() => assertMascotAsset(Buffer.alloc(0), 'image')).toThrow(UnprocessableEntityException);
-    expect(() => assertMascotAsset(PNG, 'sound')).toThrow(/not an allowed type/);
+    expect(() => assertMascotAsset(Buffer.alloc(0), 'image')).toThrow(
+      UnprocessableEntityException,
+    );
+    expect(() => assertMascotAsset(PNG, 'sound')).toThrow(
+      /not an allowed type/,
+    );
   });
 });
 
 describe('mascot file names', () => {
   it('only builds {snowflake}.{ext}', () => {
     expect(mascotFileName('123', 'gif')).toBe('123.gif');
-    expect(() => mascotFileName('../x', 'gif')).toThrow(UnprocessableEntityException);
+    expect(() => mascotFileName('../x', 'gif')).toThrow(
+      UnprocessableEntityException,
+    );
   });
   it('maps a stored url back to its file and ignores foreign urls', () => {
-    expect(mascotFileFromUrl('/uploads/gg-mascot/123.png?v=abcd')).toBe('123.png');
+    expect(mascotFileFromUrl('/uploads/gg-mascot/123.png?v=abcd')).toBe(
+      '123.png',
+    );
     expect(mascotFileFromUrl('/uploads/branding/logo.png')).toBeNull();
     expect(mascotFileFromUrl('/uploads/gg-mascot/../x.png')).toBeNull();
     expect(mascotFileFromUrl(null)).toBeNull();

@@ -18,7 +18,9 @@ type SettingsWriter = Pick<SettingsService, 'set' | 'delete'>;
  * The community mascot, or `null`. The owner GG controller calls this (then
  * {@link toOwnerMascot}) to fill `GgOwnerSnapshotDto.mascot`.
  */
-export async function readGgMascot(settings: SettingsReader): Promise<GgMascot | null> {
+export async function readGgMascot(
+  settings: SettingsReader,
+): Promise<GgMascot | null> {
   const raw = await settings.get(SETTING_KEYS.GG_MASCOT);
   if (!raw) return null;
   try {
@@ -37,7 +39,10 @@ export function toOwnerMascot(mascot: GgMascot | null): GgOwnerMascot | null {
 }
 
 /** Stores (or with `null`, deletes) the `GG_MASCOT` row. */
-export async function writeGgMascot(settings: SettingsWriter, mascot: GgMascot | null): Promise<void> {
+export async function writeGgMascot(
+  settings: SettingsWriter,
+  mascot: GgMascot | null,
+): Promise<void> {
   if (!mascot) {
     await settings.delete(SETTING_KEYS.GG_MASCOT);
     return;

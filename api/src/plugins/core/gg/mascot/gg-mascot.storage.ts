@@ -64,7 +64,10 @@ function sniffSound(buf: Buffer): MascotSoundExt | null {
 }
 
 /** Magic-byte sniff: the extension the bytes really are, or `null`. */
-export function sniffMascotAsset(buf: Buffer, kind: MascotAssetKind): MascotExt | null {
+export function sniffMascotAsset(
+  buf: Buffer,
+  kind: MascotAssetKind,
+): MascotExt | null {
   return kind === 'image' ? sniffImage(buf) : sniffSound(buf);
 }
 
@@ -74,23 +77,36 @@ export function mascotMaxBytes(kind: MascotAssetKind): number {
 }
 
 /** Size cap + sniff; returns the extension or throws 422. */
-export function assertMascotAsset(buf: Buffer, kind: MascotAssetKind): MascotExt {
+export function assertMascotAsset(
+  buf: Buffer,
+  kind: MascotAssetKind,
+): MascotExt {
   if (buf.length === 0 || buf.length > mascotMaxBytes(kind)) {
-    throw new UnprocessableEntityException(`Mascot ${kind} is empty or over ${mascotMaxBytes(kind)} bytes`);
+    throw new UnprocessableEntityException(
+      `Mascot ${kind} is empty or over ${mascotMaxBytes(kind)} bytes`,
+    );
   }
   const ext = sniffMascotAsset(buf, kind);
-  if (!ext) throw new UnprocessableEntityException(`Mascot ${kind} is not an allowed type`);
+  if (!ext)
+    throw new UnprocessableEntityException(
+      `Mascot ${kind} is not an allowed type`,
+    );
   return ext;
 }
 
 /** Filename for a copy; refuses anything but a snowflake (path-safety). */
 export function mascotFileName(id: string, ext: MascotExt): string {
-  if (!SNOWFLAKE.test(id)) throw new UnprocessableEntityException('Bad mascot id');
+  if (!SNOWFLAKE.test(id))
+    throw new UnprocessableEntityException('Bad mascot id');
   return `${id}.${ext}`;
 }
 
 /** Writes `{id}.{ext}` atomically; returns its URL with a content `?v=`. */
-export async function writeMascotFile(id: string, ext: MascotExt, buf: Buffer): Promise<string> {
+export async function writeMascotFile(
+  id: string,
+  ext: MascotExt,
+  buf: Buffer,
+): Promise<string> {
   const dir = getGgMascotDir();
   const name = mascotFileName(id, ext);
   await fs.promises.mkdir(dir, { recursive: true });
@@ -102,7 +118,9 @@ export async function writeMascotFile(id: string, ext: MascotExt, buf: Buffer): 
 }
 
 /** Deletes every mascot copy except `keep` (file names). Missing dir = no-op. */
-export async function removeMascotFiles(keep: ReadonlySet<string>): Promise<void> {
+export async function removeMascotFiles(
+  keep: ReadonlySet<string>,
+): Promise<void> {
   const dir = getGgMascotDir();
   let entries: string[];
   try {
@@ -111,7 +129,9 @@ export async function removeMascotFiles(keep: ReadonlySet<string>): Promise<void
     return;
   }
   const stale = entries.filter((f) => MASCOT_FILE.test(f) && !keep.has(f));
-  await Promise.all(stale.map((f) => fs.promises.rm(path.join(dir, f), { force: true })));
+  await Promise.all(
+    stale.map((f) => fs.promises.rm(path.join(dir, f), { force: true })),
+  );
 }
 
 /** File name of a stored mascot URL (`/uploads/gg-mascot/1.png?v=…` → `1.png`). */

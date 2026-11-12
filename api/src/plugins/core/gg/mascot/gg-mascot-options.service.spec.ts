@@ -16,14 +16,26 @@ class FakeSource extends GgMascotExpressionSource {
 }
 
 const OPTIONS: GgMascotOptionsDto = {
-  emojis: [{ id: '1', name: 'wololo', animated: false, previewUrl: 'https://cdn.discordapp.com/emojis/1.webp' }],
-  sounds: [{ id: '2', name: 'Wololo', volume: 0.5, available: true, emojiName: null }],
+  emojis: [
+    {
+      id: '1',
+      name: 'wololo',
+      animated: false,
+      previewUrl: 'https://cdn.discordapp.com/emojis/1.webp',
+    },
+  ],
+  sounds: [
+    { id: '2', name: 'Wololo', volume: 0.5, available: true, emojiName: null },
+  ],
 };
 
 function build(): { svc: GgMascotOptionsService; fetchExpressions: jest.Mock } {
   const source = new FakeSource();
   source.fetchExpressions.mockResolvedValue(OPTIONS);
-  return { svc: new GgMascotOptionsService(source), fetchExpressions: source.fetchExpressions };
+  return {
+    svc: new GgMascotOptionsService(source),
+    fetchExpressions: source.fetchExpressions,
+  };
 }
 
 describe('GgMascotOptionsService', () => {
@@ -39,12 +51,17 @@ describe('GgMascotOptionsService', () => {
   it('503s while the bot is offline', async () => {
     const { svc, fetchExpressions } = build();
     fetchExpressions.mockResolvedValueOnce(null);
-    await expect(svc.getOptions(0)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(svc.getOptions(0)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 
   it('on a 429 with no cache answers 429 and does not call Discord until retry_after passes', async () => {
     const { svc, fetchExpressions } = build();
-    fetchExpressions.mockRejectedValueOnce({ status: 429, rawError: { retry_after: 3 } });
+    fetchExpressions.mockRejectedValueOnce({
+      status: 429,
+      rawError: { retry_after: 3 },
+    });
     await expect(svc.getOptions(0)).rejects.toMatchObject({ status: 429 });
     await expect(svc.getOptions(2_999)).rejects.toBeInstanceOf(HttpException);
     expect(fetchExpressions).toHaveBeenCalledTimes(1);
@@ -55,7 +72,9 @@ describe('GgMascotOptionsService', () => {
     const { svc, fetchExpressions } = build();
     await svc.getOptions(0);
     fetchExpressions.mockRejectedValueOnce({ retryAfter: 5_000 });
-    await expect(svc.getOptions(GG_MASCOT_OPTIONS_TTL_MS)).resolves.toEqual(OPTIONS);
+    await expect(svc.getOptions(GG_MASCOT_OPTIONS_TTL_MS)).resolves.toEqual(
+      OPTIONS,
+    );
   });
 
   it('rethrows any non-rate-limit error', async () => {
@@ -68,7 +87,9 @@ describe('GgMascotOptionsService', () => {
 describe('retryAfterMs', () => {
   it('reads RateLimitError ms, DiscordAPIError seconds, and ignores other errors', () => {
     expect(retryAfterMs({ retryAfter: 1200 })).toBe(1200);
-    expect(retryAfterMs({ status: 429, rawError: { retry_after: 1.5 } })).toBe(1500);
+    expect(retryAfterMs({ status: 429, rawError: { retry_after: 1.5 } })).toBe(
+      1500,
+    );
     expect(retryAfterMs({ status: 500 })).toBeNull();
     expect(retryAfterMs('nope')).toBeNull();
   });
