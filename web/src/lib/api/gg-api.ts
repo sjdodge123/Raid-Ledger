@@ -2,7 +2,7 @@
  * "GG <year>" API client (ROK-2187). Paths:
  * `GET /gg/:year` (owner snapshot), `GET /gg/archive` (years with a snapshot),
  * `PUT /gg/:year/share` (opt-in public link), `GET /gg/public/:slug` (summary
- * only, anonymous) and the share image `GET /gg/public/:slug/card.png`.
+ * only, anonymous) and the share image `GET /gg/public/:slug/card`.
  */
 import type {
     GgArchiveDto, GgOwnerMascot, GgOwnerSnapshotDto, GgPublicSummaryDto, GgShareStateDto, GgShareToggleDto,
@@ -56,7 +56,7 @@ export async function getGgPublic(slug: string): Promise<GgPublicSummaryDto> {
 
 /** The server-rendered share card image for a public slug. */
 export function ggShareImageUrl(slug: string): string {
-    return `${API_BASE_URL}/gg/public/${encodePathSegment(slug)}/card.png`;
+    return `${API_BASE_URL}/gg/public/${encodePathSegment(slug)}/card`;
 }
 
 /** The page a shared link opens. */
