@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -38,12 +39,15 @@ const fakeLoot = [
   },
 ];
 
+/** Extra JSON loot rows a test appends (ROK-2170 Forever fallback cases). */
+const extraLoot: Array<Record<string, unknown>> = [];
+
 jest.mock('fs/promises', () => ({
   readFile: jest.fn().mockImplementation((path: string) => {
     if (path.includes('boss-encounter-data'))
       return Promise.resolve(JSON.stringify(fakeBosses));
     if (path.includes('boss-loot-data'))
-      return Promise.resolve(JSON.stringify(fakeLoot));
+      return Promise.resolve(JSON.stringify([...fakeLoot, ...extraLoot]));
     return Promise.reject(new Error(`Unexpected readFile: ${path}`));
   }),
 }));
@@ -53,13 +57,20 @@ const storedBosses = [
   { id: 2, instanceId: 409, name: 'Lucifron', expansion: 'classic' },
 ];
 
+/** Extra stored boss rows a test appends (ROK-2170). */
+const extraBosses: Array<Record<string, unknown>> = [];
+
 const storedLoot = [
   { id: 10, bossId: 1, itemId: 17182, expansion: 'classic' },
   // Retail leftover on a KEPT boss — no longer in boss-loot-data.json.
   { id: 11, bossId: 2, itemId: 151403, expansion: 'classic' },
 ];
 
+/** Extra stored loot rows a test appends (ROK-2170 D7). */
+const extraStoredLoot: Array<Record<string, unknown>> = [];
+
 let seeder: BossEncounterSeeder;
+let mockValues: jest.Mock;
 let mockDb: {
   insert: jest.Mock;
   delete: jest.Mock;
@@ -72,7 +83,7 @@ async function setupEach() {
   const mockOnConflictDoUpdate = jest
     .fn()
     .mockReturnValue({ returning: mockReturning });
-  const mockValues = jest
+  mockValues = jest
     .fn()
     .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
 
@@ -81,7 +92,11 @@ async function setupEach() {
   const mockFrom = jest
     .fn()
     .mockImplementation((table: unknown) =>
-      Promise.resolve(table === wowClassicBossLoot ? storedLoot : storedBosses),
+      Promise.resolve(
+        table === wowClassicBossLoot
+          ? [...storedLoot, ...extraStoredLoot]
+          : [...storedBosses, ...extraBosses],
+      ),
     );
 
   mockDb = {
@@ -138,7 +153,7 @@ describe('BossEncounterSeeder', () => {
         .mockImplementation((rows, wanted, ids, warn) =>
           realLoot(rows, wanted, ids, warn, 1),
         );
-      const prune = jest.spyOn(pruneHelpers, 'pruneClassicRows');
+      const prune = jest.spyOn(pruneHelpers, 'pruneStaleRows');
       await seeder.seed();
       expect(prune).toHaveBeenCalledWith(mockDb, [], [11]);
       prune.mockRestore();
@@ -154,5 +169,118 @@ describe('BossEncounterSeeder', () => {
       // delete() called twice: loot first, then bosses
       expect(mockDb.delete).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+/**
+ * Run seed() with the REAL stale-row helpers at a floor of 1 (the fake JSON
+ * is far below the production floors) and return the loot ids it prunes.
+ */
+async function prunedLootIds(): Promise<unknown> {
+  const realBoss = pruneHelpers.findStaleClassicBossIds;
+  const realClassic = pruneHelpers.findStaleClassicLootIds;
+  const realForever = pruneHelpers.findStaleForeverLootIds;
+  jest
+    .spyOn(pruneHelpers, 'findStaleClassicBossIds')
+    .mockImplementation((r, j, w) => realBoss(r, j, w, 1));
+  jest
+    .spyOn(pruneHelpers, 'findStaleClassicLootIds')
+    .mockImplementation((r, l, ids, w) => realClassic(r, l, ids, w, 1));
+  jest
+    .spyOn(pruneHelpers, 'findStaleForeverLootIds')
+    .mockImplementation((r, l, ids, w) => realForever(r, l, ids, w, 1));
+  const prune = jest.spyOn(pruneHelpers, 'pruneStaleRows');
+  await seeder.seed();
+  return prune.mock.calls[0]?.[2];
+}
+
+describe('BossEncounterSeeder — Forever loot (ROK-2170)', () => {
+  beforeEach(() => setupEach());
+
+  const foreverRow = (bossName: string) => ({
+    ...fakeLoot[0],
+    bossName,
+    expansion: 'forever',
+    itemId: 99001,
+    itemName: 'Forever Blade',
+  });
+  /** The loot batch handed to insert().values() (second insert call). */
+  const insertedLoot = (): Array<Record<string, unknown>> =>
+    (mockValues.mock.calls[1]?.[0] ?? []) as Array<Record<string, unknown>>;
+
+  afterEach(() => {
+    extraLoot.length = 0;
+    extraBosses.length = 0;
+  });
+
+  it('attaches a forever loot row to the classic boss of the same name', async () => {
+    extraLoot.push(foreverRow('Lucifron'));
+    await seeder.seed();
+    const row = insertedLoot().find((l) => l.itemId === 99001);
+    expect(row).toMatchObject({ bossId: 2, expansion: 'forever' });
+  });
+
+  it('prefers a forever boss row over the classic one when both exist', async () => {
+    extraBosses.push({
+      id: 3,
+      instanceId: 409,
+      name: 'Lucifron',
+      expansion: 'forever',
+    });
+    extraLoot.push(foreverRow('Lucifron'));
+    await seeder.seed();
+    const row = insertedLoot().find((l) => l.itemId === 99001);
+    expect(row).toMatchObject({ bossId: 3, expansion: 'forever' });
+  });
+
+  it('skips and warns on a forever row for an unknown boss', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    extraLoot.push(foreverRow('Nobody'));
+    await seeder.seed();
+    expect(insertedLoot().map((l) => l.itemId)).not.toContain(99001);
+    expect(warn).toHaveBeenCalledWith(
+      'Skipping loot "Forever Blade" — boss "Nobody" (forever) not found',
+    );
+    warn.mockRestore();
+  });
+});
+
+describe('BossEncounterSeeder — Forever loot prune (ROK-2170 D7)', () => {
+  beforeEach(() => setupEach());
+
+  const foreverRow = (bossName: string) => ({
+    ...fakeLoot[0],
+    bossName,
+    expansion: 'forever',
+    itemId: 99001,
+    itemName: 'Forever Blade',
+  });
+
+  afterEach(() => {
+    extraLoot.length = 0;
+    extraStoredLoot.length = 0;
+    jest.restoreAllMocks();
+  });
+
+  it('keeps a bundled forever row stored on its classic boss (D7)', async () => {
+    extraLoot.push(foreverRow('Lucifron'));
+    extraStoredLoot.push({
+      id: 20,
+      bossId: 2,
+      itemId: 99001,
+      expansion: 'forever',
+    });
+    expect(await prunedLootIds()).toEqual([11]);
+  });
+
+  it('prunes a stored forever row removed from the JSON and leaves classic rows alone (D7)', async () => {
+    extraLoot.push(foreverRow('Lucifron'));
+    extraStoredLoot.push(
+      { id: 20, bossId: 2, itemId: 99001, expansion: 'forever' },
+      { id: 21, bossId: 2, itemId: 99002, expansion: 'forever' },
+    );
+    // 10 (bundled classic on boss 1) and 20 (bundled forever) stay; 11 is the
+    // classic retail leftover the classic prune already removes.
+    expect(await prunedLootIds()).toEqual([11, 21]);
   });
 });

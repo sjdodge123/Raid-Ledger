@@ -45,6 +45,8 @@ Create the object the step needs (a poll with the right members, a lineup in the
 
 Seed AFTER the fleet gate: gates reset the env DB, so seeding first leaves the tester on a dead link.
 
+**Seeding from a lane.** No admin token is left on the runner after a gate, so a lane cannot call the env's API with one. What works: a temporary, untracked Playwright spec under `scripts/smoke/` (name it `seed-<story>.smoke.spec.ts`) that creates the objects through the env's API, runs under the `desktop` project only, does no cleanup and `console.log`s the ids it created; run it with `rl_validate_ci({ args: ['--only-e2e'], e2e_specs: [...], against_env_slug, base_url })`, read the ids from the task log, then delete the spec. The sentinel that run writes tests nothing about the branch: never count it as the branch's Playwright tier.
+
 ## Agent verification (the `fleet-ui-verify` lane)
 
 - **Plan read:** `rl_test_plan_status({ plan_id })`, default view only — never `include_comments`.

@@ -63,8 +63,8 @@ function parseMessage(error: unknown): string {
 }
 
 /** Bind → blob → message; a 409 `cross_hub_move` holds the upload for Move here (re-bind with the flag) / Cancel. */
-function useGuardedUpload(hubId: number, onResult: (r: Bg3UploadResult) => void, fail: (e: Bg3UploadError) => void) {
-    const upload = useBg3UploadSave(hubId);
+function useGuardedUpload(onResult: (r: Bg3UploadResult) => void, fail: (e: Bg3UploadError) => void) {
+    const upload = useBg3UploadSave();
     const move = useBg3MoveCheck();
     const run = (vars: Bg3UploadVars): void => upload.mutate(vars, {
         onSuccess: onResult,
@@ -76,7 +76,7 @@ function useGuardedUpload(hubId: number, onResult: (r: Bg3UploadResult) => void,
     return { upload, move, run };
 }
 
-export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null) {
+export function useBg3UploadFlow(initialCampaignId: number | null) {
     const isOpen = useMountedFlag();
     const [parsed, setParsed] = useState<Parsed | null>(null);
     const [parsing, setParsing] = useState(false);
@@ -86,7 +86,7 @@ export function useBg3UploadFlow(hubId: number, initialCampaignId: number | null
     useRevokeOnChange(parsed?.thumbUrl ?? null);
     const campaignId = picked === undefined ? initialCampaignId : picked;
     const fail = (e: Bg3UploadError): void => setBanner({ tone: 'danger', text: bg3UploadErrorMessage(e) });
-    const { upload, move, run } = useGuardedUpload(hubId, setResult, fail);
+    const { upload, move, run } = useGuardedUpload(setResult, fail);
 
     const read = (dropped: Bg3DroppedFiles): void => {
         setBanner(null);

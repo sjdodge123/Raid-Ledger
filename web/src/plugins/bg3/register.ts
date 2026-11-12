@@ -20,6 +20,7 @@ import { LazyBg3SessionsWidget } from './hub/bg3-sessions-widget-lazy';
 import { Bg3CampaignAction, Bg3SeeAllAction } from './hub/bg3-see-all-action';
 import { LazyBg3CampaignTab } from './campaign/bg3-campaign-tab-lazy';
 import { useBg3PartyVisible, useBg3SnapshotVisible } from './hooks/use-bg3-visible';
+import { bg3HubClaimProvider } from './hub/bg3-hub-claim-provider';
 
 /** Neutral registry colour, like Valheim. */
 const bg3 = registerPlugin('bg3', {
@@ -103,3 +104,7 @@ bg3.registerHubCompanionPrompt({
     body: "This hub reads Baldur's Gate 3 saves. Install the Raid Ledger Companion on the PC you play on and your party, level and location update after every save — or upload saves from your browser.",
     shortBody: 'Install the Raid Ledger Companion on the PC you play on — or upload saves from your browser.',
 });
+
+// ROK-2153 S6 — "claim your character" on the core Overview prompt: the active
+// campaign's unclaimed party slots, dismissed per campaign (`scopedDismissal`).
+bg3.registerHubClaimProvider(bg3HubClaimProvider);

@@ -12,7 +12,11 @@ import * as schema from '../../../drizzle/schema';
 import { SETTING_KEYS } from '../../../drizzle/schema/app-settings';
 import { SettingsService } from '../../../settings/settings.service';
 import { WowItemMetaService } from './wow-item-meta.service';
-import type { WowheadEnv, WowheadFetchResult } from './wowhead-item.types';
+import {
+  WOWHEAD_TOOLTIP_PARSE_VERSION,
+  type WowheadEnv,
+  type WowheadFetchResult,
+} from './wowhead-item.types';
 
 const fetchModule = jest.requireActual<typeof import('./wowhead-item.fetch')>(
   './wowhead-item.fetch',
@@ -23,6 +27,7 @@ const HIT: WowheadFetchResult = {
   name: 'Thunderfury',
   quality: 5,
   icon: 'inv_sword_39',
+  tooltip: null,
 };
 
 /** Item 19019 lives in env 16; 16921 only in env 4; 16922 nowhere. */
@@ -105,6 +110,8 @@ describe('WowItemMetaService on a real DB (ROK-1727)', () => {
         status: 'classic_fallback',
         env: 4,
         name: 'Keep',
+        // Fresh = parsed by the current tooltip parser too (ROK-2176).
+        tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
         fetchedAt: new Date(),
         nextRetryAt: new Date(Date.now() + 3_600_000),
       },

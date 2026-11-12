@@ -1,6 +1,8 @@
 import type { EquipmentItemDto } from '@raid-ledger/contract';
 import { WowItemCard } from './wow-item-card';
+import { StatDeltaChips } from './stat-delta-chips';
 import { getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
+import type { StatDelta } from '../lib/item-stat-diff';
 import './item-comparison.css';
 
 /**
@@ -62,6 +64,26 @@ interface ItemComparisonProps {
     lootItemSubclass?: string | null;
     /** Item slot name — used to infer Shield when itemSubclass is missing */
     lootSlot?: string | null;
+    /** ROK-2176: what the drop is compared against ("vs Ring 2 — your weaker ring"). */
+    compareLabel?: string | null | undefined;
+    /** ROK-2176: per-stat deltas; `null` = a side has no stats (`statsNote` says why); absent = no chips (quest rewards). */
+    deltas?: StatDelta[] | null | undefined;
+    statsNote?: string | null | undefined;
+    /** ROK-2176: opens the compare popup — the equipped card and "+N more" call it. */
+    onOpen?: (() => void) | undefined;
+}
+
+/** ROK-2176 extras shared by the equipped and empty-slot displays. */
+type CompareExtras = Pick<ItemComparisonProps, 'compareLabel' | 'deltas' | 'statsNote' | 'onOpen'>;
+
+function CompareDetails({ compareLabel, deltas, statsNote, onOpen }: CompareExtras) {
+    return (
+        <>
+            {compareLabel && <span className="item-comparison__target">{compareLabel}</span>}
+            {deltas && <StatDeltaChips deltas={deltas} onOpen={onOpen} />}
+            {deltas === null && statsNote && <span className="item-comparison__note">{statsNote}</span>}
+        </>
+    );
 }
 
 /**
@@ -78,7 +100,7 @@ function computeDelta(rewardItemLevel: number | null, equippedItemLevel: number)
     return { deltaClass: 'item-comparison__delta--neutral', deltaText: '= Same iLvl' };
 }
 
-function EquippedItemDisplay({ equippedItem, rewardItemLevel, gameVariant }: {
+function EquippedItemDisplay({ equippedItem, rewardItemLevel, gameVariant, ...extras }: CompareExtras & {
     equippedItem: EquipmentItemDto; rewardItemLevel: number | null; gameVariant: string | null;
 }) {
     const wowheadSuffix = getWowheadDataSuffix(gameVariant);
@@ -92,15 +114,17 @@ function EquippedItemDisplay({ equippedItem, rewardItemLevel, gameVariant }: {
                 iconUrl={equippedItem.iconUrl} enchant={equippedItem.enchantments?.[0]?.displayString}
                 wowheadUrl={getWowheadItemUrl(equippedItem.itemId, gameVariant)}
                 wowheadData={`item=${equippedItem.itemId}&${wowheadSuffix}`}
+                onOpen={extras.onOpen}
             />
             {deltaText && <span className={`item-comparison__delta ${deltaClass}`}>{deltaText}</span>}
+            <CompareDetails {...extras} />
         </div>
     );
 }
 
 export function ItemComparison({
     rewardItemLevel, equippedItem, gameVariant,
-    characterClass, lootItemSubclass, lootSlot,
+    characterClass, lootItemSubclass, lootSlot, ...extras
 }: ItemComparisonProps) {
     const equippable = isItemEquippable(characterClass, lootItemSubclass, lootSlot);
     const displaySubclass = lootItemSubclass ?? (lootSlot === 'Shield' ? 'Shield' : null);
@@ -118,10 +142,11 @@ export function ItemComparison({
             <div className="item-comparison">
                 <span className="item-comparison__label">Equipped:</span>
                 <span className="item-comparison__empty">Empty slot</span>
+                <CompareDetails {...extras} />
             </div>
         );
     }
 
-    return <EquippedItemDisplay equippedItem={equippedItem} rewardItemLevel={rewardItemLevel} gameVariant={gameVariant} />;
+    return <EquippedItemDisplay equippedItem={equippedItem} rewardItemLevel={rewardItemLevel} gameVariant={gameVariant} {...extras} />;
 }
 

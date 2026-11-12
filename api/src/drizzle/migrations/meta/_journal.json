@@ -2059,6 +2059,13 @@
       "when": 1794323249793,
       "tag": "0294_guid_release_backfill_deactivated_owners",
       "breakpoints": true
+    },
+    {
+      "idx": 295,
+      "version": "7",
+      "when": 1794429433052,
+      "tag": "0295_wow_item_meta_tooltip",
+      "breakpoints": true
     }
   ]
 }

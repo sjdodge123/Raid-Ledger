@@ -11,8 +11,10 @@ import {
   NOT_FOUND_PARK_MS,
 } from './wow-item-meta.backoff';
 import { RECHECK_TTL_MS, RESOLVED_TTL_MS } from './wow-item-meta.resolve';
-import { ERROR_VIEW_RETRY_FLOOR_MS } from './wow-item-meta.due';
+import { ERROR_VIEW_RETRY_FLOOR_MS, isMetaDue } from './wow-item-meta.due';
 import { createWowheadLimiter } from './wowhead-item.limiter';
+import type { BossEncountersService } from '../boss-encounters.service';
+import { WOWHEAD_TOOLTIP_PARSE_VERSION } from './wowhead-item.types';
 import type {
   WowheadFetch,
   WowItemMetaInsert,
@@ -56,6 +58,8 @@ function row(over: Partial<WowItemMetaRow>): WowItemMetaRow {
     fetchedAt: NOW,
     nextRetryAt: null,
     attempts: 0,
+    tooltip: null,
+    tooltipVersion: null,
     ...over,
   };
 }
@@ -88,6 +92,7 @@ function setup(opts: {
   const service = new WowItemMetaService(
     db as never,
     settings as unknown as SettingsService,
+    { clearCache: jest.fn() } as unknown as BossEncountersService,
     {
       fetchFn: opts.fetch.fn,
       limiter: createWowheadLimiter({ minIntervalMs: 0 }),
@@ -113,6 +118,8 @@ describe('WowItemMetaService.enqueue — resolution (ROK-1727)', () => {
       status: 'resolved',
       env: 16,
       ...HIT,
+      tooltip: null,
+      tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
       fetchedAt: NOW,
       nextRetryAt: after(RESOLVED_TTL_MS),
       attempts: 0,
@@ -185,12 +192,27 @@ describe('WowItemMetaService — due selection + kill switch (ROK-1727)', () => 
   it('enqueue skips rows not yet due and de-dupes ids', async () => {
     const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
     const existing = [
-      row({ itemId: 1, status: 'resolved', nextRetryAt: after(HOUR) }),
+      row({
+        itemId: 1,
+        status: 'resolved',
+        nextRetryAt: after(HOUR),
+        tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
+      }),
       row({ itemId: 2, nextRetryAt: after(-HOUR) }),
     ];
     const { service, writes } = setup({ fetch, existing });
     await expect(service.enqueue([1, 2, 2, 3, 0])).resolves.toBe(2);
     expect(writes.map((w) => w.row.itemId).sort()).toEqual([2, 3]);
+  });
+
+  it('enqueue re-probes a cached resolved row with no parsed tooltip (ROK-2176)', async () => {
+    const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
+    const existing = [
+      row({ itemId: 1, status: 'resolved', nextRetryAt: after(HOUR) }),
+    ];
+    const { service, writes } = setup({ fetch, existing });
+    await expect(service.enqueue([1])).resolves.toBe(1);
+    expect(writes[0]?.row.tooltipVersion).toBe(WOWHEAD_TOOLTIP_PARSE_VERSION);
   });
 
   it('retryDue re-probes the due rows', async () => {
@@ -426,5 +448,63 @@ describe('WowItemMetaService — miss cap × failure logging (ROK-1756 + ROK-176
     expect(String(warn.mock.calls[0]?.[0])).toContain(
       `re-check at ${after(NOT_FOUND_PARK_MS).toISOString()}`,
     );
+  });
+});
+
+describe('WowItemMetaService — a stale-tooltip re-probe settles (ROK-2176 review MAJOR 1)', () => {
+  const stale = row({
+    status: 'resolved',
+    env: 16,
+    name: 'Old',
+    tooltipVersion: null,
+    nextRetryAt: after(20 * 24 * HOUR),
+  });
+
+  /**
+   * Due on the NEXT enqueue? The stored row is `resolved`, so every CASE-
+   * guarded column keeps its stored value; only plain values land.
+   */
+  function dueAfter(set: Record<string, unknown>): boolean {
+    const { nextRetryAt, attempts, tooltipVersion } = set;
+    if (!(nextRetryAt instanceof Date) || typeof attempts !== 'number') {
+      throw new Error('upsert set is missing its retry bookkeeping');
+    }
+    const version =
+      typeof tooltipVersion === 'number'
+        ? tooltipVersion
+        : stale.tooltipVersion;
+    return isMetaDue(
+      { ...stale, nextRetryAt, attempts, tooltipVersion: version },
+      NOW.getTime(),
+    );
+  }
+
+  it.each([
+    ['env-4 only', { 16: [{ status: 404 }], 4: [{ status: 200, body: HIT }] }],
+    ['not_found', { 16: [{ status: 404 }], 4: [{ status: 404 }] }],
+  ])(
+    '%s: stamps the parser version and is not due again',
+    async (_label, byEnv) => {
+      const { service, writes } = setup({
+        fetch: fetchStub(byEnv),
+        existing: [stale],
+      });
+      await expect(service.enqueue([1])).resolves.toBe(1);
+      const set = writes[0]?.set ?? {};
+      expect(set.tooltipVersion).toBe(WOWHEAD_TOOLTIP_PARSE_VERSION);
+      expect(dueAfter(set)).toBe(false);
+    },
+  );
+
+  it('a 429 keeps the stale version but waits for its error backoff', async () => {
+    const { service, writes } = setup({
+      fetch: fetchStub({ 16: [{ status: 429 }] }),
+      existing: [stale],
+    });
+    await expect(service.enqueue([1])).resolves.toBe(1);
+    const set = writes[0]?.set ?? {};
+    expect(set).not.toHaveProperty('tooltipVersion');
+    expect(set.attempts).toBe(1);
+    expect(dueAfter(set)).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { Modal } from '../../../components/ui/modal';
 import './wow-item-card.css';
+import { Button } from '../../../components/ui/button';
 
 /** Slot label display names */
 const SLOT_LABELS: Record<string, string> = {
@@ -65,6 +66,12 @@ export interface WowItemCardProps {
     wowheadUrl?: string;
     /** Optional extra class name */
     className?: string;
+    /**
+     * ROK-2176: when set, a click/tap on the card (any width) calls this
+     * instead of opening the mobile modal or navigating to Wowhead; desktop
+     * hover keeps the Wowhead tooltip. Unset (quest rewards) = unchanged.
+     */
+    onOpen?: (() => void) | undefined;
 }
 
 function ItemIcon({ iconUrl, name, qKey, itemLevel }: {
@@ -139,10 +146,12 @@ function ItemMobileModal({ name, qKey, iconUrl, itemLevel, slotLabel, subclass, 
                 {enchant && <div className="text-sm text-green-400">{enchant}</div>}
                 {wowheadUrl && (
                     <div className="pt-2 border-t border-edge">
-                        <a href={wowheadUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
+                        {/* ROK-2176: a button, not <a href=wowhead…> — Wowhead's global tooltips.js binds to those links and spawned a second overlay over this modal. */}
+                        <Button variant="bare" onClick={() => window.open(wowheadUrl, '_blank', 'noopener,noreferrer')}
+                            className="text-sm text-blue-400 hover:underline">
                             View on Wowhead
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                        </a>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </Button>
                     </div>
                 )}
             </div>
@@ -152,7 +161,7 @@ function ItemMobileModal({ name, qKey, iconUrl, itemLevel, slotLabel, subclass, 
 
 export function WowItemCard({
     name, quality, slot, subclass, itemLevel, iconUrl,
-    enchant, wowheadData, wowheadUrl, className,
+    enchant, wowheadData, wowheadUrl, className, onOpen,
 }: WowItemCardProps) {
     const qKey = qualityKey(quality);
     const slotLabel = slot ? (SLOT_LABELS[slot] ?? slot) : null;
@@ -160,12 +169,16 @@ export function WowItemCard({
     const [modalOpen, setModalOpen] = useState(false);
 
     const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-        if (isMobile) { e.preventDefault(); e.stopPropagation(); setModalOpen(true); }
+        if (!onOpen && !isMobile) return;
+        e.preventDefault(); e.stopPropagation();
+        if (onOpen) onOpen(); else setModalOpen(true);
     };
+    const clickable = onOpen ? ' wow-item-card--clickable' : '';
 
     return (
         <>
-            <div className={`wow-item-card ${className ?? ''}`}>
+            {/* The name link is the keyboard target; the card-wide click only widens the tap area. */}
+            <div className={`wow-item-card${clickable} ${className ?? ''}`} onClick={onOpen}>
                 <ItemIcon iconUrl={iconUrl} name={name} qKey={qKey} itemLevel={itemLevel} />
                 <ItemCardContent name={name} qKey={qKey} slotLabel={slotLabel} subclass={subclass}
                     enchant={enchant} wowheadUrl={wowheadUrl} wowheadData={wowheadData}

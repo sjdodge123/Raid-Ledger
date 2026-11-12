@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { ItemTooltip } from '@raid-ledger/contract';
 import { BossEncountersService } from './boss-encounters.service';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -7,6 +8,8 @@ import { REDIS_CLIENT } from '../../redis/redis.module';
 let service: BossEncountersService;
 let mockSeeder: { seed: jest.Mock; drop: jest.Mock };
 let mockDb: { select: jest.Mock };
+let mockOrderBy: jest.Mock;
+let mockLeftJoin: jest.Mock;
 let mockRedis: {
   get: jest.Mock;
   setex: jest.Mock;
@@ -20,10 +23,13 @@ async function setupEach() {
     drop: jest.fn().mockResolvedValue(undefined),
   };
 
-  // Build a fluent mock for Drizzle queries: db.select().from().where().orderBy()
-  const mockOrderBy = jest.fn().mockResolvedValue([]);
+  // Fluent Drizzle mock: db.select().from()[.leftJoin()].where().orderBy()
+  mockOrderBy = jest.fn().mockResolvedValue([]);
   const mockWhere = jest.fn().mockReturnValue({ orderBy: mockOrderBy });
-  const mockFrom = jest.fn().mockReturnValue({ where: mockWhere });
+  mockLeftJoin = jest.fn().mockReturnValue({ where: mockWhere });
+  const mockFrom = jest
+    .fn()
+    .mockReturnValue({ where: mockWhere, leftJoin: mockLeftJoin });
 
   mockDb = {
     select: jest.fn().mockReturnValue({ from: mockFrom }),
@@ -108,6 +114,96 @@ describe('BossEncountersService — variant and queries', () => {
       const result = await service.getLootForBoss(999, 'classic_era');
       expect(result).toEqual([]);
     });
+  });
+});
+
+/** A stored loot row as the DB returns it (ROK-2170). */
+function lootRow(id: number, expansion: string) {
+  return {
+    id,
+    bossId: 7,
+    itemId: 1000 + id,
+    itemName: `Item ${id}`,
+    slot: null,
+    quality: 'Rare',
+    itemLevel: null,
+    dropRate: null,
+    expansion,
+    classRestrictions: null,
+    iconUrl: null,
+    itemSubclass: null,
+  };
+}
+
+describe('BossEncountersService — Forever loot read rule (ROK-2170)', () => {
+  beforeEach(() => setupEach());
+
+  it('returns only the forever rows under wow_forever when the boss has any', async () => {
+    mockOrderBy.mockResolvedValue([
+      lootRow(1, 'classic'),
+      lootRow(2, 'forever'),
+    ]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result.map((l) => [l.id, l.expansion])).toEqual([[2, 'forever']]);
+  });
+
+  it('falls back to the classic rows under wow_forever when no forever row exists', async () => {
+    mockOrderBy.mockResolvedValue([
+      lootRow(1, 'classic'),
+      lootRow(3, 'classic'),
+    ]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result.map((l) => l.id)).toEqual([1, 3]);
+  });
+
+  it('never returns forever rows under classic_era', async () => {
+    mockOrderBy.mockResolvedValue([lootRow(1, 'classic')]);
+    const result = await service.getLootForBoss(7, 'classic_era');
+    expect(result.map((l) => l.expansion)).toEqual(['classic']);
+    expect(service.getExpansionsForVariant('classic_era')).not.toContain(
+      'forever',
+    );
+  });
+});
+
+describe('BossEncountersService — stored loot tooltip (ROK-2176)', () => {
+  beforeEach(() => setupEach());
+
+  const TOOLTIP: ItemTooltip = {
+    env: 16,
+    slotLabel: 'Two-Hand',
+    subclass: 'Mace',
+    binding: 'Binds when picked up',
+    unique: false,
+    requiredLevel: 60,
+    armor: null,
+    weapon: null,
+    stats: [{ key: 'STRENGTH', name: 'Strength', value: 12, unit: 'flat' }],
+    effects: [],
+    setName: null,
+    randomEnchant: false,
+  };
+
+  it('left-joins the Wowhead item cache on the loot read', async () => {
+    await service.getLootForBoss(7, 'classic_era');
+    expect(mockLeftJoin).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes a stored tooltip through onto the loot row', async () => {
+    mockOrderBy.mockResolvedValue([
+      { ...lootRow(1, 'classic'), tooltip: TOOLTIP },
+    ]);
+    const [loot] = await service.getLootForBoss(7, 'classic_era');
+    expect(loot?.tooltip).toEqual(TOOLTIP);
+  });
+
+  it('sets tooltip to null when the item has no cached tooltip', async () => {
+    mockOrderBy.mockResolvedValue([
+      { ...lootRow(1, 'classic'), tooltip: null },
+      lootRow(2, 'classic'),
+    ]);
+    const result = await service.getLootForBoss(7, 'classic_era');
+    expect(result.map((l) => l.tooltip)).toEqual([null, null]);
   });
 });
 

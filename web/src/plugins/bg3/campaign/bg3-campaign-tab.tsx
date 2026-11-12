@@ -82,7 +82,7 @@ function TabDialogs({ dialog, hubId, campaigns, active, onClose }: TabDialogsPro
             {dialog === 'start' && <Bg3StartCampaignDialog isOpen hubId={hubId} onClose={onClose} />}
             {dialog === 'upload' && <Bg3UploadSaveSheet isOpen hubId={hubId} onClose={onClose} />}
             {dialog === 'manage-saves' && <Bg3ManageSavesSheet isOpen campaigns={campaigns} onClose={onClose} />}
-            {active && dialog === 'add-saves' && <Bg3AddSavesSheet isOpen hubId={hubId} campaignId={active.id}
+            {active && dialog === 'add-saves' && <Bg3AddSavesSheet isOpen campaignId={active.id}
                 campaignName={active.name} onClose={onClose} />}
         </>
     );

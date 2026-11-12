@@ -125,6 +125,8 @@ export * from './character-quests.schema.js';
 
 // Boss Encounters & Loot (ROK-244)
 export * from './boss-encounters.schema.js';
+// Wowhead item tooltip (ROK-2176)
+export * from './wow-item-tooltip.schema.js';
 
 // Quest Progress (ROK-246)
 export * from './quest-progress.schema.js';
@@ -284,6 +286,8 @@ export * from './companion-dev-bridge-bg3-redaction.js';
 export * from './companion-dev-bridge-json-schema.js';
 // BG3 plugin hub shapes — campaigns, snapshot, sessions, claims (ROK-1957).
 export * from './bg3-hub.schema.js';
+// BG3 display labels for raw save ids — shared by web + api (ROK-1958 D-7, moved ROK-2153 S6).
+export * from './bg3-labels.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';

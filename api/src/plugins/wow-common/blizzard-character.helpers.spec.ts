@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import { buildCharacterParams } from './blizzard-character.helpers';
+import {
+  buildCharacterParams,
+  mapEquipmentItems,
+} from './blizzard-character.helpers';
 import {
   FOREVER_NAMESPACE_ALIAS,
   getForeverNamespacePrefix,
@@ -136,5 +139,51 @@ describe('buildCharacterParams — realmless Forever branch (ROK-2102)', () => {
     );
     expect(result.characterPath).toBe('some-realm/ana');
     expect(result.namespace).toBe('profile-forever-us');
+  });
+});
+
+describe('mapEquipmentItems — sparse weapon data (ROK-2173)', () => {
+  const fullWeapon = {
+    damage: { min_value: 10, max_value: 20 },
+    attack_speed: { value: 2.6 },
+    dps: { value: 5.8 },
+  };
+  const weaponItem = (weapon: Record<string, unknown>, name = 'Axe') => ({
+    slot: { type: 'MAIN_HAND' },
+    item: { id: 1001 },
+    name,
+    weapon,
+  });
+
+  it('maps a complete weapon unchanged', () => {
+    const [item] = mapEquipmentItems([weaponItem(fullWeapon)], new Map());
+    expect(item?.weapon).toEqual({
+      damageMin: 10,
+      damageMax: 20,
+      attackSpeed: 2.6,
+      dps: 5.8,
+    });
+  });
+
+  it.each([
+    ['attack_speed', { damage: fullWeapon.damage, dps: fullWeapon.dps }],
+    [
+      'dps',
+      { damage: fullWeapon.damage, attack_speed: fullWeapon.attack_speed },
+    ],
+  ])('keeps the item but drops weapon when %s is missing', (_field, weapon) => {
+    const items = mapEquipmentItems([weaponItem(weapon)], new Map());
+    expect(items.map((i) => i.name)).toEqual(['Axe']);
+    expect(items[0]?.weapon).toBeUndefined();
+  });
+
+  it('skips one malformed item without losing the other slots', () => {
+    const broken = { ...weaponItem(fullWeapon, 'Bad'), stats: [{ value: 3 }] };
+    const good = weaponItem(fullWeapon, 'Good');
+    let names: string[] = [];
+    expect(() => {
+      names = mapEquipmentItems([broken, good], new Map()).map((i) => i.name);
+    }).not.toThrow();
+    expect(names).toEqual(['Good']);
   });
 });

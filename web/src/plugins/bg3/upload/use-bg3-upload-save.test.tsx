@@ -127,7 +127,7 @@ describe('useBg3UploadSave', () => {
         const qc = createTestQueryClient();
         qc.setQueryData(bg3Keys.snapshot(HUB_ID), null);
         const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
-        const { result } = renderHook(() => useBg3UploadSave(HUB_ID), { wrapper });
+        const { result } = renderHook(() => useBg3UploadSave(), { wrapper });
         await act(() => result.current.mutateAsync(vars()));
         await waitFor(() => expect(qc.getQueryState(bg3Keys.snapshot(HUB_ID))?.isInvalidated).toBe(true));
     });

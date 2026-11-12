@@ -5,10 +5,19 @@
  * Scholomance rows that were tagged `classic`, and the retail loot left on
  * kept bosses like Darkmaster Gandling) would otherwise live on forever.
  *
- * Scope guard: only rows with `expansion = 'classic'` are ever candidates.
- * Floor guard: the step is skipped (with a warning) when the bundled JSON
- * carries fewer classic rows than an absolute minimum — a truncated file must
- * never wipe the table.
+ * Scope guard: boss candidates are only rows with `expansion = 'classic'`;
+ * loot candidates are `classic` loot on live classic bosses, plus (ROK-2170
+ * D7) `forever` loot on ANY live boss — a Forever loot row hangs off the
+ * existing classic boss row, so its boss's expansion is not filtered. No other
+ * expansion (tbc, sod, ...) is ever a candidate.
+ *
+ * The boss prune stays classic-only: no `forever` boss rows exist (Forever
+ * loot reuses the classic boss rows), and a floor on zero bundled rows would
+ * be meaningless.
+ *
+ * Floor guard: each step is skipped (with a warning) when the bundled JSON
+ * carries fewer rows of its expansion than an absolute minimum — a truncated
+ * file must never wipe the table.
  */
 import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -36,6 +45,15 @@ export const MIN_BUNDLED_CLASSIC_BOSSES = 200;
  * fewer than 600 classic rows is treated as truncated.
  */
 export const MIN_BUNDLED_CLASSIC_LOOT = 600;
+
+/**
+ * Forever loot (ROK-2170 D7): the bundled list is 279 rows. A file with fewer
+ * than 200 forever rows is treated as truncated and the forever loot prune is
+ * skipped with a warning — same absolute-floor reasoning as ROK-2168 above.
+ */
+export const MIN_BUNDLED_FOREVER_LOOT = 200;
+
+export const FOREVER_EXPANSION = 'forever';
 
 /** Receives the reason a prune step was skipped. */
 export type PruneWarn = (message: string) => void;
@@ -99,6 +117,32 @@ export function findStaleClassicBossIds(
 }
 
 /**
+ * Ids of stored `expansion` loot rows on `bossIds` whose (bossId, itemId) is
+ * not among the wanted rows of that expansion; [] (and a warning) below the
+ * absolute floor.
+ */
+function findStaleLootIds(
+  expansion: string,
+  lootRows: readonly LootKeyRow[],
+  wantedLoot: readonly LootWantedKey[],
+  bossIds: ReadonlySet<number>,
+  floor: { min: number; warn?: PruneWarn | undefined },
+): number[] {
+  const ofExp = (r: { expansion: string }): boolean =>
+    r.expansion === expansion;
+  const key = (l: LootWantedKey): string => `${l.bossId}::${l.itemId}`;
+  const wanted = new Set(wantedLoot.filter(ofExp).map(key));
+  const stored = lootRows.filter((r) => ofExp(r) && bossIds.has(r.bossId));
+  if (belowFloor(wanted.size, floor.min)) {
+    floor.warn?.(
+      `Skipping ${expansion} loot prune: JSON has ${wanted.size} ${expansion} loot rows (minimum ${floor.min}) vs ${stored.length} stored`,
+    );
+    return [];
+  }
+  return stored.filter((r) => !wanted.has(key(r))).map((r) => r.id);
+}
+
+/**
  * Ids of `classic` loot rows on classic bosses whose (bossId, itemId) is no
  * longer in the bundled JSON. Returns [] (and warns) when the JSON has fewer
  * classic loot rows than `minBundled` (production: `MIN_BUNDLED_CLASSIC_LOOT`).
@@ -110,26 +154,51 @@ export function findStaleClassicLootIds(
   warn?: PruneWarn,
   minBundled = MIN_BUNDLED_CLASSIC_LOOT,
 ): number[] {
-  const key = (l: LootWantedKey): string => `${l.bossId}::${l.itemId}`;
-  const wanted = new Set(wantedLoot.filter(isClassic).map(key));
-  const stored = lootRows.filter(
-    (r) => isClassic(r) && classicBossIds.has(r.bossId),
+  return findStaleLootIds(
+    PRUNED_EXPANSION,
+    lootRows,
+    wantedLoot,
+    classicBossIds,
+    {
+      min: minBundled,
+      warn,
+    },
   );
-  if (belowFloor(wanted.size, minBundled)) {
-    warn?.(
-      `Skipping classic loot prune: JSON has ${wanted.size} classic loot rows (minimum ${minBundled}) vs ${stored.length} stored`,
-    );
-    return [];
-  }
-  return stored.filter((r) => !wanted.has(key(r))).map((r) => r.id);
 }
 
 /**
- * Delete the stale classic loot and bosses in ONE transaction (the boss FK
- * also cascades to loot). The ids come from the two `findStale*` helpers, so
- * they are classic-only by construction.
+ * ROK-2170 D7: ids of `forever` loot rows on a LIVE boss (any expansion —
+ * Forever loot hangs off classic boss rows) whose (bossId, itemId) is no
+ * longer among the wanted `forever` rows. `wantedLoot` must carry each forever
+ * row with its RESOLVED bossId, else every bundled row would read as stale.
+ * Returns [] (and warns) below `minBundled` (production:
+ * `MIN_BUNDLED_FOREVER_LOOT`).
  */
-export async function pruneClassicRows(
+export function findStaleForeverLootIds(
+  lootRows: readonly LootKeyRow[],
+  wantedLoot: readonly LootWantedKey[],
+  liveBossIds: ReadonlySet<number>,
+  warn?: PruneWarn,
+  minBundled = MIN_BUNDLED_FOREVER_LOOT,
+): number[] {
+  return findStaleLootIds(
+    FOREVER_EXPANSION,
+    lootRows,
+    wantedLoot,
+    liveBossIds,
+    {
+      min: minBundled,
+      warn,
+    },
+  );
+}
+
+/**
+ * Delete the stale loot and bosses in ONE transaction (the boss FK also
+ * cascades to loot). The ids come from the `findStale*` helpers, so they are
+ * classic bosses and classic/forever loot only by construction.
+ */
+export async function pruneStaleRows(
   db: PostgresJsDatabase<typeof schema>,
   bossIds: readonly number[],
   lootIds: readonly number[],

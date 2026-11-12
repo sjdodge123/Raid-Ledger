@@ -203,6 +203,39 @@ async function testLootClassicAnniversaryIncludesTbc() {
   expect(itemNames).toContain('TBC Ring');
 }
 
+/** ROK-2170: Forever's own loot replaces the classic table, per boss. */
+async function testForeverLootReplacesClassic() {
+  const boss = await insertBoss(testApp, {
+    instanceId: 203,
+    name: 'Bazil Thredd',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 7001,
+    itemName: 'Classic Cloak',
+    quality: 'Rare',
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 7002,
+    itemName: 'Forever Cloak',
+    quality: 'Rare',
+    expansion: 'forever',
+  });
+  const names = async (variant: string): Promise<string[]> => {
+    const res = await testApp.request.get(
+      `/plugins/wow-classic/bosses/${boss.id}/loot?variant=${variant}`,
+    );
+    expect(res.status).toBe(200);
+    return (res.body as Array<{ itemName: string }>).map((l) => l.itemName);
+  };
+  expect(await names('wow_forever')).toEqual(['Forever Cloak']);
+  expect(await names('classic_era')).toEqual(['Classic Cloak']);
+}
+
 describe('Boss Encounters (integration)', () => {
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -245,6 +278,9 @@ describe('Boss Encounters (integration)', () => {
 
     it('should include tbc loot for classic_anniversary variant', () =>
       testLootClassicAnniversaryIncludesTbc());
+
+    it('returns only forever loot under wow_forever, only classic under classic_era (ROK-2170)', () =>
+      testForeverLootReplacesClassic());
 
     it('should return empty array for boss with no loot', async () => {
       const boss = await insertBoss(testApp, {

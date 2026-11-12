@@ -33,6 +33,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The canary imports @raid-ledger/contract at runtime (dist/index.js),
+      # which is not committed — build it, as every other job does.
+      - name: Build contract package
+        run: npm run build -w packages/contract
+
       - name: Run canary tests
         env:
           GH_TOKEN: ${{ github.token }}
