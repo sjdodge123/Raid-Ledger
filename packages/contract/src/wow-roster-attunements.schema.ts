@@ -79,6 +79,11 @@ export const WowAttunementResultSchema = z
     nextStep: label.nullable(),
     /** Below the chain's level step — an annotation, not a verdict (D3). */
     belowLevel: z.boolean(),
+    /**
+     * The chain's level step ("needs 55"); null when the chain has none.
+     * Optional so older bodies still parse (additive, ROK-1927 P5).
+     */
+    requiredLevel: z.number().int().min(0).max(100).nullable().optional(),
   })
   .strict();
 export type WowAttunementResultDto = z.infer<typeof WowAttunementResultSchema>;
