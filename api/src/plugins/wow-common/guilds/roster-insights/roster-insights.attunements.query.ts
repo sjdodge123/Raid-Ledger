@@ -10,6 +10,7 @@ import { loadForeverQuestSources } from '../../forever-quest-source.query';
 import { mainsOnly } from './roster-insights.helpers';
 import {
   computeAttunements,
+  rosterFaction,
   toAttunementMember,
 } from './roster-insights.attunements';
 import type { InsightRow } from './roster-insights.types';
@@ -44,6 +45,7 @@ export async function loadAttunements(
   const mains = mainsOnly(all);
   const ids = mains.flatMap((r) => (r.characterId ? [r.characterId] : []));
   const quests = await loadForeverQuestSources(db, ids);
-  const members = mains.map((r) => toAttunementMember(r, quests));
+  const side = rosterFaction(mains);
+  const members = mains.map((r) => toAttunementMember(r, quests, side));
   return computeAttunements(FOREVER_ATTUNEMENTS, confirmed, members);
 }

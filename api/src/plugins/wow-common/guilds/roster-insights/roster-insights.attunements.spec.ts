@@ -8,8 +8,10 @@ import type { EffectiveQuests } from '../../forever-quest-source.helpers';
 import {
   computeAttunements,
   factionOfRace,
+  rosterFaction,
   type AttunementMemberInput,
 } from './roster-insights.attunements';
+import type { InsightRow } from './roster-insights.types';
 
 const CHAIN: AttunementDef = {
   key: 'chain',
@@ -238,5 +240,37 @@ describe('factionOfRace', () => {
     [null, null],
   ])('%s → %s', (race, side) => {
     expect(factionOfRace(race)).toBe(side);
+  });
+});
+
+describe('rosterFaction', () => {
+  const row = (race: string | null): InsightRow => ({
+    name: 'x',
+    characterId: null,
+    userId: null,
+    isMain: false,
+    rankIndex: null,
+    onlineAtExport: null,
+    lastOnlineDays: null,
+    facts: {
+      level: null,
+      class: null,
+      race: race ? { value: race, source: 'roster', asOf: null } : null,
+      role: null,
+      ilvl: null,
+      gear: null,
+      professions: null,
+      quests: null,
+      lockouts: null,
+      lastOnline: null,
+      enchantsReported: null,
+    },
+  });
+
+  it('picks the majority side of known races; a tie is null', () => {
+    expect(rosterFaction([row('Orc'), row('Troll'), row('Human')])).toBe(
+      'horde',
+    );
+    expect(rosterFaction([row('Orc'), row('Human'), row(null)])).toBeNull();
   });
 });

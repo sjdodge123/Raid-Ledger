@@ -80,10 +80,30 @@ export function factionOfRace(
   return null;
 }
 
+/**
+ * The roster's faction: the side most rows with a known race belong to (a
+ * guild is one faction). Fills in members whose race is unknown — typically
+ * unclaimed roster members — so they still count as `no_data`. Tie → null.
+ */
+export function rosterFaction(
+  rows: readonly InsightRow[],
+): AttunementFactionSide | null {
+  let horde = 0;
+  let alliance = 0;
+  for (const r of rows) {
+    const side = factionOfRace(r.facts?.race?.value);
+    if (side === 'horde') horde += 1;
+    else if (side === 'alliance') alliance += 1;
+  }
+  if (horde === alliance) return null;
+  return horde > alliance ? 'horde' : 'alliance';
+}
+
 /** Roster row → compute input (rowKey: `characterId ?? 'm' + member id`). */
 export function toAttunementMember(
   row: InsightRow,
   quests: ReadonlyMap<string, EffectiveQuests>,
+  rosterSide: AttunementFactionSide | null = null,
 ): AttunementMemberInput {
   const id = row.characterId;
   return {
@@ -92,7 +112,7 @@ export function toAttunementMember(
     characterId: id,
     cls: row.facts?.class?.value ?? null,
     level: row.facts?.level?.value ?? null,
-    faction: factionOfRace(row.facts?.race?.value),
+    faction: factionOfRace(row.facts?.race?.value) ?? rosterSide,
     quests: id === null ? null : (quests.get(id) ?? null),
   };
 }
