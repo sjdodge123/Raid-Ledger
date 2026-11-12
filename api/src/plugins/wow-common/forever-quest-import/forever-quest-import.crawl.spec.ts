@@ -367,6 +367,41 @@ describe('QuestImportCrawl — extra quest ids (ROK-1927 attunements)', () => {
   });
 });
 
+describe('QuestImportCrawl — an extra id a dungeon area also lists (review MINOR-2)', () => {
+  it('is fetched and stored once, keeping its area and dungeon', async () => {
+    const instanceId = classicQuestAreaInstanceIds().find((id) => id !== KRAUL);
+    if (instanceId === undefined) throw new Error('no mapped area but Kraul');
+    const entry = CLASSIC_QUEST_AREAS[instanceId];
+    if (!entry) throw new Error(`missing area entry ${instanceId}`);
+    const urls: string[] = [];
+    const saved: { questId: number; areaId: number; dungeon: number | null }[] =
+      [];
+    const base = routed(urls, (path) => {
+      if (path === `quest/area/${entry.areaId}`)
+        return ok({ quests: [{ id: 7761, name: 'Command' }] });
+      if (path === 'quest/7761') {
+        const area = { id: entry.areaId, name: entry.dungeon };
+        return ok({ id: 7761, title: 'Command', area });
+      }
+      return route(path);
+    });
+    const { err } = await runCrawl({
+      ...base,
+      extraQuestIds: [7761],
+      saveQuest: (row) => {
+        const dungeon = row.dungeonInstanceId ?? null;
+        saved.push({ questId: row.questId, areaId: row.areaId, dungeon });
+        return Promise.resolve();
+      },
+    });
+    expect(err).toBeNull();
+    expect(urls.filter((u) => /\/quest\/7761\?/.test(u))).toHaveLength(1);
+    expect(saved.filter((r) => r.questId === 7761)).toEqual([
+      { questId: 7761, areaId: entry.areaId, dungeon: instanceId },
+    ]);
+  });
+});
+
 /** Kraul's sample quest 1101 answers with `answer`; everything else routes. */
 function probeDeps(answer: () => Promise<QuestImportResponse>) {
   const base = routed([], route);

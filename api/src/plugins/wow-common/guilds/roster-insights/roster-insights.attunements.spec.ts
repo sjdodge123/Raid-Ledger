@@ -6,9 +6,11 @@ import {
 } from '../../data/forever-attunements';
 import type { EffectiveQuests } from '../../forever-quest-source.helpers';
 import {
+  attunementsApply,
   computeAttunements,
   factionOfRace,
   rosterFaction,
+  toAttunementMember,
   type AttunementMemberInput,
 } from './roster-insights.attunements';
 import type { InsightRow } from './roster-insights.types';
@@ -273,5 +275,143 @@ describe('rosterFaction', () => {
       'horde',
     );
     expect(rosterFaction([row('Orc'), row('Human'), row(null)])).toBeNull();
+  });
+});
+
+/** A roster row with a race fact (null = unknown race). */
+function insightRow(
+  race: string | null,
+  characterId: string | null,
+): InsightRow {
+  return {
+    name: 'x',
+    characterId,
+    userId: null,
+    isMain: true,
+    rankIndex: null,
+    onlineAtExport: null,
+    lastOnlineDays: null,
+    facts: {
+      level: null,
+      class: null,
+      race: race ? { value: race, source: 'roster', asOf: null } : null,
+      role: null,
+      ilvl: null,
+      gear: null,
+      professions: null,
+      quests: null,
+      lockouts: null,
+      lastOnline: null,
+      enchantsReported: null,
+    },
+  };
+}
+
+/** Summed counts of the defs of one group (the card merges variants). */
+function groupCounts(dto: WowRosterAttunementsDto, groupKey: string) {
+  const sum = { done: 0, inProgress: 0, notStarted: 0, noData: 0 };
+  for (const a of dto.attunements.filter((x) => x.groupKey === groupKey)) {
+    sum.done += a.counts.done;
+    sum.inProgress += a.counts.inProgress;
+    sum.notStarted += a.counts.notStarted;
+    sum.noData += a.counts.noData;
+  }
+  return sum;
+}
+
+describe('faction fallback — claimed vs unclaimed (review MAJOR-2)', () => {
+  const confirmed = new Set(attunementExtraQuestIds());
+  const charId = '22222222-2222-4222-8222-222222222222';
+
+  it('a claimed character with an unknown race never takes the roster side', () => {
+    const m = toAttunementMember(insightRow(null, charId), new Map(), 'horde');
+    expect(m.faction).toBeNull();
+  });
+
+  it('a claimed character with an unknown race uses its stored faction column', () => {
+    const stored = new Map([[charId, 'alliance' as const]]);
+    const row = insightRow(null, charId);
+    expect(toAttunementMember(row, new Map(), 'horde', stored).faction).toBe(
+      'alliance',
+    );
+  });
+
+  it('an unclaimed member with an unknown race still takes the roster side', () => {
+    const m = toAttunementMember(insightRow(null, null), new Map(), 'horde');
+    expect(m.faction).toBe('horde');
+  });
+
+  it('claimed + unknown faction: one no_data per faction group, no guessed verdict', () => {
+    const m = member({ faction: null, quests: quests([]) });
+    const dto = computeAttunements(FOREVER_ATTUNEMENTS, confirmed, [m]);
+    for (const group of ['mc', 'onyxia']) {
+      expect(groupCounts(dto, group)).toEqual({
+        done: 0,
+        inProgress: 0,
+        notStarted: 0,
+        noData: 1,
+      });
+    }
+    const results = must(dto.members[0], 'member').results;
+    expect(results.filter((r) => r.state === 'no_data')).toHaveLength(2);
+    expect(results.find((r) => r.key === 'bwl')?.state).toBe('not_started');
+  });
+
+  it('a roster tie keeps an unknown-race unclaimed member as not_claimed', () => {
+    const tie = rosterFaction([
+      insightRow('Orc', null),
+      insightRow('Human', null),
+    ]);
+    expect(tie).toBeNull();
+    const m = toAttunementMember(insightRow(null, null), new Map(), tie);
+    const dto = computeAttunements(FOREVER_ATTUNEMENTS, confirmed, [m]);
+    const results = must(dto.members[0], 'unclaimed member').results;
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((r) => r.noDataReason === 'not_claimed')).toBe(true);
+  });
+});
+
+describe('member freshness with a quest-log verdict (Codex P2)', () => {
+  const old = new Date('2026-09-01T00:00:00.000Z');
+  const withLog = (completed: number[], logAt: Date): EffectiveQuests => ({
+    ...quests(completed, { inProgress: [{ questId: 100 }] }),
+    inProgressAsOf: logAt,
+  });
+
+  it('an in_progress verdict from an older log dates the member by the log', () => {
+    const dto = run(member({ quests: withLog([], old) }));
+    expect(only(dto).state).toBe('in_progress');
+    expect(dto.members[0]).toMatchObject({
+      asOf: old.toISOString(),
+      source: 'addon',
+    });
+    expect(dto.oldestAsOf).toBe(old.toISOString());
+  });
+
+  it('a newer log keeps the completed list time', () => {
+    const newer = new Date('2026-12-01T00:00:00.000Z');
+    const dto = run(member({ quests: withLog([], newer) }));
+    expect(dto.members[0]).toMatchObject({
+      asOf: AT.toISOString(),
+      source: 'blizzard',
+    });
+  });
+
+  it('a done verdict ignores the log time', () => {
+    const dto = run(member({ quests: withLog([300], old) }));
+    expect(only(dto).state).toBe('done');
+    expect(dto.members[0]?.asOf).toBe(AT.toISOString());
+  });
+});
+
+describe('attunementsApply (review MINOR-1)', () => {
+  it.each([
+    [{ kind: 'wow_guild', gameSlug: 'world-of-warcraft-forever' }, true],
+    [{ kind: 'wow_guild', gameSlug: 'world-of-warcraft-classic' }, false],
+    [{ kind: 'game_community', gameSlug: 'world-of-warcraft-forever' }, false],
+    [{ kind: 'wow_guild', gameSlug: null }, false],
+    [null, false],
+  ])('%o → %s', (hub, expected) => {
+    expect(attunementsApply(hub)).toBe(expected);
   });
 });

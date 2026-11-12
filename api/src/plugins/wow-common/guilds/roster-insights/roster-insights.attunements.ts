@@ -130,7 +130,9 @@ function verdict(
 
 /** Unknown faction → a faction-specific def is no_data, never guessed. */
 function unknownSideVerdict(m: AttunementMemberInput): AttunementVerdict {
-  return noDataVerdict(m.characterId === null ? 'not_claimed' : 'no_quest_data');
+  return noDataVerdict(
+    m.characterId === null ? 'not_claimed' : 'no_quest_data',
+  );
 }
 
 type ResultDto = WowRosterAttunementMemberDto['results'][number];
@@ -154,7 +156,10 @@ function memberResults(
     groups.add(v.def.groupKey);
     const r = applies ? verdict(v, m, prepared) : unknownSideVerdict(m);
     if (r.state === 'in_progress' && stepInLog(v, m.quests)) logDated = true;
-    const level = { belowLevel: isBelowLevel(v, m.level), requiredLevel: v.minLevel };
+    const level = {
+      belowLevel: isBelowLevel(v, m.level),
+      requiredLevel: v.minLevel,
+    };
     return [{ key: v.def.key, ...r, ...level }];
   });
   return { results, logDated };

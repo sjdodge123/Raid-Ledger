@@ -38,7 +38,7 @@ import {
   loadInsightRawRows,
   type JoinedRoster,
 } from './roster-insights.refs';
-import type { InsightsAudience } from './roster-insights.types';
+import type { InsightRow, InsightsAudience } from './roster-insights.types';
 
 /**
  * ROK-1913 (H5) — `GET plugins/wow/guilds/:id/roster-insights`. One roster
@@ -108,15 +108,21 @@ export class RosterInsightsService {
             // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
             gear: computeGear(all),
             ...(await this.raidSection(hub, linkedUserIds)),
-            // ROK-1927: mains of the full roster (ruling D), never a visitor,
-            // and only on a Forever guild hub (MINOR-1).
-            ...(attunementsApply(hub)
-              ? { attunements: await loadAttunements(this.db, all) }
-              : {}),
+            // ROK-1927: mains of the full roster (ruling D), never a visitor.
+            ...(await this.attunementSection(hub, all)),
           }
         : {}),
       freshness: computeFreshness(rows),
     };
+  }
+
+  /** ROK-1927 — `{ attunements }` for a Forever guild hub, else nothing. */
+  private async attunementSection(
+    hub: { kind: string; gameSlug: string | null } | null,
+    all: readonly InsightRow[],
+  ) {
+    if (!attunementsApply(hub)) return {};
+    return { attunements: await loadAttunements(this.db, all) };
   }
 
   /** ROK-1917 — `{ raidProgress }` for a WoW guild hub, else nothing. */
