@@ -8,8 +8,9 @@
  *     Only this def is confirmed here — the others stay as the DB has them.
  *   - makes the three linked characters Orcs (Horde) and gives each an
  *     Armory completed-quest list: `done` holds the whole chain, `inProgress`
- *     its first {@link IN_PROGRESS_STEPS} quests, `notStarted` an empty list
- *     ("completed nothing", not "no data").
+ *     its first {@link IN_PROGRESS_STEPS} quests, `notStarted` only quests
+ *     outside every chain (`UNRELATED_COMPLETED_QUESTS`: "not started",
+ *     not "no data" — an empty list would hide the Quests section).
  *
  * Unclaimed roster rows keep no quests and take the roster's (Horde)
  * majority, so they read "No data — not claimed".
@@ -30,6 +31,7 @@ import {
 import { defined } from '../common/defined.helpers';
 import {
   AttunementCastEntrySchema,
+  armoryCompleted,
   castEntryPlan,
   seedCastEntry,
   type SeededCastEntry,
@@ -41,8 +43,6 @@ type Db = PostgresJsDatabase<typeof schema>;
 export const SEEDED_ATTUNEMENT_KEY = 'ony-horde';
 /** Quests the `inProgress` character has completed. */
 export const IN_PROGRESS_STEPS = 3;
-/** Typed empty list (no `as` cast). */
-const NONE: number[] = [];
 const SEED_RACE = 'Orc';
 const SEED_FACTION = 'horde';
 const SEED_RUN_ID = 'demo-test-attunements';
@@ -96,7 +96,7 @@ export function attunementSeedPlan() {
     completed: {
       done: ids,
       inProgress: ids.slice(0, IN_PROGRESS_STEPS),
-      notStarted: NONE,
+      notStarted: armoryCompleted([]),
     },
   };
 }

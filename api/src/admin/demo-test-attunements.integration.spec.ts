@@ -16,6 +16,7 @@ import {
   attunementQuestSteps,
 } from '../plugins/wow-common/data/forever-attunements';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
+import { UNRELATED_COMPLETED_QUESTS } from './demo-test-attunements-cast.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const LOG_AT = '2026-11-01T10:00:00.000Z';
@@ -126,7 +127,7 @@ describe('POST /admin/test/wow/seed-attunements — cast', () => {
     expect(row?.faction).toBe('alliance');
     expect(row?.armoryQuests).toEqual({
       fetchedAt: LIST_AT,
-      completed: [],
+      completed: [...UNRELATED_COMPLETED_QUESTS],
     });
     const snap = await snapshotRow(id);
     expect(snap?.data.quests).toEqual({ inProgress: [{ questId: next }] });

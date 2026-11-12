@@ -12,6 +12,8 @@
  * - The def's quest steps are confirmed like the Onyxia chain (an attunement
  *   shows only when its final quest is confirmed).
  * - Race + faction follow the def (`both` → `faction`, default horde).
+ * - Zero completed steps writes {@link UNRELATED_COMPLETED_QUESTS}, never an
+ *   empty list ("not started", not "no data").
  * - `questLog` upserts the `char` snapshot's `quests` slice as a log-only
  *   export (no `completed`: the Armory list stays the completed list), keeping
  *   any gear/lockouts already stored. Without `questLog` the snapshot is left
@@ -42,6 +44,20 @@ export const CAST_ATTUNEMENT_KEYS = FOREVER_ATTUNEMENTS.filter(
 ).map((d) => d.key);
 
 const RACE_OF = { horde: 'Orc', alliance: 'Human' } as const;
+
+/**
+ * What a "not started" character's Armory completed list holds: real
+ * level-55+ dungeon quests (BRD's Spectral Chalice and Heart of the Mountain,
+ * Scholomance's Plagued Hatchlings) that are steps of no attunement. Real
+ * Armory data is never an empty list, and an empty one hides the character
+ * page's Quests section (ROK-1745 R-6), so the fixture never writes `[]`.
+ */
+export const UNRELATED_COMPLETED_QUESTS: readonly number[] = [4083, 4123, 5529];
+
+/** The chain's completed ids, or the unrelated quests when there are none. */
+export function armoryCompleted(chainIds: number[]): number[] {
+  return chainIds.length > 0 ? chainIds : [...UNRELATED_COMPLETED_QUESTS];
+}
 
 export const AttunementCastEntrySchema = z
   .object({
@@ -83,7 +99,7 @@ function castDef(key: string): AttunementDef {
 export function castEntryPlan(entry: AttunementCastEntry, now: Date) {
   const def = castDef(entry.attunement);
   const steps = attunementQuestSteps(def);
-  const completed = steps.slice(0, entry.completedSteps).map((s) => s.questId);
+  const chainIds = steps.slice(0, entry.completedSteps).map((s) => s.questId);
   const side =
     def.faction === 'both' ? (entry.faction ?? 'horde') : def.faction;
   const log = entry.questLog;
@@ -92,9 +108,10 @@ export function castEntryPlan(entry: AttunementCastEntry, now: Date) {
     steps,
     race: RACE_OF[side],
     faction: side,
+    completedSteps: chainIds.length,
     armoryQuests: {
       fetchedAt: entry.completedAt ?? now.toISOString(),
-      completed,
+      completed: armoryCompleted(chainIds),
     },
     questLog: log
       ? {
@@ -174,6 +191,6 @@ export async function seedCastEntry(
     key: plan.def.key,
     instance: plan.def.instance,
     steps: plan.steps.map((s) => s.label),
-    completedSteps: plan.armoryQuests.completed.length,
+    completedSteps: plan.completedSteps,
   };
 }
