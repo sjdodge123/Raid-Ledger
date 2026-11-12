@@ -1,19 +1,27 @@
 import {
   MAX_ROSTER_ATTUNEMENT_MEMBERS,
-  type WowAttunementResultDto,
   type WowRosterAttunementDto,
   type WowRosterAttunementMemberDto,
   type WowRosterAttunementsDto,
 } from '@raid-ledger/contract';
-import {
-  attunementQuestSteps,
-  finalAttunementQuest,
-  type AttunementDef,
-  type AttunementQuestStep,
-} from '../../data/forever-attunements';
+import type { AttunementDef } from '../../data/forever-attunements';
 import type { EffectiveQuests } from '../../forever-quest-source.helpers';
-import { truncationCutoff } from '../../quest-progress-addon.helpers';
+import {
+  appliesTo,
+  evaluateAttunement,
+  factionOfRace,
+  isBelowLevel,
+  noDataVerdict,
+  visibleDefs,
+  type AttunementFactionSide,
+  type AttunementVerdict,
+  type VisibleDef,
+} from '../../attunement-evaluate';
 import type { InsightRow } from './roster-insights.types';
+
+/** Re-exported: the faction rule moved beside the shared evaluator. */
+export { factionOfRace };
+export type { AttunementFactionSide };
 
 /**
  * ROK-1927 (P2) — the members-only `attunements` section, computed purely
@@ -28,8 +36,6 @@ import type { InsightRow } from './roster-insights.types';
  * attuned (ruling Q3).
  */
 
-export type AttunementFactionSide = 'horde' | 'alliance';
-
 /** One roster main as the attunement compute sees it. */
 export interface AttunementMemberInput {
   rowKey: string;
@@ -42,42 +48,6 @@ export interface AttunementMemberInput {
   faction: AttunementFactionSide | null;
   /** Null = no addon quests slice and no Armory list. */
   quests: EffectiveQuests | null;
-}
-
-/** A def as shown: its confirmed quest steps and level gate. */
-interface VisibleDef {
-  def: AttunementDef;
-  steps: AttunementQuestStep[];
-  final: AttunementQuestStep | null;
-  minLevel: number | null;
-}
-
-const HORDE_RACES = new Set([
-  'orc',
-  'undead',
-  'scourge',
-  'tauren',
-  'troll',
-  'blood elf',
-  'bloodelf',
-]);
-const ALLIANCE_RACES = new Set([
-  'human',
-  'dwarf',
-  'night elf',
-  'nightelf',
-  'gnome',
-  'draenei',
-]);
-
-/** A race (display name or addon token) → its faction; unknown → null. */
-export function factionOfRace(
-  race: string | null | undefined,
-): AttunementFactionSide | null {
-  const key = race?.trim().toLowerCase() ?? '';
-  if (HORDE_RACES.has(key)) return 'horde';
-  if (ALLIANCE_RACES.has(key)) return 'alliance';
-  return null;
 }
 
 /**
@@ -117,24 +87,6 @@ export function toAttunementMember(
   };
 }
 
-/** The defs to show; hidden = trackable with an unconfirmed final quest. */
-function visibleDefs(
-  defs: readonly AttunementDef[],
-  confirmed: ReadonlySet<number>,
-): VisibleDef[] {
-  return defs.flatMap<VisibleDef>((def) => {
-    const levelStep = def.steps.find((s) => s.kind === 'level');
-    const minLevel = levelStep?.kind === 'level' ? levelStep.min : null;
-    if (!def.trackable) return [{ def, steps: [], final: null, minLevel }];
-    const final = finalAttunementQuest(def);
-    if (!final || !confirmed.has(final.questId)) return [];
-    const steps = attunementQuestSteps(def).filter((s) =>
-      confirmed.has(s.questId),
-    );
-    return [{ def, steps, final, minLevel }];
-  });
-}
-
 function untrackedReason(def: AttunementDef): string | null {
   if (def.trackable) return null;
   if (def.steps.some((s) => s.kind === 'reputation'))
@@ -142,55 +94,10 @@ function untrackedReason(def: AttunementDef): string | null {
   return "Key items aren't tracked yet";
 }
 
-/** Whether a def applies to a member of `faction` (D7). */
-function appliesTo(
-  def: AttunementDef,
-  faction: AttunementFactionSide | null,
-): boolean {
-  return def.faction === 'both' || def.faction === faction;
-}
-
-type Verdict = Omit<WowAttunementResultDto, 'key' | 'belowLevel'>;
-
-function noData(
-  reason: 'no_quest_data' | 'not_claimed' | 'truncated',
-): Verdict {
-  return {
-    state: 'no_data',
-    noDataReason: reason,
-    stepsDone: 0,
-    nextStep: null,
-  };
-}
-
 /** One member's verdict on one trackable, visible def. */
-function verdict(v: VisibleDef, m: AttunementMemberInput): Verdict {
-  if (m.characterId === null) return noData('not_claimed');
-  if (m.quests === null || v.final === null) return noData('no_quest_data');
-  const { completed, inProgress } = m.quests.quests;
-  const done = new Set(completed);
-  if (done.has(v.final.questId))
-    return {
-      state: 'done',
-      noDataReason: null,
-      stepsDone: v.steps.length,
-      nextStep: null,
-    };
-  const inLog = inProgress.some((q) =>
-    v.steps.some((s) => s.questId === q.questId),
-  );
-  const cutoff = truncationCutoff(m.quests.quests);
-  const unknown =
-    cutoff !== undefined && v.steps.some((s) => s.questId > cutoff);
-  if (unknown && !inLog) return noData('truncated');
-  const stepsDone = v.steps.filter((s) => done.has(s.questId)).length;
-  const next = v.steps.find((s) => !done.has(s.questId));
-  return {
-    state: inLog || stepsDone > 0 ? 'in_progress' : 'not_started',
-    noDataReason: null,
-    stepsDone,
-    nextStep: next?.label ?? null,
-  };
+function verdict(v: VisibleDef, m: AttunementMemberInput): AttunementVerdict {
+  if (m.characterId === null) return noDataVerdict('not_claimed');
+  return evaluateAttunement(v, m.quests);
 }
 
 function memberRow(
@@ -202,8 +109,8 @@ function memberRow(
     .map((v) => ({
       key: v.def.key,
       ...verdict(v, m),
-      belowLevel:
-        v.minLevel !== null && m.level !== null && m.level < v.minLevel,
+      belowLevel: isBelowLevel(v, m.level),
+      requiredLevel: v.minLevel,
     }));
   if (results.length === 0) return null;
   return {
