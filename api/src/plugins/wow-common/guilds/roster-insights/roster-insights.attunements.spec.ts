@@ -103,6 +103,7 @@ describe('computeAttunements — verdicts (§7, ROK-1927)', () => {
       stepsDone: 3,
       nextStep: null,
       belowLevel: false,
+      requiredLevel: 55,
     });
   });
 
