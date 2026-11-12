@@ -4,6 +4,7 @@
  * announce does not recompute every player on the next tick, and two passes
  * never overlap. The real-DB behaviour lives in gg-delivery.integration.spec.
  */
+import type { EmbedBuilder } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import { SETTING_KEYS } from '../../../drizzle/schema';
@@ -12,6 +13,7 @@ import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-c
 import type { NotificationDedupService } from '../../../notifications/notification-dedup.service';
 import type { NotificationService } from '../../../notifications/notification.service';
 import type { GgComputeService } from './gg-compute.service';
+import { EMBED_COLORS } from '../../../discord-bot/discord-bot.constants';
 import { GgDeliveryService } from './gg-delivery.service';
 import { findGgAnnouncedAt, runGgDmWave } from './gg-dm-wave.helpers';
 
@@ -51,6 +53,7 @@ function build(): {
     get: jest.fn((k: string) => Promise.resolve(SETTINGS[k] ?? null)),
     getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('chan'),
     getClientUrl: jest.fn().mockResolvedValue(null),
+    getBranding: jest.fn().mockResolvedValue({ communityName: 'Guild' }),
   };
   const computeAll = jest.fn().mockResolvedValue(undefined);
   const compute = {
@@ -88,6 +91,18 @@ it('send-now (announceOnly) after the offset never runs a DM wave', async () => 
   expect(runWave).not.toHaveBeenCalled();
   expect((await service.runTick(NOW)).status).toBe('dm-wave');
   expect(runWave).toHaveBeenCalledTimes(1);
+});
+
+it('the announcement goes out through the shared channel chrome', async () => {
+  findAnnounced.mockResolvedValue(null);
+  const { service, sendEmbed } = build();
+  await service.runTick(NOW);
+  expect(sendEmbed).toHaveBeenCalledTimes(1);
+  const embed = (sendEmbed.mock.calls[0] as [string, EmbedBuilder])[1];
+  expect(embed.data.title).toBe('GG 2026 is here');
+  expect(embed.data.author?.name).toBe('Guild');
+  expect(embed.data.footer?.text).toBe('Guild');
+  expect(embed.data.color).toBe(EMBED_COLORS.ANNOUNCEMENT);
 });
 
 it('a failed announce does not recompute every player on the next tick', async () => {

@@ -6,12 +6,15 @@
  * player's `gg_ready` prefs and falls back to in-app only without Discord (Q6).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EmbedBuilder } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import {
+  createChannelEmbed,
+  type ChannelEmbed,
+} from '../../../discord-bot/embeds/embed-chrome.helpers';
 import { NotificationDedupService } from '../../../notifications/notification-dedup.service';
 import { NotificationService } from '../../../notifications/notification.service';
 import {
@@ -224,10 +227,18 @@ export class GgDeliveryService {
     }
   }
 
-  private async buildEmbed(year: number): Promise<EmbedBuilder> {
-    const base = (await this.settings.getClientUrl())?.replace(/\/$/, '');
+  /** The channel announcement, through the shared chrome (ROK-1477 AC4). */
+  private async buildEmbed(year: number): Promise<ChannelEmbed> {
+    const [clientUrl, branding] = await Promise.all([
+      this.settings.getClientUrl(),
+      this.settings.getBranding().catch(() => null),
+    ]);
+    const base = clientUrl?.replace(/\/$/, '');
     const link = base ? `\n\nOpen yours: ${base}/gg/${year}` : '';
-    return new EmbedBuilder()
+    return createChannelEmbed({
+      state: 'announcing',
+      communityName: branding?.communityName ?? null,
+    })
       .setTitle(`GG ${year} is here`)
       .setDescription(
         `Everyone's year in games with the community is ready. Your own GG ${year} arrives in your DMs shortly.${link}`,
