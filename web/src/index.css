@@ -1977,3 +1977,27 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .btn-secondary:hover {
     background: rgba(0, 0, 0, 0.08);
 }
+
+/* StoryViewer (ROK-2187): slide entrance + KenBurnsBackground pan/zoom.
+   Both classes are dropped under prefers-reduced-motion by the components. */
+@keyframes story-slide-in {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes story-ken-burns {
+    0% {
+        transform: scale(1) translate(0, 0);
+    }
+
+    100% {
+        transform: scale(1.16) translate(-3%, 2%);
+    }
+}
