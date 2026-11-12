@@ -31,7 +31,11 @@ export function WowFactionPill({ page }: HubCtx): JSX.Element | null {
  */
 export function WowFoundedPill({ page }: HubCtx): JSX.Element | null {
     const foundedAt = page.guild.blizzardGuild?.foundedAt;
-    if (!foundedAt) return null;
+    return foundedAt ? <FoundedPill foundedAt={foundedAt} /> : null;
+}
+
+/** The pill itself, from an ISO founded date (also mounted by /dev/design-system). */
+export function FoundedPill({ foundedAt }: { foundedAt: string }): JSX.Element {
     const at = new Date(foundedAt);
     const full = at.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
     return <Pill title={full}>Founded {at.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</Pill>;

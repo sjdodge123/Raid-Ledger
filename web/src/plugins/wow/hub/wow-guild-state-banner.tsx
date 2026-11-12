@@ -14,15 +14,19 @@ import { useHubSettings } from '../../../components/hub/settings/hub-settings-co
 
 const COPY = 'Blizzard no longer finds this guild — it may have been disbanded or renamed in game';
 
+/** The banner itself; `onUpdate` null = the member variant (copy only). */
+export function GuildStateBannerView({ onUpdate }: { onUpdate: (() => void) | null }): JSX.Element {
+    return (
+        <DialogBanner tone="warning" role="status" testId="wow-guild-state-banner">
+            <span>{COPY}</span>
+            {onUpdate && <Button variant="warning-soft" size="sm" onClick={onUpdate}>Update the guild path</Button>}
+        </DialogBanner>
+    );
+}
+
 /** Renders only for a disbanded guild; the action needs `canEdit` and a settings entry. */
 export function WowGuildStateBanner({ page }: HubCtx): JSX.Element | null {
     const { openSettings } = useHubSettings();
     if (page.guild.blizzardGuild?.state !== 'disbanded') return null;
-    const action = page.viewer.canEdit ? openSettings : null;
-    return (
-        <DialogBanner tone="warning" role="status" testId="wow-guild-state-banner">
-            <span>{COPY}</span>
-            {action && <Button variant="warning-soft" size="sm" onClick={action}>Update the guild path</Button>}
-        </DialogBanner>
-    );
+    return <GuildStateBannerView onUpdate={page.viewer.canEdit ? openSettings : null} />;
 }

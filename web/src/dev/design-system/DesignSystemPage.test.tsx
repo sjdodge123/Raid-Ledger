@@ -78,6 +78,7 @@ describe('DesignSystemPage', () => {
         'Forms — the form primitives',
         'Pattern — Valheim trend chip',
         'Pattern — plugin hub widgets',
+        'Pattern — hub hero banner',
         'Pattern — meter tones and CSS histogram',
         'Pattern — masonry-packed card grid',
         'Pattern — wizard sub-step rail',
