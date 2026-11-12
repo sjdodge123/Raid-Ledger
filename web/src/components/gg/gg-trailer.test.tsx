@@ -8,7 +8,7 @@ import { GgTrailerPlayer } from './gg-trailer';
 function setup(): { controls: { pause: ReturnType<typeof vi.fn>; resume: ReturnType<typeof vi.fn> }; audio: GgStoryContextValue['audio'] } {
     const controls = { pause: vi.fn(), resume: vi.fn(), paused: false };
     const audio = { muted: false, toggleMute: vi.fn(), start: vi.fn(), pauseMusic: vi.fn(), resumeMusic: vi.fn() };
-    const ctx: GgStoryContextValue = { year: 2026, tier: 'full', share: { shared: false, slug: null, sharedAt: null }, mascot: null, started: true, start: vi.fn(), audio };
+    const ctx: GgStoryContextValue = { year: 2026, tier: 'full', share: { shared: false, slug: null, sharedAt: null }, mascot: null, started: true, start: vi.fn(), replay: vi.fn(), audio };
     render(
         <StoryControlsContext.Provider value={controls}>
             <GgStoryContext.Provider value={ctx}><GgTrailerPlayer videoId="abc123" title="Valheim trailer" /></GgStoryContext.Provider>

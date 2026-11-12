@@ -11,6 +11,29 @@ import type { GgCardProps } from '../../gg-cards';
 import { GgCardBody, GgKicker, GgLede, GgTitle } from '../../../components/gg/gg-card-parts';
 import { useGgStory } from '../../../components/gg/gg-story-context';
 import { usePrefersReducedMotion } from '../../../hooks/use-prefers-reduced-motion';
+import { useAuth } from '../../../hooks/use-auth';
+import { useBranding } from '../../../hooks/use-branding';
+
+const LINES = {
+    short: ['This was the year you joined the party.', 'this was the year you joined the party.'],
+    full: ['It was a big one. About a minute — let’s go.', 'it was a big one. About a minute — let’s go.'],
+} as const;
+
+/**
+ * The names the intro shows: the player from the signed-in user, the community
+ * from branding (the card payload carries only `memberSince`).
+ */
+function useIntroNames(): { player: string | null; community: string | null } {
+    const { user } = useAuth();
+    const { brandingQuery } = useBranding();
+    return { player: user?.displayName ?? user?.username ?? null, community: brandingQuery.data?.communityName ?? null };
+}
+
+/** "<Player>, it was a big one…" — or the bare sentence when no name is known. */
+function introLede(tier: 'full' | 'short', player: string | null): string {
+    const [bare, tail] = LINES[tier];
+    return player ? `${player}, ${tail}` : bare;
+}
 
 function TapToStart({ onStart, muted }: { onStart: () => void; muted: boolean }): JSX.Element {
     return (
@@ -29,6 +52,7 @@ function TapToStart({ onStart, muted }: { onStart: () => void; muted: boolean })
 export function GgIntroCardView({ year }: GgCardProps): JSX.Element {
     const { started, start, mascot, audio, tier } = useGgStory();
     const reduced = usePrefersReducedMotion();
+    const { player, community } = useIntroNames();
     return (
         <div className="relative h-full" data-testid="gg-intro" data-converted={started ? 'true' : 'false'}>
             {started && !reduced && (
@@ -36,13 +60,14 @@ export function GgIntroCardView({ year }: GgCardProps): JSX.Element {
                     className="pointer-events-none absolute left-1/2 top-1/3 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-success/40 animate-[gg-wash_1s_ease-out_both]" />
             )}
             <GgCardBody center>
-                <GgKicker>Your year in Raid Ledger</GgKicker>
+                <GgKicker>{community ? `${community} · ${year}` : 'Your year in Raid Ledger'}</GgKicker>
                 {mascot && (
                     <img src={mascot.imageUrl} alt={mascot.emojiName}
                         className={`h-28 w-28 object-contain ${started ? '' : 'grayscale'}`} />
                 )}
                 <GgTitle display>GG {year}</GgTitle>
-                <GgLede>{tier === 'short' ? 'This was the year you joined the party.' : 'It was a big one. About a minute — let’s go.'}</GgLede>
+                {community && <GgLede><strong>Your year in Raid Ledger</strong></GgLede>}
+                <GgLede>{introLede(tier === 'short' ? 'short' : 'full', player)}</GgLede>
             </GgCardBody>
             {!started && <TapToStart onStart={start} muted={audio.muted} />}
         </div>

@@ -16,6 +16,8 @@ export interface GgStoryContextValue {
     started: boolean;
     /** Leave the intro gate (plays sound unless muted). */
     start: () => void;
+    /** Play the story again from the intro (the Summary's Replay button). */
+    replay: () => void;
     audio: GgAudio;
 }
 
@@ -23,7 +25,7 @@ const NOOP_AUDIO: GgAudio = { muted: true, toggleMute: () => {}, start: () => {}
 
 export const GgStoryContext = createContext<GgStoryContextValue>({
     year: new Date().getFullYear(), tier: 'full', share: { shared: false, slug: null, sharedAt: null },
-    mascot: null, started: true, start: () => {}, audio: NOOP_AUDIO,
+    mascot: null, started: true, start: () => {}, replay: () => {}, audio: NOOP_AUDIO,
 });
 
 /** The enclosing GG story. */

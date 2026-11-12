@@ -4,14 +4,19 @@ import type { GgTopGamesCard } from '@raid-ledger/contract';
 import type { GgCardProps } from '../../gg-cards';
 import { GgCardBody, GgKicker, GgLede, GgRankRow, GgTitle } from '../../../components/gg/gg-card-parts';
 import { GgTrailer, GgTrailerPlayer } from '../../../components/gg/gg-trailer';
+import { ggPrefersLowData } from '../../../components/gg/gg-low-data';
 import { ggHours } from '../../../components/gg/gg-format';
 
 interface GameRef { gameId: number; name: string; coverUrl?: string | null | undefined }
 interface NewGames { count: number; games: GameRef[] }
 
-/** Stored trailer id → the player; `undefined` (older snapshot) → look it up; `null` → none. */
+/**
+ * Stored trailer id → the player; `undefined` (older snapshot) → look it up;
+ * `null` → none. Save-Data / slow link → a note instead (stills only).
+ */
 function TopTrailer({ game }: { game: GgTopGamesCard['games'][number] }): JSX.Element | null {
     if (game.trailerVideoId === null) return null;
+    if (ggPrefersLowData()) return <p className="text-xs text-muted" data-testid="gg-trailer-skipped">Trailer hidden to save data.</p>;
     if (game.trailerVideoId === undefined) return <GgTrailer gameId={game.gameId} gameName={game.name} />;
     return <GgTrailerPlayer videoId={game.trailerVideoId} title={`${game.name} trailer`} />;
 }

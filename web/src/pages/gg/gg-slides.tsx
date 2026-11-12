@@ -29,22 +29,22 @@ export function useGgBackdrops(media: { gameId?: number; screenshots: readonly s
     return stored ? media.screenshots : data?.screenshots ?? [];
 }
 
-function backgroundFor(c: ResolvedGgCard, i: number, backdrops: readonly string[], started: boolean): JSX.Element {
+function backgroundFor(c: ResolvedGgCard, i: number, backdrops: readonly string[], started: boolean, still: boolean): JSX.Element {
     if (c.key === 'core:intro') return <GgIntroBackground started={started} />;
     const own = c.card.backgroundSrc?.(c.payload);
     const fallback = backdrops.length > 0 ? backdrops[i % backdrops.length] : undefined;
-    return <KenBurnsBackground src={own ?? fallback} />;
+    return <KenBurnsBackground src={own ?? fallback} still={still} />;
 }
 
-/** One slide per resolved card. */
-export function buildGgSlides(cards: readonly ResolvedGgCard[], year: number, backdrops: readonly string[], started: boolean): StorySlide[] {
+/** One slide per resolved card; `still` (Save-Data / slow link) freezes every backdrop. */
+export function buildGgSlides(cards: readonly ResolvedGgCard[], year: number, backdrops: readonly string[], started: boolean, still = false): StorySlide[] {
     return cards.map((c, i) => {
         const { Component } = c.card;
         const slide: StorySlide = {
             id: c.key,
             label: c.key === 'core:intro' ? `GG ${year}` : c.card.label,
             content: () => <Suspense fallback={null}><Component payload={c.payload} year={year} /></Suspense>,
-            background: backgroundFor(c, i, backdrops, started),
+            background: backgroundFor(c, i, backdrops, started, still),
         };
         return c.card.durationMs === undefined ? slide : { ...slide, durationMs: c.card.durationMs };
     });

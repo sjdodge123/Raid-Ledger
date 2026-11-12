@@ -129,8 +129,8 @@ export function StoryLiveRegion({ index, count, label }: { index: number; count:
  * keyframes in index.css). Reduced motion = the same image, static. Without a
  * `src` it paints a token gradient so text keeps its contrast.
  */
-export function KenBurnsBackground({ src, className = '' }: { src?: string | undefined; className?: string }): JSX.Element {
-    const reduced = usePrefersReducedMotion();
+export function KenBurnsBackground({ src, className = '', still = false }: { src?: string | undefined; className?: string; still?: boolean }): JSX.Element {
+    const reduced = usePrefersReducedMotion() || still;
     return (
         <div aria-hidden="true" className={`absolute inset-0 overflow-hidden bg-gradient-to-b from-panel to-backdrop ${className}`}>
             {src && (

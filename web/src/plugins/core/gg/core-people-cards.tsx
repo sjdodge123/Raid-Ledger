@@ -10,6 +10,8 @@ import { GG_SUPERLATIVES } from '../../../components/gg/gg-format';
 import { GgSummaryFace } from '../../../components/gg/gg-summary-face';
 import { GgSharePanel } from '../../../components/gg/gg-share-panel';
 import { ggMusicCredits } from '../../../components/gg/gg-music';
+import { useGgStory } from '../../../components/gg/gg-story-context';
+import { Button } from '../../../components/ui/button';
 
 /** Card 9 — top three people. */
 export function GgPeopleCardView({ payload }: GgCardProps<GgPeopleCard>): JSX.Element {
@@ -41,14 +43,16 @@ export function GgSuperlativeCardView({ payload }: GgCardProps<{ key: GgSuperlat
     );
 }
 
-/** Card 12 — the summary + Share toggle + the CC BY music credit. */
+/** Card 12 — the summary + Share toggle + Replay + the CC BY music credit. */
 export function GgSummaryCardView({ payload, year }: GgCardProps<GgSummaryCard>): JSX.Element {
+    const { replay } = useGgStory();
     return (
         <GgCardBody>
             <GgSummaryFace year={year} eventsAttended={payload.eventsAttended} hoursPlayedSeconds={payload.hoursPlayedSeconds}
                 topGames={payload.topGames} playedWithCount={payload.playedWithCount} superlative={payload.superlative} />
             <div className="flex-1" />
             <GgSharePanel />
+            <Button variant="secondary" onClick={replay} data-testid="gg-replay">Replay</Button>
             {ggMusicCredits().map((c) => <p key={c} className="text-[11px] leading-snug text-dim" data-testid="gg-music-credit">Music: {c}</p>)}
         </GgCardBody>
     );

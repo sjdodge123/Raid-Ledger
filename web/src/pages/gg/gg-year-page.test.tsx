@@ -93,3 +93,28 @@ describe('GG year page (ROK-2187)', () => {
         await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
     });
 });
+
+describe('GG year page — replay + Save-Data (ROK-2187)', () => {
+    it('Replay on the Summary goes back to the intro and re-arms Tap to start', async () => {
+        renderYear(ggSnapshotFixture({ cards: pick('intro', 'events', 'summary') }));
+        fireEvent.click(await screen.findByTestId('gg-tap-to-start'));
+        key('ArrowRight'); key('ArrowRight');
+        fireEvent.click(await screen.findByTestId('gg-replay'));
+        expect(await screen.findByRole('group', { name: '1 of 3: GG 2026' })).toBeInTheDocument();
+        expect(screen.getByTestId('gg-tap-to-start')).toBeInTheDocument();
+    });
+
+    it('Save-Data: the top-games card shows no trailer player and the backdrops stay still', async () => {
+        Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true } });
+        try {
+            renderYear(ggSnapshotFixture({ cards: pick('intro', 'top-games') }));
+            fireEvent.click(await screen.findByTestId('gg-tap-to-start'));
+            key('ArrowRight');
+            expect(await screen.findByTestId('gg-trailer-skipped')).toHaveTextContent('Trailer hidden to save data.');
+            expect(screen.queryByTestId('gg-trailer-frame')).toBeNull();
+            expect(screen.getByTestId('ken-burns-image')).toHaveAttribute('data-motion', 'static');
+        } finally {
+            Object.defineProperty(navigator, 'connection', { configurable: true, value: undefined });
+        }
+    });
+});

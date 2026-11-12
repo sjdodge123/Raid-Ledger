@@ -14,6 +14,7 @@ import { resolveGgCards } from '../../plugins/gg-cards';
 import { usePluginStore } from '../../stores/plugin-store';
 import type { GgOwnerSnapshot } from '../../lib/api/gg-api';
 import { buildGgSlides, topGameMedia, useGgBackdrops } from './gg-slides';
+import { ggPrefersLowData } from '../../components/gg/gg-low-data';
 
 function HeaderExtra({ snapshot, audio }: { snapshot: GgOwnerSnapshot; audio: GgStoryContextValue['audio'] }): JSX.Element {
     return (
@@ -26,28 +27,45 @@ function HeaderExtra({ snapshot, audio }: { snapshot: GgOwnerSnapshot; audio: Gg
     );
 }
 
-/** The full-screen story for `snapshot`. */
-export function GgStory({ snapshot, onClose }: { snapshot: GgOwnerSnapshot; onClose: () => void }): JSX.Element {
-    const active = usePluginStore((s) => s.activeSlugs);
-    const cards = useMemo(() => resolveGgCards(snapshot.cards, active), [snapshot.cards, active]);
-    const audio = useGgAudio();
-    const gated = cards[0]?.key === 'core:intro';
+/**
+ * The intro gate + replay: `started` flips on "Tap to start"; `replay` stops the
+ * music, re-arms the gate and bumps `run` (the StoryViewer key → slide 1).
+ */
+interface GgRun { started: boolean; start: () => void; replay: () => void; run: number }
+
+function useGgRun(gated: boolean, audio: GgStoryContextValue['audio'], mascot: GgStoryContextValue['mascot']): GgRun {
     const [started, setStarted] = useState(!gated);
-    const mascot = snapshot.mascot ?? null;
+    const [run, setRun] = useState(0);
     const start = useCallback((): void => {
         if (started) return;
         setStarted(true);
         audio.start(mascot);
     }, [started, audio, mascot]);
+    const replay = useCallback((): void => {
+        audio.pauseMusic();
+        setStarted(!gated);
+        setRun((r) => r + 1);
+    }, [audio, gated]);
+    return { started, start, replay, run };
+}
+
+/** The full-screen story for `snapshot`. */
+export function GgStory({ snapshot, onClose }: { snapshot: GgOwnerSnapshot; onClose: () => void }): JSX.Element {
+    const active = usePluginStore((s) => s.activeSlugs);
+    const cards = useMemo(() => resolveGgCards(snapshot.cards, active), [snapshot.cards, active]);
+    const audio = useGgAudio();
+    const mascot = snapshot.mascot ?? null;
+    const { started, start, replay, run } = useGgRun(cards[0]?.key === 'core:intro', audio, mascot);
+    const still = useMemo(() => ggPrefersLowData(), []);
     const media = useMemo(() => topGameMedia(snapshot.cards), [snapshot.cards]);
     const backdrops = useGgBackdrops(media);
-    const slides = useMemo(() => buildGgSlides(cards, snapshot.year, backdrops, started), [cards, snapshot.year, backdrops, started]);
+    const slides = useMemo(() => buildGgSlides(cards, snapshot.year, backdrops, started, still), [cards, snapshot.year, backdrops, started, still]);
     const ctx = useMemo<GgStoryContextValue>(() => ({
-        year: snapshot.year, tier: snapshot.tier, share: snapshot.share, mascot, started, start, audio,
-    }), [snapshot.year, snapshot.tier, snapshot.share, mascot, started, start, audio]);
+        year: snapshot.year, tier: snapshot.tier, share: snapshot.share, mascot, started, start, replay, audio,
+    }), [snapshot.year, snapshot.tier, snapshot.share, mascot, started, start, replay, audio]);
     return (
         <GgStoryContext.Provider value={ctx}>
-            <StoryViewer title={`GG ${snapshot.year}`} slides={slides} onClose={onClose} paused={!started}
+            <StoryViewer key={run} title={`GG ${snapshot.year}`} slides={slides} onClose={onClose} paused={!started}
                 onIndexChange={(i) => { if (i > 0) start(); }}
                 headerExtra={<HeaderExtra snapshot={snapshot} audio={audio} />} />
         </GgStoryContext.Provider>
