@@ -22,7 +22,11 @@ type SideName = 'loot' | 'equipped';
 interface Side { items: DetailItem[]; stats: Map<string, StatLine> | null; note: string | null }
 interface Sides { loot: Side; equipped: Side }
 
-export interface ItemCompareTableProps { loot: BossLootDto; comparison: LootComparison; gameVariant: string }
+export interface ItemCompareTableProps {
+    loot: BossLootDto; comparison: LootComparison; gameVariant: string;
+    /** The row's Wowhead link override for the loot side (a quest reward's `/forever` page). */
+    lootUrl?: string | undefined;
+}
 
 export function StatsUnknown({ text, side, className = '' }: { text: string; side: SideName; className?: string }) {
     return <div className={`px-2.5 py-2 rounded-lg bg-panel text-muted text-xs ${className}`} data-testid="stats-not-synced" data-side={side}>{text}</div>;
@@ -32,12 +36,12 @@ function statMap(view: StatsView | null): Map<string, StatLine> | null {
     return view ? new Map(view.stats.map((s) => [s.key, s])) : null;
 }
 
-function buildSides(loot: BossLootDto, comparison: LootComparison, gameVariant: string): Sides {
+function buildSides({ loot, comparison, gameVariant, lootUrl }: ItemCompareTableProps): Sides {
     const note = lootNote(loot, comparison);
     const eqItems = comparison.target.items;
     const eqView = eqItems.length > 0 ? sumViews(eqItems.map((i) => itemStatsView(i))) : null;
     return {
-        loot: { items: [toDetailItem(loot, gameVariant)], stats: note ? null : statMap(itemStatsView(loot)), note },
+        loot: { items: [toDetailItem(loot, gameVariant, lootUrl)], stats: note ? null : statMap(itemStatsView(loot)), note },
         equipped: {
             items: eqItems.map((i) => toDetailItem(i, gameVariant)),
             stats: statMap(eqView),
@@ -207,8 +211,8 @@ function WowheadButtons({ sides }: { sides: Sides }) {
 }
 
 /** Desktop body of `ItemCompareDialog` — see file docstring. */
-export function ItemCompareTable({ loot, comparison, gameVariant }: ItemCompareTableProps) {
-    const sides = useMemo(() => buildSides(loot, comparison, gameVariant), [loot, comparison, gameVariant]);
+export function ItemCompareTable({ loot, comparison, gameVariant, lootUrl }: ItemCompareTableProps) {
+    const sides = useMemo(() => buildSides({ loot, comparison, gameVariant, lootUrl }), [loot, comparison, gameVariant, lootUrl]);
     const deltas = useMemo(() => (comparison.deltas ? new Map(comparison.deltas.map((d) => [d.key, d])) : undefined), [comparison.deltas]);
     return (
         <div data-testid="item-compare-dialog" data-layout="table">

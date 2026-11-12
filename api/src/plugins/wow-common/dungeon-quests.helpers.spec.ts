@@ -6,9 +6,11 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { buildItemDetailsMap } from './dungeon-quests.helpers';
+import { attachItemTooltips } from './dungeon-quests.item-meta';
 
 jest.mock('./dungeon-quests.item-meta', () => ({
   mergeItemMetaFallback: jest.fn().mockResolvedValue(undefined),
+  attachItemTooltips: jest.fn().mockResolvedValue(undefined),
 }));
 
 type LootRow = {
@@ -75,5 +77,14 @@ describe('buildItemDetailsMap — Classic vs Forever loot rows (ROK-2170)', () =
       if (rows.length === 1) expect(item).toBeUndefined();
       else expect(item).toMatchObject({ quality: 'Uncommon', itemLevel: 23 });
     }
+  });
+});
+
+describe('buildItemDetailsMap — reward tooltips (ROK-2186)', () => {
+  it('attaches cached tooltips to the finished map', async () => {
+    const db = fakeDb([CLASSIC_6903]);
+    const map = await buildItemDetailsMap(db, new Set([6903]), {}, false);
+    expect(attachItemTooltips).toHaveBeenCalledWith(db, map);
+    expect(map.has(6903)).toBe(true);
   });
 });

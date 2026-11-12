@@ -10,7 +10,9 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../../common/testing/integration-helpers';
+import type { ItemTooltip } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { WOWHEAD_TOOLTIP_PARSE_VERSION } from './wowhead-item/wowhead-item.types';
 import { defined } from '../../common/testing/narrow';
 
 /** Insert a dungeon quest directly and return the row. */
@@ -239,6 +241,55 @@ async function testRewardFromItemMetaCache() {
   ]);
 }
 
+const TOOLTIP_REWARD_ID = 991003;
+
+/** ROK-2186: a reward with a parsed `wow_item_meta` tooltip carries it. */
+async function testRewardCarriesCachedTooltip() {
+  const instanceId = 402;
+  await insertQuest(testApp, {
+    questId: 5201,
+    dungeonInstanceId: instanceId,
+    name: 'Tooltip Reward Quest',
+    expansion: 'classic',
+    questLevel: 30,
+    rewardsJson: [TOOLTIP_REWARD_ID],
+  });
+  const tooltip: ItemTooltip = {
+    env: 4,
+    slotLabel: 'Wrist',
+    subclass: 'Leather',
+    binding: null,
+    unique: false,
+    requiredLevel: 25,
+    armor: 40,
+    weapon: null,
+    stats: [{ key: 'AGILITY', name: 'Agility', value: 7 }],
+    effects: [],
+    setName: null,
+    randomEnchant: false,
+  };
+  await testApp.db.insert(schema.wowItemMeta).values({
+    itemId: TOOLTIP_REWARD_ID,
+    status: 'resolved',
+    env: 4,
+    name: 'Cuffs of the Tooltip',
+    quality: 2,
+    icon: 'inv_bracer_07',
+    fetchedAt: new Date(),
+    tooltip,
+    tooltipVersion: WOWHEAD_TOOLTIP_PARSE_VERSION,
+  });
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/instances/${instanceId}/quests/enriched?variant=classic_era`,
+  );
+  expect(res.status).toBe(200);
+  type Reward = { itemId: number; tooltip?: ItemTooltip | null };
+  const quest = (res.body as Array<{ rewards: Reward[] | null }>)[0];
+  expect(quest?.rewards).toEqual([
+    expect.objectContaining({ itemId: TOOLTIP_REWARD_ID, tooltip }),
+  ]);
+}
+
 describe('Dungeon Quests — enriched quests (integration)', () => {
   beforeAll(() => setupTestApp());
   afterEach(() => cleanupTestApp());
@@ -281,6 +332,9 @@ describe('Dungeon Quests — enriched quests (integration)', () => {
 
     it('resolves a reward id with no lookup entry from the wow_item_meta cache', () =>
       testRewardFromItemMetaCache());
+
+    it('a reward with a parsed wow_item_meta row carries its tooltip (ROK-2186)', () =>
+      testRewardCarriesCachedTooltip());
 
     it('should return 400 for invalid variant', async () => {
       const res = await testApp.request.get(
