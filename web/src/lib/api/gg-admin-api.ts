@@ -35,8 +35,18 @@ export function recomputeGg(body: GgAdminRecomputeDto): Promise<unknown> {
     return fetchApi('/admin/gg/recompute', { method: 'POST', body: JSON.stringify(body) });
 }
 
-/** Send now — bypasses the date gate, still idempotent. */
-export function sendGgNow(): Promise<unknown> {
+/**
+ * The send-now response (`GgDeliveryOutcome`, `api/src/plugins/core/gg/gg-delivery.service.ts`):
+ * HTTP 200 for every status — `announced` / `waiting-offset` carry the year and post time.
+ */
+export interface GgSendNowOutcome {
+    status: string;
+    year?: number;
+    announcedAt?: string;
+}
+
+/** Send now — bypasses the date gate, still idempotent; posts the announcement only. */
+export function sendGgNow(): Promise<GgSendNowOutcome> {
     return fetchApi('/admin/gg/send-now', { method: 'POST' });
 }
 

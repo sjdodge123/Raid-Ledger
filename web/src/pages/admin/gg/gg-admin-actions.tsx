@@ -9,9 +9,10 @@ import type { GgAdminDryRunDto } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import { DiscardChangesConfirm } from '../../../components/ui/discard-changes-confirm';
-import { useGgDryRun } from '../../../hooks/admin/use-gg-admin';
+import { useGgAdminSettings, useGgDryRun } from '../../../hooks/admin/use-gg-admin';
 import { recomputeGg, sendGgNow } from '../../../lib/api/gg-admin-api';
 import { toast } from '../../../lib/toast';
+import { ggSendNowToast, type GgSendNowOutcome } from './gg-send-now-outcome';
 
 function DryRunTable({ r }: { r: GgAdminDryRunDto }): JSX.Element {
     const rows: [string, number][] = [
@@ -33,19 +34,32 @@ function DryRunTable({ r }: { r: GgAdminDryRunDto }): JSX.Element {
     );
 }
 
-/** "Send now" behind a confirm: it posts the announcement and starts the DM wave. */
+/** The confirm text: send-now posts the announcement only; DMs follow on the cron's pacing. */
+function sendNowMessage(year: number, wouldDm: number | undefined, offsetMinutes: number | undefined): string {
+    const who = wouldDm === undefined ? 'Players' : `${wouldDm} player${wouldDm === 1 ? '' : 's'}`;
+    const start = offsetMinutes ? `, starting ${offsetMinutes} min after the post` : '';
+    return `Post the GG ${year} announcement now? ${who} then get their DMs in batches of up to 25 every 5 minutes${start}. This can't be undone.`;
+}
+
+/** "Send now" behind a confirm: it posts the announcement; the DM wave follows on schedule. */
 function SendNow({ year, wouldDm, pending, onSend }: { year: number; wouldDm: number | undefined; pending: boolean; onSend: () => void }): JSX.Element {
     const [confirming, setConfirming] = useState(false);
-    const who = wouldDm === undefined ? 'players' : `${wouldDm} player${wouldDm === 1 ? '' : 's'}`;
+    const offset = useGgAdminSettings().data?.dmOffsetMinutes;
     return (
         <>
             <Button variant="warning-soft" data-testid="gg-send-now" loading={pending} onClick={() => setConfirming(true)}>Send now</Button>
             <DiscardChangesConfirm isOpen={confirming} onKeep={() => setConfirming(false)}
                 onDiscard={() => { setConfirming(false); onSend(); }}
-                message={`Post the GG ${year} announcement and DM ${who} now? This can't be undone.`}
+                message={sendNowMessage(year, wouldDm, offset)}
                 copy={{ title: `Send GG ${year} now?`, keepLabel: 'Cancel', discardLabel: 'Send now' }} />
         </>
     );
+}
+
+/** Toast what send-now actually did (every status is HTTP 200). */
+function toastSendNow(outcome: GgSendNowOutcome, clickedAt: Date): void {
+    const t = ggSendNowToast(outcome, clickedAt);
+    toast[t.kind](t.text);
 }
 
 /** Dry run / recompute / send now for the current year. */
@@ -53,9 +67,15 @@ export function GgAdminActions({ year }: { year: number }): JSX.Element {
     const [asked, setAsked] = useState(false);
     const [force, setForce] = useState(false);
     const dry = useGgDryRun(year, asked);
-    const done = { onSuccess: () => { toast.success('Done'); void dry.refetch(); }, onError: (e: Error) => toast.error(e.message) };
-    const recompute = useMutation({ mutationFn: () => recomputeGg(force ? { year, force } : { year }), ...done });
-    const send = useMutation({ mutationFn: sendGgNow, ...done });
+    const onError = (e: Error): void => { toast.error(e.message); };
+    const recompute = useMutation({
+        mutationFn: () => recomputeGg(force ? { year, force } : { year }),
+        onSuccess: () => { toast.success(`GG ${year} recomputed`); void dry.refetch(); }, onError,
+    });
+    const send = useMutation({
+        mutationFn: async () => ({ outcome: await sendGgNow(), clickedAt: new Date() }),
+        onSuccess: ({ outcome, clickedAt }) => { toastSendNow(outcome, clickedAt); void dry.refetch(); }, onError,
+    });
     return (
         <section data-testid="gg-admin-actions" className="bg-panel border border-edge rounded-lg p-4 space-y-3">
             <h3 className="text-base font-semibold text-foreground">GG {year} — check and send</h3>
