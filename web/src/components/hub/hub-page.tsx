@@ -40,6 +40,7 @@ import { hubBellVisible } from './hub-notify-bell.helpers';
 import { useSignInAgain } from './use-sign-in-again';
 import { useSessionRecheck, type RecoveryResult } from './use-session-recheck';
 import { ErrorState, LoadingState, Notice, NotFoundNotice, PAGE } from './hub-page-error';
+import { canPagePastEvents } from './api/use-guild-past-events';
 
 /** Re-exported for the page's existing specs (moved to `hub-page-error.tsx`, ROK-2132). */
 export { ErrorState };
@@ -94,8 +95,8 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
     if (active === 'events') {
         const Lead = mod?.eventsLead;
-        // ROK-2185: the past-events route answers members and staff (staff resolve to leader); a visitor gets 403.
-        const past = { guildId: page.guild.id, canPage: page.viewer.role !== 'visitor' };
+        // ROK-2185: same read rule as the past-events route (`canReadOverview`).
+        const past = { guildId: page.guild.id, canPage: canPagePastEvents(page) };
         return <HubEventsTab query={ctx.raids} kind={page.guild.kind} lead={Lead && <Lead {...ctx} />} past={past} />;
     }
     if (active === 'posts') {
