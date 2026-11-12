@@ -1,4 +1,3 @@
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { WowCharacterAttunementDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -6,8 +5,10 @@ import {
   appliesTo,
   attunementChecklist,
   evaluateAttunement,
+  factionOfColumn,
   factionOfRace,
   isBelowLevel,
+  prepareQuests,
   visibleDefs,
   type AttunementFactionSide,
 } from './attunement-evaluate';
@@ -39,10 +40,11 @@ export function computeCharacterAttunements(
   confirmed: ReadonlySet<number>,
   input: CharacterAttunementInput,
 ): WowCharacterAttunementDto[] {
+  const prepared = prepareQuests(input.quests);
   return visibleDefs(defs, confirmed)
     .filter((v) => v.def.trackable && appliesTo(v.def, input.faction))
     .map((v) => {
-      const { state, nextStep } = evaluateAttunement(v, input.quests);
+      const { state, nextStep } = evaluateAttunement(v, input.quests, prepared);
       return {
         key: v.def.key,
         groupKey: v.def.groupKey,
@@ -51,35 +53,33 @@ export function computeCharacterAttunements(
         belowLevel: isBelowLevel(v, input.level),
         requiredLevel: v.minLevel,
         nextStep,
-        steps: attunementChecklist(v, input.quests),
+        steps: attunementChecklist(v, input.quests, prepared),
       };
     });
 }
 
-/** A stored faction column ("Horde", "alliance") → its side; else null. */
-function sideOf(faction: string | null): AttunementFactionSide | null {
-  const key = faction?.trim().toLowerCase();
-  return key === 'horde' || key === 'alliance' ? key : null;
+/** The character columns the faction and level gate read. */
+export interface CharacterAttunementRow {
+  race: string | null;
+  faction: string | null;
+  level: number | null;
 }
 
-/** Loads the confirmed ids and the character's race/faction/level. */
+/**
+ * Loads the confirmed ids; the caller passes the character row it already
+ * read (review NIT-1: one character read per request).
+ */
 export async function loadCharacterAttunements(
   db: Db,
-  characterId: string,
+  row: CharacterAttunementRow,
   quests: EffectiveQuests,
 ): Promise<WowCharacterAttunementDto[]> {
   const confirmed = await loadConfirmedAttunementIds(db);
   if (confirmed.size === 0) return [];
-  const c = schema.characters;
-  const [row] = await db
-    .select({ race: c.race, faction: c.faction, level: c.level })
-    .from(c)
-    .where(eq(c.id, characterId))
-    .limit(1);
-  const faction = factionOfRace(row?.race) ?? sideOf(row?.faction ?? null);
+  const faction = factionOfRace(row.race) ?? factionOfColumn(row.faction);
   return computeCharacterAttunements(FOREVER_ATTUNEMENTS, confirmed, {
     faction,
-    level: row?.level ?? null,
+    level: row.level,
     quests,
   });
 }

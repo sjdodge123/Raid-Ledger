@@ -6,6 +6,10 @@ import {
   FOREVER_ATTUNEMENTS,
   attunementExtraQuestIds,
 } from '../../data/forever-attunements';
+import {
+  factionOfColumn,
+  type AttunementFactionSide,
+} from '../../attunement-evaluate';
 import { loadForeverQuestSources } from '../../forever-quest-source.query';
 import { mainsOnly } from './roster-insights.helpers';
 import {
@@ -30,6 +34,25 @@ export async function loadConfirmedAttunementIds(db: Db): Promise<Set<number>> {
   return new Set(rows.map((r) => r.id));
 }
 
+/** Claimed characters' stored faction column (the race-unknown fallback). */
+async function loadStoredSides(
+  db: Db,
+  ids: readonly string[],
+): Promise<Map<string, AttunementFactionSide>> {
+  if (ids.length === 0) return new Map();
+  const c = schema.characters;
+  const rows = await db
+    .select({ id: c.id, faction: c.faction })
+    .from(c)
+    .where(inArray(c.id, [...ids]));
+  const sides = new Map<string, AttunementFactionSide>();
+  for (const r of rows) {
+    const side = factionOfColumn(r.faction);
+    if (side) sides.set(r.id, side);
+  }
+  return sides;
+}
+
 /**
  * The members-only `attunements` section over the roster's MAINS (ruling D:
  * a linked user's main row plus every unclaimed member). Quests are loaded
@@ -44,8 +67,11 @@ export async function loadAttunements(
     return computeAttunements(FOREVER_ATTUNEMENTS, confirmed, []);
   const mains = mainsOnly(all);
   const ids = mains.flatMap((r) => (r.characterId ? [r.characterId] : []));
-  const quests = await loadForeverQuestSources(db, ids);
+  const [quests, stored] = await Promise.all([
+    loadForeverQuestSources(db, ids),
+    loadStoredSides(db, ids),
+  ]);
   const side = rosterFaction(mains);
-  const members = mains.map((r) => toAttunementMember(r, quests, side));
+  const members = mains.map((r) => toAttunementMember(r, quests, side, stored));
   return computeAttunements(FOREVER_ATTUNEMENTS, confirmed, members);
 }

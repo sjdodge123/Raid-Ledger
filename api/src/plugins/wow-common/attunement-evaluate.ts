@@ -67,6 +67,42 @@ export function factionOfRace(
   return null;
 }
 
+/** A stored faction column ("Horde", "alliance") → its side; else null. */
+export function factionOfColumn(
+  faction: string | null | undefined,
+): AttunementFactionSide | null {
+  const key = faction?.trim().toLowerCase();
+  return key === 'horde' || key === 'alliance' ? key : null;
+}
+
+/**
+ * One character's completed-id Set and truncation cut-off, built ONCE per
+ * character and shared by every def's verdict and checklist (review MINOR-3).
+ */
+export interface PreparedQuests {
+  done: ReadonlySet<number>;
+  cutoff: number | undefined;
+}
+
+export function prepareQuests(
+  quests: EffectiveQuests | null,
+): PreparedQuests | null {
+  if (quests === null) return null;
+  return {
+    done: new Set(quests.quests.completed),
+    cutoff: truncationCutoff(quests.quests),
+  };
+}
+
+/** Whether a confirmed step of `v` sits in the character's quest log. */
+export function stepInLog(
+  v: VisibleDef,
+  quests: EffectiveQuests | null,
+): boolean {
+  const log = quests?.quests.inProgress ?? [];
+  return log.some((q) => v.steps.some((s) => s.questId === q.questId));
+}
+
 /** The defs to show; hidden = trackable with an unconfirmed final quest. */
 export function visibleDefs(
   defs: readonly AttunementDef[],
@@ -122,16 +158,13 @@ function doneVerdict(v: VisibleDef): AttunementVerdict {
 export function evaluateAttunement(
   v: VisibleDef,
   quests: EffectiveQuests | null,
+  prepared: PreparedQuests | null = prepareQuests(quests),
 ): AttunementVerdict {
-  if (quests === null || v.final === null)
+  if (quests === null || prepared === null || v.final === null)
     return noDataVerdict('no_quest_data');
-  const { completed, inProgress } = quests.quests;
-  const done = new Set(completed);
+  const { done, cutoff } = prepared;
   if (done.has(v.final.questId)) return doneVerdict(v);
-  const inLog = inProgress.some((q) =>
-    v.steps.some((s) => s.questId === q.questId),
-  );
-  const cutoff = truncationCutoff(quests.quests);
+  const inLog = stepInLog(v, quests);
   const unknown =
     cutoff !== undefined && v.steps.some((s) => s.questId > cutoff);
   if (unknown && !inLog) return noDataVerdict('truncated');
@@ -152,8 +185,9 @@ export function evaluateAttunement(
 export function attunementChecklist(
   v: VisibleDef,
   quests: EffectiveQuests | null,
+  prepared: PreparedQuests | null = prepareQuests(quests),
 ): { label: string; done: boolean }[] {
-  const done = new Set(quests?.quests.completed ?? []);
+  const done = prepared?.done ?? new Set<number>();
   const attuned = v.final !== null && done.has(v.final.questId);
   return v.steps.map((s) => ({
     label: s.label,

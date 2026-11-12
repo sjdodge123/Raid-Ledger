@@ -34,7 +34,11 @@ export class CharacterQuestsService {
   /** @returns the quest DTO, or null when the section is hidden (D2). */
   async getForCharacter(id: string): Promise<CharacterQuestsDto | null> {
     const [row] = await this.db
-      .select({ id: schema.characters.id })
+      .select({
+        race: schema.characters.race,
+        faction: schema.characters.faction,
+        level: schema.characters.level,
+      })
       .from(schema.characters)
       .where(eq(schema.characters.id, id))
       .limit(1);
@@ -54,7 +58,7 @@ export class CharacterQuestsService {
     );
     if (!dto) return null;
     // ROK-1927: the own attunement checklists ride on the same visibility.
-    const attunements = await loadCharacterAttunements(this.db, id, eff);
+    const attunements = await loadCharacterAttunements(this.db, row, eff);
     return { ...dto, attunements };
   }
 

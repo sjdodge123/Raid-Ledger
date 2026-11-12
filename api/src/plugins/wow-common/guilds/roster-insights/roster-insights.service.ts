@@ -30,6 +30,7 @@ import {
   type RaidHubRow,
 } from './roster-insights.raid-progress';
 import { RosterInsightsCache, insightsKey } from './roster-insights.cache';
+import { attunementsApply } from './roster-insights.attunements';
 import { loadAttunements } from './roster-insights.attunements.query';
 import {
   emptyInsights,
@@ -107,8 +108,11 @@ export class RosterInsightsService {
             // Linked mains of the full roster, never mainsOnly (ROK-1915 D2).
             gear: computeGear(all),
             ...(await this.raidSection(hub, linkedUserIds)),
-            // ROK-1927: mains of the full roster (ruling D), never a visitor.
-            attunements: await loadAttunements(this.db, all),
+            // ROK-1927: mains of the full roster (ruling D), never a visitor,
+            // and only on a Forever guild hub (MINOR-1).
+            ...(attunementsApply(hub)
+              ? { attunements: await loadAttunements(this.db, all) }
+              : {}),
           }
         : {}),
       freshness: computeFreshness(rows),
@@ -131,7 +135,9 @@ export class RosterInsightsService {
    */
   private async loadHubRow(
     guildId: number,
-  ): Promise<(RaidHubRow & { at: string | null }) | null> {
+  ): Promise<
+    (RaidHubRow & { at: string | null; gameSlug: string | null }) | null
+  > {
     const g = schema.guilds;
     const [row] = await this.db
       .select({
@@ -140,8 +146,10 @@ export class RosterInsightsService {
         region: g.region,
         nameKey: g.nameKey,
         kind: g.kind,
+        gameSlug: schema.games.slug,
       })
       .from(g)
+      .leftJoin(schema.games, eq(schema.games.id, g.gameId))
       .where(eq(g.id, guildId))
       .limit(1);
     return row ? { ...row, at: row.at ? row.at.toISOString() : null } : null;
