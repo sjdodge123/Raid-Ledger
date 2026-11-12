@@ -50,20 +50,30 @@ export class GgShareCardService {
       return hit;
     }
     const png = await renderGgShareCardPng(found.dto);
-    const card = { png, etag: `"${createHash('sha256').update(png).digest('hex').slice(0, 32)}"` };
+    const card = {
+      png,
+      etag: `"${createHash('sha256').update(png).digest('hex').slice(0, 32)}"`,
+    };
     this.remember(key, card);
     return card;
   }
 
   /** Crawler HTML with og:title/description/image; a generic card for unknown slugs. */
   async ogHtml(slug: string, requestOrigin: string): Promise<string> {
-    const clientUrl = (await this.settings.getTrustedClientUrl()) ?? requestOrigin;
+    const clientUrl =
+      (await this.settings.getTrustedClientUrl()) ?? requestOrigin;
     const enc = encodeURIComponent(slug);
     const url = `${clientUrl}/w/${enc}`;
     const found = await this.lookup(slug);
     if (!found) {
-      const description = 'A year of games, events and good company on Raid Ledger.';
-      return buildOgHtmlPage({ title: 'GG — Raid Ledger', description, url, imageUrl: null });
+      const description =
+        'A year of games, events and good company on Raid Ledger.';
+      return buildOgHtmlPage({
+        title: 'GG — Raid Ledger',
+        description,
+        url,
+        imageUrl: null,
+      });
     }
     const { dto } = found;
     return buildOgHtmlPage({
@@ -74,7 +84,9 @@ export class GgShareCardService {
     });
   }
 
-  private async lookup(slug: string): Promise<{ dto: GgPublicSummaryDto; computedAt: Date } | null> {
+  private async lookup(
+    slug: string,
+  ): Promise<{ dto: GgPublicSummaryDto; computedAt: Date } | null> {
     if (!SLUG_RE.test(slug)) return null;
     const row = await findGgPublic(this.db, slug);
     const dto = row ? toGgPublicSummary(row) : null;
@@ -84,7 +96,8 @@ export class GgShareCardService {
   private remember(key: string, card: GgShareCardPng): void {
     this.cache.set(key, card);
     const oldest = this.cache.keys().next();
-    if (this.cache.size > MAX_CACHED && !oldest.done) this.cache.delete(oldest.value);
+    if (this.cache.size > MAX_CACHED && !oldest.done)
+      this.cache.delete(oldest.value);
   }
 }
 

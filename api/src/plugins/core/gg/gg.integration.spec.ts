@@ -11,6 +11,7 @@ import {
   type GgSnapshotV1,
 } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
+import sharp from 'sharp';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -207,6 +208,80 @@ describe('PUT /gg/:year/share + GET /gg/public/:slug', () => {
   it('404s when sharing a year without a snapshot', async () => {
     const me = await insertUser('empty');
     expect((await share(me, 2026, true)).status).toBe(404);
+  });
+});
+
+/** Share PNG request — superagent buffers `image/*` bodies into a Buffer. */
+async function card(slug: string) {
+  return testApp.request.get(`/gg/public/${slug}/card.png`);
+}
+
+describe('GET /gg/public/:slug/card.png + /og (share PNG, AC12)', () => {
+  it('serves an immutable 1200x630 PNG with an ETag while shared', async () => {
+    const me = await insertUser('pngsharer');
+    await storeSnapshot(me.id, 2026);
+    const slug = (await share(me, 2026, true)).body.slug as string;
+    const res = await card(slug);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    expect(res.headers['cache-control']).toBe(
+      'public, max-age=31536000, immutable',
+    );
+    const png = res.body as Buffer;
+    expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+    const meta = await sharp(png).metadata();
+    expect([meta.width, meta.height]).toEqual([1200, 630]);
+    const etag = String(res.headers['etag']);
+    expect(etag).toMatch(/^"[0-9a-f]{32}"$/);
+    const again = await card(slug);
+    expect(again.headers['etag']).toBe(etag);
+    const cond = await testApp.request
+      .get(`/gg/public/${slug}/card.png`)
+      .set('If-None-Match', etag);
+    expect(cond.status).toBe(304);
+  });
+
+  it('404s at once after revoke, and the old slug stays 404 after re-share', async () => {
+    const me = await insertUser('pngrotator');
+    await storeSnapshot(me.id, 2026);
+    const first = (await share(me, 2026, true)).body.slug as string;
+    expect((await card(first)).status).toBe(200);
+    await share(me, 2026, false);
+    expect((await card(first)).status).toBe(404);
+    const second = (await share(me, 2026, true)).body.slug as string;
+    expect((await card(second)).status).toBe(200);
+    expect((await card(first)).status).toBe(404);
+  });
+
+  it('404s for a deactivated owner and an unknown slug', async () => {
+    const me = await insertUser('pnggone');
+    await storeSnapshot(me.id, 2026);
+    const slug = (await share(me, 2026, true)).body.slug as string;
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date() })
+      .where(eq(schema.users.id, me.id));
+    expect((await card(slug)).status).toBe(404);
+    expect((await card('x'.repeat(20))).status).toBe(404);
+  });
+});
+
+describe('GET /gg/public/:slug/og (crawler unfurl)', () => {
+  it('og page carries the card URL for a shared slug, generic otherwise', async () => {
+    const me = await insertUser('ogsharer');
+    await storeSnapshot(me.id, 2026);
+    const slug = (await share(me, 2026, true)).body.slug as string;
+    const og = await testApp.request.get(`/gg/public/${slug}/og`);
+    expect(og.status).toBe(200);
+    expect(og.headers['content-type']).toContain('text/html');
+    expect(og.text).toContain(`/api/gg/public/${slug}/card.png`);
+    expect(og.text).toContain('ogsharer D&#39;s GG 2026');
+    expect(og.text).not.toContain('SecretFriend');
+    const generic = await testApp.request.get(
+      `/gg/public/${'y'.repeat(20)}/og`,
+    );
+    expect(generic.status).toBe(200);
+    expect(generic.text).not.toContain('og:image');
   });
 });
 

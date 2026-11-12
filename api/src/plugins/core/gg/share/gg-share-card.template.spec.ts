@@ -6,7 +6,11 @@
 import { writeFileSync } from 'node:fs';
 import sharp from 'sharp';
 import type { GgPublicSummaryDto } from '@raid-ledger/contract';
-import { buildGgShareCardTree, ggNode, ggShareCardModel } from './gg-share-card.template';
+import {
+  buildGgShareCardTree,
+  ggNode,
+  ggShareCardModel,
+} from './gg-share-card.template';
 import { rasterizeGgTree, renderGgShareCardPng } from './gg-share-card.render';
 
 const DTO: GgPublicSummaryDto = {
@@ -58,20 +62,34 @@ describe('ggShareCardModel / buildGgShareCardTree', () => {
 
   it('projects exactly the public fields into the model', () => {
     expect(Object.keys(ggShareCardModel(leakyDto())).sort()).toEqual([
-      'displayName', 'eventsAttended', 'hours', 'playedWithCount',
-      'superlativeTitle', 'topGames', 'year',
+      'displayName',
+      'eventsAttended',
+      'hours',
+      'playedWithCount',
+      'superlativeTitle',
+      'topGames',
+      'year',
     ]);
   });
 
   it('omits the superlative line when there is none', () => {
-    const tree = JSON.stringify(buildGgShareCardTree({ ...DTO, superlative: null }));
+    const tree = JSON.stringify(
+      buildGgShareCardTree({ ...DTO, superlative: null }),
+    );
     expect(tree).not.toContain('The Night Owl');
   });
 });
 
 describe('rasterizeGgTree / renderGgShareCardPng', () => {
   it('draws glyphs: a lone string on a flat background is not a blank PNG', async () => {
-    const flat = { display: 'flex', width: '100%', height: '100%', background: '#000000', color: '#ffffff', fontSize: 48 };
+    const flat = {
+      display: 'flex',
+      width: '100%',
+      height: '100%',
+      background: '#000000',
+      color: '#ffffff',
+      fontSize: 48,
+    };
     const tree = ggNode('div', flat, 'GG');
     const png = await rasterizeGgTree(tree, 200, 100);
     expect(await channelSpread(png)).toBeGreaterThan(100);
@@ -81,7 +99,11 @@ describe('rasterizeGgTree / renderGgShareCardPng', () => {
     const png = await renderGgShareCardPng(DTO);
     expect(png.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     const meta = await sharp(png).metadata();
-    expect({ w: meta.width, h: meta.height, f: meta.format }).toEqual({ w: 1200, h: 630, f: 'png' });
+    expect({ w: meta.width, h: meta.height, f: meta.format }).toEqual({
+      w: 1200,
+      h: 630,
+      f: 'png',
+    });
     const samplePath = process.env.GG_SHARE_SAMPLE_PATH;
     if (samplePath) writeFileSync(samplePath, png);
   });

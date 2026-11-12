@@ -10,11 +10,11 @@
  */
 import { test, expect } from './base';
 import type { Page, Route } from '@playwright/test';
-import { getAdminToken } from './api-helpers';
+import { API_BASE, getAdminToken } from './api-helpers';
 import { jwtSub } from './browser-session';
 import {
     MASCOT_EMOJI_ID, MASCOT_OPTIONS, MASCOT_SOUND_ID, OWNER_MASCOT,
-    ggCoPlayerName, ggSmokeYear, publicGgStatus, resetGgYear, seedGgSnapshot,
+    ggCoPlayerName, ggSmokeYear, publicGgCardStatus, publicGgStatus, resetGgYear, seedGgSnapshot,
 } from './gg-fixtures';
 
 let token = '';
@@ -142,10 +142,24 @@ test.describe('GG public share (ROK-2187, Q4/Q5)', () => {
         }
     });
 
-    // The share PNG (`GET /gg/public/:slug/card.png`) is a later lane (L7/L8) — not built yet.
-    test.fixme('share PNG URL answers 200 while shared and 404 after revoke', async () => {
-        // TODO(ROK-2187 PNG lane): share on → fetch `${API_BASE}/gg/public/<slug>/card.png` → 200 image/png
-        // with cache headers; share off → the same URL 404s immediately.
+    test('share PNG URL answers 200 while shared and 404 after revoke', async ({ page }) => {
+        await openAndStart(page);
+        await toSummary(page);
+        await setShare(page, true);
+        const shareUrl = (await page.getByTestId('gg-share-url').textContent())?.trim() ?? '';
+        const slug = shareUrl.slice(shareUrl.lastIndexOf('/') + 1);
+        expect(slug, 'share slug after toggling on').toMatch(/^[A-Za-z0-9_-]{16,64}$/);
+
+        const png = await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}/card.png`);
+        expect(png.status).toBe(200);
+        expect(png.headers.get('content-type')).toBe('image/png');
+        expect(png.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+        expect(png.headers.get('etag')).toMatch(/^"[0-9a-f]{32}"$/);
+        const magic = Buffer.from(await png.arrayBuffer()).subarray(0, 8).toString('hex');
+        expect(magic, 'PNG signature').toBe('89504e470d0a1a0a');
+
+        await setShare(page, false);
+        await expect.poll(() => publicGgCardStatus(slug), { message: 'share PNG after revoke' }).toBe(404);
     });
 });
 

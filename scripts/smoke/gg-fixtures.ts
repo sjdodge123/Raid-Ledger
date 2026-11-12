@@ -65,6 +65,11 @@ export async function publicGgStatus(slug: string): Promise<number> {
     return (await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}`)).status;
 }
 
+/** Anonymous `GET /gg/public/:slug/card.png` status (the share PNG). */
+export async function publicGgCardStatus(slug: string): Promise<number> {
+    return (await fetch(`${API_BASE}/gg/public/${encodeURIComponent(slug)}/card.png`)).status;
+}
+
 /** `GET /admin/gg/mascot/options` as the picker sees it — one emoji, one sound. */
 export const MASCOT_OPTIONS = {
     emojis: [{ id: MASCOT_EMOJI_ID, name: 'smoke_wololo', animated: false, previewUrl: '/favicon.ico' }],
