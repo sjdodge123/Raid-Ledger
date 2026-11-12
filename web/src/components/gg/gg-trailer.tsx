@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { PlayCircleIcon } from '@heroicons/react/24/solid';
+import { Button } from '../ui/button';
 import { useStoryControls } from '../ui/story-controls';
 import { useGgStory } from './gg-story-context';
 import { useGameDetail } from '../../hooks/use-games-discover';
@@ -40,16 +41,16 @@ export function GgTrailerPlayer({ videoId, title }: { videoId: string; title: st
                     <iframe src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?autoplay=1&playsinline=1&rel=0`}
                         title={title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen className="h-full w-full" />
                 ) : (
-                    <button type="button" onClick={() => setPlaying(true)}
-                        className="flex h-full w-full flex-col items-center justify-center gap-1 text-foreground">
+                    <Button variant="bare" onClick={() => setPlaying(true)}
+                        className="h-full w-full flex-col gap-1 text-foreground">
                         <PlayCircleIcon aria-hidden="true" className="h-14 w-14" />
                         <span className="font-semibold">Play trailer</span>
                         <span className="text-xs text-muted">{title} · plays with sound</span>
-                    </button>
+                    </Button>
                 )}
             </div>
             {playing && (
-                <button type="button" onClick={() => setPlaying(false)} className="text-sm text-secondary underline">Stop trailer</button>
+                <Button variant="bare" onClick={() => setPlaying(false)} className="text-sm text-secondary underline">Stop trailer</Button>
             )}
         </div>
     );

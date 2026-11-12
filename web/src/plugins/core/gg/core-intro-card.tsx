@@ -10,6 +10,7 @@ import { SpeakerWaveIcon } from '@heroicons/react/24/outline';
 import type { GgCardProps } from '../../gg-cards';
 import { GgCardBody, GgKicker, GgLede, GgTitle } from '../../../components/gg/gg-card-parts';
 import { useGgStory } from '../../../components/gg/gg-story-context';
+import { Button } from '../../../components/ui/button';
 import { usePrefersReducedMotion } from '../../../hooks/use-prefers-reduced-motion';
 import { useAuth } from '../../../hooks/use-auth';
 import { useBranding } from '../../../hooks/use-branding';
@@ -37,14 +38,17 @@ function introLede(tier: 'full' | 'short', player: string | null): string {
 
 function TapToStart({ onStart, muted }: { onStart: () => void; muted: boolean }): JSX.Element {
     return (
-        <button type="button" onClick={onStart} data-testid="gg-tap-to-start"
-            className="absolute inset-0 z-10 flex flex-col items-center justify-end gap-2 pb-20">
-            <span className="rounded-full bg-success px-8 py-3 text-lg font-semibold text-white shadow-lg">Tap to start</span>
-            <span className="flex items-center gap-1.5 text-sm text-secondary">
-                <SpeakerWaveIcon aria-hidden="true" className="h-4 w-4" />
-                {muted ? 'Sound is muted' : 'This plays sound'}
-            </span>
-        </button>
+        <div className="absolute inset-0 z-10">
+            <Button variant="bare" onClick={onStart} data-testid="gg-tap-to-start" className="h-full w-full">
+                <span className="flex h-full w-full flex-col items-center justify-end gap-2 pb-20">
+                    <span className="rounded-full bg-success px-8 py-3 text-lg font-semibold text-white shadow-lg">Tap to start</span>
+                    <span className="flex items-center gap-1.5 text-sm text-secondary">
+                        <SpeakerWaveIcon aria-hidden="true" className="h-4 w-4" />
+                        {muted ? 'Sound is muted' : 'This plays sound'}
+                    </span>
+                </span>
+            </Button>
+        </div>
     );
 }
 
