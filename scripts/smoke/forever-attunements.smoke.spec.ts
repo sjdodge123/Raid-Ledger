@@ -85,11 +85,17 @@ async function seedCast(token: string, testInfo: TestInfo): Promise<{ guild: See
             inProgress: linkedCharacter(guild, 'officer'),
             notStarted: linkedCharacter(guild, 'member'),
         },
-    })) as Partial<SeededAttunement>;
-    if (seeded.key !== 'ony-horde' || !Array.isArray(seeded.steps) || typeof seeded.inProgressSteps !== 'number') {
-        throw new Error(`seed-attunements: ${JSON.stringify(seeded)}`);
-    }
-    return { guild, attunement: seeded as SeededAttunement };
+    })) as unknown;
+    if (!isSeededAttunement(seeded)) throw new Error(`seed-attunements: ${JSON.stringify(seeded)}`);
+    return { guild, attunement: seeded };
+}
+
+/** Narrows the seed response field by field, so no cast stands in for a check. */
+function isSeededAttunement(body: unknown): body is SeededAttunement {
+    if (typeof body !== 'object' || body === null) return false;
+    const b = body as Record<string, unknown>;
+    return b.key === 'ony-horde' && typeof b.instance === 'string' && typeof b.inProgressSteps === 'number'
+        && Array.isArray(b.steps) && b.steps.every((s) => typeof s === 'string');
 }
 
 async function removeUsers(token: string, guild: SeededGuild): Promise<void> {
@@ -187,12 +193,16 @@ test.describe('WoW: Forever attunements (ROK-1927)', () => {
         const { guild } = await seedCast(token, testInfo);
         try {
             const jwt = await signInOnboardedMember(page, guild.users.outsider.userId);
+            // HubVisibleGuard lets a visitor read a visible hub: a 200 body (apiGet is null on any non-2xx),
+            // which the service builds without the members-only attunements key (AC1).
             const insights = (await apiGet(jwt, `/plugins/wow/guilds/${guild.guildId}/roster-insights`)) as Record<string, unknown> | null;
-            expect(insights === null || !('attunements' in insights), 'a visitor response carries no attunements key').toBe(true);
+            expect(insights, 'the visitor reads the hub roster insights (200)').not.toBeNull();
+            expect(insights, 'a visitor response carries no attunements key').not.toHaveProperty('attunements');
+            expect(insights, 'the body is a real insights payload').toHaveProperty('classes');
             await page.goto(`/hubs/${guild.guildId}`);
             await expect(page.getByTestId('wow-join-gate'), 'a non-member of a Forever guild gets the join gate (ROK-2132)').toBeVisible({ timeout: 15_000 });
             await expect(page.getByTestId('guild-overview'), 'no Overview renders behind the gate').toHaveCount(0);
-            await expect(page.getByRole('region', { name: 'Attunements', exact: true }), 'the card never mounts for a visitor').toHaveCount(0);
+            await expect(page.getByRole('region', { name: 'Attunements', exact: true }), 'nothing behind the join gate renders the card').toHaveCount(0);
         } finally {
             await removeUsers(token, guild);
         }
