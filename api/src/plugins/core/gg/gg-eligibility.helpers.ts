@@ -28,14 +28,16 @@ export function hasRealDiscordId(discordId: string | null): boolean {
 }
 
 /**
- * The bucket for one player: deactivated → skipped; `gg_ready` in-app OR
- * Discord turned off → optedOut (no DM); no real Discord id → noDiscord
- * (in-app only); else a DM.
+ * The bucket for one player: deactivated → skipped; `gg_ready` in-app off →
+ * optedOut (nothing is delivered); Discord off for `gg_ready` OR no real
+ * Discord id → noDiscord (in-app only — `create` still writes the in-app
+ * notification); else a DM.
  */
 export function ggRecipientBucket(facts: GgRecipientFacts): GgRecipientBucket {
   if (facts.deactivatedAt !== null) return 'deactivated';
   const ready = resolveChannelPrefs(facts.prefs).gg_ready;
-  if (ready.inApp === false || ready.discord === false) return 'optedOut';
+  if (ready.inApp === false) return 'optedOut';
+  if (ready.discord === false) return 'noDiscord';
   if (!hasRealDiscordId(facts.discordId)) return 'noDiscord';
   return 'dm';
 }

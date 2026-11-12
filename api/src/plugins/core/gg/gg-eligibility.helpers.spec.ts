@@ -23,8 +23,15 @@ describe('ggRecipientBucket', () => {
     );
   });
 
-  it('a gg_ready Discord opt-out (in-app on) is not a DM', () => {
+  it('a gg_ready Discord opt-out (in-app on) is in-app only, not opted out', () => {
     const prefs = { gg_ready: { inApp: true, push: false, discord: false } };
+    expect(ggRecipientBucket({ ...LIVE, discordId: '81000123', prefs })).toBe(
+      'noDiscord',
+    );
+  });
+
+  it('only a gg_ready in-app opt-out is opted out (nothing is delivered)', () => {
+    const prefs = { gg_ready: { inApp: false, push: false, discord: true } };
     expect(ggRecipientBucket({ ...LIVE, discordId: '81000123', prefs })).toBe(
       'optedOut',
     );
