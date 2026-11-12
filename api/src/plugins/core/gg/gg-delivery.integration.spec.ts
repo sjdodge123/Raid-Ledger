@@ -201,6 +201,40 @@ describe('GG delivery — DM wave (AC3, AC4, AC14)', () => {
   });
 });
 
+describe('GG delivery — bot disconnected after the announcement', () => {
+  it('claims nothing and stamps nothing until the bot is back', async () => {
+    await enable();
+    const id = await insertUser();
+    await insertSnapshot(id);
+    await service.runTick(new Date());
+    const client = testApp.app.get(DiscordBotClientService);
+    jest.spyOn(client, 'isConnected').mockReturnValue(false);
+    expect((await service.runTick(LATER())).status).toBe('not-connected');
+    expect(await snapshotRow(id)).toEqual({ claimed: false, sent: false });
+    expect(await ggNotifications(id)).toBe(0);
+    jest.spyOn(client, 'isConnected').mockReturnValue(true);
+    expect((await service.runTick(LATER())).status).toBe('dm-wave');
+    expect(await snapshotRow(id)).toEqual({ claimed: true, sent: true });
+  });
+});
+
+describe('GG delivery — early send-now keeps the wave going', () => {
+  it('DMs go out after the offset even before the configured date', async () => {
+    await enable();
+    await testApp.app
+      .get(SettingsService)
+      .set(SETTING_KEYS.GG_DELIVERY_DATE, `${YEAR}-12-31`);
+    const id = await insertUser();
+    await insertSnapshot(id);
+    const early = new Date(Date.UTC(YEAR, 0, 2));
+    expect((await service.runTick(early)).status).toBe('not-due');
+    await testApp.app.get(GgAdminController).sendNow();
+    const wave = await service.runTick(LATER());
+    expect(wave.status).toBe('dm-wave');
+    expect(await ggNotifications(id)).toBe(1);
+  });
+});
+
 describe('GG delivery — claim release + stale reclaim', () => {
   it('a throwing send releases the claim; the next tick sends exactly once', async () => {
     await enable();

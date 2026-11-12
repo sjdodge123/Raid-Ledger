@@ -128,10 +128,10 @@ export class GgDeliveryService {
   ): Promise<GgDeliveryOutcome> {
     const cfg = await this.readSettings(now);
     if (!cfg.enabled) return { status: 'disabled' };
-    const tz = await this.compute.communityTimeZone();
-    const due = isGgDeliveryDue(now, cfg.deliveryDate, cfg.deliveryHour, tz);
-    if (!opts.bypassDate && !due) return { status: 'not-due' };
     const year = Number(cfg.deliveryDate.slice(0, 4));
+    if (!opts.bypassDate && !(await this.isStartedOrDue(now, cfg, year))) {
+      return { status: 'not-due' };
+    }
     const announced = await this.ensureAnnounced(year, now, cfg.channelId);
     if ('status' in announced) return announced;
     const announcedAt = announced.announcedAt.toISOString();
@@ -139,10 +139,29 @@ export class GgDeliveryService {
       return { status: 'waiting-offset', year, announcedAt };
     }
     if (opts.announceOnly) return { status: 'announced', year, announcedAt };
+    // Discord dispatch drops sends while the bot is down (it never queues
+    // them), so a wave now would stamp dm_sent_at on DMs that never left.
+    if (!this.bot.isConnected()) return { status: 'not-connected' };
     const dm = await runGgDmWave(this.db, year, (claim) =>
       this.notifyReady(claim.userId, year),
     );
     return { status: 'dm-wave', year, announcedAt, dm };
+  }
+
+  /**
+   * The date/hour gate decides when `year` STARTS; once its announcement is
+   * out (e.g. an early send-now) the wave continues on every tick.
+   */
+  private async isStartedOrDue(
+    now: Date,
+    cfg: GgDeliverySettings,
+    year: number,
+  ): Promise<boolean> {
+    const tz = await this.compute.communityTimeZone();
+    if (isGgDeliveryDue(now, cfg.deliveryDate, cfg.deliveryHour, tz)) {
+      return true;
+    }
+    return (await findGgAnnouncedAt(this.db, ggAnnounceKey(year))) !== null;
   }
 
   /** Compute + post the announcement unless `year` already went out. */
@@ -215,8 +234,17 @@ export class GgDeliveryService {
       );
   }
 
-  /** The per-player `gg_ready` notification (prefs + no-Discord handled by create). */
+  /**
+   * The per-player `gg_ready` notification (prefs + no-Discord handled by
+   * create). `create` hands the DM to Discord dispatch, which enqueues a
+   * durable BullMQ job (retried by the queue) only while the bot is
+   * connected and silently skips otherwise — so a disconnect throws here,
+   * which releases this row's claim instead of stamping `dm_sent_at`.
+   */
   private async notifyReady(userId: number, year: number): Promise<void> {
+    if (!this.bot.isConnected()) {
+      throw new Error('Discord bot not connected; GG DM left for a later tick');
+    }
     await this.notifications.create({
       userId,
       type: 'gg_ready',

@@ -32,6 +32,8 @@ function build(): {
   service: GgDeliveryService;
   computeAll: jest.Mock;
   sendEmbed: jest.Mock;
+  bot: { connected: boolean };
+  create: jest.Mock;
 } {
   const marked = new Set<string>();
   const dedup = {
@@ -56,16 +58,18 @@ function build(): {
     computeAll,
   };
   const sendEmbed = jest.fn().mockResolvedValue(undefined);
-  const bot = { isConnected: () => true, sendEmbed };
+  const state = { connected: true };
+  const bot = { isConnected: () => state.connected, sendEmbed };
+  const create = jest.fn().mockResolvedValue(null);
   const service = new GgDeliveryService(
     {} as PostgresJsDatabase<typeof schema>,
     settings as unknown as SettingsService,
     compute as unknown as GgComputeService,
     dedup as unknown as NotificationDedupService,
     bot as unknown as DiscordBotClientService,
-    {} as NotificationService,
+    { create } as unknown as NotificationService,
   );
-  return { service, computeAll, sendEmbed };
+  return { service, computeAll, sendEmbed, bot: state, create };
 }
 
 beforeEach(() => {
@@ -109,4 +113,51 @@ it('a pass still running makes the next one return busy', async () => {
   finish();
   await first;
   expect(computeAll).toHaveBeenCalledTimes(1);
+});
+
+it('an announced year keeps its DM wave going before the configured date', async () => {
+  const early = new Date('2026-12-01T12:00:00Z');
+  findAnnounced.mockResolvedValue(null);
+  const { service } = build();
+  expect((await service.runTick(early)).status).toBe('not-due');
+  findAnnounced.mockResolvedValue(new Date('2026-11-30T12:00:00Z'));
+  expect((await service.runTick(early)).status).toBe('dm-wave');
+  expect(runWave).toHaveBeenCalledTimes(1);
+});
+
+it('a disconnected bot claims nothing: no DM wave runs', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service, bot } = build();
+  bot.connected = false;
+  expect((await service.runTick(NOW)).status).toBe('not-connected');
+  expect(runWave).not.toHaveBeenCalled();
+});
+
+it('a bot dropping mid-wave fails the send so the claim is released', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service, bot, create } = build();
+  runWave.mockImplementation(async (_db, _year, send) => {
+    bot.connected = false;
+    await expect(send({ id: 1, userId: 7 })).rejects.toThrow(/not connected/);
+    return { claimed: 1, sent: 0, failed: 1 };
+  });
+  await service.runTick(NOW);
+  expect(runWave).toHaveBeenCalledTimes(1);
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('the gg_ready notification carries the GG link for the DM button', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service, create } = build();
+  runWave.mockImplementation(async (_db, _year, send) => {
+    await send({ id: 1, userId: 7 });
+    return { claimed: 1, sent: 1, failed: 0 };
+  });
+  await service.runTick(NOW);
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: 'gg_ready',
+      payload: { year: 2026, url: '/gg/2026' },
+    }),
+  );
 });
