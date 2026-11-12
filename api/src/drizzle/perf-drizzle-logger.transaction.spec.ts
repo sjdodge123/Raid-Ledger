@@ -112,7 +112,11 @@ describe('withQueryPerfLogging — statements inside a transaction', () => {
         await tx.unsafe('UPDATE FAIL_events SET x = 1', []);
       }),
     ).rejects.toThrow('boom: UPDATE FAIL_events SET x = 1');
-    expect(mockPerfLog.mock.calls[1]?.[3]).toMatchObject({ status: 'err' });
+    const statuses = mockPerfLog.mock.calls.map(
+      (call: unknown[]) =>
+        (call[3] as { status?: unknown } | undefined)?.status,
+    );
+    expect(statuses).toEqual(['ok', 'err']);
   });
 });
 
