@@ -78,6 +78,20 @@ export const guilds = pgTable(
       length: 16,
       enum: ['ok', 'not_found', 'error', 'skipped_empty'],
     }),
+    /** ROK-1170: Forever guild summary `created_timestamp` (null until a 200). */
+    foundedAt: timestamp('founded_at', { withTimezone: true }),
+    /**
+     * ROK-1170: the last guild summary outcome — `ok`, `not_found`,
+     * `disbanded` or `error` (`guilds_blizzard_summary_status_check`).
+     */
+    blizzardSummaryStatus: varchar('blizzard_summary_status', {
+      length: 12,
+      enum: ['ok', 'not_found', 'disbanded', 'error'],
+    }),
+    /** ROK-1170: the first 404 of the current not-found run (two-strike rule). */
+    blizzardNotFoundSince: timestamp('blizzard_not_found_since', {
+      withTimezone: true,
+    }),
     faction: varchar('faction', { length: 20 }),
     memberCount: integer('member_count').default(0).notNull(),
     /** addon_import | blizzard | pelican (ROK-1831 server hubs) */
@@ -239,6 +253,10 @@ export const guilds = pgTable(
     check(
       'guilds_blizzard_roster_status_check',
       sql`${table.blizzardRosterStatus} IS NULL OR ${table.blizzardRosterStatus} IN ('ok', 'not_found', 'error', 'skipped_empty')`,
+    ),
+    check(
+      'guilds_blizzard_summary_status_check',
+      sql`${table.blizzardSummaryStatus} IS NULL OR ${table.blizzardSummaryStatus} IN ('ok', 'not_found', 'disbanded', 'error')`,
     ),
     check(
       'guilds_name_override_kind_check',
