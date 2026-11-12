@@ -28,6 +28,8 @@ export const HUB_BEHAVIOUR_KINDS = [
   'media-gate',
   /** ROK-2153 — serves the hub's "claim your character" list (`GET/POST /guilds/:id/claim`). */
   'claim-provider',
+  /** ROK-2187 — produces one "GG <year>" story card (api producer + web renderer). */
+  'gg-card',
 ] as const;
 export const HubBehaviourKindSchema = z.enum(HUB_BEHAVIOUR_KINDS);
 export type HubBehaviourKind = z.infer<typeof HubBehaviourKindSchema>;
