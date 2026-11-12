@@ -30,6 +30,7 @@ const PUBLIC_KEYS = [
 ].sort();
 const NOW = new Date('2026-12-10T12:00:00Z');
 let testApp: TestApp;
+let seq = 0;
 
 interface Who {
   id: number;
@@ -41,7 +42,7 @@ async function insertUser(name: string, deactivated = false): Promise<Who> {
     await testApp.db
       .insert(schema.users)
       .values({
-        discordId: `9${name.length}00${name.charCodeAt(0)}77`,
+        discordId: `90000${(seq += 1)}`,
         username: name,
         displayName: `${name} D`,
         role: 'member',
