@@ -20,14 +20,26 @@ export function attunementRowTitle(attunement: WowCharacterAttunementDto): strin
     return `${attunement.instance} — ${done} of ${attunement.steps.length} steps`;
 }
 
-/** Done steps, then the first open one marked next (none once attuned or without data), then the rest. */
+/**
+ * The index of the "Next" step: the open step whose label is the api's `nextStep`
+ * (on a log-only import that is the furthest step in the quest log, which may sit
+ * past earlier open steps — `loggedStep`, api `attunement-evaluate.ts`). Falls back
+ * to the first open step when `nextStep` is null or matches no open step; -1 once
+ * attuned or without data.
+ */
+function nextStepIndex(attunement: WowCharacterAttunementDto): number {
+    if (attunement.state === 'done' || attunement.state === 'no_data') return -1;
+    const named = attunement.nextStep === null
+        ? -1
+        : attunement.steps.findIndex((s) => !s.done && s.label === attunement.nextStep);
+    return named >= 0 ? named : attunement.steps.findIndex((s) => !s.done);
+}
+
+/** Done steps, the api's next step marked next (none once attuned or without data), every other open step muted. */
 export function attunementStepViews(attunement: WowCharacterAttunementDto): AttunementStepView[] {
-    const hasNext = attunement.nextStep !== null && attunement.state !== 'done' && attunement.state !== 'no_data';
-    let nextTaken = !hasNext;
+    const nextIdx = nextStepIndex(attunement);
     return attunement.steps.map((step, i) => {
-        if (step.done) return { label: step.label, kind: 'done', position: i + 1 };
-        const kind: AttunementStepKind = nextTaken ? 'rest' : 'next';
-        nextTaken = true;
+        const kind: AttunementStepKind = step.done ? 'done' : i === nextIdx ? 'next' : 'rest';
         return { label: step.label, kind, position: i + 1 };
     });
 }

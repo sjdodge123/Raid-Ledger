@@ -72,8 +72,8 @@ describe('attunementRows', () => {
             buildAttunementMember({ rowKey: 'm', name: 'Mogrash', level: 52, asOf: daysAgo(20), results: [result('ony-horde', { belowLevel: true })] }),
         ];
         const [thundrel, mogrash] = attunementRows(onyTab(), members, now);
-        // A 7-step chain: the DTO cannot say which step is logged, so no "(in quest log)" claim (Codex P2).
-        expect(thundrel?.next).toBe('For The Horde!');
+        // In progress with nothing done: the api's nextStep is the logged step (Codex P2).
+        expect(thundrel?.next).toBe('For The Horde! (in quest log)');
         expect(thundrel?.levelNote).toBeNull();
         expect(thundrel?.stale).toBe(false);
         expect(mogrash?.levelNote).toBe('Level 52 — below the required level');
@@ -99,11 +99,18 @@ describe('the "(in quest log)" annotation (Codex P2)', () => {
         expect(attunementRows(tab, members)[0]?.next).toBe('Attunement to the Core (in quest log)');
     });
 
-    it('never names the first step of a longer chain as the logged one', () => {
+    it('marks the logged step of a 7-step chain, which the api sends as nextStep', () => {
         const members = [
-            buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('ony-horde', { state: 'in_progress', stepsDone: 0, nextStep: 's1' })] }),
+            buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('ony-horde', { state: 'in_progress', stepsDone: 0, nextStep: 's3' })] }),
         ];
-        expect(attunementRows(onyTab(), members)[0]?.next, 'a log-only start in a 7-step chain makes no quest-log claim').toBe('s1');
+        expect(attunementRows(onyTab(), members)[0]?.next, 'a log-only start in a 7-step chain names the logged step').toBe('s3 (in quest log)');
+    });
+
+    it('makes no quest-log claim once a step is done', () => {
+        const members = [
+            buildAttunementMember({ rowKey: 't', name: 'Thundrel', results: [result('ony-horde', { state: 'in_progress', stepsDone: 2, nextStep: 's3' })] }),
+        ];
+        expect(attunementRows(onyTab(), members)[0]?.next).toBe('s3');
     });
 });
 

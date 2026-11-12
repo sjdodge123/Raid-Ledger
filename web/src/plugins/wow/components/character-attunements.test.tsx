@@ -33,6 +33,21 @@ describe('attunement own-view helpers', () => {
         expect(kinds).toEqual(['done', 'done', 'done', 'done', 'next', 'rest', 'rest']);
     });
 
+    it("marks the api's nextStep as next on a log-only import, not the first open step (W1)", () => {
+        const logged = buildCharacterAttunement({
+            nextStep: "Eitrigg's Wisdom", steps: buildCharacterAttunement().steps.map((s) => ({ ...s, done: false })),
+        });
+        const views = attunementStepViews(logged);
+        expect(views.find((s) => s.label === "Eitrigg's Wisdom")?.kind, "Eitrigg's Wisdom is the logged step").toBe('next');
+        expect(views.find((s) => s.label === "Warlord's Command")?.kind, 'an earlier open step stays muted').toBe('rest');
+        expect(views.filter((s) => s.kind === 'next')).toHaveLength(1);
+    });
+
+    it('falls back to the first open step when nextStep is null', () => {
+        const kinds = attunementStepViews(buildCharacterAttunement({ nextStep: null })).map((s) => s.kind);
+        expect(kinds).toEqual(['done', 'done', 'done', 'done', 'next', 'rest', 'rest']);
+    });
+
     it('has no next step once attuned or without data', () => {
         const noData = buildCharacterAttunement({ state: 'no_data', nextStep: null, steps: [{ label: 'a', done: false }] });
         expect(attunementStepViews(noData).map((s) => s.kind)).toEqual(['rest']);
