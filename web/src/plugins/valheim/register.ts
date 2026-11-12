@@ -1,4 +1,6 @@
 import type { HubCtx } from '../hub-module';
+import { lazy } from 'react';
+import { GgValheimCardSchema } from '@raid-ledger/contract';
 import { registerPlugin } from '../plugin-registry';
 import { ValheimLinkTokenControl } from './slots/valheim-link-token-control';
 import { LazyValheimCharactersHubTab } from './hub/valheim-characters-hub-tab-lazy';
@@ -79,4 +81,13 @@ valheim.registerHubWidget({
     component: LazyValheimDeathsWidget,
     action: ValheimDeathsShowAll,
     useVisible: useDeathsWidgetVisible,
+});
+
+// ROK-2187 — the Valheim "GG <year>" card (deaths + skills gained), declared as gg-card `valheim-year`.
+valheim.registerGgCard({
+    id: 'valheim-year',
+    label: 'Valheim',
+    order: 100,
+    schema: GgValheimCardSchema,
+    Component: lazy(() => import('./gg/valheim-gg-card').then((m) => ({ default: m.GgValheimCardView }))),
 });

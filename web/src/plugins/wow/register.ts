@@ -1,4 +1,6 @@
+import { lazy } from 'react';
 import { registerPlugin } from '../plugin-registry';
+import { GgWowLevelsCardSchema } from '@raid-ledger/contract';
 import { CharacterDetailSections } from './slots/character-detail-sections';
 import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
@@ -96,4 +98,13 @@ blizzard.registerHubCompanionPrompt({
     heading: 'Upload your LedgerLink exports automatically',
     body: 'This hub reads LedgerLink exports. Install the Raid Ledger Companion on the PC you play WoW on and your exports upload when you log out, or keep pasting them.',
     shortBody: 'Install the Raid Ledger Companion on the PC you play WoW on, or keep pasting exports.',
+});
+
+// ROK-2187 — the WoW "GG <year>" card (levels dinged), declared as blizzard gg-card `wow-levels`.
+blizzard.registerGgCard({
+    id: 'wow-levels',
+    label: 'Levels dinged',
+    order: 110,
+    schema: GgWowLevelsCardSchema,
+    Component: lazy(() => import('./gg/wow-levels-gg-card').then((m) => ({ default: m.GgWowLevelsCardView }))),
 });

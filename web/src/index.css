@@ -2004,6 +2004,20 @@ body {
     }
 }
 
+/* GG intro "conversion" (ROK-2187): an accent wash spreads from the mascot
+   after "Tap to start". Not rendered under prefers-reduced-motion. */
+@keyframes gg-wash {
+    0% {
+        opacity: 0.6;
+        transform: scale(0.1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(2.4);
+    }
+}
+
 @keyframes story-ken-burns {
     0% {
         transform: scale(1) translate(0, 0);
