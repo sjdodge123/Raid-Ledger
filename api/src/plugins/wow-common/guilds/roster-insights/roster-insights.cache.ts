@@ -8,6 +8,7 @@ import * as schema from '../../../../drizzle/schema';
 import { liveMemberPredicate } from '../../../../guilds/community/community-membership.queries';
 import { characterLink } from '../guild-link.predicates';
 import { pullScopeHubIds, type PullScope } from './roster-insights.pull-scope';
+import type { InsightsAudience } from './roster-insights.types';
 
 /** 5 minutes, the quest-coverage pattern (ROK-1748 D10). */
 export const ROSTER_INSIGHTS_TTL_MS = 5 * 60 * 1000;
@@ -31,10 +32,17 @@ export class RosterInsightsCache {
    */
   private readonly generations = new Map<string, number>();
 
+  private recompute: InsightsRecompute | null = null;
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
+
+  /** STUB (red) — register the uncached compute used to warm keys. */
+  registerRecompute(fn: InsightsRecompute): void {
+    this.recompute = fn;
+  }
 
   /** Cached insights, or `fetcher` on a miss/expiry (refreshed when stale). */
   get(
@@ -106,6 +114,13 @@ export class RosterInsightsCache {
       this.invalidateGuild(id);
   }
 }
+
+/** The uncached compute behind one key (the service's `compute`). */
+export type InsightsRecompute = (
+  guildId: number,
+  audience: InsightsAudience,
+  onlyMains: boolean,
+) => Promise<WowRosterInsightsDto>;
 
 /**
  * Namespace of every insights key: `memorySwr`'s in-flight refresh tracker is
