@@ -109,7 +109,6 @@ describe('GgCardRegistry (ROK-2187)', () => {
     );
     expect((await r.produceAll(ctx)).map((c) => c.cardId)).toEqual(['hubs']);
   });
-
 });
 
 describe('GgCardRegistry registration rules (ROK-2187)', () => {
