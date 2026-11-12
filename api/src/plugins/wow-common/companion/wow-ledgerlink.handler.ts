@@ -69,10 +69,12 @@ export class WowLedgerlinkHandler implements CompanionAfterCommitHandler<WowLedg
     }
     let res: AddonImportNewResultDto;
     try {
-      res = await this.imports.importNew(ctx.userId, {
-        importString: msg.payload.exportString,
-        dryRun: false,
-      });
+      // ROK-2179: ack first; audit finalise + roster follow-ups run after.
+      res = await this.imports.importNew(
+        ctx.userId,
+        { importString: msg.payload.exportString, dryRun: false },
+        { deferHousekeeping: true },
+      );
     } catch (err: unknown) {
       if (err instanceof AddonImportError) {
         this.logger.log(`wow-ledgerlink ${who} rejected code=${err.code}`);
