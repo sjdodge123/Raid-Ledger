@@ -6,7 +6,7 @@
  * page that is mostly repeats (the newest page overlaps `raids.recent`) is
  * followed by the next page within the same click.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
     GUILD_PAST_EVENTS_PAGE_SIZE,
@@ -54,15 +54,28 @@ export async function fetchNewPastEvents(
     return { events, nextCursor: next };
 }
 
-interface PastState { shown: GuildRecentEventDto[]; buffer: GuildRecentEventDto[]; cursor: string | null; started: boolean; lastAdded: number | null }
+interface PastState {
+    /** The hub these rows belong to — state for any other hub reads as {@link initial}. */
+    guildId: number;
+    shown: GuildRecentEventDto[]; buffer: GuildRecentEventDto[]; cursor: string | null; started: boolean; lastAdded: number | null;
+}
 
-const INITIAL: PastState = { shown: [], buffer: [], cursor: null, started: false, lastAdded: null };
+function initial(guildId: number): PastState {
+    return { guildId, shown: [], buffer: [], cursor: null, started: false, lastAdded: null };
+}
+
+/** `s` when it is `guildId`'s, else a clean start — a hub switch never carries rows or a cursor over. */
+function forGuild(s: PastState, guildId: number): PastState {
+    return s.guildId === guildId ? s : initial(guildId);
+}
 
 function reveal(s: PastState, fresh: GuildRecentEventDto[], cursor: string | null): PastState {
     const pool = [...s.buffer, ...fresh];
     const add = pool.slice(0, GUILD_PAST_EVENTS_PAGE_SIZE);
-    return { shown: [...s.shown, ...add], buffer: pool.slice(add.length), cursor, started: true, lastAdded: add.length };
+    return { ...s, shown: [...s.shown, ...add], buffer: pool.slice(add.length), cursor, started: true, lastAdded: add.length };
 }
+
+interface LoadVars { guildId: number; cursor: string | null; seen: ReadonlySet<number>; want: number }
 
 export interface GuildPastEvents {
     /** Older rows revealed so far (never repeating `recent`). */
@@ -76,27 +89,35 @@ export interface GuildPastEvents {
     showMore: () => void;
 }
 
-/** Click-driven paging of a hub's ended events beyond `recent`. */
+/** Click-driven paging of a hub's ended events beyond `recent`; state is scoped to `guildId`. */
 export function useGuildPastEvents(guildId: number, recent: readonly GuildRecentEventDto[]): GuildPastEvents {
-    const [state, setState] = useState<PastState>(INITIAL);
+    const [stored, setState] = useState<PastState>(() => initial(guildId));
+    const state = forGuild(stored, guildId);
+    const current = useRef(guildId);
+    useEffect(() => { current.current = guildId; }, [guildId]);
     const load = useMutation({
-        mutationFn: (want: number) => {
-            const seen = new Set([...recent, ...state.shown, ...state.buffer].map((e) => e.id));
-            return fetchNewPastEvents(guildId, state.cursor, seen, want);
+        mutationFn: (v: LoadVars) => fetchNewPastEvents(v.guildId, v.cursor, v.seen, v.want),
+        // A page for a hub the viewer already left is dropped, never merged into this hub's rows.
+        onSuccess: (fresh, v) => {
+            if (v.guildId === current.current) setState((s) => reveal(forGuild(s, v.guildId), fresh.events, fresh.nextCursor));
         },
-        onSuccess: (fresh) => setState((s) => reveal(s, fresh.events, fresh.nextCursor)),
     });
+    const mine = load.variables?.guildId === guildId;
     const showMore = (): void => {
         const want = GUILD_PAST_EVENTS_PAGE_SIZE - state.buffer.length;
-        if (want <= 0 || (state.started && state.cursor === null)) setState((s) => reveal(s, [], s.cursor));
-        else load.mutate(want);
+        if (want <= 0 || (state.started && state.cursor === null)) {
+            setState((s) => { const cur = forGuild(s, guildId); return reveal(cur, [], cur.cursor); });
+            return;
+        }
+        const seen = new Set([...recent, ...state.shown, ...state.buffer].map((e) => e.id));
+        load.mutate({ guildId, cursor: state.cursor, seen, want });
     };
     return {
         shown: state.shown,
         canShowMore: !state.started || state.buffer.length > 0 || state.cursor !== null,
         foundNothing: state.lastAdded === 0,
-        isLoading: load.isPending,
-        isError: load.isError,
+        isLoading: mine && load.isPending,
+        isError: mine && load.isError,
         showMore,
     };
 }
