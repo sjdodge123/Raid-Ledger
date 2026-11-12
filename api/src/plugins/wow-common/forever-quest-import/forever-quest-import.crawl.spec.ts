@@ -334,6 +334,39 @@ describe('QuestImportCrawl — error lines (L6)', () => {
   });
 });
 
+describe('QuestImportCrawl — extra quest ids (ROK-1927 attunements)', () => {
+  it('fetches each extra id once and stores it outside any dungeon', async () => {
+    const urls: string[] = [];
+    const saved: { questId: number; areaId: number; dungeon: number | null }[] =
+      [];
+    const base = routed(urls, (path) => {
+      if (path === 'quest/7761') return ok({ id: 7761, title: 'Command' });
+      if (path === 'quest/4903') {
+        return ok({ id: 4903, title: 'Orders', area: { id: 46, name: 'BS' } });
+      }
+      return route(path);
+    });
+    const { report, err } = await runCrawl({
+      ...base,
+      extraQuestIds: [7761, 4903, 7761],
+      saveQuest: (row) => {
+        const dungeon = row.dungeonInstanceId ?? null;
+        saved.push({ questId: row.questId, areaId: row.areaId, dungeon });
+        return Promise.resolve();
+      },
+    });
+    expect(err).toBeNull();
+    expect(urls.filter((u) => /\/quest\/(7761|4903)\?/.test(u))).toHaveLength(
+      2,
+    );
+    expect(saved).toEqual([
+      { questId: 7761, areaId: 0, dungeon: null },
+      { questId: 4903, areaId: 46, dungeon: null },
+    ]);
+    expect(report.counts.questsFetched).toBe(2);
+  });
+});
+
 /** Kraul's sample quest 1101 answers with `answer`; everything else routes. */
 function probeDeps(answer: () => Promise<QuestImportResponse>) {
   const base = routed([], route);
