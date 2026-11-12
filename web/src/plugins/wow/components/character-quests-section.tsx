@@ -3,6 +3,7 @@
  * quest log and completed known dungeon quests from the addon snapshot, or the
  * Armory sync's completed list (ROK-2109: an Armory-only character has no log).
  * Renders nothing while loading, on error, or when the API hides it (`quests: null`).
+ * ROK-1927: the own "Attunements" checklists follow, only when the api sent them.
  */
 import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { useCharacterQuests } from '../hooks/use-character-quests';
@@ -10,6 +11,7 @@ import { formatCaptureDate, formatSourceLine } from '../lib/addon-source-line';
 import { plural } from '../lib/plural';
 import { CharacterQuestLog } from './character-quest-log';
 import { CharacterCompletedQuests } from './character-completed-quests';
+import { CharacterAttunements } from './character-attunements';
 import '../slots/quest-prep-panel.css';
 
 /**
@@ -35,8 +37,15 @@ function logDateSuffix(quests: CharacterQuestsDto): string {
     return ` · log ${logDate}`;
 }
 
+interface SectionProps {
+    characterId: string;
+    variant: string | null;
+    /** ROK-1927: the character's level for the attunement below-level note. */
+    level?: number | null;
+}
+
 /** The Quests card; chrome matches the Talents section. */
-export function CharacterQuestsSection({ characterId, variant }: { characterId: string; variant: string | null }) {
+export function CharacterQuestsSection({ characterId, variant, level = null }: SectionProps) {
     const { quests, isError } = useCharacterQuests(characterId, variant);
     if (isError || !quests) return null;
     return (
@@ -46,6 +55,10 @@ export function CharacterQuestsSection({ characterId, variant }: { characterId: 
             <div className="space-y-6">
                 <CharacterQuestLog quests={quests.inProgress} />
                 <CharacterCompletedQuests groups={quests.completedKnown} knownTotal={quests.counts.knownTotal} />
+                {quests.attunements !== undefined && (
+                    <CharacterAttunements attunements={quests.attunements} level={level}
+                        sourceLine={formatSourceLine(quests.source, quests.syncedAt)} />
+                )}
             </div>
         </div>
     );

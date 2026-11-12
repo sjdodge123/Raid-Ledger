@@ -33,7 +33,7 @@ export interface AttunementMemberRow {
     steps: string;
     /** Next step label (or "Not claimed"), "—" when none. */
     next: string;
-    /** "Level 52 — below the required level", or null. */
+    /** "Level 52 — needs 55" ("— below the required level" without a known level gate), or null. */
     levelNote: string | null;
     /** "as of 2 days ago", or null without a capture time. */
     asOf: string | null;
@@ -41,7 +41,7 @@ export interface AttunementMemberRow {
 }
 
 const ORDER: Record<WowAttunementState, number> = { done: 0, in_progress: 1, not_started: 2, no_data: 3 };
-const CHIP: Record<WowAttunementState, { tone: StatusChipTone; label: string; title: string }> = {
+export const ATTUNEMENT_CHIP: Record<WowAttunementState, { tone: StatusChipTone; label: string; title: string }> = {
     done: { tone: 'success', label: 'Attuned', title: 'Completed the final quest' },
     in_progress: { tone: 'warning', label: 'In progress', title: 'Part of the chain is done' },
     not_started: { tone: 'neutral', label: 'Not started', title: 'No step of the chain is done yet' },
@@ -52,6 +52,16 @@ const NO_DATA_TITLE: Record<NonNullable<WowAttunementResultDto['noDataReason']>,
     not_claimed: 'Not claimed by a member',
     truncated: 'Quest list too long to read',
 };
+
+/**
+ * The below-level note (spec §7): "Level 52 — needs 55"; "Needs level 55" without a
+ * known character level; "Level 52 — below the required level" when the api sent no
+ * gate (older bodies). Null when neither is known.
+ */
+export function belowLevelNote(level: number | null, requiredLevel: number | null): string | null {
+    if (level === null) return requiredLevel === null ? null : `Needs level ${requiredLevel}`;
+    return requiredLevel === null ? `Level ${level} — below the required level` : `Level ${level} — needs ${requiredLevel}`;
+}
 
 /** One tab per tracked group, in first-seen order; untracked groups never get a tab. */
 export function attunementTabs(defs: readonly WowRosterAttunementDto[]): AttunementTab[] {
@@ -79,12 +89,12 @@ function nextText(result: WowAttunementResultDto): string {
 
 function chipTitle(result: WowAttunementResultDto): string {
     if (result.state === 'no_data' && result.noDataReason !== null) return NO_DATA_TITLE[result.noDataReason];
-    return CHIP[result.state].title;
+    return ATTUNEMENT_CHIP[result.state].title;
 }
 
 function toRow(member: WowRosterAttunementMemberDto, result: WowAttunementResultDto, def: WowRosterAttunementDto, now: number): AttunementMemberRow {
-    const chip = CHIP[result.state];
-    const levelNote = result.belowLevel && member.level !== null ? `Level ${member.level} — below the required level` : null;
+    const chip = ATTUNEMENT_CHIP[result.state];
+    const levelNote = result.belowLevel ? belowLevelNote(member.level, result.requiredLevel ?? null) : null;
     return {
         rowKey: member.rowKey, name: member.name, characterId: member.characterId, state: result.state,
         tone: chip.tone, label: chip.label, title: chipTitle(result), steps: stepsText(result, def),
