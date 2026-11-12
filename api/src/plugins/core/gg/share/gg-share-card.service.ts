@@ -19,6 +19,7 @@ import { SettingsService } from '../../../../settings/settings.service';
 import { toGgPublicSummary } from '../gg-dto.helpers';
 import { findGgPublic } from '../gg-snapshot.queries';
 import { renderGgShareCardPng } from './gg-share-card.render';
+import { ggShareCountsLine } from './gg-share-card.template';
 
 /** A rendered share card and its strong ETag. */
 export interface GgShareCardPng {
@@ -79,7 +80,7 @@ export class GgShareCardService {
     const { dto } = found;
     return buildOgHtmlPage({
       title: `${dto.displayName}'s GG ${dto.year}`,
-      description: ogDescription(dto),
+      description: ggShareCountsLine(dto),
       url,
       // Extension-less: nginx's static regex would 404 a `.png` API path.
       imageUrl: `${clientUrl}/api/gg/public/${enc}/card`,
@@ -106,10 +107,4 @@ export class GgShareCardService {
 /** Hash of the rendered model — any field the card draws changes the key. */
 function modelHash(dto: GgPublicSummaryDto): string {
   return createHash('sha256').update(JSON.stringify(dto)).digest('hex');
-}
-
-/** "42 events · 380h played · played with 17 people" — counts only. */
-function ogDescription(dto: GgPublicSummaryDto): string {
-  const hours = Math.round(dto.hoursPlayedSeconds / 3600);
-  return `${dto.eventsAttended} events · ${hours}h played · played with ${dto.playedWithCount} people`;
 }

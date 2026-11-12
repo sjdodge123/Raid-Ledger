@@ -48,18 +48,79 @@ export interface GgCardNode {
   props: { style: Style; children?: GgCardChild | GgCardChild[] };
 }
 
+/** One pre-formatted stat tile, e.g. `{ value: '42', label: 'events attended' }`. */
+export interface GgShareStat {
+  value: string;
+  label: string;
+}
+
 /** The share card's only inputs — the public allow-list, pre-formatted. */
 export interface GgShareCardModel {
   year: number;
   displayName: string;
-  eventsAttended: string;
-  hours: string;
-  playedWithCount: string;
+  /** Events, hours, played-with — only the non-zero ones (never a 0 tile). */
+  stats: GgShareStat[];
   topGames: string[];
   superlativeTitle: string | null;
 }
 
 const NUM = new Intl.NumberFormat('en-US');
+
+const plural = (n: number, one: string, many: string): string =>
+  n === 1 ? one : many;
+
+const wholeHours = (dto: GgPublicSummaryDto): number =>
+  Math.round(dto.hoursPlayedSeconds / 3600);
+
+/** The non-zero stat tiles, singular for a count of one. */
+function ggShareStats(dto: GgPublicSummaryDto): GgShareStat[] {
+  const hours = wholeHours(dto);
+  const n = dto.eventsAttended;
+  const people = dto.playedWithCount;
+  const all: [number, GgShareStat][] = [
+    [
+      n,
+      {
+        value: NUM.format(n),
+        label: plural(n, 'event attended', 'events attended'),
+      },
+    ],
+    [
+      hours,
+      {
+        value: `${NUM.format(hours)}h`,
+        label: plural(hours, 'hour played', 'hours played'),
+      },
+    ],
+    [
+      people,
+      {
+        value: NUM.format(people),
+        label: plural(people, 'person played with', 'people played with'),
+      },
+    ],
+  ];
+  return all.filter(([count]) => count > 0).map(([, stat]) => stat);
+}
+
+/**
+ * The og:description counts line, zero values dropped and singular for one:
+ * "42 events · 380h played · played with 17 people".
+ */
+export function ggShareCountsLine(dto: GgPublicSummaryDto): string {
+  const hours = wholeHours(dto);
+  const n = dto.eventsAttended;
+  const people = dto.playedWithCount;
+  const parts: [number, string][] = [
+    [n, `${n} ${plural(n, 'event', 'events')}`],
+    [hours, `${hours}h played`],
+    [people, `played with ${people} ${plural(people, 'person', 'people')}`],
+  ];
+  return parts
+    .filter(([count]) => count > 0)
+    .map(([, text]) => text)
+    .join(' · ');
+}
 
 /** Builds one satori element. */
 export function ggNode(
@@ -79,9 +140,7 @@ export function ggShareCardModel(dto: GgPublicSummaryDto): GgShareCardModel {
   return {
     year: dto.year,
     displayName: dto.displayName,
-    eventsAttended: NUM.format(dto.eventsAttended),
-    hours: `${NUM.format(Math.round(dto.hoursPlayedSeconds / 3600))}h`,
-    playedWithCount: NUM.format(dto.playedWithCount),
+    stats: ggShareStats(dto),
     topGames: dto.topGames.slice(0, 3).map((g) => g.name),
     superlativeTitle: dto.superlative
       ? SUPERLATIVE_TITLES[dto.superlative]
@@ -187,11 +246,11 @@ const ROOT: Style = {
 };
 
 function stats(m: GgShareCardModel): GgCardNode {
-  return ggNode('div', { display: 'flex' }, [
-    stat(m.eventsAttended, 'events attended'),
-    stat(m.hours, 'hours played'),
-    stat(m.playedWithCount, 'people played with'),
-  ]);
+  return ggNode(
+    'div',
+    { display: 'flex' },
+    m.stats.map((s) => stat(s.value, s.label)),
+  );
 }
 
 /** The full 1200×630 share card tree for a public Summary DTO. */

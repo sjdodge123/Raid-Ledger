@@ -10,6 +10,7 @@ import {
   buildGgShareCardTree,
   ggNode,
   ggShareCardModel,
+  ggShareCountsLine,
 } from './gg-share-card.template';
 import { rasterizeGgTree, renderGgShareCardPng } from './gg-share-card.render';
 
@@ -61,14 +62,18 @@ describe('ggShareCardModel / buildGgShareCardTree', () => {
   });
 
   it('projects exactly the public fields into the model', () => {
-    expect(Object.keys(ggShareCardModel(leakyDto())).sort()).toEqual([
+    const model = ggShareCardModel(leakyDto());
+    expect(Object.keys(model).sort()).toEqual([
       'displayName',
-      'eventsAttended',
-      'hours',
-      'playedWithCount',
+      'stats',
       'superlativeTitle',
       'topGames',
       'year',
+    ]);
+    expect(model.stats).toEqual([
+      { value: '42', label: 'events attended' },
+      { value: '380h', label: 'hours played' },
+      { value: '17', label: 'people played with' },
     ]);
   });
 
@@ -106,5 +111,41 @@ describe('rasterizeGgTree / renderGgShareCardPng', () => {
     });
     const samplePath = process.env.GG_SHARE_SAMPLE_PATH;
     if (samplePath) writeFileSync(samplePath, png);
+  });
+});
+
+describe('share card — no zero values, singular counts (ROK-2187)', () => {
+  it('drops every zero stat from the card and the og line', () => {
+    const dto = { ...DTO, eventsAttended: 0, hoursPlayedSeconds: 600 };
+    expect(ggShareCardModel(dto).stats.map((s) => s.label)).toEqual([
+      'people played with',
+    ]);
+    const tree = JSON.stringify(buildGgShareCardTree(dto));
+    expect(tree).not.toContain('events attended');
+    expect(tree).not.toContain('hours played');
+    expect(ggShareCountsLine(dto)).toBe('played with 17 people');
+  });
+
+  it('uses singular labels for counts of one', () => {
+    const dto = {
+      ...DTO,
+      eventsAttended: 1,
+      hoursPlayedSeconds: 3600,
+      playedWithCount: 1,
+    };
+    expect(ggShareCardModel(dto).stats).toEqual([
+      { value: '1', label: 'event attended' },
+      { value: '1h', label: 'hour played' },
+      { value: '1', label: 'person played with' },
+    ]);
+    expect(ggShareCountsLine(dto)).toBe(
+      '1 event · 1h played · played with 1 person',
+    );
+  });
+
+  it('keeps the plural line for larger counts', () => {
+    expect(ggShareCountsLine(DTO)).toBe(
+      '42 events · 380h played · played with 17 people',
+    );
   });
 });
