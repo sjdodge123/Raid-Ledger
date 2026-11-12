@@ -1992,6 +1992,18 @@ body {
     }
 }
 
+/* StoryViewer auto-advance: the current progress segment fills over the
+   slide's duration (inline animation-duration; frozen while paused). */
+@keyframes story-progress {
+    0% {
+        transform: scaleX(0);
+    }
+
+    100% {
+        transform: scaleX(1);
+    }
+}
+
 @keyframes story-ken-burns {
     0% {
         transform: scale(1) translate(0, 0);

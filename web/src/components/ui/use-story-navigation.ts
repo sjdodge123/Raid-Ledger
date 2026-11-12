@@ -24,13 +24,14 @@ export function clampIndex(i: number, count: number): number {
     return Math.max(0, Math.min(Math.max(0, count - 1), Math.trunc(i)));
 }
 
-function isEditable(target: EventTarget | null): boolean {
+/** True when the key event's target is a text field (keys belong to it). */
+export function isEditable(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
     return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }
 
 /** True when the key event belongs to another modal layered over (or beside) `container`. */
-function belongsToOtherModal(target: EventTarget | null, container: HTMLElement | null): boolean {
+export function belongsToOtherModal(target: EventTarget | null, container: HTMLElement | null): boolean {
     if (!(target instanceof Element)) return false;
     const owner = target.closest('[aria-modal="true"]');
     return owner !== null && owner !== container;
@@ -68,8 +69,8 @@ function useSwipe(next: () => void, prev: () => void): Pick<StoryNavigation, 'on
 }
 
 /**
- * Index state for a paged story. Never wraps and never auto-advances; each
- * real move reports through `onIndexChange`.
+ * Index state for a paged story. Never wraps; each real move reports through
+ * `onIndexChange`. Auto-advance lives in `use-story-autoplay.ts`.
  */
 export function useStoryNavigation(
     count: number,

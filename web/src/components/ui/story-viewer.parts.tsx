@@ -1,13 +1,14 @@
 /**
  * The pieces `StoryViewer` composes (ROK-2187): progress segments, the close
- * button, the two tap zones, the desktop side arrows, the polite live region
+ * and play/pause buttons, the two tap zones, the desktop side arrows, the polite live region
  * and `KenBurnsBackground`. Tokens only — every colour remaps with the scheme.
  */
 import type { JSX } from 'react';
-import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from './button';
 import { FOCUS_RING } from './form-classes';
 import { usePrefersReducedMotion } from '../../hooks/use-prefers-reduced-motion';
+import type { HoldToPause } from './use-hold-to-pause';
 
 type SegmentState = 'done' | 'current' | 'upcoming';
 
@@ -16,8 +17,33 @@ function segmentState(k: number, index: number): SegmentState {
     return k === index ? 'current' : 'upcoming';
 }
 
-/** One thin bar per slide; filled up to and including the current one. Decorative (the live region speaks). */
-export function ProgressSegments({ count, index }: { count: number; index: number }): JSX.Element {
+/** How the current segment fills while auto-advance is on. */
+export interface SegmentTiming {
+    durationMs: number;
+    running: boolean;
+}
+
+const FILL = 'block h-full rounded-full bg-foreground';
+
+function SegmentFill({ state, timing }: { state: SegmentState; timing: SegmentTiming | undefined }): JSX.Element {
+    if (state === 'current' && timing) {
+        return (
+            <span data-testid="story-progress-fill" data-running={String(timing.running)}
+                className={`${FILL} w-full origin-left animate-[story-progress_1s_linear_forwards]`}
+                style={{ animationDuration: `${timing.durationMs}ms`, animationPlayState: timing.running ? 'running' : 'paused' }} />
+        );
+    }
+    return <span className={`${FILL} ${state === 'upcoming' ? 'w-0' : 'w-full'}`} />;
+}
+
+/**
+ * One thin bar per slide; filled up to and including the current one. With
+ * `timing` the current bar fills over the slide's duration (and freezes while
+ * paused). Decorative (the live region speaks).
+ */
+export function ProgressSegments({ count, index, timing }: {
+    count: number; index: number; timing?: SegmentTiming | undefined;
+}): JSX.Element {
     return (
         <div className="flex gap-1" aria-hidden="true">
             {Array.from({ length: count }, (_, k) => {
@@ -25,11 +51,22 @@ export function ProgressSegments({ count, index }: { count: number; index: numbe
                 return (
                     <span key={k} data-testid="story-progress-segment" data-state={state}
                         className="h-1 flex-1 overflow-hidden rounded-full bg-foreground/20">
-                        <span className={`block h-full rounded-full bg-foreground ${state === 'upcoming' ? 'w-0' : 'w-full'}`} />
+                        <SegmentFill key={`${state}-${index}`} state={state} timing={timing} />
                     </span>
                 );
             })}
         </div>
+    );
+}
+
+/** Visible pause/play for auto-advance (Space does the same). */
+export function StoryPlayPauseButton({ paused, onToggle }: { paused: boolean; onToggle: () => void }): JSX.Element {
+    const Icon = paused ? PlayIcon : PauseIcon;
+    return (
+        <Button variant="ghost" iconOnly aria-label={paused ? 'Play story' : 'Pause story'}
+            data-testid="story-play-pause" onClick={onToggle} className="text-foreground">
+            <Icon className="h-5 w-5" aria-hidden="true" />
+        </Button>
     );
 }
 
@@ -46,18 +83,22 @@ const TAP_ZONE = `absolute top-20 bottom-0 z-10 w-1/2 cursor-pointer bg-transpar
 
 /**
  * Left half = back, right half = next (mockup). On desktop the side arrows are
- * the keyboard/AT controls, so there the zones leave the tab order.
+ * the keyboard/AT controls, so there the zones leave the tab order. A
+ * press-and-hold (`hold`) pauses auto-advance and does not page.
  */
-export function TapZones({ onPrev, onNext, pointerOnly }: {
+export function TapZones({ onPrev, onNext, pointerOnly, hold }: {
     onPrev: () => void;
     onNext: () => void;
     pointerOnly: boolean;
+    hold: HoldToPause;
 }): JSX.Element {
     const a11y = pointerOnly ? { tabIndex: -1, 'aria-hidden': true as const } : {};
+    const tap = (go: () => void) => (): void => { if (!hold.consumeHold()) go(); };
+    const common = { type: 'button' as const, 'data-story-tap': '', ...hold.handlers, ...a11y };
     return (
         <>
-            <button type="button" aria-label="Previous slide" onClick={onPrev} className={`${TAP_ZONE} left-0`} {...a11y} />
-            <button type="button" aria-label="Next slide" onClick={onNext} className={`${TAP_ZONE} right-0`} {...a11y} />
+            <button aria-label="Previous slide" onClick={tap(onPrev)} className={`${TAP_ZONE} left-0`} {...common} />
+            <button aria-label="Next slide" onClick={tap(onNext)} className={`${TAP_ZONE} right-0`} {...common} />
         </>
     );
 }
