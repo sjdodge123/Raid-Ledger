@@ -9,6 +9,10 @@ import {
 import * as schema from '../../drizzle/schema';
 import { toContentInstanceCards } from '../../events/event-content-cards.helpers';
 import { loadCommunityAttendanceRows } from './community-attendance.queries';
+import {
+  LIVE_SIGNUP as LIVE,
+  withMemberSignupCounts,
+} from '../hub-member-signups.helpers';
 
 /**
  * ROK-1870 L3 — the core "events tagged to this hub" read (`events.guild_id`)
@@ -35,7 +39,6 @@ const starts = sql`lower(${events.duration})`;
 const signupCount = (where: SQL): SQL<number> =>
   sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and ${where})`;
 
-const LIVE = sql.raw(`s.status in ('signed_up', 'tentative')`);
 const SIGNED = sql.raw(`s.status in ('signed_up', 'tentative', 'departed')`);
 
 /** Ended in the look-back window `(since, now]`. */
@@ -150,15 +153,22 @@ async function recordedEventIds(
   return rows.map((r) => r.id);
 }
 
-/** The hub's Events tab payload: upcoming + recent tagged events + attendance. */
+/**
+ * The hub's Events tab payload: upcoming + recent tagged events + attendance.
+ * `memberUserIds` is the hub kind's member set, behind each upcoming card's
+ * `memberSignupCount` (ROK-2185).
+ */
 export async function loadCommunityHubEvents(
   db: Db,
   guildId: number,
   viewerId: number,
+  memberUserIds: readonly number[],
   now: Date = new Date(),
 ): Promise<GuildRaidsDto> {
   const [upcoming, recent, attendanceRows] = await Promise.all([
-    loadUpcoming(db, guildId, viewerId, now),
+    loadUpcoming(db, guildId, viewerId, now).then((cards) =>
+      withMemberSignupCounts(db, cards, memberUserIds),
+    ),
     loadRecent(db, guildId, now),
     recordedEventIds(db, guildId, now).then((ids) =>
       loadCommunityAttendanceRows(db, ids),

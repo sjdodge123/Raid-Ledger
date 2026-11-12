@@ -7,6 +7,7 @@ import { ChannelMirrorService } from './channel-mirror.service';
 import { toMirrorPort } from './channel-mirror.discord';
 import type { MirrorChannelPort } from './channel-mirror.read';
 import { sourceMessage } from './channel-mirror.spec-helpers';
+import { CHANNEL_MIRROR_REFRESH_MIN_MS } from './channel-mirror.helpers';
 
 jest.mock('./channel-mirror.discord', () => ({
   toMirrorPort: jest.fn(),
@@ -79,6 +80,51 @@ describe('ChannelMirrorService.readLatest', () => {
     service.clear('555');
     await service.readLatest('555');
     expect(fetchLatest).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ChannelMirrorService.readLatest refresh (ROK-2185)', () => {
+  beforeEach(() => {
+    toMirrorPortMock.mockReset();
+    jest.useFakeTimers({ now: 1_000_000 });
+  });
+  afterEach(() => jest.useRealTimers());
+
+  function serviceWithFetch(): {
+    service: ChannelMirrorService;
+    fetchLatest: jest.Mock;
+  } {
+    const fetchLatest = jest.fn().mockResolvedValue([]);
+    toMirrorPortMock.mockReturnValue(portWith(fetchLatest));
+    return { service: makeService({ id: 'G1' }), fetchLatest };
+  }
+
+  it('skips the 60s cache once the cached read is 15s old', async () => {
+    const { service, fetchLatest } = serviceWithFetch();
+    await service.readLatest('555');
+    jest.setSystemTime(1_000_000 + CHANNEL_MIRROR_REFRESH_MIN_MS);
+    await service.readLatest('555', { refresh: true });
+    expect(fetchLatest).toHaveBeenCalledTimes(2);
+  });
+
+  it('serves the cache for a refresh inside the 15s floor', async () => {
+    const { service, fetchLatest } = serviceWithFetch();
+    await service.readLatest('555');
+    jest.setSystemTime(1_000_000 + CHANNEL_MIRROR_REFRESH_MIN_MS - 1);
+    await service.readLatest('555', { refresh: true });
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+  });
+
+  it('a plain read 15s later still serves the cache', async () => {
+    const { service, fetchLatest } = serviceWithFetch();
+    await service.readLatest('555');
+    jest.setSystemTime(1_000_000 + CHANNEL_MIRROR_REFRESH_MIN_MS);
+    await service.readLatest('555');
+    expect(fetchLatest).toHaveBeenCalledTimes(1);
+  });
+
+  it('the floor is 15 seconds', () => {
+    expect(CHANNEL_MIRROR_REFRESH_MIN_MS).toBe(15_000);
   });
 });
 

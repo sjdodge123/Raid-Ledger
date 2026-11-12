@@ -59,16 +59,20 @@ export class GuildDiscordService {
     private readonly events: EventEmitter2,
   ) {}
 
-  /** The card's state; `unset` when no channel is bound. Never a 5xx. */
+  /**
+   * The card's state; `unset` when no channel is bound. Never a 5xx.
+   * ROK-2185: `refresh` asks the mirror to skip its cache (15s floor).
+   */
   async getMirror(
     actor: GuildActor,
     guildId: number,
+    refresh = false,
   ): Promise<GuildDiscordMirrorDto> {
     if (!(await this.access.canReadOverview(actor, guildId))) {
       throw new ForbiddenException('Not a member of this guild');
     }
     await this.assertGuild(guildId);
-    return this.read(guildId);
+    return this.read(guildId, refresh);
   }
 
   /** Picker options (bot-readable text channels, tagged public/private). */
@@ -137,10 +141,13 @@ export class GuildDiscordService {
     }
   }
 
-  private async read(guildId: number): Promise<GuildDiscordMirrorDto> {
+  private async read(
+    guildId: number,
+    refresh = false,
+  ): Promise<GuildDiscordMirrorDto> {
     const binding = await findBinding(this.db, guildId);
     if (binding === null) return { state: 'unset' };
-    const read = await this.mirror.readLatest(binding.channelId);
+    const read = await this.mirror.readLatest(binding.channelId, { refresh });
     const named = withServerName(
       requirePrivateAck(read, binding.privateAck),
       this.serverName(),

@@ -2,7 +2,7 @@
  * ROK-1787 — pure formatting for the guild Raids widgets. Every time is shown
  * in the viewer's local time zone (the browser's), never the server's.
  */
-import type { GuildEventCardDto } from '@raid-ledger/contract';
+import type { GuildEventCardDto, GuildKind } from '@raid-ledger/contract';
 
 /** `attended` of `of` as a whole percentage; 0 when there is nothing to divide by. */
 export function percent(part: number, whole: number): number {
@@ -44,6 +44,23 @@ export function whenLabel(iso: string): string {
 /** "3 / 20 signed up", or "3 signed up" when the event is uncapped. */
 export function signupLabel(e: Pick<GuildEventCardDto, 'signupCount' | 'needed'>): string {
     return e.needed === null ? `${e.signupCount} signed up` : `${e.signupCount} / ${e.needed} signed up`;
+}
+
+/**
+ * ROK-2185 (operator ruling Q3 = A) — how many of the signups are members of
+ * this hub: "4 guild members" on a WoW guild, "4 members" on a community or
+ * server hub. Shown once anyone has signed up, so "0 guild members" tells the
+ * hub that only outsiders have; null before the first signup or when the
+ * server sent no count.
+ */
+export function memberSignupLabel(
+    e: Pick<GuildEventCardDto, 'signupCount' | 'memberSignupCount'>,
+    kind: GuildKind | undefined,
+): string | null {
+    const n = e.memberSignupCount;
+    if (n === undefined || e.signupCount <= 0) return null;
+    const noun = (kind ?? 'wow_guild') === 'wow_guild' ? 'guild member' : 'member';
+    return `${n} ${noun}${n === 1 ? '' : 's'}`;
 }
 
 /** Hero chip count: "3/20 signed" or "3 signed". */

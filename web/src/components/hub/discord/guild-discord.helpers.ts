@@ -14,6 +14,27 @@ export function latestMessages(messages: GuildDiscordMessageDto[], n = MIRROR_VI
     return n > 0 ? messages.slice(-n) : [];
 }
 
+/** ROK-2185: "Show more" expands in-card to everything the server fetched (D10: up to 10). */
+export const MIRROR_MAX_MESSAGES = 10;
+
+/** The messages the card renders: the newest 3, or every fetched one (≤10) once expanded. */
+export function visibleMessages(messages: GuildDiscordMessageDto[], expanded: boolean): GuildDiscordMessageDto[] {
+    return latestMessages(messages, expanded ? MIRROR_MAX_MESSAGES : MIRROR_VISIBLE_MESSAGES);
+}
+
+/** The Show more / Show less toggle only exists when there is more than the default 3. */
+export function canExpandMessages(messages: GuildDiscordMessageDto[]): boolean {
+    return messages.length > MIRROR_VISIBLE_MESSAGES;
+}
+
+/** A mirror with a bound channel (any state but `unset`). */
+export type BoundMirror = Exclude<GuildDiscordMirrorDto, { state: 'unset' }>;
+
+/** True once a channel is bound — the only time the card header carries actions (Refresh, Change). */
+export function isMirrorBound(mirror: GuildDiscordMirrorDto | undefined): mirror is BoundMirror {
+    return mirror !== undefined && mirror.state !== 'unset';
+}
+
 /** The card heading: `#name` when the channel name is known. */
 export function mirrorTitle(mirror: GuildDiscordMirrorDto): string {
     switch (mirror.state) {

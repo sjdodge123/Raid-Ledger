@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
   type GuildEditor,
   type GuildEditorList,
   type GuildPage,
+  type GuildPastEventsPageDto,
   type GuildProfile,
   type GuildRaidsDto,
   type GuildSummary,
@@ -71,6 +73,20 @@ export class HubController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildRaidsDto> {
     return this.hubs.raids(req.user, id);
+  }
+
+  /**
+   * ROK-2185 item 3 — page back through the hub's ended events, 20 at a time
+   * (`?cursor=` from the previous page's `nextCursor`). Members/staff only.
+   */
+  @Get('events/past')
+  @UseGuards(jwt, HubVisibleGuard)
+  pastEvents(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: unknown,
+  ): Promise<GuildPastEventsPageDto> {
+    return this.hubs.pastEvents(req.user, id, query);
   }
 
   @Get('profile')

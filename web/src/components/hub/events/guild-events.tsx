@@ -6,12 +6,14 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { GuildEventCardDto, GuildKind, GuildRaidsDto, GuildRecentEventDto } from '@raid-ledger/contract';
+import type { GuildEventCardDto, GuildKind, GuildRaidsDto } from '@raid-ledger/contract';
 import { hubCopy } from '../hub-copy';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle, WidgetCard } from '../hub-bits';
 import { GuildMeter } from './guild-meter';
-import { dateTile, dayLabel, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
+import { dateTile, dayLabel, memberSignupLabel, percent, signupLabel, timeRange } from './guild-raids.helpers';
+import { RecentRow } from './guild-recent-row';
+import { GuildPastEvents } from './guild-past-events';
 import { JumpLink, QuietEmpty } from '../card-bits';
 
 const SUBHEAD = 'mb-2 text-xs font-semibold uppercase tracking-wider text-muted';
@@ -24,18 +26,19 @@ function StatusMark({ e }: { e: GuildEventCardDto }): JSX.Element {
     return <Link to={`/events/${e.id}`} className={SIGN_UP_LINK} aria-label={`Sign up for ${e.title}`}>Sign up</Link>;
 }
 
-function SignupMeter({ e }: { e: GuildEventCardDto }): JSX.Element {
+function SignupMeter({ e, kind }: { e: GuildEventCardDto; kind: GuildKind | undefined }): JSX.Element {
+    const members = memberSignupLabel(e, kind);
     return (
         <div className="flex items-center gap-2">
             {e.needed !== null && (
                 <div className="w-24"><GuildMeter pct={percent(e.signupCount, e.needed)} label={`${e.title}: ${signupLabel(e)}`} /></div>
             )}
-            <span className="text-xs text-muted">{signupLabel(e)}</span>
+            <span className="text-xs text-muted">{members === null ? signupLabel(e) : `${signupLabel(e)} · ${members}`}</span>
         </div>
     );
 }
 
-function UpcomingCard({ e }: { e: GuildEventCardDto }): JSX.Element {
+function UpcomingCard({ e, kind }: { e: GuildEventCardDto; kind: GuildKind | undefined }): JSX.Element {
     const tile = dateTile(e.startTime);
     return (
         <li data-testid="guild-upcoming-event" className="flex items-center gap-3 rounded-lg border border-edge bg-surface p-3">
@@ -49,7 +52,7 @@ function UpcomingCard({ e }: { e: GuildEventCardDto }): JSX.Element {
                     <span className="text-xs text-muted">{dayLabel(e.startTime)} · {timeRange(e.startTime, e.endTime)}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <SignupMeter e={e} />
+                    <SignupMeter e={e} kind={kind} />
                     <StatusMark e={e} />
                 </div>
             </div>
@@ -57,24 +60,24 @@ function UpcomingCard({ e }: { e: GuildEventCardDto }): JSX.Element {
     );
 }
 
-function recentLabel(e: GuildRecentEventDto): string {
-    if (e.attended === null) return `${e.signedUp} signed up · attendance not recorded`;
-    return `${e.attended} of ${e.signedUp} attended (${percent(e.attended, e.signedUp)}%)`;
+/** ROK-2185: the full Events tab pages its Recent list back through history. */
+export interface PastPaging {
+    guildId: number;
+    /** False for a viewer the past-events route refuses (a visitor). */
+    canPage: boolean;
 }
 
-function RecentRow({ e }: { e: GuildRecentEventDto }): JSX.Element {
-    return (
-        <li data-testid="guild-recent-event" className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-edge-subtle py-2 text-sm last:border-b-0">
-            <span className="min-w-0 text-secondary">
-                <Link to={`/events/${e.id}`} className={`rounded-sm font-medium hover:underline ${FOCUS_RING}`}>{e.title}</Link>{' '}
-                <span className="text-xs text-dim">· {whenLabel(e.startTime)}</span>
-            </span>
-            <span className="text-xs text-muted">{recentLabel(e)}</span>
-        </li>
-    );
+interface EventListsProps { raids: GuildRaidsDto; compact: boolean; kind: GuildKind | undefined; past?: PastPaging | undefined }
+
+function RecentList({ recent, kind, past }: { recent: GuildRaidsDto['recent']; kind: GuildKind | undefined; past?: PastPaging | undefined }): JSX.Element {
+    if (past) return <GuildPastEvents guildId={past.guildId} recent={recent} canPage={past.canPage} kind={kind} />;
+    const copy = hubCopy(kind);
+    return recent.length === 0
+        ? <QuietEmpty>{copy.recentEmpty}</QuietEmpty>
+        : <Card className="bg-panel py-1"><ul aria-label={`Recent ${copy.noun} events`}>{recent.map((e) => <RecentRow key={e.id} e={e} />)}</ul></Card>;
 }
 
-function EventLists({ raids, compact, kind }: { raids: GuildRaidsDto; compact: boolean; kind: GuildKind | undefined }): JSX.Element {
+function EventLists({ raids, compact, kind, past }: EventListsProps): JSX.Element {
     const copy = hubCopy(kind);
     const upcoming = compact ? raids.upcoming.slice(0, COMPACT_COUNT) : raids.upcoming;
     const recent = compact ? raids.recent.slice(0, COMPACT_COUNT) : raids.recent;
@@ -83,11 +86,9 @@ function EventLists({ raids, compact, kind }: { raids: GuildRaidsDto; compact: b
             <h4 className={SUBHEAD}>Upcoming</h4>
             {upcoming.length === 0
                 ? <QuietEmpty>{copy.upcomingEmpty}</QuietEmpty>
-                : <ul aria-label={`Upcoming ${copy.noun} events`} className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} />)}</ul>}
+                : <ul aria-label={`Upcoming ${copy.noun} events`} className="mb-5 flex flex-col gap-2">{upcoming.map((e) => <UpcomingCard key={e.id} e={e} kind={kind} />)}</ul>}
             <h4 className={SUBHEAD}>Recent</h4>
-            {recent.length === 0
-                ? <QuietEmpty>{copy.recentEmpty}</QuietEmpty>
-                : <Card className="bg-panel py-1"><ul aria-label={`Recent ${copy.noun} events`}>{recent.map((e) => <RecentRow key={e.id} e={e} />)}</ul></Card>}
+            <RecentList recent={recent} kind={kind} past={compact ? undefined : past} />
         </>
     );
 }
@@ -99,9 +100,11 @@ interface GuildEventsProps {
     jumpTab?: string | null;
     /** Hub kind, for the empty-state copy. */
     kind?: GuildKind | undefined;
+    /** Full mode only: page the Recent list (ROK-2185); absent = the payload's `recent` alone. */
+    past?: PastPaging | undefined;
 }
 
-export function GuildEvents({ raids, compact = false, jumpTab = null, kind }: GuildEventsProps): JSX.Element {
+export function GuildEvents({ raids, compact = false, jumpTab = null, kind, past }: GuildEventsProps): JSX.Element {
     if (compact) {
         const action = jumpTab === null ? undefined : <JumpLink testId="guild-all-events" href={`#${jumpTab}`}>All events</JumpLink>;
         return (
@@ -114,7 +117,7 @@ export function GuildEvents({ raids, compact = false, jumpTab = null, kind }: Gu
     return (
         <section id="guild-events" data-testid="guild-events-full" className="scroll-mt-4">
             <SectionTitle title={copy.eventsTitle} blurb={copy.eventsBlurb} />
-            <EventLists raids={raids} compact={false} kind={kind} />
+            <EventLists raids={raids} compact={false} kind={kind} past={past} />
         </section>
     );
 }

@@ -11,8 +11,9 @@ import { fetchApi } from '../../../lib/api-client';
 
 const base = (guildId: number): string => `/guilds/${guildId}/discord`;
 
-export function fetchGuildDiscord(guildId: number): Promise<GuildDiscordMirrorDto> {
-    return fetchApi(base(guildId), {}, GuildDiscordMirrorSchema);
+/** ROK-2185: `refresh` asks the server to skip its 60s mirror cache (15s floor server-side). */
+export function fetchGuildDiscord(guildId: number, refresh = false): Promise<GuildDiscordMirrorDto> {
+    return fetchApi(refresh ? `${base(guildId)}?refresh=1` : base(guildId), {}, GuildDiscordMirrorSchema);
 }
 
 export function fetchGuildDiscordChannels(guildId: number): Promise<GuildDiscordChannelListDto> {
