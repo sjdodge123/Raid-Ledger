@@ -3,10 +3,9 @@
  * Renders a single quest with collapsible details.
  */
 import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, QuestPrereqState } from '@raid-ledger/contract';
-import { getWowheadQuestUrl, getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
-import { ItemComparison } from '../components/item-comparison';
-import { WowItemCard } from '../components/wow-item-card';
-import { REWARD_TO_EQUIP_SLOT, formatGold, formatReputationReward, prerequisiteCount } from './quest-card-constants';
+import { getWowheadQuestUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
+import { QuestRewardItems } from './quest-reward-items';
+import { formatGold, formatReputationReward, prerequisiteCount } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
@@ -275,33 +274,5 @@ function QuestReputationRewards({ rewards }: { rewards: { factionName: string; a
                 </span>
             ))}
         </span>
-    );
-}
-
-function QuestRewardItems({ quest, wowheadSuffix, wowheadVariant, equippedBySlot, charClass, characterId }: {
-    quest: EnrichedDungeonQuestDto; wowheadSuffix: string; wowheadVariant: string;
-    equippedBySlot: Map<string, EquipmentItemDto>; charClass: string | null; characterId: string | undefined;
-}) {
-    if (!quest.rewards || quest.rewards.length === 0) return null;
-    return (
-        <div className="quest-rewards">
-            {quest.rewards.map((reward: { itemId: number; itemName: string; quality: string; slot: string | null; itemLevel: number | null; iconUrl: string | null; itemSubclass: string | null }) => {
-                const equipSlot = reward.slot ? REWARD_TO_EQUIP_SLOT[reward.slot] ?? reward.slot : null;
-                const equippedItem = equipSlot ? equippedBySlot.get(equipSlot) : undefined;
-                return (
-                    <div key={reward.itemId} className="quest-reward-item-wrapper">
-                        <WowItemCard itemId={reward.itemId} name={reward.itemName} quality={reward.quality}
-                            slot={reward.slot} itemLevel={reward.itemLevel} iconUrl={reward.iconUrl}
-                            wowheadUrl={getWowheadItemUrl(reward.itemId, wowheadVariant)}
-                            wowheadData={`item=${reward.itemId}&${wowheadSuffix}`} />
-                        {equipSlot && characterId && (
-                            <ItemComparison rewardItemLevel={reward.itemLevel} equippedItem={equippedItem}
-                                gameVariant={wowheadVariant} characterClass={charClass}
-                                lootItemSubclass={reward.itemSubclass} lootSlot={reward.slot} />
-                        )}
-                    </div>
-                );
-            })}
-        </div>
     );
 }

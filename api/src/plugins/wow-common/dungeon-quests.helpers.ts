@@ -11,7 +11,10 @@ import type { EnrichedQuestReward } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { wowClassicBossLoot } from '../../drizzle/schema';
 import type { DungeonQuestDto } from './dungeon-quests.types';
-import { mergeItemMetaFallback } from './dungeon-quests.item-meta';
+import {
+  attachItemTooltips,
+  mergeItemMetaFallback,
+} from './dungeon-quests.item-meta';
 
 const logger = new Logger('DungeonQuestsHelpers');
 
@@ -264,7 +267,8 @@ async function selectLootRows(
 
 /**
  * Build item details map from Wowhead JSON, then the boss loot table, then
- * the `wow_item_meta` cache for ids still unresolved (Forever rewards).
+ * the `wow_item_meta` cache for ids still unresolved (Forever rewards),
+ * then each resolved reward's cached tooltip (ROK-2186).
  * `preferForever`: the variant reads Forever data (ROK-2170).
  */
 export async function buildItemDetailsMap(
@@ -284,6 +288,7 @@ export async function buildItemDetailsMap(
     mergeLootRows(pickLootRows(rows, preferForever), itemDetailsMap);
   }
   await mergeItemMetaFallback(db, allItemIds, itemDetailsMap);
+  await attachItemTooltips(db, itemDetailsMap);
   return itemDetailsMap;
 }
 
