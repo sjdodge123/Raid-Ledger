@@ -4,6 +4,7 @@
  * bind parameters — a large calendar in one `values(rows)` call fails the
  * whole read sync. Chunks run sequentially on the caller's transaction.
  */
+import type { SQL } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { NormalizedBusyBlock } from './calendar-read-normalize.helpers';
 
@@ -16,6 +17,13 @@ type BusyBlockInsert = typeof schema.calendarBusyBlocks.$inferInsert;
 export interface BusyBlockInserter {
   insert(table: typeof schema.calendarBusyBlocks): {
     values(rows: BusyBlockInsert[]): PromiseLike<unknown>;
+  };
+}
+
+/** The tx slice that replaces a connection's blocks: delete, then insert. */
+export interface BusyBlockWriter extends BusyBlockInserter {
+  delete(table: typeof schema.calendarBusyBlocks): {
+    where(condition: SQL | undefined): PromiseLike<unknown>;
   };
 }
 

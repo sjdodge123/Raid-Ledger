@@ -15,11 +15,14 @@ import {
   classifyReadFailure,
   readErrorBackoffMs,
 } from './calendar-read-failure.helpers';
+import type { BusyBlockWriter } from './calendar-busy-insert.helpers';
+import type { NormalizedBusyBlock } from './calendar-read-normalize.helpers';
 import {
   buildSyncedFields,
   lockForSync,
   nextReadSyncAt,
   pruneReadCalendarIds,
+  replaceBlocks,
   safeReadWindow,
   selectReadCalendarIds,
 } from './calendar-read-sync.helpers';
@@ -277,5 +280,47 @@ describe('lockForSync (lock order)', () => {
       lockForSync(tx, { id: 3, userId: 7 }, true),
     ).resolves.toBeNull();
     expect(calls).toEqual(['advisory', 'row update']);
+  });
+});
+
+describe('replaceBlocks (chunked busy-block insert wiring)', () => {
+  function block(i: number): NormalizedBusyBlock {
+    const startsAt = new Date(NOW.getTime() + i * MIN);
+    return {
+      startsAt,
+      endsAt: new Date(startsAt.getTime() + MIN),
+      allDay: false,
+      firstDate: null,
+      lastDate: null,
+    };
+  }
+
+  it('writes 2,500 blocks with no INSERT over 1,000 rows, every row once', async () => {
+    const batches: unknown[][] = [];
+    let deletes = 0;
+    const tx: BusyBlockWriter = {
+      delete: () => ({
+        where: () => {
+          deletes += 1;
+          return Promise.resolve(undefined);
+        },
+      }),
+      insert: () => ({
+        values: (rows) => {
+          batches.push(rows);
+          return Promise.resolve(undefined);
+        },
+      }),
+    };
+    const rows = Array.from({ length: 2_500 }, (_, i) => block(i));
+
+    await replaceBlocks(tx, { id: 3, userId: 7 }, { start: NOW }, rows);
+
+    expect(deletes).toBe(1);
+    expect(batches.length).toBeGreaterThan(1);
+    expect(batches.every((b) => b.length <= 1_000)).toBe(true);
+    expect(batches.flat()).toEqual(
+      rows.map((r) => ({ ...r, connectionId: 3, userId: 7 })),
+    );
   });
 });

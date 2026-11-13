@@ -59,7 +59,10 @@ import {
   type NormalizedBusyBlock,
   type ReadWindow,
 } from './calendar-read-normalize.helpers';
-import { insertBusyBlocks } from './calendar-busy-insert.helpers';
+import {
+  insertBusyBlocks,
+  type BusyBlockWriter,
+} from './calendar-busy-insert.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 export type ReadSyncTx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -228,10 +231,11 @@ export async function lockForSync(
   return lockReadable(tx, conn.id);
 }
 
-async function replaceBlocks(
-  tx: ReadSyncTx,
-  conn: ReadSyncConnection,
-  window: ReadWindow,
+/** Exported for the chunked-insert wiring unit spec. */
+export async function replaceBlocks(
+  tx: BusyBlockWriter,
+  conn: Pick<ReadSyncConnection, 'id' | 'userId'>,
+  window: Pick<ReadWindow, 'start'>,
   rows: NormalizedBusyBlock[],
 ): Promise<void> {
   const t = schema.calendarBusyBlocks;
