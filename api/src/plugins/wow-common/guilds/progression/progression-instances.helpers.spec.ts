@@ -114,7 +114,9 @@ describe('groupIntoInstances — instance resolution', () => {
     expect(zg.name).toBe("Zul'Gurub");
     expect(zg.bossTotal).toBeNull();
   });
+});
 
+describe('groupIntoInstances — other bucket and split bosses', () => {
   it('an unknown boss with no map id lands in "Other bosses", sorted last even when newest', () => {
     const out = groupIntoInstances(
       [
@@ -196,7 +198,9 @@ describe('groupIntoInstances — bosses and difficulty (B3)', () => {
     expect(mc.bossesDown).toBe(1);
     expect(mc.bosses).toHaveLength(3);
   });
+});
 
+describe('groupIntoInstances — boss order and latest kill', () => {
   it('orders bosses by boss-row order, unmatched bosses last', () => {
     const out = groupIntoInstances(
       [
