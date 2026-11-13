@@ -6,6 +6,7 @@ import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
 import { openEventLink } from './discord-embed-event-chrome.helpers';
 import { eventDescriptionExcerpt } from './discord-embed-event-description.helpers';
+import { plannedVoiceLine } from './discord-embed-event-body.helpers';
 import type { EmbedEventData, EmbedContext } from './discord-embed.factory';
 
 /** `✉ INVITED BY roknua` — the DM's author line (ROK-1460 §Grammar). */
@@ -62,5 +63,7 @@ function buildInviteBodyLines(event: EmbedEventData): string[] {
   lines.push(`\uD83D\uDCC6 <t:${startUnix}:f> (<t:${startUnix}:R>)`);
   if (event.voiceChannelId)
     lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
+  else if (event.plannedVoiceChannel)
+    lines.push(plannedVoiceLine(event.plannedVoiceChannel));
   return lines;
 }

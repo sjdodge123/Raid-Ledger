@@ -5,12 +5,18 @@ import type {
   EventResponseDto,
   VoiceChannelResponseDto,
 } from '@raid-ledger/contract';
+import {
+  resolvePlannedVoiceForEvent,
+  type PlannedVoiceSettingsSource,
+} from '../discord-bot/services/planned-ephemeral-voice.helpers';
 
 const logger = new Logger('VoiceChannelResolver');
 
 export interface VoiceChannelResolverDeps {
   channelResolver: ChannelResolverService;
   bot: DiscordBotClientService;
+  /** Planned temporary voice channel settings (operator ruling 2026-11-13). */
+  settings: PlannedVoiceSettingsSource;
 }
 
 export async function resolveVoiceChannelForEvent(
@@ -19,6 +25,18 @@ export async function resolveVoiceChannelForEvent(
   isAuthenticated: boolean,
 ): Promise<VoiceChannelResponseDto> {
   try {
+    const planned = await resolvePlannedVoiceForEvent(
+      deps.settings,
+      plannedFieldsOf(event),
+    );
+    if (planned) {
+      return {
+        channelId: null,
+        channelName: planned.name,
+        guildId: null,
+        plannedOpensAt: planned.opensAt,
+      };
+    }
     // ROK-1389: route through the shared voice-aware resolver so a text override
     // no longer masquerades as the event's voice channel on the website.
     const channelId =
@@ -44,6 +62,19 @@ export async function resolveVoiceChannelForEvent(
     );
     return { channelId: null, channelName: null, guildId: null };
   }
+}
+
+/** The planned-channel inputs carried by the event response. */
+function plannedFieldsOf(event: EventResponseDto) {
+  return {
+    eventOverride: event.ephemeralVoiceEnabled ?? null,
+    liveChannelId: event.ephemeralVoiceChannelId ?? null,
+    cancelled: (event.cancelledAt ?? null) !== null,
+    rescheduling: (event.reschedulingPollId ?? null) !== null,
+    startTime: new Date(event.startTime),
+    title: event.title,
+    gameName: event.game?.name ?? null,
+  };
 }
 
 async function resolveChannelName(

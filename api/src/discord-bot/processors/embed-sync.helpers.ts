@@ -9,6 +9,10 @@ import {
   toEmbedGame,
 } from '../services/embed-game.helpers';
 import { computeEmbedStateForData } from '../services/embed-state.helpers';
+import {
+  plannedVoiceForEmbed,
+  type PlannedVoiceSettingsSource,
+} from '../services/planned-ephemeral-voice.helpers';
 
 /**
  * Find all tracked Discord messages for this event in the given guild.
@@ -40,6 +44,7 @@ export async function buildEventData(
   db: PostgresJsDatabase<typeof schema>,
   event: typeof schema.events.$inferSelect,
   channelResolver: ChannelResolverService,
+  settings?: PlannedVoiceSettingsSource,
 ): Promise<EmbedEventData> {
   const signupMentions = await queryActiveSignups(db, event.id, event.gameId);
   const roleCounts = await queryRoleCounts(db, event.id);
@@ -47,6 +52,8 @@ export async function buildEventData(
   const eventData = assembleEventData(event, signupMentions, roleCounts);
 
   await enrichWithGameInfo(db, event, eventData);
+  if (settings && (await enrichWithPlannedVoice(settings, event, eventData)))
+    return eventData;
   await enrichWithVoiceChannel(channelResolver, event, eventData);
 
   return eventData;
@@ -249,6 +256,28 @@ async function enrichWithGameInfo(
     .limit(1);
   const projected = toEmbedGame(game);
   if (projected) eventData.game = projected;
+}
+
+/**
+ * Set the planned (not yet created) temporary voice channel, if any — the
+ * same decision embed-poster makes (operator ruling 2026-11-13). Runs after
+ * the game enrichment so the planned name carries the game.
+ * @returns true when a planned channel was set (the voice link is skipped).
+ */
+async function enrichWithPlannedVoice(
+  settings: PlannedVoiceSettingsSource,
+  event: typeof schema.events.$inferSelect,
+  eventData: EmbedEventData,
+): Promise<boolean> {
+  const planned = await plannedVoiceForEmbed(settings, eventData, {
+    channelId: event.ephemeralVoiceChannelId,
+    enabled: event.ephemeralVoiceEnabled,
+    cancelled: event.cancelledAt !== null,
+    rescheduling: event.reschedulingPollId !== null,
+  });
+  if (!planned) return false;
+  eventData.plannedVoiceChannel = planned;
+  return true;
 }
 
 /** Enrich event data with voice channel info. */
