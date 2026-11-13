@@ -43,7 +43,9 @@ describe('plannedVoiceLine', () => {
     });
     expect(line).not.toContain('@everyone');
     expect(line).not.toMatch(/<#\d+>/);
-    expect(line).not.toContain('[x](');
+    // The masked link survives only backslash-escaped, so it renders literally.
+    expect(line).toContain('\\[x](');
+    expect(line).not.toMatch(/(^|[^\\])\[x\]\(/);
   });
 });
 
