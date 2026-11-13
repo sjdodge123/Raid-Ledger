@@ -39,15 +39,15 @@ import {
   pollForCondition,
   pollForEmbed,
   waitForEmbedUpdate,
-} from "../../helpers/polling.js";
-import { readLastMessages } from "../../helpers/messages.js";
+} from '../../helpers/polling.js';
+import { readLastMessages } from '../../helpers/messages.js';
 import {
   endSpawnedLfgSession,
   lfgNowVoiceJoin,
   lfgNowVoiceLeave,
   type LfgNowVoiceResult,
   type LfgNowVoiceTarget,
-} from "../fixtures-lfg-now.js";
+} from '../fixtures-lfg-now.js';
 import {
   awaitProcessing,
   createBinding,
@@ -58,12 +58,12 @@ import {
   withdrawLfgIntent,
   type FixtureUser,
   type LfgGroupSummary,
-} from "../fixtures.js";
-import type { SmokeTest, TestContext } from "../types.js";
-import type { SimpleEmbed, SimpleMessage } from "../../helpers/messages.js";
-import { withLfgSurface } from "../lfg-surface-lock.js";
-import { lfmCandidates } from "../lfg-smoke-scope.js";
-import { armForumSweep, sweepForumThreads } from "../lfg-forum-sweep.js";
+} from '../fixtures.js';
+import type { SmokeTest, TestContext } from '../types.js';
+import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
+import { withLfgSurface } from '../lfg-surface-lock.js';
+import { lfmCandidates } from '../lfg-smoke-scope.js';
+import { armForumSweep, sweepForumThreads } from '../lfg-forum-sweep.js';
 
 /**
  * `▸ PLAYING NOW · N in voice` — the sixth state's author line (D3).
@@ -106,7 +106,7 @@ function isNew(run: Run, msg: SimpleMessage): boolean {
 function embedFor(msg: SimpleMessage, title: string): SimpleEmbed {
   const embed = msg.embeds.find((e) => e.title === title);
   if (!embed) {
-    const titles = msg.embeds.map((e) => e.title).join(", ");
+    const titles = msg.embeds.map((e) => e.title).join(', ');
     throw new Error(
       `AC7: message ${msg.id} carries no embed titled "${title}" (titles: [${titles}])`,
     );
@@ -116,11 +116,11 @@ function embedFor(msg: SimpleMessage, title: string): SimpleEmbed {
 
 /** The head-count off a PLAYING NOW author line, or a failure naming it. */
 function headCount(embed: SimpleEmbed, label: string): number {
-  const match = PLAYING_AUTHOR.exec(embed.author ?? "");
+  const match = PLAYING_AUTHOR.exec(embed.author ?? '');
   if (!match) {
     throw new Error(
       `${label}: expected an author line matching ${String(PLAYING_AUTHOR)}, ` +
-        `got "${embed.author ?? ""}"`,
+        `got "${embed.author ?? ''}"`,
     );
   }
   return Number(match[1]);
@@ -131,11 +131,11 @@ async function pickIdleGame(
   ctx: TestContext,
 ): Promise<{ id: number; name: string }> {
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-    "/admin/settings/games?limit=100",
+    '/admin/settings/games?limit=100',
   );
   // ROK-1522: the shared LFM window, past the board's and the newest games.
   const candidates = lfmCandidates(res.data ?? []);
-  if (candidates.length === 0) throw new Error("AC7: no games in the registry");
+  if (candidates.length === 0) throw new Error('AC7: no games in the registry');
   for (const game of candidates) {
     const group = await ctx.api.get<LfgGroupSummary>(`/lfg/${game.id}`);
     // A game with a live session is NOT idle even at `activeCount === 0` — the
@@ -146,7 +146,7 @@ async function pickIdleGame(
   }
   throw new Error(
     `AC7: no idle game among ${candidates.length} candidates — clear the LFG ` +
-      "intents (and any live LFG-born session) before re-running",
+      'intents (and any live LFG-born session) before re-running',
   );
 }
 
@@ -169,16 +169,21 @@ async function raiseNowHand(
   expectedCount: number | null,
 ): Promise<void> {
   const res = await postLfgIntent(user.api, run.game.id, {
-    urgency: "now",
+    urgency: 'now',
     ttlMinutes: 60,
   });
   if (expectedCount !== null && res.group.activeCount !== expectedCount) {
     throw new Error(
       `AC7 precondition: expected activeCount ${expectedCount} after a ` +
         `now-hand on "${run.game.name}", got ${res.group.activeCount} — the ` +
-        "group was not idle, so every assertion below is about someone else",
+        'group was not idle, so every assertion below is about someone else',
     );
   }
+}
+
+/** `err`'s message, for a diagnostic line. */
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -196,29 +201,25 @@ async function describeMissingPlayingPost(run: Run): Promise<string> {
     );
     const listed = posts.map((m) => {
       const author =
-        m.embeds.find((e) => e.title === run.game.name)?.author ?? "";
-      return `${m.id}${run.preexisting.has(m.id) ? " (preexisting)" : ""} "${author}"`;
+        m.embeds.find((e) => e.title === run.game.name)?.author ?? '';
+      const old = run.preexisting.has(m.id) ? ' (preexisting)' : '';
+      return `${m.id}${old} "${author}"`;
     });
-    parts.push(
-      `game-titled posts in #${run.channelId}: [${listed.join(", ")}]`,
-    );
+    parts.push(`game-titled posts in ${run.channelId}: [${listed.join(', ')}]`);
   } catch (err) {
-    parts.push(
-      `channel read failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    parts.push(`channel read failed: ${errText(err)}`);
   }
   try {
-    const group = await run.ctx.api.get<LfgGroupSummary>(`/lfg/${run.game.id}`);
+    const path = `/lfg/${run.game.id}`;
+    const group = await run.ctx.api.get<LfgGroupSummary>(path);
     parts.push(
-      `GET /lfg/${run.game.id}: activeCount=${group.activeCount} ` +
+      `GET ${path}: activeCount=${group.activeCount} ` +
         `playingNow=${JSON.stringify(group.playingNow ?? null)}`,
     );
   } catch (err) {
-    parts.push(
-      `GET /lfg/${run.game.id} failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    parts.push(`GET /lfg/${run.game.id} failed: ${errText(err)}`);
   }
-  return parts.join("; ");
+  return parts.join('; ');
 }
 
 /** Wait until the post flips to PLAYING NOW, and hand back its voice channel. */
@@ -227,8 +228,8 @@ async function awaitPlayingPost(
 ): Promise<{ embed: SimpleEmbed; voiceChannelId: string; count: number }> {
   // Round-2 TECH-DEBT: a bare poll timeout named no author line, so three
   // rounds of this gate could not tell "never rendered" from "painted over".
-  let seen = "<no post for this game>";
-  let seenDescription = "";
+  let seen = '<no post for this game>';
+  let seenDescription = '';
   // The spawn paints PLAYING NOW before the ephemeral voice channel is
   // claimed (an in-between edit with no link), so wait for both together.
   const msg = await pollForEmbed(
@@ -237,8 +238,8 @@ async function awaitPlayingPost(
       isNew(run, m) &&
       m.embeds.some((e) => {
         if (e.title !== run.game.name) return false;
-        seen = e.author ?? "";
-        seenDescription = e.description ?? "";
+        seen = e.author ?? '';
+        seenDescription = e.description ?? '';
         return PLAYING_AUTHOR.test(seen) && VOICE_LINK.test(seenDescription);
       }),
     run.ctx.config.timeoutMs,
@@ -246,7 +247,7 @@ async function awaitPlayingPost(
     // Only the WAIT expiring means "it never rendered" — restating a gateway
     // error as a render failure would hide the real cause.
     const text = err instanceof Error ? err.message : String(err);
-    if (!text.includes("timed out")) throw err;
+    if (!text.includes('timed out')) throw err;
     throw new Error(
       `AC7: no PLAYING NOW post with a voice link — expected an author line ` +
         `matching ${String(PLAYING_AUTHOR)} and a description matching ` +
@@ -255,15 +256,15 @@ async function awaitPlayingPost(
     );
   });
   const embed = embedFor(msg, run.game.name);
-  const voiceChannelId = VOICE_LINK.exec(embed.description ?? "")?.[1];
+  const voiceChannelId = VOICE_LINK.exec(embed.description ?? '')?.[1];
   if (!voiceChannelId) {
     throw new Error(
-      "AC7: the PLAYING NOW post carries no voice-channel link — expected a " +
+      'AC7: the PLAYING NOW post carries no voice-channel link — expected a ' +
         `description matching ${String(VOICE_LINK)}, got ` +
-        `"${embed.description ?? ""}"`,
+        `"${embed.description ?? ''}"`,
     );
   }
-  return { embed, voiceChannelId, count: headCount(embed, "AC7") };
+  return { embed, voiceChannelId, count: headCount(embed, 'AC7') };
 }
 
 /** Wait for the head-count to reach `expected`, naming what it actually read. */
@@ -274,7 +275,7 @@ async function awaitHeadCount(
 ): Promise<void> {
   await flushVoiceSessions(run.ctx.api);
   await awaitProcessing(run.ctx.api);
-  let seen = "<no PLAYING NOW post>";
+  let seen = '<no PLAYING NOW post>';
   try {
     await waitForEmbedUpdate(
       run.channelId,
@@ -282,8 +283,8 @@ async function awaitHeadCount(
         isNew(run, m) &&
         m.embeds.some((e) => {
           if (e.title !== run.game.name) return false;
-          const match = PLAYING_AUTHOR.exec(e.author ?? "");
-          if (match) seen = e.author ?? "";
+          const match = PLAYING_AUTHOR.exec(e.author ?? '');
+          if (match) seen = e.author ?? '';
           return match !== null && Number(match[1]) === expected;
         }),
       run.ctx.config.timeoutMs,
@@ -294,7 +295,7 @@ async function awaitHeadCount(
     // head-count failure would hide the real cause behind a wrong diagnosis —
     // the same masking `waitForEmbedUpdate` itself was fixed to avoid.
     const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes("timed out")) throw err;
+    if (!msg.includes('timed out')) throw err;
     throw new Error(
       `${label}: expected the author line to read "${expected} in voice", ` +
         `last rendered "${seen}"`,
@@ -335,15 +336,12 @@ async function awaitHeadCount(
  * Restoring `boardWas` in `finally` therefore hands the next lock holder a
  * settled board, not one mid-retirement.
  */
-async function pinLfgBoard(
-  ctx: TestContext,
-  enabled: boolean,
-): Promise<boolean> {
+async function pinLfgBoard(ctx: TestContext, enabled: boolean): Promise<boolean> {
   const before = await ctx.api.get<{ enabled: boolean }>(
-    "/admin/settings/discord-bot/lfg-board",
+    '/admin/settings/discord-bot/lfg-board',
   );
   if (before.enabled !== enabled) {
-    await ctx.api.put("/admin/settings/discord-bot/lfg-board", { enabled });
+    await ctx.api.put('/admin/settings/discord-bot/lfg-board', { enabled });
   }
   return before.enabled;
 }
@@ -378,12 +376,11 @@ async function assertSpawned(run: Run): Promise<number> {
     return playing.eventId;
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    const group = seen.group as
-      (LfgGroupSummary & { nowCount?: number }) | undefined;
+    const group = seen.group as (LfgGroupSummary & { nowCount?: number }) | undefined;
     throw new Error(
       `AC7: two now-hands did NOT spawn a session on "${run.game.name}" — ` +
-        `playingNow is null (activeCount=${group?.activeCount ?? "?"}, ` +
-        `nowCount=${group?.nowCount ?? "?"}). ` +
+        `playingNow is null (activeCount=${group?.activeCount ?? '?'}, ` +
+        `nowCount=${group?.nowCount ?? '?'}). ` +
         `The post is not the problem; nothing was spawned to post about. (${why})`,
     );
   }
@@ -398,7 +395,7 @@ async function assertSpawned(run: Run): Promise<number> {
  */
 function assertRecorded(
   res: LfgNowVoiceResult,
-  action: "join" | "leave",
+  action: 'join' | 'leave',
   target: LfgNowVoiceTarget,
   eventId: number,
 ): void {
@@ -406,7 +403,7 @@ function assertRecorded(
   throw new Error(
     `AC7 ${action}: expected voice-${action} for user ${target.userId} on ` +
       `channel ${target.channelId} to be recorded against spawned event ` +
-      `${eventId}, got recorded=${res.recorded} eventId=${res.eventId ?? "null"}`,
+      `${eventId}, got recorded=${res.recorded} eventId=${res.eventId ?? 'null'}`,
   );
 }
 
@@ -431,12 +428,12 @@ async function driveHeadCount(
   let open = true;
   try {
     const joined = await lfgNowVoiceJoin(run.ctx.api, target);
-    assertRecorded(joined, "join", target, eventId);
-    await awaitHeadCount(run, playing.count + 1, "AC7 join");
+    assertRecorded(joined, 'join', target, eventId);
+    await awaitHeadCount(run, playing.count + 1, 'AC7 join');
     const left = await lfgNowVoiceLeave(run.ctx.api, target);
     open = false;
-    assertRecorded(left, "leave", target, eventId);
-    await awaitHeadCount(run, playing.count, "AC7 leave");
+    assertRecorded(left, 'leave', target, eventId);
+    await awaitHeadCount(run, playing.count, 'AC7 leave');
   } finally {
     // An open roster row reads as "still in voice" to the session lifecycle.
     // Swallowed so a cleanup error never replaces the test's real failure.
@@ -469,8 +466,8 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     boardWas = await pinLfgBoard(ctx, false);
     bindingId = await createBinding(ctx.api, {
       channelId: run.channelId,
-      channelType: "text",
-      purpose: "game-announcements",
+      channelType: 'text',
+      purpose: 'game-announcements',
       gameId: game.id,
     });
     run.first = await seedFixtureUser(ctx.api, 3, 5);
@@ -490,7 +487,7 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     // FIRST, while the binding still routes the post's closing re-render:
     // ends the spawned session and force-destroys its temp voice channel,
     // which a CI run would otherwise orphan in the shared guild.
-    await endSpawnedLfgSession(run.ctx.api, run.game.id, "lfm-playing");
+    await endSpawnedLfgSession(run.ctx.api, run.game.id, 'lfm-playing');
     // After a spawn both intents are already `converted`, so these 404 —
     // `withdrawLfgIntent` swallows that by design. They matter on the failure
     // path, where the spawn never happened and the hands are still live.
@@ -505,11 +502,11 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
 }
 
 const lfmEmbedPlayingNow: SmokeTest = {
-  name: "LFM embed: a spawned now-group renders PLAYING NOW with a live head-count",
-  category: "embed",
+  name: 'LFM embed: a spawned now-group renders PLAYING NOW with a live head-count',
+  category: 'embed',
   // The same global board toggle every other LFM test contends for.
   run(ctx) {
-    return withLfgSurface("lfm-playing", () => runPlayingNow(ctx));
+    return withLfgSurface('lfm-playing', () => runPlayingNow(ctx));
   },
 };
 
