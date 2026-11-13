@@ -17,6 +17,7 @@ import {
 } from '../../../discord-bot/embeds/embed-chrome.helpers';
 import { NotificationDedupService } from '../../../notifications/notification-dedup.service';
 import { NotificationService } from '../../../notifications/notification.service';
+import type { CreateNotificationInput } from '../../../notifications/notification.types';
 import { DiscordNotificationService } from '../../../notifications/discord-notification.service';
 import {
   resolveDigestChannel,
@@ -38,6 +39,7 @@ import {
   runGgDmWave,
   type GgDmWaveResult,
 } from './gg-dm-wave.helpers';
+import { findGgReadyNotificationId } from './gg-ready-notification.helpers';
 
 /** What one pass did. */
 export type GgDeliveryOutcome =
@@ -253,8 +255,9 @@ export class GgDeliveryService {
    * dispatched here and AWAITED: the promise settles once the durable BullMQ
    * job is added (retried by the queue). A disconnect or a failed enqueue
    * throws, which releases this row's claim instead of stamping `dm_sent_at`.
-   * A `null` row means the player turned in-app gg_ready off — no DM either,
-   * exactly as `create` behaves for every other caller.
+   * The in-app row is once per (user, year): a retry reuses it. A `null` row
+   * means the player turned in-app gg_ready off — no DM either, exactly as
+   * `create` behaves for every other caller.
    */
   private async notifyReady(userId: number, year: number): Promise<void> {
     if (!this.bot.isConnected()) {
@@ -267,11 +270,33 @@ export class GgDeliveryService {
       message: `Your year in games with the community — open your GG ${year}.`,
       payload: { year, url: `/gg/${year}` },
     };
+    const notificationId = await this.readyRowId(ready, year);
+    if (!notificationId) return;
+    const sent = await this.discordDm.dispatch({ ...ready, notificationId });
+    // `false` is normal for no Discord link / DM pref off / rate limit, but
+    // a bot that dropped since the check above must not stamp `dm_sent_at`.
+    if (!sent && !this.bot.isConnected()) {
+      throw new Error(
+        'Discord bot disconnected mid-send; GG DM left for a later tick',
+      );
+    }
+  }
+
+  /** The year's existing `gg_ready` row, else a new one (null = in-app off). */
+  private async readyRowId(
+    ready: Omit<CreateNotificationInput, 'skipDiscord'>,
+    year: number,
+  ): Promise<string | null> {
+    const existing = await findGgReadyNotificationId(
+      this.db,
+      ready.userId,
+      year,
+    );
+    if (existing) return existing;
     const row = await this.notifications.create({
       ...ready,
       skipDiscord: true,
     });
-    if (!row) return;
-    await this.discordDm.dispatch({ ...ready, notificationId: row.id });
+    return row?.id ?? null;
   }
 }

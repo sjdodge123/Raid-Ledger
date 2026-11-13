@@ -17,13 +17,19 @@ import type { GgComputeService } from './gg-compute.service';
 import { EMBED_COLORS } from '../../../discord-bot/discord-bot.constants';
 import { GgDeliveryService } from './gg-delivery.service';
 import { findGgAnnouncedAt, runGgDmWave } from './gg-dm-wave.helpers';
+import { findGgReadyNotificationId } from './gg-ready-notification.helpers';
 
 jest.mock('./gg-dm-wave.helpers', () => ({
   findGgAnnouncedAt: jest.fn(),
   runGgDmWave: jest.fn(),
 }));
 
+jest.mock('./gg-ready-notification.helpers', () => ({
+  findGgReadyNotificationId: jest.fn(),
+}));
+
 const findAnnounced = jest.mocked(findGgAnnouncedAt);
+const findReady = jest.mocked(findGgReadyNotificationId);
 const runWave = jest.mocked(runGgDmWave);
 const NOW = new Date('2026-12-20T12:00:00Z');
 const SETTINGS: Record<string, string> = {
@@ -82,6 +88,7 @@ function build(): {
 beforeEach(() => {
   jest.clearAllMocks();
   runWave.mockResolvedValue({ claimed: 1, sent: 1, failed: 0 });
+  findReady.mockResolvedValue(null);
 });
 
 it('send-now (announceOnly) after the offset never runs a DM wave', async () => {
@@ -183,6 +190,7 @@ it('the gg_ready notification carries the GG link for the DM button', async () =
 
 describe('gg_ready DM enqueue is awaited before dm_sent_at is stamped', () => {
   type Send = (row: { id: number; userId: number }) => Promise<void>;
+  let sendBot: { connected: boolean } = { connected: true };
   async function captureSend(): Promise<{
     send: Send;
     create: jest.Mock;
@@ -191,6 +199,7 @@ describe('gg_ready DM enqueue is awaited before dm_sent_at is stamped', () => {
     findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
     const built = build();
     let send: Send | null = null;
+    sendBot = built.bot;
     runWave.mockImplementation((_db, _year, s: Send) => {
       send = s;
       return Promise.resolve({ claimed: 0, sent: 0, failed: 0 });
@@ -222,6 +231,36 @@ describe('gg_ready DM enqueue is awaited before dm_sent_at is stamped', () => {
     create.mockResolvedValue({ id: 'n-2' });
     dispatch.mockRejectedValue(new Error('redis down'));
     await expect(send({ id: 1, userId: 7 })).rejects.toThrow('redis down');
+  });
+
+  it("a retry after a failed enqueue reuses the year's gg_ready row, never creating a second", async () => {
+    const { send, create, dispatch } = await captureSend();
+    findReady.mockResolvedValue('n-first');
+    await send({ id: 1, userId: 7 });
+    expect(findReady).toHaveBeenCalledWith(expect.anything(), 7, 2026);
+    expect(create).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ notificationId: 'n-first', userId: 7 }),
+    );
+  });
+
+  it('a false dispatch because the bot dropped mid-send rejects, so dm_sent_at is not stamped', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-3' });
+    dispatch.mockImplementation(() => {
+      sendBot.connected = false;
+      return Promise.resolve(false);
+    });
+    await expect(send({ id: 1, userId: 7 })).rejects.toThrow(
+      /disconnected mid-send/,
+    );
+  });
+
+  it('a false dispatch with the bot still up (no Discord link, DM pref off) resolves: in-app only', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-4' });
+    dispatch.mockResolvedValue(false);
+    await expect(send({ id: 1, userId: 7 })).resolves.toBeUndefined();
   });
 
   it('skips the DM when the in-app gg_ready category is off (no row created)', async () => {

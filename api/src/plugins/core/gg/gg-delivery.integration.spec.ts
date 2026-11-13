@@ -20,6 +20,7 @@ import { GgAdminController } from './gg-admin.controller';
 import { ggAnnounceKey } from './gg-delivery.schedule';
 import { GG_DELIVERY_JOB_NAME } from './gg-delivery.cron';
 import { NotificationService } from '../../../notifications/notification.service';
+import { DiscordNotificationService } from '../../../notifications/discord-notification.service';
 
 const YEAR = new Date().getUTCFullYear();
 const LATER = (): Date => new Date(Date.now() + 16 * 60_000);
@@ -254,6 +255,27 @@ describe('GG delivery — claim release + stale reclaim', () => {
     create.mockRestore();
     await service.runTick(LATER());
     expect(await snapshotRow(id)).toEqual({ claimed: true, sent: true });
+    expect(await ggNotifications(id)).toBe(1);
+  });
+
+  it('a failed DM enqueue then a retry leaves exactly one gg_ready row', async () => {
+    await enable();
+    const id = await insertUser();
+    await insertSnapshot(id);
+    await service.runTick(new Date());
+    const dispatch = jest
+      .spyOn(testApp.app.get(DiscordNotificationService), 'dispatch')
+      .mockRejectedValueOnce(new Error('redis down'))
+      .mockResolvedValue(true);
+    await service.runTick(LATER());
+    expect(await snapshotRow(id)).toEqual({ claimed: false, sent: false });
+    expect(await ggNotifications(id)).toBe(1);
+    await service.runTick(LATER());
+    expect(await snapshotRow(id)).toEqual({ claimed: true, sent: true });
+    expect(dispatch).toHaveBeenCalledTimes(2);
+    expect(dispatch.mock.calls[1]?.[0].notificationId).toBe(
+      dispatch.mock.calls[0]?.[0].notificationId,
+    );
     expect(await ggNotifications(id)).toBe(1);
   });
 
