@@ -48,12 +48,15 @@ export interface StartVoiceDeps {
  * has started. Before activating, point it at the voice channel the event
  * resolves to now (default / override); none → it stays External.
  */
-async function voiceForExternalStart(
+async function placeExternalAtStart(
   guild: Guild,
   eventId: number,
   seId: string,
-  voice: StartVoiceDeps,
+  se: { entityType: GuildScheduledEventEntityType },
+  voice: StartVoiceDeps | undefined,
 ): Promise<string | null> {
+  if (!voice || se.entityType !== GuildScheduledEventEntityType.External)
+    return null;
   const channelId = await voice.resolveVoiceChannel(eventId);
   if (!channelId) return null;
   await timedDiscordCall(
@@ -80,10 +83,8 @@ export async function tryStartEvent(
     if (se.status !== GuildScheduledEventStatus.Scheduled) {
       return { cleared: false };
     }
-    channelId = se.channelId;
-    if (voice && se.entityType === GuildScheduledEventEntityType.External) {
-      channelId = await voiceForExternalStart(guild, eventId, seId, voice);
-    }
+    const placed = await placeExternalAtStart(guild, eventId, seId, se, voice);
+    channelId = placed ?? se.channelId;
 
     await timedDiscordCall(
       'scheduledEvents.edit',
