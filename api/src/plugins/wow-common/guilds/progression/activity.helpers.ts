@@ -49,8 +49,13 @@ export function activityWindowStart(now: Date): Date {
 }
 
 /** B6: true when the member arrived with the guild's first import batch. */
-export function isFirstBatch(memberCreatedAt: Date, guildCreatedAt: Date): boolean {
-  return memberCreatedAt.getTime() <= guildCreatedAt.getTime() + FIRST_BATCH_SLACK_MS;
+export function isFirstBatch(
+  memberCreatedAt: Date,
+  guildCreatedAt: Date,
+): boolean {
+  return (
+    memberCreatedAt.getTime() <= guildCreatedAt.getTime() + FIRST_BATCH_SLACK_MS
+  );
 }
 
 function inWindow(at: Date, since: Date, now: Date): boolean {
@@ -58,16 +63,23 @@ function inWindow(at: Date, since: Date, now: Date): boolean {
   return t >= since.getTime() && t <= now.getTime();
 }
 
-function firstPerMember(rows: readonly ActivityMemberRow[]): ActivityMemberRow[] {
+function firstPerMember(
+  rows: readonly ActivityMemberRow[],
+): ActivityMemberRow[] {
   const seen = new Set<number>();
   return rows.filter((r) => !seen.has(r.memberId) && seen.add(r.memberId));
 }
 
 function byName(a: ActivityMemberRow, b: ActivityMemberRow): number {
-  return a.characterName.localeCompare(b.characterName) || a.memberId - b.memberId;
+  return (
+    a.characterName.localeCompare(b.characterName) || a.memberId - b.memberId
+  );
 }
 
-function groupBy<T>(items: readonly T[], key: (t: T) => string): Map<string, T[]> {
+function groupBy<T>(
+  items: readonly T[],
+  key: (t: T) => string,
+): Map<string, T[]> {
   const out = new Map<string, T[]>();
   for (const item of items) {
     const k = key(item);
@@ -79,7 +91,10 @@ function groupBy<T>(items: readonly T[], key: (t: T) => string): Map<string, T[]
 }
 
 function namesOf(rows: readonly ActivityMemberRow[]): string[] {
-  return [...rows].sort(byName).slice(0, GUILD_ACTIVITY_NAMES_MAX).map((r) => r.characterName);
+  return [...rows]
+    .sort(byName)
+    .slice(0, GUILD_ACTIVITY_NAMES_MAX)
+    .map((r) => r.characterName);
 }
 
 function newMember(r: ActivityMemberRow): Entry {
@@ -99,13 +114,22 @@ function newMember(r: ActivityMemberRow): Entry {
  * `created_at` collapsed into one `roster_import` row (Q-B14).
  */
 export function joinEntries(rows: readonly ActivityMemberRow[]): Entry[] {
-  const later = firstPerMember(rows).filter((r) => !isFirstBatch(r.createdAt, r.guildCreatedAt));
+  const later = firstPerMember(rows).filter(
+    (r) => !isFirstBatch(r.createdAt, r.guildCreatedAt),
+  );
   const batches = groupBy(later, (r) => r.createdAt.toISOString());
   const out: Entry[] = [];
   for (const [at, batch] of batches) {
-    if (batch.length < GUILD_ROSTER_IMPORT_MIN) out.push(...batch.map(newMember));
+    if (batch.length < GUILD_ROSTER_IMPORT_MIN)
+      out.push(...batch.map(newMember));
     else
-      out.push({ kind: 'roster_import', id: `import:${at}`, at, count: batch.length, names: namesOf(batch) });
+      out.push({
+        kind: 'roster_import',
+        id: `import:${at}`,
+        at,
+        count: batch.length,
+        names: namesOf(batch),
+      });
   }
   return out;
 }
@@ -116,7 +140,9 @@ export function addMonthsUtc(d: Date, months: number): Date {
   const day = out.getUTCDate();
   out.setUTCDate(1);
   out.setUTCMonth(out.getUTCMonth() + months);
-  const lastDay = new Date(Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0)).getUTCDate();
+  const lastDay = new Date(
+    Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0),
+  ).getUTCDate();
   out.setUTCDate(Math.min(day, lastDay));
   return out;
 }
@@ -127,11 +153,17 @@ interface Anniversary {
   at: Date;
 }
 
-function anniversaries(rows: readonly ActivityMemberRow[], since: Date, now: Date): Anniversary[] {
+function anniversaries(
+  rows: readonly ActivityMemberRow[],
+  since: Date,
+  now: Date,
+): Anniversary[] {
   return firstPerMember(rows).flatMap((row) =>
-    MILESTONE_MONTHS.map((months) => ({ row, months, at: addMonthsUtc(row.createdAt, months) })).filter(
-      (a) => inWindow(a.at, since, now),
-    ),
+    MILESTONE_MONTHS.map((months) => ({
+      row,
+      months,
+      at: addMonthsUtc(row.createdAt, months),
+    })).filter((a) => inWindow(a.at, since, now)),
   );
 }
 
@@ -149,7 +181,10 @@ function singleMilestone(a: Anniversary): MilestoneEntry {
   };
 }
 
-function groupedMilestone(day: string, group: readonly Anniversary[]): MilestoneEntry[] {
+function groupedMilestone(
+  day: string,
+  group: readonly Anniversary[],
+): MilestoneEntry[] {
   const lead = [...group].sort((a, b) => byName(a.row, b.row))[0];
   if (lead === undefined) return [];
   const newest = Math.max(...group.map((a) => a.at.getTime()));
@@ -169,11 +204,19 @@ function groupedMilestone(day: string, group: readonly Anniversary[]): Milestone
  * ≥ `GUILD_MILESTONE_GROUP_MIN` same-UTC-day, same-months anniversaries
  * become one grouped row, lead (by name) first (Q-B13).
  */
-export function milestoneEntries(rows: readonly ActivityMemberRow[], since: Date, now: Date): Entry[] {
-  const groups = groupBy(anniversaries(rows, since, now), (a) => `${a.at.toISOString().slice(0, 10)}:${a.months}`);
+export function milestoneEntries(
+  rows: readonly ActivityMemberRow[],
+  since: Date,
+  now: Date,
+): Entry[] {
+  const groups = groupBy(
+    anniversaries(rows, since, now),
+    (a) => `${a.at.toISOString().slice(0, 10)}:${a.months}`,
+  );
   const out: Entry[] = [];
   for (const [key, group] of groups) {
-    if (group.length < GUILD_MILESTONE_GROUP_MIN) out.push(...group.map(singleMilestone));
+    if (group.length < GUILD_MILESTONE_GROUP_MIN)
+      out.push(...group.map(singleMilestone));
     else out.push(...groupedMilestone(key.slice(0, 10), group));
   }
   return out;
