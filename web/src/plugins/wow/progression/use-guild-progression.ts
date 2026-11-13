@@ -6,8 +6,8 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { WowGuildProgressionPageDto } from '@raid-ledger/contract';
 import { fetchGuildProgression } from './progression-api';
 
-/** The per-hub query key. */
-export const guildProgressionKey = (guildId: number) => ['wow-guild-progression', guildId] as const;
+/** Under the hub-page prefix `['plugins', 'wow', 'guilds', id]`, so an addon import's `invalidateAllHubMemberships` refreshes the tab (Codex P2). */
+export const guildProgressionKey = (guildId: number) => ['plugins', 'wow', 'guilds', guildId, 'progression'] as const;
 
 /** One guild's Progression page (instances + activity feed). */
 export function useGuildProgression(guildId: number): UseQueryResult<WowGuildProgressionPageDto, Error> {
