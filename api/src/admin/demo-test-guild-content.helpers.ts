@@ -173,3 +173,15 @@ export async function seedGuildContent(
     .where(and(eq(ga.guildId, guildId), notInArray(ga.id, addonIds)));
   return { gmPost: SEED_GUILD_GM_POST, addonIds, postIds };
 }
+
+/** `withContent` (ROK-1786): seed the profile content as `gmUserId`; `{}` when not asked. */
+export async function seedContentHalf(
+  db: Db,
+  input: { withContent: boolean },
+  guildId: number,
+  gmUserId: number,
+  now: Date,
+): Promise<{ content?: SeedGuildContent }> {
+  if (!input.withContent) return {};
+  return { content: await seedGuildContent(db, guildId, gmUserId, now) };
+}

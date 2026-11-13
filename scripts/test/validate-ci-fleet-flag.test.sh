@@ -156,8 +156,13 @@ exec "${REAL_GIT:-/usr/bin/git}" "$@"
 EOF
     # ROK-1154: the bundle budget measures web/dist, which the stubbed `npm run
     # build` never produces, so a real run would read a missing or stale bundle.
-    # Record that one call; every other node call (the node:test specs) is real.
+    # Record that one call; every other node call is real except `node --test`.
     # STUB_NODE_BUNDLE_RC=1 makes the checker report an overrun (its real exit 1).
+    # `node --test` (the "Script node:test specs" step) is recorded and stubbed
+    # to pass: a real run nested every scripts/*.spec.mjs inside each --fleet
+    # case — slow, and a flake there failed this test without naming the spec.
+    # CI runs those specs directly (.github/workflows/ci.yml "Script node:test
+    # specs"), so this test only needs the gate to reach the step.
     # The real node path is baked in: `command -v node` inside the stub would
     # find the stub itself.
     cat >"$stub_dir/node" <<EOF
@@ -165,6 +170,10 @@ EOF
 if [[ "\${1:-}" == *check-bundle-size.mjs ]]; then
   [[ -n "\${STUB_NODE_ARGV_FILE:-}" ]] && echo "\$*" >>"\$STUB_NODE_ARGV_FILE"
   exit "\${STUB_NODE_BUNDLE_RC:-0}"
+fi
+if [[ "\${1:-}" == "--test" ]]; then
+  [[ -n "\${STUB_NODE_ARGV_FILE:-}" ]] && echo "\$*" >>"\$STUB_NODE_ARGV_FILE"
+  exit 0
 fi
 exec "$(command -v node)" "\$@"
 EOF
@@ -284,6 +293,7 @@ invoke remote "$ENV_URL" --fleet
 assert_rc 0 "--fleet"
 assert_grep 'run build' "$npm_argv_file" "--fleet must build"
 assert_grep 'scripts/check-bundle-size\.mjs' "$node_argv_file" "--fleet must run the bundle size budget (ROK-1154)"
+assert_grep '^--test .*scripts/[^ ]*\.spec\.mjs' "$node_argv_file" "--fleet must reach the Script node:test specs step (node --test is stubbed)"
 assert_out_matches 'Bundle size budget.*PASS' "Bundle size budget row"
 assert_grep 'tsc --noEmit' "$npx_argv_file" "--fleet must typecheck"
 assert_grep '(^| )lint( |$)' "$npm_argv_file" "--fleet must lint"

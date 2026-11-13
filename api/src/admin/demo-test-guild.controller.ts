@@ -31,6 +31,8 @@
  *   - with `withArmorySnapshots: true` (ROK-2149), a verified Armory snapshot
  *     on every unlinked roster row but the last, for the read-only member
  *     page (`demo-test-guild-armory.helpers.ts`).
+ *   - with `withRecruitment: true` (ROK-1789), the recruitment card's object
+ *     (`demo-test-guild-recruitment.helpers.ts`); a re-seed restores it.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -43,6 +45,7 @@ import {
   HttpStatus,
   Inject,
   Post,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -60,7 +63,6 @@ import { defined } from '../common/defined.helpers';
 import {
   SEED_GUILD_EDITOR_RANK,
   SEED_GUILD_ROSTER,
-  ensureCharacter,
   ensureRankEditor,
   findWowGameId,
   guildKeyHash,
@@ -77,39 +79,39 @@ import {
   raiderOf,
   type SeededGuildRaids,
 } from './demo-test-guild-raids.helpers';
-import { seedGuildContent } from './demo-test-guild-content.helpers';
-import {
-  seedInstalledAddons,
-  type SeededInstalledAddons,
-} from './demo-test-guild-installed-addons.helpers';
-import {
-  seedGuildLockouts,
-  type SeededGuildLockouts,
-} from './demo-test-guild-lockouts.helpers';
-import { seededGear } from './demo-test-guild-gear.helpers';
-import {
-  snapshotOwners,
-  type RosterCtx,
-  type SeedGuildExtras,
-  type SeedGuildResponse,
-  type SeedGuildUser,
-  type SeededRoster,
+import type {
+  RosterCtx,
+  SeedGuildResponse,
+  SeedGuildUser,
+  SeededRoster,
 } from './demo-test-guild.response';
-import { seedGuildPulls } from './demo-test-guild-pulls.helpers';
-import { applyArmoryProfessions } from './demo-test-guild-professions.helpers';
-import { seedArmoryHalf } from './demo-test-guild-armory.helpers';
 import {
-  seedGuildDings,
-  type SeededGuildDings,
-} from './demo-test-guild-dings.helpers';
+  seedOptionalHalves,
+  type OptionalDeps,
+  type ShowcaseRoster,
+} from './demo-test-guild-optional.helpers';
 import {
-  seedGuildPresence,
-  type SeededGuildPresence,
-} from './demo-test-guild-presence.helpers';
+  claimGuidCharacter,
+  ensureCharacter,
+  ensureMemberEditor,
+  loadSeedCaller,
+  seedFillerMembers,
+  type SeedCaller,
+} from './demo-test-guild-showcase.helpers';
+import type { AuthenticatedRequest } from '../auth/types';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 export type { SeedGuildResponse } from './demo-test-guild.response';
+
+/** The roster context: ids, `now`, the guild-key hash and the name suffix. */
+function rosterCtx(
+  input: Pick<SeedGuildInput, 'name' | 'rosterSuffix'>,
+  ids: Pick<RosterCtx, 'guildId' | 'gameId' | 'now'>,
+): RosterCtx {
+  const hash = guildKeyHash(input.name.toLowerCase());
+  return { ...ids, hash, nameSuffix: input.rosterSuffix };
+}
 
 @Controller('admin/test/wow')
 @SkipThrottle()
@@ -124,151 +126,56 @@ export class DemoTestGuildController {
   /** Idempotent per guild name; see the file header for the cast. */
   @Post('seed-guild')
   @HttpCode(HttpStatus.OK)
-  async seedGuild(@Body() body?: unknown): Promise<SeedGuildResponse> {
+  async seedGuild(
+    @Request() req: AuthenticatedRequest,
+    @Body() body?: unknown,
+  ): Promise<SeedGuildResponse> {
     const input = parseSeedGuildBody(body);
     const gameId = await findWowGameId(this.db, input.gameSlug);
     await this.ensurePluginActive();
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input, now);
-    const hash = guildKeyHash(input.name.toLowerCase());
-    const nameSuffix = input.rosterSuffix;
-    const ctx: RosterCtx = { guildId, gameId, hash, now, nameSuffix };
-    const { users, unlinked } = await this.seedRoster(ctx);
-    const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
+    const ctx = rosterCtx(input, { guildId, gameId, now });
+    const cast = await this.seedCast(ctx, input, req.user.id);
+    const { users, unlinked, fillers } = cast;
     const raids = await this.seedRaids(ctx, users);
-    const extras = await this.seedOptional(input, ctx, { users, unlinked });
+    const extras = await seedOptionalHalves(this.deps(), input, ctx, cast);
     return {
       guildId,
       gameId,
       name: input.name,
-      editorId,
+      editorId: cast.editorId,
       editorRankIndex: SEED_GUILD_EDITOR_RANK,
       users,
       unlinkedMemberIds: unlinked,
+      fillerMemberIds: fillers,
       raids,
       ...extras,
     };
   }
 
-  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147), `withArmorySnapshots` (ROK-2149). */
-  private async seedOptional(
-    input: SeedGuildInput,
+  /** The roster (caller as GM with `asCaller`), the `memberCount` fillers and the editor grants. */
+  private async seedCast(
     ctx: RosterCtx,
-    roster: SeededRoster,
-  ): Promise<SeedGuildExtras> {
-    const { users, unlinked } = roster;
-    const gm = users.gm.userId;
-    await applyArmoryProfessions(this.db, users, input.armoryProfessions);
-    const content = input.withContent
-      ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
+    input: Pick<SeedGuildInput, 'asCaller' | 'memberCount'>,
+    callerId: number,
+  ): Promise<ShowcaseRoster & { editorId: number }> {
+    const caller = input.asCaller
+      ? await loadSeedCaller(this.db, callerId)
       : null;
-    const snapshots = await this.seedSnapshotHalves(users, ctx, input);
-    const dings = input.withDings
-      ? await this.seedDings(users, unlinked, ctx)
-      : null;
-    const presence = input.withPresence
-      ? await this.seedPresence(roster, ctx.guildId)
-      : null;
-    const pulls = await this.seedPulls(users, ctx, input);
-    const installedAddons = await this.seedInstalledHalf(input, users, ctx);
+    const { users, unlinked } = await this.seedRoster(ctx, caller);
+    const fillerCount = input.memberCount - SEED_GUILD_ROSTER.length;
+    const fillers = await seedFillerMembers(this.db, ctx, fillerCount);
+    const editorId = await this.ensureEditors(ctx.guildId, users, caller);
+    return { users, unlinked, fillers, editorId };
+  }
+
+  /** What the opt-in halves need from the controller. */
+  private deps(): OptionalDeps {
     return {
-      ...(content ? { content } : {}),
-      ...snapshots,
-      ...(dings ? { dings } : {}),
-      ...(presence ? { presence } : {}),
-      ...pulls,
-      ...(installedAddons ? { installedAddons } : {}),
-      ...(await seedArmoryHalf(this.db, input, unlinked, ctx.now)),
+      db: this.db,
+      invalidateInsights: (id: number) => this.invalidateInsights(id),
     };
-  }
-
-  /** `withInstalledAddons` (ROK-2147): the member character's installed-addon list, or null when not asked. */
-  private async seedInstalledHalf(
-    input: Pick<SeedGuildInput, 'withInstalledAddons'>,
-    users: Record<SeedGuildRole, SeedGuildUser>,
-    ctx: RosterCtx,
-  ): Promise<SeededInstalledAddons | null> {
-    if (!input.withInstalledAddons) return null;
-    return seedInstalledAddons(this.db, snapshotOwners(users).member, ctx.now);
-  }
-
-  /** `withLockouts` / `withGear`: one snapshot write, each half reported only when asked. */
-  private async seedSnapshotHalves(
-    users: Record<SeedGuildRole, SeedGuildUser>,
-    ctx: RosterCtx,
-    input: Pick<SeedGuildInput, 'withLockouts' | 'withGear'>,
-  ): Promise<Pick<SeedGuildResponse, 'lockouts' | 'gear'>> {
-    if (!input.withLockouts && !input.withGear) return {};
-    const lockouts = await this.seedSnapshots(users, ctx, input);
-    return {
-      ...(input.withLockouts ? { lockouts } : {}),
-      ...(input.withGear ? { gear: seededGear(snapshotOwners(users)) } : {}),
-    };
-  }
-
-  /**
-   * ROK-1914/1915 — lockout and/or gear snapshots on the three linked
-   * characters (one row each), then drop the guild's 5-minute roster-insights
-   * cache so a re-seed of the same guild name is served at once
-   * (WowCommonModule owns the cache).
-   */
-  private async seedSnapshots(
-    users: Record<SeedGuildRole, SeedGuildUser>,
-    ctx: RosterCtx,
-    input: Pick<SeedGuildInput, 'withLockouts' | 'withGear'>,
-  ): Promise<SeededGuildLockouts> {
-    const ids = snapshotOwners(users);
-    const owners = (['gm', 'officer', 'member'] as const).map((owner) => ({
-      owner,
-      characterId: ids[owner],
-    }));
-    const seeded = await seedGuildLockouts(this.db, owners, ctx.now, {
-      lockouts: input.withLockouts,
-      gear: input.withGear,
-    });
-    this.invalidateInsights(ctx.guildId);
-    return seeded;
-  }
-
-  /** ROK-1916 — presence on the five roster rows, then a fresh insights cache. */
-  private async seedPresence(
-    { users, unlinked }: SeededRoster,
-    guildId: number,
-  ): Promise<SeededGuildPresence> {
-    const memberOf = (role: SeedGuildRole): number =>
-      defined(users[role].memberId ?? undefined, `seeded ${role} member`);
-    const seeded = await seedGuildPresence(this.db, {
-      gm: memberOf('gm'),
-      officer: memberOf('officer'),
-      member: memberOf('member'),
-      unlinked: [
-        defined(unlinked[0], 'seeded unlinked member'),
-        defined(unlinked[1], 'seeded second unlinked member'),
-      ],
-    });
-    this.invalidateInsights(guildId);
-    return seeded;
-  }
-
-  /** ROK-1917 — boss pulls exported by the linked gm/officer (+ one untrusted), then a fresh insights cache. */
-  private async seedPulls(
-    users: Record<SeedGuildRole, SeedGuildUser>,
-    ctx: RosterCtx,
-    input: Pick<SeedGuildInput, 'name' | 'withPulls'>,
-  ): Promise<Pick<SeedGuildResponse, 'pulls'>> {
-    if (!input.withPulls) return {};
-    const pulls = await seedGuildPulls(this.db, {
-      gameId: ctx.gameId,
-      guildKey: input.name.toLowerCase(),
-      reporters: {
-        gm: users.gm.userId,
-        officer: users.officer.userId,
-        outsider: users.outsider.userId,
-      },
-      now: ctx.now,
-    });
-    this.invalidateInsights(ctx.guildId);
-    return { pulls };
   }
 
   /** Drops the guild's 5-minute roster-insights cache (WowCommonModule owns it). */
@@ -278,18 +185,18 @@ export class DemoTestGuildController {
       .invalidateGuild(guildId);
   }
 
-  /** ROK-1919 — three level-up events: GM (linked), an unlinked row, member (31 days old). */
-  private seedDings(
+  /** The rank-1 grant; with `asCaller` (Q-B16) also a member grant on the caller's rank-0 row. */
+  private async ensureEditors(
+    guildId: number,
     users: Record<SeedGuildRole, SeedGuildUser>,
-    unlinked: number[],
-    ctx: RosterCtx,
-  ): Promise<SeededGuildDings> {
-    const members = {
-      linked: defined(users.gm.memberId ?? undefined, 'seeded gm member'),
-      unlinked: defined(unlinked[0], 'seeded unlinked member'),
-      old: defined(users.member.memberId ?? undefined, 'seeded member member'),
-    };
-    return seedGuildDings(this.db, ctx.guildId, members, ctx.now);
+    caller: SeedCaller | null,
+  ): Promise<number> {
+    const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
+    const gmRow = users.gm.memberId;
+    if (caller && gmRow !== null) {
+      await ensureMemberEditor(this.db, guildId, gmRow, caller.userId);
+    }
+    return editorId;
   }
 
   /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */
@@ -314,11 +221,14 @@ export class DemoTestGuildController {
   }
 
   /** Roster rows + their owners; `unlinked` collects owner-less member ids. */
-  private async seedRoster(ctx: RosterCtx): Promise<SeededRoster> {
+  private async seedRoster(
+    ctx: RosterCtx,
+    caller: SeedCaller | null,
+  ): Promise<SeededRoster> {
     const linked = new Map<SeedGuildRole, SeedGuildUser>();
     const unlinked: number[] = [];
     for (const entry of SEED_GUILD_ROSTER) {
-      const seeded = await this.seedEntry(ctx, entry);
+      const seeded = await this.seedEntry(ctx, entry, caller);
       if (seeded.owner === null) unlinked.push(seeded.memberId);
       else linked.set(seeded.owner, seeded.user);
     }
@@ -341,6 +251,7 @@ export class DemoTestGuildController {
   private async seedEntry(
     ctx: RosterCtx,
     entry: (typeof SEED_GUILD_ROSTER)[number],
+    caller: SeedCaller | null,
   ): Promise<
     | { owner: null; memberId: number }
     | { owner: SeedGuildRole; user: SeedGuildUser }
@@ -355,17 +266,28 @@ export class DemoTestGuildController {
       ctx.now,
     );
     if (entry.owner === null) return { owner: null, memberId };
-    const user = await upsertSeedUser(this.db, ctx.hash, entry.owner);
-    const characterId = await ensureCharacter(this.db, {
-      userId: user.userId,
-      gameId: ctx.gameId,
-      guid,
-      name: row.char,
-      role: entry.role,
-    });
+    const owner = entry.owner;
+    const link = { guid, name: row.char, role: entry.role };
+    const linked = await this.linkOwner(ctx, owner, link, caller);
     return {
-      owner: entry.owner,
-      user: { ...user, characterId, memberId, rankIndex: entry.rank },
+      owner,
+      user: { ...linked, memberId, rankIndex: entry.rank },
     };
+  }
+
+  /** The row's owner + its GUID character; the caller takes the GM's (Q-B16). */
+  private async linkOwner(
+    ctx: RosterCtx,
+    owner: Exclude<SeedGuildRole, 'outsider'>,
+    link: { guid: string; name: string; role: string | null },
+    caller: SeedCaller | null,
+  ): Promise<SeedCaller & { characterId: string }> {
+    const asCaller = owner === 'gm' ? caller : null;
+    const user = asCaller ?? (await upsertSeedUser(this.db, ctx.hash, owner));
+    const args = { ...link, userId: user.userId, gameId: ctx.gameId };
+    const characterId = asCaller
+      ? await claimGuidCharacter(this.db, args)
+      : await ensureCharacter(this.db, args);
+    return { ...user, characterId };
   }
 }
