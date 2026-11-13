@@ -21,6 +21,7 @@ import {
   SEED_GUILD_RULES,
 } from './demo-test-guild-content.helpers';
 import { SEED_HUB_POST_NEWEST } from './demo-test-hub-posts.helpers';
+import { SEED_GUILD_RECRUITMENT } from './demo-test-guild-recruitment.helpers';
 import {
   SEED_LOCKOUT_SHARED,
   SEED_LOCKOUT_SOLO,
@@ -468,6 +469,46 @@ describe('POST /admin/test/wow/seed-guild — withArmorySnapshots (ROK-2149)', (
 
   it('is 400 for a non-boolean withArmorySnapshots', async () => {
     const res = await seed({ name: 'Flag Armory', withArmorySnapshots: 'yes' });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — withRecruitment (ROK-1789)', () => {
+  const recruitmentPath = (id: number): string =>
+    `/plugins/wow/guilds/${id}/recruitment`;
+
+  it('seeds the AC12 recruitment as the GM; a re-seed restores it', async () => {
+    const out = await seedGuild('Recruit Seed Keepers', {
+      withRecruitment: true,
+    });
+    expect(out.recruitment).toEqual(SEED_GUILD_RECRUITMENT);
+    const gmToken = `Bearer ${await tokenFor(out.users.gm)}`;
+    const read = await testApp.request
+      .get(recruitmentPath(out.guildId))
+      .set('Authorization', gmToken);
+    expect(read.status).toBe(200);
+    expect(read.body.recruitment).toEqual(SEED_GUILD_RECRUITMENT);
+    expect(read.body.state).toBe('open');
+    expect(read.body.updatedBy).not.toBeNull();
+    const closed = await testApp.request
+      .put(recruitmentPath(out.guildId))
+      .set('Authorization', gmToken)
+      .send({ ...SEED_GUILD_RECRUITMENT, recruiting: false });
+    expect(closed.body.state).toBe('closed');
+    await seedGuild('Recruit Seed Keepers', { withRecruitment: true });
+    const again = await testApp.request
+      .get(recruitmentPath(out.guildId))
+      .set('Authorization', gmToken);
+    expect(again.body.recruitment).toEqual(SEED_GUILD_RECRUITMENT);
+  });
+
+  it('without the flag: no recruitment key', async () => {
+    const out = await seedGuild('Recruitless Keepers');
+    expect(out).not.toHaveProperty('recruitment');
+  });
+
+  it('is 400 for a non-boolean withRecruitment', async () => {
+    const res = await seed({ name: 'Flag Recruit', withRecruitment: 'yes' });
     expect(res.status).toBe(400);
   });
 });
