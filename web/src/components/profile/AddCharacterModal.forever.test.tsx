@@ -200,4 +200,12 @@ describe('AddCharacterModal — guild join gate entry (ROK-2132)', () => {
         expect(ctx?.initialTab).toBeUndefined();
         expect(ctx?.rosterGuildId).toBeUndefined();
     });
+
+    it('a prefill (the LedgerLink name-mismatch link) opens on Manual with the name filled and asks the slot to hold that tab', () => {
+        renderGateModal({ gameId: 7, prefill: { gameId: 7, name: 'Ana Forever', region: 'us', ruleset: 'pvp', class: 'Paladin' } });
+        expect(importFormContext(), 'a prefill must hand the import-form slot initialTab "manual", or its Armory default (Blizzard configured) hides the prefilled name')
+            .toMatchObject({ activeTab: 'manual', initialTab: 'manual' });
+        expect(screen.getByRole('textbox', { name: 'First name' })).toHaveValue('Ana');
+        expect(screen.getByRole('textbox', { name: 'Second name' })).toHaveValue('Forever');
+    });
 });
