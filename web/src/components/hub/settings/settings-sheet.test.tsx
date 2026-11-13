@@ -230,7 +230,7 @@ function ImmediateTargetSection(): JSX.Element {
         </SettingsSection>
     );
 }
-const moduleWith = (settingsSections: HubModule['settingsSections']): HubModule => ({
+const moduleWith = (settingsSections: NonNullable<HubModule['settingsSections']>): HubModule => ({
     kind: 'wow_guild', tabs: [], overviewWidgets: [], memberColumns: [], heroPills: [],
     memberRows: () => [], settingsSections,
 });
