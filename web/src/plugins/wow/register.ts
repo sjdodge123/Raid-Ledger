@@ -1,17 +1,22 @@
 import { lazy } from 'react';
 import { registerPlugin } from '../plugin-registry';
 import { GgWowLevelsCardSchema } from '@raid-ledger/contract';
-import { CharacterDetailSections } from './slots/character-detail-sections';
-import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
+// App-entry diet: the heavy slots are lazy chunks (see slots/lazy-slots.tsx).
+// The character-create import slots and the character header's Sync action stay eager:
+// lazy, they shift the Add Character dialog / the phone header's three-action row.
+import {
+    EventCreateContentBrowser,
+    EventDetailContentSections,
+    BlizzardIntegrationSlot,
+    QuestPrepPanel,
+    BossLootPanel,
+} from './slots/lazy-slots';
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
 import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
-import { EventCreateContentBrowser } from './slots/event-create-content-browser';
-import { EventDetailContentSections } from './slots/event-detail-content-sections';
-import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
-import { BlizzardIntegrationSlot } from './slots/admin-settings-integration-cards';
+import { CharacterDetailSections } from './slots/character-detail-sections';
+import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { ProfileCharacterActions } from './slots/profile-character-actions';
-import { QuestPrepPanel } from './slots/quest-prep-panel';
-import { BossLootPanel } from './slots/boss-loot-panel';
+import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
 import { CharacterVariantBadge } from './slots/character-variant-badge';
 import { CharacterDetailOwnerActions } from './slots/character-detail-owner-actions';
 import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
