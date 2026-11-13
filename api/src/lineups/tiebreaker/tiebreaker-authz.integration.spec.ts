@@ -589,11 +589,7 @@ function describeTiebreakerAuthz() {
     const { last, vote } = await voteAllButLast(tb);
     const buildSpy = jest.spyOn(matching, 'buildMatchesForLineup');
     try {
-      const { force, vote: raced } = await raceForceAgainstVote(
-        tb,
-        last,
-        vote,
-      );
+      const { force, vote: raced } = await raceForceAgainstVote(tb, last, vote);
       expect(force.status).toBe('fulfilled');
       // The vote waited on the lock and found the tiebreaker decided: it is
       // refused with a message saying so, not "Matchup is not open".

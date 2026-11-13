@@ -13,6 +13,12 @@
  * was stored and a retry redoes it all from durable state. No catch-and-retry
  * inside the transaction (postgres.js poisons it on a failed statement); the
  * poll-card / cohort-memory side effects run only after it commits.
+ *
+ * Behaviour change: the insert now waits on the same lock an admin
+ * force-resolve holds. A vote that arrives while a force-resolve is in
+ * progress is therefore refused with a 400 and not stored; before, it was
+ * inserted outside the lock and could still be counted by the force-resolve's
+ * tally.
  */
 import type { BracketVoteInput } from './tiebreaker-authz.helpers';
 import { insertBracketVoteIfOpen } from './tiebreaker-authz.helpers';

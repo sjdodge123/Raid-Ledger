@@ -48,6 +48,7 @@ import { buildTiebreakerDetail } from './tiebreaker-response.helpers';
 import {
   assertCallerMayTiebreak,
   assertMatchupVotable,
+  assertTiebreakerStillActive,
 } from './tiebreaker-authz.helpers';
 import type { EligibilityCaller } from '../lineups-eligibility.helpers';
 import { findVetoes } from './tiebreaker-query.helpers';
@@ -209,8 +210,10 @@ export class TiebreakerService {
       );
     }
     if (!result.inserted) {
-      // Duplicate vote (no-op) or the round advanced after the pre-check:
-      // re-run the check so a now-closed matchup surfaces as a 400.
+      // Duplicate vote (no-op), a force-resolve decided the tiebreaker while
+      // this vote waited on the lock, or the round advanced after the
+      // pre-check: surface the decided / now-closed case as a 400.
+      await assertTiebreakerStillActive(this.db, tb.id);
       await assertMatchupVotable(this.db, tb.id, dto.matchupId, dto.gameId);
     }
 

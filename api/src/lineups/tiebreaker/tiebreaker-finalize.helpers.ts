@@ -1,7 +1,7 @@
 /**
  * ROK-2098 — once-only, repairable tiebreaker finalize.
  *
- * Both the round-completing vote (`checkAndAdvanceRound`) and an admin
+ * Both the round-completing vote (`castBracketVoteAtomically`) and an admin
  * `forceResolve` end in resolve → clear → decided flip → matching. Run
  * unguarded, a force-resolve racing the final vote did all of it twice, and
  * the second matching pass wiped and rebuilt the match groups, so the Discord
