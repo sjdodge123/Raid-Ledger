@@ -12,6 +12,7 @@ import type { SettingsService } from '../../../settings/settings.service';
 import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import type { NotificationDedupService } from '../../../notifications/notification-dedup.service';
 import type { NotificationService } from '../../../notifications/notification.service';
+import type { DiscordNotificationService } from '../../../notifications/discord-notification.service';
 import type { GgComputeService } from './gg-compute.service';
 import { EMBED_COLORS } from '../../../discord-bot/discord-bot.constants';
 import { GgDeliveryService } from './gg-delivery.service';
@@ -64,6 +65,7 @@ function build(): {
   const state = { connected: true };
   const bot = { isConnected: () => state.connected, sendEmbed };
   const create = jest.fn().mockResolvedValue(null);
+  const dispatch = jest.fn().mockResolvedValue(true);
   const service = new GgDeliveryService(
     {} as PostgresJsDatabase<typeof schema>,
     settings as unknown as SettingsService,
@@ -71,8 +73,9 @@ function build(): {
     dedup as unknown as NotificationDedupService,
     bot as unknown as DiscordBotClientService,
     { create } as unknown as NotificationService,
+    { dispatch } as unknown as DiscordNotificationService,
   );
-  return { service, computeAll, sendEmbed, bot: state, create };
+  return { service, computeAll, sendEmbed, bot: state, create, dispatch };
 }
 
 beforeEach(() => {
@@ -175,4 +178,55 @@ it('the gg_ready notification carries the GG link for the DM button', async () =
       payload: { year: 2026, url: '/gg/2026' },
     }),
   );
+});
+
+describe('gg_ready DM enqueue is awaited before dm_sent_at is stamped', () => {
+  type Send = (row: { id: number; userId: number }) => Promise<void>;
+  async function captureSend(): Promise<{
+    send: Send;
+    create: jest.Mock;
+    dispatch: jest.Mock;
+  }> {
+    findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+    const built = build();
+    let send: Send | null = null;
+    runWave.mockImplementation((_db, _year, s: Send) => {
+      send = s;
+      return Promise.resolve({ claimed: 0, sent: 0, failed: 0 });
+    });
+    await built.service.runTick(NOW);
+    if (!send) throw new Error('runWave was not handed a send callback');
+    return { send, create: built.create, dispatch: built.dispatch };
+  }
+
+  it('creates the in-app row without the fire-and-forget DM, then awaits the enqueue', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-1' });
+    await send({ id: 1, userId: 7 });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'gg_ready', skipDiscord: true }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationId: 'n-1',
+        userId: 7,
+        type: 'gg_ready',
+        payload: { year: 2026, url: '/gg/2026' },
+      }),
+    );
+  });
+
+  it('a failed enqueue rejects the send so the wave releases the claim', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-2' });
+    dispatch.mockRejectedValue(new Error('redis down'));
+    await expect(send({ id: 1, userId: 7 })).rejects.toThrow('redis down');
+  });
+
+  it('skips the DM when the in-app gg_ready category is off (no row created)', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue(null);
+    await send({ id: 1, userId: 7 });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
 });

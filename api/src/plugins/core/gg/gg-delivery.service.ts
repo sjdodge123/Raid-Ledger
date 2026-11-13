@@ -17,6 +17,7 @@ import {
 } from '../../../discord-bot/embeds/embed-chrome.helpers';
 import { NotificationDedupService } from '../../../notifications/notification-dedup.service';
 import { NotificationService } from '../../../notifications/notification.service';
+import { DiscordNotificationService } from '../../../notifications/discord-notification.service';
 import {
   resolveDigestChannel,
   zonedParts,
@@ -88,6 +89,7 @@ export class GgDeliveryService {
     private readonly dedup: NotificationDedupService,
     private readonly bot: DiscordBotClientService,
     private readonly notifications: NotificationService,
+    private readonly discordDm: DiscordNotificationService,
   ) {}
 
   /** Current delivery settings (default date = this year in community tz). */
@@ -246,22 +248,30 @@ export class GgDeliveryService {
   }
 
   /**
-   * The per-player `gg_ready` notification (prefs + no-Discord handled by
-   * create). `create` hands the DM to Discord dispatch, which enqueues a
-   * durable BullMQ job (retried by the queue) only while the bot is
-   * connected and silently skips otherwise — so a disconnect throws here,
-   * which releases this row's claim instead of stamping `dm_sent_at`.
+   * The per-player `gg_ready` notification. `create` would hand the DM to
+   * Discord fire-and-forget, so it runs with `skipDiscord` and the DM is
+   * dispatched here and AWAITED: the promise settles once the durable BullMQ
+   * job is added (retried by the queue). A disconnect or a failed enqueue
+   * throws, which releases this row's claim instead of stamping `dm_sent_at`.
+   * A `null` row means the player turned in-app gg_ready off — no DM either,
+   * exactly as `create` behaves for every other caller.
    */
   private async notifyReady(userId: number, year: number): Promise<void> {
     if (!this.bot.isConnected()) {
       throw new Error('Discord bot not connected; GG DM left for a later tick');
     }
-    await this.notifications.create({
+    const ready = {
       userId,
-      type: 'gg_ready',
+      type: 'gg_ready' as const,
       title: `Your GG ${year} is ready`,
       message: `Your year in games with the community — open your GG ${year}.`,
       payload: { year, url: `/gg/${year}` },
+    };
+    const row = await this.notifications.create({
+      ...ready,
+      skipDiscord: true,
     });
+    if (!row) return;
+    await this.discordDm.dispatch({ ...ready, notificationId: row.id });
   }
 }
