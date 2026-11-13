@@ -324,7 +324,8 @@ export class ScheduledEventService {
     const s = this.settingsService;
     const d = await desc(s, eventId, eventData);
     // A planned temporary channel keeps the SE External (2026-11-13).
-    const loc = await plannedSELocation(this.db, s, eventId, eventData);
+    const planDeps = { settings: s, channelResolver: this.channelResolver };
+    const loc = await plannedSELocation(this.db, planDeps, eventId, eventData);
     const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
     const name = await resolveEditedScheduledEventName(event, eventData, () =>
       this.settingsService.getDefaultTimezone(),

@@ -12,6 +12,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 import { buildEphemeralChannelName } from './scheduled-event.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
+import type { ChannelResolverService } from './channel-resolver.service';
 
 /** The not-yet-created temporary channel: its name and when it opens (ISO). */
 export interface PlannedEphemeralVoice {
@@ -32,6 +33,13 @@ export interface PlannedVoiceEventFields {
   eventOverride: boolean | null;
   /** The live ephemeral channel id — set once the scheduler created it. */
   liveChannelId: string | null;
+  /**
+   * The event's `notificationChannelOverride` is a voice channel. It beats the
+   * temporary channel in `resolveVoiceChannelHonoringOverride` even once that
+   * channel exists, so a planned line would advertise a room nobody is sent to.
+   * Compute it with `hasVoiceOverride` (the resolver's own voice-ness rule).
+   */
+  voiceOverride: boolean;
   cancelled: boolean;
   /** An open reschedule poll is voting this start time away (ROK-1370). */
   rescheduling: boolean;
@@ -71,9 +79,28 @@ export function resolvePlannedEphemeralVoice(
   return { name: plannedChannelName(input), opensAt: opensAt.toISOString() };
 }
 
-/** Live channel already there, cancelled, or a reschedule poll is open. */
+/** Live channel there, voice override wins, cancelled, or poll open. */
 function isNeverPlanned(event: PlannedVoiceEventFields): boolean {
-  return !!event.liveChannelId || event.cancelled || event.rescheduling;
+  if (event.liveChannelId || event.voiceOverride) return true;
+  return event.cancelled || event.rescheduling;
+}
+
+/** The slice of `ChannelResolverService` that owns override voice-ness. */
+export type VoiceOverrideChecker = Pick<
+  ChannelResolverService,
+  'overrideIsVoiceChannel'
+>;
+
+/**
+ * True when the event's override is a voice channel — the SAME rule
+ * `resolveVoiceChannelHonoringOverride` applies (optimistic for an id the
+ * guild cache does not know), so planned and live can never disagree.
+ */
+export function hasVoiceOverride(
+  resolver: VoiceOverrideChecker,
+  override: string | null | undefined,
+): boolean {
+  return !!override && resolver.overrideIsVoiceChannel(override);
 }
 
 /** The name the scheduler will give the channel (title/game drive it). */
@@ -131,11 +158,13 @@ export function plannedVoiceForEmbed(
   settings: PlannedVoiceSettingsSource,
   event: Pick<EmbedEventData, 'startTime' | 'title' | 'game'>,
   state: EphemeralVoiceState,
+  voiceOverride: boolean,
   now: Date = new Date(),
 ): Promise<PlannedEphemeralVoice | null> {
   const fields: PlannedVoiceEventFields = {
     eventOverride: state.enabled,
     liveChannelId: state.channelId,
+    voiceOverride,
     cancelled: state.cancelled,
     rescheduling: state.rescheduling,
     startTime: new Date(event.startTime),
@@ -154,8 +183,14 @@ export async function applyPlannedVoice(
   event: Pick<EmbedEventData, 'startTime' | 'title' | 'game'> &
     Pick<EmbedEventData, 'plannedVoiceChannel'>,
   state: EphemeralVoiceState,
+  voiceOverride: boolean,
 ): Promise<boolean> {
-  const planned = await plannedVoiceForEmbed(settings, event, state);
+  const planned = await plannedVoiceForEmbed(
+    settings,
+    event,
+    state,
+    voiceOverride,
+  );
   if (!planned) return false;
   event.plannedVoiceChannel = planned;
   return true;

@@ -9,10 +9,11 @@ import {
   toEmbedGame,
 } from '../services/embed-game.helpers';
 import { computeEmbedStateForData } from '../services/embed-state.helpers';
-import {
-  applyPlannedVoice,
-  type PlannedVoiceSettingsSource,
+import type {
+  EphemeralVoiceState,
+  PlannedVoiceSettingsSource,
 } from '../services/planned-ephemeral-voice.helpers';
+import { applyEmbedVoice } from '../services/embed-voice.helpers';
 
 /**
  * Find all tracked Discord messages for this event in the given guild.
@@ -51,10 +52,14 @@ export async function buildEventData(
 
   const eventData = assembleEventData(event, signupMentions, roleCounts);
 
+  // Game first so a planned temporary channel's name carries the game.
   await enrichWithGameInfo(db, event, eventData);
-  if (settings && (await enrichWithPlannedVoice(settings, event, eventData)))
-    return eventData;
-  await enrichWithVoiceChannel(channelResolver, event, eventData);
+  await applyEmbedVoice({ settings, channelResolver }, eventData, {
+    gameId: event.gameId,
+    recurrenceGroupId: event.recurrenceGroupId,
+    notificationChannelOverride: event.notificationChannelOverride,
+    ephemeral: ephemeralStateOf(event),
+  });
 
   return eventData;
 }
@@ -258,42 +263,16 @@ async function enrichWithGameInfo(
   if (projected) eventData.game = projected;
 }
 
-/**
- * Set the planned (not yet created) temporary voice channel, if any — the
- * same decision embed-poster makes (operator ruling 2026-11-13). Runs after
- * the game enrichment so the planned name carries the game.
- * @returns true when a planned channel was set (the voice link is skipped).
- */
-async function enrichWithPlannedVoice(
-  settings: PlannedVoiceSettingsSource,
+/** The event row's ephemeral-voice columns, as the embed decision reads them. */
+function ephemeralStateOf(
   event: typeof schema.events.$inferSelect,
-  eventData: EmbedEventData,
-): Promise<boolean> {
-  return applyPlannedVoice(settings, eventData, {
+): EphemeralVoiceState {
+  return {
     channelId: event.ephemeralVoiceChannelId,
     enabled: event.ephemeralVoiceEnabled,
     cancelled: (event.cancelledAt ?? null) !== null,
     rescheduling: (event.reschedulingPollId ?? null) !== null,
-  });
-}
-
-/** Enrich event data with voice channel info. */
-async function enrichWithVoiceChannel(
-  channelResolver: ChannelResolverService,
-  event: typeof schema.events.$inferSelect,
-  eventData: EmbedEventData,
-): Promise<void> {
-  // ROK-1389: honor a voice override only when it is actually a voice channel.
-  const voiceChannelId =
-    await channelResolver.resolveVoiceChannelHonoringOverride(
-      event.gameId,
-      event.recurrenceGroupId,
-      event.ephemeralVoiceChannelId,
-      event.notificationChannelOverride,
-    );
-  if (voiceChannelId) {
-    eventData.voiceChannelId = voiceChannelId;
-  }
+  };
 }
 
 /**

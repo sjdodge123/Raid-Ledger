@@ -90,6 +90,7 @@ export class DiscordEventListener {
       embedFactory: this.embedFactory,
       embedPoster: this.embedPoster,
       channelResolver: this.channelResolver,
+      settings: this.settingsService,
       logger: this.logger,
     };
   }

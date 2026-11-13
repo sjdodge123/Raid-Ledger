@@ -6,8 +6,11 @@ import type {
   VoiceChannelResponseDto,
 } from '@raid-ledger/contract';
 import {
+  hasVoiceOverride,
   resolvePlannedVoiceForEvent,
+  type PlannedVoiceEventFields,
   type PlannedVoiceSettingsSource,
+  type VoiceOverrideChecker,
 } from '../discord-bot/services/planned-ephemeral-voice.helpers';
 
 const logger = new Logger('VoiceChannelResolver');
@@ -27,7 +30,7 @@ export async function resolveVoiceChannelForEvent(
   try {
     const planned = await resolvePlannedVoiceForEvent(
       deps.settings,
-      plannedFieldsOf(event),
+      plannedFieldsOf(deps.channelResolver, event),
     );
     if (planned) {
       return {
@@ -65,10 +68,18 @@ export async function resolveVoiceChannelForEvent(
 }
 
 /** The planned-channel inputs carried by the event response. */
-function plannedFieldsOf(event: EventResponseDto) {
+function plannedFieldsOf(
+  resolver: VoiceOverrideChecker,
+  event: EventResponseDto,
+): PlannedVoiceEventFields {
   return {
     eventOverride: event.ephemeralVoiceEnabled ?? null,
     liveChannelId: event.ephemeralVoiceChannelId ?? null,
+    // A voice override beats the temporary channel once it exists — same rule.
+    voiceOverride: hasVoiceOverride(
+      resolver,
+      event.notificationChannelOverride,
+    ),
     cancelled: (event.cancelledAt ?? null) !== null,
     rescheduling: (event.reschedulingPollId ?? null) !== null,
     startTime: new Date(event.startTime),

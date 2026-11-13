@@ -13,8 +13,11 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
+  hasVoiceOverride,
   resolvePlannedVoiceForEvent,
+  type PlannedVoiceEventFields,
   type PlannedVoiceSettingsSource,
+  type VoiceOverrideChecker,
 } from './planned-ephemeral-voice.helpers';
 import { resolveVoiceForCreate } from './scheduled-event.db-helpers';
 import { parseEventTimestampUtc } from './scheduled-event.revalidate';
@@ -76,6 +79,8 @@ async function readPlannedVoiceRow(db: Db, eventId: number) {
       ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
       cancelledAt: schema.events.cancelledAt,
       reschedulingPollId: schema.events.reschedulingPollId,
+      notificationChannelOverride: schema.events.notificationChannelOverride,
+      gameId: schema.events.gameId,
     })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
@@ -84,32 +89,58 @@ async function readPlannedVoiceRow(db: Db, eventId: number) {
 }
 
 /**
+ * The game name the planned channel is named after. A reconciliation
+ * candidate carries `gameId` but no `game`, and `EphemeralVoiceService` names
+ * the real channel from the game row — so read it rather than drop it.
+ */
+async function plannedGameName(
+  db: Db,
+  eventData: ScheduledEventData,
+  gameId: number | null | undefined,
+): Promise<string | null> {
+  if (eventData.game) return eventData.game.name;
+  if (!gameId) return null;
+  const [game] = await db
+    .select({ name: schema.games.name })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  return game?.name ?? null;
+}
+
+/** What the planned SE decision needs besides the row. */
+export interface PlannedSEDeps {
+  settings: PlannedVoiceSettingsSource;
+  /** Owns override voice-ness — a voice override is never "planned". */
+  channelResolver: VoiceOverrideChecker;
+}
+
+/**
  * The planned temporary channel's name as an SE location, or null when no
- * temporary channel is pending (gate off, live channel exists, cancelled,
- * rescheduling, or already started).
+ * temporary channel is pending (gate off, live channel exists, a voice
+ * override wins, cancelled, rescheduling, or already started).
  */
 export async function plannedSELocation(
   db: Db,
-  settings: PlannedVoiceSettingsSource,
+  deps: PlannedSEDeps,
   eventId: number,
   eventData: ScheduledEventData,
   now: Date = new Date(),
 ): Promise<string | null> {
   const row = await readPlannedVoiceRow(db, eventId);
   if (!row) return null;
-  const planned = await resolvePlannedVoiceForEvent(
-    settings,
-    {
-      eventOverride: row.ephemeralVoiceEnabled ?? null,
-      liveChannelId: row.ephemeralVoiceChannelId ?? null,
-      cancelled: row.cancelledAt != null,
-      rescheduling: row.reschedulingPollId != null,
-      startTime: parseEventTimestampUtc(eventData.startTime),
-      title: eventData.title,
-      gameName: eventData.game?.name ?? null,
-    },
-    now,
-  );
+  const override = row.notificationChannelOverride ?? null;
+  const fields: PlannedVoiceEventFields = {
+    eventOverride: row.ephemeralVoiceEnabled ?? null,
+    liveChannelId: row.ephemeralVoiceChannelId ?? null,
+    voiceOverride: hasVoiceOverride(deps.channelResolver, override),
+    cancelled: row.cancelledAt != null,
+    rescheduling: row.reschedulingPollId != null,
+    startTime: parseEventTimestampUtc(eventData.startTime),
+    title: eventData.title,
+    gameName: await plannedGameName(db, eventData, row.gameId),
+  };
+  const planned = await resolvePlannedVoiceForEvent(deps.settings, fields, now);
   return planned ? planned.name.slice(0, SE_LOCATION_MAX_LENGTH) : null;
 }
 
@@ -117,7 +148,8 @@ export async function plannedSELocation(
 export interface CreatePlaceInputs {
   gameId?: number | null;
   voiceChannelOverride?: string | null;
-  channelResolver: Parameters<typeof resolveVoiceForCreate>[4];
+  channelResolver: Parameters<typeof resolveVoiceForCreate>[4] &
+    VoiceOverrideChecker;
   /** Absent → never planned (the pre-2026-11-13 behaviour). */
   plannedVoiceSettings?: PlannedVoiceSettingsSource;
 }
@@ -130,9 +162,13 @@ export async function resolveCreatePlace(
   inputs: CreatePlaceInputs,
 ): Promise<SEPlace | null> {
   if (inputs.plannedVoiceSettings) {
+    const deps = {
+      settings: inputs.plannedVoiceSettings,
+      channelResolver: inputs.channelResolver,
+    };
     const location = await plannedSELocation(
       db,
-      inputs.plannedVoiceSettings,
+      deps,
       eventId,
       eventData,
     );

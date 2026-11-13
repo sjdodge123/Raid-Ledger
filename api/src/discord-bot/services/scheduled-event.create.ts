@@ -42,6 +42,8 @@ interface VoiceChannelResolver {
     ephemeralChannelId?: string | null,
     override?: string | null,
   ): Promise<string | null>;
+  /** Voice-ness of an override — a voice override is never "planned". */
+  overrideIsVoiceChannel(override: string): boolean;
 }
 
 /** Inputs the create helper needs to resolve the voice channel + description

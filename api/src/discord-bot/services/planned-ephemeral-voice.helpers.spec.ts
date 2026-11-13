@@ -3,6 +3,7 @@
  * decision, the settings loader and the surface conveniences.
  */
 import {
+  hasVoiceOverride,
   loadPlannedVoiceSettings,
   plannedVoiceForEmbed,
   resolvePlannedEphemeralVoice,
@@ -22,6 +23,7 @@ function input(
     bufferMinutes: 30,
     eventOverride: true,
     liveChannelId: null,
+    voiceOverride: false,
     cancelled: false,
     rescheduling: false,
     startTime: START,
@@ -121,6 +123,7 @@ describe('resolvePlannedVoiceForEvent', () => {
   const event = {
     eventOverride: true,
     liveChannelId: null,
+    voiceOverride: false,
     cancelled: false,
     rescheduling: false,
     startTime: START,
@@ -160,6 +163,7 @@ describe('plannedVoiceForEmbed', () => {
         game: { name: 'WoW' },
       },
       { channelId: null, enabled: true, cancelled: false, rescheduling: false },
+      false,
       NOW,
     );
     expect(planned).toEqual({
@@ -173,8 +177,65 @@ describe('plannedVoiceForEmbed', () => {
       settingsMock(),
       { startTime: START.toISOString(), title: 'Stocks 5 man' },
       { channelId: null, enabled: true, cancelled: false, rescheduling: true },
+      false,
       NOW,
     );
     expect(planned).toBeNull();
+  });
+});
+
+/**
+ * Codex r1: `resolveVoiceChannelHonoringOverride` returns a voice override
+ * BEFORE the temporary channel, so a planned line for such an event would
+ * advertise a room nobody gets sent to.
+ */
+describe('a voice-channel override is never planned', () => {
+  it('returns null when the event has a voice override', () => {
+    const planned = resolvePlannedEphemeralVoice(
+      input({ voiceOverride: true }),
+    );
+    expect(planned).toBeNull();
+  });
+
+  it('skips the settings reads for a voice override', async () => {
+    const settings = settingsMock();
+    const event = {
+      ...input({ voiceOverride: true }),
+    };
+    await expect(
+      resolvePlannedVoiceForEvent(settings, event, NOW),
+    ).resolves.toBeNull();
+    expect(settings.getEphemeralVoiceEnabled).not.toHaveBeenCalled();
+  });
+
+  it('plannedVoiceForEmbed returns null when the override is voice', async () => {
+    const planned = await plannedVoiceForEmbed(
+      settingsMock(),
+      { startTime: START.toISOString(), title: 'Stocks 5 man' },
+      { channelId: null, enabled: true, cancelled: false, rescheduling: false },
+      true,
+      NOW,
+    );
+    expect(planned).toBeNull();
+  });
+});
+
+describe('hasVoiceOverride', () => {
+  const resolver = (isVoice: boolean) => ({
+    overrideIsVoiceChannel: jest.fn().mockReturnValue(isVoice),
+  });
+
+  it('asks the resolver for a set override and returns its verdict', () => {
+    const voice = resolver(true);
+    expect(hasVoiceOverride(voice, 'vc-override')).toBe(true);
+    expect(voice.overrideIsVoiceChannel).toHaveBeenCalledWith('vc-override');
+    expect(hasVoiceOverride(resolver(false), 'text-override')).toBe(false);
+  });
+
+  it('is false without an override (no resolver call)', () => {
+    const voice = resolver(true);
+    expect(hasVoiceOverride(voice, null)).toBe(false);
+    expect(hasVoiceOverride(voice, undefined)).toBe(false);
+    expect(voice.overrideIsVoiceChannel).not.toHaveBeenCalled();
   });
 });

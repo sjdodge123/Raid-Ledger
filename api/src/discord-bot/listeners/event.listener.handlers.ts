@@ -11,7 +11,9 @@ import type {
 import { embedComponents } from '../services/discord-embed.factory';
 import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
-import { getEphemeralChannelId } from '../services/ephemeral-voice.db-helpers';
+import { getEphemeralVoiceState } from '../services/ephemeral-voice.db-helpers';
+import { applyEmbedVoice } from '../services/embed-voice.helpers';
+import type { PlannedVoiceSettingsSource } from '../services/planned-ephemeral-voice.helpers';
 import { EMBED_STATES } from '../discord-bot.constants';
 import { deleteRecordBump } from '../processors/embed-sync-bump.helpers';
 import type { EventPayload } from './event.listener';
@@ -23,6 +25,8 @@ export interface EventListenerDeps {
   embedFactory: DiscordEmbedFactory;
   embedPoster: EmbedPosterService;
   channelResolver: ChannelResolverService;
+  /** Planned temporary voice channel settings (2026-11-13). */
+  settings: PlannedVoiceSettingsSource;
   logger: Logger;
 }
 
@@ -165,37 +169,27 @@ export async function applyEmbedUpdates(
   }
 }
 
-/** Resolve the voice channel ID for a payload. */
-export async function resolveVoiceChannel(
-  deps: EventListenerDeps,
-  payload: EventPayload,
-): Promise<string | null> {
-  // ROK-1352: a live ephemeral channel wins, so an embed re-render on edit
-  // doesn't rewrite the "Join Voice" link to the static/default channel.
-  const ephemeralChannelId = await getEphemeralChannelId(
-    deps.db,
-    payload.eventId,
-  );
-  // ROK-1389: honor a voice override only when it is a voice channel.
-  return deps.channelResolver.resolveVoiceChannelHonoringOverride(
-    payload.gameId,
-    payload.recurrenceGroupId,
-    ephemeralChannelId,
-    payload.notificationChannelOverride,
-  );
-}
-
-/** Enrich event data with live roster and voice channel. */
+/**
+ * Enrich event data with live roster and voice. The voice side is the shared
+ * embed decision (`applyEmbedVoice`), so an edit before the temporary channel
+ * exists keeps the planned line instead of linking the default room; a live
+ * ephemeral channel still wins (ROK-1352) and a text override never does.
+ */
 export async function enrichEventData(
   deps: EventListenerDeps,
-  payload: import('./event.listener').EventPayload,
+  payload: EventPayload,
 ): Promise<EmbedEventData> {
   const eventData = await deps.embedPoster.enrichWithLiveRoster(
     payload.eventId,
     payload.event,
   );
-  const voiceChannelId = await resolveVoiceChannel(deps, payload);
-  if (voiceChannelId) eventData.voiceChannelId = voiceChannelId;
+  const ephemeral = await getEphemeralVoiceState(deps.db, payload.eventId);
+  await applyEmbedVoice(deps, eventData, {
+    gameId: payload.gameId,
+    recurrenceGroupId: payload.recurrenceGroupId,
+    notificationChannelOverride: payload.notificationChannelOverride,
+    ephemeral,
+  });
   return eventData;
 }
 

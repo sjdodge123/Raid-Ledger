@@ -15,7 +15,8 @@ import type { EmbedRows } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { getEphemeralVoiceState } from './ephemeral-voice.db-helpers';
-import { applyPlannedVoice } from './planned-ephemeral-voice.helpers';
+import type { EphemeralVoiceState } from './planned-ephemeral-voice.helpers';
+import { applyEmbedVoice } from './embed-voice.helpers';
 import type { EmbedState } from '../discord-bot.constants';
 import { computeEmbedStateForData } from './embed-state.helpers';
 import {
@@ -41,7 +42,7 @@ interface ChannelOpts {
    * ROK-1352 Tier 0: a live ephemeral channel wins over static bindings; the
    * rest of the row drives the planned-channel line (2026-11-13).
    */
-  ephemeralVoice?: Parameters<typeof applyPlannedVoice>[2] | undefined;
+  ephemeralVoice?: EphemeralVoiceState | undefined;
 }
 
 /**
@@ -202,27 +203,21 @@ export class EmbedPosterService {
     );
   }
 
+  /** The shared embed voice decision (planned temp channel, else the link). */
   private async applyVoiceChannel(
     enrichedEvent: EmbedEventData,
     opts: ChannelOpts,
   ): Promise<void> {
-    // 2026-11-13: a planned (not yet created) temporary channel wins over the
-    // game's default binding, which would point attendees at the wrong room.
-    const eph = opts.ephemeralVoice;
-    if (
-      eph &&
-      (await applyPlannedVoice(this.settingsService, enrichedEvent, eph))
-    )
-      return;
-    // ROK-1389: a text override must not win the embed's "Join Voice" link.
-    const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelHonoringOverride(
-        opts.gameId,
-        opts.recurrenceGroupId,
-        opts.ephemeralVoice?.channelId ?? null,
-        opts.notificationChannelOverride,
-      );
-    if (voiceChannelId) enrichedEvent.voiceChannelId = voiceChannelId;
+    const deps = {
+      settings: this.settingsService,
+      channelResolver: this.channelResolver,
+    };
+    await applyEmbedVoice(deps, enrichedEvent, {
+      gameId: opts.gameId,
+      recurrenceGroupId: opts.recurrenceGroupId,
+      notificationChannelOverride: opts.notificationChannelOverride,
+      ephemeral: opts.ephemeralVoice,
+    });
   }
 
   private async postNewEmbed(
