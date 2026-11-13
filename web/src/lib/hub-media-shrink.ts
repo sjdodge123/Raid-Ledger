@@ -34,7 +34,7 @@ export type ShrinkOutputType = 'image/jpeg' | 'image/webp';
 /** Re-encodes `file` as `type` within `maxEdge`; null when the browser can't decode it. */
 export type ImageEncoder = (file: File, maxEdge: number, quality: number, type: ShrinkOutputType) => Promise<Blob | null>;
 
-/** PNG and WebP can carry transparency; re-encoding them as JPEG would turn it black. */
+/** PNG and WebP can carry transparency; a JPEG re-encode flattens it (onto white — `paintForEncode`). */
 export function mayHaveAlpha(file: File): boolean {
     return file.type === 'image/png' || file.type === 'image/webp';
 }
@@ -42,6 +42,19 @@ export function mayHaveAlpha(file: File): boolean {
 /** Decodes `file` and re-encodes it as JPEG no longer than `maxEdge`; null when it cannot. */
 export function encodeJpeg(file: File, maxEdge: number, quality: number): Promise<Blob | null> {
     return encodeImage(file, maxEdge, quality, 'image/jpeg');
+}
+
+/** The slice of a 2D canvas context the shrinker draws with. */
+export type ShrinkDrawContext = Pick<CanvasRenderingContext2D, 'fillStyle' | 'fillRect' | 'drawImage'>;
+
+/** Draws `image` over the whole canvas, matting it on white first when `type` has no alpha channel. */
+export function paintForEncode(ctx: ShrinkDrawContext, image: CanvasImageSource, width: number, height: number, type: ShrinkOutputType): void {
+    if (type === 'image/jpeg') {
+        // Image pixel data, not a UI/theme colour: JPEG has no alpha, so unfilled (transparent) pixels would encode black.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+    }
+    ctx.drawImage(image, 0, 0, width, height);
 }
 
 /**
@@ -58,7 +71,7 @@ export async function encodeImage(file: File, maxEdge: number, quality: number, 
         canvas.height = Math.max(1, Math.round(bitmap.height * scale));
         const ctx = canvas.getContext('2d');
         if (ctx === null) return null;
-        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        paintForEncode(ctx, bitmap, canvas.width, canvas.height, type);
         return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
     } finally {
         bitmap.close();
