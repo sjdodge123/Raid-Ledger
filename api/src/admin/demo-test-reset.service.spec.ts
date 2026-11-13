@@ -107,7 +107,7 @@ const EMPTY_SNAPSHOT = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
  * Redis glob patterns flushed by flushDedupRedisCache. Must stay in lock-step
  * with the `patterns` array in demo-test-reset.service.ts (ROK-1062 + ROK-1202:
  * recruitment-* + game-alert* added so recruitment/game-alert specs that recycle
- * event IDs don't inherit stale dedup keys).
+ * event IDs don't inherit stale dedup keys; ROK-2187 gg:* for the GG announce/DM keys).
  */
 const EXPECTED_DEDUP_PATTERNS = [
   'lineup-*',
@@ -118,6 +118,7 @@ const EXPECTED_DEDUP_PATTERNS = [
   'standalone-poll-*',
   'recruitment-*',
   'game-alert*',
+  'gg:*',
 ];
 
 describe('DemoTestResetService', () => {
