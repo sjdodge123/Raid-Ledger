@@ -62,6 +62,9 @@ export function GroupDayView({
             // minimum at pager + the 132px day floor + strip, which is what
             // `PhoneGroupAvailability` floors its wrapper at so the strip can
             // never be squeezed down onto the legend (320×640 overlapped by 15px).
+            // Callers must give this view a definite height (a fixed-height box
+            // or a floored flex slot): with `contain:size` and no height it
+            // renders as an empty 0px day instead of growing to its rows.
             className="relative isolate min-h-0 flex-1 overflow-y-auto [contain:size]"
             style={{ touchAction: 'pan-y' }}
             data-testid="phone-group-day"

@@ -969,6 +969,8 @@ test.describe('Scheduling poll heatmap', () => {
                 message: 'the week strip\'s bottom edge must sit at or above the legend\'s top edge (px of overlap)',
             })
             .toBeLessThanOrEqual(0.5);
+        const day = await page.getByTestId('phone-group-day').boundingBox();
+        expect(day?.height ?? 0, 'the hour list keeps real height under contain:size').toBeGreaterThanOrEqual(100);
     });
 
     /**
