@@ -13,6 +13,8 @@ import { professionMemberKey } from '../lib/profession-member-key';
 import { useRosterInsights } from './use-roster-insights';
 import { ProfessionsEmpty } from './professions-empty';
 import { FreshnessFooter } from './freshness-footer';
+import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { CRAFTERS_HASH } from '../hub/crafters/crafters.helpers';
 import {
     bestMember, characterCount, charactersWithProfessions, formatSkill, memberCount, sortMembers, sourceLabel,
     type ProfessionMember, type RosterProfession,
@@ -33,6 +35,11 @@ export default function ProfessionsWidget({ page }: Pick<HubWidgetCtx, 'page'>):
             <p data-testid="professions-footer" className="text-xs text-muted">
                 {characterCount(charactersWithProfessions(professions))} with professions
             </p>
+            {/* ROK-1790 (ruling 2026-11-12 Q4) — the full directory lives on the Crafters tab. */}
+            <a href={CRAFTERS_HASH}
+                className={`self-start rounded-sm text-sm font-medium text-foreground underline underline-offset-2 hover:opacity-80 ${FOCUS_RING}`}>
+                See all crafters
+            </a>
             {data.freshness.roster !== null && <FreshnessFooter freshness={data.freshness.roster} testId="professions-freshness" />}
         </div>
     );

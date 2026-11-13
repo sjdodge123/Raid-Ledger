@@ -8,6 +8,10 @@
 import type { GuildPage, WowRosterInsightsDto } from '@raid-ledger/contract';
 import { sortMembers, type RosterProfession } from '../../hub-widgets/professions.helpers';
 
+/** The Crafters hub tab id; `#crafters` opens it (core hub tabs are hash links). */
+export const CRAFTERS_TAB_ID = 'crafters';
+export const CRAFTERS_HASH = `#${CRAFTERS_TAB_ID}`;
+
 /** The Crafters filter state. Empty `professions` / null `minSkill` = that group is off. */
 export interface CrafterFilters {
     professions: readonly string[];
