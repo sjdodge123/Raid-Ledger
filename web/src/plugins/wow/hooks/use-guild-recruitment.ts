@@ -34,22 +34,34 @@ export function useRecruitmentVisible({ page }: HubWidgetCtx): boolean {
     return data.recruitment !== null || data.viewer.canEdit;
 }
 
-/** Editors: save the whole object; the response view replaces the cache, so the card updates without a reload (AC4). */
+/**
+ * Editors: save the whole object; the response view replaces the cache, so the card updates without a reload (AC4).
+ * In-flight GETs are cancelled first — one that resolved after the PUT would otherwise put the old view back.
+ */
 export function useSaveGuildRecruitment(guildId: number) {
     const client = useQueryClient();
     return useMutation({
         mutationFn: async (body: PutGuildRecruitmentInput): Promise<GuildRecruitmentView> =>
             (await import('../recruitment-api')).putGuildRecruitment(guildId, body),
-        onSuccess: (data) => client.setQueryData(guildRecruitmentKey(guildId), data),
+        onSuccess: async (data): Promise<void> => {
+            await client.cancelQueries({ queryKey: guildRecruitmentKey(guildId) });
+            client.setQueryData(guildRecruitmentKey(guildId), data);
+        },
     });
 }
 
-/** Editors: clear back to unset (AC7), then refetch the view (204 carries no body). */
+/**
+ * Editors: clear back to unset (AC7), then refetch the view (204 carries no body).
+ * A pre-clear GET is cancelled first so it cannot land after the refetch is due (inactive observers included).
+ */
 export function useClearGuildRecruitment(guildId: number) {
     const client = useQueryClient();
     return useMutation({
         mutationFn: async (): Promise<void> =>
             (await import('../recruitment-api')).deleteGuildRecruitment(guildId),
-        onSuccess: () => client.invalidateQueries({ queryKey: guildRecruitmentKey(guildId) }),
+        onSuccess: async (): Promise<void> => {
+            await client.cancelQueries({ queryKey: guildRecruitmentKey(guildId) });
+            await client.invalidateQueries({ queryKey: guildRecruitmentKey(guildId) });
+        },
     });
 }
