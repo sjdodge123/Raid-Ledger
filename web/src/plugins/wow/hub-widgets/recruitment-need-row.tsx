@@ -21,13 +21,13 @@ export function RecruitmentNeedRow({ need }: { need: GuildRecruitWanted }): JSX.
             <CharRoleBadge role={need.role} />
             {icon !== null && <img src={icon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 rounded" />}
             <span data-testid="recruitment-row-name"
-                className={`min-w-0 flex-1 truncate text-sm ${quiet ? 'text-muted' : 'font-medium text-foreground'}`}>
+                className={`min-w-0 flex-1 break-words text-sm ${quiet ? 'text-muted' : 'font-medium text-foreground'}`}>
                 {need.className}
                 {need.note !== undefined && need.note !== '' && (
                     <span className="text-xs font-normal text-muted"> · {need.note}</span>
                 )}
             </span>
-            <span data-testid="recruitment-row-state">
+            <span data-testid="recruitment-row-state" className="shrink-0">
                 <StatusChip tone={meta.tone} title={`${need.className} ${need.role}: ${meta.label}`}>{meta.label}</StatusChip>
             </span>
         </li>

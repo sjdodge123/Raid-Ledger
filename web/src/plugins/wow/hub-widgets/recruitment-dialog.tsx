@@ -31,7 +31,7 @@ interface OverlayProps { guard: DirtyCloseGuard; onClose: () => void; busy: bool
 function RecruitmentOverlay({ guard, onClose, busy, footer, children }: OverlayProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const shared = { isOpen: true, title: DIALOG_TITLE, onClose, closeGuard: guard, closeDisabled: busy, footer, children };
-    return isDesktop ? <Modal {...shared} maxWidth="max-w-lg" /> : <BottomSheet {...shared} maxHeight="85vh" />;
+    return isDesktop ? <Modal {...shared} maxWidth="max-w-2xl" /> : <BottomSheet {...shared} maxHeight="85vh" />;
 }
 
 /** Draft + the view it started from + the save / clear mutations. A clean draft rebases on a fresher view. */
