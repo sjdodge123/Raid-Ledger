@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useGameFilterStore } from './game-filter-store';
+import { NO_GAMES_MARKER, useGameFilterStore } from './game-filter-store';
 import type { GameInfo } from './game-filter-store';
 
 vi.mock('../lib/api-client', () => ({
@@ -175,5 +175,50 @@ describe('useGameFilterStore — empty saved filter fallback', () => {
         const selected = useGameFilterStore.getState().selectedGames;
         expect(selected.has('wow')).toBe(true);
         expect(selected.size).toBe(2); // wow + deleted-game (stale but not all stale)
+    });
+});
+
+/**
+ * Operator ruling 2026-11-13: an explicit None survives a reload. Saving an
+ * empty selection stores the None marker, and loading it selects nothing —
+ * the all-games fallback is kept only for an empty (legacy) or fully stale list.
+ */
+describe('useGameFilterStore — explicit None survives a reload', () => {
+    beforeEach(() => {
+        useGameFilterStore.getState()._reset();
+    });
+
+    it('saving None stores the None marker, not an empty list', async () => {
+        const { updatePreference } = await import('../lib/api-client');
+        const { getAuthToken } = await import('../hooks/use-auth');
+        vi.mocked(getAuthToken).mockReturnValue('test-token');
+        vi.mocked(updatePreference).mockClear();
+
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().deselectAll();
+        useGameFilterStore.getState().saveFilter();
+
+        expect(updatePreference).toHaveBeenCalledWith('calendarGameFilter', [NO_GAMES_MARKER]);
+    });
+
+    it('the saved None marker loads as None when prefs arrive before the games', () => {
+        useGameFilterStore.getState().loadSavedFilter([NO_GAMES_MARKER]);
+        useGameFilterStore.getState().reportGames(GAMES);
+
+        expect(useGameFilterStore.getState().selectedGames.size).toBe(0);
+    });
+
+    it('the saved None marker loads as None when prefs arrive after the games', () => {
+        useGameFilterStore.getState().reportGames(GAMES);
+        useGameFilterStore.getState().loadSavedFilter([NO_GAMES_MARKER]);
+
+        expect(useGameFilterStore.getState().selectedGames.size).toBe(0);
+    });
+
+    it('a list whose every slug is stale still falls back to all games', () => {
+        useGameFilterStore.getState().loadSavedFilter(['deleted-game']);
+        useGameFilterStore.getState().reportGames(GAMES);
+
+        expect(useGameFilterStore.getState().selectedGames.size).toBe(GAMES.length);
     });
 });

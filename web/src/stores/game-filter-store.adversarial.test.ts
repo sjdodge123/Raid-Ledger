@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useGameFilterStore } from './game-filter-store';
+import { NO_GAMES_MARKER, useGameFilterStore } from './game-filter-store';
 import type { GameInfo } from './game-filter-store';
 
 vi.mock('../lib/api-client', () => ({
@@ -109,7 +109,7 @@ describe('useGameFilterStore — saved filter edge cases', () => {
         expect(useGameFilterStore.getState().selectedGames.size).toBe(0);
     });
 
-    it('saveFilter sends empty array when nothing is selected', async () => {
+    it('saveFilter sends the None marker when nothing is selected (ruling 2026-11-13)', async () => {
         const { updatePreference } = await import('../lib/api-client');
         const { getAuthToken } = await import('../hooks/use-auth');
         vi.mocked(getAuthToken).mockReturnValue('test-token');
@@ -120,7 +120,7 @@ describe('useGameFilterStore — saved filter edge cases', () => {
 
         expect(updatePreference).toHaveBeenCalledWith(
             'calendarGameFilter',
-            [],
+            [NO_GAMES_MARKER],
         );
     });
 
