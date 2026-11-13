@@ -3,6 +3,7 @@ import { SettingsService } from '../settings/settings.service';
 import type { LlmProvider } from './llm-provider.interface';
 import { AI_SETTING_KEYS } from './llm.constants';
 import type { SettingKey } from '../drizzle/schema';
+import { isCloudFlavour } from '../common/flavour/flavour';
 
 /**
  * Resolution outcome for the active LLM provider.
@@ -47,12 +48,18 @@ export class LlmProviderRegistry {
    *    Self-hosted/keyless providers are skipped in auto-pick — they need
    *    explicit operator selection via `ai_provider`.
    * 3. If neither path yields a provider, return `undefined`.
+   *
+   * Under `RL_FLAVOUR=cloud` a configured self-hosted provider (Ollama, e.g.
+   * left behind by a NAS DB restore) is ignored and step 2 runs instead —
+   * cloud hides and 404s Ollama everywhere else.
    */
   async resolveActive(): Promise<ActiveProviderResolution | undefined> {
     const configured = await this.settings.get(AI_SETTING_KEYS.PROVIDER);
     if (configured) {
       const provider = this.providers.get(configured);
-      if (provider) return { provider, source: 'setting' };
+      if (provider && isAllowedOnFlavour(provider)) {
+        return { provider, source: 'setting' };
+      }
     }
     return this.autoPickProvider();
   }
@@ -75,4 +82,9 @@ export class LlmProviderRegistry {
   list(): LlmProvider[] {
     return [...this.providers.values()];
   }
+}
+
+/** Self-hosted providers (Ollama) are never usable on the cloud flavour. */
+function isAllowedOnFlavour(provider: LlmProvider): boolean {
+  return !(provider.selfHosted && isCloudFlavour());
 }

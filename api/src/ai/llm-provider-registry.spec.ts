@@ -290,4 +290,54 @@ describe('LlmProviderRegistry.resolveActive — source reporting (ROK-1114)', ()
     // even though claude has a key and is registered first.
     expect(result).toEqual({ provider: google, source: 'setting' });
   });
+
+  describe('TD-2026-10 — stored self-hosted provider under RL_FLAVOUR=cloud', () => {
+    afterEach(() => delete process.env.RL_FLAVOUR);
+
+    function registerOllamaAndClaude(): {
+      ollama: LlmProvider;
+      claude: LlmProvider;
+    } {
+      const ollama = createMockProvider('ollama');
+      const claude = createCloudProvider('claude');
+      registry.register(ollama);
+      registry.register(claude);
+      return { ollama, claude };
+    }
+
+    it('ignores a configured self-hosted provider on cloud and auto-picks a keyed cloud provider', async () => {
+      process.env.RL_FLAVOUR = 'cloud';
+      const { claude } = registerOllamaAndClaude();
+      mockSettings.get.mockImplementation((key: string) => {
+        if (key === 'ai_provider') return 'ollama';
+        if (key === 'ai_claude_api_key') return 'sk-ant-test';
+        return null;
+      });
+
+      const result = await registry.resolveActive();
+
+      expect(result).toEqual({ provider: claude, source: 'auto' });
+    });
+
+    it('returns undefined on cloud when only a self-hosted provider is configured', async () => {
+      process.env.RL_FLAVOUR = 'cloud';
+      registerOllamaAndClaude();
+      mockSettings.get.mockImplementation((key: string) =>
+        key === 'ai_provider' ? 'ollama' : null,
+      );
+
+      expect(await registry.resolveActive()).toBeUndefined();
+    });
+
+    it('still honours a configured self-hosted provider on the nas flavour', async () => {
+      const { ollama } = registerOllamaAndClaude();
+      mockSettings.get.mockImplementation((key: string) =>
+        key === 'ai_provider' ? 'ollama' : null,
+      );
+
+      const result = await registry.resolveActive();
+
+      expect(result).toEqual({ provider: ollama, source: 'setting' });
+    });
+  });
 });
