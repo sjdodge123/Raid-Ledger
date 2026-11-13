@@ -165,7 +165,7 @@
 }
 
 .quest-card__wowhead-icon:hover {
-    color: var(--color-indigo-400);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 /* Inset the focus ring: the right-hand 8px overhang sits in the card's
@@ -203,7 +203,7 @@
     font-size: 0.625rem;
     font-weight: 600;
     background: color-mix(in srgb, var(--color-warning) 12%, transparent);
-    color: var(--color-warning);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
     border: 1px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
     white-space: nowrap;
     flex-shrink: 0;
@@ -220,11 +220,11 @@
 }
 
 .quest-card__inline-status--covered {
-    color: color-mix(in srgb, var(--color-success) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .quest-card__inline-status--needed {
-    color: var(--color-warning);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-card__body {
@@ -257,7 +257,7 @@
 }
 
 .quest-card__meta-item--sharable {
-    color: color-mix(in srgb, var(--color-faction-alliance) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .quest-card__details {
@@ -305,7 +305,7 @@
 }
 
 .quest-card__wowhead-link:hover {
-    color: var(--color-indigo-400);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .quest-card__name {
@@ -320,7 +320,7 @@
 }
 
 .quest-card__name a:hover {
-    color: var(--color-indigo-400);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
     text-decoration: underline;
 }
 
@@ -356,7 +356,7 @@
     font-size: 0.6875rem;
     font-weight: 600;
     background: color-mix(in srgb, var(--color-faction-alliance) 12%, transparent);
-    color: color-mix(in srgb, var(--color-faction-alliance) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
     border: 1px solid color-mix(in srgb, var(--color-faction-alliance) 25%, transparent);
     white-space: nowrap;
 }
@@ -373,11 +373,11 @@
 }
 
 .quest-coverage--covered {
-    color: color-mix(in srgb, var(--color-success) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .quest-coverage--uncovered {
-    color: var(--color-warning);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-coverage__status {
@@ -385,7 +385,7 @@
 }
 
 .quest-coverage__status--needed {
-    color: var(--color-warning);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-coverage__also {
@@ -419,7 +419,7 @@
 
 .quest-coverage__btn--add {
     background: color-mix(in srgb, var(--color-warning) 15%, transparent);
-    color: var(--color-warning);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
     border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
 }
 
@@ -429,7 +429,7 @@
 
 .quest-coverage__btn--checked {
     background: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: color-mix(in srgb, var(--color-success) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
     border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
 }
 
@@ -540,11 +540,11 @@
 }
 
 .quest-reward-gold {
-    color: var(--color-warning);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-reward-xp {
-    color: color-mix(in srgb, var(--color-busy) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-busy) 55%, var(--color-foreground));
 }
 
 .quest-reward-choice {
@@ -554,7 +554,7 @@
 
 /* Upgrade indicator */
 .quest-reward-upgrade {
-    color: color-mix(in srgb, var(--color-success) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
     font-size: 0.75rem;
     font-weight: 700;
     margin-left: 0.125rem;
@@ -570,19 +570,23 @@
 }
 
 .quality-uncommon {
-    color: color-mix(in srgb, var(--color-success) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .quality-rare {
-    color: color-mix(in srgb, var(--color-faction-alliance) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .quality-epic {
-    color: color-mix(in srgb, var(--color-item-level) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-item-level) 50%, var(--color-foreground));
 }
 
 .quality-legendary {
-    color: color-mix(in srgb, var(--color-warning) 70%, var(--color-danger));
+    color: color-mix(
+        in srgb,
+        color-mix(in srgb, var(--color-warning) 70%, var(--color-danger)) 55%,
+        var(--color-foreground)
+    );
 }
 
 /* Quality borders for icons */
@@ -693,13 +697,17 @@
 
 .quest-badge-class {
     background: color-mix(in srgb, var(--color-warning) 12%, transparent);
-    color: color-mix(in srgb, var(--color-warning) 70%, var(--color-danger));
+    color: color-mix(
+        in srgb,
+        color-mix(in srgb, var(--color-warning) 70%, var(--color-danger)) 55%,
+        var(--color-foreground)
+    );
     border: 1px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
 }
 
 .quest-badge-race {
     background: color-mix(in srgb, var(--color-item-level) 12%, transparent);
-    color: color-mix(in srgb, var(--color-item-level) 75%, var(--color-foreground));
+    color: color-mix(in srgb, var(--color-item-level) 50%, var(--color-foreground));
     border: 1px solid color-mix(in srgb, var(--color-item-level) 25%, transparent);
 }
 
