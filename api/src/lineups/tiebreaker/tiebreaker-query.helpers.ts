@@ -1,7 +1,7 @@
 /**
  * Tiebreaker DB read queries (ROK-938).
  */
-import { and, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -39,17 +39,17 @@ export function findActiveTiebreaker(db: Db, lineupId: number) {
     .limit(1);
 }
 
-/** Find any non-dismissed tiebreaker for a lineup. */
+/**
+ * Find the newest non-dismissed tiebreaker for a lineup (createdAt, then id,
+ * descending) so the pick is deterministic when more than one row exists.
+ */
 export function findPendingOrActiveTiebreaker(db: Db, lineupId: number) {
+  const t = schema.communityLineupTiebreakers;
   return db
     .select()
-    .from(schema.communityLineupTiebreakers)
-    .where(
-      and(
-        eq(schema.communityLineupTiebreakers.lineupId, lineupId),
-        sql`${schema.communityLineupTiebreakers.status} != 'dismissed'`,
-      ),
-    )
+    .from(t)
+    .where(and(eq(t.lineupId, lineupId), sql`${t.status} != 'dismissed'`))
+    .orderBy(desc(t.createdAt), desc(t.id))
     .limit(1);
 }
 

@@ -14,6 +14,7 @@ import {
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
+import { HttpAdapterHost } from '@nestjs/core';
 import * as Sentry from '@sentry/nestjs';
 import { randomUUID } from 'node:crypto';
 import { isNotNull } from 'drizzle-orm';
@@ -78,13 +79,19 @@ export class ForeverQuestImportService implements OnModuleInit {
     private readonly settings: SettingsService,
     private readonly auth: BlizzardAuthService,
     private readonly quests: DungeonQuestsService,
+    private readonly adapterHost: HttpAdapterHost,
   ) {}
 
   /**
    * A boot never has a run of its own, so a stored `running` report is a run
    * the last process died in: settle it as `failed` (prod runs one instance).
+   * Only the HTTP server does this: a script building AppModule through
+   * `createApplicationContext` (no adapter) runs beside the live server and
+   * must not fail the server's in-progress run.
    */
   async onModuleInit(): Promise<void> {
+    const adapter: unknown = this.adapterHost.httpAdapter;
+    if (adapter === undefined || adapter === null) return;
     await bestEffortInit(
       'ForeverQuestImportService: settle an interrupted run',
       this.logger,

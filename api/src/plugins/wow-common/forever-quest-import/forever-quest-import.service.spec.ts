@@ -3,6 +3,7 @@
  * quest cache (24h SWR), on success and on failure; a run that wrote nothing
  * leaves it alone. The crawl and the repo are stubbed.
  */
+import type { HttpAdapterHost } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import type { SettingsService } from '../../../settings/settings.service';
@@ -36,7 +37,8 @@ function build(): ForeverQuestImportService {
   } as unknown as BlizzardAuthService;
   clearCache = jest.fn().mockResolvedValue(undefined);
   const quests = { clearCache } as unknown as DungeonQuestsService;
-  return new ForeverQuestImportService(db, settings, auth, quests);
+  const adapterHost = { httpAdapter: {} } as unknown as HttpAdapterHost;
+  return new ForeverQuestImportService(db, settings, auth, quests, adapterHost);
 }
 
 /** The crawl "writes" `upserted` rows, then throws when `fail` is set. */
