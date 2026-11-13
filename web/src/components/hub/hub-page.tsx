@@ -31,7 +31,7 @@ import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
 import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
-import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
+import { HubSettingsProvider, type HubSettingsTarget, type HubSettingsValue } from './settings/hub-settings-context';
 import { HubSettingsTrigger } from './settings/settings-trigger';
 import { hubCopy, hubSectionsLabel } from './hub-copy';
 import { canOpenHubSettings, canUseHubChannelPicker } from './settings/settings-access';
@@ -137,14 +137,16 @@ interface OverlayProps {
     ctx: HubCtx;
     module: HubModule | undefined;
     overlay: HubOverlay;
+    /** ROK-2188 — the settings section to land on, `undefined` = the top. */
+    section: string | undefined;
     onClose: () => void;
     openPicker: () => void;
 }
 
-function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: OverlayProps): JSX.Element {
+function HubOverlays({ ctx, module: mod, overlay, section, onClose, openPicker }: OverlayProps): JSX.Element {
     return (
         <Suspense fallback={null}>
-            {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} onClose={onClose} onChangeChannel={openPicker} />}
+            {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} section={section} onClose={onClose} onChangeChannel={openPicker} />}
             {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} kind={ctx.page.guild.kind} onClose={onClose} />}
         </Suspense>
     );
@@ -153,8 +155,14 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
 /** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
 function useHubSettingsState(canManage: boolean, canPick: boolean) {
     const [requested, setRequested] = useState<HubOverlay>('closed');
+    const [section, setSection] = useState<string | undefined>(undefined);
     const openPicker = useCallback(() => setRequested('picker'), []);
-    const openSettings = useCallback(() => setRequested('settings'), []);
+    const openSettings = useCallback((target?: HubSettingsTarget) => {
+        setSection(target?.section);
+        setRequested('settings');
+    }, []);
+    // The hero trigger's onClick would hand openSettings a MouseEvent as `target`.
+    const openSettingsTop = useCallback(() => openSettings(), [openSettings]);
     const onClose = useCallback(() => setRequested('closed'), []);
     // Both overlays are Leader-only, so the rights gate the RENDER rather than
     // an effect that resets the state: a refetched page that demotes the viewer
@@ -166,7 +174,7 @@ function useHubSettingsState(canManage: boolean, canPick: boolean) {
     const value: HubSettingsValue = useMemo(
         () => ({ openChannelPicker: canPick ? openPicker : null, openSettings: canManage ? openSettings : null }),
         [canPick, openPicker, canManage, openSettings]);
-    return { overlay, openPicker, onClose, openSettings, value };
+    return { overlay, section, openPicker, onClose, openSettingsTop, value };
 }
 
 interface FrameProps {
@@ -192,13 +200,13 @@ function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProp
                     action={canManage || hubBellVisible(ctx.page.viewer) ? (
                         <div className="flex items-center gap-2">
                             <HubNotifyBell page={ctx.page} />
-                            {canManage && <HubSettingsTrigger onOpen={s.openSettings} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
+                            {canManage && <HubSettingsTrigger onOpen={s.openSettingsTop} label={hubCopy(ctx.page.guild.kind).settingsTitle} />}
                         </div>
                     ) : null} />
                 {HeroBanner && <HeroBanner {...ctx} />}
                 <TabRow tabs={tabs} activeId={active} label={hubSectionsLabel(ctx.page.guild.kind)} className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} mods={mods} />
-                <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
+                <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} section={s.section} onClose={s.onClose} openPicker={s.openPicker} />
                 {/* ROK-2074: page-level (was the Overview's), so the hero crest opens it from every tab. */}
                 <HubGalleryDialogMount guildId={ctx.page.guild.id} canEdit={ctx.page.viewer.canEdit} />
             </div>

@@ -10,7 +10,7 @@
  * used instead and the divergence is flagged in the PR rather than invented
  * around.
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { GuildDiscordMirrorDto } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../../plugins/hub-module';
 import { BottomSheet } from '../../ui/bottom-sheet';
@@ -27,6 +27,7 @@ import { HubWelcomeRepost } from './hub-welcome-repost';
 import { HubMediaChannelSection } from './hub-media-channel-row';
 import { isWelcomeHub } from './hub-welcome.helpers';
 import { hubCopy } from '../hub-copy';
+import { useSettingsSectionFocus } from './use-settings-section-focus';
 
 function channelLine(mirror: GuildDiscordMirrorDto): string {
     if (mirror.state === 'ok') return `#${mirror.channel.name}`;
@@ -74,14 +75,18 @@ export interface HubSettingsSheetProps {
     module: HubModule | undefined;
     onClose: () => void;
     onChangeChannel: () => void;
+    /** ROK-2188 — open scrolled to + focused on this `SettingsSection sectionId`; omit for the top. */
+    section?: string | undefined;
 }
+
+type BodyProps = Omit<HubSettingsSheetProps, 'onClose' | 'section'>;
 
 /**
  * The Leader / admin rows (ROK-1830 S4) — an Officer who opens a community
  * hub's sheet doesn't get them. A community hub keeps Discord only: page
  * editors mean nothing for that kind (D6) and Archive replaces hiding (A7).
  */
-function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+function LeaderSections({ ctx, module: mod, onChangeChannel }: BodyProps): JSX.Element {
     const isCommunity = ctx.page.community !== undefined;
     return (
         <>
@@ -100,25 +105,28 @@ function LeaderSections({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsS
     );
 }
 
-function SheetBody({ ctx, module: mod, onChangeChannel }: Omit<HubSettingsSheetProps, 'onClose'>): JSX.Element {
+function SheetBody({ ctx, module: mod, onChangeChannel, bodyRef }: BodyProps & { bodyRef: (el: HTMLDivElement | null) => void }): JSX.Element {
     const Extra = mod?.settingsSections;
     return (
-        <div className="flex flex-col gap-5" data-testid="guild-settings-sheet">
+        <div ref={bodyRef} className="flex flex-col gap-5" data-testid="guild-settings-sheet">
             {ctx.page.viewer.canManageEditors && <LeaderSections ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />}
             {Extra && <Extra {...ctx} />}
         </div>
     );
 }
 
-export function HubSettingsSheet({ ctx, module: mod, onClose, onChangeChannel }: HubSettingsSheetProps): JSX.Element {
+export function HubSettingsSheet({ ctx, module: mod, onClose, onChangeChannel, section }: HubSettingsSheetProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
+    // A callback ref (state, not useRef): the body sits in a portal, so the effect waits for the node.
+    const [bodyEl, setBodyEl] = useState<HTMLDivElement | null>(null);
+    useSettingsSectionFocus(bodyEl, section);
     const shared = {
         isOpen: true,
         onClose,
         title: hubCopy(ctx.page.guild.kind).settingsTitle,
         footer: <Button variant="secondary" onClick={onClose} data-testid="guild-settings-done">Done</Button>,
     };
-    const body = <SheetBody ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />;
+    const body = <SheetBody ctx={ctx} module={mod} onChangeChannel={onChangeChannel} bodyRef={setBodyEl} />;
     if (isDesktop) return <Modal {...shared} maxWidth="max-w-lg">{body}</Modal>;
     return <BottomSheet {...shared} maxHeight="85vh">{body}</BottomSheet>;
 }
