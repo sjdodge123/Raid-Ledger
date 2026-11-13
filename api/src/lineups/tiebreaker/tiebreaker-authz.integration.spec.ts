@@ -18,13 +18,15 @@
  *      (late-vote race: the round advanced after the pre-check).
  *  10. Two concurrent round-completing votes advance the round exactly once
  *      (tech-debt 2026-10-10: `checkAndAdvanceRound` was not serialized).
- *  11. ROK-2098: a force-resolve racing the final vote runs matching once.
+ *  11. ROK-2098: a force-resolve racing the final vote runs matching once;
+ *      the parked vote is refused with "already been decided".
  *  12. ROK-2098: a force-resolve retry repairs a lineup left in `voting`
  *      after the resolve committed, with the stored winner; a second retry
  *      does not rebuild the match groups.
  *  13. ROK-2098: a force-resolve racing a round-completing vote advances the
  *      bracket once (one round-2 matchup).
  */
+import { BadRequestException } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -565,8 +567,11 @@ function describeTiebreakerAuthz() {
       ]);
       await parkedOrSettled(tb.tiebreakerId, voted);
       gate.release();
-      const [[forceResult]] = await Promise.all([force, voted]);
-      return defined(forceResult, 'force-resolve result');
+      const [[forceResult], [voteResult]] = await Promise.all([force, voted]);
+      return {
+        force: defined(forceResult, 'force-resolve result'),
+        vote: defined(voteResult, 'raced vote result'),
+      };
     } finally {
       // A throw before the release above would leave force-resolve parked
       // with its tx open and hang the suite instead of failing it.
@@ -584,8 +589,21 @@ function describeTiebreakerAuthz() {
     const { last, vote } = await voteAllButLast(tb);
     const buildSpy = jest.spyOn(matching, 'buildMatchesForLineup');
     try {
-      const force = await raceForceAgainstVote(tb, last, vote);
+      const { force, vote: raced } = await raceForceAgainstVote(
+        tb,
+        last,
+        vote,
+      );
       expect(force.status).toBe('fulfilled');
+      // The vote waited on the lock and found the tiebreaker decided: it is
+      // refused with a message saying so, not "Matchup is not open".
+      expect(raced.status).toBe('rejected');
+      expect(raced.status === 'rejected' && raced.reason).toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(raced.status === 'rejected' && raced.reason.message).toBe(
+        'This tiebreaker has already been decided',
+      );
       expect(buildSpy).toHaveBeenCalledTimes(1);
       const lineup = await lineupRow(tb.lineupId);
       expect(lineup.status).toBe('decided');
@@ -649,7 +667,7 @@ function describeTiebreakerAuthz() {
     expect(counts).toEqual(
       open.map((m) => (m.id === vote.matchupId ? required - 1 : required)),
     );
-    const force = await raceForceAgainstVote(tb, last, vote);
+    const { force } = await raceForceAgainstVote(tb, last, vote);
     expect(force.status).toBe('fulfilled');
     const roundTwo = (await findMatchups(testApp.db, tb.tiebreakerId)).filter(
       (m) => m.round === 2,
