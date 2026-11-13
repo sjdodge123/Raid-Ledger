@@ -4,10 +4,7 @@
  * 300-line limit.
  */
 import { BadRequestException } from '@nestjs/common';
-import {
-  SEED_GUILD_ROSTER,
-  type SeedGuildInput,
-} from './demo-test-guild.helpers';
+import type { SeedGuildInput } from './demo-test-guild.helpers';
 
 /** An optional boolean body flag (absent = false). */
 function boolFlag(value: unknown, name: string): boolean {
@@ -44,8 +41,13 @@ export interface RawSeedFlags {
   memberCount?: unknown;
 }
 
-/** The fixed five-row roster; `memberCount` pads it with filler rows. */
-export const SEED_GUILD_BASE_ROWS = SEED_GUILD_ROSTER.length;
+/**
+ * The fixed five-row roster; `memberCount` pads it with filler rows. A
+ * literal (demo-test-guild.helpers.ts imports this file, so deriving it from
+ * `SEED_GUILD_ROSTER.length` is an import cycle); `SEED_GUILD_ROSTER`'s
+ * `satisfies` clause makes tsc fail if the two ever drift.
+ */
+export const SEED_GUILD_BASE_ROWS = 5;
 export const SEED_GUILD_MAX_ROWS = 60;
 /** `withActivity` without a `memberCount` pads to this (B9 showcase). */
 export const SEED_GUILD_SHOWCASE_ROWS = 50;

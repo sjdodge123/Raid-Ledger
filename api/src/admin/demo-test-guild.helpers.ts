@@ -20,6 +20,7 @@ import { parseArmoryProfessionsFlag } from './demo-test-guild-professions.helper
 import {
   parseSeedFlags,
   type RawSeedFlags,
+  type SEED_GUILD_BASE_ROWS,
 } from './demo-test-guild-flags.helpers';
 import {
   parseRosterSuffix,
@@ -93,7 +94,7 @@ export const SEED_GUILD_ROSTER = [
   { rank: 2, rankName: 'Veteran', char: 'Corvin', owner: null, role: null },
   { rank: 3, rankName: 'Member', char: 'Dainel', owner: 'member', role: 'dps' },
   { rank: 4, rankName: 'Initiate', char: 'Elowen', owner: null, role: null },
-] as const;
+] as const satisfies { readonly length: typeof SEED_GUILD_BASE_ROWS };
 
 /** The rank the GM delegated page editing to. */
 export const SEED_GUILD_EDITOR_RANK = 1;
