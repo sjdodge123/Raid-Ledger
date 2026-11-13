@@ -2,9 +2,8 @@ import { lazy } from 'react';
 import { registerPlugin } from '../plugin-registry';
 import { GgWowLevelsCardSchema } from '@raid-ledger/contract';
 // App-entry diet: the heavy slots are lazy chunks (see slots/lazy-slots.tsx).
+// The character-create import slots stay eager: lazy, they shift the Add Character dialog.
 import {
-    CharacterCreateImportForm,
-    CharacterCreateInlineImport,
     EventCreateContentBrowser,
     EventDetailContentSections,
     BlizzardIntegrationSlot,
@@ -12,6 +11,8 @@ import {
     QuestPrepPanel,
     BossLootPanel,
 } from './slots/lazy-slots';
+import { CharacterCreateImportForm } from './slots/character-create-import-form';
+import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
 import { CharacterDetailSections } from './slots/character-detail-sections';
 import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
