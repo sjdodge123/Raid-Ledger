@@ -164,6 +164,10 @@ export class EmbedPosterService {
   ): Promise<boolean> {
     const existing = await findExistingEmbedRecord(this.db, eventId, guildId);
     const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
+    // Lifecycle/scheduler callers pass the series id as an arg, not on the
+    // event, so without this the FIRST post of a series night had no Join
+    // Series row and relied on a racing embed-sync edit (ROK-1622 race).
+    enrichedEvent.recurrenceGroupId ??= opts.recurrenceGroupId ?? null;
     await this.applyVoiceChannel(enrichedEvent, opts);
     const context = await this.buildContext(eventId);
     // ROK-1622: derive the state HERE. Defaulting to POSTED made every first
