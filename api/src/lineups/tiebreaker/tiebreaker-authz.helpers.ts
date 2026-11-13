@@ -71,6 +71,29 @@ export async function assertMatchupVotable(
   }
 }
 
+/**
+ * Throw 400 when the tiebreaker is no longer `active` — e.g. a vote that
+ * waited on the round-advance lock while an admin force-resolve decided it.
+ * Lets the caller say "already decided" instead of "matchup is not open".
+ */
+export async function assertTiebreakerStillActive(
+  db: Db,
+  tiebreakerId: number,
+): Promise<void> {
+  const t = schema.communityLineupTiebreakers;
+  const [row] = await db
+    .select({ status: t.status })
+    .from(t)
+    .where(eq(t.id, tiebreakerId))
+    .limit(1);
+  if (row?.status === 'resolved') {
+    throw new BadRequestException('This tiebreaker has already been decided');
+  }
+  if (row?.status !== 'active') {
+    throw new BadRequestException('No active tiebreaker');
+  }
+}
+
 export interface BracketVoteInput {
   tiebreakerId: number;
   matchupId: number;

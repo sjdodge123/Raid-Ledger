@@ -30,8 +30,11 @@ import {
   findMatchups,
 } from './tiebreaker-query.helpers';
 import { advanceBracket } from './tiebreaker-bracket.helpers';
-import { advanceRoundIfComplete } from './tiebreaker-advance.helpers';
-import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
+import { castBracketVoteAtomically } from './tiebreaker-vote.helpers';
+import {
+  decideLineupFromTiebreaker,
+  type TiebreakerDecideDeps,
+} from './tiebreaker-decide.helpers';
 import {
   finalizeTiebreaker,
   type WinnerPicker,
@@ -45,7 +48,7 @@ import { buildTiebreakerDetail } from './tiebreaker-response.helpers';
 import {
   assertCallerMayTiebreak,
   assertMatchupVotable,
-  insertBracketVoteIfOpen,
+  assertTiebreakerStillActive,
 } from './tiebreaker-authz.helpers';
 import type { EligibilityCaller } from '../lineups-eligibility.helpers';
 import { findVetoes } from './tiebreaker-query.helpers';
@@ -197,14 +200,22 @@ export class TiebreakerService {
     await assertMatchupVotable(this.db, tb.id, dto.matchupId, dto.gameId);
     const { matchupId, gameId } = dto;
     const vote = { tiebreakerId: tb.id, matchupId, userId, gameId };
-    if (!(await insertBracketVoteIfOpen(this.db, vote))) {
-      // Duplicate vote (no-op) or the round advanced after the pre-check:
-      // re-run the check so a now-closed matchup surfaces as a 400.
+    // Insert + round advance + finalize in ONE locked transaction: an error
+    // (busy lock, failed matching) leaves no vote behind.
+    const deps = this.finalizeDeps();
+    const result = await castBracketVoteAtomically(deps, vote, lineupId);
+    if (result.winner) {
+      this.logger.log(
+        `Bracket tiebreaker ${tb.id} resolved, winner: ${result.winner}`,
+      );
+    }
+    if (!result.inserted) {
+      // Duplicate vote (no-op), a force-resolve decided the tiebreaker while
+      // this vote waited on the lock, or the round advanced after the
+      // pre-check: surface the decided / now-closed case as a 400.
+      await assertTiebreakerStillActive(this.db, tb.id);
       await assertMatchupVotable(this.db, tb.id, dto.matchupId, dto.gameId);
     }
-
-    // Check if current round is complete and auto-advance
-    await this.checkAndAdvanceRound(tb, lineupId);
 
     const [updated] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     return buildTiebreakerDetail(this.db, updated ?? tb, userId);
@@ -241,30 +252,13 @@ export class TiebreakerService {
     await this.finalize(tb.id, (row, tx) => this.determineWinner(row, tx));
   }
 
-  /**
-   * Advance the bracket once every lineup voter has voted on every open
-   * matchup of the current round (serialized — see tiebreaker-advance).
-   * If the bracket completes, resolve the tiebreaker and transition the
-   * lineup — after the advance transaction has committed.
-   */
-  private async checkAndAdvanceRound(
-    tb: typeof schema.communityLineupTiebreakers.$inferSelect,
-    lineupId: number,
-  ): Promise<void> {
-    const winner = await advanceRoundIfComplete(this.db, tb.id, lineupId);
-    if (!winner) return;
-    const final = await this.finalize(tb.id, () => Promise.resolve(winner));
-    this.logger.log(`Bracket tiebreaker ${tb.id} resolved, winner: ${final}`);
-  }
-
   /** ROK-2098: once-only, repairable resolve → clear → decide. */
   private finalize(tiebreakerId: number, pickWinner: WinnerPicker) {
-    const deps = {
-      db: this.db,
-      logger: this.logger,
-      events: this.eventEmitter,
-    };
-    return finalizeTiebreaker(deps, tiebreakerId, pickWinner);
+    return finalizeTiebreaker(this.finalizeDeps(), tiebreakerId, pickWinner);
+  }
+
+  private finalizeDeps(): TiebreakerDecideDeps {
+    return { db: this.db, logger: this.logger, events: this.eventEmitter };
   }
 
   /**
