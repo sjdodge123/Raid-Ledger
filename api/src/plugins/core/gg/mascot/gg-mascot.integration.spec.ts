@@ -152,10 +152,15 @@ describe('GG mascot API (integration)', () => {
       soundName: 'Wololo',
       volume: 0.8,
     });
-    expect(res.body.imageUrl).toMatch(/^\/uploads\/gg-mascot\/111\.webp\?v=/);
-    expect(res.body.soundUrl).toMatch(/^\/uploads\/gg-mascot\/333\.mp3\?v=/);
+    expect(res.body.imageUrl).toMatch(/^\/uploads\/gg-mascot\/111-webp\?v=/);
+    expect(res.body.soundUrl).toMatch(/^\/uploads\/gg-mascot\/333-mp3\?v=/);
     expect(fs.readFileSync(path.join(MASCOT_DIR, '111.webp'))).toEqual(WEBP);
     expect(fs.readFileSync(path.join(MASCOT_DIR, '333.mp3'))).toEqual(MP3);
+    // Served anonymously from the extensionless URL (prod nginx static regex).
+    await testApp.request
+      .get(res.body.imageUrl)
+      .expect(200)
+      .expect('Content-Type', /image\/webp/);
     const stored = await testApp.app
       .get(SettingsService)
       .get(SETTING_KEYS.GG_MASCOT);

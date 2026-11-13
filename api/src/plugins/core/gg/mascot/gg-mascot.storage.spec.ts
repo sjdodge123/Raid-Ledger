@@ -76,13 +76,35 @@ describe('mascot file names', () => {
     );
   });
   it('maps a stored url back to its file and ignores foreign urls', () => {
-    expect(mascotFileFromUrl('/uploads/gg-mascot/123.png?v=abcd')).toBe(
+    expect(mascotFileFromUrl('/uploads/gg-mascot/123-png?v=abcd')).toBe(
       '123.png',
     );
+    expect(mascotFileFromUrl('/uploads/gg-mascot/123.png?v=abcd')).toBeNull();
     expect(mascotFileFromUrl('/uploads/branding/logo.png')).toBeNull();
     expect(mascotFileFromUrl('/uploads/gg-mascot/../x.png')).toBeNull();
     expect(mascotFileFromUrl(null)).toBeNull();
   });
+});
+
+/** nginx's static-asset regex location (nginx/*.conf) — it wins over `/api/`. */
+const NGINX_STATIC = /\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/i;
+
+describe('mascot urls survive the prod nginx static regex', () => {
+  it.each(['png', 'gif', 'webp', 'mp3', 'ogg'] as const)(
+    'a %s copy url has no file extension nginx would serve from disk',
+    async (ext) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rok-2187-ext-'));
+      process.env.GG_MASCOT_UPLOAD_DIR = dir;
+      try {
+        const url = await writeMascotFile('5', ext, PNG);
+        const urlPath = url.split('?')[0] ?? '';
+        expect(urlPath).not.toMatch(NGINX_STATIC);
+      } finally {
+        delete process.env.GG_MASCOT_UPLOAD_DIR;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe('write + prune', () => {
@@ -97,7 +119,7 @@ describe('write + prune', () => {
 
   it('writes the copy and returns a versioned same-origin url', async () => {
     const url = await writeMascotFile('42', 'png', PNG);
-    expect(url).toMatch(/^\/uploads\/gg-mascot\/42\.png\?v=[a-f0-9]{8}$/);
+    expect(url).toMatch(/^\/uploads\/gg-mascot\/42-png\?v=[a-f0-9]{8}$/);
     expect(fs.readFileSync(path.join(dir, '42.png'))).toEqual(PNG);
   });
   it('removes every copy except the kept ones, leaving foreign files', async () => {

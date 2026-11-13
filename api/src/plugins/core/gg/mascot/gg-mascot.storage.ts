@@ -7,10 +7,13 @@ import * as path from 'path';
  * ROK-2187 — the community GG mascot's same-origin copies: the admin's
  * Discord emoji + soundboard sound, copied at save time so a CDN edit,
  * delete or lost boost never breaks a delivered GG (and CSP has no
- * media-src). Files are `{snowflake}.{ext}` only.
+ * media-src). Files are `{snowflake}.{ext}` only; their URLs use the
+ * extensionless token `{snowflake}-{ext}` because prod nginx's static-asset
+ * regex location (`\.(png|gif|…)$`) outranks `location /api/` and would look
+ * for the file on disk (404). `GgMascotAssetController` serves the token.
  */
 
-/** URL prefix the API serves the copies under (main.ts). */
+/** URL prefix the API serves the copies under (`GgMascotAssetController`). */
 export const GG_MASCOT_URL_PREFIX = '/uploads/gg-mascot/';
 /** Image cap (spec): 256 KB. */
 export const MASCOT_IMAGE_MAX_BYTES = 256 * 1024;
@@ -33,6 +36,7 @@ export const MASCOT_CONTENT_TYPES: Record<MascotExt, string> = {
 
 const SNOWFLAKE = /^\d{1,25}$/;
 const MASCOT_FILE = /^\d{1,25}\.(png|webp|gif|mp3|ogg)$/;
+const MASCOT_TOKEN = /^(\d{1,25})-(png|webp|gif|mp3|ogg)$/;
 
 /** Upload dir: `GG_MASCOT_UPLOAD_DIR` (specs) → prod `/data/uploads/gg-mascot` → dev cwd. */
 export function getGgMascotDir(): string {
@@ -114,7 +118,7 @@ export async function writeMascotFile(
   await fs.promises.writeFile(tmp, buf);
   await fs.promises.rename(tmp, path.join(dir, name));
   const v = createHash('sha256').update(buf).digest('hex').slice(0, 8);
-  return `${GG_MASCOT_URL_PREFIX}${name}?v=${v}`;
+  return `${GG_MASCOT_URL_PREFIX}${id}-${ext}?v=${v}`;
 }
 
 /** Deletes every mascot copy except `keep` (file names). Missing dir = no-op. */
@@ -134,9 +138,23 @@ export async function removeMascotFiles(
   );
 }
 
-/** File name of a stored mascot URL (`/uploads/gg-mascot/1.png?v=…` → `1.png`). */
+/** A served copy: its on-disk file name and Content-Type. */
+export interface MascotServedFile {
+  name: string;
+  contentType: string;
+}
+
+/** URL token → stored file (`1-png` → `1.png`, image/png); `null` if malformed. */
+export function mascotFileFromToken(token: string): MascotServedFile | null {
+  const m = MASCOT_TOKEN.exec(token);
+  if (!m?.[1] || !m[2]) return null;
+  const ext = m[2] as MascotExt;
+  return { name: `${m[1]}.${ext}`, contentType: MASCOT_CONTENT_TYPES[ext] };
+}
+
+/** File name of a stored mascot URL (`/uploads/gg-mascot/1-png?v=…` → `1.png`). */
 export function mascotFileFromUrl(url: string | null): string | null {
   if (!url?.startsWith(GG_MASCOT_URL_PREFIX)) return null;
-  const name = url.slice(GG_MASCOT_URL_PREFIX.length).split('?')[0] ?? '';
-  return MASCOT_FILE.test(name) ? name : null;
+  const token = url.slice(GG_MASCOT_URL_PREFIX.length).split('?')[0] ?? '';
+  return mascotFileFromToken(token)?.name ?? null;
 }
