@@ -65,6 +65,9 @@ import { HubNotificationService } from './hub-notification.service';
     HubNotificationService,
   ],
   exports: [
+    // Re-exports the DISCORD_NOTIFICATION_QUEUE registration so AdminModule's
+    // DEMO_MODE deactivation controller injects this one, not a second copy.
+    BullModule,
     HubNotificationService,
     NotificationService,
     NotificationDedupService,
