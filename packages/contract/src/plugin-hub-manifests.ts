@@ -150,7 +150,8 @@ const blizzard = {
     { id: 'raids', label: 'Raids' },
     // ROK-1790 — the guild crafters directory (a `registerHubGameTab` game tab).
     { id: 'crafters', label: 'Crafters' },
-    { id: 'progression', label: 'Progression', planned: true },
+    // ROK-1789 Part B — the Forever Progression tab (see-all of Raid progress).
+    { id: 'progression', label: 'Progression' },
     { id: 'loot', label: 'Loot', planned: true },
   ],
   behaviours: [

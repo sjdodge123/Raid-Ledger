@@ -197,24 +197,43 @@ export async function loadRewardItemLookup(): Promise<
 
 type LootRewardRow = EnrichedQuestReward & { expansion: string };
 
+/** Copy `extra`'s values into the nullable fields `base` leaves null. */
+function fillNullFields(
+  base: EnrichedQuestReward,
+  extra: EnrichedQuestReward,
+): void {
+  base.slot ??= extra.slot;
+  base.itemLevel ??= extra.itemLevel;
+  base.iconUrl ??= extra.iconUrl;
+  base.itemSubclass ??= extra.itemSubclass;
+}
+
 /**
- * ROK-2170: one loot row per item id. Classic variants drop `forever` rows;
- * under Forever a `forever` row wins over any other row, whatever DB order.
+ * ROK-2170: one loot item per item id. Classic variants drop `forever` rows;
+ * under Forever a `forever` row's values win over any other row, whatever DB
+ * order. Later rows of the same item fill the fields the winner leaves null.
  */
 export function pickLootRows(
   rows: LootRewardRow[],
   preferForever: boolean,
 ): EnrichedQuestReward[] {
-  const picked = new Map<number, LootRewardRow>();
-  for (const row of rows) {
-    const isForever = row.expansion === 'forever';
-    if (isForever && !preferForever) continue;
+  const isForever = (row: LootRewardRow): boolean =>
+    row.expansion === 'forever';
+  const ordered = rows
+    .filter((row) => preferForever || !isForever(row))
+    .sort((a, b) => Number(isForever(b)) - Number(isForever(a)));
+  const picked = new Map<number, EnrichedQuestReward>();
+  for (const row of ordered) {
     const held = picked.get(row.itemId);
-    if (!held || (isForever && held.expansion !== 'forever')) {
-      picked.set(row.itemId, row);
-    }
+    if (held) fillNullFields(held, row);
+    else picked.set(row.itemId, toReward(row));
   }
-  return [...picked.values()].map((row) => ({
+  return [...picked.values()];
+}
+
+/** Strip the loot row's `expansion` so only reward fields remain. */
+function toReward(row: LootRewardRow): EnrichedQuestReward {
+  return {
     itemId: row.itemId,
     itemName: row.itemName,
     quality: row.quality,
@@ -222,7 +241,7 @@ export function pickLootRows(
     itemLevel: row.itemLevel,
     iconUrl: row.iconUrl,
     itemSubclass: row.itemSubclass,
-  }));
+  };
 }
 
 /** Merge loot table rows into the item details map, filling gaps. */
