@@ -102,20 +102,26 @@ EXEC_MANIFEST=(
 # records the answer: every path the index stores as mode 100755. The runner's
 # /workspace/.git is scaffolded by cli/rl::scaffold_runner_git with
 # `reset --mixed FETCH_HEAD`, so its index carries the commit's modes, not the
-# synced 0644 ones. No git, no .git, or an empty index adds nothing and the
-# static manifest above still applies on its own.
+# synced 0644 ones. That index can be stale relative to the synced tree (it is
+# whatever the last scaffold reset to): a stale entry can only over-chmod a file
+# that is still present (harmless) or miss a NEW executable, which the static
+# manifest still covers. No git, no .git, or an empty index adds nothing and the
+# static manifest above still applies on its own. `-z` keeps non-ASCII paths
+# unquoted (without it git C-quotes them and the -f test skips them).
 collect_git_exec_files() {
-    local root="$1" path f seen
+    local root="$1" rec path f seen
     command -v git >/dev/null 2>&1 || return 0
     seen=$'\n'"$(printf '%s\n' "${MATCHED_FILES[@]+"${MATCHED_FILES[@]}"}")"$'\n'
-    while IFS= read -r path; do
+    # Each NUL-terminated record is "<mode> <sha> <stage>\t<path>".
+    while IFS= read -r -d '' rec; do
+        [[ "${rec%% *}" == 100755 ]] || continue
+        path="${rec#*$'\t'}"
         f="$root/$path"
         [[ -n "$path" && -f "$f" ]] || continue
         [[ "$seen" == *$'\n'"$f"$'\n'* ]] && continue
         MATCHED_FILES+=("$f")
         seen+="$f"$'\n'
-    done < <(git -C "$root" -c safe.directory="$root" ls-files -s 2>/dev/null \
-        | awk -F'\t' '{ split($1, m, " "); if (m[1] == "100755") print $2 }')
+    done < <(git -C "$root" -c safe.directory="$root" ls-files -s -z 2>/dev/null)
 }
 
 usage() {
