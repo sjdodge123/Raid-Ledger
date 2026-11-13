@@ -446,9 +446,10 @@ describe('EventDetailPage — planned temporary voice channel (operator ruling 2
 
     it('shows the planned channel name and when it opens, not a link', async () => {
         renderEventDetailPage({}, { channelId: null, channelName: '⏰ Stocks 5 man', guildId: null, plannedOpensAt: '2026-08-10T20:30:00.000Z' });
-        const voice = await screen.findByTestId('event-banner-voice-channel', {}, { timeout: 4000 });
-        expect(voice).toHaveTextContent('🔊 ⏰ Stocks 5 man · opens 8:30 PM');
-        expect(within(voice).queryByRole('link')).not.toBeInTheDocument();
+        const heading = await screen.findByRole('heading', { name: FIXTURE_TITLE }, { timeout: 4000 });
+        const bannerContent = heading.parentElement;
+        expect(bannerContent).toHaveTextContent('🔊 ⏰ Stocks 5 man · opens 8:30 PM');
+        expect(within(screen.getByTestId('event-banner-voice-channel')).queryByRole('link')).not.toBeInTheDocument();
     });
 
     it('shows a created channel by name with no "opens" suffix', async () => {
