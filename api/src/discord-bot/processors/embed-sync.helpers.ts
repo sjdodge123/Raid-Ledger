@@ -272,8 +272,8 @@ async function enrichWithPlannedVoice(
   const planned = await plannedVoiceForEmbed(settings, eventData, {
     channelId: event.ephemeralVoiceChannelId,
     enabled: event.ephemeralVoiceEnabled,
-    cancelled: event.cancelledAt !== null,
-    rescheduling: event.reschedulingPollId !== null,
+    cancelled: (event.cancelledAt ?? null) !== null,
+    rescheduling: (event.reschedulingPollId ?? null) !== null,
   });
   if (!planned) return false;
   eventData.plannedVoiceChannel = planned;

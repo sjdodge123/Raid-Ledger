@@ -108,6 +108,9 @@ describe('EmbedPosterService — event deleted mid-post (ROK-1511)', () => {
       {
         provide: SettingsService,
         useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
           getBranding: jest
             .fn()
             .mockResolvedValue({ communityName: 'Test Guild' }),

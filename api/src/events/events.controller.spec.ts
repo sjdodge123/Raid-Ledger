@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { SettingsService } from '../settings/settings.service';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsSignupsController } from './events-signups.controller';
@@ -144,6 +145,14 @@ describe('EventsController', () => {
       {
         provide: DiscordBotClientService,
         useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
+        },
       },
       {
         provide: ActivityLogService,

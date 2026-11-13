@@ -42,6 +42,9 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
       {
         provide: SettingsService,
         useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
           getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
         },
       },
