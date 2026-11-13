@@ -33,6 +33,7 @@ import { raidProgressWidget } from './hub-widgets/raid-progress.register';
 import { WOW_FOREVER_GAME_SLUG } from './lib/forever-identity';
 import { registerReadyCheckWidget } from './hub-widgets/ready-check.register';
 import { guildTextWidget } from './hub-widgets/guild-text.register';
+import { recruitmentWidget } from './hub-widgets/recruitment.register';
 import { contributionsWidget } from './hub-widgets/contributions.register';
 import { attunementsWidget } from './hub-widgets/attunements.register';
 import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
@@ -79,6 +80,8 @@ blizzard.registerHubWidget(lastSeenWidget);
 blizzard.registerHubWidget(gearReadinessWidget);
 blizzard.registerHubWidget(raidProgressWidget);
 blizzard.registerHubWidget(guildTextWidget);
+// ROK-1789 — the Forever guild "Recruitment" Overview card (order 14).
+blizzard.registerHubWidget(recruitmentWidget);
 blizzard.registerHubWidget(contributionsWidget);
 // ROK-1927 — the members-only "Attunements" Overview card (order 90).
 blizzard.registerHubWidget(attunementsWidget);

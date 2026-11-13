@@ -3,6 +3,7 @@
  * `POST /admin/test/wow/seed-guild` fixture (`demo-test-guild.controller.ts`),
  * split out so the controller stays under the max-lines limit (ROK-1917).
  */
+import type { GuildRecruitment } from '@raid-ledger/contract';
 import { defined } from '../common/defined.helpers';
 import type { SeedGuildRole } from './demo-test-guild.helpers';
 import type { SeededGuildRaids } from './demo-test-guild-raids.helpers';
@@ -17,6 +18,7 @@ import type { SeededGuildPresence } from './demo-test-guild-presence.helpers';
 import type { SeededArmorySnapshots } from './demo-test-guild-armory.helpers';
 import type { SeededGuildPulls } from './demo-test-guild-pulls.helpers';
 import type { SeededInstalledAddons } from './demo-test-guild-installed-addons.helpers';
+import type { SeededGuildActivity } from './demo-test-guild-activity.helpers';
 
 export interface RosterCtx {
   guildId: number;
@@ -65,6 +67,12 @@ export interface SeedGuildResponse {
   installedAddons?: SeededInstalledAddons;
   /** Present only when the body sent `withArmorySnapshots: true` (ROK-2149). */
   armorySnapshots?: SeededArmorySnapshots;
+  /** Present only when the body sent `withRecruitment: true` (ROK-1789). */
+  recruitment?: GuildRecruitment;
+  /** ROK-1789 B9: `memberCount` filler roster rows (roster-only, no RL user); [] by default. */
+  fillerMemberIds: number[];
+  /** Present only when the body sent `withActivity: true` (ROK-1789 B9). */
+  activity?: SeededGuildActivity;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
@@ -78,6 +86,8 @@ export type SeedGuildExtras = Pick<
   | 'pulls'
   | 'installedAddons'
   | 'armorySnapshots'
+  | 'recruitment'
+  | 'activity'
 >;
 
 export interface SeededRoster {
