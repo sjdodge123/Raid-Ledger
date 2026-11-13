@@ -40,7 +40,7 @@ import type { SmokeTest, TestContext } from '../types.js';
 // ---------------------------------------------------------------------------
 
 /** Set the global ephemeral-voice config (admin). */
-async function setEphemeralVoiceConfig(
+export async function setEphemeralVoiceConfig(
   api: ApiClient,
   cfg: {
     enabled: boolean;
@@ -53,7 +53,7 @@ async function setEphemeralVoiceConfig(
 }
 
 /** Force the create-window scheduler scan — DEMO_MODE only. */
-async function forceEphemeralScan(api: ApiClient): Promise<void> {
+export async function forceEphemeralScan(api: ApiClient): Promise<void> {
   await api.post('/admin/test/ephemeral-voice/scan', {});
 }
 
@@ -63,7 +63,7 @@ async function forceEphemeralReap(api: ApiClient): Promise<void> {
 }
 
 /** Read an event's live ephemeral channel id (null when none). */
-async function getEphemeralChannelId(
+export async function getEphemeralChannelId(
   api: ApiClient,
   eventId: number,
 ): Promise<string | null> {
@@ -79,7 +79,7 @@ async function getEphemeralChannelId(
  * GUILD_CATEGORY and prefer the voice category. ctx.voiceChannels[0] is a
  * voice channel, NOT a category, so it is not a valid parent. ROK-1352.
  */
-async function resolveCategoryId(ctx: TestContext): Promise<string> {
+export async function resolveCategoryId(ctx: TestContext): Promise<string> {
   let categoryId = process.env.SMOKE_EPHEMERAL_CATEGORY_ID;
   if (!categoryId) {
     const cats = await ctx.api
@@ -102,7 +102,7 @@ async function resolveCategoryId(ctx: TestContext): Promise<string> {
  * the library games list — matches voice-activity.test.ts — so the test is
  * seed-robust and passes in CI. ROK-1352.
  */
-async function resolveGameId(ctx: TestContext): Promise<number> {
+export async function resolveGameId(ctx: TestContext): Promise<number> {
   let gameId = ctx.games[0]?.id;
   if (!gameId) {
     const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
@@ -209,7 +209,7 @@ async function assertIdleDestroyed(
  * a cleanup failure must not replace the test's real failure, and the
  * companion bot may lack Manage Channels.
  */
-async function reportOrphanChannel(channelId: string): Promise<void> {
+export async function reportOrphanChannel(channelId: string): Promise<void> {
   // force: ask Discord itself, not the gateway cache — a CHANNEL_DELETE the
   // companion bot has not processed yet would otherwise read as a survivor.
   // getGuild() sits inside the async callback so its synchronous throw (no
