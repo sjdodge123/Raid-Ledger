@@ -46,14 +46,20 @@ export interface SeededGuildPulls {
 }
 
 const MIN = 60_000;
-const DIFFICULTY_40 = 9;
+/** Classic 40-player raid difficulty. */
+export const DIFFICULTY_40 = 9;
+/** ROK-1789 B9: Molten Core's map id, carried on every base pull (`instance_id`). */
+export const SEED_MC_INSTANCE_ID = 409;
 
-interface PullSpec {
+/** One seeded pull; `instanceId` defaults to Molten Core, null = unknown map. */
+export interface PullSpec {
   encounterId: number;
   name: string;
   offsetMs: number;
   success: boolean;
   by: keyof SeedPullReporters;
+  difficultyId?: number;
+  instanceId?: number | null;
 }
 
 const PULLS: readonly PullSpec[] = [
@@ -104,29 +110,38 @@ export const SEEDED_GUILD_PULLS: SeededGuildPulls = {
   pullCount: 4,
 };
 
+/** One pull row `offsetMs` after `anchorMs`; `key` makes its payload hash unique (pure). */
+export function buildPullRow(
+  input: SeedPullsInput,
+  p: PullSpec,
+  anchorMs: number,
+  key: string,
+): PullInsert {
+  const startAt = new Date(anchorMs + p.offsetMs);
+  return {
+    gameId: input.gameId,
+    region: SEED_GUILD_REGION,
+    encounterId: p.encounterId,
+    encounterName: p.name,
+    difficultyId: p.difficultyId ?? DIFFICULTY_40,
+    instanceId: p.instanceId === undefined ? SEED_MC_INSTANCE_ID : p.instanceId,
+    groupSize: 40,
+    startAt,
+    endAt: new Date(startAt.getTime() + 3 * MIN),
+    success: p.success,
+    roster: [],
+    guildKey: input.guildKey,
+    reportedByUserId: input.reporters[p.by],
+    payloadSha256: createHash('sha256')
+      .update(`${key}:${input.guildKey}`)
+      .digest('hex'),
+  };
+}
+
 /** The pull rows, starting two days before `now` (pure). */
 export function seedPullRows(input: SeedPullsInput): PullInsert[] {
   const anchor = input.now.getTime() - 2 * 24 * 60 * MIN;
-  return PULLS.map((p, i) => {
-    const startAt = new Date(anchor + p.offsetMs);
-    return {
-      gameId: input.gameId,
-      region: SEED_GUILD_REGION,
-      encounterId: p.encounterId,
-      encounterName: p.name,
-      difficultyId: DIFFICULTY_40,
-      groupSize: 40,
-      startAt,
-      endAt: new Date(startAt.getTime() + 3 * MIN),
-      success: p.success,
-      roster: [],
-      guildKey: input.guildKey,
-      reportedByUserId: input.reporters[p.by],
-      payloadSha256: createHash('sha256')
-        .update(`seed-pull:${input.guildKey}:${i}`)
-        .digest('hex'),
-    };
-  });
+  return PULLS.map((p, i) => buildPullRow(input, p, anchor, `seed-pull:${i}`));
 }
 
 /** Replace the guild's pulls with the seeded set. */

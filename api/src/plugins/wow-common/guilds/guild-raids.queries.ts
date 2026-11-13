@@ -48,7 +48,8 @@ const at = (d: Date): SQL => sql`${d.toISOString()}::timestamp`;
 const ends = sql`upper(${events.duration})`;
 const starts = sql`lower(${events.duration})`;
 
-function guildEvents(guildId: number): SQL | undefined {
+/** Tagged to the guild, not cancelled, not a rescheduling placeholder (exported for ROK-1789's activity feed). */
+export function guildEvents(guildId: number): SQL | undefined {
   return and(
     eq(events.guildId, guildId),
     isNull(events.cancelledAt),
@@ -57,7 +58,7 @@ function guildEvents(guildId: number): SQL | undefined {
 }
 
 /** Ended at or before `now`, within the window starting at `since`. */
-function endedBetween(since: Date, now: Date): SQL {
+export function endedBetween(since: Date, now: Date): SQL {
   return sql`${ends} <= ${at(now)} and ${ends} > ${at(since)}`;
 }
 
