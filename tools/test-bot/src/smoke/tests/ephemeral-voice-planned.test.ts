@@ -240,7 +240,7 @@ async function teardown(
     (await getEphemeralChannelId(ctx.api, eventId).catch(() => null));
   await deleteEvent(ctx.api, eventId).catch(() => undefined);
   if (liveId) await reportOrphanChannel(liveId);
-  if (seId) await reportOrphanSe(seId);
+  if (seId) await reportOrphanSe(ctx, seId);
   await setEphemeralVoiceConfig(ctx.api, {
     enabled: false,
     categoryId: null,
@@ -248,8 +248,19 @@ async function teardown(
   await releaseScheduledEvents(ctx.api);
 }
 
-/** Warn + best-effort delete an SE that survived the event delete. */
-async function reportOrphanSe(seId: string): Promise<void> {
+/**
+ * Warn + best-effort delete an SE that survived the event delete. The product
+ * deletes the SE asynchronously after the event row goes, so wait for it to
+ * disappear before calling it a survivor (an immediate check misfired on a
+ * fleet run: the SE was gone a minute later). Never throws.
+ */
+async function reportOrphanSe(ctx: TestContext, seId: string): Promise<void> {
+  const gone = await pollForCondition(
+    async () => ((await fetchSe(seId)) === null ? true : null),
+    ctx.config.timeoutMs,
+    { intervalMs: 2000 },
+  ).catch(() => false);
+  if (gone) return;
   const se = await getGuild()
     .scheduledEvents.fetch({ guildScheduledEvent: seId, force: true })
     .catch(() => null);
