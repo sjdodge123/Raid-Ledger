@@ -169,9 +169,12 @@ function onlineSlider(filters: Locator): Locator {
  * input events React listens for. `minPlayers: 0` therefore clears it.
  */
 async function setOnlineMin(page: Page, filters: Locator, minPlayers: number): Promise<void> {
-    await onlineSlider(filters).focus();
+    const slider = onlineSlider(filters);
+    await slider.focus();
+    await expect(slider).toBeFocused();
     await page.keyboard.press('Home');
     for (let i = 0; i < minPlayers; i++) await page.keyboard.press('ArrowRight');
+    await expect(slider, `the Online co-op slider is set to ${minPlayers}`).toHaveValue(String(minPlayers));
 }
 
 /** Open, set, and close again so the results underneath are clickable. */
