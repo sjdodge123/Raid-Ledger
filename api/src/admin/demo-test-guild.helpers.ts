@@ -60,6 +60,8 @@ export interface SeedGuildInput extends SeedGuildSummaryOverrides {
   withInstalledAddons: boolean;
   /** ROK-2149: Armory snapshots on the unlinked roster rows (member page). */
   withArmorySnapshots: boolean;
+  /** ROK-1789: also seed guild recruitment (one row per state + Apply URL). */
+  withRecruitment: boolean;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
   /** ROK-2132: appended to every roster name, so parallel claim specs never share one ('' = none). */

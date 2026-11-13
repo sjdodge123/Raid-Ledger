@@ -143,6 +143,8 @@ const blizzard = {
     { id: 'forever-attunements', title: 'Attunements', description: 'Who is attuned to each raid, and who is still working through the chain.', layoutKey: 'plugin' },
     // ROK-2151 — the staff non-member claim banner (chrome-less, order 5).
     { id: 'forever-claim-banner', title: 'Claim your character', description: 'Asks staff who are not guild members to claim their character.', layoutKey: 'plugin' },
+    // ROK-1789 — the Forever guild Recruitment card (order 14).
+    { id: 'forever-recruitment', title: 'Recruitment', description: 'Whether the guild is recruiting, which classes and roles it wants, and where to apply.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
