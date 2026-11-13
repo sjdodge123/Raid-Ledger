@@ -10,7 +10,7 @@ import type { WowProgressionInstanceDto } from '@raid-ledger/contract';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { ProgressionBossRow } from './progression-boss-row';
-import { shortDate } from './progression.helpers';
+import { formatShortDate } from '../lib/short-date';
 
 type Instance = WowProgressionInstanceDto;
 
@@ -41,7 +41,7 @@ export function ProgressionInstance({ instance }: { instance: Instance }): JSX.E
             )}
             {instance.latestKill !== null && (
                 <p data-testid="progression-latest-kill" className="text-xs text-muted">
-                    Latest kill: {instance.latestKill.name} · {shortDate(instance.latestKill.at)}
+                    Latest kill: {instance.latestKill.name} · {formatShortDate(instance.latestKill.at)}
                 </p>
             )}
             <ul aria-label={`${instance.name} bosses`} className="mt-1 divide-y divide-edge border-t border-edge">

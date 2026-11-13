@@ -12,8 +12,8 @@ import type {
 } from '@raid-ledger/contract';
 
 export const GUILD_PROGRESSION_URL = 'http://localhost:3000/plugins/wow/guilds/:id/progression';
-export const PROGRESSION_NOV_6 = '2026-11-06T21:30:00.000Z';
-export const PROGRESSION_NOV_10 = '2026-11-10T22:00:00.000Z';
+export const PROGRESSION_NOV_6 = '2026-11-06T12:00:00.000Z';
+export const PROGRESSION_NOV_10 = '2026-11-10T12:00:00.000Z';
 
 /** One boss row: killed once on Nov 6 at 40-player, last pulled Nov 10. */
 export function buildProgressionBoss(name: string, over: Partial<WowProgressionBossDto> = {}): WowProgressionBossDto {

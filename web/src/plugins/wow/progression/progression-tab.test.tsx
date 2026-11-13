@@ -39,6 +39,9 @@ describe('ProgressionTab', () => {
         renderWithProviders(<ProgressionTab {...ctx()} />);
         const headings = await screen.findAllByRole('heading', { level: 3 });
         expect(headings.map((h) => h.textContent)).toEqual(['Molten Core', 'Other bosses']);
+        expect(screen.getByRole('heading', { level: 2, name: 'Raid progression' })).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Raid progression' })).toBe(screen.getByTestId('progression-instances'));
+        expect(screen.getByRole('complementary', { name: 'Activity feed' })).toBe(screen.getByTestId('progression-feed'));
         expect(screen.getByTestId('progression-feed')).toContainElement(screen.getByTestId('activity-feed-stub'));
         expect(screen.getByTestId('wow-progression-tab')).toHaveClass('lg:grid');
     });

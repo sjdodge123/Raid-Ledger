@@ -5,6 +5,7 @@
  */
 import { lazy, Suspense, type JSX } from 'react';
 import type { HubCtx } from '../../hub-module';
+import { ProgressionSkeleton } from '../progression/progression-skeleton';
 import { GuildRaidsTab } from './raids-tab';
 
 /** ROK-1789 Part B — the Progression tab body is its own chunk. */
@@ -16,7 +17,7 @@ export function WowRaidsTab({ page, raids }: HubCtx): JSX.Element {
 
 /** ROK-1789 Part B — the Forever guild's Progression tab (instances + activity feed). */
 export function WowProgressionTab({ page }: HubCtx): JSX.Element {
-    return <Suspense fallback={<div aria-busy="true" className="h-64 animate-pulse rounded-lg border border-edge bg-panel" />}><ProgressionTab page={page} /></Suspense>;
+    return <Suspense fallback={<ProgressionSkeleton />}><ProgressionTab page={page} /></Suspense>;
 }
 
 /** A tab declared for the frame but not yet filled — never rendered (`visible: () => false`). */

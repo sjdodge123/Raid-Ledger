@@ -15,8 +15,3 @@ export function progressionTabVisible({ page }: { page: Pick<GuildPage, 'guild' 
     if (!isWowForeverSlug(page.guild.gameSlug)) return false;
     return audienceAllows('members', page.viewer) || page.viewer.isStaff === true;
 }
-
-/** "Nov 10" in the viewer's locale. */
-export function shortDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}

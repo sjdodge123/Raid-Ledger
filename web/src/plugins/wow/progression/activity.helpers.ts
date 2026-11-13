@@ -81,8 +81,3 @@ export function entryText(entry: WowGuildActivityEntryDto): string {
             return milestoneText(entry);
     }
 }
-
-/** "Nov 10" in the viewer's locale (the raid-progress widget's date style). */
-export function formatActivityDate(at: string): string {
-    return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}

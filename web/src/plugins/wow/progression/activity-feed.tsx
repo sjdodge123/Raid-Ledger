@@ -16,8 +16,9 @@ import { StatusChip } from '../../../components/ui/status-chip';
 import { ShowAllToggle } from '../components/show-all-toggle';
 import { useRowCap } from '../hooks/use-row-cap';
 import {
-    ACTIVITY_EMPTY_COPY, ACTIVITY_FOOTER_COPY, KIND_META, entryActor, entryText, formatActivityDate,
+    ACTIVITY_EMPTY_COPY, ACTIVITY_FOOTER_COPY, KIND_META, entryActor, entryText,
 } from './activity.helpers';
+import { formatShortDate } from '../lib/short-date';
 
 function ActivityRow({ entry }: { entry: WowGuildActivityEntryDto }): JSX.Element {
     const meta = KIND_META[entry.kind];
@@ -27,7 +28,7 @@ function ActivityRow({ entry }: { entry: WowGuildActivityEntryDto }): JSX.Elemen
             className="flex flex-col gap-1 border-l-2 border-edge-strong py-0.5 pl-3">
             <div className="flex flex-wrap items-center gap-2">
                 <StatusChip tone={meta.tone} title={meta.label}>{meta.label}</StatusChip>
-                <time dateTime={entry.at} className="text-xs text-muted">{formatActivityDate(entry.at)}</time>
+                <time dateTime={entry.at} className="text-xs text-muted">{formatShortDate(entry.at)}</time>
             </div>
             <p data-testid="guild-activity-text" className="text-sm text-secondary">
                 {actor && <CharacterLink name={actor.name} characterId={actor.characterId} />}
@@ -51,7 +52,7 @@ function ActivityList({ entries }: { entries: WowGuildActivityDto['entries'] }):
 }
 
 /** The activity card; LB6's Progression tab renders it in the right column (stacked below 1024px). */
-export function ActivityFeed({ activity }: { activity: WowGuildActivityDto }): JSX.Element | null {
+export function ActivityFeed({ activity }: { activity: WowGuildActivityDto }): JSX.Element {
     const { entries } = activity;
     const titleId = useId();
     return (
