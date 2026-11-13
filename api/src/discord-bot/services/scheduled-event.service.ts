@@ -42,6 +42,7 @@ import {
   type SECompletionRun,
 } from './scheduled-event.completion';
 import { completeAndSweep } from './scheduled-event.embed-completion';
+import { plannedSELocation } from './scheduled-event.planned-voice';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -189,6 +190,7 @@ export class ScheduledEventService {
             : {}),
           channelResolver: this.channelResolver,
           describe: (id, data) => desc(this.settingsService, id, data),
+          plannedVoiceSettings: this.settingsService,
         },
         cache,
       );
@@ -319,7 +321,10 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
   ): Promise<void> {
-    const d = await desc(this.settingsService, eventId, eventData);
+    const s = this.settingsService;
+    const d = await desc(s, eventId, eventData);
+    // A planned temporary channel keeps the SE External (2026-11-13).
+    const loc = await plannedSELocation(this.db, s, eventId, eventData);
     const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
     const name = await resolveEditedScheduledEventName(event, eventData, () =>
       this.settingsService.getDefaultTimezone(),
@@ -331,7 +336,7 @@ export class ScheduledEventService {
         event.discordScheduledEventId!,
         eventData,
         d,
-        vc,
+        loc ? { location: loc } : vc,
         name,
       );
     } catch (err) {

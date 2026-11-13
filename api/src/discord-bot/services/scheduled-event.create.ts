@@ -2,7 +2,11 @@ import type { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
-import { resolveVoiceForCreate } from './scheduled-event.db-helpers';
+import {
+  resolveCreatePlace,
+  type SEPlace,
+} from './scheduled-event.planned-voice';
+import type { PlannedVoiceSettingsSource } from './planned-ephemeral-voice.helpers';
 import {
   getEventLiveState,
   saveScheduledEventId,
@@ -47,6 +51,8 @@ export interface CreatePreamble {
   voiceChannelOverride?: string | null;
   channelResolver: VoiceChannelResolver;
   describe: (eventId: number, eventData: ScheduledEventData) => Promise<string>;
+  /** Set → a planned temporary channel makes an External SE (2026-11-13). */
+  plannedVoiceSettings?: PlannedVoiceSettingsSource;
 }
 
 /** Generous bound for the guild-wide SE fetch (see GuildSECache.get). */
@@ -117,14 +123,8 @@ export async function createScheduledEventIdempotent(
   const guarded = await applyCreateEntryGuard(db, logger, eventId, eventData);
   if (!guarded) return;
   eventData = guarded;
-  const vc = await resolveVoiceForCreate(
-    db,
-    eventId,
-    preamble.gameId,
-    preamble.voiceChannelOverride,
-    preamble.channelResolver,
-  );
-  if (!vc) {
+  const place = await resolveCreatePlace(db, eventId, eventData, preamble);
+  if (!place) {
     logger.warn(`Skip SE ${eventId}: no voice channel`);
     return;
   }
@@ -148,7 +148,7 @@ export async function createScheduledEventIdempotent(
         logger,
         eventId,
         eventData,
-        vc,
+        place,
         description,
         seCache,
       }),
@@ -198,7 +198,7 @@ interface CreateAttempt {
   logger: Logger;
   eventId: number;
   eventData: ScheduledEventData;
-  vc: string;
+  place: SEPlace;
   description: string;
   seCache: GuildSECache;
 }
@@ -207,14 +207,15 @@ interface CreateAttempt {
  *  slowly) re-fetch and adopt by title+start instead of letting the next tick
  *  create a duplicate (ROK-1347). */
 async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
-  const { guild, db, logger, eventId, eventData, vc, description, seCache } = a;
+  const { guild, db, logger, eventId, eventData, place, description, seCache } =
+    a;
   let seId: string;
   try {
     const se = await tryCreateNewEvent(
       guild,
       eventId,
       eventData,
-      vc,
+      place,
       description,
     );
     seId = se.id;
