@@ -15,6 +15,7 @@ import { toast } from '../../../lib/toast';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import { useGuildBlizzardRoster, useSetBlizzardRosterSlug, useSyncBlizzardRoster } from '../hooks/use-guild-blizzard-roster';
 import { blizzardRosterStatusLine } from './blizzard-roster-status';
+import { BLIZZARD_ROSTER_SETTINGS_SECTION } from './blizzard-roster-section-id';
 
 const BLURB = 'Read the member list from Blizzard instead of LedgerLink exports.';
 
@@ -25,7 +26,7 @@ export function BlizzardRosterSection({ page }: HubCtx): JSX.Element | null {
     const query = useGuildBlizzardRoster(guild.id, forever);
     if (!forever || query.data === undefined) return null;
     return (
-        <SettingsSection title="Blizzard roster" blurb={BLURB} testId="wow-blizzard-roster-section">
+        <SettingsSection title="Blizzard roster" blurb={BLURB} testId="wow-blizzard-roster-section" sectionId={BLIZZARD_ROSTER_SETTINGS_SECTION}>
             <StatusLine roster={query.data} />
             {viewer.canEdit
                 ? <SlugEditor guildId={guild.id} roster={query.data} />

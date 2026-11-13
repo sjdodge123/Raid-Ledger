@@ -112,6 +112,16 @@ describe('tab-id collisions — core and module tabs win over game tabs', () => 
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('"map"'));
     });
 
+    it('warns once per collided id, not on every rebuild of the band (ROK-1790)', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const withDocs: HubModule = { ...withMap, tabs: [tab({ id: 'docs', label: 'Module docs', order: 50 })] };
+        registerPlugin('valheim', { icon: 'x', color: 'c', label: 'Valheim' }).registerHubGameTab(['valheim'], tab({ id: 'docs' }));
+        hubModuleTabs(withDocs);
+        hubModuleTabs(withDocs);
+        const docsWarnings = warn.mock.calls.filter(([msg]) => String(msg).includes('"docs"'));
+        expect(docsWarnings, 'the collision warning repeated on a second band rebuild').toHaveLength(1);
+    });
+
     it('drops a game tab named like a core tab, and a second plugin’s duplicate id', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         registerPlugin('valheim', { icon: 'x', color: 'c', label: 'Valheim' }).registerHubGameTab(['valheim'], tab({ id: 'members' }));

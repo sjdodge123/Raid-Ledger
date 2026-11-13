@@ -2667,14 +2667,32 @@ run_default_gate() {
 # ---------------------------------------------------------------------------
 SCOPED_TARGETS=""
 
+# Bring origin/main up to date before the merge-base diff (ROK-2182): a
+# runner's checkout can lag, and a stale base widens the "committed" set with
+# main's own commits. Quiet and best-effort — offline or no remote leaves the
+# ref as it was, and run_scoped_gate still fails closed if it does not resolve.
+_scoped_refresh_base() {
+  # Never hang the gate: no prompts, abort a stalled HTTPS transfer after 20 s
+  # under 1 KB/s, and fail fast on SSH remotes (review MINOR, ROK-2182).
+  GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=20 \
+    GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh} -o BatchMode=yes -o ConnectTimeout=10" \
+    git fetch --quiet origin main >/dev/null 2>&1 || true
+}
+
 # The branch's own changes: merge-base diff + uncommitted + untracked files.
 # --no-renames: a rename lists BOTH paths, so moving a file out of
 # packages/contract/** still escalates. Any git failure returns non-zero —
 # the caller refuses rather than planning from a partial file list.
+# The uncommitted leg ignores mode-only changes (core.fileMode=false,
+# ROK-2182): Mutagen lands synced files at 0644, so every tracked 100755 file
+# outside restore-exec-bits.sh's manifest would otherwise read as "changed".
+# Set through GIT_CONFIG_* rather than `git -c` so `diff` stays $1 for the
+# scripts/test git stubs. Committed (tree-to-tree) mode changes still count.
 _scoped_changed_files() {
   local committed uncommitted untracked
   committed=$(git diff --no-renames --name-only origin/main...HEAD) || return 1
-  uncommitted=$(git diff --no-renames --name-only HEAD) || return 1
+  uncommitted=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fileMode GIT_CONFIG_VALUE_0=false \
+    git diff --no-renames --name-only HEAD) || return 1
   untracked=$(git ls-files --others --exclude-standard) || return 1
   printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | sort -u
 }
@@ -2740,6 +2758,7 @@ run_scoped_lint() {
 
 run_scoped_gate() {
   local files plan rc=0
+  _scoped_refresh_base
   # Fail closed, like scripts/smoke/surface-hash.sh: without the base the plan
   # would see only uncommitted files and could vouch for a contract/web commit.
   if ! git rev-parse --verify -q 'origin/main^{commit}' >/dev/null; then
