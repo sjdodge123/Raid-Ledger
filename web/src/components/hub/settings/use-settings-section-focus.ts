@@ -11,7 +11,8 @@ import { useEffect } from 'react';
 /** The attribute `SettingsSection` stamps from its `sectionId`. */
 export const SETTINGS_SECTION_ATTR = 'data-settings-section';
 
-const FIELD = 'input, select, textarea';
+/** A real field: never a hidden input or a disabled control. */
+const FIELD = 'input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])';
 const FOCUSABLE = 'button, [href], [tabindex]:not([tabindex="-1"])';
 
 function findSection(root: HTMLElement, section: string): HTMLElement | null {
@@ -53,26 +54,51 @@ export function focusSettingsSection(root: HTMLElement, section: string): boolea
 }
 
 /**
- * Retries `focusSettingsSection` until the section exists, then lets go — so a
- * later re-render never steals focus back. Each attempt is a `setTimeout(0)`,
- * which runs after the shell's own open-focus (BottomSheet's timer, Modal's
- * trap effect), so the target wins. Returns the cleanup.
+ * How long after open a late section may still take focus. Past it the user
+ * is likely editing something else, and a late arrival (a roster query on its
+ * third retry) must not yank scroll and focus away from them.
  */
-function watchForSection(host: HTMLElement, id: string): () => void {
-    let done = false;
+export const SECTION_FOCUS_WINDOW_MS = 2000;
+
+/**
+ * Runs `run` after BOTH shells' own open-focus: the Modal trap focuses its
+ * first control in a `requestAnimationFrame` and the BottomSheet in a
+ * `setTimeout(0)`, both queued before this — a frame then a task lands after
+ * either. Returns the cancel.
+ */
+function afterShellFocus(run: () => void): () => void {
     let timer: number | undefined;
-    const observer = new MutationObserver(() => {
-        if (!done && timer === undefined) timer = window.setTimeout(tryNow, 0);
-    });
-    function tryNow(): void {
-        timer = undefined;
-        if (done || !focusSettingsSection(host, id)) return;
+    const frame = window.requestAnimationFrame(() => { timer = window.setTimeout(run, 0); });
+    return () => { window.cancelAnimationFrame(frame); window.clearTimeout(timer); };
+}
+
+/**
+ * Retries `focusSettingsSection` as `host` changes until the section lands —
+ * then lets go for good, so a re-render or refetch never steals focus back —
+ * or until `windowMs` has passed. Returns the cleanup.
+ */
+export function watchForSection(host: HTMLElement, id: string, windowMs: number = SECTION_FOCUS_WINDOW_MS): () => void {
+    let done = false;
+    let cancelAttempt: (() => void) | null = null;
+    const observer = new MutationObserver(() => schedule());
+    const deadline = window.setTimeout(() => stop(), windowMs);
+    function stop(): void {
         done = true;
         observer.disconnect();
+        window.clearTimeout(deadline);
+        cancelAttempt?.();
+        cancelAttempt = null;
+    }
+    function schedule(): void {
+        if (!done && cancelAttempt === null) cancelAttempt = afterShellFocus(tryNow);
+    }
+    function tryNow(): void {
+        cancelAttempt = null;
+        if (!done && focusSettingsSection(host, id)) stop();
     }
     observer.observe(host, { childList: true, subtree: true });
-    timer = window.setTimeout(tryNow, 0);
-    return () => { done = true; observer.disconnect(); window.clearTimeout(timer); };
+    schedule();
+    return stop;
 }
 
 /** Lands the open sheet on `section` (no-op when undefined); `root` is the sheet body. */

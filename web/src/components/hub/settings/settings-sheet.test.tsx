@@ -6,8 +6,8 @@
  * PATCH /guilds/:id/hidden (ROK-1831).
  */
 import { useEffect, useState, type JSX } from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { GuildDiscordMirrorDto, GuildEditor, GuildPage as GuildPageDto } from '@raid-ledger/contract';
@@ -208,33 +208,59 @@ describe('HubSettingsSheet — hub rename (ROK-1950)', () => {
     });
 });
 
+/** Like the real Blizzard roster section, the target only renders once its own data arrives. */
+function LateTargetSection(): JSX.Element | null {
+    const [ready, setReady] = useState(false);
+    useEffect(() => {
+        const id = window.setTimeout(() => setReady(true), 30);
+        return () => window.clearTimeout(id);
+    }, []);
+    if (!ready) return null;
+    return (
+        <SettingsSection title="Target" sectionId="target" testId="target-section">
+            <label>Target slug<input data-testid="target-input" /></label>
+        </SettingsSection>
+    );
+}
+/** A section whose data is already cached: it is in the DOM on the sheet's first paint. */
+function ImmediateTargetSection(): JSX.Element {
+    return (
+        <SettingsSection title="Target" sectionId="target" testId="target-section">
+            <label>Target slug<input data-testid="target-input" /></label>
+        </SettingsSection>
+    );
+}
+const moduleWith = (settingsSections: HubModule['settingsSections']): HubModule => ({
+    kind: 'wow_guild', tabs: [], overviewWidgets: [], memberColumns: [], heroPills: [],
+    memberRows: () => [], settingsSections,
+});
+const TARGET_MODULE = moduleWith(LateTargetSection);
+
+/**
+ * Resolves after a frame and then a task — the slot the hook lands in, so
+ * anything it (or the shell) would do has happened. Ordering, not a duration.
+ */
+const flushFocusSlot = async (): Promise<void> => {
+    await act(async () => {
+        await new Promise<void>((resolve) => { window.requestAnimationFrame(() => { window.setTimeout(resolve, 0); }); });
+    });
+};
+
 describe('HubSettingsSheet — open at a named section (ROK-2188)', () => {
-    /** Like the real Blizzard roster section, the target only renders once its own data arrives. */
-    function LateTargetSection(): JSX.Element | null {
-        const [ready, setReady] = useState(false);
-        useEffect(() => {
-            const id = window.setTimeout(() => setReady(true), 30);
-            return () => window.clearTimeout(id);
-        }, []);
-        if (!ready) return null;
-        return (
-            <SettingsSection title="Target" sectionId="target" testId="target-section">
-                <label>Target slug<input data-testid="target-input" /></label>
-            </SettingsSection>
-        );
-    }
-    const TARGET_MODULE: HubModule = {
-        kind: 'wow_guild', tabs: [], overviewWidgets: [], memberColumns: [], heroPills: [],
-        memberRows: () => [], settingsSections: LateTargetSection,
-    };
     const scrolled: Element[] = [];
+    const originalScroll = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView');
     beforeEach(() => {
         scrolled.length = 0;
         Element.prototype.scrollIntoView = function scrollIntoView(this: Element): void { scrolled.push(this); };
     });
-    const renderAt = (section?: string): void => {
+    afterEach(() => {
+        if (originalScroll) Object.defineProperty(Element.prototype, 'scrollIntoView', originalScroll);
+        else Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+        vi.restoreAllMocks();
+    });
+    const renderAt = (section?: string, mod: HubModule = TARGET_MODULE): void => {
         renderWithProviders(
-            <HubSettingsSheet ctx={ctxFor()} module={TARGET_MODULE} onClose={() => undefined}
+            <HubSettingsSheet ctx={ctxFor()} module={mod} onClose={() => undefined}
                 onChangeChannel={() => undefined} {...(section === undefined ? {} : { section })} />,
         );
     };
@@ -251,8 +277,25 @@ describe('HubSettingsSheet — open at a named section (ROK-2188)', () => {
         serve({ state: 'unset' }, []);
         renderAt();
         const input = await screen.findByTestId('target-input');
-        await new Promise<void>((resolve) => { window.setTimeout(resolve, 20); });
+        await flushFocusSlot();
+        await flushFocusSlot();
         expect(document.activeElement, 'no target, no focus steal').not.toBe(input);
         expect(scrolled).toEqual([]);
+    });
+
+    it('desktop: a section already rendered at open keeps focus after the Modal trap has run', async () => {
+        vi.spyOn(window, 'matchMedia').mockImplementation((query: string): MediaQueryList => ({
+            matches: true, media: query, onchange: null,
+            addListener: () => undefined, removeListener: () => undefined,
+            addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+        }));
+        serve({ state: 'unset' }, []);
+        renderAt('target', moduleWith(ImmediateTargetSection));
+        expect(await screen.findByRole('dialog'), 'desktop renders the Modal (BottomSheet uses aria-label)').toHaveAttribute('aria-labelledby');
+        const input = screen.getByTestId('target-input');
+        await waitFor(() => expect(document.activeElement, 'the section field must take focus').toBe(input));
+        await flushFocusSlot();
+        await flushFocusSlot();
+        expect(document.activeElement, 'the Modal initial focus (Close) must not win it back').toBe(input);
     });
 });
