@@ -22,7 +22,10 @@ import { SETTING_KEYS } from '../../../drizzle/schema/app-settings';
 import { SettingsService } from '../../../settings/settings.service';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { BossEncountersService } from '../boss-encounters.service';
-import { bossLootBackfillIds } from './wow-item-meta.backfill';
+import {
+  bossLootBackfillIds,
+  questRewardBackfillIds,
+} from './wow-item-meta.backfill';
 import { WowItemMetaService } from './wow-item-meta.service';
 import {
   WOWHEAD_TOOLTIP_PARSE_VERSION,
@@ -291,6 +294,48 @@ describe('wow_item_meta tooltip storage (ROK-2176)', () => {
       expect.arrayContaining([
         expect.objectContaining({ key: 'STRENGTH', value: 12 }),
       ]),
+    );
+  });
+});
+
+async function seedQuest(
+  questId: number,
+  expansion: string,
+  rewards: unknown,
+): Promise<void> {
+  await testApp.db.insert(schema.wowClassicDungeonQuests).values({
+    questId,
+    name: `Quest ${questId}`,
+    expansion,
+    rewardsJson: rewards as number[] | null,
+  });
+}
+
+async function seedOverlay(questId: number, ids: number[]): Promise<void> {
+  await testApp.db.insert(schema.wowDungeonQuestBlizzard).values({
+    questId,
+    areaId: 1,
+    title: `Overlay ${questId}`,
+    rewardItems: ids.map((id) => ({ id, name: `Item ${id}` })),
+    raw: {},
+    fetchedAt: new Date(),
+    runId: 'run-1',
+  });
+}
+
+describe('quest reward tooltip backfill (ROK-2186)', () => {
+  it('runs against Postgres (no ambiguous item_id) and picks due dataset + overlay reward ids', async () => {
+    await seedQuest(9001, 'classic', [60001, 60002]); // 60002 fresh → skip
+    await seedQuest(9002, 'tbc', [60003]); // Wowhead env 16/4 cannot serve it
+    await seedQuest(9003, 'forever', { not: 'an array' }); // unnests to nothing
+    await seedOverlay(9001, [60001, 60004]); // 60001 dedups with the dataset
+    await seedMeta(60002);
+    await seedMeta(60004, { tooltipVersion: 0 }); // older parser → due
+
+    const all = await questRewardBackfillIds(testApp.db, 100);
+    expect([...all].sort()).toEqual([60001, 60004]);
+    await expect(questRewardBackfillIds(testApp.db, 1)).resolves.toHaveLength(
+      1,
     );
   });
 });

@@ -10,6 +10,7 @@
  */
 interface CacheEntry<T> {
   value: T;
+  storedAt: number;
   expiresAt: number;
 }
 
@@ -49,11 +50,28 @@ export class ChannelMirrorCache<T> {
     this.inflight.delete(key);
   }
 
+  /**
+   * ROK-2185 Refresh: forget a key only when its cached value is at least
+   * `ms` old, so repeated clicks inside the floor keep serving the cache
+   * instead of turning into Discord REST calls. A load in flight is left
+   * alone (the next `get` joins it). Returns whether the entry was dropped.
+   */
+  expireIfOlderThan(key: string, ms: number): boolean {
+    const hit = this.entries.get(key);
+    if (!hit || this.now() - hit.storedAt < ms) return false;
+    this.entries.delete(key);
+    return true;
+  }
+
   private store(key: string, value: T): void {
     const now = this.now();
     for (const [k, entry] of this.entries) {
       if (entry.expiresAt <= now) this.entries.delete(k);
     }
-    this.entries.set(key, { value, expiresAt: now + this.ttlMs });
+    this.entries.set(key, {
+      value,
+      storedAt: now,
+      expiresAt: now + this.ttlMs,
+    });
   }
 }

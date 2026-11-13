@@ -21,6 +21,8 @@ import { isDiscordAccessError } from '../channel-lifecycle/channel-lifecycle.err
 export const CHANNEL_MIRROR_FETCH_LIMIT = 10;
 /** Server-side cache lifetime of one channel read, failures included (D1/D5). */
 export const CHANNEL_MIRROR_TTL_MS = 60_000;
+/** ROK-2185: a Refresh skips the cache only once the cached read is this old. */
+export const CHANNEL_MIRROR_REFRESH_MIN_MS = 15_000;
 /** Cap on message content and embed text sent to the page (D10). */
 export const CHANNEL_MIRROR_TEXT_CAP = 2000;
 

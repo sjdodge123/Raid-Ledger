@@ -60,7 +60,7 @@ function isLoot(item: DetailSource): item is BossLootDto {
     return 'bossId' in item;
 }
 
-function fromLoot(loot: BossLootDto): DetailItem {
+function fromLoot(loot: BossLootDto, wowheadUrl: string | undefined): DetailItem {
     const t = loot.tooltip ?? null;
     const view = itemStatsView(loot);
     return {
@@ -70,7 +70,7 @@ function fromLoot(loot: BossLootDto): DetailItem {
         weapon: t?.weapon ?? null, stats: view?.stats ?? null, effects: t?.effects ?? [],
         enchantments: [], sockets: [], requiredLevel: t?.requiredLevel ?? null,
         setName: t?.setName ?? null, description: null,
-        wowheadUrl: getWowheadItemUrlForExpansion(loot.itemId, loot.expansion), classicHint: false,
+        wowheadUrl: wowheadUrl ?? getWowheadItemUrlForExpansion(loot.itemId, loot.expansion), classicHint: false,
     };
 }
 
@@ -92,7 +92,10 @@ function fromEquipped(item: EquipmentItemDto, gameVariant: string | null): Detai
     };
 }
 
-/** The display model for either source. */
-export function toDetailItem(item: DetailSource, gameVariant: string | null): DetailItem {
-    return isLoot(item) ? fromLoot(item) : fromEquipped(item, gameVariant);
+/**
+ * The display model for either source. `lootUrl` overrides a loot item's
+ * expansion-derived Wowhead link (a quest reward's per-variant page, ROK-2186).
+ */
+export function toDetailItem(item: DetailSource, gameVariant: string | null, lootUrl?: string): DetailItem {
+    return isLoot(item) ? fromLoot(item, lootUrl) : fromEquipped(item, gameVariant);
 }

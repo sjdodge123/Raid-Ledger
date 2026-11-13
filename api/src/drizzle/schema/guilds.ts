@@ -88,7 +88,7 @@ export const guilds = pgTable(
       length: 12,
       enum: ['ok', 'not_found', 'disbanded', 'error'],
     }),
-    /** ROK-1170: the first 404 of the current not-found run (two-strike rule). */
+    /** ROK-1170: the first 404 of the current not-found run (disbanded after 7 days). */
     blizzardNotFoundSince: timestamp('blizzard_not_found_since', {
       withTimezone: true,
     }),

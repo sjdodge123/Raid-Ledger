@@ -99,7 +99,7 @@ describe('summaryPatch — 404 two-strike', () => {
     });
   });
 
-  it('a second 404 under 6h stays not_found and keeps since', () => {
+  it('a 404 under 7 days into the run stays not_found and keeps since', () => {
     const patch = summaryPatch(
       state(42, ago(DISBANDED_AFTER_MS - 1)),
       notFound,
@@ -108,7 +108,7 @@ describe('summaryPatch — 404 two-strike', () => {
     expect(patch).toEqual({ blizzardSummaryStatus: 'not_found' });
   });
 
-  it('a second 404 at exactly 6h is disbanded', () => {
+  it('a 404 exactly 7 days into the run is disbanded', () => {
     const patch = summaryPatch(
       state(42, ago(DISBANDED_AFTER_MS)),
       notFound,
@@ -117,8 +117,8 @@ describe('summaryPatch — 404 two-strike', () => {
     expect(patch).toEqual({ blizzardSummaryStatus: 'disbanded' });
   });
 
-  it('DISBANDED_AFTER_MS is six hours', () => {
-    expect(DISBANDED_AFTER_MS).toBe(6 * 60 * 60 * 1000);
+  it('DISBANDED_AFTER_MS is seven days (an Armory outage never flags a live guild)', () => {
+    expect(DISBANDED_AFTER_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
 });
 
@@ -130,7 +130,7 @@ describe('summaryPatch — 404 after a 200 that carried no guild id', () => {
     });
   });
 
-  it('a second 404 at least 6h later is disbanded', () => {
+  it('a 404 at least 7 days into the run is disbanded', () => {
     const since = ago(DISBANDED_AFTER_MS);
     const patch = summaryPatch(
       state(null, since, 'not_found'),

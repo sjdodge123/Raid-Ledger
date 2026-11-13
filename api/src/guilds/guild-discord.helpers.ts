@@ -12,6 +12,7 @@ import {
   type GuildDiscordMirrorDto,
   type SetGuildDiscordChannelDto,
 } from '@raid-ledger/contract';
+import { z } from 'zod';
 
 /** ROK-1788 — pure validation for the guild's Discord channel binding. */
 
@@ -31,6 +32,20 @@ export function parseSetChannel(body: unknown): SetGuildDiscordChannelDto {
   const parsed = SetGuildDiscordChannelSchema.safeParse(body);
   if (!parsed.success) {
     throw new BadRequestException(parsed.error.flatten().fieldErrors);
+  }
+  return parsed.data;
+}
+
+const RefreshFlagSchema = z
+  .enum(['1', 'true', '0', 'false'])
+  .optional()
+  .transform((raw) => raw === '1' || raw === 'true');
+
+/** ROK-2185: the mirror GET's `?refresh=` flag; absent is false, junk is a 400. */
+export function parseRefreshFlag(raw: unknown): boolean {
+  const parsed = RefreshFlagSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new BadRequestException('refresh must be 1, true, 0 or false');
   }
   return parsed.data;
 }

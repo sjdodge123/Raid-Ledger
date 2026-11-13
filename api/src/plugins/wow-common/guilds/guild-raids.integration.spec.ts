@@ -168,7 +168,15 @@ async function seedEvents(): Promise<void> {
   await signup(soon, 'member', { status: 'tentative' });
   // Departed mid-raid: no longer counted as signed up on a live card.
   await signup(soon, 'alt', { status: 'departed' });
-  await ev({ key: 'b1', startH: 30, group: groups.b, rule: 'biweekly' });
+  const b1 = await ev({
+    key: 'b1',
+    startH: 30,
+    group: groups.b,
+    rule: 'biweekly',
+  });
+  // ROK-2185: a linked member + a non-member → memberSignupCount 1 of 2.
+  await signup(b1, 'member');
+  await signup(b1, 'outsider');
   const mmo = await ev({ key: 'mmo', startH: 48, slot: MMO });
   await rosterOn(mmo, 'member', 'tank');
   await rosterOn(mmo, 'alt', 'bench');
@@ -230,6 +238,7 @@ type RaidsBody = Record<string, unknown> & {
   upcoming: {
     id: number;
     signupCount: number;
+    memberSignupCount?: number;
     viewerStatus: unknown;
     contentInstances?: unknown;
   }[];
@@ -271,6 +280,16 @@ describe('GET /plugins/wow/guilds/:id/raids — payload: upcoming + recent', () 
     expect(soon).toMatchObject({ viewerStatus: 'tentative', signupCount: 1 });
     const a1 = body.upcoming.find((e) => e.id === ids.a1);
     expect(a1?.viewerStatus).toBeNull();
+  });
+
+  it('counts linked-member signups apart from the total (ROK-2185)', () => {
+    const b1 = body.upcoming.find((e) => e.id === ids.b1);
+    expect(b1).toMatchObject({ signupCount: 2, memberSignupCount: 1 });
+    // Departed is not live: the member count follows signupCount's predicate.
+    const soon = body.upcoming.find((e) => e.id === ids.soon);
+    expect(soon).toMatchObject({ signupCount: 1, memberSignupCount: 1 });
+    const a1 = body.upcoming.find((e) => e.id === ids.a1);
+    expect(a1?.memberSignupCount).toBe(0);
   });
 
   it('cards carry the event content instances as {id, name} (ROK-1911)', () => {

@@ -81,3 +81,43 @@ describe('ChannelMirrorCache (D5)', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('ChannelMirrorCache.expireIfOlderThan (ROK-2185 Refresh, 15s floor)', () => {
+  let clock = 0;
+  const cache = (): ChannelMirrorCache<string> =>
+    new ChannelMirrorCache<string>(60_000, () => clock);
+
+  beforeEach(() => {
+    clock = 1_000;
+  });
+
+  it('drops an entry at least `ms` old, so the next get reloads', async () => {
+    const c = cache();
+    const load = jest
+      .fn()
+      .mockResolvedValueOnce('v1')
+      .mockResolvedValueOnce('v2');
+    await c.get('k', load);
+    clock += 15_000;
+    expect(c.expireIfOlderThan('k', 15_000)).toBe(true);
+    await expect(c.get('k', load)).resolves.toBe('v2');
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an entry younger than `ms` (click-spam stays cached)', async () => {
+    const c = cache();
+    const load = jest
+      .fn()
+      .mockResolvedValueOnce('v1')
+      .mockResolvedValueOnce('v2');
+    await c.get('k', load);
+    clock += 14_999;
+    expect(c.expireIfOlderThan('k', 15_000)).toBe(false);
+    await expect(c.get('k', load)).resolves.toBe('v1');
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('is a no-op for an unknown key', () => {
+    expect(cache().expireIfOlderThan('missing', 15_000)).toBe(false);
+  });
+});
