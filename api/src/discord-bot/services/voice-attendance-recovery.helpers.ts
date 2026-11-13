@@ -150,5 +150,6 @@ export function restoreExistingSession(
     isActive: true,
     activeSegmentStart: now,
     dirty: true,
+    dirtyVersion: 0,
   });
 }
