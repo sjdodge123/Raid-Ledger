@@ -103,6 +103,20 @@ describe('computeRaidProgress rows and ordering (ROK-1917)', () => {
       [9, '40 Player'],
       [999, null],
     ]);
+    // Two rows, one boss: the card counts bosses, not boss × difficulty
+    // (operator ruling 2026-11-13 — it matches the Progression tab).
+    expect(out.killedCount).toBe(1);
+  });
+
+  it('counts distinct bosses killed across difficulties, not killed rows', () => {
+    const out = computeRaidProgress([
+      pull(663, 0, true),
+      pull(663, 100, true, { difficultyId: 3 }),
+      pull(664, 200, true),
+      pull(664, 300, false, { difficultyId: 3 }),
+      pull(665, 400, false),
+    ]);
+    expect(out.bosses).toHaveLength(5);
     expect(out.killedCount).toBe(2);
   });
 

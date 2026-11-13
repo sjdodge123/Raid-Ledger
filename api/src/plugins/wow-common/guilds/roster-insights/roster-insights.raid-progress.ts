@@ -120,6 +120,18 @@ function groupPulls(pulls: readonly RaidPull[]): RaidPull[][] {
   return [...groups.values()];
 }
 
+/**
+ * Distinct bosses with at least one kill. A boss killed at two difficulties is
+ * one boss, matching the Progression tab's "N/M bosses down" (operator ruling
+ * 2026-11-13: the Overview card read "5 bosses killed" beside a tab summing 4).
+ */
+function countKilledEncounters(
+  bosses: readonly { encounterId: number; kills: number }[],
+): number {
+  return new Set(bosses.filter((b) => b.kills > 0).map((b) => b.encounterId))
+    .size;
+}
+
 /** The `raidProgress` section from the hub's in-scope pulls (pure). */
 export function computeRaidProgress(
   pulls: readonly RaidPull[],
@@ -138,7 +150,7 @@ export function computeRaidProgress(
   );
   return {
     bosses: bosses.slice(0, MAX_RAID_PROGRESS_BOSSES),
-    killedCount: bosses.filter((b) => b.kills > 0).length,
+    killedCount: countKilledEncounters(bosses),
     pullCount,
     lastPullAt,
   };

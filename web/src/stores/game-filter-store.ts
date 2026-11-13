@@ -40,6 +40,18 @@ interface GameFilterState {
     _reset: () => void;
 }
 
+/**
+ * Saved in place of a slug list when the viewer explicitly picked None, so a
+ * reload keeps None (operator ruling 2026-11-13). Not a valid game slug. An
+ * empty saved list (legacy, and the smoke specs' reset) still means "all".
+ */
+export const NO_GAMES_MARKER = '__none__';
+
+/** True when the saved list is the explicit-None marker. */
+function isExplicitNone(slugs: readonly string[]): boolean {
+    return slugs.length === 1 && slugs[0] === NO_GAMES_MARKER;
+}
+
 function mergeKnownGames(existing: GameInfo[], incoming: GameInfo[]): GameInfo[] {
     const map = new Map(existing.map((g) => [g.slug, g]));
     for (const g of incoming) map.set(g.slug, g);
@@ -86,13 +98,10 @@ function applyGameSelection(
     }
 }
 
-/** Resolve initial selection, falling back to all games when saved filter is empty or fully stale. */
+/** Resolve initial selection: none for the explicit-None marker, all when nothing is saved. */
 function resolveInitialSelection(savedSlugs: string[] | null, games: GameInfo[]): Set<string> {
     if (!savedSlugs) return new Set(games.map((g) => g.slug));
-    const knownSlugs = new Set(games.map((g) => g.slug));
-    const hasAnyValid = savedSlugs.some((s) => knownSlugs.has(s));
-    if (savedSlugs.length === 0 || !hasAnyValid) return new Set(games.map((g) => g.slug));
-    return new Set(savedSlugs);
+    return resolveSavedSlugs(savedSlugs, games);
 }
 
 function toggleSlug(selectedGames: Set<string>, slug: string): Set<string> {
@@ -101,10 +110,10 @@ function toggleSlug(selectedGames: Set<string>, slug: string): Set<string> {
     return next;
 }
 
-/** Persist filter to server (fire-and-forget). */
+/** Persist filter to server (fire-and-forget); an empty selection saves the None marker. */
 function syncFilterToServer(slugs: string[]): void {
     if (getAuthToken()) {
-        updatePreference('calendarGameFilter', slugs).catch(() => {
+        updatePreference('calendarGameFilter', slugs.length === 0 ? [NO_GAMES_MARKER] : slugs).catch(() => {
             // Fire-and-forget — silent failure for offline/unauth
         });
     }
@@ -117,18 +126,22 @@ function applyLoadedFilter(
     slugs: string[],
 ): void {
     if (state.hasInitialized) {
-        const selected = resolveLoadedSelection(slugs, state.allKnownGames);
+        const selected = resolveSavedSlugs(slugs, state.allKnownGames);
         set({ selectedGames: selected, hasSavedFilter: true, savedFilterSlugs: slugs, lastChangeSource: 'loaded' });
     } else {
         set({ hasSavedFilter: true, savedFilterSlugs: slugs, lastChangeSource: 'loaded' });
     }
 }
 
-/** Resolve loaded selection, falling back to all games when slugs are empty or fully stale. */
-function resolveLoadedSelection(slugs: string[], allKnownGames: GameInfo[]): Set<string> {
-    const knownSlugs = new Set(allKnownGames.map((g) => g.slug));
+/**
+ * A saved slug list against the known games: the explicit-None marker stays
+ * None; an empty (legacy) or fully stale list falls back to every game (ROK-764).
+ */
+function resolveSavedSlugs(slugs: string[], games: GameInfo[]): Set<string> {
+    if (isExplicitNone(slugs)) return new Set<string>();
+    const knownSlugs = new Set(games.map((g) => g.slug));
     const hasAnyValid = slugs.some((s) => knownSlugs.has(s));
-    if (slugs.length === 0 || !hasAnyValid) return new Set(allKnownGames.map((g) => g.slug));
+    if (slugs.length === 0 || !hasAnyValid) return new Set(games.map((g) => g.slug));
     return new Set(slugs);
 }
 

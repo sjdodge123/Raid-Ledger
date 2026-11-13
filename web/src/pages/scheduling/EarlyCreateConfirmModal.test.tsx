@@ -6,11 +6,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { EarlyCreateConfirmModal } from './EarlyCreateConfirmModal';
 
-function renderModal(distinctVoters: number, memberCount: number) {
+function renderModal(distinctVoters: number, memberCount: number, isReschedule = false) {
     return render(
         <EarlyCreateConfirmModal
             distinctVoters={distinctVoters}
             memberCount={memberCount}
+            isReschedule={isReschedule}
             timeLabel="Fri 8:00 PM"
             onCancel={vi.fn()}
             onConfirm={vi.fn()}
@@ -24,6 +25,20 @@ describe('EarlyCreateConfirmModal', () => {
         expect(screen.getByText('Create event below majority?')).toBeInTheDocument();
         expect(screen.getByText(/Only 1 of 5 participants/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Create anyway' })).toBeInTheDocument();
+    });
+
+    it('below majority on a reschedule poll says Reschedule, not Create event (ruling 2026-11-13)', () => {
+        renderModal(1, 5, true);
+        expect(screen.getByText('Reschedule below majority?')).toBeInTheDocument();
+        expect(screen.getByText('Only 1 of 5 participants picked this time. Reschedule anyway?')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Reschedule anyway' })).toBeInTheDocument();
+        expect(screen.queryByText(/Create event/)).not.toBeInTheDocument();
+    });
+
+    it('threshold met on a reschedule poll keeps the neutral lock-in copy', () => {
+        renderModal(3, 4, true);
+        expect(screen.getByText('Lock in Fri 8:00 PM for everyone?')).toBeInTheDocument();
+        expect(screen.queryByText(/below majority/)).not.toBeInTheDocument();
     });
 
     it('threshold met shows the neutral lock-in copy', () => {
