@@ -1,6 +1,6 @@
 /** ROK-1789 AC4/AC6/AC7/AC8 — the guild Recruitment editor: switch, rows, validation, save body, clear, discard guard. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { GuildRecruitmentView, PutGuildRecruitmentInput } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -71,11 +71,26 @@ describe('RecruitmentDialog wanted rows (AC4/AC6)', () => {
         await renderDialog();
         change('recruitment-class-1', 'Priest');
         change('recruitment-role-1', 'healer');
-        expect(screen.getByTestId('recruitment-row-error-1')).toHaveTextContent('Priest Healer is already listed.');
+        const error = screen.getByTestId('recruitment-row-error-1');
+        expect(error).toHaveTextContent('Priest Healer is already listed.');
+        expect(error).toHaveAttribute('role', 'alert');
+        expect(error.id).not.toBe('');
+        for (const field of ['class', 'role']) {
+            expect(screen.getByTestId(`recruitment-${field}-1`).getAttribute('aria-describedby')?.split(' ')).toContain(error.id);
+        }
+        expect(screen.getByTestId('recruitment-class-0')).not.toHaveAttribute('aria-describedby');
         expect(screen.getByTestId('recruitment-save')).toBeDisabled();
     });
 
-    it('hides Add class at the 12-row cap', async () => {
+    it('shows a saved class the picker does not list instead of the first class', async () => {
+        const wanted = [{ className: 'Monk' as const, role: 'healer' as const, state: 'open' as const }];
+        await renderDialog(buildRecruitmentView(buildRecruitment({ wanted }), true));
+        const select = screen.getByTestId('recruitment-class-0');
+        expect(select).toHaveValue('Monk');
+        expect(within(select).getByRole('option', { name: 'Monk' })).toBeInTheDocument();
+    });
+
+    it('disables Add class at the 12-row cap', async () => {
         await renderDialog(buildRecruitmentView(null, true));
         for (let i = 0; i < 12; i += 1) fireEvent.click(screen.getByTestId('recruitment-add-row'));
         expect(screen.getAllByTestId(/^recruitment-row-\d+$/)).toHaveLength(12);
@@ -144,5 +159,60 @@ describe('RecruitmentDialog dirty close (AC8)', () => {
         media.desktop = false;
         await renderDialog();
         expect(screen.getByTestId('bottom-sheet-footer')).toContainElement(screen.getByTestId('recruitment-save'));
+    });
+});
+
+/** A request handler that stays pending until the test releases it. */
+function held(): { wait: Promise<void>; release: () => void } {
+    let release: () => void = () => undefined;
+    const wait = new Promise<void>((resolve) => { release = resolve; });
+    return { wait, release };
+}
+
+describe('RecruitmentDialog in-flight lock (design-system Modal, ROK-2068)', () => {
+    it('locks close, Cancel and Clear while a save is in flight', async () => {
+        const gate = held();
+        server.use(http.put(GUILD_RECRUITMENT_URL, async () => { await gate.wait; return HttpResponse.json(SAVED); }));
+        await renderDialog();
+        change('recruitment-note-0', 'Disc too');
+        fireEvent.click(screen.getByTestId('recruitment-save'));
+        await waitFor(() => expect(screen.getByTestId('recruitment-save')).toHaveAttribute('aria-busy', 'true'));
+        expect(screen.getByRole('button', { name: 'Close modal' })).toBeDisabled();
+        expect(screen.getByTestId('recruitment-cancel')).toBeDisabled();
+        expect(screen.getByTestId('recruitment-clear')).toBeDisabled();
+        gate.release();
+    });
+
+    it('disables Save while a clear is in flight', async () => {
+        const gate = held();
+        server.use(http.delete(GUILD_RECRUITMENT_URL, async () => { await gate.wait; return new HttpResponse(null, { status: 204 }); }));
+        await renderDialog();
+        fireEvent.click(screen.getByTestId('recruitment-clear'));
+        fireEvent.click(await screen.findByTestId('discard-changes-discard'));
+        await waitFor(() => expect(screen.getByTestId('recruitment-clear')).toHaveAttribute('aria-busy', 'true'));
+        expect(screen.getByTestId('recruitment-save')).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Close modal' })).toBeDisabled();
+        gate.release();
+    });
+});
+
+describe('RecruitmentDialog failures', () => {
+    it('shows the save error banner and stays open when the PUT fails', async () => {
+        server.use(http.put(GUILD_RECRUITMENT_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const onClose = await renderDialog();
+        change('recruitment-note-0', 'Disc too');
+        fireEvent.click(screen.getByTestId('recruitment-save'));
+        expect(await screen.findByTestId('recruitment-save-error')).toHaveTextContent("Couldn't save recruitment. Try again.");
+        expect(onClose).not.toHaveBeenCalled();
+        expect(screen.getByTestId('recruitment-note-0')).toHaveValue('Disc too');
+    });
+
+    it('shows the clear error banner and stays open when the DELETE fails', async () => {
+        server.use(http.delete(GUILD_RECRUITMENT_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const onClose = await renderDialog();
+        fireEvent.click(screen.getByTestId('recruitment-clear'));
+        fireEvent.click(await screen.findByTestId('discard-changes-discard'));
+        expect(await screen.findByTestId('recruitment-clear-error')).toHaveTextContent("Couldn't clear recruitment. Try again.");
+        expect(onClose).not.toHaveBeenCalled();
     });
 });
