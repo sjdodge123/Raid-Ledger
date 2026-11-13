@@ -55,6 +55,7 @@ describe('WowGuildStateBanner (ROK-1170)', () => {
         expect(screen.getByTestId('wow-guild-state-banner')).toHaveTextContent(COPY);
         await userEvent.click(screen.getByRole('button', ACTION));
         expect(openSettings).toHaveBeenCalledTimes(1);
+        expect(openSettings, 'lands on the Blizzard roster section (ROK-2188)').toHaveBeenCalledWith({ section: 'blizzard-roster' });
     });
 
     it('hides the action from an editor who cannot open hub settings (delegated page editor)', () => {

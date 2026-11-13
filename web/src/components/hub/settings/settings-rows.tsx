@@ -12,12 +12,14 @@ interface SectionProps {
     title: string;
     blurb?: string;
     testId?: string;
+    /** ROK-2188 — stable id `openSettings({ section })` can land on (`data-settings-section`). */
+    sectionId?: string;
     children: ReactNode;
 }
 
-export function SettingsSection({ title, blurb, testId, children }: SectionProps): JSX.Element {
+export function SettingsSection({ title, blurb, testId, sectionId, children }: SectionProps): JSX.Element {
     return (
-        <section data-testid={testId} className="flex flex-col gap-3 border-b border-edge-subtle pb-5 last:border-b-0 last:pb-0">
+        <section data-testid={testId} data-settings-section={sectionId} className="flex flex-col gap-3 border-b border-edge-subtle pb-5 last:border-b-0 last:pb-0">
             <div>
                 <h3 className="text-sm font-semibold text-foreground">{title}</h3>
                 {blurb && <p className="mt-1 text-sm text-muted">{blurb}</p>}
