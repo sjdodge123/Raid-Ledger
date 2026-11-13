@@ -34,12 +34,33 @@ export interface SteamDisplayInput {
   characterOwnerId?: string;
 }
 
-/** A player's character name, or null while they are only a SteamID64. */
+/** Length of the varchar columns a Steam row's names are written to. */
+export const STORED_NAME_MAX_LENGTH = 255;
+
+/**
+ * Clamp an in-game name to the `ad_hoc_participants` varchar(255) name
+ * columns. Counts code points, as Postgres does, so an astral character is
+ * never split. An over-long name would otherwise roll back the whole Quick
+ * Play spawn transaction.
+ */
+export function clampStoredName(name: string): string {
+  const chars = Array.from(name);
+  return chars.length <= STORED_NAME_MAX_LENGTH
+    ? name
+    : chars.slice(0, STORED_NAME_MAX_LENGTH).join('');
+}
+
+/**
+ * A player's character name (clamped to the column), or null while they are
+ * only a SteamID64.
+ */
 export function characterNameOf(player: {
   steamId: string;
   displayName: string;
 }): string | null {
-  return player.displayName === player.steamId ? null : player.displayName;
+  return player.displayName === player.steamId
+    ? null
+    : clampStoredName(player.displayName);
 }
 
 /**
@@ -56,7 +77,10 @@ export async function resolveSteamRowDisplay(
   const characterOwnerId =
     characterName === null ? null : (member.characterOwnerId ?? null);
   const character = { characterName, characterOwnerId };
-  const unlinked = { discordUsername: member.displayName, ...character };
+  const unlinked = {
+    discordUsername: clampStoredName(member.displayName),
+    ...character,
+  };
   if (member.userId === null) return unlinked;
   const u = schema.users;
   const rows = await db

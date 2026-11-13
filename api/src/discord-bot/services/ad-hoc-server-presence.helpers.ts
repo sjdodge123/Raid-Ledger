@@ -10,7 +10,10 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
-import { characterNameOf } from './ad-hoc-steam-display.helpers';
+import {
+  characterNameOf,
+  clampStoredName,
+} from './ad-hoc-steam-display.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const p = schema.adHocParticipants;
@@ -334,7 +337,7 @@ export async function renameSteamOnlyRow(
     .update(p)
     .set({
       ...character,
-      discordUsername: sql`CASE WHEN ${unlinked} THEN ${player.displayName} ELSE ${p.discordUsername} END`,
+      discordUsername: sql`CASE WHEN ${unlinked} THEN ${clampStoredName(player.displayName)} ELSE ${p.discordUsername} END`,
     })
     .where(and(eq(p.eventId, eventId), eq(p.steamId, player.steamId)));
 }
