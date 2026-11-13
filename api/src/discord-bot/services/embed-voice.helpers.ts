@@ -23,6 +23,12 @@ export interface EmbedVoiceDeps {
   >;
 }
 
+/** The embed-data slice the decision reads (title/start/game) and writes. */
+export type EmbedVoiceTarget = Pick<
+  EmbedEventData,
+  'startTime' | 'title' | 'game' | 'plannedVoiceChannel' | 'voiceChannelId'
+>;
+
 /** The event-row inputs of the embed voice decision. */
 export interface EmbedVoiceRow {
   gameId?: number | null | undefined;
@@ -35,7 +41,7 @@ export interface EmbedVoiceRow {
 /** Set `plannedVoiceChannel` or `voiceChannelId` on the embed data. */
 export async function applyEmbedVoice(
   deps: EmbedVoiceDeps,
-  eventData: EmbedEventData,
+  eventData: EmbedVoiceTarget,
   row: EmbedVoiceRow,
 ): Promise<void> {
   const override = row.notificationChannelOverride;

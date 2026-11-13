@@ -88,6 +88,20 @@ async function readPlannedVoiceRow(db: Db, eventId: number) {
   return row ?? null;
 }
 
+/** A game's name by id (null when unset or missing). */
+export async function readGameName(
+  db: Db,
+  gameId: number | null | undefined,
+): Promise<string | null> {
+  if (!gameId) return null;
+  const [game] = await db
+    .select({ name: schema.games.name })
+    .from(schema.games)
+    .where(eq(schema.games.id, gameId))
+    .limit(1);
+  return game?.name ?? null;
+}
+
 /**
  * The game name the planned channel is named after. A reconciliation
  * candidate carries `gameId` but no `game`, and `EphemeralVoiceService` names
@@ -99,13 +113,7 @@ async function plannedGameName(
   gameId: number | null | undefined,
 ): Promise<string | null> {
   if (eventData.game) return eventData.game.name;
-  if (!gameId) return null;
-  const [game] = await db
-    .select({ name: schema.games.name })
-    .from(schema.games)
-    .where(eq(schema.games.id, gameId))
-    .limit(1);
-  return game?.name ?? null;
+  return readGameName(db, gameId);
 }
 
 /** What the planned SE decision needs besides the row. */

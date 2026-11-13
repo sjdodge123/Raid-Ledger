@@ -25,6 +25,7 @@ import {
   claimPugSlotsInDb,
 } from './pug-invite.member-helpers';
 import { errorStack } from '../../common/error-format.helpers';
+import { resolveInviteVoice, type InviteVoice } from './pug-invite.voice.helpers';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
@@ -172,7 +173,7 @@ export class PugInviteService {
     if (!event || event.cancelledAt) return;
 
     const ctx = await loadInviteContext(this.settingsService);
-    const [voiceChannelId, signupCount] = await Promise.all([
+    const [voice, signupCount] = await Promise.all([
       this.resolveVoice(event, gameId),
       // The spots line must quote the REAL roster: hardcoding 0 told a capped
       // event's invitee "N spots open · 0 of N signed up" regardless of signups.
@@ -185,7 +186,7 @@ export class PugInviteService {
       event,
       communityName: ctx.communityName,
       clientUrl: ctx.clientUrl,
-      voiceChannelId,
+      ...voice,
       signupCount,
     });
 
@@ -279,7 +280,7 @@ export class PugInviteService {
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
     const ctx = await loadInviteContext(this.settingsService);
-    const [voiceChannelId, data] = await Promise.all([
+    const [voice, data] = await Promise.all([
       this.resolveVoice(event),
       // ROK-1462: never blocks the DM — degrades on any failure.
       loadPugInviteData(this.db, {
@@ -294,7 +295,7 @@ export class PugInviteService {
       event,
       communityName: ctx.communityName,
       clientUrl: ctx.clientUrl,
-      voiceChannelId,
+      ...voice,
       role,
       signupCount: data.signupCount,
       personalized: data.fields,
@@ -305,21 +306,20 @@ export class PugInviteService {
   }
 
   /**
-   * The voice channel an event's invite should point at, if any. Routes
-   * through the ROK-1389 single voice resolver so a voice
-   * notificationChannelOverride wins here exactly as it does for reminders,
-   * the website and embeds (TDB:174a).
+   * The invite's voice: the live channel link, or the planned temporary
+   * channel (2026-11-13). Shared embed decision, so a voice override still
+   * wins exactly as for reminders, the website and embeds (TDB:174a).
    */
   private resolveVoice(
     event: typeof schema.events.$inferSelect,
     gameId: number | null = event.gameId ?? null,
-  ): Promise<string | null> {
-    return this.channelResolver.resolveVoiceChannelHonoringOverride(
-      gameId,
-      event.recurrenceGroupId,
-      event.ephemeralVoiceChannelId,
-      event.notificationChannelOverride,
-    );
+  ): Promise<InviteVoice> {
+    const deps = {
+      db: this.db,
+      settings: this.settingsService,
+      channelResolver: this.channelResolver,
+    };
+    return resolveInviteVoice(deps, event, gameId);
   }
 
   private async getEvent(
