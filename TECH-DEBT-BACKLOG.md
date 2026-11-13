@@ -4304,3 +4304,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 - **med** — `Dockerfile.allinone` (api `nest build` step) — `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` on Docker Desktop with 8 GB; the Dockerfile sets no `NODE_OPTIONS`. Pre-existing (the nginx-only diff can't affect the TS build); a scratch copy adding `ENV NODE_OPTIONS=--max-old-space-size=6144` before the api build succeeded. Suggested: set that ENV in the build stage (own infra PR, validate per CLAUDE.md).
 
+
+### 2026-11-13 — fix/series-card-join-row-on-post (surfaced during root-cause)
+
+- **low** — `api/src/queue/queue-health.service.ts:118-122` (`drainAll`, reached via `/admin/test/flush-embed-queue` → `api/src/admin/demo-test-core.helpers.ts:120`, smoke `flushEmbedQueue` in `tools/test-bot/src/smoke/fixtures.ts:284`) — the "flush" calls BullMQ `queue.drain()` on every registered queue, which DELETES waiting jobs rather than waiting for them to finish, so a smoke test can silently throw away a pending embed re-sync (or any other queue's job) mid-run. Pre-existing: found while root-causing the `series-signup-embed` flake; this branch does not touch the queue or the fixture. Suggested: make the endpoint await idle (`awaitDrained`-style poll) instead of `drain()`, or rename it so callers know it discards work.
