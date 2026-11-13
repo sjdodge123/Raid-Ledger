@@ -26,6 +26,18 @@ import { readClaims } from '../lib/api/token-expiry';
 
 const AUTH_ME_KEY = ['auth', 'me'] as const;
 
+/** Bumped by every `dropViewerPrivateCaches`; see `viewerCacheGeneration`. */
+let viewerGeneration = 0;
+
+/**
+ * The current viewer-cache generation. A callback captured before a drop (an
+ * optimistic mutation's rollback) compares it with the value it captured and
+ * skips its cache write when they differ — the cache now belongs to someone else.
+ */
+export function viewerCacheGeneration(): number {
+    return viewerGeneration;
+}
+
 /** True for the `['auth','me']` Query itself (not a longer key under it). */
 function isAuthMe(query: Query): boolean {
     const key = query.queryKey;
@@ -119,6 +131,7 @@ function resumeStranded(queryClient: QueryClient): void {
  * awaited gap would let a late response or render land between drop and re-seed.
  */
 export function dropViewerPrivateCaches(queryClient: QueryClient): void {
+    viewerGeneration += 1;
     void queryClient.cancelQueries(VIEWER_PRIVATE_QUERIES, { silent: true });
     const queries = queryClient.getQueryCache().findAll(VIEWER_PRIVATE_QUERIES);
     const stranded = strandedFor(queryClient);
