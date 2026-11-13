@@ -109,6 +109,8 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
           resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
+          // Optimistic like the real guard: a set override counts as voice.
+          overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
         },
       },
       {

@@ -92,6 +92,8 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
           resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
+          // Optimistic like the real guard: a set override counts as voice.
+          overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
         },
       },
       {
