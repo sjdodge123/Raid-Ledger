@@ -4304,3 +4304,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 - **med** — `Dockerfile.allinone` (api `nest build` step) — `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` on Docker Desktop with 8 GB; the Dockerfile sets no `NODE_OPTIONS`. Pre-existing (the nginx-only diff can't affect the TS build); a scratch copy adding `ENV NODE_OPTIONS=--max-old-space-size=6144` before the api build succeeded. Suggested: set that ENV in the build stage (own infra PR, validate per CLAUDE.md).
 
+
+### 2026-11-13 — fix/tiebreaker-vote-after-lock (surfaced during review)
+
+- **low** — `web/src/hooks/use-tiebreaker.ts:59-68` (`useCastBracketVote`) — the mutation has no `onError`: a refused bracket vote (400 "This tiebreaker has already been decided" / "Matchup is not open in the current round", 409 "being finalized, please try again") fails silently and the card keeps showing the matchup as open until the next refetch. Pre-existing: the hook predates this branch, which changes only the api; the fix just makes these errors more likely and more meaningful. Suggested: `onError: (err) => { toast.error(err.message || 'Vote failed'); void qc.invalidateQueries({ queryKey: [...TIEBREAKER_KEY] }); }`, as the dismiss hook above it does.
