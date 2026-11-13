@@ -124,8 +124,7 @@ export function buildPullRow(
     encounterId: p.encounterId,
     encounterName: p.name,
     difficultyId: p.difficultyId ?? DIFFICULTY_40,
-    instanceId:
-      p.instanceId === undefined ? SEED_MC_INSTANCE_ID : p.instanceId,
+    instanceId: p.instanceId === undefined ? SEED_MC_INSTANCE_ID : p.instanceId,
     groupSize: 40,
     startAt,
     endAt: new Date(startAt.getTime() + 3 * MIN),
@@ -142,9 +141,7 @@ export function buildPullRow(
 /** The pull rows, starting two days before `now` (pure). */
 export function seedPullRows(input: SeedPullsInput): PullInsert[] {
   const anchor = input.now.getTime() - 2 * 24 * 60 * MIN;
-  return PULLS.map((p, i) =>
-    buildPullRow(input, p, anchor, `seed-pull:${i}`),
-  );
+  return PULLS.map((p, i) => buildPullRow(input, p, anchor, `seed-pull:${i}`));
 }
 
 /** Replace the guild's pulls with the seeded set. */

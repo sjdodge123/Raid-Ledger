@@ -19,7 +19,12 @@ import {
   type PullSpec,
   type SeedPullsInput,
 } from './demo-test-guild-pulls.helpers';
-import type * as schema from '../drizzle/schema';
+import { and, eq, inArray } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -43,10 +48,7 @@ export interface ActivityTimeline {
 }
 
 export type FillerStampKind =
-  | 'new_member'
-  | 'roster_import'
-  | 'milestone'
-  | 'grouped_milestone';
+  'new_member' | 'roster_import' | 'milestone' | 'grouped_milestone';
 
 export interface FillerStamp {
   memberId: number;
@@ -135,7 +137,12 @@ export function fillerJoinStamps(
 export function activityEventSpecs(now: Date): ActivityEventSpec[] {
   const spec = (title: string, daysAgo: number, cancelled: boolean) => {
     const end = new Date(now.getTime() - daysAgo * DAY_MS);
-    return { title, start: new Date(end.getTime() - 3 * HOUR_MS), end, cancelled };
+    return {
+      title,
+      start: new Date(end.getTime() - 3 * HOUR_MS),
+      end,
+      cancelled,
+    };
   };
   return [
     spec('Showcase: Molten Core Clear', 3, false),
@@ -173,4 +180,123 @@ export function activityPullRows(
   return ACTIVITY_PULLS.map((p, i) =>
     buildPullRow(input, p, anchor, `seed-activity-pull:${i}`),
   );
+}
+
+export interface SeedActivityArgs {
+  guildId: number;
+  gameId: number;
+  /** Creator of the seeded guild events (the GM / caller). */
+  creatorId: number;
+  /** Filler roster rows, in `fillerRosterEntries` order. */
+  fillerIds: number[];
+  /** Same input `seedGuildPulls` got — its wipe runs first. */
+  pulls: SeedPullsInput;
+}
+
+/** What the `withActivity` seed wrote (ISO UTC strings). */
+export interface SeededGuildActivity {
+  guildCreatedAt: string;
+  stamped: Record<FillerStampKind, number[]>;
+  rosterImportAt: string | null;
+  events: { ended: number[]; cancelled: number[] };
+  firstKills: string[];
+}
+
+/** Backdates the guild + founding batch, stamps the fillers, writes events + pulls. */
+export async function seedGuildActivity(
+  db: Db,
+  args: SeedActivityArgs,
+): Promise<SeededGuildActivity> {
+  const t = activityTimeline(args.pulls.now);
+  const stamps = fillerJoinStamps(args.fillerIds, t);
+  await backdateRoster(db, args.guildId, t.guildCreatedAt, stamps);
+  const events = await seedActivityEvents(db, args);
+  const rows = activityPullRows(args.pulls);
+  await db
+    .insert(schema.addonEncounterPulls)
+    .values(rows)
+    .onConflictDoNothing();
+  const ids = (kind: FillerStampKind): number[] =>
+    stamps.filter((s) => s.kind === kind).map((s) => s.memberId);
+  const imported = ids('roster_import');
+  return {
+    guildCreatedAt: t.guildCreatedAt.toISOString(),
+    stamped: {
+      new_member: ids('new_member'),
+      roster_import: imported,
+      milestone: ids('milestone'),
+      grouped_milestone: ids('grouped_milestone'),
+    },
+    rosterImportAt: imported.length ? t.rosterImportAt.toISOString() : null,
+    events,
+    firstKills: rows.filter((r) => r.success).map((r) => r.encounterName),
+  };
+}
+
+/** Guild + every roster row → founding stamp, then each filler stamp (grouped by time). */
+async function backdateRoster(
+  db: Db,
+  guildId: number,
+  foundedAt: Date,
+  stamps: readonly FillerStamp[],
+): Promise<void> {
+  const g = schema.guilds;
+  const m = schema.guildMembers;
+  await db.update(g).set({ createdAt: foundedAt }).where(eq(g.id, guildId));
+  await db
+    .update(m)
+    .set({ createdAt: foundedAt })
+    .where(eq(m.guildId, guildId));
+  const byTime = new Map<number, number[]>();
+  for (const s of stamps) {
+    const key = s.createdAt.getTime();
+    byTime.set(key, [...(byTime.get(key) ?? []), s.memberId]);
+  }
+  for (const [ms, ids] of byTime) {
+    await db
+      .update(m)
+      .set({ createdAt: new Date(ms) })
+      .where(and(eq(m.guildId, guildId), inArray(m.id, ids)));
+  }
+}
+
+/** Upserts the three showcase events on (guild, title). */
+async function seedActivityEvents(
+  db: Db,
+  args: SeedActivityArgs,
+): Promise<SeededGuildActivity['events']> {
+  const out: SeededGuildActivity['events'] = { ended: [], cancelled: [] };
+  for (const spec of activityEventSpecs(args.pulls.now)) {
+    const id = await upsertActivityEvent(db, args, spec);
+    (spec.cancelled ? out.cancelled : out.ended).push(id);
+  }
+  return out;
+}
+
+async function upsertActivityEvent(
+  db: Db,
+  args: SeedActivityArgs,
+  spec: ActivityEventSpec,
+): Promise<number> {
+  const e = schema.events;
+  const duration: [Date, Date] = [spec.start, spec.end];
+  const set = { duration, cancelledAt: spec.cancelled ? spec.start : null };
+  const [found] = await db
+    .update(e)
+    .set(set)
+    .where(and(eq(e.guildId, args.guildId), eq(e.title, spec.title)))
+    .returning({ id: e.id });
+  if (found) return found.id;
+  const [row] = await db
+    .insert(e)
+    .values({
+      ...set,
+      title: spec.title,
+      gameId: args.gameId,
+      creatorId: args.creatorId,
+      guildId: args.guildId,
+      slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+    })
+    .returning({ id: e.id });
+  return defined(row, `seed-guild activity event ${spec.title}`).id;
 }

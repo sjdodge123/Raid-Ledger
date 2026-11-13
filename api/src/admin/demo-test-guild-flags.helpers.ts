@@ -48,7 +48,10 @@ export const SEED_GUILD_MAX_ROWS = 60;
 export const SEED_GUILD_SHOWCASE_ROWS = 50;
 
 /** ROK-1789 B9: optional roster size, 5..60 (absent = 5, or 50 with `withActivity`). */
-export function parseMemberCount(value: unknown, withActivity: boolean): number {
+export function parseMemberCount(
+  value: unknown,
+  withActivity: boolean,
+): number {
   if (value === undefined) {
     return withActivity ? SEED_GUILD_SHOWCASE_ROWS : SEED_GUILD_BASE_ROWS;
   }

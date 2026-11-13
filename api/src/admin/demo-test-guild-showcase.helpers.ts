@@ -60,38 +60,55 @@ export function seedFillerGuid(hash: string, n: number): string {
   return `Player-4395-${tail.toUpperCase()}`;
 }
 
-/** Upserts the filler rows on (guild, guid); returns their member ids in order. */
+type FillerCtx = {
+  guildId: number;
+  hash: string;
+  now: Date;
+  nameSuffix: string;
+};
+
+/** Upserts one filler row on (guild, guid); returns its member id. */
+async function upsertFiller(
+  db: Db,
+  ctx: FillerCtx,
+  e: FillerEntry,
+): Promise<number> {
+  const m = schema.guildMembers;
+  const set = {
+    rankIndex: e.rank,
+    rankName: e.rankName,
+    level: e.level,
+    class: e.class,
+    lastSeenAt: ctx.now,
+  };
+  const guid = seedFillerGuid(ctx.hash, e.n);
+  const [row] = await db
+    .insert(m)
+    .values({
+      guildId: ctx.guildId,
+      guid,
+      characterName: e.char,
+      source: 'addon_import',
+      ...set,
+    })
+    .onConflictDoUpdate({
+      target: [m.guildId, m.guid],
+      targetWhere: sql`${m.guid} IS NOT NULL`,
+      set,
+    })
+    .returning({ id: m.id });
+  return defined(row, `seed-guild filler ${e.char}`).id;
+}
+
+/** Upserts the filler rows; returns their member ids in order. */
 export async function seedFillerMembers(
   db: Db,
-  ctx: { guildId: number; hash: string; now: Date; nameSuffix: string },
+  ctx: FillerCtx,
   count: number,
 ): Promise<number[]> {
   const ids: number[] = [];
   for (const e of fillerRosterEntries(count, ctx.nameSuffix)) {
-    const set = {
-      rankIndex: e.rank,
-      rankName: e.rankName,
-      level: e.level,
-      class: e.class,
-      lastSeenAt: ctx.now,
-    };
-    const m = schema.guildMembers;
-    const [row] = await db
-      .insert(m)
-      .values({
-        guildId: ctx.guildId,
-        guid: seedFillerGuid(ctx.hash, e.n),
-        characterName: e.char,
-        source: 'addon_import',
-        ...set,
-      })
-      .onConflictDoUpdate({
-        target: [m.guildId, m.guid],
-        targetWhere: sql`${m.guid} IS NOT NULL`,
-        set,
-      })
-      .returning({ id: m.id });
-    ids.push(defined(row, `seed-guild filler ${e.char}`).id);
+    ids.push(await upsertFiller(db, ctx, e));
   }
   return ids;
 }
@@ -103,9 +120,15 @@ export interface SeedCaller {
 }
 
 /** The JWT caller's user row (404 if it vanished). `discordId` is '' for a local-only user. */
-export async function loadSeedCaller(db: Db, userId: number): Promise<SeedCaller> {
+export async function loadSeedCaller(
+  db: Db,
+  userId: number,
+): Promise<SeedCaller> {
   const [row] = await db
-    .select({ username: schema.users.username, discordId: schema.users.discordId })
+    .select({
+      username: schema.users.username,
+      discordId: schema.users.discordId,
+    })
     .from(schema.users)
     .where(eq(schema.users.id, userId))
     .limit(1);
@@ -126,20 +149,13 @@ interface ClaimArgs {
  * RL character, idx_characters_addon_guid) or inserts a non-main one, so the
  * caller's own main is never displaced.
  */
-export async function claimGuidCharacter(db: Db, args: ClaimArgs): Promise<string> {
+export async function claimGuidCharacter(
+  db: Db,
+  args: ClaimArgs,
+): Promise<string> {
+  const found = await reownGuidCharacter(db, args);
+  if (found !== undefined) return found;
   const c = schema.characters;
-  const [found] = await db
-    .update(c)
-    .set({ userId: args.userId, isMain: false, updatedAt: new Date() })
-    .where(
-      and(
-        eq(c.gameId, args.gameId),
-        eq(c.region, SEED_GUILD_REGION),
-        eq(c.addonGuid, args.guid),
-      ),
-    )
-    .returning({ id: c.id });
-  if (found) return found.id;
   const [row] = await db
     .insert(c)
     .values({
@@ -155,6 +171,26 @@ export async function claimGuidCharacter(db: Db, args: ClaimArgs): Promise<strin
     })
     .returning({ id: c.id });
   return defined(row, `seed-guild caller character ${args.name}`).id;
+}
+
+/** Moves the GUID's existing character (if any) to the caller, as a non-main. */
+async function reownGuidCharacter(
+  db: Db,
+  args: ClaimArgs,
+): Promise<string | undefined> {
+  const c = schema.characters;
+  const [found] = await db
+    .update(c)
+    .set({ userId: args.userId, isMain: false, updatedAt: new Date() })
+    .where(
+      and(
+        eq(c.gameId, args.gameId),
+        eq(c.region, SEED_GUILD_REGION),
+        eq(c.addonGuid, args.guid),
+      ),
+    )
+    .returning({ id: c.id });
+  return found?.id;
 }
 
 /** Idempotent member editor grant on the caller's rank-0 row ("GM + editor"). */
