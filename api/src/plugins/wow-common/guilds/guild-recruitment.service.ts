@@ -68,7 +68,13 @@ export class GuildRecruitmentService {
     await upsertRecruitment(this.db, guildId, null, actor.id, new Date());
   }
 
-  /** Editor grant / staff (`canEdit`), or the GUID-linked rank-0 GM (A1). */
+  /**
+   * Editor grant / staff (`canEdit`), or the GUID-linked rank-0 GM (A1).
+   * Q-A6 (accepted 2026-11-12): the rank-0 arm rests on an unsigned
+   * LedgerLink GUID claim, so the GUID-squat risk extends beyond the crest
+   * to all of recruitment, including the outbound Apply URL (public once
+   * ROK-1813 ships). ROK-1794 adds GUID verification.
+   */
   private async canEditRecruitment(
     actor: GuildActor,
     guildId: number,

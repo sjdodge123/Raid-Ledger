@@ -14,7 +14,7 @@ import {
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../common/testing/narrow';
+import { defined, nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 
@@ -40,12 +40,20 @@ const ROWS: Record<Who, RowSpec> = {
   unlinked: { rank: 0, link: 'none', lastSeenAt: SNAP },
   deleg: { rank: 3, link: 'guid', lastSeenAt: SNAP },
 };
+const WHO: readonly Who[] = [
+  'gm0',
+  'r1',
+  'bliz0',
+  'left0',
+  'unlinked',
+  'deleg',
+];
 
 let testApp: TestApp;
 let guildId: number;
 let communityId: number;
-const tokens = {} as Record<Actor, string>;
-const memberIds = {} as Partial<Record<Who, number>>;
+const tokens = new Map<Actor, string>();
+const memberIds: Partial<Record<Who, number>> = {};
 
 async function insertGuild(
   name: string,
@@ -91,7 +99,9 @@ async function seedLogin(who: Who): Promise<number> {
   const res = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
-  tokens[who] = res.body.access_token as string;
+  const token: unknown = res.body.access_token;
+  if (typeof token !== 'string') throw new Error(`no access_token for ${who}`);
+  tokens.set(who, token);
   return user.id;
 }
 
@@ -100,7 +110,7 @@ async function seedUser(who: Who): Promise<void> {
   const userId = await seedLogin(who);
   const spec = ROWS[who];
   const guid = `Player-1-rec-${who}`;
-  const blizzardId = 7_000_000 + Object.keys(ROWS).indexOf(who);
+  const blizzardId = 7_000_000 + WHO.indexOf(who);
   const byGuid = spec.link === 'guid' || spec.link === 'none';
   await testApp.db.insert(schema.characters).values({
     userId,
@@ -133,7 +143,8 @@ async function seedUser(who: Who): Promise<void> {
 }
 
 const path = (id: number): string => `${BASE}/${id}/recruitment`;
-const auth = (who: Actor): string => `Bearer ${tokens[who]}`;
+const auth = (who: Actor): string =>
+  `Bearer ${defined(tokens.get(who), `token for ${who}`)}`;
 const get = (who: Actor, id = guildId) =>
   testApp.request.get(path(id)).set('Authorization', auth(who));
 const put = (who: Actor, body: object, id = guildId) =>
@@ -160,13 +171,13 @@ beforeAll(async () => {
   await plugins().activate('blizzard');
   guildId = await insertGuild('Recruit Keepers', 'wow_guild');
   communityId = await insertGuild('Recruit Community', 'game_community');
-  for (const who of Object.keys(ROWS) as Who[]) await seedUser(who);
+  for (const who of WHO) await seedUser(who);
   const delegMember = memberIds.deleg;
   if (delegMember === undefined) throw new Error('deleg member row missing');
   await testApp.db
     .insert(schema.guildEditors)
     .values({ guildId, kind: 'member', guildMemberId: delegMember });
-  tokens.admin = await loginAsAdmin(testApp.request, testApp.seed);
+  tokens.set('admin', await loginAsAdmin(testApp.request, testApp.seed));
 });
 
 /** Randomized order: every test starts with no profile row for the guild. */
@@ -193,21 +204,24 @@ describe('rank-0 GM edit right (ruling A1 / AC4b)', () => {
     expect((await del('r1')).status).toBe(403);
   });
 
-  it('rank-0 linked only by Blizzard character id: member GET, PUT 403', async () => {
+  it('rank-0 linked only by Blizzard character id: member GET, PUT + DELETE 403', async () => {
     const view = await get('bliz0');
     expect(view.status).toBe(200);
     expect(view.body.viewer).toEqual({ canEdit: false });
     expect((await put('bliz0', VALID)).status).toBe(403);
+    expect((await del('bliz0')).status).toBe(403);
   });
 
-  it('rank-0 row not in the latest snapshot: not a member, GET + PUT 403', async () => {
+  it('rank-0 row not in the latest snapshot: not a member, GET + PUT + DELETE 403', async () => {
     expect((await get('left0')).status).toBe(403);
     expect((await put('left0', VALID)).status).toBe(403);
+    expect((await del('left0')).status).toBe(403);
   });
 
-  it('a character GUID matching no row: GET + PUT 403', async () => {
+  it('a character GUID matching no row: GET + PUT + DELETE 403', async () => {
     expect((await get('unlinked')).status).toBe(403);
     expect((await put('unlinked', VALID)).status).toBe(403);
+    expect((await del('unlinked')).status).toBe(403);
   });
 
   it('a confirmed member editor grant still edits', async () => {
@@ -266,6 +280,15 @@ describe('save / read / clear (AC3, AC4, AC7)', () => {
     expect(res.body.state).toBeNull();
     expect(res.body.updatedAt).toBeNull();
     expect(res.body.updatedBy).toBeNull();
+  });
+
+  it('DELETE on a guild with no profile row creates none', async () => {
+    expect((await del('deleg')).status).toBe(204);
+    const rows = await testApp.db
+      .select({ guildId: schema.guildProfiles.guildId })
+      .from(schema.guildProfiles)
+      .where(eq(schema.guildProfiles.guildId, guildId));
+    expect(rows).toEqual([]);
   });
 
   it('a PUT leaves rules, links and in-game text unchanged', async () => {
@@ -362,12 +385,17 @@ describe('gating (AC5)', () => {
     expect((await get('admin')).body.updatedBy).not.toBeNull();
   });
 
-  it('plugin inactive → the plugin guard refuses', async () => {
+  it('plugin inactive → the plugin guard refuses GET, PUT and DELETE', async () => {
     await plugins().deactivate('blizzard');
     try {
-      const res = await get('gm0');
-      expect(res.status).toBe(403);
-      expect(String(res.body.message)).toContain('not active');
+      for (const res of [
+        await get('gm0'),
+        await put('gm0', VALID),
+        await del('gm0'),
+      ]) {
+        expect(res.status).toBe(403);
+        expect(String(res.body.message)).toContain('not active');
+      }
     } finally {
       await plugins().activate('blizzard');
     }

@@ -35,7 +35,8 @@ export async function findRecruitmentRow(
 
 /**
  * Save (`value`) or clear (`null` → the three columns NULL) the guild's
- * recruitment. Upserts: creates the profile row on the first save. Last
+ * recruitment. A save upserts (creates the profile row on the first save);
+ * a clear only updates an existing row, never inserting an empty one. Last
  * write wins (A-D4).
  */
 export async function upsertRecruitment(
@@ -46,6 +47,10 @@ export async function upsertRecruitment(
   now: Date,
 ): Promise<void> {
   const patch = buildRecruitmentPatch(value, userId, now);
+  if (value === null) {
+    await db.update(profiles).set(patch).where(eq(profiles.guildId, guildId));
+    return;
+  }
   await db
     .insert(profiles)
     .values({ guildId, ...patch })

@@ -63,19 +63,27 @@ export const GuildRecruitWantedSchema = z
   .strict();
 export type GuildRecruitWanted = z.infer<typeof GuildRecruitWantedSchema>;
 
-/** What an editor saves (stored as-is in `guild_profiles.recruitment`). */
-export const GuildRecruitmentSchema = z
+/**
+ * The recruitment object without the duplicate-row refine, so later schemas
+ * (e.g. ROK-1813's public shape) can `.omit/.pick/.extend` it — zod throws
+ * on those for a refined object. Validate input with `GuildRecruitmentSchema`.
+ */
+export const GuildRecruitmentObjectSchema = z
   .object({
     /** Guild switch (Q-A5 / ruling A4): false = "Not recruiting right now"; rows, states + URL kept. */
     recruiting: z.boolean(),
     wanted: z.array(GuildRecruitWantedSchema).max(GUILD_RECRUIT_WANTED_MAX),
     applyUrl: GuildHttpUrlSchema.nullable(),
   })
-  .strict()
-  .refine(
-    (v) => new Set(v.wanted.map((w) => `${w.className}|${w.role}`)).size === v.wanted.length,
-    { message: 'Each class + role can be listed once', path: ['wanted'] },
-  );
+  .strict();
+
+/** What an editor saves (stored as-is in `guild_profiles.recruitment`). */
+export const GuildRecruitmentSchema = GuildRecruitmentObjectSchema.refine(
+  (v) =>
+    new Set(v.wanted.map((w) => `${w.className}|${w.role}`)).size ===
+    v.wanted.length,
+  { message: 'Each class + role can be listed once', path: ['wanted'] },
+);
 export type GuildRecruitment = z.infer<typeof GuildRecruitmentSchema>;
 
 /**
