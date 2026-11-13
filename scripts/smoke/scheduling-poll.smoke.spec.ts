@@ -645,6 +645,34 @@ const TEMPLATED_GRID_CELLS: GridCell[] = [
     { day: 5, hour: 18 }, { day: 5, hour: 19 },
 ];
 
+/**
+ * The hour each Playwright project's ROK-1570 case signs the SHARED admin up
+ * for. desktop/mobile/tablet run this file concurrently against one env DB,
+ * and busy is derived from the admin's signups across every event — so if two
+ * projects picked the same cell, one project's live signup would make the
+ * other's "starts free" read `0 free · 1 busy`. One distinct cell per project.
+ */
+const BUSY_CELL_BY_PROJECT: Record<string, GridCell> = {
+    desktop: { day: 1, hour: 19 },
+    mobile: { day: 3, hour: 19 },
+    tablet: { day: 5, hour: 18 },
+};
+
+/** Templated hours NO project's ROK-1570 signup covers — safe control cells. */
+const UNBUSIED_GRID_CELLS: GridCell[] = TEMPLATED_GRID_CELLS.filter(
+    (c) =>
+        !Object.values(BUSY_CELL_BY_PROJECT).some(
+            (b) => b.day === c.day && b.hour === c.hour,
+        ),
+);
+
+/** This project's own ROK-1570 busy cell; an unassigned project fails loudly. */
+function busyCellFor(projectName: string): GridCell {
+    const cell = BUSY_CELL_BY_PROJECT[projectName];
+    if (!cell) throw new Error(`no ROK-1570 busy cell assigned to project "${projectName}"`);
+    return cell;
+}
+
 /** Sunday 00:00 UTC of the week containing `d`. */
 function weekStartUtc(d: Date): Date {
     const x = new Date(d);
@@ -662,11 +690,12 @@ function gridCellInstant(weekStart: Date, cell: GridCell): Date {
 }
 
 /**
- * The first templated hour still in the future — this week if one is left,
- * otherwise next week (the test then pages the sheet forward). Events must be
- * in the future, and the test has to be deterministic on any weekday.
+ * The first of `candidates` (templated hours) still in the future — this week
+ * if one is left, otherwise next week (the test then pages the sheet forward).
+ * Events must be in the future, and the test has to be deterministic on any
+ * weekday.
  */
-function pickTargetCell(): {
+function pickTargetCell(candidates: readonly GridCell[]): {
     cell: GridCell;
     start: Date;
     weekStart: Date;
@@ -675,14 +704,14 @@ function pickTargetCell(): {
     const now = new Date();
     const thisWeek = weekStartUtc(now);
     const cutoff = now.getTime() + 60 * 60_000;
-    for (const cell of TEMPLATED_GRID_CELLS) {
+    for (const cell of candidates) {
         const start = gridCellInstant(thisWeek, cell);
         if (start.getTime() > cutoff)
             return { cell, start, weekStart: thisWeek, weeksForward: 0 };
     }
     const nextWeek = new Date(thisWeek);
     nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
-    const cell = at(TEMPLATED_GRID_CELLS, 0);
+    const cell = at(candidates, 0);
     return {
         cell,
         start: gridCellInstant(nextWeek, cell),
@@ -993,9 +1022,11 @@ test.describe('Scheduling poll heatmap', () => {
     test('a signed-up hour is no longer painted free (ROK-1570)', async ({
         page,
         world,
-    }) => {
-        const target = pickTargetCell();
-        const neighbour = TEMPLATED_GRID_CELLS.find(
+    }, testInfo) => {
+        // Per-project cell + a neighbour no project signs up at: the sibling
+        // projects run this case concurrently as the same admin.
+        const target = pickTargetCell([busyCellFor(testInfo.project.name)]);
+        const neighbour = UNBUSIED_GRID_CELLS.find(
             (c) => c.day !== target.cell.day,
         );
         if (!neighbour) throw new Error('no neighbouring templated cell seeded');
@@ -1135,7 +1166,8 @@ test.describe('Scheduling poll heatmap', () => {
             'phone-layout only: at >=1024px the sheet mounts the seven-column GroupWeekView Modal',
         );
 
-        const target = pickTargetCell();
+        // A cell no project's concurrent ROK-1570 signup can make busy.
+        const target = pickTargetCell(UNBUSIED_GRID_CELLS);
         await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
         await goToPoll(page, lineupId, matchId);
         await openBetterTimeSheet(page);
