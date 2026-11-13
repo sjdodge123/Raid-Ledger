@@ -43,6 +43,13 @@ function makeSession(n: number, over: Partial<InMemorySession> = {}) {
   return session;
 }
 
+/** Fail loudly on a missing element instead of reading through `undefined`. */
+function must<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined)
+    throw new Error(`missing ${label}`);
+  return value;
+}
+
 function toMap(sessions: InMemorySession[]): Map<string, InMemorySession> {
   return new Map(sessions.map((s) => [`${s.eventId}:${s.discordUserId}`, s]));
 }
@@ -192,7 +199,7 @@ describe('voice flush — a leave landing mid-write is not lost', () => {
     expect(session.dirty).toBe(true);
     await flushDirtySessions(mockDb as never, map, logger);
     expect(mockDb.values).toHaveBeenCalledTimes(2);
-    const rows: unknown[] = mockDb.values.mock.calls[1][0];
+    const rows: unknown[] = must(mockDb.values.mock.calls[1]?.[0], 'rows');
     expectLeaveWritten(rows[0], session);
     expect(session.dirty).toBe(false);
   });
@@ -222,5 +229,42 @@ describe('voice flush — a leave landing mid-write is not lost', () => {
 
     expect([single.dirty, batched.dirty]).toEqual([false, false]);
     expect(logger.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('voice flush — a leave landing during the per-row retry is not lost', () => {
+  let mockDb: MockDb;
+  let logger: ReturnType<typeof makeLogger>;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.onConflictDoUpdate.mockResolvedValue(undefined);
+    logger = makeLogger();
+  });
+
+  it('batch fails, then a leave lands during the per-row retry: stays dirty', async () => {
+    const retryStarted = deferred();
+    const retryWrite = deferred();
+    mockDb.onConflictDoUpdate
+      .mockRejectedValueOnce(new Error('batch boom')) // the batch
+      .mockImplementationOnce(() => {
+        retryStarted.resolve(); // the per-row retry is now awaiting its write
+        return retryWrite.promise;
+      });
+    const session = makeActiveSession(1);
+    const map = toMap([session]);
+
+    const flushing = flushDirtySessions(mockDb as never, map, logger);
+    await retryStarted.promise;
+    leaveSession(session); // arrives while the per-row retry is awaited
+    retryWrite.resolve();
+    await flushing;
+
+    expect(mockDb.insert).toHaveBeenCalledTimes(2); // batch + 1 retry
+    expect(session.dirty).toBe(true);
+    await flushDirtySessions(mockDb as never, map, logger);
+    const rows: unknown[] = must(mockDb.values.mock.calls[2]?.[0], 'rows');
+    expectLeaveWritten(rows[0], session);
+    expect(session.dirty).toBe(false);
   });
 });

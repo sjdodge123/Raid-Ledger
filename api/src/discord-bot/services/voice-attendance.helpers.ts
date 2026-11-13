@@ -40,7 +40,10 @@ export interface InMemorySession {
   dirtyVersion: number;
 }
 
-/** Mark a session as needing a DB flush; the only way to set `dirty`. */
+/**
+ * Mark an existing session as needing a DB flush. The only way to re-dirty a
+ * session (new sessions are built with `dirty: true` directly).
+ */
 export function markSessionDirty(session: InMemorySession): void {
   session.dirty = true;
   session.dirtyVersion += 1;

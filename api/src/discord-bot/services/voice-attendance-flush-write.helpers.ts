@@ -128,7 +128,10 @@ async function flushChunk(
   logger: Logger,
 ): Promise<void> {
   try {
-    const versions = chunk.map((s) => s.dirtyVersion);
+    const pending = chunk.map((session) => ({
+      session,
+      version: session.dirtyVersion,
+    }));
     const rows = chunk.map((s) => toInsertRow(s, snapshotSessionForFlush(s)));
     await db
       .insert(T)
@@ -137,7 +140,9 @@ async function flushChunk(
         target: [T.eventId, T.discordUserId],
         set: BATCH_UPSERT_SET,
       });
-    chunk.forEach((s, i) => clearDirtyIfUnchanged(s, versions[i] ?? -1));
+    pending.forEach(({ session, version }) =>
+      clearDirtyIfUnchanged(session, version),
+    );
   } catch (err) {
     logger.warn(
       `Batched voice flush of ${chunk.length} session(s) failed, retrying per row: ${err}`,
