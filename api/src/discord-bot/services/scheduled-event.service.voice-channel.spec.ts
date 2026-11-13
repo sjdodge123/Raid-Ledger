@@ -307,14 +307,14 @@ describe('planned SE — voice override and reconciliation game name', () => {
       false,
       'vc-override',
     );
-    expect(mocks.channelResolver.overrideIsVoiceChannel).toHaveBeenCalledWith(
-      'vc-override',
-    );
     expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: GuildScheduledEventEntityType.Voice,
         channel: 'vc-override',
       }),
+    );
+    expect(mocks.channelResolver.overrideIsVoiceChannel).toHaveBeenCalledWith(
+      'vc-override',
     );
   });
 
