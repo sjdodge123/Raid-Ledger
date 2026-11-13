@@ -25,7 +25,10 @@ import {
   claimPugSlotsInDb,
 } from './pug-invite.member-helpers';
 import { errorStack } from '../../common/error-format.helpers';
-import { resolveInviteVoice, type InviteVoice } from './pug-invite.voice.helpers';
+import {
+  resolveInviteVoice,
+  type InviteVoice,
+} from './pug-invite.voice.helpers';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
