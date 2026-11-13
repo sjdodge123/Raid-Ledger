@@ -8,22 +8,36 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
-import type { GuildPage, GuildRecruitmentView, PutGuildRecruitmentInput } from '@raid-ledger/contract';
+import { PutGuildRecruitmentSchema, type GuildPage, type GuildRecruitmentView } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     GUILD_RECRUITMENT_URL, buildRecruitment, buildRecruitmentView,
 } from '../../../test/mocks/guild-recruitment-handlers';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
+import type { HubCtx } from '../../hub-module';
+import { buildCommunityPage } from '../../../test/factories/community-hub';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import RecruitmentWidget, { RECRUITMENT_EMPTY_HINT } from './recruitment-widget';
 import { RecruitmentAction } from './recruitment-action';
 import { useRecruitmentDialog } from './recruitment-dialog-store';
 
+/** Never read by the card — spelled out rather than cast (server-hours-widget.test idiom). */
+const IDLE_RAIDS: HubCtx['raids'] = {
+    data: undefined, error: null, isPending: true, isLoading: true, isLoadingError: false,
+    isRefetchError: false, isSuccess: false, isError: false, isFetched: false,
+    isFetchedAfterMount: false, isFetching: false, isInitialLoading: true, isPaused: false,
+    isPlaceholderData: false, isRefetching: false, isStale: false, isEnabled: true,
+    status: 'pending', fetchStatus: 'fetching', dataUpdatedAt: 0, errorUpdatedAt: 0,
+    failureCount: 0, failureReason: null, errorUpdateCount: 0,
+    refetch: () => Promise.reject(new Error('not used')),
+};
+
 function ctx(): HubWidgetCtx {
     // The card reads only `page.guild.id`; rights come from the recruitment view (guild-text test idiom).
-    const page = { guild: { id: 5, kind: 'wow_guild', gameSlug: WOW_FOREVER_GAME_SLUG } } as GuildPage;
-    return { page, gameSlug: WOW_FOREVER_GAME_SLUG } as HubWidgetCtx;
+    const base = buildCommunityPage();
+    const page: GuildPage = { ...base, guild: { ...base.guild, id: 5, kind: 'wow_guild' } };
+    return { page, raids: IDLE_RAIDS, gameSlug: WOW_FOREVER_GAME_SLUG };
 }
 
 const Card = (): JSX.Element => <><RecruitmentAction {...ctx()} /><RecruitmentWidget {...ctx()} /></>;
@@ -47,7 +61,7 @@ describe('Recruitment editor → card cache (AC4/AC7)', () => {
     it('a save shows on the card without a refetch', async () => {
         serveLive(buildRecruitmentView(buildRecruitment(), true));
         server.use(http.put(GUILD_RECRUITMENT_URL, async ({ request }) =>
-            HttpResponse.json(buildRecruitmentView((await request.json()) as PutGuildRecruitmentInput, true))));
+            HttpResponse.json(buildRecruitmentView(PutGuildRecruitmentSchema.parse(await request.json()), true))));
         await openEditor();
         fireEvent.click(screen.getByRole('checkbox'));
         fireEvent.click(screen.getByTestId('recruitment-save'));
