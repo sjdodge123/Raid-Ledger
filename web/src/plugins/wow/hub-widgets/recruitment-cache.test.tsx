@@ -16,7 +16,7 @@ import {
 } from '../../../test/mocks/guild-recruitment-handlers';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
-import RecruitmentWidget from './recruitment-widget';
+import RecruitmentWidget, { RECRUITMENT_EMPTY_HINT } from './recruitment-widget';
 import { RecruitmentAction } from './recruitment-action';
 import { useRecruitmentDialog } from './recruitment-dialog-store';
 
@@ -66,7 +66,9 @@ describe('Recruitment editor → card cache (AC4/AC7)', () => {
         await openEditor();
         fireEvent.click(screen.getByTestId('recruitment-clear'));
         fireEvent.click(await screen.findByTestId('discard-changes-discard'));
-        expect(await screen.findByTestId('recruitment-set')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByTestId('recruitment-save')).toBeNull());
+        await waitFor(() => expect(screen.getByTestId('recruitment-card')).toHaveTextContent(RECRUITMENT_EMPTY_HINT));
+        expect(screen.getByTestId('recruitment-set')).toBeInTheDocument();
         expect(screen.queryByTestId('recruitment-headline')).toBeNull();
     });
 });

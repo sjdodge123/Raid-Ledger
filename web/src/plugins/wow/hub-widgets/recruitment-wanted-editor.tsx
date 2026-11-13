@@ -24,6 +24,8 @@ interface RowProps {
     index: number;
     classes: readonly WowRecruitClass[];
     error: string | undefined;
+    /** Id of the row's error line; the class + role selects point at it while `error` is set. */
+    errorId: string;
     onChange: RowsUpdate;
 }
 
@@ -53,21 +55,27 @@ function StateAndNote({ row, index, set }: { row: DraftWanted; index: number; se
     );
 }
 
-function RowControls({ row, index, classes, error, onChange }: RowProps): JSX.Element {
+/** The class options; a saved class outside this game's list (e.g. set via the API) stays visible and selected. */
+function classOptions(classes: readonly WowRecruitClass[], current: WowRecruitClass): readonly WowRecruitClass[] {
+    return classes.includes(current) ? classes : [current, ...classes];
+}
+
+function RowControls({ row, index, classes, error, errorId, onChange }: RowProps): JSX.Element {
     const set: RowPatch = (patch) => onChange((rows) => wantedOps.patch(rows, row.key, patch));
     const invalid = error !== undefined;
+    const describedBy = invalid ? { 'aria-describedby': errorId } : {};
     const n = index + 1;
     return (
         <div className="grid grid-cols-[1fr_1fr_auto] gap-2 lg:grid-cols-[1fr_1fr_1fr_1.4fr_auto]">
             <div className="col-start-1 row-start-1 min-w-0">
                 <Select aria-label={`Class ${n}`} data-testid={`recruitment-class-${index}`} value={row.className} invalid={invalid}
-                    onChange={(e) => { const v = e.target.value; if (isClass(classes, v)) set({ className: v }); }}>
-                    {classes.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {...describedBy} onChange={(e) => { const v = e.target.value; if (isClass(classes, v)) set({ className: v }); }}>
+                    {classOptions(classes, row.className).map((c) => <option key={c} value={c}>{c}</option>)}
                 </Select>
             </div>
             <div className="col-start-2 row-start-1 min-w-0">
                 <Select aria-label={`Role ${n}`} data-testid={`recruitment-role-${index}`} value={row.role} invalid={invalid}
-                    onChange={(e) => { const v = e.target.value; if (isRole(v)) set({ role: v }); }}>
+                    {...describedBy} onChange={(e) => { const v = e.target.value; if (isRole(v)) set({ role: v }); }}>
                     {RECRUIT_ROLES.map((r) => <option key={r} value={r}>{RECRUIT_ROLE_LABEL[r]}</option>)}
                 </Select>
             </div>
@@ -100,10 +108,13 @@ export function RecruitmentWantedEditor({ rows, classes, errors, onChange }: Rec
                 <ul className="flex flex-col gap-3">
                     {rows.map((row, i) => {
                         const error = errors.get(row.key);
+                        const errorId = `recruitment-row-error-${row.key}`;
                         return (
                             <li key={row.key} className="flex flex-col gap-1" data-testid={`recruitment-row-${i}`}>
-                                <RowControls row={row} index={i} classes={classes} error={error} onChange={onChange} />
-                                {error !== undefined && <p className="text-xs text-danger" data-testid={`recruitment-row-error-${i}`}>{error}</p>}
+                                <RowControls row={row} index={i} classes={classes} error={error} errorId={errorId} onChange={onChange} />
+                                {error !== undefined && (
+                                    <p id={errorId} role="alert" className="text-xs text-danger" data-testid={`recruitment-row-error-${i}`}>{error}</p>
+                                )}
                             </li>
                         );
                     })}

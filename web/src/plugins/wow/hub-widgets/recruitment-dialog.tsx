@@ -25,11 +25,12 @@ export const DIALOG_TITLE = 'Recruitment';
 const CLEAR_COPY: DiscardCopy = { title: 'Clear recruitment?', keepLabel: 'Keep it', discardLabel: 'Clear recruitment' };
 const CLEAR_MESSAGE = 'Members stop seeing the Recruitment card. The list, states and link are removed.';
 
-interface OverlayProps { guard: DirtyCloseGuard; onClose: () => void; footer: ReactNode; children: ReactNode }
+interface OverlayProps { guard: DirtyCloseGuard; onClose: () => void; busy: boolean; footer: ReactNode; children: ReactNode }
 
-function RecruitmentOverlay({ guard, onClose, footer, children }: OverlayProps): JSX.Element {
+/** `busy` (a save or clear in flight) locks the close affordances (design-system Modal, ROK-2068). */
+function RecruitmentOverlay({ guard, onClose, busy, footer, children }: OverlayProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
-    const shared = { isOpen: true, title: DIALOG_TITLE, onClose, closeGuard: guard, footer, children };
+    const shared = { isOpen: true, title: DIALOG_TITLE, onClose, closeGuard: guard, closeDisabled: busy, footer, children };
     return isDesktop ? <Modal {...shared} maxWidth="max-w-lg" /> : <BottomSheet {...shared} maxHeight="85vh" />;
 }
 
@@ -44,7 +45,8 @@ function useRecruitmentEditor(guildId: number, initial: GuildRecruitmentView) {
         setBase(initial);
         setDraft(draftOf(initial));
     }
-    return { base, draft, setDraft, save, clear, dirty, errors: draftErrors(draft) };
+    const busy = save.isPending || clear.isPending;
+    return { base, draft, setDraft, save, clear, dirty, busy, errors: draftErrors(draft) };
 }
 
 type Editor = ReturnType<typeof useRecruitmentEditor>;
@@ -55,14 +57,15 @@ function DialogFooter({ editor, onCancel, onSave, onClear }: FooterProps): JSX.E
     return (
         <div className="flex w-full flex-wrap items-center gap-2">
             {editor.base.recruitment !== null && (
-                <Button variant="ghost" data-testid="recruitment-clear" loading={editor.clear.isPending} onClick={onClear}>
+                <Button variant="ghost" data-testid="recruitment-clear" loading={editor.clear.isPending}
+                    disabled={editor.save.isPending} onClick={onClear}>
                     Clear recruitment
                 </Button>
             )}
             <span className="flex-1" />
-            <Button variant="secondary" data-testid="recruitment-cancel" onClick={onCancel}>Cancel</Button>
+            <Button variant="secondary" data-testid="recruitment-cancel" disabled={editor.busy} onClick={onCancel}>Cancel</Button>
             <Button data-testid="recruitment-save" loading={editor.save.isPending}
-                disabled={hasDraftErrors(editor.errors)} onClick={onSave}>Save</Button>
+                disabled={editor.clear.isPending || hasDraftErrors(editor.errors)} onClick={onSave}>Save</Button>
         </div>
     );
 }
@@ -76,7 +79,7 @@ function RecruitmentEditor({ guildId, gameSlug, data, onClose }: EditorProps): J
     const save = (): void => editor.save.mutate(toPutBody(editor.draft), { onSuccess: onClose });
     const clearNow = (): void => { setConfirmClear(false); editor.clear.mutate(undefined, { onSuccess: onClose }); };
     return (
-        <RecruitmentOverlay guard={guard} onClose={onClose} footer={
+        <RecruitmentOverlay guard={guard} onClose={onClose} busy={editor.busy} footer={
             <DialogFooter editor={editor} onCancel={guard.requestClose} onSave={save} onClear={() => setConfirmClear(true)} />
         }>
             {editor.save.isError && <DialogBanner tone="danger" testId="recruitment-save-error">Couldn&apos;t save recruitment. Try again.</DialogBanner>}
