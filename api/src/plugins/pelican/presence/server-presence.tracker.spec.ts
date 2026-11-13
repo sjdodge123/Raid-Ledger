@@ -359,3 +359,32 @@ describe('owner-carrying snapshot for cold-replay restore (ROK-1822 r4)', () => 
     expect(t.snapshot()).toEqual([{ steamId: A, name: 'Bjorn' }]);
   });
 });
+
+describe('over-long character names vs the clamped stored roster (varchar(255))', () => {
+  const LOG_NAME = 'L'.repeat(300);
+  const STORED_NAME = 'L'.repeat(255);
+
+  it("a player rehydrated under the clamped name matches their full-length line and does not take another player's handshake", () => {
+    tracker.hydrate([{ steamId: A, name: STORED_NAME, owner: '111' }]);
+    expect(run(tracker, [join(B), characterOf(LOG_NAME, '111')], 10)).toEqual(
+      [],
+    );
+    expect(tracker.snapshot()).toEqual([{ steamId: A, name: STORED_NAME }]);
+    // B's handshake is still pending for B's own character line.
+    expect(run(tracker, [characterOf('Y', '222')], 20)).toEqual([
+      { kind: 'joined', steamId: B, name: 'Y' },
+    ]);
+  });
+
+  it('a death line with the full-length name resolves to the rehydrated player', () => {
+    tracker.hydrate([{ steamId: A, name: STORED_NAME }]);
+    expect(tracker.steamIdOfCharacter(LOG_NAME)).toBe(A);
+    expect(run(tracker, [join(B), character(LOG_NAME)], 10)).toEqual([]);
+  });
+
+  it('a live over-long name is tracked in its clamped form', () => {
+    expect(run(tracker, [join(A), characterOf(LOG_NAME, '111')])).toEqual([
+      { kind: 'joined', steamId: A, name: STORED_NAME },
+    ]);
+  });
+});

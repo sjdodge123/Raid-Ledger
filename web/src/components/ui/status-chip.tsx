@@ -29,13 +29,17 @@ export interface StatusChipProps {
     children: ReactNode;
     className?: string;
     size?: StatusChipSize;
+    /** Opt-in: let a long label wrap onto more lines (default: one line, `whitespace-nowrap`). */
+    wrap?: boolean;
 }
 
-export function StatusChip({ tone, title, children, className, size = 'sm' }: StatusChipProps) {
+/** Read-only status chip (§4.21). Colour is never its only signal — `title` is required. */
+export function StatusChip({ tone, title, children, className, size = 'sm', wrap = false }: StatusChipProps) {
     const extra = className ? ` ${className}` : '';
+    const whitespace = wrap ? 'whitespace-normal' : 'whitespace-nowrap';
     return (
         <span data-tone={tone} title={title}
-            className={`inline-flex items-center whitespace-nowrap rounded-full border ${SIZE_CLS[size]} font-mono ${TONE_CLS[tone]}${extra}`}>
+            className={`inline-flex items-center ${whitespace} rounded-full border ${SIZE_CLS[size]} font-mono ${TONE_CLS[tone]}${extra}`}>
             {children}
         </span>
     );

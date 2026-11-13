@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
@@ -167,7 +167,9 @@ function buildAdHocEventValues(
 }
 
 /**
- * Find a fallback admin user for ad-hoc event creation.
+ * Find a fallback admin user for ad-hoc event creation: the lowest-id
+ * (oldest) admin, so an unlinked player's Quick Play is always attributed to
+ * the same admin rather than whichever row Postgres returns first.
  */
 export async function findAdminFallback(
   db: PostgresJsDatabase<typeof schema>,
@@ -176,6 +178,7 @@ export async function findAdminFallback(
     .select({ id: tables.users.id })
     .from(tables.users)
     .where(eq(tables.users.role, 'admin'))
+    .orderBy(asc(tables.users.id))
     .limit(1);
 
   return admin?.id ?? null;

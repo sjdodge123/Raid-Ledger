@@ -9,6 +9,7 @@
  * whole tx, so violations are mapped only after it has rolled back.
  */
 import { ConflictException } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterDto, CreateCharacterDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -51,7 +52,25 @@ export function buildCreateValues(
   };
 }
 
-/** Duplicate claim → main-swap → insert, on the given transaction. */
+/**
+ * Serialise every create for one (user, game) until `tx` ends. Without it two
+ * concurrent creates both count 0 rows under READ COMMITTED (or both demote on
+ * an explicit `isMain`), both insert `is_main = true`, and the second violates
+ * the partial unique index `idx_one_main_per_game` → unmapped 500. Two-arg
+ * form in its own `hashtext('character-main-claim')` class so it cannot
+ * collide with other two-arg locks. MUST run on the transaction handle.
+ */
+async function lockUserGameCreate(
+  tx: CharactersTx,
+  userId: number,
+  gameId: number,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext('character-main-claim'), hashtext(${userId}::text || ':' || ${gameId}::text))`,
+  );
+}
+
+/** Lock → duplicate claim → main-swap → insert, on the given transaction. */
 export async function insertCharacterTx(
   tx: CharactersTx,
   userId: number,
@@ -59,6 +78,7 @@ export async function insertCharacterTx(
   logger: Logger,
   identity?: CharacterIdentityProvider,
 ): Promise<CharacterDto> {
+  await lockUserGameCreate(tx, userId, dto.gameId);
   await checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm, {
     ...(dto.region !== undefined ? { region: dto.region } : {}),
     identity,

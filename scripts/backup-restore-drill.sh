@@ -399,7 +399,7 @@ emit_failure_report() {
   local a1_status="${1:-failed}" reason="${2:-A1 failed}" extra_finding="${3:-}"
   RECONCILE_DETAIL="not reached — $reason"
   BOOT_FINDING="$(json_finding boot-health boot informational "not reached ($reason)")"
-  if [ -n "$extra_finding" ]; then EXTRA_FINDINGS=",$extra_finding"; fi
+  if [ -n "$extra_finding" ]; then EXTRA_FINDINGS="${EXTRA_FINDINGS},$extra_finding"; fi
   write_report_body "$a1_status" informational "$REPORT_PATH" \
     ",\"finishedAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"status\":\"failed\""
   REPORT_WRITTEN=1

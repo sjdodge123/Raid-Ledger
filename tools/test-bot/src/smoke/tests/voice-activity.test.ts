@@ -1062,8 +1062,20 @@ const metricsVoicePopulated: SmokeTest = {
  * injecting synthetic voice sessions with controlled timing, then asserting
  * the metrics endpoint returns correct counts and roster entries.
  *
- * Event: 60 min, ended 5 min ago. 7 signups covering every status combination.
+ * Event: 60 min, scheduled 48h in the future. 7 signups covering every status
+ * combination. The window is deliberately in the FUTURE: the API's minute cron
+ * (VoiceAttendanceService.classifyCompletedEvents) only picks events whose end
+ * is <= now (fetchEndedEvents). An already-ended event let the cron run between
+ * signup and session injection, insert no_show rows for every linked signup
+ * and fill attendance=no_show — the injected sessions then hit ON CONFLICT DO
+ * NOTHING and autoPopulateAttendance (fills NULL only) could never write
+ * "attended" (TDB:1076, `attended: expected 4, got 0`). triggerClassify grades
+ * against the event window, not the wall clock, so the same statuses result.
+ * 48h also keeps the event outside the 24h reminder window (no stray DMs).
  */
+/** Minutes from now the ROK-943 event starts: past the 24h reminder window. */
+const ROK943_START_MIN = 48 * 60;
+
 const classifyPopulatesAttendance: SmokeTest = {
   name: 'Voice classification populates attendance and metrics (ROK-943)',
   category: 'voice',
@@ -1080,9 +1092,9 @@ async function rok943ClassifyAllStatuses(ctx: TestContext) {
   const gameId = gamesRes.data[0]?.id;
   if (!gameId) throw new Error('No games in DB');
 
-  // 60-min event that ended 5 min ago
-  const evStart = futureTime(-65);
-  const evEnd = futureTime(-5);
+  // 60-min event 48h out — never "ended", so the classify cron cannot race us
+  const evStart = futureTime(ROK943_START_MIN);
+  const evEnd = futureTime(ROK943_START_MIN + 60);
   const ev = await createEvent(ctx.api, 'rok943-all-statuses', {
     gameId,
     startTime: evStart,
