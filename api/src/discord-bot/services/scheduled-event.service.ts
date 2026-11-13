@@ -327,9 +327,8 @@ export class ScheduledEventService {
     const planDeps = { settings: s, channelResolver: this.channelResolver };
     const loc = await plannedSELocation(this.db, planDeps, eventId, eventData);
     const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
-    const name = await resolveEditedScheduledEventName(event, eventData, () =>
-      this.settingsService.getDefaultTimezone(),
-    );
+    const tz = () => s.getDefaultTimezone();
+    const name = await resolveEditedScheduledEventName(event, eventData, tz);
     try {
       await tryEditFullEvent(
         guild,

@@ -117,10 +117,7 @@ export class DiscordEventListener {
     if (!this.clientService.isConnected()) return;
     if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
-    if (records.length === 0) {
-      await this.handleMissingEmbedOnUpdate(payload);
-      return;
-    }
+    if (records.length === 0) return this.handleMissingEmbedOnUpdate(payload);
     await this.updateExistingEmbeds(payload, records, isRescheduling);
   }
 

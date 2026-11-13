@@ -166,12 +166,7 @@ export async function resolveCreatePlace(
       settings: inputs.plannedVoiceSettings,
       channelResolver: inputs.channelResolver,
     };
-    const location = await plannedSELocation(
-      db,
-      deps,
-      eventId,
-      eventData,
-    );
+    const location = await plannedSELocation(db, deps, eventId, eventData);
     if (location) return { location };
   }
   return resolveVoiceForCreate(
