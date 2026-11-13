@@ -605,8 +605,9 @@ async function insertRoster(
 
 /**
  * Run `fn` and count the SQL statements IT issues: every drizzle query goes
- * through the app client's `unsafe`, and the AsyncLocalStorage scope keeps
- * any concurrent background work (crons, cache warms) out of the count.
+ * through the app client's `unsafe`, and the AsyncLocalStorage scope counts
+ * only calls made inside `fn`'s async context (work it starts that outlives
+ * it, or a `db.transaction`/raw `$client` path, is not counted).
  */
 async function countQueries<T>(
   fn: () => Promise<T>,
@@ -628,7 +629,11 @@ async function countQueries<T>(
   }
 }
 
-/** p95 of 10 uncached computes — logged as a metric, never asserted. */
+/**
+ * p95 of 10 uncached computes — logged as a metric. Only a catastrophic
+ * backstop (10 s, ~65x the measured p95) is asserted; the real scale guard is
+ * the query budget, so a slow shared runner cannot flake it.
+ */
 async function logP95(gid: number): Promise<void> {
   const svc = testApp.app.get(RosterInsightsService);
   const times: number[] = [];
@@ -642,6 +647,7 @@ async function logP95(gid: number): Promise<void> {
   console.log(
     `roster-insights 2000-row (${LINKED} linked) p95=${p95.toFixed(1)}ms`,
   );
+  expect(p95).toBeLessThan(10_000);
 }
 
 describe('roster-insights on a 2000-member roster', () => {
@@ -671,7 +677,9 @@ describe('roster-insights on a 2000-member roster', () => {
     console.log(
       `roster-insights SQL statements: 20 rows=${atSmall.queries}, 2000 rows=${atBig.queries}`,
     );
-    expect(atSmall.queries).toBeGreaterThan(0);
+    // Pinned so a query path that bypasses the counter cannot pass silently;
+    // adding a fact source legitimately moves it — update the number then.
+    expect(atSmall.queries).toBe(8);
     expect({ sqlStatementsFor2000Rows: atBig.queries }).toEqual({
       sqlStatementsFor2000Rows: atSmall.queries,
     });
