@@ -7,6 +7,11 @@
  * Proven through the real `/plugins/wow/guilds/:id` access matrix.
  */
 import { and, eq, inArray } from 'drizzle-orm';
+import {
+  GUILD_ACTIVITY_KINDS,
+  WowGuildProgressionPageSchema,
+} from '@raid-ledger/contract';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -608,6 +613,19 @@ describe('POST /admin/test/wow/seed-guild — withActivity (ROK-1789 B9)', () =>
       .from(p)
       .where(and(eq(p.guildKey, 'mapped keepers'), eq(p.gameId, out.gameId)));
     expect(again).toHaveLength(pulls.length);
+  });
+
+  it('the progression route returns every activity kind for the seed (LB4)', async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.ensureInstalled('blizzard');
+    await registry.activate('blizzard');
+    const out = await seedGuild('Route Keepers', { withActivity: true });
+    const res = await guildGet(out.guildId, 'progression', adminToken);
+    expect(res.status).toBe(200);
+    const body = WowGuildProgressionPageSchema.parse(res.body);
+    const kinds = new Set(body.activity.entries.map((e) => e.kind));
+    expect([...kinds].sort()).toEqual([...GUILD_ACTIVITY_KINDS].sort());
+    expect(body.progression.instances.length).toBeGreaterThan(0);
   });
 
   it('is 400 for a non-boolean withActivity or asCaller', async () => {
