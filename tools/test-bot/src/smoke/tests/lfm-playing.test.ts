@@ -181,6 +181,47 @@ async function raiseNowHand(
   }
 }
 
+/** `err`'s message, for a diagnostic line. */
+function errText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Diagnostic for an AC7 timeout (cause undetermined after one sighting,
+ * ROOT-CAUSE-smoke-flakes-3c, 2026-11-13): every game-titled post in the last
+ * 100 messages — preexisting ones included, which `isNew` hides — and the
+ * group's `/lfg/:gameId` summary. That tells "rendered onto an older post"
+ * from "routed elsewhere" from "never sent". It never replaces the failure.
+ */
+async function describeMissingPlayingPost(run: Run): Promise<string> {
+  const parts: string[] = [];
+  try {
+    const posts = (await readLastMessages(run.channelId, 100)).filter((m) =>
+      m.embeds.some((e) => e.title === run.game.name),
+    );
+    const listed = posts.map((m) => {
+      const author =
+        m.embeds.find((e) => e.title === run.game.name)?.author ?? '';
+      const old = run.preexisting.has(m.id) ? ' (preexisting)' : '';
+      return `${m.id}${old} "${author}"`;
+    });
+    parts.push(`game-titled posts in ${run.channelId}: [${listed.join(', ')}]`);
+  } catch (err) {
+    parts.push(`channel read failed: ${errText(err)}`);
+  }
+  try {
+    const path = `/lfg/${run.game.id}`;
+    const group = await run.ctx.api.get<LfgGroupSummary>(path);
+    parts.push(
+      `GET ${path}: activeCount=${group.activeCount} ` +
+        `playingNow=${JSON.stringify(group.playingNow ?? null)}`,
+    );
+  } catch (err) {
+    parts.push(`GET /lfg/${run.game.id} failed: ${errText(err)}`);
+  }
+  return parts.join('; ');
+}
+
 /** Wait until the post flips to PLAYING NOW, and hand back its voice channel. */
 async function awaitPlayingPost(
   run: Run,
@@ -202,7 +243,7 @@ async function awaitPlayingPost(
         return PLAYING_AUTHOR.test(seen) && VOICE_LINK.test(seenDescription);
       }),
     run.ctx.config.timeoutMs,
-  ).catch((err: unknown) => {
+  ).catch(async (err: unknown) => {
     // Only the WAIT expiring means "it never rendered" — restating a gateway
     // error as a render failure would hide the real cause.
     const text = err instanceof Error ? err.message : String(err);
@@ -210,7 +251,8 @@ async function awaitPlayingPost(
     throw new Error(
       `AC7: no PLAYING NOW post with a voice link — expected an author line ` +
         `matching ${String(PLAYING_AUTHOR)} and a description matching ` +
-        `${String(VOICE_LINK)}, last rendered "${seen}" / "${seenDescription}"`,
+        `${String(VOICE_LINK)}, last rendered "${seen}" / "${seenDescription}"` +
+        `; ${await describeMissingPlayingPost(run)}`,
     );
   });
   const embed = embedFor(msg, run.game.name);

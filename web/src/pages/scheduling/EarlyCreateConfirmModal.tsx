@@ -21,6 +21,12 @@ interface EarlyCreateConfirmModalProps {
      * the lock-in signs up, which is the slot's voters and nobody else.
      */
     variant?: 'lock' | 'expired';
+    /**
+     * The poll reschedules an existing event (`match.linkedEventId`), so the
+     * below-majority warning says "Reschedule", not "Create event" (operator
+     * ruling 2026-11-13). Normal scheduling polls keep the create copy.
+     */
+    isReschedule?: boolean;
     onCancel: () => void;
     onConfirm: () => void;
 }
@@ -29,6 +35,15 @@ interface ModalCopy {
     title: string;
     body: string;
     confirm: string;
+}
+
+/** The early-lock warning: "Create event" for a new event, "Reschedule" for a moved one. */
+function belowMajorityCopy(distinctVoters: number, memberCount: number, isReschedule: boolean): ModalCopy {
+    const picked = `Only ${distinctVoters} of ${memberCount} participants picked this time.`;
+    if (isReschedule) {
+        return { title: 'Reschedule below majority?', body: `${picked} Reschedule anyway?`, confirm: 'Reschedule anyway' };
+    }
+    return { title: 'Create event below majority?', body: `${picked} Create event anyway?`, confirm: 'Create anyway' };
 }
 
 /** Pick early-lock or neutral copy from the (fresh) voter counts. */
@@ -42,11 +57,7 @@ function modalCopy(props: EarlyCreateConfirmModalProps): ModalCopy {
         };
     }
     if (distinctVoters < computeRequiredVoters(memberCount)) {
-        return {
-            title: 'Create event below majority?',
-            body: `Only ${distinctVoters} of ${memberCount} participants picked this time. Create event anyway?`,
-            confirm: 'Create anyway',
-        };
+        return belowMajorityCopy(distinctVoters, memberCount, props.isReschedule === true);
     }
     return {
         title: `Lock in ${timeLabel} for everyone?`,

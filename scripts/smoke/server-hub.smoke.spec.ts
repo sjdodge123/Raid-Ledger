@@ -127,9 +127,16 @@ test.describe('Server community hub (ROK-1831)', () => {
     });
 
     test('Quick Play tab lists the seeded session', async ({ page }) => {
-        const hub = await seedHub(await getAdminToken());
-        await page.goto(`/hubs/${hub.guildId}#quick-play`);
-        await expect(page.getByTestId('server-hub-quick-play')).toBeVisible({ timeout: 15_000 });
+        const token = await getAdminToken();
+        // A sibling worker's `reset-to-seed` TRUNCATEs events and
+        // ad_hoc_participants, which can wipe the seeded session between the
+        // seed and the render (ROOT-CAUSE-smoke-flakes-3b, 2026-11-13). Seed,
+        // load and check as ONE retried unit so a wipe is healed by re-seeding.
+        await expect(async () => {
+            const hub = await seedHub(token);
+            await page.goto(`/hubs/${hub.guildId}#quick-play`);
+            await expect(page.getByTestId('server-hub-quick-play')).toBeVisible({ timeout: 10_000 });
+        }).toPass({ timeout: 45_000 });
         await expect(page.getByTestId('server-hub-quick-play-row')).toHaveCount(1);
     });
 
