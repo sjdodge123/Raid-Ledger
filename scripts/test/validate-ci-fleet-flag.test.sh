@@ -293,6 +293,7 @@ invoke remote "$ENV_URL" --fleet
 assert_rc 0 "--fleet"
 assert_grep 'run build' "$npm_argv_file" "--fleet must build"
 assert_grep 'scripts/check-bundle-size\.mjs' "$node_argv_file" "--fleet must run the bundle size budget (ROK-1154)"
+assert_grep '^--test .*scripts/[^ ]*\.spec\.mjs' "$node_argv_file" "--fleet must reach the Script node:test specs step (node --test is stubbed)"
 assert_out_matches 'Bundle size budget.*PASS' "Bundle size budget row"
 assert_grep 'tsc --noEmit' "$npx_argv_file" "--fleet must typecheck"
 assert_grep '(^| )lint( |$)' "$npm_argv_file" "--fleet must lint"
