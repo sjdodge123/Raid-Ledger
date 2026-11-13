@@ -152,11 +152,21 @@ interface ModalResetState {
     setPrevIsOpen: React.Dispatch<React.SetStateAction<boolean>>; setActiveTab: React.Dispatch<React.SetStateAction<CharacterAddTab>>;
 }
 
+/**
+ * The tab Add Character opens on: the caller's `initialTab`, else Manual for a
+ * prefill — the prefilled name lives on Manual, so the Armory default must not
+ * hide it (LedgerLink name-mismatch link). Undefined leaves the plugin defaults.
+ */
+function resolveInitialTab(props: AddCharacterModalProps): CharacterAddTab | undefined {
+    return props.initialTab ?? (props.prefill && !props.editingCharacter ? 'manual' : undefined);
+}
+
 function syncModalOpenClose(
     isOpen: boolean, prevIsOpen: boolean, props: AddCharacterModalProps,
     hasMainForGame: boolean, preselected: { id: number; name: string; slug: string } | undefined, rs: ModalResetState,
 ) {
-    const { editingCharacter, prefill, initialTab } = props;
+    const { editingCharacter, prefill } = props;
+    const initialTab = resolveInitialTab(props);
     if (isOpen && !prevIsOpen) {
         rs.setPrevIsOpen(true); rs.setResetKey((k) => k + 1);
         const initial = getInitialFormState(editingCharacter, editingCharacter ? null : prefill);
@@ -176,7 +186,7 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const identitySource = editingCharacter ?? prefill;
     const mutations = useCharacterModalMutations();
     const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
-    const [activeTab, setActiveTab] = useState<CharacterAddTab>(props.initialTab ?? 'manual');
+    const [activeTab, setActiveTab] = useState<CharacterAddTab>(resolveInitialTab(props) ?? 'manual');
     const [prevIsOpen, setPrevIsOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
@@ -274,7 +284,7 @@ export function AddCharacterModal(props: AddCharacterModalProps) {
         <Modal isOpen={isOpen} onClose={onClose} closeGuard={guard} footer={footer} title={s.isEditing ? 'Edit Character' : 'Add Character'}>
             <CharacterModalFormBody formId={formId} s={s} editingCharacter={editingCharacter} onClose={onClose}
                 effectiveGameName={effectiveGameName} currentSlug={currentSlug} isArmorySynced={isArmorySynced}
-                initialTab={props.initialTab} rosterGuildId={props.rosterGuildId} />
+                initialTab={resolveInitialTab(props)} rosterGuildId={props.rosterGuildId} />
         </Modal>
     );
 }
