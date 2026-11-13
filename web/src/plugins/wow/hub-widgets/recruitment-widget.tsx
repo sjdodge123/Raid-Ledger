@@ -82,11 +82,11 @@ function EditorEmpty({ guildId }: { guildId: number }): JSX.Element {
 }
 
 /** The editor dialog (L5), lazy-loaded, while the store says this hub's editor is open. */
-function DialogMount({ guildId }: { guildId: number }): JSX.Element | null {
+function DialogMount({ guildId, gameSlug }: { guildId: number; gameSlug: string }): JSX.Element | null {
     const openFor = useRecruitmentDialog((s) => s.guildId);
     const close = useRecruitmentDialog((s) => s.close);
     if (openFor !== guildId) return null;
-    return <Suspense fallback={null}><LazyRecruitmentDialog guildId={guildId} onClose={close} /></Suspense>;
+    return <Suspense fallback={null}><LazyRecruitmentDialog guildId={guildId} gameSlug={gameSlug} onClose={close} /></Suspense>;
 }
 
 /** Leaving the hub closes this hub's editor, so returning never reopens a stale dialog. */
@@ -97,7 +97,7 @@ function useCloseDialogOnUnmount(guildId: number): void {
     }, [guildId]);
 }
 
-export default function RecruitmentWidget({ page }: HubWidgetCtx): JSX.Element | null {
+export default function RecruitmentWidget({ page, gameSlug }: HubWidgetCtx): JSX.Element | null {
     const guildId = page.guild.id;
     const { data } = useGuildRecruitment(guildId);
     useCloseDialogOnUnmount(guildId);
@@ -107,7 +107,7 @@ export default function RecruitmentWidget({ page }: HubWidgetCtx): JSX.Element |
     // The dialog keeps one position across unset ↔ set, so a save never remounts it mid-edit.
     return (
         <>
-            {viewer.canEdit && <DialogMount guildId={guildId} />}
+            {viewer.canEdit && <DialogMount guildId={guildId} gameSlug={gameSlug} />}
             {recruitment === null ? <EditorEmpty guildId={guildId} /> : <CardBody view={data} recruitment={recruitment} />}
         </>
     );

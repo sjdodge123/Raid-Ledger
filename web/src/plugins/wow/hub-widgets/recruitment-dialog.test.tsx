@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { GuildRecruitmentView, PutGuildRecruitmentInput } from '@raid-ledger/contract';
-import { WOW_FOREVER_GAME_SLUG } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import {
     GUILD_RECRUITMENT_URL, buildRecruitment, buildRecruitmentView, guildRecruitmentGetHandler,
 } from '../../../test/mocks/guild-recruitment-handlers';
+import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import RecruitmentDialog from './recruitment-dialog';
 import { APPLY_URL_ERROR } from './recruitment.helpers';
 
@@ -142,6 +142,6 @@ describe('RecruitmentDialog dirty close (AC8)', () => {
     it('renders as a bottom sheet below 1024px', async () => {
         media.desktop = false;
         await renderDialog();
-        expect(screen.getByTestId('recruitment-wanted-editor')).toBeInTheDocument();
+        expect(screen.getByTestId('bottom-sheet-footer')).toContainElement(screen.getByTestId('recruitment-save'));
     });
 });
