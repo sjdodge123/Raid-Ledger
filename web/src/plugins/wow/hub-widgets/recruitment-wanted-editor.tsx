@@ -97,6 +97,26 @@ export interface RecruitmentWantedEditorProps {
     onChange: RowsUpdate;
 }
 
+/** One `<li>` per row; a duplicate-pair error is announced and linked to that row's class + role selects. */
+function WantedRows({ rows, classes, errors, onChange }: RecruitmentWantedEditorProps): JSX.Element {
+    return (
+        <ul className="flex flex-col gap-3">
+            {rows.map((row, i) => {
+                const error = errors.get(row.key);
+                const errorId = `recruitment-row-error-${row.key}`;
+                return (
+                    <li key={row.key} className="flex flex-col gap-1" data-testid={`recruitment-row-${i}`}>
+                        <RowControls row={row} index={i} classes={classes} error={error} errorId={errorId} onChange={onChange} />
+                        {error !== undefined && (
+                            <p id={errorId} role="alert" className="text-xs text-danger" data-testid={`recruitment-row-error-${i}`}>{error}</p>
+                        )}
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
 /** The wanted-classes list with Add class; rows edit through `wantedOps`. */
 export function RecruitmentWantedEditor({ rows, classes, errors, onChange }: RecruitmentWantedEditorProps): JSX.Element {
     return (
@@ -104,22 +124,7 @@ export function RecruitmentWantedEditor({ rows, classes, errors, onChange }: Rec
             <legend className="mb-1 text-sm font-medium text-foreground">
                 Wanted classes <span className="text-muted">({rows.length} of {GUILD_RECRUIT_WANTED_MAX})</span>
             </legend>
-            {rows.length > 0 && (
-                <ul className="flex flex-col gap-3">
-                    {rows.map((row, i) => {
-                        const error = errors.get(row.key);
-                        const errorId = `recruitment-row-error-${row.key}`;
-                        return (
-                            <li key={row.key} className="flex flex-col gap-1" data-testid={`recruitment-row-${i}`}>
-                                <RowControls row={row} index={i} classes={classes} error={error} errorId={errorId} onChange={onChange} />
-                                {error !== undefined && (
-                                    <p id={errorId} role="alert" className="text-xs text-danger" data-testid={`recruitment-row-error-${i}`}>{error}</p>
-                                )}
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
+            {rows.length > 0 && <WantedRows rows={rows} classes={classes} errors={errors} onChange={onChange} />}
             <div>
                 <Button variant="secondary" size="sm" data-testid="recruitment-add-row" disabled={rows.length >= GUILD_RECRUIT_WANTED_MAX}
                     onClick={() => onChange((current) => wantedOps.add(current, classes))}>
