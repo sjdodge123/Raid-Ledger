@@ -87,8 +87,13 @@ async function appDate(page: Page, iso: string): Promise<string> {
 async function openGrid(page: Page, testInfo: TestInfo, date?: string): Promise<void> {
     if (isMobile(testInfo)) {
         await page.goto(date ? `/calendar?date=${date}` : '/calendar');
+        // Phones always open in Schedule (no `?view=` deep link below 768px), and a Day
+        // click during the page's mount-time URL writes can be lost — click until it sticks.
         const switcher = page.locator('[aria-label="Calendar view switcher"]');
-        await switcher.getByRole('button', { name: 'Day' }).click({ timeout: 15_000 });
+        await expect(async () => {
+            await switcher.getByRole('button', { name: 'Day' }).click({ timeout: 5_000 });
+            await expect(page.locator('.rbc-time-view')).toBeVisible({ timeout: 3_000 });
+        }).toPass({ timeout: 25_000 });
     } else {
         // Deep-link Week (honoured at >=768px since #1805). Clicking Week right after
         // goto races the page's mount-time URL writes, which can put Month back.
