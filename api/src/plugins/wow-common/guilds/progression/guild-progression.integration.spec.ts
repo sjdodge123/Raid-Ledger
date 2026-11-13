@@ -27,6 +27,7 @@ import { defined } from '../../../../common/defined.helpers';
 import * as schema from '../../../../drizzle/schema';
 import { SettingsService } from '../../../../settings/settings.service';
 import type { SeedGuildResponse } from '../../../../admin/demo-test-guild.controller';
+import { SHOWCASE_OTHER_BOSS } from '../../../../admin/demo-test-guild-activity.helpers';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_GAME_SLUG } from '../../wow-forever-identity.helpers';
 import { addMonthsUtc } from './activity.helpers';
@@ -54,6 +55,7 @@ let communityId: number;
 let otherGameGuildId: number;
 const tokens = new Map<string, string>();
 const extra = { steady: 0, fresh: 0, gone: 0 };
+const edges = { futureEvent: 0, oldDing: 0, recentDing: 0 };
 
 const path = (id: number): string => `/plugins/wow/guilds/${id}/progression`;
 const get = (who: string, id = seeded.guildId) =>
@@ -66,6 +68,13 @@ const plugins = (): PluginRegistryService =>
 async function setDemoMode(on: boolean): Promise<void> {
   process.env.DEMO_MODE = on ? 'true' : 'false';
   await testApp.app.get(SettingsService).setDemoMode(on);
+}
+
+/** Puts DEMO_MODE (env + setting) back as the suite found it. */
+async function restoreDemoMode(settingWas: boolean): Promise<void> {
+  await testApp.app.get(SettingsService).setDemoMode(settingWas);
+  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 }
 
 /** The suite's own WoW: Forever game row (the baseline seed has none). */
@@ -180,6 +189,51 @@ async function insertHub(
   return g.id;
 }
 
+/** One level-up event `daysAgo` days ago on roster row `memberId`. */
+async function insertDing(memberId: number, daysAgo: number): Promise<number> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.guildMemberLevelEvents)
+      .values({
+        guildId: seeded.guildId,
+        guildMemberId: memberId,
+        fromLevel: 41,
+        toLevel: 42,
+        occurredAt: new Date(Date.now() - daysAgo * DAY_MS),
+      })
+      .returning({ id: schema.guildMemberLevelEvents.id }),
+    `ding ${daysAgo}d`,
+  );
+  return row.id;
+}
+
+/** A guild event that has not happened yet (starts in 2 days). */
+async function insertFutureEvent(): Promise<number> {
+  const start = new Date(Date.now() + 2 * DAY_MS);
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Prog Future Raid',
+        gameId: seeded.gameId,
+        creatorId: seeded.users.gm.userId,
+        guildId: seeded.guildId,
+        duration: [start, new Date(start.getTime() + 3 * 3_600_000)],
+        slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+      })
+      .returning({ id: schema.events.id }),
+    'future event',
+  );
+  return row.id;
+}
+
+/** Window edges (spec B-3): a future event, a 31-day ding, a 29-day control. */
+async function seedWindowEdges(): Promise<void> {
+  edges.futureEvent = await insertFutureEvent();
+  edges.oldDing = await insertDing(extra.fresh, 31);
+  edges.recentDing = await insertDing(extra.steady, 29);
+}
+
 /** Edge-case rows the seed does not write. */
 async function seedEdgeCases(): Promise<void> {
   const now = new Date();
@@ -209,15 +263,19 @@ beforeAll(async () => {
   testApp = await getTestApp();
   await plugins().ensureInstalled('blizzard');
   await plugins().activate('blizzard');
+  const demoSettingWas = await testApp.app.get(SettingsService).getDemoMode();
   await setDemoMode(true);
   await seedWowGame();
   const adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   tokens.set('admin', adminToken);
   seeded = await seedShowcase(adminToken);
+  // The route under test is not DEMO_MODE-gated: only the seed needs it.
+  await restoreDemoMode(demoSettingWas);
   for (const role of ['gm', 'member', 'outsider'] as const)
     await tokenFor(role);
   await seedMoltenCoreBosses();
   await seedEdgeCases();
+  await seedWindowEdges();
   communityId = await insertHub(
     'Prog Community',
     'game_community',
@@ -230,6 +288,10 @@ beforeAll(async () => {
   );
 });
 
+// DEMO_MODE is restored at the end of beforeAll (DB-backed state cannot be
+// restored here: integration-setup.ts's global afterAll closes the app
+// first, and the next file gets a fresh app + truncated tables). 'blizzard'
+// stays active for the same reason; the inactive case restores it itself.
 afterAll(() => {
   if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
@@ -313,6 +375,7 @@ describe('progression (B2/B3)', () => {
     expect(other.key).toBe('other');
     expect(other.bossTotal).toBeNull();
     expect(other.bosses.map((b) => b.name)).toContain('Mystery Boss');
+    expect(other.bosses.map((b) => b.name)).toContain(SHOWCASE_OTHER_BOSS);
   });
 
   it('a pull reported by a non-roster user is excluded (Q1)', async () => {
@@ -379,5 +442,16 @@ describe('activity feed (B5–B8)', () => {
     const ids = (await page('member')).activity.entries.map((e) => e.id);
     for (const id of events.ended) expect(ids).toContain(`event:${id}`);
     for (const id of events.cancelled) expect(ids).not.toContain(`event:${id}`);
+  });
+
+  it('a guild event that has not happened yet is excluded', async () => {
+    const ids = (await page('member')).activity.entries.map((e) => e.id);
+    expect(ids).not.toContain(`event:${edges.futureEvent}`);
+  });
+
+  it('a 31-day-old ding is excluded; a 29-day-old one is shown', async () => {
+    const ids = (await page('member')).activity.entries.map((e) => e.id);
+    expect(ids).toContain(`ding:${edges.recentDing}`);
+    expect(ids).not.toContain(`ding:${edges.oldDing}`);
   });
 });

@@ -4,7 +4,10 @@
  * 300-line limit.
  */
 import { BadRequestException } from '@nestjs/common';
-import type { SeedGuildInput } from './demo-test-guild.helpers';
+import {
+  SEED_GUILD_ROSTER,
+  type SeedGuildInput,
+} from './demo-test-guild.helpers';
 
 /** An optional boolean body flag (absent = false). */
 function boolFlag(value: unknown, name: string): boolean {
@@ -42,7 +45,7 @@ export interface RawSeedFlags {
 }
 
 /** The fixed five-row roster; `memberCount` pads it with filler rows. */
-export const SEED_GUILD_BASE_ROWS = 5;
+export const SEED_GUILD_BASE_ROWS = SEED_GUILD_ROSTER.length;
 export const SEED_GUILD_MAX_ROWS = 60;
 /** `withActivity` without a `memberCount` pads to this (B9 showcase). */
 export const SEED_GUILD_SHOWCASE_ROWS = 50;

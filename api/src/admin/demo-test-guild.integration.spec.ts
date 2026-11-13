@@ -106,6 +106,19 @@ beforeAll(async () => {
   await setDemoMode(true);
 });
 
+/** Runs `fn` with the 'blizzard' plugin active, then restores its prior state. */
+async function withBlizzardActive(fn: () => Promise<void>): Promise<void> {
+  const registry = testApp.app.get(PluginRegistryService);
+  await registry.ensureInstalled('blizzard');
+  const wasActive = registry.isActive('blizzard');
+  await registry.activate('blizzard');
+  try {
+    await fn();
+  } finally {
+    if (!wasActive) await registry.deactivate('blizzard');
+  }
+}
+
 // No truncate here: integration-setup.ts's global afterAll (closeTestApp)
 // runs first and ends the DB client; its beforeAll truncates every file.
 afterAll(() => {
@@ -619,16 +632,15 @@ describe('POST /admin/test/wow/seed-guild — withActivity (ROK-1789 B9)', () =>
   });
 
   it('the progression route returns every activity kind for the seed (LB4)', async () => {
-    const registry = testApp.app.get(PluginRegistryService);
-    await registry.ensureInstalled('blizzard');
-    await registry.activate('blizzard');
-    const out = await seedGuild('Route Keepers', { withActivity: true });
-    const res = await guildGet(out.guildId, 'progression', adminToken);
-    expect(res.status).toBe(200);
-    const body = WowGuildProgressionPageSchema.parse(res.body);
-    const kinds = new Set(body.activity.entries.map((e) => e.kind));
-    expect([...kinds].sort()).toEqual([...GUILD_ACTIVITY_KINDS].sort());
-    expect(body.progression.instances.length).toBeGreaterThan(0);
+    await withBlizzardActive(async () => {
+      const out = await seedGuild('Route Keepers', { withActivity: true });
+      const res = await guildGet(out.guildId, 'progression', adminToken);
+      expect(res.status).toBe(200);
+      const body = WowGuildProgressionPageSchema.parse(res.body);
+      const kinds = new Set(body.activity.entries.map((e) => e.kind));
+      expect([...kinds].sort()).toEqual([...GUILD_ACTIVITY_KINDS].sort());
+      expect(body.progression.instances.length).toBeGreaterThan(0);
+    });
   });
 
   it('is 400 for a non-boolean withActivity or asCaller', async () => {

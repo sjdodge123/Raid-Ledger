@@ -59,11 +59,13 @@ export class GuildProgressionService {
     if (!(await this.access.canView(actor, guildId))) {
       throw new ForbiddenException(NOT_MEMBER);
     }
-    const hub = await loadInsightsHubRow(this.db, guildId);
+    const [hub, reporters] = await Promise.all([
+      loadInsightsHubRow(this.db, guildId),
+      loadRaidReporters(this.db, guildId),
+    ]);
     if (!hub || hub.kind !== 'wow_guild') {
       throw new NotFoundException('Guild not found');
     }
-    const reporters = await loadRaidReporters(this.db, guildId);
     const progression = await loadGuildProgression(this.db, hub, reporters);
     const activity = await loadGuildActivity(
       this.db,
