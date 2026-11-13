@@ -79,6 +79,7 @@ function buildTx(opts: {
     set: () => ({ where: jest.fn().mockResolvedValue(undefined) }),
   });
   const tx = {
+    execute: jest.fn().mockResolvedValue(undefined),
     select,
     insert: jest.fn().mockReturnValue({ values }),
     update,
@@ -125,6 +126,8 @@ describe('CharactersService.createWithin (ROK-1738)', () => {
     const result = await service.createWithin(asTx, 7, dto);
     expect(result).toMatchObject({ id: 'char-uuid-9', name: 'NewChar' });
     expect(tx.select).toHaveBeenCalledTimes(3);
+    // The per-(user, game) main-claim lock is taken on the caller's tx.
+    expect(tx.execute).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 7,
