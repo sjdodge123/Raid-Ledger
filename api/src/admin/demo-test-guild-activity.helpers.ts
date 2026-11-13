@@ -8,8 +8,11 @@
  *     (Q-B14), a 1/6/12-month milestone each, and 4 same-day 1-month
  *     milestones (grouped, Q-B13);
  *   - two ended guild events in the window + one cancelled one;
- *   - extra boss pulls: Molten Core first kills (map 409) and one Lucifron
- *     kill with no map on a second difficulty ("Other bosses").
+ *   - extra boss pulls: Molten Core first kills (map 409); one Lucifron
+ *     kill with no map on a second difficulty (still filed under Molten Core
+ *     by its boss-row name, and it makes MC show difficulty labels); and one
+ *     kill of a boss no boss row knows, with no map — the "Other bosses"
+ *     section (`SHOWCASE_OTHER_BOSS`).
  * The pulls are wiped by `seedGuildPulls` first, so a re-seed never doubles.
  */
 import {
@@ -36,6 +39,9 @@ export const SHOWCASE_MC_INSTANCE_ID = SEED_MC_INSTANCE_ID;
 const DIFFICULTY_20 = 148;
 const ROSTER_IMPORT_ROWS = 12;
 const ROSTER_IMPORT_MIN = 10;
+/** A boss no `wow_classic_bosses` row names — lands in "Other bosses". */
+export const SHOWCASE_OTHER_BOSS = 'Forgotten Champion';
+const SHOWCASE_OTHER_ENCOUNTER_ID = 99_001;
 
 export type MilestoneMonths = 1 | 6 | 12;
 
@@ -168,6 +174,14 @@ const ACTIVITY_PULLS: readonly PullSpec[] = [
     success: true,
     by: 'gm',
     difficultyId: DIFFICULTY_20,
+    instanceId: null,
+  },
+  {
+    encounterId: SHOWCASE_OTHER_ENCOUNTER_ID,
+    name: SHOWCASE_OTHER_BOSS,
+    offsetMs: 8 * DAY_MS,
+    success: true,
+    by: 'gm',
     instanceId: null,
   },
 ];

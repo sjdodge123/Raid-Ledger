@@ -8,10 +8,13 @@
  * `withActivity: true` (implies pulls + dings) and a per-project, per-worker,
  * per-run name. The seed backdates the founding roster 400 days, re-stamps
  * fillers as 4 new members, a 12-row roster import, three single milestones
- * and one 4-member grouped milestone, adds ended guild events and Molten Core
- * (map 409) kills. Every UI assertion is checked against the route's own
- * payload, polled first (memory `feedback_smoke_polling_for_async_writes`), so
- * nothing depends on game names IGDB may rewrite or on the env's boss table.
+ * and one 4-member grouped milestone, adds ended guild events, Molten Core
+ * (map 409) kills, a no-map Lucifron kill (filed under Molten Core by its boss
+ * name) and a no-map kill of a boss no boss row knows ("Other bosses"). Every
+ * UI assertion is checked against the route's own payload, polled first
+ * (memory `feedback_smoke_polling_for_async_writes`), so nothing depends on
+ * game names IGDB may rewrite. Molten Core's total of 10 comes from the boss
+ * table the API seeds on boot (`seedOnBoot`, 10 classic rows for Journal 741).
  * Seeded users are deleted in `finally`.
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
@@ -28,6 +31,10 @@ const DESKTOP_MIN_WIDTH = 1024;
 const FEED_PAGE = 25;
 /** Molten Core's Journal id: `RAID_MAP_INSTANCES[409]` → static name, never IGDB. */
 const MC_KEY = 'j:741';
+/** Molten Core's classic boss rows (boss-encounter-data.json, seeded on API boot). */
+const MC_BOSS_TOTAL = 10;
+/** Mirrors the API seed's `SHOWCASE_OTHER_BOSS` — no boss row names it, no map id. */
+const OTHER_BOSS = 'Forgotten Champion';
 const EXPECTED_KINDS = ['first_kill', 'new_member', 'roster_import', 'event', 'ding', 'milestone'] as const;
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
@@ -121,7 +128,15 @@ async function expectInstances(page: Page, data: WowGuildProgressionPageDto): Pr
     const { instances } = data.progression;
     const mc = must(instances.find((i) => i.key === MC_KEY), `${MC_KEY} (map 409) in the payload`);
     expect(mc.name, 'map 409 groups under its static name').toBe('Molten Core');
+    expect(mc.bossTotal, 'Molten Core counts its 10 boss rows (N/10)').toBe(MC_BOSS_TOTAL);
     expect(mc.bossesDown, 'the seeded Molten Core kills count as bosses down').toBeGreaterThan(0);
+    expect(mc.bossesDown, 'bosses down never exceed the total').toBeLessThanOrEqual(MC_BOSS_TOTAL);
+    expect(mc.bosses.map((b) => b.name), 'the no-map Lucifron kill is filed under Molten Core by name')
+        .toContain('Lucifron');
+    const other = must(instances.find((i) => i.key === 'other'), 'the "Other bosses" section in the payload');
+    expect(instances.at(-1)?.key, '"Other bosses" sorts last').toBe('other');
+    expect(other.bossTotal, '"Other bosses" has no total (N/?)').toBeNull();
+    expect(other.bosses.map((b) => b.name), 'the unknown no-map boss lands in "Other bosses"').toContain(OTHER_BOSS);
     await expect(tab(page).getByTestId('progression-instance'), 'one section per payload instance')
         .toHaveCount(instances.length, { timeout: 15_000 });
     for (const inst of instances) {
@@ -131,9 +146,14 @@ async function expectInstances(page: Page, data: WowGuildProgressionPageDto): Pr
             .toHaveText(`${inst.bossesDown}/${inst.bossTotal ?? '?'}`);
         await expect(section.getByTestId('progression-boss-row'), `${inst.key} boss rows`).toHaveCount(inst.bosses.length);
     }
-    if (instances.some((i) => i.key === 'other')) {
-        expect(instances.at(-1)?.key, '"Other bosses" sorts last').toBe('other');
-    }
+    await expect(instanceSection(page, MC_KEY).getByTestId('progression-instance-count'), 'Molten Core reads N/10')
+        .toHaveText(new RegExp(`^\\d+/${MC_BOSS_TOTAL}$`));
+    await expect(instanceSection(page, 'other').locator('h3'), 'the "Other bosses" section renders')
+        .toHaveText('Other bosses');
+    await expect(instanceSection(page, 'other').getByTestId('progression-instance-count'), '"Other bosses" reads N/?')
+        .toHaveText(/^\d+\/\?$/);
+    await expect(tab(page).getByTestId('progression-instance').last(), '"Other bosses" is the last section')
+        .toHaveAttribute('data-instance-key', 'other');
 }
 
 /** Feed beside the instances at ≥1024px, below them under it. */

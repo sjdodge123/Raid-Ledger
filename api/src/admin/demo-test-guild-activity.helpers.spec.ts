@@ -6,6 +6,7 @@ import {
   ACTIVITY_WINDOW_MS,
   activityEventSpecs,
   activityPullRows,
+  SHOWCASE_OTHER_BOSS,
   activityTimeline,
   fillerJoinStamps,
   monthsBeforeUtc,
@@ -114,11 +115,13 @@ describe('activityPullRows', () => {
     expect(mc.every((r) => r.reportedByUserId !== 3)).toBe(true);
   });
 
-  it('adds one Lucifron kill with no instance on a second difficulty', () => {
+  it('adds a no-map Lucifron kill (second difficulty) and a no-map unknown boss kill', () => {
     const other = rows.filter((r) => r.instanceId === null);
     expect(other.map((r) => [r.encounterName, r.success])).toEqual([
       ['Lucifron', true],
+      [SHOWCASE_OTHER_BOSS, true],
     ]);
+    expect(other.every((r) => inWindow(r.startAt))).toBe(true);
     const diffs = new Set(rows.map((r) => r.difficultyId));
     expect(diffs.size).toBeGreaterThanOrEqual(2);
     expect(new Set(rows.map((r) => r.payloadSha256)).size).toBe(rows.length);

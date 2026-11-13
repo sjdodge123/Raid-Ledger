@@ -28,6 +28,7 @@ import {
 } from './demo-test-guild-content.helpers';
 import { SEED_HUB_POST_NEWEST } from './demo-test-hub-posts.helpers';
 import { SEED_GUILD_RECRUITMENT } from './demo-test-guild-recruitment.helpers';
+import { SHOWCASE_OTHER_BOSS } from './demo-test-guild-activity.helpers';
 import {
   SEED_LOCKOUT_SHARED,
   SEED_LOCKOUT_SOLO,
@@ -597,7 +598,7 @@ describe('POST /admin/test/wow/seed-guild — withActivity (ROK-1789 B9)', () =>
     expect(activity.events.cancelled).toHaveLength(1);
   });
 
-  it('tags Molten Core pulls with map 409 and one Lucifron kill with none', async () => {
+  it('tags Molten Core pulls with map 409; Lucifron + the unknown boss have none', async () => {
     const out = await seedGuild('Mapped Keepers', { withActivity: true });
     const p = schema.addonEncounterPulls;
     const pulls = await testApp.db
@@ -605,7 +606,9 @@ describe('POST /admin/test/wow/seed-guild — withActivity (ROK-1789 B9)', () =>
       .from(p)
       .where(and(eq(p.guildKey, 'mapped keepers'), eq(p.gameId, out.gameId)));
     const unmapped = pulls.filter((r) => r.instanceId === null);
-    expect(unmapped.map((r) => r.name)).toEqual(['Lucifron']);
+    expect(unmapped.map((r) => r.name).sort()).toEqual(
+      ['Lucifron', SHOWCASE_OTHER_BOSS].sort(),
+    );
     expect(pulls.filter((r) => r.instanceId === 409).length).toBeGreaterThan(4);
     await seedGuild('Mapped Keepers', { withActivity: true });
     const again = await testApp.db
