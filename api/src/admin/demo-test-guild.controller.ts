@@ -79,7 +79,7 @@ import {
   raiderOf,
   type SeededGuildRaids,
 } from './demo-test-guild-raids.helpers';
-import { seedGuildContent } from './demo-test-guild-content.helpers';
+import { seedContentHalf } from './demo-test-guild-content.helpers';
 import {
   seedInstalledAddons,
   type SeededInstalledAddons,
@@ -162,9 +162,6 @@ export class DemoTestGuildController {
     const { users, unlinked } = roster;
     const gm = users.gm.userId;
     await applyArmoryProfessions(this.db, users, input.armoryProfessions);
-    const content = input.withContent
-      ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
-      : null;
     const snapshots = await this.seedSnapshotHalves(users, ctx, input);
     const dings = input.withDings
       ? await this.seedDings(users, unlinked, ctx)
@@ -175,7 +172,7 @@ export class DemoTestGuildController {
     const pulls = await this.seedPulls(users, ctx, input);
     const installedAddons = await this.seedInstalledHalf(input, users, ctx);
     return {
-      ...(content ? { content } : {}),
+      ...(await seedContentHalf(this.db, input, ctx.guildId, gm, ctx.now)),
       ...snapshots,
       ...(dings ? { dings } : {}),
       ...(presence ? { presence } : {}),

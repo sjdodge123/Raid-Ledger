@@ -8,7 +8,10 @@
  */
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
-import type { GuildRecruitment } from '@raid-ledger/contract';
+import {
+  GuildRecruitmentViewSchema,
+  type GuildRecruitment,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -72,7 +75,11 @@ async function seedLogin(who: Who): Promise<number> {
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
-      .values({ discordId: `local:${email}`, username: `rec-${who}`, role: 'member' })
+      .values({
+        discordId: `local:${email}`,
+        username: `rec-${who}`,
+        role: 'member',
+      })
       .returning(),
     'user',
   );
@@ -240,8 +247,12 @@ describe('save / read / clear (AC3, AC4, AC7)', () => {
     await put('deleg', VALID);
     const off = await put('deleg', { ...VALID, recruiting: false });
     expect(off.body.state).toBe('closed');
-    expect(off.body.recruitment.wanted.map((w: { state: string }) => w.state))
-      .toEqual(['open', 'limited', 'closed']);
+    const kept = GuildRecruitmentViewSchema.parse(off.body).recruitment;
+    expect(kept?.wanted.map((w) => w.state)).toEqual([
+      'open',
+      'limited',
+      'closed',
+    ]);
     const on = await put('deleg', { ...VALID, recruiting: true });
     expect(on.body.state).toBe('open');
     expect(on.body.recruitment.applyUrl).toBe('https://example.com/apply');
@@ -260,7 +271,10 @@ describe('save / read / clear (AC3, AC4, AC7)', () => {
   it('a PUT leaves rules, links and in-game text unchanged', async () => {
     const rules = [{ title: 'Loot', body: 'Council' }];
     const links = [
-      { title: 'Links', links: [{ label: 'Site', url: 'https://example.com' }] },
+      {
+        title: 'Links',
+        links: [{ label: 'Site', url: 'https://example.com' }],
+      },
     ];
     await testApp.db.insert(schema.guildProfiles).values({
       guildId,
@@ -296,7 +310,10 @@ describe('validation (AC6)', () => {
     ['javascript URL', { ...VALID, applyUrl: 'javascript:alert(1)' }],
     ['duplicate class + role', { ...VALID, wanted: [row(), row()] }],
     ['unknown class', { ...VALID, wanted: [row({ className: 'Bard' })] }],
-    ['row without state', { ...VALID, wanted: [{ className: 'Mage', role: 'dps' }] }],
+    [
+      'row without state',
+      { ...VALID, wanted: [{ className: 'Mage', role: 'dps' }] },
+    ],
     ['unknown row state', { ...VALID, wanted: [row({ state: 'maybe' })] }],
     ['missing recruiting', { wanted: [], applyUrl: null }],
     ['61-char note', { ...VALID, wanted: [row({ note: 'x'.repeat(61) })] }],
@@ -307,7 +324,17 @@ describe('validation (AC6)', () => {
   });
 
   it('13 entries → 400', async () => {
-    const classes = ['Warrior', 'Paladin', 'Hunter', 'Rogue', 'Priest', 'Shaman', 'Mage', 'Warlock', 'Druid'];
+    const classes = [
+      'Warrior',
+      'Paladin',
+      'Hunter',
+      'Rogue',
+      'Priest',
+      'Shaman',
+      'Mage',
+      'Warlock',
+      'Druid',
+    ];
     const roles = ['tank', 'healer', 'dps'];
     const wanted = classes
       .flatMap((className) => roles.map((role) => row({ className, role })))
