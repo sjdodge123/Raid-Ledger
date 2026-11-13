@@ -55,6 +55,15 @@ describe('GgPreviewPage (ROK-2187 L10d)', () => {
         expect(screen.getByTestId('gg-tap-to-start')).toBeInTheDocument();
     });
 
+    it('renders a realistic full-tier payload (every core card) as the story, not the empty state (ROK-2187)', async () => {
+        const cards = ggFullCards.filter((c) => c.pluginSlug === 'core');
+        api.getGgPreview.mockResolvedValue({ ...PREVIEW, cards });
+        renderPreview();
+        expect(await screen.findByRole('group', { name: `1 of ${cards.length}: GG 2026` })).toBeInTheDocument();
+        expect(screen.queryByTestId('gg-preview-empty')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('gg-preview-error')).not.toBeInTheDocument();
+    });
+
     it('shows no share toggle on the summary card', async () => {
         renderPreview();
         fireEvent.click(await screen.findByTestId('gg-tap-to-start'));

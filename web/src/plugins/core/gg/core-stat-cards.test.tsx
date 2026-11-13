@@ -78,6 +78,13 @@ describe('Core GG stat cards — short durations and empty tile grids', () => {
         expect(screen.queryByText('0h')).toBeNull();
     });
 
+    it('Voice headline never rounds up past the detail — 41h 40m reads "41h", not "42h" (ROK-2187)', () => {
+        render(<GgVoiceCardView year={2026} payload={{ totalSeconds: 41 * 3600 + 40 * 60, sessions: 9 }} />);
+        expect(screen.getByText('41h')).toBeInTheDocument();
+        expect(screen.queryByText('42h')).not.toBeInTheDocument();
+        expect(screen.getByText('41h 40m')).toBeInTheDocument();
+    });
+
     it('Hours and Voice cards are skipped entirely at zero seconds', () => {
         expect(GG_HOURS_CARD_SCHEMA.safeParse({ totalSeconds: 0, gamesPlayed: 0 }).success).toBe(false);
         expect(GG_VOICE_CARD_SCHEMA.safeParse({ totalSeconds: 0, sessions: 0 }).success).toBe(false);
