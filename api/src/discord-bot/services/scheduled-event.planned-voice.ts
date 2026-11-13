@@ -185,3 +185,28 @@ export async function resolveCreatePlace(
     inputs.channelResolver,
   );
 }
+
+/** The resolver slice the start-time re-place needs. */
+export type StartVoiceResolver = Parameters<typeof resolveVoiceForCreate>[4];
+
+/**
+ * The voice channel an already-started event's SE belongs in: the live
+ * temporary channel, else the override / default binding — the same fallback
+ * `resolveCreatePlace` takes once `plannedSELocation` stops planning (start
+ * passed). Null when none resolves (the SE then stays External).
+ */
+export async function resolveStartVoiceChannel(
+  db: Db,
+  eventId: number,
+  channelResolver: StartVoiceResolver,
+): Promise<string | null> {
+  const row = await readPlannedVoiceRow(db, eventId);
+  if (!row) return null;
+  return resolveVoiceForCreate(
+    db,
+    eventId,
+    row.gameId,
+    row.notificationChannelOverride,
+    channelResolver,
+  );
+}

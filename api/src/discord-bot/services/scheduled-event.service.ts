@@ -16,7 +16,6 @@ import {
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import {
-  findStartCandidates,
   getScheduledEventId,
   getEventWithOverride,
   clearScheduledEventId,
@@ -31,7 +30,7 @@ import {
   resolveVoiceForEdit,
   resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
-import { pruneStartWarnings, startCandidate } from './scheduled-event.start';
+import { runStartPass } from './scheduled-event.start';
 import {
   createScheduledEventIdempotent,
   type GuildSECache,
@@ -97,15 +96,12 @@ export class ScheduledEventService {
       this.eventCache.getActiveEvents(new Date()).length === 0
     )
       return false;
-    const candidates = await findStartCandidates(this.db);
-    pruneStartWarnings(this.startWarned, candidates);
-    if (candidates.length === 0) return false;
-    const deps = {
+    return runStartPass(guild, {
+      db: this.db,
       logger: this.logger,
       warned: this.startWarned,
-      clear: (id: number) => clearScheduledEventId(this.db, id),
-    };
-    for (const c of candidates) await startCandidate(guild, c, deps);
+      channelResolver: this.channelResolver,
+    });
   }
 
   /** Cron: auto-complete Discord Scheduled Events past end time (ROK-717, ROK-860). */
