@@ -9,6 +9,10 @@
 import { eq, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import {
+  STORED_NAME_MAX_LENGTH,
+  clampStoredName,
+} from '../../common/stored-name.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.adHocParticipants;
@@ -34,21 +38,9 @@ export interface SteamDisplayInput {
   characterOwnerId?: string;
 }
 
-/** Length of the varchar columns a Steam row's names are written to. */
-export const STORED_NAME_MAX_LENGTH = 255;
-
-/**
- * Clamp an in-game name to the `ad_hoc_participants` varchar(255) name
- * columns. Counts code points, as Postgres does, so an astral character is
- * never split. An over-long name would otherwise roll back the whole Quick
- * Play spawn transaction.
- */
-export function clampStoredName(name: string): string {
-  const chars = Array.from(name);
-  return chars.length <= STORED_NAME_MAX_LENGTH
-    ? name
-    : chars.slice(0, STORED_NAME_MAX_LENGTH).join('');
-}
+// The clamp lives in common/ so the presence tracker (plugins/pelican) keys
+// names in the same form the rows store them.
+export { STORED_NAME_MAX_LENGTH, clampStoredName };
 
 /**
  * A player's character name (clamped to the column), or null while they are
