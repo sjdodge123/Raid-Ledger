@@ -670,4 +670,23 @@ describe('POST /admin/test/wow/seed-guild — asCaller (ROK-1789 B9, Q-B16)', ()
     const again = await seedGuild('Caller Keepers', { asCaller: true });
     expect(again.users.gm.characterId).toBe(out.users.gm.characterId);
   });
+
+  it('a plain re-seed hands the GUID character back to the seed GM (Codex P2)', async () => {
+    const admin = testApp.seed.adminUser;
+    const claimed = await seedGuild('Handback Keepers', { asCaller: true });
+    const res = await seed({
+      name: 'Handback Keepers',
+      gameSlug: WOW_FOREVER_GAME_SLUG,
+    });
+    expect(res.status).toBe(200);
+    const plain = res.body as SeedGuildResponse;
+    expect(plain.users.gm.userId).not.toBe(admin.id);
+    expect(plain.users.gm.characterId).toBe(claimed.users.gm.characterId);
+    const gmChar = defined(plain.users.gm.characterId ?? undefined, 'gm char');
+    const [owned] = await testApp.db
+      .select({ userId: schema.characters.userId, isMain: schema.characters.isMain })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, gmChar));
+    expect(owned).toEqual({ userId: plain.users.gm.userId, isMain: true });
+  });
 });
