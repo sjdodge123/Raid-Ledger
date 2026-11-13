@@ -301,3 +301,43 @@ test('the boot check polls no hardcoded port and no /api/health', () => {
   assert.doesNotMatch(code, /127\.0\.0\.1:3000/, 'the drill must not hardcode :3000');
   assert.doesNotMatch(code, /\/api\/health/, 'the API serves /health at the root');
 });
+
+/**
+ * `emit_failure_report` must APPEND its own finding to EXTRA_FINDINGS. It used
+ * to assign `EXTRA_FINDINGS=",$extra"`, silently dropping the journal/uploads
+ * findings gathered before the failure. No end-to-end path reaches it with
+ * earlier findings today (D5 runs before both checks), so the emitter is run
+ * on its own: the drill is sourced with its trailing `main "$@"` stripped.
+ */
+const drillFunctionsOnly = () => {
+  const src = fs.readFileSync(DRILL, 'utf8');
+  const MAIN_CALL = /^main "\$@"$/m;
+  assert.match(src, MAIN_CALL, 'the drill must end in a bare `main "$@"` for this harness');
+  return src.replace(MAIN_CALL, '');
+};
+
+test('the failure report keeps the journal and uploads findings gathered before it', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-drill-extra-'));
+  const dump = makeCorruptDump(tmp, Buffer.from('size only'));
+  const reportPath = path.join(tmp, 'restore-drill-report.json');
+  const lib = path.join(tmp, 'drill-functions.sh');
+  fs.writeFileSync(lib, drillFunctionsOnly());
+  const script = [
+    'source "$1"; DUMP_FILE="$2"; REPORT_PATH="$3"',
+    'EXTRA_FINDINGS=",$(json_finding journal-hashes-present reconcile passed ok)"',
+    'EXTRA_FINDINGS="$EXTRA_FINDINGS,$(json_finding u2-referenced-files uploads failed missing)"',
+    'emit_failure_report passed "the D5 classifier rejected the restore" \\',
+    '  "$(json_finding d5-restore-stderr restore failed boom)"',
+  ].join('\n');
+
+  const res = spawnSync('bash', ['-c', script, 'drill', lib, dump, reportPath], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  });
+
+  assert.equal(res.status, 0, `the emitter harness failed: ${res.stderr}`);
+  const ids = readReport(reportPath).findings.map((f) => f.id);
+  for (const id of ['journal-hashes-present', 'u2-referenced-files', 'd5-restore-stderr']) {
+    assert.ok(ids.includes(id), `failure report dropped finding ${id}; got ${JSON.stringify(ids)}`);
+  }
+});
