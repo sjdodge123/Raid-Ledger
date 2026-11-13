@@ -5,7 +5,7 @@
  */
 import type { JSX, ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
     plannedVoiceRefetchDelay,
@@ -19,6 +19,13 @@ const getEventDetail = vi.fn();
 vi.mock('../lib/api-client', () => ({ getEventDetail: (id: number) => getEventDetail(id) }));
 
 const { useEventDetail } = await import('./use-events');
+
+/** Advance fake time inside act() so React Query's state updates don't warn. */
+async function tick(ms: number): Promise<void> {
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+    });
+}
 
 const NOW = Date.parse('2026-11-13T20:00:00Z');
 const OPENS_AT = '2026-11-13T20:30:00Z';
@@ -70,33 +77,33 @@ describe('useEventDetail planned-voice refetch', () => {
     it('refetches after the planned channel opens and stops once it is live', async () => {
         getEventDetail.mockResolvedValueOnce({ voiceChannel: planned }).mockResolvedValue({ voiceChannel: live });
         renderDetail();
-        await vi.advanceTimersByTimeAsync(0);
+        await tick(0);
         expect(getEventDetail).toHaveBeenCalledTimes(1);
 
-        await vi.advanceTimersByTimeAsync(OPENS_MS + PLANNED_VOICE_GRACE_MS - NOW - 1_000);
+        await tick(OPENS_MS + PLANNED_VOICE_GRACE_MS - NOW - 1_000);
         expect(getEventDetail).toHaveBeenCalledTimes(1);
 
-        await vi.advanceTimersByTimeAsync(1_000);
+        await tick(1_000);
         expect(getEventDetail).toHaveBeenCalledTimes(2);
 
-        await vi.advanceTimersByTimeAsync(PLANNED_VOICE_RETRY_MS * 5);
+        await tick(PLANNED_VOICE_RETRY_MS * 5);
         expect(getEventDetail).toHaveBeenCalledTimes(2);
     });
 
     it('retries a still-planned response on the bounded interval', async () => {
         getEventDetail.mockResolvedValue({ voiceChannel: planned });
         renderDetail();
-        await vi.advanceTimersByTimeAsync(OPENS_MS + PLANNED_VOICE_GRACE_MS - NOW);
+        await tick(OPENS_MS + PLANNED_VOICE_GRACE_MS - NOW);
         expect(getEventDetail).toHaveBeenCalledTimes(2);
 
-        await vi.advanceTimersByTimeAsync(PLANNED_VOICE_RETRY_MS * (PLANNED_VOICE_MAX_RETRIES + 5));
+        await tick(PLANNED_VOICE_RETRY_MS * (PLANNED_VOICE_MAX_RETRIES + 5));
         expect(getEventDetail).toHaveBeenCalledTimes(2 + PLANNED_VOICE_MAX_RETRIES);
     });
 
     it('does not refetch a live channel', async () => {
         getEventDetail.mockResolvedValue({ voiceChannel: live });
         renderDetail();
-        await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
+        await tick(2 * 60 * 60 * 1000);
         expect(getEventDetail).toHaveBeenCalledTimes(1);
     });
 });
