@@ -7,10 +7,7 @@ import {
   flushDirtySessions,
   flushSingleSession,
 } from './voice-attendance-flush-write.helpers';
-import {
-  type InMemorySession,
-  leaveSession,
-} from './voice-attendance.helpers';
+import { type InMemorySession, leaveSession } from './voice-attendance.helpers';
 import {
   createDrizzleMock,
   type MockDb,
@@ -40,6 +37,7 @@ function makeSession(n: number, over: Partial<InMemorySession> = {}) {
     isActive: false,
     activeSegmentStart: null,
     dirty: true,
+    dirtyVersion: 0,
     ...over,
   };
   return session;

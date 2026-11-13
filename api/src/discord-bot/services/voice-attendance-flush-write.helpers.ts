@@ -72,6 +72,18 @@ const BATCH_UPSERT_SET = {
   segments: sql`excluded.segments`,
 };
 
+/**
+ * Clear `dirty` after a write only if nothing marked the session dirty while
+ * the write was in flight: a leave that lands mid-write bumps `dirtyVersion`,
+ * so the session stays dirty and the next flush writes it.
+ */
+function clearDirtyIfUnchanged(
+  session: InMemorySession,
+  version: number,
+): void {
+  if (session.dirtyVersion === version) session.dirty = false;
+}
+
 /** Upsert a single voice session row (the fallback path). */
 async function upsertSessionRow(
   db: Db,
@@ -94,9 +106,10 @@ export async function flushSingleSession(
   logger: Logger,
 ): Promise<void> {
   try {
+    const version = session.dirtyVersion;
     const snapshot = snapshotSessionForFlush(session);
     await upsertSessionRow(db, session, snapshot);
-    session.dirty = false;
+    clearDirtyIfUnchanged(session, version);
   } catch (err) {
     logger.error(
       `Failed to flush session ${session.eventId}:${session.discordUserId}: ${err}`,
@@ -115,6 +128,7 @@ async function flushChunk(
   logger: Logger,
 ): Promise<void> {
   try {
+    const versions = chunk.map((s) => s.dirtyVersion);
     const rows = chunk.map((s) => toInsertRow(s, snapshotSessionForFlush(s)));
     await db
       .insert(T)
@@ -123,7 +137,7 @@ async function flushChunk(
         target: [T.eventId, T.discordUserId],
         set: BATCH_UPSERT_SET,
       });
-    for (const s of chunk) s.dirty = false;
+    chunk.forEach((s, i) => clearDirtyIfUnchanged(s, versions[i] ?? -1));
   } catch (err) {
     logger.warn(
       `Batched voice flush of ${chunk.length} session(s) failed, retrying per row: ${err}`,
