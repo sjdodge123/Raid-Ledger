@@ -892,19 +892,20 @@ docker ps -a --filter "label=rl.role=env" --format '{{.ID}}' | while read -r cid
 done
 
 # 3. Scoped prune (ROK-2181). Per resource, never a blanket
-# `prune --filter label=rl.role=env`: stopped containers, dangling volumes and
-# dangling images of an env env-registry still knows — pinned (rl_env_pin),
+# `prune --filter label=rl.role=env`: stopped containers and dangling
+# anonymous volumes of an env env-registry still knows — pinned (rl_env_pin),
 # preserved by rl_release (claimable_by_next) or live — are kept; only dead
-# envs' leftovers go. An unreadable registry prunes nothing. A missing lib
-# skips the step (never falls back to the blanket prune).
+# envs' leftovers older than RL_ENV_SCOPED_PRUNE_MIN_AGE_MIN (default 30, the
+# env-spin race grace) go. Named rl-data-<slug> volumes and images are never
+# touched here. An unreadable registry prunes nothing and is audited. A missing
+# lib skips the step (never falls back to the blanket prune).
 # RL_ENV_SCOPED_PRUNE_DRY_RUN=1 reports would_remove only (default 0).
 ENV_SCOPED_PRUNE_LIB="${ENV_SCOPED_PRUNE_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_env_scoped_prune.sh}"
 if [[ -r "$ENV_SCOPED_PRUNE_LIB" ]]; then
     # shellcheck disable=SC1090
     source "$ENV_SCOPED_PRUNE_LIB"
     ENV_SCOPED_PRUNE_RESULT=$(env_scoped_prune::run "$ENVS" 2>/dev/null || echo '{}')
-    if [[ "$(jq -r '[(.removed // []), (.would_remove // []), (.failed // [])] | add | length > 0 or has("error")' \
-            <<<"$ENV_SCOPED_PRUNE_RESULT" 2>/dev/null)" == "true" ]]; then
+    if env_scoped_prune::needs_audit "$ENV_SCOPED_PRUNE_RESULT"; then
         audit env_scoped_prune "$ENV_SCOPED_PRUNE_RESULT"
     fi
     log "scoped-prune: $(jq -rc '"removed=" + ((.removed // [])|length|tostring) + " would_remove=" + ((.would_remove // [])|length|tostring) + " kept=" + ((.kept // [])|length|tostring) + " " + (.error // "")' <<<"$ENV_SCOPED_PRUNE_RESULT" 2>/dev/null || echo unknown)"

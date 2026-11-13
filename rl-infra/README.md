@@ -196,15 +196,18 @@ Specs: `orchestrator/test/runner-exec-bits.test.sh` (repair + named error) and
     though `env-spin` labels the `-pg` sidecar `rl.role=env` too.
 - **Dead claim sweep:** heartbeat older than 30min (`CLAIM_HEARTBEAT_TIMEOUT_SECONDS`,
   raised from 5min — fleet-grace fix) → slot released, claim record cleared.
-- **Image/volume/container GC (ROK-2181, `orchestrator/bin/_env_scoped_prune.sh`):**
-  every 15min `gc-sweeper` removes stopped `rl.role=env` containers, dangling
-  `rl.role=env` volumes and dangling `rl.role=env` images one at a time (no
-  `-f`, never a blanket `prune`) — but only for envs `env-registry.json` no
-  longer knows. A registered env (pinned by `rl_env_pin`, preserved by
-  `rl_release`, or live) keeps them, matched by `rl.env_slug` label or by the
-  `rl-env-<slug>-{allinone,pg}` / `rl-data-<slug>` name, and an image whose id a
-  row's `.image` names is kept. An unreadable or non-array registry prunes
-  nothing; `RL_ENV_SCOPED_PRUNE_DRY_RUN=1` reports `would_remove` only. Audit
+- **Env container/volume GC (ROK-2181, `orchestrator/bin/_env_scoped_prune.sh`):**
+  every 15min `gc-sweeper` removes stopped `rl.role=env` containers and
+  dangling ANONYMOUS `rl.role=env` volumes one at a time (no `-f`, never a
+  blanket `prune`) — but only for envs `env-registry.json` no longer knows. A
+  registered env (pinned by `rl_env_pin`, preserved by `rl_release`, or live)
+  keeps them, matched by `rl.env_slug` label or by the
+  `rl-env-<slug>-{allinone,pg}` name. Named `rl-data-<slug>` volumes and env
+  images are never touched here (parity with the old prune; env-destroy and the
+  ROK-2171 image GC own them). Candidates younger than
+  `RL_ENV_SCOPED_PRUNE_MIN_AGE_MIN` (default 30, the env-spin race grace) are
+  kept. A missing, empty, unreadable or non-array registry prunes nothing and is
+  audited; `RL_ENV_SCOPED_PRUNE_DRY_RUN=1` reports `would_remove` only. Audit
   `env_scoped_prune`, log `scoped-prune: …`. Runner and infra containers are
   never pruned. Tests: `orchestrator/test/env-scoped-prune.test.sh`.
 - **Disk-pressure ladder (ROK-1568):** the scoped prune above only touches
