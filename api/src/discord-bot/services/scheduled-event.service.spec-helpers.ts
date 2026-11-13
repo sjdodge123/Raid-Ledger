@@ -163,6 +163,11 @@ function buildScheduledEventProviders(
       useValue: {
         getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
         getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+        // Planned temporary voice (2026-11-13): off by default, so every SE
+        // stays a Voice event unless a spec turns the gate on.
+        getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+        getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+        getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
       },
     },
     {
