@@ -2,6 +2,7 @@
  * Unit tests for QuestCard keyboard accessibility (ROK-881).
  * Verifies that the quest header div[role="button"] responds to Enter/Space.
  */
+import { useState, type JSX } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/react';
 import { QuestCard } from './quest-card';
@@ -75,6 +76,25 @@ describe('QuestCardHeader — keyboard handler (ROK-881)', () => {
         const header = container.querySelector('.quest-card__header')!;
         fireEvent.keyDown(header, { key: ' ' });
         expect(onToggle).toHaveBeenCalledWith(100);
+    });
+});
+
+describe('QuestCardHeader — disclosure state (triage a11y)', () => {
+    it('the header disclosure reports aria-expanded false then true, controlling the body', () => {
+        function Harness(): JSX.Element {
+            const [open, setOpen] = useState(false);
+            return (
+                <QuestCard quest={createQuest()} questCoverage={undefined} currentUserId={1} eventId={1}
+                    wowheadVariant="classic" isExpanded={open} pendingQuestId={null} equippedBySlot={new Map()}
+                    charClass={null} characterId={undefined} onToggleExpanded={() => setOpen((o) => !o)} onTogglePickedUp={vi.fn()} />
+            );
+        }
+        const { container } = render(<Harness />);
+        const header = screen.getByRole('button', { name: /Test Quest/ });
+        expect(header).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(header);
+        expect(header).toHaveAttribute('aria-expanded', 'true');
+        expect(container.querySelector('.quest-card__body')).toHaveAttribute('id', header.getAttribute('aria-controls'));
     });
 });
 

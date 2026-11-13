@@ -66,6 +66,13 @@ describe('RadioGroup — semantics', () => {
         const track = screen.getByRole('radio', { name: '2 hours' }).closest('label')?.parentElement;
         expect(track).toHaveClass('flex', 'flex-wrap');
     });
+
+    // Triage: "30 days" in Top givers broke as "30 / days". A segment label never
+    // wraps inside itself; the wrapping track above moves whole segments instead.
+    it('segmented: an option label never wraps inside its segment', () => {
+        render(<Harness appearance="segmented" />);
+        expect(screen.getByRole('radio', { name: '2 hours' }).closest('label')).toHaveClass('whitespace-nowrap');
+    });
 });
 
 describe('RadioGroup — interaction', () => {

@@ -76,7 +76,7 @@ interface OptionProps<V extends string> {
 
 const RADIO = `w-5 h-5 shrink-0 accent-success cursor-pointer ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${DISABLED}`;
 const SEGMENT = [
-    'relative flex flex-1 items-center justify-center min-h-[44px] px-3 rounded-md text-center border border-transparent',
+    'relative flex flex-1 items-center justify-center min-h-[44px] px-3 rounded-md text-center whitespace-nowrap border border-transparent',
     'text-base lg:text-sm font-medium text-muted cursor-pointer transition-colors hover:text-foreground',
     'has-[:checked]:bg-overlay has-[:checked]:border-success has-[:checked]:text-foreground',
     'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-success/80',
