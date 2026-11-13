@@ -82,7 +82,10 @@ function describeVoteAtomic() {
     const [game] = nonEmpty(
       await testApp.db
         .insert(schema.games)
-        .values({ name: `TBAtomic${seq}`, slug: `tb-atomic-${seq}-${Date.now()}` })
+        .values({
+          name: `TBAtomic${seq}`,
+          slug: `tb-atomic-${seq}-${Date.now()}`,
+        })
         .returning(),
       'game',
     );
@@ -132,7 +135,11 @@ function describeVoteAtomic() {
     return at(open, 0);
   }
 
-  function vote(tb: Tied, voterIdx: number, m: { id: number; gameAId: number }) {
+  function vote(
+    tb: Tied,
+    voterIdx: number,
+    m: { id: number; gameAId: number },
+  ) {
     const id = defined(tb.voterIds[voterIdx], 'voter');
     return service.castBracketVote(
       tb.lineupId,
@@ -148,7 +155,10 @@ function describeVoteAtomic() {
   async function statusOf(tb: Tied) {
     const T = schema.communityLineupTiebreakers;
     const L = schema.communityLineups;
-    const [t] = await testApp.db.select().from(T).where(eq(T.id, tb.tiebreakerId));
+    const [t] = await testApp.db
+      .select()
+      .from(T)
+      .where(eq(T.id, tb.tiebreakerId));
     const [l] = await testApp.db.select().from(L).where(eq(L.id, tb.lineupId));
     return { tiebreaker: t?.status, lineup: l?.status };
   }
@@ -194,14 +204,20 @@ function describeVoteAtomic() {
       // Old code: this vote and the matchup winner had already committed.
       expect(await votesFor(m.id)).toHaveLength(1);
       expect((await onlyMatchup(tb.tiebreakerId)).winnerGameId).toBeNull();
-      expect(await statusOf(tb)).toEqual({ tiebreaker: 'active', lineup: 'voting' });
+      expect(await statusOf(tb)).toEqual({
+        tiebreaker: 'active',
+        lineup: 'voting',
+      });
       // Old code: the retry 400s on the now-closed matchup.
       await vote(tb, 1, m);
     } finally {
       buildSpy.mockRestore();
     }
     expect(await votesFor(m.id)).toHaveLength(2);
-    expect(await statusOf(tb)).toEqual({ tiebreaker: 'resolved', lineup: 'decided' });
+    expect(await statusOf(tb)).toEqual({
+      tiebreaker: 'resolved',
+      lineup: 'decided',
+    });
   });
 
   it('a non-final vote is stored and leaves the round open', async () => {
@@ -211,8 +227,14 @@ function describeVoteAtomic() {
     expect(detail.id).toBe(tb.tiebreakerId);
     expect(await votesFor(m.id)).toHaveLength(1);
     expect((await onlyMatchup(tb.tiebreakerId)).winnerGameId).toBeNull();
-    expect(await statusOf(tb)).toEqual({ tiebreaker: 'active', lineup: 'voting' });
+    expect(await statusOf(tb)).toEqual({
+      tiebreaker: 'active',
+      lineup: 'voting',
+    });
   });
 }
 
-describe('tiebreaker bracket vote is atomic with advance + finalize (integration)', describeVoteAtomic);
+describe(
+  'tiebreaker bracket vote is atomic with advance + finalize (integration)',
+  describeVoteAtomic,
+);
