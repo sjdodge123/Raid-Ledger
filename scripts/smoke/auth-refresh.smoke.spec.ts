@@ -33,7 +33,7 @@
  */
 import type { Page, Response } from '@playwright/test';
 import { test, expect } from './base';
-import { expandLocalLogin } from './helpers';
+import { expandLocalLogin, isMobile } from './helpers';
 import { storageJwtEntries } from './browser-session';
 const ADMIN_USER = 'admin@local';
 const ADMIN_PASS = process.env.ADMIN_PASSWORD || 'password';
@@ -107,20 +107,23 @@ test.describe('Auth refresh (ROK-1353)', () => {
 
     test('AC3: logout revokes refresh — a subsequent refresh is rejected', async ({
         browser,
-    }) => {
+    }, testInfo) => {
         const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await loginViaForm(page);
 
         // Trigger the app logout (server-side revocation + cookie clear).
-        // Desktop: logout lives in the user-menu dropdown; mobile: behind the
-        // header hamburger ("Open menu") in the MoreDrawer.
-        const userMenu = page.getByTestId('user-menu-trigger');
-        if (await userMenu.isVisible({ timeout: 5_000 }).catch(() => false)) {
-            await userMenu.click();
-        } else {
+        // Desktop + tablet (>= md): logout lives in the user-menu dropdown;
+        // phone: behind the header hamburger ("Open menu") in the MoreDrawer.
+        // Branch on the project, not on a visibility probe: a late header on
+        // desktop used to fall into the phone branch.
+        if (isMobile(testInfo)) {
             await page.getByRole('button', { name: 'Open menu' }).click();
+        } else {
+            const userMenu = page.getByTestId('user-menu-trigger');
+            await expect(userMenu).toBeVisible();
+            await userMenu.click();
         }
         await page
             .getByRole('button', { name: /log ?out|sign ?out/i })

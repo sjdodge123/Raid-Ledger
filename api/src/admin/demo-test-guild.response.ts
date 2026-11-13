@@ -3,6 +3,7 @@
  * `POST /admin/test/wow/seed-guild` fixture (`demo-test-guild.controller.ts`),
  * split out so the controller stays under the max-lines limit (ROK-1917).
  */
+import type { GuildRecruitment } from '@raid-ledger/contract';
 import { defined } from '../common/defined.helpers';
 import type { SeedGuildRole } from './demo-test-guild.helpers';
 import type { SeededGuildRaids } from './demo-test-guild-raids.helpers';
@@ -65,6 +66,8 @@ export interface SeedGuildResponse {
   installedAddons?: SeededInstalledAddons;
   /** Present only when the body sent `withArmorySnapshots: true` (ROK-2149). */
   armorySnapshots?: SeededArmorySnapshots;
+  /** Present only when the body sent `withRecruitment: true` (ROK-1789). */
+  recruitment?: GuildRecruitment;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
@@ -78,6 +81,7 @@ export type SeedGuildExtras = Pick<
   | 'pulls'
   | 'installedAddons'
   | 'armorySnapshots'
+  | 'recruitment'
 >;
 
 export interface SeededRoster {

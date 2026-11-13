@@ -24,6 +24,7 @@ export interface RawSeedFlags {
   withPulls?: unknown;
   withInstalledAddons?: unknown;
   withArmorySnapshots?: unknown;
+  withRecruitment?: unknown;
 }
 
 /** The opt-in boolean flags; 400 on a non-boolean. */
@@ -48,5 +49,6 @@ export function parseSeedFlags(
       raw.withArmorySnapshots,
       'withArmorySnapshots',
     ),
+    withRecruitment: boolFlag(raw.withRecruitment, 'withRecruitment'),
   };
 }

@@ -12,6 +12,8 @@ import { GuildContributionsService } from './guild-contributions.service';
 import { GuildIngameTextController } from './guild-ingame-text.controller';
 import { GuildIngameTextService } from './guild-ingame-text.service';
 import { GuildPageService } from './guild-page.service';
+import { GuildRecruitmentController } from './guild-recruitment.controller';
+import { GuildRecruitmentService } from './guild-recruitment.service';
 import { GuildRaidsService } from './guild-raids.service';
 import { GuildsController } from './guilds.controller';
 import { JoinGateService } from './join-gate/join-gate.service';
@@ -23,11 +25,12 @@ import { WowHubClaimProvider } from './roster-claim/wow-hub-claim.provider';
 import { RosterMemberController } from './roster-member/roster-member.controller';
 import { RosterMemberService } from './roster-member/roster-member.service';
 
-/** Hub page/content/roster routes + ROK-2128 Add character → Guild roster + ROK-2136 in-game text + ROK-2148 contributions. */
+/** Hub page/content/roster routes + ROK-2128 Add character → Guild roster + ROK-2136 in-game text + ROK-2148 contributions + ROK-1789 recruitment. */
 export const CONTROLLERS = [
   GuildsController,
   GuildContentController,
   GuildIngameTextController,
+  GuildRecruitmentController,
   GuildContributionsController,
   GuildBlizzardRosterController,
   ...rosterSync.CONTROLLERS,
@@ -36,12 +39,13 @@ export const CONTROLLERS = [
   RosterMemberController,
 ];
 
-/** Hub services + the Blizzard roster sync + ROK-2128 roster claim + ROK-2136 in-game text + ROK-2148 contributions. */
+/** Hub services + the Blizzard roster sync + ROK-2128 roster claim + ROK-2136 in-game text + ROK-2148 contributions + ROK-1789 recruitment. */
 export const PROVIDERS = [
   GuildPageService,
   GuildRaidsService,
   GuildAddonsService,
   GuildIngameTextService,
+  GuildRecruitmentService,
   GuildContributionsService,
   GuildBlizzardRosterService,
   ...rosterSync.PROVIDERS,
