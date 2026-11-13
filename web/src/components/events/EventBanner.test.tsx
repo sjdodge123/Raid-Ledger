@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { EventBanner } from './EventBanner';
 import { MemoryRouter } from 'react-router-dom';
+import { useTimezoneStore } from '../../stores/timezone-store';
 
 const mockProps = {
         title: 'Mythic+ Push Night',
@@ -204,5 +205,38 @@ describe('voice channel link scheme allow-list', () => {
         const url = 'https://discord.com/channels/1/2';
         renderWithRouter(<EventBanner {...mockProps} voiceChannelName="Raid Voice" voiceChannelUrl={url} />);
         expect(screen.getByRole('link', { name: 'Raid Voice' })).toHaveAttribute('href', url);
+    });
+});
+
+describe('planned temporary voice channel (operator ruling 2026-11-13)', () => {
+    const originalResolved = useTimezoneStore.getState().resolved;
+    beforeEach(() => useTimezoneStore.setState({ resolved: 'UTC' }));
+    afterEach(() => useTimezoneStore.setState({ resolved: originalResolved }));
+
+    it('shows the planned name and when it opens, in the user timezone, with no link', () => {
+        renderWithRouter(
+            <EventBanner {...mockProps} voiceChannelName="⏰ Stocks 5 man" voiceChannelUrl="https://discord.com/channels/1/2"
+                voiceChannelOpensAt="2026-02-06T12:30:00Z" />,
+        );
+        expect(screen.getByTestId('event-banner-voice-channel')).toHaveTextContent('🔊 ⏰ Stocks 5 man · opens 12:30 PM');
+        expect(screen.queryByRole('link', { name: /Stocks 5 man/ })).not.toBeInTheDocument();
+    });
+
+    it('formats the open time in the selected timezone', () => {
+        useTimezoneStore.setState({ resolved: 'America/New_York' });
+        renderWithRouter(<EventBanner {...mockProps} voiceChannelName="⏰ Stocks 5 man" voiceChannelOpensAt="2026-02-07T01:30:00Z" />);
+        expect(screen.getByTestId('event-banner-voice-channel')).toHaveTextContent('· opens 8:30 PM');
+    });
+
+    it('has no "opens" suffix for a live channel', () => {
+        renderWithRouter(<EventBanner {...mockProps} voiceChannelName="Raid Voice" voiceChannelUrl="https://discord.com/channels/1/2" />);
+        expect(screen.getByRole('link', { name: 'Raid Voice' })).toBeInTheDocument();
+        expect(screen.getByTestId('event-banner-voice-channel')).not.toHaveTextContent('opens');
+    });
+
+    it('leaves the voice channel out of the collapsed banner, as for a live channel', () => {
+        renderWithRouter(<EventBanner {...mockProps} isCollapsed voiceChannelName="⏰ Stocks 5 man" voiceChannelOpensAt="2026-02-06T12:30:00Z" />);
+        expect(screen.queryByTestId('event-banner-voice-channel')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Stocks 5 man/)).not.toBeInTheDocument();
     });
 });
