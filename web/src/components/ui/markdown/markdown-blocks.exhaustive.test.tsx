@@ -71,14 +71,16 @@ const CONSTRUCTS: string[] = [
     '[<https://example.com/?a&amp;b>](/p) $', '$ [x <https://example.com/~a~&amp;> y](/p)',
 ];
 
-/** Each construct alone, after a paragraph line, before one, and between blank-line paragraphs. */
-function inputs(): string[] {
+/**
+ * One construct alone, after a paragraph line, before one, and between blank-line paragraphs — for
+ * each inline text. Split per construct so no single test carries the whole cross-product (it timed
+ * out at 15 s on CI as one test).
+ */
+function inputsFor(construct: string): string[] {
     const out: string[] = [];
     for (const text of [T, U]) {
-        for (const c of CONSTRUCTS) {
-            const body = c.split('$').join(text);
-            out.push(body, `${text}\n${body}`, `${body}\n${text}`, `${text}\n\n${body}\n\n${text}`);
-        }
+        const body = construct.split('$').join(text);
+        out.push(body, `${text}\n${body}`, `${body}\n${text}`, `${text}\n\n${body}\n\n${text}`);
     }
     return [...new Set(out)];
 }
@@ -139,11 +141,14 @@ function blockFailure(input: string): string | null {
 }
 
 describe('every stored block construct loads, shows and saves like MarkdownBlock (Codex r13)', () => {
-    it('block construct × context × inline text', () => {
-        const cases = inputs();
-        const bad = cases.map(blockFailure).filter((m): m is string => m !== null);
-        expect(bad.slice(0, 10), `${bad.length} of ${cases.length} cases failed`).toEqual([]);
-    });
+    it.each(CONSTRUCTS.map((construct, index) => [index, construct] as const))(
+        'block construct #%i %j × context × inline text',
+        (_index: number, construct: string) => {
+            const cases = inputsFor(construct);
+            const bad = cases.map(blockFailure).filter((m): m is string => m !== null);
+            expect(bad.slice(0, 10), `${bad.length} of ${cases.length} cases failed`).toEqual([]);
+        },
+    );
 
     it.each(R14C)('r14c review repro %s', (construct: string) => {
         expect(blockFailure(construct.split('$').join(T))).toBeNull();
