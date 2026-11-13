@@ -131,6 +131,7 @@ describe('CharactersService — crud', () => {
     mockDb.transaction.mockImplementation(
       (callback: (tx: Record<string, jest.Mock>) => unknown) => {
         const tx = {
+          execute: jest.fn().mockResolvedValue(undefined),
           select: mockTxSelectDualCall([], [{ charCount: 1 }]),
           update: jest.fn().mockReturnValue({
             set: jest.fn().mockReturnValue({
@@ -297,6 +298,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: mockTxSelectDualCall([], [{ charCount: 1 }]),
             insert: jest.fn().mockReturnValue({
               values: jest.fn().mockReturnValue({
@@ -341,6 +343,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: mockTxSelectDualCall([], [{ charCount: 0 }]),
             insert: txInsertMock,
           };
@@ -385,6 +388,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: mockTxSelectDualCall([], [{ charCount: 1 }]),
             insert: txInsertMock,
           };
@@ -426,6 +430,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: mockTxSelectDualCall([], [{ charCount: 1 }]),
             update: txUpdateMock,
             insert: jest.fn().mockReturnValue({
@@ -483,6 +488,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: mockTxSelectDualCall([], [{ charCount: 2 }]),
             update: txUpdateMock,
             insert: txInsertMock,
@@ -528,6 +534,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: mockTxSelectDualCall(
               [{ id: 'other-char-id', userId: 999 }], // existingClaim found
               [{ charCount: 0 }],
@@ -578,6 +585,7 @@ describe('CharactersService — crud', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
+            execute: jest.fn().mockResolvedValue(undefined),
             select: txSelectMock,
             insert: txInsertMock,
           };
