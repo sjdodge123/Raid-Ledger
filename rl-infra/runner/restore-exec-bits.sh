@@ -96,6 +96,34 @@ EXEC_MANIFEST=(
     "scripts/test/*.sh"
 )
 
+# ROK-2182 follow-up — the static manifest misses tracked executables outside
+# its globs (docker/allinone/*.sh, scripts/smoke/*.sh, scripts/ci/*.sh,
+# tools/*/scripts/*.sh, …), which Mutagen also lands at 0644. git already
+# records the answer: every path the index stores as mode 100755. The runner's
+# /workspace/.git is scaffolded by cli/rl::scaffold_runner_git with
+# `reset --mixed FETCH_HEAD`, so its index carries the commit's modes, not the
+# synced 0644 ones. That index can be stale relative to the synced tree (it is
+# whatever the last scaffold reset to): a stale entry can only over-chmod a file
+# that is still present (harmless) or miss a NEW executable, which the static
+# manifest still covers. No git, no .git, or an empty index adds nothing and the
+# static manifest above still applies on its own. `-z` keeps non-ASCII paths
+# unquoted (without it git C-quotes them and the -f test skips them).
+collect_git_exec_files() {
+    local root="$1" rec path f seen
+    command -v git >/dev/null 2>&1 || return 0
+    seen=$'\n'"$(printf '%s\n' "${MATCHED_FILES[@]+"${MATCHED_FILES[@]}"}")"$'\n'
+    # Each NUL-terminated record is "<mode> <sha> <stage>\t<path>".
+    while IFS= read -r -d '' rec; do
+        [[ "${rec%% *}" == 100755 ]] || continue
+        path="${rec#*$'\t'}"
+        f="$root/$path"
+        [[ -n "$path" && -f "$f" ]] || continue
+        [[ "$seen" == *$'\n'"$f"$'\n'* ]] && continue
+        MATCHED_FILES+=("$f")
+        seen+="$f"$'\n'
+    done < <(git -C "$root" -c safe.directory="$root" ls-files -s -z 2>/dev/null)
+}
+
 usage() {
     echo "usage: bash restore-exec-bits.sh [--check] [ROOT]" >&2
     exit 2
@@ -187,6 +215,7 @@ main() {
     fi
 
     collect_manifest_files "$root"
+    collect_git_exec_files "$root"
     if (( ${#MATCHED_FILES[@]} == 0 )); then
         echo "$LOG_PREFIX FATAL no manifest entry matched anything under $root" >&2
         echo "$LOG_PREFIX   expected: a synced repo worktree; actual: nothing recognisable" >&2

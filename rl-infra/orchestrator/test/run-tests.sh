@@ -143,6 +143,8 @@ else
         # ROK-2111 — interval disk retention (sweeper step 3a): stopped
         # containers, unused images, idle-runner /tmp + npm cache; KEEP_N=15.
         "$TEST_DIR/disk-retention.test.sh"
+        # ROK-2181 — sweeper step 3 keeps pinned/preserved envs' resources.
+        "$TEST_DIR/env-scoped-prune.test.sh"
     )
 fi
 
