@@ -216,10 +216,38 @@ test_ac4_check_mode_reports_without_repairing() {
     assert_not_executable "$root/rl-infra/cli/rl" "rl-infra/cli/rl (under --check)"
 }
 
+# AC5 (ROK-2182 follow-up) — a file git tracks as 100755 OUTSIDE the static
+# manifest globs gets its bit back; a tracked 100644 file beside it does not.
+test_ac5_git_tracked_exec_files_restored() {
+    CURRENT_TEST_NAME="AC5: git 100755 files outside the manifest are +x after a restore"
+    restore_script_present || return 0
+    if ! command -v git >/dev/null 2>&1; then
+        echo "SKIP [$CURRENT_TEST_FILE] AC5 — git not installed"; return 0
+    fi
+    local root="$TMP_STATE/workspace"
+    make_synced_tree "$root"
+    mkdir -p "$root/docker/allinone" "$root/tools/test-bot/scripts"
+    printf '#!/bin/sh\ntrue\n' > "$root/docker/allinone/entrypoint.sh"
+    printf '#!/bin/sh\ntrue\n' > "$root/tools/test-bot/scripts/run-unit-specs.sh"
+    printf '#!/bin/sh\ntrue\n' > "$root/docker/allinone/not-exec.sh"
+    git -C "$root" init -q
+    git -C "$root" add docker tools api
+    git -C "$root" update-index --chmod=+x docker/allinone/entrypoint.sh tools/test-bot/scripts/run-unit-specs.sh
+    find "$root" -path "$root/.git" -prune -o -type f -exec chmod 0644 {} +
+
+    bash "$RESTORE_SCRIPT" "$root" >/dev/null 2>&1
+
+    assert_executable "$root/docker/allinone/entrypoint.sh" "git-100755 docker/allinone/entrypoint.sh"
+    assert_executable "$root/tools/test-bot/scripts/run-unit-specs.sh" "git-100755 tools/test-bot/scripts/run-unit-specs.sh"
+    assert_not_executable "$root/docker/allinone/not-exec.sh" "git-100644 docker/allinone/not-exec.sh"
+    assert_not_executable "$root/api/src/main.ts" "git-100644 api/src/main.ts"
+}
+
 run_test "AC1 known set executable"        test_ac1_known_set_is_executable
 run_test "AC1b healthy tree exits 0"       test_ac1b_healthy_tree_exits_zero
 run_test "AC2 manifest-scoped"             test_ac2_does_not_blanket_chmod
 run_test "AC3 named error not 126"         test_ac3_unrepairable_yields_named_error_not_126
 run_test "AC4 check mode"                  test_ac4_check_mode_reports_without_repairing
+run_test "AC5 git 100755 files restored"   test_ac5_git_tracked_exec_files_restored
 
 print_test_summary
