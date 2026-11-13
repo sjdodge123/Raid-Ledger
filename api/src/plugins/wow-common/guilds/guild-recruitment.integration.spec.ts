@@ -259,7 +259,9 @@ describe('save / read / clear (AC3, AC4, AC7)', () => {
 
   it('a PUT leaves rules, links and in-game text unchanged', async () => {
     const rules = [{ title: 'Loot', body: 'Council' }];
-    const links = [{ title: 'Links', links: [] }];
+    const links = [
+      { title: 'Links', links: [{ label: 'Site', url: 'https://example.com' }] },
+    ];
     await testApp.db.insert(schema.guildProfiles).values({
       guildId,
       rules,
