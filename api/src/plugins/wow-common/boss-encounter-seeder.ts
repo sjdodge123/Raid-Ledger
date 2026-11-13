@@ -18,7 +18,6 @@ import {
   type LootKeyRow,
   type LootWantedKey,
 } from './boss-encounter-prune.helpers';
-import { buildBossLookup, resolveLootBossId } from './boss-loot-lookup.helpers';
 
 const BATCH_SIZE = 100;
 
@@ -30,11 +29,23 @@ interface BossEntry {
   sodModified: boolean;
 }
 
+/**
+ * Boss FK for a loot entry. ROK-2170: a `forever` loot row hangs off a
+ * `forever` boss row when one exists, else off the classic boss of the same
+ * name — boss rows are not duplicated for Forever.
+ */
+function resolveLootBossId(
+  lookup: Map<string, number>,
+  l: { bossName: string; expansion: string },
+): number | undefined {
+  const own = lookup.get(`${l.bossName}::${l.expansion}`);
+  if (own !== undefined || l.expansion !== 'forever') return own;
+  return lookup.get(`${l.bossName}::classic`);
+}
+
 interface LootEntry {
   bossName: string;
   expansion: string;
-  /** Optional: picks between same-name bosses in one expansion. */
-  instanceId?: number;
   itemId: number;
   itemName: string;
   slot: string | null;
@@ -83,7 +94,7 @@ export class BossEncounterSeeder {
     const staleBossIds = findStaleClassicBossIds(rows, bosses, warn);
     const stale = new Set(staleBossIds);
     const live = rows.filter((r) => !stale.has(r.id));
-    const loot = await this.seedLootItems(buildBossLookup(live));
+    const loot = await this.seedLootItems(this.buildBossLookup(live));
     const staleLoot = await this.findStaleLoot(live, loot.wanted, warn);
     await pruneStaleRows(this.db, staleBossIds, [
       ...staleLoot.classic,
@@ -189,6 +200,13 @@ export class BossEncounterSeeder {
     }
     this.logger.log(`Seeded ${inserted}/${lootEntries.length} loot items`);
     return { inserted, wanted: lootToInsert };
+  }
+
+  /** Build boss name+expansion → DB id lookup map. */
+  private buildBossLookup(allBosses: BossKeyRow[]): Map<string, number> {
+    const lookup = new Map<string, number>();
+    for (const b of allBosses) lookup.set(`${b.name}::${b.expansion}`, b.id);
+    return lookup;
   }
 
   /** Map loot entries to insert values, resolving boss FKs. */
