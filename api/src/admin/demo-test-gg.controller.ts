@@ -7,7 +7,8 @@
  * - `POST /admin/test/gg/age-announce {year, minutes}` backdates the announce
  *   by `minutes`, so the DM wave opens without waiting out the offset.
  * - `POST /admin/test/gg/seed {userId, year, snapshot?}` stores a snapshot:
- *   the given one, else the user's live compute (422 without activity).
+ *   the given one, else the user's live compute (404 for an unknown user,
+ *   422 without activity).
  */
 import {
   Body,
@@ -15,6 +16,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  NotFoundException,
   Post,
   UnprocessableEntityException,
   UseGuards,
@@ -99,6 +101,7 @@ export class DemoTestGgController {
   @HttpCode(HttpStatus.OK)
   async seed(@Body() body: unknown): Promise<{ userId: number; year: number }> {
     const input = parseDemoBody(SeedBody, body);
+    await this.assertUserExists(input.userId);
     const snapshot =
       input.snapshot ??
       (await this.compute.computeForUser(input.userId, input.year));
@@ -109,5 +112,15 @@ export class DemoTestGgController {
     }
     await this.compute.upsertSnapshot(input.userId, snapshot);
     return { userId: input.userId, year: input.year };
+  }
+
+  /** 404 for an unknown user — the snapshot upsert would otherwise 500 on the FK. */
+  private async assertUserExists(userId: number): Promise<void> {
+    const [row] = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    if (!row) throw new NotFoundException(`User ${userId} not found`);
   }
 }
