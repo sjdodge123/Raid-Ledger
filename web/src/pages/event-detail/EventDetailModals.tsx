@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useRef } from 'react';
 import { Modal } from '../../components/ui/modal';
+import { Button } from '../../components/ui/button';
 import type { CharacterRole, PugSlotResponseDto, SeriesScope } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
 
@@ -183,6 +184,34 @@ export function RemoveConfirmModal(props: RemoveConfirmModalProps): JSX.Element 
                     </div>
                 </div>
             )}
+        </Modal>
+    );
+}
+
+interface DeleteEventConfirmModalProps {
+    isOpen: boolean;
+    eventTitle: string;
+    onClose: () => void;
+    onConfirm: () => void;
+    isPending: boolean;
+}
+
+/** Confirm before deleting a single (non-series) event — mirrors the Cancel Event modal's Keep / destructive footer. */
+export function DeleteEventConfirmModal(props: DeleteEventConfirmModalProps): JSX.Element {
+    const keepRef = useRef<HTMLButtonElement>(null);
+    const footer = (
+        <div className="flex w-full justify-end gap-2">
+            <Button ref={keepRef} variant="secondary" size="sm" disabled={props.isPending} onClick={props.onClose}>Keep Event</Button>
+            <Button variant="destructive" size="sm" loading={props.isPending} loadingLabel="Deleting..." onClick={props.onConfirm}>
+                Delete Event
+            </Button>
+        </div>
+    );
+    return (
+        <Modal isOpen={props.isOpen} onClose={props.onClose} title="Delete Event" footer={footer} closeDisabled={props.isPending} initialFocusRef={keepRef}>
+            <p className="text-sm text-foreground">
+                Are you sure you want to delete <span className="font-semibold">{props.eventTitle}</span>? All signups and roster assignments are removed. This can&apos;t be undone.
+            </p>
         </Modal>
     );
 }
