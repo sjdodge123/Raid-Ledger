@@ -4304,3 +4304,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 - **med** — `Dockerfile.allinone` (api `nest build` step) — `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` on Docker Desktop with 8 GB; the Dockerfile sets no `NODE_OPTIONS`. Pre-existing (the nginx-only diff can't affect the TS build); a scratch copy adding `ENV NODE_OPTIONS=--max-old-space-size=6144` before the api build succeeded. Suggested: set that ENV in the build stage (own infra PR, validate per CLAUDE.md).
 
+
+### 2026-11-13 — fix/voice-flush-mid-write-leave (surfaced during review)
+
+- **med** — `api/src/discord-bot/services/voice-attendance.service.ts:69-72,139,267-272` — overlapping flushes can commit out of order: `flushToDb` has no single-flight guard, so a periodic flush (setInterval) still in flight when `runClassification` runs `handleLeave` + its own flush can commit its older (pre-leave) row AFTER the classification flush. The newer flush already cleared `dirty` (its version matched), so the DB keeps the pre-leave row and `classifyPendingEvents` classifies it and deletes the session. Pre-existing: the interval and classification flushes have always run unserialised; the branch's `dirtyVersion` guard only covers a leave landing during a single write, not two writes racing each other. Rare, since Postgres row locks usually keep commit order.
+  Suggested: serialise flushes through a promise chain, e.g. `this.flushChain = this.flushChain.then(() => flushDirtySessions(...))`.
