@@ -5,7 +5,8 @@
  *     Classic classes, levels 40..60;
  *   - `asCaller` (Q-B16): the JWT caller owns the rank-0 row's GUID-linked
  *     character (claimed from the synthetic `gm` user on a re-seed) and gets
- *     a member editor grant.
+ *     a member editor grant. `ensureCharacter` is the plain (non-caller)
+ *     side and hands a claimed character back to the seed user.
  */
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -196,6 +197,67 @@ async function reownGuidCharacter(
     )
     .returning({ id: c.id });
   return found?.id;
+}
+
+/** The GUID's character under any owner (idx_characters_addon_guid allows one). */
+async function findGuidCharacter(
+  db: Db,
+  args: ClaimArgs,
+): Promise<{ id: string; userId: number } | undefined> {
+  const c = schema.characters;
+  const [found] = await db
+    .select({ id: c.id, userId: c.userId })
+    .from(c)
+    .where(
+      and(
+        eq(c.gameId, args.gameId),
+        eq(c.region, SEED_GUILD_REGION),
+        eq(c.addonGuid, args.guid),
+      ),
+    )
+    .limit(1);
+  return found;
+}
+
+/**
+ * Hands an `asCaller` seed's GUID character back to the seed user as their
+ * main — a plain re-seed must re-point it, never insert a second GUID row.
+ */
+async function reclaimGuidCharacter(
+  db: Db,
+  id: string,
+  userId: number,
+): Promise<string> {
+  await db
+    .update(schema.characters)
+    .set({ userId, isMain: true, updatedAt: new Date() })
+    .where(eq(schema.characters.id, id));
+  return id;
+}
+
+/** Find-or-insert the user's main character carrying the member GUID. */
+export async function ensureCharacter(
+  db: Db,
+  args: ClaimArgs,
+): Promise<string> {
+  const existing = await findGuidCharacter(db, args);
+  if (existing?.userId === args.userId) return existing.id;
+  if (existing) return reclaimGuidCharacter(db, existing.id, args.userId);
+  const [row] = await db
+    .insert(schema.characters)
+    .values({
+      userId: args.userId,
+      gameId: args.gameId,
+      name: args.name,
+      region: SEED_GUILD_REGION,
+      class: 'Warrior',
+      level: 60,
+      role: args.role,
+      addonGuid: args.guid,
+      isMain: true,
+    })
+    .returning({ id: schema.characters.id });
+  return defined(row, `seed-guild character ${args.name}`).id;
 }
 
 /** Idempotent member editor grant on the caller's rank-0 row ("GM + editor"). */

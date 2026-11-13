@@ -684,7 +684,10 @@ describe('POST /admin/test/wow/seed-guild — asCaller (ROK-1789 B9, Q-B16)', ()
     expect(plain.users.gm.characterId).toBe(claimed.users.gm.characterId);
     const gmChar = defined(plain.users.gm.characterId ?? undefined, 'gm char');
     const [owned] = await testApp.db
-      .select({ userId: schema.characters.userId, isMain: schema.characters.isMain })
+      .select({
+        userId: schema.characters.userId,
+        isMain: schema.characters.isMain,
+      })
       .from(schema.characters)
       .where(eq(schema.characters.id, gmChar));
     expect(owned).toEqual({ userId: plain.users.gm.userId, isMain: true });

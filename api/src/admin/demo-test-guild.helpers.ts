@@ -249,56 +249,6 @@ export async function upsertMember(
   return defined(row, `seed-guild member ${entry.char}`).id;
 }
 
-interface SeedCharacterArgs {
-  userId: number;
-  gameId: number;
-  guid: string;
-  name: string;
-  role: string | null;
-}
-
-async function findCharacterId(
-  db: Db,
-  args: SeedCharacterArgs,
-): Promise<string | undefined> {
-  const [found] = await db
-    .select({ id: schema.characters.id })
-    .from(schema.characters)
-    .where(
-      and(
-        eq(schema.characters.userId, args.userId),
-        eq(schema.characters.gameId, args.gameId),
-        eq(schema.characters.addonGuid, args.guid),
-      ),
-    )
-    .limit(1);
-  return found?.id;
-}
-
-/** Find-or-insert the user's main character carrying the member GUID. */
-export async function ensureCharacter(
-  db: Db,
-  args: SeedCharacterArgs,
-): Promise<string> {
-  const existing = await findCharacterId(db, args);
-  if (existing !== undefined) return existing;
-  const [row] = await db
-    .insert(schema.characters)
-    .values({
-      userId: args.userId,
-      gameId: args.gameId,
-      name: args.name,
-      region: SEED_GUILD_REGION,
-      class: 'Warrior',
-      level: 60,
-      role: args.role,
-      addonGuid: args.guid,
-      isMain: true,
-    })
-    .returning({ id: schema.characters.id });
-  return defined(row, `seed-guild character ${args.name}`).id;
-}
-
 /** Idempotent rank grant for the delegated-editor rank. */
 export async function ensureRankEditor(
   db: Db,

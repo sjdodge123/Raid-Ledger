@@ -63,7 +63,6 @@ import { defined } from '../common/defined.helpers';
 import {
   SEED_GUILD_EDITOR_RANK,
   SEED_GUILD_ROSTER,
-  ensureCharacter,
   ensureRankEditor,
   findWowGameId,
   guildKeyHash,
@@ -93,6 +92,7 @@ import {
 } from './demo-test-guild-optional.helpers';
 import {
   claimGuidCharacter,
+  ensureCharacter,
   ensureMemberEditor,
   loadSeedCaller,
   seedFillerMembers,
