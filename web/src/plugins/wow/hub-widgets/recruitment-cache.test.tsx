@@ -21,6 +21,7 @@ import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import RecruitmentWidget, { RECRUITMENT_EMPTY_HINT } from './recruitment-widget';
 import { RecruitmentAction } from './recruitment-action';
 import { useRecruitmentDialog } from './recruitment-dialog-store';
+import { guildRecruitmentKey } from '../hooks/use-guild-recruitment';
 
 /** Never read by the card — spelled out rather than cast (server-hours-widget.test idiom). */
 const IDLE_RAIDS: HubCtx['raids'] = {
@@ -84,5 +85,51 @@ describe('Recruitment editor → card cache (AC4/AC7)', () => {
         await waitFor(() => expect(screen.getByTestId('recruitment-card')).toHaveTextContent(RECRUITMENT_EMPTY_HINT));
         expect(screen.getByTestId('recruitment-set')).toBeInTheDocument();
         expect(screen.queryByTestId('recruitment-headline')).toBeNull();
+    });
+});
+
+/**
+ * The first GET (the card) answers at once; every later one (the editor's
+ * refetch-on-mount) waits for `release()` and then answers the pre-save view.
+ * `served` settles once that late response has been sent.
+ */
+function serveHeldRefetch(view: GuildRecruitmentView): { release: () => void; calls: () => number; served: Promise<void> } {
+    let calls = 0;
+    let release = (): void => undefined;
+    let markServed = (): void => undefined;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const served = new Promise<void>((resolve) => { markServed = resolve; });
+    server.use(http.get(GUILD_RECRUITMENT_URL, async () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json(view);
+        await gate;
+        markServed();
+        return HttpResponse.json(view);
+    }));
+    return { release: () => release(), calls: () => calls, served };
+}
+
+describe('Recruitment save vs an in-flight GET (Codex P2)', () => {
+    it('a GET that resolves after the save does not revert the card', async () => {
+        const held = serveHeldRefetch(buildRecruitmentView(buildRecruitment(), true));
+        const saved: { view: GuildRecruitmentView | undefined } = { view: undefined };
+        server.use(http.put(GUILD_RECRUITMENT_URL, async ({ request }) => {
+            saved.view = buildRecruitmentView(PutGuildRecruitmentSchema.parse(await request.json()), true);
+            return HttpResponse.json(saved.view);
+        }));
+        const { queryClient } = renderWithProviders(<Card />);
+        fireEvent.click(await screen.findByTestId('recruitment-edit'));
+        await screen.findByTestId('recruitment-apply-url');
+        await waitFor(() => expect(held.calls()).toBe(2));
+        fireEvent.click(screen.getByRole('checkbox'));
+        fireEvent.click(screen.getByTestId('recruitment-save'));
+        await waitFor(() => expect(screen.queryByTestId('recruitment-save')).toBeNull());
+        held.release();
+        await held.served;
+        await waitFor(() => expect(queryClient.isFetching({ queryKey: guildRecruitmentKey(5) })).toBe(0));
+        expect(saved.view).toBeDefined();
+        expect(queryClient.getQueryData<GuildRecruitmentView>(guildRecruitmentKey(5))).toEqual(saved.view);
+        const card = screen.getByTestId('recruitment-card');
+        await waitFor(() => expect(within(card).getByTestId('recruitment-headline')).toHaveTextContent('Closed'));
     });
 });
