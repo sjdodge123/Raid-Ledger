@@ -10,7 +10,7 @@
  * so the raid import hands a pull to a re-importing member once that reporter
  * left the roster (`addon-import-raid.reassign.ts`). Window (Q7): all time.
  */
-import { and, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, or, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   MAX_RAID_PROGRESS_BOSSES,
@@ -69,7 +69,7 @@ function mergePull(kept: RaidPull, dup: RaidPull): RaidPull {
 const maxDate = (a: Date, b: Date): Date => (b > a ? b : a);
 
 /** One boss row from the collapsed pulls of one `(encounter, difficulty)`. */
-function toBoss(pulls: readonly RaidPull[]): Boss | null {
+export function toBoss(pulls: readonly RaidPull[]): Boss | null {
   const first = pulls[0];
   if (!first) return null;
   let newest = first;
@@ -154,7 +154,8 @@ export interface RaidHubRow {
   kind: string;
 }
 
-type RaidScope = Pick<RaidHubRow, 'gameId' | 'region' | 'nameKey'>;
+/** The `(game, region, guild key)` a hub's pulls are scoped to. */
+export type RaidScope = Pick<RaidHubRow, 'gameId' | 'region' | 'nameKey'>;
 
 /** The hub's pull scope; null for a non-guild hub or an empty name key. */
 export function raidScope(row: RaidHubRow | null): RaidScope | null {
@@ -170,14 +171,27 @@ function trustedReporter(reporterIds: readonly number[]) {
     : isNull(by);
 }
 
+/** D2 + Q1: the hub's scope AND a trusted reporter (shared by Part B). */
+export function guildPullsWhere(
+  scope: RaidScope,
+  reporterIds: readonly number[],
+): SQL | undefined {
+  const p = schema.addonEncounterPulls;
+  return and(
+    eq(p.gameId, scope.gameId),
+    eq(p.region, scope.region),
+    eq(p.guildKey, scope.nameKey),
+    trustedReporter(reporterIds),
+  );
+}
+
 /** In-scope pulls reported by `reporterIds` or by a deleted user (Q1). */
-async function loadGuildPulls(
+export async function loadGuildPulls(
   db: Db,
   scope: RaidScope,
   reporterIds: readonly number[],
 ): Promise<RaidPull[]> {
   const p = schema.addonEncounterPulls;
-  const trusted = trustedReporter(reporterIds);
   return db
     .select({
       encounterId: p.encounterId,
@@ -188,14 +202,7 @@ async function loadGuildPulls(
       success: p.success,
     })
     .from(p)
-    .where(
-      and(
-        eq(p.gameId, scope.gameId),
-        eq(p.region, scope.region),
-        eq(p.guildKey, scope.nameKey),
-        trusted,
-      ),
-    );
+    .where(guildPullsWhere(scope, reporterIds));
 }
 
 /**
