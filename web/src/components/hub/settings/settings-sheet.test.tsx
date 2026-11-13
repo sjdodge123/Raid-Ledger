@@ -5,7 +5,7 @@
  * showing half a form, and the hub-visibility switch is an admin-only
  * PATCH /guilds/:id/hidden (ROK-1831).
  */
-import type { JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -16,6 +16,7 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import { okMirror, discordMessage } from '../../../test/mocks/guild-discord-handlers';
 import type { HubCtx, HubModule } from '../../../plugins/hub-module';
 import { HubSettingsSheet } from './settings-sheet';
+import { SettingsSection } from './settings-rows';
 
 const auth = vi.hoisted(() => ({ role: 'member' as 'admin' | 'member' }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => {
@@ -204,5 +205,54 @@ describe('HubSettingsSheet — hub rename (ROK-1950)', () => {
         renderAs({ role: 'officer', canEdit: true, canManageEditors: false });
         expect(await screen.findByText('Description')).toBeInTheDocument();
         expect(screen.queryByTestId('hub-name-section'), 'officers must not get the rename control').toBeNull();
+    });
+});
+
+describe('HubSettingsSheet — open at a named section (ROK-2188)', () => {
+    /** Like the real Blizzard roster section, the target only renders once its own data arrives. */
+    function LateTargetSection(): JSX.Element | null {
+        const [ready, setReady] = useState(false);
+        useEffect(() => {
+            const id = window.setTimeout(() => setReady(true), 30);
+            return () => window.clearTimeout(id);
+        }, []);
+        if (!ready) return null;
+        return (
+            <SettingsSection title="Target" sectionId="target" testId="target-section">
+                <label>Target slug<input data-testid="target-input" /></label>
+            </SettingsSection>
+        );
+    }
+    const TARGET_MODULE: HubModule = {
+        kind: 'wow_guild', tabs: [], overviewWidgets: [], memberColumns: [], heroPills: [],
+        memberRows: () => [], settingsSections: LateTargetSection,
+    };
+    const scrolled: Element[] = [];
+    beforeEach(() => {
+        scrolled.length = 0;
+        Element.prototype.scrollIntoView = function scrollIntoView(this: Element): void { scrolled.push(this); };
+    });
+    const renderAt = (section?: string): void => {
+        renderWithProviders(
+            <HubSettingsSheet ctx={ctxFor()} module={TARGET_MODULE} onClose={() => undefined}
+                onChangeChannel={() => undefined} {...(section === undefined ? {} : { section })} />,
+        );
+    };
+
+    it('scrolls to and focuses the first field of the named section once it renders', async () => {
+        serve({ state: 'unset' }, []);
+        renderAt('target');
+        const input = await screen.findByTestId('target-input');
+        await waitFor(() => expect(document.activeElement, 'the section field must take focus').toBe(input));
+        expect(scrolled, 'the section itself is scrolled to the top of the sheet').toContain(screen.getByTestId('target-section'));
+    });
+
+    it('opening without a section leaves focus and scroll where the sheet puts them', async () => {
+        serve({ state: 'unset' }, []);
+        renderAt();
+        const input = await screen.findByTestId('target-input');
+        await new Promise<void>((resolve) => { window.setTimeout(resolve, 20); });
+        expect(document.activeElement, 'no target, no focus steal').not.toBe(input);
+        expect(scrolled).toEqual([]);
     });
 });
