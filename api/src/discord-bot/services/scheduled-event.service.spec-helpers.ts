@@ -156,6 +156,9 @@ function buildScheduledEventProviders(
           .mockImplementation((_g, _r, _e, override) =>
             Promise.resolve(override ?? 'voice-channel-123'),
           ),
+        // Optimistic like the real guard for an uncached id: a set override
+        // counts as voice, so a planned SE never beats it (2026-11-13).
+        overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
       },
     },
     {

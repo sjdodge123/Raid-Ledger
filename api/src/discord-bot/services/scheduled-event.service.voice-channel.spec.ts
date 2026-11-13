@@ -265,3 +265,78 @@ describe('Scheduled Event while a temporary voice channel is planned', () => {
     );
   });
 });
+
+/**
+ * Codex r1 (2026-11-13): the planned decision must agree with the live voice
+ * resolution — a voice override beats the temporary channel, and the planned
+ * name must match the one EphemeralVoiceService gives the real channel.
+ */
+describe('planned SE — voice override and reconciliation game name', () => {
+  let mocks: ScheduledEventMocks;
+
+  function useRow(overrides: Record<string, unknown>) {
+    const row = {
+      discordScheduledEventId: null,
+      notificationChannelOverride: null,
+      recurrenceGroupId: null,
+      ephemeralVoiceEnabled: true,
+      ephemeralVoiceChannelId: null,
+      cancelledAt: null,
+      reschedulingPollId: null,
+      gameId: null,
+      startIso: baseEventData.startTime,
+      endIso: baseEventData.endTime,
+      ...overrides,
+    };
+    mocks.mockDb.select.mockReturnValue(mocks.createSelectChain([row]));
+  }
+
+  beforeEach(async () => {
+    mocks = await setupScheduledEventTestModule();
+    mocks.settingsService.getEphemeralVoiceEnabled.mockResolvedValue(true);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('creates a Voice SE in a voice override, never External at the planned name', async () => {
+    useRow({ notificationChannelOverride: 'vc-override' });
+    await mocks.service.createScheduledEvent(
+      42,
+      baseEventData,
+      1,
+      false,
+      'vc-override',
+    );
+    expect(mocks.channelResolver.overrideIsVoiceChannel).toHaveBeenCalledWith(
+      'vc-override',
+    );
+    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: GuildScheduledEventEntityType.Voice,
+        channel: 'vc-override',
+      }),
+    );
+  });
+
+  it('still plans past a TEXT override (it never wins the voice slot)', async () => {
+    mocks.channelResolver.overrideIsVoiceChannel.mockReturnValue(false);
+    useRow({ notificationChannelOverride: 'text-override' });
+    await mocks.service.createScheduledEvent(42, baseEventData, 1, false);
+    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: GuildScheduledEventEntityType.External,
+      }),
+    );
+  });
+
+  it('names a reconciliation SE (gameId, no game) after the game row', async () => {
+    useRow({ gameId: 7, name: 'World of Warcraft' });
+    const candidate = { ...baseEventData };
+    delete candidate.game;
+    await mocks.service.createScheduledEvent(42, candidate, 7, false);
+    const withGame = buildEphemeralChannelName(baseEventData);
+    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
+      expect.objectContaining({ entityMetadata: { location: withGame } }),
+    );
+  });
+});

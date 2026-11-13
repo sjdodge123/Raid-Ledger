@@ -29,10 +29,13 @@ function makeEvent(over: Partial<EventResponseDto> = {}): EventResponseDto {
   return { ...base, ...over } as EventResponseDto;
 }
 
-function makeDeps(globalEnabled = true) {
+function makeDeps(globalEnabled = true, overrideIsVoice = true) {
   const resolve = jest.fn().mockResolvedValue(null);
   const deps = {
-    channelResolver: { resolveVoiceChannelHonoringOverride: resolve },
+    channelResolver: {
+      resolveVoiceChannelHonoringOverride: resolve,
+      overrideIsVoiceChannel: jest.fn().mockReturnValue(overrideIsVoice),
+    },
     bot: { getGuildId: jest.fn(), getClient: jest.fn() },
     settings: {
       getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(globalEnabled),
@@ -87,5 +90,25 @@ describe('resolveVoiceChannelForEvent — planned temporary channel', () => {
     const cancelled = makeEvent({ cancelledAt: new Date().toISOString() });
     const result = await resolveVoiceChannelForEvent(deps, cancelled, true);
     expect(result.plannedOpensAt).toBeUndefined();
+  });
+});
+
+/** Codex r1: a voice override beats the temporary channel once it exists. */
+describe('resolveVoiceChannelForEvent — voice override', () => {
+  it('is not planned when the override is a voice channel', async () => {
+    const { deps, resolve } = makeDeps(true, true);
+    const event = makeEvent({ notificationChannelOverride: 'vc-override' });
+    const result = await resolveVoiceChannelForEvent(deps, event, true);
+    expect(result.plannedOpensAt).toBeUndefined();
+    expect(result.channelName).not.toBe('⏰ Stocks 5 man');
+    expect(resolve).toHaveBeenCalledWith(null, null, null, 'vc-override');
+  });
+
+  it('is still planned past a text override', async () => {
+    const { deps, resolve } = makeDeps(true, false);
+    const event = makeEvent({ notificationChannelOverride: 'text-override' });
+    const result = await resolveVoiceChannelForEvent(deps, event, true);
+    expect(result.channelName).toBe('⏰ Stocks 5 man');
+    expect(resolve).not.toHaveBeenCalled();
   });
 });
