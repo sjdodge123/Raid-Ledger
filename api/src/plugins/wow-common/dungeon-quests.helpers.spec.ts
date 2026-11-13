@@ -5,7 +5,7 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { buildItemDetailsMap } from './dungeon-quests.helpers';
+import { buildItemDetailsMap, pickLootRows } from './dungeon-quests.helpers';
 import { attachItemTooltips } from './dungeon-quests.item-meta';
 
 jest.mock('./dungeon-quests.item-meta', () => ({
@@ -77,6 +77,40 @@ describe('buildItemDetailsMap — Classic vs Forever loot rows (ROK-2170)', () =
       if (rows.length === 1) expect(item).toBeUndefined();
       else expect(item).toMatchObject({ quality: 'Uncommon', itemLevel: 23 });
     }
+  });
+});
+
+describe('pickLootRows — later rows fill null fields', () => {
+  it('fills a null itemSubclass from a later row of the same item', () => {
+    const first: LootRow = { ...CLASSIC_6903, itemSubclass: null };
+    const second: LootRow = { ...CLASSIC_6903, iconUrl: 'icon.jpg' };
+    expect(pickLootRows([first, second], false)).toEqual([
+      expect.objectContaining({ itemSubclass: 'Cloth', iconUrl: 'icon.jpg' }),
+    ]);
+  });
+
+  it('keeps the Forever row values and fills its nulls from Classic', () => {
+    const forever: LootRow = { ...FOREVER_6903, itemSubclass: null };
+    for (const rows of [
+      [CLASSIC_6903, forever],
+      [forever, CLASSIC_6903],
+    ]) {
+      expect(pickLootRows(rows, true)).toEqual([
+        expect.objectContaining({
+          quality: 'Rare',
+          itemLevel: 28,
+          itemSubclass: 'Cloth',
+        }),
+      ]);
+    }
+  });
+
+  it('never fills a Classic variant from a Forever row', () => {
+    const classic: LootRow = { ...CLASSIC_6903, itemSubclass: null };
+    const forever: LootRow = { ...FOREVER_6903, itemSubclass: 'Silk' };
+    expect(pickLootRows([forever, classic], false)).toEqual([
+      expect.objectContaining({ quality: 'Uncommon', itemSubclass: null }),
+    ]);
   });
 });
 
