@@ -31,8 +31,30 @@ const isClass = (classes: readonly WowRecruitClass[], v: string): v is WowRecrui
 const isRole = (v: string): v is CharacterRole => RECRUIT_ROLES.some((r) => r === v);
 const isState = (v: string): v is GuildRecruitmentState => GUILD_RECRUITMENT_STATES.some((s) => s === v);
 
+type RowPatch = (patch: Partial<Omit<DraftWanted, 'key'>>) => void;
+
+/** The row's second line below 1024px: state + note (columns 3–4 on desktop). */
+function StateAndNote({ row, index, set }: { row: DraftWanted; index: number; set: RowPatch }): JSX.Element {
+    const n = index + 1;
+    return (
+        <>
+            <div className="col-start-1 row-start-2 min-w-0 lg:col-start-3 lg:row-start-1">
+                <Select aria-label={`State ${n}`} data-testid={`recruitment-state-${index}`} value={row.state}
+                    onChange={(e) => { const v = e.target.value; if (isState(v)) set({ state: v }); }}>
+                    {GUILD_RECRUITMENT_STATES.map((s) => <option key={s} value={s}>{RECRUIT_STATE_META[s].label}</option>)}
+                </Select>
+            </div>
+            <div className="col-span-2 col-start-2 row-start-2 min-w-0 lg:col-span-1 lg:col-start-4 lg:row-start-1">
+                <Input aria-label={`Note ${n}`} data-testid={`recruitment-note-${index}`} value={row.note}
+                    maxLength={GUILD_RECRUIT_NOTE_MAX} placeholder="Note (optional)"
+                    onChange={(e) => set({ note: e.target.value })} />
+            </div>
+        </>
+    );
+}
+
 function RowControls({ row, index, classes, error, onChange }: RowProps): JSX.Element {
-    const set = (patch: Partial<Omit<DraftWanted, 'key'>>): void => onChange((rows) => wantedOps.patch(rows, row.key, patch));
+    const set: RowPatch = (patch) => onChange((rows) => wantedOps.patch(rows, row.key, patch));
     const invalid = error !== undefined;
     const n = index + 1;
     return (
@@ -49,17 +71,7 @@ function RowControls({ row, index, classes, error, onChange }: RowProps): JSX.El
                     {RECRUIT_ROLES.map((r) => <option key={r} value={r}>{RECRUIT_ROLE_LABEL[r]}</option>)}
                 </Select>
             </div>
-            <div className="col-start-1 row-start-2 min-w-0 lg:col-start-3 lg:row-start-1">
-                <Select aria-label={`State ${n}`} data-testid={`recruitment-state-${index}`} value={row.state}
-                    onChange={(e) => { const v = e.target.value; if (isState(v)) set({ state: v }); }}>
-                    {GUILD_RECRUITMENT_STATES.map((s) => <option key={s} value={s}>{RECRUIT_STATE_META[s].label}</option>)}
-                </Select>
-            </div>
-            <div className="col-span-2 col-start-2 row-start-2 min-w-0 lg:col-span-1 lg:col-start-4 lg:row-start-1">
-                <Input aria-label={`Note ${n}`} data-testid={`recruitment-note-${index}`} value={row.note}
-                    maxLength={GUILD_RECRUIT_NOTE_MAX} placeholder="Note (optional)"
-                    onChange={(e) => set({ note: e.target.value })} />
-            </div>
+            <StateAndNote row={row} index={index} set={set} />
             <Button variant="ghost" iconOnly className="col-start-3 row-start-1 shrink-0 lg:col-start-5"
                 aria-label={`Remove ${row.className} ${RECRUIT_ROLE_LABEL[row.role]}`} data-testid={`recruitment-remove-${index}`}
                 onClick={() => onChange((rows) => wantedOps.remove(rows, row.key))}>

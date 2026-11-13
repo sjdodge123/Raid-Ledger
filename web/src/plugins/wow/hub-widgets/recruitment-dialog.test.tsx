@@ -116,7 +116,8 @@ describe('RecruitmentDialog save + clear (AC4/AC7)', () => {
         server.use(http.delete(GUILD_RECRUITMENT_URL, () => { deletes += 1; return new HttpResponse(null, { status: 204 }); }));
         const onClose = await renderDialog();
         fireEvent.click(screen.getByTestId('recruitment-clear'));
-        expect(await screen.findByTestId('discard-changes-confirm')).toHaveTextContent('Clear recruitment?');
+        expect(await screen.findByTestId('discard-changes-confirm')).toBeInTheDocument();
+        expect(screen.getByText('Clear recruitment?')).toBeInTheDocument();
         expect(deletes).toBe(0);
         fireEvent.click(screen.getByTestId('discard-changes-discard'));
         await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
