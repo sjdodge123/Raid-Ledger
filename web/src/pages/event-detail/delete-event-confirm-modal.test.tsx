@@ -3,7 +3,7 @@
  * starts on Keep Event, and while the delete is in flight Keep, Escape and
  * the header × cannot close the dialog.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { DeleteEventConfirmModal } from './EventDetailModals';
 
@@ -14,9 +14,10 @@ function setup(isPending: boolean) {
 }
 
 describe('DeleteEventConfirmModal', () => {
-    it('opens with focus on Keep Event', () => {
+    it('opens with focus on Keep Event', async () => {
         const { keep } = setup(false);
-        expect(keep).toHaveFocus();
+        // useFocusTrap focuses the initial element one animation frame after open.
+        await waitFor(() => expect(keep).toHaveFocus());
     });
 
     it('cannot be closed while the delete is pending', () => {
