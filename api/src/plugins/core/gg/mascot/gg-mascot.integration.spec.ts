@@ -161,6 +161,13 @@ describe('GG mascot API (integration)', () => {
       .get(String(res.body.imageUrl))
       .expect(200)
       .expect('Content-Type', /image\/webp/);
+    // Range/206 for WebKit <audio> (iPad), via Express sendFile.
+    await testApp.request
+      .get(String(res.body.soundUrl))
+      .set('Range', 'bytes=0-9')
+      .expect(206)
+      .expect('Content-Range', `bytes 0-9/${MP3.length}`)
+      .expect('Content-Type', /audio\/mpeg/);
     const stored = await testApp.app
       .get(SettingsService)
       .get(SETTING_KEYS.GG_MASCOT);
