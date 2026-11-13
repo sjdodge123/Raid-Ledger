@@ -62,6 +62,12 @@ export interface SeedGuildInput extends SeedGuildSummaryOverrides {
   withArmorySnapshots: boolean;
   /** ROK-1789: also seed guild recruitment (one row per state + Apply URL). */
   withRecruitment: boolean;
+  /** ROK-1789 B9: backdated joins, milestones, events + first kills (implies withPulls/withDings). */
+  withActivity: boolean;
+  /** ROK-1789 B9 (Q-B16): the JWT caller owns the rank-0 character + a member editor grant. */
+  asCaller: boolean;
+  /** ROK-1789 B9: roster rows incl. filler (5..60). */
+  memberCount: number;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
   /** ROK-2132: appended to every roster name, so parallel claim specs never share one ('' = none). */
@@ -142,13 +148,13 @@ export async function findWowGameId(db: Db, slug: string): Promise<number> {
 
 /** The columns a re-seed re-stamps, incl. the ROK-1170 summary overrides (picked, never spread). */
 function seedGuildSet(
-  seed: SeedGuildSummaryOverrides,
+  seed: SeedGuildSummaryOverrides & Pick<SeedGuildInput, 'memberCount'>,
   now: Date,
 ): Partial<typeof schema.guilds.$inferInsert> {
   return {
     foundedAt: seed.foundedAt,
     blizzardSummaryStatus: seed.blizzardSummaryStatus,
-    memberCount: SEED_GUILD_ROSTER.length,
+    memberCount: seed.memberCount,
     rawRealm: SEED_GUILD_REALM,
     lastSnapshotAt: now,
     updatedAt: now,
@@ -159,7 +165,10 @@ function seedGuildSet(
 export async function upsertGuild(
   db: Db,
   gameId: number,
-  seed: Pick<SeedGuildInput, 'name' | 'foundedAt' | 'blizzardSummaryStatus'>,
+  seed: Pick<
+    SeedGuildInput,
+    'name' | 'foundedAt' | 'blizzardSummaryStatus' | 'memberCount'
+  >,
   now: Date,
 ): Promise<number> {
   const { name } = seed;
