@@ -24,6 +24,11 @@ const LAZY_ONLY = [
     'components/admin/admin-nav-data.tsx',
     'plugins/wow/components/forever-settings-section.tsx',
     'plugins/wow/components/forever-quest-import-panel.tsx',
+    'plugins/wow/slots/event-create-content-browser.tsx',
+    'plugins/wow/slots/event-detail-content-sections.tsx',
+    'plugins/wow/slots/admin-settings-integration-cards.tsx',
+    'plugins/wow/slots/quest-prep-panel.tsx',
+    'plugins/wow/slots/boss-loot-panel.tsx',
 ];
 
 function resolveLocal(fromFile: string, spec: string): string | null {

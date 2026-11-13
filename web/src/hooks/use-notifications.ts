@@ -9,6 +9,7 @@ import {
     patchPreferences,
     fetchChannelAvailability,
 } from './notifications-api';
+import { viewerCacheGeneration } from './viewer-private-caches';
 
 export interface Notification {
     id: string;
@@ -116,6 +117,11 @@ function buildOptimisticPrefs(
     return optimistic;
 }
 
+/** True once the viewer caches were dropped (logout, identity change) after `context` was captured. */
+function isDroppedSince(context: { generation: number }): boolean {
+    return context.generation !== viewerCacheGeneration();
+}
+
 function usePreferencesMutation(queryClient: ReturnType<typeof useQueryClient>, queryKey: string[]) {
     return useMutation({
         mutationFn: patchPreferences,
@@ -123,15 +129,16 @@ function usePreferencesMutation(queryClient: ReturnType<typeof useQueryClient>, 
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<NotificationPreferences>(queryKey);
             if (previous) queryClient.setQueryData(queryKey, buildOptimisticPrefs(previous, input));
-            return { previous };
+            return { previous, generation: viewerCacheGeneration() };
         },
         onSuccess: () => toast.success('Preferences updated', { id: 'notif-prefs' }),
         onError: (_err, _vars, context) => {
-            const prev = (context as { previous?: NotificationPreferences })?.previous;
-            if (prev) queryClient.setQueryData(queryKey, prev);
+            if (context?.previous && !isDroppedSince(context)) queryClient.setQueryData(queryKey, context.previous);
             toast.error('Failed to update preferences', { id: 'notif-prefs' });
         },
-        onSettled: () => queryClient.invalidateQueries({ queryKey }),
+        onSettled: async (_data, _err, _vars, context) => {
+            if (!context || !isDroppedSince(context)) await queryClient.invalidateQueries({ queryKey });
+        },
     });
 }
 

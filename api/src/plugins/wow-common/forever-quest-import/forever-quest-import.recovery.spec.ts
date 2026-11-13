@@ -5,6 +5,7 @@
  * predicates, and a mid-run kill switch ends `failed` without a Sentry event.
  */
 import * as Sentry from '@sentry/nestjs';
+import type { HttpAdapterHost } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import type { SettingsService } from '../../../settings/settings.service';
@@ -55,7 +56,8 @@ function storedReport(): ForeverQuestImportReport {
   return JSON.parse(raw) as ForeverQuestImportReport;
 }
 
-function build(): ForeverQuestImportService {
+/** `http: false` = a `createApplicationContext` script (no HTTP adapter). */
+function build({ http = true } = {}): ForeverQuestImportService {
   const where = jest.fn().mockResolvedValue([]);
   const db = {
     select: () => ({ from: () => ({ where }) }),
@@ -74,7 +76,10 @@ function build(): ForeverQuestImportService {
   const quests = {
     clearCache: jest.fn().mockResolvedValue(undefined),
   } as unknown as DungeonQuestsService;
-  return new ForeverQuestImportService(db, settings, auth, quests);
+  const adapterHost = {
+    httpAdapter: http ? {} : undefined,
+  } as unknown as HttpAdapterHost;
+  return new ForeverQuestImportService(db, settings, auth, quests, adapterHost);
 }
 
 beforeEach(() => {
@@ -125,6 +130,13 @@ describe('ForeverQuestImportService — interrupted run recovery (M1)', () => {
     expect(settled.errors).toEqual([FOREVER_QUEST_IMPORT_INTERRUPTED_MESSAGE]);
     expect(settled.finishedAt).toBe(NOW.toISOString());
     expect(settled.runId).toBe('run-1');
+  });
+
+  it('a script context (no HTTP adapter) leaves the live running report untouched', async () => {
+    const live = runningReport(1000);
+    storeReport(live);
+    await build({ http: false }).onModuleInit();
+    expect(storedReport()).toEqual(live);
   });
 
   it('boot leaves a finished report untouched', async () => {

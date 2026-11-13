@@ -98,22 +98,23 @@ export async function withTiebreakerAdvanceLock<T>(
  * caller advances a given round. ROK-2098: a tiebreaker that is no longer
  * `active` (an admin force-resolved it while this vote waited on the lock)
  * is never advanced again.
+ * `tx` MUST already hold the tiebreaker's round-advance lock
+ * (`withTiebreakerAdvanceLock`) — the bracket vote takes it once for the
+ * insert, this check and the finalize (`tiebreaker-vote.helpers.ts`).
  * @returns the bracket's final winner game id when this call completed the
  *   bracket, else null (round still open, already advanced, tiebreaker no
  *   longer active, or a new round was created).
  */
-export async function advanceRoundIfComplete(
-  db: Db,
+export async function advanceRoundInTx(
+  tx: Db,
   tiebreakerId: number,
   lineupId: number,
 ): Promise<number | null> {
-  return withTiebreakerAdvanceLock(db, tiebreakerId, async (tx) => {
-    if (!(await isTiebreakerActive(tx, tiebreakerId))) return null;
-    if (!(await isCurrentRoundComplete(tx, tiebreakerId, lineupId))) {
-      return null;
-    }
-    return advanceBracket(tx, tiebreakerId);
-  });
+  if (!(await isTiebreakerActive(tx, tiebreakerId))) return null;
+  if (!(await isCurrentRoundComplete(tx, tiebreakerId, lineupId))) {
+    return null;
+  }
+  return advanceBracket(tx, tiebreakerId);
 }
 
 /** True while the tiebreaker row is still `active`. */

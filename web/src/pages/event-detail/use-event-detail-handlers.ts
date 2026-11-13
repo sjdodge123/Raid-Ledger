@@ -162,10 +162,15 @@ function useSeriesHandlers(eventId: number) {
     const deleteSeries = useDeleteSeries(eventId);
     const cancelSeries = useCancelSeries(eventId);
 
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+    /** Runs the delete — only ever from the confirm's Delete button. */
     const handleDelete = useCallback(async () => {
-        try { await deleteEvent.mutateAsync(); toast.success('Event deleted'); navigate('/calendar'); }
+        try { await deleteEvent.mutateAsync(); setDeleteConfirmOpen(false); toast.success('Event deleted'); navigate('/calendar'); }
         catch (err) { toast.error('Failed to delete', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [deleteEvent, navigate]);
+    const requestDelete = useCallback(() => setDeleteConfirmOpen(true), []);
+    const closeDeleteConfirm = useCallback(() => setDeleteConfirmOpen(false), []);
 
     const handleSeriesConfirm = useCallback(async (action: 'edit' | 'delete' | 'cancel', scope: SeriesScope) => {
         if (action === 'edit') { navigate(`/events/${eventId}/edit?seriesScope=${scope}`); return; }
@@ -177,7 +182,8 @@ function useSeriesHandlers(eventId: number) {
 
     const isSeriesPending = deleteSeries.isPending || cancelSeries.isPending;
 
-    return { handleDelete, handleSeriesConfirm, isSeriesPending };
+    const deleteConfirm = { deleteConfirmOpen, requestDelete, closeDeleteConfirm, isDeletePending: deleteEvent.isPending };
+    return { handleDelete, ...deleteConfirm, handleSeriesConfirm, isSeriesPending };
 }
 
 export function useEventDetailHandlers(eventId: number, options: {

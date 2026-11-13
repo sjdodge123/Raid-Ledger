@@ -62,12 +62,12 @@ export interface MetricsPollSource {
  * Read `/events/:id/metrics` until classification is visible, bounded by
  * `ctx.config.timeoutMs`.
  *
- * This is a guard, not the fix for TDB:1076 (`attended: expected 4, got 0`).
+ * This is a guard, not the fix for TDB:1076 (`attended: expected 4, got 0`):
+ * that was the classify cron grading an already-ended ROK-943 event before
+ * its sessions were injected, fixed by giving the event a future window (see
+ * `classifyPopulatesAttendance` in tests/voice-activity.test.ts).
  * POST /admin/test/trigger-classify awaits the classify and auto-populate
- * writes before it returns, so they are normally committed by the first
- * read. If the flake recurs, the cause is more likely unclassified sessions
- * or grace handling: read it from the `await-processing settled` log line
- * and the last-read dump this logs on timeout.
+ * writes before it returns, so they are normally committed by the first read.
  *
  * On timeout this returns the LAST read instead of throwing, so the caller's
  * own assertions fail naming expected vs actual rather than "timed out". A

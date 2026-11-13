@@ -20,6 +20,7 @@ import { parseArmoryProfessionsFlag } from './demo-test-guild-professions.helper
 import {
   parseSeedFlags,
   type RawSeedFlags,
+  type SEED_GUILD_BASE_ROWS,
 } from './demo-test-guild-flags.helpers';
 import {
   parseRosterSuffix,
@@ -60,6 +61,14 @@ export interface SeedGuildInput extends SeedGuildSummaryOverrides {
   withInstalledAddons: boolean;
   /** ROK-2149: Armory snapshots on the unlinked roster rows (member page). */
   withArmorySnapshots: boolean;
+  /** ROK-1789: also seed guild recruitment (one row per state + Apply URL). */
+  withRecruitment: boolean;
+  /** ROK-1789 B9: backdated joins, milestones, events + first kills (implies withPulls/withDings). */
+  withActivity: boolean;
+  /** ROK-1789 B9 (Q-B16): the JWT caller owns the rank-0 character + a member editor grant. */
+  asCaller: boolean;
+  /** ROK-1789 B9: roster rows incl. filler (5..60). */
+  memberCount: number;
   /** ROK-2107: Armory professions for the linked characters ("Armory" pill). */
   armoryProfessions?: CharacterProfessionsDto;
   /** ROK-2132: appended to every roster name, so parallel claim specs never share one ('' = none). */
@@ -85,7 +94,7 @@ export const SEED_GUILD_ROSTER = [
   { rank: 2, rankName: 'Veteran', char: 'Corvin', owner: null, role: null },
   { rank: 3, rankName: 'Member', char: 'Dainel', owner: 'member', role: 'dps' },
   { rank: 4, rankName: 'Initiate', char: 'Elowen', owner: null, role: null },
-] as const;
+] as const satisfies { readonly length: typeof SEED_GUILD_BASE_ROWS };
 
 /** The rank the GM delegated page editing to. */
 export const SEED_GUILD_EDITOR_RANK = 1;
@@ -140,13 +149,13 @@ export async function findWowGameId(db: Db, slug: string): Promise<number> {
 
 /** The columns a re-seed re-stamps, incl. the ROK-1170 summary overrides (picked, never spread). */
 function seedGuildSet(
-  seed: SeedGuildSummaryOverrides,
+  seed: SeedGuildSummaryOverrides & Pick<SeedGuildInput, 'memberCount'>,
   now: Date,
 ): Partial<typeof schema.guilds.$inferInsert> {
   return {
     foundedAt: seed.foundedAt,
     blizzardSummaryStatus: seed.blizzardSummaryStatus,
-    memberCount: SEED_GUILD_ROSTER.length,
+    memberCount: seed.memberCount,
     rawRealm: SEED_GUILD_REALM,
     lastSnapshotAt: now,
     updatedAt: now,
@@ -157,7 +166,10 @@ function seedGuildSet(
 export async function upsertGuild(
   db: Db,
   gameId: number,
-  seed: Pick<SeedGuildInput, 'name' | 'foundedAt' | 'blizzardSummaryStatus'>,
+  seed: Pick<
+    SeedGuildInput,
+    'name' | 'foundedAt' | 'blizzardSummaryStatus' | 'memberCount'
+  >,
   now: Date,
 ): Promise<number> {
   const { name } = seed;
@@ -235,56 +247,6 @@ export async function upsertMember(
     })
     .returning({ id: schema.guildMembers.id });
   return defined(row, `seed-guild member ${entry.char}`).id;
-}
-
-interface SeedCharacterArgs {
-  userId: number;
-  gameId: number;
-  guid: string;
-  name: string;
-  role: string | null;
-}
-
-async function findCharacterId(
-  db: Db,
-  args: SeedCharacterArgs,
-): Promise<string | undefined> {
-  const [found] = await db
-    .select({ id: schema.characters.id })
-    .from(schema.characters)
-    .where(
-      and(
-        eq(schema.characters.userId, args.userId),
-        eq(schema.characters.gameId, args.gameId),
-        eq(schema.characters.addonGuid, args.guid),
-      ),
-    )
-    .limit(1);
-  return found?.id;
-}
-
-/** Find-or-insert the user's main character carrying the member GUID. */
-export async function ensureCharacter(
-  db: Db,
-  args: SeedCharacterArgs,
-): Promise<string> {
-  const existing = await findCharacterId(db, args);
-  if (existing !== undefined) return existing;
-  const [row] = await db
-    .insert(schema.characters)
-    .values({
-      userId: args.userId,
-      gameId: args.gameId,
-      name: args.name,
-      region: SEED_GUILD_REGION,
-      class: 'Warrior',
-      level: 60,
-      role: args.role,
-      addonGuid: args.guid,
-      isMain: true,
-    })
-    .returning({ id: schema.characters.id });
-  return defined(row, `seed-guild character ${args.name}`).id;
 }
 
 /** Idempotent rank grant for the delegated-editor rank. */

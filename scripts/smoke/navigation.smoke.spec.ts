@@ -40,6 +40,15 @@ test.describe('Navigation (desktop)', () => {
         await page.goto('/calendar');
         const nav = page.locator('header nav[aria-label="Main navigation"]');
         await expect(nav).toBeVisible({ timeout: 15_000 });
+        // The header renders before the lazy CalendarPage. On mount the calendar
+        // rewrites its URL with `setSearchParams(..., { replace: true })` (`date=`
+        // always, `view=` when the saved pref differs); a nav click that beats that
+        // mount gets its `/events` entry replaced by `/calendar?…`. Both effects
+        // commit together, so `date=` present means the rewrite is done.
+        await expect(page).toHaveURL(/\/calendar\?(.*&)?date=\d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+        await expect(page.getByRole('heading', { level: 1, name: 'Calendar' })).toBeVisible({
+            timeout: 15_000,
+        });
 
         // ROK-1247: gate each nav-click on URL change + networkidle instead
         // of a heading text match. The previous heading checks raced the nav
@@ -70,8 +79,9 @@ test.describe('Navigation (desktop)', () => {
         ).toBeVisible({ timeout: 10_000 });
 
         await nav.getByRole('link', { name: 'Calendar' }).click();
-        // The calendar page may append ?date=YYYY-MM-DD on mount (documented rerun-once flake).
-        await expect(page).toHaveURL(/\/calendar(\?date=[^&]*)?$/, { timeout: 10_000 });
+        // The calendar page rewrites its query on mount (`date=`, and `view=` when the
+        // saved view pref differs) — any query on /calendar is the page; the h1 proves it.
+        await expect(page).toHaveURL(/\/calendar(\?[^#]*)?$/, { timeout: 10_000 });
         await page.waitForLoadState('networkidle');
         await waitForMainContent(page);
         await expect(

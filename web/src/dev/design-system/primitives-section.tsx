@@ -100,6 +100,7 @@ function StatusChipStates(): JSX.Element {
             <StatusChip tone="neutral" size="md" title="Server hub">Server · md</StatusChip>
             <StatusChip tone="danger" title="Alpha: Online, Beta: Offline">1 of 2 servers offline</StatusChip>
             <StatusChip tone="neutral" title="Valheim Main: Unknown">Server status unknown</StatusChip>
+            <span className="inline-block max-w-[12rem]"><StatusChip tone="neutral" title="wrap" wrap>Inactive — linked to Ayla after the grant · wrap</StatusChip></span>
         </StateFrame>
     );
 }

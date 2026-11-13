@@ -1,7 +1,7 @@
 /**
  * ROK-2098 — once-only, repairable tiebreaker finalize.
  *
- * Both the round-completing vote (`checkAndAdvanceRound`) and an admin
+ * Both the round-completing vote (`castBracketVoteAtomically`) and an admin
  * `forceResolve` end in resolve → clear → decided flip → matching. Run
  * unguarded, a force-resolve racing the final vote did all of it twice, and
  * the second matching pass wiped and rebuilt the match groups, so the Discord
@@ -59,7 +59,7 @@ type Db = TiebreakerDecideDeps['db'];
 export type WinnerPicker = (tb: TiebreakerRow, tx: Db) => Promise<number>;
 
 /** What the locked transaction did, for the after-commit side effects. */
-interface FinalizeOutcome {
+export interface FinalizeOutcome {
   winner: number;
   lineupId: number;
   /** True when THIS call resolved the row (writes the veto cohort memory). */
@@ -87,8 +87,12 @@ export async function finalizeTiebreaker(
   return outcome.winner;
 }
 
-/** The locked part: every query on `tx`, no side effects. */
-async function finalizeUnderLock(
+/**
+ * The locked part: every query on `tx`, no side effects. `tx` MUST already
+ * hold the round-advance lock; pass the outcome to `announceFinalized` after
+ * the transaction commits.
+ */
+export async function finalizeUnderLock(
   tx: Db,
   tiebreakerId: number,
   pickWinner: WinnerPicker,
@@ -104,7 +108,7 @@ async function finalizeUnderLock(
 }
 
 /** After commit: cohort memory + poll-card events for the work THIS call did. */
-async function announceFinalized(
+export async function announceFinalized(
   deps: TiebreakerDecideDeps,
   tiebreakerId: number,
   outcome: FinalizeOutcome,

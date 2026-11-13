@@ -24,6 +24,7 @@ import {
     RescheduleModalSection,
     InviteModalSection,
     RemoveConfirmModal,
+    DeleteEventConfirmModal,
     SeriesScopeModalSection,
 } from './event-detail/EventDetailModals';
 import { useEventDetailHandlers } from './event-detail/use-event-detail-handlers';
@@ -150,6 +151,8 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
                 eventTitle={event.title} gameId={event.game?.id} gameSlug={event.game?.slug} gameName={event.game?.name} coverUrl={event.game?.coverUrl} description={event.description}
                 creatorUsername={event.creator?.username} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
                 onClose={() => { setShowRescheduleModal(false); clearDeepLink(); }} />
+            <DeleteEventConfirmModal isOpen={handlers.deleteConfirmOpen} eventTitle={event.title} onClose={handlers.closeDeleteConfirm}
+                onConfirm={() => { void handlers.handleDelete(); }} isPending={handlers.isDeletePending} />
             <RemoveConfirmModal removeConfirm={handlers.removeConfirm} onClose={() => handlers.setRemoveConfirm(null)} onConfirm={handlers.handleConfirmRemoveFromEvent} isPending={handlers.adminRemoveUser.isPending} />
             <InviteModalSection show={showInviteModal} onClose={() => setShowInviteModal(false)} eventId={eventId} pugs={handlers.pugs} roster={roster} isMMOGame={derived.isMMOGame} />
             <SeriesScopeModalSection show={seriesAction !== null} action={seriesAction ?? 'edit'} eventId={eventId}
@@ -227,7 +230,7 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
             <EventDetailTopbar fromCalendar={page.fromCalendar} navState={page.navState} hasHistory={page.hasHistory} isAuthenticated={page.isAuthenticated}
                 canManageRoster={derived.canManageRoster} isCancelled={derived.isCancelled} isEnded={derived.isEnded} eventId={page.eventId}
                 recurrenceGroupId={page.event.recurrenceGroupId} onInvite={() => modals.setShowInviteModal(true)} onReschedule={() => modals.setShowRescheduleModal(true)}
-                onCancel={() => modals.setShowCancelModal(true)} onDelete={handlers.handleDelete} onSeriesAction={modals.setSeriesAction} />
+                onCancel={() => modals.setShowCancelModal(true)} onDelete={handlers.requestDelete} onSeriesAction={modals.setSeriesAction} />
             <CancelledBanner event={page.event} isCancelled={derived.isCancelled} />
             <div ref={bannerRef}>
                 <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}

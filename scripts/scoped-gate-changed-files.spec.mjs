@@ -84,3 +84,74 @@ test('an unresolvable origin/main refuses with exit 2 instead of planning from u
   assert.equal(gate.status, 2, `expected exit 2 (fail closed), got ${gate.status}: ${gate.stdout}${gate.stderr}`);
   assert.match(gate.stderr, /origin\/main does not resolve/);
 });
+
+test('a mode-only change in the worktree (Mutagen 100755 -> 0644) is not a changed file (ROK-2182)', (t) => {
+  const root = makeRepo(t, { withBase: true });
+  put(root, 'docker/allinone/entrypoint.sh', '#!/bin/sh\n');
+  git(root, 'add', '.');
+  git(root, 'update-index', '--chmod=+x', 'docker/allinone/entrypoint.sh');
+  git(root, 'commit', '-q', '-m', 'exec script');
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  // The runner's sync lands the file at 0644 while git tracks 100755.
+  spawnSync('chmod', ['0644', join(root, 'docker/allinone/entrypoint.sh')]);
+  git(root, 'config', 'core.fileMode', 'true');
+  assert.match(git(root, 'diff', '--summary', 'HEAD'), /mode change 100755 => 100644/, 'fixture must show a mode-only diff');
+  put(root, 'web/src/a.ts');
+
+  const listed = inScript(root, '_scoped_changed_files');
+  assert.equal(listed.status, 0, listed.stderr);
+  const files = listed.stdout.split('\n').filter(Boolean);
+  assert.deepEqual(files, ['web/src/a.ts'], `expected only the real change, got: ${JSON.stringify(files)}`);
+});
+
+test('a stale local origin/main is refreshed before the diff, so main-only commits are not listed (ROK-2182)', (t) => {
+  const root = makeRepo(t, { withBase: true });
+  const remote = mkdtempSync(join(tmpdir(), 'scoped-gate-remote-'));
+  t.after(() => rmSync(remote, { recursive: true, force: true }));
+  git(remote, 'init', '-q', '--bare');
+  git(root, 'remote', 'add', 'origin', remote);
+  // main moves on (a docker change lands) and the branch is cut from it,
+  // but this checkout's origin/main still points at the old base.
+  put(root, 'docker/allinone/entrypoint.sh', '#!/bin/sh\n');
+  git(root, 'add', '.');
+  git(root, 'commit', '-q', '-m', 'main moves');
+  git(root, 'push', '-q', 'origin', 'HEAD:refs/heads/main');
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD~1');
+  put(root, 'web/src/a.ts');
+  git(root, 'add', '.');
+  git(root, 'commit', '-q', '-m', 'branch work');
+
+  const listed = inScript(root, '_scoped_refresh_base; _scoped_changed_files');
+  assert.equal(listed.status, 0, listed.stderr);
+  const files = listed.stdout.split('\n').filter(Boolean);
+  assert.deepEqual(files, ['web/src/a.ts'], `expected only the branch's change, got: ${JSON.stringify(files)}`);
+});
+
+test('refreshing the base tolerates a missing/unreachable origin (ROK-2182)', (t) => {
+  const root = makeRepo(t, { withBase: true });
+  git(root, 'remote', 'add', 'origin', join(root, 'does-not-exist'));
+  const r = inScript(root, '_scoped_refresh_base; echo ok');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'ok');
+});
+
+test('detect_scope ignores a mode-only change in the worktree (Mutagen 100755 -> 0644)', (t) => {
+  const root = makeRepo(t, { withBase: true });
+  put(root, 'docker/allinone/entrypoint.sh', '#!/bin/sh\n');
+  git(root, 'add', '.');
+  git(root, 'update-index', '--chmod=+x', 'docker/allinone/entrypoint.sh');
+  git(root, 'commit', '-q', '-m', 'exec script');
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  spawnSync('chmod', ['0644', join(root, 'docker/allinone/entrypoint.sh')]);
+  git(root, 'config', 'core.fileMode', 'true');
+  assert.match(git(root, 'diff', '--summary', 'HEAD'), /mode change 100755 => 100644/, 'fixture must show a mode-only diff');
+  put(root, 'web/src/a.ts');
+
+  const r = inScript(root, 'detect_scope >/dev/null; echo "container=$container_changed workspace=$detected_workspace"');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(
+    r.stdout.trim(),
+    'container=false workspace=web',
+    'a mode-only Dockerfile-adjacent file must not flag container changes or widen the workspace',
+  );
+});

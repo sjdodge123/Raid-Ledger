@@ -2080,6 +2080,13 @@
       "when": 1794503109378,
       "tag": "0297_gg_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 298,
+      "version": "7",
+      "when": 1794548199671,
+      "tag": "0298_guild_profiles_recruitment",
+      "breakpoints": true
     }
   ]
 }

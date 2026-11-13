@@ -25,4 +25,18 @@ describe('StatusChip (ROK-1776)', () => {
         expect(chip.className).toContain('bg-panel border-edge');
         expect(chip.className.endsWith(' ml-2')).toBe(true);
     });
+
+    it('does not wrap by default (whitespace-nowrap)', () => {
+        render(<StatusChip tone="neutral" title="x">one line</StatusChip>);
+        const chip = screen.getByText('one line');
+        expect(chip.className).toContain('whitespace-nowrap');
+        expect(chip.className).not.toContain('whitespace-normal');
+    });
+
+    it('wraps onto more lines with `wrap` (whitespace-normal, no nowrap)', () => {
+        render(<StatusChip tone="neutral" title="x" wrap>a long status that wraps</StatusChip>);
+        const chip = screen.getByText('a long status that wraps');
+        expect(chip.className).toContain('whitespace-normal');
+        expect(chip.className).not.toContain('whitespace-nowrap');
+    });
 });

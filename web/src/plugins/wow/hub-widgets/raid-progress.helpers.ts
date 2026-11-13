@@ -4,6 +4,7 @@
  * "First kill Nov 6" line and when a row needs its difficulty label.
  */
 import type { WowRosterRaidProgressBossDto } from '@raid-ledger/contract';
+import { formatShortDate } from '../lib/short-date';
 
 /** Boss rows shown before the "N more bosses" disclosure (spec Q3). */
 export const RAID_PROGRESS_ROWS = 8;
@@ -29,8 +30,7 @@ export function pullsLine(pulls: number): string {
 /** "First kill Nov 6", or "Not killed yet" for a boss with wipes only. */
 export function firstKillLine(firstKillAt: string | null): string {
     if (firstKillAt === null) return 'Not killed yet';
-    const day = new Date(firstKillAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    return `First kill ${day}`;
+    return `First kill ${formatShortDate(firstKillAt)}`;
 }
 
 /**

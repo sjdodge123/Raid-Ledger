@@ -23,6 +23,9 @@ const T0 = 1790000000000;
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const run = (cwd, cmd, args) => spawnSync(cmd, args, { cwd, encoding: 'utf8' });
+// Teardown retries: a git child (gc/fsmonitor) can still be writing under the
+// fixture's .git as the hook runs, so a single rmdir races with ENOTEMPTY.
+const removeFixture = (dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
 // Conflicted paths via `ls-files --unmerged`, not `diff --name-only`: validate-ci's
 // shell suites (validate-ci-fleet-scope-skip.test.sh) put a `git` stub on PATH that
 // answers every `diff --name-only` from a fixture file, which empties this list.
@@ -83,7 +86,7 @@ function buildFixture() {
 
 test('collision guard: the fixture branch collides with origin/main and the report names the fix command', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   const res = run(dir, 'node', [GUARD, '--root', dir]);
   assert.equal(res.status, 1, res.stdout + res.stderr);
   assert.match(res.stderr, /0002_branch_feat: idx 2 collides with origin\/main's 0002_main_x/);
@@ -94,7 +97,7 @@ test('collision guard: the fixture branch collides with origin/main and the repo
 
 test('renumber: moves branch migrations after main, rewrites journal + snapshot chain, never touches SQL', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   const featSql = read(dir, '0002_branch_feat.sql');
   const customSql = read(dir, '0003_branch_custom.sql');
   const featSnap = read(dir, 'meta/0002_snapshot.json');
@@ -137,7 +140,7 @@ test('renumber: moves branch migrations after main, rewrites journal + snapshot 
 
 test('renumber is idempotent; merging main afterwards conflicts only on the journal, and ours is right', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   assert.equal(run(dir, 'bash', [TOOL, '--no-fetch']).status, 0);
   commitAll(dir, 'renumber');
   const again = run(dir, 'bash', [TOOL, '--no-fetch']);
@@ -163,7 +166,7 @@ test('renumber is idempotent; merging main afterwards conflicts only on the jour
 
 test('renumber is a no-op on a branch already numbered after the base (journal bytes untouched)', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   git(dir, 'update-ref', 'refs/remotes/origin/main', 'main~1'); // base = the common parent: no collision
   const before = read(dir, 'meta/_journal.json');
   const res = run(dir, 'bash', [TOOL, '--no-fetch']);
@@ -175,7 +178,7 @@ test('renumber is a no-op on a branch already numbered after the base (journal b
 
 test('main moves between renumber and merge: keeping ours drops main\'s entry, the guard names it, a re-run heals it', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   assert.equal(run(dir, 'bash', [TOOL, '--no-fetch']).status, 0);
   commitAll(dir, 'renumber');
   // Another PR lands on main after the renumber: 0003_main2.
@@ -211,7 +214,7 @@ test('main moves between renumber and merge: keeping ours drops main\'s entry, t
 
 test('renumber refuses a dirty tree and changes nothing', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   writeFileSync(path.join(dir, MIG, '0002_branch_feat.sql'), '-- wip edit\n', { flag: 'a' });
   const res = run(dir, 'bash', [TOOL, '--no-fetch']);
   assert.notEqual(res.status, 0);
@@ -222,7 +225,7 @@ test('renumber refuses a dirty tree and changes nothing', (t) => {
 
 test('renumber ignores untracked notes (lane HANDOVER files) in its dirty check', (t) => {
   const dir = buildFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   writeFileSync(path.join(dir, 'HANDOVER.md'), 'notes\n');
   const res = run(dir, 'bash', [TOOL, '--no-fetch']);
   assert.doesNotMatch(res.stdout + res.stderr, /dirty/i);
@@ -287,7 +290,7 @@ function buildSchemaFixture() {
 
 test('renumber merges main\'s post-fork schema (new column, new table) into every renumbered snapshot, keeping ids', (t) => {
   const { dir, t1ab } = buildSchemaFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   const res = run(dir, 'bash', [TOOL, '--no-fetch']);
   assert.equal(res.status, 0, res.stdout + res.stderr);
   const s2 = JSON.parse(read(dir, 'meta/0002_snapshot.json'));
@@ -303,7 +306,7 @@ test('renumber merges main\'s post-fork schema (new column, new table) into ever
 
 test('renumber finds the fork by prevId after the branch already merged main (merge-base = main\'s tip)', (t) => {
   const { dir, t1ab } = buildSchemaFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   git(dir, 'merge', '-q', '-s', 'ours', '-m', 'merge main', 'main');
   const res = run(dir, 'bash', [TOOL, '--no-fetch']);
   assert.equal(res.status, 0, res.stdout + res.stderr);
@@ -313,7 +316,7 @@ test('renumber finds the fork by prevId after the branch already merged main (me
 
 test('renumber warns that snapshot bodies were not merged when no fork snapshot can be found', (t) => {
   const { dir } = buildSchemaFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   const rel = path.join(dir, MIG, 'meta/0001_snapshot.json');
   writeFileSync(rel, readFileSync(rel, 'utf8').replace('"prevId": "id-0"', '"prevId": "id-gone"'));
   commitAll(dir, 'orphan prevId');
@@ -337,7 +340,7 @@ test('mergeSnapshot: a key both sides changed keeps the branch value and is repo
 
 test('renumber reports a conflict even when every main-side change conflicted (body unchanged)', (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'rl-renumber-conflict-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeFixture(dir));
   mkdirSync(path.join(dir, MIG, 'meta'), { recursive: true });
   git(dir, 'init', '-q', '-b', 'main');
   git(dir, 'config', 'user.email', 'fixture@example.com');

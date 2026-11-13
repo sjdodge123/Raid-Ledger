@@ -32,6 +32,21 @@ export interface InMemorySession {
   activeSegmentStart: Date | null;
   /** Dirty flag — needs DB flush */
   dirty: boolean;
+  /**
+   * Bumped on every mutation that marks the session dirty (via
+   * `markSessionDirty`). A flush snapshots it and only clears `dirty` if it is
+   * unchanged once the write lands, so a leave mid-write is not lost.
+   */
+  dirtyVersion: number;
+}
+
+/**
+ * Mark an existing session as needing a DB flush. The only way to re-dirty a
+ * session (new sessions are built with `dirty: true` directly).
+ */
+export function markSessionDirty(session: InMemorySession): void {
+  session.dirty = true;
+  session.dirtyVersion += 1;
 }
 
 /** Input shape for toVoiceSessionDto. */
@@ -236,7 +251,7 @@ export function rejoinSession(session: InMemorySession): void {
     leaveAt: null,
     durationSec: 0,
   });
-  session.dirty = true;
+  markSessionDirty(session);
 }
 
 /** Create a new in-memory session in the map. */
@@ -263,6 +278,7 @@ export function createSession(
     isActive: true,
     activeSegmentStart: now,
     dirty: true,
+    dirtyVersion: 0,
   });
 }
 
@@ -292,5 +308,5 @@ export function leaveSession(session: InMemorySession): void {
     lastSeg.leaveAt = now.toISOString();
     lastSeg.durationSec = segDuration;
   }
-  session.dirty = true;
+  markSessionDirty(session);
 }

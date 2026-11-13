@@ -63,7 +63,7 @@ function EditorChip({ editor, disabled, onRemove }: { editor: GuildEditor; disab
         <li data-testid="guild-editor-chip" data-active={inactive ? 'false' : 'true'}
             className={`inline-flex min-h-[44px] max-w-full items-center gap-2 rounded-full border pl-3 text-sm font-medium ${CHIP_TONE[inactive ? 'inactive' : 'active']}`}>
             {label}
-            {inactive && <StatusChip tone="neutral" title={inactive.title} className="whitespace-normal">{inactive.label}</StatusChip>}
+            {inactive && <StatusChip tone="neutral" title={inactive.title} wrap>{inactive.label}</StatusChip>}
             <Button variant="ghost" iconOnly aria-label={`Remove ${label}`} onClick={onRemove} disabled={disabled}>
                 <XMarkIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
