@@ -24,7 +24,8 @@ import { HubOverview, type ModsState } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
 import { postIdFromSearch } from './posts/post-link';
-import { HUB_TAB_HASH_ALIASES, hubModuleTabs, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HUB_TAB_HASH_ALIASES, hubModuleTabs, hubTabLabel, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { useHubTabs } from './use-hub-tabs';
 import { HubMembers } from './hub-members';
 import { HubEventsTab } from './events/events-tab';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
@@ -188,7 +189,7 @@ interface FrameProps {
 
 /** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
 function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProps): JSX.Element {
-    const tabs = hubTabs(mod, ctx, showResources, hasPosts);
+    const tabs = useHubTabs(mod, ctx, showResources, hasPosts);
     const HeroBanner = mod?.heroBanner;
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
     const canManage = canOpenHubSettings(ctx.page);
