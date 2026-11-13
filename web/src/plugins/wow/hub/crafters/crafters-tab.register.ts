@@ -5,11 +5,9 @@
  * `HUB_PLUGIN_MANIFESTS.blizzard.tabs`, so it disappears with the plugin.
  */
 import { lazy } from 'react';
-import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import type { HubCtx, HubTab } from '../../../hub-module';
-import { getCachedUser } from '../../../../hooks/use-auth';
 import { queryClient } from '../../../../lib/query-client';
-import { rosterInsightsKey } from '../../hub-widgets/use-roster-insights';
+import { peekRosterInsights } from '../../hub-widgets/use-roster-insights';
 import { CRAFTERS_TAB_ID, canSeeCrafters } from './crafters.helpers';
 
 /**
@@ -17,12 +15,11 @@ import { CRAFTERS_TAB_ID, canSeeCrafters } from './crafters.helpers';
  * Overview professions widget and the Members coverage strip share (same key,
  * spec D1) straight from the cache. Before that query lands the tab shows for
  * members and staff, so a `#crafters` deep link resolves; once it lands with
- * no profession data the tab hides on the next hub render.
+ * no profession data the tab hides on the next hub render. The key's viewer
+ * scope comes from `peekRosterInsights`, the same source the data hook uses.
  */
-export function craftersTabVisible({ page }: HubCtx): boolean {
-    const viewer = getCachedUser()?.id ?? 'anon';
-    const cached = queryClient.getQueryData<WowRosterInsightsDto>(rosterInsightsKey(page.guild.id, false, viewer));
-    return canSeeCrafters(page.viewer, cached);
+export function craftersTabVisible({ page }: Pick<HubCtx, 'page'>): boolean {
+    return canSeeCrafters(page.viewer, peekRosterInsights(queryClient, page.guild.id));
 }
 
 /** The Crafters tab — after Raids (10), before the planned Progression (20). */

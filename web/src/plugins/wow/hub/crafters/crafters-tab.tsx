@@ -21,14 +21,17 @@ import {
     EMPTY_CRAFTER_FILTERS, activeCount, filterCrafters, professionOptions, type CrafterFilters,
 } from './crafters.helpers';
 
+/** 1 column on phones, 2 at `md`, 3 at `lg` (spec Scope). */
+const GRID_CLASS = 'grid gap-3 md:grid-cols-2 lg:grid-cols-3';
+
 /**
  * The Crafters tab panel. Takes only `page` (a `HubCtx` subset), so it is
  * still a valid `HubTab.component` and tests need no raids query.
  */
 export default function CraftersTab({ page }: Pick<HubCtx, 'page'>): JSX.Element {
     const { data, isPending, isError } = useRosterInsights(page.guild.id);
-    if (isPending) return <div className="h-24 animate-pulse rounded-lg bg-panel" />;
     if (isError) return <p role="alert" className="text-sm text-muted">Couldn't load crafters.</p>;
+    if (isPending) return <CraftersSkeleton />;
     const professions = data.professions ?? [];
     if (professions.length === 0) return <ProfessionsEmpty gameId={page.guild.gameId} />;
     return (
@@ -49,20 +52,40 @@ function CraftersDirectory({ professions, hubId }: { professions: readonly Roste
     };
     return (
         <>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-edge pb-2">
-                <h2 id="crafters-title" className="text-lg font-semibold text-foreground">Crafters</h2>
-                <span className="text-sm text-secondary">{summary(shown)}</span>
-            </div>
+            <CraftersHeader summary={summary(shown)} />
             <CraftersToolbar query={query} onQuery={setQuery} filters={filters} onFilters={setFilters}
                 professions={professionOptions(professions)} />
             {shown.length > 0 ? (
-                <ul aria-label="Crafters by profession" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <ul aria-label="Crafters by profession" className={GRID_CLASS}>
                     {shown.map((p) => <CrafterCard key={p.name} profession={p} hubId={hubId} />)}
                 </ul>
             ) : (
                 <NoMatch query={query} filtered={activeCount(filters) > 0} onClear={clearAll} />
             )}
         </>
+    );
+}
+
+/** The tab title row; `summary` is omitted while loading. */
+function CraftersHeader({ summary: line }: { summary?: string }): JSX.Element {
+    return (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-edge pb-2">
+            <h2 id="crafters-title" className="text-lg font-semibold text-foreground">Crafters</h2>
+            {line !== undefined && <span className="text-sm text-secondary">{line}</span>}
+        </div>
+    );
+}
+
+/** §4.6 loading: keep the frame (title + toolbar row) and grey the cards, never a lone block. */
+function CraftersSkeleton(): JSX.Element {
+    return (
+        <section aria-labelledby="crafters-title" aria-busy="true" data-testid="crafters-loading" className="flex flex-col gap-3">
+            <CraftersHeader />
+            <div className="h-11 animate-pulse rounded-lg bg-panel" />
+            <div aria-hidden="true" className={GRID_CLASS}>
+                {[0, 1, 2].map((i) => <div key={i} className="h-40 animate-pulse rounded-lg border border-edge bg-panel" />)}
+            </div>
+        </section>
     );
 }
 

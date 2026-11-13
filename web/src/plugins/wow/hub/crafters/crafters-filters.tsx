@@ -3,13 +3,14 @@
  * name) plus the §4.1 funnel standard (`filter-entry.tsx`): the toolbar
  * trigger + inline panel at 1024px and up, the neutral Filters FAB +
  * `BottomSheet` below. Filter body per operator ruling 2026-11-12 Q3:
- * Profession (multi-select `FilterChip`s) and Minimum skill (single-select
- * `FilterChip`s). Same layout as the Valheim Materials toolbar.
+ * Profession (multi-select `FilterChip`s) and Minimum skill (a segmented
+ * `RadioGroup`, §4.11: one choice, "Any" is the `null` sentinel). Same layout as the Valheim Materials toolbar.
  */
 import { useState, type JSX } from 'react';
 import { FilterEntry, FilterEntryTrigger } from '../../../../components/ui/filter-entry';
 import { FilterChip } from '../../../../components/ui/filter-chip';
 import { SearchInput } from '../../../../components/ui/search-input';
+import { RadioGroup } from '../../../../components/ui/radio-group';
 import { EMPTY_CRAFTER_FILTERS, MIN_SKILL_OPTIONS, activeCount, type CrafterFilters } from './crafters.helpers';
 
 interface CraftersToolbarProps {
@@ -39,6 +40,17 @@ export function CraftersToolbar({ query, onQuery, filters, onFilters, profession
     );
 }
 
+/** Radio values are strings; "Any" (`null`) maps to the `any` sentinel. */
+function minSkillKey(value: number | null): string {
+    return value === null ? 'any' : String(value);
+}
+
+function minSkillFromKey(key: string): number | null {
+    return MIN_SKILL_OPTIONS.find((o) => minSkillKey(o.value) === key)?.value ?? null;
+}
+
+const MIN_SKILL_RADIOS = MIN_SKILL_OPTIONS.map((o) => ({ value: minSkillKey(o.value), label: o.label }));
+
 type ControlsProps = Pick<CraftersToolbarProps, 'filters' | 'onFilters' | 'professions'>;
 
 function CrafterFilterControls({ filters, onFilters, professions }: ControlsProps): JSX.Element {
@@ -54,12 +66,8 @@ function CrafterFilterControls({ filters, onFilters, professions }: ControlsProp
                         onPressedChange={(on) => toggleProfession(name, on)} />
                 ))}
             </ChipGroup>
-            <ChipGroup title="Minimum skill">
-                {MIN_SKILL_OPTIONS.map((o) => (
-                    <FilterChip key={o.label} label={o.label} pressed={filters.minSkill === o.value}
-                        onPressedChange={() => onFilters({ ...filters, minSkill: o.value })} />
-                ))}
-            </ChipGroup>
+            <RadioGroup label="Minimum skill" appearance="segmented" options={MIN_SKILL_RADIOS}
+                value={minSkillKey(filters.minSkill)} onChange={(key) => onFilters({ ...filters, minSkill: minSkillFromKey(key) })} />
         </div>
     );
 }

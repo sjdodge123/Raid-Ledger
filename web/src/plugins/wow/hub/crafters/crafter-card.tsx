@@ -2,7 +2,8 @@
  * ROK-1790 — one profession card on the Crafters tab (§4.2 card chrome):
  * the profession name + crafter count, then one row per crafter — the same
  * `CharacterLink` / `formatSkill` / `sourceLabel` row the Guild professions
- * widget draws (spec D5), plus a §3.2 `GuildMeter` skill bar. An unclaimed
+ * widget draws (spec D5), plus a §3.2 `GuildMeter` skill bar
+ * (`success` fill on the `edge` track, spec Scope). An unclaimed
  * roster member links to its read-only roster page (ROK-2149) in italics.
  * No "specialty" line (operator ruling 2026-11-12 Q4: no source for it).
  */
@@ -54,7 +55,7 @@ function CrafterRow({ member, profession, hubId }: { member: ProfessionMember; p
                 </span>
             </span>
             {member.skill !== null && member.maxSkill !== null && member.maxSkill > 0 && (
-                <GuildMeter tone="neutral" pct={(member.skill / member.maxSkill) * 100} label={`${member.name} ${profession} skill`} />
+                <GuildMeter tone="success" pct={(member.skill / member.maxSkill) * 100} label={`${member.name} ${profession} skill`} />
             )}
         </li>
     );

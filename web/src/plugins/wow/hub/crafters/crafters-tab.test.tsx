@@ -1,6 +1,7 @@
 /**
  * ROK-1790 — the WoW: Forever Crafters tab: one card per profession, search,
- * the `FilterEntry` funnel (desktop toolbar panel here), and both empty states.
+ * the `FilterEntry` funnel (desktop toolbar panel and the phone FAB + sheet),
+ * unclaimed roster rows, and both empty states.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, within } from '@testing-library/react';
@@ -80,7 +81,8 @@ describe('CraftersTab', () => {
         renderTab();
         await cardTitles();
         await userEvent.click(screen.getByRole('button', { name: /^Filters/ }));
-        await userEvent.click(screen.getByRole('button', { name: '300', pressed: false }));
+        await userEvent.click(screen.getByRole('radio', { name: '300' }));
+        expect(screen.getByRole('radiogroup', { name: 'Minimum skill' })).toBeInTheDocument();
         expect(screen.getByText('No crafter matches these filters.')).toBeInTheDocument();
         expect(screen.queryByRole('list', { name: 'Crafters by profession' })).toBeNull();
         await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
@@ -93,6 +95,47 @@ describe('CraftersTab', () => {
         await cardTitles();
         await userEvent.type(screen.getByRole('searchbox', { name: 'Search professions or crafters' }), 'zzz');
         expect(screen.getByText('No crafter matches “zzz”.')).toBeInTheDocument();
+    });
+
+});
+
+describe('CraftersTab — phone funnel, Clear all, unclaimed rows', () => {
+    it('phone: the Filters FAB opens the bottom sheet and a profession chip narrows the cards', async () => {
+        media.desktop = false;
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
+        renderTab();
+        await cardTitles();
+        await userEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        const sheet = await screen.findByRole('dialog');
+        await userEvent.click(within(sheet).getByRole('button', { name: 'Mining', pressed: false }));
+        expect(within(sheet).getByRole('button', { name: 'Mining', pressed: true })).toBeInTheDocument();
+        const list = screen.getByRole('list', { name: 'Crafters by profession', hidden: true });
+        expect(within(list).getAllByRole('heading', { level: 3, hidden: true }).map((h) => h.textContent)).toEqual(['Mining']);
+    });
+
+    it('"Clear all" resets the filters but keeps the search (AC4)', async () => {
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
+        renderTab();
+        await cardTitles();
+        const search = screen.getByRole('searchbox', { name: 'Search professions or crafters' });
+        await userEvent.type(search, 'mix');
+        await userEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+        await userEvent.click(screen.getByRole('button', { name: 'Mining', pressed: false }));
+        expect(await cardTitles()).toEqual(['Mining']);
+        await userEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+        expect(search).toHaveValue('mix');
+        expect(screen.getByRole('button', { name: 'Mining', pressed: false })).toBeInTheDocument();
+        expect(await cardTitles()).toEqual(['Alchemy', 'Mining']);
+    });
+
+    it('an unclaimed roster member links to their roster page in italics (AC6)', async () => {
+        const unclaimed = { characterId: null, memberId: 42, name: 'Orcbert', skill: 100, maxSkill: 300, source: 'addon' as const };
+        server.use(rosterInsightsHandler({ all: { ...PROFESSIONS_FIXTURE, professions: [{ name: 'Herbalism', members: [unclaimed] }] } }));
+        renderTab();
+        expect(await cardTitles()).toEqual(['Herbalism']);
+        const link = within(screen.getByRole('list', { name: 'Herbalism crafters' })).getByRole('link', { name: 'Orcbert' });
+        expect(link).toHaveAttribute('href', `/hubs/${PAGE.guild.id}/members/42`);
+        expect(link).toHaveClass('italic');
     });
 
     it('shows the professions empty state when nobody has professions', async () => {
