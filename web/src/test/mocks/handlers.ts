@@ -17,6 +17,7 @@ import { guildContentHandlers } from './guild-content-handlers';
 import { hubPostsHandlers } from './hub-posts-handlers';
 import { hubSessionNoteHandlers } from './hub-session-note-handlers';
 import { guildIngameTextHandlers } from './guild-ingame-text-handlers';
+import { guildRecruitmentHandlers } from './guild-recruitment-handlers';
 import { guildContributionsHandlers } from './guild-contributions-handlers';
 import { bg3Handlers } from './bg3-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
@@ -42,6 +43,7 @@ export const handlers = [
     ...hubPostsHandlers,
     ...hubSessionNoteHandlers,
     ...guildIngameTextHandlers,
+    ...guildRecruitmentHandlers,
     ...guildContributionsHandlers,
     ...bg3Handlers,
     ...guildDiscordHandlers,
