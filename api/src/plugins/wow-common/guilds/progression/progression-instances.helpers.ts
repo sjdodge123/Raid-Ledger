@@ -209,15 +209,19 @@ function toInstance(
   index: BossIndex,
 ): WowProgressionInstanceDto {
   const bosses = entries.map((e) => e.boss).sort(compareOrdered);
-  const killed = new Set(
-    bosses.filter((b) => b.kills > 0).map((b) => b.encounterId),
-  );
   const total =
     place.journalId === null ? 0 : (index.totals.get(place.journalId) ?? 0);
+  // With a known total only bosses matching a boss row count, so a map-id
+  // pull of an unlisted encounter can never read "11/10" or "On farm".
+  const killed = new Set(
+    bosses
+      .filter((b) => b.kills > 0 && (total === 0 || b.order !== null))
+      .map((b) => b.encounterId),
+  );
   return {
     key: place.key,
     name: place.name,
-    bossesDown: killed.size,
+    bossesDown: total > 0 ? Math.min(killed.size, total) : killed.size,
     bossTotal: total > 0 ? total : null,
     showDifficulty: new Set(bosses.map((b) => b.difficultyId)).size > 1,
     latestKill: latestKill(entries),
@@ -275,6 +279,8 @@ export function groupIntoInstances(
   });
   const bosses = entries.map((e) => e.boss);
   return {
+    // `other` sorts last, so past the 30-section cap it is the first section
+    // dropped. Accepted: 30 known raids outrank a bucket of unplaced bosses.
     instances: instances
       .sort(compareInstances)
       .slice(0, WOW_PROGRESSION_INSTANCES_MAX),

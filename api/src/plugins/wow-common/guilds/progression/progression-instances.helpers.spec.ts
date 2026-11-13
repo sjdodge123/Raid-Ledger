@@ -162,6 +162,30 @@ describe('groupIntoInstances — totals (Q-B11)', () => {
     ]);
   });
 
+  it('bosses down count only bosses with a boss row, so they never exceed the total', () => {
+    const out = groupIntoInstances(
+      [
+        pull(663, 'Lucifron', 0, true),
+        pull(664, 'Magmadar', 300, true),
+        pull(665, 'Gehennas', 600, true),
+        pull(7001, 'Core Hound Pack', 900, true),
+      ],
+      MC_ROWS,
+    );
+    const mc = only(out.instances, 'j:741');
+    expect(mc.bosses).toHaveLength(4);
+    expect([mc.bossesDown, mc.bossTotal]).toEqual([3, 3]);
+  });
+
+  it('with no boss rows (no total) every killed boss counts as down', () => {
+    const out = groupIntoInstances(
+      [pull(663, 'Lucifron', 0, true), pull(7001, 'Core Hound Pack', 9, true)],
+      [],
+    );
+    const mc = only(out.instances, 'j:741');
+    expect([mc.bossesDown, mc.bossTotal]).toEqual([2, null]);
+  });
+
   it('ignores rows of other expansions', () => {
     const out = groupIntoInstances(
       [pull(663, 'Lucifron', 0, true)],
