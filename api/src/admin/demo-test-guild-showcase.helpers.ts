@@ -67,6 +67,17 @@ type FillerCtx = {
   nameSuffix: string;
 };
 
+/** The columns a re-seed re-stamps on a filler row. */
+function fillerSet(e: FillerEntry, now: Date) {
+  return {
+    rankIndex: e.rank,
+    rankName: e.rankName,
+    level: e.level,
+    class: e.class,
+    lastSeenAt: now,
+  };
+}
+
 /** Upserts one filler row on (guild, guid); returns its member id. */
 async function upsertFiller(
   db: Db,
@@ -74,13 +85,7 @@ async function upsertFiller(
   e: FillerEntry,
 ): Promise<number> {
   const m = schema.guildMembers;
-  const set = {
-    rankIndex: e.rank,
-    rankName: e.rankName,
-    level: e.level,
-    class: e.class,
-    lastSeenAt: ctx.now,
-  };
+  const set = fillerSet(e, ctx.now);
   const guid = seedFillerGuid(ctx.hash, e.n);
   const [row] = await db
     .insert(m)

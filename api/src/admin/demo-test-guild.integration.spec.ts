@@ -6,7 +6,7 @@
  * linked through a character GUID, an outsider, and a rank-1 editor grant.
  * Proven through the real `/plugins/wow/guilds/:id` access matrix.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -15,6 +15,7 @@ import { SettingsService } from '../settings/settings.service';
 import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
 import { nonEmpty } from '../common/testing/narrow';
+import { defined } from '../common/defined.helpers';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
 import {
   SEED_GUILD_LINKS,
@@ -541,5 +542,99 @@ describe('POST /admin/test/wow/seed-guild — summary overrides (ROK-1170)', () 
     for (const extra of bad) {
       expect((await seed({ name: 'Flag Founded', ...extra })).status).toBe(400);
     }
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — memberCount (ROK-1789 B9)', () => {
+  it('pads the roster to 50 rows with roster-only fillers; a re-seed keeps the ids', async () => {
+    const out = await seedGuild('Padded Keepers', { memberCount: 50 });
+    expect(out.fillerMemberIds).toHaveLength(45);
+    const rows = await testApp.db
+      .select({ rank: schema.guildMembers.rankIndex })
+      .from(schema.guildMembers)
+      .where(eq(schema.guildMembers.guildId, out.guildId));
+    expect(rows).toHaveLength(50);
+    expect(rows.filter((r) => r.rank === 1)).toHaveLength(2);
+    expect(rows.filter((r) => r.rank === 0)).toHaveLength(1);
+    const again = await seedGuild('Padded Keepers', { memberCount: 50 });
+    expect(again.fillerMemberIds).toEqual(out.fillerMemberIds);
+  });
+
+  it('is 400 below 5, above 60 or for a non-integer', async () => {
+    for (const memberCount of [4, 61, 12.5, '50']) {
+      const res = await seed({ name: 'Flag Padded', memberCount });
+      expect(res.status).toBe(400);
+    }
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — withActivity (ROK-1789 B9)', () => {
+  it('backdates the guild, stamps a ≥10-row import, events and map-tagged pulls', async () => {
+    const out = await seedGuild('Busy Keepers', { withActivity: true });
+    const activity = defined(out.activity, 'activity');
+    expect(out.fillerMemberIds).toHaveLength(45);
+    expect(out.pulls).toBeDefined();
+    expect(out.dings).toBeDefined();
+    const [guild] = await testApp.db
+      .select({ createdAt: schema.guilds.createdAt })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, out.guildId));
+    expect(guild?.createdAt.toISOString()).toBe(activity.guildCreatedAt);
+    const imported = await testApp.db
+      .select({ createdAt: schema.guildMembers.createdAt })
+      .from(schema.guildMembers)
+      .where(inArray(schema.guildMembers.id, activity.stamped.roster_import));
+    expect(imported.length).toBeGreaterThanOrEqual(10);
+    const stamps = new Set(imported.map((r) => r.createdAt.toISOString()));
+    expect([...stamps]).toEqual([activity.rosterImportAt]);
+    expect(activity.stamped.new_member).toHaveLength(4);
+    expect(activity.events.ended).toHaveLength(2);
+    expect(activity.events.cancelled).toHaveLength(1);
+  });
+
+  it('tags Molten Core pulls with map 409 and one Lucifron kill with none', async () => {
+    const out = await seedGuild('Mapped Keepers', { withActivity: true });
+    const p = schema.addonEncounterPulls;
+    const pulls = await testApp.db
+      .select({ name: p.encounterName, instanceId: p.instanceId })
+      .from(p)
+      .where(and(eq(p.guildKey, 'mapped keepers'), eq(p.gameId, out.gameId)));
+    const unmapped = pulls.filter((r) => r.instanceId === null);
+    expect(unmapped.map((r) => r.name)).toEqual(['Lucifron']);
+    expect(pulls.filter((r) => r.instanceId === 409).length).toBeGreaterThan(4);
+    await seedGuild('Mapped Keepers', { withActivity: true });
+    const again = await testApp.db
+      .select({ name: p.encounterName })
+      .from(p)
+      .where(and(eq(p.guildKey, 'mapped keepers'), eq(p.gameId, out.gameId)));
+    expect(again).toHaveLength(pulls.length);
+  });
+
+  it('is 400 for a non-boolean withActivity or asCaller', async () => {
+    for (const extra of [{ withActivity: 1 }, { asCaller: 'yes' }]) {
+      expect((await seed({ name: 'Flag Busy', ...extra })).status).toBe(400);
+    }
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — asCaller (ROK-1789 B9, Q-B16)', () => {
+  it('makes the JWT caller the rank-0 GUID owner with a member editor grant', async () => {
+    const admin = testApp.seed.adminUser;
+    const out = await seedGuild('Caller Keepers', { asCaller: true });
+    expect(out.users.gm.userId).toBe(admin.id);
+    expect(out.users.gm.rankIndex).toBe(0);
+    const gmChar = defined(out.users.gm.characterId ?? undefined, 'gm char');
+    const [owned] = await testApp.db
+      .select({ userId: schema.characters.userId })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, gmChar));
+    expect(owned?.userId).toBe(admin.id);
+    const grants = await testApp.db
+      .select({ memberId: schema.guildEditors.guildMemberId })
+      .from(schema.guildEditors)
+      .where(eq(schema.guildEditors.guildId, out.guildId));
+    expect(grants.map((g) => g.memberId)).toContain(out.users.gm.memberId);
+    const again = await seedGuild('Caller Keepers', { asCaller: true });
+    expect(again.users.gm.characterId).toBe(out.users.gm.characterId);
   });
 });

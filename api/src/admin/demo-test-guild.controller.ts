@@ -104,6 +104,15 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 export type { SeedGuildResponse } from './demo-test-guild.response';
 
+/** The roster context: ids, `now`, the guild-key hash and the name suffix. */
+function rosterCtx(
+  input: Pick<SeedGuildInput, 'name' | 'rosterSuffix'>,
+  ids: Pick<RosterCtx, 'guildId' | 'gameId' | 'now'>,
+): RosterCtx {
+  const hash = guildKeyHash(input.name.toLowerCase());
+  return { ...ids, hash, nameSuffix: input.rosterSuffix };
+}
+
 @Controller('admin/test/wow')
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
@@ -126,9 +135,7 @@ export class DemoTestGuildController {
     await this.ensurePluginActive();
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input, now);
-    const hash = guildKeyHash(input.name.toLowerCase());
-    const nameSuffix = input.rosterSuffix;
-    const ctx: RosterCtx = { guildId, gameId, hash, now, nameSuffix };
+    const ctx = rosterCtx(input, { guildId, gameId, now });
     const cast = await this.seedCast(ctx, input, req.user.id);
     const { users, unlinked, fillers } = cast;
     const raids = await this.seedRaids(ctx, users);
