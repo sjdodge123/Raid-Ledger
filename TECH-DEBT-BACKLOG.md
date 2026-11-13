@@ -4304,3 +4304,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 - **med** — `Dockerfile.allinone` (api `nest build` step) — `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` on Docker Desktop with 8 GB; the Dockerfile sets no `NODE_OPTIONS`. Pre-existing (the nginx-only diff can't affect the TS build); a scratch copy adding `ENV NODE_OPTIONS=--max-old-space-size=6144` before the api build succeeded. Suggested: set that ENV in the build stage (own infra PR, validate per CLAUDE.md).
 
+
+### 2026-11-13 — overnight triage (surfaced during main CI review)
+
+- **med** — Discord smoke `series-signup-embed` (`tools/test-bot/src/smoke/series-join-row.ts:73`, driven by `tests/series-signup-embed.test.ts`): `series card: expected 2 rows, got 1` — red on main runs 43133821485 and 43180653145, green on the 6 main runs since. Pre-existing: both failing runs are on `main`, not on a branch. Suspected race between the series card post and the series link (unconfirmed). Suggested: root-cause lane — reproduce with the companion bot first (`cd tools/test-bot && npm run smoke` looped on that spec) before designing a fix.
+- **low** — `web/src/components/ui/markdown/markdown-blocks.exhaustive.test.tsx:142` — the single `block construct × context × inline text` cross-product test timed out at 15 s on main CI run 43187066100 (file took 36.8 s). Pre-existing on `main`; the one test carried every construct's bodies. Fixed on branch `fix/test-flakes-2026-11-13` (one `it.each` test per construct, same checks and assertion). Suggested: none once that branch merges.
