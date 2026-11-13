@@ -4292,3 +4292,10 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-12 — feat/rok-1170-guild-summary (surfaced during the ROK-1170 fleet image build)
 - **low** — fleet `rl_env_build_image_from_runner` (task `5f3c79de2552`, slot 4) failed on the first try with a runner containerd error `lease does not exist`; an identical retry (`72a6eab58aac`) succeeded. Not caused by the branch (infra-side, no code path in the diff). Suggested: have `build-image-on-runner` retry once on a containerd `lease does not exist` error, or record its frequency before deciding.
 - **nit** — `api/src/plugins/wow-common/guilds/blizzard-summary-apply.ts` `hadSummary200`: a 200 without a usable `id`, then an `error`, then a 404 still reads as never-200 (the `error` status overwrites the `ok` evidence), so that guild stays `not_found` instead of reaching `disbanded`. Needs an id-less 200 from Blizzard first, which no probe has seen. Suggested: persist a `blizzard_summary_ok_at` timestamp if it ever shows up in logs.
+
+### 2026-11-13 — overnight (ROK-2187 GG 2026 review follow-ups, carried by the day-7 handover)
+
+- **low** — `api/src/plugins/core/gg/gg-delivery.service.ts` ~136 (`effectiveGgDeliveryDate`) — a delivery date late enough that the DM wave crosses Jan 1 abandons that year's unsent DMs. Operator accepted as a known limitation 2026-11-13. Suggested: keep the previous year active until its wave drains, or reject delivery dates after ~Dec 28 in the admin settings.
+- **nit** — `api/src/admin/demo-test-gg.controller.ts` ~100 (`seed()`) — returns 500 (FK violation) for a userId that does not exist. Suggested: a NotFoundException precheck.
+- **low** — DEMO GG fixtures (`/admin/test/gg/seed|reset|tick`) are reachable only with an admin bearer token, which agents get only inside `rl_validate_ci` (Playwright global setup, which runs reset-to-seed first). An operator own-account step (ROK-2187 plan step 11) could not be seeded overnight. Suggested: an admin-only DEMO_MODE button on the admin GG page that seeds + sends the signed-in admin's own GG.
+
