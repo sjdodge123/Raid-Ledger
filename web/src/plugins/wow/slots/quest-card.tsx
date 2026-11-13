@@ -2,6 +2,7 @@
  * Quest card component for the Quest Prep Panel.
  * Renders a single quest with collapsible details.
  */
+import { useId } from 'react';
 import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, QuestPrereqState } from '@raid-ledger/contract';
 import { getWowheadQuestUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import { QuestRewardItems } from './quest-reward-items';
@@ -49,6 +50,7 @@ export function QuestCard({
     // A quest with any prevQuestId is not shareable; the Chain badge and line need a resolved prerequisite (ROK-2143).
     const hasPrevQuest = !!quest.prevQuestId;
     const prereqTotal = prerequisiteCount(quest);
+    const bodyId = useId();
 
     return (
         <div key={quest.questId} className="quest-card-row">
@@ -57,11 +59,11 @@ export function QuestCard({
                     eventId={eventId} pendingQuestId={pendingQuestId} onToggle={onTogglePickedUp} />
             )}
             <div className="quest-card">
-                <QuestCardHeader quest={quest} isExpanded={isExpanded} prereqTotal={prereqTotal}
+                <QuestCardHeader quest={quest} isExpanded={isExpanded} bodyId={bodyId} prereqTotal={prereqTotal}
                     completed={prereqs?.state.completed ?? false}
                     wowheadVariant={wowheadVariant} onToggle={() => onToggleExpanded(quest.questId)} />
                 {isExpanded && (
-                    <QuestCardBody quest={quest} hasPrevQuest={hasPrevQuest} prereqTotal={prereqTotal} coveredByMe={coveredByMe}
+                    <QuestCardBody bodyId={bodyId} quest={quest} hasPrevQuest={hasPrevQuest} prereqTotal={prereqTotal} coveredByMe={coveredByMe}
                         coveredByOthers={coveredByOthers} isCovered={isCovered} questCoverage={questCoverage}
                         wowheadSuffix={getWowheadDataSuffix(wowheadVariant)} wowheadVariant={wowheadVariant}
                         equippedBySlot={equippedBySlot} charClass={charClass} characterId={characterId} prereqs={prereqs} />
@@ -102,15 +104,15 @@ function CoverageIndicator({ questId, coveredByMe, isCovered, eventId, pendingQu
     return <span className="quest-card__inline-status quest-card__inline-status--needed">&#x26A0;</span>;
 }
 
-function QuestCardHeader({ quest, isExpanded, prereqTotal, completed, wowheadVariant, onToggle }: {
-    quest: EnrichedDungeonQuestDto; isExpanded: boolean; prereqTotal: number;
+function QuestCardHeader({ quest, isExpanded, bodyId, prereqTotal, completed, wowheadVariant, onToggle }: {
+    quest: EnrichedDungeonQuestDto; isExpanded: boolean; bodyId: string; prereqTotal: number;
     completed: boolean; wowheadVariant: string; onToggle: () => void;
 }) {
     return (
         <div className="quest-card__header-wrapper">
             <div className="quest-card__header" onClick={onToggle}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
-                role="button" tabIndex={0}>
+                role="button" tabIndex={0} aria-expanded={isExpanded} aria-controls={bodyId}>
                 <span className={`quest-card__chevron ${isExpanded ? 'quest-card__chevron--open' : ''}`}>&#x25B8;</span>
                 <div className="quest-card__info">
                     <span className="quest-card__name">
@@ -138,8 +140,8 @@ function DonePill() {
     );
 }
 
-function QuestCardBody({ quest, hasPrevQuest, prereqTotal, coveredByMe, coveredByOthers, isCovered, questCoverage, wowheadSuffix, wowheadVariant, equippedBySlot, charClass, characterId, prereqs }: {
-    quest: EnrichedDungeonQuestDto; hasPrevQuest: boolean; prereqTotal: number; coveredByMe: boolean;
+function QuestCardBody({ bodyId, quest, hasPrevQuest, prereqTotal, coveredByMe, coveredByOthers, isCovered, questCoverage, wowheadSuffix, wowheadVariant, equippedBySlot, charClass, characterId, prereqs }: {
+    bodyId: string; quest: EnrichedDungeonQuestDto; hasPrevQuest: boolean; prereqTotal: number; coveredByMe: boolean;
     coveredByOthers: { userId: number; username: string }[];
     isCovered: boolean; questCoverage: QuestCoverageEntry | undefined;
     wowheadSuffix: string; wowheadVariant: string;
@@ -148,7 +150,7 @@ function QuestCardBody({ quest, hasPrevQuest, prereqTotal, coveredByMe, coveredB
     prereqs: QuestCardPrereqs | undefined;
 }) {
     return (
-        <div className="quest-card__body">
+        <div id={bodyId} className="quest-card__body">
             {quest.questGiverNpc && (
                 <div className="quest-card__quest-giver">
                     Start: {quest.questGiverNpc}
