@@ -168,6 +168,11 @@ describe('GG mascot API (integration)', () => {
       .expect(206)
       .expect('Content-Range', `bytes 0-9/${MP3.length}`)
       .expect('Content-Type', /audio\/mpeg/);
+    // An unsatisfiable range keeps send's own 416, not a blanket 404.
+    await testApp.request
+      .get(String(res.body.soundUrl))
+      .set('Range', `bytes=${MP3.length + 100}-`)
+      .expect(416);
     const stored = await testApp.app
       .get(SettingsService)
       .get(SETTING_KEYS.GG_MASCOT);

@@ -18,6 +18,7 @@ import { GgComputeService } from './gg-compute.service';
 import { GgDeliveryService } from './gg-delivery.service';
 import { GgAdminController } from './gg-admin.controller';
 import { ggAnnounceKey } from './gg-delivery.schedule';
+import { resetGgDmState } from './gg-dm-wave.helpers';
 import { GG_DELIVERY_JOB_NAME } from './gg-delivery.cron';
 import { NotificationService } from '../../../notifications/notification.service';
 import { DiscordNotificationService } from '../../../notifications/discord-notification.service';
@@ -277,6 +278,18 @@ describe('GG delivery — claim release + stale reclaim', () => {
       dispatch.mock.calls[0]?.[0].notificationId,
     );
     expect(await ggNotifications(id)).toBe(1);
+  });
+
+  it("the DEMO reset also drops the year's gg_ready rows so a resend makes a new one", async () => {
+    await enable();
+    const id = await insertUser();
+    await insertSnapshot(id);
+    await service.runTick(new Date());
+    await service.runTick(LATER());
+    expect(await ggNotifications(id)).toBe(1);
+    await resetGgDmState(testApp.db, YEAR);
+    expect(await ggNotifications(id)).toBe(0);
+    expect(await snapshotRow(id)).toEqual({ claimed: false, sent: false });
   });
 
   it('reclaims a claim older than 30 min, never a fresh one', async () => {

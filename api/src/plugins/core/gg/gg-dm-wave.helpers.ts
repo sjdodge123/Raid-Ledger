@@ -8,7 +8,11 @@
 import { and, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
-import { ggSnapshots, notificationDedup } from '../../../drizzle/schema';
+import {
+  ggSnapshots,
+  notificationDedup,
+  notifications,
+} from '../../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -119,12 +123,25 @@ export async function findGgAnnouncedAt(
   return row?.createdAt ?? null;
 }
 
-/** Clear every DM claim/stamp of `year` (DEMO fixture reset only). */
+/**
+ * Clear every DM claim/stamp of `year` (DEMO fixture reset only). Also drops
+ * that year's `gg_ready` in-app rows: a resend reuses an existing row
+ * (gg-ready-notification.helpers.ts), so a reset that kept them would make
+ * every later smoke run wait for a row that is never created.
+ */
 export async function resetGgDmState(db: Db, year: number): Promise<number> {
   const rows = await db
     .update(ggSnapshots)
     .set({ dmClaimedAt: null, dmSentAt: null })
     .where(eq(ggSnapshots.year, year))
     .returning({ id: ggSnapshots.id });
+  await db
+    .delete(notifications)
+    .where(
+      and(
+        eq(notifications.type, 'gg_ready'),
+        sql`${notifications.payload}->>'year' = ${String(year)}`,
+      ),
+    );
   return rows.length;
 }

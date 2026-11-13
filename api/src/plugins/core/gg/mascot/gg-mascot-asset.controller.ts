@@ -8,7 +8,15 @@
  * Served with Express `sendFile`, which answers Range (206 — WebKit audio
  * asks for byte ranges), ETag and conditional 304s like the old static mount.
  */
-import { Controller, Get, NotFoundException, Param, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Res,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { getGgMascotDir, mascotFileFromToken } from './gg-mascot.storage';
 
@@ -31,10 +39,16 @@ export class GgMascotAssetController {
       },
     };
     return new Promise((resolve, reject) => {
-      res.sendFile(file.name, options, (err?: Error) => {
-        // Missing file → Nest's 404; an aborted client after headers → done.
-        if (err && !res.headersSent) reject(new NotFoundException());
-        else resolve();
+      res.sendFile(file.name, options, (err?: Error & { status?: number }) => {
+        // An aborted client after headers → done. Otherwise keep send's own
+        // status (416 bad range, 412 precondition); missing file → 404.
+        if (!err || res.headersSent) return resolve();
+        const status = err.status ?? 404;
+        reject(
+          status === 404
+            ? new NotFoundException()
+            : new HttpException(HttpStatus[status] ?? 'Error', status),
+        );
       });
     });
   }

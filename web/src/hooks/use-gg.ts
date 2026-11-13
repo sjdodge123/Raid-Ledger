@@ -32,7 +32,9 @@ export function useGgPublic(slug: string | undefined): UseQueryResult<GgPublicSu
         queryKey: [...GG_KEY, 'public', slug],
         queryFn: () => getGgPublic(slug ?? ''),
         enabled: !!slug,
-        staleTime: FROZEN,
+        // Revalidate on every visit: a revoked share must 404 at once, not
+        // keep serving a cached summary (the owner's snapshot stays FROZEN).
+        staleTime: 0,
         retry: false,
     });
 }
@@ -45,6 +47,7 @@ export function useSetGgShare(year: number): UseMutationResult<GgShareStateDto, 
         onSuccess: (share) => {
             qc.setQueryData<GgOwnerSnapshot>([...GG_KEY, 'year', year], (old) => (old ? { ...old, share } : old));
             void qc.invalidateQueries({ queryKey: [...GG_KEY, 'archive'] });
+            if (!share.shared) qc.removeQueries({ queryKey: [...GG_KEY, 'public'] });
         },
         onError: (err: Error) => {
             toast.error(err.message || 'Could not change sharing');
