@@ -17,7 +17,7 @@
  * assertions pass. GREEN.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -204,13 +204,14 @@ function legacyRejectHandlers() {
     ];
 }
 
-function detailHandler() {
+function detailHandler(eventOverrides: Record<string, unknown> = {}) {
     return http.get(`${API_BASE}/events/:id/detail`, ({ params }) => {
         const requestedId = Number(params.id);
         if (requestedId !== EVENT_ID) {
             return HttpResponse.json({ error: 'not-found' }, { status: 404 });
         }
-        return HttpResponse.json(buildDetailFixture());
+        const fixture = buildDetailFixture();
+        return HttpResponse.json({ ...fixture, event: { ...fixture.event, ...eventOverrides } });
     });
 }
 
@@ -241,9 +242,9 @@ function allowedSidebandHandlers() {
     ];
 }
 
-function renderEventDetailPage() {
+function renderEventDetailPage(eventOverrides: Record<string, unknown> = {}) {
     server.use(
-        detailHandler(),
+        detailHandler(eventOverrides),
         ...allowedSidebandHandlers(),
         ...legacyRejectHandlers(),
     );
@@ -391,5 +392,45 @@ describe('EventDetailPage — hub join prompt placement (ROK-1893 P1)', () => {
         expect(section?.contains(prompt)).toBe(true);
         expect(header?.nextElementSibling).toBe(prompt);
         expect(screen.getAllByTestId('hub-join-prompts-mount')).toHaveLength(1);
+    });
+});
+
+describe('EventDetailPage — Delete Event asks before deleting (TDB 2026-10-15 rok-1787)', () => {
+    const UPCOMING = { startTime: '2099-09-01T20:00:00.000Z', endTime: '2099-09-01T23:00:00.000Z', recurrenceGroupId: null };
+
+    /** Renders an upcoming single event, counts DELETE /events/:id calls, clicks the topbar Delete. */
+    async function openDeleteConfirm(): Promise<{ deletes: () => number; dialog: HTMLElement }> {
+        let count = 0;
+        renderEventDetailPage(UPCOMING);
+        server.use(http.delete(`${API_BASE}/events/:id`, () => { count += 1; return HttpResponse.json({ message: 'ok' }); }));
+        const [deleteButton] = await screen.findAllByRole('button', { name: 'Delete Event' }, { timeout: 4000 });
+        if (!deleteButton) throw new Error('topbar Delete Event button missing');
+        fireEvent.click(deleteButton);
+        // Red before the fix: the click deleted at once, so this fails "expected 1 to be 0".
+        const dialog = await waitFor(() => {
+            expect(count).toBe(0);
+            return screen.getByRole('dialog');
+        });
+        return { deletes: () => count, dialog };
+    }
+
+    it('clicking Delete Event opens a confirm naming the event and does not delete', async () => {
+        const { deletes, dialog } = await openDeleteConfirm();
+        expect(within(dialog).getByText(FIXTURE_TITLE)).toBeInTheDocument();
+        expect(within(dialog).getByText(/signups/i)).toBeInTheDocument();
+        expect(deletes()).toBe(0);
+    });
+
+    it('confirming deletes the event exactly once', async () => {
+        const { deletes, dialog } = await openDeleteConfirm();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Delete Event' }));
+        await waitFor(() => expect(deletes()).toBe(1));
+    });
+
+    it('Keep Event closes the confirm without deleting', async () => {
+        const { deletes, dialog } = await openDeleteConfirm();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Keep Event' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+        expect(deletes()).toBe(0);
     });
 });

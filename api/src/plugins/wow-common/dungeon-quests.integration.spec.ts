@@ -290,6 +290,50 @@ async function testRewardCarriesCachedTooltip() {
   ]);
 }
 
+const SUBCLASS_REWARD_ID = 991004;
+
+/** A boss with one `classic` loot row for `SUBCLASS_REWARD_ID`. */
+async function insertBossLoot(name: string, itemSubclass: string | null) {
+  const [boss] = await testApp.db
+    .insert(schema.wowClassicBosses)
+    .values({ instanceId: 403, name, order: 1, expansion: 'classic' })
+    .returning();
+  await testApp.db.insert(schema.wowClassicBossLoot).values({
+    bossId: defined(boss, 'inserted boss').id,
+    itemId: SUBCLASS_REWARD_ID,
+    itemName: 'Shared Drop Gloves',
+    quality: 'Uncommon',
+    expansion: 'classic',
+    itemSubclass,
+  });
+}
+
+/** A later loot row of the same item fills an earlier row's null subclass. */
+async function testLootRowsMergeNullSubclass() {
+  await insertQuest(testApp, {
+    questId: 5301,
+    dungeonInstanceId: 403,
+    name: 'Shared Drop Quest',
+    expansion: 'classic',
+    questLevel: 30,
+    rewardsJson: [SUBCLASS_REWARD_ID],
+  });
+  await insertBossLoot('No Subclass Boss', null);
+  await insertBossLoot('Leather Boss', 'Leather');
+  const res = await testApp.request.get(
+    '/plugins/wow-classic/instances/403/quests/enriched?variant=classic_era',
+  );
+  expect(res.status).toBe(200);
+  type Reward = { itemId: number; itemSubclass: string | null };
+  const quest = (res.body as Array<{ rewards: Reward[] | null }>)[0];
+  expect(quest?.rewards).toEqual([
+    expect.objectContaining({
+      itemId: SUBCLASS_REWARD_ID,
+      itemSubclass: 'Leather',
+    }),
+  ]);
+}
+
 describe('Dungeon Quests — enriched quests (integration)', () => {
   beforeAll(() => setupTestApp());
   afterEach(() => cleanupTestApp());
@@ -335,6 +379,9 @@ describe('Dungeon Quests — enriched quests (integration)', () => {
 
     it('a reward with a parsed wow_item_meta row carries its tooltip (ROK-2186)', () =>
       testRewardCarriesCachedTooltip());
+
+    it('fills a null loot itemSubclass from another row of the same item', () =>
+      testLootRowsMergeNullSubclass());
 
     it('should return 400 for invalid variant', async () => {
       const res = await testApp.request.get(

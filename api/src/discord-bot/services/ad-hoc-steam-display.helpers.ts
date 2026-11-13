@@ -9,6 +9,10 @@
 import { eq, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import {
+  STORED_NAME_MAX_LENGTH,
+  clampStoredName,
+} from '../../common/stored-name.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.adHocParticipants;
@@ -34,12 +38,21 @@ export interface SteamDisplayInput {
   characterOwnerId?: string;
 }
 
-/** A player's character name, or null while they are only a SteamID64. */
+// The clamp lives in common/ so the presence tracker (plugins/pelican) keys
+// names in the same form the rows store them.
+export { STORED_NAME_MAX_LENGTH, clampStoredName };
+
+/**
+ * A player's character name (clamped to the column), or null while they are
+ * only a SteamID64.
+ */
 export function characterNameOf(player: {
   steamId: string;
   displayName: string;
 }): string | null {
-  return player.displayName === player.steamId ? null : player.displayName;
+  return player.displayName === player.steamId
+    ? null
+    : clampStoredName(player.displayName);
 }
 
 /**
@@ -56,7 +69,10 @@ export async function resolveSteamRowDisplay(
   const characterOwnerId =
     characterName === null ? null : (member.characterOwnerId ?? null);
   const character = { characterName, characterOwnerId };
-  const unlinked = { discordUsername: member.displayName, ...character };
+  const unlinked = {
+    discordUsername: clampStoredName(member.displayName),
+    ...character,
+  };
   if (member.userId === null) return unlinked;
   const u = schema.users;
   const rows = await db

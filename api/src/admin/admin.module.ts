@@ -1,5 +1,4 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { BullModule } from '@nestjs/bullmq';
 import { AdminController } from './admin.controller';
 import { AdminSettingsController } from './settings.controller';
 import { AdminSessionController } from './admin-session.controller';
@@ -10,7 +9,6 @@ import { DemoTestClaimController } from './demo-test-claim.controller';
 import { SetupClaimModule } from '../setup-claim/setup-claim.module';
 import { DemoTestDeactivationController } from './demo-test-deactivation.controller';
 import { NotificationModule } from '../notifications/notification.module';
-import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
 import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
@@ -121,7 +119,6 @@ import { UsersModule } from '../users/users.module';
     // channels in the mirror. forwardRef: ChannelMirrorModule → DiscordBotModule
     // → … → AdminModule is the same cycle as above.
     forwardRef(() => ChannelMirrorModule),
-    BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [
     AdminController,

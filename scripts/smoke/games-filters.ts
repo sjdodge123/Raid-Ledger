@@ -57,6 +57,13 @@ export async function openGamesFilters(page: Page): Promise<Locator> {
     await expect(opener).toHaveAttribute('aria-expanded', 'true');
     const surface = filtersSurface(page);
     await expect(surface).toBeVisible({ timeout: 10_000 });
+    // The BottomSheet moves focus to its Close button on a 0 ms timer after it
+    // opens (`useSheetFocus`). On a re-open every wait above passes in the same
+    // frame, so wait for that move — a caller that focuses a control first would
+    // otherwise have its focus (and key presses) stolen by Close.
+    if (!hasFilterFunnel(page)) {
+        await expect(surface.locator(':focus'), 'the Filters sheet moved focus inside itself').toHaveCount(1);
+    }
     return surface;
 }
 

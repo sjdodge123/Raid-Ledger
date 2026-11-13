@@ -6,7 +6,12 @@
  * linked through a character GUID, an outsider, and a rank-1 editor grant.
  * Proven through the real `/plugins/wow/guilds/:id` access matrix.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import {
+  GUILD_ACTIVITY_KINDS,
+  WowGuildProgressionPageSchema,
+} from '@raid-ledger/contract';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -15,12 +20,15 @@ import { SettingsService } from '../settings/settings.service';
 import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
 import { nonEmpty } from '../common/testing/narrow';
+import { defined } from '../common/defined.helpers';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
 import {
   SEED_GUILD_LINKS,
   SEED_GUILD_RULES,
 } from './demo-test-guild-content.helpers';
 import { SEED_HUB_POST_NEWEST } from './demo-test-hub-posts.helpers';
+import { SEED_GUILD_RECRUITMENT } from './demo-test-guild-recruitment.helpers';
+import { SHOWCASE_OTHER_BOSS } from './demo-test-guild-activity.helpers';
 import {
   SEED_LOCKOUT_SHARED,
   SEED_LOCKOUT_SOLO,
@@ -97,6 +105,19 @@ beforeAll(async () => {
   await seedWowGame();
   await setDemoMode(true);
 });
+
+/** Runs `fn` with the 'blizzard' plugin active, then restores its prior state. */
+async function withBlizzardActive(fn: () => Promise<void>): Promise<void> {
+  const registry = testApp.app.get(PluginRegistryService);
+  await registry.ensureInstalled('blizzard');
+  const wasActive = registry.isActive('blizzard');
+  await registry.activate('blizzard');
+  try {
+    await fn();
+  } finally {
+    if (!wasActive) await registry.deactivate('blizzard');
+  }
+}
 
 // No truncate here: integration-setup.ts's global afterAll (closeTestApp)
 // runs first and ends the DB client; its beforeAll truncates every file.
@@ -472,6 +493,46 @@ describe('POST /admin/test/wow/seed-guild — withArmorySnapshots (ROK-2149)', (
   });
 });
 
+describe('POST /admin/test/wow/seed-guild — withRecruitment (ROK-1789)', () => {
+  const recruitmentPath = (id: number): string =>
+    `/plugins/wow/guilds/${id}/recruitment`;
+
+  it('seeds the AC12 recruitment as the GM; a re-seed restores it', async () => {
+    const out = await seedGuild('Recruit Seed Keepers', {
+      withRecruitment: true,
+    });
+    expect(out.recruitment).toEqual(SEED_GUILD_RECRUITMENT);
+    const gmToken = `Bearer ${await tokenFor(out.users.gm)}`;
+    const read = await testApp.request
+      .get(recruitmentPath(out.guildId))
+      .set('Authorization', gmToken);
+    expect(read.status).toBe(200);
+    expect(read.body.recruitment).toEqual(SEED_GUILD_RECRUITMENT);
+    expect(read.body.state).toBe('open');
+    expect(read.body.updatedBy).not.toBeNull();
+    const closed = await testApp.request
+      .put(recruitmentPath(out.guildId))
+      .set('Authorization', gmToken)
+      .send({ ...SEED_GUILD_RECRUITMENT, recruiting: false });
+    expect(closed.body.state).toBe('closed');
+    await seedGuild('Recruit Seed Keepers', { withRecruitment: true });
+    const again = await testApp.request
+      .get(recruitmentPath(out.guildId))
+      .set('Authorization', gmToken);
+    expect(again.body.recruitment).toEqual(SEED_GUILD_RECRUITMENT);
+  });
+
+  it('without the flag: no recruitment key', async () => {
+    const out = await seedGuild('Recruitless Keepers');
+    expect(out).not.toHaveProperty('recruitment');
+  });
+
+  it('is 400 for a non-boolean withRecruitment', async () => {
+    const res = await seed({ name: 'Flag Recruit', withRecruitment: 'yes' });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('POST /admin/test/wow/seed-guild — summary overrides (ROK-1170)', () => {
   const FOUNDED = '2024-03-15T12:00:00.000Z';
 
@@ -500,5 +561,135 @@ describe('POST /admin/test/wow/seed-guild — summary overrides (ROK-1170)', () 
     for (const extra of bad) {
       expect((await seed({ name: 'Flag Founded', ...extra })).status).toBe(400);
     }
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — memberCount (ROK-1789 B9)', () => {
+  it('pads the roster to 50 rows with roster-only fillers; a re-seed keeps the ids', async () => {
+    const out = await seedGuild('Padded Keepers', { memberCount: 50 });
+    expect(out.fillerMemberIds).toHaveLength(45);
+    const rows = await testApp.db
+      .select({ rank: schema.guildMembers.rankIndex })
+      .from(schema.guildMembers)
+      .where(eq(schema.guildMembers.guildId, out.guildId));
+    expect(rows).toHaveLength(50);
+    expect(rows.filter((r) => r.rank === 1)).toHaveLength(2);
+    expect(rows.filter((r) => r.rank === 0)).toHaveLength(1);
+    const again = await seedGuild('Padded Keepers', { memberCount: 50 });
+    expect(again.fillerMemberIds).toEqual(out.fillerMemberIds);
+  });
+
+  it('is 400 below 5, above 60 or for a non-integer', async () => {
+    for (const memberCount of [4, 61, 12.5, '50']) {
+      const res = await seed({ name: 'Flag Padded', memberCount });
+      expect(res.status).toBe(400);
+    }
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — withActivity (ROK-1789 B9)', () => {
+  it('backdates the guild, stamps a ≥10-row import, events and map-tagged pulls', async () => {
+    const out = await seedGuild('Busy Keepers', { withActivity: true });
+    const activity = defined(out.activity, 'activity');
+    expect(out.fillerMemberIds).toHaveLength(45);
+    expect(out.pulls).toBeDefined();
+    expect(out.dings).toBeDefined();
+    const [guild] = await testApp.db
+      .select({ createdAt: schema.guilds.createdAt })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, out.guildId));
+    expect(guild?.createdAt.toISOString()).toBe(activity.guildCreatedAt);
+    const imported = await testApp.db
+      .select({ createdAt: schema.guildMembers.createdAt })
+      .from(schema.guildMembers)
+      .where(inArray(schema.guildMembers.id, activity.stamped.roster_import));
+    expect(imported.length).toBeGreaterThanOrEqual(10);
+    const stamps = new Set(imported.map((r) => r.createdAt.toISOString()));
+    expect([...stamps]).toEqual([activity.rosterImportAt]);
+    expect(activity.stamped.new_member).toHaveLength(4);
+    expect(activity.events.ended).toHaveLength(2);
+    expect(activity.events.cancelled).toHaveLength(1);
+  });
+
+  it('tags Molten Core pulls with map 409; Lucifron + the unknown boss have none', async () => {
+    const out = await seedGuild('Mapped Keepers', { withActivity: true });
+    const p = schema.addonEncounterPulls;
+    const pulls = await testApp.db
+      .select({ name: p.encounterName, instanceId: p.instanceId })
+      .from(p)
+      .where(and(eq(p.guildKey, 'mapped keepers'), eq(p.gameId, out.gameId)));
+    const unmapped = pulls.filter((r) => r.instanceId === null);
+    expect(unmapped.map((r) => r.name).sort()).toEqual(
+      ['Lucifron', SHOWCASE_OTHER_BOSS].sort(),
+    );
+    expect(pulls.filter((r) => r.instanceId === 409).length).toBeGreaterThan(4);
+    await seedGuild('Mapped Keepers', { withActivity: true });
+    const again = await testApp.db
+      .select({ name: p.encounterName })
+      .from(p)
+      .where(and(eq(p.guildKey, 'mapped keepers'), eq(p.gameId, out.gameId)));
+    expect(again).toHaveLength(pulls.length);
+  });
+
+  it('the progression route returns every activity kind for the seed (LB4)', async () => {
+    await withBlizzardActive(async () => {
+      const out = await seedGuild('Route Keepers', { withActivity: true });
+      const res = await guildGet(out.guildId, 'progression', adminToken);
+      expect(res.status).toBe(200);
+      const body = WowGuildProgressionPageSchema.parse(res.body);
+      const kinds = new Set(body.activity.entries.map((e) => e.kind));
+      expect([...kinds].sort()).toEqual([...GUILD_ACTIVITY_KINDS].sort());
+      expect(body.progression.instances.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('is 400 for a non-boolean withActivity or asCaller', async () => {
+    for (const extra of [{ withActivity: 1 }, { asCaller: 'yes' }]) {
+      expect((await seed({ name: 'Flag Busy', ...extra })).status).toBe(400);
+    }
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — asCaller (ROK-1789 B9, Q-B16)', () => {
+  it('makes the JWT caller the rank-0 GUID owner with a member editor grant', async () => {
+    const admin = testApp.seed.adminUser;
+    const out = await seedGuild('Caller Keepers', { asCaller: true });
+    expect(out.users.gm.userId).toBe(admin.id);
+    expect(out.users.gm.rankIndex).toBe(0);
+    const gmChar = defined(out.users.gm.characterId ?? undefined, 'gm char');
+    const [owned] = await testApp.db
+      .select({ userId: schema.characters.userId })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, gmChar));
+    expect(owned?.userId).toBe(admin.id);
+    const grants = await testApp.db
+      .select({ memberId: schema.guildEditors.guildMemberId })
+      .from(schema.guildEditors)
+      .where(eq(schema.guildEditors.guildId, out.guildId));
+    expect(grants.map((g) => g.memberId)).toContain(out.users.gm.memberId);
+    const again = await seedGuild('Caller Keepers', { asCaller: true });
+    expect(again.users.gm.characterId).toBe(out.users.gm.characterId);
+  });
+
+  it('a plain re-seed hands the GUID character back to the seed GM (Codex P2)', async () => {
+    const admin = testApp.seed.adminUser;
+    const claimed = await seedGuild('Handback Keepers', { asCaller: true });
+    const res = await seed({
+      name: 'Handback Keepers',
+      gameSlug: WOW_FOREVER_GAME_SLUG,
+    });
+    expect(res.status).toBe(200);
+    const plain = res.body as SeedGuildResponse;
+    expect(plain.users.gm.userId).not.toBe(admin.id);
+    expect(plain.users.gm.characterId).toBe(claimed.users.gm.characterId);
+    const gmChar = defined(plain.users.gm.characterId ?? undefined, 'gm char');
+    const [owned] = await testApp.db
+      .select({
+        userId: schema.characters.userId,
+        isMain: schema.characters.isMain,
+      })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, gmChar));
+    expect(owned).toEqual({ userId: plain.users.gm.userId, isMain: true });
   });
 });

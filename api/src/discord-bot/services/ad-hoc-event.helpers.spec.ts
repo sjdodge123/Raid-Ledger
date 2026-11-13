@@ -2,9 +2,12 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { asc } from 'drizzle-orm';
+import * as tables from '../../drizzle/schema';
 import {
   createAdHocEventRow,
   findActiveScheduledEvent,
+  findAdminFallback,
 } from './ad-hoc-event.helpers';
 
 /** Recursively extract string fragments from Drizzle SQL objects. */
@@ -230,5 +233,18 @@ describe('createAdHocEventRow — title resolution (ROK-817)', () => {
 
     const insertedValues = db.values.mock.calls[0][0];
     expect(insertedValues.title).toBe('Unknown Discord Game — Quick Play');
+  });
+});
+
+describe('findAdminFallback — deterministic admin (TECH-DEBT 3040)', () => {
+  it('orders admins by id ascending so the same (oldest) admin is always picked', async () => {
+    const db = createDrizzleMock();
+    db.limit.mockResolvedValueOnce([{ id: 3 }]);
+
+    const id = await findAdminFallback(db as never);
+
+    expect(id).toBe(3);
+    expect(db.orderBy).toHaveBeenCalledWith(asc(tables.users.id));
+    expect(db.limit).toHaveBeenCalledWith(1);
   });
 });

@@ -75,8 +75,12 @@ export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.
 
     const group = overlayFor(props, data, { cells, events, day });
     return (
-        <div className="flex h-full min-h-0 flex-col gap-2" data-testid="phone-group-availability">
-            <div className="min-h-0 flex-1">
+        // `overflow-y-auto` + the wrapper's automatic minimum (no `min-h-0`):
+        // when the sheet is shorter than pager + day floor + strip + legend
+        // (320×640, where the legend also wraps a line), the module scrolls
+        // rather than letting the week strip paint over the legend below it.
+        <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto" data-testid="phone-group-availability">
+            <div className="flex-1">
                 <PhoneWeekEditorCore
                     slots={[]} hours={CHECK_HOURS} initialDay={day} onDayChange={setDay}
                     group={group}

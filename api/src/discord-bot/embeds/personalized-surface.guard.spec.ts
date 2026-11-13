@@ -132,6 +132,7 @@ const KNOWN_SPEC_HELPER_FIXTURES = [
   'events/og-meta.service.spec-helpers.ts',
   'events/signups.integration.spec-helpers.ts',
   'events/signups.spec-helpers.ts',
+  'lfg/lfg-horizon.spec-helpers.ts',
   'lfg/lfg-reads.integration.spec-helpers.ts',
   'lfg/lfg.integration.spec-helpers.ts',
   'notifications/recruitment-reminder.service.spec-helpers.ts',

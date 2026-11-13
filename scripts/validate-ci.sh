@@ -543,7 +543,11 @@ detect_scope() {
   local changed_files
   # Untracked (not ignored) files count too: a new, uncommitted spec must not
   # be invisible to the scope a --fleet gate uses to skip suites (ROK-1793 m2).
-  changed_files="$( { git diff --name-only origin/main 2>/dev/null || true
+  # core.fileMode=false: the worktree leg ignores Mutagen's 100755 -> 0644
+  # mode-only changes, as _scoped_changed_files does (ROK-2182). A committed
+  # mode change still counts — the index keeps the committed mode.
+  changed_files="$( { GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fileMode GIT_CONFIG_VALUE_0=false \
+    git diff --name-only origin/main 2>/dev/null || true
     git ls-files --others --exclude-standard 2>/dev/null || true; } | sort -u)"
 
   if echo "$changed_files" | grep -q 'drizzle/migrations'; then

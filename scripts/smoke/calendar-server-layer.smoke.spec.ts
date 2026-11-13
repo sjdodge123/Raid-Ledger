@@ -23,8 +23,8 @@
  *   `activeSlugs`), so a sibling worker is never pulled out from under. The
  *   real switch-off is a step in the fleet test plan instead.
  * - Views: phones (mobile project) drive Day via the view switcher; desktop and
- *   tablet click the toolbar's Week button (the page forces Month on mount, as
- *   `calendar.smoke.spec.ts` notes).
+ *   tablet deep-link `?view=week` (a Week click right after load can lose a race
+ *   with the page's mount-time URL writes and land back on Month).
  * - No global teardown: the projects run concurrently against ONE API with ONE
  *   shared admin, so no project may flip a global toggle or write the admin's
  *   preferences (a last-one-out restore raced a joining worker, Codex P2). The
@@ -85,12 +85,21 @@ async function appDate(page: Page, iso: string): Promise<string> {
 
 /** Open the grid on `date` in Week (desktop/tablet) or Day (phone) view. */
 async function openGrid(page: Page, testInfo: TestInfo, date?: string): Promise<void> {
-    await page.goto(date ? `/calendar?date=${date}` : '/calendar');
     if (isMobile(testInfo)) {
+        await page.goto(date ? `/calendar?date=${date}` : '/calendar');
+        // Phones always open in Schedule (no `?view=` deep link below 768px), and a Day
+        // click during the page's mount-time URL writes can be lost — click until it sticks.
         const switcher = page.locator('[aria-label="Calendar view switcher"]');
-        await switcher.getByRole('button', { name: 'Day' }).click({ timeout: 15_000 });
+        await expect(async () => {
+            await switcher.getByRole('button', { name: 'Day' }).click({ timeout: 5_000 });
+            await expect(page.locator('.rbc-time-view')).toBeVisible({ timeout: 3_000 });
+        }).toPass({ timeout: 25_000 });
     } else {
-        await page.getByRole('button', { name: 'Week', exact: true }).click({ timeout: 15_000 });
+        // Deep-link Week (honoured at >=768px since #1805). Clicking Week right after
+        // goto races the page's mount-time URL writes, which can put Month back.
+        const qs = new URLSearchParams({ view: 'week', ...(date ? { date } : {}) });
+        await page.goto(`/calendar?${qs.toString()}`);
+        await expect(page.getByRole('button', { name: 'Week', exact: true })).toHaveAttribute('aria-pressed', 'true');
     }
     await expect(page.locator('.rbc-time-view')).toBeVisible({ timeout: 15_000 });
 }

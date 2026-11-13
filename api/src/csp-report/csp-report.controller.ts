@@ -33,7 +33,8 @@ export class CspReportController {
     @Headers('content-type') contentType?: string,
   ): void {
     // Only browser CSP report types are reports: an application/json body
-    // reaches here through Nest's 2MB default parser and is dropped unlogged.
+    // reaches here through Nest's 2MB default parser and is ignored — logged
+    // with its content type, never sent to Sentry.
     if (!isCspReportContentType(contentType)) {
       this.logger.log({
         event: 'csp_violation',

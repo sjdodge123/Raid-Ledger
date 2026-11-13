@@ -10,6 +10,7 @@
 import { useId, useState, type JSX } from 'react';
 import type { WowRosterRaidProgressBossDto } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
+import { DifficultyTag } from '../components/difficulty-tag';
 import { RAID_PROGRESS_ROWS, firstKillLine, multiDifficultyEncounters, plural, rowDifficulty } from './raid-progress.helpers';
 
 type Boss = WowRosterRaidProgressBossDto;
@@ -29,10 +30,7 @@ function BossRow({ boss, label }: { boss: Boss; label: string | null }): JSX.Ele
         <li data-testid="raid-progress-row" className={ROW_CLASS}>
             <span className="col-start-1 row-start-1 min-w-0 truncate text-sm font-medium text-foreground">
                 {boss.name}
-                {label !== null && (
-                    <span data-testid="raid-progress-difficulty"
-                        className="ml-1.5 rounded border border-edge px-1 text-[11px] font-normal text-dim">{label}</span>
-                )}
+                {label !== null && <DifficultyTag label={label} testId="raid-progress-difficulty" />}
             </span>
             <span className={`col-start-1 row-start-2 text-xs sm:col-start-2 sm:row-start-1 ${killed ? 'text-muted' : 'text-dim'}`}>
                 {firstKillLine(boss.firstKillAt)}

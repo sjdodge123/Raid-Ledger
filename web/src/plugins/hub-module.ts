@@ -35,7 +35,10 @@ export interface HubTab {
     /** Within the module band only — core pins Overview/Members/Events/Resources first (ROK-1876). */
     order: number;
     component: ComponentType<HubCtx>;
-    /** Omitted = always shown. A hidden tab keeps its slot in the frame but is not rendered. */
+    /**
+     * Omitted = always shown. A hidden tab keeps its slot in the frame but is not rendered.
+     * Re-evaluated on every frame render and on any query-cache change (`useHubTabs`), so it may read the cache.
+     */
     visible?: (ctx: HubCtx) => boolean;
 }
 
