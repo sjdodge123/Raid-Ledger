@@ -4,6 +4,7 @@
  */
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { isValidIanaTimezone } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
@@ -159,6 +160,21 @@ export function buildReminderPayload(input: {
   };
 }
 
+/**
+ * Pick the first stored timezone this runtime knows, else `'UTC'`. A stored
+ * value that is not an IANA zone would make `toLocaleTimeString` throw a
+ * `RangeError` and abort the whole reminder.
+ */
+export function resolveReminderTimezone(
+  timezone?: string,
+  defaultTimezone?: string,
+): string {
+  for (const candidate of [timezone, defaultTimezone]) {
+    if (candidate && isValidIanaTimezone(candidate)) return candidate;
+  }
+  return 'UTC';
+}
+
 /** Build reminder message text and title label. */
 export function buildReminderStrings(input: {
   title: string;
@@ -167,7 +183,10 @@ export function buildReminderStrings(input: {
   timezone?: string;
   defaultTimezone?: string;
 }): { messageText: string; titleTimeLabel: string } {
-  const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
+  const timezone = resolveReminderTimezone(
+    input.timezone,
+    input.defaultTimezone,
+  );
   const timeStr = input.startTime.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',

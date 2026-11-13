@@ -321,10 +321,7 @@ export async function countActiveIntents(
   return Number(rows[0]?.count ?? '0');
 }
 
-/** Minutes between `expiresAt` and now, rounded — horizons differ by hours. */
-export function minutesFromNow(expiresAt: string | Date): number {
-  return Math.round((new Date(expiresAt).getTime() - Date.now()) / 60_000);
-}
+export { minutesFromNow } from './lfg-horizon.spec-helpers';
 
 /** Milliseconds between `expiresAt` and now, expressed in days. */
 export function daysFromNow(expiresAt: string | Date): number {
