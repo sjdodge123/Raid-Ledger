@@ -15,6 +15,8 @@ import { GuildPageService } from './guild-page.service';
 import { GuildRecruitmentController } from './guild-recruitment.controller';
 import { GuildRecruitmentService } from './guild-recruitment.service';
 import { GuildRaidsService } from './guild-raids.service';
+import { GuildProgressionController } from './progression/guild-progression.controller';
+import { GuildProgressionService } from './progression/guild-progression.service';
 import { GuildsController } from './guilds.controller';
 import { JoinGateService } from './join-gate/join-gate.service';
 import { CharacterOwnerAdminController } from './roster-claim/character-owner.admin.controller';
@@ -25,12 +27,13 @@ import { WowHubClaimProvider } from './roster-claim/wow-hub-claim.provider';
 import { RosterMemberController } from './roster-member/roster-member.controller';
 import { RosterMemberService } from './roster-member/roster-member.service';
 
-/** Hub page/content/roster routes + ROK-2128 Add character → Guild roster + ROK-2136 in-game text + ROK-2148 contributions + ROK-1789 recruitment. */
+/** Hub page/content/roster routes + ROK-2128 Add character → Guild roster + ROK-2136 in-game text + ROK-2148 contributions + ROK-1789 recruitment + progression. */
 export const CONTROLLERS = [
   GuildsController,
   GuildContentController,
   GuildIngameTextController,
   GuildRecruitmentController,
+  GuildProgressionController,
   GuildContributionsController,
   GuildBlizzardRosterController,
   ...rosterSync.CONTROLLERS,
@@ -39,13 +42,14 @@ export const CONTROLLERS = [
   RosterMemberController,
 ];
 
-/** Hub services + the Blizzard roster sync + ROK-2128 roster claim + ROK-2136 in-game text + ROK-2148 contributions + ROK-1789 recruitment. */
+/** Hub services + the Blizzard roster sync + ROK-2128 roster claim + ROK-2136 in-game text + ROK-2148 contributions + ROK-1789 recruitment + progression. */
 export const PROVIDERS = [
   GuildPageService,
   GuildRaidsService,
   GuildAddonsService,
   GuildIngameTextService,
   GuildRecruitmentService,
+  GuildProgressionService,
   GuildContributionsService,
   GuildBlizzardRosterService,
   ...rosterSync.PROVIDERS,
