@@ -5,8 +5,9 @@
 import {
   FLUSH_UPSERT_CHUNK,
   flushDirtySessions,
+  flushSingleSession,
 } from './voice-attendance-flush-write.helpers';
-import type { InMemorySession } from './voice-attendance.helpers';
+import { type InMemorySession, leaveSession } from './voice-attendance.helpers';
 import {
   createDrizzleMock,
   type MockDb,
@@ -36,9 +37,17 @@ function makeSession(n: number, over: Partial<InMemorySession> = {}) {
     isActive: false,
     activeSegmentStart: null,
     dirty: true,
+    dirtyVersion: 0,
     ...over,
   };
   return session;
+}
+
+/** Fail loudly on a missing element instead of reading through `undefined`. */
+function must<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined)
+    throw new Error(`missing ${label}`);
+  return value;
 }
 
 function toMap(sessions: InMemorySession[]): Map<string, InMemorySession> {
@@ -133,5 +142,129 @@ describe('flushDirtySessions — batched upsert (ROK-2174)', () => {
     expect(logger.warn.mock.calls[0]?.[0]).toContain('retrying per row');
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(sessions.map((s) => s.dirty)).toEqual([false, true, false]);
+  });
+});
+
+/** A promise the test resolves by hand, to hold a write "in flight". */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+/** A session that is still in voice (open last segment, no leave yet). */
+function makeActiveSession(n: number): InMemorySession {
+  const join = new Date(Date.now() - 60_000);
+  return makeSession(n, {
+    isActive: true,
+    activeSegmentStart: join,
+    lastLeaveAt: null,
+    totalDurationSec: 0,
+    segments: [{ joinAt: join.toISOString(), leaveAt: null, durationSec: 0 }],
+  });
+}
+
+/** The written row must carry the leave: last_leave_at and a closed segment. */
+function expectLeaveWritten(row: unknown, session: InMemorySession): void {
+  expect(session.lastLeaveAt).not.toBeNull();
+  expect(row).toMatchObject({
+    lastLeaveAt: session.lastLeaveAt,
+    segments: [{ leaveAt: session.lastLeaveAt?.toISOString() }],
+  });
+}
+
+describe('voice flush — a leave landing mid-write is not lost', () => {
+  let mockDb: MockDb;
+  let logger: ReturnType<typeof makeLogger>;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.onConflictDoUpdate.mockResolvedValue(undefined);
+    logger = makeLogger();
+  });
+
+  it('batch path: keeps the session dirty and writes the leave on the next flush', async () => {
+    const write = deferred();
+    mockDb.onConflictDoUpdate.mockReturnValueOnce(write.promise);
+    const session = makeActiveSession(1);
+    const map = toMap([session]);
+
+    const flushing = flushDirtySessions(mockDb as never, map, logger);
+    leaveSession(session); // arrives while the upsert is awaited
+    write.resolve();
+    await flushing;
+
+    expect(session.dirty).toBe(true);
+    await flushDirtySessions(mockDb as never, map, logger);
+    expect(mockDb.values).toHaveBeenCalledTimes(2);
+    const rows: unknown[] = must(mockDb.values.mock.calls[1]?.[0], 'rows');
+    expectLeaveWritten(rows[0], session);
+    expect(session.dirty).toBe(false);
+  });
+
+  it('single path: keeps the session dirty and writes the leave on the next flush', async () => {
+    const write = deferred();
+    mockDb.onConflictDoUpdate.mockReturnValueOnce(write.promise);
+    const session = makeActiveSession(1);
+
+    const flushing = flushSingleSession(mockDb as never, session, logger);
+    leaveSession(session); // arrives while the upsert is awaited
+    write.resolve();
+    await flushing;
+
+    expect(session.dirty).toBe(true);
+    await flushSingleSession(mockDb as never, session, logger);
+    expect(mockDb.values).toHaveBeenCalledTimes(2);
+    expectLeaveWritten(mockDb.values.mock.calls[1][0], session);
+    expect(session.dirty).toBe(false);
+  });
+
+  it('still clears dirty when nothing changed during the write', async () => {
+    const single = makeSession(1);
+    const batched = makeSession(2);
+    await flushSingleSession(mockDb as never, single, logger);
+    await flushDirtySessions(mockDb as never, toMap([batched]), logger);
+
+    expect([single.dirty, batched.dirty]).toEqual([false, false]);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+});
+
+describe('voice flush — a leave landing during the per-row retry is not lost', () => {
+  let mockDb: MockDb;
+  let logger: ReturnType<typeof makeLogger>;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.onConflictDoUpdate.mockResolvedValue(undefined);
+    logger = makeLogger();
+  });
+
+  it('batch fails, then a leave lands during the per-row retry: stays dirty', async () => {
+    const retryStarted = deferred();
+    const retryWrite = deferred();
+    mockDb.onConflictDoUpdate
+      .mockRejectedValueOnce(new Error('batch boom')) // the batch
+      .mockImplementationOnce(() => {
+        retryStarted.resolve(); // the per-row retry is now awaiting its write
+        return retryWrite.promise;
+      });
+    const session = makeActiveSession(1);
+    const map = toMap([session]);
+
+    const flushing = flushDirtySessions(mockDb as never, map, logger);
+    await retryStarted.promise;
+    leaveSession(session); // arrives while the per-row retry is awaited
+    retryWrite.resolve();
+    await flushing;
+
+    expect(mockDb.insert).toHaveBeenCalledTimes(2); // batch + 1 retry
+    expect(session.dirty).toBe(true);
+    await flushDirtySessions(mockDb as never, map, logger);
+    const rows: unknown[] = must(mockDb.values.mock.calls[2]?.[0], 'rows');
+    expectLeaveWritten(rows[0], session);
+    expect(session.dirty).toBe(false);
   });
 });
