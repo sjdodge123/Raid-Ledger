@@ -83,7 +83,7 @@ describe('CraftersTab', () => {
         await userEvent.click(screen.getByRole('button', { name: '300', pressed: false }));
         expect(screen.getByText('No crafter matches these filters.')).toBeInTheDocument();
         expect(screen.queryByRole('list', { name: 'Crafters by profession' })).toBeNull();
-        await userEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
         expect(await cardTitles()).toEqual(['Alchemy', 'Mining']);
     });
 
