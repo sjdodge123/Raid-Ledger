@@ -882,6 +882,18 @@ async function assertPhoneGroupModule(
     }
 }
 
+/**
+ * How far (px) the strip's bottom edge runs past the legend's top edge; a
+ * missing box reads as a large overlap so the poll keeps waiting for layout.
+ */
+function stripOverlapPx(
+    strip: { y: number; height: number } | null,
+    legend: { y: number } | null,
+): number {
+    if (!strip || !legend) return Number.POSITIVE_INFINITY;
+    return strip.y + strip.height - legend.y;
+}
+
 // ROK-1587 (1587-6): an hour a poll slot starts in appends ", N voted".
 const PHONE_CELL_LABEL = /^(\d+ free( · \d+ stale)? · \d+ unknown|no data)(, \d+ voted)?$/;
 
@@ -927,6 +939,36 @@ test.describe('Scheduling poll heatmap', () => {
                 message: 'the week view must render at least 7 hours x 7 days of cell buttons',
             })
             .toBeGreaterThanOrEqual(49);
+    });
+
+    /**
+     * 320×640 (TECH-DEBT 2026-11-10, ROK-2167 verify lane): the sheet is
+     * shorter than pager + day floor + week strip + a legend that wraps an
+     * extra line, and the editor's wrapper used to shrink below its content —
+     * so the week strip painted 15px over the legend. Both projects run it:
+     * the viewport is set explicitly and the sheet is the phone surface below
+     * 1024px, so the desktop project exercises the same layout.
+     */
+    test('at 320px the phone week strip does not overlap the heatmap legend', async ({
+        page,
+    }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await pollSchedulingPollHasSlot(adminToken, lineupId, matchId);
+        await goToPoll(page, lineupId, matchId);
+        await openBetterTimeSheet(page);
+        await assertPhoneGroupModule(page);
+
+        const strip = page.getByTestId('phone-week-strip');
+        const legend = page.getByTestId('phone-group-legend');
+        await expect(legend, 'the poll aggregate carries freshness, so the legend renders').toBeAttached({
+            timeout: 15_000,
+        });
+        await expect
+            .poll(async () => stripOverlapPx(await strip.boundingBox(), await legend.boundingBox()), {
+                timeout: 10_000,
+                message: 'the week strip\'s bottom edge must sit at or above the legend\'s top edge (px of overlap)',
+            })
+            .toBeLessThanOrEqual(0.5);
     });
 
     /**
