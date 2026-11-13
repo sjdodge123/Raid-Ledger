@@ -2672,7 +2672,11 @@ SCOPED_TARGETS=""
 # main's own commits. Quiet and best-effort — offline or no remote leaves the
 # ref as it was, and run_scoped_gate still fails closed if it does not resolve.
 _scoped_refresh_base() {
-  GIT_TERMINAL_PROMPT=0 git fetch --quiet origin main >/dev/null 2>&1 || true
+  # Never hang the gate: no prompts, abort a stalled HTTPS transfer after 20 s
+  # under 1 KB/s, and fail fast on SSH remotes (review MINOR, ROK-2182).
+  GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=20 \
+    GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh} -o BatchMode=yes -o ConnectTimeout=10" \
+    git fetch --quiet origin main >/dev/null 2>&1 || true
 }
 
 # The branch's own changes: merge-base diff + uncommitted + untracked files.
