@@ -110,7 +110,9 @@ describe('EmbedPosterService — first post carries the Join Series row', () => 
           useValue: {
             getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
             getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
-            getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
+            getEphemeralVoiceCreateBufferMinutes: jest
+              .fn()
+              .mockResolvedValue(30),
             getBranding: jest.fn().mockResolvedValue({ communityName: 'G' }),
             getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
             getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),

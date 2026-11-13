@@ -101,7 +101,9 @@ describe('EmbedPosterService — first post derives its own state (ROK-1622)', (
           useValue: {
             getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
             getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
-            getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
+            getEphemeralVoiceCreateBufferMinutes: jest
+              .fn()
+              .mockResolvedValue(30),
             getBranding: jest
               .fn()
               .mockResolvedValue({ communityName: 'Test Guild' }),
