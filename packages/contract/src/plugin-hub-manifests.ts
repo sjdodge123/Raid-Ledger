@@ -148,7 +148,8 @@ const blizzard = {
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
-    { id: 'progression', label: 'Progression', planned: true },
+    // ROK-1789 Part B — the Forever Progression tab (see-all of Raid progress).
+    { id: 'progression', label: 'Progression' },
     { id: 'loot', label: 'Loot', planned: true },
   ],
   behaviours: [
