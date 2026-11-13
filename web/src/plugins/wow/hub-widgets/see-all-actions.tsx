@@ -6,7 +6,8 @@
 import type { JSX } from 'react';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 
-function SeeAll({ href, testId }: { href: string; testId: string }): JSX.Element {
+/** The shared "See all" tab-jump link (44px target, success-tone text). */
+export function SeeAll({ href, testId }: { href: string; testId: string }): JSX.Element {
     return (
         <a href={href} data-testid={testId}
             className={`inline-flex min-h-11 items-center rounded-sm text-sm font-medium text-success hover:underline ${FOCUS_RING}`}>

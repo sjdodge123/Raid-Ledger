@@ -14,6 +14,7 @@ import {
 import { sql } from 'drizzle-orm';
 import type {
   GuildLinkGroup,
+  GuildRecruitment,
   GuildRuleSection,
   HubWidgetPrefs,
 } from '@raid-ledger/contract';
@@ -180,6 +181,19 @@ export const guildProfiles = pgTable(
     gameInfoAcknowledgedAt: timestamp('game_info_acknowledged_at', {
       withTimezone: true,
     }),
+    /**
+     * ROK-1789 (S5 part A, A-D2): guild recruitment — the switch, the wanted
+     * rows with per-row state, the apply URL. NULL = never set or cleared.
+     * Read with `GuildRecruitmentSchema.safeParse` (old shape → unset).
+     */
+    recruitment: jsonb('recruitment').$type<GuildRecruitment>(),
+    recruitmentUpdatedAt: timestamp('recruitment_updated_at', {
+      withTimezone: true,
+    }),
+    recruitmentUpdatedBy: integer('recruitment_updated_by').references(
+      () => users.id,
+      { onDelete: 'set null' },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -207,6 +221,9 @@ export const guildProfiles = pgTable(
       .where(sql`${table.mediaChannelId} IS NOT NULL`),
     index('idx_guild_profiles_media_channel_set_by').on(
       table.mediaChannelSetBy,
+    ),
+    index('idx_guild_profiles_recruitment_updated_by').on(
+      table.recruitmentUpdatedBy,
     ),
     ...ingameTextConstraints(table),
     ...gameTextConstraints(table),

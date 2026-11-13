@@ -134,3 +134,24 @@ test('refreshing the base tolerates a missing/unreachable origin (ROK-2182)', (t
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout.trim(), 'ok');
 });
+
+test('detect_scope ignores a mode-only change in the worktree (Mutagen 100755 -> 0644)', (t) => {
+  const root = makeRepo(t, { withBase: true });
+  put(root, 'docker/allinone/entrypoint.sh', '#!/bin/sh\n');
+  git(root, 'add', '.');
+  git(root, 'update-index', '--chmod=+x', 'docker/allinone/entrypoint.sh');
+  git(root, 'commit', '-q', '-m', 'exec script');
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+  spawnSync('chmod', ['0644', join(root, 'docker/allinone/entrypoint.sh')]);
+  git(root, 'config', 'core.fileMode', 'true');
+  assert.match(git(root, 'diff', '--summary', 'HEAD'), /mode change 100755 => 100644/, 'fixture must show a mode-only diff');
+  put(root, 'web/src/a.ts');
+
+  const r = inScript(root, 'detect_scope >/dev/null; echo "container=$container_changed workspace=$detected_workspace"');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(
+    r.stdout.trim(),
+    'container=false workspace=web',
+    'a mode-only Dockerfile-adjacent file must not flag container changes or widen the workspace',
+  );
+});

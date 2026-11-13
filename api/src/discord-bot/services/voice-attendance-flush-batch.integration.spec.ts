@@ -75,6 +75,7 @@ function session(
     isActive: false,
     activeSegmentStart: null,
     dirty: true,
+    dirtyVersion: 0,
   };
 }
 
