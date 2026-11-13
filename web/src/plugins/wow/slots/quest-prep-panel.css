@@ -165,7 +165,7 @@
 }
 
 .quest-card__wowhead-icon:hover {
-    color: var(--color-indigo-400);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 /* Inset the focus ring: the right-hand 8px overhang sits in the card's
@@ -202,9 +202,9 @@
     border-radius: 9999px;
     font-size: 0.625rem;
     font-weight: 600;
-    background: rgba(251, 191, 36, 0.12);
-    color: rgb(251, 191, 36);
-    border: 1px solid rgba(251, 191, 36, 0.25);
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
+    border: 1px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -220,11 +220,11 @@
 }
 
 .quest-card__inline-status--covered {
-    color: rgb(74, 222, 128);
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .quest-card__inline-status--needed {
-    color: rgb(251, 191, 36);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-card__body {
@@ -257,7 +257,7 @@
 }
 
 .quest-card__meta-item--sharable {
-    color: rgb(96, 165, 250);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .quest-card__details {
@@ -305,7 +305,7 @@
 }
 
 .quest-card__wowhead-link:hover {
-    color: var(--color-indigo-400);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .quest-card__name {
@@ -320,7 +320,7 @@
 }
 
 .quest-card__name a:hover {
-    color: var(--color-indigo-400);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
     text-decoration: underline;
 }
 
@@ -355,9 +355,9 @@
     border-radius: 9999px;
     font-size: 0.6875rem;
     font-weight: 600;
-    background: rgba(59, 130, 246, 0.12);
-    color: rgb(96, 165, 250);
-    border: 1px solid rgba(59, 130, 246, 0.25);
+    background: color-mix(in srgb, var(--color-faction-alliance) 12%, transparent);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
+    border: 1px solid color-mix(in srgb, var(--color-faction-alliance) 25%, transparent);
     white-space: nowrap;
 }
 
@@ -373,11 +373,11 @@
 }
 
 .quest-coverage--covered {
-    color: rgb(74, 222, 128);
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .quest-coverage--uncovered {
-    color: rgb(251, 191, 36);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-coverage__status {
@@ -385,7 +385,7 @@
 }
 
 .quest-coverage__status--needed {
-    color: rgb(251, 191, 36);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-coverage__also {
@@ -418,23 +418,23 @@
 }
 
 .quest-coverage__btn--add {
-    background: rgba(251, 191, 36, 0.15);
-    color: rgb(251, 191, 36);
-    border: 1px solid rgba(251, 191, 36, 0.3);
+    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
+    border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
 }
 
 .quest-coverage__btn--add:hover:not(:disabled) {
-    background: rgba(251, 191, 36, 0.25);
+    background: color-mix(in srgb, var(--color-warning) 25%, transparent);
 }
 
 .quest-coverage__btn--checked {
-    background: rgba(74, 222, 128, 0.15);
-    color: rgb(74, 222, 128);
-    border: 1px solid rgba(74, 222, 128, 0.3);
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
+    border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
 }
 
 .quest-coverage__btn--checked:hover:not(:disabled) {
-    background: rgba(74, 222, 128, 0.25);
+    background: color-mix(in srgb, var(--color-success) 25%, transparent);
 }
 
 /* Prerequisite chain */
@@ -540,11 +540,11 @@
 }
 
 .quest-reward-gold {
-    color: rgb(252, 211, 77);
+    color: color-mix(in srgb, var(--color-warning) 60%, var(--color-foreground));
 }
 
 .quest-reward-xp {
-    color: rgb(196, 181, 253);
+    color: color-mix(in srgb, var(--color-busy) 55%, var(--color-foreground));
 }
 
 .quest-reward-choice {
@@ -554,7 +554,7 @@
 
 /* Upgrade indicator */
 .quest-reward-upgrade {
-    color: rgb(74, 222, 128);
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
     font-size: 0.75rem;
     font-weight: 700;
     margin-left: 0.125rem;
@@ -562,52 +562,56 @@
 
 /* Quality colors */
 .quality-poor {
-    color: rgb(157, 157, 157);
+    color: var(--color-muted);
 }
 
 .quality-common {
-    color: rgb(209, 213, 219);
+    color: var(--color-foreground);
 }
 
 .quality-uncommon {
-    color: rgb(74, 222, 128);
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .quality-rare {
-    color: rgb(96, 165, 250);
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .quality-epic {
-    color: rgb(192, 132, 252);
+    color: color-mix(in srgb, var(--color-item-level) 50%, var(--color-foreground));
 }
 
 .quality-legendary {
-    color: rgb(251, 146, 60);
+    color: color-mix(
+        in srgb,
+        color-mix(in srgb, var(--color-warning) 70%, var(--color-danger)) 55%,
+        var(--color-foreground)
+    );
 }
 
 /* Quality borders for icons */
 .quality-border-poor {
-    border: 1px solid rgb(107, 114, 128);
+    border: 1px solid var(--color-dim);
 }
 
 .quality-border-common {
-    border: 1px solid rgb(156, 163, 175);
+    border: 1px solid var(--color-muted);
 }
 
 .quality-border-uncommon {
-    border: 1px solid rgb(34, 197, 94);
+    border: 1px solid var(--color-success);
 }
 
 .quality-border-rare {
-    border: 1px solid rgb(59, 130, 246);
+    border: 1px solid var(--color-faction-alliance);
 }
 
 .quality-border-epic {
-    border: 1px solid rgb(168, 85, 247);
+    border: 1px solid var(--color-item-level);
 }
 
 .quality-border-legendary {
-    border: 1px solid rgb(249, 115, 22);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 70%, var(--color-danger));
 }
 
 /* Completion checkbox */
@@ -628,13 +632,13 @@
 }
 
 .quest-checkbox:checked {
-    background: rgb(79, 70, 229);
-    border-color: rgb(99, 102, 241);
+    background: var(--color-success);
+    border-color: var(--color-success);
 }
 
 .quest-checkbox:checked::after {
     content: '✓';
-    color: white;
+    color: var(--color-status-solid-label);
     font-size: 0.625rem;
     font-weight: 700;
 }
@@ -692,15 +696,19 @@
 }
 
 .quest-badge-class {
-    background: rgba(251, 146, 60, 0.12);
-    color: rgb(251, 146, 60);
-    border: 1px solid rgba(251, 146, 60, 0.25);
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: color-mix(
+        in srgb,
+        color-mix(in srgb, var(--color-warning) 70%, var(--color-danger)) 55%,
+        var(--color-foreground)
+    );
+    border: 1px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
 }
 
 .quest-badge-race {
-    background: rgba(168, 85, 247, 0.12);
-    color: rgb(192, 132, 252);
-    border: 1px solid rgba(168, 85, 247, 0.25);
+    background: color-mix(in srgb, var(--color-item-level) 12%, transparent);
+    color: color-mix(in srgb, var(--color-item-level) 50%, var(--color-foreground));
+    border: 1px solid color-mix(in srgb, var(--color-item-level) 25%, transparent);
 }
 
 /* Dimmed quest card (character can't use) */
@@ -722,8 +730,8 @@
     border-radius: 9999px;
     font-size: 0.625rem;
     font-weight: 600;
-    background: rgba(239, 68, 68, 0.12);
-    color: rgb(248, 113, 113);
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+    color: var(--color-danger);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 25%, transparent);
     white-space: nowrap;
 }

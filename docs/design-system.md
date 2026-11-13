@@ -148,6 +148,11 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
 - **DO** put the opacity modifier on the token (`bg-success/10`, `border-warning/30`): it works at any
   alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
   `bg-amber-500/70` had none; `bg-warning/70` needs none.
+- **DO** mix an accent token toward `--color-foreground` when it is small **text** on a raised surface
+  (`--color-overlay` / `--color-faint`) where the bare token misses 4.5:1 — e.g. dark `--color-busy` is 3.8:1 on
+  overlay. `color-mix(in srgb, var(--color-busy) 55%, var(--color-foreground))` lightens it on dark and darkens it
+  on light, so one rule clears AA in both families (Quest Prep XP, ROK-2183). Pick the highest % that still holds on
+  the hover surface; keep fills and borders on the bare token.
 - **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because
   `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:840-848`)
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
