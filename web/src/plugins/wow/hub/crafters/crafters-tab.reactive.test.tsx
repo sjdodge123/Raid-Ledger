@@ -6,7 +6,7 @@
  * re-render of the strip.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import type { JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
@@ -72,17 +72,18 @@ describe('Crafters tab visibility follows the roster-insights cache', () => {
         renderHub();
         expect(screen.getByText('crafters')).toBeInTheDocument();
         await screen.findByText('insights:loaded');
-        expect(screen.queryByText('crafters'), 'Crafters tab still shown after an empty-professions payload landed').toBeNull();
+        await waitFor(() => {
+            expect(screen.queryByText('crafters'), 'Crafters tab still shown after an empty-professions payload landed').toBeNull();
+        });
     });
 
     it('comes back when profession data appears in the cache', async () => {
         server.use(rosterInsightsHandler({ all: NO_PROFESSIONS_FIXTURE }));
         renderHub();
-        await screen.findByText('insights:loaded');
-        expect(screen.queryByText('crafters')).toBeNull();
+        await waitFor(() => expect(screen.queryByText('crafters')).toBeNull());
         act(() => {
             queryClient.setQueryData(rosterInsightsKey(PAGE.guild.id, false, 1), PROFESSIONS_FIXTURE);
         });
-        expect(screen.getByText('crafters')).toBeInTheDocument();
+        expect(await screen.findByText('crafters')).toBeInTheDocument();
     });
 });
