@@ -51,6 +51,10 @@ function build(kind: 'voice' | 'text' | 'uncached') {
     getBranding: jest.fn().mockResolvedValue({ communityName: 'Guild' }),
     getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
     getDiscordBotDefaultVoiceChannel: jest.fn().mockResolvedValue(null),
+    // The planned-channel gate is off: these cases pin the override rule only.
+    getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+    getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+    getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
   } as unknown as SettingsService;
   const resolver = new ChannelResolverService(settings, bindings, client);
   const event = {
@@ -68,6 +72,7 @@ function build(kind: 'voice' | 'text' | 'uncached') {
     select: jest
       .fn()
       .mockReturnValueOnce(selectChain([event]))
+      .mockReturnValueOnce(selectChain([{ name: 'WoW' }]))
       .mockReturnValueOnce(selectChain([{ value: 2 }])),
   };
   const service = new PugInviteService(db as never, client, resolver, settings);
