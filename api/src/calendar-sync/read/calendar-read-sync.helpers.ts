@@ -59,6 +59,7 @@ import {
   type NormalizedBusyBlock,
   type ReadWindow,
 } from './calendar-read-normalize.helpers';
+import { insertBusyBlocks } from './calendar-busy-insert.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 export type ReadSyncTx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -239,7 +240,7 @@ async function replaceBlocks(
     .where(and(eq(t.connectionId, conn.id), gt(t.endsAt, window.start)));
   if (rows.length === 0) return;
   const owner = { connectionId: conn.id, userId: conn.userId };
-  await tx.insert(t).values(rows.map((r) => ({ ...r, ...owner })));
+  await insertBusyBlocks(tx, rows, owner);
 }
 
 /**
