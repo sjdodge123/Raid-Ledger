@@ -105,7 +105,8 @@ function ggShareStats(dto: GgPublicSummaryDto): GgShareStat[] {
 
 /**
  * The og:description counts line, zero values dropped and singular for one:
- * "42 events · 380h played · played with 17 people".
+ * "42 events · 380h played · played with 17 people". Never empty: a GG with
+ * no counts reads "The Night Owl · GG 2026" (or the stock line + year).
  */
 export function ggShareCountsLine(dto: GgPublicSummaryDto): string {
   const hours = wholeHours(dto);
@@ -116,10 +117,22 @@ export function ggShareCountsLine(dto: GgPublicSummaryDto): string {
     [hours, `${hours}h played`],
     [people, `played with ${people} ${plural(people, 'person', 'people')}`],
   ];
-  return parts
+  const line = parts
     .filter(([count]) => count > 0)
     .map(([, text]) => text)
     .join(' · ');
+  return line || ggShareFallbackLine(dto);
+}
+
+/** Shown when a GG has no counted stat (voice- or hubs-only year). */
+export const GG_SHARE_NO_STATS_LINE = 'A year in games with the community';
+
+/** og:description for a GG with no counts: superlative (or the stock line) + year. */
+function ggShareFallbackLine(dto: GgPublicSummaryDto): string {
+  const lead = dto.superlative
+    ? SUPERLATIVE_TITLES[dto.superlative]
+    : GG_SHARE_NO_STATS_LINE;
+  return `${lead} · GG ${dto.year}`;
 }
 
 /** Builds one satori element. */
@@ -245,7 +258,15 @@ const ROOT: Style = {
   fontFamily: 'Inter',
 };
 
+/** The stat tiles, or one stock line when none is non-zero (never an empty row). */
 function stats(m: GgShareCardModel): GgCardNode {
+  if (m.stats.length === 0) {
+    return ggNode(
+      'div',
+      { ...ONE_LINE, fontSize: 36, fontWeight: 700, color: C.accent },
+      GG_SHARE_NO_STATS_LINE,
+    );
+  }
   return ggNode(
     'div',
     { display: 'flex' },

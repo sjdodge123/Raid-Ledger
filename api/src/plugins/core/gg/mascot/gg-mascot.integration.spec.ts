@@ -158,7 +158,7 @@ describe('GG mascot API (integration)', () => {
     expect(fs.readFileSync(path.join(MASCOT_DIR, '333.mp3'))).toEqual(MP3);
     // Served anonymously from the extensionless URL (prod nginx static regex).
     await testApp.request
-      .get(res.body.imageUrl)
+      .get(String(res.body.imageUrl))
       .expect(200)
       .expect('Content-Type', /image\/webp/);
     const stored = await testApp.app

@@ -149,3 +149,33 @@ describe('share card — no zero values, singular counts (ROK-2187)', () => {
     );
   });
 });
+
+describe('share card — a GG with no counted stats (voice/hubs-only)', () => {
+  const EMPTY: GgPublicSummaryDto = {
+    ...DTO,
+    eventsAttended: 0,
+    hoursPlayedSeconds: 0,
+    playedWithCount: 0,
+  };
+
+  it('never leaves og:description empty: superlative + year', () => {
+    expect(ggShareCountsLine(EMPTY)).toBe('The Night Owl · GG 2026');
+  });
+
+  it('falls back to the year alone without a superlative', () => {
+    expect(ggShareCountsLine({ ...EMPTY, superlative: null })).toBe(
+      'A year in games with the community · GG 2026',
+    );
+  });
+
+  it('draws a fallback line instead of an empty stats row', () => {
+    const tree = JSON.stringify(buildGgShareCardTree(EMPTY));
+    expect(ggShareCardModel(EMPTY).stats).toEqual([]);
+    expect(tree).toContain('A year in games with the community');
+  });
+
+  it('does not add the fallback line when there are stats', () => {
+    const tree = JSON.stringify(buildGgShareCardTree(DTO));
+    expect(tree).not.toContain('A year in games with the community');
+  });
+});

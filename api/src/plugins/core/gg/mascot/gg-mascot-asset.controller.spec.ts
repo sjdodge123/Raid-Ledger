@@ -61,8 +61,8 @@ describe('GgMascotAssetController', () => {
   );
 
   it('404s a well-formed token whose file does not exist', async () => {
-    await expect(
-      controller.asset('777-gif', fakeRes().res),
-    ).rejects.toThrow(NotFoundException);
+    await expect(controller.asset('777-gif', fakeRes().res)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

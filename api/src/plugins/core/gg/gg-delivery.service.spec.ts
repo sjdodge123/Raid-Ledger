@@ -37,6 +37,7 @@ function build(): {
   sendEmbed: jest.Mock;
   bot: { connected: boolean };
   create: jest.Mock;
+  dispatch: jest.Mock;
 } {
   const marked = new Set<string>();
   const dedup = {
