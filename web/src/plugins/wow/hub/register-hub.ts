@@ -6,7 +6,7 @@
  */
 import { lazy } from 'react';
 import type { HubModule } from '../../hub-module';
-import { HiddenTab, WowRaidsTab } from './wow-tabs';
+import { HiddenTab, WowProgressionTab, WowRaidsTab, progressionTabVisible } from './wow-tabs';
 import { WowFactionPill, WowFoundedPill, WowViewerRolePills, WowWhereFact } from './wow-hero';
 import { WowGuildStateBanner } from './wow-guild-state-banner';
 import { wowHeroNote } from './wow-hero.helpers';
@@ -41,8 +41,9 @@ export const wowHubModule: HubModule = {
     kind: 'wow_guild',
     tabs: [
         { id: 'raids', label: 'Raids', order: 10, component: WowRaidsTab },
-        /** Placeholders from the approved prototype — hidden until their story ships (spec Q3). */
-        { id: 'progression', label: 'Progression', order: 20, component: HiddenTab, visible: () => false },
+        /** ROK-1789 Part B: Forever guilds, members + staff only (Q-B15, B10). */
+        { id: 'progression', label: 'Progression', order: 20, component: WowProgressionTab, visible: progressionTabVisible },
+        /** Placeholder from the approved prototype — hidden until its story ships (spec Q3). */
         { id: 'loot', label: 'Loot', order: 30, component: HiddenTab, visible: () => false },
     ],
     overviewWidgets: [

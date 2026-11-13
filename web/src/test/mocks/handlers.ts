@@ -18,6 +18,7 @@ import { hubPostsHandlers } from './hub-posts-handlers';
 import { hubSessionNoteHandlers } from './hub-session-note-handlers';
 import { guildIngameTextHandlers } from './guild-ingame-text-handlers';
 import { guildRecruitmentHandlers } from './guild-recruitment-handlers';
+import { guildProgressionHandlers } from './guild-progression-handlers';
 import { guildContributionsHandlers } from './guild-contributions-handlers';
 import { bg3Handlers } from './bg3-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
@@ -43,6 +44,8 @@ export const handlers = [
     ...hubPostsHandlers, ...hubSessionNoteHandlers,
     // Guild message (ROK-2136) + Recruitment (ROK-1789) — nothing set, cards hidden.
     ...guildIngameTextHandlers, ...guildRecruitmentHandlers,
+    // Progression tab (ROK-1789 Part B) — no pulls, no activity.
+    ...guildProgressionHandlers,
     ...guildContributionsHandlers,
     ...bg3Handlers,
     ...guildDiscordHandlers,

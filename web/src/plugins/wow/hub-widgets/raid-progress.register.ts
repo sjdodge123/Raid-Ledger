@@ -4,12 +4,13 @@
  * cards; span 2 (core clamps it to 1 on a phone). Raid progress is members +
  * staff only: the API omits `raidProgress` for visitors, so `audience` is
  * 'everyone' and `useVisible` gates on the key (see `gear-readiness.register.ts`).
- * No "See all" action: no hub tab holds boss progress, and the card already
- * expands to the full boss list in place ("N more bosses").
+ * ROK-1789 Part B: the header "See all" jumps to the Progression tab, which
+ * holds every instance's bosses plus the guild activity feed.
  */
 import { lazy } from 'react';
 import type { HubGameWidget, HubWidgetCtx } from '../../hub-game-widgets';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
+import { RaidProgressSeeAll } from './raid-progress-see-all';
 import { useRosterInsights } from './use-roster-insights';
 
 /** Visible once the roster insights carry a `raidProgress` section (even an empty one). */
@@ -28,6 +29,7 @@ export const raidProgressWidget: HubGameWidget = {
     order: 89,
     span: 2,
     audience: 'everyone',
+    action: RaidProgressSeeAll,
     component: lazy(() => import('./raid-progress-widget')),
     useVisible: useRaidProgressVisible,
 };
