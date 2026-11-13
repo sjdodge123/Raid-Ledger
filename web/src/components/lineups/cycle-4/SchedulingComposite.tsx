@@ -329,6 +329,7 @@ export function SchedulingComposite(
         <EarlyCreateConfirmModal
           distinctVoters={lock.pendingDistinctVoters}
           memberCount={lock.pendingMemberCount}
+          isReschedule={poll.match.linkedEventId != null}
           timeLabel={formatSlotTime(lock.pendingSlot.proposedTime).label}
           onCancel={lock.cancelLock}
           onConfirm={lock.confirmLock}
