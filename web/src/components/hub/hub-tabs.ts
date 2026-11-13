@@ -31,6 +31,9 @@ export function canOpenHubPosts(ctx: HubCtx): boolean {
 /** Core's tab ids (`hubTabs` below); a module or game tab may not reuse one. Declared under `core` (ROK-1969). */
 export const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts'];
 
+/** Collided game-tab ids already warned about — the band is rebuilt on every cache change (`useHubTabs`), the warning once. */
+const warnedCollisions = new Set<string>();
+
 /**
  * The module band: the kind module's own tabs plus every plugin's game tabs
  * (ROK-1912 `registerHubGameTab`), each game tab gated on `page.guild.gameSlug`.
@@ -46,7 +49,10 @@ export function hubModuleTabs(mod: HubModule | undefined): HubTab[] {
             taken.add(t.id);
             return true;
         }
-        if (import.meta.env.DEV) console.warn(`[hub] game tab "${t.id}" collides with an existing hub tab id; dropped`);
+        if (import.meta.env.DEV && !warnedCollisions.has(t.id)) {
+            warnedCollisions.add(t.id);
+            console.warn(`[hub] game tab "${t.id}" collides with an existing hub tab id; dropped`);
+        }
         return false;
     });
     return [...own, ...games];
