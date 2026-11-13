@@ -3,9 +3,11 @@
  * real DB: a Forever guild (roster rows + 3 linked characters + 1 LedgerLink
  * snapshot). Asserts the contract parse, the visitor/member professions
  * and lockouts (ROK-1914) split, import invalidation of the 5-min cache (incl. a real first-time
- * create import), the hidden-hub 404, and a 2000-row timing guard with 300
- * linked + snapshotted rows so the character/snapshot fact queries run.
+ * create import), the hidden-hub 404, and a 2000-row query-budget guard (SQL
+ * statement count equals a 20-row roster's; p95 logged) with 300 linked +
+ * snapshotted rows so the character/snapshot fact queries run.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as bcrypt from 'bcrypt';
 import { and, eq, sql } from 'drizzle-orm';
 import { WowRosterInsightsSchema } from '@raid-ledger/contract';
@@ -582,46 +584,105 @@ async function linkBigRoster(): Promise<void> {
   );
 }
 
+/** Insert `count` roster rows; the first `linked` carry linkBigRoster's guids. */
+async function insertRoster(
+  gid: number,
+  count: number,
+  linked: number,
+): Promise<void> {
+  const rows = Array.from({ length: count }, (_, i) =>
+    memberRow(
+      gid,
+      i < linked ? `Player-7-big${i}` : `Player-7-g${gid}-${i}`,
+      `Big${i}`,
+      (i % 60) + 1,
+      i % 2 ? 'Mage' : 'Rogue',
+    ),
+  );
+  for (let i = 0; i < rows.length; i += 500)
+    await testApp.db.insert(schema.guildMembers).values(rows.slice(i, i + 500));
+}
+
+/**
+ * Run `fn` and count the SQL statements IT issues: every drizzle query goes
+ * through the app client's `unsafe`, and the AsyncLocalStorage scope counts
+ * only calls made inside `fn`'s async context (work it starts that outlives
+ * it, or a `db.transaction`/raw `$client` path, is not counted).
+ */
+async function countQueries<T>(
+  fn: () => Promise<T>,
+): Promise<{ result: T; queries: number }> {
+  const client = testApp._appClient;
+  const original: unknown = Reflect.get(client, 'unsafe');
+  if (typeof original !== 'function') throw new Error('client.unsafe missing');
+  const scope = new AsyncLocalStorage<true>();
+  let queries = 0;
+  Reflect.set(client, 'unsafe', (...args: unknown[]): unknown => {
+    if (scope.getStore()) queries += 1;
+    return Reflect.apply(original, client, args);
+  });
+  try {
+    const result = await scope.run(true, fn);
+    return { result, queries };
+  } finally {
+    Reflect.set(client, 'unsafe', original);
+  }
+}
+
+/**
+ * p95 of 10 uncached computes — logged as a metric. Only a catastrophic
+ * backstop (10 s, ~65x the measured p95) is asserted; the real scale guard is
+ * the query budget, so a slow shared runner cannot flake it.
+ */
+async function logP95(gid: number): Promise<void> {
+  const svc = testApp.app.get(RosterInsightsService);
+  const times: number[] = [];
+  for (let run = 0; run < 10; run += 1) {
+    const t0 = performance.now();
+    await svc.compute(gid, 'member', false);
+    times.push(performance.now() - t0);
+  }
+  const p95 =
+    [...times].sort((a, b) => a - b)[Math.ceil(times.length * 0.95) - 1] ?? 0;
+  console.log(
+    `roster-insights 2000-row (${LINKED} linked) p95=${p95.toFixed(1)}ms`,
+  );
+  expect(p95).toBeLessThan(10_000);
+}
+
 describe('roster-insights on a 2000-member roster', () => {
-  it('computes under the timing guard (p95 logged)', async () => {
+  // The scale guard is a query budget, not a wall-clock bound (an absolute ms
+  // bound flaked on shared CI runners: p95 1666 > 1500). The service issues
+  // one roster read + one batched query per fact source (class doc), so the
+  // statement count must not grow with the roster: a per-member or
+  // per-character query (N+1) turns 2000 rows into 300+ statements here.
+  it('issues the same SQL statements for 2000 members as for 20 (no N+1; p95 logged)', async () => {
     const big = await insertGuild('Forever Two Thousand');
-    const rows = Array.from({ length: 2000 }, (_, i) =>
-      memberRow(
-        big,
-        `Player-7-big${i}`,
-        `Big${i}`,
-        (i % 60) + 1,
-        i % 2 ? 'Mage' : 'Rogue',
-      ),
-    );
-    for (let i = 0; i < rows.length; i += 500)
-      await testApp.db
-        .insert(schema.guildMembers)
-        .values(rows.slice(i, i + 500));
+    const small = await insertGuild('Forever Twenty');
+    await insertRoster(big, 2000, LINKED);
+    await insertRoster(small, 20, 3);
     await linkBigRoster();
-    // The guard measures the computation, not planner statistics: after the
-    // shard's earlier specs churn these tables (TRUNCATE + bulk insert), the
-    // planner can still hold empty-table stats and pick a bad plan (p95 went
-    // 80-200 ms -> 0.8-1.8 s at shard scale). Production autovacuum keeps them
-    // analyzed, so refresh them here and run one untimed warm-up compute.
     await testApp.db.execute(
       sql`ANALYZE ${schema.guildMembers}, ${schema.characters}, ${schema.characterAddonSnapshots}`,
     );
     const svc = testApp.app.get(RosterInsightsService);
-    await svc.compute(big, 'member', false);
-    const times: number[] = [];
-    for (let run = 0; run < 10; run += 1) {
-      const t0 = performance.now();
-      const dto = await svc.compute(big, 'member', false);
-      times.push(performance.now() - t0);
-      expect(dto.classes.reduce((n, c) => n + c.count, 0)).toBe(2000);
-      expect(dto.freshness.characters.addon).toBe(LINKED);
-    }
-    const p95 =
-      [...times].sort((a, b) => a - b)[Math.ceil(times.length * 0.95) - 1] ?? 0;
-    console.log(
-      `roster-insights 2000-row (${LINKED} linked) p95=${p95.toFixed(1)}ms`,
+    await svc.compute(big, 'member', false); // warm any process-level memo
+    const atSmall = await countQueries(() =>
+      svc.compute(small, 'member', false),
     );
-    expect(p95).toBeLessThan(1500);
+    const atBig = await countQueries(() => svc.compute(big, 'member', false));
+    expect(atBig.result.classes.reduce((n, c) => n + c.count, 0)).toBe(2000);
+    expect(atBig.result.freshness.characters.addon).toBe(LINKED);
+    expect(atSmall.result.freshness.characters.addon).toBe(3);
+    console.log(
+      `roster-insights SQL statements: 20 rows=${atSmall.queries}, 2000 rows=${atBig.queries}`,
+    );
+    // Pinned so a query path that bypasses the counter cannot pass silently;
+    // adding a fact source legitimately moves it — update the number then.
+    expect(atSmall.queries).toBe(8);
+    expect({ sqlStatementsFor2000Rows: atBig.queries }).toEqual({
+      sqlStatementsFor2000Rows: atSmall.queries,
+    });
+    await logP95(big);
   });
 });
