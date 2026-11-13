@@ -12,6 +12,9 @@
  * The character-create import slots (`import-form`, `inline-import`) stay EAGER in
  * `register.ts`: their first render flips the host to the Import tab, so a lazy
  * chunk would show the manual fields first and then shift the dialog.
+ * `ProfileCharacterActions` (the character header's Sync button) stays EAGER too: lazy,
+ * the phone header renders Import string + More first and Sync lands a beat later,
+ * shifting ROK-2140's three equal actions.
  * `CharacterDetailSections` stays eager: as its own chunk it measured 24.1 KB gz,
  * over the 11.3 KB default lazy cap, and budgets are not raised for this diet.
  */
@@ -43,4 +46,3 @@ export const EventDetailContentSections = lazySlot(() => import('./event-detail-
 export const BossLootPanel = lazySlot(() => import('./boss-loot-panel'), (m) => m.BossLootPanel);
 export const QuestPrepPanel = lazySlot(() => import('./quest-prep-panel'), (m) => m.QuestPrepPanel);
 export const BlizzardIntegrationSlot = lazySlot(() => import('./admin-settings-integration-cards'), (m) => m.BlizzardIntegrationSlot);
-export const ProfileCharacterActions = lazySlot(() => import('./profile-character-actions'), (m) => m.ProfileCharacterActions);

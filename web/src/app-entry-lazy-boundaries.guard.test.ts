@@ -27,7 +27,6 @@ const LAZY_ONLY = [
     'plugins/wow/slots/event-create-content-browser.tsx',
     'plugins/wow/slots/event-detail-content-sections.tsx',
     'plugins/wow/slots/admin-settings-integration-cards.tsx',
-    'plugins/wow/slots/profile-character-actions.tsx',
     'plugins/wow/slots/quest-prep-panel.tsx',
     'plugins/wow/slots/boss-loot-panel.tsx',
 ];
