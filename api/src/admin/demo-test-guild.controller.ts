@@ -31,6 +31,8 @@
  *   - with `withArmorySnapshots: true` (ROK-2149), a verified Armory snapshot
  *     on every unlinked roster row but the last, for the read-only member
  *     page (`demo-test-guild-armory.helpers.ts`).
+ *   - with `withRecruitment: true` (ROK-1789), the recruitment card's object
+ *     (`demo-test-guild-recruitment.helpers.ts`); a re-seed restores it.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -77,7 +79,7 @@ import {
   raiderOf,
   type SeededGuildRaids,
 } from './demo-test-guild-raids.helpers';
-import { seedGuildContent } from './demo-test-guild-content.helpers';
+import { seedContentHalf } from './demo-test-guild-content.helpers';
 import {
   seedInstalledAddons,
   type SeededInstalledAddons,
@@ -98,6 +100,7 @@ import {
 import { seedGuildPulls } from './demo-test-guild-pulls.helpers';
 import { applyArmoryProfessions } from './demo-test-guild-professions.helpers';
 import { seedArmoryHalf } from './demo-test-guild-armory.helpers';
+import { seedRecruitmentHalf } from './demo-test-guild-recruitment.helpers';
 import {
   seedGuildDings,
   type SeededGuildDings,
@@ -150,7 +153,7 @@ export class DemoTestGuildController {
     };
   }
 
-  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147), `withArmorySnapshots` (ROK-2149). */
+  /** The opt-in halves: `armoryProfessions` (ROK-2107), `withContent` (ROK-1786), `withLockouts` (ROK-1914), `withDings` (ROK-1919), `withPresence` (ROK-1916), `withGear` (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147), `withArmorySnapshots` (ROK-2149), `withRecruitment` (ROK-1789). */
   private async seedOptional(
     input: SeedGuildInput,
     ctx: RosterCtx,
@@ -159,9 +162,6 @@ export class DemoTestGuildController {
     const { users, unlinked } = roster;
     const gm = users.gm.userId;
     await applyArmoryProfessions(this.db, users, input.armoryProfessions);
-    const content = input.withContent
-      ? await seedGuildContent(this.db, ctx.guildId, gm, ctx.now)
-      : null;
     const snapshots = await this.seedSnapshotHalves(users, ctx, input);
     const dings = input.withDings
       ? await this.seedDings(users, unlinked, ctx)
@@ -172,13 +172,14 @@ export class DemoTestGuildController {
     const pulls = await this.seedPulls(users, ctx, input);
     const installedAddons = await this.seedInstalledHalf(input, users, ctx);
     return {
-      ...(content ? { content } : {}),
+      ...(await seedContentHalf(this.db, input, ctx.guildId, gm, ctx.now)),
       ...snapshots,
       ...(dings ? { dings } : {}),
       ...(presence ? { presence } : {}),
       ...pulls,
       ...(installedAddons ? { installedAddons } : {}),
       ...(await seedArmoryHalf(this.db, input, unlinked, ctx.now)),
+      ...(await seedRecruitmentHalf(this.db, input, ctx.guildId, gm, ctx.now)),
     };
   }
 
