@@ -106,11 +106,17 @@ function useGgMusic(tracks: readonly GgTrack[]): GgMusic {
     const el = useRef<HTMLAudioElement | null>(null);
     const flags = useRef({ started: false, held: false });
     const fade = useRef<ReturnType<typeof setInterval> | null>(null);
-    useEffect(() => () => { if (fade.current) clearInterval(fade.current); }, []);
+    // Closed = unmounted. A trailer's cleanup runs AFTER this one when the
+    // story closes, and its resumeMusic() must not restart the music.
+    const closed = useRef(false);
+    useEffect(() => {
+        closed.current = false;
+        return () => { closed.current = true; if (fade.current) clearInterval(fade.current); };
+    }, []);
     return useMemo((): GgMusic => {
         const pause = (): void => { el.current?.pause(); };
         const play = (): void => {
-            if (flags.current.held || !flags.current.started) return;
+            if (closed.current || flags.current.held || !flags.current.started) return;
             const a = lazy();
             el.current = a;
             if (a === null) return;

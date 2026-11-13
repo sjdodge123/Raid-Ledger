@@ -16,6 +16,17 @@ interface Hours { totalSeconds: number; gamesPlayed: number; nightOwlShare?: num
 interface Voice { totalSeconds: number; sessions: number }
 interface Hubs { joined: number; posts: number; pictures: number }
 
+/** The Events card's no-show / created tiles — nothing at all when both are zero. */
+function EventTiles({ noShows, created }: { noShows: number; created: number }): JSX.Element | null {
+    if (noShows <= 0 && created <= 0) return null;
+    return (
+        <GgStats>
+            {noShows > 0 && <GgStat value={noShows} label={ggPlural(noShows, 'no-show', 'no-shows')} />}
+            {created > 0 && <GgStat value={created} label={ggPlural(created, 'event you created', 'events you created')} />}
+        </GgStats>
+    );
+}
+
 /** Card 2 — events attended. */
 export function GgEventsCardView({ payload }: GgCardProps<GgEventsCard>): JSX.Element {
     return (
@@ -25,12 +36,7 @@ export function GgEventsCardView({ payload }: GgCardProps<GgEventsCard>): JSX.El
             <GgHuge>{payload.attended}</GgHuge>
             <GgLede><strong>{ggPlural(payload.attended, 'event', 'events')}</strong> out of {payload.signedUp} you signed up for.</GgLede>
             {payload.eventsByMonth !== undefined && <GgMonthHistogram counts={payload.eventsByMonth} />}
-            <GgStats>
-                {payload.noShows > 0 && <GgStat value={payload.noShows} label={ggPlural(payload.noShows, 'no-show', 'no-shows')} />}
-                {payload.created !== undefined && payload.created > 0 && (
-                    <GgStat value={payload.created} label={ggPlural(payload.created, 'event you created', 'events you created')} />
-                )}
-            </GgStats>
+            <EventTiles noShows={payload.noShows} created={payload.created ?? 0} />
         </GgCardBody>
     );
 }
@@ -92,11 +98,13 @@ export function GgHubsCardView({ payload }: GgCardProps<Hubs>): JSX.Element {
         <GgCardBody>
             <GgKicker>Hubs</GgKicker>
             <GgTitle>You made the hubs louder</GgTitle>
-            <GgStats>
-                {payload.posts > 0 && <GgStat value={payload.posts} label={ggPlural(payload.posts, 'post', 'posts')} />}
-                {payload.pictures > 0 && <GgStat value={payload.pictures} label={ggPlural(payload.pictures, 'picture', 'pictures')} />}
-                {payload.joined > 0 && <GgStat value={payload.joined} label={ggPlural(payload.joined, 'hub joined', 'hubs joined')} />}
-            </GgStats>
+            {(payload.posts > 0 || payload.pictures > 0 || payload.joined > 0) && (
+                <GgStats>
+                    {payload.posts > 0 && <GgStat value={payload.posts} label={ggPlural(payload.posts, 'post', 'posts')} />}
+                    {payload.pictures > 0 && <GgStat value={payload.pictures} label={ggPlural(payload.pictures, 'picture', 'pictures')} />}
+                    {payload.joined > 0 && <GgStat value={payload.joined} label={ggPlural(payload.joined, 'hub joined', 'hubs joined')} />}
+                </GgStats>
+            )}
         </GgCardBody>
     );
 }

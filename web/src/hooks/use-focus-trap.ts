@@ -25,12 +25,27 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
     ).filter((el) => el.offsetParent !== null);
 }
 
+/** True when no tabbable element lies after (`back`: before) `active` — the browser's Tab would leave. */
+function tabLeaves(active: Element, focusable: HTMLElement[], back: boolean): boolean {
+    const side = back ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+    return !focusable.some((el) => (active.compareDocumentPosition(el) & side) !== 0);
+}
+
 function handleTabTrap(e: KeyboardEvent, container: HTMLElement): void {
     const focusable = getFocusableElements(container);
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) { e.preventDefault(); return; }
 
+    const active = document.activeElement;
+    // Focus on a non-tabbable element inside (a tabIndex=-1 story slide):
+    // wrap only when the browser's own Tab would leave the container.
+    if (active && container.contains(active) && !focusable.some((el) => el === active)) {
+        if (!tabLeaves(active, focusable, e.shiftKey)) return;
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+    }
     if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();

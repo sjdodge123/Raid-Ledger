@@ -6,9 +6,11 @@ export function ggPlural(n: number, one: string, many: string): string {
     return n === 1 ? one : many;
 }
 
-/** Whole hours, e.g. 1_368_000 → "380h". */
+/** Whole hours, e.g. 1_368_000 → "380h"; under half an hour it reads in minutes ("25m"), never "0h". */
 export function ggHours(seconds: number): string {
-    return `${Math.round(seconds / 3600).toLocaleString()}h`;
+    const hours = Math.round(seconds / 3600);
+    if (hours === 0 && seconds > 0) return `${Math.max(1, Math.round(seconds / 60))}m`;
+    return `${hours.toLocaleString()}h`;
 }
 
 /** "3h 12m" style duration for voice time. */
