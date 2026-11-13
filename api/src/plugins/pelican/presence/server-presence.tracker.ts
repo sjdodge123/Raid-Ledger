@@ -2,6 +2,7 @@ import type {
   GamePresenceEvent,
   PresenceCharacterEvent,
 } from './presence-events';
+import { clampStoredName } from '../../../common/stored-name.helpers';
 
 /** A player the tracker considers present. `name` is null until a character line names them. */
 export interface PresentPlayer {
@@ -111,8 +112,9 @@ export class ServerPresenceTracker {
    * is all a death line carries. Read-only: touches no lastSeen.
    */
   steamIdOfCharacter(name: string): string | null {
+    const key = clampStoredName(name);
     for (const [steamId, entry] of this.present)
-      if (entry.name === name) return steamId;
+      if (entry.name === key) return steamId;
     return null;
   }
 
@@ -139,7 +141,8 @@ export class ServerPresenceTracker {
   /** Present with lastSeen 0; an unnamed one queues for the next character line. */
   private addNeverSeen(p: PresentPlayer): void {
     const owner = p.owner ?? null;
-    this.present.set(p.steamId, { name: p.name, lastSeen: 0, owner });
+    const name = p.name === null ? null : clampStoredName(p.name);
+    this.present.set(p.steamId, { name, lastSeen: 0, owner });
     if (p.name === null) this.unnamed.push(p.steamId);
   }
 
@@ -156,7 +159,10 @@ export class ServerPresenceTracker {
     event: PresenceCharacterEvent,
     now: number,
   ): PresenceChange[] {
-    const { name, zdoidZero } = event;
+    // Key by the stored (clamped) form so a name restored from the roster
+    // still equals its own next line.
+    const name = clampStoredName(event.name);
+    const { zdoidZero } = event;
     const ownerId = zdoidZero ? undefined : event.ownerId;
     const known = this.findCharacter(name, ownerId);
     if (known) known.lastSeen = now;
