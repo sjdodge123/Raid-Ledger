@@ -148,6 +148,8 @@ const blizzard = {
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
+    // ROK-1790 — the guild crafters directory (a `registerHubGameTab` game tab).
+    { id: 'crafters', label: 'Crafters' },
     { id: 'progression', label: 'Progression', planned: true },
     { id: 'loot', label: 'Loot', planned: true },
   ],

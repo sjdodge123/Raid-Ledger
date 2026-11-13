@@ -49,6 +49,12 @@ describe('ProfessionsWidget', () => {
         expect(screen.getByRole('button', { name: /Mining/ })).toHaveTextContent('150/150');
     });
 
+    it('links "See all crafters" to the Crafters tab (ROK-1790)', async () => {
+        server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
+        renderWidget();
+        expect(await screen.findByRole('link', { name: 'See all crafters' })).toHaveAttribute('href', '#crafters');
+    });
+
     it('expands a profession to its members, each linking to their character by uuid', async () => {
         server.use(rosterInsightsHandler({ all: PROFESSIONS_FIXTURE }));
         renderWidget();

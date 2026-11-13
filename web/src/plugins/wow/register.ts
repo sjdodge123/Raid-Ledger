@@ -38,6 +38,7 @@ import { contributionsWidget } from './hub-widgets/contributions.register';
 import { attunementsWidget } from './hub-widgets/attunements.register';
 import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
 import { wowHubClaimProvider } from './hub/wow-hub-claim-provider';
+import { craftersTab } from './hub/crafters/crafters-tab.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -69,6 +70,8 @@ blizzard.registerEventReportLinks(supportsEventReportLinks);
 registerClassLevelWidgets(blizzard);
 registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);
+// ROK-1790 (ruling 2026-11-12 Q1) — the Crafters directory is its own tab on Forever guild hubs.
+blizzard.registerHubGameTab([WOW_FOREVER_GAME_SLUG], craftersTab);
 blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
 registerReadyCheckWidget(blizzard);
