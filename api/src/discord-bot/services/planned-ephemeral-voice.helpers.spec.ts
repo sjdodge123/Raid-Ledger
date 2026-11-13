@@ -109,7 +109,11 @@ describe('loadPlannedVoiceSettings', () => {
   it('reads the three ephemeral settings', async () => {
     await expect(
       loadPlannedVoiceSettings(settingsMock(true, true, 15)),
-    ).resolves.toEqual({ globalEnabled: true, forced: true, bufferMinutes: 15 });
+    ).resolves.toEqual({
+      globalEnabled: true,
+      forced: true,
+      bufferMinutes: 15,
+    });
   });
 });
 

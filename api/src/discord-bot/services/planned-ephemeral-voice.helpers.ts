@@ -144,3 +144,19 @@ export function plannedVoiceForEmbed(
   };
   return resolvePlannedVoiceForEvent(settings, fields, now);
 }
+
+/**
+ * Set `plannedVoiceChannel` on embed data when a temporary channel is planned.
+ * @returns true when set — the caller then skips the default voice binding.
+ */
+export async function applyPlannedVoice(
+  settings: PlannedVoiceSettingsSource,
+  event: Pick<EmbedEventData, 'startTime' | 'title' | 'game'> &
+    Pick<EmbedEventData, 'plannedVoiceChannel'>,
+  state: EphemeralVoiceState,
+): Promise<boolean> {
+  const planned = await plannedVoiceForEmbed(settings, event, state);
+  if (!planned) return false;
+  event.plannedVoiceChannel = planned;
+  return true;
+}

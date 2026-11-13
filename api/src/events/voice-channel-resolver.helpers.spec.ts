@@ -59,7 +59,11 @@ describe('resolveVoiceChannelForEvent — planned temporary channel', () => {
   it('falls back to the resolver when ephemeral voice is off', async () => {
     const { deps, resolve } = makeDeps(false);
     const result = await resolveVoiceChannelForEvent(deps, makeEvent(), true);
-    expect(result).toEqual({ channelId: null, channelName: null, guildId: null });
+    expect(result).toEqual({
+      channelId: null,
+      channelName: null,
+      guildId: null,
+    });
     expect(resolve).toHaveBeenCalled();
   });
 

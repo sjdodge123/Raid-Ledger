@@ -10,7 +10,7 @@ import {
 } from '../services/embed-game.helpers';
 import { computeEmbedStateForData } from '../services/embed-state.helpers';
 import {
-  plannedVoiceForEmbed,
+  applyPlannedVoice,
   type PlannedVoiceSettingsSource,
 } from '../services/planned-ephemeral-voice.helpers';
 
@@ -269,15 +269,12 @@ async function enrichWithPlannedVoice(
   event: typeof schema.events.$inferSelect,
   eventData: EmbedEventData,
 ): Promise<boolean> {
-  const planned = await plannedVoiceForEmbed(settings, eventData, {
+  return applyPlannedVoice(settings, eventData, {
     channelId: event.ephemeralVoiceChannelId,
     enabled: event.ephemeralVoiceEnabled,
     cancelled: (event.cancelledAt ?? null) !== null,
     rescheduling: (event.reschedulingPollId ?? null) !== null,
   });
-  if (!planned) return false;
-  eventData.plannedVoiceChannel = planned;
-  return true;
 }
 
 /** Enrich event data with voice channel info. */

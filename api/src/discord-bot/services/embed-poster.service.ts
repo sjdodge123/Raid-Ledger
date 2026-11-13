@@ -15,10 +15,7 @@ import type { EmbedRows } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { getEphemeralVoiceState } from './ephemeral-voice.db-helpers';
-import {
-  plannedVoiceForEmbed,
-  type EphemeralVoiceState,
-} from './planned-ephemeral-voice.helpers';
+import { applyPlannedVoice } from './planned-ephemeral-voice.helpers';
 import type { EmbedState } from '../discord-bot.constants';
 import { computeEmbedStateForData } from './embed-state.helpers';
 import {
@@ -40,10 +37,11 @@ interface ChannelOpts {
   gameId?: number | null | undefined;
   recurrenceGroupId?: string | null | undefined;
   notificationChannelOverride?: string | null | undefined;
-  /** ROK-1352 Tier 0: a live ephemeral channel wins over static bindings. */
-  ephemeralVoiceChannelId?: string | null | undefined;
-  /** The event's ephemeral columns — drives the planned-channel line. */
-  ephemeralVoice?: EphemeralVoiceState | undefined;
+  /**
+   * ROK-1352 Tier 0: a live ephemeral channel wins over static bindings; the
+   * rest of the row drives the planned-channel line (2026-11-13).
+   */
+  ephemeralVoice?: Parameters<typeof applyPlannedVoice>[2] | undefined;
 }
 
 /**
@@ -75,13 +73,11 @@ export class EmbedPosterService {
     if (!this.clientService.isConnected()) return false;
     // ROK-1352: a live ephemeral channel must win over static bindings in the
     // embed's "Join Voice" link, or attendees get sent to the wrong channel.
-    const ephemeralVoice = await getEphemeralVoiceState(this.db, eventId);
     const opts: ChannelOpts = {
       gameId,
       recurrenceGroupId,
       notificationChannelOverride,
-      ephemeralVoiceChannelId: ephemeralVoice.channelId,
-      ephemeralVoice,
+      ephemeralVoice: await getEphemeralVoiceState(this.db, eventId),
     };
     const resolved = await this.resolvePostTargets(opts);
     if (!resolved) return false;
@@ -212,23 +208,18 @@ export class EmbedPosterService {
   ): Promise<void> {
     // 2026-11-13: a planned (not yet created) temporary channel wins over the
     // game's default binding, which would point attendees at the wrong room.
-    const planned = opts.ephemeralVoice
-      ? await plannedVoiceForEmbed(
-          this.settingsService,
-          enrichedEvent,
-          opts.ephemeralVoice,
-        )
-      : null;
-    if (planned) {
-      enrichedEvent.plannedVoiceChannel = planned;
+    const eph = opts.ephemeralVoice;
+    if (
+      eph &&
+      (await applyPlannedVoice(this.settingsService, enrichedEvent, eph))
+    )
       return;
-    }
     // ROK-1389: a text override must not win the embed's "Join Voice" link.
     const voiceChannelId =
       await this.channelResolver.resolveVoiceChannelHonoringOverride(
         opts.gameId,
         opts.recurrenceGroupId,
-        opts.ephemeralVoiceChannelId,
+        opts.ephemeralVoice?.channelId ?? null,
         opts.notificationChannelOverride,
       );
     if (voiceChannelId) enrichedEvent.voiceChannelId = voiceChannelId;
