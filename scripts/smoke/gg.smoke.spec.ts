@@ -131,7 +131,7 @@ test.describe('GG public share (ROK-2187, Q4/Q5)', () => {
         try {
             const pub = await anon.newPage();
             await pub.goto(shareUrl, { waitUntil: 'domcontentloaded' });
-            await expect(pub.getByText('people played with')).toBeVisible({ timeout: 15_000 });
+            await expect(pub.getByText(/^(person|people) played with$/)).toBeVisible({ timeout: 15_000 });
             await expect(pub.getByText(`GG ${year}`)).toBeVisible();
             await expect(pub.locator('body')).not.toContainText(ggCoPlayerName(year));
             await expect(pub.locator('body')).not.toContainText(/@local\b|@[a-z0-9-]+\.[a-z]{2,}/i);

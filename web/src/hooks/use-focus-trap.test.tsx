@@ -1,5 +1,5 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
-import { useRef } from 'react';
+import { useRef, type JSX } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { at } from '../test/defined';
 import { useFocusTrap } from './use-focus-trap';
@@ -328,5 +328,47 @@ describe('useFocusTrap — initial focus (ROK-1647)', () => {
         act(() => input.focus()); // fill()/a fast typist lands before the rAF
         runFrame();
         expect(input, 'the trap must not blur a field focused inside the dialog').toHaveFocus();
+    });
+});
+
+describe('useFocusTrap — focus on a non-tabbable element inside (ROK-2187)', () => {
+    function Viewer(): JSX.Element {
+        const trapRef = useFocusTrap<HTMLDivElement>(true);
+        return (
+            <div ref={trapRef}>
+                <div tabIndex={-1} data-testid="slide"><button>Share</button></div>
+                <button>Close</button>
+            </div>
+        );
+    }
+
+    function setup(): { slide: HTMLElement; share: HTMLElement; close: HTMLElement } {
+        render(<Viewer />);
+        for (const b of screen.getAllByRole('button')) Object.defineProperty(b, 'offsetParent', { value: document.body, configurable: true });
+        const slide = screen.getByTestId('slide');
+        act(() => slide.focus());
+        return { slide, share: screen.getByRole('button', { name: 'Share' }), close: screen.getByRole('button', { name: 'Close' }) };
+    }
+
+    function pressTab(shiftKey: boolean): KeyboardEvent {
+        const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true });
+        document.dispatchEvent(event);
+        return event;
+    }
+
+    afterEach(() => { document.body.innerHTML = ''; });
+
+    it('Shift+Tab from the focused slide wraps to the last control instead of leaving the dialog', () => {
+        const { close } = setup();
+        const event = pressTab(true);
+        expect(event.defaultPrevented, 'Shift+Tab escaped the trap').toBe(true);
+        expect(close).toHaveFocus();
+    });
+
+    it('Tab from the focused slide is left to the browser when a control follows it', () => {
+        const { slide } = setup();
+        const event = pressTab(false);
+        expect(event.defaultPrevented).toBe(false);
+        expect(slide).toHaveFocus();
     });
 });

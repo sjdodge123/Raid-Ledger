@@ -46,7 +46,7 @@ describe('GG intro card (ROK-2187)', () => {
         expect(pill.className).not.toMatch(/emerald|text-foreground/);
     });
 
-    it('after Tap to start unmounts, focus lands on the enclosing slide (never lost to <body>)', () => {
+    it('Tap to start moves focus to the enclosing slide (never lost to <body>)', () => {
         renderWithProviders(
             <div role="group" aria-roledescription="slide" aria-label="1 of 3: Intro" tabIndex={-1}>
                 <GgStoryContext.Provider value={ctx('full', false)}><GgIntroCardView payload={{}} year={2026} /></GgStoryContext.Provider>

@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { GgEventsCardView, GgOnTimeCardView } from './core-stat-cards';
-import { ggHubsBackdrop } from './register-core-gg-cards';
+import { GgEventsCardView, GgHoursCardView, GgHubsCardView, GgOnTimeCardView, GgVoiceCardView } from './core-stat-cards';
+import { GG_HOURS_CARD_SCHEMA, GG_VOICE_CARD_SCHEMA, ggHubsBackdrop } from './register-core-gg-cards';
 
 const events = { signedUp: 5, attended: 4, noShows: 1, firstEventAt: null, lastEventAt: null };
 const onTime = { attended: 4, onTime: 3, onTimeRatio: 0.75 };
@@ -62,5 +62,36 @@ describe('Core GG stat cards — no zero values, singular counts', () => {
         render(<GgEventsCardView year={2026} payload={{ ...events, noShows: 2 }} />);
         expect(screen.getByText('no-shows')).toBeInTheDocument();
         expect(screen.getByText('events')).toBeInTheDocument();
+    });
+});
+
+describe('Core GG stat cards — short durations and empty tile grids', () => {
+    it('Hours card shows minutes, never a huge "0h", under half an hour', () => {
+        render(<GgHoursCardView year={2026} payload={{ totalSeconds: 1500, gamesPlayed: 1 }} />);
+        expect(screen.getByText('25m')).toBeInTheDocument();
+        expect(screen.queryByText('0h')).toBeNull();
+    });
+
+    it('Voice card shows minutes, never a huge "0h", under half an hour', () => {
+        render(<GgVoiceCardView year={2026} payload={{ totalSeconds: 1500, sessions: 2 }} />);
+        expect(screen.getAllByText('25m').length).toBeGreaterThan(0);
+        expect(screen.queryByText('0h')).toBeNull();
+    });
+
+    it('Hours and Voice cards are skipped entirely at zero seconds', () => {
+        expect(GG_HOURS_CARD_SCHEMA.safeParse({ totalSeconds: 0, gamesPlayed: 0 }).success).toBe(false);
+        expect(GG_VOICE_CARD_SCHEMA.safeParse({ totalSeconds: 0, sessions: 0 }).success).toBe(false);
+        expect(GG_HOURS_CARD_SCHEMA.safeParse({ totalSeconds: 60, gamesPlayed: 1 }).success).toBe(true);
+        expect(GG_VOICE_CARD_SCHEMA.safeParse({ totalSeconds: 60, sessions: 1 }).success).toBe(true);
+    });
+
+    it('Events card draws no tile grid when no tile survives', () => {
+        const { container } = render(<GgEventsCardView year={2026} payload={{ ...events, noShows: 0 }} />);
+        expect(container.querySelector('.grid-cols-2')).toBeNull();
+    });
+
+    it('Hubs card draws no tile grid when every count is zero', () => {
+        const { container } = render(<GgHubsCardView year={2026} payload={{ joined: 0, posts: 0, pictures: 0 }} />);
+        expect(container.querySelector('.grid-cols-2')).toBeNull();
     });
 });
