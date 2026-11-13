@@ -176,8 +176,8 @@ describe('owner, share and admin DTOs', () => {
 describe('GG mascot (community mascot intro)', () => {
   const mascot = {
     emojiId: '1234567890123', emojiName: 'wololo', animated: false,
-    imageUrl: '/uploads/gg-mascot/1234567890123.webp?v=ab12cd34',
-    soundId: '987654321', soundName: 'Wololo', soundUrl: '/uploads/gg-mascot/987654321.mp3',
+    imageUrl: '/uploads/gg-mascot/1234567890123-webp?v=ab12cd34',
+    soundId: '987654321', soundName: 'Wololo', soundUrl: '/uploads/gg-mascot/987654321-mp3',
     volume: 0.8,
   };
 
@@ -190,6 +190,14 @@ describe('GG mascot (community mascot intro)', () => {
   it('refuses a mascot url that is not our same-origin copy', () => {
     expect(GgMascotSchema.safeParse({ ...mascot, imageUrl: 'https://cdn.discordapp.com/emojis/1.webp' }).success).toBe(false);
     expect(GgMascotSchema.safeParse({ ...mascot, soundUrl: '/uploads/gg-mascot/../x.mp3' }).success).toBe(false);
+    expect(GgMascotSchema.safeParse({ ...mascot, soundUrl: '/uploads/gg-mascot/../x-mp3' }).success).toBe(false);
+    expect(GgMascotSchema.safeParse({ ...mascot, soundUrl: '/uploads/gg-mascot/987654321-exe' }).success).toBe(false);
+  });
+
+  it('accepts only the extensionless {id}-{ext} copy url, never the {id}.{ext} static form', () => {
+    expect(GgMascotSchema.safeParse({ ...mascot, imageUrl: '/uploads/gg-mascot/1234567890123.webp?v=ab12cd34' }).success).toBe(false);
+    expect(GgMascotSchema.safeParse({ ...mascot, soundUrl: '/uploads/gg-mascot/987654321.mp3' }).success).toBe(false);
+    expect(GgMascotSchema.safeParse({ ...mascot, soundUrl: '/uploads/gg-mascot/987654321-ogg?v=0a1b' }).success).toBe(true);
     expect(GgMascotSchema.safeParse({ ...mascot, volume: 1.5 }).success).toBe(false);
   });
 

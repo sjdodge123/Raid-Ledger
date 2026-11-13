@@ -25,7 +25,7 @@ const PREVIEW: GgAdminPreviewDto = {
     cards: pick('intro', 'summary'),
 };
 const MASCOT = {
-    emojiId: '111', emojiName: 'wololo_guy', animated: false, imageUrl: '/uploads/gg-mascot/111.webp',
+    emojiId: '111', emojiName: 'wololo_guy', animated: false, imageUrl: '/uploads/gg-mascot/111-webp',
     soundId: null, soundName: null, soundUrl: null, volume: 0.8,
 };
 
@@ -51,7 +51,7 @@ describe('GgPreviewPage (ROK-2187 L10d)', () => {
         expect(await screen.findByRole('group', { name: '1 of 2: GG 2026' })).toBeInTheDocument();
         expect(api.getGgPreview).toHaveBeenCalledWith(2026);
         expect(screen.getByTestId('gg-preview-banner')).toHaveTextContent('Preview — not saved, not shared');
-        expect(await screen.findByRole('img', { name: 'wololo_guy' })).toHaveAttribute('src', 'http://api.test/uploads/gg-mascot/111.webp');
+        expect(await screen.findByRole('img', { name: 'wololo_guy' })).toHaveAttribute('src', 'http://api.test/uploads/gg-mascot/111-webp');
         expect(screen.getByTestId('gg-tap-to-start')).toBeInTheDocument();
     });
 

@@ -19,7 +19,7 @@ import { GgYearPage } from './gg-year-page';
 
 const key = (k: string): void => { fireEvent.keyDown(window, { key: k }); };
 const pick = (...ids: string[]) => ggFullCards.filter((c) => c.pluginSlug === 'core' && ids.includes(c.cardId));
-const MASCOT = { emojiName: 'wololo', imageUrl: '/uploads/gg-mascot/1.png', soundUrl: '/uploads/gg-mascot/2.ogg', volume: 0.8 };
+const MASCOT = { emojiName: 'wololo', imageUrl: '/uploads/gg-mascot/1-png', soundUrl: '/uploads/gg-mascot/2-ogg', volume: 0.8 };
 
 let play: ReturnType<typeof vi.spyOn>;
 

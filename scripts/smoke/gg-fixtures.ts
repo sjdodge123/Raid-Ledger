@@ -78,5 +78,5 @@ export const MASCOT_OPTIONS = {
 
 /** The owner-read mascot block injected into `GET /gg/:year` (no sound file). */
 export const OWNER_MASCOT = {
-    emojiName: 'smoke_wololo', imageUrl: `/uploads/gg-mascot/${MASCOT_EMOJI_ID}.png`, soundUrl: null, volume: 0.8,
+    emojiName: 'smoke_wololo', imageUrl: `/uploads/gg-mascot/${MASCOT_EMOJI_ID}-png`, soundUrl: null, volume: 0.8,
 };

@@ -152,7 +152,12 @@ export function mascotFileFromToken(token: string): MascotServedFile | null {
   return { name: `${m[1]}.${ext}`, contentType: MASCOT_CONTENT_TYPES[ext] };
 }
 
-/** File name of a stored mascot URL (`/uploads/gg-mascot/1-png?v=…` → `1.png`). */
+/**
+ * File name of a stored mascot URL (`/uploads/gg-mascot/1-png?v=…` → `1.png`).
+ * Only the extensionless `{id}-{ext}` form parses: the `{id}.{ext}` static
+ * form never shipped (it existed only on this branch's fleet envs), and the
+ * contract's `GgMascotSchema` refuses it, so no stored setting can carry one.
+ */
 export function mascotFileFromUrl(url: string | null): string | null {
   if (!url?.startsWith(GG_MASCOT_URL_PREFIX)) return null;
   const token = url.slice(GG_MASCOT_URL_PREFIX.length).split('?')[0] ?? '';

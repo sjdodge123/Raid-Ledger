@@ -55,8 +55,12 @@ export type GgShareToggleDto = z.infer<typeof GgShareToggleDtoSchema>;
 
 /** A Discord snowflake id (emoji / soundboard sound); also our copy's filename stem. */
 const snowflake = z.string().regex(/^\d{1,25}$/);
-/** A same-origin copy under `/uploads/gg-mascot/` (relative to the API base; `?v=` busts caches). */
-const mascotUploadUrl = z.string().regex(/^\/uploads\/gg-mascot\/\d{1,25}\.(png|webp|gif|mp3|ogg)(\?v=[a-f0-9]{1,16})?$/);
+/**
+ * A same-origin copy served by the API at `/uploads/gg-mascot/{snowflake}-{ext}`
+ * (relative to the API base; `?v=` busts caches). Extensionless on purpose:
+ * prod nginx's static-asset regex would 404 a `{id}.{ext}` URL from its own disk.
+ */
+const mascotUploadUrl = z.string().regex(/^\/uploads\/gg-mascot\/\d{1,25}-(png|webp|gif|mp3|ogg)(\?v=[a-f0-9]{1,16})?$/);
 
 /**
  * ROK-2187 — the community's GG mascot (app-settings `GG_MASCOT`, JSON): a

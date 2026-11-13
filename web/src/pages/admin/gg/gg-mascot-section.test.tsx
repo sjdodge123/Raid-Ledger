@@ -26,8 +26,8 @@ const OPTIONS = {
 };
 const SAVED = {
     emojiId: '111', emojiName: 'wololo_guy', animated: false,
-    imageUrl: '/uploads/gg-mascot/111.webp?v=a', soundId: '333', soundName: 'wololo',
-    soundUrl: '/uploads/gg-mascot/333.ogg?v=b', volume: 0.8,
+    imageUrl: '/uploads/gg-mascot/111-webp?v=a', soundId: '333', soundName: 'wololo',
+    soundUrl: '/uploads/gg-mascot/333-ogg?v=b', volume: 0.8,
 };
 
 describe('GgMascotSection (ROK-2187 L10)', () => {
@@ -62,7 +62,7 @@ describe('GgMascotSection (ROK-2187 L10)', () => {
         renderWithProviders(<GgMascotSection />);
         expect(await screen.findByTestId('gg-mascot-bot-offline')).toBeInTheDocument();
         const img = screen.getByTestId('gg-mascot-current').querySelector('img');
-        expect(img?.getAttribute('src')).toBe('http://api.test/uploads/gg-mascot/111.webp?v=a');
+        expect(img?.getAttribute('src')).toBe('http://api.test/uploads/gg-mascot/111-webp?v=a');
     });
 
     it('re-syncs with the saved ids and removes with nulls', async () => {
