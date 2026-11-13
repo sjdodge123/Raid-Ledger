@@ -9,7 +9,8 @@ import type { JSX } from 'react';
 import type { WowProgressionInstanceDto } from '@raid-ledger/contract';
 import { GuildMeter } from '../../../components/hub/events/guild-meter';
 import { StatusChip } from '../../../components/ui/status-chip';
-import { ProgressionBossRow, shortDate } from './progression-boss-row';
+import { ProgressionBossRow } from './progression-boss-row';
+import { shortDate } from './progression.helpers';
 
 type Instance = WowProgressionInstanceDto;
 

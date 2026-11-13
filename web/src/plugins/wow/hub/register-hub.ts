@@ -6,7 +6,8 @@
  */
 import { lazy } from 'react';
 import type { HubModule } from '../../hub-module';
-import { HiddenTab, WowProgressionTab, WowRaidsTab, progressionTabVisible } from './wow-tabs';
+import { HiddenTab, WowProgressionTab, WowRaidsTab } from './wow-tabs';
+import { progressionTabVisible } from '../progression/progression.helpers';
 import { WowFactionPill, WowFoundedPill, WowViewerRolePills, WowWhereFact } from './wow-hero';
 import { WowGuildStateBanner } from './wow-guild-state-banner';
 import { wowHeroNote } from './wow-hero.helpers';

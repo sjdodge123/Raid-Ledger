@@ -42,13 +42,10 @@ export const handlers = [
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
     ...hubPostsHandlers, ...hubSessionNoteHandlers,
-    // Guild message (ROK-2136) + Recruitment (ROK-1789) — nothing set, cards hidden.
-    ...guildIngameTextHandlers, ...guildRecruitmentHandlers,
-    // Progression tab (ROK-1789 Part B) — no pulls, no activity.
-    ...guildProgressionHandlers,
+    // Guild message (ROK-2136) + Recruitment (ROK-1789) — nothing set, cards hidden; Progression (Part B) — empty.
+    ...guildIngameTextHandlers, ...guildRecruitmentHandlers, ...guildProgressionHandlers,
     ...guildContributionsHandlers,
-    ...bg3Handlers,
-    ...guildDiscordHandlers,
+    ...bg3Handlers, ...guildDiscordHandlers,
     ...hubMediaChannelHandlers,
     ...channelLifecycleHandlers,
     // Per-group notification mute (ROK-1832) — echo writes, no muted groups.

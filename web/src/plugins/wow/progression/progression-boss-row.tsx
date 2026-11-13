@@ -7,15 +7,11 @@
 import type { JSX } from 'react';
 import type { WowProgressionBossDto } from '@raid-ledger/contract';
 import { firstKillLine, plural } from '../hub-widgets/raid-progress.helpers';
+import { shortDate } from './progression.helpers';
 
 const ROW_CLASS = 'grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 py-1 '
     + 'sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_4rem_4rem_minmax(0,1fr)]';
 const COUNT_CLASS = 'whitespace-nowrap text-right text-xs text-muted sm:row-start-1';
-
-/** "Nov 10" in the viewer's locale. */
-export function shortDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 function Kills({ kills }: { kills: number }): JSX.Element {
     if (kills === 0) return <>{plural(0, 'kill')}</>;

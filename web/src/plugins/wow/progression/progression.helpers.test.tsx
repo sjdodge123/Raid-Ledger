@@ -4,14 +4,17 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { GuildPage } from '@raid-ledger/contract';
-import { progressionTabVisible } from './wow-tabs';
-import { wowHubModule } from './register-hub';
+import { progressionTabVisible } from './progression.helpers';
+import { wowHubModule } from '../hub/register-hub';
 
-function page(gameSlug: string, viewer: Partial<GuildPage['viewer']> = {}): Pick<GuildPage, 'guild' | 'viewer'> {
+function page(gameSlug: string, viewer: Partial<GuildPage['viewer']> = {}): GuildPage {
     return {
         guild: { id: 7, gameId: 3, kind: 'wow_guild', name: 'Hub', region: 'us', realmSlug: null, realmName: null, faction: null,
             memberCount: 42, lastSnapshotAt: null, gameSlug },
+        importedBy: null,
         viewer: { role: 'member', canEdit: false, canManageEditors: false, ...viewer },
+        ranks: [],
+        roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
     };
 }
 
