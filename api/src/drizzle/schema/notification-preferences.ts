@@ -34,6 +34,7 @@ export const NOTIFICATION_TYPES = [
   'hub_proposal_submitted',
   'hub_proposal_reviewed',
   'valheim_claim_suggestion',
+  'gg_ready',
   'system',
 ] as const;
 
@@ -86,6 +87,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   hub_proposal_reviewed: { inApp: true, push: false, discord: true },
   // ROK-1933 Q7 (recommended, not yet ruled): a Discord DM only.
   valheim_claim_suggestion: { inApp: false, push: false, discord: true },
+  gg_ready: { inApp: true, push: false, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 

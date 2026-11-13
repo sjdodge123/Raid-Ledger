@@ -1977,3 +1977,53 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .btn-secondary:hover {
     background: rgba(0, 0, 0, 0.08);
 }
+
+/* StoryViewer (ROK-2187): slide entrance + KenBurnsBackground pan/zoom.
+   Both classes are dropped under prefers-reduced-motion by the components. */
+@keyframes story-slide-in {
+    0% {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* StoryViewer auto-advance: the current progress segment fills over the
+   slide's duration (inline animation-duration; frozen while paused). */
+@keyframes story-progress {
+    0% {
+        transform: scaleX(0);
+    }
+
+    100% {
+        transform: scaleX(1);
+    }
+}
+
+/* GG intro "conversion" (ROK-2187): an accent wash spreads from the mascot
+   after "Tap to start". Not rendered under prefers-reduced-motion. */
+@keyframes gg-wash {
+    0% {
+        opacity: 0.6;
+        transform: scale(0.1);
+    }
+
+    100% {
+        opacity: 0;
+        transform: scale(2.4);
+    }
+}
+
+@keyframes story-ken-burns {
+    0% {
+        transform: scale(1) translate(0, 0);
+    }
+
+    100% {
+        transform: scale(1.16) translate(-3%, 2%);
+    }
+}

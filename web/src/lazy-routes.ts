@@ -27,6 +27,19 @@ export const JoinPage = lazyWithRetry(() =>
 export const PollSharePage = lazyWithRetry(() =>
     import('./pages/poll-share-page').then((m) => ({ default: m.PollSharePage })),
 );
+/** ROK-2187: "GG <year>" — the owner story, archive + `/gg` redirect, and the public `/w/:slug` summary. */
+export const GgYearPage = lazyWithRetry(() =>
+    import('./pages/gg/gg-year-page').then((m) => ({ default: m.GgYearPage })),
+);
+export const GgArchivePage = lazyWithRetry(() =>
+    import('./pages/gg/gg-archive-page').then((m) => ({ default: m.GgArchivePage })),
+);
+export const GgLatestRedirect = lazyWithRetry(() =>
+    import('./pages/gg/gg-archive-page').then((m) => ({ default: m.GgLatestRedirect })),
+);
+export const GgPublicPage = lazyWithRetry(() =>
+    import('./pages/gg/gg-public-page').then((m) => ({ default: m.GgPublicPage })),
+);
 /** ROK-1893: community-hub invite link landing (`/h/:token`). */
 export const HubInvitePage = lazyWithRetry(() =>
     import('./pages/hub-invite-page').then((m) => ({ default: m.HubInvitePage })),
@@ -231,6 +244,12 @@ export const PluginIntegrationPanel = lazyWithRetry(() =>
 );
 export const CronJobsPanel = lazyWithRetry(() =>
     import('./pages/admin/cron-jobs-panel').then((m) => ({ default: m.CronJobsPanel })),
+);
+export const GgPanel = lazyWithRetry(() =>
+    import('./pages/admin/gg-panel').then((m) => ({ default: m.GgPanel })),
+);
+export const GgPreviewPage = lazyWithRetry(() =>
+    import('./pages/admin/gg/gg-preview-page').then((m) => ({ default: m.GgPreviewPage })),
 );
 export const BackupsPanel = lazyWithRetry(() =>
     import('./pages/admin/backups-panel').then((m) => ({ default: m.BackupsPanel })),

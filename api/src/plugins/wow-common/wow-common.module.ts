@@ -66,6 +66,7 @@ import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.m
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
+import { WowGgCardRegistration } from './gg/wow-gg.registration';
 
 @Module({
   imports: [
@@ -96,6 +97,8 @@ import { NotificationModule } from '../../notifications/notification.module';
     ...guildHub.CONTROLLERS,
   ],
   providers: [
+    // ROK-2187: the WoW levels-dinged GG <year> card.
+    WowGgCardRegistration,
     BlizzardService,
     BlizzardAuthService,
     ForeverConfigService,

@@ -26,7 +26,7 @@ import {
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
-  CronJobsPanel, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
+  CronJobsPanel, GgPanel, GgPreviewPage, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage, DiscordLifecyclePage,
@@ -38,6 +38,10 @@ import {
   ValheimCharacterPage,
   CompanionLinkPage,
   ClaimPage,
+  GgYearPage,
+  GgArchivePage,
+  GgLatestRedirect,
+  GgPublicPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -81,6 +85,16 @@ function AdminIntegrationRoutes() {
   );
 }
 
+/** Admin → General → GG and its admin-only "Preview my GG" story (ROK-2187). */
+function GgAdminRoutes() {
+  return (
+    <>
+      <Route path="general/gg" element={<GgPanel />} />
+      <Route path="general/gg/preview/:year" element={<GgPreviewPage />} />
+    </>
+  );
+}
+
 function AdminSettingsRoutes() {
   return (
     <Route path="/admin/settings" element={<AdminSettingsLayout />}>
@@ -89,6 +103,7 @@ function AdminSettingsRoutes() {
       <Route path="general/data" element={<NasOnlyRoute><DemoDataPanel /></NasOnlyRoute>} />
       <Route path="general/lineup" element={<Navigate to="/admin/settings/general" replace />} />
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
+      {GgAdminRoutes()}
       <Route path="general/backups" element={<BackupsPanel />} />
       <Route path="general/logs" element={<LogsPanel />} />
       <Route path="general/hubs" element={<HubsPanel />} />
@@ -144,6 +159,7 @@ export function AppRoutes() {
       <Route path="/i/:code" element={<InvitePage />} />
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
       <Route path="/p/poll/:token" element={<PollSharePage />} />
+      <Route path="/w/:slug" element={<GgPublicPage />} />
       <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/claim" element={<ClaimPage />} />
@@ -155,6 +171,9 @@ export function AppRoutes() {
         <Route path="/onboarding" element={<OnboardingWizardPage />} />
         <Route path="/admin/setup" element={<AdminSetupWizard />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/gg" element={<GgLatestRedirect />} />
+        <Route path="/gg/archive" element={<GgArchivePage />} />
+        <Route path="/gg/:year" element={<GgYearPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/games/:id" element={<GameDetailPage />} />
         <Route path="/hubs" element={<HubsDirectoryPage />} />

@@ -55,6 +55,7 @@ import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
 import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
 import { recruitmentBumpSyncTests } from "./tests/recruitment-bump-sync.test.js";
 import { weeklyDigestTests } from "./tests/weekly-digest.test.js";
+import { ggDeliveryTests } from "./tests/gg-delivery.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { quickPlayAnnouncementsTests } from "./tests/quick-play-announcements.test.js";
 import { quickPlayOnePerGameTests } from "./tests/quick-play-one-per-game.test.js";
@@ -223,6 +224,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...recruitmentReminderTests,
     ...recruitmentBumpSyncTests,
     ...weeklyDigestTests,
+    ...ggDeliveryTests,
     ...seriesDualBindingTests,
     ...quickPlayAnnouncementsTests,
     ...quickPlayOnePerGameTests,

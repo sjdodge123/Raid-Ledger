@@ -349,3 +349,6 @@ export * from './hub-notification-mutes.schema.js';
 export * from './hub-widget-prefs.schema.js';
 // Companion device tokens — RFC 8628 link flow + Devices API (ROK-1955).
 export * from './companion-devices.schema.js';
+// GG <year> — yearly personalised story snapshot, cards, share + admin DTOs (ROK-2187).
+export * from './gg-cards.schema.js';
+export * from './gg.schema.js';

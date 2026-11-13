@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { buildHubProposalButton } from './notification-embed.hub-proposal';
 import { buildPollHubButton } from './notification-embed.poll-hub';
+import { buildGgReadyButton } from './notification-embed.gg-ready';
 import {
   ROACH_OUT_BUTTON_IDS,
   RUNNING_LATE_BUTTON_IDS,
@@ -138,6 +139,7 @@ const PAYLOAD_BUTTONS: Partial<
   valheim_claim_suggestion: buildValheimOpenHubButton,
   hub_proposal_submitted: buildHubProposalButton,
   hub_proposal_reviewed: buildHubProposalButton,
+  gg_ready: buildGgReadyButton,
 };
 
 /** Build the primary action button for a notification. */

@@ -1,0 +1,272 @@
+/**
+ * ROK-2187 — GgDeliveryService.runTick pacing/guard rules with mocked
+ * collaborators: send-now (`announceOnly`) never runs a DM wave, a failed
+ * announce does not recompute every player on the next tick, and two passes
+ * never overlap. The real-DB behaviour lives in gg-delivery.integration.spec.
+ */
+import type { EmbedBuilder } from 'discord.js';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../../drizzle/schema';
+import { SETTING_KEYS } from '../../../drizzle/schema';
+import type { SettingsService } from '../../../settings/settings.service';
+import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import type { NotificationDedupService } from '../../../notifications/notification-dedup.service';
+import type { NotificationService } from '../../../notifications/notification.service';
+import type { DiscordNotificationService } from '../../../notifications/discord-notification.service';
+import type { GgComputeService } from './gg-compute.service';
+import { EMBED_COLORS } from '../../../discord-bot/discord-bot.constants';
+import { GgDeliveryService } from './gg-delivery.service';
+import { findGgAnnouncedAt, runGgDmWave } from './gg-dm-wave.helpers';
+import { findGgReadyNotificationId } from './gg-ready-notification.helpers';
+
+jest.mock('./gg-dm-wave.helpers', () => ({
+  findGgAnnouncedAt: jest.fn(),
+  runGgDmWave: jest.fn(),
+}));
+
+jest.mock('./gg-ready-notification.helpers', () => ({
+  findGgReadyNotificationId: jest.fn(),
+}));
+
+const findAnnounced = jest.mocked(findGgAnnouncedAt);
+const findReady = jest.mocked(findGgReadyNotificationId);
+const runWave = jest.mocked(runGgDmWave);
+const NOW = new Date('2026-12-20T12:00:00Z');
+const SETTINGS: Record<string, string> = {
+  [SETTING_KEYS.GG_ENABLED]: 'true',
+  [SETTING_KEYS.GG_DELIVERY_DATE]: '2026-12-07',
+};
+
+function build(): {
+  service: GgDeliveryService;
+  computeAll: jest.Mock;
+  sendEmbed: jest.Mock;
+  bot: { connected: boolean };
+  create: jest.Mock;
+  dispatch: jest.Mock;
+} {
+  const marked = new Set<string>();
+  const dedup = {
+    checkAndMarkSent: jest.fn((key: string) => {
+      const had = marked.has(key);
+      marked.add(key);
+      return Promise.resolve(had);
+    }),
+    releaseKey: jest.fn((key: string) => {
+      marked.delete(key);
+      return Promise.resolve();
+    }),
+  };
+  const settings = {
+    get: jest.fn((k: string) => Promise.resolve(SETTINGS[k] ?? null)),
+    getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('chan'),
+    getClientUrl: jest.fn().mockResolvedValue(null),
+    getBranding: jest.fn().mockResolvedValue({ communityName: 'Guild' }),
+  };
+  const computeAll = jest.fn().mockResolvedValue(undefined);
+  const compute = {
+    communityTimeZone: jest.fn().mockResolvedValue('UTC'),
+    computeAll,
+  };
+  const sendEmbed = jest.fn().mockResolvedValue(undefined);
+  const state = { connected: true };
+  const bot = { isConnected: () => state.connected, sendEmbed };
+  const create = jest.fn().mockResolvedValue(null);
+  const dispatch = jest.fn().mockResolvedValue(true);
+  const service = new GgDeliveryService(
+    {} as PostgresJsDatabase<typeof schema>,
+    settings as unknown as SettingsService,
+    compute as unknown as GgComputeService,
+    dedup as unknown as NotificationDedupService,
+    bot as unknown as DiscordBotClientService,
+    { create } as unknown as NotificationService,
+    { dispatch } as unknown as DiscordNotificationService,
+  );
+  return { service, computeAll, sendEmbed, bot: state, create, dispatch };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  runWave.mockResolvedValue({ claimed: 1, sent: 1, failed: 0 });
+  findReady.mockResolvedValue(null);
+});
+
+it('send-now (announceOnly) after the offset never runs a DM wave', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service } = build();
+  const out = await service.runTick(NOW, {
+    bypassDate: true,
+    announceOnly: true,
+  });
+  expect(out.status).toBe('announced');
+  expect(runWave).not.toHaveBeenCalled();
+  expect((await service.runTick(NOW)).status).toBe('dm-wave');
+  expect(runWave).toHaveBeenCalledTimes(1);
+});
+
+it('the announcement goes out through the shared channel chrome', async () => {
+  findAnnounced.mockResolvedValue(null);
+  const { service, sendEmbed } = build();
+  await service.runTick(NOW);
+  expect(sendEmbed).toHaveBeenCalledTimes(1);
+  const embed = (sendEmbed.mock.calls[0] as [string, EmbedBuilder])[1];
+  expect(embed.data.title).toBe('GG 2026 is here');
+  expect(embed.data.author?.name).toBe('Guild');
+  expect(embed.data.footer?.text).toBe('Guild');
+  expect(embed.data.color).toBe(EMBED_COLORS.ANNOUNCEMENT);
+});
+
+it('a failed announce does not recompute every player on the next tick', async () => {
+  findAnnounced.mockResolvedValue(null);
+  const { service, computeAll, sendEmbed } = build();
+  sendEmbed.mockRejectedValueOnce(new Error('discord down'));
+  await expect(service.runTick(NOW)).rejects.toThrow('discord down');
+  await service.runTick(NOW);
+  expect(sendEmbed).toHaveBeenCalledTimes(2);
+  expect(computeAll).toHaveBeenCalledTimes(1);
+});
+
+it('a pass still running makes the next one return busy', async () => {
+  findAnnounced.mockResolvedValue(null);
+  const { service, computeAll } = build();
+  let finish: () => void = () => undefined;
+  computeAll.mockReturnValueOnce(
+    new Promise<void>((resolve) => (finish = resolve)),
+  );
+  const first = service.runTick(NOW);
+  await new Promise((r) => setImmediate(r));
+  expect((await service.runTick(NOW)).status).toBe('busy');
+  finish();
+  await first;
+  expect(computeAll).toHaveBeenCalledTimes(1);
+});
+
+it('an announced year keeps its DM wave going before the configured date', async () => {
+  const early = new Date('2026-12-01T12:00:00Z');
+  findAnnounced.mockResolvedValue(null);
+  const { service } = build();
+  expect((await service.runTick(early)).status).toBe('not-due');
+  findAnnounced.mockResolvedValue(new Date('2026-11-30T12:00:00Z'));
+  expect((await service.runTick(early)).status).toBe('dm-wave');
+  expect(runWave).toHaveBeenCalledTimes(1);
+});
+
+it('a disconnected bot claims nothing: no DM wave runs', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service, bot } = build();
+  bot.connected = false;
+  expect((await service.runTick(NOW)).status).toBe('not-connected');
+  expect(runWave).not.toHaveBeenCalled();
+});
+
+it('a bot dropping mid-wave fails the send so the claim is released', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service, bot, create } = build();
+  runWave.mockImplementation(async (_db, _year, send) => {
+    bot.connected = false;
+    await expect(send({ id: 1, userId: 7 })).rejects.toThrow(/not connected/);
+    return { claimed: 1, sent: 0, failed: 1 };
+  });
+  await service.runTick(NOW);
+  expect(runWave).toHaveBeenCalledTimes(1);
+  expect(create).not.toHaveBeenCalled();
+});
+
+it('the gg_ready notification carries the GG link for the DM button', async () => {
+  findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+  const { service, create } = build();
+  runWave.mockImplementation(async (_db, _year, send) => {
+    await send({ id: 1, userId: 7 });
+    return { claimed: 1, sent: 1, failed: 0 };
+  });
+  await service.runTick(NOW);
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: 'gg_ready',
+      payload: { year: 2026, url: '/gg/2026' },
+    }),
+  );
+});
+
+describe('gg_ready DM enqueue is awaited before dm_sent_at is stamped', () => {
+  type Send = (row: { id: number; userId: number }) => Promise<void>;
+  let sendBot: { connected: boolean } = { connected: true };
+  async function captureSend(): Promise<{
+    send: Send;
+    create: jest.Mock;
+    dispatch: jest.Mock;
+  }> {
+    findAnnounced.mockResolvedValue(new Date('2026-12-07T00:00:00Z'));
+    const built = build();
+    let send: Send | null = null;
+    sendBot = built.bot;
+    runWave.mockImplementation((_db, _year, s: Send) => {
+      send = s;
+      return Promise.resolve({ claimed: 0, sent: 0, failed: 0 });
+    });
+    await built.service.runTick(NOW);
+    if (!send) throw new Error('runWave was not handed a send callback');
+    return { send, create: built.create, dispatch: built.dispatch };
+  }
+
+  it('creates the in-app row without the fire-and-forget DM, then awaits the enqueue', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-1' });
+    await send({ id: 1, userId: 7 });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'gg_ready', skipDiscord: true }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationId: 'n-1',
+        userId: 7,
+        type: 'gg_ready',
+        payload: { year: 2026, url: '/gg/2026' },
+      }),
+    );
+  });
+
+  it('a failed enqueue rejects the send so the wave releases the claim', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-2' });
+    dispatch.mockRejectedValue(new Error('redis down'));
+    await expect(send({ id: 1, userId: 7 })).rejects.toThrow('redis down');
+  });
+
+  it("a retry after a failed enqueue reuses the year's gg_ready row, never creating a second", async () => {
+    const { send, create, dispatch } = await captureSend();
+    findReady.mockResolvedValue('n-first');
+    await send({ id: 1, userId: 7 });
+    expect(findReady).toHaveBeenCalledWith(expect.anything(), 7, 2026);
+    expect(create).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ notificationId: 'n-first', userId: 7 }),
+    );
+  });
+
+  it('a false dispatch because the bot dropped mid-send rejects, so dm_sent_at is not stamped', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-3' });
+    dispatch.mockImplementation(() => {
+      sendBot.connected = false;
+      return Promise.resolve(false);
+    });
+    await expect(send({ id: 1, userId: 7 })).rejects.toThrow(
+      /disconnected mid-send/,
+    );
+  });
+
+  it('a false dispatch with the bot still up (no Discord link, DM pref off) resolves: in-app only', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue({ id: 'n-4' });
+    dispatch.mockResolvedValue(false);
+    await expect(send({ id: 1, userId: 7 })).resolves.toBeUndefined();
+  });
+
+  it('skips the DM when the in-app gg_ready category is off (no row created)', async () => {
+    const { send, create, dispatch } = await captureSend();
+    create.mockResolvedValue(null);
+    await send({ id: 1, userId: 7 });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+});

@@ -6,6 +6,7 @@ import { addGameServerProvider, clearGameServerProviders } from './game-server-s
 import { addEventReportLinkPredicate, clearEventReportLinkPredicates, type EventReportLinkPredicate } from './event-report-links';
 import { addHubGameWidget, clearHubGameWidgets, type HubGameWidget } from './hub-game-widgets';
 import { addHubGameTab, clearHubGameTabs } from './hub-game-tabs';
+import { addGgCard, type GgCardRegistration } from './gg-cards';
 import {
     addHubCompanionPrompt, clearHubCompanionPrompts, type HubCompanionPrompt,
 } from '../components/hub/companion/hub-companion-prompts';
@@ -101,6 +102,12 @@ export interface PluginHandle {
      * must declare a `claim-provider` behaviour and the api must register the matching provider.
      */
     registerHubClaimProvider(provider: HubClaimProvider): void;
+    /**
+     * Render this plugin's "GG <year>" card `card.id` (ROK-2187). Shown only while this plugin is
+     * active and the stored payload parses with `card.schema`; the manifest must declare a
+     * `gg-card` behaviour with the same id (ownership guard).
+     */
+    registerGgCard<P>(card: GgCardRegistration<P>): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -179,6 +186,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerHubGameTab: (gameSlugs, tab) => addHubGameTab(slug, gameSlugs, tab),
         registerHubCompanionPrompt: (prompt) => addHubCompanionPrompt(slug, prompt),
         registerHubClaimProvider: (provider) => addHubClaimProvider(slug, provider),
+        registerGgCard: (card) => addGgCard(slug, card),
     };
 }
 

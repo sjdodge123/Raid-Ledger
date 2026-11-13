@@ -1,0 +1,65 @@
+/**
+ * "GG <year>" API client (ROK-2187). Paths:
+ * `GET /gg/:year` (owner snapshot), `GET /gg/archive` (years with a snapshot),
+ * `PUT /gg/:year/share` (opt-in public link), `GET /gg/public/:slug` (summary
+ * only, anonymous) and the share image `GET /gg/public/:slug/card`.
+ */
+import type {
+    GgArchiveDto, GgOwnerMascot, GgOwnerSnapshotDto, GgPublicSummaryDto, GgShareStateDto, GgShareToggleDto,
+} from '@raid-ledger/contract';
+import { API_BASE_URL } from '../config';
+import { fetchApi } from './fetch-api';
+import { encodePathSegment } from './path-segment';
+
+/** The owner snapshot (`mascot` absent/`null` = the plain intro). */
+export type GgOwnerSnapshot = GgOwnerSnapshotDto;
+
+/**
+ * Mascot copies are served by the API at `/uploads/gg-mascot/…` (API-relative,
+ * like the branding logo) — prefix `API_BASE_URL` so `<img>` / `Audio` load
+ * them from the API host, not the web host. Absolute URLs pass through.
+ */
+export function resolveGgAssetUrl(url: string): string {
+    return /^https?:\/\//.test(url) ? url : `${API_BASE_URL}${url}`;
+}
+
+function withResolvedMascot(dto: GgOwnerSnapshot): GgOwnerSnapshot {
+    const m = dto.mascot;
+    if (!m) return dto;
+    const mascot: GgOwnerMascot = {
+        ...m,
+        imageUrl: resolveGgAssetUrl(m.imageUrl),
+        soundUrl: m.soundUrl === null ? null : resolveGgAssetUrl(m.soundUrl),
+    };
+    return { ...dto, mascot };
+}
+
+/** The viewer's own frozen snapshot for `year` (mascot URLs made absolute). */
+export async function getGgYear(year: number): Promise<GgOwnerSnapshot> {
+    return withResolvedMascot(await fetchApi<GgOwnerSnapshot>(`/gg/${year}`));
+}
+
+/** Every year the viewer has a GG for (R5). */
+export async function getGgArchive(): Promise<GgArchiveDto> {
+    return fetchApi('/gg/archive');
+}
+
+/** Turn the public link for `year` on or off (off by default, Q5). */
+export async function setGgShare(year: number, body: GgShareToggleDto): Promise<GgShareStateDto> {
+    return fetchApi(`/gg/${year}/share`, { method: 'PUT', body: JSON.stringify(body) });
+}
+
+/** The public summary behind `/w/:slug` — no names, ids or email (Q4). */
+export async function getGgPublic(slug: string): Promise<GgPublicSummaryDto> {
+    return fetchApi(`/gg/public/${encodePathSegment(slug)}`);
+}
+
+/** The server-rendered share card image for a public slug. */
+export function ggShareImageUrl(slug: string): string {
+    return `${API_BASE_URL}/gg/public/${encodePathSegment(slug)}/card`;
+}
+
+/** The page a shared link opens. */
+export function ggPublicPageUrl(slug: string): string {
+    return `${window.location.origin}/w/${encodePathSegment(slug)}`;
+}

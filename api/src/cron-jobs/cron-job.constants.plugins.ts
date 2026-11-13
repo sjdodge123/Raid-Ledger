@@ -18,6 +18,12 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Refreshes Steam achievements for members of game hubs whose game has Steam stats enabled, nightly at 04:30',
     category: 'Data Sync',
   },
+  // ROK-2187: Core's GG <year> delivery (announce once, then paced DMs).
+  GgDeliveryCron_tick: {
+    description:
+      'Delivers GG <year> on the configured December day: computes every snapshot, posts the announcement once, then sends up to 25 player notifications every 5 minutes',
+    category: 'Notifications',
+  },
   // ROK-1957 D-9: the BG3 plugin's nightly save-history thinning.
   Bg3HistoryRetentionCron_prune: {
     description:

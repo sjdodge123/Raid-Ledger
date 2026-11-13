@@ -52,6 +52,8 @@ function configureStaticAssets(
     prefix: '/uploads/branding/',
     maxAge: '1d',
   });
+  // ROK-2187: GG mascot copies are NOT a static mount — GgMascotAssetController
+  // serves extensionless URLs so prod nginx's static regex can't 404 them.
   // ROK-1814 Q3: re-encoded, content-hashed guild crests are public static.
   app.useStaticAssets(getGuildCrestDir(), {
     prefix: GUILD_CREST_URL_PREFIX,

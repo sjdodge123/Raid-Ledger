@@ -23,6 +23,7 @@ import {
     useSteamPlaytimeVisible,
 } from '../../components/hub/steam-stats/use-steam-stats-visible';
 import { EventHubField } from './slots/event-hub-field';
+import { registerCoreGgCards } from './gg/register-core-gg-cards';
 
 /** Core plugin (ROK-1969, OQ1) — label "Core" matches the arrange-mode owner label; neutral registry colour. */
 const core = registerPlugin(CORE_PLUGIN_ID, {
@@ -98,3 +99,6 @@ core.registerHubWidget({
 // ROK-2071 — the event form's "Hub" picker (create + edit). Core-owned so an event of any game can be
 // tagged to any hub kind with the WoW plugin off; the write path is Core's `event-guild-tagger`.
 core.registerSlot('event-create:hub-field', EventHubField);
+
+// ROK-2187 — the core "GG <year>" card renderers (declared as core gg-card behaviours).
+registerCoreGgCards(core);

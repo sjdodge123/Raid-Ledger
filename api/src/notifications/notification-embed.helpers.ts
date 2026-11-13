@@ -68,6 +68,8 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   hub_proposal_reviewed: 'done',
   // ROK-1933: asks the player to confirm a character is theirs.
   valheim_claim_suggestion: 'needs_you',
+  // ROK-2187: "your GG <year> is ready" announces, asks nothing.
+  gg_ready: 'announcing',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -135,6 +137,7 @@ const TYPE_EMOJI: Record<string, string> = {
   hub_proposal_submitted: '🗳️',
   hub_proposal_reviewed: '🏕️',
   valheim_claim_suggestion: '🛡️',
+  gg_ready: '🎮',
   role_gap_alert: '\u26A0\uFE0F',
 };
 
@@ -170,6 +173,7 @@ const TYPE_LABEL: Record<string, string> = {
   hub_proposal_submitted: 'Hub Proposal',
   hub_proposal_reviewed: 'Hub Proposal Reviewed',
   valheim_claim_suggestion: 'Raid Ledger · Valheim',
+  gg_ready: 'GG',
   role_gap_alert: 'Role Gap Alert',
 };
 

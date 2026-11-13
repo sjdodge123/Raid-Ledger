@@ -4,13 +4,26 @@ import { bestEffortInit } from '../../common/lifecycle.util';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { CORE_MANIFEST } from './core.manifest';
 import { CoreSteamStatsModule } from './steam-stats/core-steam-stats.module';
+import { GgCardModule } from './gg/gg-card.module';
+import { GgMascotModule } from './gg/mascot/gg-mascot.module';
+import { GgModule } from './gg/gg.module';
+import { GgDeliveryModule } from './gg/gg-delivery.module';
 
 /**
  * ROK-1969 D2 — registers the Core manifest and installs its row on boot
  * (same pattern as Discord / Blizzard). Core is active regardless (D3), so
  * a failed install only hides it from `GET /admin/plugins` until next boot.
  */
-@Module({ imports: [CoreSteamStatsModule] })
+// ROK-2187: GgCardModule is @Global — every plugin registers its GG cards.
+@Module({
+  imports: [
+    CoreSteamStatsModule,
+    GgCardModule,
+    GgModule,
+    GgMascotModule,
+    GgDeliveryModule,
+  ],
+})
 export class CorePluginModule implements OnModuleInit {
   private readonly logger = new Logger(CorePluginModule.name);
 

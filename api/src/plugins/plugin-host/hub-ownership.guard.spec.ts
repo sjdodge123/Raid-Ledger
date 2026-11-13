@@ -374,3 +374,35 @@ describe('ROK-1957 D-16 — companion handlers are scanned (each must go red)', 
     ]);
   });
 });
+
+describe('ROK-2187 — GG card registrations are scanned (each must go red)', () => {
+  it('fails when a GG card registration is gone', () => {
+    const noCore = SOURCES.filter(
+      (s) => s.file !== 'plugins/core/gg/core-gg.registration.ts',
+    );
+    const keys = scanHubRegistrations(noCore, CTX).keys;
+    expect(ownershipDrift(keys, HUB_PLUGIN_MANIFESTS)).toContain(
+      'core/gg-card/summary is declared but nothing registers it',
+    );
+  });
+
+  it('fails on a GG card nobody declared, and reports an unresolvable one', () => {
+    const extra: ScanSource[] = [
+      {
+        file: 'plugins/valheim/gg/x.ts',
+        text: "class X { constructor(private readonly gg: GgCardRegistry) {} init() { this.gg.register(VALHEIM_PLUGIN_ID, 'valheim-stray', p, 1); } }",
+      },
+      {
+        file: 'plugins/valheim/gg/y.ts',
+        text: 'class Y { constructor(private readonly gg: GgCardRegistry) {} init() { this.gg.register(VALHEIM_PLUGIN_ID, CARD, p, 1); } }',
+      },
+    ];
+    const live = scanHubRegistrations([...SOURCES, ...extra], CTX);
+    expect(ownershipDrift(live.keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+      'valheim/gg-card/valheim-stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    ]);
+    expect(live.problems).toEqual([
+      'plugins/valheim/gg/y.ts: GG card owner "VALHEIM_PLUGIN_ID" / card "CARD" is unresolvable',
+    ]);
+  });
+});

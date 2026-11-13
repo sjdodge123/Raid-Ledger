@@ -86,6 +86,11 @@ const NOTIFICATION_TYPE_META: {
         description: 'When a confirmed player takes your tentative slot',
     },
     {
+        type: 'gg_ready',
+        label: 'Your GG of the year',
+        description: 'When your yearly GG story is ready to open',
+    },
+    {
         type: 'community_lineup',
         label: 'Community Lineup',
         description: 'Updates about community lineup voting, matches, and scheduling',
