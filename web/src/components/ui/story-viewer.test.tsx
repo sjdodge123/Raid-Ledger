@@ -197,6 +197,16 @@ describe('StoryViewer — focus', () => {
         expect(document.activeElement).toBe(next);
     });
 
+    it('Shift+Tab from the focused slide on desktop wraps to the last control — the tabIndex -1 tap zones before it are not tabbable (ROK-2187)', async () => {
+        matching = [DESKTOP];
+        renderViewer();
+        await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+        const slide = screen.getByRole('group', { name: '1 of 3: Intro' });
+        slide.focus();
+        fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+        expect(document.activeElement).toBe(screen.getByTestId('story-side-arrow-next'));
+    });
+
     it('locks body scroll while open', () => {
         renderViewer();
         expect(document.body.style.overflow).toBe('hidden');

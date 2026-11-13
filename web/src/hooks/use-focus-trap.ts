@@ -20,9 +20,11 @@ const FOCUSABLE_SELECTOR = [
  * @returns ref to attach to the container element
  */
 function getFocusableElements(container: HTMLElement): HTMLElement[] {
+    // An explicit tabIndex -1 control (a pointer-only story tap zone) is never
+    // reached by Tab; counting it made a slide's Shift+Tab escape the dialog (ROK-2187).
     return Array.from(
         container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-    ).filter((el) => el.offsetParent !== null);
+    ).filter((el) => el.offsetParent !== null && el.getAttribute('tabindex') !== '-1');
 }
 
 /** True when no tabbable element lies after (`back`: before) `active` — the browser's Tab would leave. */
