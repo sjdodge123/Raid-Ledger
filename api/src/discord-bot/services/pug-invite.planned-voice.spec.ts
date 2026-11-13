@@ -8,15 +8,24 @@ import { PugInviteService } from './pug-invite.service';
 import type { ChannelResolverService } from './channel-resolver.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { SettingsService } from '../../settings/settings.service';
+import * as schema from '../../drizzle/schema';
 
 const START = new Date(Date.now() + 3 * 24 * 3_600_000);
 
-/** `select().from().where().limit()` resolving to `rows`. */
-function selectChain(rows: unknown[]) {
+/**
+ * `select().from(table).where().limit()` resolving to the rows for `table`,
+ * so the result does not depend on the order the service issues its reads.
+ */
+function tableChain(rowsFor: (table: unknown) => unknown[]) {
   const chain: Record<string, jest.Mock> = {};
-  chain.from = jest.fn().mockReturnValue(chain);
+  let rows: unknown[] = [];
+  chain.from = jest.fn((table: unknown) => {
+    rows = rowsFor(table);
+    return chain;
+  });
   chain.where = jest.fn().mockReturnValue(chain);
-  chain.limit = jest.fn().mockResolvedValue(rows);
+  chain.limit = jest.fn(() => Promise.resolve(rows));
+  chain.then = jest.fn((ok: (v: unknown[]) => unknown) => ok(rows));
   return chain;
 }
 
@@ -56,13 +65,12 @@ function build(liveChannelId: string | null) {
     ephemeralVoiceChannelId: liveChannelId,
     notificationChannelOverride: null,
   };
-  const db = {
-    select: jest
-      .fn()
-      .mockReturnValueOnce(selectChain([event]))
-      .mockReturnValueOnce(selectChain([{ name: 'World of Warcraft' }]))
-      .mockReturnValueOnce(selectChain([{ value: 2 }])),
+  const rowsFor = (table: unknown): unknown[] => {
+    if (table === schema.events) return [event];
+    if (table === schema.games) return [{ name: 'World of Warcraft' }];
+    return [{ value: 2 }];
   };
+  const db = { select: jest.fn(() => tableChain(rowsFor)) };
   const service = new PugInviteService(db as never, client, resolver, settings);
   return { service, sendEmbedDM };
 }

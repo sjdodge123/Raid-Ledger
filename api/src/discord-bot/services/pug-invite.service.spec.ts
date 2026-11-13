@@ -155,6 +155,8 @@ describe('PugInviteService', () => {
           resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue('channel-789'),
+          // Optimistic like the real guard: a set override counts as voice.
+          overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
         },
       },
       {
