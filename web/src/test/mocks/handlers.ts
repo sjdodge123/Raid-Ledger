@@ -40,10 +40,9 @@ export const handlers = [
     ...guildRaidsHandlers,
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
-    ...hubPostsHandlers,
-    ...hubSessionNoteHandlers,
-    ...guildIngameTextHandlers,
-    ...guildRecruitmentHandlers,
+    ...hubPostsHandlers, ...hubSessionNoteHandlers,
+    // Guild message (ROK-2136) + Recruitment (ROK-1789) — nothing set, cards hidden.
+    ...guildIngameTextHandlers, ...guildRecruitmentHandlers,
     ...guildContributionsHandlers,
     ...bg3Handlers,
     ...guildDiscordHandlers,
