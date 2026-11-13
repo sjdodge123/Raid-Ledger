@@ -72,7 +72,6 @@ function build(kind: 'voice' | 'text' | 'uncached') {
     select: jest
       .fn()
       .mockReturnValueOnce(selectChain([event]))
-      .mockReturnValueOnce(selectChain([{ name: 'WoW' }]))
       .mockReturnValueOnce(selectChain([{ value: 2 }])),
   };
   const service = new PugInviteService(db as never, client, resolver, settings);

@@ -8,7 +8,11 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { applyEmbedVoice, type EmbedVoiceDeps } from './embed-voice.helpers';
-import type { PlannedEphemeralVoice } from './planned-ephemeral-voice.helpers';
+import {
+  loadPlannedVoiceSettings,
+  type PlannedEphemeralVoice,
+} from './planned-ephemeral-voice.helpers';
+import { shouldCreateEphemeralChannel } from './ephemeral-voice.gate.helpers';
 import { readGameName } from './scheduled-event.planned-voice';
 
 type EventRow = typeof schema.events.$inferSelect;
@@ -22,6 +26,17 @@ export interface InviteVoiceDeps extends EmbedVoiceDeps {
   db: PostgresJsDatabase<typeof schema>;
 }
 
+/** The ephemeral-voice gate for this event (no settings → closed). */
+async function ephemeralGateOpen(
+  deps: InviteVoiceDeps,
+  event: EventRow,
+): Promise<boolean> {
+  if (!deps.settings) return false;
+  const s = await loadPlannedVoiceSettings(deps.settings);
+  const eventOverride = event.ephemeralVoiceEnabled ?? null;
+  return shouldCreateEphemeralChannel(s.globalEnabled, s.forced, eventOverride);
+}
+
 /** Resolve the invite's live voice channel or its planned temporary one. */
 export async function resolveInviteVoice(
   deps: InviteVoiceDeps,
@@ -29,7 +44,9 @@ export async function resolveInviteVoice(
   gameId: number | null,
 ): Promise<InviteVoice> {
   // The planned name carries the game, as the channel the scheduler creates.
-  const gameName = await readGameName(deps.db, gameId);
+  // Read it only when the ephemeral gate is open (most invites: it is not).
+  const open = await ephemeralGateOpen(deps, event);
+  const gameName = open ? await readGameName(deps.db, gameId) : null;
   const target: Parameters<typeof applyEmbedVoice>[1] = {
     startTime: event.duration[0].toISOString(),
     title: event.title,

@@ -166,6 +166,10 @@ describe('PugInviteService', () => {
           }),
           getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
           getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
+          // Planned temporary channel gate off (pug-invite.planned-voice.spec).
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
         },
       },
     ];
