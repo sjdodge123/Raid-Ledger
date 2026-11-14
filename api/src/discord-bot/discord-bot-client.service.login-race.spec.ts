@@ -191,7 +191,9 @@ describe('ROK-2198 — a failed login destroys its client (AC1)', () => {
     expect(newClient).not.toBe(oldClient);
 
     failOld(transientError());
-    await expect(first).rejects.toThrow(DiscordConnectError);
+    await flush();
+    const outcome = await first.catch((err: unknown) => err);
+    expect(isSupersededConnectError(outcome)).toBe(true);
     expect(getClient(service)).toBe(newClient);
     expect(service.isConnecting()).toBe(true);
   });
