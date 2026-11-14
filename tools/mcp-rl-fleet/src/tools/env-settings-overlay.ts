@@ -135,16 +135,20 @@ export function parseSkippedUnusable(text: string | undefined): string[] {
 /**
  * ROK-2202: shared keys that are still NOT usable in the env after the
  * overlay — a key the bundle holds that was neither written, filled nor kept,
- * plus a key the sync skipped as unusable that the overlay did not write.
+ * plus a key the sync skipped as unusable that the overlay did not replace
+ * with a USABLE value. A write only repairs a skipped key when the bundle's
+ * copy is usable (listed in `bundle_keys`): a blank bundle row is still
+ * inserted and reported, but leaves the key broken (Codex P2 #1).
  * Sorted names, never values.
  */
 export function missingSharedKeys(ov: SettingsOverlayResult, skipped: string[]): string[] {
   if (!ov.ok) return [];
+  const usable = new Set(ov.bundle_keys ?? []);
   const written = new Set([...ov.applied, ...(ov.inserted_if_absent ?? [])]);
   const present = new Set([...written, ...(ov.kept_synced ?? [])]);
   const missing = new Set([
-    ...(ov.bundle_keys ?? []).filter((k) => !present.has(k)),
-    ...skipped.filter((k) => !written.has(k)),
+    ...[...usable].filter((k) => !present.has(k)),
+    ...skipped.filter((k) => !(written.has(k) && usable.has(k))),
   ]);
   return [...missing].sort();
 }

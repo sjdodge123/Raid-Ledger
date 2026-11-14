@@ -408,6 +408,22 @@ describe('runDeployChain — unusable laptop keys (ROK-2202)', () => {
     expect(cap.details.settings_overlay).toContain('missing: blizzard_client_secret');
   });
 
+  it('a skipped key the overlay filled with a BLANK bundle value stays missing (Codex P2 #1)', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true, stdout: '', stderr: SKIPPED_STDERR });
+    // Both copies blank: the overlay still inserts the bundle row and reports
+    // it, but bundle_keys (usable values only) excludes it.
+    overlayRun.mockResolvedValue({
+      ok: true, applied: ALWAYS_SEEDED, sync_wins: true,
+      bundle_keys: ['itad_api_key'],
+      inserted_if_absent: ['blizzard_client_secret'], kept_synced: ['itad_api_key'],
+    });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect((res as { shared_keys_missing?: string[] }).shared_keys_missing).toEqual(['blizzard_client_secret']);
+    expect(res.message).toContain('shared key(s) missing in the env after the overlay: blizzard_client_secret');
+    expect(cap.details.settings_overlay).toContain('missing: blizzard_client_secret');
+  });
+
   it('a GOOD laptop value kept by sync-wins is not reported missing', async () => {
     envSyncExecute.mockResolvedValue({ ok: true, stdout: '', stderr: 'skipped_unusable: []\n' });
     overlayRun.mockResolvedValue({
