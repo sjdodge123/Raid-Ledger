@@ -16,7 +16,7 @@ import { WeekEventCard } from './WeekEventCard';
 import { ScheduleView } from './ScheduleView';
 import { CalendarToolbar } from './CalendarToolbar';
 import { MonthEventComponent } from './MonthEventComponent';
-import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar } from './calendar-view.utils';
+import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar, isShownOnCalendar } from './calendar-view.utils';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { isLayerEvent, type LayerWindowEvent } from './layers/calendar-layer-events';
@@ -111,11 +111,7 @@ function useCalendarEvents(eventsData: ReturnType<typeof useEvents>['data'], sel
     return useMemo(() => {
         if (!eventsData?.data) return [];
         return eventsData.data
-            .filter((event) => {
-                if (event.cancelledAt) return false;
-                if (event.reschedulingPollId) return false;
-                return shouldRenderInCalendar(event, selectedGames);
-            })
+            .filter((event) => isShownOnCalendar(event) && shouldRenderInCalendar(event, selectedGames))
             .map((event) => ({
                 id: event.id, title: event.title,
                 start: toZonedDate(event.startTime, resolved!),
@@ -179,7 +175,7 @@ function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
     const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
-    const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved));
+    const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved), eventsData?.data);
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };

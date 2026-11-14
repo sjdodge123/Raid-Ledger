@@ -8,6 +8,7 @@ import { config as loadEnvFile } from 'dotenv';
 import * as os from 'os';
 import { scrubSecrets } from './sentry-scrub.helpers';
 import { scrubPii } from './sentry-pii.helpers';
+import { isExpectedRetry } from './sentry-expected-retry.helpers';
 import {
   API_ENV_FILE,
   isProductionRuntime,
@@ -61,7 +62,11 @@ if (!telemetryDisabled && isProduction) {
     dataCollection: V10_DATA_COLLECTION,
     // v11 defaults this to true; keep v10 issue grouping.
     attachStacktrace: false,
-    beforeSend(event) {
+    beforeSend(event, hint) {
+      // ROK-2189: a job error rethrown only so BullMQ retries it (a calendar
+      // provider TransientError/RateLimitError on a non-final attempt) is
+      // marked by its thrower. The final attempt is never marked → reports.
+      if (isExpectedRetry(hint?.originalException)) return null;
       // ROK-1365: drop synthetic CSP-report noise before anything else. The
       // /csp-report controller captures real browser violations via
       // captureMessage (tag source='csp_report', the report under
