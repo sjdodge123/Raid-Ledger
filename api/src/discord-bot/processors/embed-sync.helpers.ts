@@ -9,6 +9,11 @@ import {
   toEmbedGame,
 } from '../services/embed-game.helpers';
 import { computeEmbedStateForData } from '../services/embed-state.helpers';
+import type {
+  EphemeralVoiceState,
+  PlannedVoiceSettingsSource,
+} from '../services/planned-ephemeral-voice.helpers';
+import { applyEmbedVoice } from '../services/embed-voice.helpers';
 
 /**
  * Find all tracked Discord messages for this event in the given guild.
@@ -40,14 +45,21 @@ export async function buildEventData(
   db: PostgresJsDatabase<typeof schema>,
   event: typeof schema.events.$inferSelect,
   channelResolver: ChannelResolverService,
+  settings?: PlannedVoiceSettingsSource,
 ): Promise<EmbedEventData> {
   const signupMentions = await queryActiveSignups(db, event.id, event.gameId);
   const roleCounts = await queryRoleCounts(db, event.id);
 
   const eventData = assembleEventData(event, signupMentions, roleCounts);
 
+  // Game first so a planned temporary channel's name carries the game.
   await enrichWithGameInfo(db, event, eventData);
-  await enrichWithVoiceChannel(channelResolver, event, eventData);
+  await applyEmbedVoice({ settings, channelResolver }, eventData, {
+    gameId: event.gameId,
+    recurrenceGroupId: event.recurrenceGroupId,
+    notificationChannelOverride: event.notificationChannelOverride,
+    ephemeral: ephemeralStateOf(event),
+  });
 
   return eventData;
 }
@@ -251,23 +263,16 @@ async function enrichWithGameInfo(
   if (projected) eventData.game = projected;
 }
 
-/** Enrich event data with voice channel info. */
-async function enrichWithVoiceChannel(
-  channelResolver: ChannelResolverService,
+/** The event row's ephemeral-voice columns, as the embed decision reads them. */
+function ephemeralStateOf(
   event: typeof schema.events.$inferSelect,
-  eventData: EmbedEventData,
-): Promise<void> {
-  // ROK-1389: honor a voice override only when it is actually a voice channel.
-  const voiceChannelId =
-    await channelResolver.resolveVoiceChannelHonoringOverride(
-      event.gameId,
-      event.recurrenceGroupId,
-      event.ephemeralVoiceChannelId,
-      event.notificationChannelOverride,
-    );
-  if (voiceChannelId) {
-    eventData.voiceChannelId = voiceChannelId;
-  }
+): EphemeralVoiceState {
+  return {
+    channelId: event.ephemeralVoiceChannelId,
+    enabled: event.ephemeralVoiceEnabled,
+    cancelled: (event.cancelledAt ?? null) !== null,
+    rescheduling: (event.reschedulingPollId ?? null) !== null,
+  };
 }
 
 /**

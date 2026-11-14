@@ -46,10 +46,12 @@ import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import { HubJoinPromptsLazy } from '../components/hub/community/hub-join-prompt-lazy';
 import './event-detail-page.css';
 
-function buildVoiceChannelLink(data: VoiceChannelResponseDto | null | undefined): { name: string; url: string } | null {
-    if (!data?.channelName || !data.channelId) return null;
-    const url = data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '';
-    return { name: data.channelName, url };
+/** A planned temporary channel (no id yet, `plannedOpensAt` set) yields its name + open time and no url. */
+function buildVoiceChannelLink(data: VoiceChannelResponseDto | null | undefined): { name: string; url: string; opensAt: string | null } | null {
+    if (!data?.channelName) return null;
+    if (!data.channelId) return data.plannedOpensAt ? { name: data.channelName, url: '', opensAt: data.plannedOpensAt } : null;
+    const url = data.guildId ? `https://discord.com/channels/${data.guildId}/${data.channelId}` : '';
+    return { name: data.channelName, url, opensAt: null };
 }
 
 function useBannerCollapse(event: EventResponseDto | undefined) {
@@ -235,6 +237,7 @@ function EventDetailBody({ page, voice, bannerRef, isBannerCollapsed, derived, h
             <div ref={bannerRef}>
                 <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator}
                     description={page.event.description} voiceChannelName={voice.voiceChannel?.name ?? null} voiceChannelUrl={voice.voiceChannel?.url ?? null}
+                    voiceChannelOpensAt={voice.voiceChannel?.opensAt ?? null}
                     recurrenceGroupId={page.event.recurrenceGroupId} hub={page.event.hub} />
             </div>
             {isBannerCollapsed && <EventBanner title={page.event.title} game={page.event.game} startTime={page.event.startTime} endTime={page.event.endTime} creator={page.event.creator} isCollapsed />}

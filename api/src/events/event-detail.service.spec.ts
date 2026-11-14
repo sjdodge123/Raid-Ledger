@@ -57,6 +57,11 @@ describe('EventDetailService.findDetail', () => {
       getGuildId: jest.fn().mockReturnValue(null),
       getClient: jest.fn().mockReturnValue(null),
     };
+    const settingsService = {
+      getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+      getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+      getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
+    };
     // The conflict query is reached through the drizzle handle, so the mock
     // mirrors `findConflictingEvents`'s chain
     // (select → from → innerJoin → where) and hands back the deferred.
@@ -78,6 +83,7 @@ describe('EventDetailService.findDetail', () => {
       pugsService as never,
       channelResolverService as never,
       discordBotClientService as never,
+      settingsService as never,
     );
 
     // userId must be non-null or the enrichment short-circuits before querying.

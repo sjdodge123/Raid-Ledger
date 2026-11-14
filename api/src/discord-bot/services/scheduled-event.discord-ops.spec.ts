@@ -1,3 +1,4 @@
+import { GuildScheduledEventEntityType } from 'discord.js';
 import {
   isAtScheduledEventCapacityError,
   tryCreateNewEvent,
@@ -203,5 +204,66 @@ describe('tryCreateNewEvent / tryEditFullEvent — naive pg text is UTC', () => 
 
     expect(create.mock.calls[0]?.[0]).toMatchObject(want);
     expect(edit.mock.calls[0]?.[1]).toMatchObject(want);
+  });
+});
+
+describe('planned temporary voice channel → SE entity (2026-11-13)', () => {
+  const planned = { location: '⏰ Gamernight' };
+
+  it('creates an External SE at the planned location, with no channel', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'se-1' });
+    const guild = makeCreateEditGuild(create, jest.fn());
+    await tryCreateNewEvent(guild, 42, makeEventData(), planned, 'desc');
+    const opts = create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(opts).toMatchObject({
+      entityType: GuildScheduledEventEntityType.External,
+      entityMetadata: { location: '⏰ Gamernight' },
+      scheduledEndTime: new Date('2026-06-10T23:00:00.000Z'),
+    });
+    expect(opts).not.toHaveProperty('channel');
+  });
+
+  it('creates a Voice SE in the channel when a channel id is given (unchanged)', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'se-1' });
+    const guild = makeCreateEditGuild(create, jest.fn());
+    await tryCreateNewEvent(guild, 42, makeEventData(), 'voice-1', 'desc');
+    const opts = create.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(opts).toMatchObject({
+      entityType: GuildScheduledEventEntityType.Voice,
+      channel: 'voice-1',
+    });
+    expect(opts).not.toHaveProperty('entityMetadata');
+  });
+
+  it('edits a planned SE to External with a null channel', async () => {
+    const edit = jest.fn().mockResolvedValue({ id: 'se-1' });
+    const guild = makeCreateEditGuild(jest.fn(), edit);
+    await tryEditFullEvent(guild, 42, 'se-1', makeEventData(), 'd', planned);
+    expect(edit.mock.calls[0]?.[1]).toMatchObject({
+      entityType: GuildScheduledEventEntityType.External,
+      channel: null,
+      entityMetadata: { location: '⏰ Gamernight' },
+    });
+  });
+
+  it('flips the SE to Voice whenever an edit carries a channel', async () => {
+    const edit = jest.fn().mockResolvedValue({ id: 'se-1' });
+    const guild = makeCreateEditGuild(jest.fn(), edit);
+    await tryEditFullEvent(guild, 42, 'se-1', makeEventData(), 'd', 'eph-1');
+    const opts = edit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(opts).toMatchObject({
+      entityType: GuildScheduledEventEntityType.Voice,
+      channel: 'eph-1',
+    });
+    expect(opts).not.toHaveProperty('entityMetadata');
+  });
+
+  it('leaves the entity untouched when no place resolved', async () => {
+    const edit = jest.fn().mockResolvedValue({ id: 'se-1' });
+    const guild = makeCreateEditGuild(jest.fn(), edit);
+    await tryEditFullEvent(guild, 42, 'se-1', makeEventData(), 'd', null);
+    const opts = edit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(opts).not.toHaveProperty('entityType');
+    expect(opts).not.toHaveProperty('channel');
   });
 });

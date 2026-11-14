@@ -33,6 +33,7 @@ import type { UserRole } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
 import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
+import { SettingsService } from '../settings/settings.service';
 
 @Controller('events')
 export class EventsAttendanceController {
@@ -44,6 +45,7 @@ export class EventsAttendanceController {
     private readonly analyticsService: AnalyticsService,
     private readonly channelResolverService: ChannelResolverService,
     private readonly discordBotClientService: DiscordBotClientService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get(':id/voice-sessions')
@@ -99,6 +101,7 @@ export class EventsAttendanceController {
       {
         channelResolver: this.channelResolverService,
         bot: this.discordBotClientService,
+        settings: this.settingsService,
       },
       event,
       !!req.user,

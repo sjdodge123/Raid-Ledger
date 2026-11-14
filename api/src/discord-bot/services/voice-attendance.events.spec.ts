@@ -10,6 +10,7 @@
  *  5. VoiceStateListener — scheduled event branch fires independently of ad-hoc
  *  6. EventsController voice endpoints — 403 for non-creator / non-admin
  */
+import { SettingsService } from '../../settings/settings.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException } from '@nestjs/common';
 import { VoiceAttendanceService } from './voice-attendance.service';
@@ -499,6 +500,14 @@ describe('EventsController — voice endpoint authorization', () => {
       {
         provide: DiscordBotClientService,
         useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
+        },
       },
     ];
   }

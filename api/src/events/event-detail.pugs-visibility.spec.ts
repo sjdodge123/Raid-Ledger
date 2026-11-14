@@ -69,6 +69,7 @@ function buildService(): EventDetailService {
     pugs as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 }
 

@@ -9,6 +9,7 @@
  *  3. Response shape is consistent regardless of delegation path
  *  4. VoiceAttendanceService.getActiveRoster() result is returned directly for planned events
  */
+import { SettingsService } from '../settings/settings.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsAttendanceController } from './events-attendance.controller';
 import { EventsService } from './events.service';
@@ -116,6 +117,14 @@ async function setupEach() {
       {
         provide: DiscordBotClientService,
         useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
+        },
       },
     ],
   }).compile();

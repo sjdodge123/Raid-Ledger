@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getEvents, getEvent, getEventRoster, getEventDetail, getEventVariantContext, cancelEvent, deleteEvent, updateSeries, deleteSeries, cancelSeries } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
+import { plannedVoiceRefetchDelay } from './planned-voice-refetch';
 import type { EventResponseDto, SeriesScope, UpdateEventDto } from '@raid-ledger/contract';
 
 /**
@@ -55,12 +56,17 @@ export function useEventRoster(eventId: number) {
 /**
  * Hook to fetch the composite event-detail bundle (ROK-1046).
  * Returns `{ event, roster, rosterAssignments, pugs, voiceChannel }` in one call.
+ * While the voice channel is a planned temporary one, it refetches shortly after
+ * the channel opens (bounded retries) so an open page swaps to the live link.
  */
 export function useEventDetail(eventId: number) {
     return useQuery({
         queryKey: ['events', eventId, 'detail'],
         queryFn: () => getEventDetail(eventId),
         enabled: !!eventId,
+        refetchInterval: (query) => plannedVoiceRefetchDelay(query.state.data?.voiceChannel, Date.now()),
+        // Bounded (~11 requests per planned channel), so a backgrounded tab still flips to the live link.
+        refetchIntervalInBackground: true,
     });
 }
 

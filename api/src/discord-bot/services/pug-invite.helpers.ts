@@ -27,6 +27,8 @@ import {
   startTimeLine,
   RELAY_AUTHOR_LINE,
 } from './pug-invite-chrome.helpers';
+import { plannedVoiceLine } from './discord-embed-event-body.helpers';
+import type { PlannedEphemeralVoice } from './planned-ephemeral-voice.helpers';
 
 /** What every invite DM needs to render its chrome and body. */
 interface InviteBase {
@@ -35,6 +37,8 @@ interface InviteBase {
   communityName: string;
   clientUrl: string | null;
   voiceChannelId: string | null;
+  /** A planned (not yet created) temporary channel, shown when no live link. */
+  plannedVoiceChannel?: PlannedEphemeralVoice | null;
   /** Game cover art, when the caller hydrated it. */
   coverUrl?: string | null;
   /** Epoch ms; injected so the author line is testable. */
@@ -72,14 +76,18 @@ export interface InviteDm {
   row: ActionRowBuilder<ButtonBuilder> | undefined;
 }
 
-/** Add the optional voice channel field to an invite embed. */
-function addVoiceField(embed: DmEmbed, voiceChannelId: string | null): void {
-  if (!voiceChannelId) return;
-  embed.addFields({
-    name: 'Voice Channel',
-    value: `<#${voiceChannelId}>`,
-    inline: true,
-  });
+/**
+ * Add the optional voice channel field: the live `<#id>` link, else the
+ * planned temporary channel's name + open time (2026-11-13), as plain text.
+ */
+function addVoiceField(embed: DmEmbed, input: InviteBase): void {
+  const value = input.voiceChannelId
+    ? `<#${input.voiceChannelId}>`
+    : input.plannedVoiceChannel
+      ? plannedVoiceLine(input.plannedVoiceChannel)
+      : null;
+  if (!value) return;
+  embed.addFields({ name: 'Voice Channel', value, inline: true });
 }
 
 /**
@@ -165,7 +173,7 @@ export function buildPugInviteEmbed(input: PugInviteInput): InviteDm {
     coverUrl: input.coverUrl ?? null,
   });
 
-  addVoiceField(embed, input.voiceChannelId);
+  addVoiceField(embed, input);
   addPersonalizedFields(
     embed,
     (input.personalized ?? []).slice(0, MAX_PERSONALIZED_FIELDS),
@@ -203,7 +211,7 @@ export function buildMemberInviteEmbed(input: MemberInviteInput): InviteDm {
     coverUrl: input.coverUrl ?? null,
   });
 
-  addVoiceField(embed, input.voiceChannelId);
+  addVoiceField(embed, input);
 
   return {
     embed,

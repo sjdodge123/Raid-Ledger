@@ -7,6 +7,7 @@ import { SignupsService } from './signups.service';
 import { PugsService } from './pugs.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
 import type {
   EventDetailResponseDto,
   PublicEventDetailResponseDto,
@@ -46,6 +47,7 @@ export class EventDetailService {
     private readonly pugsService: PugsService,
     private readonly channelResolverService: ChannelResolverService,
     private readonly discordBotClientService: DiscordBotClientService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -82,6 +84,7 @@ export class EventDetailService {
           {
             channelResolver: this.channelResolverService,
             bot: this.discordBotClientService,
+            settings: this.settingsService,
           },
           event,
           userId !== null,

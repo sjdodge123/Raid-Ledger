@@ -127,6 +127,9 @@ beforeEach(async () => {
       {
         provide: SettingsService,
         useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
           getBranding: jest.fn().mockResolvedValue({
             communityName: 'Test Guild',
             communityLogoPath: null,
@@ -247,6 +250,31 @@ describe('EmbedSyncProcessor voice channel — skip conditions', () => {
 
     await processor.process(job);
 
+    expect(
+      channelResolver.resolveVoiceChannelHonoringOverride,
+    ).not.toHaveBeenCalled();
+  });
+});
+
+describe('EmbedSyncProcessor voice channel — planned temporary channel (2026-11-13)', () => {
+  it('shows the planned channel instead of the default voice binding', async () => {
+    setupDbForSuccessfulSync(mockDb);
+    mockDb.update.mockReturnValue(makeUpdateChain());
+    const settings = processor['settingsService'];
+    jest.mocked(settings.getEphemeralVoiceEnabled).mockResolvedValue(true);
+    jest.mocked(settings.getEphemeralVoiceForced).mockResolvedValue(true);
+    channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+      'default-vc',
+    );
+
+    await processor.process(job);
+
+    const [eventDataArg] = at(embedFactory.buildEventUpdate.mock.calls, 0);
+    expect(eventDataArg.plannedVoiceChannel).toEqual({
+      name: expect.stringContaining('⏰ Raid Night'),
+      opensAt: new Date(FUTURE.getTime() - 30 * 60_000).toISOString(),
+    });
+    expect(eventDataArg.voiceChannelId).toBeUndefined();
     expect(
       channelResolver.resolveVoiceChannelHonoringOverride,
     ).not.toHaveBeenCalled();

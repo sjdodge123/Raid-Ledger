@@ -31,6 +31,8 @@ interface EventBannerProps {
     description?: string | null;
     voiceChannelName?: string | null;
     voiceChannelUrl?: string | null;
+    /** Set while the temporary voice channel is planned: the ISO time it opens. Renders "name · opens <time>", never a link. */
+    voiceChannelOpensAt?: string | null;
     isCollapsed?: boolean;
     recurrenceGroupId?: string | null | undefined;
     /** ROK-1893: the visible hub the event belongs to (`null` when untagged or the hub is hidden, R28). */
@@ -110,23 +112,34 @@ function BannerBadges({ game, hub }: { game: EventBannerProps['game']; hub: Even
     );
 }
 
-function VoiceChannel({ name, url: rawUrl }: { name: string; url?: string | null | undefined }) {
-    const url = safeHttpUrl(rawUrl);
+/** Clock time (e.g. "8:30 PM") in the user's timezone — the banner's `timeStr` options without the zone name. */
+function useClockTime(iso: string | null | undefined): string | null {
+    const resolved = useTimezoneStore((s) => s.resolved);
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: resolved }).format(date);
+}
+
+function VoiceChannel({ name, url: rawUrl, opensAt }: { name: string; url?: string | null | undefined; opensAt?: string | null | undefined }) {
+    const opensStr = useClockTime(opensAt);
+    const url = opensStr ? undefined : safeHttpUrl(rawUrl);
     return (
         <>
             <span className="event-banner__separator">•</span>
-            <span className="event-banner__voice-channel">
+            <span className="event-banner__voice-channel" data-testid="event-banner-voice-channel">
                 <span role="img" aria-hidden="true">🔊</span>{' '}
                 {url ? <a href={url} target="_blank" rel="noopener noreferrer">{name}</a> : name}
+                {opensStr && ` · opens ${opensStr}`}
             </span>
         </>
     );
 }
 
-function FullBanner({ title, game, hub, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl, recurrenceGroupId }: {
+function FullBanner({ title, game, hub, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl, voiceChannelOpensAt, recurrenceGroupId }: {
     title: string; game: EventBannerProps['game']; hub: EventHubRef | null | undefined; dateStr: string; timeStr: string; duration: string;
     creator: EventBannerProps['creator']; description?: string | null | undefined;
-    voiceChannelName?: string | null | undefined; voiceChannelUrl?: string | null | undefined; recurrenceGroupId?: string | null | undefined;
+    voiceChannelName?: string | null | undefined; voiceChannelUrl?: string | null | undefined; voiceChannelOpensAt?: string | null | undefined; recurrenceGroupId?: string | null | undefined;
 }) {
     return (
         <div className="event-banner">
@@ -138,7 +151,7 @@ function FullBanner({ title, game, hub, dateStr, timeStr, duration, creator, des
                     <span className="event-banner__date"><span role="img" aria-hidden="true">📅</span> {dateStr} @ {timeStr}</span>
                     <span className="event-banner__separator">•</span>
                     <span className="event-banner__duration"><span role="img" aria-hidden="true">⏱️</span> {duration}</span>
-                    {voiceChannelName && <VoiceChannel name={voiceChannelName} url={voiceChannelUrl} />}
+                    {voiceChannelName && <VoiceChannel name={voiceChannelName} url={voiceChannelUrl} opensAt={voiceChannelOpensAt} />}
                     <span className="event-banner__separator">•</span>
                     <span className="event-banner__creator"><CreatorLink creator={creator} /></span>
                     {recurrenceGroupId && (
@@ -162,7 +175,7 @@ function FullBanner({ title, game, hub, dateStr, timeStr, duration, creator, des
  */
 export const EventBanner = memo(function EventBanner({
     title, game, startTime, endTime, creator, description,
-    voiceChannelName, voiceChannelUrl, isCollapsed = false, recurrenceGroupId, hub,
+    voiceChannelName, voiceChannelUrl, voiceChannelOpensAt, isCollapsed = false, recurrenceGroupId, hub,
 }: EventBannerProps) {
     const { dateStr, timeStr, duration } = useFormattedTimes(startTime, endTime);
     const scrollDirection = useScrollDirection();
@@ -175,5 +188,5 @@ export const EventBanner = memo(function EventBanner({
 
     return <FullBanner title={title} game={game} hub={hub} dateStr={dateStr} timeStr={timeStr}
         duration={duration} creator={creator} description={description}
-        voiceChannelName={voiceChannelName} voiceChannelUrl={voiceChannelUrl} recurrenceGroupId={recurrenceGroupId} />;
+        voiceChannelName={voiceChannelName} voiceChannelUrl={voiceChannelUrl} voiceChannelOpensAt={voiceChannelOpensAt} recurrenceGroupId={recurrenceGroupId} />;
 });

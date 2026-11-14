@@ -36,6 +36,9 @@ async function makeProcessor(): Promise<EmbedSyncProcessor> {
       {
         provide: SettingsService,
         useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
           getBranding: jest.fn().mockResolvedValue({ communityName: 'G' }),
           getClientUrl: jest.fn().mockResolvedValue(BASE),
           getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),

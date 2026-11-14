@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { utcIsoText, utcWallClock } from '../../drizzle/timestamp-utils';
 import type { RosterSignupRow } from './ephemeral-voice.private.helpers';
+import type { EphemeralVoiceState } from './planned-ephemeral-voice.helpers';
 
 /**
  * Fetch an event's live ephemeral voice channel id (null when none). Shared by
@@ -19,6 +20,33 @@ export async function getEphemeralChannelId(
     .where(eq(schema.events.id, eventId))
     .limit(1);
   return row?.ephemeralVoiceChannelId ?? null;
+}
+
+/**
+ * An event's ephemeral-voice columns for the embed-poster path, which only has
+ * an eventId: the live channel (Tier 0) plus what the planned-channel decision
+ * needs (operator ruling 2026-11-13). A missing row reads as "nothing planned".
+ */
+export async function getEphemeralVoiceState(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<EphemeralVoiceState> {
+  const [row] = await db
+    .select({
+      ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
+      ephemeralVoiceEnabled: schema.events.ephemeralVoiceEnabled,
+      cancelledAt: schema.events.cancelledAt,
+      reschedulingPollId: schema.events.reschedulingPollId,
+    })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return {
+    channelId: row?.ephemeralVoiceChannelId ?? null,
+    enabled: row?.ephemeralVoiceEnabled ?? null,
+    cancelled: (row?.cancelledAt ?? null) !== null,
+    rescheduling: (row?.reschedulingPollId ?? null) !== null,
+  };
 }
 
 /** Event fields the ephemeral-voice lifecycle needs (ROK-1352). */
