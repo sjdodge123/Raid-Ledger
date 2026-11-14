@@ -32,8 +32,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import * as path from 'path';
 import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
 import { applyCorsPolicy } from '../../cors/cors-auto-policy';
@@ -43,6 +41,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { closeTestSharedRedis } from '../../queue/queue.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
+import { ensureTestDbMigrated } from './integration-migrations';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
 import {
   ownedSharedTestDbUrl,
@@ -151,17 +150,15 @@ async function provisionDatabase(): Promise<{
   return { connectionString: container.getConnectionUri(), container };
 }
 
-/** Run migrations and return an app-level DB connection plus the raw client. */
+/**
+ * Run migrations (skipped when the CI globalSetup already migrated this DB,
+ * ROK-2196) and return an app-level DB connection plus the raw client.
+ */
 async function setupDatabase(connectionString: string): Promise<{
   db: PostgresJsDatabase<typeof schema>;
   appClient: ReturnType<typeof postgres>;
 }> {
-  const migrationClient = postgres(connectionString, { max: 1 });
-  const migrationDb = drizzle(migrationClient);
-  await migrate(migrationDb, {
-    migrationsFolder: path.join(__dirname, '../../drizzle/migrations'),
-  });
-  await migrationClient.end();
+  await ensureTestDbMigrated(connectionString);
   const appClient = postgres(connectionString, { max: 10 });
   return { db: drizzle(appClient, { schema }), appClient };
 }

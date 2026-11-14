@@ -10,10 +10,13 @@
  * This starts ONE container per jest process, in the OUTER realm, and hands
  * its URI to every spec file via `SHARED_TEST_DB_URL_ENV` — the same
  * one-shared-DB shape GitHub CI already runs with its `postgres` service.
- * Migrations still run per file in `test-app.ts::setupDatabase`, exactly as
- * on CI (the migrator is idempotent).
+ * Off-CI, migrations still run per file in `test-app.ts::setupDatabase` (the
+ * migrator is idempotent).
  *
- * CI (`CI=true` + `DATABASE_URL`) is untouched: no container is started.
+ * CI (`CI=true` + `DATABASE_URL`): no container is started. The shard's one
+ * service DB is migrated ONCE here and its URL recorded, so every spec file
+ * skips its own `migrate()` (ROK-2196). The env var reaches the test files:
+ * jest runs globalSetup in the parent before the test realms/workers exist.
  */
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
@@ -22,6 +25,11 @@ import {
   SHARED_TEST_DB_URL_ENV,
   startTestPostgres,
 } from './test-postgres-container';
+import {
+  MIGRATED_TEST_DB_URL_ENV,
+  markTestDbMigrated,
+  runTestMigrations,
+} from './integration-migrations';
 
 /** globalSetup and globalTeardown share the outer realm's globalThis. */
 export const CONTAINER_KEY = '__rl_integration_pg_container';
@@ -34,7 +42,13 @@ export default async function integrationGlobalSetup(): Promise<void> {
   // Never inherit a shared URL: only one this setup creates is trusted.
   delete process.env[SHARED_TEST_DB_URL_ENV];
   delete process.env[SHARED_TEST_DB_OWNER_ENV];
-  if (process.env.CI === 'true' && process.env.DATABASE_URL) return;
+  delete process.env[MIGRATED_TEST_DB_URL_ENV];
+  const ciDbUrl = process.env.DATABASE_URL;
+  if (process.env.CI === 'true' && ciDbUrl) {
+    await runTestMigrations(ciDbUrl);
+    markTestDbMigrated(ciDbUrl);
+    return;
+  }
   const container = await startTestPostgres();
   (globalThis as GlobalWithContainer)[CONTAINER_KEY] = container;
   process.env[SHARED_TEST_DB_URL_ENV] = container.getConnectionUri();
