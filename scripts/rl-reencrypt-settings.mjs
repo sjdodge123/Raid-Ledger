@@ -45,7 +45,16 @@
 // Exit codes:
 //   0   success
 //   2   bad CLI args
-//   3   stdin parse failure OR decrypt failure on any row (detail on stderr)
+//   3   stdin parse failure OR decrypt failure on a NON-shared row (detail
+//       on stderr)
+//
+// ROK-2202 — unusable SHARED keys are skipped, not written. A key in the VM
+//   bundle's allowlist (rl-settings-shared-keys.mjs) whose laptop value does
+//   not decrypt, or is empty/whitespace, is left OUT of the SQL, so after the
+//   TRUNCATE the env has no row and the overlay's sync-wins insert-if-absent
+//   fills it from the bundle. A good laptop value still wins (operator ruling
+//   2026-09-27). Stderr always ends with `skipped_unusable: [k1, k2]` — key
+//   NAMES only; rl_env_deploy parses that line into the sync_settings step.
 
 import {
   createCipheriv,
@@ -54,6 +63,7 @@ import {
   scryptSync,
 } from 'node:crypto';
 import { stdin } from 'node:process';
+import { SHARED_KEYS } from './rl-settings-shared-keys.mjs';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -171,6 +181,39 @@ function buildUpsert(key, encrypted) {
   );
 }
 
+/**
+ * Decrypt one laptop row. Returns the plaintext, or null when the row must be
+ * skipped: an empty encrypted value (any key), or — for a SHARED key only — a
+ * value that does not decrypt or decrypts to blank (ROK-2202). A NON-shared
+ * row that does not decrypt still aborts the sync (exit 3): nothing else
+ * would refill it. Never logs a value.
+ */
+function decryptRow(key, encrypted, srcKey, isShared) {
+  if (!encrypted) {
+    console.error(`row "${key}" has empty encrypted_value — skipping`);
+    return null;
+  }
+  let plaintext;
+  try {
+    plaintext = decryptWithKey(encrypted, srcKey);
+  } catch (err) {
+    if (isShared) {
+      console.error(`shared key "${key}" did not decrypt — skipped so the VM bundle can fill it`);
+      return null;
+    }
+    console.error(
+      `decrypt failed for key="${key}": ${err.message}. ` +
+        `Verify --src-secret matches the secret these rows were encrypted with.`,
+    );
+    process.exit(3);
+  }
+  if (isShared && plaintext.trim() === '') {
+    console.error(`shared key "${key}" is blank on the laptop — skipped so the VM bundle can fill it`);
+    return null;
+  }
+  return plaintext;
+}
+
 async function readStdin() {
   let buf = '';
   for await (const chunk of stdin) buf += chunk;
@@ -190,6 +233,8 @@ async function main() {
 
   if (args.truncate) out.push('TRUNCATE app_settings CASCADE;');
 
+  const shared = new Set(SHARED_KEYS);
+  const skippedUnusable = [];
   for (const line of lines) {
     const tab = line.indexOf('\t');
     if (tab < 0) {
@@ -200,23 +245,15 @@ async function main() {
     }
     const key = line.slice(0, tab);
     const encrypted = line.slice(tab + 1);
-    if (!encrypted) {
-      console.error(`row "${key}" has empty encrypted_value — skipping`);
-      continue;
-    }
     let plaintext;
     if (args.substitutes.has(key)) {
       plaintext = args.substitutes.get(key);
       substitutedFromSource++;
     } else {
-      try {
-        plaintext = decryptWithKey(encrypted, srcKey);
-      } catch (err) {
-        console.error(
-          `decrypt failed for key="${key}": ${err.message}. ` +
-            `Verify --src-secret matches the secret these rows were encrypted with.`,
-        );
-        process.exit(3);
+      plaintext = decryptRow(key, encrypted, srcKey, shared.has(key));
+      if (plaintext === null) {
+        if (shared.has(key)) skippedUnusable.push(key);
+        continue;
       }
     }
     out.push(buildUpsert(key, encryptWithKey(plaintext, dstKey)));
@@ -237,12 +274,14 @@ async function main() {
   // End-of-run summary: `decrypted N, substituted M from source + K synthetic`.
   // When every input row was substitute-overridden, decrypted = 0 — a loud
   // canary that the source secret didn't actually exercise the decrypt path.
-  const decryptedCount = lines.length - substitutedFromSource;
+  const decryptedCount = seenKeys.size - substitutedFromSource;
   console.error(
-    `re-encrypted ${lines.length} row(s); ` +
+    `re-encrypted ${seenKeys.size} row(s); ` +
       `decrypted ${decryptedCount}, ` +
       `substituted ${substitutedFromSource} from source + ${inserted} synthetic`,
   );
+  // NAMES only — rl_env_deploy reports this line on the sync_settings step.
+  console.error(`skipped_unusable: [${skippedUnusable.sort().join(', ')}]`);
 }
 
 main().catch((err) => {
