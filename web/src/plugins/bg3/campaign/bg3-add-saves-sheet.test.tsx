@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http } from 'msw';
+import { http, HttpResponse } from 'msw';
 import type { Bg3CrossHubMove } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
@@ -83,6 +83,18 @@ describe('Add my saves — cross-hub bind asks first', () => {
         await user.click(within(screen.getByTestId(CONFIRM)).getByRole('button', { name: 'Cancel' }));
         for (const box of within(sheet).getAllByRole('checkbox')) expect(box).toBeEnabled();
         expect(calls).toEqual(['bind']);
+    });
+
+    it('while the bind request runs the checkboxes are locked, so a cross-hub hold cannot resend a stale pick', async () => {
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.put(BG3_KEY_URL, async ({ request }) => { record(await request.json()); await held; return new HttpResponse(null, { status: 204 }); }));
+        const sheet = await addOne(userEvent.setup(), true);
+        await waitFor(() => expect(calls, 'the bind request is in flight').toEqual(['bind']));
+        for (const box of within(sheet).getAllByRole('checkbox')) expect(box, `"${box.closest('label')?.textContent ?? ''}" must be locked while the bind runs`).toBeDisabled();
+        release();
+        await settled();
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('Cancel sends nothing further and keeps the sheet open', async () => {

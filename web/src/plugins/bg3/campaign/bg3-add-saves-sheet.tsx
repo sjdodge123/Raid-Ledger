@@ -48,7 +48,7 @@ interface PlaythroughListProps {
     readonly selected: ReadonlySet<string>;
     readonly capped: boolean;
     readonly onToggle: (key: string) => void;
-    /** True while the cross-hub confirm is open — Move here resends the pick made at Add, so it cannot change. */
+    /** True while a bind runs or the cross-hub confirm is open — Move here resends the pick made at Add, so it cannot change. */
     readonly locked: boolean;
 }
 
@@ -112,9 +112,10 @@ export function Bg3AddSavesSheet({ isOpen, campaignId, campaignName, onClose }: 
     const guard = useDirtyCloseGuard(picked.length > 0 || alsoDefault, close);
     const submit = (): void => bind.run({ campaignKeys: picked.map((p) => p.campaignKey), campaignId, alsoDefault }, close);
     const { confirm } = bind.move;
-    const locked = confirm !== null;
+    // Locked while a bind runs or the confirm is open: a hold's Move here resends the pick made at Add.
+    const locked = confirm !== null || bind.pending;
     const footer = <AddFooter picked={picked} capped={capped} onCancel={guard.requestClose} onSubmit={submit}
-        pending={bind.pending} holding={locked} />;
+        pending={bind.pending} holding={confirm !== null} />;
     return (
         <Bg3Overlay isOpen={isOpen} title={`Add my saves to ${campaignName}`} onClose={close} footer={footer}
             closeGuard={guard} discardMessage="The playthroughs you picked won't be added.">
