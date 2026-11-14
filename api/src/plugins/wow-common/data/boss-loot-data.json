@@ -605,6 +605,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 749,
     "itemId": 30311,
     "itemName": "Warp Slicer",
     "slot": "One-Hand",
@@ -618,6 +619,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 749,
     "itemId": 32458,
     "itemName": "Ashes of Al'ar",
     "slot": "Mount",
@@ -12529,6 +12531,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 35275,
     "itemName": "Orb of the Sin'dorei",
     "slot": null,
@@ -12542,6 +12545,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 35504,
     "itemName": "Phoenix Hatchling",
     "slot": null,
@@ -12555,6 +12559,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34609,
     "itemName": "Quickening Blade of the Prince",
     "slot": "One-Hand",
@@ -12568,6 +12573,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34610,
     "itemName": "Scarlet Sin'dorei Robes",
     "slot": null,
@@ -12581,6 +12587,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34611,
     "itemName": "Cudgel of Consecration",
     "slot": "One-Hand",
@@ -12594,6 +12601,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34612,
     "itemName": "Greaves of the Penitent Knight",
     "slot": "Feet",
@@ -12607,6 +12615,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34613,
     "itemName": "Shoulderpads of the Silvermoon Retainer",
     "slot": "Shoulder",
@@ -12620,6 +12629,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34614,
     "itemName": "Tunic of the Ranger Lord",
     "slot": "Chest",
@@ -12633,6 +12643,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34615,
     "itemName": "Netherforce Chestplate",
     "slot": "Chest",
@@ -12646,6 +12657,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34616,
     "itemName": "Breeching Comet",
     "slot": "One-Hand",
@@ -12659,6 +12671,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 35513,
     "itemName": "Swift White Hawkstrider",
     "slot": null,
@@ -12672,6 +12685,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133449,
     "itemName": "Cord of Reconstruction",
     "slot": "Waist",
@@ -12685,6 +12699,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133453,
     "itemName": "Sun-Infused Focus Staff",
     "slot": "Two-Hand",
@@ -12698,6 +12713,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133476,
     "itemName": "Shoulderpads of the Silvermoon Retainer",
     "slot": "Shoulder",
@@ -12711,6 +12727,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133459,
     "itemName": "Cloak of Blade Turning",
     "slot": "Back",
@@ -12724,6 +12741,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133450,
     "itemName": "Axe of Shattered Dreams",
     "slot": "Two-Hand",
@@ -12737,6 +12755,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133451,
     "itemName": "Helm of Sanctification",
     "slot": "Head",
@@ -12750,6 +12769,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133477,
     "itemName": "Tunic of the Ranger Lord",
     "slot": "Chest",
@@ -12763,6 +12783,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133474,
     "itemName": "Cudgel of Consecration",
     "slot": "One-Hand",
@@ -12776,6 +12797,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133473,
     "itemName": "Scarlet Sin'dorei Robes",
     "slot": null,
@@ -12789,6 +12811,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133479,
     "itemName": "Breeching Comet",
     "slot": "One-Hand",
@@ -12802,6 +12825,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133452,
     "itemName": "Robes of Summer Flame",
     "slot": null,
@@ -12815,6 +12839,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133472,
     "itemName": "Quickening Blade of the Prince",
     "slot": "One-Hand",
@@ -12828,6 +12853,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133455,
     "itemName": "Hauberk of the War Bringer",
     "slot": "Chest",
@@ -12841,6 +12867,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 133475,
     "itemName": "Greaves of the Penitent Knight",
     "slot": "Feet",
@@ -12854,6 +12881,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34810,
     "itemName": "Cloak of Blade Turning",
     "slot": "Back",
@@ -12867,6 +12895,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34796,
     "itemName": "Robes of Summer Flame",
     "slot": null,
@@ -12880,6 +12909,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34625,
     "itemName": "Kharmaa's Ring of Fate",
     "slot": "Finger",
@@ -12893,6 +12923,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34793,
     "itemName": "Cord of Reconstruction",
     "slot": "Waist",
@@ -12906,6 +12937,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34809,
     "itemName": "Sunrage Treads",
     "slot": "Feet",
@@ -12919,6 +12951,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34808,
     "itemName": "Gloves of Arcane Acuity",
     "slot": "Hands",
@@ -12932,6 +12965,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34797,
     "itemName": "Sun-Infused Focus Staff",
     "slot": "Two-Hand",
@@ -12945,6 +12979,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34807,
     "itemName": "Sunstrider Warboots",
     "slot": "Feet",
@@ -12958,6 +12993,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34799,
     "itemName": "Hauberk of the War Bringer",
     "slot": "Chest",
@@ -12971,6 +13007,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34795,
     "itemName": "Helm of Sanctification",
     "slot": "Head",
@@ -12984,6 +13021,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34794,
     "itemName": "Axe of Shattered Dreams",
     "slot": "Two-Hand",
@@ -12997,6 +13035,7 @@
   {
     "bossName": "Kael'thas Sunstrider",
     "expansion": "tbc",
+    "instanceId": 249,
     "itemId": 34798,
     "itemName": "Band of Celerity",
     "slot": "Finger",
@@ -24411,6 +24450,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37235,
     "itemName": "Crypt Lord's Deft Blade",
     "slot": "One-Hand",
@@ -24424,6 +24464,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37241,
     "itemName": "Ancient Aligned Girdle",
     "slot": "Waist",
@@ -24437,6 +24478,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 35662,
     "itemName": "Wing Cover Girdle",
     "slot": "Waist",
@@ -24450,6 +24492,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37237,
     "itemName": "Chitin Shell Greathelm",
     "slot": "Head",
@@ -24463,6 +24506,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37240,
     "itemName": "Flamebeard's Bracers",
     "slot": "Wrist",
@@ -24476,6 +24520,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37236,
     "itemName": "Insect Vestments",
     "slot": null,
@@ -24489,6 +24534,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37242,
     "itemName": "Sash of the Servant",
     "slot": "Waist",
@@ -24502,6 +24548,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 35663,
     "itemName": "Charmed Silken Cord",
     "slot": "Waist",
@@ -24515,6 +24562,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 35661,
     "itemName": "Signet of Arachnathid Command",
     "slot": "Finger",
@@ -24528,6 +24576,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37232,
     "itemName": "Ring of the Traitor King",
     "slot": "Finger",
@@ -24541,6 +24590,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 37238,
     "itemName": "Rod of the Fallen Monarch",
     "slot": "Ranged",
@@ -24554,6 +24604,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188423,
     "itemName": "Rod of the Fallen Monarch",
     "slot": "Ranged",
@@ -24567,6 +24618,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188410,
     "itemName": "Charmed Silken Cord",
     "slot": "Waist",
@@ -24580,6 +24632,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188420,
     "itemName": "Crypt Lord's Deft Blade",
     "slot": "One-Hand",
@@ -24593,6 +24646,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188425,
     "itemName": "Ancient Aligned Girdle",
     "slot": "Waist",
@@ -24606,6 +24660,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188421,
     "itemName": "Insect Vestments",
     "slot": null,
@@ -24619,6 +24674,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188409,
     "itemName": "Wing Cover Girdle",
     "slot": "Waist",
@@ -24632,6 +24688,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188424,
     "itemName": "Flamebeard's Bracers",
     "slot": "Wrist",
@@ -24645,6 +24702,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188422,
     "itemName": "Chitin Shell Greathelm",
     "slot": "Head",
@@ -24658,6 +24716,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188408,
     "itemName": "Signet of Arachnathid Command",
     "slot": "Finger",
@@ -24671,6 +24730,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188419,
     "itemName": "Ring of the Traitor King",
     "slot": "Finger",
@@ -24684,6 +24744,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 272,
     "itemId": 188426,
     "itemName": "Sash of the Servant",
     "slot": "Waist",
@@ -54545,6 +54606,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47154,
     "itemName": "Greaves of the 7th Legion",
     "slot": "Feet",
@@ -54558,6 +54620,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47473,
     "itemName": "Greaves of the Saronite Citadel",
     "slot": "Feet",
@@ -54571,6 +54634,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47312,
     "itemName": "Greaves of the Saronite Citadel",
     "slot": "Feet",
@@ -54584,6 +54648,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47318,
     "itemName": "Leggings of the Awakening",
     "slot": "Legs",
@@ -54597,6 +54662,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47233,
     "itemName": "Archon Glaive",
     "slot": "Two-Hand",
@@ -54610,6 +54676,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47810,
     "itemName": "Crusader's Glory",
     "slot": "One-Hand",
@@ -54623,6 +54690,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47485,
     "itemName": "Bindings of the Ashen Saint",
     "slot": "Wrist",
@@ -54636,6 +54704,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47812,
     "itemName": "Vigilant Ward",
     "slot": "Shield",
@@ -54649,6 +54718,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47477,
     "itemName": "Reign of the Dead",
     "slot": "Trinket",
@@ -54662,6 +54732,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47962,
     "itemName": "Argent Resolve",
     "slot": "One-Hand",
@@ -54675,6 +54746,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48051,
     "itemName": "Robes of the Sleepless",
     "slot": null,
@@ -54688,6 +54760,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47238,
     "itemName": "Maiden's Favor",
     "slot": "Back",
@@ -54701,6 +54774,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47967,
     "itemName": "Crusader's Glory",
     "slot": "One-Hand",
@@ -54714,6 +54788,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47900,
     "itemName": "Perdition",
     "slot": "Two-Hand",
@@ -54727,6 +54802,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47192,
     "itemName": "Strength of the Nerub",
     "slot": "Back",
@@ -54740,6 +54816,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47321,
     "itemName": "Boots of the Icy Floe",
     "slot": "Feet",
@@ -54753,6 +54830,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47191,
     "itemName": "Legguards of the Lurking Threat",
     "slot": "Legs",
@@ -54766,6 +54844,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47815,
     "itemName": "Cold Convergence",
     "slot": "Two-Hand",
@@ -54779,6 +54858,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48045,
     "itemName": "Perdition",
     "slot": "Two-Hand",
@@ -54792,6 +54872,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47239,
     "itemName": "Archon Glaive",
     "slot": "Two-Hand",
@@ -54805,6 +54886,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47240,
     "itemName": "Gloves of Bitter Reprisal",
     "slot": "Hands",
@@ -54818,6 +54900,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47330,
     "itemName": "Gauntlets of Bitter Reprisal",
     "slot": "Hands",
@@ -54831,6 +54914,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47903,
     "itemName": "Forsaken Bonecarver",
     "slot": "One-Hand",
@@ -54844,6 +54928,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48049,
     "itemName": "Shoulderpads of the Snow Bandit",
     "slot": "Shoulder",
@@ -54857,6 +54942,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47491,
     "itemName": "Hellion Glaive",
     "slot": "Two-Hand",
@@ -54870,6 +54956,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47315,
     "itemName": "Band of the Traitor King",
     "slot": "Finger",
@@ -54883,6 +54970,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47972,
     "itemName": "Spaulders of the Snow Bandit",
     "slot": "Shoulder",
@@ -54896,6 +54984,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47490,
     "itemName": "Maiden's Adoration",
     "slot": "Back",
@@ -54909,6 +54998,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47329,
     "itemName": "Hellion Glaive",
     "slot": "Two-Hand",
@@ -54922,6 +55012,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48054,
     "itemName": "Belt of the Eternal",
     "slot": "Waist",
@@ -54935,6 +55026,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47834,
     "itemName": "Fordragon Blades",
     "slot": "Two-Hand",
@@ -54948,6 +55040,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47209,
     "itemName": "Chestguard of Flowing Elements",
     "slot": "Chest",
@@ -54961,6 +55054,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47182,
     "itemName": "Reign of the Unliving",
     "slot": "Trinket",
@@ -54974,6 +55068,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47149,
     "itemName": "Signet of the Traitor King",
     "slot": "Finger",
@@ -54987,6 +55082,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47205,
     "itemName": "Footpads of the Icy Floe",
     "slot": "Feet",
@@ -55000,6 +55096,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47835,
     "itemName": "Bulwark of the Royal Guard",
     "slot": "Shield",
@@ -55013,6 +55110,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47184,
     "itemName": "Legguards of the Lurking Threat",
     "slot": "Legs",
@@ -55026,6 +55124,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47324,
     "itemName": "Bindings of the Ashen Saint",
     "slot": "Wrist",
@@ -55039,6 +55138,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47325,
     "itemName": "Cuirass of Flowing Elements",
     "slot": "Chest",
@@ -55052,6 +55152,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47979,
     "itemName": "Fordragon Blades",
     "slot": "Two-Hand",
@@ -55065,6 +55166,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47965,
     "itemName": "Helmet of the Crypt Lord",
     "slot": "Head",
@@ -55078,6 +55180,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47313,
     "itemName": "Armbands of Dark Determination",
     "slot": "Wrist",
@@ -55091,6 +55194,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47206,
     "itemName": "Misery's End",
     "slot": "One-Hand",
@@ -55104,6 +55208,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47904,
     "itemName": "Shoulderpads of the Snow Bandit",
     "slot": "Shoulder",
@@ -55117,6 +55222,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48041,
     "itemName": "Stoneskin Chestplate",
     "slot": "Chest",
@@ -55130,6 +55236,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48043,
     "itemName": "Frostblade Hatchet",
     "slot": "One-Hand",
@@ -55143,6 +55250,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47193,
     "itemName": "Misery's End",
     "slot": "One-Hand",
@@ -55156,6 +55264,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47492,
     "itemName": "Gauntlets of Bitter Reprisal",
     "slot": "Hands",
@@ -55169,6 +55278,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47974,
     "itemName": "Vestments of the Sleepless",
     "slot": null,
@@ -55182,6 +55292,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48056,
     "itemName": "Anguish",
     "slot": "Two-Hand",
@@ -55195,6 +55306,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47481,
     "itemName": "Might of the Nerub",
     "slot": "Back",
@@ -55208,6 +55320,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47837,
     "itemName": "Cinch of the Undying",
     "slot": "Waist",
@@ -55221,6 +55334,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47237,
     "itemName": "Band of Deplorable Violence",
     "slot": "Finger",
@@ -55234,6 +55348,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47194,
     "itemName": "Footpads of the Icy Floe",
     "slot": "Feet",
@@ -55247,6 +55362,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47151,
     "itemName": "Bracers of Dark Determination",
     "slot": "Wrist",
@@ -55260,6 +55376,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48053,
     "itemName": "Sunwalker Legguards",
     "slot": "Legs",
@@ -55273,6 +55390,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47320,
     "itemName": "Might of the Nerub",
     "slot": "Back",
@@ -55286,6 +55404,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47204,
     "itemName": "Chestguard of Flowing Elements",
     "slot": "Chest",
@@ -55299,6 +55418,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47225,
     "itemName": "Maiden's Favor",
     "slot": "Back",
@@ -55312,6 +55432,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47203,
     "itemName": "Armbands of the Ashen Saint",
     "slot": "Wrist",
@@ -55325,6 +55446,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47311,
     "itemName": "Waistguard of Deathly Dominion",
     "slot": "Waist",
@@ -55338,6 +55460,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47896,
     "itemName": "Stoneskin Chestplate",
     "slot": "Chest",
@@ -55351,6 +55474,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47479,
     "itemName": "Leggings of the Awakening",
     "slot": "Legs",
@@ -55364,6 +55488,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47235,
     "itemName": "Gloves of the Lifeless Touch",
     "slot": "Hands",
@@ -55377,6 +55502,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47905,
     "itemName": "Blackhorn Bludgeon",
     "slot": "One-Hand",
@@ -55390,6 +55516,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47186,
     "itemName": "Legwraps of the Awakening",
     "slot": "Legs",
@@ -55403,6 +55530,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47894,
     "itemName": "Mace of the Earthborn Chieftain",
     "slot": "One-Hand",
@@ -55416,6 +55544,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47319,
     "itemName": "Leggings of the Lurking Threat",
     "slot": "Legs",
@@ -55429,6 +55558,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47978,
     "itemName": "Bulwark of the Royal Guard",
     "slot": "Shield",
@@ -55442,6 +55572,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47314,
     "itemName": "Hellscream Slicer",
     "slot": "One-Hand",
@@ -55455,6 +55586,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47741,
     "itemName": "Baelgun's Heavy Crossbow",
     "slot": "Ranged",
@@ -55468,6 +55600,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47964,
     "itemName": "Chestguard of the Warden",
     "slot": "Chest",
@@ -55481,6 +55614,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47901,
     "itemName": "Pauldrons of the Shadow Hunter",
     "slot": "Shoulder",
@@ -55494,6 +55628,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47816,
     "itemName": "The Grinder",
     "slot": "One-Hand",
@@ -55507,6 +55642,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47970,
     "itemName": "Legplates of the Silver Hand",
     "slot": "Legs",
@@ -55520,6 +55656,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47832,
     "itemName": "Spaulders of the Snow Bandit",
     "slot": "Shoulder",
@@ -55533,6 +55670,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48047,
     "itemName": "Legplates of the Redeemed Blood Knight",
     "slot": "Legs",
@@ -55546,6 +55684,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48052,
     "itemName": "Darkmaw Crossbow",
     "slot": "Ranged",
@@ -55559,6 +55698,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47973,
     "itemName": "The Grinder",
     "slot": "One-Hand",
@@ -55572,6 +55712,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47911,
     "itemName": "Anguish",
     "slot": "Two-Hand",
@@ -55585,6 +55726,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47895,
     "itemName": "Pride of the Kor'kron",
     "slot": "Shield",
@@ -55598,6 +55740,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47236,
     "itemName": "Gloves of the Lifeless Touch",
     "slot": "Hands",
@@ -55611,6 +55754,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48048,
     "itemName": "Forsaken Bonecarver",
     "slot": "One-Hand",
@@ -55624,6 +55768,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47484,
     "itemName": "Girdle of the Forgotten Martyr",
     "slot": "Waist",
@@ -55637,6 +55782,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47157,
     "itemName": "Signet of the Traitor King",
     "slot": "Finger",
@@ -55650,6 +55796,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47189,
     "itemName": "Leggings of the Deepening Void",
     "slot": "Legs",
@@ -55663,6 +55810,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47963,
     "itemName": "Vigilant Ward",
     "slot": "Shield",
@@ -55676,6 +55824,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47971,
     "itemName": "Westfall Saber",
     "slot": "One-Hand",
@@ -55689,6 +55838,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47150,
     "itemName": "Greaves of the 7th Legion",
     "slot": "Feet",
@@ -55702,6 +55852,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48046,
     "itemName": "Pauldrons of the Shadow Hunter",
     "slot": "Shoulder",
@@ -55715,6 +55866,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47183,
     "itemName": "Strength of the Nerub",
     "slot": "Back",
@@ -55728,6 +55880,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47054,
     "itemName": "Band of Deplorable Violence",
     "slot": "Finger",
@@ -55741,6 +55894,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47483,
     "itemName": "Suffering's End",
     "slot": "One-Hand",
@@ -55754,6 +55908,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47187,
     "itemName": "Leggings of the Deepening Void",
     "slot": "Legs",
@@ -55767,6 +55922,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47966,
     "itemName": "The Lion's Maw",
     "slot": "One-Hand",
@@ -55780,6 +55936,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47328,
     "itemName": "Maiden's Adoration",
     "slot": "Back",
@@ -55793,6 +55950,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47898,
     "itemName": "Frostblade Hatchet",
     "slot": "One-Hand",
@@ -55806,6 +55964,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47808,
     "itemName": "The Lion's Maw",
     "slot": "One-Hand",
@@ -55819,6 +55978,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47474,
     "itemName": "Armbands of Dark Determination",
     "slot": "Wrist",
@@ -55832,6 +55992,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47323,
     "itemName": "Girdle of the Forgotten Martyr",
     "slot": "Waist",
@@ -55845,6 +56006,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47155,
     "itemName": "Bracers of Dark Determination",
     "slot": "Wrist",
@@ -55858,6 +56020,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47188,
     "itemName": "Reign of the Unliving",
     "slot": "Trinket",
@@ -55871,6 +56034,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47156,
     "itemName": "Stormpike Cleaver",
     "slot": "One-Hand",
@@ -55884,6 +56048,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47976,
     "itemName": "Legplates of the Immortal Spider",
     "slot": "Legs",
@@ -55897,6 +56062,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47838,
     "itemName": "Vestments of the Sleepless",
     "slot": null,
@@ -55910,6 +56076,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47969,
     "itemName": "Pauldrons of the Timeless Hunter",
     "slot": "Shoulder",
@@ -55923,6 +56090,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47830,
     "itemName": "Legplates of the Silver Hand",
     "slot": "Legs",
@@ -55936,6 +56104,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47480,
     "itemName": "Leggings of the Lurking Threat",
     "slot": "Legs",
@@ -55949,6 +56118,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47906,
     "itemName": "Robes of the Sleepless",
     "slot": null,
@@ -55962,6 +56132,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47814,
     "itemName": "Westfall Saber",
     "slot": "One-Hand",
@@ -55975,6 +56146,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48042,
     "itemName": "Helm of the Crypt Lord",
     "slot": "Head",
@@ -55988,6 +56160,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47909,
     "itemName": "Belt of the Eternal",
     "slot": "Waist",
@@ -56001,6 +56174,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48044,
     "itemName": "Ardent Guard",
     "slot": "One-Hand",
@@ -56014,6 +56188,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48050,
     "itemName": "Blackhorn Bludgeon",
     "slot": "One-Hand",
@@ -56027,6 +56202,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47148,
     "itemName": "Stormpike Cleaver",
     "slot": "One-Hand",
@@ -56040,6 +56216,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47489,
     "itemName": "Lurid Manifestation",
     "slot": "Finger",
@@ -56053,6 +56230,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47897,
     "itemName": "Helm of the Crypt Lord",
     "slot": "Head",
@@ -56066,6 +56244,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47153,
     "itemName": "Belt of Deathly Dominion",
     "slot": "Waist",
@@ -56079,6 +56258,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47556,
     "itemName": "Crusader Orb",
     "slot": null,
@@ -56092,6 +56272,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47977,
     "itemName": "Cinch of the Undying",
     "slot": "Waist",
@@ -56105,6 +56286,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47908,
     "itemName": "Sunwalker Legguards",
     "slot": "Legs",
@@ -56118,6 +56300,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47486,
     "itemName": "Cuirass of Flowing Elements",
     "slot": "Chest",
@@ -56131,6 +56314,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47813,
     "itemName": "Helmet of the Crypt Lord",
     "slot": "Head",
@@ -56144,6 +56328,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47809,
     "itemName": "Argent Resolve",
     "slot": "One-Hand",
@@ -56157,6 +56342,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47899,
     "itemName": "Ardent Guard",
     "slot": "One-Hand",
@@ -56170,6 +56356,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47190,
     "itemName": "Legwraps of the Awakening",
     "slot": "Legs",
@@ -56183,6 +56370,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47234,
     "itemName": "Gloves of Bitter Reprisal",
     "slot": "Hands",
@@ -56196,6 +56384,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47829,
     "itemName": "Pauldrons of the Timeless Hunter",
     "slot": "Shoulder",
@@ -56209,6 +56398,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47487,
     "itemName": "Handwraps of the Lifeless Touch",
     "slot": "Hands",
@@ -56222,6 +56412,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47968,
     "itemName": "Cold Convergence",
     "slot": "Two-Hand",
@@ -56235,6 +56426,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47317,
     "itemName": "Breeches of the Deepening Void",
     "slot": "Legs",
@@ -56248,6 +56440,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47836,
     "itemName": "Legplates of the Immortal Spider",
     "slot": "Legs",
@@ -56261,6 +56454,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47482,
     "itemName": "Boots of the Icy Floe",
     "slot": "Feet",
@@ -56274,6 +56468,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47811,
     "itemName": "Chestguard of the Warden",
     "slot": "Chest",
@@ -56287,6 +56482,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47910,
     "itemName": "Aegis of the Coliseum",
     "slot": "Shield",
@@ -56300,6 +56496,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47478,
     "itemName": "Breeches of the Deepening Void",
     "slot": "Legs",
@@ -56313,6 +56510,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47207,
     "itemName": "Belt of the Forgotten Martyr",
     "slot": "Waist",
@@ -56326,6 +56524,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47326,
     "itemName": "Handwraps of the Lifeless Touch",
     "slot": "Hands",
@@ -56339,6 +56538,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47907,
     "itemName": "Darkmaw Crossbow",
     "slot": "Ranged",
@@ -56352,6 +56552,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47902,
     "itemName": "Legplates of Redeemed Blood",
     "slot": "Legs",
@@ -56365,6 +56566,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47975,
     "itemName": "Baelgun's Heavy Crossbow",
     "slot": "Ranged",
@@ -56378,6 +56580,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48040,
     "itemName": "Pride of the Kor'kron",
     "slot": "Shield",
@@ -56391,6 +56594,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47322,
     "itemName": "Suffering's End",
     "slot": "One-Hand",
@@ -56404,6 +56608,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47472,
     "itemName": "Waistguard of Deathly Dominion",
     "slot": "Waist",
@@ -56417,6 +56622,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47316,
     "itemName": "Reign of the Dead",
     "slot": "Trinket",
@@ -56430,6 +56636,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48055,
     "itemName": "Aegis of the Coliseum",
     "slot": "Shield",
@@ -56443,6 +56650,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47242,
     "itemName": "Trophy of the Crusade",
     "slot": null,
@@ -56456,6 +56664,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47475,
     "itemName": "Hellscream Slicer",
     "slot": "One-Hand",
@@ -56469,6 +56678,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47476,
     "itemName": "Band of the Traitor King",
     "slot": "Finger",
@@ -56482,6 +56692,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47195,
     "itemName": "Belt of the Forgotten Martyr",
     "slot": "Waist",
@@ -56495,6 +56706,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47152,
     "itemName": "Belt of Deathly Dominion",
     "slot": "Waist",
@@ -56508,6 +56720,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47208,
     "itemName": "Armbands of the Ashen Saint",
     "slot": "Wrist",
@@ -56521,6 +56734,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 47327,
     "itemName": "Lurid Manifestation",
     "slot": "Finger",
@@ -56534,6 +56748,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 48039,
     "itemName": "Mace of the Earthborn Chieftain",
     "slot": "One-Hand",
@@ -56547,6 +56762,7 @@
   {
     "bossName": "Anub'arak",
     "expansion": "wotlk",
+    "instanceId": 757,
     "itemId": 142085,
     "itemName": "Nerubian Relic",
     "slot": null,
