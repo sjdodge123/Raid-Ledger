@@ -6,6 +6,8 @@
  */
 import type { HubForumThread, HubForumThreadList } from '@raid-ledger/contract';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
+import { nonEmpty } from '../common/testing/narrow';
+import * as schema from '../drizzle/schema';
 import {
   bootPostsApp,
   call,
@@ -107,5 +109,27 @@ describe('ROK-1175 forum seed — fixtures', () => {
     await seed(g);
     const gone = await read(`/guilds/${g}/forum/${x.removedThreadId}`);
     expect(gone.status).toBe(404);
+  });
+});
+
+describe('ROK-1175 forum seed — community hubs', () => {
+  it('seeds a game_community hub (the smoke spec seeds a community crew)', async () => {
+    const [crew] = nonEmpty(
+      await ctx.testApp.db
+        .insert(schema.guilds)
+        .values({
+          gameId: ctx.testApp.seed.game.id,
+          region: 'us',
+          kind: 'game_community',
+          source: 'community',
+          name: 'Forum Seed Crew',
+          nameKey: 'forum seed crew',
+        })
+        .returning({ id: schema.guilds.id }),
+      'community hub',
+    );
+    const s = await seed(crew.id);
+    expect(s.guildId).toBe(crew.id);
+    expect(typeof s.memberThreadId).toBe('number');
   });
 });

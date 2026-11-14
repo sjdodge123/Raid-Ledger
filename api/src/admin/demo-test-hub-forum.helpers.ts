@@ -9,6 +9,7 @@
  * incl. one deleted by its author. A re-call replaces the hub's whole forum,
  * in one transaction.
  */
+import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
@@ -49,6 +50,24 @@ export interface HubForumSeedResult {
   bulk: number;
   /** Only with `full: true`. */
   extras: HubForumSeedExtras | null;
+}
+
+/**
+ * The hub's id, 404 when unknown. Every hub kind has a forum — community
+ * hubs included (the smoke spec seeds a `game_community` crew), so this does
+ * NOT reuse `findHubOr404`, which refuses community hubs.
+ */
+export async function findForumHubOr404(
+  db: Db,
+  guildId: number,
+): Promise<number> {
+  const [row] = await db
+    .select({ id: schema.guilds.id })
+    .from(schema.guilds)
+    .where(eq(schema.guilds.id, guildId))
+    .limit(1);
+  if (!row) throw new NotFoundException(`Guild ${guildId} not found`);
+  return row.id;
 }
 
 /** Two replies on `threadId`; the second removed by the leader. */

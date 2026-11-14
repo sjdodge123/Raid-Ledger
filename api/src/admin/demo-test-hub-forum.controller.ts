@@ -27,8 +27,9 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { DemoModeGuard } from './demo-mode.guard';
 import { parseDemoBody } from './demo-test.utils';
-import { assertUserExists, findHubOr404 } from './demo-test-hub-member.helpers';
+import { assertUserExists } from './demo-test-hub-member.helpers';
 import {
+  findForumHubOr404,
   HubForumSeedSchema,
   seedHubForum,
   type HubForumSeedResult,
@@ -52,10 +53,10 @@ export class DemoTestHubForumController {
     @Body() body: unknown,
   ): Promise<HubForumSeedResult> {
     const input = parseDemoBody(HubForumSeedSchema, body ?? {});
-    const hub = await findHubOr404(this.db, id);
+    const guildId = await findForumHubOr404(this.db, id);
     await assertUserExists(this.db, input.memberUserId);
     const actors = {
-      guildId: hub.id,
+      guildId,
       leaderId: req.user.id,
       memberId: input.memberUserId,
     };
