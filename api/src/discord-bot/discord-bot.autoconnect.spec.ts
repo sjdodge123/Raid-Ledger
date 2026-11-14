@@ -67,6 +67,10 @@ describe('connectWithRetry', () => {
       'a raw TokenInvalid',
       Object.assign(new Error('x'), { code: 'TokenInvalid' }),
     ],
+    [
+      'a raw DisallowedIntents',
+      Object.assign(new Error('x'), { code: 'DisallowedIntents' }),
+    ],
   ])('does not retry %s', async (_label, error) => {
     const connect = jest.fn<Promise<void>, []>().mockRejectedValue(error);
     const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
@@ -93,36 +97,42 @@ describe('connectWithRetry', () => {
   });
 });
 
+const connect = jest.fn<Promise<void>, [string]>();
+
+async function buildService(): Promise<DiscordBotService> {
+  connect.mockReset();
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DiscordBotService,
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          connect,
+          isConnected: jest.fn().mockReturnValue(false),
+          isConnecting: jest.fn().mockReturnValue(false),
+          disconnect: jest.fn().mockResolvedValue(undefined),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getDiscordBotConfig: jest
+            .fn()
+            .mockResolvedValue({ token: 'tok', enabled: true }),
+        },
+      },
+    ],
+  }).compile();
+  const service = module.get(DiscordBotService);
+  service.autoConnectDelay = () => Promise.resolve();
+  return service;
+}
+
 describe('DiscordBotService.onApplicationBootstrap — auto-connect retry', () => {
   let service: DiscordBotService;
-  const connect = jest.fn<Promise<void>, [string]>();
 
   beforeEach(async () => {
-    connect.mockReset();
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DiscordBotService,
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            connect,
-            isConnected: jest.fn().mockReturnValue(false),
-            isConnecting: jest.fn().mockReturnValue(false),
-            disconnect: jest.fn().mockResolvedValue(undefined),
-          },
-        },
-        {
-          provide: SettingsService,
-          useValue: {
-            getDiscordBotConfig: jest
-              .fn()
-              .mockResolvedValue({ token: 'tok', enabled: true }),
-          },
-        },
-      ],
-    }).compile();
-    service = module.get(DiscordBotService);
-    service.autoConnectDelay = () => Promise.resolve();
+    service = await buildService();
   });
 
   it('reconnects after a transient first-login failure', async () => {
@@ -151,41 +161,51 @@ describe('DiscordBotService.onApplicationBootstrap — auto-connect retry', () =
     await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
     expect(connect).toHaveBeenCalledTimes(1);
   });
+});
 
-  describe('cancelled during the backoff', () => {
-    let release: () => void = () => {};
+describe('DiscordBotService auto-connect — cancelled during the backoff', () => {
+  let service: DiscordBotService;
+  let release: () => void = () => {};
 
-    beforeEach(async () => {
-      const backoff = new Promise<void>((resolve) => (release = resolve));
-      service.autoConnectDelay = () => backoff;
-      connect.mockRejectedValueOnce(transient()).mockResolvedValue();
-      await service.onApplicationBootstrap();
-      await flush();
-      expect(connect.mock.calls).toEqual([['tok']]);
-    });
+  beforeEach(async () => {
+    service = await buildService();
+    const backoff = new Promise<void>((resolve) => (release = resolve));
+    service.autoConnectDelay = () => backoff;
+    connect.mockRejectedValueOnce(transient()).mockResolvedValue();
+    await service.onApplicationBootstrap();
+    await flush();
+    expect(connect.mock.calls).toEqual([['tok']]);
+  });
 
-    it('an admin disable stops further connects', async () => {
-      await service.handleConfigUpdate({ token: 'tok', enabled: false });
-      release();
-      await flush();
+  it('an admin disable stops further connects', async () => {
+    await service.handleConfigUpdate({ token: 'tok', enabled: false });
+    release();
+    await flush();
 
-      expect(connect.mock.calls).toEqual([['tok']]);
-    });
+    expect(connect.mock.calls).toEqual([['tok']]);
+  });
 
-    it('a token change never reconnects with the old token', async () => {
-      await service.handleConfigUpdate({ token: 'new', enabled: true });
-      release();
-      await flush();
+  it('a token change never reconnects with the old token', async () => {
+    await service.handleConfigUpdate({ token: 'new', enabled: true });
+    release();
+    await flush();
 
-      expect(connect.mock.calls).toEqual([['tok'], ['new']]);
-    });
+    expect(connect.mock.calls).toEqual([['tok'], ['new']]);
+  });
 
-    it('shutdown stops further connects', async () => {
-      await service.onModuleDestroy();
-      release();
-      await flush();
+  it('an admin reconnect (ensureConnected) takes over', async () => {
+    await service.ensureConnected({ token: 'admin', enabled: true });
+    release();
+    await flush();
 
-      expect(connect.mock.calls).toEqual([['tok']]);
-    });
+    expect(connect.mock.calls).toEqual([['tok'], ['admin']]);
+  });
+
+  it('shutdown stops further connects', async () => {
+    await service.onModuleDestroy();
+    release();
+    await flush();
+
+    expect(connect.mock.calls).toEqual([['tok']]);
   });
 });

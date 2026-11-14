@@ -4,7 +4,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventEmitter } from 'events';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DISCORD_BOT_EVENTS } from './discord-bot.constants';
-import { DiscordConnectError } from './discord-bot-client.login.helpers';
+import {
+  ABANDONED_SESSION_MESSAGE,
+  DiscordConnectError,
+} from './discord-bot-client.login.helpers';
 import { Events } from 'discord.js';
 
 /**
@@ -89,6 +92,8 @@ let service: DiscordBotClientService;
 let eventEmitter: EventEmitter2;
 let logSpy: jest.SpyInstance;
 let errorSpy: jest.SpyInstance;
+let warnSpy: jest.SpyInstance;
+let debugSpy: jest.SpyInstance;
 
 beforeEach(async () => {
   const module: TestingModule = await Test.createTestingModule({
@@ -107,7 +112,8 @@ beforeEach(async () => {
   eventEmitter = module.get(EventEmitter2);
   logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
   errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
-  jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  debugSpy = jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => {});
   mockLoginImpl = () => Promise.resolve();
 });
 
@@ -118,6 +124,12 @@ afterEach(async () => {
 
 function transientError(): Error {
   return Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+}
+
+function abandonedErrors(): number {
+  return errorSpy.mock.calls.filter(
+    (args: unknown[]) => args[0] === ABANDONED_SESSION_MESSAGE,
+  ).length;
 }
 
 function connectedLogged(): boolean {
@@ -190,6 +202,26 @@ describe('ROK-2198 — stale-client events are discarded (AC2)', () => {
     );
     expect(zombie.destroy).toHaveBeenCalledTimes(1);
     expect(getClient(service)).toBeNull();
+    expect(abandonedErrors()).toBe(1);
+  });
+
+  it('logs an error trailing our own failed login at debug, not warn', async () => {
+    mockLoginImpl = () => Promise.reject(transientError());
+    const connecting = service.connect(TOKEN);
+    const client = mustClient(service);
+    await expect(connecting).rejects.toThrow(DiscordConnectError);
+    warnSpy.mockClear();
+
+    client.emit(Events.Error, new Error('trailing'));
+    await flush();
+
+    const stale = (spy: jest.SpyInstance): boolean =>
+      spy.mock.calls.some((args: unknown[]) =>
+        String(args[0]).includes('Discarded stale Discord client'),
+      );
+    expect(stale(debugSpy)).toBe(true);
+    expect(stale(warnSpy)).toBe(false);
+    expect(abandonedErrors()).toBe(0);
   });
 
   it('ignores ready and error from a client a newer connect replaced', async () => {
@@ -212,6 +244,7 @@ describe('ROK-2198 — stale-client events are discarded (AC2)', () => {
     );
     expect(connectedLogged()).toBe(false);
     expect(oldClient.destroy).toHaveBeenCalled();
+    expect(abandonedErrors()).toBe(1);
     expect(getClient(service)).toBe(newClient);
     expect(service.isConnecting()).toBe(true);
   });

@@ -1,7 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { Client } from 'discord.js';
 import { isDisallowedIntentError } from './discord-bot.constants';
-import { closeLingeringShards } from './discord-bot-client.shards.helpers';
 
 /**
  * ROK-2198: a connect() failure that remembers whether retrying can help.
@@ -53,29 +52,44 @@ export function describeRawLoginError(error: unknown, token: string): string {
   return token ? raw.split(token).join('[redacted]') : raw;
 }
 
-/**
- * Destroy a client, then close any gateway shard discord.js's own destroy
- * left running (ROK-2198 — see discord-bot-client.shards.helpers.ts). A throw
- * is logged, never escapes. Returns how many lingering shards were closed.
- */
+/** Destroy a client; a throw (sync or async) from destroy is logged, never escapes. */
 export async function destroyClientSafely(
   client: Client,
   logger: Logger,
-): Promise<number> {
+): Promise<void> {
   try {
     await client.destroy();
-    return await closeLingeringShards(client);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`Destroying a discarded Discord client failed: ${message}`);
-    return 0;
   }
 }
 
 /**
- * ROK-2198: an event arrived from a client that is no longer the live one
- * (its login already failed, or a newer connect replaced it). discord.js keeps
- * retrying internally, so it must be destroyed or it lingers as a zombie.
+ * ROK-2198: logged when a client the service already abandoned reaches READY.
+ * discord.js 14's destroy() cannot always close that session (an Idle shard
+ * mid-reconnect is forgotten, then reconnects), so it is made visible instead.
+ */
+export const ABANDONED_SESSION_MESSAGE =
+  'Discord gateway session from an abandoned login connected; it has no listeners and will close on the next restart (ROK-2198)';
+
+/**
+ * A client that is no longer the live one reached READY: never adopt it.
+ * Destroy it (harmless if discord.js already did) and raise one error.
+ */
+export async function abandonStaleReadyClient(
+  client: Client,
+  logger: Logger,
+): Promise<void> {
+  await destroyClientSafely(client, logger);
+  logger.error(ABANDONED_SESSION_MESSAGE);
+}
+
+/**
+ * ROK-2198: an error arrived from a client that is no longer the live one
+ * (its login already failed, or a newer connect replaced it). It is destroyed
+ * so discord.js stops retrying it. An error trailing our own failed login is
+ * expected and logs at debug.
  */
 export async function discardStaleClient(
   client: Client,
@@ -83,9 +97,8 @@ export async function discardStaleClient(
   event: string,
   expected = false,
 ): Promise<void> {
-  const closed = await destroyClientSafely(client, logger);
-  const line = `Discarded stale Discord client (${event}); closed ${closed} lingering gateway shard(s)`;
-  // An error that trails our own failed login is expected, not news.
-  if (expected && closed === 0) logger.debug(line);
+  await destroyClientSafely(client, logger);
+  const line = `Discarded stale Discord client (${event}) — it is no longer the live client`;
+  if (expected) logger.debug(line);
   else logger.warn(line);
 }

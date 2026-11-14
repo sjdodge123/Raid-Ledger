@@ -7,6 +7,7 @@ import {
 import { warnIfMultipleGuilds } from './discord-bot-client.helpers';
 import {
   DiscordConnectError,
+  abandonStaleReadyClient,
   describeRawLoginError,
   destroyClientSafely,
   discardStaleClient,
@@ -61,7 +62,7 @@ function onReady(
   { resolve, reject }: ConnectSettlers,
 ): void {
   if (!hooks.isLive(client)) {
-    void discardStaleClient(client, hooks.logger, 'clientReady');
+    void abandonStaleReadyClient(client, hooks.logger);
     reject(new DiscordConnectError(SUPERSEDED_MESSAGE, false));
     return;
   }
@@ -91,7 +92,7 @@ function onError(
   reject(new DiscordConnectError(message, definitive));
 }
 
-/** A failed login destroys its client and closes any shard it left behind. */
+/** A failed login destroys its client so discord.js cannot revive it. */
 async function onLoginFailure(
   client: Client,
   token: string,
