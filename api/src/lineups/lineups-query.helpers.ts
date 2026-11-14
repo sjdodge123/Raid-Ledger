@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema';
@@ -76,7 +76,13 @@ export function findEntriesWithGames(
     .where(eq(schema.communityLineupEntries.lineupId, lineupId));
 }
 
-/** Count votes per game for a lineup. */
+/**
+ * Count votes per game for a lineup — nominated games only.
+ * The inner join on the lineup's entries drops vote rows on a game that is
+ * no longer (or never was) nominated: removing a nomination deletes only the
+ * entry, so its votes survive and would otherwise still win, force a tie or
+ * open a match. `uq_lineup_entry_game` keeps the join one-to-one.
+ */
 export function countVotesPerGame(
   db: PostgresJsDatabase<typeof schema>,
   lineupId: number,
@@ -87,6 +93,19 @@ export function countVotesPerGame(
       voteCount: sql<number>`count(*)::int`.as('vote_count'),
     })
     .from(schema.communityLineupVotes)
+    .innerJoin(
+      schema.communityLineupEntries,
+      and(
+        eq(
+          schema.communityLineupEntries.lineupId,
+          schema.communityLineupVotes.lineupId,
+        ),
+        eq(
+          schema.communityLineupEntries.gameId,
+          schema.communityLineupVotes.gameId,
+        ),
+      ),
+    )
     .where(eq(schema.communityLineupVotes.lineupId, lineupId))
     .groupBy(schema.communityLineupVotes.gameId);
 }
