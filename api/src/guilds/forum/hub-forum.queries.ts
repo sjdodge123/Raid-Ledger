@@ -159,20 +159,31 @@ export async function findThread(
   return row && threadProbe(row).record;
 }
 
-/** Widget: the `limit` newest-activity listed threads + the listed total. */
-export async function latestThreads(
-  db: Db,
-  guildId: number,
-  limit: number,
-): Promise<{ records: HubForumThreadRecord[]; total: number }> {
-  const where = and(eq(threads.guildId, guildId), listedThread);
-  const rows = await selectThreads(db, where)
+/** Widget rows: live threads only (the card never shows a placeholder). */
+const liveThreadOf = (guildId: number) =>
+  and(eq(threads.guildId, guildId), isNull(threads.deletedAt));
+
+/** Widget probe: removed threads are excluded BEFORE the limit (SQL tests). */
+export function latestThreadsQuery(db: Db, guildId: number, limit: number) {
+  return selectThreads(db, liveThreadOf(guildId))
     .orderBy(
       sql`${threads.lastActivityAt} desc nulls last`,
       sql`${threads.id} desc nulls last`,
     )
     .limit(limit);
-  const [tally] = await db.select({ n: count() }).from(threads).where(where);
+}
+
+/** Widget: the `limit` newest-activity live threads + the live total. */
+export async function latestThreads(
+  db: Db,
+  guildId: number,
+  limit: number,
+): Promise<{ records: HubForumThreadRecord[]; total: number }> {
+  const rows = await latestThreadsQuery(db, guildId, limit);
+  const [tally] = await db
+    .select({ n: count() })
+    .from(threads)
+    .where(liveThreadOf(guildId));
   return {
     records: rows.map((r) => threadProbe(r).record),
     total: tally?.n ?? 0,

@@ -6,6 +6,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
+  latestThreadsQuery,
   listRepliesQuery,
   listThreadsQuery,
   pinnedThreadsQuery,
@@ -71,6 +72,17 @@ describe('pinnedThreadsQuery SQL', () => {
     expect(sql).toContain(`${T}."pinned_at" is not null`);
     expect(sql).toContain(`${T}."deleted_at" is null`);
     expect(sql).toContain(`order by ${T}."pinned_at" desc nulls last`);
+  });
+});
+
+describe('latestThreadsQuery SQL', () => {
+  it('excludes removed threads before the limit (Codex P2)', () => {
+    const { sql, params } = latestThreadsQuery(db, 7, 3).toSQL();
+    const where = sql.slice(sql.indexOf(' where '), sql.indexOf(' order by '));
+    expect(where).toContain(`${T}."deleted_at" is null`);
+    expect(where).not.toContain(`"reply_count" > `);
+    expect(sql.indexOf('limit')).toBeGreaterThan(sql.indexOf(' where '));
+    expect(params).toEqual(expect.arrayContaining([7, 3]));
   });
 });
 
