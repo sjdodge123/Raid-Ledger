@@ -22,7 +22,7 @@
  *   const { app, request } = await getTestApp();
  *   const res = await request.get('/system/status');
  */
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { type INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -46,7 +46,7 @@ import {
   instrumentLifecycleHooks,
   phaseMark,
   recordMigrate,
-  recordPhase,
+  timePhase,
 } from './integration-phase-timer';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
 import {
@@ -231,28 +231,45 @@ async function listenOnEphemeralPort(
   });
 }
 
+/** Compile AppModule with the integration harness's provider overrides. */
+function compileAppModule(
+  db: PostgresJsDatabase<typeof schema>,
+  redisMock: RedisMockHandle,
+): Promise<TestingModule> {
+  return (
+    Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(DrizzleAsyncProvider)
+      .useValue(db)
+      .overrideProvider(REDIS_CLIENT)
+      .useValue(redisMock.client)
+      // ROK-1727: no integration spec may call nether.wowhead.com.
+      .overrideProvider(WOWHEAD_RESOLVER_DEPS)
+      .useValue(noNetworkWowheadDeps())
+      // ROK-2162: no boot / settings-save quest import; specs call it directly.
+      .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
+      .useValue(false)
+      // ROK-2196: the setup file truncates right after init, so the ~6.6k-row
+      // WoW boot seed was wiped unread; specs that need it seed explicitly.
+      .overrideProvider(WOW_BOOT_SEED_ENABLED)
+      .useValue(false)
+      .compile()
+  );
+}
+
+/** Init the app with the opt-in phase/provider timers wrapped around it. */
+async function initInstrumented(app: INestApplication): Promise<void> {
+  instrumentLifecycleHooks(app);
+  instrumentProviderInitHooks(app);
+  await timePhase('init', () => app.init());
+}
+
 async function buildNestApp(
   db: PostgresJsDatabase<typeof schema>,
   redisMock: RedisMockHandle,
 ): Promise<{ app: INestApplication; request: TestAgent<supertest.Test> }> {
-  const moduleStart = phaseMark();
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(DrizzleAsyncProvider)
-    .useValue(db)
-    .overrideProvider(REDIS_CLIENT)
-    .useValue(redisMock.client)
-    // ROK-1727: no integration spec may call nether.wowhead.com.
-    .overrideProvider(WOWHEAD_RESOLVER_DEPS)
-    .useValue(noNetworkWowheadDeps())
-    // ROK-2162: no boot / settings-save quest import; specs call it directly.
-    .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
-    .useValue(false)
-    // ROK-2196: the setup file truncates right after init, so the ~6.6k-row
-    // WoW boot seed was wiped unread; specs that need it seed explicitly.
-    .overrideProvider(WOW_BOOT_SEED_ENABLED)
-    .useValue(false)
-    .compile();
-  recordPhase('module', moduleStart);
+  const moduleRef = await timePhase('module', () =>
+    compileAppModule(db, redisMock),
+  );
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,
   // which would 413 a request before any route (e.g. ROK-1724's 256 KB cap).
@@ -266,11 +283,7 @@ async function buildNestApp(
   // ahead of the router. Supertest sends no Origin, so it allows every
   // existing spec; specs that set Origin/Host exercise the real policy.
   applyCorsPolicy(app, { isProduction: false });
-  instrumentLifecycleHooks(app);
-  instrumentProviderInitHooks(app);
-  const initStart = phaseMark();
-  await app.init();
-  recordPhase('init', initStart);
+  await initInstrumented(app);
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
@@ -349,6 +362,22 @@ export async function getTestApp(): Promise<TestApp> {
 }
 
 /**
+ * ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
+ * never has to await an in-flight job whose DB query would race the
+ * _appClient.end timeout cap. Best-effort — app.close() runs regardless.
+ */
+async function drainQueuesBestEffort(app: INestApplication): Promise<void> {
+  try {
+    const queueHealth = app.get(QueueHealthService, { strict: false });
+    if (queueHealth) {
+      await timePhase('drain', () => queueHealth.awaitDrained(15_000));
+    }
+  } catch {
+    // best-effort — fall through to app.close() regardless
+  }
+}
+
+/**
  * Shut down the TestApp singleton.
  * Called automatically by the global afterAll hook in integration-setup.ts.
  *
@@ -367,21 +396,7 @@ export async function closeTestApp(): Promise<void> {
   if (!instance) return;
 
   try {
-    // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
-    // never has to await an in-flight job whose DB query would race the
-    // _appClient.end timeout cap.
-    try {
-      const queueHealth = instance.app.get(QueueHealthService, {
-        strict: false,
-      });
-      if (queueHealth) {
-        const drainStart = phaseMark();
-        await queueHealth.awaitDrained(15_000);
-        recordPhase('drain', drainStart);
-      }
-    } catch {
-      // best-effort — fall through to app.close() regardless
-    }
+    await drainQueuesBestEffort(instance.app);
 
     // Capture the test container's port BEFORE _appClient.end() / container.stop()
     // so the fallback destroy can scope itself to ONLY our test-DB sockets.
@@ -389,9 +404,7 @@ export async function closeTestApp(): Promise<void> {
       instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
     const ourPort = extractPortFromConnectionString(connStr);
 
-    const closeStart = phaseMark();
-    await instance.app.close();
-    recordPhase('close', closeStart);
+    await timePhase('close', () => instance.app.close());
     if (instance._appClient) {
       await instance._appClient.end({ timeout: 30 });
     }
