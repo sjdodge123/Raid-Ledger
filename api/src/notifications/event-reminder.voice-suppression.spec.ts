@@ -70,7 +70,7 @@ async function buildModule(opts: {
   mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   voiceAttendance?: { isUserActive: jest.Mock } | null;
 }): Promise<EventReminderService> {
@@ -121,7 +121,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
 
   beforeEach(() => {
@@ -130,7 +130,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
   });
 

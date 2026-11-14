@@ -16,6 +16,7 @@ import {
 import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 import { addPollHubField } from './notification-embed.poll-hub';
+import { dmVoiceFieldValue } from './notification-voice.helpers';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -194,17 +195,13 @@ function addFieldIf(
     embed.addFields({ name, value: toStr(payload[key]), inline });
 }
 
-/** Add a voice channel field if present. */
+/** Add a voice channel field: the live link, or a planned temporary channel. */
 function addVoiceChannelField(
   embed: EmbedBuilder,
   payload: Record<string, unknown>,
 ): void {
-  if (payload.voiceChannelId)
-    embed.addFields({
-      name: 'Voice Channel',
-      value: `<#${toStr(payload.voiceChannelId)}>`,
-      inline: true,
-    });
+  const value = dmVoiceFieldValue(payload);
+  if (value) embed.addFields({ name: 'Voice Channel', value, inline: true });
 }
 
 /** Field definitions per notification type: [payloadKey, fieldName] pairs + voice flag. */

@@ -23,6 +23,7 @@ import {
   buildReminderStrings,
 } from './event-reminder.helpers';
 import { claimReminderDedup } from './event-reminder-dedup.helpers';
+import type { PlannedEphemeralVoice } from '../discord-bot/services/planned-ephemeral-voice.helpers';
 
 type CharsByUserMap = Map<
   number,
@@ -175,11 +176,20 @@ export class EventReminderService {
       0,
       Math.round((startTime.getTime() - now.getTime()) / 60000),
     );
-    const [discordUrl, voiceChannelId] = await Promise.all([
+    // A planned temporary channel shows its name + open time (PR #2134).
+    const [discordUrl, voice] = await Promise.all([
       this.notificationService.getDiscordEmbedUrl(event.id),
-      this.notificationService.resolveVoiceChannelForEvent(event.id),
+      this.notificationService.resolveVoiceForEvent(event.id),
     ]);
-    return { startTime, minutesUntil, discordUrl, voiceChannelId };
+    const voiceChannelId = voice.voiceChannelId ?? null;
+    const plannedVoiceChannel = voice.plannedVoiceChannel ?? null;
+    return {
+      startTime,
+      minutesUntil,
+      discordUrl,
+      voiceChannelId,
+      plannedVoiceChannel,
+    };
   }
 
   /** Send reminders for a single event to all signed-up users. */
@@ -291,6 +301,7 @@ export class EventReminderService {
     defaultTimezone?: string;
     discordUrl?: string | null;
     voiceChannelId?: string | null;
+    plannedVoiceChannel?: PlannedEphemeralVoice | null;
     gameId?: number | null;
   }): Promise<boolean> {
     if (!(await claimReminderDedup(this.db, input))) return false;

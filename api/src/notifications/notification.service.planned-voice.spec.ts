@@ -74,7 +74,10 @@ describe('NotificationService — planned temporary voice channel in DMs', () =>
         { provide: DiscordNotificationService, useValue: null },
         { provide: ChannelResolverService, useValue: resolver },
         { provide: SettingsService, useValue: settings },
-        { provide: CronJobService, useValue: { executeWithTracking: jest.fn() } },
+        {
+          provide: CronJobService,
+          useValue: { executeWithTracking: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(NotificationService);
@@ -92,7 +95,10 @@ describe('NotificationService — planned temporary voice channel in DMs', () =>
     });
     const opensAt = new Date(START.getTime() - BUFFER_MINUTES * 60_000);
     expect(voice).toEqual({
-      plannedVoiceChannel: { name: expectedName, opensAt: opensAt.toISOString() },
+      plannedVoiceChannel: {
+        name: expectedName,
+        opensAt: opensAt.toISOString(),
+      },
     });
   });
 

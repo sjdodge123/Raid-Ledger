@@ -3,10 +3,11 @@
  * event embeds use (`plannedVoiceLine`, PR #2134), and a DM without one keeps
  * the `<#id>` channel link.
  */
-jest.mock(
-  'discord.js',
-  () => jest.requireActual('../common/testing/discord-js-mock').discordJsMock,
-);
+// The shared mock lacks escapeMarkdown, which `plannedVoiceLine` uses.
+jest.mock('discord.js', () => ({
+  ...jest.requireActual('../common/testing/discord-js-mock').discordJsMock,
+  escapeMarkdown: jest.requireActual('discord.js').escapeMarkdown,
+}));
 
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { SettingsService } from '../settings/settings.service';
@@ -71,7 +72,10 @@ describe('buildReminderPayload — planned temporary voice channel', () => {
   };
 
   it('carries the planned channel into the DM payload', () => {
-    const payload = buildReminderPayload({ ...base, plannedVoiceChannel: PLANNED });
+    const payload = buildReminderPayload({
+      ...base,
+      plannedVoiceChannel: PLANNED,
+    });
     expect(payload.plannedVoiceChannel).toEqual(PLANNED);
     expect(payload.voiceChannelId).toBeUndefined();
   });

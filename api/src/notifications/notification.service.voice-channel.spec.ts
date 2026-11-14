@@ -26,6 +26,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
   const makeSelectChain = (rows: unknown[] = []) => {
     const chain: Record<string, jest.Mock> = {};
     chain.from = jest.fn().mockReturnValue(chain);
+    chain.leftJoin = jest.fn().mockReturnValue(chain);
     chain.where = jest.fn().mockReturnValue(chain);
     chain.limit = jest.fn().mockResolvedValue(rows);
     chain.orderBy = jest.fn().mockReturnValue(chain);
