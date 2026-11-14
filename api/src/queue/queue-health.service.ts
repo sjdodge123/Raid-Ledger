@@ -114,13 +114,6 @@ export class QueueHealthService {
     return results;
   }
 
-  /** Drain (remove waiting jobs from) all registered queues. */
-  async drainAll(): Promise<void> {
-    for (const [, queue] of this.queues) {
-      await queue.drain();
-    }
-  }
-
   /**
    * Poll all registered queues until none have waiting/active jobs (and no
    * delayed jobs in short-coalesce queues — see `SHORT_COALESCE_QUEUES`).
