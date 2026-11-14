@@ -112,15 +112,6 @@ export async function flushNotificationBufferForTest(
   return count;
 }
 
-/** Drain the embed sync BullMQ queue. */
-export async function flushEmbedQueueForTest(
-  moduleRef: ModuleRef,
-): Promise<{ success: boolean }> {
-  const qhs = moduleRef.get(QueueHealthService, { strict: false });
-  await qhs.drainAll();
-  return { success: true };
-}
-
 const awaitProcessingLogger = new Logger('DemoTestCore');
 
 /** Structured body for a drain that never completed (ROK-1511). */
@@ -203,4 +194,21 @@ export async function awaitProcessingForTest(
     );
     throw new ConflictException(body);
   }
+}
+
+/**
+ * Let pending embed-sync work land before a smoke test polls Discord.
+ *
+ * Every caller follows this with a poll for the posted/edited embed, so it
+ * must WAIT for the queues to go idle — never delete waiting jobs. It used to
+ * call BullMQ `queue.drain()` on every queue, which silently discarded a
+ * pending embed re-sync (or any queue's job) mid-run. A timeout reports the
+ * same structured 409 body as `awaitProcessingForTest`.
+ */
+export async function flushEmbedQueueForTest(
+  moduleRef: ModuleRef,
+  timeoutMs = 30_000,
+): Promise<{ success: boolean }> {
+  await awaitProcessingForTest(moduleRef, timeoutMs);
+  return { success: true };
 }

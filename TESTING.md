@@ -604,7 +604,7 @@ Available helpers:
 |--------|----------|---------|
 | `awaitProcessing(api)` | `fixtures.ts` | Drain all BullMQ queues |
 | `flushVoiceSessions(api)` | `fixtures.ts` | Flush in-memory voice sessions to DB |
-| `flushEmbedQueue(api)` | `fixtures.ts` | Drain embed sync queue |
+| `flushEmbedQueue(api)` | `fixtures.ts` | Wait for pending embed-sync work to land (never deletes jobs) |
 | `flushNotificationBuffer(api)` | `fixtures.ts` | Flush buffered notifications |
 | `pollForCondition(check, timeout)` | `polling.ts` | Generic condition poller with backoff |
 | `pollForEmbed(channelId, predicate, timeout)` | `polling.ts` | Poll channel for matching message |
