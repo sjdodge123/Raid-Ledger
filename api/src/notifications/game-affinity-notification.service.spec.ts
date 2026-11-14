@@ -81,6 +81,7 @@ function build(groupIds: number[]): Harness {
   const notifications = {
     create,
     resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
   } as unknown as NotificationService;
   const hub = {
     resolveGroupEventRecipients: jest.fn().mockResolvedValue(groupIds),

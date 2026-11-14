@@ -12,6 +12,7 @@ let mockNotificationService: {
   create: jest.Mock;
   getDiscordEmbedUrl: jest.Mock;
   resolveVoiceChannelForEvent: jest.Mock;
+  resolveVoiceForEvent: jest.Mock;
 };
 
 /**
@@ -97,6 +98,7 @@ async function setupEach() {
     create: jest.fn().mockResolvedValue(null),
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
     resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
   };
 
   selectChains = [];
@@ -200,9 +202,9 @@ async function testIncludesDiscordUrlAndVoiceChannel() {
   mockNotificationService.getDiscordEmbedUrl.mockResolvedValue(
     'https://discord.com/channels/1/2/3',
   );
-  mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
-    'vc-123',
-  );
+  mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+    voiceChannelId: 'vc-123',
+  });
 
   service.bufferLeave({ ...baseAction, vacatedRole: 'tank' });
 
@@ -281,6 +283,24 @@ describe('RosterNotificationBufferService (ROK-534)', () => {
 
   it('includes discord URL and voice channel in notification payload', () =>
     testIncludesDiscordUrlAndVoiceChannel());
+
+  it('carries a planned temporary voice channel in the payload', async () => {
+    setupFlushChains(mmoEvent);
+    mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+      plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+    });
+    service.bufferLeave({ ...baseAction, vacatedRole: 'tank' });
+    jest.advanceTimersByTime(ROSTER_NOTIFY_GRACE_MS + 100);
+    await jest.runAllTimersAsync();
+    expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: {
+          eventId: 1,
+          plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+        },
+      }),
+    );
+  });
 
   it('onModuleDestroy clears all pending timers', () => {
     service.bufferLeave(baseAction);

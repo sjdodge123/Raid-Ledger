@@ -54,6 +54,7 @@ describe('LiveNoShowService — phase2', () => {
   let mockNotificationService: {
     create: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   let mockCronJobService: { executeWithTracking: jest.Mock };
   let mockVoiceAttendance: { isUserActive: jest.Mock };
@@ -93,6 +94,7 @@ describe('LiveNoShowService — phase2', () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
       resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
 
     mockCronJobService = {

@@ -20,6 +20,7 @@ function createMockNotificationService() {
     createMany: jest.fn().mockResolvedValue([]),
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
     resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
   };
 }
 
@@ -180,6 +181,23 @@ describe('Regression: ROK-828', () => {
     expect(content).not.toMatch(/<t:\d+/); // no raw token survives
     expect(content).toContain(abs); // rendered in the recipient timezone
     expect(content.split(abs).length - 1).toBe(1); // absolute appears once
+  });
+
+  it('carries a planned temporary voice channel in the payload', async () => {
+    mockNotifSvc.resolveVoiceForEvent.mockResolvedValue({
+      plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+    });
+    await rescheduleEvent(
+      mockDb as any,
+      mockNotifSvc as any,
+      eventId,
+      creatorId,
+      true,
+      { startTime: newStartISO, endTime: newEndISO },
+    );
+
+    const call = mockNotifSvc.createMany.mock.calls[0][0][0];
+    expect(call.payload.plannedVoiceChannel).toEqual({ name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' });
   });
 
   it('should include event title and correct type', async () => {
