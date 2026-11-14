@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import type { GuildPage } from '@raid-ledger/contract';
 import {
-    FOREVER_NAME_REQUIRED, FOREVER_PART_INVALID, foreverIdentityFromCharacter, formatForeverRuleset,
+    FOREVER_NAME_REQUIRED, WOW_FOREVER_GAME_SLUG, isForeverGuildPage, FOREVER_PART_INVALID, foreverIdentityFromCharacter, formatForeverRuleset,
     foreverUpdateFields, sameForeverIdentity, usesForeverIdentity, validateForeverIdentity,
 } from './forever-identity';
 
@@ -52,5 +53,26 @@ describe('forever-identity helpers (ROK-1721)', () => {
             expect(validateForeverIdentity(id('Ana', 'F0rever'))).toEqual({ second: FOREVER_PART_INVALID });
             expect(validateForeverIdentity(id('Ana', 'Forever'))).toBeNull();
         });
+    });
+});
+
+describe('isForeverGuildPage (ROK-2192)', () => {
+    function page(kind: GuildPage['guild']['kind'], gameSlug: string | undefined): GuildPage {
+        return {
+            guild: { id: 7, gameId: 3, kind, name: 'Ye Olde Guild', region: 'us', realmSlug: null, realmName: null, faction: null, memberCount: 1, lastSnapshotAt: null, ...(gameSlug === undefined ? {} : { gameSlug }) },
+            importedBy: null,
+            viewer: { role: 'member', canEdit: false, canManageEditors: false, isGuildMaster: true },
+            ranks: [],
+            roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
+        };
+    }
+
+    it.each([
+        ['a WoW: Forever guild hub', 'wow_guild', WOW_FOREVER_GAME_SLUG, true],
+        ['a retail WoW guild hub', 'wow_guild', 'world-of-warcraft', false],
+        ['a WoW guild hub with no game slug', 'wow_guild', undefined, false],
+        ['a community hub on the Forever game', 'game_community', WOW_FOREVER_GAME_SLUG, false],
+    ] as const)('%s', (_label, kind, slug, expected) => {
+        expect(isForeverGuildPage(page(kind, slug)), `${_label} is a Forever guild page`).toBe(expected);
     });
 });

@@ -4,7 +4,8 @@
  * used to resolve (`blizzardGuild.state === 'disbanded'`). Everyone sees the
  * copy; an editor (or the rank-0 GM, ROK-2192) who can open hub settings also
  * gets "Update the guild path", which opens the settings sheet scrolled to +
- * focused on the Blizzard roster section's slug field (ROK-2188; was the top of the sheet, spec F7).
+ * focused on the Blizzard roster section's slug field (ROK-2188; was the top
+ * of the sheet, spec F7).
  */
 import type { JSX } from 'react';
 import type { HubCtx } from '../../hub-module';

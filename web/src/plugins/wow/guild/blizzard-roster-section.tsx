@@ -14,7 +14,7 @@ import { Input } from '../../../components/ui/input';
 import { SettingsSection } from '../../../components/hub/settings/settings-rows';
 import { canWriteHubSettings } from '../../../components/hub/settings/settings-access';
 import { toast } from '../../../lib/toast';
-import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
+import { isForeverGuildPage } from '../lib/forever-identity';
 import { useGuildBlizzardRoster, useSetBlizzardRosterSlug, useSyncBlizzardRoster } from '../hooks/use-guild-blizzard-roster';
 import { blizzardRosterStatusLine } from './blizzard-roster-status';
 import { BLIZZARD_ROSTER_SETTINGS_SECTION } from './blizzard-roster-section-id';
@@ -24,7 +24,7 @@ const BLURB = 'Read the member list from Blizzard instead of LedgerLink exports.
 /** The hub's settings-sheet section; renders nothing off a Forever guild hub. */
 export function BlizzardRosterSection({ page }: HubCtx): JSX.Element | null {
     const { guild, viewer } = page;
-    const forever = guild.kind === 'wow_guild' && guild.gameSlug === WOW_FOREVER_GAME_SLUG;
+    const forever = isForeverGuildPage(page);
     const query = useGuildBlizzardRoster(guild.id, forever);
     if (!forever || query.data === undefined) return null;
     return (
