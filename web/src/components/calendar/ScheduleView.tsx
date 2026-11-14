@@ -11,7 +11,7 @@ import {
 } from 'date-fns';
 import { getGameColors } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
-import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { ignoreScrollFor, useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
 import { EventHubLabel } from './event-hub-label';
@@ -244,6 +244,27 @@ function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, layerDays, now
     );
 }
 
+/**
+ * How long the mount-time smooth scroll to today is treated as app-started
+ * scrolling. A smooth `scrollIntoView` takes ~300–600 ms; the margin covers
+ * long schedules and slow phones without swallowing a real user scroll.
+ */
+const SCROLL_TO_TODAY_IGNORE_MS = 1000;
+
+/** Smooth-scrolls to today shortly after mount without hiding the bottom tab bar. */
+function useScrollToToday(todayRef: React.RefObject<HTMLDivElement | null>): void {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const today = todayRef.current;
+            if (!today) return;
+            // Our own scroll, not the user's: keep the bottom tab bar shown.
+            ignoreScrollFor(SCROLL_TO_TODAY_IGNORE_MS);
+            today.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [todayRef]);
+}
+
 export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent, isFetching, layerDays }: ScheduleViewProps) {
     const todayRef = useRef<HTMLDivElement>(null);
     const scrollDirection = useScrollDirection();
@@ -251,10 +272,7 @@ export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent,
     const { eventsByDate, daysWithEvents } = useScheduleData(events, layerDays);
     const { handleTouchStart, handleTouchEnd } = useSwipeNavigation(currentDate, onDateChange);
 
-    useEffect(() => {
-        const timer = setTimeout(() => { todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
-        return () => clearTimeout(timer);
-    }, []);
+    useScrollToToday(todayRef);
 
     const hasLayerRows = [...(layerDays?.values() ?? [])].some((entries) => entries.length > 0);
     if (events.length === 0 && !hasLayerRows) {
