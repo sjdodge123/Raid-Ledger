@@ -22,8 +22,9 @@ import { _resetRecentlyProcessed } from '../../discord-bot/listeners/event-link.
 import { _resetInFlightRefreshes } from '../swr-cache';
 import { INSTANCE_KEY, type TestApp } from './test-app';
 import { nonEmpty } from './narrow';
-import { phaseMark, recordPhase } from './integration-phase-timer';
+import { phaseMark, recordPhase, timePhase } from './integration-phase-timer';
 import { buildTruncateSql } from './integration-truncate-sql';
+import { retryOnDeadlock } from './integration-deadlock-retry';
 
 const obliterateLogger = new Logger('truncateAllTables.obliterate');
 
@@ -103,24 +104,6 @@ export async function reseedAdminCreds(
   });
 }
 
-const DEADLOCK_MAX_RETRIES = 5;
-const DEADLOCK_BASE_DELAY_MS = 200;
-
-async function retryOnDeadlock(fn: () => Promise<unknown>): Promise<void> {
-  for (let attempt = 1; attempt <= DEADLOCK_MAX_RETRIES; attempt++) {
-    try {
-      await fn();
-      return;
-    } catch (err: unknown) {
-      const isDeadlock =
-        err instanceof Error && 'code' in err && err.code === '40P01';
-      if (!isDeadlock || attempt === DEADLOCK_MAX_RETRIES) throw err;
-      const delay = DEADLOCK_BASE_DELAY_MS * 2 ** (attempt - 1);
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-}
-
 /**
  * Truncate all application tables between test suites.
  * Preserves baseline seed data by re-seeding after truncation.
@@ -132,13 +115,13 @@ export async function truncateAllTables(
   const truncateStart = phaseMark();
   // ONE statement (ROK-2196): a DO block discovers every public table except
   // Drizzle bookkeeping and cron_jobs/cron_job_executions (seeded at boot,
-  // needed by live cron handlers) and DELETEs it with FK triggers off for the
-  // transaction only. See integration-truncate-sql.ts for why DELETE, not
-  // TRUNCATE, and why the table list is not cached client-side.
-  await retryOnDeadlock(() =>
-    db.transaction(async (tx) => {
-      await tx.execute(sql.raw(TRUNCATE_ALL_SQL));
-    }),
+  // needed by live cron handlers) and DELETEs it with FK triggers off. A lone
+  // statement is its own implicit transaction, so no BEGIN/COMMIT wrapper.
+  // See integration-truncate-sql.ts for why DELETE, not TRUNCATE, and why the
+  // table list is not cached client-side. The truncate.* sub-phases split the
+  // env-gated [phase-timing] truncate total (RL_INTEGRATION_PHASE_TIMING=1).
+  await timePhase('truncateDelete', () =>
+    retryOnDeadlock(() => db.execute(sql.raw(TRUNCATE_ALL_SQL))),
   );
 
   // Reset cross-suite in-memory state that can otherwise leak between files
@@ -150,14 +133,16 @@ export async function truncateAllTables(
   // stale `community_name` (or any setting) read can
   // bias logic in the next spec, and a `lineup-*` dedup key can silence a
   // notification expected by spec B.
+  const cachesStart = phaseMark();
   clearAuthUserCache();
   clearMockRedisByPrefix(MOCK_REDIS_TEARDOWN_PREFIXES);
   clearSettingsServiceCache();
   resetModuleSingletons();
-  await obliterateAllQueues();
+  recordPhase('truncateCaches', cachesStart);
+  await timePhase('truncateQueues', obliterateAllQueues);
 
   // Re-seed baseline data
-  const seed = await seedBaseline(db);
+  const seed = await timePhase('truncateSeed', () => seedBaseline(db));
   recordPhase('truncate', truncateStart);
   return seed;
 }

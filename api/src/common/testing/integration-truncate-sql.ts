@@ -15,8 +15,11 @@
  * deadlock with live request/cron handlers (see INVESTIGATION-2196 row C).
  *
  * `session_replication_role` is set with `set_config(…, true)`, i.e. local to
- * the transaction, so a failure part-way cannot leave a pooled connection in
- * replica mode (FK triggers off).
+ * the transaction. The caller sends the DO block as one statement with no
+ * explicit BEGIN/COMMIT, so that is the statement's implicit transaction: the
+ * setting reverts at statement end on success or failure. (The old per-table
+ * reset was equally safe — its plain SET ran inside an explicit transaction
+ * and was undone on rollback too; this just drops the BEGIN/COMMIT trips.)
  */
 
 /** Tables that must survive a reset (seeded at app boot, used by cron). */
@@ -46,7 +49,7 @@ function assertNoDollarTag(values: readonly string[]): void {
 /**
  * Build the single-statement reset: one `DO` block that DELETEs every row
  * from every `public` table except the excluded ones, with FK triggers
- * disabled for the duration of the enclosing transaction.
+ * disabled for the duration of the statement's (implicit) transaction.
  */
 export function buildTruncateSql(
   excluded: readonly string[] = TRUNCATE_EXCLUDED_TABLES,
