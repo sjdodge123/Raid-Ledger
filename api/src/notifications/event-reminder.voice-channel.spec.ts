@@ -15,7 +15,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -35,7 +35,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
         createdAt: new Date().toISOString(),
       }),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
 
     const module: TestingModule = await Test.createTestingModule({

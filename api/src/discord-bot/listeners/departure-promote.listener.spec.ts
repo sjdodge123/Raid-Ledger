@@ -57,7 +57,7 @@ let mockDb: MockDb;
 let mockClientService: { getClient: jest.Mock; isConnected: jest.Mock };
 let mockNotificationService: {
   getDiscordEmbedUrl: jest.Mock;
-  resolveVoiceChannelForEvent: jest.Mock;
+  resolveVoiceForEvent: jest.Mock;
   create: jest.Mock;
 };
 let mockSignupsService: { promoteFromBench: jest.Mock };
@@ -71,7 +71,7 @@ function setupDeparturePromote() {
   };
   mockNotificationService = {
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     create: jest.fn().mockResolvedValue(undefined),
   };
   mockSignupsService = {
@@ -197,6 +197,32 @@ function promoteSuccessTests() {
     );
 
     expect(interaction.message.edit).toHaveBeenCalled();
+  });
+
+  it('the promoted-from-bench DM carries a planned temporary voice channel', async () => {
+    const planned = { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' };
+    mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+      plannedVoiceChannel: planned,
+    });
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
+    );
+    mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
+    mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+      role: 'tank',
+      position: 1,
+      username: 'BenchPlayer',
+    });
+    mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
+
+    await listener.handlePromote(interaction, 1);
+
+    expect(mockNotificationService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'bench_promoted',
+        payload: expect.objectContaining({ plannedVoiceChannel: planned }),
+      }),
+    );
   });
 
   it('shows warning when role calc places player in non-preferred role', async () => {

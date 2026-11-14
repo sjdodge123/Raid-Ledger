@@ -6,6 +6,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import type { EventVoicePayload } from './notification-voice.helpers';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ActiveEventCacheService } from '../events/active-event-cache.service';
@@ -78,7 +79,7 @@ export class LiveNoShowService {
   private async sendPhase1Reminder(
     event: LiveEvent,
     userId: number,
-    voiceChannelId: string | null,
+    voice: EventVoicePayload,
   ): Promise<void> {
     if (!(await this.insertReminderDedup(event.id, userId, 'noshow_reminder')))
       return;
@@ -90,7 +91,7 @@ export class LiveNoShowService {
       payload: {
         eventId: event.id,
         startTime: event.startTime.toISOString(),
-        voiceChannelId,
+        ...voice,
         noshowReminder: true,
       },
     });
@@ -117,11 +118,10 @@ export class LiveNoShowService {
       (p) => !isSignupWithinLateGrace(p, msSinceStart, PHASE1_OFFSET_MS),
     );
     if (dueForNudge.length === 0) return;
-    const voiceChannelId =
-      await this.notificationService.resolveVoiceChannelForEvent(event.id);
+    const voice = await this.notificationService.resolveVoiceForEvent(event.id);
     for (const player of dueForNudge) {
       if (!player.userId) continue;
-      await this.sendPhase1Reminder(event, player.userId, voiceChannelId);
+      await this.sendPhase1Reminder(event, player.userId, voice);
     }
   }
 

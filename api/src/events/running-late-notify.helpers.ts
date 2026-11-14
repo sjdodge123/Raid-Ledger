@@ -26,7 +26,7 @@ export interface NotifyRunningLateParams {
   db: PostgresJsDatabase<typeof schema>;
   notificationService: Pick<
     NotificationService,
-    'createMany' | 'getDiscordEmbedUrl' | 'resolveVoiceChannelForEvent'
+    'createMany' | 'getDiscordEmbedUrl' | 'resolveVoiceForEvent'
   >;
   event: RunningLateNotifyEvent;
   lateUserId: number;
@@ -63,9 +63,9 @@ export async function notifyAttendeeRunningLate(
   const { db, notificationService, event, lateUserId, lateUsername } = params;
   const recipients = await fetchRecipients(db, event, lateUserId);
   if (recipients.length === 0) return;
-  const [discordUrl, voiceChannelId] = await Promise.all([
+  const [discordUrl, voice] = await Promise.all([
     notificationService.getDiscordEmbedUrl(event.id),
-    notificationService.resolveVoiceChannelForEvent(event.id),
+    notificationService.resolveVoiceForEvent(event.id),
   ]);
   const payload: Record<string, unknown> = {
     eventId: event.id,
@@ -76,7 +76,7 @@ export async function notifyAttendeeRunningLate(
     // two different attendees going late within 5 min both reach recipients.
     subtype: `late-${lateUserId}`,
     ...(discordUrl ? { discordUrl } : {}),
-    ...(voiceChannelId ? { voiceChannelId } : {}),
+    ...voice,
   };
   await notificationService.createMany(
     recipients.map((uid) => ({

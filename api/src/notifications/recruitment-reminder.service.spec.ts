@@ -281,10 +281,10 @@ describe('RecruitmentReminderService', () => {
       );
     });
 
-    it('should include voiceChannelId in payload when resolveVoiceChannelForEvent returns a value', async () => {
-      mocks.mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
-        'vc-999',
-      );
+    it('should include voiceChannelId in payload when resolveVoiceForEvent returns a channel', async () => {
+      mocks.mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+        voiceChannelId: 'vc-999',
+      });
 
       await service.checkAndSendReminders();
 
@@ -295,10 +295,26 @@ describe('RecruitmentReminderService', () => {
       );
     });
 
-    it('should NOT include voiceChannelId in payload when resolveVoiceChannelForEvent returns null', async () => {
-      mocks.mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
-        null,
-      );
+    it('should include a planned temporary voice channel in the payload', async () => {
+      mocks.mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+        plannedVoiceChannel: {
+          name: 'Raid Night',
+          opensAt: '2026-11-20T19:45:00.000Z',
+        },
+      });
+
+      await service.checkAndSendReminders();
+
+      const call = mocks.mockNotificationService.create.mock.calls[0][0];
+      expect(call.payload.plannedVoiceChannel).toEqual({
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      });
+      expect(call.payload).not.toHaveProperty('voiceChannelId');
+    });
+
+    it('should NOT include voiceChannelId in payload when resolveVoiceForEvent returns none', async () => {
+      mocks.mockNotificationService.resolveVoiceForEvent.mockResolvedValue({});
 
       await service.checkAndSendReminders();
 

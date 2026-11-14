@@ -70,8 +70,7 @@ export async function notifyPromotedPlayer(
     .where(eq(schema.events.id, eventId))
     .limit(1);
   const discordUrl = await deps.notificationService.getDiscordEmbedUrl(eventId);
-  const voiceChannelId =
-    await deps.notificationService.resolveVoiceChannelForEvent(eventId);
+  const voice = await deps.notificationService.resolveVoiceForEvent(eventId);
   await deps.notificationService.create({
     userId: benchPlayer.userId,
     type: 'bench_promoted',
@@ -82,7 +81,7 @@ export async function notifyPromotedPlayer(
       role: result.role,
       position: result.position,
       ...(discordUrl ? { discordUrl } : {}),
-      ...(voiceChannelId ? { voiceChannelId } : {}),
+      ...voice,
     },
   });
 }
