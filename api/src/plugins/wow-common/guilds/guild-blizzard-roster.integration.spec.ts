@@ -1,7 +1,8 @@
 /**
  * ROK-1928 A — `PATCH /plugins/wow/guilds/:id/blizzard-roster` against a real
  * database: editor sets the slug, non-editor 403, non-Forever 404, invalid
- * slug 400, kill switch off 403.
+ * slug 400, kill switch off 403. ROK-2192: the GUID-linked rank-0 GM sets it
+ * too; a rank-1 GUID-linked member stays 403.
  */
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
@@ -21,6 +22,8 @@ let adminToken: string;
 let plainToken: string;
 let foreverGuildId: number;
 let otherGuildId: number;
+let foreverGameId: number;
+const SNAP = new Date('2026-11-13T20:00:00.000Z');
 
 async function ensureGame(slug: string): Promise<number> {
   const [found] = await testApp.db
@@ -80,6 +83,51 @@ async function plainLogin(): Promise<string> {
   return res.body.access_token as string;
 }
 
+/**
+ * ROK-2192: a local-login member whose character is GUID-linked to a roster
+ * row of the Forever guild at `rank` in its latest snapshot.
+ */
+async function linkedMemberLogin(tag: string, rank: number): Promise<string> {
+  const email = `${tag}@roster.test`;
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: `local:${email}`, username: tag, role: 'member' })
+      .returning(),
+    'user',
+  );
+  await testApp.db.insert(schema.localCredentials).values({
+    email,
+    passwordHash: await bcrypt.hash('TestPassword123!', 4),
+    userId: user.id,
+  });
+  const guid = `Player-1-roster-${tag}`;
+  await testApp.db.insert(schema.characters).values({
+    userId: user.id,
+    gameId: foreverGameId,
+    name: tag,
+    region: 'us',
+    addonGuid: guid,
+    role: 'dps',
+    isMain: true,
+  });
+  await testApp.db.insert(schema.guildMembers).values({
+    guildId: foreverGuildId,
+    guid,
+    characterName: tag,
+    rankIndex: rank,
+    rankName: `Rank ${rank}`,
+    source: 'addon_import',
+    lastSeenAt: SNAP,
+  });
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
+  const token: unknown = res.body.access_token;
+  if (typeof token !== 'string') throw new Error(`no access_token for ${tag}`);
+  return token;
+}
+
 async function setSwitch(value: 'true' | 'false'): Promise<void> {
   const settings = testApp.app.get(SettingsService);
   await settings.set(WOW_FOREVER_ARMORY_IMPORT_KEY, value);
@@ -91,10 +139,12 @@ beforeAll(async () => {
   const registry = testApp.app.get(PluginRegistryService);
   await registry.ensureInstalled('blizzard');
   await registry.activate('blizzard');
-  foreverGuildId = await insertGuild(
-    await ensureGame(FOREVER_SLUG),
-    'Ye Olde Guild',
-  );
+  foreverGameId = await ensureGame(FOREVER_SLUG);
+  foreverGuildId = await insertGuild(foreverGameId, 'Ye Olde Guild');
+  await testApp.db
+    .update(schema.guilds)
+    .set({ lastSnapshotAt: SNAP })
+    .where(eq(schema.guilds.id, foreverGuildId));
   otherGuildId = await insertGuild(testApp.seed.game.id, 'Retail Guild');
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   plainToken = await plainLogin();
@@ -164,6 +214,25 @@ describe('PATCH /plugins/wow/guilds/:id/blizzard-roster (ROK-1928)', () => {
     } finally {
       await setSwitch('true');
     }
+  });
+});
+
+describe('PATCH blizzard-roster — the rank-0 GM (ROK-2192)', () => {
+  it('ROK-2192: the GUID-linked rank-0 GM (no editor grant) sets the slug', async () => {
+    const gmToken = await linkedMemberLogin('rostergm', 0);
+    const res = await patch(foreverGuildId, gmToken, {
+      guildSlug: 'ye-olde-guild',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.blizzardRoster?.guildSlug).toBe('ye-olde-guild');
+  });
+
+  it('ROK-2192: a GUID-linked rank-1 member is still 403', async () => {
+    const r1Token = await linkedMemberLogin('rosterr1', 1);
+    const res = await patch(foreverGuildId, r1Token, {
+      guildSlug: 'ye-olde-guild',
+    });
+    expect(res.status).toBe(403);
   });
 });
 
