@@ -54,6 +54,8 @@ beforeEach(async () => {
   }).compile();
 
   service = module.get<DiscordBotService>(DiscordBotService);
+  // ROK-2198: no real backoff waits between auto-connect retries.
+  service.autoConnectDelay = () => Promise.resolve();
   clientService = module.get<DiscordBotClientService>(DiscordBotClientService);
   settingsService = module.get<SettingsService>(SettingsService);
 });
