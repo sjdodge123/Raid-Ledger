@@ -31,6 +31,7 @@ import { cdpSteamNominationTests } from "./tests/cdp-steam-nomination.test.js";
 import { scheduledEventCompletionTests } from "./tests/scheduled-event-completion.test.js";
 import { scheduledEventRecoveryTests } from "./tests/scheduled-event-recovery.test.js";
 import { scheduledEventRenameTests } from "./tests/scheduled-event-rename.test.js";
+import { scheduledEventRescheduleStartedTests } from "./tests/scheduled-event-reschedule-started.test.js";
 import { aiChatTests } from "./tests/ai-chat.test.js";
 import { lineupTitleTests } from "./tests/lineup-title.test.js";
 import { privateLineupTests } from "./tests/private-lineup.test.js";
@@ -62,6 +63,7 @@ import { quickPlayOnePerGameTests } from "./tests/quick-play-one-per-game.test.j
 import { bindQuickPlayTests } from "./tests/bind-quick-play.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 import { ephemeralVoicePlannedTests } from "./tests/ephemeral-voice-planned.test.js";
+import { ephemeralVoiceRescheduleTests } from "./tests/ephemeral-voice-reschedule.test.js";
 import { privateVoiceAccessTests } from "./tests/private-voice-access.test.js";
 import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
 import { lfmPlayingTests } from "./tests/lfm-playing.test.js";
@@ -201,6 +203,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...scheduledEventCompletionTests,
     ...scheduledEventRecoveryTests,
     ...scheduledEventRenameTests,
+    ...scheduledEventRescheduleStartedTests,
     ...aiChatTests,
     ...lineupTitleTests,
     ...privateLineupTests,
@@ -232,6 +235,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...bindQuickPlayTests,
     ...ephemeralVoiceTests,
     ...ephemeralVoicePlannedTests,
+    ...ephemeralVoiceRescheduleTests,
     ...privateVoiceAccessTests,
     ...lfmEmbedTests,
     ...lfmPlayingTests,
