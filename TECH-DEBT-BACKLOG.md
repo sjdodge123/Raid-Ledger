@@ -4347,6 +4347,10 @@ Existing entries are left in place; this records their status. Line numbers are 
 - **nit** `api/src/common/testing/integration-phase-timer.ts:15` — comment says "no extra awaits" with the flag off, but `timePhase` adds one async wrapper + one `performance.now()` per call. Suggested: reword.
 - **nit** `api/src/common/testing/integration-truncate.integration.spec.ts:46` — the 10-read fan-out assumes the test pool max of 10 (`test-app.ts:171`). Suggested: read the pool size from the shared constant.
 
+### 2026-11-14 — fix/overnight-td7-2026-11-14 (resolutions)
+
+- **resolved** line 3611 (rest of line 2884: `countVotesPerGame` counted votes on un-nominated games) — `countVotesPerGame` (`api/src/lineups/lineups-query.helpers.ts`) now inner-joins the lineup's entries; regression case `lineups-voting.integration.spec.ts` › 'countVotesPerGame — nominated games only'. Still open: `countDistinctVoters` and `countStarsPerGame` still read every vote row (a voter whose only votes sit on removed nominations still counts toward the participation denominator).
+- **already resolved** line 3455 (calendar-write rerun overlap) — confirmed fixed by `deferWhileSiblingActive` in PR #1955 (48df3c890), as line 3988 records; no change needed.
 ### 2026-11-14 — fix/overnight-td6-2026-11-14 (surfaced during the td6 review; accepted MINOR + NIT, not fixed)
 - **[low]** `api/src/common/pipes/int4-id.pipe.ts`: this is the third copy of the "positive int4 id → else 400 'Invalid id'" pipe, after `api/src/plugins/bg3/campaigns/bg3-id.pipe.ts` and the Valheim armory id pipe (`valheim-armory-id.pipe.ts`). They are plugin-owned, so the overnight fix added a shared one rather than reaching into plugins. Suggested: have the plugin pipes re-export the common one (plugin → common is the allowed direction) and drop their own `INT4_MAX`.
 - **[nit]** `api/src/lineups/tiebreaker/tiebreaker-lifecycle.helpers.ts` `lockLineupForStart`: repeats the voting and "already active" checks of `findAndValidateLineup`. Suggested: a `{ lock: true }` option on `findAndValidateLineup` that adds `.for('update')` when given a tx.

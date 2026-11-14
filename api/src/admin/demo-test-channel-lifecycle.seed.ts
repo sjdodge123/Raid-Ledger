@@ -97,6 +97,11 @@ export async function seedLineupVotes(
   const lineupIds: number[] = [];
   for (let i = 0; i < n; i += 1) {
     const lineupId = await insertLineup(db, ctx);
+    // Nominate first, as the app does — a vote on an un-nominated game is
+    // not counted by countVotesPerGame. Nominations are not activity (A6).
+    await db
+      .insert(schema.communityLineupEntries)
+      .values({ lineupId, gameId: ctx.gameId, nominatedBy: ctx.creatorId });
     await db
       .insert(schema.communityLineupVotes)
       .values({ lineupId, gameId: ctx.gameId, userId: ctx.creatorId });

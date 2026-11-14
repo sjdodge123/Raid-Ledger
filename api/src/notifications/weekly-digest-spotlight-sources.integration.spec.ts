@@ -352,6 +352,20 @@ async function seedVotes(
   gameId: number,
   voters: readonly number[],
 ) {
+  // Nominate first, as the app does: countVotesPerGame only counts votes on
+  // a game that has an entry row in the lineup.
+  const nominatedBy = voters[0];
+  if (nominatedBy !== undefined) {
+    await t.db
+      .insert(schema.communityLineupEntries)
+      .values({ lineupId, gameId, nominatedBy })
+      .onConflictDoNothing({
+        target: [
+          schema.communityLineupEntries.lineupId,
+          schema.communityLineupEntries.gameId,
+        ],
+      });
+  }
   for (const userId of voters) {
     await t.db
       .insert(schema.communityLineupVotes)
