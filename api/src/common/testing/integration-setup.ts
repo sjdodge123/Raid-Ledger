@@ -28,6 +28,7 @@ const importStart = beginPhaseTiming();
 import { closeTestApp, getTestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
 import { dumpFailureSnapshot } from './dump-failure-snapshot';
+import { reportProviderTiming } from './integration-provider-timer';
 import { listSocketHandles } from './socket-handle-audit';
 import { heapProbeAfterFile } from './heap-probe';
 recordPhase('import', importStart);
@@ -94,6 +95,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await closeTestApp();
   reportPhaseTiming(expect.getState().testPath);
+  reportProviderTiming(expect.getState().testPath);
   // ROK-1250: opt-in audit gate. When `RL_TEST_SOCKET_HANDLE_AUDIT=true`,
   // throw if more than `SOCKET_HANDLE_AUDIT_THRESHOLD` connected TCP
   // sockets remain after closeTestApp(). Off by default in CI; flipped on
