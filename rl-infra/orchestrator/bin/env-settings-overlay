@@ -98,6 +98,11 @@ PAYLOAD=$(jq -nc --argjson bundle "$BUNDLE_PAYLOAD" --argjson identity "$IDENTIT
     --argjson demo "$DEMO_PAYLOAD" \
     '$bundle + $identity + $demo')
 PAYLOAD_KEYS=$(jq -nc --argjson p "$PAYLOAD" '$p | keys')
+# ROK-2202: the SHARED keys the bundle holds a usable (non-blank) value for,
+# identity keys excluded (the slot wins those). NAMES only — rl_env_deploy
+# checks each one was applied, filled or kept, and names any that was not.
+BUNDLE_KEYS=$(jq -nc --argjson b "$BUNDLE_PAYLOAD" --argjson identity "$IDENTITY_PAYLOAD" \
+    '[$b | to_entries[] | select((.value | tostring | test("\\S"))) | .key] - ($identity | keys)')
 
 if [[ "$(jq -r 'length' <<<"$PAYLOAD_KEYS")" == "0" ]]; then
     # Nothing configured for this slot and no bundle on disk. A no-op, NOT a
@@ -158,7 +163,8 @@ audit::log env-settings-overlay ok \
 jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --argjson applied "$APPLIED" \
     --argjson identity "$IDENTITY_JSON" --arg bundle_warning "$BUNDLE_WARNING" \
     --argjson inserted "$INSERTED" --argjson kept "$KEPT" --argjson honoured "$HONOURED" \
-    '{ok:true, slug:$slug, slot:$slot, applied:$applied, bot_identity:$identity,
+    --argjson bundle_keys "$BUNDLE_KEYS" \
+    '{ok:true, slug:$slug, slot:$slot, applied:$applied, bot_identity:$identity, bundle_keys:$bundle_keys,
       inserted_if_absent:$inserted, inserted_count:($inserted | length),
       kept_synced:$kept, kept_count:($kept | length), sync_wins:$honoured,
       bundle_warning: (if $bundle_warning == "" then null else $bundle_warning end)}'
