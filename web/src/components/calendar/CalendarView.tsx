@@ -16,7 +16,7 @@ import { WeekEventCard } from './WeekEventCard';
 import { ScheduleView } from './ScheduleView';
 import { CalendarToolbar } from './CalendarToolbar';
 import { MonthEventComponent } from './MonthEventComponent';
-import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar } from './calendar-view.utils';
+import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar, isShownOnCalendar } from './calendar-view.utils';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { isLayerEvent, type LayerWindowEvent } from './layers/calendar-layer-events';
@@ -111,11 +111,7 @@ function useCalendarEvents(eventsData: ReturnType<typeof useEvents>['data'], sel
     return useMemo(() => {
         if (!eventsData?.data) return [];
         return eventsData.data
-            .filter((event) => {
-                if (event.cancelledAt) return false;
-                if (event.reschedulingPollId) return false;
-                return shouldRenderInCalendar(event, selectedGames);
-            })
+            .filter((event) => isShownOnCalendar(event) && shouldRenderInCalendar(event, selectedGames))
             .map((event) => ({
                 id: event.id, title: event.title,
                 start: toZonedDate(event.startTime, resolved!),

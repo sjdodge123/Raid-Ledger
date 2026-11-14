@@ -56,18 +56,6 @@ describe('useHubFilteredEvents + useCalendarHubFilter (ROK-1893 P4)', () => {
         expect(result.current.hubs.known.map((h) => h.id)).toEqual([SOLO.id, CREW.id]);
         expect(result.current.hubs.hiddenCount).toBe(1);
     });
-});
-
-describe('useCalendarHubFilterStore.clearViewer (ROK-1893 P4)', () => {
-    it('forgets the departing viewer\'s hubs and hidden set', () => {
-        const store = useCalendarHubFilterStore.getState();
-        store.addKnown([{ id: 7, name: 'BG3 Friends', kind: 'game_community' }]);
-        store.toggle(7);
-        store.toggle(NO_HUB);
-        useCalendarHubFilterStore.getState().clearViewer();
-        const after = useCalendarHubFilterStore.getState();
-        expect({ known: after.known, hidden: [...after.hidden] }).toEqual({ known: [], hidden: [] });
-    });
 
     it('lists the loaded hubs even when the game filter (None) hides every event', () => {
         // #2132 verify lane: Games = None, reload → the Hubs group vanished,
@@ -79,5 +67,30 @@ describe('useCalendarHubFilterStore.clearViewer (ROK-1893 P4)', () => {
         }));
         expect(result.current.hubs.known.map((h) => h.name)).toEqual(['Alpha Solo', 'Seed Crew']);
         expect(result.current.visible).toEqual([]);
+    });
+
+    it('does not learn hubs from loaded events the calendar hides (cancelled, rescheduling poll)', () => {
+        const GONE = { id: 11, name: 'Cancelled Only', kind: 'game_community' as const };
+        const POLL = { id: 12, name: 'Poll Only', kind: 'game_community' as const };
+        const loaded = [
+            ...EVENTS.map((e) => e.resource),
+            createMockEvent({ id: 5, hub: GONE, cancelledAt: '2026-11-01T00:00:00.000Z' }),
+            createMockEvent({ id: 6, hub: POLL, reschedulingPollId: 42 }),
+        ];
+        const { result } = renderHook(() => useCalendarHubFilter());
+        renderHook(() => useHubFilteredEvents([], loaded));
+        expect(result.current.known.map((h) => h.name)).toEqual(['Alpha Solo', 'Seed Crew']);
+    });
+});
+
+describe('useCalendarHubFilterStore.clearViewer (ROK-1893 P4)', () => {
+    it('forgets the departing viewer\'s hubs and hidden set', () => {
+        const store = useCalendarHubFilterStore.getState();
+        store.addKnown([{ id: 7, name: 'BG3 Friends', kind: 'game_community' }]);
+        store.toggle(7);
+        store.toggle(NO_HUB);
+        useCalendarHubFilterStore.getState().clearViewer();
+        const after = useCalendarHubFilterStore.getState();
+        expect({ known: after.known, hidden: [...after.hidden] }).toEqual({ known: [], hidden: [] });
     });
 });

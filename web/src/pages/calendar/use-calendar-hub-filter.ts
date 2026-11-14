@@ -7,6 +7,7 @@ import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 import type { EventHubRef, EventResponseDto } from '@raid-ledger/contract';
 import { onViewerChange } from '../../stores/viewer-reset-registry';
+import { isShownOnCalendar } from '../../components/calendar/calendar-view.utils';
 
 export const NO_HUB = 'none';
 /** A hub id, or `NO_HUB` for untagged events. */
@@ -46,19 +47,23 @@ onViewerChange(() => useCalendarHubFilterStore.getState().clearViewer());
 
 export const hubKeyOf = (e: Pick<EventResponseDto, 'hub'>): HubKey => e.hub?.id ?? NO_HUB;
 
-const hubsOf = (events: ReadonlyArray<Pick<EventResponseDto, 'hub'>>): EventHubRef[] =>
-    events.flatMap((e) => (e.hub ? [e.hub] : []));
+type LoadedEvent = Pick<EventResponseDto, 'hub' | 'cancelledAt' | 'reschedulingPollId'>;
+
+/** Hubs of the events the calendar can show — never a hub only a cancelled or rescheduling-poll event carries. */
+const hubsOf = (events: ReadonlyArray<LoadedEvent>): EventHubRef[] =>
+    events.flatMap((e) => (e.hub && isShownOnCalendar(e) ? [e.hub] : []));
 
 /**
  * `CalendarView`: remember the loaded events' hubs, return the events whose hub
  * is shown. Pass `loaded` — the fetched events BEFORE the game filter — so the
  * Hubs group lists its hubs even when the game filter hides every event (Games
  * = None survives a reload since #2132, and the store does not); without it
- * the hubs are learned from `events` alone.
+ * the hubs are learned from `events` alone. Either way, cancelled and
+ * rescheduling-poll events (hidden by the calendar) teach no hub.
  */
 export function useHubFilteredEvents<T extends { resource: EventResponseDto }>(
     events: T[],
-    loaded?: ReadonlyArray<Pick<EventResponseDto, 'hub'>>,
+    loaded?: ReadonlyArray<LoadedEvent>,
 ): T[] {
     const addKnown = useCalendarHubFilterStore((s) => s.addKnown);
     const hidden = useCalendarHubFilterStore((s) => s.hidden);

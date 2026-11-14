@@ -30,7 +30,8 @@ export interface SchedulingVoteProgressProps {
  */
 function targetCopy(voted: number, total: number): string {
   if (voted >= total) return 'Vote target reached';
-  return `${total - voted} more to reach the vote target`;
+  const left = total - voted;
+  return `${left} more ${left === 1 ? 'voter' : 'voters'} to reach the vote target`;
 }
 
 /** Compact distinct-voters / threshold progress bar — see file-level docstring. */

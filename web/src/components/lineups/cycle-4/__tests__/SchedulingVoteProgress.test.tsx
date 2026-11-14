@@ -33,6 +33,11 @@ describe('SchedulingVoteProgress', () => {
     it('counts the voters still needed below the target, without "majority"', () => {
         render(<SchedulingVoteProgress match={matchWithThreshold(5)} uniqueVoterCount={2} />);
         expect(screen.queryByText(/majority/i)).not.toBeInTheDocument();
-        expect(screen.getByText('3 more to reach the vote target')).toBeInTheDocument();
+        expect(screen.getByText('3 more voters to reach the vote target')).toBeInTheDocument();
+    });
+
+    it('says "voter" (singular) when one more is needed', () => {
+        render(<SchedulingVoteProgress match={matchWithThreshold(3)} uniqueVoterCount={2} />);
+        expect(screen.getByText('1 more voter to reach the vote target')).toBeInTheDocument();
     });
 });

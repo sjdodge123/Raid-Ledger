@@ -144,7 +144,7 @@ function TimePopover(
 interface TimeSheetProps extends SchedulingTimeMenuProps {
   label: string;
   onClose: () => void;
-  /** Close WITHOUT focus return — a confirm modal is about to take focus. */
+  /** Close without the menu's own focus restore; BottomSheet defers to the confirm dialog about to take focus. */
   onDismissForConfirm: () => void;
 }
 
