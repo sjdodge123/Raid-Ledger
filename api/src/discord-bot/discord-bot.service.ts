@@ -11,6 +11,12 @@ import { SettingsService } from '../settings/settings.service';
 import type { DiscordBotConfig } from '../settings/settings.types';
 import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { friendlyDiscordErrorMessage } from './discord-bot.constants';
+import { isSupersededConnectError } from './discord-bot-client.connect.helpers';
+import {
+  connectWithRetry,
+  realDelay,
+  type DelayFn,
+} from './discord-bot.autoconnect.helpers';
 import {
   applicationIdFromToken,
   fetchMissingPrivilegedIntents,
@@ -27,6 +33,12 @@ export class DiscordBotService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(DiscordBotService.name);
+  /** Backoff wait between startup auto-connect attempts (swapped in tests). */
+  autoConnectDelay: DelayFn = realDelay;
+  /** Bumped to cancel a running startup auto-connect (ROK-2198). */
+  private autoConnectGeneration = 0;
+  /** Set once shutdown starts; no connect may start after it (ROK-2198). */
+  private shuttingDown = false;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -43,7 +55,8 @@ export class DiscordBotService
       const config = await this.settingsService.getDiscordBotConfig();
       if (config?.enabled) {
         this.logger.log('Discord bot is configured and enabled, connecting...');
-        await this.clientService.connect(config.token);
+        // ROK-2198: retried in the background so boot never waits on Discord.
+        void this.autoConnect(config.token);
       }
     } catch (error) {
       this.logger.error(
@@ -53,10 +66,39 @@ export class DiscordBotService
     }
   }
 
+  /** Startup connect with bounded retries; stops once cancelled. */
+  private async autoConnect(token: string): Promise<void> {
+    const generation = ++this.autoConnectGeneration;
+    const cancelled = (): boolean => generation !== this.autoConnectGeneration;
+    try {
+      await connectWithRetry({
+        connect: () => this.clientService.connect(token),
+        cancelled,
+        shouldRetry: () =>
+          !this.clientService.isConnected() &&
+          !this.clientService.isConnecting(),
+        logger: this.logger,
+        delay: this.autoConnectDelay,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to auto-connect Discord bot on startup:',
+        error,
+      );
+    }
+  }
+
+  /** An admin action or shutdown now owns the connection. */
+  private cancelAutoConnect(): void {
+    this.autoConnectGeneration++;
+  }
+
   /**
    * Graceful shutdown.
    */
   async onModuleDestroy(): Promise<void> {
+    this.shuttingDown = true;
+    this.cancelAutoConnect();
     await this.clientService.disconnect();
   }
 
@@ -68,6 +110,8 @@ export class DiscordBotService
     this.logger.log(
       `handleConfigUpdate called with config: ${config ? `enabled=${String(config.enabled)}` : 'null'}`,
     );
+    this.cancelAutoConnect();
+    if (this.shuttingDown) return;
 
     if (!config || !config.enabled) {
       this.logger.log(
@@ -82,9 +126,9 @@ export class DiscordBotService
       await this.clientService.connect(config.token);
       this.logger.log('Discord bot connected successfully after config update');
     } catch (error) {
-      this.logger.error(
+      this.logConnectFailure(
         'Failed to reconnect Discord bot after config update:',
-        error instanceof Error ? error.message : error,
+        error,
       );
     }
   }
@@ -95,7 +139,7 @@ export class DiscordBotService
    * depend on the event bus.  Skips if already connected or connecting.
    */
   async ensureConnected(config: DiscordBotConfig): Promise<void> {
-    if (!config.enabled) return;
+    if (!config.enabled || this.shuttingDown) return;
     if (this.clientService.isConnected() || this.clientService.isConnecting()) {
       this.logger.debug(
         'ensureConnected: already connected or connecting, skipping',
@@ -103,16 +147,21 @@ export class DiscordBotService
       return;
     }
 
+    this.cancelAutoConnect();
     try {
       this.logger.log('ensureConnected: starting bot connection...');
       await this.clientService.connect(config.token);
       this.logger.log('ensureConnected: bot connected successfully');
     } catch (error) {
-      this.logger.error(
-        'ensureConnected: failed to connect bot:',
-        error instanceof Error ? error.message : error,
-      );
+      this.logConnectFailure('ensureConnected: failed to connect bot:', error);
     }
+  }
+
+  /** A superseded connect is routine (a newer call took over): debug, not error. */
+  private logConnectFailure(prefix: string, error: unknown): void {
+    const detail = error instanceof Error ? error.message : error;
+    if (isSupersededConnectError(error)) this.logger.debug(prefix, detail);
+    else this.logger.error(prefix, detail);
   }
 
   /**

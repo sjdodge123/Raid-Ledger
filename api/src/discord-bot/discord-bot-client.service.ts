@@ -10,16 +10,11 @@ import {
   type TextChannel,
   type Message,
 } from 'discord.js';
-import {
-  DISCORD_BOT_EVENTS,
-  friendlyDiscordErrorMessage,
-  friendlyConnectErrorMessage,
-} from './discord-bot.constants';
+import { DISCORD_BOT_EVENTS } from './discord-bot.constants';
 import { emitIsolated } from './discord-bot-event-dispatch.helpers';
 import {
   createDiscordClient,
   checkBotPermissions,
-  warnIfMultipleGuilds,
   type GuildInfo,
   type PermissionCheckResult,
 } from './discord-bot-client.helpers';
@@ -39,6 +34,11 @@ import {
   toRows,
   type EmbedRows,
 } from './discord-bot-client-rows.helpers';
+import {
+  supersededConnectError,
+  wireConnectHandlers,
+  type ConnectHooks,
+} from './discord-bot-client.connect.helpers';
 
 export type {
   GuildInfo,
@@ -53,11 +53,19 @@ export class DiscordBotClientService {
   private client: Client | null = null;
   private connecting = false;
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped by every connect and disconnect; the latest call owns the client. */
+  private ownerEpoch = 0;
+  /** The in-flight destroy of a detached client, shared by concurrent callers. */
+  private pendingTeardown: Promise<void> | null = null;
 
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   async connect(token: string): Promise<void> {
-    if (this.client) await this.disconnect();
+    const epoch = ++this.ownerEpoch;
+    if (this.client || this.pendingTeardown) await this.teardown();
+    // ROK-2198: a disconnect or newer connect that arrived during the
+    // teardown owns the connection — never build a client with this token.
+    if (epoch !== this.ownerEpoch) throw supersededConnectError();
 
     const client = createDiscordClient();
     this.client = client;
@@ -70,28 +78,46 @@ export class DiscordBotClientService {
         reject(new Error('Discord bot connection timed out after 15s'));
       }, 15_000);
 
-      this.setupReadyHandler(client, resolve);
-      this.setupErrorHandler(client, reject);
-      this.doLogin(client, token, reject);
+      wireConnectHandlers(client, token, this.connectHooks(), {
+        resolve,
+        reject,
+      });
     });
   }
 
   async disconnect(): Promise<void> {
+    this.ownerEpoch++;
+    await this.teardown();
+  }
+
+  /**
+   * Destroy the live client without changing who owns the connection. The
+   * client is detached before the await and concurrent callers share one
+   * destroy, so a teardown that finishes late never clears a newer client.
+   */
+  private async teardown(): Promise<void> {
     this.connecting = false;
     if (this.connectTimeout) {
       clearTimeout(this.connectTimeout);
       this.connectTimeout = null;
     }
-    if (!this.client) return;
+    const client = this.client;
+    if (client && !this.pendingTeardown) {
+      this.client = null;
+      this.pendingTeardown = this.destroyDetached(client).finally(() => {
+        this.pendingTeardown = null;
+      });
+    }
+    await this.pendingTeardown;
+  }
 
+  private async destroyDetached(client: Client): Promise<void> {
     try {
-      await this.client.destroy();
+      await client.destroy();
       this.logger.log('Discord bot disconnected');
       this.eventEmitter.emit(DISCORD_BOT_EVENTS.DISCONNECTED);
     } catch (error) {
       this.logger.error('Error disconnecting Discord bot:', error);
-    } finally {
-      this.client = null;
     }
   }
 
@@ -305,53 +331,26 @@ export class DiscordBotClientService {
 
   // ─── Private helpers ──────────────────────────────────────
 
-  private setupReadyHandler(client: Client, resolve: () => void): void {
-    client.once('clientReady', () => {
-      clearTimeout(this.connectTimeout!);
+  /** Callbacks the per-attempt connect handlers use (ROK-2198). */
+  private connectHooks(): ConnectHooks {
+    const settle = (): void => {
+      if (this.connectTimeout) clearTimeout(this.connectTimeout);
       this.connectTimeout = null;
       this.connecting = false;
-      this.logger.log(`Discord bot connected as ${client.user?.tag}`);
-
-      warnIfMultipleGuilds(this.logger, client.guilds.cache.size);
-
-      this.emitConnected().then(resolve, resolve);
-    });
-  }
-
-  private setupErrorHandler(
-    client: Client,
-    reject: (err: Error) => void,
-  ): void {
-    client.once('error', (error: Error) => {
-      clearTimeout(this.connectTimeout!);
-      this.connectTimeout = null;
-      this.connecting = false;
-      const message = friendlyDiscordErrorMessage(error);
-      this.logger.error('Discord bot connection error:', message);
-      this.eventEmitter.emit(DISCORD_BOT_EVENTS.ERROR, error);
-      reject(new Error(message));
-    });
-  }
-
-  private doLogin(
-    client: Client,
-    token: string,
-    reject: (err: Error) => void,
-  ): void {
-    client.login(token).catch((err: unknown) => {
-      clearTimeout(this.connectTimeout!);
-      this.connectTimeout = null;
-      this.connecting = false;
-      this.client = null;
-      // ROK-1703: a 4014 names the intents that are actually off.
-      // The .catch keeps connect() from hanging if the lookup ever throws.
-      void friendlyConnectErrorMessage(err, token)
-        .catch(() => friendlyDiscordErrorMessage(err))
-        .then((message) => {
-          this.logger.error('Discord bot login failed:', message);
-          reject(new Error(message));
-        });
-    });
+    };
+    return {
+      logger: this.logger,
+      isLive: (client) => this.client === client,
+      settle,
+      dropClient: (client) => {
+        if (this.client !== client) return;
+        settle();
+        this.client = null;
+      },
+      emitConnected: () => this.emitConnected(),
+      emitError: (error) =>
+        this.eventEmitter.emit(DISCORD_BOT_EVENTS.ERROR, error),
+    };
   }
 
   /**
