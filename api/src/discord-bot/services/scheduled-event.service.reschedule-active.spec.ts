@@ -62,29 +62,37 @@ function statusEdits(mocks: ScheduledEventMocks): unknown[] {
     .map((arg: { status?: unknown }) => arg.status);
 }
 
-describe('updateScheduledEvent — SE already started (ROK-2201)', () => {
-  let mocks: ScheduledEventMocks;
-  let errorSpy: jest.SpyInstance;
+interface Harness {
+  mocks: ScheduledEventMocks;
+  errorSpy: jest.SpyInstance;
+}
 
+/** Fresh module with a silenced, spied logger. */
+async function setupHarness(): Promise<Harness> {
+  const mocks = await setupScheduledEventTestModule();
+  mocks.mockGuild.scheduledEvents.create.mockResolvedValue({ id: NEW_SE });
+  const errorSpy = jest
+    .spyOn(Logger.prototype, 'error')
+    .mockImplementation(() => undefined);
+  jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  return { mocks, errorSpy };
+}
+
+describe('updateScheduledEvent — ACTIVE SE moved later (ROK-2201)', () => {
+  let h: Harness;
   beforeEach(async () => {
-    mocks = await setupScheduledEventTestModule();
-    mocks.mockGuild.scheduledEvents.create.mockResolvedValue({ id: NEW_SE });
-    errorSpy = jest
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => undefined);
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    h = await setupHarness();
   });
-
   afterEach(() => jest.restoreAllMocks());
 
   it('ends an ACTIVE SE and creates a new one at the later start', async () => {
-    const updateChain = stubStoredId(mocks);
-    stubSEStatus(mocks, GuildScheduledEventStatus.Active);
-    rejectFullEdit(mocks, 50035);
+    const updateChain = stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Active);
+    rejectFullEdit(h.mocks, 50035);
 
-    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    await h.mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-    const { edit, create } = mocks.mockGuild.scheduledEvents;
+    const { edit, create } = h.mocks.mockGuild.scheduledEvents;
     expect(edit).toHaveBeenCalledWith(OLD_SE, {
       status: GuildScheduledEventStatus.Completed,
     });
@@ -97,34 +105,45 @@ describe('updateScheduledEvent — SE already started (ROK-2201)', () => {
     expect(updateChain.set).toHaveBeenCalledWith({
       discordScheduledEventId: NEW_SE,
     });
-    const clearOrder = updateChain.set.mock.invocationCallOrder[0] ?? Infinity;
+    const setMock = defined(updateChain.set, 'update chain set');
+    const clearOrder = setMock.mock.invocationCallOrder[0] ?? Infinity;
     const createOrder = create.mock.invocationCallOrder[0] ?? -Infinity;
     expect(clearOrder).toBeLessThan(createOrder);
   });
 
   it('deletes the ACTIVE SE when ending it is refused, then recreates', async () => {
-    const updateChain = stubStoredId(mocks);
-    stubSEStatus(mocks, GuildScheduledEventStatus.Active);
-    mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(
+    const updateChain = stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Active);
+    h.mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(
       makeDiscordApiError(50035, 'Invalid Form Body'),
     );
 
-    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    await h.mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-    expect(mocks.mockGuild.scheduledEvents.delete).toHaveBeenCalledWith(OLD_SE);
-    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
+    expect(h.mocks.mockGuild.scheduledEvents.delete).toHaveBeenCalledWith(
+      OLD_SE,
+    );
+    expect(h.mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
     expect(updateChain.set).toHaveBeenCalledWith({
       discordScheduledEventId: NEW_SE,
     });
   });
+});
+
+describe('updateScheduledEvent — not-started or finished SE (ROK-2201)', () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await setupHarness();
+  });
+  afterEach(() => jest.restoreAllMocks());
 
   it('edits a SCHEDULED SE in place exactly as before (no fetch, no recreate)', async () => {
-    stubStoredId(mocks);
-    stubSEStatus(mocks, GuildScheduledEventStatus.Scheduled);
+    stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Scheduled);
 
-    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    await h.mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-    const { edit, create, fetch } = mocks.mockGuild.scheduledEvents;
+    const { edit, create, fetch } = h.mocks.mockGuild.scheduledEvents;
     expect(edit).toHaveBeenCalledTimes(1);
     expect(edit).toHaveBeenCalledWith(
       OLD_SE,
@@ -132,19 +151,19 @@ describe('updateScheduledEvent — SE already started (ROK-2201)', () => {
     );
     expect(fetch).not.toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
-    expect(statusEdits(mocks)).toEqual([]);
+    expect(statusEdits(h.mocks)).toEqual([]);
   });
 
   it('logs a rejected edit of a SCHEDULED SE with its Discord code', async () => {
-    stubStoredId(mocks);
-    stubSEStatus(mocks, GuildScheduledEventStatus.Scheduled);
-    rejectFullEdit(mocks, 50013);
+    stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Scheduled);
+    rejectFullEdit(h.mocks, 50013);
 
-    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    await h.mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-    expect(mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
-    expect(statusEdits(mocks)).toEqual([]);
-    const logged = errorSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(h.mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
+    expect(statusEdits(h.mocks)).toEqual([]);
+    const logged = h.errorSpy.mock.calls.map((c: unknown[]) => String(c[0]));
     expect(logged).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/event 42 .*code=50013.*status=Scheduled/),
@@ -153,14 +172,14 @@ describe('updateScheduledEvent — SE already started (ROK-2201)', () => {
   });
 
   it('recreates when the rejected edit hit an SE that already ended', async () => {
-    const updateChain = stubStoredId(mocks);
-    stubSEStatus(mocks, GuildScheduledEventStatus.Completed);
-    rejectFullEdit(mocks, 180000);
+    const updateChain = stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Completed);
+    rejectFullEdit(h.mocks, 180000);
 
-    await mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
+    await h.mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-    expect(statusEdits(mocks)).toEqual([]);
-    expect(mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
+    expect(statusEdits(h.mocks)).toEqual([]);
+    expect(h.mocks.mockGuild.scheduledEvents.create).toHaveBeenCalled();
     expect(updateChain.set).toHaveBeenCalledWith({
       discordScheduledEventId: NEW_SE,
     });
