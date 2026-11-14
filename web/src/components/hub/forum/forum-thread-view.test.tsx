@@ -67,9 +67,10 @@ describe('ForumThreadView (ROK-1175)', () => {
         ]);
     });
 
-    it('pages replies with "Show more replies" and only then offers the reply box', async () => {
+    it('pages replies with "Show more replies", with the reply box already showing', async () => {
         serveThread(buildForumThreadDetail({ nextReplyCursor: 'r1' }), buildForumThreadDetail({ replies: [buildForumReply({ id: 13, body: 'newer' })] }));
         renderThread();
+        expect(await screen.findByTestId('forum-reply-composer'), 'the composer does not wait for every page').toBeInTheDocument();
         await userEvent.click(await screen.findByRole('button', { name: 'Show more replies' }));
         expect(await screen.findByText('newer')).toBeInTheDocument();
         expect(screen.getAllByTestId('forum-reply')).toHaveLength(2);
@@ -181,5 +182,74 @@ describe('Forum reply edit + delete, and the row Edit link (ROK-1175)', () => {
         expect(await screen.findByTestId('forum-message-editor')).toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(screen.getByTestId('where')).toHaveTextContent('?thread=5#forum');
+    });
+});
+
+describe('Forum ?reply= deep link + posting past the loaded pages (ROK-1175 D9)', () => {
+    const original = Element.prototype.scrollIntoView;
+    const scrolled: string[] = [];
+    beforeEach(() => {
+        scrolled.length = 0;
+        Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); };
+        return () => { Element.prototype.scrollIntoView = original; };
+    });
+
+    it('pages through to an off-page ?reply= target, rings it and scrolls it into view', async () => {
+        serveThread(buildForumThreadDetail({ nextReplyCursor: 'r1' }), buildForumThreadDetail({ replies: [buildForumReply({ id: 13, body: 'deep' })] }));
+        renderThread(true, '/hubs/7?thread=5&reply=13#forum');
+        const target = (await screen.findByText('deep')).closest('article');
+        expect(target?.getAttribute('aria-current'), 'reply 13 is the ringed deep-link target').toBe('true');
+        await vi.waitFor(() => expect(scrolled, 'scrollIntoView ran on reply 13').toEqual(['forum-reply-13']));
+    });
+
+    it('shows a just-posted reply that lands beyond the loaded pages', async () => {
+        serveThread(buildForumThreadDetail({ nextReplyCursor: 'r1' }), buildForumThreadDetail({ replies: [buildForumReply({ id: 13, body: 'my reply' })] }));
+        server.use(http.post(`${THREAD}/replies`, () => HttpResponse.json(buildForumReply({ id: 13, body: 'my reply' }), { status: 201 })));
+        renderThread();
+        await userEvent.type(await screen.findByTestId('forum-reply-input'), 'my reply');
+        expect(screen.queryByText('my reply', { selector: '[data-testid="forum-reply-body"] *' }), 'page 2 not loaded yet').toBeNull();
+        await userEvent.click(screen.getByTestId('forum-reply-submit'));
+        expect(await screen.findByText('?thread=5&reply=13#forum', { selector: '[data-testid="where"]' })).toBeInTheDocument();
+        const mine = await vi.waitFor(() => {
+            const el = document.getElementById('forum-reply-13');
+            expect(el, 'the posted reply is rendered without "Show more replies"').not.toBeNull();
+            return el;
+        });
+        expect(mine).toHaveTextContent('my reply');
+    });
+});
+
+describe('Forum discard guards (ROK-1175)', () => {
+    it('asks before Cancel drops an in-place edit with changes', async () => {
+        serveThread(buildForumThreadDetail({ replies: [buildForumReply({ can: ALL_REPLY, body: 'old text' })] }));
+        renderThread();
+        await userEvent.click(await screen.findByTestId('forum-reply-actions'));
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+        await userEvent.type(screen.getByTestId('forum-edit-body'), ' more');
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(await screen.findByTestId('discard-changes-confirm'), 'a changed edit asks first').toBeInTheDocument();
+        await userEvent.click(screen.getByTestId('discard-changes-keep'));
+        expect(screen.getByTestId('forum-edit-body'), 'Keep leaves the draft').toHaveValue('old text more');
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        await userEvent.click(await screen.findByTestId('discard-changes-discard'));
+        expect(screen.queryByTestId('forum-message-editor'), 'Discard closes the editor').toBeNull();
+    });
+
+    it('holds an in-hub tab link while a new-thread draft is dirty', async () => {
+        server.use(http.get('http://localhost:3000/guilds/7/forum', () => HttpResponse.json({ pinned: [], threads: [], nextCursor: null })));
+        window.location.hash = '#forum';
+        renderWithProviders(<><HubForumTab guildId={7} canWrite kind="wow_guild" /><a href="#overview">Overview</a></>, { initialEntries: ['/hubs/7#forum'] });
+        await userEvent.click((await screen.findAllByRole('button', { name: /new thread/i }))[0] ?? document.body);
+        await userEvent.type(screen.getByTestId('forum-title-input'), 'Draft');
+        await userEvent.click(screen.getByRole('link', { name: 'Overview' }));
+        expect(await screen.findByTestId('discard-changes-confirm'), 'the tab switch is held').toBeInTheDocument();
+        expect(window.location.hash, 'the hash did not move yet').toBe('#forum');
+        await userEvent.click(screen.getByTestId('discard-changes-keep'));
+        expect(screen.getByTestId('forum-title-input'), 'Keep leaves the draft').toHaveValue('Draft');
+        await userEvent.click(screen.getByRole('link', { name: 'Overview' }));
+        await userEvent.click(await screen.findByTestId('discard-changes-discard'));
+        expect(window.location.hash, 'Discard applies the held tab').toBe('#overview');
+        expect(screen.queryByTestId('hub-forum-composer'), 'and drops the draft').toBeNull();
+        window.location.hash = '';
     });
 });

@@ -1,6 +1,9 @@
 /** ROK-1175 — the "Latest threads" card: rows → thread links, empty state, visitor gate (Q1/Q3). */
 import { describe, it, expect } from 'vitest';
 import { renderHook, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useLocation } from 'react-router-dom';
+import type { JSX } from 'react';
 import { http, HttpResponse } from 'msw';
 import type { HubForumThreadSummary } from '@raid-ledger/contract';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
@@ -52,5 +55,21 @@ describe('ForumLatestWidget (ROK-1175)', () => {
         serve([], 0);
         const empty = renderHook(() => useForumLatestVisible(ctx('member')), { wrapper: createWrapper() });
         await waitFor(() => expect(empty.result.current).toBe(false));
+    });
+
+    it('opens the thread in-app and fires the hashchange the hub tab row follows', async () => {
+        serve([buildForumThread({ id: 5, title: 'Raid comp' })]);
+        function Where(): JSX.Element {
+            const loc = useLocation();
+            return <output data-testid="where">{`${loc.search}${loc.hash}`}</output>;
+        }
+        let hashChanges = 0;
+        const count = (): void => { hashChanges += 1; };
+        window.addEventListener('hashchange', count);
+        renderWithProviders(<><ForumLatestWidget {...ctx('member')} /><Where /></>, { initialEntries: ['/hubs/7#overview'] });
+        await userEvent.click(await screen.findByRole('link', { name: /Raid comp/ }));
+        window.removeEventListener('hashchange', count);
+        expect(screen.getByTestId('where'), 'routed in-app to the thread').toHaveTextContent('?thread=5#forum');
+        expect(hashChanges, 'useHashTab sees the tab switch').toBe(1);
     });
 });

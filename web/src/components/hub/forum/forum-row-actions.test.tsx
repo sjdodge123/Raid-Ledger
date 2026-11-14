@@ -12,7 +12,11 @@ import type { JSX } from 'react';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { buildForumThread } from '../../../test/factories/hub-forum';
+import { toast } from '../../../lib/toast';
 import { HubForumTab } from './forum-tab';
+import { FORUM_PIN_FAILED } from './use-hub-forum';
+
+vi.mock('../../../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 const auth = vi.hoisted(() => ({ userId: 1 }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => {
@@ -72,5 +76,34 @@ describe('Forum list row actions (ROK-1175)', () => {
         renderList(2, false);
         expect(await screen.findByTestId('forum-thread-row')).toBeInTheDocument();
         expect(screen.queryByTestId('forum-row-actions'), 'no rights → no ⋯ trigger').toBeNull();
+    });
+
+    it('moves a thread into the pinned group once the pin lands', async () => {
+        auth.userId = 99;
+        let pinned = false;
+        const older = buildForumThread({ id: 4, title: 'Loot rules' });
+        const comp = buildForumThread({ id: 5, title: 'Raid comp' });
+        server.use(
+            http.get(FORUM, () => HttpResponse.json(pinned
+                ? { pinned: [{ ...comp, pinnedAt: '2026-11-14T11:00:00.000Z' }], threads: [older], nextCursor: null }
+                : { pinned: [], threads: [older, comp], nextCursor: null })),
+            http.put(`${FORUM}/5/pin`, () => { pinned = true; return new HttpResponse(null, { status: 204 }); }),
+        );
+        renderWithProviders(<HubForumTab guildId={7} canWrite canModerate kind="wow_guild" />, { initialEntries: ['/hubs/7#forum'] });
+        const titles = (): string[] => screen.getAllByTestId('forum-thread-title').map((t) => t.textContent ?? '');
+        await screen.findByText('Raid comp');
+        expect(titles()).toEqual(['Loot rules', 'Raid comp']);
+        await userEvent.click(screen.getByRole('button', { name: 'Actions for Raid comp' }));
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Pin' }));
+        await vi.waitFor(() => expect(titles(), 'the pinned thread moves to the top group').toEqual(['Raid comp', 'Loot rules']));
+    });
+
+    it('toasts when Pin fails', async () => {
+        vi.mocked(toast.error).mockClear();
+        server.use(http.put(`${FORUM}/5/pin`, () => new HttpResponse(null, { status: 500 })));
+        renderList(99, true);
+        await menuLabels();
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Pin' }));
+        await vi.waitFor(() => expect(toast.error, 'a failed pin is never silent').toHaveBeenCalledWith(FORUM_PIN_FAILED));
     });
 });
