@@ -18,6 +18,10 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
+/** Let a detached auto-connect chain (mocked delays) run to completion. */
+const flush = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
 function transient(): DiscordConnectError {
   return new DiscordConnectError(
     'Failed to connect with provided token',
@@ -104,6 +108,7 @@ describe('DiscordBotService.onApplicationBootstrap — auto-connect retry', () =
             connect,
             isConnected: jest.fn().mockReturnValue(false),
             isConnecting: jest.fn().mockReturnValue(false),
+            disconnect: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -124,6 +129,7 @@ describe('DiscordBotService.onApplicationBootstrap — auto-connect retry', () =
     connect.mockRejectedValueOnce(transient()).mockResolvedValueOnce();
 
     await service.onApplicationBootstrap();
+    await flush();
 
     expect(connect).toHaveBeenCalledTimes(2);
   });
@@ -134,7 +140,52 @@ describe('DiscordBotService.onApplicationBootstrap — auto-connect retry', () =
     );
 
     await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    await flush();
 
     expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not wait for the retry chain before returning', async () => {
+    connect.mockReturnValue(new Promise<void>(() => {}));
+
+    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  describe('cancelled during the backoff', () => {
+    let release: () => void = () => {};
+
+    beforeEach(async () => {
+      const backoff = new Promise<void>((resolve) => (release = resolve));
+      service.autoConnectDelay = () => backoff;
+      connect.mockRejectedValueOnce(transient()).mockResolvedValue();
+      await service.onApplicationBootstrap();
+      await flush();
+      expect(connect.mock.calls).toEqual([['tok']]);
+    });
+
+    it('an admin disable stops further connects', async () => {
+      await service.handleConfigUpdate({ token: 'tok', enabled: false });
+      release();
+      await flush();
+
+      expect(connect.mock.calls).toEqual([['tok']]);
+    });
+
+    it('a token change never reconnects with the old token', async () => {
+      await service.handleConfigUpdate({ token: 'new', enabled: true });
+      release();
+      await flush();
+
+      expect(connect.mock.calls).toEqual([['tok'], ['new']]);
+    });
+
+    it('shutdown stops further connects', async () => {
+      await service.onModuleDestroy();
+      release();
+      await flush();
+
+      expect(connect.mock.calls).toEqual([['tok']]);
+    });
   });
 });
