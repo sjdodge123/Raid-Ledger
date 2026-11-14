@@ -44,11 +44,13 @@ export function wireConnectHandlers(
   hooks: ConnectHooks,
   settlers: ConnectSettlers,
 ): void {
+  let loginFailed = false;
   client.once('clientReady', () => onReady(client, hooks, settlers));
   client.once('error', (error: Error) =>
-    onError(client, error, hooks, settlers.reject),
+    onError(client, error, hooks, settlers.reject, loginFailed),
   );
   client.login(token).catch((err: unknown) => {
+    loginFailed = true;
     void onLoginFailure(client, token, err, hooks, settlers.reject);
   });
 }
@@ -74,11 +76,12 @@ function onError(
   error: Error,
   hooks: ConnectHooks,
   reject: (err: Error) => void,
+  afterLoginFailure: boolean,
 ): void {
   const message = friendlyDiscordErrorMessage(error);
   const definitive = isDefinitiveConnectError(error);
   if (!hooks.isLive(client)) {
-    void discardStaleClient(client, hooks.logger, 'error');
+    void discardStaleClient(client, hooks.logger, 'error', afterLoginFailure);
     reject(new DiscordConnectError(message, definitive));
     return;
   }
@@ -88,7 +91,7 @@ function onError(
   reject(new DiscordConnectError(message, definitive));
 }
 
-/** A failed login destroys its client so discord.js cannot revive it. */
+/** A failed login destroys its client and closes any shard it left behind. */
 async function onLoginFailure(
   client: Client,
   token: string,

@@ -1,6 +1,7 @@
 import type { Logger } from '@nestjs/common';
 import type { Client } from 'discord.js';
 import { isDisallowedIntentError } from './discord-bot.constants';
+import { closeLingeringShards } from './discord-bot-client.shards.helpers';
 
 /**
  * ROK-2198: a connect() failure that remembers whether retrying can help.
@@ -34,6 +35,7 @@ export function isDefinitiveConnectError(error: unknown): boolean {
   if (isDisallowedIntentError(error)) return true;
   const code = errorCode(error);
   if (code === 4004 || code === 'TokenInvalid') return true;
+  if (code === 'DisallowedIntents') return true;
   return /invalid token|TOKEN_INVALID|authentication failed/i.test(
     error.message,
   );
@@ -51,16 +53,22 @@ export function describeRawLoginError(error: unknown, token: string): string {
   return token ? raw.split(token).join('[redacted]') : raw;
 }
 
-/** Destroy a client; a throw (sync or async) from destroy is logged, never escapes. */
+/**
+ * Destroy a client, then close any gateway shard discord.js's own destroy
+ * left running (ROK-2198 — see discord-bot-client.shards.helpers.ts). A throw
+ * is logged, never escapes. Returns how many lingering shards were closed.
+ */
 export async function destroyClientSafely(
   client: Client,
   logger: Logger,
-): Promise<void> {
+): Promise<number> {
   try {
     await client.destroy();
+    return await closeLingeringShards(client);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.warn(`Destroying a discarded Discord client failed: ${message}`);
+    return 0;
   }
 }
 
@@ -73,9 +81,11 @@ export async function discardStaleClient(
   client: Client,
   logger: Logger,
   event: string,
+  expected = false,
 ): Promise<void> {
-  logger.warn(
-    `Discarding stale Discord client (${event}) — it is no longer the live client`,
-  );
-  await destroyClientSafely(client, logger);
+  const closed = await destroyClientSafely(client, logger);
+  const line = `Discarded stale Discord client (${event}); closed ${closed} lingering gateway shard(s)`;
+  // An error that trails our own failed login is expected, not news.
+  if (expected && closed === 0) logger.debug(line);
+  else logger.warn(line);
 }
