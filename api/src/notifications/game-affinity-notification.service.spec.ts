@@ -63,7 +63,10 @@ interface Harness {
   claimed: Set<string>;
 }
 
-function build(groupIds: number[]): Harness {
+function build(
+  groupIds: number[],
+  voice: Record<string, unknown> = {},
+): Harness {
   const claimed = new Set<string>();
   const create = jest.fn().mockResolvedValue({});
   const releaseKey = jest.fn((k: string) => {
@@ -81,7 +84,7 @@ function build(groupIds: number[]): Harness {
   const notifications = {
     create,
     resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
-    resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
+    resolveVoiceForEvent: jest.fn().mockResolvedValue(voice),
   } as unknown as NotificationService;
   const hub = {
     resolveGroupEventRecipients: jest.fn().mockResolvedValue(groupIds),
@@ -368,5 +371,18 @@ describe('GameAffinityNotificationService — group-only scheduler send (Codex r
       [20, 'hub_event_tagged'],
       [10, 'subscribed_game'],
     ]);
+  });
+});
+
+describe('GameAffinityNotificationService — planned temporary voice channel', () => {
+  it('the new-event notice carries the planned channel name + open time', async () => {
+    const planned = { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' };
+    affinity.mockResolvedValue([10]);
+    guildOf.mockResolvedValue(null);
+    const h = build([], { plannedVoiceChannel: planned });
+    await h.service.notifyGameAffinity(input);
+    expect(h.create.mock.calls[0]?.[0]).toMatchObject({
+      payload: { plannedVoiceChannel: planned },
+    });
   });
 });

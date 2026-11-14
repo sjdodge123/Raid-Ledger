@@ -69,4 +69,29 @@ describe('applyEventDelay — notice expiry (TDB:196)', () => {
       expect(r.expiresAt?.toISOString()).toBe('2026-07-15T03:15:00.000Z');
     }
   });
+
+  it('the event_delayed DM carries a planned temporary voice channel', async () => {
+    const planned = { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' };
+    const notificationService = {
+      createMany,
+      getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest
+        .fn()
+        .mockResolvedValue({ plannedVoiceChannel: planned }),
+    } as unknown as NotificationService;
+
+    await applyEventDelay(
+      mockDb as unknown as PostgresJsDatabase<typeof schema>,
+      notificationService,
+      7,
+      15,
+      1,
+    );
+
+    const rows = createMany.mock.calls[0][0] as Array<{
+      payload: Record<string, unknown>;
+    }>;
+    expect(rows[0]?.payload).toMatchObject({ plannedVoiceChannel: planned });
+  });
 });
