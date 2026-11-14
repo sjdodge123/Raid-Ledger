@@ -106,4 +106,14 @@ describe('Forum list row actions (ROK-1175)', () => {
         await userEvent.click(screen.getByRole('menuitem', { name: 'Pin' }));
         await vi.waitFor(() => expect(toast.error, 'a failed pin is never silent').toHaveBeenCalledWith(FORUM_PIN_FAILED));
     });
+
+    it('toasts the server message when the pin cap is reached (409)', async () => {
+        vi.mocked(toast.error).mockClear();
+        const cap = 'A hub can pin at most 50 threads. Unpin a thread first.';
+        server.use(http.put(`${FORUM}/5/pin`, () => HttpResponse.json({ statusCode: 409, message: cap }, { status: 409 })));
+        renderList(99, true);
+        await menuLabels();
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Pin' }));
+        await vi.waitFor(() => expect(toast.error, 'a 409 says how to fix it, not "try again"').toHaveBeenCalledWith(cap));
+    });
 });

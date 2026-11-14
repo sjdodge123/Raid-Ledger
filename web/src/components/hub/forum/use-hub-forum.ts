@@ -12,6 +12,7 @@ import type {
     CreateHubForumThreadInput, HubForumLatest, HubForumReply, HubForumThread, HubForumThreadList, UpdateHubForumThreadInput,
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
+import { httpStatusOf } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import {
     createForumReply, createForumThread, deleteForumReply, deleteForumThread, fetchForumLatest, fetchForumThread,
@@ -66,7 +67,7 @@ function useRefreshForum(guildId: number): () => Promise<unknown> {
 }
 
 /** A mutation whose success refetches the hub's forum cache; `onError` for writes with no inline field to show it. */
-function useForumMutation<T, V>(guildId: number, mutationFn: (vars: V) => Promise<T>, onError?: () => void): UseMutationResult<T, Error, V> {
+function useForumMutation<T, V>(guildId: number, mutationFn: (vars: V) => Promise<T>, onError?: (error: Error) => void): UseMutationResult<T, Error, V> {
     const onSuccess = useRefreshForum(guildId);
     return useMutation({ mutationFn, onSuccess, ...(onError === undefined ? {} : { onError }) });
 }
@@ -89,10 +90,15 @@ export interface PinVars { threadId: number; pinned: boolean }
 
 export const FORUM_PIN_FAILED = 'Couldn’t change the pin. Try again.';
 
+/** The pin toast: the server's own words on a 409 (the 50-pin cap — "Unpin a thread first"), where retrying never helps. */
+export function pinFailureMessage(error: Error): string {
+    return httpStatusOf(error) === 409 && error.message ? error.message : FORUM_PIN_FAILED;
+}
+
 /** Pin (`pinned: true`) or unpin; 204 → the list refetches to re-order. A menu item has no inline slot, so a failure toasts. */
 export function useSetForumThreadPin(guildId: number): UseMutationResult<void, Error, PinVars> {
     return useForumMutation(guildId, ({ threadId, pinned }: PinVars) => setForumThreadPin(guildId, threadId, pinned),
-        () => { toast.error(FORUM_PIN_FAILED); });
+        (error) => { toast.error(pinFailureMessage(error)); });
 }
 
 export interface ReplyVars { threadId: number; body: string }
