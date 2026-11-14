@@ -72,6 +72,19 @@ describe('Add my saves — cross-hub bind asks first', () => {
         expect(calls).toEqual(['bind']);
     });
 
+    it('while the confirm is open the playthrough and default checkboxes are locked; Cancel unlocks them', async () => {
+        server.use(bg3BindKeyCrossHubHandler(MOVE, record));
+        const user = userEvent.setup();
+        const sheet = await addOne(user, true);
+        await settled();
+        const boxes = within(sheet).getAllByRole('checkbox');
+        expect(boxes.length).toBeGreaterThan(1);
+        for (const box of boxes) expect(box, `"${box.closest('label')?.textContent ?? ''}" must be locked while Move here would resend the first pick`).toBeDisabled();
+        await user.click(within(screen.getByTestId(CONFIRM)).getByRole('button', { name: 'Cancel' }));
+        for (const box of within(sheet).getAllByRole('checkbox')) expect(box).toBeEnabled();
+        expect(calls).toEqual(['bind']);
+    });
+
     it('Cancel sends nothing further and keeps the sheet open', async () => {
         server.use(bg3BindKeyCrossHubHandler(MOVE, record));
         const user = userEvent.setup();
