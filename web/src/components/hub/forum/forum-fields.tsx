@@ -5,18 +5,11 @@
  * contract schemas so the UI and the api say the same thing.
  */
 import { useId, type JSX } from 'react';
-import { HUB_FORUM_TITLE_MAX, HUB_POST_BODY_MAX, HubForumTitleInputSchema } from '@raid-ledger/contract';
+import { HUB_FORUM_TITLE_MAX, HUB_POST_BODY_MAX } from '@raid-ledger/contract';
 import { CharCounter } from '../../ui/char-counter';
 import { Field } from '../../ui/field';
 import { Input } from '../../ui/input';
 import { LazyMarkdownEditor } from '../../ui/markdown/lazy-markdown-editor';
-
-/** The title's inline error; an empty title only disables submit (no error). */
-export function forumTitleError(title: string): string | null {
-    if (title.trim() === '') return null;
-    const parsed = HubForumTitleInputSchema.safeParse(title);
-    return parsed.success ? null : (parsed.error.issues[0]?.message ?? `Keep the title to ${HUB_FORUM_TITLE_MAX} characters`);
-}
 
 export interface TitleFieldProps { value: string; onChange: (v: string) => void; error?: string | undefined }
 

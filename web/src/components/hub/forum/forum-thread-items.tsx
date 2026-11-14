@@ -6,7 +6,8 @@
  */
 import { useState, type JSX } from 'react';
 import type { HubForumReply, HubForumThread } from '@raid-ledger/contract';
-import { ForumActionMenu, forumMenuItems } from './forum-action-menu';
+import { ForumActionMenu } from './forum-action-menu';
+import { forumMenuItems } from './forum-menu-items';
 import { ForumMessageEditor } from './forum-composer';
 import { ForumDeleteConfirm } from './forum-delete-confirm';
 import { ForumMessage } from './forum-message';

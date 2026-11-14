@@ -23,7 +23,8 @@ import {
     useSteamPlaytimeVisible,
 } from '../../components/hub/steam-stats/use-steam-stats-visible';
 import { LazyForumLatestWidget } from '../../components/hub/forum/forum-latest-widget-lazy';
-import { ForumLatestAction, useForumLatestVisible } from '../../components/hub/forum/forum-latest-eager';
+import { ForumLatestAction } from '../../components/hub/forum/forum-latest-action';
+import { useForumLatestVisible } from '../../components/hub/forum/use-forum-latest-visible';
 import { EventHubField } from './slots/event-hub-field';
 import { registerCoreGgCards } from './gg/register-core-gg-cards';
 

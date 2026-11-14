@@ -8,8 +8,7 @@ import type { JSX, ReactNode } from 'react';
 import type { HubForumReply } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
-import { syncedAgo } from '../../../lib/synced-ago';
-import { forumAuthorName, forumDeletedLabel } from './forum-thread.helpers';
+import { forumAgo, forumAuthorName, forumDeletedLabel } from './forum-thread.helpers';
 
 /** The fields a root and a reply share. */
 export type ForumMessageData = Pick<HubForumReply, 'author' | 'body' | 'createdAt' | 'editedAt' | 'deleted'>;
@@ -34,7 +33,7 @@ function Byline({ message }: { message: ForumMessageData }): JSX.Element {
             <p className="min-w-0 text-sm">
                 <span className="font-semibold text-foreground">{name}</span>
                 <span className="block text-xs text-dim">
-                    {syncedAgo(message.createdAt, Date.now())}
+                    {forumAgo(message.createdAt)}
                     {message.editedAt !== null && <span data-testid="forum-edited"> · Edited</span>}
                 </span>
             </p>

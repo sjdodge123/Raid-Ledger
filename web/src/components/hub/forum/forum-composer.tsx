@@ -9,7 +9,8 @@ import type { HubForumThread } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
 import { bodyError, serverBodyError } from '../posts/hub-post.helpers';
-import { ForumBodyField, ForumTitleField, forumTitleError } from './forum-fields';
+import { ForumBodyField, ForumTitleField } from './forum-fields';
+import { forumTitleError } from './forum-thread.helpers';
 import { useCreateForumReply, useCreateForumThread } from './use-hub-forum';
 
 function submitError(local: string | null, err: Error | null, fallback: string): string | undefined {

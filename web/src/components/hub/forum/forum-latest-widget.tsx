@@ -8,11 +8,10 @@ import { Link } from 'react-router-dom';
 import { HUB_FORUM_LATEST_LIMIT, type HubForumThreadSummary } from '@raid-ledger/contract';
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { FOCUS_RING } from '../../ui/form-classes';
-import { syncedAgo } from '../../../lib/synced-ago';
 import { QuietEmpty } from '../card-bits';
 import { Pill } from '../hub-bits';
 import { forumThreadHref } from './forum-link';
-import { replyCountLabel } from './forum-thread.helpers';
+import { forumAgo, replyCountLabel } from './forum-thread.helpers';
 import { useLatestThreads } from './use-hub-forum';
 
 export const FORUM_LATEST_EMPTY = 'No threads yet. Start one in the Forum.';
@@ -25,7 +24,7 @@ function LatestRow({ thread }: { thread: HubForumThreadSummary }): JSX.Element {
                     <span className="truncate text-sm font-medium text-foreground">{thread.title}</span>
                     {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
                 </span>
-                <span className="block text-xs text-muted">{replyCountLabel(thread.replyCount)} · {syncedAgo(thread.lastActivityAt, Date.now())}</span>
+                <span className="block text-xs text-muted">{replyCountLabel(thread.replyCount)} · {forumAgo(thread.lastActivityAt)}</span>
             </Link>
         </li>
     );
