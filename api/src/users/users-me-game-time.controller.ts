@@ -11,7 +11,6 @@ import {
   Delete,
   Body,
   Query,
-  ParseIntPipe,
   Param,
   UseGuards,
   Request,
@@ -31,6 +30,7 @@ import {
   resolveWeekStart,
 } from './users-controller.helpers';
 import type { AuthenticatedRequest } from '../auth/types';
+import { int4IdPipe } from '../common/pipes/int4-id.pipe';
 
 /** Controller for /users/me/game-time/* (current user). */
 @Controller('users')
@@ -123,7 +123,7 @@ export class UsersMeGameTimeController {
   @HttpCode(204)
   async ignoreAbsence(
     @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', int4IdPipe) id: number,
   ) {
     await this.gameTimeService.ignoreAbsence(req.user.id, id);
   }
@@ -134,7 +134,7 @@ export class UsersMeGameTimeController {
   @HttpCode(204)
   async deleteAbsence(
     @Request() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', int4IdPipe) id: number,
   ) {
     await this.gameTimeService.deleteAbsence(req.user.id, id);
   }

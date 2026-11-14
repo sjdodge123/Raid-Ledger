@@ -81,7 +81,8 @@ export function insertTiebreaker(
 
 /**
  * TDB:920 — create a started tiebreaker: insert it `active`, link it to the
- * lineup and, for a bracket, seed round 1. Run it inside ONE transaction and
+ * lineup and, for a bracket, seed round 1 — after re-checking the lineup
+ * under a row lock (`lockLineupForStart`). Run it inside ONE transaction and
  * pass that `tx` as `db`, so a bracket-build failure rolls back the row AND
  * the lineup link instead of stranding a `pending` row as the active one.
  */
@@ -91,6 +92,7 @@ export async function createActiveTiebreaker(
   dto: StartTiebreakerDto,
   ties: { tiedGameIds: number[]; voteCount: number },
 ): Promise<TiebreakerRow> {
+  await lockLineupForStart(db, lineupId);
   const [inserted] = await insertTiebreaker(
     db,
     lineupId,
@@ -104,6 +106,27 @@ export async function createActiveTiebreaker(
     await buildBracket(db, row.id, ties.tiedGameIds);
   }
   return row;
+}
+
+/**
+ * Backlog 2026-10-02 — re-read the lineup `FOR UPDATE` inside the start
+ * transaction and re-run the voting + "already active" checks. The service's
+ * first read sits outside the transaction, so two concurrent starts could
+ * both pass it; the lock makes the second wait for the first to commit and
+ * then see its `activeTiebreakerId` (400, same as the unlocked check).
+ */
+async function lockLineupForStart(db: Db, lineupId: number): Promise<void> {
+  const [locked] = await db
+    .select()
+    .from(schema.communityLineups)
+    .where(eq(schema.communityLineups.id, lineupId))
+    .limit(1)
+    .for('update');
+  if (!locked) throw new NotFoundException('Lineup not found');
+  if (locked.status !== 'voting') {
+    throw new BadRequestException('Lineup must be in voting status');
+  }
+  assertNoActiveTiebreaker(locked);
 }
 
 /** Point the lineup at its active tiebreaker. */
