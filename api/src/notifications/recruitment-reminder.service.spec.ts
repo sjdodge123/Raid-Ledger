@@ -297,13 +297,19 @@ describe('RecruitmentReminderService', () => {
 
     it('should include a planned temporary voice channel in the payload', async () => {
       mocks.mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
-        plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+        plannedVoiceChannel: {
+          name: 'Raid Night',
+          opensAt: '2026-11-20T19:45:00.000Z',
+        },
       });
 
       await service.checkAndSendReminders();
 
       const call = mocks.mockNotificationService.create.mock.calls[0][0];
-      expect(call.payload.plannedVoiceChannel).toEqual({ name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' });
+      expect(call.payload.plannedVoiceChannel).toEqual({
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      });
       expect(call.payload).not.toHaveProperty('voiceChannelId');
     });
 

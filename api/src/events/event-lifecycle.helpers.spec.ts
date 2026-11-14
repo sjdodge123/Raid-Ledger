@@ -185,7 +185,10 @@ describe('Regression: ROK-828', () => {
 
   it('carries a planned temporary voice channel in the payload', async () => {
     mockNotifSvc.resolveVoiceForEvent.mockResolvedValue({
-      plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+      plannedVoiceChannel: {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      },
     });
     await rescheduleEvent(
       mockDb as any,
@@ -197,7 +200,10 @@ describe('Regression: ROK-828', () => {
     );
 
     const call = mockNotifSvc.createMany.mock.calls[0][0][0];
-    expect(call.payload.plannedVoiceChannel).toEqual({ name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' });
+    expect(call.payload.plannedVoiceChannel).toEqual({
+      name: 'Raid Night',
+      opensAt: '2026-11-20T19:45:00.000Z',
+    });
   });
 
   it('should include event title and correct type', async () => {

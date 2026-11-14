@@ -73,14 +73,20 @@ describe('notifyAttendeeRunningLate', () => {
 
   it('carries a planned temporary voice channel instead of a link', async () => {
     notificationService.resolveVoiceForEvent.mockResolvedValue({
-      plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+      plannedVoiceChannel: {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      },
     });
     mockDb.where.mockResolvedValue([{ userId: 1 }]);
     await run();
     const created = notificationService.createMany.mock.calls[0][0] as Array<{
       payload: Record<string, unknown>;
     }>;
-    expect(created[0]?.payload.plannedVoiceChannel).toEqual({ name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' });
+    expect(created[0]?.payload.plannedVoiceChannel).toEqual({
+      name: 'Raid Night',
+      opensAt: '2026-11-20T19:45:00.000Z',
+    });
     expect(created[0]?.payload).not.toHaveProperty('voiceChannelId');
   });
 

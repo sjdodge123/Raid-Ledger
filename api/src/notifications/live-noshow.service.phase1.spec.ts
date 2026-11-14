@@ -189,7 +189,10 @@ describe('LiveNoShowService — phase1', () => {
       const event = makeEvent({
         startTime: new Date(Date.now() - 11 * 60 * 1000),
       });
-      const planned = { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' };
+      const planned = {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      };
       mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
         plannedVoiceChannel: planned,
       });

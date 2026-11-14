@@ -287,7 +287,10 @@ describe('RosterNotificationBufferService (ROK-534)', () => {
   it('carries a planned temporary voice channel in the payload', async () => {
     setupFlushChains(mmoEvent);
     mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
-      plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+      plannedVoiceChannel: {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      },
     });
     service.bufferLeave({ ...baseAction, vacatedRole: 'tank' });
     jest.advanceTimersByTime(ROSTER_NOTIFY_GRACE_MS + 100);
@@ -296,7 +299,10 @@ describe('RosterNotificationBufferService (ROK-534)', () => {
       expect.objectContaining({
         payload: {
           eventId: 1,
-          plannedVoiceChannel: { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' },
+          plannedVoiceChannel: {
+            name: 'Raid Night',
+            opensAt: '2026-11-20T19:45:00.000Z',
+          },
         },
       }),
     );
