@@ -130,42 +130,51 @@ export async function createScheduledEventIdempotent(
   preamble: CreatePreamble,
   cache?: GuildSECache,
 ): Promise<void> {
-  // ROK-1391: revalidate against live state before the create — a fire-and-forget
-  // create can carry a stale pre-reschedule payload minutes after the row moved
-  // (see applyCreateEntryGuard: skip on open poll / cancel, else fresh-time sub).
+  const ready = await guardAndResolvePlace(
+    { db, logger, eventId, eventData },
+    preamble,
+  );
+  if (!ready) return;
+  const attempt: CreateAttempt = {
+    ...{ guild, db, logger, eventId },
+    ...ready,
+    description: await preamble.describe(eventId, ready.eventData),
+    seCache: cache ?? new GuildSECache(guild),
+  };
+  const getTimezone = preamble.getTimezone ?? noTimezone;
+  if (await adoptExistingGuildSE({ ...attempt, getTimezone })) return;
+  await createWithCapacityRecovery(attempt);
+}
+
+/** ROK-1391: revalidate against live state before the create — a fire-and-forget
+ *  create can carry a stale pre-reschedule payload minutes after the row moved
+ *  (see applyCreateEntryGuard: skip on open poll / cancel, else fresh-time sub).
+ *  Then resolve the SE's place; null when the create must be skipped. */
+async function guardAndResolvePlace(
+  c: Pick<CreateAttempt, 'db' | 'logger' | 'eventId' | 'eventData'>,
+  preamble: CreatePreamble,
+): Promise<Pick<CreateAttempt, 'eventData' | 'place'> | null> {
+  const { db, logger, eventId, eventData } = c;
   const guarded = await applyCreateEntryGuard(db, logger, eventId, eventData);
-  if (!guarded) return;
-  eventData = guarded;
-  const place = await resolveCreatePlace(db, eventId, eventData, preamble);
+  if (!guarded) return null;
+  const place = await resolveCreatePlace(db, eventId, guarded, preamble);
   if (!place) {
     logger.warn(`Skip SE ${eventId}: no voice channel`);
-    return;
+    return null;
   }
-  const description = await preamble.describe(eventId, eventData);
-  const seCache = cache ?? new GuildSECache(guild);
+  return { eventData: guarded, place };
+}
 
-  const getTimezone = preamble.getTimezone ?? noTimezone;
-  const adoptCtx = { guild, db, logger, eventId, eventData, place, seCache };
-  if (await adoptExistingGuildSE({ ...adoptCtx, getTimezone })) return;
-
+/** Create wrapped in `withCapacityRecovery` (30038 → GC sweep + retry). */
+async function createWithCapacityRecovery(a: CreateAttempt): Promise<void> {
   await withCapacityRecovery(
-    guild,
-    db,
-    logger,
-    () =>
-      createOrAdoptOnTimeout({
-        guild,
-        db,
-        logger,
-        eventId,
-        eventData,
-        place,
-        description,
-        seCache,
-      }),
+    a.guild,
+    a.db,
+    a.logger,
+    () => createOrAdoptOnTimeout(a),
     // GC inside capacity recovery deletes guild SEs — drop the cached snapshot
     // so the retry's adopt path re-fetches live state (review medium).
-    () => seCache.invalidate(),
+    () => a.seCache.invalidate(),
   );
 }
 
@@ -244,8 +253,9 @@ async function repointAdoptedPlannedSE(
       c.eventData,
       c.getTimezone,
     );
-    const end = c.eventData.endTime;
-    await tryEditEntity(c.guild, c.eventId, existing.id, c.place, end, name);
+    // No end time: Voice doesn't need one, and the create-time end could
+    // clobber a newer one from a concurrent update (Codex P2).
+    await tryEditEntity(c.guild, c.eventId, existing.id, c.place, name);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     c.logger.warn(

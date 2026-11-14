@@ -149,6 +149,19 @@ describe('adopt path repoints a planned (External) SE to the real channel', () =
     );
   });
 
+  it('sends no timing fields, so a concurrent update keeps its newer end', async () => {
+    const { guild, edit } = guildWith({
+      entityType: GuildScheduledEventEntityType.External,
+      channelId: null,
+    });
+
+    await runCreate(guild);
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(edit.mock.calls[0]?.[1]).not.toHaveProperty('scheduledEndTime');
+    expect(edit.mock.calls[0]?.[1]).not.toHaveProperty('scheduledStartTime');
+  });
+
   it('leaves an adopted SE already Voice in that channel untouched', async () => {
     const { guild, edit } = guildWith({
       entityType: GuildScheduledEventEntityType.Voice,

@@ -337,18 +337,18 @@ export async function tryEditFullEvent(
 }
 
 /**
- * Edit only an SE's entity to a place — the entity half of the repoint edit
+ * Convert an SE to Voice in a channel — the entity half of the repoint edit
  * (`seEditEntity`), used when an adopted planned SE must follow its now-real
- * temporary channel. `scheduledEndTime` rides along because Discord requires
- * it whenever an SE is (or stays) External; `name`, when given, applies the
- * repoint's (time-suffixed) SE name in the same edit.
+ * temporary channel. Sends NO timing fields: a Voice SE needs no
+ * `scheduledEndTime`, and a time captured before this edit could overwrite a
+ * newer end written by a concurrent delay/reschedule/extension (Codex P2).
+ * `name`, when given, applies the repoint's (time-suffixed) SE name.
  */
 export async function tryEditEntity(
   guild: Guild,
   eventId: number,
   seId: string,
-  place: SEPlace,
-  endTime: string,
+  voiceChannelId: string,
   name?: string,
 ): Promise<void> {
   await timedDiscordCall(
@@ -356,8 +356,7 @@ export async function tryEditEntity(
     () =>
       guild.scheduledEvents.edit(seId, {
         ...(name !== undefined ? { name } : {}),
-        scheduledEndTime: parseEventTimestampUtc(endTime),
-        ...seEditEntity(place),
+        ...seEditEntity(voiceChannelId),
       }),
     { eventId, op: 'adoptRepoint' },
   );
