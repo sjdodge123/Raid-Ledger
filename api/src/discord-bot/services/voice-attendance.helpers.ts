@@ -310,3 +310,27 @@ export function leaveSession(session: InMemorySession): void {
   }
   markSessionDirty(session);
 }
+
+/**
+ * A queue that runs tasks one at a time in call order. Each caller's promise
+ * settles with its own task (errors included); the queue itself never jams.
+ */
+export function createSerialQueue(): (
+  task: () => Promise<void>,
+) => Promise<void> {
+  let tail: Promise<void> = Promise.resolve();
+  return (task) => {
+    const run = tail.then(task);
+    tail = run.catch(() => undefined);
+    return run;
+  };
+}
+
+/** End every still-active session that belongs to one of `eventIds`. */
+export function closeActiveSessions(
+  sessions: Map<string, InMemorySession>,
+  eventIds: ReadonlySet<number>,
+): void {
+  for (const s of sessions.values())
+    if (s.isActive && eventIds.has(s.eventId)) leaveSession(s);
+}
