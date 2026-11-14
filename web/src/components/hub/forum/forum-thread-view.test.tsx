@@ -70,7 +70,8 @@ describe('ForumThreadView (ROK-1175)', () => {
     it('pages replies with "Show more replies", with the reply box already showing', async () => {
         serveThread(buildForumThreadDetail({ nextReplyCursor: 'r1' }), buildForumThreadDetail({ replies: [buildForumReply({ id: 13, body: 'newer' })] }));
         renderThread();
-        expect(await screen.findByTestId('forum-reply-composer'), 'the composer does not wait for every page').toBeInTheDocument();
+        await screen.findByTestId('forum-thread-root');
+        expect(screen.queryByTestId('forum-reply-composer'), 'the composer does not wait for every page').not.toBeNull();
         await userEvent.click(await screen.findByRole('button', { name: 'Show more replies' }));
         expect(await screen.findByText('newer')).toBeInTheDocument();
         expect(screen.getAllByTestId('forum-reply')).toHaveLength(2);
@@ -197,7 +198,11 @@ describe('Forum ?reply= deep link + posting past the loaded pages (ROK-1175 D9)'
     it('pages through to an off-page ?reply= target, rings it and scrolls it into view', async () => {
         serveThread(buildForumThreadDetail({ nextReplyCursor: 'r1' }), buildForumThreadDetail({ replies: [buildForumReply({ id: 13, body: 'deep' })] }));
         renderThread(true, '/hubs/7?thread=5&reply=13#forum');
-        const target = (await screen.findByText('deep')).closest('article');
+        const target = await vi.waitFor(() => {
+            const el = document.getElementById('forum-reply-13');
+            expect(el, 'reply 13 (page 2) is fetched without a click').not.toBeNull();
+            return el;
+        });
         expect(target?.getAttribute('aria-current'), 'reply 13 is the ringed deep-link target').toBe('true');
         await vi.waitFor(() => expect(scrolled, 'scrollIntoView ran on reply 13').toEqual(['forum-reply-13']));
     });
@@ -227,7 +232,7 @@ describe('Forum discard guards (ROK-1175)', () => {
         await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
         await userEvent.type(screen.getByTestId('forum-edit-body'), ' more');
         await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-        expect(await screen.findByTestId('discard-changes-confirm'), 'a changed edit asks first').toBeInTheDocument();
+        await vi.waitFor(() => expect(screen.queryByTestId('discard-changes-confirm'), 'a changed edit asks first').not.toBeNull());
         await userEvent.click(screen.getByTestId('discard-changes-keep'));
         expect(screen.getByTestId('forum-edit-body'), 'Keep leaves the draft').toHaveValue('old text more');
         await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -242,7 +247,7 @@ describe('Forum discard guards (ROK-1175)', () => {
         await userEvent.click((await screen.findAllByRole('button', { name: /new thread/i }))[0] ?? document.body);
         await userEvent.type(screen.getByTestId('forum-title-input'), 'Draft');
         await userEvent.click(screen.getByRole('link', { name: 'Overview' }));
-        expect(await screen.findByTestId('discard-changes-confirm'), 'the tab switch is held').toBeInTheDocument();
+        await vi.waitFor(() => expect(screen.queryByTestId('discard-changes-confirm'), 'the tab switch is held').not.toBeNull());
         expect(window.location.hash, 'the hash did not move yet').toBe('#forum');
         await userEvent.click(screen.getByTestId('discard-changes-keep'));
         expect(screen.getByTestId('forum-title-input'), 'Keep leaves the draft').toHaveValue('Draft');
