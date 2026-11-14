@@ -50,8 +50,8 @@ export { ErrorState };
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
 /** ROK-1868 — the Posts tab (feed, composer, deep link) loads only when opened. */
 const HubPostsTab = lazy(() => import('./posts/posts-tab').then((m) => ({ default: m.HubPostsTab })));
-/** ROK-1175 — the member Forum tab (list, thread view) loads only when opened. */
-const HubForumTab = lazy(() => import('./forum/forum-tab').then((m) => ({ default: m.HubForumTab })));
+/** ROK-1175 — the member Forum tab loads only when opened, via a tiny entry chunk that carries its preload list. */
+const HubForumTab = lazy(() => import('./forum/forum-tab-entry').then((m) => ({ default: m.HubForumTabEntry })));
 const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
 /** Stable identity so the source list doesn't churn while a module is absent. */
