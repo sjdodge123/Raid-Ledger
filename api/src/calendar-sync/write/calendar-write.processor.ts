@@ -49,9 +49,7 @@ import {
 } from './calendar-write-off.helpers';
 
 type WriteJobOutcome =
-  | ReconcileOutcome
-  | WriteOffOutcome
-  | CalendarDisconnectResult;
+  ReconcileOutcome | WriteOffOutcome | CalendarDisconnectResult;
 
 @Processor(CALENDAR_WRITE_QUEUE, {
   concurrency: 2,

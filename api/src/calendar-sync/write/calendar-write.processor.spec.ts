@@ -129,18 +129,18 @@ describe('CalendarWriteProcessor → Sentry sees only reportable failures (ROK-2
   it('the final attempt is NOT marked — exhausted retries report', async () => {
     const err = new TransientError('http_503');
     reconcile.mockRejectedValue(err);
-    await expect(
-      makeProcessor().process(attempt(RECONCILE_8, 5)),
-    ).rejects.toBe(err);
+    await expect(makeProcessor().process(attempt(RECONCILE_8, 5))).rejects.toBe(
+      err,
+    );
     expect(isExpectedRetry(err)).toBe(false);
   });
 
   it('a non-provider error with attempts left is NOT marked', async () => {
     const err = new Error('connection terminated unexpectedly');
     reconcile.mockRejectedValue(err);
-    await expect(
-      makeProcessor().process(attempt(RECONCILE_8, 0)),
-    ).rejects.toBe(err);
+    await expect(makeProcessor().process(attempt(RECONCILE_8, 0))).rejects.toBe(
+      err,
+    );
     expect(isExpectedRetry(err)).toBe(false);
   });
 });

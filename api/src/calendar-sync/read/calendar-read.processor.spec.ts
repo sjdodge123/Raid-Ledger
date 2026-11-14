@@ -157,6 +157,17 @@ describe('CalendarReadProcessor failures', () => {
     expect(invalidate).toHaveBeenCalledWith(CONN.userId);
   });
 
+  it('kill switch off → skipped before any load or provider call', async () => {
+    const { processor, sets } = setup(false);
+    await expect(processor.process(job(0))).resolves.toBe('skipped');
+    expect(runSync).not.toHaveBeenCalled();
+    expect(sets).toEqual([]);
+  });
+});
+
+describe('CalendarReadProcessor → Sentry sees only reportable failures (ROK-2189)', () => {
+  beforeEach(() => runSync.mockReset());
+
   it.each([
     ['TransientError', () => new TransientError('http_503')],
     ['RateLimitError', () => new RateLimitError(30_000, 'http_429')],
@@ -185,13 +196,6 @@ describe('CalendarReadProcessor failures', () => {
     runSync.mockRejectedValue(err);
     await expect(processor.process(job(1))).rejects.toBe(err);
     expect(isExpectedRetry(err)).toBe(false);
-  });
-
-  it('kill switch off → skipped before any load or provider call', async () => {
-    const { processor, sets } = setup(false);
-    await expect(processor.process(job(0))).resolves.toBe('skipped');
-    expect(runSync).not.toHaveBeenCalled();
-    expect(sets).toEqual([]);
   });
 });
 
