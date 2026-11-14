@@ -5,6 +5,7 @@ import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
+import { parseDateParam } from '../components/calendar/parse-date-param';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
@@ -31,22 +32,31 @@ function initialCalendarView(viewParam: string | null, width: number): CalendarV
 }
 
 /**
- * Adopts `?view=` from a real navigation while the page stays mounted
- * (Back/Forward, a link to `/calendar?view=day`), since the grid follows page
- * state, not the URL. The grid's own URL sync writes with `replace`, so
- * REPLACE entries are skipped — a view click during the mount sync survives.
- * Phones stay where they are; no `view` opens Month, like a fresh load.
+ * Adopts `?view=` and `?date=` from a real navigation while the page stays
+ * mounted (Back/Forward, a link to `/calendar?view=day&date=…`), since the grid
+ * follows page state, not the URL. The grid's own URL sync writes with
+ * `replace`, so REPLACE entries are skipped — a view click during the mount
+ * sync survives. Like a fresh load: no `view` opens Month (phones stay in
+ * Schedule), no `date` opens today, an invalid `date` keeps the current one.
  */
-function useAdoptNavigatedView(viewParam: string | null, setCalendarView: (v: CalendarViewMode) => void): void {
+function useAdoptNavigatedLocation(
+    searchParams: URLSearchParams,
+    setCalendarView: (v: CalendarViewMode) => void,
+    setCurrentDate: (d: Date) => void,
+): void {
     const { key } = useLocation();
     const navigationType = useNavigationType();
     const seenKeyRef = useRef(key);
+    const viewParam = searchParams.get('view');
+    const dateParam = searchParams.get('date');
     useEffect(() => {
         if (seenKeyRef.current === key) return;
         seenKeyRef.current = key;
-        if (navigationType === NavigationType.Replace || window.innerWidth < 768) return;
-        setCalendarView(initialCalendarView(viewParam, window.innerWidth));
-    }, [key, navigationType, viewParam, setCalendarView]);
+        if (navigationType === NavigationType.Replace) return;
+        const date = dateParam === null ? new Date() : parseDateParam(dateParam);
+        if (date) setCurrentDate(date);
+        if (window.innerWidth >= 768) setCalendarView(initialCalendarView(viewParam, window.innerWidth));
+    }, [key, navigationType, viewParam, dateParam, setCalendarView, setCurrentDate]);
 }
 
 /**
@@ -55,19 +65,12 @@ function useAdoptNavigatedView(viewParam: string | null, setCalendarView: (v: Ca
  */
 function useCalendarState() {
     const [searchParams] = useSearchParams();
-    const [currentDate, setCurrentDate] = useState(() => {
-        const dateStr = searchParams.get('date');
-        if (dateStr) {
-            const parsed = new Date(dateStr + 'T00:00:00');
-            if (!isNaN(parsed.getTime())) return parsed;
-        }
-        return new Date();
-    });
+    const [currentDate, setCurrentDate] = useState(() => parseDateParam(searchParams.get('date')) ?? new Date());
     const [calendarView, setCalendarView] = useState<CalendarViewMode>(
         () => initialCalendarView(searchParams.get('view'), typeof window !== 'undefined' ? window.innerWidth : 1024),
     );
     const [filtersOpen, setFiltersOpen] = useState(false);
-    useAdoptNavigatedView(searchParams.get('view'), setCalendarView);
+    useAdoptNavigatedLocation(searchParams, setCalendarView, setCurrentDate);
 
     const handleMobileNavPrev = useCallback(() => {
         setCurrentDate((prev) => calendarView === 'day' ? subDays(prev, 1) : subMonths(prev, 1));
