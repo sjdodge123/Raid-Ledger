@@ -8,6 +8,7 @@
  * slot, which is what the leading card and the API comment already call it.
  */
 import type { JSX } from 'react';
+import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { computeRequiredVoters } from './threshold';
 
 interface EarlyCreateConfirmModalProps {
@@ -66,10 +67,42 @@ function modalCopy(props: EarlyCreateConfirmModalProps): ModalCopy {
     };
 }
 
-/** Confirm dialog rendered from `useSchedulingLock().pendingSlot`. */
+/** Cancel + confirm button row. */
+function ConfirmActions({ confirmLabel, onCancel, onConfirm }: {
+    confirmLabel: string;
+    onCancel: () => void;
+    onConfirm: () => void;
+}): JSX.Element {
+    return (
+        <div className="mt-4 flex justify-end gap-2">
+            <button
+                type="button"
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium rounded-lg border border-edge text-foreground hover:bg-overlay transition-colors"
+            >
+                Cancel
+            </button>
+            <button
+                type="button"
+                onClick={onConfirm}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
+            >
+                {confirmLabel}
+            </button>
+        </div>
+    );
+}
+
+/**
+ * Confirm dialog rendered from `useSchedulingLock().pendingSlot`. Callers
+ * mount it only while a lock is pending, so it holds the shared ref-counted
+ * body scroll lock for its whole lifetime: on phone the Poll actions
+ * `BottomSheet` closes (releasing its lock) before this opens (Codex P2).
+ */
 export function EarlyCreateConfirmModal(
     props: EarlyCreateConfirmModalProps,
 ): JSX.Element {
+    useBodyScrollLock(true);
     const copy = modalCopy(props);
     return (
         <div
@@ -82,22 +115,7 @@ export function EarlyCreateConfirmModal(
                     {copy.title}
                 </h4>
                 <p className="mt-2 text-sm text-muted">{copy.body}</p>
-                <div className="mt-4 flex justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={props.onCancel}
-                        className="px-4 py-2 text-sm font-medium rounded-lg border border-edge text-foreground hover:bg-overlay transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={props.onConfirm}
-                        className="px-4 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 transition-colors"
-                    >
-                        {copy.confirm}
-                    </button>
-                </div>
+                <ConfirmActions confirmLabel={copy.confirm} onCancel={props.onCancel} onConfirm={props.onConfirm} />
             </div>
         </div>
     );
