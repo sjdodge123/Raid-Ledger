@@ -187,6 +187,7 @@ export class ScheduledEventService {
           channelResolver: this.channelResolver,
           describe: (id, data) => desc(this.settingsService, id, data),
           plannedVoiceSettings: this.settingsService,
+          getTimezone: () => this.settingsService.getDefaultTimezone(),
         },
         cache,
       );

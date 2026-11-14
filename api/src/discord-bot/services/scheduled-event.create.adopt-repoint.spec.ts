@@ -16,11 +16,16 @@ import {
 import * as dbHelpers from './scheduled-event.db-helpers';
 import * as revalidate from './scheduled-event.revalidate';
 import * as discordOps from './scheduled-event.discord-ops';
-import type { ScheduledEventData } from './scheduled-event.helpers';
+import {
+  buildScheduledEventName,
+  buildScheduledEventNameWithTime,
+  type ScheduledEventData,
+} from './scheduled-event.helpers';
 
 jest.mock('./scheduled-event.db-helpers', () => ({
   ...jest.requireActual('./scheduled-event.db-helpers'),
   resolveVoiceForCreate: jest.fn(),
+  getRecurrenceAndEphemeral: jest.fn(),
 }));
 jest.mock('./scheduled-event.revalidate', () => ({
   ...jest.requireActual('./scheduled-event.revalidate'),
@@ -35,6 +40,9 @@ jest.mock('./scheduled-event.discord-ops', () => ({
 }));
 
 const resolveVoiceForCreate = jest.mocked(dbHelpers.resolveVoiceForCreate);
+const getRecurrenceAndEphemeral = jest.mocked(
+  dbHelpers.getRecurrenceAndEphemeral,
+);
 const saveScheduledEventId = jest.mocked(revalidate.saveScheduledEventId);
 const getEventLiveState = jest.mocked(revalidate.getEventLiveState);
 const applyCreateEntryGuard = jest.mocked(revalidate.applyCreateEntryGuard);
@@ -44,6 +52,7 @@ const START = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const START_MS = Date.parse(START);
 const END = new Date(START_MS + 3 * 60 * 60 * 1000).toISOString();
 const EVENT_ID = 91;
+const TZ = 'America/New_York';
 const eventData: ScheduledEventData = {
   title: 'Planned Voice Raid',
   startTime: START,
@@ -69,6 +78,7 @@ function preamble(): CreatePreamble {
       overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
     },
     describe: jest.fn().mockResolvedValue('desc'),
+    getTimezone: jest.fn().mockResolvedValue(TZ),
   };
 }
 
@@ -107,6 +117,10 @@ async function runCreate(guild: Guild): Promise<void> {
 
 beforeEach(() => {
   resolveVoiceForCreate.mockReset().mockResolvedValue('temp-voice-1');
+  getRecurrenceAndEphemeral.mockReset().mockResolvedValue({
+    recurrenceGroupId: null,
+    ephemeralVoiceChannelId: 'temp-voice-1',
+  });
   saveScheduledEventId.mockReset().mockResolvedValue({ bound: true });
   getEventLiveState.mockReset().mockResolvedValue(LIVE);
   applyCreateEntryGuard
@@ -160,5 +174,57 @@ describe('adopt path repoints a planned (External) SE to the real channel', () =
     await runCreate(guild);
 
     expect(edit).not.toHaveBeenCalled();
+  });
+});
+
+describe('adopt repoint: SE name and edit-failure handling', () => {
+  it('gives the adopted SE the time-suffixed name while the temp channel exists', async () => {
+    const { guild, edit } = guildWith({
+      entityType: GuildScheduledEventEntityType.External,
+      channelId: null,
+    });
+
+    await runCreate(guild);
+
+    expect(edit).toHaveBeenCalledWith(
+      'se-1',
+      expect.objectContaining({
+        name: buildScheduledEventNameWithTime(eventData, TZ),
+      }),
+    );
+  });
+
+  it('keeps the bare name when the event has no temporary channel', async () => {
+    getRecurrenceAndEphemeral.mockResolvedValue({
+      recurrenceGroupId: null,
+      ephemeralVoiceChannelId: null,
+    });
+    const { guild, edit } = guildWith({
+      entityType: GuildScheduledEventEntityType.External,
+      channelId: null,
+    });
+
+    await runCreate(guild);
+
+    expect(edit).toHaveBeenCalledWith(
+      'se-1',
+      expect.objectContaining({ name: buildScheduledEventName(eventData) }),
+    );
+  });
+
+  it('a failed repoint edit does not fail the create — the adopt is already bound', async () => {
+    const { guild, edit } = guildWith({
+      entityType: GuildScheduledEventEntityType.External,
+      channelId: null,
+    });
+    edit.mockRejectedValue(new Error('Discord 500'));
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    await expect(runCreate(guild)).resolves.toBeUndefined();
+
+    expect(saveScheduledEventId).toHaveBeenCalledWith(db, EVENT_ID, 'se-1');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('se-1'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('External'));
+    warn.mockRestore();
   });
 });

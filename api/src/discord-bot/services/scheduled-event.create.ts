@@ -20,7 +20,9 @@ import {
   tryCreateNewEvent,
   tryDeleteEvent,
   tryEditEntity,
+  resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
+import { getRecurrenceAndEphemeral } from './scheduled-event.db-helpers';
 import { withCapacityRecovery } from './scheduled-event.capacity';
 import {
   findExistingGuildSE,
@@ -57,6 +59,8 @@ export interface CreatePreamble {
   describe: (eventId: number, eventData: ScheduledEventData) => Promise<string>;
   /** Set → a planned temporary channel makes an External SE (2026-11-13). */
   plannedVoiceSettings?: PlannedVoiceSettingsSource;
+  /** Display timezone for the adopt repoint's time-suffixed SE name. */
+  getTimezone?: () => Promise<string | null>;
 }
 
 /** Generous bound for the guild-wide SE fetch (see GuildSECache.get). */
@@ -94,6 +98,11 @@ export class GuildSECache {
   invalidate(): void {
     this.cached = null;
   }
+}
+
+/** Fallback when the caller has no timezone source: the name helper's default. */
+function noTimezone(): Promise<null> {
+  return Promise.resolve(null);
 }
 
 function isTimeoutError(err: unknown): boolean {
@@ -135,8 +144,9 @@ export async function createScheduledEventIdempotent(
   const description = await preamble.describe(eventId, eventData);
   const seCache = cache ?? new GuildSECache(guild);
 
+  const getTimezone = preamble.getTimezone ?? noTimezone;
   const adoptCtx = { guild, db, logger, eventId, eventData, place, seCache };
-  if (await adoptExistingGuildSE(adoptCtx)) return;
+  if (await adoptExistingGuildSE({ ...adoptCtx, getTimezone })) return;
 
   await withCapacityRecovery(
     guild,
@@ -167,6 +177,7 @@ interface AdoptContext {
   eventData: ScheduledEventData;
   place: SEPlace;
   seCache: GuildSECache;
+  getTimezone: () => Promise<string | null>;
 }
 
 /** Pre-create liveness check: adopt a live guild SE matching this event's
@@ -193,10 +204,15 @@ async function adoptExistingGuildSE(c: AdoptContext): Promise<boolean> {
     return false;
   }
   logger.warn(`Skip SE ${eventId}: live guild SE ${existing.id} matches`);
-  if (
-    await bindOrCompensate(guild, db, logger, eventId, existing.id, eventData)
-  )
-    await repointAdoptedPlannedSE(c, existing);
+  const kept = await bindOrCompensate(
+    guild,
+    db,
+    logger,
+    eventId,
+    existing.id,
+    eventData,
+  );
+  if (kept) await repointAdoptedPlannedSE(c, existing);
   return true;
 }
 
@@ -204,8 +220,10 @@ async function adoptExistingGuildSE(c: AdoptContext): Promise<boolean> {
  * Planned-voice race (PR #2134 follow-up): the temporary channel can be created
  * before the planned SE's create bound its id, so the repoint lands here and
  * adopts the still-External SE. Flip it to Voice in the now-real channel —
- * the same entity edit the bound repoint makes. Only External → Voice; any
- * other adopt is left exactly as before.
+ * the same entity edit (and time-suffixed name) the bound repoint makes. Only
+ * External → Voice; any other adopt is left exactly as before. The SE is
+ * already bound, so an edit failure is logged, not thrown: the adopt itself
+ * succeeded and must not surface as a failed create.
  */
 async function repointAdoptedPlannedSE(
   c: AdoptContext,
@@ -216,13 +234,25 @@ async function repointAdoptedPlannedSE(
   c.logger.log(
     `Repoint adopted SE ${existing.id} for event ${c.eventId} to voice ${c.place}`,
   );
-  await tryEditEntity(
-    c.guild,
-    c.eventId,
-    existing.id,
-    c.place,
-    c.eventData.endTime,
-  );
+  try {
+    const { ephemeralVoiceChannelId } = await getRecurrenceAndEphemeral(
+      c.db,
+      c.eventId,
+    );
+    const name = await resolveEditedScheduledEventName(
+      { ephemeralVoiceChannelId },
+      c.eventData,
+      c.getTimezone,
+    );
+    const end = c.eventData.endTime;
+    await tryEditEntity(c.guild, c.eventId, existing.id, c.place, end, name);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    c.logger.warn(
+      `Adopted SE ${existing.id} for event ${c.eventId} stays External — ` +
+        `repoint to voice ${c.place} failed: ${msg}`,
+    );
+  }
 }
 
 interface CreateAttempt {
@@ -283,9 +313,10 @@ async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
  * live state, THEN compensate. Binding before the re-read (Dekker-style
  * write-before-read) closes the interleave where a concurrent poll-start
  * teardown reads the binding as NULL and returns early, then our bind lands and
- * a flagged-poll SE survives. Returns whether the SE was kept. When the bind lost the row, or the row now carries
- * an open poll / cancellation / a different start than the SE we created, delete
- * our SE and clear only the binding that still points at it.
+ * a flagged-poll SE survives. When the bind lost the row, or the row now
+ * carries an open poll / cancellation / a different start than the SE we
+ * created, delete our SE and clear only the binding that still points at it.
+ * Returns whether the SE was kept.
  */
 async function bindOrCompensate(
   guild: Guild,

@@ -21,7 +21,6 @@ export interface GuildSEShape {
   /** discord.js `entityType` (2 = Voice, 3 = External) — read by the adopt
    *  repoint so a planned (External) SE flips to Voice once its channel exists. */
   entityType?: number | null;
-  channelId?: string | null;
 }
 
 /**
