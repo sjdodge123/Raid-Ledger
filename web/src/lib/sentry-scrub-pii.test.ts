@@ -242,9 +242,11 @@ describe('scrubPiiString — e-mail regex stays linear', () => {
         expect(performance.now() - start).toBeLessThan(2000);
     });
 
-    it('scrubs 160k chars of 64-char segments joined by %2B in under 500 ms (plus-tag bound, ruling 2026-11-13)', () => {
+    it('scrubs 160k chars of 64-char segments joined by %2B in under 1.5 s (plus-tag bound, ruling 2026-11-13)', () => {
         // The worst case for the plus-tag repeat: every start can chain tags.
-        // `{0,32}` took ~780 ms here, `{0,4}` ~100 ms. Best of three keeps a
+        // `{0,32}` took ~780 ms on a laptop, `{0,4}` ~100 ms; GitHub's coverage
+        // runners are ~5x slower (`{0,4}` measured 527 ms there), so the bound
+        // sits at 1.5 s: ~3x headroom, still red for `{0,32}`. Best of three keeps a
         // GC pause from failing it.
         const long = `${'a'.repeat(64)}%2B`.repeat(2_400).slice(0, 160_000);
         const runs = [0, 1, 2].map(() => {
@@ -252,7 +254,7 @@ describe('scrubPiiString — e-mail regex stays linear', () => {
             expect(scrubPiiString(long)).toBe(long);
             return performance.now() - start;
         });
-        expect(Math.min(...runs)).toBeLessThan(500);
+        expect(Math.min(...runs)).toBeLessThan(1500);
     });
 
     it('still scrubs an encoded address with up to four plus-tags', () => {
