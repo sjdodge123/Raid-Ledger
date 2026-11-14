@@ -140,11 +140,26 @@ function TimePopover(
   );
 }
 
-/** The phone/tablet bottom sheet — 52px rows, mounted only while open. */
-function TimeSheet(
-  props: SchedulingTimeMenuProps & { label: string; onClose: () => void },
-): JSX.Element {
-  const { label, onClose, testIdPrefix } = props;
+/** Sheet-only props: its title, and the two ways it closes. */
+interface TimeSheetProps extends SchedulingTimeMenuProps {
+  label: string;
+  onClose: () => void;
+  /** Close WITHOUT focus return — a confirm modal is about to take focus. */
+  onDismissForConfirm: () => void;
+}
+
+/**
+ * The phone/tablet bottom sheet — 52px rows, mounted only while open. Lock
+ * closes it first so it never sits under the lock confirm (#2132 verify
+ * lane); the slot rides in `props.onLock`'s closure and the confirm belongs
+ * to the composite, so closing loses nothing.
+ */
+function TimeSheet(props: TimeSheetProps): JSX.Element {
+  const { label, onClose, onDismissForConfirm, testIdPrefix } = props;
+  const onLock = (): void => {
+    onDismissForConfirm();
+    props.onLock();
+  };
   return (
     <BottomSheet isOpen onClose={onClose} ariaLabel={label}>
       <div
@@ -156,7 +171,7 @@ function TimeSheet(
           onClose={onClose}
           testId={`${testIdPrefix}-menu-title`}
         />
-        <TimeMenuItems {...props} />
+        <TimeMenuItems {...props} onLock={onLock} />
       </div>
     </BottomSheet>
   );
@@ -213,6 +228,7 @@ export function SchedulingTimeMenu(
             {...props}
             label={label}
             onClose={() => close({ restoreFocus: true })}
+            onDismissForConfirm={() => close()}
           />
         )
       )}
