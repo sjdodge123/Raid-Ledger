@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useId, useRef } from 'react';
+import { useState, useEffect, useMemo, useId, useRef, useCallback, type MutableRefObject } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
@@ -88,15 +88,23 @@ function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, keepTa
 /**
  * ROK-2132 (Codex P2): an `initialTab` of `import` resolves once the capabilities have
  * loaded. While they load, Forever's Armory is fail-closed and the sync above falls back to
- * Manual; the moment they settle, the requested Import tab wins if it is available — once.
+ * Manual; the moment they settle, the requested Import tab wins if it is available — once,
+ * and only if the user has not picked a tab themselves meanwhile (`userPicked`).
  */
-function useRequestedImportTab(initialTab: Tab | undefined, capsSettled: boolean, armoryOk: boolean, onTabChange: (tab: Tab) => void) {
+function useRequestedImportTab(initialTab: Tab | undefined, capsSettled: boolean, armoryOk: boolean, onTabChange: (tab: Tab) => void, userPicked: MutableRefObject<boolean>) {
     const resolved = useRef(false);
     useEffect(() => {
         if (initialTab !== 'import' || !capsSettled || resolved.current) return;
         resolved.current = true;
-        if (armoryOk) onTabChange('import');
-    }, [initialTab, capsSettled, armoryOk, onTabChange]);
+        if (armoryOk && !userPicked.current) onTabChange('import');
+    }, [initialTab, capsSettled, armoryOk, onTabChange, userPicked]);
+}
+
+/** A tab change made by the user's own click on the toggle — recorded so no one-time automatic switch overrides it. */
+function useUserTabPick(onTabChange: (tab: Tab) => void): { userPicked: MutableRefObject<boolean>; pick: (tab: Tab) => void } {
+    const userPicked = useRef(false);
+    const pick = useCallback((tab: Tab) => { userPicked.current = true; onTabChange(tab); }, [onTabChange]);
+    return { userPicked, pick };
 }
 
 /**
@@ -153,13 +161,14 @@ export function CharacterCreateImportForm({
     const noteId = useId();
     const { showRoster, rosterDefault } = useRosterTab(gameSlug, gameId, charactersLoading ? undefined : existingCharacters, activeTab, onTabChange, initialTab);
     useArmoryTabSync(blizzardConfigured, armoryOk, rosterDefault || initialTab !== undefined, activeTab, onTabChange);
-    useRequestedImportTab(initialTab, !capsPending, armoryOk, onTabChange);
+    const { userPicked, pick } = useUserTabPick(onTabChange);
+    useRequestedImportTab(initialTab, !capsPending, armoryOk, onTabChange, userPicked);
     if (!isWowSlug(gameSlug)) return null;
     const showImport = activeTab === 'import' && armoryOk;
 
     return (
         <>
-            <TabToggle activeTab={activeTab} onTabChange={onTabChange} noteId={armoryOk ? undefined : noteId} showRoster={showRoster} />
+            <TabToggle activeTab={activeTab} onTabChange={pick} noteId={armoryOk ? undefined : noteId} showRoster={showRoster} />
             {!armoryOk && <ArmoryUnavailableNote id={noteId} />}
             {showImport && blizzardConfigured && showVariantSelector && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} caps={caps} onVariantChange={setUserVariant} />}
             {showImport && (blizzardConfigured
