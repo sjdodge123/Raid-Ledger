@@ -39,6 +39,23 @@ describe('integration-phase-timer formatting (ROK-2196)', () => {
     );
   });
 
+  it('splits the truncate total into its sub-phases when they were recorded', () => {
+    const t = createPhaseTimings(0);
+    addPhase(t, 'truncate', 40);
+    addPhase(t, 'truncate', 44);
+    addPhase(t, 'truncateDelete', 10.4);
+    addPhase(t, 'truncateDelete', 12);
+    addPhase(t, 'truncateCaches', 0.2);
+    addPhase(t, 'truncateQueues', 30);
+    addPhase(t, 'truncateSeed', 9.6);
+    expect(formatPhaseLine('x', t, 100)).toBe(
+      '[phase-timing] x import=n/a module=n/a init=n/a migrate=n/a ' +
+        'truncate=84ms(×2) truncate.delete=22ms truncate.caches=0ms ' +
+        'truncate.queues=30ms truncate.seed=10ms drain=n/a close=n/a ' +
+        'total=100ms',
+    );
+  });
+
   it('prints n/a, skipped and a zero truncate count for missing phases', () => {
     const t = createPhaseTimings(0);
     t.migrateSkipped = true;

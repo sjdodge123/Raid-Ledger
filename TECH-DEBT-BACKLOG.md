@@ -4338,3 +4338,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 ### 2026-11-14 — fix/overnight-td5-2026-11-14 (surfaced during the td5 review; accepted MINOR, not fixed)
 - **[low]** `web/src/hooks/use-scroll-direction.ts` `ignoreScrollFor`: the phone `/calendar` scroll to today is ignored for a fixed 1 s (`SCROLL_TO_TODAY_IGNORE_MS`). A smooth scroll that runs longer (a long schedule on a slow phone) still counts its last frames as a scroll down and hides the tab bar. It is not pre-existing: this branch added the window. Suggested: stretch the window while scroll events keep arriving (end it on the first quiet frame, or on `scrollend` where supported), capped at about 2 s.
+### 2026-11-14 — perf/rok-2196-truncate (surfaced during the option C delta review)
+
+- **low** `api/src/common/testing/integration-truncate.integration.spec.ts:44-58` — the "role back to origin" test passes even if `set_config(...,true)` became session-wide, because the DO block's last line already restores `origin`; it only guards the success path. Suggested: add a case where the reset raises after setting `replica` (e.g. a builder hook that injects a failing statement) and assert `origin` on every pooled connection.
+- **nit** `api/src/common/testing/integration-phase-timer.ts:15` — comment says "no extra awaits" with the flag off, but `timePhase` adds one async wrapper + one `performance.now()` per call. Suggested: reword.
+- **nit** `api/src/common/testing/integration-truncate.integration.spec.ts:46` — the 10-read fan-out assumes the test pool max of 10 (`test-app.ts:171`). Suggested: read the pool size from the shared constant.
