@@ -25,7 +25,6 @@ let mockDb: MockDb;
 let mockVoiceAttendanceService: { isUserActive: jest.Mock };
 let mockNotificationService: {
   getDiscordEmbedUrl: jest.Mock;
-  resolveVoiceChannelForEvent: jest.Mock;
   resolveVoiceForEvent: jest.Mock;
   create: jest.Mock;
 };
@@ -77,7 +76,6 @@ beforeEach(() => {
     getDiscordEmbedUrl: jest
       .fn()
       .mockResolvedValue('https://discord.com/embed/1'),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue('channel-123'),
     resolveVoiceForEvent: jest
       .fn()
       .mockResolvedValue({ voiceChannelId: 'channel-123' }),
@@ -797,21 +795,6 @@ describe('DepartureGraceProcessor — notification payload URLs', () => {
     expect(mockNotificationService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({ voiceChannelId: 'vc-999' }),
-      }),
-    );
-  });
-
-  it('carries a planned temporary voice channel (name + open time)', async () => {
-    const planned = { name: 'Raid Night', opensAt: '2026-11-20T19:45:00.000Z' };
-    mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
-      plannedVoiceChannel: planned,
-    });
-
-    await processor.process(makeJob(jobData));
-
-    expect(mockNotificationService.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({ plannedVoiceChannel: planned }),
       }),
     );
   });

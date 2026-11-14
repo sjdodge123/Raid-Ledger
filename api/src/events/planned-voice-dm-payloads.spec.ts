@@ -11,6 +11,7 @@ import {
   BenchPromotionProcessor,
 } from './bench-promotion.service';
 import { fetchNotificationContext } from './signups-notification.helpers';
+import { notifyOrganizer } from '../discord-bot/processors/departure-grace.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
 import { QueueHealthService } from '../queue/queue-health.service';
@@ -66,6 +67,24 @@ describe('BenchPromotionProcessor — promoted-from-bench DM', () => {
     await processor['notifyPromotedPlayer'](3, 7, 'Raid', 'tank', 1);
     expect(ns.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        payload: expect.objectContaining({ plannedVoiceChannel: PLANNED }),
+      }),
+    );
+  });
+});
+
+describe('notifyOrganizer — departure-grace "Member Departed" DM', () => {
+  it('carries the planned temporary voice channel', async () => {
+    const ns = notificationMock();
+    await notifyOrganizer(
+      { notificationService: ns as unknown as NotificationService },
+      { creatorId: 99, title: 'Raid' },
+      7,
+      'RaidMember',
+    );
+    expect(ns.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'slot_vacated',
         payload: expect.objectContaining({ plannedVoiceChannel: PLANNED }),
       }),
     );
