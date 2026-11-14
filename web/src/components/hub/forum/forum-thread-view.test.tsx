@@ -28,6 +28,7 @@ vi.mock('../../ui/markdown/lazy-markdown-editor', async () => {
 
 const THREAD = 'http://localhost:3000/guilds/7/forum/5';
 const ALL = { edit: true, delete: true, pin: true };
+const ALL_REPLY = { edit: true, delete: true, pin: false };
 const calls: string[] = [];
 
 function serveThread(first: HubForumThread, older: HubForumThread | null = null): void {
@@ -136,5 +137,49 @@ describe('ForumThreadComposer (ROK-1175)', () => {
         expect(screen.getByTestId('forum-thread-submit'), 'a valid title + body can post').toBeEnabled();
         await userEvent.click(screen.getByTestId('forum-thread-submit'));
         expect(await screen.findByText('?thread=42#forum', { selector: '[data-testid="where"]' })).toBeInTheDocument();
+    });
+});
+
+describe('Forum reply edit + delete, and the row Edit link (ROK-1175)', () => {
+    it('saves an in-place reply edit with the new body and shows the Edited mark', async () => {
+        let body = '';
+        let edited = false;
+        server.use(
+            http.get(THREAD, () => HttpResponse.json(buildForumThreadDetail({
+                replies: [buildForumReply({ can: ALL_REPLY, body: edited ? body : 'old text', editedAt: edited ? '2026-11-14T11:00:00.000Z' : null })],
+            }))),
+            http.patch(`${THREAD}/replies/11`, async ({ request }) => {
+                body = ((await request.json()) as { body: string }).body;
+                edited = true;
+                return HttpResponse.json(buildForumReply({ body, editedAt: '2026-11-14T11:00:00.000Z' }));
+            }),
+        );
+        renderThread();
+        await userEvent.click(await screen.findByTestId('forum-reply-actions'));
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
+        await userEvent.clear(screen.getByTestId('forum-edit-body'));
+        await userEvent.type(screen.getByTestId('forum-edit-body'), 'new text');
+        await userEvent.click(screen.getByTestId('forum-edit-save'));
+        const reply = await screen.findByTestId('forum-edited');
+        expect(body, 'PATCH carries the edited body').toBe('new text');
+        expect(reply.closest('[data-testid="forum-reply"]')).toHaveTextContent('new text');
+    });
+
+    it('deletes a reply through the menu and the confirm', async () => {
+        serveThread(buildForumThreadDetail({ replies: [buildForumReply({ can: ALL_REPLY })] }));
+        server.use(http.delete(`${THREAD}/replies/11`, () => { calls.push('DELETE reply'); return new HttpResponse(null, { status: 204 }); }));
+        renderThread();
+        await userEvent.click(await screen.findByTestId('forum-reply-actions'));
+        await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+        await userEvent.click(await screen.findByTestId('forum-delete-confirm'));
+        await vi.waitFor(() => expect(calls, 'DELETE the reply, not the thread').toEqual(['DELETE reply']));
+    });
+
+    it('opens the root in the editor from a row Edit link (&edit=1), and Cancel drops the flag', async () => {
+        serveThread(buildForumThreadDetail({ can: { edit: true, delete: true, pin: false } }));
+        renderThread(true, '/hubs/7?thread=5&edit=1#forum');
+        expect(await screen.findByTestId('forum-message-editor')).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(screen.getByTestId('where')).toHaveTextContent('?thread=5#forum');
     });
 });
