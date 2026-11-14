@@ -25,12 +25,17 @@ function stubSEStatus(
   mocks: ScheduledEventMocks,
   status: GuildScheduledEventStatus,
 ): void {
-  mocks.mockGuild.scheduledEvents.fetch.mockImplementation((seId?: string) =>
-    Promise.resolve(
-      seId === undefined
-        ? new Map()
-        : { id: seId, status, channelId: 'voice-1' },
-    ),
+  mocks.mockGuild.scheduledEvents.fetch.mockImplementation(
+    (arg?: string | { guildScheduledEvent: string; force?: boolean }) =>
+      Promise.resolve(
+        arg === undefined
+          ? new Map()
+          : {
+              id: typeof arg === 'string' ? arg : arg.guildScheduledEvent,
+              status,
+              channelId: 'voice-1',
+            },
+      ),
   );
 }
 
@@ -93,7 +98,11 @@ describe('updateScheduledEvent — ACTIVE SE moved later (ROK-2201)', () => {
 
     await h.mocks.service.updateScheduledEvent(42, baseEventData, 1, false);
 
-    const { edit, create } = h.mocks.mockGuild.scheduledEvents;
+    const { edit, create, fetch } = h.mocks.mockGuild.scheduledEvents;
+    expect(fetch).toHaveBeenCalledWith({
+      guildScheduledEvent: OLD_SE,
+      force: true,
+    });
     expect(edit).toHaveBeenCalledWith(OLD_SE, {
       status: GuildScheduledEventStatus.Completed,
     });

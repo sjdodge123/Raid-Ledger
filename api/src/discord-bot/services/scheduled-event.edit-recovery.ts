@@ -67,7 +67,12 @@ async function fetchSEState(r: RejectedEdit): Promise<SEState> {
   try {
     const se = await timedDiscordCall(
       'scheduledEvents.fetch',
-      () => r.guild.scheduledEvents.fetch(r.seId),
+      // force: a cached status can be stale; recovery must act on Discord's live state.
+      () =>
+        r.guild.scheduledEvents.fetch({
+          guildScheduledEvent: r.seId,
+          force: true,
+        }),
       { eventId: r.eventId, op: 'update-recover' },
     );
     return se.status;
