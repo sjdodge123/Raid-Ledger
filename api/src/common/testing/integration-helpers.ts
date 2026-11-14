@@ -22,6 +22,7 @@ import { _resetRecentlyProcessed } from '../../discord-bot/listeners/event-link.
 import { _resetInFlightRefreshes } from '../swr-cache';
 import { INSTANCE_KEY, type TestApp } from './test-app';
 import { nonEmpty } from './narrow';
+import { phaseMark, recordPhase } from './integration-phase-timer';
 
 const obliterateLogger = new Logger('truncateAllTables.obliterate');
 
@@ -124,6 +125,7 @@ async function retryOnDeadlock(fn: () => Promise<unknown>): Promise<void> {
 export async function truncateAllTables(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<SeededData> {
+  const truncateStart = phaseMark();
   // Discover all application tables.
   // Exclude Drizzle migration tracking and cron infrastructure tables —
   // cron_jobs/cron_job_executions are seeded on app startup and must persist
@@ -164,7 +166,9 @@ export async function truncateAllTables(
   await obliterateAllQueues();
 
   // Re-seed baseline data
-  return seedBaseline(db);
+  const seed = await seedBaseline(db);
+  recordPhase('truncate', truncateStart);
+  return seed;
 }
 
 /**

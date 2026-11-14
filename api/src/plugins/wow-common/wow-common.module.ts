@@ -1,4 +1,15 @@
-import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Module,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
+import {
+  runWowBootSeed,
+  seedWowReferenceData,
+  WOW_BOOT_SEED_ENABLED,
+} from './wow-boot-seed';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
@@ -109,6 +120,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     ForeverQuestAutoImportService,
     // The integration TestApp overrides this to false (no surprise runs).
     { provide: FOREVER_QUEST_AUTO_IMPORT_KICKS, useValue: true },
+    { provide: WOW_BOOT_SEED_ENABLED, useValue: true },
     ForeverRealmRulesetsService,
     ForeverRulesetLookupService,
     BlizzardCharacterSyncAdapter,
@@ -179,6 +191,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly hubKindAdapter: WowHubKindAdapter,
     private readonly companionRegistry: CompanionHandlerRegistry,
     private readonly ledgerlink: WowLedgerlinkHandler,
+    @Inject(WOW_BOOT_SEED_ENABLED) private readonly bootSeedEnabled: boolean,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -190,38 +203,15 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
       await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);
       this.registerAdapters();
-      await this.seedOnBoot();
+      await runWowBootSeed(this.bootSeedEnabled, () =>
+        seedWowReferenceData(
+          this.dungeonQuestsService,
+          this.bossEncountersService,
+          this.logger,
+        ),
+      );
       this.registerEventHandlers();
     });
-  }
-
-  /** Seed data on first boot (non-fatal on failure). */
-  private async seedOnBoot(): Promise<void> {
-    await this.safeSeed('Dungeon quest', () =>
-      this.dungeonQuestsService.seedQuests(),
-    );
-    await this.safeSeed('Boss encounter', () =>
-      this.bossEncountersService.seedBosses(),
-    );
-  }
-
-  /** Run a seed function with error handling for missing tables. */
-  private async safeSeed(
-    label: string,
-    fn: () => Promise<unknown>,
-  ): Promise<void> {
-    try {
-      await fn();
-    } catch (err) {
-      const msg = String(err);
-      if (msg.includes('relation') && msg.includes('does not exist')) {
-        this.logger.error(
-          `${label} seed FAILED — table does not exist. Migrations may not have run: ${err}`,
-        );
-      } else {
-        this.logger.warn(`${label} seed skipped (may already exist): ${err}`);
-      }
-    }
   }
 
   /** Handle plugin install: register adapters + seed data. */
