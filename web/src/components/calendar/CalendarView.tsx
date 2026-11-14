@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { enUS } from 'date-fns/locale';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { useLiveSearchParams, type SearchParamsMutator } from './use-live-search-params';
 import { useEvents } from '../../hooks/use-events';
 import { useCalendarImageHints } from '../../hooks/use-calendar-image-hints';
 import { getCalendarEventStyle } from '../../constants/game-colors';
@@ -68,7 +69,7 @@ interface CalendarViewProps {
 }
 
 function useCalendarDate(controlledDate?: Date, onDateChange?: (d: Date) => void) {
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams, writeSearchParams] = useLiveSearchParams();
     const [internalDate, setInternalDate] = useState(() => {
         const dateStr = searchParams.get('date');
         if (dateStr) { const parsed = new Date(dateStr + 'T00:00:00'); if (!isNaN(parsed.getTime())) return parsed; }
@@ -79,30 +80,44 @@ function useCalendarDate(controlledDate?: Date, onDateChange?: (d: Date) => void
 
     useEffect(() => {
         const dateStr = format(currentDate, 'yyyy-MM-dd');
-        setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('date', dateStr); return next; }, { replace: true });
-    }, [currentDate, setSearchParams]);
+        writeSearchParams((next) => next.set('date', dateStr));
+    }, [currentDate, writeSearchParams]);
 
-    return { currentDate, setCurrentDate, searchParams, setSearchParams };
+    return { currentDate, setCurrentDate, searchParams, writeSearchParams };
 }
 
-function useCalendarViewSync(searchParams: URLSearchParams, setSearchParams: (fn: (p: URLSearchParams) => URLSearchParams, opts?: { replace: boolean }) => void, calendarView?: CalendarViewMode) {
+/**
+ * The grid's month/week/day view. When the page controls `calendarView`, that
+ * prop IS the view (the URL and the saved pref follow it), so a stale URL write
+ * can never flip the grid away from what the page shows. A user view change
+ * (`setView`) also reports to the page through `onCalendarViewChange`.
+ */
+function useCalendarViewSync(
+    searchParams: URLSearchParams, writeSearchParams: (mutate: SearchParamsMutator) => void,
+    calendarView: CalendarViewMode | undefined, onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined,
+) {
     const viewPref = useCalendarViewStore((s) => s.viewPref);
     const setViewPref = useCalendarViewStore((s) => s.setViewPref);
     const urlViewParam = searchParams.get('view');
     const urlView = urlViewParam ? VIEW_MAP[urlViewParam] : undefined;
-    const view: View = urlView ?? VIEW_MAP[viewPref] ?? Views.WEEK;
+    const uncontrolledView: View = urlView ?? VIEW_MAP[viewPref] ?? Views.WEEK;
+    const controlledView = calendarView && calendarView !== 'schedule' ? VIEW_MAP[calendarView] : undefined;
+    const view: View = controlledView ?? uncontrolledView;
 
-    const setView = useCallback((newView: View) => {
+    const syncView = useCallback((newView: View) => {
         const viewStr: CalendarViewPref = viewToStr(newView);
         setViewPref(viewStr);
-        setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', viewStr); return next; }, { replace: true });
-    }, [setViewPref, setSearchParams]);
+        writeSearchParams((next) => next.set('view', viewStr));
+    }, [setViewPref, writeSearchParams]);
+
+    const setView = useCallback((newView: View) => {
+        syncView(newView);
+        onCalendarViewChange?.(viewToStr(newView));
+    }, [syncView, onCalendarViewChange]);
 
     useEffect(() => {
-        if (!calendarView || calendarView === 'schedule') return;
-        const mapped = VIEW_MAP[calendarView];
-        if (mapped && mapped !== view) setView(mapped);
-    }, [calendarView]); // eslint-disable-line react-hooks/exhaustive-deps
+        if (controlledView && controlledView !== uncontrolledView) syncView(controlledView);
+    }, [controlledView]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return { view, setView };
 }
@@ -166,12 +181,15 @@ function CalendarEmptyState({ view }: { view: View }) {
     );
 }
 
-function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((d: Date) => void) | undefined, calendarView: CalendarViewMode | undefined, selectedGames: Set<string> | undefined) {
+function useCalendarViewState(
+    controlledDate: Date | undefined, onDateChange: ((d: Date) => void) | undefined, calendarView: CalendarViewMode | undefined,
+    selectedGames: Set<string> | undefined, onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined,
+) {
     const navigate = useNavigate();
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
-    const { currentDate, setCurrentDate, searchParams, setSearchParams } = useCalendarDate(controlledDate, onDateChange);
-    const { view, setView } = useCalendarViewSync(searchParams, setSearchParams, calendarView);
+    const { currentDate, setCurrentDate, searchParams, writeSearchParams } = useCalendarDate(controlledDate, onDateChange);
+    const { view, setView } = useCalendarViewSync(searchParams, writeSearchParams, calendarView, onCalendarViewChange);
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
     const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
@@ -263,7 +281,7 @@ export function CalendarView({
     className = '', currentDate: controlledDate, onDateChange, selectedGames,
     gameTimeSlots, calendarView, onCalendarViewChange, toolbarAction, belowToolbar,
 }: CalendarViewProps) {
-    const s = useCalendarViewState(controlledDate, onDateChange, calendarView, selectedGames);
+    const s = useCalendarViewState(controlledDate, onDateChange, calendarView, selectedGames, onCalendarViewChange);
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
     const eventOverlapsGameTime = useGameTimeOverlap(gameTimeSlots);
