@@ -1,6 +1,8 @@
 /**
  * ROK-1175 — the forum composers: a new thread (title + markdown body, a
- * `DiscardChangesConfirm` when leaving with text), a reply (body only), and
+ * `DiscardChangesConfirm` when Cancel or an in-hub tab link would drop the
+ * draft — the arrange-mode leave guard; browser Back/Forward cannot be held
+ * under `BrowserRouter`, see `use-arrange-leave-guard.ts`), a reply (body only), and
  * the author's in-place edit of a thread or reply (Q5, inside 24 h — the
  * caller only offers it when the server's `can.edit` says so).
  */
@@ -8,6 +10,7 @@ import { useState, type JSX } from 'react';
 import type { HubForumReply, HubForumThread } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
+import { useArrangeLeaveGuard } from '../arrange/use-arrange-leave-guard';
 import { bodyError, serverBodyError } from '../posts/hub-post.helpers';
 import { ForumBodyField, ForumTitleField } from './forum-fields';
 import { forumTitleError } from './forum-thread.helpers';
@@ -23,12 +26,11 @@ export interface ThreadComposerProps { guildId: number; onCancel: () => void; on
 export function ForumThreadComposer({ guildId, onCancel, onPosted }: ThreadComposerProps): JSX.Element {
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
-    const [confirmLeave, setConfirmLeave] = useState(false);
     const create = useCreateForumThread(guildId);
     const titleErr = forumTitleError(title);
     const bodyErr = bodyError(body);
     const blocked = title.trim() === '' || body.trim() === '' || titleErr !== null || bodyErr !== null;
-    const leave = (): void => { if (title.trim() + body.trim() === '') onCancel(); else setConfirmLeave(true); };
+    const guard = useArrangeLeaveGuard(title.trim() + body.trim() !== '' && !create.isSuccess, onCancel);
     const submit = (): void => create.mutate({ title: title.trim(), body: body.trim() }, { onSuccess: onPosted });
     return (
         <section className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4" data-testid="hub-forum-composer" aria-label="New thread">
@@ -37,10 +39,10 @@ export function ForumThreadComposer({ guildId, onCancel, onPosted }: ThreadCompo
             <ForumBodyField label="Message" value={body} onChange={setBody} testId="forum-body-input"
                 error={submitError(bodyErr, create.error, 'Couldn’t post the thread. Try again.')} />
             <div className="flex justify-end gap-2">
-                <Button variant="secondary" onClick={leave}>Cancel</Button>
+                <Button variant="secondary" onClick={guard.requestClose}>Cancel</Button>
                 <Button onClick={submit} loading={create.isPending} disabled={blocked} data-testid="forum-thread-submit">Post thread</Button>
             </div>
-            <DiscardChangesConfirm isOpen={confirmLeave} onKeep={() => setConfirmLeave(false)} onDiscard={onCancel}
+            <DiscardChangesConfirm isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard}
                 message="Your thread hasn’t been posted yet." />
         </section>
     );
