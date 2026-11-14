@@ -144,12 +144,11 @@ export class DepartureGraceService {
   ): Promise<Record<string, unknown>> {
     const discordUrl =
       await this.notificationService.getDiscordEmbedUrl(eventId);
-    const voiceChannelId =
-      await this.notificationService.resolveVoiceChannelForEvent(eventId);
+    const voice = await this.notificationService.resolveVoiceForEvent(eventId);
     return {
       eventId,
       ...(discordUrl ? { discordUrl } : {}),
-      ...(voiceChannelId ? { voiceChannelId } : {}),
+      ...voice,
     };
   }
 

@@ -122,7 +122,7 @@ async function buildGraceModule() {
   };
   const mockNotificationService = {
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     create: jest.fn().mockResolvedValue(undefined),
   };
   const mockEventEmitter = { emit: jest.fn() };
@@ -153,7 +153,7 @@ describe('DepartureGraceService', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   let mockEventEmitter: { emit: jest.Mock };
 
@@ -375,6 +375,24 @@ describe('DepartureGraceService', () => {
           userId: 99,
           type: 'member_returned',
           title: 'Member Returned',
+        }),
+      );
+    });
+
+    it('the "Member Returned" DM carries a planned temporary voice channel', async () => {
+      const planned = {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      };
+      mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+        plannedVoiceChannel: planned,
+      });
+      setupPriorityRejoin();
+      await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'member_returned',
+          payload: expect.objectContaining({ plannedVoiceChannel: planned }),
         }),
       );
     });

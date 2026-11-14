@@ -11,6 +11,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { CancelEventDto, RescheduleEventDto } from '@raid-ledger/contract';
 import type { NotificationService } from '../notifications/notification.service';
+import type { EventVoicePayload } from '../notifications/notification-voice.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
@@ -167,7 +168,7 @@ function buildReschedulePayload(
   existing: EventSelect,
   dto: RescheduleEventDto,
   discordUrl: string | null,
-  voiceChannelId: string | null,
+  voice: EventVoicePayload,
 ): Record<string, unknown> {
   return {
     eventId,
@@ -177,7 +178,7 @@ function buildReschedulePayload(
     newEndTime: dto.endTime,
     startTime: dto.startTime,
     ...(discordUrl ? { discordUrl } : {}),
-    ...(voiceChannelId ? { voiceChannelId } : {}),
+    ...voice,
   };
 }
 
@@ -185,11 +186,10 @@ function buildReschedulePayload(
 async function resolveRescheduleContext(
   notificationService: NotificationService,
   eventId: number,
-): Promise<{ discordUrl: string | null; voiceChannelId: string | null }> {
+): Promise<{ discordUrl: string | null; voice: EventVoicePayload }> {
   const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
-  const voiceChannelId =
-    await notificationService.resolveVoiceChannelForEvent(eventId);
-  return { discordUrl, voiceChannelId };
+  const voice = await notificationService.resolveVoiceForEvent(eventId);
+  return { discordUrl, voice };
 }
 
 /** Sends a batch of reschedule notifications to the given users (ROK-1043). */
@@ -224,7 +224,7 @@ async function buildFullReschedulePayload(
     existing,
     dto,
     ctx.discordUrl,
-    ctx.voiceChannelId,
+    ctx.voice,
   );
 }
 

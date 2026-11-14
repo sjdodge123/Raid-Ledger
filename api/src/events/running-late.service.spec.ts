@@ -19,7 +19,7 @@ describe('RunningLateService (ROK-1379)', () => {
           useValue: {
             createMany: jest.fn().mockResolvedValue(undefined),
             getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-            resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+            resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
           },
         },
       ],

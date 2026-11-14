@@ -17,6 +17,11 @@ import type { NotificationType } from '../drizzle/schema/notification-preference
 import { DiscordNotificationService } from './discord-notification.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { SettingsService } from '../settings/settings.service';
+import {
+  resolveEventVoicePayload,
+  type EventVoicePayload,
+} from './notification-voice.helpers';
 import {
   mapNotificationToDto,
   mapPreferencesToDto,
@@ -60,6 +65,9 @@ export class NotificationService {
     @Inject(ChannelResolverService)
     private channelResolver: ChannelResolverService | null,
     private readonly cronJobService: CronJobService,
+    @Optional()
+    @Inject(SettingsService)
+    private readonly settings: SettingsService | null = null,
   ) {}
 
   /** Create a new notification for a user, checking preferences first. */
@@ -254,28 +262,18 @@ export class NotificationService {
     return this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId);
   }
 
-  /** ROK-507: Resolve voice channel ID for an event by looking up the event's gameId. */
-  async resolveVoiceChannelForEvent(eventId: number): Promise<string | null> {
-    if (!this.channelResolver) return null;
-    const [event] = await this.db
-      .select({
-        gameId: schema.events.gameId,
-        recurrenceGroupId: schema.events.recurrenceGroupId,
-        notificationChannelOverride: schema.events.notificationChannelOverride,
-        ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
-      })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-    if (!event) return null;
-    // ROK-1389: honor the override only when it is a voice channel, else fall
-    // through to tiered resolution — a text override no longer wins.
-    return this.channelResolver.resolveVoiceChannelHonoringOverride(
-      event.gameId,
-      event.recurrenceGroupId,
-      event.ephemeralVoiceChannelId,
-      event.notificationChannelOverride,
-    );
+  /**
+   * The DM voice payload for an event — the event embeds' own decision: a
+   * planned temporary channel (name + open time) wins, else the ROK-1389
+   * voice-aware link (a text override no longer wins).
+   */
+  async resolveVoiceForEvent(eventId: number): Promise<EventVoicePayload> {
+    if (!this.channelResolver) return {};
+    const deps = {
+      channelResolver: this.channelResolver,
+      settings: this.settings ?? undefined,
+    };
+    return resolveEventVoicePayload(this.db, deps, eventId);
   }
 
   /** ROK-538: Look up the Discord embed URL for an event. */

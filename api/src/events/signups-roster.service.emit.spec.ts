@@ -89,7 +89,7 @@ describe('SignupsRosterService — emit timing (ROK-824)', () => {
           useValue: {
             create: jest.fn().mockResolvedValue(null),
             getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-            resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+            resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
           },
         },
         {

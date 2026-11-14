@@ -13,6 +13,7 @@ import {
   withVoiceAccessLine,
   type VoiceGateSettings,
 } from '../notifications/voice-access-lost.helpers';
+import type { NotificationContext } from './signups-notification.helpers';
 
 const DISPLACED_ACTION: Record<DisplacedDestination, (r?: string) => string> = {
   role: (r) => `moved to ${r}`,
@@ -23,7 +24,7 @@ const DISPLACED_ACTION: Record<DisplacedDestination, (r?: string) => string> = {
 export async function sendDisplacedNotification(
   p: DisplacedNotificationParams,
   notificationService: NotificationService,
-  fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
+  fetchNotificationCtx: (eventId: number) => Promise<NotificationContext>,
   settings: VoiceGateSettings,
 ) {
   const { db, eventId, role, rearrangedToRole } = p;
