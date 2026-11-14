@@ -1,7 +1,7 @@
 /**
  * DemoTestHubForumController (ROK-1175) — `POST /admin/test/hubs/:id/forum/seed`.
  *
- * Body `{ memberUserId, bulk? }`: replaces the hub's forum with the fixture in
+ * Body `{ memberUserId, bulk?, full? }`: replaces the hub's forum with the fixture in
  * `demo-test-hub-forum.helpers.ts`; the calling admin is the leader/moderator.
  * 404 for an unknown hub or member user. DEMO_MODE-only, behind the JWT +
  * admin guards like every `/admin/test/*`.
@@ -59,6 +59,7 @@ export class DemoTestHubForumController {
       leaderId: req.user.id,
       memberId: input.memberUserId,
     };
-    return seedHubForum(this.db, actors, input.bulk, new Date());
+    const opts = { bulk: input.bulk, full: input.full };
+    return seedHubForum(this.db, actors, opts, new Date());
   }
 }

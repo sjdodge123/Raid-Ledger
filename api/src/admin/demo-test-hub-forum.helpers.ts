@@ -1,25 +1,40 @@
 /**
  * ROK-1175 — the DEMO_MODE forum fixture behind
- * `POST /admin/test/hubs/:id/forum/seed`, for the fleet test plan and smoke
- * specs: a pinned leader thread, a member thread with replies (one removed
- * by a moderator), a member thread past the 24 h edit window, and optional
- * bulk threads for paging. A re-call replaces the hub's whole forum.
+ * `POST /admin/test/hubs/:id/forum/seed`. The base fixture (what the smoke
+ * spec pins): a pinned leader thread, a member thread with replies (one
+ * removed by a moderator), a member thread past the 24 h edit window, and
+ * optional bulk threads for paging. `full: true` adds the fleet test plan's
+ * extras (spec "Fleet test plan"): a second pin, a thread deleted by its
+ * author that keeps a live reply, and the member thread grown to 30 replies
+ * incl. one deleted by its author. A re-call replaces the hub's whole forum,
+ * in one transaction.
  */
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import * as schema from '../drizzle/schema';
+import {
+  seedFullExtras,
+  type HubForumSeedExtras,
+} from './demo-test-hub-forum.extras';
+import {
+  insertSeedReplies,
+  insertSeedThread,
+  type SeedActors,
+  type SeedDb,
+} from './demo-test-hub-forum.rows';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
-/** Body: who plays the member, and how many filler threads to add. */
+/** Body: who plays the member, filler threads, and the test-plan extras. */
 export const HubForumSeedSchema = z
   .object({
     memberUserId: z.number().int().positive(),
     bulk: z.number().int().min(0).max(1100).default(0),
+    full: z.boolean().default(false),
   })
   .strict();
 
@@ -32,86 +47,35 @@ export interface HubForumSeedResult {
   replyIds: number[];
   removedReplyId: number;
   bulk: number;
+  /** Only with `full: true`. */
+  extras: HubForumSeedExtras | null;
 }
 
-interface Actors {
-  guildId: number;
-  leaderId: number;
-  memberId: number;
-}
-
-async function thread(
-  db: Db,
-  a: Actors,
-  row: {
-    authorId: number;
-    title: string;
-    body: string;
-    at: Date;
-    pinned?: boolean;
-  },
-): Promise<number> {
-  const t = schema.hubForumThreads;
-  const [out] = await db
-    .insert(t)
-    .values({
-      guildId: a.guildId,
-      authorId: row.authorId,
-      title: row.title,
-      body: row.body,
-      createdAt: row.at,
-      updatedAt: row.at,
-      lastActivityAt: row.at,
-      ...(row.pinned ? { pinnedAt: row.at, pinnedBy: a.leaderId } : {}),
-    })
-    .returning({ id: t.id });
-  if (!out) throw new Error('forum seed: thread insert returned no row');
-  return out.id;
-}
-
-/** Two replies on `threadId`; the second removed by the leader as moderator. */
-async function replies(
-  db: Db,
-  a: Actors,
+/** Two replies on `threadId`; the second removed by the leader. */
+async function baseReplies(
+  db: SeedDb,
+  a: SeedActors,
   threadId: number,
   now: Date,
-): Promise<number[]> {
-  const r = schema.hubForumReplies;
+): Promise<[number, number]> {
   const first = new Date(now.getTime() - 30 * MINUTE_MS);
-  const rows = await db
-    .insert(r)
-    .values([
-      {
-        threadId,
-        guildId: a.guildId,
-        authorId: a.leaderId,
-        body: 'Two healers, **one** tank.',
-        createdAt: first,
-        updatedAt: first,
-      },
-      {
-        threadId,
-        guildId: a.guildId,
-        authorId: a.memberId,
-        body: 'Off-topic rant',
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: now,
-        deletedBy: a.leaderId,
-        deletedAs: 'moderator',
-      },
-    ])
-    .returning({ id: r.id });
-  await db
-    .update(schema.hubForumThreads)
-    .set({ replyCount: 1, lastActivityAt: first })
-    .where(eq(schema.hubForumThreads.id, threadId));
-  return rows.map((row) => row.id);
+  const [kept, removed] = await insertSeedReplies(db, a, threadId, [
+    { authorId: a.leaderId, body: 'Two healers, **one** tank.', at: first },
+    {
+      authorId: a.memberId,
+      body: 'Off-topic rant',
+      at: now,
+      deleted: { by: a.leaderId, as: 'moderator' },
+    },
+  ]);
+  if (kept === undefined || removed === undefined)
+    throw new Error('forum seed: replies missing');
+  return [kept, removed];
 }
 
 async function bulkThreads(
-  db: Db,
-  a: Actors,
+  db: SeedDb,
+  a: SeedActors,
   n: number,
   now: Date,
 ): Promise<void> {
@@ -131,46 +95,60 @@ async function bulkThreads(
   await db.insert(schema.hubForumThreads).values(rows);
 }
 
-/** Replace the hub's forum with the fixture (replies cascade with threads). */
-export async function seedHubForum(
-  db: Db,
-  a: Actors,
-  bulk: number,
-  now: Date,
-): Promise<HubForumSeedResult> {
-  await db
-    .delete(schema.hubForumThreads)
-    .where(eq(schema.hubForumThreads.guildId, a.guildId));
-  const pinnedThreadId = await thread(db, a, {
+/** The three base threads (pinned, stale, member). */
+async function baseThreads(db: SeedDb, a: SeedActors, now: Date) {
+  const ago = (ms: number) => new Date(now.getTime() - ms);
+  const pinnedThreadId = await insertSeedThread(db, a, {
     authorId: a.leaderId,
     title: 'Read me first: forum rules',
     body: 'Be kind. Stay on topic.',
-    at: new Date(now.getTime() - 3 * HOUR_MS),
+    at: ago(3 * HOUR_MS),
     pinned: true,
   });
-  const staleThreadId = await thread(db, a, {
+  const staleThreadId = await insertSeedThread(db, a, {
     authorId: a.memberId,
     title: 'Old idea (edit window closed)',
     body: 'Posted yesterday.',
-    at: new Date(now.getTime() - 25 * HOUR_MS),
+    at: ago(25 * HOUR_MS),
   });
-  const memberThreadId = await thread(db, a, {
+  const memberThreadId = await insertSeedThread(db, a, {
     authorId: a.memberId,
     title: 'Raid comp for Tuesday',
     body: 'Who is bringing a **healer**?',
-    at: new Date(now.getTime() - HOUR_MS),
+    at: ago(HOUR_MS),
   });
-  const [kept, removed] = await replies(db, a, memberThreadId, now);
-  if (kept === undefined || removed === undefined)
-    throw new Error('forum seed: replies missing');
-  await bulkThreads(db, a, bulk, now);
+  return { pinnedThreadId, staleThreadId, memberThreadId };
+}
+
+async function seedInTx(
+  tx: SeedDb,
+  a: SeedActors,
+  opts: { bulk: number; full: boolean },
+  now: Date,
+): Promise<HubForumSeedResult> {
+  await tx
+    .delete(schema.hubForumThreads)
+    .where(eq(schema.hubForumThreads.guildId, a.guildId));
+  const ids = await baseThreads(tx, a, now);
+  const [kept, removed] = await baseReplies(tx, a, ids.memberThreadId, now);
+  const extras = opts.full ? await seedFullExtras(tx, a, ids, now) : null;
+  await bulkThreads(tx, a, opts.bulk, now);
   return {
     guildId: a.guildId,
-    pinnedThreadId,
-    memberThreadId,
-    staleThreadId,
+    ...ids,
     replyIds: [kept, removed],
     removedReplyId: removed,
-    bulk,
+    bulk: opts.bulk,
+    extras,
   };
+}
+
+/** Replace the hub's forum with the fixture (replies cascade with threads). */
+export async function seedHubForum(
+  db: Db,
+  a: SeedActors,
+  opts: { bulk: number; full: boolean },
+  now: Date,
+): Promise<HubForumSeedResult> {
+  return db.transaction((tx) => seedInTx(tx, a, opts, now));
 }
