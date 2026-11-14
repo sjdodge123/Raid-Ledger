@@ -200,6 +200,27 @@ describe('EventHubField — edit-mode stand-in for a tagged hub the viewer canno
         expect(guildIdForSubmit(picked, true, 21), 'an unchanged tag is omitted from the save DTO').toEqual({});
     });
 
+    it('edit mode: no stand-in while the hub list is loading', () => {
+        server.use(http.get(API, () => new Promise<never>(() => undefined)));
+        renderField(21);
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'an unproven list cannot show the stand-in').toBeNull();
+    });
+
+    it('edit mode: no stand-in once a refetch of the hub list fails', async () => {
+        server.use(http.get(API, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['guilds', 'taggable', 7, 1], { hubs: [SERVER] }, { updatedAt: 0 });
+        render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, {
+            wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+        });
+        await waitFor(() => expect(client.getQueryCache().getAll()[0]?.state.status, 'the stale-list refetch failed').toBe('error'));
+        await act(async () => {});
+        expect(screen.getByLabelText('Hub'), 'the cached list still renders').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'a failed lookup cannot prove the hub is absent').toBeNull();
+    });
+});
+
+describe('EventHubField — the stand-in follows the game the edit form opened with', () => {
     it('edit mode: no stand-in once the form switches to another game (its hub is not that game\'s — the api would 400)', async () => {
         serve([SERVER]);
         const { rerender } = render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
@@ -220,24 +241,5 @@ describe('EventHubField — edit-mode stand-in for a tagged hub the viewer canno
         await waitFor(() => expect(lastGameId, 'the game-7 hubs were fetched').toBe('7'));
         expect(await screen.findByText(UNLISTED_HUB_LABEL), 'the stand-in carries the current tag').toBeInTheDocument();
         expect(screen.getByLabelText('Hub'), 'the tagged hub stays selected once the registry resolves').toHaveValue('21');
-    });
-
-    it('edit mode: no stand-in while the hub list is loading', () => {
-        server.use(http.get(API, () => new Promise<never>(() => undefined)));
-        renderField(21);
-        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'an unproven list cannot show the stand-in').toBeNull();
-    });
-
-    it('edit mode: no stand-in once a refetch of the hub list fails', async () => {
-        server.use(http.get(API, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-        client.setQueryData(['guilds', 'taggable', 7, 1], { hubs: [SERVER] }, { updatedAt: 0 });
-        render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, {
-            wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
-        });
-        await waitFor(() => expect(client.getQueryCache().getAll()[0]?.state.status, 'the stale-list refetch failed').toBe('error'));
-        await act(async () => {});
-        expect(screen.getByLabelText('Hub'), 'the cached list still renders').toBeInTheDocument();
-        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'a failed lookup cannot prove the hub is absent').toBeNull();
     });
 });
