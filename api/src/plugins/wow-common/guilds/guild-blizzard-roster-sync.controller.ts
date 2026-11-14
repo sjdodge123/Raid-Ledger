@@ -19,8 +19,9 @@ import { BlizzardRosterSyncJob } from './blizzard-roster-sync.job';
 
 /**
  * ROK-1928 §C3 — "Sync now" for a WoW: Forever guild's Blizzard roster.
- * Editors + the rank-0 GM (ROK-2192; same guards as the slug PATCH). 403 kill switch, 404 no slug /
- * not a Forever guild, 409 already running, 502 upstream failure.
+ * Editors + the rank-0 GM (ROK-2192; same guards as the slug PATCH).
+ * 403 kill switch, 404 no slug / not a Forever guild, 409 already running,
+ * 502 upstream failure.
  */
 @Controller('plugins/wow/guilds/:id/blizzard-roster')
 @UseGuards(PluginActiveGuard)
