@@ -12,14 +12,16 @@
  * hub the form opened with as a {@link UNLISTED_HUB_LABEL} option, so the picker
  * does not read "None" for an event that is in fact tagged (the DTO carries no
  * hub name). It stays offered after a switch away, so the viewer can switch back
- * (re-picking it is an unchanged tag, omitted from the save).
+ * (re-picking it is an unchanged tag, omitted from the save) — but only while the
+ * form's game is still the one it opened with: that hub belongs to that game, and
+ * sending it with another game is a 400 `GUILD_GAME_MISMATCH` (Codex P2).
  */
 import { useEffect, useState, type ChangeEvent, type JSX } from 'react';
 import { Field } from '../../../components/ui/field';
 import { Select } from '../../../components/ui/select';
 import { useTaggableHubsQuery } from './taggable-hubs-queries';
 
-/** Label of the disabled option standing in for a tagged hub the viewer cannot list. */
+/** Label of the option standing in for the tagged hub the viewer cannot list (edit mode). */
 export const UNLISTED_HUB_LABEL = 'Current hub (not in your list)';
 
 interface EventHubFieldProps {
@@ -32,12 +34,13 @@ interface EventHubFieldProps {
 
 export function EventHubField({ gameId, guildId, onGuildChange, dropUnlisted = false }: EventHubFieldProps): JSX.Element | null {
     const q = useTaggableHubsQuery(gameId ?? undefined);
-    const [openedWith] = useState(guildId);
+    const [opened] = useState({ guildId, gameId });
     const hubs = q.data?.hubs ?? [];
     // Only a successful lookup can prove a hub is absent; a loading or failed one keeps the pick (Codex P2).
     const isAbsent = (id: number | null): id is number => q.isSuccess && id !== null && !hubs.some((h) => h.id === id);
     const unseen = dropUnlisted && isAbsent(guildId);
-    const standIn = !dropUnlisted && isAbsent(openedWith) ? openedWith : null;
+    const sameGame = gameId === opened.gameId;
+    const standIn = !dropUnlisted && sameGame && isAbsent(opened.guildId) ? opened.guildId : null;
     useEffect(() => {
         if (unseen) onGuildChange(null);
     }, [unseen, onGuildChange]);

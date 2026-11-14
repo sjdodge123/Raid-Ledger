@@ -200,6 +200,19 @@ describe('EventHubField — edit-mode stand-in for a tagged hub the viewer canno
         expect(guildIdForSubmit(picked, true, 21), 'an unchanged tag is omitted from the save DTO').toEqual({});
     });
 
+    it('edit mode: no stand-in once the form switches to another game (its hub is not that game\'s — the api would 400)', async () => {
+        serve([SERVER]);
+        const { rerender } = render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
+        await screen.findByLabelText('Hub');
+        await settled();
+        expect(screen.getByText(UNLISTED_HUB_LABEL), 'offered while the game is the opened one').toBeInTheDocument();
+        rerender(<EventHubField gameId={8} guildId={null} onGuildChange={vi.fn()} />);
+        await waitFor(() => expect(lastGameId, 'the new game\'s hubs were fetched').toBe('8'));
+        await act(async () => {});
+        expect(screen.getByLabelText('Hub'), 'the new game still lists a hub').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'the opened-with hub belongs to the old game').toBeNull();
+    });
+
     it('edit mode: no stand-in while the hub list is loading', () => {
         server.use(http.get(API, () => new Promise<never>(() => undefined)));
         renderField(21);
