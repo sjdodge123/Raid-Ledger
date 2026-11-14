@@ -48,9 +48,11 @@ interface PlaythroughListProps {
     readonly selected: ReadonlySet<string>;
     readonly capped: boolean;
     readonly onToggle: (key: string) => void;
+    /** True while a bind runs or the cross-hub confirm is open — Move here resends the pick made at Add, so it cannot change. */
+    readonly locked: boolean;
 }
 
-function PlaythroughList({ playthroughs, selected, capped, onToggle }: PlaythroughListProps): JSX.Element {
+function PlaythroughList({ playthroughs, selected, capped, onToggle, locked }: PlaythroughListProps): JSX.Element {
     if (playthroughs.length === 0) return <p className="text-sm text-muted">All your saves are already in a campaign.</p>;
     const labels = uniquePlaythroughLabels(playthroughs, bg3AreaLabel);
     return (
@@ -58,7 +60,7 @@ function PlaythroughList({ playthroughs, selected, capped, onToggle }: Playthrou
             {playthroughs.map((p, i) => (
                 <li key={p.campaignKey}>
                     <Checkbox label={labels[i] ?? p.newest.saveName} description={`${saveCountLabel(p.saves.length, capped)} · ${bg3SaveLine(p.newest)}`}
-                        checked={selected.has(p.campaignKey)} onChange={() => onToggle(p.campaignKey)} />
+                        checked={selected.has(p.campaignKey)} disabled={locked} onChange={() => onToggle(p.campaignKey)} />
                 </li>
             ))}
         </ul>
@@ -110,6 +112,8 @@ export function Bg3AddSavesSheet({ isOpen, campaignId, campaignName, onClose }: 
     const guard = useDirtyCloseGuard(picked.length > 0 || alsoDefault, close);
     const submit = (): void => bind.run({ campaignKeys: picked.map((p) => p.campaignKey), campaignId, alsoDefault }, close);
     const { confirm } = bind.move;
+    // Locked while a bind runs or the confirm is open: a hold's Move here resends the pick made at Add.
+    const locked = confirm !== null || bind.pending;
     const footer = <AddFooter picked={picked} capped={capped} onCancel={guard.requestClose} onSubmit={submit}
         pending={bind.pending} holding={confirm !== null} />;
     return (
@@ -118,10 +122,10 @@ export function Bg3AddSavesSheet({ isOpen, campaignId, campaignName, onClose }: 
             <div className="flex flex-col gap-4" data-testid="bg3-add-saves">
                 <p className="text-sm text-muted">Your saves that aren't in a campaign yet, by playthrough. Adding a playthrough adds all of its saves.</p>
                 {query.isLoading ? <p className="text-sm text-muted">Loading your saves…</p>
-                    : <PlaythroughList playthroughs={playthroughs} selected={selected} capped={capped} onToggle={(k) => setSelected((s) => toggle(s, k))} />}
+                    : <PlaythroughList playthroughs={playthroughs} selected={selected} capped={capped} locked={locked} onToggle={(k) => setSelected((s) => toggle(s, k))} />}
                 {capped && <p className="text-sm text-secondary" role="note">{BG3_ADD_SAVES_CAPPED_NOTE}</p>}
                 {picked.length > 0 && <p className="text-sm text-secondary" role="note">{addSavesMoveNote(picked.length)}</p>}
-                <Checkbox label={BG3_ADD_SAVES_DEFAULT_LABEL} checked={alsoDefault} onChange={(e) => setAlsoDefault(e.target.checked)} />
+                <Checkbox label={BG3_ADD_SAVES_DEFAULT_LABEL} checked={alsoDefault} disabled={locked} onChange={(e) => setAlsoDefault(e.target.checked)} />
                 {confirm !== null && <Bg3UploadMoveConfirm move={confirm} onMove={bind.move.confirmMove} onCancel={bind.move.cancel} />}
             </div>
         </Bg3Overlay>

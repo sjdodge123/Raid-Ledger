@@ -5,13 +5,25 @@
  * Blizzard is configured and Armory would otherwise win.
  */
 import { describe, it, expect } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { CharacterDto, RosterClaimListResponseDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { CharacterCreateImportForm } from './character-create-import-form';
+
+/** A complete Forever main the user already has (fully typed — no partial cast). */
+function existingMain(): CharacterDto {
+    return {
+        id: 'c0', userId: 1, gameId: 1, name: 'Existing', realm: null, class: null, spec: null, role: null, roleOverride: null,
+        effectiveRole: null, isMain: true, itemLevel: null, externalId: null, avatarUrl: null, renderUrl: null, level: null,
+        race: null, faction: null, lastSyncedAt: null, profileUrl: null, region: null, ruleset: 'normal', gameVariant: null,
+        equipment: null, talents: null, professions: null, displayOrder: 0,
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+}
 
 const API_BASE = 'http://localhost:3000';
 const FOREVER = 'world-of-warcraft-forever';
@@ -80,7 +92,7 @@ describe('CharacterCreateImportForm — Guild roster option (ROK-2128)', () => {
 
     it('offers the option but keeps it off the default when the user already owns a Forever character', async () => {
         serveCandidates(ONE);
-        const existing = [{ id: 'c0', ruleset: 'normal', isMain: true } as CharacterDto];
+        const existing = [existingMain()];
         renderWithProviders(<Harness gameSlug={FOREVER} existing={existing} />);
         await waitFor(() => expect(rosterOption()).toBeInTheDocument());
         expect(rosterOption()).toHaveAttribute('aria-pressed', 'false');
@@ -102,11 +114,49 @@ describe('CharacterCreateImportForm — Guild roster option (ROK-2128)', () => {
             guildIds.push(new URL(request.url).searchParams.get('guildId'));
             return HttpResponse.json(ONE);
         }));
-        const existing = [{ id: 'c0', ruleset: 'normal', isMain: true } as CharacterDto];
+        const existing = [existingMain()];
         renderWithProviders(<Harness gameSlug={FOREVER} existing={existing} initialTab="roster" rosterGuildId={1} />);
         expect(await screen.findByText('Ashen Vale')).toBeInTheDocument();
         expect(screen.getByTestId('active-tab')).toHaveTextContent('roster');
         expect(guildIds, 'the tab probe asks unfiltered; the pick list asks for the one guild').toEqual(expect.arrayContaining([null, '1']));
         expect(screen.getByText(/^Showing/)).toHaveTextContent('Showing Ledger Test Guild only');
+    });
+});
+
+/** Holds the capabilities response (Forever Armory on) until `release` — the one-time Import switch fires when it lands. */
+function holdCapabilities(): () => void {
+    let release: () => void = () => undefined;
+    const loaded = new Promise<void>((resolve) => { release = resolve; });
+    server.use(http.get(`${API_BASE}/blizzard/capabilities`, async () => {
+        await loaded;
+        return HttpResponse.json({ armoryImport: { wow_forever: true } });
+    }));
+    return release;
+}
+
+describe('CharacterCreateImportForm — a requested Import tab vs a tab the user picked (ROK-2132 nit)', () => {
+    const existing = [existingMain()];
+    const importTab = () => within(screen.getByRole('group', { name: 'Add character by' })).getByRole('button', { name: /import from armory/i });
+
+    it('a Guild roster click made while the capabilities load survives them settling', async () => {
+        serveCandidates(ONE);
+        const release = holdCapabilities();
+        const user = userEvent.setup();
+        renderWithProviders(<Harness gameSlug={FOREVER} existing={existing} initialTab="import" />);
+        await user.click(await screen.findByRole('button', { name: 'Guild roster' }));
+        expect(screen.getByTestId('active-tab')).toHaveTextContent('roster');
+        release();
+        await waitFor(() => expect(importTab(), 'the Armory became available').not.toHaveAttribute('aria-disabled'));
+        expect(screen.getByTestId('active-tab'), 'the user picked Guild roster; the one-time Import switch must not override it').toHaveTextContent('roster');
+        expect(rosterOption()).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('control: with no click, the requested Import tab still wins once the capabilities load', async () => {
+        serveCandidates(ONE);
+        const release = holdCapabilities();
+        renderWithProviders(<Harness gameSlug={FOREVER} existing={existing} initialTab="import" />);
+        await waitFor(() => expect(rosterOption()).toBeInTheDocument());
+        release();
+        await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('import'));
     });
 });
