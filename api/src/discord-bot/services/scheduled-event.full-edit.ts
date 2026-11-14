@@ -92,7 +92,9 @@ export async function editScheduledEventFully(
       name,
     );
   } catch (err) {
-    const rejected = { guild, eventId, seId, eventData, logger: deps.logger };
+    const { logger } = deps;
+    const fields = { name, description };
+    const rejected = { guild, eventId, seId, eventData, logger, fields };
     await recoverRejectedEdit(rejected, err, deps.recreate);
   }
 }

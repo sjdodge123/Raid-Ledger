@@ -12,6 +12,7 @@ import {
   makeDiscordApiError,
   baseEventData,
   FUTURE,
+  PAST,
   type ScheduledEventMocks,
 } from './scheduled-event.service.spec-helpers';
 import { defined } from '../../common/testing/narrow';
@@ -183,5 +184,55 @@ describe('updateScheduledEvent — not-started or finished SE (ROK-2201)', () =>
     expect(updateChain.set).toHaveBeenCalledWith({
       discordScheduledEventId: NEW_SE,
     });
+  });
+});
+
+describe('updateScheduledEvent — ACTIVE SE, start not moved later (ROK-2201)', () => {
+  let h: Harness;
+  beforeEach(async () => {
+    h = await setupHarness();
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const startedData = { ...baseEventData, startTime: PAST.toISOString() };
+
+  it('retries the edit once without scheduledStartTime so name/description/end land', async () => {
+    stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Active);
+    rejectFullEdit(h.mocks, 50035);
+
+    await h.mocks.service.updateScheduledEvent(42, startedData, 1, false);
+
+    const { edit, create } = h.mocks.mockGuild.scheduledEvents;
+    expect(edit).toHaveBeenCalledTimes(2);
+    const retryArg = edit.mock.calls[1]?.[1] as Record<string, unknown>;
+    expect(retryArg).not.toHaveProperty('scheduledStartTime');
+    expect(retryArg).toEqual(
+      expect.objectContaining({
+        name: 'Raid Night — World of Warcraft',
+        description: expect.any(String),
+        scheduledEndTime: new Date(startedData.endTime),
+      }),
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('logs with the Discord code when the retry without start also fails', async () => {
+    stubStoredId(h.mocks);
+    stubSEStatus(h.mocks, GuildScheduledEventStatus.Active);
+    h.mocks.mockGuild.scheduledEvents.edit.mockRejectedValue(
+      makeDiscordApiError(50035, 'Invalid Form Body'),
+    );
+
+    await h.mocks.service.updateScheduledEvent(42, startedData, 1, false);
+
+    expect(h.mocks.mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(2);
+    expect(h.mocks.mockGuild.scheduledEvents.create).not.toHaveBeenCalled();
+    const logged = h.errorSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(logged).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/event 42 .*code=50035.*status=Active/),
+      ]),
+    );
   });
 });
