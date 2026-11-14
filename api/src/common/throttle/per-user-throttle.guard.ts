@@ -33,25 +33,34 @@ export abstract class PerUserThrottleGuard implements CanActivate {
   /** The window length in ms. */
   protected abstract readonly windowMs: number;
   now: () => number = () => Date.now();
-  private readonly windows = new Map<number, Window>();
+  private readonly windows = new Map<number | string, Window>();
 
   canActivate(context: ExecutionContext): boolean {
-    const userId = requestUserId(context.switchToHttp().getRequest<unknown>());
-    if (userId !== null) this.hit(userId);
+    const req = context.switchToHttp().getRequest<unknown>();
+    const userId = requestUserId(req);
+    if (userId !== null) this.hit(this.bucketKey(req, userId));
     return true;
   }
 
-  /** Count one request for `userId`; throws 429 once the window is spent. */
-  hit(userId: number): void {
+  /**
+   * The bucket a request counts against — the user id by default. Override
+   * to scope the limit further (e.g. per user per hub).
+   */
+  protected bucketKey(_req: unknown, userId: number): number | string {
+    return userId;
+  }
+
+  /** Count one request for bucket `key`; throws 429 once the window is spent. */
+  hit(key: number | string): void {
     const now = this.now();
-    const live = this.windows.get(userId);
+    const live = this.windows.get(key);
     if (live && now - live.startedAt < this.windowMs) {
       if (live.count >= this.limit) throw new ThrottlerException();
       live.count += 1;
       return;
     }
     if (this.windows.size >= MAX_KEYS) this.sweep(now);
-    this.windows.set(userId, { startedAt: now, count: 1 });
+    this.windows.set(key, { startedAt: now, count: 1 });
   }
 
   /** Forget every bucket (integration specs reset between tests). */
