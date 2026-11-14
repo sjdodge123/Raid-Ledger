@@ -1,6 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, NavigationType, useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
@@ -31,6 +31,25 @@ function initialCalendarView(viewParam: string | null, width: number): CalendarV
 }
 
 /**
+ * Adopts `?view=` from a real navigation while the page stays mounted
+ * (Back/Forward, a link to `/calendar?view=day`), since the grid follows page
+ * state, not the URL. The grid's own URL sync writes with `replace`, so
+ * REPLACE entries are skipped — a view click during the mount sync survives.
+ * Phones stay where they are; no `view` opens Month, like a fresh load.
+ */
+function useAdoptNavigatedView(viewParam: string | null, setCalendarView: (v: CalendarViewMode) => void): void {
+    const { key } = useLocation();
+    const navigationType = useNavigationType();
+    const seenKeyRef = useRef(key);
+    useEffect(() => {
+        if (seenKeyRef.current === key) return;
+        seenKeyRef.current = key;
+        if (navigationType === NavigationType.Replace || window.innerWidth < 768) return;
+        setCalendarView(initialCalendarView(viewParam, window.innerWidth));
+    }, [key, navigationType, viewParam, setCalendarView]);
+}
+
+/**
  * Calendar page - displays events in a month grid view.
  * ROK-171: Calendar Month View
  */
@@ -48,6 +67,7 @@ function useCalendarState() {
         () => initialCalendarView(searchParams.get('view'), typeof window !== 'undefined' ? window.innerWidth : 1024),
     );
     const [filtersOpen, setFiltersOpen] = useState(false);
+    useAdoptNavigatedView(searchParams.get('view'), setCalendarView);
 
     const handleMobileNavPrev = useCallback(() => {
         setCurrentDate((prev) => calendarView === 'day' ? subDays(prev, 1) : subMonths(prev, 1));
