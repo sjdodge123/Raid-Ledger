@@ -24,12 +24,11 @@ function createMockModuleRef(overrides: Record<string, unknown> = {}) {
 
 describe('DemoTestService — test utility endpoints', () => {
   let service: DemoTestService;
-  let mockQueueHealth: { drainAll: jest.Mock; awaitDrained: jest.Mock };
+  let mockQueueHealth: { awaitDrained: jest.Mock };
   let mockModuleRef: ReturnType<typeof createMockModuleRef>;
 
   beforeEach(async () => {
     mockQueueHealth = {
-      drainAll: jest.fn().mockResolvedValue(undefined),
       awaitDrained: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -69,9 +68,10 @@ describe('DemoTestService — test utility endpoints', () => {
     expect(mockModuleRef.get).toHaveBeenCalled();
   });
 
-  it('flushEmbedQueueForTest calls QueueHealthService.drainAll', async () => {
+  it('flushEmbedQueueForTest waits via QueueHealthService.awaitDrained', async () => {
     const result = await service.flushEmbedQueueForTest();
     expect(result).toMatchObject({ success: true });
+    expect(mockQueueHealth.awaitDrained).toHaveBeenCalledWith(30_000);
   });
 
   it('awaitProcessingForTest calls QueueHealthService.awaitDrained', async () => {

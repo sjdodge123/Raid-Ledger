@@ -46,7 +46,6 @@ function buildMockDemoData(success = true, message = '') {
 
 function buildMockQueue() {
   return {
-    drainAll: jest.fn().mockResolvedValue(undefined),
     awaitDrained: jest.fn().mockResolvedValue(undefined),
   };
 }

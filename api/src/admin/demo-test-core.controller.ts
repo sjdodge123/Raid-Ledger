@@ -132,7 +132,7 @@ export class DemoTestCoreController {
     return { success: true, flushed };
   }
 
-  /** Drain the embed sync BullMQ queue — DEMO_MODE only. */
+  /** Wait for pending embed-sync work to land (never deletes jobs) — DEMO_MODE only. */
   @Post('flush-embed-queue')
   @HttpCode(HttpStatus.OK)
   async flushEmbedQueueForTest(): Promise<{ success: boolean }> {
