@@ -50,7 +50,7 @@ import './event-detail-page.css';
 function buildVoiceChannelLink(data: VoiceChannelResponseDto | null | undefined): { name: string; url: string; opensAt: string | null } | null {
     if (!data?.channelName) return null;
     if (!data.channelId) return data.plannedOpensAt ? { name: data.channelName, url: '', opensAt: data.plannedOpensAt } : null;
-    const url = data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '';
+    const url = data.guildId ? `https://discord.com/channels/${data.guildId}/${data.channelId}` : '';
     return { name: data.channelName, url, opensAt: null };
 }
 

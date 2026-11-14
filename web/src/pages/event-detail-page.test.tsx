@@ -459,6 +459,15 @@ describe('EventDetailPage — planned temporary voice channel (operator ruling 2
         expect(voice).not.toHaveTextContent('opens');
     });
 
+    it('links a created channel to Discord over https (a discord:// link was dropped by the URL guard)', async () => {
+        renderEventDetailPage();
+        const voice = await screen.findByTestId('event-banner-voice-channel', {}, { timeout: 4000 });
+        expect(within(voice).getByRole('link', { name: FIXTURE_VOICE_CHANNEL_NAME })).toHaveAttribute(
+            'href',
+            'https://discord.com/channels/444555666/111222333',
+        );
+    });
+
     it('shows no voice channel when there is neither a channel nor a plan', async () => {
         renderEventDetailPage({}, { channelId: null, channelName: null, guildId: null });
         await screen.findByText(FIXTURE_TITLE, {}, { timeout: 4000 });
