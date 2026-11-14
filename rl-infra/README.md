@@ -1073,6 +1073,20 @@ So a stale `bundle.enc` never overwrites a fresher laptop value, and an env
 never loses a key only the bundle holds. The overlay output carries key NAMES
 and counts only (`inserted_count`, `kept_count`, `sync_wins`). The bundle is
 read either way, so `bundle_warning` still surfaces on a green deploy.
+
+**Unusable laptop values (ROK-2202).** A shared key "kept from the sync" is
+only as good as the laptop's row. `scripts/rl-reencrypt-settings.mjs` therefore
+does NOT write a bundle-allowlisted key (`scripts/rl-settings-shared-keys.mjs`)
+whose laptop value fails to decrypt or is empty/whitespace: after its TRUNCATE
+the env has no row, so the overlay's insert-if-absent fills it from the bundle.
+A good laptop value still wins. The `sync_settings` step names those keys
+(`skipped_unusable: [blizzard_client_secret]`). The overlay output also carries
+`bundle_keys` (the shared keys the bundle holds a non-blank value for); after
+the overlay, any of them neither written, filled nor kept, or any skipped key
+the overlay did not fill, is named in the deploy result as `shared_keys_missing`
+with a `WARNING:` in its message and the `settings_overlay` step detail. A
+warning, not a failed deploy — like `bundle_warning`. Names and counts only,
+never values. A non-shared key that does not decrypt still fails the sync.
 `sync_wins: false` on a sync-wins request means the env image predates the
 flag (it UPSERTed everything); the deploy message says so.
 
