@@ -297,6 +297,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1868: `author_id` / `updated_by` are SET NULL; a hub's post outlives
   // its author (the feed shows a null author).
   schema.hubPosts,
+  // ROK-1175: `author_id` / `pinned_by` / `deleted_by` are SET NULL; a hub's
+  // forum thread or reply outlives its author ("Former member").
+  schema.hubForumThreads,
+  schema.hubForumReplies,
   schema.guildRecommendedAddons,
   // ROK-1870: `guilds.proposed_by` / `reviewed_by` are SET NULL provenance; a
   // community hub belongs to its members, not to whoever proposed/approved it.
