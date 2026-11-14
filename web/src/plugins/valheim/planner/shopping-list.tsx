@@ -91,19 +91,25 @@ function Leaves({ plan, names }: { plan: ValheimRecipePlanResponse; names: Plann
     );
 }
 
+function CopyList({ text }: { text: string }): JSX.Element {
+    return (
+        <span className="flex items-center gap-1 text-xs text-muted">
+            Copy list
+            <CopyButton text={text} />
+        </span>
+    );
+}
+
 export function ShoppingList({ targets, plan, names, onRemove, isHidden }: Props): JSX.Element {
     if (targets.length === 0)
         return <p className="text-sm text-muted">Add an item to start a shopping list.</p>;
+    // Nothing short → nothing to copy: hide the control, as when there is no plan yet.
+    const copyText = plan === undefined ? '' : shoppingListText(plan.shoppingList, (p) => names.nameOf(p, 'item'));
     return (
         <section aria-label="Shopping list" className="space-y-3">
             <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">Shopping list</h3>
-                {plan !== undefined && (
-                    <span className="flex items-center gap-1 text-xs text-muted">
-                        Copy list
-                        <CopyButton text={shoppingListText(plan.shoppingList, (p) => names.nameOf(p, 'item'))} />
-                    </span>
-                )}
+                {copyText !== '' && <CopyList text={copyText} />}
             </div>
             <TargetList targets={targets} names={names} onRemove={onRemove} isHidden={isHidden} />
             {plan !== undefined && <Leaves plan={plan} names={names} />}
