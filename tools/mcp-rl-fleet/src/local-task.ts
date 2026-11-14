@@ -68,6 +68,9 @@ export const LocalTaskJsonSchema = z.object({
   admin_password: z.string().nullable().optional(),
   expected_head: z.string().nullable().optional(),
   synced_head: z.string().nullable().optional(),
+  // ROK-2202: shared settings key NAMES still unusable after the overlay.
+  // Absent when none (and on task JSON written before it).
+  shared_keys_missing: z.array(z.string()).optional(),
   // rl_env_spin result fields — declared so zod does not strip the runner's
   // writes. Unset for deploy/clone tasks.
   operator_admin: z.string().nullable().optional(),
@@ -199,6 +202,7 @@ function toStatusReturn(
     operator_admin: raw.operator_admin,
     bootstrap_warnings: raw.bootstrap_warnings,
     hint: raw.hint,
+    ...(raw.shared_keys_missing ? { shared_keys_missing: raw.shared_keys_missing } : {}),
   } as ExecuteStatusReturn;
 }
 

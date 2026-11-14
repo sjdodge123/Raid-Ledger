@@ -316,10 +316,32 @@ test_overlay_sync_wins_forwards_flag() {
     eso_teardown
 }
 
+# 11 — ROK-2202: the overlay names the shared keys the bundle HOLDS (a
+#      non-blank value, identity keys excluded), so rl_env_deploy can check
+#      each one ended up written, filled or kept. Names only, never values.
+test_overlay_reports_bundle_keys() {
+    CURRENT_TEST_NAME="ROK-2202: bundle_keys names the usable shared keys the bundle holds"
+    eso_setup
+    export RL_SETTINGS_BUNDLE="$RL_STATE_DIR/bundle.enc"
+    export RL_SETTINGS_BUNDLE_KEY="overlay-test-key"
+    printf '%s' '{"itad_api_key":"itad-from-bundle","steam_api_key":"  ","discord_bot_token":"stale-laptop-token"}' \
+        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:RL_SETTINGS_BUNDLE_KEY \
+          -out "$RL_SETTINGS_BUNDLE" 2>/dev/null
+    local out rc=0
+    out=$(bash "$OVERLAY_BIN" --slug eso1 --sync-wins 2>&1) || rc=$?
+    assert_exit_code "$rc" "0" "overlay with a bundle should exit 0"
+    assert_eq "$(jq -c '.bundle_keys' <<<"$out" 2>/dev/null || echo parse_err)" '["itad_api_key"]' \
+        ".bundle_keys lists usable shared bundle keys only (no blank, no identity)"
+    assert_eq "$(grep -c "itad-from-bundle" <<<"$out")" "0" "a bundle VALUE leaked into the overlay output"
+    unset RL_SETTINGS_BUNDLE RL_SETTINGS_BUNDLE_KEY
+    eso_teardown
+}
+
 run_test "d6-bundle-merge" test_overlay_merges_settings_bundle
 run_test "d6-bundle-only" test_overlay_runs_for_bundle_only
 run_test "b1-bundle-warning" test_overlay_reports_bundle_warning
 run_test "b1-bundle-warning-skip" test_overlay_reports_bundle_warning_on_skip
+run_test "rok2202-bundle-keys" test_overlay_reports_bundle_keys
 run_test "sync-wins-flag" test_overlay_sync_wins_forwards_flag
 
 print_test_summary

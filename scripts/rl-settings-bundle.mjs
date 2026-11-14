@@ -30,31 +30,16 @@
 
 import { createDecipheriv, scryptSync } from 'node:crypto';
 import { stdin } from 'node:process';
+import { SHARED_KEYS } from './rl-settings-shared-keys.mjs';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
 const KEY_LENGTH = 32;
 
-/** Community-wide API keys — safe to share across every fleet env. */
-export const SHARED_KEYS = [
-    'itad_api_key',
-    'steam_api_key',
-    'cooptimus_user_agent',
-    'cooptimus_prose_enabled',
-    'blizzard_client_id',
-    'blizzard_client_secret',
-    'igdb_client_id',
-    'igdb_client_secret',
-    'igdb_filter_adult',
-    'ai_provider',
-    'ai_model',
-    'ai_ollama_url',
-    'ai_chat_enabled',
-    'ai_openai_api_key',
-    'ai_claude_api_key',
-    'ai_google_api_key',
-];
+// The allowlist lives in rl-settings-shared-keys.mjs (also read by
+// rl-reencrypt-settings.mjs, ROK-2202); re-exported for existing callers.
+export { SHARED_KEYS };
 
 function deriveKey(secret) {
     const salt = Buffer.from(secret.slice(0, SALT_LENGTH).padEnd(SALT_LENGTH, '0'));
