@@ -12,6 +12,11 @@ import type { DiscordBotConfig } from '../settings/settings.types';
 import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { friendlyDiscordErrorMessage } from './discord-bot.constants';
 import {
+  connectWithRetry,
+  realDelay,
+  type DelayFn,
+} from './discord-bot.autoconnect.helpers';
+import {
   applicationIdFromToken,
   fetchMissingPrivilegedIntents,
 } from './discord-intents.helpers';
@@ -27,6 +32,8 @@ export class DiscordBotService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(DiscordBotService.name);
+  /** Backoff wait between startup auto-connect attempts (swapped in tests). */
+  autoConnectDelay: DelayFn = realDelay;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -43,7 +50,15 @@ export class DiscordBotService
       const config = await this.settingsService.getDiscordBotConfig();
       if (config?.enabled) {
         this.logger.log('Discord bot is configured and enabled, connecting...');
-        await this.clientService.connect(config.token);
+        // ROK-2198: a transient first-login failure is retried, bounded.
+        await connectWithRetry({
+          connect: () => this.clientService.connect(config.token),
+          shouldRetry: () =>
+            !this.clientService.isConnected() &&
+            !this.clientService.isConnecting(),
+          logger: this.logger,
+          delay: this.autoConnectDelay,
+        });
       }
     } catch (error) {
       this.logger.error(
