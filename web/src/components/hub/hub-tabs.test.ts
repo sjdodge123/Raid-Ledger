@@ -32,27 +32,47 @@ describe('hubTabs order', () => {
             { id: 'quick-play', order: 10 },
             { id: 'materials', order: 25 },
         ]);
-        expect(hubTabs(mod, ctx, true).map((t) => t.id), 'core band is Overview, Members, Events, Resources, Posts; modules follow by order')
-            .toEqual(['overview', 'members', 'events', 'resources', 'posts', 'quick-play', 'materials', 'planner']);
+        expect(hubTabs(mod, ctx, true).map((t) => t.id), 'core band is Overview, Members, Events, Resources, Posts, Forum; modules follow by order')
+            .toEqual(['overview', 'members', 'events', 'resources', 'posts', 'forum', 'quick-play', 'materials', 'planner']);
     });
 
     it('keeps the slot but hides Resources until it has content (and Posts until there is a post)', () => {
         const mod = moduleWith([{ id: 'raids', order: 10 }]);
         const tabs = hubTabs(mod, ctx, false);
-        expect(tabs.map((t) => t.id)).toEqual(['overview', 'members', 'events', 'resources', 'posts', 'raids']);
-        expect(visibleHubTabIds(tabs)).toEqual(['overview', 'members', 'events', 'raids']);
+        expect(tabs.map((t) => t.id)).toEqual(['overview', 'members', 'events', 'resources', 'posts', 'forum', 'raids']);
+        expect(visibleHubTabIds(tabs)).toEqual(['overview', 'members', 'events', 'forum', 'raids']);
     });
 
     it('with no module, Resources still follows Events', () => {
-        expect(hubTabs(undefined, ctx, true).map((t) => t.id)).toEqual(['overview', 'members', 'events', 'resources', 'posts']);
+        expect(hubTabs(undefined, ctx, true).map((t) => t.id)).toEqual(['overview', 'members', 'events', 'resources', 'posts', 'forum']);
     });
 
     it('shows Posts (ROK-1868) after Resources once the hub has a post, never ahead of it', () => {
         const mod = moduleWith([{ id: 'quick-play', order: 10 }]);
         expect(visibleHubTabIds(hubTabs(mod, ctx, true, true)), 'Resources keeps its slot right after Events; Posts follows it')
-            .toEqual(['overview', 'members', 'events', 'resources', 'posts', 'quick-play']);
-        expect(visibleHubTabIds(hubTabs(mod, ctx, false, true))).toEqual(['overview', 'members', 'events', 'posts', 'quick-play']);
+            .toEqual(['overview', 'members', 'events', 'resources', 'posts', 'forum', 'quick-play']);
+        expect(visibleHubTabIds(hubTabs(mod, ctx, false, true))).toEqual(['overview', 'members', 'events', 'posts', 'forum', 'quick-play']);
         expect(visibleHubTabIds(hubTabs(mod, ctxAs('visitor'), true, true)), 'a visitor cannot open the post routes')
             .toEqual(['overview', 'members', 'events', 'resources', 'quick-play']);
+    });
+});
+
+describe('Forum tab (ROK-1175)', () => {
+    const kinds = ['wow_guild', 'game_server', 'game_community'] as const;
+    function ctxOf(kind: (typeof kinds)[number], role: 'member' | 'visitor'): HubCtx {
+        return { page: { guild: { kind }, viewer: { role } } } as HubCtx;
+    }
+
+    it.each(kinds)('sits in the core band right after Posts and shows to a member with no threads yet (%s, Q2)', (kind) => {
+        const mod = moduleWith([{ id: 'quick-play', order: 10 }]);
+        const tabs = hubTabs(mod, ctxOf(kind, 'member'), true, true);
+        expect(tabs.map((t) => t.id), 'Forum follows Posts, ahead of the module band')
+            .toEqual(['overview', 'members', 'events', 'resources', 'posts', 'forum', 'quick-play']);
+        expect(tabs.find((t) => t.id === 'forum')).toEqual({ id: 'forum', label: 'Forum', hidden: false });
+    });
+
+    it('is hidden from a visitor (Q1: members + staff read)', () => {
+        const tabs = hubTabs(undefined, ctxOf('wow_guild', 'visitor'), true, true);
+        expect(visibleHubTabIds(tabs), 'a visitor gets no Forum tab').not.toContain('forum');
     });
 });

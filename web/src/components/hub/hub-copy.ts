@@ -21,6 +21,9 @@ export interface HubCopy {
     composerHint: string;
     postRemoved: string;
     postsBlurb: string;
+    /** ROK-1175 — the member forum. */
+    forumTab: string;
+    forumBlurb: string;
     /** Events card empty states (ROK-1870: a community hub has no "guild"). */
     upcomingEmpty: string;
     recentEmpty: string;
@@ -74,6 +77,8 @@ const WOW_COPY: HubCopy = {
     composerHint: 'Members see this at the top of the guild page.',
     postRemoved: 'This post was removed.',
     postsBlurb: 'Everything the guild master and officers have posted, newest first.',
+    forumTab: 'Forum',
+    forumBlurb: 'Threads from members of this guild, latest activity first.',
     upcomingEmpty: 'No upcoming guild events. A guild editor can pick this guild when creating an event.',
     recentEmpty: 'No guild events in the last 8 weeks.',
     settingsTitle: 'Guild settings',
@@ -102,6 +107,8 @@ const SERVER_COPY: HubCopy = {
     composerHint: 'Members see this at the top of the server page.',
     postRemoved: 'This post was removed.',
     postsBlurb: 'Everything the server leader and officers have posted, newest first.',
+    forumTab: 'Forum',
+    forumBlurb: 'Threads from members of this server, latest activity first.',
     upcomingEmpty: 'No upcoming server events. A server editor can pick this server when creating an event.',
     recentEmpty: 'No server events in the last 8 weeks.',
     settingsTitle: 'Server settings',
@@ -130,6 +137,8 @@ const COMMUNITY_COPY: HubCopy = {
     composerHint: 'Members see this at the top of the hub page.',
     postRemoved: 'This post was removed.',
     postsBlurb: 'Everything the hub leader and editors have posted, newest first.',
+    forumTab: 'Forum',
+    forumBlurb: 'Threads from members of this hub, latest activity first.',
     upcomingEmpty: 'No upcoming hub events. A hub editor can pick this hub when creating an event.',
     recentEmpty: 'No hub events in the last 8 weeks.',
     settingsTitle: 'Hub settings',
