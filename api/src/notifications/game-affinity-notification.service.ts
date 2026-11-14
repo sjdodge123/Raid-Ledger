@@ -262,8 +262,9 @@ export class GameAffinityNotificationService {
     const discordUrl = input.discordMessage
       ? `https://discord.com/channels/${input.discordMessage.guildId}/${input.discordMessage.channelId}/${input.discordMessage.messageId}`
       : null;
-    const voiceChannelId =
-      await this.notificationService.resolveVoiceChannelForEvent(input.eventId);
+    const voice = await this.notificationService.resolveVoiceForEvent(
+      input.eventId,
+    );
     return {
       eventId: input.eventId,
       gameId: input.gameId,
@@ -273,7 +274,7 @@ export class GameAffinityNotificationService {
       ...(input.gameCoverUrl ? { gameCoverUrl: input.gameCoverUrl } : {}),
       ...(eventUrl ? { url: eventUrl } : {}),
       ...(discordUrl ? { discordUrl } : {}),
-      ...(voiceChannelId ? { voiceChannelId } : {}),
+      ...voice,
     };
   }
 

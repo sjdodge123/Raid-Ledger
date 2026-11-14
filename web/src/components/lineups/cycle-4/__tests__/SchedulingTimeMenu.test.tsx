@@ -236,6 +236,22 @@ describe('SchedulingTimeMenu — both actions live here (AC5)', () => {
         expect(onLock).toHaveBeenCalledTimes(1);
     });
 
+    it('closes the phone sheet when Lock opens its confirm (no sheet behind the modal)', async () => {
+        // #2132 verify lane: the Poll actions sheet stayed open underneath the
+        // lock confirm on a phone. The lock still runs for THIS slot.
+        stubViewport(false);
+        const user = userEvent.setup();
+        renderMenu();
+        await user.click(trigger());
+        await user.click(screen.getByTestId('scheduling-leader-lock'));
+
+        expect(onLock).toHaveBeenCalledTimes(1);
+        expect(
+            screen.queryByTestId('scheduling-leader-menu-sheet'),
+        ).not.toBeInTheDocument();
+        expect(trigger()).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('closes on Escape and puts focus back on the trigger', async () => {
         const user = userEvent.setup();
         renderMenu();

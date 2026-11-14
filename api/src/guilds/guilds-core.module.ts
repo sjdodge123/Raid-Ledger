@@ -7,6 +7,7 @@ import { GuildAccessService } from './guild-access.service';
 import { GuildDiscordController } from './guild-discord.controller';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildEditorGuard } from './guild-editor.guard';
+import { GuildEditorOrTopRankGuard } from './guild-editor-or-top-rank.guard';
 import { GuildEditorsService } from './guild-editors.service';
 import { GuildLeaderGuard } from './guild-leader.guard';
 import { GuildProfileService } from './guild-profile.service';
@@ -73,6 +74,7 @@ import {
   providers: [
     GuildAccessService,
     GuildEditorGuard,
+    GuildEditorOrTopRankGuard,
     GuildLeaderGuard,
     GuildEditorsService,
     GuildProfileService,
@@ -98,6 +100,7 @@ import {
     GuildAccessService,
     HubKindActiveGuard,
     GuildEditorGuard,
+    GuildEditorOrTopRankGuard,
     GuildLeaderGuard,
     GuildEditorsService,
     GuildProfileService,

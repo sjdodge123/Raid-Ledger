@@ -21,7 +21,7 @@
  * TDD colors (spec table):
  *   i     RED   — findActive misses the instance (gameId filter excludes it)
  *   ii    GREEN — resolveVoiceChannelForScheduledEvent Tier-1 hits (regression pin)
- *   iii   GREEN — notification resolveVoiceChannelForEvent, no override (pin)
+ *   iii   GREEN — notification resolveVoiceForEvent, no override (pin)
  *   iii-b RED   — override to a TEXT channel is returned unconditionally today
  *   iv    RED   — no-show list keeps an in-voice player absent (depends on i)
  *   v     RED   — classify finds 0 tracked sessions (depends on i)
@@ -205,11 +205,12 @@ describe('ROK-1389 — voice-channel agreement (integration)', () => {
 
   // Case iii (GREEN pin): the notification deep-link resolver, with NO override,
   // resolves the same VOICE1 via the event's stored gameId + recurrence group.
-  it('iii: notification resolveVoiceChannelForEvent === VOICE1 (no override)', async () => {
+  it('iii: notification resolveVoiceForEvent === VOICE1 (no override)', async () => {
     const { eventId } = await seedAgreementFixture();
 
     const resolved =
-      await notificationService.resolveVoiceChannelForEvent(eventId);
+      (await notificationService.resolveVoiceForEvent(eventId))
+        .voiceChannelId ?? null;
 
     expect(resolved).toBe(VOICE1);
   });
@@ -225,7 +226,8 @@ describe('ROK-1389 — voice-channel agreement (integration)', () => {
       .where(eq(schema.events.id, eventId));
 
     const resolved =
-      await notificationService.resolveVoiceChannelForEvent(eventId);
+      (await notificationService.resolveVoiceForEvent(eventId))
+        .voiceChannelId ?? null;
 
     expect(resolved).toBe(VOICE1);
   });

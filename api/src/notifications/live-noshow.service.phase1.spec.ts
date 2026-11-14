@@ -22,7 +22,7 @@ describe('LiveNoShowService — phase1', () => {
   let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   let mockCronJobService: { executeWithTracking: jest.Mock };
   let mockVoiceAttendance: { isUserActive: jest.Mock };
@@ -57,7 +57,7 @@ describe('LiveNoShowService — phase1', () => {
 
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
 
     mockCronJobService = {
@@ -178,6 +178,53 @@ describe('LiveNoShowService — phase1', () => {
           payload: expect.objectContaining({
             eventId: event.id,
             noshowReminder: true,
+          }) as Record<string, unknown>,
+        }),
+      );
+    });
+
+    it('carries a planned temporary voice channel in the reminder DM', async () => {
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
+      const planned = {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      };
+      mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+        plannedVoiceChannel: planned,
+      });
+      mockDb.select
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            {
+              id: event.id,
+              title: event.title,
+              creatorId: event.creatorId,
+              duration: [event.startTime, event.endTime],
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          makeSelectFromWhere([
+            { userId: 10, discordUserId: 'discord-10', discordUsername: 'P1' },
+          ]),
+        )
+        .mockReturnValueOnce(makeSelectFromWhere([]));
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+
+      await service.checkNoShows();
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            plannedVoiceChannel: planned,
           }) as Record<string, unknown>,
         }),
       );

@@ -71,7 +71,7 @@ function EditorChip({ editor, disabled, onRemove }: { editor: GuildEditor; disab
     );
 }
 
-/** Rendered inside the settings sheet, which is Leader/admin only (`canManageEditors`). */
+/** Rendered inside the settings sheet's Leader-only rows (`canManageEditors`); the sheet itself opens per `canOpenHubSettings` (ROK-2192: also the GM). */
 export function HubEditorsSection({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     const { page } = ctx;
     const guildId = page.guild.id;

@@ -201,7 +201,7 @@ function HubFrame({ ctx, module: mod, showResources, hasPosts, mods }: FrameProp
     const tabs = useHubTabs(mod, ctx, showResources, hasPosts);
     const HeroBanner = mod?.heroBanner;
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
-    const canManage = canOpenHubSettings(ctx.page);
+    const canManage = canOpenHubSettings(ctx.page, mod);
     const s = useHubSettingsState(canManage, canUseHubChannelPicker(ctx.page));
     return (
         <HubSettingsProvider value={s.value}>

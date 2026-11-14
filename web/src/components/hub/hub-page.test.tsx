@@ -236,6 +236,27 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
 // ROK-1830 r1 (Codex P2): both overlays are Leader-only, so a refetched page
 // that demotes the viewer must take the open one off the screen rather than
 // leave a dialog whose writes the server now refuses.
+describe('GuildPage — the rank-0 GM settings entry (ROK-2192)', () => {
+    function gmPage(gameSlug: string): GuildPageDto {
+        const page = makePage(false);
+        return { ...page, guild: { ...page.guild, gameSlug }, viewer: { ...page.viewer, isGuildMaster: true } };
+    }
+
+    it('gives the GM of a retail WoW hub no settings trigger — there is nothing a GM can write there', async () => {
+        serve(gmPage('world-of-warcraft'));
+        renderPage();
+        await screen.findByTestId('guild-members-summary');
+        expect(screen.queryByTestId('guild-settings-trigger'), 'a GM on a non-Forever hub must not get a gear that opens an empty sheet').toBeNull();
+    });
+
+    it('gives the GM of a WoW: Forever hub the settings trigger', async () => {
+        serve(gmPage('world-of-warcraft-forever'));
+        renderPage();
+        await screen.findByTestId('guild-members-summary');
+        expect(screen.getByTestId('guild-settings-trigger'), 'the Forever GM may write the Blizzard roster slug').toBeInTheDocument();
+    });
+});
+
 describe('GuildPage — a demotion closes the Leader-only overlays (ROK-1830 r1)', () => {
     it('closes an open settings sheet when canManageEditors flips false', async () => {
         let canManage = true;

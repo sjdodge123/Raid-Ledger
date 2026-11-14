@@ -8,6 +8,10 @@ import {
   ABANDONED_SESSION_MESSAGE,
   DiscordConnectError,
 } from './discord-bot-client.login.helpers';
+import {
+  isSupersededConnectError,
+  supersededConnectError,
+} from './discord-bot-client.connect.helpers';
 import { Events } from 'discord.js';
 
 /**
@@ -187,7 +191,9 @@ describe('ROK-2198 — a failed login destroys its client (AC1)', () => {
     expect(newClient).not.toBe(oldClient);
 
     failOld(transientError());
-    await expect(first).rejects.toThrow(DiscordConnectError);
+    await flush();
+    const outcome = await first.catch((err: unknown) => err);
+    expect(isSupersededConnectError(outcome)).toBe(true);
     expect(getClient(service)).toBe(newClient);
     expect(service.isConnecting()).toBe(true);
   });
@@ -290,5 +296,25 @@ describe('ROK-2198 — the raw login error is logged (AC3)', () => {
     await expect(service.connect(TOKEN)).rejects.toMatchObject({
       definitive: true,
     });
+  });
+});
+
+describe('a disconnect during the login window settles the connect', () => {
+  it('rejects the pending connect with the superseded error', async () => {
+    mockLoginImpl = () => new Promise<void>(() => {});
+    const connecting = service.connect(TOKEN);
+    await flush();
+
+    await service.disconnect();
+    const outcome = await Promise.race([
+      connecting.then(
+        () => 'resolved',
+        (error: unknown) => error,
+      ),
+      flush().then(() => 'still pending'),
+    ]);
+
+    expect(outcome).toEqual(supersededConnectError());
+    expect(isSupersededConnectError(outcome)).toBe(true);
   });
 });

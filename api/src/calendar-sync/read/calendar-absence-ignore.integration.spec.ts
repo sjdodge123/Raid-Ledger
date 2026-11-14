@@ -251,3 +251,25 @@ describe('absence read model carries source + provider (ROK-1593)', () => {
     expect(byId(data.absences)).toEqual(expected);
   });
 });
+
+// Backlog 2026-10-12: `ParseIntPipe` let ids above int4 reach Postgres
+// ("out of range for type integer" → 500). The int4 id pipe answers 400.
+describe('absence id routes reject ids outside int4 with 400', () => {
+  const ABOVE_INT4 = 2147483648;
+
+  it('POST …/absences/:id/ignore → 400 for an id above int4', async () => {
+    const { token } = await member('big1');
+
+    const res = await ignore(token, ABOVE_INT4);
+
+    expect(res.status).toBe(400);
+  });
+
+  it('DELETE …/absences/:id → 400 for an id above int4', async () => {
+    const { token } = await member('big2');
+
+    const res = await del(token, ABOVE_INT4);
+
+    expect(res.status).toBe(400);
+  });
+});

@@ -129,6 +129,8 @@ export class HubService {
    * ROK-1814: `isStaff` (moderation, e.g. the crest's "Remove upload") and
    * `canEditCrest` (`canEdit`, or the kind's top in-game rank — the same
    * predicate `HubCrestEditorGuard` applies). Visitors never edit the crest.
+   * Mirrors `GuildAccessService.canEditOrHoldsTopRank`, reusing the resolved
+   * viewer so a visitor skips the roster lookup.
    */
   private async withCrestRights(
     actor: GuildActor,

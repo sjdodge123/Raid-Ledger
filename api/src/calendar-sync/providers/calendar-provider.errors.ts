@@ -6,6 +6,10 @@
  * is kept only when it looks like a short provider error code
  * (`invalid_grant`, `http_503`); anything else becomes `unspecified`. There is
  * no `cause` — a wrapped fetch error can hold a URL with a token in it.
+ *
+ * Throw a NEW instance per attempt; never cache or share a rejected error
+ * across jobs. ROK-2189 marks retry-pending instances for Sentry to drop, so a
+ * shared instance could hide another job's final, reportable failure.
  */
 const SAFE_REASON = /^[a-z0-9_]{1,48}$/;
 

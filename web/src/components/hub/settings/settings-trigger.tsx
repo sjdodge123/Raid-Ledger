@@ -1,8 +1,10 @@
 /**
  * ROK-1830 S4 — the single settings entry point, in the hero's action area.
- * Rendered only for `viewer.canManageEditors` (Leader = admin/operator today,
- * spec Q1); Officers keep the inline content-edit affordances they already
- * have and see no trigger (D10/Q4).
+ * Rendered when `canOpenHubSettings` says so: the Leader (`canManageEditors`,
+ * admin/operator today, spec Q1), a community Officer, and — ROK-2192 — the
+ * rank-0 GM where `HubModule.topRankOpensSettings` allows it. WoW Officers
+ * keep the inline content-edit affordances they already have and see no
+ * trigger (D10/Q4).
  */
 import type { JSX } from 'react';
 import { Cog6ToothIcon } from '@heroicons/react/24/outline';

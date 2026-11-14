@@ -111,13 +111,37 @@ describe('connectWithRetry', () => {
   it('stops when another connect took over during the backoff', async () => {
     const connect = jest.fn<Promise<void>, []>().mockRejectedValue(transient());
     const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
+    const shouldRetry = jest
+      .fn<boolean, []>()
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false);
+
+    await expect(
+      connectWithRetry({ connect, shouldRetry, logger, delay }),
+    ).resolves.toBeUndefined();
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(delay).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not claim to retry once a newer connect has superseded it', async () => {
+    const connect = jest.fn<Promise<void>, []>().mockRejectedValue(transient());
+    const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
+    const warn = jest.spyOn(Logger.prototype, 'warn');
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => {});
 
     await expect(
       connectWithRetry({ connect, shouldRetry: () => false, logger, delay }),
     ).resolves.toBeUndefined();
 
-    expect(connect).toHaveBeenCalledTimes(1);
-    expect(delay).toHaveBeenCalledTimes(1);
+    const warned = warn.mock.calls.map((call) => String(call[0]));
+    expect(warned.filter((line) => line.includes('retrying'))).toEqual([]);
+    expect(delay).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('superseded by a newer connect; not retrying'),
+    );
   });
 });
 

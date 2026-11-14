@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import type { GuildBlizzardRosterSyncResult } from '@raid-ledger/contract';
-import { GuildEditorGuard } from '../../../guilds/guild-editor.guard';
+import { GuildEditorOrTopRankGuard } from '../../../guilds/guild-editor-or-top-rank.guard';
 import { HubVisibleGuard } from '../../../guilds/hub-visible.guard';
 import {
   PluginActiveGuard,
@@ -19,8 +19,9 @@ import { BlizzardRosterSyncJob } from './blizzard-roster-sync.job';
 
 /**
  * ROK-1928 §C3 — "Sync now" for a WoW: Forever guild's Blizzard roster.
- * Editors only (same guards as the slug PATCH). 403 kill switch, 404 no slug /
- * not a Forever guild, 409 already running, 502 upstream failure.
+ * Editors + the rank-0 GM (ROK-2192; same guards as the slug PATCH).
+ * 403 kill switch, 404 no slug / not a Forever guild, 409 already running,
+ * 502 upstream failure.
  */
 @Controller('plugins/wow/guilds/:id/blizzard-roster')
 @UseGuards(PluginActiveGuard)
@@ -31,7 +32,7 @@ export class GuildBlizzardRosterSyncController {
   /** Run the Blizzard roster sync for this guild now. */
   @Post('sync')
   @HttpCode(200)
-  @UseGuards(AuthGuard('jwt'), HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(AuthGuard('jwt'), HubVisibleGuard, GuildEditorOrTopRankGuard)
   sync(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildBlizzardRosterSyncResult> {
