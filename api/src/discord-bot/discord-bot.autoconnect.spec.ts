@@ -37,7 +37,9 @@ describe('connectWithRetry', () => {
       .mockResolvedValueOnce(undefined);
     const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
 
-    await connectWithRetry({ connect, shouldRetry: () => true, logger, delay });
+    await expect(
+      connectWithRetry({ connect, shouldRetry: () => true, logger, delay }),
+    ).resolves.toBeUndefined();
 
     expect(connect).toHaveBeenCalledTimes(2);
     expect(delay.mock.calls).toEqual([[2_000]]);
@@ -86,14 +88,12 @@ describe('connectWithRetry', () => {
     const connect = jest.fn<Promise<void>, []>().mockRejectedValue(transient());
     const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
 
-    await connectWithRetry({
-      connect,
-      shouldRetry: () => false,
-      logger,
-      delay,
-    });
+    await expect(
+      connectWithRetry({ connect, shouldRetry: () => false, logger, delay }),
+    ).resolves.toBeUndefined();
 
     expect(connect).toHaveBeenCalledTimes(1);
+    expect(delay).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -158,7 +158,12 @@ describe('DiscordBotService.onApplicationBootstrap — auto-connect retry', () =
   it('does not wait for the retry chain before returning', async () => {
     connect.mockReturnValue(new Promise<void>(() => {}));
 
-    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    const outcome = await Promise.race([
+      service.onApplicationBootstrap().then(() => 'returned'),
+      flush().then(() => 'blocked on the retry chain'),
+    ]);
+
+    expect(outcome).toBe('returned');
     expect(connect).toHaveBeenCalledTimes(1);
   });
 });

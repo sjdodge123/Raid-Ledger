@@ -157,9 +157,18 @@ describe('ROK-2198 — a failed login destroys its client (AC1)', () => {
       throw new Error('destroy blew up');
     });
 
-    await expect(connecting).rejects.toThrow(
-      'Failed to connect with provided token',
-    );
+    const outcome = await Promise.race([
+      connecting.then(
+        () => 'resolved',
+        (error: unknown) => error,
+      ),
+      flush().then(() => 'still pending'),
+    ]);
+
+    expect(outcome).toBeInstanceOf(DiscordConnectError);
+    expect(outcome).toMatchObject({
+      message: 'Failed to connect with provided token',
+    });
   });
 
   it('leaves a newer live client alone when an old login fails late', async () => {

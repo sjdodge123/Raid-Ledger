@@ -18,7 +18,7 @@ export class DiscordConnectError extends Error {
 }
 
 function errorCode(error: Error): unknown {
-  return (error as Error & { code?: unknown }).code;
+  return 'code' in error ? error.code : undefined;
 }
 
 function codeText(code: unknown): string {
