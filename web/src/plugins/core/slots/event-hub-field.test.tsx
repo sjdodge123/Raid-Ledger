@@ -16,7 +16,7 @@ import { usePluginStore } from '../../../stores/plugin-store';
 import { PluginSlot } from '../../plugin-slot';
 import { getSlotRegistrations } from '../../plugin-registry';
 import { guildIdForSubmit } from '../../../components/events/create-event-form.utils';
-import { EventHubField } from './event-hub-field';
+import { EventHubField, UNLISTED_HUB_LABEL } from './event-hub-field';
 import '../register';
 import '../../wow/register';
 
@@ -163,7 +163,92 @@ describe('EventHubField — a crafted ?guildId= (ROK-1817)', () => {
         const select = await screen.findByLabelText('Hub');
         await settled();
         const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
-        expect(options, 'the list the edit form settled on').toEqual(['None', 'Seed Server']);
+        expect(options, 'the list the edit form settled on').toEqual(['None', UNLISTED_HUB_LABEL, 'Seed Server']);
         expect(onGuildChange, 'edit mode must not clear a tag absent from the list').not.toHaveBeenCalled();
+    });
+});
+
+describe('EventHubField — edit-mode stand-in for a tagged hub the viewer cannot list', () => {
+    it('edit mode: an event tagged to a hub the viewer cannot list keeps that hub selected, as a stand-in option', async () => {
+        serve([SERVER]);
+        renderField(21);
+        const select = await screen.findByLabelText('Hub');
+        await settled();
+        expect(select, 'the field must show the current tag, not "None"').toHaveValue('21');
+        const current = select.querySelector('option[value="21"]');
+        expect(current?.textContent, 'the unlisted hub gets a generic label').toBe('Current hub (not in your list)');
+        expect(current, 'the stand-in carries the current tag').toBeInTheDocument();
+    });
+
+    it('edit mode: the stand-in stays after switching away, so the viewer can switch back to the original tag', async () => {
+        serve([SERVER]);
+        let picked: number | null = 21;
+        function Harness() {
+            const [guildId, setGuildId] = useState<number | null>(21);
+            picked = guildId;
+            return <EventHubField gameId={7} guildId={guildId} onGuildChange={setGuildId} />;
+        }
+        render(<Harness />, { wrapper: wrapper() });
+        const select = await screen.findByLabelText('Hub');
+        await settled();
+        await userEvent.selectOptions(select, '22');
+        await waitFor(() => expect(picked).toBe(22));
+        const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+        expect(options, 'the opened-with hub must still be offered after switching away').toEqual(['None', UNLISTED_HUB_LABEL, 'Seed Server']);
+        await userEvent.selectOptions(select, '21');
+        await waitFor(() => expect(picked, 'switching back restores the original tag').toBe(21));
+        expect(guildIdForSubmit(picked, true, 21), 'an unchanged tag is omitted from the save DTO').toEqual({});
+    });
+
+    it('edit mode: no stand-in while the hub list is loading', () => {
+        server.use(http.get(API, () => new Promise<never>(() => undefined)));
+        renderField(21);
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'an unproven list cannot show the stand-in').toBeNull();
+    });
+
+    it('edit mode: no stand-in once a refetch of the hub list fails', async () => {
+        server.use(http.get(API, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['guilds', 'taggable', 7, 1], { hubs: [SERVER] }, { updatedAt: 0 });
+        render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, {
+            wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+        });
+        await waitFor(() => expect(client.getQueryCache().getAll()[0]?.state.status, 'the stale-list refetch failed').toBe('error'));
+        await act(async () => {});
+        expect(screen.getByLabelText('Hub'), 'the cached list still renders').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'a failed lookup cannot prove the hub is absent').toBeNull();
+    });
+});
+
+describe('EventHubField — the stand-in follows the game the edit form opened with', () => {
+    it('edit mode: no stand-in once the form switches to another game (its hub is not that game\'s — the api would 400)', async () => {
+        serve([SERVER]);
+        const { rerender } = render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
+        await screen.findByLabelText('Hub');
+        await settled();
+        expect(screen.getByText(UNLISTED_HUB_LABEL), 'offered while the game is the opened one').toBeInTheDocument();
+        rerender(<EventHubField gameId={8} guildId={null} onGuildChange={vi.fn()} />);
+        await waitFor(() => expect(lastGameId, 'the new game\'s hubs were fetched').toBe('8'));
+        expect(await screen.findByLabelText('Hub'), 'the new game still lists a hub').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'the opened-with hub belongs to the old game').toBeNull();
+    });
+
+    it('edit mode: a cold load (game id null until the game registry resolves) still shows the stand-in', async () => {
+        serve([SERVER]);
+        const { rerender } = render(<EventHubField gameId={null} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
+        rerender(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />);
+        // The disabled null-game query sits first in the cache, so wait on the game-7 lookup by its request.
+        await waitFor(() => expect(lastGameId, 'the game-7 hubs were fetched').toBe('7'));
+        expect(await screen.findByText(UNLISTED_HUB_LABEL), 'the stand-in carries the current tag').toBeInTheDocument();
+        expect(screen.getByLabelText('Hub'), 'the tagged hub stays selected once the registry resolves').toHaveValue('21');
+    });
+
+    it('edit mode: the opened game never resolved and the viewer switched game — no stand-in under the new game', async () => {
+        serve([SERVER]);
+        const { rerender } = render(<EventHubField gameId={null} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
+        rerender(<EventHubField gameId={8} guildId={null} onGuildChange={vi.fn()} />);
+        await waitFor(() => expect(lastGameId, 'the game-8 hubs were fetched').toBe('8'));
+        expect(await screen.findByLabelText('Hub'), 'the new game lists a hub').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'the opened hub is not the new game\'s').toBeNull();
     });
 });
