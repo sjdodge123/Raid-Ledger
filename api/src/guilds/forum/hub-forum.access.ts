@@ -25,15 +25,27 @@ export const FORUM_ALREADY_DELETED = 'This message was deleted';
 export const FORUM_CANNOT_DELETE =
   'Only the author or a moderator can remove this';
 
+/**
+ * Member (or staff) or 403 — the cheap check for routes that never read
+ * `canModerate` (list, latest) or whose guard already proved it (pin).
+ */
+export async function assertForumMember(
+  access: GuildAccessService,
+  actor: GuildActor,
+  guildId: number,
+): Promise<void> {
+  if (!(await access.canView(actor, guildId))) {
+    throw new ForbiddenException(FORUM_NOT_MEMBER);
+  }
+}
+
 /** Member (or staff) → forum actor; anyone else → 403. */
 export async function resolveForumActor(
   access: GuildAccessService,
   actor: GuildActor,
   guildId: number,
 ): Promise<HubForumActor> {
-  if (!(await access.canView(actor, guildId))) {
-    throw new ForbiddenException(FORUM_NOT_MEMBER);
-  }
+  await assertForumMember(access, actor, guildId);
   const canModerate = await access.canEdit(actor, guildId);
   return { userId: actor.id, canWrite: true, canModerate };
 }

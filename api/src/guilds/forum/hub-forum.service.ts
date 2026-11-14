@@ -23,6 +23,7 @@ import { GuildAccessService, type GuildActor } from '../guild-access.service';
 import { finalBody, parseOrThrow } from '../posts/hub-posts.service.helpers';
 import {
   assertCanEdit,
+  assertForumMember,
   removalFor,
   resolveForumActor,
 } from './hub-forum.access';
@@ -52,6 +53,8 @@ import * as writes from './hub-forum.writes';
 
 /** Q8: replying to a removed (or vanished) thread. */
 export const FORUM_THREAD_CLOSED = 'This thread was removed';
+/** The pinned group is one un-paged list, so pins are capped at write time. */
+export const FORUM_PIN_LIMIT = `A hub can pin at most ${HUB_FORUM_PAGE_MAX} threads. Unpin a thread first.`;
 
 function cursorOf(raw: string | undefined): HubForumCursor | null {
   return raw === undefined ? null : decodeForumCursor(raw);
@@ -85,7 +88,7 @@ export class HubForumService {
   ): Promise<HubForumThreadList> {
     const { limit, cursor } = parseOrThrow(HubForumListQuerySchema, query);
     const after = cursorOf(cursor);
-    await resolveForumActor(this.access, actor, guildId);
+    await assertForumMember(this.access, actor, guildId);
     const page = await listThreads(this.db, guildId, limit, after);
     return {
       pinned: page.pinned.map(toThreadSummary),
@@ -96,7 +99,7 @@ export class HubForumService {
 
   /** The Latest threads widget. */
   async latest(actor: GuildActor, guildId: number): Promise<HubForumLatest> {
-    await resolveForumActor(this.access, actor, guildId);
+    await assertForumMember(this.access, actor, guildId);
     const { records, total } = await latestThreads(
       this.db,
       guildId,
@@ -177,16 +180,27 @@ export class HubForumService {
     if (!row) throw new NotFoundException('Thread not found');
   }
 
-  /** Pin / unpin (moderators — `GuildEditorGuard` on the route). Idempotent. */
+  /**
+   * Pin / unpin (moderators — `GuildEditorGuard` on the route). Idempotent;
+   * a pin past the cap is 409 (the list never pages the pinned group).
+   */
   async setPin(
     actor: GuildActor,
     guildId: number,
     threadId: number,
     pinned: boolean,
   ): Promise<void> {
-    await resolveForumActor(this.access, actor, guildId);
-    const pin = pinned ? { by: actor.id, now: this.now() } : null;
-    const row = await writes.setThreadPin(this.db, { guildId, threadId }, pin);
+    await assertForumMember(this.access, actor, guildId);
+    const target = { guildId, threadId };
+    const row = pinned
+      ? await writes.pinThread(
+          this.db,
+          target,
+          { by: actor.id, now: this.now() },
+          HUB_FORUM_PAGE_MAX,
+        )
+      : await writes.setThreadPin(this.db, target, null);
+    if (row === 'full') throw new ConflictException(FORUM_PIN_LIMIT);
     if (!row) throw new NotFoundException('Thread not found');
   }
 

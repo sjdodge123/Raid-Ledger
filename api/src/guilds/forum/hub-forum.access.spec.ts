@@ -8,6 +8,7 @@ import {
   FORUM_NOT_AUTHOR,
   FORUM_NOT_MEMBER,
   assertCanEdit,
+  assertForumMember,
   removalFor,
   resolveForumActor,
 } from './hub-forum.access';
@@ -43,6 +44,24 @@ function refusal(fn: () => unknown): string {
   }
   return 'allowed';
 }
+
+describe('ROK-1175 assertForumMember', () => {
+  const who = { id: 9, role: 'member' as const };
+
+  it('403s a visitor and never asks canEdit', async () => {
+    const a = access(false, true);
+    await expect(assertForumMember(a, who, 7)).rejects.toThrow(
+      FORUM_NOT_MEMBER,
+    );
+    expect(jest.mocked(a.canEdit)).not.toHaveBeenCalled();
+  });
+
+  it('lets a member through without the canEdit lookup', async () => {
+    const a = access(true, true);
+    await expect(assertForumMember(a, who, 7)).resolves.toBeUndefined();
+    expect(jest.mocked(a.canEdit)).not.toHaveBeenCalled();
+  });
+});
 
 describe('ROK-1175 resolveForumActor', () => {
   const visitor = { id: 9, role: 'member' as const };

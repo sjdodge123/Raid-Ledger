@@ -4,7 +4,7 @@
  * (`undefined`). Reply insert/delete keep `reply_count` and
  * `last_activity_at` in step inside one transaction (D5).
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, count, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { HubForumDeleted } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type {
@@ -14,6 +14,12 @@ import type {
 import type { Db } from './hub-forum.queries';
 
 const { hubForumThreads: threads, hubForumReplies: replies } = schema;
+
+/** A transaction handle from `db.transaction`. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Advisory-lock namespace for the per-hub pin cap (ROK-1175). */
+const PIN_LOCK_NS = 1175;
 
 /** A thread addressed through its hub. */
 export interface ThreadTarget {
@@ -115,7 +121,7 @@ export async function softDeleteThread(
  * keeps the original pin time and pinner.
  */
 export async function setThreadPin(
-  db: Db,
+  db: Db | Tx,
   target: ThreadTarget,
   pin: { by: number; now: Date } | null,
 ): Promise<HubForumThreadSelect | undefined> {
@@ -131,6 +137,37 @@ export async function setThreadPin(
     .where(liveThread(target))
     .returning();
   return row;
+}
+
+/**
+ * Pin a live thread unless the hub already has `cap` OTHER live pinned
+ * threads (`'full'` → the service's 409), so the list's capped pinned group
+ * can never hide one. A per-hub advisory lock serialises concurrent pins.
+ */
+export async function pinThread(
+  db: Db,
+  target: ThreadTarget,
+  pin: { by: number; now: Date },
+  cap: number,
+): Promise<HubForumThreadSelect | undefined | 'full'> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(${PIN_LOCK_NS}::int, ${target.guildId}::int)`,
+    );
+    const [tally] = await tx
+      .select({ n: count() })
+      .from(threads)
+      .where(
+        and(
+          eq(threads.guildId, target.guildId),
+          isNotNull(threads.pinnedAt),
+          isNull(threads.deletedAt),
+          ne(threads.id, target.threadId),
+        ),
+      );
+    if ((tally?.n ?? 0) >= cap) return 'full';
+    return setThreadPin(tx, target, pin);
+  });
 }
 
 /**

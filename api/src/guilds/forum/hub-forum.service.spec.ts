@@ -21,10 +21,16 @@ import {
 import {
   findReply,
   findThread,
+  latestThreads,
   listReplies,
+  listThreads,
   type Db,
 } from './hub-forum.queries';
-import { FORUM_THREAD_CLOSED, HubForumService } from './hub-forum.service';
+import {
+  FORUM_PIN_LIMIT,
+  FORUM_THREAD_CLOSED,
+  HubForumService,
+} from './hub-forum.service';
 import * as writes from './hub-forum.writes';
 
 jest.mock('./hub-forum.queries', () => ({
@@ -39,6 +45,7 @@ jest.mock('./hub-forum.writes', () => ({
   updateThread: jest.fn(),
   softDeleteThread: jest.fn(),
   setThreadPin: jest.fn(),
+  pinThread: jest.fn(),
   insertReply: jest.fn(),
   updateReply: jest.fn(),
   softDeleteReply: jest.fn(),
@@ -108,6 +115,7 @@ beforeEach(() => {
   jest.mocked(writes.updateThread).mockResolvedValue(thread());
   jest.mocked(writes.softDeleteThread).mockResolvedValue(thread());
   jest.mocked(writes.setThreadPin).mockResolvedValue(thread());
+  jest.mocked(writes.pinThread).mockResolvedValue(thread());
   jest.mocked(writes.insertReply).mockResolvedValue(reply());
   jest.mocked(writes.softDeleteReply).mockResolvedValue(reply());
 });
@@ -220,11 +228,44 @@ describe('ROK-1175 HubForumService — views', () => {
     });
   });
 
-  it('pin stamps the actor; unpin clears', async () => {
+  it('pin stamps the actor under the 50-pin cap; unpin clears', async () => {
     await build(true, true).setPin(other, 7, 21, true);
     await build(true, true).setPin(other, 7, 21, false);
+    expect(jest.mocked(writes.pinThread).mock.calls.map((c) => c[2])).toEqual([
+      { by: 4, now: NOW },
+    ]);
+    expect(jest.mocked(writes.pinThread).mock.calls[0]?.[3]).toBe(50);
     expect(
       jest.mocked(writes.setThreadPin).mock.calls.map((c) => c[2]),
-    ).toEqual([{ by: 4, now: NOW }, null]);
+    ).toEqual([null]);
+  });
+
+  it('a pin past the cap is 409 "Unpin a thread first"', async () => {
+    jest.mocked(writes.pinThread).mockResolvedValue('full');
+    const err = await build(true, true)
+      .setPin(other, 7, 21, true)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).message).toBe(FORUM_PIN_LIMIT);
+    expect(FORUM_PIN_LIMIT).toContain('Unpin a thread first');
+  });
+
+  it('list, latest and pin skip the canEdit lookup', async () => {
+    jest.mocked(listThreads).mockResolvedValue({
+      records: [],
+      next: null,
+      pinned: [],
+    });
+    jest.mocked(latestThreads).mockResolvedValue({ records: [], total: 0 });
+    const fake = {
+      canView: jest.fn().mockResolvedValue(true),
+      canEdit: jest.fn().mockResolvedValue(true),
+    };
+    const s = new HubForumService({} as Db, fake as never);
+    await s.list(other, 7, {});
+    await s.latest(other, 7);
+    await s.setPin(other, 7, 21, true);
+    expect(fake.canView).toHaveBeenCalledTimes(3);
+    expect(fake.canEdit).not.toHaveBeenCalled();
   });
 });
