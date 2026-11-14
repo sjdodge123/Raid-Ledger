@@ -15,10 +15,10 @@
  * scheduler cron cannot create the channel before the "planned" assertions.
  * Deterministic polling only — no fixed delays.
  */
-import { GuildScheduledEventEntityType } from 'discord.js';
-import { getGuild } from '../../client.js';
-import { pollForCondition } from '../../helpers/polling.js';
-import { readLastMessages } from '../../helpers/messages.js';
+import { GuildScheduledEventEntityType } from "discord.js";
+import { getGuild } from "../../client.js";
+import { pollForCondition } from "../../helpers/polling.js";
+import { readLastMessages } from "../../helpers/messages.js";
 import {
   createEvent,
   deleteEvent,
@@ -28,12 +28,12 @@ import {
   channelForTest,
   channelForGame,
   triggerReconciliation,
-} from '../fixtures.js';
+} from "../fixtures.js";
 import {
   acquireScheduledEvents,
   releaseScheduledEvents,
   releaseScheduledEventsAndRethrow,
-} from '../scheduled-events-toggle.js';
+} from "../scheduled-events-toggle.js";
 import {
   setEphemeralVoiceConfig,
   forceEphemeralScan,
@@ -41,10 +41,10 @@ import {
   resolveCategoryId,
   resolveGameId,
   reportOrphanChannel,
-} from './ephemeral-voice.test.js';
-import type { SmokeTest, TestContext } from '../types.js';
+} from "./ephemeral-voice.test.js";
+import type { SmokeTest, TestContext } from "../types.js";
 
-const SPEAKER = '\u{1F50A}'; // 🔊
+const SPEAKER = "\u{1F50A}"; // 🔊
 const BUFFER_MIN = 30;
 const SE_NAME_MAX = 100;
 
@@ -63,13 +63,13 @@ function expectedPlannedName(title: string, gameName: string | null): string {
       ? `${title} — ${gameName}`
       : title;
   const capped =
-    named.length <= SE_NAME_MAX ? named : named.slice(0, SE_NAME_MAX - 1) + '…';
-  const stripped = capped.replace(/\s+event\s*$/i, '');
+    named.length <= SE_NAME_MAX ? named : named.slice(0, SE_NAME_MAX - 1) + "…";
+  const stripped = capped.replace(/\s+event\s*$/i, "");
   const base = stripped.trim().length > 0 ? stripped : capped;
   const marked = `⏰ ${base}`;
   return marked.length <= SE_NAME_MAX
     ? marked
-    : marked.slice(0, SE_NAME_MAX - 1) + '…';
+    : marked.slice(0, SE_NAME_MAX - 1) + "…";
 }
 
 function toSeView(se: {
@@ -113,8 +113,11 @@ async function readVoiceLine(
     .flatMap((m) => m.embeds)
     .find((e) => e.title?.includes(title));
   if (!embed) return { found: false, line: null };
-  const lines = (embed.description ?? '').split('\n');
-  return { found: true, line: lines.find((l) => l.startsWith(SPEAKER)) ?? null };
+  const lines = (embed.description ?? "").split("\n");
+  return {
+    found: true,
+    line: lines.find((l) => l.startsWith(SPEAKER)) ?? null,
+  };
 }
 
 /** Poll until the embed's voice line satisfies `accept`; explicit failure. */
@@ -125,7 +128,10 @@ async function pollVoiceLine(
   accept: (line: string) => boolean,
   want: string,
 ): Promise<string> {
-  let last: { found: boolean; line: string | null } = { found: false, line: null };
+  let last: { found: boolean; line: string | null } = {
+    found: false,
+    line: null,
+  };
   try {
     return await pollForCondition(
       async () => {
@@ -137,7 +143,7 @@ async function pollVoiceLine(
     );
   } catch {
     throw new Error(
-      `Embed voice line: expected ${want}; got ${last.found ? JSON.stringify(last.line) : 'no embed for the event'}`,
+      `Embed voice line: expected ${want}; got ${last.found ? JSON.stringify(last.line) : "no embed for the event"}`,
     );
   }
 }
@@ -166,16 +172,23 @@ async function assertPlannedEmbed(
   title: string,
   opensUnix: number,
 ): Promise<void> {
-  const line = await pollVoiceLine(ctx, channelId, title, () => true, 'a 🔊 line');
+  const line = await pollVoiceLine(
+    ctx,
+    channelId,
+    title,
+    () => true,
+    "a 🔊 line",
+  );
   const opens = `· opens <t:${opensUnix}:t>`;
   const problems: string[] = [];
-  if (!line.startsWith(`${SPEAKER} ⏰ `)) problems.push('missing "🔊 ⏰ " prefix');
+  if (!line.startsWith(`${SPEAKER} ⏰ `))
+    problems.push('missing "🔊 ⏰ " prefix');
   if (!line.includes(title)) problems.push(`missing title ${title}`);
   if (!line.includes(opens)) problems.push(`missing "${opens}"`);
-  if (line.includes('<#')) problems.push('contains a <# channel mention');
+  if (line.includes("<#")) problems.push("contains a <# channel mention");
   if (problems.length > 0) {
     throw new Error(
-      `Planned embed voice line ${JSON.stringify(line)}: ${problems.join('; ')}`,
+      `Planned embed voice line ${JSON.stringify(line)}: ${problems.join("; ")}`,
     );
   }
 }
@@ -203,18 +216,22 @@ async function assertLiveSe(
   });
   if (live.channelId !== channelId) {
     throw new Error(
-      `Live SE: expected channelId ${channelId}, got ${live.channelId ?? 'none'}`,
+      `Live SE: expected channelId ${channelId}, got ${live.channelId ?? "none"}`,
     );
   }
 }
 
 /**
- * Barrier: the event row is bound to its SE. The SE create is fire-and-forget
- * and binds its id only after Discord replies, so an SE visible in the guild
- * may still be unbound. Reconciliation runs synchronously and binds any
- * unbound event (adopting its live RL SE), so once it returns the binding
- * exists and the channel creation below takes the normal repoint path rather
- * than the create-time adopt race.
+ * Best-effort barrier: nudge the event row to bind its SE before the channel
+ * is created. The SE create is fire-and-forget and binds its id only after
+ * Discord replies, so an SE visible in the guild may still be unbound. One
+ * reconciliation run adopts unbound events' live RL SEs, but it takes a
+ * bounded, unordered batch, so in a busy shared DB this event may not be in it
+ * and NO endpoint exposes the binding to poll on. Either outcome is correct:
+ * bound → the channel creation takes the normal repoint; still unbound → the
+ * create-time adopt path flips the SE to Voice itself. The assertions below
+ * hold on both paths; the adopt branch is pinned by
+ * scheduled-event.create.adopt-repoint.spec.ts.
  */
 async function awaitSeBinding(ctx: TestContext): Promise<void> {
   await triggerReconciliation(ctx.api);
@@ -281,22 +298,28 @@ async function reportOrphanSe(ctx: TestContext, seId: string): Promise<void> {
   console.warn(`[planned-voice] SE ${seId} survived event delete`);
   await se.delete().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[planned-voice] companion-bot delete of SE ${seId} failed: ${msg}`);
+    console.warn(
+      `[planned-voice] companion-bot delete of SE ${seId} failed: ${msg}`,
+    );
   });
 }
 
 /** Poll for the event's SE (2× timeout: reconciliation → BullMQ → Discord). */
 async function awaitSe(ctx: TestContext, title: string): Promise<SeView> {
-  return pollForCondition(() => findSeByTitle(title), ctx.config.timeoutMs * 2, {
-    intervalMs: 2000,
-  }).catch(() => {
+  return pollForCondition(
+    () => findSeByTitle(title),
+    ctx.config.timeoutMs * 2,
+    {
+      intervalMs: 2000,
+    },
+  ).catch(() => {
     throw new Error(`No Scheduled Event appeared for event "${title}"`);
   });
 }
 
 const plannedVoiceSurfaces: SmokeTest = {
-  name: 'Planned temporary voice channel: embed name + open time, SE External → Voice once created',
-  category: 'voice',
+  name: "Planned temporary voice channel: embed name + open time, SE External → Voice once created",
+  category: "voice",
   async run(ctx) {
     const categoryId = await resolveCategoryId(ctx);
     const gameId = channelForTest(ctx, 3).gameId ?? (await resolveGameId(ctx));
@@ -309,7 +332,7 @@ const plannedVoiceSurfaces: SmokeTest = {
     });
     await acquireScheduledEvents(ctx.api);
     const startTime = futureTime(60);
-    const ev = await createEvent(ctx.api, 'planned-voice', {
+    const ev = await createEvent(ctx.api, "planned-voice", {
       gameId,
       startTime,
       endTime: futureTime(120),
@@ -323,7 +346,10 @@ const plannedVoiceSurfaces: SmokeTest = {
       const read = await ctx.api.get<{ game?: { name?: string } | null }>(
         `/events/${ev.id}`,
       );
-      const expectedName = expectedPlannedName(ev.title, read.game?.name ?? null);
+      const expectedName = expectedPlannedName(
+        ev.title,
+        read.game?.name ?? null,
+      );
       const se = await awaitSe(ctx, ev.title);
       seId = se.id;
       assertPlannedSe(se, expectedName);
@@ -337,7 +363,13 @@ const plannedVoiceSurfaces: SmokeTest = {
       await flushEmbedQueue(ctx.api);
       await assertLiveSe(ctx, seId, channelId);
       const mention = `<#${channelId}>`;
-      await pollVoiceLine(ctx, embedChannelId, ev.title, (l) => l.includes(mention), mention);
+      await pollVoiceLine(
+        ctx,
+        embedChannelId,
+        ev.title,
+        (l) => l.includes(mention),
+        mention,
+      );
     } finally {
       await teardown(ctx, ev.id, seId, channelId);
     }
