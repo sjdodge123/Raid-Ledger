@@ -41,11 +41,19 @@ export const GM_RANK_INDEX = 0;
  * an admin/operator. Flipping this to `true` restores implicit GM edit rights
  * (managing editors stays staff-only).
  *
- * ACCEPTED RISK (operator ruling 2026-10-30, ROK-1814): the ONE exception is
- * the hub crest — `holdsTopRank` below lets rank 0 change it without a grant.
- * Rank 0 is self-reported via those same unsigned exports, so a GUID squatter
- * can act as the GM and edit or upload the crest. Staff can remove an upload
- * (`DELETE guilds/:id/crest/upload`); the operator accepted this risk.
+ * ACCEPTED RISK: `holdsTopRank` below grants a GUID-linked rank 0 a few
+ * rights without a grant. Rank 0 is self-reported via those same unsigned
+ * exports, so a GUID squatter can act as the GM and use every one of them.
+ * Each is an operator ruling — add a line here before adding a right:
+ *  - the hub crest — edit or upload it (ROK-1814, 2026-10-30). Staff can
+ *    remove an upload (`DELETE guilds/:id/crest/upload`).
+ *  - recruitment — edit all of it, the outbound Apply URL included
+ *    (ROK-1789 Q-A6).
+ *  - the Blizzard roster — set or clear the slug (which also resets
+ *    `blizzardGuildId`, `foundedAt` and the two-strike state) and trigger
+ *    "Sync now", an upstream Blizzard API call (ROK-2192, 2026-11-13). Bounded
+ *    by the ROK-2139 `identityMismatch` guard: a slug pointing at another
+ *    guild fetches a roster that writes nothing over the GUID roster.
  */
 // ROK-2160: flipping this lets rank-derived edit follow the roster row to a
 // new winner with no staff action; add the owner-status audits first.

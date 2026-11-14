@@ -130,10 +130,23 @@ export class GuildAccessService {
     return hub.holdsTopRank(actor.id, guildId);
   }
 
-  /** ROK-1814: change the hub crest — `canEdit`, or the top in-game rank. */
-  async canEditCrest(actor: GuildActor, guildId: number): Promise<boolean> {
+  /**
+   * `canEdit`, or the kind's top in-game rank (a WoW GM, rank 0) — the
+   * ROK-1789 Q-A6 recruitment rule. ROK-2192 (operator ruling 2026-11-13)
+   * extends it to the hub-settings writes a GM may make (the Blizzard roster
+   * slug + "Sync now"); never editor/staff management, Discord or hiding.
+   */
+  async canEditOrHoldsTopRank(
+    actor: GuildActor,
+    guildId: number,
+  ): Promise<boolean> {
     if (await this.canEdit(actor, guildId)) return true;
     return this.holdsTopRank(actor, guildId);
+  }
+
+  /** ROK-1814: change the hub crest — `canEdit`, or the top in-game rank. */
+  canEditCrest(actor: GuildActor, guildId: number): Promise<boolean> {
+    return this.canEditOrHoldsTopRank(actor, guildId);
   }
 
   /**

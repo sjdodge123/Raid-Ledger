@@ -7,7 +7,7 @@
 import {
     WowForeverNamePartSchema, WOW_FOREVER_DEFAULT_REGION, WOW_FOREVER_RULESET_LABELS,
     WowForeverRulesetSchema, WowRegionSchema,
-    type WowForeverRuleset, type WowForeverSelectableRuleset, type WowRegion,
+    type GuildPage, type WowForeverRuleset, type WowForeverSelectableRuleset, type WowRegion,
 } from '@raid-ledger/contract';
 
 /** Forever is detected by its game slug, never by `game_variant`. */
@@ -15,6 +15,14 @@ export const WOW_FOREVER_GAME_SLUG = 'world-of-warcraft-forever';
 
 export function isWowForeverSlug(slug: string | null | undefined): boolean {
     return slug === WOW_FOREVER_GAME_SLUG;
+}
+
+/**
+ * ROK-2192 — a WoW: Forever guild hub (the only hub with a Blizzard roster
+ * slug a GM may write; `BlizzardRosterSection` renders nothing elsewhere).
+ */
+export function isForeverGuildPage(page: GuildPage): boolean {
+    return page.guild.kind === 'wow_guild' && isWowForeverSlug(page.guild.gameSlug);
 }
 
 /**
