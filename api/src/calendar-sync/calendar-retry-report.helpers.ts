@@ -4,6 +4,10 @@
  * expected — BullMQ backs off and retries — so it is marked for `beforeSend`
  * to drop. The final attempt, and every non-provider error (a derive's DB
  * error, an unexpected exception), stay unmarked and still report.
+ *
+ * The mark is set on the error instance: every provider throw site must build
+ * a fresh error per attempt — never share or cache a rejected error across
+ * jobs (see `sentry-expected-retry.helpers.ts`).
  */
 import { markExpectedRetry } from '../sentry/sentry-expected-retry.helpers';
 import {

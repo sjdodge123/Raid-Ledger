@@ -93,12 +93,6 @@ describe('CalendarWriteProcessor → derive on needs_reconnect', () => {
 
 const attempt = (data: CalendarWriteJobData, attemptsMade: number) =>
   ({ ...job(data), attemptsMade }) as Job<CalendarWriteJobData>;
-const RECONCILE_8 = {
-  kind: 'reconcile',
-  connectionId: 8,
-  eventId: 2,
-  userId: 4,
-} as CalendarWriteJobData;
 
 describe('CalendarWriteProcessor → Sentry sees only reportable failures (ROK-2189)', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -111,9 +105,9 @@ describe('CalendarWriteProcessor → Sentry sees only reportable failures (ROK-2
     async (_name, make) => {
       const err = make();
       reconcile.mockRejectedValue(err);
-      await expect(
-        makeProcessor().process(attempt(RECONCILE_8, 2)),
-      ).rejects.toBe(err);
+      await expect(makeProcessor().process(attempt(RECONCILE, 2))).rejects.toBe(
+        err,
+      );
       expect(isExpectedRetry(err)).toBe(true);
     },
   );
@@ -129,7 +123,7 @@ describe('CalendarWriteProcessor → Sentry sees only reportable failures (ROK-2
   it('the final attempt is NOT marked — exhausted retries report', async () => {
     const err = new TransientError('http_503');
     reconcile.mockRejectedValue(err);
-    await expect(makeProcessor().process(attempt(RECONCILE_8, 5))).rejects.toBe(
+    await expect(makeProcessor().process(attempt(RECONCILE, 5))).rejects.toBe(
       err,
     );
     expect(isExpectedRetry(err)).toBe(false);
@@ -138,7 +132,7 @@ describe('CalendarWriteProcessor → Sentry sees only reportable failures (ROK-2
   it('a non-provider error with attempts left is NOT marked', async () => {
     const err = new Error('connection terminated unexpectedly');
     reconcile.mockRejectedValue(err);
-    await expect(makeProcessor().process(attempt(RECONCILE_8, 0))).rejects.toBe(
+    await expect(makeProcessor().process(attempt(RECONCILE, 0))).rejects.toBe(
       err,
     );
     expect(isExpectedRetry(err)).toBe(false);

@@ -82,4 +82,13 @@ describe('Sentry beforeSend — expected BullMQ retries (ROK-2189)', () => {
   it('still reports an event with no hint at all', () => {
     expect(beforeSend(transientEvent())).not.toBeNull();
   });
+
+  it('leaves a frozen error unmarked instead of throwing over the real job error', () => {
+    const err = Object.freeze(new TransientError('frozen'));
+    expect(() => markExpectedRetry(err)).not.toThrow();
+    expect(markExpectedRetry(err)).toBe(err);
+    expect(
+      beforeSend(transientEvent(), { originalException: err }),
+    ).not.toBeNull();
+  });
 });
