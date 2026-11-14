@@ -9,7 +9,8 @@
  * so `scheduling-poll-threshold.smoke.spec.ts` (AC5) passes unchanged.
  *
  * `voted` = distinct voters so far (`poll.uniqueVoterCount`), `total` =
- * `match.minVoteThreshold`.
+ * `match.minVoteThreshold`. The copy says "vote target", never "majority"
+ * (see {@link targetCopy}).
  */
 import type { JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
@@ -18,6 +19,18 @@ export interface SchedulingVoteProgressProps {
   match: MatchDetailResponseDto;
   /** Distinct voters on this poll so far (poll.uniqueVoterCount). */
   uniqueVoterCount: number | undefined;
+}
+
+/**
+ * Right-hand copy. This bar counts poll PARTICIPATION (anyone who voted on any
+ * time), not support for one time, so it never says "majority" — the lock-in
+ * confirm owns that word and measures the picked slot against a majority of
+ * members. Saying "Majority reached" here while that confirm said "below
+ * majority?" for the same poll read as a contradiction (#2132 verify lane).
+ */
+function targetCopy(voted: number, total: number): string {
+  if (voted >= total) return 'Vote target reached';
+  return `${total - voted} more to reach the vote target`;
 }
 
 /** Compact distinct-voters / threshold progress bar — see file-level docstring. */
@@ -31,16 +44,13 @@ export function SchedulingVoteProgress(
   if (total == null || uniqueVoterCount === undefined) return null;
   const voted = uniqueVoterCount;
   const pct = total > 0 ? Math.min(100, Math.round((voted / total) * 100)) : 0;
-  const unlocked = voted >= total;
   return (
     <div className="mt-2 px-1">
       <div className="flex items-center justify-between text-[11px] text-muted mb-1">
         <span data-testid="vote-progress-text">
           {voted}/{total} voted
         </span>
-        <span>
-          {unlocked ? 'Majority reached' : 'unlocks at majority'}
-        </span>
+        <span>{targetCopy(voted, total)}</span>
       </div>
       <div
         className="h-1.5 rounded-full bg-overlay overflow-hidden"
