@@ -63,6 +63,7 @@ import { quickPlayOnePerGameTests } from "./tests/quick-play-one-per-game.test.j
 import { bindQuickPlayTests } from "./tests/bind-quick-play.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 import { ephemeralVoicePlannedTests } from "./tests/ephemeral-voice-planned.test.js";
+import { ephemeralVoiceRescheduleTests } from "./tests/ephemeral-voice-reschedule.test.js";
 import { privateVoiceAccessTests } from "./tests/private-voice-access.test.js";
 import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
 import { lfmPlayingTests } from "./tests/lfm-playing.test.js";
@@ -234,6 +235,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...bindQuickPlayTests,
     ...ephemeralVoiceTests,
     ...ephemeralVoicePlannedTests,
+    ...ephemeralVoiceRescheduleTests,
     ...privateVoiceAccessTests,
     ...lfmEmbedTests,
     ...lfmPlayingTests,
