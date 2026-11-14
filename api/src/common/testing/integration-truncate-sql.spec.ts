@@ -33,7 +33,9 @@ describe('buildTruncateSql (ROK-2196 option C)', () => {
   });
 
   it('DELETEs (never TRUNCATEs) with a server-quoted identifier', () => {
-    expect(block).toContain("EXECUTE format('DELETE FROM public.%I', r.tablename)");
+    expect(block).toContain(
+      "EXECUTE format('DELETE FROM public.%I', r.tablename)",
+    );
     expect(block).not.toMatch(/\bTRUNCATE\b/i);
   });
 

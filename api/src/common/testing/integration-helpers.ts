@@ -23,8 +23,12 @@ import { _resetInFlightRefreshes } from '../swr-cache';
 import { INSTANCE_KEY, type TestApp } from './test-app';
 import { nonEmpty } from './narrow';
 import { phaseMark, recordPhase } from './integration-phase-timer';
+import { buildTruncateSql } from './integration-truncate-sql';
 
 const obliterateLogger = new Logger('truncateAllTables.obliterate');
+
+/** Built once per module load; the DO block itself is table-list agnostic. */
+const TRUNCATE_ALL_SQL = buildTruncateSql();
 
 export interface SeededData {
   adminUser: typeof schema.users.$inferSelect;
@@ -126,29 +130,16 @@ export async function truncateAllTables(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<SeededData> {
   const truncateStart = phaseMark();
-  // Discover all application tables.
-  // Exclude Drizzle migration tracking and cron infrastructure tables —
-  // cron_jobs/cron_job_executions are seeded on app startup and must persist
-  // across tests to avoid FK violations and deadlocks with active cron handlers.
-  const tables = await db.execute<{ tablename: string }>(sql`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public'
-      AND tablename NOT LIKE '__drizzle%'
-      AND tablename NOT IN ('cron_jobs', 'cron_job_executions')
-  `);
-
-  if (tables.length > 0) {
-    await retryOnDeadlock(() =>
-      db.transaction(async (tx) => {
-        // Disable FK trigger checks for the session so DELETE order doesn't matter.
-        await tx.execute(sql`SET session_replication_role = 'replica'`);
-        for (const t of tables) {
-          await tx.execute(sql.raw(`DELETE FROM "${t.tablename}"`));
-        }
-        await tx.execute(sql`SET session_replication_role = 'origin'`);
-      }),
-    );
-  }
+  // ONE statement (ROK-2196): a DO block discovers every public table except
+  // Drizzle bookkeeping and cron_jobs/cron_job_executions (seeded at boot,
+  // needed by live cron handlers) and DELETEs it with FK triggers off for the
+  // transaction only. See integration-truncate-sql.ts for why DELETE, not
+  // TRUNCATE, and why the table list is not cached client-side.
+  await retryOnDeadlock(() =>
+    db.transaction(async (tx) => {
+      await tx.execute(sql.raw(TRUNCATE_ALL_SQL));
+    }),
+  );
 
   // Reset cross-suite in-memory state that can otherwise leak between files
   // during a full integration run (ROK-1059, ROK-1232). The mock Redis store,
