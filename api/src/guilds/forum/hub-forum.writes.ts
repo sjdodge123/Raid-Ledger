@@ -185,7 +185,9 @@ export async function insertReply(
       .update(threads)
       .set({
         replyCount: sql`${threads.replyCount} + 1`,
-        lastActivityAt: values.now,
+        // GREATEST: a concurrent reply with an earlier `now` that commits
+        // after a newer one must not move the thread's activity backwards.
+        lastActivityAt: sql`GREATEST(${threads.lastActivityAt}, ${values.now.toISOString()}::timestamptz)`,
       })
       .where(liveThread(target))
       .returning({ id: threads.id });

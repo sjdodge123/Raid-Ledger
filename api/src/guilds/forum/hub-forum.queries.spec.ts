@@ -99,16 +99,16 @@ function fakeDb(updated: unknown[]) {
   const insert = jest.fn(() => ({
     values: () => ({ returning: () => Promise.resolve([{ id: 1 }]) }),
   }));
-  const update = jest.fn(() => ({
-    set: () => ({
-      where: () => ({ returning: () => Promise.resolve(updated) }),
-    }),
-  }));
+  const set = jest.fn((values: Record<string, unknown>) => {
+    void values;
+    return { where: () => ({ returning: () => Promise.resolve(updated) }) };
+  });
+  const update = jest.fn(() => ({ set }));
   const tx = { insert, update };
   const fake = {
     transaction: (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  return { db: fake as unknown as Db, insert, update };
+  return { db: fake as unknown as Db, insert, update, set };
 }
 
 const TARGET = { guildId: 7, threadId: 9 };
@@ -135,6 +135,20 @@ describe('insertReply', () => {
     });
     expect(out).toEqual({ id: 1 });
     expect(insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('never moves last activity backwards: GREATEST(stored, now)', async () => {
+    const { db: fake, set } = fakeDb([{ id: 9 }]);
+    await insertReply(fake, TARGET, { authorId: 5, body: 'hi', now: NOW });
+    const values = set.mock.calls[0]?.[0] ?? {};
+    const { sql: text, params } = db
+      .update(schema.hubForumThreads)
+      .set(values)
+      .toSQL();
+    expect(text).toMatch(
+      /"last_activity_at" = GREATEST\("hub_forum_threads"\."last_activity_at", \$\d+::timestamptz\)/,
+    );
+    expect(params).toContain(NOW.toISOString());
   });
 });
 

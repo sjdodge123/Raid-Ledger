@@ -179,6 +179,25 @@ describe('ROK-1175 forum — round trip (AC2, AC3, AC5, AC6)', () => {
       newer.id,
     ]);
   });
+
+  it('a reply never moves last activity backwards (concurrent replies)', async () => {
+    const g = await newHub(ctx);
+    // A newer reply already committed: stored activity is ahead of this request's clock.
+    const ahead = new Date(Date.now() + HOUR);
+    const id = await insertThreadRow(g, ctx.userIds.plain, ahead);
+    const res = await call(ctx, 'post', `${base(g)}/${id}/replies`, 'plain', {
+      body: 'late',
+    });
+    expect(res.status).toBe(201);
+    const [row] = nonEmpty(
+      await ctx.testApp.db
+        .select({ at: schema.hubForumThreads.lastActivityAt })
+        .from(schema.hubForumThreads)
+        .where(eq(schema.hubForumThreads.id, id)),
+      'thread',
+    );
+    expect(row.at.toISOString()).toBe(ahead.toISOString());
+  });
 });
 
 describe('ROK-1175 forum — authorship (AC4)', () => {
