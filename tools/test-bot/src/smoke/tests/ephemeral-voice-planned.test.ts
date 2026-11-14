@@ -27,6 +27,7 @@ import {
   flushEmbedQueue,
   channelForTest,
   channelForGame,
+  triggerReconciliation,
 } from '../fixtures.js';
 import {
   acquireScheduledEvents,
@@ -207,6 +208,18 @@ async function assertLiveSe(
   }
 }
 
+/**
+ * Barrier: the event row is bound to its SE. The SE create is fire-and-forget
+ * and binds its id only after Discord replies, so an SE visible in the guild
+ * may still be unbound. Reconciliation runs synchronously and binds any
+ * unbound event (adopting its live RL SE), so once it returns the binding
+ * exists and the channel creation below takes the normal repoint path rather
+ * than the create-time adopt race.
+ */
+async function awaitSeBinding(ctx: TestContext): Promise<void> {
+  await triggerReconciliation(ctx.api);
+}
+
 /** Widen the create buffer so the event is inside it, then force the scan. */
 async function createChannelNow(
   ctx: TestContext,
@@ -319,6 +332,7 @@ const plannedVoiceSurfaces: SmokeTest = {
       );
       await assertPlannedEmbed(ctx, embedChannelId, ev.title, opensUnix);
 
+      await awaitSeBinding(ctx);
       channelId = await createChannelNow(ctx, ev.id, categoryId);
       await flushEmbedQueue(ctx.api);
       await assertLiveSe(ctx, seId, channelId);
