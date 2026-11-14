@@ -47,6 +47,8 @@ export interface DeployChainResult {
   operator_admin?: OperatorAdminMode | undefined;
   expected_head?: string | null | undefined;
   synced_head?: string | null | undefined;
+  /** ROK-2202: shared settings key NAMES still unusable after the overlay; absent when none. */
+  shared_keys_missing?: string[] | undefined;
   error?: string | undefined;
   failed_step?: string | undefined;
   message: string;

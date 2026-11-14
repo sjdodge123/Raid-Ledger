@@ -17,9 +17,12 @@ export function makeChainCtx(task: () => LocalTaskJson, persist: () => void): Ch
       task().current_step = step;
       persist();
     },
-    recordStep(name, ok, tookS, _detail, _error): void {
+    recordStep(name, ok, tookS, detail, _error): void {
       const t = task();
-      t.steps.push({ name, status: ok ? 'PASS' : 'FAIL', duration_s: Math.round(tookS * 10) / 10 });
+      const status = ok ? 'PASS' : 'FAIL';
+      const duration_s = Math.round(tookS * 10) / 10;
+      // ROK-2202 (Codex P2 #2): the detail must reach rl_task_status.
+      t.steps.push({ name, status, duration_s, ...(detail ? { detail } : {}) });
       t.current_step = ok ? null : name;
       persist();
     },
@@ -39,4 +42,6 @@ export function applyDeployResult(task: LocalTaskJson, res: DeployChainResult): 
   task.admin_password = res.admin_password ?? null;
   task.expected_head = res.expected_head ?? null;
   task.synced_head = res.synced_head ?? null;
+  // ROK-2202 (Codex P2 #3): name still-missing shared keys on the status read.
+  if (res.shared_keys_missing?.length) task.shared_keys_missing = res.shared_keys_missing;
 }

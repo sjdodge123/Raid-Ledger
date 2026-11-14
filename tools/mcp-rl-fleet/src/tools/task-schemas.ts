@@ -28,6 +28,10 @@ export const TaskStepSchema = z.object({
   name: z.string(),
   status: z.enum(['PASS', 'FAIL', 'SKIPPED']),
   duration_s: z.number().nullable(),
+  // ROK-2202: the laptop runner's per-step note (e.g. sync_settings'
+  // `skipped_unusable: [..]`, names only). Optional: VM steps and task JSON
+  // written before it have none.
+  detail: z.string().optional(),
 });
 
 // ISO-8601 sanity check — Zod 3 has no native datetime in our pinned slice of
@@ -109,6 +113,8 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   operator_admin?: string | null;
   /** rl_env_spin only: non-fatal pipeline warnings (e.g. admin_bootstrap_failed). */
   bootstrap_warnings?: Array<{ code: string; detail: string }> | null;
+  /** ROK-2202, rl_env_deploy only: shared settings key NAMES still unusable in the env. */
+  shared_keys_missing?: string[];
   /**
    * Operator ruling 2026-09-12 — set on a TERMINAL validate-ci task whose
    * synced HEAD sha was recorded at dispatch. true means the fleet Playwright
