@@ -34,13 +34,16 @@ interface EventHubFieldProps {
 
 export function EventHubField({ gameId, guildId, onGuildChange, dropUnlisted = false }: EventHubFieldProps): JSX.Element | null {
     const q = useTaggableHubsQuery(gameId ?? undefined);
-    const [opened] = useState({ guildId, gameId });
+    const [openedGuildId] = useState(guildId);
+    // The form's game id is null until the game registry loads (a cold edit-page load), so keep the first real one.
+    const [openedGameId, setOpenedGameId] = useState(gameId);
+    if (openedGameId === null && gameId !== null) setOpenedGameId(gameId);
     const hubs = q.data?.hubs ?? [];
     // Only a successful lookup can prove a hub is absent; a loading or failed one keeps the pick (Codex P2).
     const isAbsent = (id: number | null): id is number => q.isSuccess && id !== null && !hubs.some((h) => h.id === id);
     const unseen = dropUnlisted && isAbsent(guildId);
-    const sameGame = gameId === opened.gameId;
-    const standIn = !dropUnlisted && sameGame && isAbsent(opened.guildId) ? opened.guildId : null;
+    const sameGame = gameId !== null && gameId === openedGameId;
+    const standIn = !dropUnlisted && sameGame && isAbsent(openedGuildId) ? openedGuildId : null;
     useEffect(() => {
         if (unseen) onGuildChange(null);
     }, [unseen, onGuildChange]);

@@ -208,9 +208,18 @@ describe('EventHubField — edit-mode stand-in for a tagged hub the viewer canno
         expect(screen.getByText(UNLISTED_HUB_LABEL), 'offered while the game is the opened one').toBeInTheDocument();
         rerender(<EventHubField gameId={8} guildId={null} onGuildChange={vi.fn()} />);
         await waitFor(() => expect(lastGameId, 'the new game\'s hubs were fetched').toBe('8'));
-        await act(async () => {});
-        expect(screen.getByLabelText('Hub'), 'the new game still lists a hub').toBeInTheDocument();
+        expect(await screen.findByLabelText('Hub'), 'the new game still lists a hub').toBeInTheDocument();
         expect(screen.queryByText(UNLISTED_HUB_LABEL), 'the opened-with hub belongs to the old game').toBeNull();
+    });
+
+    it('edit mode: a cold load (game id null until the game registry resolves) still shows the stand-in', async () => {
+        serve([SERVER]);
+        const { rerender } = render(<EventHubField gameId={null} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
+        rerender(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />);
+        // The disabled null-game query sits first in the cache, so wait on the game-7 lookup by its request.
+        await waitFor(() => expect(lastGameId, 'the game-7 hubs were fetched').toBe('7'));
+        expect(await screen.findByText(UNLISTED_HUB_LABEL), 'the stand-in carries the current tag').toBeInTheDocument();
+        expect(screen.getByLabelText('Hub'), 'the tagged hub stays selected once the registry resolves').toHaveValue('21');
     });
 
     it('edit mode: no stand-in while the hub list is loading', () => {
