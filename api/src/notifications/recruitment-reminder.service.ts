@@ -5,6 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import type { EventVoicePayload } from './notification-voice.helpers';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
@@ -179,10 +180,10 @@ export class RecruitmentReminderService {
 
   /** Resolve context needed for recruitment DMs. */
   private async resolveRecruitmentContext(event: EligibleEvent) {
-    const [defaultTimezone, clientUrl, voiceChannelId] = await Promise.all([
+    const [defaultTimezone, clientUrl, voice] = await Promise.all([
       this.settingsService.getDefaultTimezone().then((tz) => tz ?? 'UTC'),
       this.settingsService.getClientUrl(),
-      this.notificationService.resolveVoiceChannelForEvent(event.id),
+      this.notificationService.resolveVoiceForEvent(event.id),
     ]);
     const eventDate = new Date(event.startTime).toLocaleDateString('en-US', {
       weekday: 'short',
@@ -191,7 +192,7 @@ export class RecruitmentReminderService {
       timeZone: defaultTimezone,
     });
     const signupSummary = buildSignupSummary(event);
-    return { clientUrl, voiceChannelId, eventDate, signupSummary };
+    return { clientUrl, voice, eventDate, signupSummary };
   }
 
   /** Send recruitment reminder DMs to all eligible recipients. */
@@ -199,14 +200,14 @@ export class RecruitmentReminderService {
     event: EligibleEvent,
     recipientIds: number[],
   ): Promise<void> {
-    const { clientUrl, voiceChannelId, eventDate, signupSummary } =
+    const { clientUrl, voice, eventDate, signupSummary } =
       await this.resolveRecruitmentContext(event);
     const message = `Spots available for ${event.gameName}: ${event.title} on ${eventDate}. ${signupSummary} — sign up now!`;
     const payload = this.buildRecruitmentPayload(
       event,
       signupSummary,
       clientUrl,
-      voiceChannelId,
+      voice,
     );
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
@@ -231,7 +232,7 @@ export class RecruitmentReminderService {
     event: EligibleEvent,
     signupSummary: string,
     clientUrl: string,
-    voiceChannelId: string | null,
+    voice: EventVoicePayload,
   ): Record<string, unknown> {
     return {
       eventId: event.id,
@@ -242,7 +243,7 @@ export class RecruitmentReminderService {
       startTime: event.startTime,
       url: `${clientUrl}/events/${event.id}`,
       discordUrl: buildDiscordUrl(event),
-      ...(voiceChannelId ? { voiceChannelId } : {}),
+      ...voice,
     };
   }
 

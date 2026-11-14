@@ -23,7 +23,7 @@ const DISPLACED_ACTION: Record<DisplacedDestination, (r?: string) => string> = {
 export async function sendDisplacedNotification(
   p: DisplacedNotificationParams,
   notificationService: NotificationService,
-  fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
+  fetchNotificationCtx: (eventId: number) => Promise<Record<string, unknown>>,
   settings: VoiceGateSettings,
 ) {
   const { db, eventId, role, rearrangedToRole } = p;

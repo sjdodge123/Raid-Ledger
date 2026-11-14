@@ -15,15 +15,12 @@ import { appendVoiceAccessLine } from '../notifications/voice-access-lost.helper
 export async function fetchNotificationContext(
   notificationService: NotificationService,
   eventId: number,
-): Promise<Record<string, string>> {
-  const [discordUrl, voiceChannelId] = await Promise.all([
+): Promise<Record<string, unknown>> {
+  const [discordUrl, voice] = await Promise.all([
     notificationService.getDiscordEmbedUrl(eventId),
-    notificationService.resolveVoiceChannelForEvent(eventId),
+    notificationService.resolveVoiceForEvent(eventId),
   ]);
-  return {
-    ...(discordUrl ? { discordUrl } : {}),
-    ...(voiceChannelId ? { voiceChannelId } : {}),
-  };
+  return { ...(discordUrl ? { discordUrl } : {}), ...voice };
 }
 
 export async function notifyRoleChanges(
@@ -33,7 +30,7 @@ export async function notifyRoleChanges(
   newAssignments: UpdateRosterDto['assignments'],
   signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
   oldRoleBySignupId: Map<number, string | null>,
-  extraPayload: Record<string, string>,
+  extraPayload: Record<string, unknown>,
   /** ROK-1769: benched members who lost private voice — line rides on the DM. */
   voiceLostUserIds: ReadonlySet<number> = new Set(),
 ): Promise<void> {
@@ -66,7 +63,7 @@ function roleChangeInput(
   eventTitle: string,
   oldRole: string,
   newRole: string,
-  extraPayload: Record<string, string>,
+  extraPayload: Record<string, unknown>,
 ): CreateNotificationInput {
   if (oldRole === 'bench' && newRole !== 'bench') {
     return {
@@ -96,7 +93,7 @@ export async function notifyNewAssignments(
   newAssignments: UpdateRosterDto['assignments'],
   signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
   oldRoleBySignupId: Map<number, string | null>,
-  extraPayload: Record<string, string>,
+  extraPayload: Record<string, unknown>,
   /** ROK-1769: pool → bench loses private voice; the line rides on the DM. */
   voiceLostUserIds: ReadonlySet<number> = new Set(),
 ): Promise<void> {
@@ -127,7 +124,7 @@ function newAssignmentInput(
   eventId: number,
   eventTitle: string,
   newRole: string,
-  extraPayload: Record<string, string>,
+  extraPayload: Record<string, unknown>,
 ) {
   const isGeneric = newRole === 'player';
   return {
