@@ -298,12 +298,12 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when the 
         })) as { id: number };
 
         try {
-            await page.goto('/calendar');
+            // Deep-link the Week grid (the user's persisted viewPref could be
+            // Day) rather than clicking Week straight after load — this test is
+            // about the grid's contents, not the view switcher.
+            await page.goto('/calendar?view=week');
             await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
-
-            // The user's last viewPref (persisted) could be Day — narrow to Week
-            // so the assertion is deterministic across stored prefs.
-            await page.getByRole('button', { name: 'Week', exact: true }).click();
+            await expect(page.locator('.rbc-time-view')).toBeVisible({ timeout: 15_000 });
             await expect(page).toHaveURL(/[?&]date=\d{4}-\d{2}-\d{2}/);
 
             // The week starts on SUNDAY (`weekStartsOn: 0`). A run late on a
