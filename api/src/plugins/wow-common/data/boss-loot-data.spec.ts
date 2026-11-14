@@ -35,6 +35,7 @@ interface LootEntry {
   classRestrictions: string[] | null;
   iconUrl: string | null;
   itemSubclass: string | null;
+  instanceId?: number;
 }
 
 const bosses = bossEncounterData as BossEntry[];
@@ -627,5 +628,37 @@ describe('boss-loot-data.json — Forever rows resolve to one boss (ROK-2170)', 
   it('no Forever loot boss name matches two boss rows', () => {
     const names = [...new Set(foreverLoot.map((l) => l.bossName))];
     expect(names.filter((n) => resolvableBossCount(n) !== 1)).toEqual([]);
+  });
+});
+
+describe('boss-loot-data.json — same-name bosses carry an instanceId (ROK-2193)', () => {
+  const instancesFor = (name: string, expansion: string) =>
+    bosses
+      .filter((b) => b.name === name && b.expansion === expansion)
+      .map((b) => b.instanceId);
+  const shared = loot.filter(
+    (l) => instancesFor(l.bossName, l.expansion).length > 1,
+  );
+
+  it("finds the known same-name bosses (Kael'thas tbc, Anub'arak wotlk)", () => {
+    const names = new Set(shared.map((l) => `${l.bossName}::${l.expansion}`));
+    expect(names).toEqual(
+      new Set(["Kael'thas Sunstrider::tbc", "Anub'arak::wotlk"]),
+    );
+  });
+
+  it("every loot row of a same-name boss names one of that boss's instances", () => {
+    const bad = shared.filter(
+      (l) =>
+        l.instanceId === undefined ||
+        !instancesFor(l.bossName, l.expansion).includes(l.instanceId),
+    );
+    expect(bad.map((l) => `${l.bossName} ${l.itemId}`)).toEqual([]);
+  });
+
+  it('each instance of a same-name boss gets at least one loot row', () => {
+    for (const id of [249, 749, 272, 757]) {
+      expect(shared.some((l) => l.instanceId === id)).toBe(true);
+    }
   });
 });
