@@ -13,7 +13,6 @@ export interface SignupsMocks {
   mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
     resolveVoiceForEvent: jest.Mock;
   };
   mockRosterNotificationBuffer: {
@@ -68,7 +67,6 @@ function buildMockServices() {
   const mockNotificationService = {
     create: jest.fn().mockResolvedValue(null),
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
   };
   const mockRosterNotificationBuffer = {

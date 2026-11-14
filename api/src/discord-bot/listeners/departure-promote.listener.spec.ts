@@ -57,7 +57,6 @@ let mockDb: MockDb;
 let mockClientService: { getClient: jest.Mock; isConnected: jest.Mock };
 let mockNotificationService: {
   getDiscordEmbedUrl: jest.Mock;
-  resolveVoiceChannelForEvent: jest.Mock;
   resolveVoiceForEvent: jest.Mock;
   create: jest.Mock;
 };
@@ -72,7 +71,6 @@ function setupDeparturePromote() {
   };
   mockNotificationService = {
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     create: jest.fn().mockResolvedValue(undefined),
   };

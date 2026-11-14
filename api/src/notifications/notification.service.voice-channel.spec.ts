@@ -1,6 +1,6 @@
 /**
  * Tests for ROK-507 voice channel resolution methods on NotificationService.
- * Verifies resolveVoiceChannelId() and resolveVoiceChannelForEvent().
+ * Verifies resolveVoiceChannelId() and resolveVoiceForEvent().
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationService } from './notification.service';
@@ -37,7 +37,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
   beforeEach(async () => {
     mockChannelResolver = {
       resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
-      // ROK-1389: resolveVoiceChannelForEvent now delegates here so a text
+      // ROK-1389: resolveVoiceForEvent now delegates here so a text
       // override no longer wins unconditionally.
       resolveVoiceChannelHonoringOverride: jest.fn().mockResolvedValue(null),
     };
@@ -140,9 +140,9 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     });
   });
 
-  // ─── resolveVoiceChannelForEvent ─────────────────────────────────────────
+  // ─── resolveVoiceForEvent ─────────────────────────────────────────
 
-  describe('resolveVoiceChannelForEvent', () => {
+  describe('resolveVoiceForEvent', () => {
     it('looks up event by ID and delegates to the override-honoring resolver', async () => {
       const mockEvent = {
         gameId: 7,
@@ -155,7 +155,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         'vc-from-game-7',
       );
 
-      const result = await service.resolveVoiceChannelForEvent(42);
+      const result = (await service.resolveVoiceForEvent(42)).voiceChannelId ?? null;
 
       expect(mockDb.select).toHaveBeenCalled();
       expect(
@@ -167,7 +167,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     it('returns null when event is not found', async () => {
       mockDb.select.mockReturnValue(makeSelectChain([])); // no event row
 
-      const result = await service.resolveVoiceChannelForEvent(9999);
+      const result = (await service.resolveVoiceForEvent(9999)).voiceChannelId ?? null;
 
       expect(result).toBeNull();
       expect(
@@ -187,7 +187,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         null,
       );
 
-      const result = await service.resolveVoiceChannelForEvent(50);
+      const result = (await service.resolveVoiceForEvent(50)).voiceChannelId ?? null;
 
       expect(
         mockChannelResolver.resolveVoiceChannelHonoringOverride,
@@ -206,7 +206,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         null,
       );
 
-      const result = await service.resolveVoiceChannelForEvent(10);
+      const result = (await service.resolveVoiceForEvent(10)).voiceChannelId ?? null;
 
       expect(result).toBeNull();
     });
@@ -222,7 +222,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         '111222333444',
       );
 
-      const result = await service.resolveVoiceChannelForEvent(99);
+      const result = (await service.resolveVoiceForEvent(99)).voiceChannelId ?? null;
 
       expect(result).toBe('111222333444');
     });
@@ -239,7 +239,7 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         'override-vc-999',
       );
 
-      const result = await service.resolveVoiceChannelForEvent(42);
+      const result = (await service.resolveVoiceForEvent(42)).voiceChannelId ?? null;
 
       expect(result).toBe('override-vc-999');
       expect(
@@ -283,9 +283,9 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
       expect(result).toBeNull();
     });
 
-    it('resolveVoiceChannelForEvent returns null when channelResolver is not injected', async () => {
+    it('resolveVoiceForEvent returns null when channelResolver is not injected', async () => {
       const result =
-        await serviceWithoutResolver.resolveVoiceChannelForEvent(42);
+        (await serviceWithoutResolver.resolveVoiceForEvent(42)).voiceChannelId ?? null;
       expect(result).toBeNull();
     });
   });

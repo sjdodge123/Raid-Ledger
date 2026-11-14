@@ -24,7 +24,6 @@ describe('notifyAttendeeRunningLate', () => {
   let notificationService: {
     createMany: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
     resolveVoiceForEvent: jest.Mock;
   };
 
@@ -42,7 +41,6 @@ describe('notifyAttendeeRunningLate', () => {
     notificationService = {
       createMany: jest.fn().mockResolvedValue(undefined),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue('https://discord/msg'),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue('voice-1'),
       resolveVoiceForEvent: jest
         .fn()
         .mockResolvedValue({ voiceChannelId: 'voice-1' }),

@@ -19,7 +19,6 @@ function createMockNotificationService() {
     create: jest.fn().mockResolvedValue(undefined),
     createMany: jest.fn().mockResolvedValue([]),
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
   };
 }

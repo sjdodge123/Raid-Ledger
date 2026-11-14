@@ -102,11 +102,6 @@ describe('NotificationService — planned temporary voice channel in DMs', () =>
     });
   });
 
-  it('resolveVoiceChannelForEvent no longer links the default channel while planned', async () => {
-    db.select.mockReturnValue(selectChain([eventRow()]));
-    await expect(service.resolveVoiceChannelForEvent(42)).resolves.toBeNull();
-  });
-
   it('an event with no planned channel keeps the resolved voice link', async () => {
     db.select.mockReturnValue(
       selectChain([eventRow({ ephemeralVoiceEnabled: false })]),
@@ -115,9 +110,6 @@ describe('NotificationService — planned temporary voice channel in DMs', () =>
     await expect(service.resolveVoiceForEvent(42)).resolves.toEqual({
       voiceChannelId: 'default-voice-1',
     });
-    await expect(service.resolveVoiceChannelForEvent(42)).resolves.toBe(
-      'default-voice-1',
-    );
   });
 
   it('a live temporary channel is linked, never planned', async () => {

@@ -59,7 +59,6 @@ export interface RecruitmentReminderTestMocks {
   mockDedupService: { checkAndMarkSent: jest.Mock };
   mockNotificationService: {
     create: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
     resolveVoiceForEvent: jest.Mock;
   };
   mockSettingsService: {
@@ -88,7 +87,6 @@ export async function createRecruitmentReminderTestModule(): Promise<{
     },
     mockNotificationService: {
       create: jest.fn().mockResolvedValue({ id: 'notif-uuid-1' }),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
       resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     },
     mockSettingsService: {

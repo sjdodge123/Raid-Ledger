@@ -122,7 +122,6 @@ async function buildGraceModule() {
   };
   const mockNotificationService = {
     getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     create: jest.fn().mockResolvedValue(undefined),
   };
@@ -154,7 +153,6 @@ describe('DepartureGraceService', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
     resolveVoiceForEvent: jest.Mock;
   };
   let mockEventEmitter: { emit: jest.Mock };

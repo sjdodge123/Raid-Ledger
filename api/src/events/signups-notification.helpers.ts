@@ -11,11 +11,16 @@ import { formatRoleLabel } from './signups-roster.helpers';
 import type { NotificationService } from '../notifications/notification.service';
 import type { CreateNotificationInput } from '../notifications/notification.types';
 import { appendVoiceAccessLine } from '../notifications/voice-access-lost.helpers';
+import type { EventVoicePayload } from '../notifications/notification-voice.helpers';
 
+/** The embed link + voice keys every roster DM payload carries. */
+export type NotificationContext = { discordUrl?: string } & EventVoicePayload;
+
+/** Fetch the embed link + voice payload shared by an event's roster DMs. */
 export async function fetchNotificationContext(
   notificationService: NotificationService,
   eventId: number,
-): Promise<Record<string, unknown>> {
+): Promise<NotificationContext> {
   const [discordUrl, voice] = await Promise.all([
     notificationService.getDiscordEmbedUrl(eventId),
     notificationService.resolveVoiceForEvent(eventId),

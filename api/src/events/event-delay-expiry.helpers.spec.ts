@@ -45,7 +45,6 @@ describe('applyEventDelay — notice expiry (TDB:196)', () => {
     const notificationService = {
       createMany,
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
       resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     } as unknown as NotificationService;
 
@@ -75,7 +74,6 @@ describe('applyEventDelay — notice expiry (TDB:196)', () => {
     const notificationService = {
       createMany,
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
       resolveVoiceForEvent: jest
         .fn()
         .mockResolvedValue({ plannedVoiceChannel: planned }),

@@ -83,7 +83,6 @@ function build(
   } as unknown as NotificationDedupService;
   const notifications = {
     create,
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     resolveVoiceForEvent: jest.fn().mockResolvedValue(voice),
   } as unknown as NotificationService;
   const hub = {
