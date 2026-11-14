@@ -79,6 +79,8 @@ export function readPlannedVoice(value: unknown): PlannedEphemeralVoice | null {
   const name: unknown = Reflect.get(value, 'name');
   const opensAt: unknown = Reflect.get(value, 'opensAt');
   if (typeof name !== 'string' || typeof opensAt !== 'string') return null;
+  // A corrupt stored time would render `<t:NaN:t>`.
+  if (!Number.isFinite(Date.parse(opensAt))) return null;
   return { name, opensAt };
 }
 

@@ -12,6 +12,7 @@ jest.mock('discord.js', () => ({
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { SettingsService } from '../settings/settings.service';
 import { buildReminderPayload } from './event-reminder.helpers';
+import type { NotificationType } from './notification.types';
 
 type EmbedFields = Array<{ name: string; value: string }>;
 
@@ -32,18 +33,28 @@ describe('DM embed — planned temporary voice channel', () => {
     );
   });
 
-  async function voiceField(payload: Record<string, unknown>) {
+  async function buildJson(
+    payload: Record<string, unknown>,
+    type: NotificationType = 'event_reminder',
+  ) {
     const { embed } = await service.buildNotificationEmbed(
       {
         notificationId: 'n-1',
-        type: 'event_reminder',
+        type,
         title: 'Starting Soon!',
         message: 'Your event starts in 3 days',
         payload: { eventId: 42, ...payload },
       },
       'Test Community',
     );
-    const json = embed.toJSON() as { fields?: EmbedFields };
+    return embed.toJSON() as { fields?: EmbedFields; description?: string };
+  }
+
+  async function voiceField(
+    payload: Record<string, unknown>,
+    type: NotificationType = 'event_reminder',
+  ) {
+    const json = await buildJson(payload, type);
     return json.fields?.find((f) => f.name === 'Voice Channel');
   }
 
@@ -60,6 +71,49 @@ describe('DM embed — planned temporary voice channel', () => {
   it('ignores a malformed planned value', async () => {
     const field = await voiceField({ plannedVoiceChannel: { name: 3 } });
     expect(field).toBeUndefined();
+  });
+
+  it('ignores a planned value whose open time is not a date', async () => {
+    const field = await voiceField({
+      plannedVoiceChannel: { name: 'Stocks 5 man', opensAt: 'not-a-date' },
+    });
+    expect(field).toBeUndefined();
+  });
+
+  it.each<NotificationType>(['event_delayed', 'running_late'])(
+    '%s shows the planned channel name and open time',
+    async (type) => {
+      const field = await voiceField({ plannedVoiceChannel: PLANNED }, type);
+      expect(field?.value).toBe(
+        `\u{1F50A} Stocks 5 man · opens <t:${UNIX}:t>`,
+      );
+    },
+  );
+
+  it.each<NotificationType>(['event_delayed', 'running_late'])(
+    '%s shows the channel link when nothing is planned',
+    async (type) => {
+      const field = await voiceField({ voiceChannelId: '111222333' }, type);
+      expect(field?.value).toBe('<#111222333>');
+    },
+  );
+
+  it.each<NotificationType>(['subscribed_game', 'hub_event_tagged'])(
+    '%s description shows the planned channel line once',
+    async (type) => {
+      const json = await buildJson({ plannedVoiceChannel: PLANNED }, type);
+      expect(json.description).toBe(
+        `\u{1F50A} Stocks 5 man · opens <t:${UNIX}:t>`,
+      );
+    },
+  );
+
+  it('subscribed_game keeps the channel link when nothing is planned', async () => {
+    const json = await buildJson(
+      { voiceChannelId: '111222333' },
+      'subscribed_game',
+    );
+    expect(json.description).toBe('\u{1F50A} <#111222333>');
   });
 });
 

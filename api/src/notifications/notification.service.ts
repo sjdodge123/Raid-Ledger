@@ -263,16 +263,6 @@ export class NotificationService {
   }
 
   /**
-   * ROK-507: the event's voice channel id for a DM. Null while a temporary
-   * channel is only PLANNED — the default binding is the wrong room then;
-   * callers that can render the planned line use `resolveVoiceForEvent`.
-   */
-  async resolveVoiceChannelForEvent(eventId: number): Promise<string | null> {
-    const voice = await this.resolveVoiceForEvent(eventId);
-    return voice.voiceChannelId ?? null;
-  }
-
-  /**
    * The DM voice payload for an event — the event embeds' own decision: a
    * planned temporary channel (name + open time) wins, else the ROK-1389
    * voice-aware link (a text override no longer wins).

@@ -7,6 +7,7 @@ import { EmbedBuilder } from 'discord.js';
 import { formatDurationMs } from '../discord-bot/utils/format-duration';
 import { escapeHubName } from '../discord-bot/services/discord-embed-event-body.helpers';
 import { toStr } from './notification-embed.helpers';
+import { dmVoiceFieldValue, readPlannedVoice } from './notification-voice.helpers';
 
 /** Override the embed description with structured game-affinity lines. */
 export function applySubscribedGameEmbed(
@@ -22,8 +23,11 @@ export function applySubscribedGameEmbed(
     const dur = computeDurationSuffix(payload.startTime, payload.endTime);
     lines.push(`📆 <t:${unix}:f> (<t:${unix}:R>)${dur}`);
   }
-  if (payload.voiceChannelId) {
-    lines.push(`🔊 <#${toStr(payload.voiceChannelId)}>`);
+  const voice = dmVoiceFieldValue(payload);
+  // The planned line already starts with 🔊; a bare `<#id>` link does not.
+  if (voice) {
+    const planned = readPlannedVoice(payload.plannedVoiceChannel);
+    lines.push(planned ? voice : `🔊 ${voice}`);
   }
   if (lines.length > 0) embed.setDescription(lines.join('\n'));
   const thumbnail =

@@ -214,6 +214,8 @@ const TYPE_FIELD_DEFS: Partial<
   member_returned: { fields: [['slotName', 'Slot']], voice: true },
   event_cancelled: { fields: [['eventTitle', 'Event']], voice: false },
   event_rescheduled: { fields: [], voice: true },
+  event_delayed: { fields: [], voice: true },
+  running_late: { fields: [], voice: true },
   bench_promoted: { fields: [], voice: true },
   tentative_displaced: { fields: [], voice: true },
   missed_event_nudge: { fields: [['eventTitle', 'Event']], voice: false },
