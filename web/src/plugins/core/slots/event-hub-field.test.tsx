@@ -242,4 +242,13 @@ describe('EventHubField — the stand-in follows the game the edit form opened w
         expect(await screen.findByText(UNLISTED_HUB_LABEL), 'the stand-in carries the current tag').toBeInTheDocument();
         expect(screen.getByLabelText('Hub'), 'the tagged hub stays selected once the registry resolves').toHaveValue('21');
     });
+
+    it('edit mode: the opened game never resolved and the viewer switched game — no stand-in under the new game', async () => {
+        serve([SERVER]);
+        const { rerender } = render(<EventHubField gameId={null} guildId={21} onGuildChange={vi.fn()} />, { wrapper: wrapper() });
+        rerender(<EventHubField gameId={8} guildId={null} onGuildChange={vi.fn()} />);
+        await waitFor(() => expect(lastGameId, 'the game-8 hubs were fetched').toBe('8'));
+        expect(await screen.findByLabelText('Hub'), 'the new game lists a hub').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'the opened hub is not the new game\'s').toBeNull();
+    });
 });
