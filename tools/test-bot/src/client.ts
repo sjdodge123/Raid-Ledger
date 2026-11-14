@@ -71,7 +71,7 @@ export async function connect(): Promise<Client> {
 /** Gracefully disconnect. */
 export async function disconnect(): Promise<void> {
   if (client) {
-    client.destroy();
+    await client.destroy();
     client = null;
     guild = null;
     console.log('[test-bot] Disconnected');

@@ -78,6 +78,28 @@ await test('every attempt fails → throws the LAST error, never loops', async (
   assert.equal(cleanups, 2);
 });
 
+await test('a cleanup that throws never hides the login error or skips the retry', async () => {
+  let n = 0;
+  const logs: string[] = [];
+  const out = await loginWithRetry({
+    attempt: async () => { n++; if (n === 1) throw new Error('Bot login timed out after 30s'); return 'client-2'; },
+    cleanup: async () => { throw new Error('destroy rejected'); },
+    attempts: 2,
+    log: (m) => logs.push(m),
+  });
+  assert.equal(out, 'client-2');
+  assert.ok(logs.some((m) => /Cleanup after failed login attempt 1 threw \(destroy rejected\)/.test(m)));
+  n = 0;
+  await assert.rejects(
+    loginWithRetry({
+      attempt: async () => { n++; throw new Error(`login fail ${n}`); },
+      cleanup: async () => { throw new Error('destroy rejected'); },
+      attempts: 2,
+    }),
+    /login fail 2/,
+  );
+});
+
 await test('waitForReady resolves when ready fires', async () => {
   let fire: (() => void) | undefined;
   const p = waitForReady(async () => undefined, (cb) => { fire = cb; }, 1_000);

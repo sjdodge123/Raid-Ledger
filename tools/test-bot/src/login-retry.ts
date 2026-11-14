@@ -25,7 +25,12 @@ export async function loginWithRetry<T>(opts: LoginAttemptOptions<T>): Promise<T
       return await opts.attempt();
     } catch (err) {
       lastErr = err;
-      await opts.cleanup();
+      try {
+        await opts.cleanup();
+      } catch (cleanupErr) {
+        const m = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
+        opts.log?.(`[test-bot] Cleanup after failed login attempt ${i} threw (${m}); continuing`);
+      }
       if (i < opts.attempts) {
         const msg = err instanceof Error ? err.message : String(err);
         opts.log?.(`[test-bot] Login attempt ${i}/${opts.attempts} failed (${msg}); retrying`);
