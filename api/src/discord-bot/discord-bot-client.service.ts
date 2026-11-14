@@ -35,6 +35,7 @@ import {
   type EmbedRows,
 } from './discord-bot-client-rows.helpers';
 import {
+  supersededConnectError,
   wireConnectHandlers,
   type ConnectHooks,
 } from './discord-bot-client.connect.helpers';
@@ -52,11 +53,17 @@ export class DiscordBotClientService {
   private client: Client | null = null;
   private connecting = false;
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped by every connect and disconnect; the latest call owns the client. */
+  private ownerEpoch = 0;
 
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   async connect(token: string): Promise<void> {
-    if (this.client) await this.disconnect();
+    const epoch = ++this.ownerEpoch;
+    if (this.client) await this.teardown();
+    // ROK-2198: a disconnect or newer connect that arrived during the
+    // teardown owns the connection — never build a client with this token.
+    if (epoch !== this.ownerEpoch) throw supersededConnectError();
 
     const client = createDiscordClient();
     this.client = client;
@@ -77,6 +84,12 @@ export class DiscordBotClientService {
   }
 
   async disconnect(): Promise<void> {
+    this.ownerEpoch++;
+    await this.teardown();
+  }
+
+  /** Destroy the live client without changing who owns the connection. */
+  private async teardown(): Promise<void> {
     this.connecting = false;
     if (this.connectTimeout) {
       clearTimeout(this.connectTimeout);

@@ -15,6 +15,13 @@ import {
 } from './discord-bot-client.login.helpers';
 
 const SUPERSEDED_MESSAGE = 'Discord client was replaced before it became ready';
+const SUPERSEDED_CONNECT_MESSAGE =
+  'Discord connect was superseded by a newer connect or disconnect';
+
+/** A connect call that lost ownership before it built its client (ROK-2198). */
+export function supersededConnectError(): DiscordConnectError {
+  return new DiscordConnectError(SUPERSEDED_CONNECT_MESSAGE, false);
+}
 
 /** What the connect handlers need from DiscordBotClientService. */
 export interface ConnectHooks {
