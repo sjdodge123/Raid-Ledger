@@ -37,6 +37,8 @@ export class DiscordBotService
   autoConnectDelay: DelayFn = realDelay;
   /** Bumped to cancel a running startup auto-connect (ROK-2198). */
   private autoConnectGeneration = 0;
+  /** Set once shutdown starts; no connect may start after it (ROK-2198). */
+  private shuttingDown = false;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -95,6 +97,7 @@ export class DiscordBotService
    * Graceful shutdown.
    */
   async onModuleDestroy(): Promise<void> {
+    this.shuttingDown = true;
     this.cancelAutoConnect();
     await this.clientService.disconnect();
   }
@@ -108,6 +111,7 @@ export class DiscordBotService
       `handleConfigUpdate called with config: ${config ? `enabled=${String(config.enabled)}` : 'null'}`,
     );
     this.cancelAutoConnect();
+    if (this.shuttingDown) return;
 
     if (!config || !config.enabled) {
       this.logger.log(
@@ -135,7 +139,7 @@ export class DiscordBotService
    * depend on the event bus.  Skips if already connected or connecting.
    */
   async ensureConnected(config: DiscordBotConfig): Promise<void> {
-    if (!config.enabled) return;
+    if (!config.enabled || this.shuttingDown) return;
     if (this.clientService.isConnected() || this.clientService.isConnecting()) {
       this.logger.debug(
         'ensureConnected: already connected or connecting, skipping',
