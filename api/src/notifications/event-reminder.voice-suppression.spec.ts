@@ -70,7 +70,7 @@ async function buildModule(opts: {
   mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   voiceAttendance?: { isUserActive: jest.Mock } | null;
 }): Promise<EventReminderService> {
@@ -121,7 +121,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
 
   beforeEach(() => {
@@ -130,7 +130,7 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
   });
 
@@ -201,6 +201,30 @@ describe('EventReminderService — voice suppression (ROK-842)', () => {
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({ userId: 2, type: 'event_reminder' }),
       );
+    });
+
+    it('carries a planned temporary voice channel, not a channel link', async () => {
+      const planned = {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      };
+      mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+        plannedVoiceChannel: planned,
+      });
+      const service = await buildModule({ mockDb, mockNotificationService });
+      wireHandleRemindersDb(mockDb, {
+        users: [{ id: 2, discordId: 'discord-2' }],
+      });
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
+
+      await service.handleReminders();
+
+      const payload: unknown =
+        mockNotificationService.create.mock.calls[0]?.[0]?.payload;
+      expect(payload).toEqual(
+        expect.objectContaining({ plannedVoiceChannel: planned }),
+      );
+      expect(payload).not.toHaveProperty('voiceChannelId');
     });
   });
 

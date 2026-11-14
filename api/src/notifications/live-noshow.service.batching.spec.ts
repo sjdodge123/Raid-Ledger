@@ -52,7 +52,7 @@ describe('LiveNoShowService — batching', () => {
   let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   let mockCronJobService: { executeWithTracking: jest.Mock };
   let mockVoiceAttendance: { isUserActive: jest.Mock };
@@ -65,7 +65,7 @@ describe('LiveNoShowService — batching', () => {
 
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
 
     mockCronJobService = {

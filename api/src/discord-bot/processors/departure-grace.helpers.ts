@@ -196,14 +196,13 @@ async function findNextBenchPosition(
 /** Notify the event organizer about the departure. */
 export async function notifyOrganizer(
   deps: Pick<DepartureGraceDeps, 'notificationService'>,
-  event: typeof schema.events.$inferSelect,
+  event: Pick<typeof schema.events.$inferSelect, 'creatorId' | 'title'>,
   eventId: number,
   displayName: string,
 ): Promise<void> {
   if (!event.creatorId) return;
   const discordUrl = await deps.notificationService.getDiscordEmbedUrl(eventId);
-  const voiceChannelId =
-    await deps.notificationService.resolveVoiceChannelForEvent(eventId);
+  const voice = await deps.notificationService.resolveVoiceForEvent(eventId);
 
   await deps.notificationService.create({
     userId: event.creatorId,
@@ -213,7 +212,7 @@ export async function notifyOrganizer(
     payload: {
       eventId,
       ...(discordUrl ? { discordUrl } : {}),
-      ...(voiceChannelId ? { voiceChannelId } : {}),
+      ...voice,
     },
   });
 }

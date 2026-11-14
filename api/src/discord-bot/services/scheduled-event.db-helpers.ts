@@ -130,7 +130,7 @@ export async function getRecurrenceGroupId(
 }
 
 /** ROK-1352: recurrence group + live ephemeral channel for an event. */
-async function getRecurrenceAndEphemeral(
+export async function getRecurrenceAndEphemeral(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
 ): Promise<{
