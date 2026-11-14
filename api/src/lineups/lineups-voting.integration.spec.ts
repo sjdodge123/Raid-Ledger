@@ -14,7 +14,8 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { countVotesPerGame } from './lineups-query.helpers';
 import * as schema from '../drizzle/schema';
 import { at, nonEmpty } from '../common/testing/narrow';
 
@@ -806,6 +807,45 @@ function describeVoting() {
   describe(
     'POST /lineups/:id/vote — configurable limit (ROK-976)',
     describeConfigurableVoteLimit,
+  );
+
+  // -- countVotesPerGame counts nominated games only (TECH-DEBT 2884) -------
+
+  function describeNominatedOnlyCounts() {
+    it('ignores votes on a game that is not nominated in the lineup', async () => {
+      const { lineupId, games } = await setupVotingLineup(2);
+      const { token, userId } = await loginAsMember('voter1');
+      const stray = at(await createAdditionalGames(1), 0);
+      const nominated = at(games, 0);
+      const removed = at(games, 1);
+
+      const voteRes = await testApp.request
+        .post(`/lineups/${lineupId}/vote`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ gameId: nominated.id });
+      expect(voteRes.status).toBe(200);
+      // A vote row on a never-nominated game, and one on a game whose
+      // nomination is removed after the vote (the entry goes, the vote stays).
+      await testApp.db.insert(schema.communityLineupVotes).values([
+        { lineupId, userId, gameId: stray.id },
+        { lineupId, userId, gameId: removed.id },
+      ]);
+      await testApp.db
+        .delete(schema.communityLineupEntries)
+        .where(
+          and(
+            eq(schema.communityLineupEntries.lineupId, lineupId),
+            eq(schema.communityLineupEntries.gameId, removed.id),
+          ),
+        );
+
+      const counts = await countVotesPerGame(testApp.db, lineupId);
+      expect(counts).toEqual([{ gameId: nominated.id, voteCount: 1 }]);
+    });
+  }
+  describe(
+    'countVotesPerGame — nominated games only',
+    describeNominatedOnlyCounts,
   );
 }
 describe('Lineup Voting (integration)', describeVoting);

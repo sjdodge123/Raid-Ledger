@@ -4344,3 +4344,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 - **low** `api/src/common/testing/integration-truncate.integration.spec.ts:44-58` — the "role back to origin" test passes even if `set_config(...,true)` became session-wide, because the DO block's last line already restores `origin`; it only guards the success path. Suggested: add a case where the reset raises after setting `replica` (e.g. a builder hook that injects a failing statement) and assert `origin` on every pooled connection.
 - **nit** `api/src/common/testing/integration-phase-timer.ts:15` — comment says "no extra awaits" with the flag off, but `timePhase` adds one async wrapper + one `performance.now()` per call. Suggested: reword.
 - **nit** `api/src/common/testing/integration-truncate.integration.spec.ts:46` — the 10-read fan-out assumes the test pool max of 10 (`test-app.ts:171`). Suggested: read the pool size from the shared constant.
+
+### 2026-11-14 — fix/overnight-td7-2026-11-14 (resolutions)
+
+- **resolved** line 3611 (rest of line 2884: `countVotesPerGame` counted votes on un-nominated games) — `countVotesPerGame` (`api/src/lineups/lineups-query.helpers.ts`) now inner-joins the lineup's entries; regression case `lineups-voting.integration.spec.ts` › 'countVotesPerGame — nominated games only'. Still open: `countDistinctVoters` and `countStarsPerGame` still read every vote row (a voter whose only votes sit on removed nominations still counts toward the participation denominator).
+- **already resolved** line 3455 (calendar-write rerun overlap) — confirmed fixed by `deferWhileSiblingActive` in PR #1955 (48df3c890), as line 3988 records; no change needed.
