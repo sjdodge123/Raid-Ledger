@@ -5,6 +5,7 @@ import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
+import { parseDateParam } from '../components/calendar/parse-date-param';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
@@ -28,13 +29,6 @@ function initialCalendarView(viewParam: string | null, width: number): CalendarV
     if (width < 768) return 'schedule';
     const match = DEEP_LINK_VIEWS.find((v) => v === viewParam);
     return match ?? 'month';
-}
-
-/** A `?date=yyyy-MM-dd` param as a local date, or null when absent or invalid. */
-function parseDateParam(dateStr: string | null): Date | null {
-    if (!dateStr) return null;
-    const parsed = new Date(dateStr + 'T00:00:00');
-    return isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**

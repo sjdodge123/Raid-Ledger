@@ -5,7 +5,7 @@
  * grid's own replace-writes (URL sync) must NOT be, or a view click during the
  * mount sync would bounce back (the race the url-sync fix closed).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, screen } from '@testing-library/react';
 import { useEffect, type JSX } from 'react';
 import { useNavigate, type NavigateFunction } from 'react-router-dom';
@@ -124,5 +124,21 @@ describe('CalendarPage — external ?date= navigation while mounted', () => {
         go('/calendar?view=day&date=not-a-date');
 
         expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2020-03-10' });
+    });
+
+    describe('at phone width (<768px)', () => {
+        const originalWidth = window.innerWidth;
+        afterEach(() => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth }); });
+
+        it('adopts the linked ?date= but stays in Schedule despite ?view=week', () => {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+            echoOnMount = null;
+            renderPage(CalendarPage, ['/calendar?date=2026-01-05']);
+            expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'schedule', date: '2026-01-05' });
+
+            go('/calendar?view=week&date=2026-03-10');
+
+            expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'schedule', date: '2026-03-10' });
+        });
     });
 });
