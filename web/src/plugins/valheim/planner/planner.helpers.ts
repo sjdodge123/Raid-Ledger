@@ -267,12 +267,16 @@ export interface ShoppingLine {
     short: number | null;
 }
 
-/** The plain-text list "Copy list" puts on the clipboard. */
+/**
+ * The plain-text list "Copy list" puts on the clipboard. Rows with nothing
+ * short are left out; rows without stock data (short null) copy their need.
+ */
 export function shoppingListText(
     lines: readonly ShoppingLine[],
     nameOf: (prefab: string) => string,
 ): string {
     return lines
+        .filter((l) => l.short !== 0)
         .map((l) => {
             const left = l.short === null ? l.need : l.short;
             return `${nameOf(l.prefab)}: ${formatAmount(left)}`;
