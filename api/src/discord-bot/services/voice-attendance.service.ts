@@ -50,6 +50,14 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   private classifyRunning = false;
   /** Flushes run one at a time: each starts after the previous settles. */
   private readonly enqueueFlush = createSerialQueue();
+  /**
+   * Interval tick: skipped while an earlier tick's flush is still queued or
+   * in flight, so a hung write cannot stack flushes without bound.
+   */
+  private readonly periodicFlush = flushH.createCoalescedTrigger(
+    () => this.flushToDb(),
+    (e) => this.logger.error(`Periodic flush failed: ${String(e)}`),
+  );
   /** Track event IDs that have already been snapshotted (ROK-735). */
   private readonly snapshotted = new Set<number>();
   /** Track event IDs that have already been classified (ROK-861). */
@@ -70,11 +78,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (this.flushTimer) clearInterval(this.flushTimer);
-    this.flushTimer = setInterval(() => {
-      this.flushToDb().catch((e) =>
-        this.logger.error(`Periodic flush failed: ${e}`),
-      );
-    }, FLUSH_INTERVAL_MS);
+    this.flushTimer = setInterval(this.periodicFlush, FLUSH_INTERVAL_MS);
   }
 
   async onModuleDestroy(): Promise<void> {
