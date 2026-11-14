@@ -5,7 +5,7 @@
  * caller only offers it when the server's `can.edit` says so).
  */
 import { useState, type JSX } from 'react';
-import type { HubForumThread } from '@raid-ledger/contract';
+import type { HubForumReply, HubForumThread } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
 import { bodyError, serverBodyError } from '../posts/hub-post.helpers';
@@ -46,12 +46,15 @@ export function ForumThreadComposer({ guildId, onCancel, onPosted }: ThreadCompo
     );
 }
 
-/** The reply box under a live thread; clears after a successful reply. */
-export function ForumReplyComposer({ guildId, threadId }: { guildId: number; threadId: number }): JSX.Element {
+export interface ReplyComposerProps { guildId: number; threadId: number; onPosted?: ((reply: HubForumReply) => void) | undefined }
+
+/** The reply box under a live thread; clears after a successful reply and hands the reply to `onPosted`. */
+export function ForumReplyComposer({ guildId, threadId, onPosted }: ReplyComposerProps): JSX.Element {
     const [body, setBody] = useState('');
     const create = useCreateForumReply(guildId);
     const localErr = bodyError(body);
-    const submit = (): void => create.mutate({ threadId, body: body.trim() }, { onSuccess: () => setBody('') });
+    const posted = (reply: HubForumReply): void => { setBody(''); onPosted?.(reply); };
+    const submit = (): void => create.mutate({ threadId, body: body.trim() }, { onSuccess: posted });
     return (
         <div className="flex flex-col gap-2" data-testid="forum-reply-composer">
             <ForumBodyField label="Reply" hideLabel value={body} onChange={setBody} testId="forum-reply-input"
@@ -74,7 +77,7 @@ export interface MessageEditorProps {
     onCancel: () => void;
 }
 
-/** In-place edit (author, inside 24 h): the root edits title + body, a reply its body. */
+/** In-place edit (author, inside 24 h): the root edits title + body, a reply its body; Cancel with changes asks first. */
 export function ForumMessageEditor({ title, body, pending, failed, onSave, onCancel }: MessageEditorProps): JSX.Element {
     const [nextTitle, setNextTitle] = useState(title ?? '');
     const [nextBody, setNextBody] = useState(body);
@@ -82,15 +85,20 @@ export function ForumMessageEditor({ title, body, pending, failed, onSave, onCan
     const bodyErr = bodyError(nextBody);
     const blocked = nextBody.trim() === '' || bodyErr !== null || titleErr !== null || (title !== undefined && nextTitle.trim() === '');
     const save = (): void => onSave({ ...(title === undefined ? {} : { title: nextTitle.trim() }), body: nextBody.trim() });
+    const [confirmLeave, setConfirmLeave] = useState(false);
+    const dirty = nextBody !== body || (title !== undefined && nextTitle !== title);
+    const cancel = (): void => { if (dirty) setConfirmLeave(true); else onCancel(); };
     return (
         <div className="flex flex-col gap-3" data-testid="forum-message-editor">
             {title !== undefined && <ForumTitleField value={nextTitle} onChange={setNextTitle} error={titleErr ?? undefined} />}
             <ForumBodyField label="Edit message" hideLabel={title === undefined} value={nextBody} onChange={setNextBody} testId="forum-edit-body"
                 autoFocus={title === undefined} error={submitError(bodyErr, failed, 'Couldn’t save. Try again.')} />
             <div className="flex justify-end gap-2">
-                <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+                <Button variant="secondary" onClick={cancel}>Cancel</Button>
                 <Button onClick={save} loading={pending} disabled={blocked} data-testid="forum-edit-save">Save</Button>
             </div>
+            <DiscardChangesConfirm isOpen={confirmLeave} onKeep={() => setConfirmLeave(false)} onDiscard={onCancel}
+                message="Your edit hasn’t been saved yet." />
         </div>
     );
 }

@@ -12,6 +12,7 @@ import type {
     CreateHubForumThreadInput, HubForumLatest, HubForumReply, HubForumThread, HubForumThreadList, UpdateHubForumThreadInput,
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
+import { toast } from '../../../lib/toast';
 import {
     createForumReply, createForumThread, deleteForumReply, deleteForumThread, fetchForumLatest, fetchForumThread,
     fetchForumThreads, setForumThreadPin, updateForumReply, updateForumThread,
@@ -64,10 +65,10 @@ function useRefreshForum(guildId: number): () => Promise<unknown> {
     return () => queryClient.invalidateQueries({ queryKey: hubForumKey(guildId) });
 }
 
-/** A mutation whose success refetches the hub's forum cache. */
-function useForumMutation<T, V>(guildId: number, mutationFn: (vars: V) => Promise<T>): UseMutationResult<T, Error, V> {
+/** A mutation whose success refetches the hub's forum cache; `onError` for writes with no inline field to show it. */
+function useForumMutation<T, V>(guildId: number, mutationFn: (vars: V) => Promise<T>, onError?: () => void): UseMutationResult<T, Error, V> {
     const onSuccess = useRefreshForum(guildId);
-    return useMutation({ mutationFn, onSuccess });
+    return useMutation({ mutationFn, onSuccess, ...(onError === undefined ? {} : { onError }) });
 }
 
 export function useCreateForumThread(guildId: number): UseMutationResult<HubForumThread, Error, CreateHubForumThreadInput> {
@@ -86,9 +87,12 @@ export function useDeleteForumThread(guildId: number): UseMutationResult<void, E
 
 export interface PinVars { threadId: number; pinned: boolean }
 
-/** Pin (`pinned: true`) or unpin; 204 → the list refetches to re-order. */
+export const FORUM_PIN_FAILED = 'Couldn’t change the pin. Try again.';
+
+/** Pin (`pinned: true`) or unpin; 204 → the list refetches to re-order. A menu item has no inline slot, so a failure toasts. */
 export function useSetForumThreadPin(guildId: number): UseMutationResult<void, Error, PinVars> {
-    return useForumMutation(guildId, ({ threadId, pinned }: PinVars) => setForumThreadPin(guildId, threadId, pinned));
+    return useForumMutation(guildId, ({ threadId, pinned }: PinVars) => setForumThreadPin(guildId, threadId, pinned),
+        () => { toast.error(FORUM_PIN_FAILED); });
 }
 
 export interface ReplyVars { threadId: number; body: string }

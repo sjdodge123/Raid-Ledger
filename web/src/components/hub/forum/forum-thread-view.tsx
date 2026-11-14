@@ -2,22 +2,26 @@
  * ROK-1175 — the `?thread=<id>` view: "Back to Forum", the title + Pinned
  * pill, the root message, flat replies oldest first (Q4) paged by
  * `nextReplyCursor` ("Show more replies"), and the reply composer for members
- * on a live thread (Q8: a removed thread takes no replies).
+ * on a live thread (Q8: a removed thread takes no replies). The composer shows
+ * without loading every page; a posted reply becomes the `?reply=` target, so
+ * the view pages through to it and scrolls there (D9, `use-page-to-reply.ts`).
  */
 import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Pill } from '../hub-bits';
 import { ForumReplyComposer } from './forum-composer';
 import { ForumReplyItem, ForumThreadRoot } from './forum-thread-items';
+import { forumThreadHref } from './forum-link';
 import { replyCountLabel } from './forum-thread.helpers';
 import { useForumThread } from './use-hub-forum';
+import { usePageToReply } from './use-page-to-reply';
 
 export interface ForumThreadViewProps {
     guildId: number;
     threadId: number;
-    /** `?reply=<id>`: ringed as the deep-link target. */
+    /** `?reply=<id>`: paged to, ringed and scrolled into view (D9). */
     replyId: number | null;
     /** `&edit=1`: open with the root in the editor (when its `can.edit` allows). */
     startEditing?: boolean | undefined;
@@ -46,6 +50,7 @@ function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): J
 }
 
 function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<ForumThreadViewProps, 'threadId'> & { query: ReturnType<typeof useForumThread> }): JSX.Element {
+    const navigate = useNavigate();
     if (query.isPending) return <div className="h-32 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" aria-label="Loading thread" />;
     const thread = query.data?.pages[0];
     if (thread === undefined) return <p role="alert" className="text-sm text-danger">Couldn’t load this thread. It may have been removed.</p>;
@@ -62,7 +67,8 @@ function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<Fo
                 {replies.map((r) => <ForumReplyItem key={r.id} guildId={guildId} threadId={thread.id} reply={r} highlighted={r.id === replyId} />)}
             </ul>
             <MoreReplies query={query} />
-            {canWrite && thread.deleted === null && !query.hasNextPage && <ForumReplyComposer guildId={guildId} threadId={thread.id} />}
+            {canWrite && thread.deleted === null && <ForumReplyComposer guildId={guildId} threadId={thread.id}
+                onPosted={(reply) => { void navigate(forumThreadHref(thread.id, reply.id), { replace: true }); }} />}
         </div>
     );
 }
@@ -70,6 +76,7 @@ function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<Fo
 /** The thread view (see file docstring). */
 export function ForumThreadView({ guildId, threadId, replyId, canWrite, startEditing }: ForumThreadViewProps): JSX.Element {
     const query = useForumThread(guildId, threadId);
+    usePageToReply(query, replyId);
     return (
         <section data-testid="hub-forum-thread" aria-label="Forum thread">
             <BackLink />

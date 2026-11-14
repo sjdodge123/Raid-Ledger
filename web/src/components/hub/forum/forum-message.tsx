@@ -4,7 +4,7 @@
  * removed message shows only its placeholder, never its text (AC6, Q8).
  * `PostByline` takes a whole `HubPost`, so this keeps its own thin byline.
  */
-import type { JSX, ReactNode } from 'react';
+import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import type { HubForumReply } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
@@ -41,18 +41,28 @@ function Byline({ message }: { message: ForumMessageData }): JSX.Element {
     );
 }
 
+/** The `?reply=<id>` target scrolls into view once it mounts (same as Posts' `post-item.tsx`). */
+function useScrollOnce(highlighted: boolean): RefObject<HTMLElement | null> {
+    const ref = useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (highlighted) ref.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+    }, [highlighted]);
+    return ref;
+}
+
 /** A root or reply (see file docstring). */
 export function ForumMessage({ message, testId, menu, editor, anchorId, highlighted = false }: ForumMessageProps): JSX.Element {
+    const ref = useScrollOnce(highlighted);
     if (message.deleted !== null) {
         return (
-            <article id={anchorId} data-testid={testId} className="rounded-lg border border-dashed border-edge px-4 py-3 text-sm text-muted">
+            <article ref={ref} id={anchorId} data-testid={testId} aria-current={highlighted ? 'true' : undefined} className="rounded-lg border border-dashed border-edge px-4 py-3 text-sm text-muted">
                 {forumDeletedLabel(message.deleted)}
             </article>
         );
     }
     const ring = highlighted ? 'border-success ring-1 ring-success' : 'border-edge';
     return (
-        <article id={anchorId} data-testid={testId} aria-current={highlighted ? 'true' : undefined}
+        <article ref={ref} id={anchorId} data-testid={testId} aria-current={highlighted ? 'true' : undefined}
             className={`scroll-mt-4 rounded-lg border bg-surface p-4 ${ring}`}>
             <div className="mb-2 flex items-start justify-between gap-2">
                 <Byline message={message} />
