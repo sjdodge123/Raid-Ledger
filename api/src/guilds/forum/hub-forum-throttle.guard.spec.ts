@@ -39,4 +39,20 @@ describe('ROK-1175 HubForumThrottleGuard — per user per hub', () => {
     spend(guard, ctxFor(1, '10'));
     expect(() => guard.canActivate(ctxFor(2, '10'))).not.toThrow();
   });
+
+  it("'010' and '10' share one bucket (the id is normalised)", () => {
+    const guard = new HubForumThrottleGuard();
+    spend(guard, ctxFor(1, '10'));
+    expect(() => guard.canActivate(ctxFor(1, '010'))).toThrow(
+      ThrottlerException,
+    );
+  });
+
+  it('a non-numeric hub id falls back to the per-user bucket', () => {
+    const guard = new HubForumThrottleGuard();
+    spend(guard, ctxFor(1, 'abc'));
+    expect(() => guard.canActivate(ctxFor(1, 'xyz'))).toThrow(
+      ThrottlerException,
+    );
+  });
 });
