@@ -11,6 +11,7 @@ import type {
 import { embedComponents } from '../services/discord-embed.factory';
 import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
+import type { ScheduledEventService } from '../services/scheduled-event.service';
 import { getEphemeralVoiceState } from '../services/ephemeral-voice.db-helpers';
 import { applyEmbedVoice } from '../services/embed-voice.helpers';
 import type { PlannedVoiceSettingsSource } from '../services/planned-ephemeral-voice.helpers';
@@ -297,4 +298,28 @@ async function updateSingleEmbedState(
   deps.logger.log(
     `Updated embed state for event ${eventId} to ${newState} (msg: ${record.messageId})`,
   );
+}
+
+/**
+ * Fire-and-forget Discord Scheduled Event sync for an updated event; a failure
+ * is only logged. Moved out of the listener (ROK-2201) to keep it under the
+ * file-size limit.
+ */
+export function fireScheduledEventUpdate(
+  scheduledEvents: Pick<ScheduledEventService, 'updateScheduledEvent'>,
+  logger: Logger,
+  payload: EventPayload,
+): void {
+  scheduledEvents
+    .updateScheduledEvent(
+      payload.eventId,
+      payload.event,
+      payload.gameId,
+      payload.isAdHoc,
+    )
+    .catch((err: unknown) => {
+      logger.warn(
+        `Failed to update scheduled event for ${payload.eventId}: ${String(err)}`,
+      );
+    });
 }

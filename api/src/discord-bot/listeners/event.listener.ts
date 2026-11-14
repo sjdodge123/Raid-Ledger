@@ -14,6 +14,7 @@ import { EmbedPosterService } from '../services/embed-poster.service';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
+import { releaseEphemeralIfStartMovedLater } from '../services/ephemeral-voice.reschedule.helpers';
 import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
 import {
@@ -33,6 +34,7 @@ import {
   getReschedulingPollId,
   isAdHocEvent,
   applyEmbedUpdates,
+  fireScheduledEventUpdate,
   type EventListenerDeps,
 } from './event.listener.handlers';
 
@@ -113,7 +115,21 @@ export class DiscordEventListener {
     // recreated at the winning time by that emission instead.
     const isRescheduling =
       (await getReschedulingPollId(this.deps, payload.eventId)) !== null;
-    if (!isRescheduling) this.fireScheduledEventUpdate(payload);
+    if (!isRescheduling) {
+      // ROK-2201: start moved past the create window → drop the EMPTY temp
+      // channel (id cleared) so the cron recreates it before the new start.
+      // Before the SE sync so that sync reads the cleared channel id.
+      await releaseEphemeralIfStartMovedLater(
+        this.deps,
+        this.ephemeralVoice,
+        payload.eventId,
+      );
+      fireScheduledEventUpdate(
+        this.scheduledEventService,
+        this.logger,
+        payload,
+      );
+    }
     if (!this.clientService.isConnected()) return;
     if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
@@ -283,21 +299,6 @@ export class DiscordEventListener {
 
   private canSendAffinityNotification(payload: EventPayload): boolean {
     return !!(this.gameAffinityNotificationService && payload.creatorId);
-  }
-
-  private fireScheduledEventUpdate(payload: EventPayload): void {
-    this.scheduledEventService
-      .updateScheduledEvent(
-        payload.eventId,
-        payload.event,
-        payload.gameId,
-        payload.isAdHoc,
-      )
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `Failed to update scheduled event for ${payload.eventId}: ${String(err)}`,
-        );
-      });
   }
 
   private fireScheduledEventDelete(eventId: number): void {

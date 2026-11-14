@@ -22,13 +22,9 @@ import {
   type ScheduledEventRecord,
 } from './scheduled-event.db-helpers';
 import {
-  isUnknownEventError,
   tryDeleteEvent,
   tryEditEndTime,
   tryEditDescription,
-  tryEditFullEvent,
-  resolveVoiceForEdit,
-  resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
 import { runStartPass } from './scheduled-event.start';
 import {
@@ -41,7 +37,7 @@ import {
   type SECompletionRun,
 } from './scheduled-event.completion';
 import { completeAndSweep } from './scheduled-event.embed-completion';
-import { plannedSELocation } from './scheduled-event.planned-voice';
+import { editScheduledEventFully } from './scheduled-event.full-edit';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -220,7 +216,8 @@ export class ScheduledEventService {
         );
         return;
       }
-      await this.tryEdit(guild, eventId, event, eventData, gameId);
+      const seId = event.discordScheduledEventId;
+      await this.tryEdit(guild, eventId, { event, seId }, eventData, gameId);
     } catch (error) {
       this.logger.error(formatApiError('update', eventId, error));
     }
@@ -314,38 +311,36 @@ export class ScheduledEventService {
   private async tryEdit(
     guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
     eventId: number,
-    event: ScheduledEventRecord,
+    { event, seId }: { event: ScheduledEventRecord; seId: string },
     eventData: ScheduledEventData,
     gameId?: number | null,
   ): Promise<void> {
-    const s = this.settingsService;
-    const d = await desc(s, eventId, eventData);
-    // A planned temporary channel keeps the SE External (2026-11-13).
-    const planDeps = { settings: s, channelResolver: this.channelResolver };
-    const loc = await plannedSELocation(this.db, planDeps, eventId, eventData);
-    const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
-    const tz = () => s.getDefaultTimezone();
-    const name = await resolveEditedScheduledEventName(event, eventData, tz);
-    try {
-      await tryEditFullEvent(
-        guild,
-        eventId,
-        event.discordScheduledEventId!,
-        eventData,
-        d,
-        loc ? { location: loc } : vc,
-        name,
-      );
-    } catch (err) {
-      if (!isUnknownEventError(err)) throw err;
-      await clearScheduledEventId(this.db, eventId);
-      await this.createScheduledEvent(
-        eventId,
-        eventData,
-        gameId,
-        false,
-        event.notificationChannelOverride,
-      );
-    }
+    const deps = {
+      db: this.db,
+      settings: this.settingsService,
+      channelResolver: this.channelResolver,
+      logger: this.logger,
+      recreate: () =>
+        this.recreateScheduledEvent(eventId, eventData, event, gameId),
+    };
+    const target = { guild, eventId, seId, event, eventData, gameId };
+    await editScheduledEventFully(deps, target);
+  }
+
+  /** Clear the stored SE id, then create a fresh SE (10070 / ROK-2201). */
+  private async recreateScheduledEvent(
+    eventId: number,
+    eventData: ScheduledEventData,
+    event: ScheduledEventRecord,
+    gameId?: number | null,
+  ): Promise<void> {
+    await clearScheduledEventId(this.db, eventId);
+    await this.createScheduledEvent(
+      eventId,
+      eventData,
+      gameId,
+      false,
+      event.notificationChannelOverride,
+    );
   }
 }
