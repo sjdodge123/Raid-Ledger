@@ -17,11 +17,20 @@ process.env.THROTTLE_DEFAULT_LIMIT = '999999';
 // THROTTLE_DISABLED — explicit, not piggy-backed on NODE_ENV.
 process.env.CRON_DISABLED = 'true';
 
+// ROK-2196: opt-in phase timer (RL_INTEGRATION_PHASE_TIMING=1). Imported
+// first so the mark below times the require of the whole app graph.
+import {
+  beginPhaseTiming,
+  recordPhase,
+  reportPhaseTiming,
+} from './integration-phase-timer';
+const importStart = beginPhaseTiming();
 import { closeTestApp, getTestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
 import { dumpFailureSnapshot } from './dump-failure-snapshot';
 import { listSocketHandles } from './socket-handle-audit';
 import { heapProbeAfterFile } from './heap-probe';
+recordPhase('import', importStart);
 
 // ROK-1527: app handle for the opt-in heap probe (no-op when disabled).
 let probedApp: object | null = null;
@@ -84,6 +93,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeTestApp();
+  reportPhaseTiming(expect.getState().testPath);
   // ROK-1250: opt-in audit gate. When `RL_TEST_SOCKET_HANDLE_AUDIT=true`,
   // throw if more than `SOCKET_HANDLE_AUDIT_THRESHOLD` connected TCP
   // sockets remain after closeTestApp(). Off by default in CI; flipped on

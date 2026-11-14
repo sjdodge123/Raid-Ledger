@@ -42,6 +42,12 @@ import { closeTestSharedRedis } from '../../queue/queue.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { ensureTestDbMigrated } from './integration-migrations';
+import {
+  instrumentLifecycleHooks,
+  phaseMark,
+  recordMigrate,
+  recordPhase,
+} from './integration-phase-timer';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
 import {
   ownedSharedTestDbUrl,
@@ -158,7 +164,8 @@ async function setupDatabase(connectionString: string): Promise<{
   db: PostgresJsDatabase<typeof schema>;
   appClient: ReturnType<typeof postgres>;
 }> {
-  await ensureTestDbMigrated(connectionString);
+  const migrateStart = phaseMark();
+  recordMigrate(migrateStart, await ensureTestDbMigrated(connectionString));
   const appClient = postgres(connectionString, { max: 10 });
   return { db: drizzle(appClient, { schema }), appClient };
 }
@@ -226,6 +233,7 @@ async function buildNestApp(
   db: PostgresJsDatabase<typeof schema>,
   redisMock: RedisMockHandle,
 ): Promise<{ app: INestApplication; request: TestAgent<supertest.Test> }> {
+  const moduleStart = phaseMark();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(DrizzleAsyncProvider)
     .useValue(db)
@@ -238,6 +246,7 @@ async function buildNestApp(
     .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
     .useValue(false)
     .compile();
+  recordPhase('module', moduleStart);
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,
   // which would 413 a request before any route (e.g. ROK-1724's 256 KB cap).
@@ -251,7 +260,10 @@ async function buildNestApp(
   // ahead of the router. Supertest sends no Origin, so it allows every
   // existing spec; specs that set Origin/Host exercise the real policy.
   applyCorsPolicy(app, { isProduction: false });
+  instrumentLifecycleHooks(app);
+  const initStart = phaseMark();
   await app.init();
+  recordPhase('init', initStart);
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
@@ -356,7 +368,9 @@ export async function closeTestApp(): Promise<void> {
         strict: false,
       });
       if (queueHealth) {
+        const drainStart = phaseMark();
         await queueHealth.awaitDrained(15_000);
+        recordPhase('drain', drainStart);
       }
     } catch {
       // best-effort — fall through to app.close() regardless
@@ -368,7 +382,9 @@ export async function closeTestApp(): Promise<void> {
       instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
     const ourPort = extractPortFromConnectionString(connStr);
 
+    const closeStart = phaseMark();
     await instance.app.close();
+    recordPhase('close', closeStart);
     if (instance._appClient) {
       await instance._appClient.end({ timeout: 30 });
     }

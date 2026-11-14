@@ -42,10 +42,14 @@ export function isTestDbMigrated(connectionString: string): boolean {
   );
 }
 
-/** Migrate `connectionString` unless the globalSetup already did. */
+/**
+ * Migrate `connectionString` unless the globalSetup already did. Resolves
+ * true when it migrated, false when it skipped (read by the phase timer).
+ */
 export async function ensureTestDbMigrated(
   connectionString: string,
-): Promise<void> {
-  if (isTestDbMigrated(connectionString)) return;
+): Promise<boolean> {
+  if (isTestDbMigrated(connectionString)) return false;
   await runTestMigrations(connectionString);
+  return true;
 }
