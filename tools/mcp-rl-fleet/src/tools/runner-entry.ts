@@ -24,6 +24,7 @@ import { runDeployChain, type ChainCtx } from './env-deploy-steps.js';
 import { runCloneCore } from './env-clone-prod.js';
 import { runSpinTask } from './env-spin-runner.js';
 import { dispatchTool } from './runner-dispatch.js';
+import { applyDeployResult, makeChainCtx } from './runner-task-state.js';
 import type { EnvSpinParams } from './env-spin.js';
 import type { EnvDeployParams } from './env-deploy.js';
 import type { EnvCloneProdParams } from './env-clone-prod.js';
@@ -66,17 +67,7 @@ function loadTask(): LocalTaskJson {
 let current = loadTask();
 const persist = (): void => writeLocalTask(current);
 
-const ctx: ChainCtx = {
-  setCurrent(step: string): void {
-    current.current_step = step;
-    persist();
-  },
-  recordStep(name, ok, tookS, _detail, _error): void {
-    current.steps.push({ name, status: ok ? 'PASS' : 'FAIL', duration_s: Math.round(tookS * 10) / 10 });
-    current.current_step = ok ? null : name;
-    persist();
-  },
-};
+const ctx: ChainCtx = makeChainCtx(() => current, persist);
 
 function finalize(
   ok: boolean,
@@ -98,16 +89,7 @@ function finalize(
 async function runDeploy(): Promise<number> {
   const params = JSON.parse(paramsJson) as EnvDeployParams;
   const res = await runDeployChain(params, ctx);
-  if (typeof res.slot === 'number') current.slot = res.slot;
-  // ROK-1362 (Codex P1): persist the deploy result fields so a terminal
-  // rl_task_status local-... exposes the shareable URL + admin login.
-  current.url = res.url ?? null;
-  current.internal_url = res.internal_url ?? null;
-  current.slot_url = res.slot_url ?? null;
-  current.admin_email = res.admin_email ?? null;
-  current.admin_password = res.admin_password ?? null;
-  current.expected_head = res.expected_head ?? null;
-  current.synced_head = res.synced_head ?? null;
+  applyDeployResult(current, res);
   finalize(res.ok, { failed_step: res.failed_step ?? null, error: res.error, message: res.message });
   return res.ok ? 0 : 1;
 }
