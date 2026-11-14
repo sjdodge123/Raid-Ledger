@@ -31,6 +31,7 @@ import { cdpSteamNominationTests } from "./tests/cdp-steam-nomination.test.js";
 import { scheduledEventCompletionTests } from "./tests/scheduled-event-completion.test.js";
 import { scheduledEventRecoveryTests } from "./tests/scheduled-event-recovery.test.js";
 import { scheduledEventRenameTests } from "./tests/scheduled-event-rename.test.js";
+import { scheduledEventRescheduleStartedTests } from "./tests/scheduled-event-reschedule-started.test.js";
 import { aiChatTests } from "./tests/ai-chat.test.js";
 import { lineupTitleTests } from "./tests/lineup-title.test.js";
 import { privateLineupTests } from "./tests/private-lineup.test.js";
@@ -201,6 +202,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...scheduledEventCompletionTests,
     ...scheduledEventRecoveryTests,
     ...scheduledEventRenameTests,
+    ...scheduledEventRescheduleStartedTests,
     ...aiChatTests,
     ...lineupTitleTests,
     ...privateLineupTests,
