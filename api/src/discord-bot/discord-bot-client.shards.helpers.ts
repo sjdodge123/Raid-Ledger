@@ -1,8 +1,7 @@
-import {
-  SimpleShardingStrategy,
-  type Client,
-  type ClientOptions,
-} from 'discord.js';
+// Imported from @discordjs/ws (what discord.js re-exports) so specs that
+// jest.mock('discord.js') still get the real base class.
+import { SimpleShardingStrategy } from '@discordjs/ws';
+import type { Client, ClientOptions } from 'discord.js';
 
 /**
  * ROK-2198: why this file exists.
