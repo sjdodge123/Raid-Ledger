@@ -335,3 +335,27 @@ export async function tryEditFullEvent(
     { eventId, op: 'update' },
   );
 }
+
+/**
+ * Edit only an SE's entity to a place — the entity half of the repoint edit
+ * (`seEditEntity`), used when an adopted planned SE must follow its now-real
+ * temporary channel. `scheduledEndTime` rides along because Discord requires
+ * it whenever an SE is (or stays) External.
+ */
+export async function tryEditEntity(
+  guild: Guild,
+  eventId: number,
+  seId: string,
+  place: SEPlace,
+  endTime: string,
+): Promise<void> {
+  await timedDiscordCall(
+    'scheduledEvents.edit',
+    () =>
+      guild.scheduledEvents.edit(seId, {
+        scheduledEndTime: parseEventTimestampUtc(endTime),
+        ...seEditEntity(place),
+      }),
+    { eventId, op: 'adoptRepoint' },
+  );
+}

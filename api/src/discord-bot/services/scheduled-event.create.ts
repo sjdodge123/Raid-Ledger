@@ -15,9 +15,11 @@ import {
   type EventLiveState,
   parseEventTimestampUtc,
 } from './scheduled-event.revalidate';
+import { GuildScheduledEventEntityType } from 'discord.js';
 import {
   tryCreateNewEvent,
   tryDeleteEvent,
+  tryEditEntity,
 } from './scheduled-event.discord-ops';
 import { withCapacityRecovery } from './scheduled-event.capacity';
 import {
@@ -133,11 +135,8 @@ export async function createScheduledEventIdempotent(
   const description = await preamble.describe(eventId, eventData);
   const seCache = cache ?? new GuildSECache(guild);
 
-  if (
-    await adoptExistingGuildSE(guild, db, logger, eventId, eventData, seCache)
-  ) {
-    return;
-  }
+  const adoptCtx = { guild, db, logger, eventId, eventData, place, seCache };
+  if (await adoptExistingGuildSE(adoptCtx)) return;
 
   await withCapacityRecovery(
     guild,
@@ -160,21 +159,25 @@ export async function createScheduledEventIdempotent(
   );
 }
 
+interface AdoptContext {
+  guild: Guild;
+  db: PostgresJsDatabase<typeof schema>;
+  logger: Logger;
+  eventId: number;
+  eventData: ScheduledEventData;
+  place: SEPlace;
+  seCache: GuildSECache;
+}
+
 /** Pre-create liveness check: adopt a live guild SE matching this event's
  *  title+start, skipping the create. Returns true when adopted (ROK-1347). */
-async function adoptExistingGuildSE(
-  guild: Guild,
-  db: PostgresJsDatabase<typeof schema>,
-  logger: Logger,
-  eventId: number,
-  eventData: ScheduledEventData,
-  seCache: GuildSECache,
-): Promise<boolean> {
+async function adoptExistingGuildSE(c: AdoptContext): Promise<boolean> {
+  const { guild, db, logger, eventId, eventData } = c;
   // ROK-1350: the SE is created under buildScheduledEventName (title + game),
   // so adopt/match by that same name — matching by the bare title would miss a
   // renamed SE and let the next reconcile create a duplicate.
   const existing = findExistingGuildSE(
-    await seCache.get(),
+    await c.seCache.get(),
     buildScheduledEventName(eventData),
     eventData.startTime,
   );
@@ -190,8 +193,36 @@ async function adoptExistingGuildSE(
     return false;
   }
   logger.warn(`Skip SE ${eventId}: live guild SE ${existing.id} matches`);
-  await bindOrCompensate(guild, db, logger, eventId, existing.id, eventData);
+  if (
+    await bindOrCompensate(guild, db, logger, eventId, existing.id, eventData)
+  )
+    await repointAdoptedPlannedSE(c, existing);
   return true;
+}
+
+/**
+ * Planned-voice race (PR #2134 follow-up): the temporary channel can be created
+ * before the planned SE's create bound its id, so the repoint lands here and
+ * adopts the still-External SE. Flip it to Voice in the now-real channel —
+ * the same entity edit the bound repoint makes. Only External → Voice; any
+ * other adopt is left exactly as before.
+ */
+async function repointAdoptedPlannedSE(
+  c: AdoptContext,
+  existing: GuildSEShape,
+): Promise<void> {
+  if (typeof c.place !== 'string') return;
+  if (existing.entityType !== GuildScheduledEventEntityType.External) return;
+  c.logger.log(
+    `Repoint adopted SE ${existing.id} for event ${c.eventId} to voice ${c.place}`,
+  );
+  await tryEditEntity(
+    c.guild,
+    c.eventId,
+    existing.id,
+    c.place,
+    c.eventData.endTime,
+  );
 }
 
 interface CreateAttempt {
@@ -252,7 +283,7 @@ async function createOrAdoptOnTimeout(a: CreateAttempt): Promise<void> {
  * live state, THEN compensate. Binding before the re-read (Dekker-style
  * write-before-read) closes the interleave where a concurrent poll-start
  * teardown reads the binding as NULL and returns early, then our bind lands and
- * a flagged-poll SE survives. When the bind lost the row, or the row now carries
+ * a flagged-poll SE survives. Returns whether the SE was kept. When the bind lost the row, or the row now carries
  * an open poll / cancellation / a different start than the SE we created, delete
  * our SE and clear only the binding that still points at it.
  */
@@ -263,11 +294,11 @@ async function bindOrCompensate(
   eventId: number,
   seId: string,
   eventData: ScheduledEventData,
-): Promise<void> {
+): Promise<boolean> {
   const { bound } = await saveScheduledEventId(db, eventId, seId);
   const live = await getEventLiveState(db, eventId);
   const decision = compensationDecision(bound, live, eventData.startTime);
-  if (decision === 'none') return;
+  if (decision === 'none') return true;
   // Codex HIGH: on a PURE start drift, the lock-in `event.updated` path may have
   // already edited OUR bound SE to the fresh time. Deleting it then would open an
   // availability gap until reconcile — re-fetch and keep the SE when it already
@@ -280,13 +311,14 @@ async function bindOrCompensate(
     logger.log(
       `SE ${seId} for event ${eventId} already repaired to the fresh start — keeping`,
     );
-    return;
+    return true;
   }
   logger.warn(
     `Compensating SE ${seId} for event ${eventId} after bind (${decision})`,
   );
   await tryDeleteEvent(guild, eventId, seId);
   await clearScheduledEventIdBySeId(db, seId);
+  return false;
 }
 
 type CompensationDecision = 'none' | 'force' | 'start-mismatch';
