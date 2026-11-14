@@ -2,7 +2,8 @@
  * ROK-1928 A — `PATCH /plugins/wow/guilds/:id/blizzard-roster` against a real
  * database: editor sets the slug, non-editor 403, non-Forever 404, invalid
  * slug 400, kill switch off 403. ROK-2192: the GUID-linked rank-0 GM sets it
- * too; a rank-1 GUID-linked member stays 403.
+ * too and reaches "Sync now"; a rank-1 member, a rank-0 row linked only by
+ * Blizzard id, and the GM of another Forever guild stay 403.
  */
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
@@ -58,36 +59,10 @@ async function insertGuild(gameId: number, name: string): Promise<number> {
   return g.id;
 }
 
-/** A plain member account (no editor grant) with a local login. */
-async function plainLogin(): Promise<string> {
-  const email = 'plain@roster.test';
-  const [user] = nonEmpty(
-    await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: 'plain',
-        role: 'member',
-      })
-      .returning(),
-    'user',
-  );
-  await testApp.db.insert(schema.localCredentials).values({
-    email,
-    passwordHash: await bcrypt.hash('TestPassword123!', 4),
-    userId: user.id,
-  });
-  const res = await testApp.request
-    .post('/auth/local')
-    .send({ email, password: 'TestPassword123!' });
-  return res.body.access_token as string;
-}
-
-/**
- * ROK-2192: a local-login member whose character is GUID-linked to a roster
- * row of the Forever guild at `rank` in its latest snapshot.
- */
-async function linkedMemberLogin(tag: string, rank: number): Promise<string> {
+/** A local-login member account; returns its user id and access token. */
+async function localMember(
+  tag: string,
+): Promise<{ userId: number; token: string }> {
   const email = `${tag}@roster.test`;
   const [user] = nonEmpty(
     await testApp.db
@@ -101,31 +76,68 @@ async function linkedMemberLogin(tag: string, rank: number): Promise<string> {
     passwordHash: await bcrypt.hash('TestPassword123!', 4),
     userId: user.id,
   });
-  const guid = `Player-1-roster-${tag}`;
-  await testApp.db.insert(schema.characters).values({
-    userId: user.id,
-    gameId: foreverGameId,
-    name: tag,
-    region: 'us',
-    addonGuid: guid,
-    role: 'dps',
-    isMain: true,
-  });
-  await testApp.db.insert(schema.guildMembers).values({
-    guildId: foreverGuildId,
-    guid,
-    characterName: tag,
-    rankIndex: rank,
-    rankName: `Rank ${rank}`,
-    source: 'addon_import',
-    lastSeenAt: SNAP,
-  });
   const res = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
   const token: unknown = res.body.access_token;
   if (typeof token !== 'string') throw new Error(`no access_token for ${tag}`);
+  return { userId: user.id, token };
+}
+
+interface LinkOpts {
+  /** Default: the main Forever guild. */
+  guildId?: number;
+  /** `guid` (default) = LedgerLink GUID; `blizzard` = Armory id only (ROK-2115). */
+  via?: 'guid' | 'blizzard';
+}
+
+let blizzardIdSeq = 920_000_000;
+
+/**
+ * ROK-2192: a local-login member whose character links to a roster row of a
+ * Forever guild at `rank` in its latest snapshot — by GUID, or (ROK-2115
+ * Ruling 1) by Blizzard character id only.
+ */
+async function linkedMemberLogin(
+  tag: string,
+  rank: number,
+  opts: LinkOpts = {},
+): Promise<string> {
+  const { userId, token } = await localMember(tag);
+  const byGuid = (opts.via ?? 'guid') === 'guid';
+  const guid = byGuid ? `Player-1-roster-${tag}` : null;
+  const blizzardId = byGuid ? null : (blizzardIdSeq += 1);
+  await testApp.db.insert(schema.characters).values({
+    userId,
+    gameId: foreverGameId,
+    name: tag,
+    region: 'us',
+    addonGuid: guid,
+    externalId: blizzardId === null ? null : String(blizzardId),
+    role: 'dps',
+    isMain: true,
+  });
+  await testApp.db.insert(schema.guildMembers).values({
+    guildId: opts.guildId ?? foreverGuildId,
+    guid,
+    blizzardCharacterId: blizzardId,
+    characterName: tag,
+    rankIndex: rank,
+    rankName: `Rank ${rank}`,
+    source: byGuid ? 'addon_import' : 'blizzard',
+    lastSeenAt: SNAP,
+  });
   return token;
+}
+
+/** A second Forever guild (snapshot at SNAP, no slug) — the cross-hub cases. */
+async function insertSecondForeverGuild(name: string): Promise<number> {
+  const id = await insertGuild(foreverGameId, name);
+  await testApp.db
+    .update(schema.guilds)
+    .set({ lastSnapshotAt: SNAP })
+    .where(eq(schema.guilds.id, id));
+  return id;
 }
 
 async function setSwitch(value: 'true' | 'false'): Promise<void> {
@@ -147,7 +159,8 @@ beforeAll(async () => {
     .where(eq(schema.guilds.id, foreverGuildId));
   otherGuildId = await insertGuild(testApp.seed.game.id, 'Retail Guild');
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-  plainToken = await plainLogin();
+  // A plain member account: no editor grant, no linked character.
+  plainToken = (await localMember('plain')).token;
 });
 
 // No truncate here: the shared integration setup closes the pool in its own
@@ -233,6 +246,41 @@ describe('PATCH blizzard-roster — the rank-0 GM (ROK-2192)', () => {
       guildSlug: 'ye-olde-guild',
     });
     expect(res.status).toBe(403);
+  });
+
+  it('ROK-2192: a rank-0 row linked only by Blizzard id is 403 (GUID-only, ROK-2115 Ruling 1)', async () => {
+    const token = await linkedMemberLogin('rosterbnet', 0, { via: 'blizzard' });
+    const res = await patch(foreverGuildId, token, {
+      guildSlug: 'ye-olde-guild',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('ROK-2192: the GM of ANOTHER Forever guild is 403 here', async () => {
+    const otherForever = await insertSecondForeverGuild('Other Forever Guild');
+    const token = await linkedMemberLogin('rosterothergm', 0, {
+      guildId: otherForever,
+    });
+    const res = await patch(foreverGuildId, token, {
+      guildSlug: 'ye-olde-guild',
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('POST blizzard-roster/sync — the rank-0 GM (ROK-2192)', () => {
+  it('ROK-2192: the GM gets past the guard (404 no slug, not 403)', async () => {
+    const fresh = await insertSecondForeverGuild('Fresh Forever Guild');
+    const token = await linkedMemberLogin('rostersyncgm', 0, {
+      guildId: fresh,
+    });
+    const res = await testApp.request
+      .post(`${url(fresh)}/sync`)
+      .set('Authorization', `Bearer ${token}`);
+    expect({ status: res.status, message: res.body.message }).toEqual({
+      status: 404,
+      message: 'No Blizzard guild slug is set',
+    });
   });
 });
 
