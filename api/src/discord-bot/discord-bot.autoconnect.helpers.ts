@@ -31,7 +31,8 @@ function messageOf(error: unknown): string {
  * Connect, retrying a transient failure with exponential backoff. A
  * definitive failure (invalid token, disallowed intents) and the last
  * attempt's failure are rethrown; a retry is skipped when `shouldRetry`
- * says another connect already took over, and once `cancelled` no attempt
+ * says another connect already took over (checked before and after the
+ * backoff, so a superseded attempt never logs a retry), and once `cancelled` no attempt
  * starts and a failure is dropped (checked before every attempt and after
  * each failure, so also after each backoff).
  */
@@ -50,6 +51,12 @@ export async function connectWithRetry(
     } catch (error) {
       if (cancelled()) return;
       if (isDefinitiveConnectError(error) || attempt >= max) throw error;
+      if (!opts.shouldRetry()) {
+        opts.logger.debug(
+          `Discord bot auto-connect attempt ${attempt}/${max} failed (${messageOf(error)}); superseded by a newer connect; not retrying`,
+        );
+        return;
+      }
       const waitMs = base * 2 ** (attempt - 1);
       opts.logger.warn(
         `Discord bot auto-connect attempt ${attempt}/${max} failed (${messageOf(error)}); retrying in ${waitMs}ms`,

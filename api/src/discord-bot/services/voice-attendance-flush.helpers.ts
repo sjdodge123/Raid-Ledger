@@ -256,3 +256,24 @@ export async function buildAttendanceSummaryFromDb(
 ): Promise<ReturnType<typeof buildAttendanceSummary>> {
   return buildAttendanceSummary(eventId, await fetchVoiceSessions(db, eventId));
 }
+
+/**
+ * Wrap `run` so overlapping triggers coalesce: a trigger while the previous
+ * run is still pending is dropped. A failure goes to `onError`, and the next
+ * trigger runs again once the pending run has settled.
+ */
+export function createCoalescedTrigger(
+  run: () => Promise<void>,
+  onError: (error: unknown) => void,
+): () => void {
+  let pending = false;
+  return () => {
+    if (pending) return;
+    pending = true;
+    run()
+      .catch(onError)
+      .finally(() => {
+        pending = false;
+      });
+  };
+}
