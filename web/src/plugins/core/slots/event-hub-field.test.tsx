@@ -167,14 +167,53 @@ describe('EventHubField — a crafted ?guildId= (ROK-1817)', () => {
         expect(onGuildChange, 'edit mode must not clear a tag absent from the list').not.toHaveBeenCalled();
     });
 
-    it('edit mode: an event tagged to a hub the viewer cannot list keeps that hub selected, as a disabled option', async () => {
+    it('edit mode: an event tagged to a hub the viewer cannot list keeps that hub selected, as a stand-in option', async () => {
         serve([SERVER]);
         renderField(21);
         const select = await screen.findByLabelText('Hub');
         await settled();
         expect(select, 'the field must show the current tag, not "None"').toHaveValue('21');
         const current = select.querySelector('option[value="21"]');
-        expect(current?.textContent, 'the unlisted hub gets a generic label').toBe(UNLISTED_HUB_LABEL);
-        expect(current, 'the unlisted hub cannot be re-picked').toBeDisabled();
+        expect(current?.textContent, 'the unlisted hub gets a generic label').toBe('Current hub (not in your list)');
+        expect(current, 'the stand-in carries the current tag').toBeInTheDocument();
+    });
+
+    it('edit mode: the stand-in stays after switching away, so the viewer can switch back to the original tag', async () => {
+        serve([SERVER]);
+        let picked: number | null = 21;
+        function Harness() {
+            const [guildId, setGuildId] = useState<number | null>(21);
+            picked = guildId;
+            return <EventHubField gameId={7} guildId={guildId} onGuildChange={setGuildId} />;
+        }
+        render(<Harness />, { wrapper: wrapper() });
+        const select = await screen.findByLabelText('Hub');
+        await settled();
+        await userEvent.selectOptions(select, '22');
+        await waitFor(() => expect(picked).toBe(22));
+        const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+        expect(options, 'the opened-with hub must still be offered after switching away').toEqual(['None', UNLISTED_HUB_LABEL, 'Seed Server']);
+        await userEvent.selectOptions(select, '21');
+        await waitFor(() => expect(picked, 'switching back restores the original tag').toBe(21));
+        expect(guildIdForSubmit(picked, true, 21), 'an unchanged tag is omitted from the save DTO').toEqual({});
+    });
+
+    it('edit mode: no stand-in while the hub list is loading', () => {
+        server.use(http.get(API, () => new Promise<never>(() => undefined)));
+        renderField(21);
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'an unproven list cannot show the stand-in').toBeNull();
+    });
+
+    it('edit mode: no stand-in once a refetch of the hub list fails', async () => {
+        server.use(http.get(API, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        client.setQueryData(['guilds', 'taggable', 7, 1], { hubs: [SERVER] }, { updatedAt: 0 });
+        render(<EventHubField gameId={7} guildId={21} onGuildChange={vi.fn()} />, {
+            wrapper: ({ children }) => createElement(QueryClientProvider, { client }, children),
+        });
+        await waitFor(() => expect(client.getQueryCache().getAll()[0]?.state.status, 'the stale-list refetch failed').toBe('error'));
+        await act(async () => {});
+        expect(screen.getByLabelText('Hub'), 'the cached list still renders').toBeInTheDocument();
+        expect(screen.queryByText(UNLISTED_HUB_LABEL), 'a failed lookup cannot prove the hub is absent').toBeNull();
     });
 });
