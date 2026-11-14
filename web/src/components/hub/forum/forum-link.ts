@@ -26,3 +26,13 @@ export function forumThreadHref(threadId: number, replyId?: number): string {
     const reply = replyId === undefined ? '' : `&reply=${replyId}`;
     return `?thread=${threadId}${reply}#forum`;
 }
+
+/** `?edit=1`: open the thread with its opening message in the editor (the list row's Edit). */
+export function editFromSearch(search: string): boolean {
+    return new URLSearchParams(search).get('edit') === '1';
+}
+
+/** In-page href that opens a thread straight into editing its opening message. */
+export function forumThreadEditHref(threadId: number): string {
+    return `?thread=${threadId}&edit=1#forum`;
+}

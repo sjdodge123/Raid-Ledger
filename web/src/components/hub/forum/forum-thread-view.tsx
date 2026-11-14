@@ -19,6 +19,8 @@ export interface ForumThreadViewProps {
     threadId: number;
     /** `?reply=<id>`: ringed as the deep-link target. */
     replyId: number | null;
+    /** `&edit=1`: open with the root in the editor (when its `can.edit` allows). */
+    startEditing?: boolean | undefined;
     canWrite: boolean;
 }
 
@@ -43,7 +45,7 @@ function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): J
     );
 }
 
-function ThreadBody({ guildId, replyId, canWrite, query }: Omit<ForumThreadViewProps, 'threadId'> & { query: ReturnType<typeof useForumThread> }): JSX.Element {
+function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<ForumThreadViewProps, 'threadId'> & { query: ReturnType<typeof useForumThread> }): JSX.Element {
     if (query.isPending) return <div className="h-32 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" aria-label="Loading thread" />;
     const thread = query.data?.pages[0];
     if (thread === undefined) return <p role="alert" className="text-sm text-danger">Couldn’t load this thread. It may have been removed.</p>;
@@ -54,7 +56,7 @@ function ThreadBody({ guildId, replyId, canWrite, query }: Omit<ForumThreadViewP
                 <h3 data-testid="forum-thread-heading" className="text-lg font-semibold text-foreground">{thread.deleted === null ? thread.title : 'Removed thread'}</h3>
                 {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
             </div>
-            <ForumThreadRoot guildId={guildId} thread={thread} />
+            <ForumThreadRoot guildId={guildId} thread={thread} startEditing={startEditing === true} />
             <p className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>
             <ul className="flex flex-col gap-2">
                 {replies.map((r) => <ForumReplyItem key={r.id} guildId={guildId} threadId={thread.id} reply={r} highlighted={r.id === replyId} />)}
@@ -66,12 +68,12 @@ function ThreadBody({ guildId, replyId, canWrite, query }: Omit<ForumThreadViewP
 }
 
 /** The thread view (see file docstring). */
-export function ForumThreadView({ guildId, threadId, replyId, canWrite }: ForumThreadViewProps): JSX.Element {
+export function ForumThreadView({ guildId, threadId, replyId, canWrite, startEditing }: ForumThreadViewProps): JSX.Element {
     const query = useForumThread(guildId, threadId);
     return (
         <section data-testid="hub-forum-thread" aria-label="Forum thread">
             <BackLink />
-            <ThreadBody guildId={guildId} replyId={replyId} canWrite={canWrite} query={query} />
+            <ThreadBody guildId={guildId} replyId={replyId} canWrite={canWrite} startEditing={startEditing} query={query} />
         </section>
     );
 }

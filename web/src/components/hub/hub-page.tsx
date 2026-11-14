@@ -112,7 +112,7 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
     if (active === 'forum') {
         return (
             <Suspense fallback={<div className="h-28 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" />}>
-                <HubForumTab guildId={page.guild.id} canWrite={page.viewer.role !== 'visitor'} kind={page.guild.kind} />
+                <HubForumTab guildId={page.guild.id} canWrite={page.viewer.role !== 'visitor'} canModerate={page.viewer.canEdit} kind={page.guild.kind} />
             </Suspense>
         );
     }

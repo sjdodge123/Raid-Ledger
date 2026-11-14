@@ -11,11 +11,14 @@ import { QuietEmpty } from '../card-bits';
 import { SectionTitle } from '../hub-bits';
 import { hubCopy } from '../hub-copy';
 import { ForumThreadRow } from './forum-thread-row';
+import type { ForumViewer } from './forum-thread.helpers';
 import { useForumThreads } from './use-hub-forum';
 
 export interface ForumThreadListProps {
     guildId: number;
     kind?: GuildKind | undefined;
+    /** Drives each row's "⋯" menu (`forumRowCan`). */
+    viewer: ForumViewer;
     /** Opens the new-thread composer; omitted = the viewer cannot write (no button, no FAB). */
     onNewThread?: (() => void) | undefined;
 }
@@ -29,12 +32,14 @@ function ListSkeleton(): JSX.Element {
     );
 }
 
-function Group({ title, threads }: { title: string; threads: HubForumThreadSummary[] }): JSX.Element | null {
+interface RowCtx { guildId: number; viewer: ForumViewer }
+
+function Group({ title, threads, row }: { title: string; threads: HubForumThreadSummary[]; row: RowCtx }): JSX.Element | null {
     if (threads.length === 0) return null;
     return (
         <div className="mb-4">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{title}</h3>
-            <ul className="flex flex-col gap-2">{threads.map((t) => <ForumThreadRow key={t.id} thread={t} />)}</ul>
+            <ul className="flex flex-col gap-2">{threads.map((t) => <ForumThreadRow key={t.id} thread={t} {...row} />)}</ul>
         </div>
     );
 }
@@ -53,7 +58,7 @@ function OlderThreads({ feed }: { feed: ReturnType<typeof useForumThreads> }): J
     );
 }
 
-function ListBody({ feed }: { feed: ReturnType<typeof useForumThreads> }): JSX.Element | null {
+function ListBody({ feed, row }: { feed: ReturnType<typeof useForumThreads>; row: RowCtx }): JSX.Element | null {
     if (feed.isPending) return <ListSkeleton />;
     if (feed.data === undefined) return <p role="alert" className="text-sm text-danger">Couldn’t load the forum. Try again later.</p>;
     const pinned = feed.data.pages[0]?.pinned ?? [];
@@ -61,15 +66,15 @@ function ListBody({ feed }: { feed: ReturnType<typeof useForumThreads> }): JSX.E
     if (pinned.length + threads.length === 0) return <QuietEmpty testId="forum-empty">Start the first thread</QuietEmpty>;
     return (
         <>
-            <Group title="Pinned" threads={pinned} />
-            <Group title={pinned.length > 0 ? 'Latest' : 'Threads'} threads={threads} />
+            <Group title="Pinned" threads={pinned} row={row} />
+            <Group title={pinned.length > 0 ? 'Latest' : 'Threads'} threads={threads} row={row} />
             <OlderThreads feed={feed} />
         </>
     );
 }
 
 /** The Forum tab's list view (see file docstring). */
-export function ForumThreadList({ guildId, kind, onNewThread }: ForumThreadListProps): JSX.Element {
+export function ForumThreadList({ guildId, kind, viewer, onNewThread }: ForumThreadListProps): JSX.Element {
     const copy = hubCopy(kind);
     const feed = useForumThreads(guildId);
     const action = onNewThread
@@ -78,7 +83,7 @@ export function ForumThreadList({ guildId, kind, onNewThread }: ForumThreadListP
     return (
         <section aria-labelledby="hub-forum-title" data-testid="hub-forum-list">
             <SectionTitle title={copy.forumTab} headingId="hub-forum-title" blurb={copy.forumBlurb} action={action} />
-            <ListBody feed={feed} />
+            <ListBody feed={feed} row={{ guildId, viewer }} />
             {onNewThread && <FAB onClick={onNewThread} label="New thread" />}
         </section>
     );

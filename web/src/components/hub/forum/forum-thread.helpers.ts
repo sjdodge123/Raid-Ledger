@@ -1,5 +1,8 @@
 /** ROK-1175 — pure copy helpers for forum rows (and L5's thread view). */
-import { HUB_FORUM_TITLE_MAX, HubForumTitleInputSchema, type HubForumDeleted, type HubForumThreadSummary, type HubPostPerson } from '@raid-ledger/contract';
+import {
+    HUB_FORUM_EDIT_WINDOW_MS, HUB_FORUM_TITLE_MAX, HubForumTitleInputSchema,
+    type HubForumCan, type HubForumDeleted, type HubForumThreadSummary, type HubPostPerson,
+} from '@raid-ledger/contract';
 import { syncedAgo } from '../../../lib/synced-ago';
 
 /** A deleted user's threads keep a null author (AC12). */
@@ -31,4 +34,19 @@ export function forumAgo(iso: string, now: number = Date.now()): string {
 export function forumTitleError(title: string): string | null {
     if (title.trim() === '' || HubForumTitleInputSchema.safeParse(title).success) return null;
     return `Keep the title to ${HUB_FORUM_TITLE_MAX} characters`;
+}
+
+/** Who is looking at the Forum: their user id, and the hub's write / moderate rights. */
+export interface ForumViewer { userId: number | null; canWrite: boolean; canModerate: boolean }
+
+/**
+ * A list row's "⋯" rights. Summaries carry no `can`, so this mirrors the api's
+ * `canFor` (`hub-forum.helpers.ts`): edit = live + own + inside 24 h; delete =
+ * live + (own or moderator); pin = live + moderator. The server still decides.
+ */
+export function forumRowCan(thread: HubForumThreadSummary, viewer: ForumViewer, now: number = Date.now()): HubForumCan {
+    const live = thread.deleted === null;
+    const own = viewer.canWrite && viewer.userId !== null && thread.author?.userId === viewer.userId;
+    const fresh = now - Date.parse(thread.createdAt) < HUB_FORUM_EDIT_WINDOW_MS;
+    return { edit: live && own && fresh, delete: live && (own || viewer.canModerate), pin: live && viewer.canModerate };
 }

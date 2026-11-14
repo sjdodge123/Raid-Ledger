@@ -5,21 +5,37 @@
  * forum cache (`use-hub-forum.ts`), so 204s re-render from the server.
  */
 import { useState, type JSX } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { HubForumReply, HubForumThread } from '@raid-ledger/contract';
 import { ForumActionMenu } from './forum-action-menu';
 import { forumMenuItems } from './forum-menu-items';
 import { ForumMessageEditor } from './forum-composer';
 import { ForumDeleteConfirm } from './forum-delete-confirm';
 import { ForumMessage } from './forum-message';
+import { forumThreadHref } from './forum-link';
 import {
     useDeleteForumReply, useDeleteForumThread, useSetForumThreadPin, useUpdateForumReply, useUpdateForumThread,
 } from './use-hub-forum';
 
 type Mode = 'read' | 'edit' | 'delete';
 
+/** The root's mode; a list row's Edit (`&edit=1`) starts in the editor, and leaving it drops the flag from the URL. */
+function useRootMode(threadId: number, startEditing: boolean, canEdit: boolean): [Mode, (m: Mode) => void] {
+    const navigate = useNavigate();
+    const fromRow = startEditing && canEdit;
+    const [mode, setMode] = useState<Mode>(fromRow ? 'edit' : 'read');
+    const change = (m: Mode): void => {
+        setMode(m);
+        if (fromRow && m !== 'edit') void navigate(forumThreadHref(threadId), { replace: true });
+    };
+    return [mode, change];
+}
+
+export interface ForumThreadRootProps { guildId: number; thread: HubForumThread; startEditing?: boolean }
+
 /** The thread's opening message + its menu (edit, delete, pin/unpin). */
-export function ForumThreadRoot({ guildId, thread }: { guildId: number; thread: HubForumThread }): JSX.Element {
-    const [mode, setMode] = useState<Mode>('read');
+export function ForumThreadRoot({ guildId, thread, startEditing = false }: ForumThreadRootProps): JSX.Element {
+    const [mode, setMode] = useRootMode(thread.id, startEditing, thread.can.edit);
     const update = useUpdateForumThread(guildId);
     const remove = useDeleteForumThread(guildId);
     const pin = useSetForumThreadPin(guildId);
