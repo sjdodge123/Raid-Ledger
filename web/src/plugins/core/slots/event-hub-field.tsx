@@ -8,12 +8,17 @@
  * ROK-1817: on create (`dropUnlisted`), a preselected hub the viewer cannot
  * tag (a crafted `?guildId=` link) is cleared once the list settles — the
  * picker could never show it, so it would ride along unseen and 403 on submit.
- * Edit mode keeps an unchanged tag (`guildIdForSubmit` omits it).
+ * Edit mode keeps an unchanged tag (`guildIdForSubmit` omits it) and shows it
+ * as a disabled {@link UNLISTED_HUB_LABEL} option, so the picker does not read
+ * "None" for an event that is in fact tagged (the DTO carries no hub name).
  */
 import { useEffect, type ChangeEvent, type JSX } from 'react';
 import { Field } from '../../../components/ui/field';
 import { Select } from '../../../components/ui/select';
 import { useTaggableHubsQuery } from './taggable-hubs-queries';
+
+/** Label of the disabled option standing in for a tagged hub the viewer cannot list. */
+export const UNLISTED_HUB_LABEL = "A hub you can't edit";
 
 interface EventHubFieldProps {
     gameId: number | null;
@@ -27,7 +32,8 @@ export function EventHubField({ gameId, guildId, onGuildChange, dropUnlisted = f
     const q = useTaggableHubsQuery(gameId ?? undefined);
     const hubs = q.data?.hubs ?? [];
     // Only a successful lookup can prove the hub is absent; a failed one keeps the pick (Codex P2).
-    const unseen = dropUnlisted && q.isSuccess && guildId !== null && !hubs.some((h) => h.id === guildId);
+    const absent = guildId !== null && !hubs.some((h) => h.id === guildId);
+    const unseen = dropUnlisted && q.isSuccess && absent;
     useEffect(() => {
         if (unseen) onGuildChange(null);
     }, [unseen, onGuildChange]);
@@ -40,6 +46,7 @@ export function EventHubField({ gameId, guildId, onGuildChange, dropUnlisted = f
         <div className="mt-4" data-testid="event-hub-field">
             <Field label="Hub" hint="Shows this event on the hub page">
                 <Select value={guildId === null ? '' : String(guildId)} onChange={onChange} placeholder="None">
+                    {!dropUnlisted && absent && <option value={String(guildId)} disabled>{UNLISTED_HUB_LABEL}</option>}
                     {hubs.map((h) => <option key={h.id} value={String(h.id)}>{h.name}</option>)}
                 </Select>
             </Field>

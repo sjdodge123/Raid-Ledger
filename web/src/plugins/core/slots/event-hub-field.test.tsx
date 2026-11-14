@@ -16,7 +16,7 @@ import { usePluginStore } from '../../../stores/plugin-store';
 import { PluginSlot } from '../../plugin-slot';
 import { getSlotRegistrations } from '../../plugin-registry';
 import { guildIdForSubmit } from '../../../components/events/create-event-form.utils';
-import { EventHubField } from './event-hub-field';
+import { EventHubField, UNLISTED_HUB_LABEL } from './event-hub-field';
 import '../register';
 import '../../wow/register';
 
@@ -163,7 +163,18 @@ describe('EventHubField — a crafted ?guildId= (ROK-1817)', () => {
         const select = await screen.findByLabelText('Hub');
         await settled();
         const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
-        expect(options, 'the list the edit form settled on').toEqual(['None', 'Seed Server']);
+        expect(options, 'the list the edit form settled on').toEqual(['None', UNLISTED_HUB_LABEL, 'Seed Server']);
         expect(onGuildChange, 'edit mode must not clear a tag absent from the list').not.toHaveBeenCalled();
+    });
+
+    it('edit mode: an event tagged to a hub the viewer cannot list keeps that hub selected, as a disabled option', async () => {
+        serve([SERVER]);
+        renderField(21);
+        const select = await screen.findByLabelText('Hub');
+        await settled();
+        expect(select, 'the field must show the current tag, not "None"').toHaveValue('21');
+        const current = select.querySelector('option[value="21"]');
+        expect(current?.textContent, 'the unlisted hub gets a generic label').toBe(UNLISTED_HUB_LABEL);
+        expect(current, 'the unlisted hub cannot be re-picked').toBeDisabled();
     });
 });
