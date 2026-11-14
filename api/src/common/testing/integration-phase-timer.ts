@@ -6,7 +6,11 @@
  *
  *   [phase-timing] <spec> import=…ms module=…ms init=…ms(onModuleInit=…ms
  *   onApplicationBootstrap=…ms) migrate=…ms|skipped truncate=…ms(×N)
- *   drain=…ms close=…ms total=…ms
+ *   [truncate.delete=…ms truncate.caches=…ms truncate.queues=…ms
+ *   truncate.seed=…ms] drain=…ms close=…ms total=…ms
+ *
+ * The bracketed `truncate.*` split (summed over every truncate call) appears
+ * only when `truncateAllTables` recorded its sub-phases.
  *
  * Unset, every entry point is a no-op apart from a `performance.now()` read:
  * no output, no extra awaits, no behaviour change. State lives on the spec
@@ -25,6 +29,10 @@ export type PhaseName =
   | 'bootstrap'
   | 'migrate'
   | 'truncate'
+  | 'truncateDelete'
+  | 'truncateCaches'
+  | 'truncateQueues'
+  | 'truncateSeed'
   | 'drain'
   | 'close';
 
@@ -127,6 +135,21 @@ function formatInit(phases: PhaseTimings['phases']): string {
   return `${ms(phases.init)}(${hooks})`;
 }
 
+const TRUNCATE_SUB_PHASES: ReadonlyArray<readonly [PhaseName, string]> = [
+  ['truncateDelete', 'delete'],
+  ['truncateCaches', 'caches'],
+  ['truncateQueues', 'queues'],
+  ['truncateSeed', 'seed'],
+];
+
+/** `truncate.<sub>=…ms` tokens, or none when no sub-phase was recorded. */
+function formatTruncateSplit(phases: PhaseTimings['phases']): string[] {
+  if (!TRUNCATE_SUB_PHASES.some(([name]) => phases[name])) return [];
+  return TRUNCATE_SUB_PHASES.map(
+    ([name, label]) => `truncate.${label}=${ms(phases[name])}`,
+  );
+}
+
 /** Pure formatter for the one stderr line (exported for the unit spec). */
 export function formatPhaseLine(
   specPath: string,
@@ -143,6 +166,7 @@ export function formatPhaseLine(
     `init=${formatInit(p)}`,
     `migrate=${migrate}`,
     `truncate=${truncate}`,
+    ...formatTruncateSplit(p),
     `drain=${ms(p.drain)}`,
     `close=${ms(p.close)}`,
     `total=${Math.round(now - timings.startedAt)}ms`,
