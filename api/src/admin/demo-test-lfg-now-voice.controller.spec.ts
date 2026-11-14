@@ -56,7 +56,9 @@ beforeEach(() => {
 });
 
 afterAll(() => {
-  process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
+  // Assigning `undefined` to process.env stores the STRING 'undefined'.
+  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
 
 /** The deps the listener's `lfgNowDeps` builds from this controller. */
