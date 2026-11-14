@@ -50,6 +50,8 @@ export { ErrorState };
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
 /** ROK-1868 — the Posts tab (feed, composer, deep link) loads only when opened. */
 const HubPostsTab = lazy(() => import('./posts/posts-tab').then((m) => ({ default: m.HubPostsTab })));
+/** ROK-1175 — the member Forum tab (list, thread view) loads only when opened. */
+const HubForumTab = lazy(() => import('./forum/forum-tab').then((m) => ({ default: m.HubForumTab })));
 const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
 /** Stable identity so the source list doesn't churn while a module is absent. */
@@ -104,6 +106,13 @@ function ActiveTab({ active, ctx, module: mod, mods }: Omit<PanelProps, 'tabs'>)
         return (
             <Suspense fallback={<div className="h-28 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" />}>
                 <HubPostsTab guildId={page.guild.id} canEdit={page.viewer.canEdit} isLeader={page.viewer.role === 'leader'} kind={page.guild.kind} />
+            </Suspense>
+        );
+    }
+    if (active === 'forum') {
+        return (
+            <Suspense fallback={<div className="h-28 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" />}>
+                <HubForumTab guildId={page.guild.id} canWrite={page.viewer.role !== 'visitor'} kind={page.guild.kind} />
             </Suspense>
         );
     }
