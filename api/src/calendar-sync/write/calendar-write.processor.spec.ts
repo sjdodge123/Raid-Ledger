@@ -16,6 +16,11 @@ import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
 import { reconcileCalendarCopy } from './calendar-write-reconcile.helpers';
 import { runCalendarWriteOff } from './calendar-write-off.helpers';
 import { WRITE_DEBOUNCE_MS } from '../calendar-sync.constants';
+import {
+  RateLimitError,
+  TransientError,
+} from '../providers/calendar-provider.errors';
+import { isExpectedRetry } from '../../sentry/sentry-expected-retry.helpers';
 
 jest.mock('../read/calendar-away-heal.helpers', () => ({
   deriveIfNeedsReconnect: jest.fn().mockResolvedValue(undefined),
@@ -83,6 +88,60 @@ describe('CalendarWriteProcessor → derive on needs_reconnect', () => {
     const data = { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 };
     await makeProcessor().process(job(data as CalendarWriteJobData));
     expect(check).not.toHaveBeenCalled();
+  });
+});
+
+const attempt = (data: CalendarWriteJobData, attemptsMade: number) =>
+  ({ ...job(data), attemptsMade }) as Job<CalendarWriteJobData>;
+const RECONCILE_8 = {
+  kind: 'reconcile',
+  connectionId: 8,
+  eventId: 2,
+  userId: 4,
+} as CalendarWriteJobData;
+
+describe('CalendarWriteProcessor → Sentry sees only reportable failures (ROK-2189)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['TransientError', () => new TransientError('http_503')],
+    ['RateLimitError', () => new RateLimitError(30_000, 'http_429')],
+  ])(
+    '%s with attempts left: same error rethrown (backoff intact), marked',
+    async (_name, make) => {
+      const err = make();
+      reconcile.mockRejectedValue(err);
+      await expect(
+        makeProcessor().process(attempt(RECONCILE_8, 2)),
+      ).rejects.toBe(err);
+      expect(isExpectedRetry(err)).toBe(true);
+    },
+  );
+
+  it('a write-off TransientError with attempts left is marked too', async () => {
+    const err = new TransientError('http_503');
+    writeOff.mockRejectedValue(err);
+    const data: CalendarWriteJobData = { kind: 'write-off', connectionId: 8 };
+    await expect(makeProcessor().process(attempt(data, 0))).rejects.toBe(err);
+    expect(isExpectedRetry(err)).toBe(true);
+  });
+
+  it('the final attempt is NOT marked — exhausted retries report', async () => {
+    const err = new TransientError('http_503');
+    reconcile.mockRejectedValue(err);
+    await expect(
+      makeProcessor().process(attempt(RECONCILE_8, 5)),
+    ).rejects.toBe(err);
+    expect(isExpectedRetry(err)).toBe(false);
+  });
+
+  it('a non-provider error with attempts left is NOT marked', async () => {
+    const err = new Error('connection terminated unexpectedly');
+    reconcile.mockRejectedValue(err);
+    await expect(
+      makeProcessor().process(attempt(RECONCILE_8, 0)),
+    ).rejects.toBe(err);
+    expect(isExpectedRetry(err)).toBe(false);
   });
 });
 

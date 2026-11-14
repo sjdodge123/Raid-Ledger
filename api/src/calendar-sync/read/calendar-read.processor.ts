@@ -27,6 +27,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_READ_QUEUE } from '../calendar-sync.constants';
 import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
+import { markRetryPendingProviderError } from '../calendar-retry-report.helpers';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { isFinalAttempt } from '../write/calendar-write-reconcile-persist.helpers';
 import { runCalendarDerive } from './calendar-away-persist.helpers';
@@ -169,7 +170,9 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     const decision = await recordReadSyncFailure(this.db, conn, err, {
       finalAttempt: isFinalAttempt(job),
     });
-    if (decision.retry && !isFinalAttempt(job)) throw err;
+    if (decision.retry && !isFinalAttempt(job)) {
+      throw markRetryPendingProviderError(err, job); // ROK-2189
+    }
     this.gameTime.invalidateUserCache(conn.userId);
     await onReadConnectionBroken(this.queue, conn.userId, decision);
     if (decision.retry) throw err;

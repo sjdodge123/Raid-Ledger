@@ -11,8 +11,10 @@ import type { SettingsService } from '../../settings/settings.service';
 import type { GameTimeService } from '../../users/game-time.service';
 import {
   ProviderAuthError,
+  RateLimitError,
   TransientError,
 } from '../providers/calendar-provider.errors';
+import { isExpectedRetry } from '../../sentry/sentry-expected-retry.helpers';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import type { CalendarReadJobData } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
@@ -155,6 +157,36 @@ describe('CalendarReadProcessor failures', () => {
     expect(invalidate).toHaveBeenCalledWith(CONN.userId);
   });
 
+  it.each([
+    ['TransientError', () => new TransientError('http_503')],
+    ['RateLimitError', () => new RateLimitError(30_000, 'http_429')],
+  ])(
+    'ROK-2189: %s with attempts left is marked so Sentry drops it',
+    async (_name, make) => {
+      const { processor } = setup();
+      const err = make();
+      runSync.mockRejectedValue(err);
+      await expect(processor.process(job(1))).rejects.toBe(err);
+      expect(isExpectedRetry(err)).toBe(true);
+    },
+  );
+
+  it('ROK-2189: the final attempt is NOT marked — exhausted retries report', async () => {
+    const { processor } = setup();
+    const err = new TransientError('http_503');
+    runSync.mockRejectedValue(err);
+    await expect(processor.process(job(3))).rejects.toBe(err);
+    expect(isExpectedRetry(err)).toBe(false);
+  });
+
+  it('ROK-2189: an unexpected (non-provider) error with attempts left is NOT marked', async () => {
+    const { processor } = setup();
+    const err = new TypeError('boom');
+    runSync.mockRejectedValue(err);
+    await expect(processor.process(job(1))).rejects.toBe(err);
+    expect(isExpectedRetry(err)).toBe(false);
+  });
+
   it('kill switch off → skipped before any load or provider call', async () => {
     const { processor, sets } = setup(false);
     await expect(processor.process(job(0))).resolves.toBe('skipped');
@@ -210,6 +242,7 @@ describe('CalendarReadProcessor in-sync derive failure', () => {
         return 'synced';
       });
       await expect(processor.process(job(attemptsMade))).rejects.toBe(dbErr);
+      expect(isExpectedRetry(dbErr)).toBe(false); // ROK-2189: still reports
       // No provider_error / backoff on the connection, no broken-conn derive.
       expect(sets).toEqual([]);
       expect(queue.add).not.toHaveBeenCalled();
