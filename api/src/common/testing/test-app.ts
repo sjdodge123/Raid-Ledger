@@ -22,7 +22,7 @@
  *   const { app, request } = await getTestApp();
  *   const res = await request.get('/system/status');
  */
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { type INestApplication } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -32,8 +32,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import * as path from 'path';
 import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
 import { applyCorsPolicy } from '../../cors/cors-auto-policy';
@@ -43,6 +41,13 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { closeTestSharedRedis } from '../../queue/queue.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
+import { ensureTestDbMigrated } from './integration-migrations';
+import {
+  instrumentLifecycleHooks,
+  phaseMark,
+  recordMigrate,
+  timePhase,
+} from './integration-phase-timer';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
 import {
   ownedSharedTestDbUrl,
@@ -55,7 +60,9 @@ import {
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 import { WOWHEAD_RESOLVER_DEPS } from '../../plugins/wow-common/wowhead-item/wow-item-meta.resolve';
 import { FOREVER_QUEST_AUTO_IMPORT_KICKS } from '../../plugins/wow-common/forever-quest-import/forever-quest-auto-import.service';
+import { WOW_BOOT_SEED_ENABLED } from '../../plugins/wow-common/wow-boot-seed';
 import { noNetworkWowheadDeps } from './wowhead-no-network';
+import { instrumentProviderInitHooks } from './integration-provider-timer';
 import { installValheimLinkBodyBypass } from '../../plugins/valheim/link/ingest/valheim-link-body-bypass';
 import { installCompanionBodyBypass } from '../../companion/ingest/companion-body-bypass';
 // ROK-1264: `supertest-persistent-agent` is intentionally NOT wired here.
@@ -151,17 +158,16 @@ async function provisionDatabase(): Promise<{
   return { connectionString: container.getConnectionUri(), container };
 }
 
-/** Run migrations and return an app-level DB connection plus the raw client. */
+/**
+ * Run migrations (skipped when the CI globalSetup already migrated this DB,
+ * ROK-2196) and return an app-level DB connection plus the raw client.
+ */
 async function setupDatabase(connectionString: string): Promise<{
   db: PostgresJsDatabase<typeof schema>;
   appClient: ReturnType<typeof postgres>;
 }> {
-  const migrationClient = postgres(connectionString, { max: 1 });
-  const migrationDb = drizzle(migrationClient);
-  await migrate(migrationDb, {
-    migrationsFolder: path.join(__dirname, '../../drizzle/migrations'),
-  });
-  await migrationClient.end();
+  const migrateStart = phaseMark();
+  recordMigrate(migrateStart, await ensureTestDbMigrated(connectionString));
   const appClient = postgres(connectionString, { max: 10 });
   return { db: drizzle(appClient, { schema }), appClient };
 }
@@ -225,22 +231,45 @@ async function listenOnEphemeralPort(
   });
 }
 
+/** Compile AppModule with the integration harness's provider overrides. */
+function compileAppModule(
+  db: PostgresJsDatabase<typeof schema>,
+  redisMock: RedisMockHandle,
+): Promise<TestingModule> {
+  return (
+    Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(DrizzleAsyncProvider)
+      .useValue(db)
+      .overrideProvider(REDIS_CLIENT)
+      .useValue(redisMock.client)
+      // ROK-1727: no integration spec may call nether.wowhead.com.
+      .overrideProvider(WOWHEAD_RESOLVER_DEPS)
+      .useValue(noNetworkWowheadDeps())
+      // ROK-2162: no boot / settings-save quest import; specs call it directly.
+      .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
+      .useValue(false)
+      // ROK-2196: the setup file truncates right after init, so the ~6.6k-row
+      // WoW boot seed was wiped unread; specs that need it seed explicitly.
+      .overrideProvider(WOW_BOOT_SEED_ENABLED)
+      .useValue(false)
+      .compile()
+  );
+}
+
+/** Init the app with the opt-in phase/provider timers wrapped around it. */
+async function initInstrumented(app: INestApplication): Promise<void> {
+  instrumentLifecycleHooks(app);
+  instrumentProviderInitHooks(app);
+  await timePhase('init', () => app.init());
+}
+
 async function buildNestApp(
   db: PostgresJsDatabase<typeof schema>,
   redisMock: RedisMockHandle,
 ): Promise<{ app: INestApplication; request: TestAgent<supertest.Test> }> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(DrizzleAsyncProvider)
-    .useValue(db)
-    .overrideProvider(REDIS_CLIENT)
-    .useValue(redisMock.client)
-    // ROK-1727: no integration spec may call nether.wowhead.com.
-    .overrideProvider(WOWHEAD_RESOLVER_DEPS)
-    .useValue(noNetworkWowheadDeps())
-    // ROK-2162: no boot / settings-save quest import; specs call it directly.
-    .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
-    .useValue(false)
-    .compile();
+  const moduleRef = await timePhase('module', () =>
+    compileAppModule(db, redisMock),
+  );
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,
   // which would 413 a request before any route (e.g. ROK-1724's 256 KB cap).
@@ -254,7 +283,7 @@ async function buildNestApp(
   // ahead of the router. Supertest sends no Origin, so it allows every
   // existing spec; specs that set Origin/Host exercise the real policy.
   applyCorsPolicy(app, { isProduction: false });
-  await app.init();
+  await initInstrumented(app);
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
@@ -333,6 +362,22 @@ export async function getTestApp(): Promise<TestApp> {
 }
 
 /**
+ * ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
+ * never has to await an in-flight job whose DB query would race the
+ * _appClient.end timeout cap. Best-effort — app.close() runs regardless.
+ */
+async function drainQueuesBestEffort(app: INestApplication): Promise<void> {
+  try {
+    const queueHealth = app.get(QueueHealthService, { strict: false });
+    if (queueHealth) {
+      await timePhase('drain', () => queueHealth.awaitDrained(15_000));
+    }
+  } catch {
+    // best-effort — fall through to app.close() regardless
+  }
+}
+
+/**
  * Shut down the TestApp singleton.
  * Called automatically by the global afterAll hook in integration-setup.ts.
  *
@@ -351,19 +396,7 @@ export async function closeTestApp(): Promise<void> {
   if (!instance) return;
 
   try {
-    // ROK-1248: drain BullMQ queues before tearing down the app so worker.close()
-    // never has to await an in-flight job whose DB query would race the
-    // _appClient.end timeout cap.
-    try {
-      const queueHealth = instance.app.get(QueueHealthService, {
-        strict: false,
-      });
-      if (queueHealth) {
-        await queueHealth.awaitDrained(15_000);
-      }
-    } catch {
-      // best-effort — fall through to app.close() regardless
-    }
+    await drainQueuesBestEffort(instance.app);
 
     // Capture the test container's port BEFORE _appClient.end() / container.stop()
     // so the fallback destroy can scope itself to ONLY our test-DB sockets.
@@ -371,7 +404,7 @@ export async function closeTestApp(): Promise<void> {
       instance.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
     const ourPort = extractPortFromConnectionString(connStr);
 
-    await instance.app.close();
+    await timePhase('close', () => instance.app.close());
     if (instance._appClient) {
       await instance._appClient.end({ timeout: 30 });
     }
