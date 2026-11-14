@@ -84,9 +84,7 @@ describe('DM embed — planned temporary voice channel', () => {
     '%s shows the planned channel name and open time',
     async (type) => {
       const field = await voiceField({ plannedVoiceChannel: PLANNED }, type);
-      expect(field?.value).toBe(
-        `\u{1F50A} Stocks 5 man · opens <t:${UNIX}:t>`,
-      );
+      expect(field?.value).toBe(`\u{1F50A} Stocks 5 man · opens <t:${UNIX}:t>`);
     },
   );
 

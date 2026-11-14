@@ -7,7 +7,10 @@ import { EmbedBuilder } from 'discord.js';
 import { formatDurationMs } from '../discord-bot/utils/format-duration';
 import { escapeHubName } from '../discord-bot/services/discord-embed-event-body.helpers';
 import { toStr } from './notification-embed.helpers';
-import { dmVoiceFieldValue, readPlannedVoice } from './notification-voice.helpers';
+import {
+  dmVoiceFieldValue,
+  readPlannedVoice,
+} from './notification-voice.helpers';
 
 /** Override the embed description with structured game-affinity lines. */
 export function applySubscribedGameEmbed(

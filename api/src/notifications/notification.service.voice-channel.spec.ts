@@ -155,7 +155,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         'vc-from-game-7',
       );
 
-      const result = (await service.resolveVoiceForEvent(42)).voiceChannelId ?? null;
+      const result =
+        (await service.resolveVoiceForEvent(42)).voiceChannelId ?? null;
 
       expect(mockDb.select).toHaveBeenCalled();
       expect(
@@ -167,7 +168,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     it('returns null when event is not found', async () => {
       mockDb.select.mockReturnValue(makeSelectChain([])); // no event row
 
-      const result = (await service.resolveVoiceForEvent(9999)).voiceChannelId ?? null;
+      const result =
+        (await service.resolveVoiceForEvent(9999)).voiceChannelId ?? null;
 
       expect(result).toBeNull();
       expect(
@@ -187,7 +189,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         null,
       );
 
-      const result = (await service.resolveVoiceForEvent(50)).voiceChannelId ?? null;
+      const result =
+        (await service.resolveVoiceForEvent(50)).voiceChannelId ?? null;
 
       expect(
         mockChannelResolver.resolveVoiceChannelHonoringOverride,
@@ -206,7 +209,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         null,
       );
 
-      const result = (await service.resolveVoiceForEvent(10)).voiceChannelId ?? null;
+      const result =
+        (await service.resolveVoiceForEvent(10)).voiceChannelId ?? null;
 
       expect(result).toBeNull();
     });
@@ -222,7 +226,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         '111222333444',
       );
 
-      const result = (await service.resolveVoiceForEvent(99)).voiceChannelId ?? null;
+      const result =
+        (await service.resolveVoiceForEvent(99)).voiceChannelId ?? null;
 
       expect(result).toBe('111222333444');
     });
@@ -239,7 +244,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
         'override-vc-999',
       );
 
-      const result = (await service.resolveVoiceForEvent(42)).voiceChannelId ?? null;
+      const result =
+        (await service.resolveVoiceForEvent(42)).voiceChannelId ?? null;
 
       expect(result).toBe('override-vc-999');
       expect(
@@ -285,7 +291,8 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
 
     it('resolveVoiceForEvent returns null when channelResolver is not injected', async () => {
       const result =
-        (await serviceWithoutResolver.resolveVoiceForEvent(42)).voiceChannelId ?? null;
+        (await serviceWithoutResolver.resolveVoiceForEvent(42))
+          .voiceChannelId ?? null;
       expect(result).toBeNull();
     });
   });

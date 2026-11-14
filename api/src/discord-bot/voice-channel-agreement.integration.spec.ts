@@ -209,7 +209,8 @@ describe('ROK-1389 — voice-channel agreement (integration)', () => {
     const { eventId } = await seedAgreementFixture();
 
     const resolved =
-      (await notificationService.resolveVoiceForEvent(eventId)).voiceChannelId ?? null;
+      (await notificationService.resolveVoiceForEvent(eventId))
+        .voiceChannelId ?? null;
 
     expect(resolved).toBe(VOICE1);
   });
@@ -225,7 +226,8 @@ describe('ROK-1389 — voice-channel agreement (integration)', () => {
       .where(eq(schema.events.id, eventId));
 
     const resolved =
-      (await notificationService.resolveVoiceForEvent(eventId)).voiceChannelId ?? null;
+      (await notificationService.resolveVoiceForEvent(eventId))
+        .voiceChannelId ?? null;
 
     expect(resolved).toBe(VOICE1);
   });

@@ -90,7 +90,9 @@ export async function notifyRemovedUser(
   userId: number,
   eventId: number,
   eventTitle: string,
-  fetchNotificationCtx: (eventId: number) => Promise<notifH.NotificationContext>,
+  fetchNotificationCtx: (
+    eventId: number,
+  ) => Promise<notifH.NotificationContext>,
   lostPrivateVoice = false,
 ) {
   const extraPayload = await fetchNotificationCtx(eventId);
@@ -133,7 +135,9 @@ export function fireRosterNotifications(
   assignments: UpdateRosterDto['assignments'],
   signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
   oldRoleBySignupId: Map<number, string | null>,
-  fetchNotificationCtx: (eventId: number) => Promise<notifH.NotificationContext>,
+  fetchNotificationCtx: (
+    eventId: number,
+  ) => Promise<notifH.NotificationContext>,
   logger: Logger,
   voiceLostUserIds: ReadonlySet<number> = new Set(),
 ) {
