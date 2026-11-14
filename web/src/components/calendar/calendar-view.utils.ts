@@ -13,6 +13,17 @@ export function viewToStr(view: View): CalendarViewPref {
 }
 
 /**
+ * True unless the calendar hides the event whatever the filters say: a
+ * cancelled event, or one replaced by an open rescheduling poll. The Hubs
+ * filter learns hubs only from events that pass this.
+ */
+export function isShownOnCalendar(
+    event: Pick<EventResponseDto, 'cancelledAt' | 'reschedulingPollId'>,
+): boolean {
+    return !event.cancelledAt && !event.reschedulingPollId;
+}
+
+/**
  * Decide whether an event should appear in the calendar grid given the current
  * game-filter selection.
  *

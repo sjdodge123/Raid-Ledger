@@ -52,4 +52,14 @@ describe('EarlyCreateConfirmModal', () => {
         expect(screen.getByRole('button', { name: 'Lock in' })).toBeInTheDocument();
         expect(screen.queryByText(/below majority/)).not.toBeInTheDocument();
     });
+
+    // Codex P2 (2026-11-14): on phone the Poll actions BottomSheet closes
+    // before Lock opens this confirm, releasing the sheet's body lock — so the
+    // confirm must hold its own, or the page scrolls behind it.
+    it('locks body scroll while open and releases it on unmount', () => {
+        const { unmount } = renderModal(1, 5);
+        expect(document.body.style.overflow).toBe('hidden');
+        unmount();
+        expect(document.body.style.overflow).toBe('');
+    });
 });
