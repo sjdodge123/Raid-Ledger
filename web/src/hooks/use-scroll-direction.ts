@@ -18,6 +18,8 @@ let lastScrollY = 0;
 let ticking = false;
 let listenerAttached = false;
 let subscriberCount = 0;
+/** Epoch ms until which scrolls are app-started, not the user's (calendar smooth scroll, backlog 2026-10-21). */
+let ignoreUntil = 0;
 const subscribers = new Set<() => void>();
 
 function notify() {
@@ -26,6 +28,13 @@ function notify() {
 
 function update() {
     const currentY = window.scrollY;
+
+    if (Date.now() < ignoreUntil) {
+        // App-started scroll: keep the direction, track the position.
+        lastScrollY = currentY;
+        ticking = false;
+        return;
+    }
 
     if (currentY > lastScrollY && currentY > SCROLL_THRESHOLD) {
         if (direction !== 'down') {
@@ -95,6 +104,17 @@ function subscribe(cb: () => void) {
             detach();
         }
     };
+}
+
+/**
+ * Marks the next `ms` milliseconds of scrolling as app-started (e.g. a
+ * smooth `scrollIntoView` on mount), so it does not count as the user
+ * scrolling: the direction stays as it is and only the last position is
+ * kept in sync. User scrolls after the window are measured from there.
+ */
+export function ignoreScrollFor(ms: number): void {
+    ignoreUntil = Date.now() + ms;
+    lastScrollY = window.scrollY;
 }
 
 function getSnapshot(): ScrollDirection {
