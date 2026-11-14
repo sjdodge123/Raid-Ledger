@@ -74,4 +74,13 @@ describe('useScrollDirection — app-started scrolls (ignoreScrollFor)', () => {
         scrollTo(600);
         expect(result.current).toBe('down');
     });
+
+    it('a shorter later call does not cut an earlier, longer window short', () => {
+        const { result } = renderHook(() => mod.useScrollDirection());
+        act(() => mod.ignoreScrollFor(1000));
+        act(() => mod.ignoreScrollFor(100));
+        vi.setSystemTime(Date.now() + 500);
+        scrollTo(500);
+        expect(result.current).toBeNull();
+    });
 });

@@ -111,9 +111,11 @@ function subscribe(cb: () => void) {
  * smooth `scrollIntoView` on mount), so it does not count as the user
  * scrolling: the direction stays as it is and only the last position is
  * kept in sync. User scrolls after the window are measured from there.
+ * Overlapping calls keep the later end, so a short call never cuts a longer one.
  */
 export function ignoreScrollFor(ms: number): void {
-    ignoreUntil = Date.now() + ms;
+    // Never shorten a window that is already running.
+    ignoreUntil = Math.max(ignoreUntil, Date.now() + ms);
     lastScrollY = window.scrollY;
 }
 
