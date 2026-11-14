@@ -23,6 +23,14 @@ export function supersededConnectError(): DiscordConnectError {
   return new DiscordConnectError(SUPERSEDED_CONNECT_MESSAGE, false);
 }
 
+/** True for the error `supersededConnectError()` builds — routine, not a fault. */
+export function isSupersededConnectError(error: unknown): boolean {
+  return (
+    error instanceof DiscordConnectError &&
+    error.message === SUPERSEDED_CONNECT_MESSAGE
+  );
+}
+
 /** What the connect handlers need from DiscordBotClientService. */
 export interface ConnectHooks {
   readonly logger: Logger;

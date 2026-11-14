@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
+import { DISCORD_BOT_EVENTS } from './discord-bot.constants';
 
 /**
  * ROK-2198 (Codex P2): a startup retry that already entered connect() and is
@@ -69,6 +70,8 @@ function liveClient(clients: DiscordBotClientService): unknown {
 let bot: DiscordBotService;
 let clients: DiscordBotClientService;
 let releaseTeardown: () => void = () => {};
+/** Number of clients created when each DISCONNECTED was emitted. */
+let disconnectedAt: number[] = [];
 
 async function build(): Promise<void> {
   const module: TestingModule = await Test.createTestingModule({
@@ -77,7 +80,14 @@ async function build(): Promise<void> {
       DiscordBotClientService,
       {
         provide: EventEmitter2,
-        useValue: { emit: jest.fn(), emitAsync: jest.fn() },
+        useValue: {
+          emit: jest.fn((event: string) => {
+            if (event === DISCORD_BOT_EVENTS.DISCONNECTED) {
+              disconnectedAt.push(mockClients.length);
+            }
+          }),
+          emitAsync: jest.fn(),
+        },
       },
       {
         provide: SettingsService,
@@ -109,6 +119,7 @@ async function parkRetryInTeardown(): Promise<void> {
 
 beforeEach(async () => {
   mockClients.length = 0;
+  disconnectedAt = [];
   for (const level of ['log', 'warn', 'error', 'debug'] as const) {
     jest.spyOn(Logger.prototype, level).mockImplementation(() => {});
   }
@@ -151,5 +162,21 @@ describe('ROK-2198 — a retry parked in teardown is cancelled', () => {
 
     expect(loginTokens()).toEqual(['tok']);
     expect(liveClient(clients)).toBeNull();
+  });
+
+  it('a teardown finishing late never clears the newer client', async () => {
+    // discord.js returns early when destroy() hits an already-destroying client.
+    must(mockClients[0], 'first client').destroy.mockResolvedValue(undefined);
+    void bot.handleConfigUpdate({ token: 'new', enabled: true });
+    await flush();
+    releaseTeardown();
+    await flush();
+
+    const newer = must(mockClients[1], 'newer client');
+    newer.isReady.mockReturnValue(true);
+    expect(loginTokens()).toEqual(['tok', 'new']);
+    expect(liveClient(clients)).toBe(newer);
+    expect(clients.isConnected()).toBe(true);
+    expect(disconnectedAt).toEqual([1]);
   });
 });

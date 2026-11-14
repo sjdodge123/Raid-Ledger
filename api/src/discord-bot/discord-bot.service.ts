@@ -11,6 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 import type { DiscordBotConfig } from '../settings/settings.types';
 import { SETTINGS_EVENTS } from '../settings/settings.types';
 import { friendlyDiscordErrorMessage } from './discord-bot.constants';
+import { isSupersededConnectError } from './discord-bot-client.connect.helpers';
 import {
   connectWithRetry,
   realDelay,
@@ -121,9 +122,9 @@ export class DiscordBotService
       await this.clientService.connect(config.token);
       this.logger.log('Discord bot connected successfully after config update');
     } catch (error) {
-      this.logger.error(
+      this.logConnectFailure(
         'Failed to reconnect Discord bot after config update:',
-        error instanceof Error ? error.message : error,
+        error,
       );
     }
   }
@@ -148,11 +149,15 @@ export class DiscordBotService
       await this.clientService.connect(config.token);
       this.logger.log('ensureConnected: bot connected successfully');
     } catch (error) {
-      this.logger.error(
-        'ensureConnected: failed to connect bot:',
-        error instanceof Error ? error.message : error,
-      );
+      this.logConnectFailure('ensureConnected: failed to connect bot:', error);
     }
+  }
+
+  /** A superseded connect is routine (a newer call took over): debug, not error. */
+  private logConnectFailure(prefix: string, error: unknown): void {
+    const detail = error instanceof Error ? error.message : error;
+    if (isSupersededConnectError(error)) this.logger.debug(prefix, detail);
+    else this.logger.error(prefix, detail);
   }
 
   /**

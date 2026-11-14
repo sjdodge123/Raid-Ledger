@@ -55,12 +55,14 @@ export class DiscordBotClientService {
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Bumped by every connect and disconnect; the latest call owns the client. */
   private ownerEpoch = 0;
+  /** The in-flight destroy of a detached client, shared by concurrent callers. */
+  private pendingTeardown: Promise<void> | null = null;
 
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   async connect(token: string): Promise<void> {
     const epoch = ++this.ownerEpoch;
-    if (this.client) await this.teardown();
+    if (this.client || this.pendingTeardown) await this.teardown();
     // ROK-2198: a disconnect or newer connect that arrived during the
     // teardown owns the connection — never build a client with this token.
     if (epoch !== this.ownerEpoch) throw supersededConnectError();
@@ -88,23 +90,34 @@ export class DiscordBotClientService {
     await this.teardown();
   }
 
-  /** Destroy the live client without changing who owns the connection. */
+  /**
+   * Destroy the live client without changing who owns the connection. The
+   * client is detached before the await and concurrent callers share one
+   * destroy, so a teardown that finishes late never clears a newer client.
+   */
   private async teardown(): Promise<void> {
     this.connecting = false;
     if (this.connectTimeout) {
       clearTimeout(this.connectTimeout);
       this.connectTimeout = null;
     }
-    if (!this.client) return;
+    const client = this.client;
+    if (client && !this.pendingTeardown) {
+      this.client = null;
+      this.pendingTeardown = this.destroyDetached(client).finally(() => {
+        this.pendingTeardown = null;
+      });
+    }
+    await this.pendingTeardown;
+  }
 
+  private async destroyDetached(client: Client): Promise<void> {
     try {
-      await this.client.destroy();
+      await client.destroy();
       this.logger.log('Discord bot disconnected');
       this.eventEmitter.emit(DISCORD_BOT_EVENTS.DISCONNECTED);
     } catch (error) {
       this.logger.error('Error disconnecting Discord bot:', error);
-    } finally {
-      this.client = null;
     }
   }
 

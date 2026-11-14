@@ -84,6 +84,30 @@ describe('connectWithRetry', () => {
     expect(delay).not.toHaveBeenCalled();
   });
 
+  it('drops a failure quietly once cancelled during the attempt', async () => {
+    let cancelled = false;
+    const connect = jest.fn<Promise<void>, []>().mockImplementation(() => {
+      cancelled = true;
+      return Promise.reject(transient());
+    });
+    const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
+    const warn = jest.spyOn(logger, 'warn');
+
+    await expect(
+      connectWithRetry({
+        connect,
+        shouldRetry: () => true,
+        cancelled: () => cancelled,
+        logger,
+        delay,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+    expect(delay).not.toHaveBeenCalled();
+  });
+
   it('stops when another connect took over during the backoff', async () => {
     const connect = jest.fn<Promise<void>, []>().mockRejectedValue(transient());
     const delay = jest.fn<Promise<void>, [number]>().mockResolvedValue();
