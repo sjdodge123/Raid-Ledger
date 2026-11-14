@@ -25,7 +25,11 @@ const LATE = new Date(CREATED.getTime() + HUB_FORUM_EDIT_WINDOW_MS);
 const author: HubForumActor = { userId: 5, canWrite: true, canModerate: false };
 const member: HubForumActor = { userId: 6, canWrite: true, canModerate: false };
 const officer: HubForumActor = { userId: 7, canWrite: true, canModerate: true };
-const leftHub: HubForumActor = { userId: 5, canWrite: false, canModerate: false };
+const leftHub: HubForumActor = {
+  userId: 5,
+  canWrite: false,
+  canModerate: false,
+};
 
 function row(over: Partial<HubForumOwnedRow> = {}): HubForumOwnedRow {
   return { authorId: 5, createdAt: CREATED, deletedAt: null, ...over };

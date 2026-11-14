@@ -32,7 +32,9 @@ const person: HubPostPersonRow = {
   discordId: null,
 };
 
-function thread(over: Partial<HubForumThreadSelect> = {}): HubForumThreadSelect {
+function thread(
+  over: Partial<HubForumThreadSelect> = {},
+): HubForumThreadSelect {
   return {
     id: 9,
     guildId: 2,
@@ -87,7 +89,11 @@ describe('toThreadSummary', () => {
   });
 
   it('blanks title + preview of a deleted thread and says who removed it', () => {
-    const gone = thread({ deletedAt: LATER, deletedAs: 'moderator', deletedBy: 7 });
+    const gone = thread({
+      deletedAt: LATER,
+      deletedAs: 'moderator',
+      deletedBy: 7,
+    });
     const out = toThreadSummary({ thread: gone, author: person });
     expect(out).toMatchObject({ title: '', preview: '', deleted: 'moderator' });
   });
@@ -102,7 +108,10 @@ describe('toThreadSummary', () => {
 
 describe('toForumReply', () => {
   it('maps a live, edited reply', () => {
-    const out = toForumReply({ reply: reply({ editedAt: LATER }), author: person }, CAN);
+    const out = toForumReply(
+      { reply: reply({ editedAt: LATER }), author: person },
+      CAN,
+    );
     expect(HubForumReplySchema.parse(out)).toMatchObject({
       id: 4,
       body: 'see you there',
@@ -133,7 +142,11 @@ describe('toForumThread', () => {
   });
 
   it('blanks the root body of a deleted thread', () => {
-    const gone = thread({ deletedAt: LATER, deletedAs: 'author', deletedBy: 5 });
+    const gone = thread({
+      deletedAt: LATER,
+      deletedAs: 'author',
+      deletedBy: 5,
+    });
     const out = toForumThread({ thread: gone, author: person }, CAN, {
       replies: [],
       nextReplyCursor: null,

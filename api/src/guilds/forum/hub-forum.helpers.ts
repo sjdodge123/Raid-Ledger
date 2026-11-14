@@ -54,7 +54,10 @@ export function forumPreview(body: string): string {
   const plain = markdownToPlainText(body).replace(/\s+/g, ' ').trim();
   const points = Array.from(plain);
   if (points.length <= HUB_FORUM_PREVIEW_MAX) return plain;
-  const cut = points.slice(0, HUB_FORUM_PREVIEW_MAX - 1).join('').trimEnd();
+  const cut = points
+    .slice(0, HUB_FORUM_PREVIEW_MAX - 1)
+    .join('')
+    .trimEnd();
   return `${cut}…`;
 }
 
