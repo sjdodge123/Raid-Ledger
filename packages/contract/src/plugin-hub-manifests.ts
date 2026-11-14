@@ -65,6 +65,8 @@ const core = {
     { id: 'session-note', title: 'Before next session', description: 'A shared note and checklist for the next session.', layoutKey: 'plugin' },
     { id: 'steam-achievements', title: 'Achievement race', description: 'Steam achievements per member and the rarest unlocks. Hidden ones stay hidden until you earn them.', layoutKey: 'plugin' },
     { id: 'steam-playtime', title: 'Playtime', description: 'Lifetime Steam hours per member.', layoutKey: 'plugin' },
+    // ROK-1175 — member forum: the newest-activity threads on the Overview.
+    { id: 'forum-latest', title: 'Latest threads', description: 'The newest forum threads.', layoutKey: 'plugin' },
   ],
   tabs: [
     { id: 'overview', label: 'Overview' },
@@ -72,6 +74,7 @@ const core = {
     { id: 'events', label: 'Events' },
     { id: 'resources', label: 'Resources' },
     { id: 'posts', label: 'Posts' },
+    { id: 'forum', label: 'Forum' },
   ],
   behaviours: [
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
