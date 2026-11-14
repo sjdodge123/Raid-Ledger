@@ -5,7 +5,7 @@
  * grid's own replace-writes (URL sync) must NOT be, or a view click during the
  * mount sync would bounce back (the race the url-sync fix closed).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act, screen } from '@testing-library/react';
 import { useEffect, type JSX } from 'react';
 import { useNavigate, type NavigateFunction } from 'react-router-dom';
@@ -26,12 +26,18 @@ vi.mock('../components/calendar/calendar-mobile-toolbar', () => ({ CalendarMobil
 vi.mock('../components/calendar/calendar-mobile-nav', () => ({ CalendarMobileNav: () => null }));
 vi.mock('./calendar/CalendarFilterEntry', () => ({ CalendarFilterEntry: () => null, CalendarFilterTrigger: () => null }));
 
+/** Local `yyyy-MM-dd`, the same shape as the `?date=` param. */
+function ymd(d: Date): string {
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 let navigateRef: NavigateFunction | null = null;
 let echoOnMount: CalendarViewMode | null = null;
 
 /** Stands in for the grid: shows the controlled view, exposes navigate, and can echo a stale URL write. */
-function GridStub({ calendarView, onCalendarViewChange }: {
-    calendarView: CalendarViewMode; onCalendarViewChange: (v: CalendarViewMode) => void;
+function GridStub({ calendarView, onCalendarViewChange, currentDate }: {
+    calendarView: CalendarViewMode; onCalendarViewChange: (v: CalendarViewMode) => void; currentDate: Date;
 }): JSX.Element {
     const navigate = useNavigate();
     useEffect(() => { navigateRef = navigate; }, [navigate]);
@@ -40,7 +46,7 @@ function GridStub({ calendarView, onCalendarViewChange }: {
         onCalendarViewChange(echoOnMount);
         navigate('/calendar?view=month', { replace: true });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
-    return <div data-testid="calendar-view" data-view={calendarView} />;
+    return <div data-testid="calendar-view" data-view={calendarView} data-date={ymd(currentDate)} />;
 }
 
 vi.mock('../components/calendar', () => ({ CalendarView: GridStub, MiniCalendar: () => null }));
@@ -49,6 +55,10 @@ import { CalendarPage } from './calendar-page';
 
 function gridView(): string | null {
     return screen.getByTestId('calendar-view').getAttribute('data-view');
+}
+
+function gridDate(): string | null {
+    return screen.getByTestId('calendar-view').getAttribute('data-date');
 }
 
 function go(to: string): void {
@@ -84,5 +94,51 @@ describe('CalendarPage — external ?view= navigation while mounted', () => {
         renderPage(CalendarPage, ['/calendar']);
 
         expect(gridView()).toBe('week');
+    });
+});
+
+describe('CalendarPage — external ?date= navigation while mounted', () => {
+    it('shows the linked week when the location changes to ?view=week&date=2026-03-10', () => {
+        echoOnMount = null;
+        renderPage(CalendarPage, ['/calendar?view=month&date=2026-01-05']);
+        expect(gridDate()).toBe('2026-01-05');
+
+        go('/calendar?view=week&date=2026-03-10');
+
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'week', date: '2026-03-10' });
+    });
+
+    it('a PUSH to /calendar with no params opens Month on today, like a fresh load', () => {
+        echoOnMount = null;
+        renderPage(CalendarPage, ['/calendar?view=week&date=2020-03-10']);
+
+        go('/calendar');
+
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'month', date: ymd(new Date()) });
+    });
+
+    it('keeps the current date when the linked ?date= is invalid', () => {
+        echoOnMount = null;
+        renderPage(CalendarPage, ['/calendar?view=week&date=2020-03-10']);
+
+        go('/calendar?view=day&date=not-a-date');
+
+        expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'day', date: '2020-03-10' });
+    });
+
+    describe('at phone width (<768px)', () => {
+        const originalWidth = window.innerWidth;
+        afterEach(() => { Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth }); });
+
+        it('adopts the linked ?date= but stays in Schedule despite ?view=week', () => {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+            echoOnMount = null;
+            renderPage(CalendarPage, ['/calendar?date=2026-01-05']);
+            expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'schedule', date: '2026-01-05' });
+
+            go('/calendar?view=week&date=2026-03-10');
+
+            expect({ view: gridView(), date: gridDate() }).toEqual({ view: 'schedule', date: '2026-03-10' });
+        });
     });
 });

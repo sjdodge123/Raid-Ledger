@@ -160,6 +160,27 @@ describe('ROK-1814 GuildAccessService.canEditCrest (ruling 2026-10-30)', () => {
   );
 });
 
+describe('ROK-2192 GuildAccessService.canEditOrHoldsTopRank', () => {
+  const withTopRank = (role: LadderRole, top: boolean): HubKindAdapter => ({
+    ...stubHub(role),
+    holdsTopRank: () => Promise.resolve(top),
+  });
+
+  it.each([
+    ['an officer', 'officer', false, true],
+    ['the in-game GM (rank 0, a plain member)', 'member', true, true],
+    ['a rank-1 member', 'member', false, false],
+    ['a non-member', 'visitor', false, false],
+  ] as const)('%s → %s', async (_label, role, top, expected) => {
+    build(withTopRank(role, top));
+    guildOfKind('wow_guild');
+    guildOfKind('wow_guild');
+    expect(await service.canEditOrHoldsTopRank(actor('member'), GUILD)).toBe(
+      expected,
+    );
+  });
+});
+
 describe('GuildAccessService.resolveLadder (ROK-1830)', () => {
   it.each(['admin', 'operator'] as const)(
     '%s is leader without any lookup',

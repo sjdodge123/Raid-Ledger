@@ -12,7 +12,7 @@ import type {
   GuildBlizzardRosterView,
   GuildSummary,
 } from '@raid-ledger/contract';
-import { GuildEditorGuard } from '../../../guilds/guild-editor.guard';
+import { GuildEditorOrTopRankGuard } from '../../../guilds/guild-editor-or-top-rank.guard';
 import { HubVisibleGuard } from '../../../guilds/hub-visible.guard';
 import {
   PluginActiveGuard,
@@ -24,7 +24,8 @@ import { GuildBlizzardRosterService } from './guild-blizzard-roster.service';
 /**
  * ROK-1928 A2 — the WoW: Forever guild's Blizzard roster source under
  * `/plugins/wow/guilds/:id/blizzard-roster`. Any hub-visible member reads it;
- * only editors (officers, delegated editors, staff) set it — FLAG A-3.
+ * editors (officers, delegated editors, staff) and the linked guild's rank-0
+ * GM set it — FLAG A-3, ROK-2192.
  */
 @Controller('plugins/wow/guilds/:id/blizzard-roster')
 @UseGuards(PluginActiveGuard)
@@ -43,7 +44,7 @@ export class GuildBlizzardRosterController {
 
   /** `{ guildSlug: string | null }` → the updated hub summary. */
   @Patch()
-  @UseGuards(AuthGuard('jwt'), HubVisibleGuard, GuildEditorGuard)
+  @UseGuards(AuthGuard('jwt'), HubVisibleGuard, GuildEditorOrTopRankGuard)
   setSlug(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,

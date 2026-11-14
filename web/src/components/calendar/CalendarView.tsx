@@ -4,6 +4,7 @@ import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, sub
 import { enUS } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useLiveSearchParams, type SearchParamsMutator } from './use-live-search-params';
+import { parseDateParam } from './parse-date-param';
 import { useEvents } from '../../hooks/use-events';
 import { useCalendarImageHints } from '../../hooks/use-calendar-image-hints';
 import { getCalendarEventStyle } from '../../constants/game-colors';
@@ -70,11 +71,7 @@ interface CalendarViewProps {
 
 function useCalendarDate(controlledDate?: Date, onDateChange?: (d: Date) => void) {
     const [searchParams, writeSearchParams] = useLiveSearchParams();
-    const [internalDate, setInternalDate] = useState(() => {
-        const dateStr = searchParams.get('date');
-        if (dateStr) { const parsed = new Date(dateStr + 'T00:00:00'); if (!isNaN(parsed.getTime())) return parsed; }
-        return new Date();
-    });
+    const [internalDate, setInternalDate] = useState(() => parseDateParam(searchParams.get('date')) ?? new Date());
     const currentDate = controlledDate ?? internalDate;
     const setCurrentDate = onDateChange ?? setInternalDate;
 

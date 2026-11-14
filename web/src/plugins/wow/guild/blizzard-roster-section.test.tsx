@@ -87,6 +87,13 @@ describe('BlizzardRosterSection', () => {
         expect(screen.queryByTestId('wow-blizzard-roster-input')).not.toBeInTheDocument();
     });
 
+    it('ROK-2192: the rank-0 GM (no editor grant) gets the slug input', async () => {
+        const page = foreverPage(false);
+        renderSection(buildBlizzardRosterView({ guildSlug: 'ye-olde-guild' }), { ...page, viewer: { ...page.viewer, isGuildMaster: true } });
+        await screen.findByTestId('wow-blizzard-roster-section');
+        expect(screen.queryByTestId('wow-blizzard-roster-input'), 'the GM edits the Blizzard guild slug').toBeInTheDocument();
+    });
+
     it('renders nothing and fetches nothing off a Forever hub', () => {
         renderSection(buildBlizzardRosterView(), foreverPage(true, 'world-of-warcraft'));
         expect(screen.queryByTestId('wow-blizzard-roster-section')).not.toBeInTheDocument();

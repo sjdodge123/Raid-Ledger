@@ -58,6 +58,13 @@ describe('WowGuildStateBanner (ROK-1170)', () => {
         expect(openSettings, 'lands on the Blizzard roster section (ROK-2188)').toHaveBeenCalledWith({ section: 'blizzard-roster' });
     });
 
+    it('ROK-2192: gives the rank-0 GM (no editor grant) "Update the guild path"', async () => {
+        const openSettings = vi.fn();
+        renderWithSettings(ctx('disbanded', { role: 'member', canEdit: false, canManageEditors: false, isGuildMaster: true }), openSettings);
+        await userEvent.click(screen.getByRole('button', ACTION));
+        expect(openSettings, 'the GM lands on the Blizzard roster section').toHaveBeenCalledWith({ section: 'blizzard-roster' });
+    });
+
     it('hides the action from an editor who cannot open hub settings (delegated page editor)', () => {
         renderWithSettings(ctx('disbanded', { role: 'officer', canEdit: true, canManageEditors: false }), null);
         expect(screen.getByTestId('wow-guild-state-banner')).toHaveTextContent(COPY);

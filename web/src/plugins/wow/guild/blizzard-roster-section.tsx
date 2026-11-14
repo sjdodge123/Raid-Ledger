@@ -1,8 +1,9 @@
 /**
  * ROK-1928 A4 — "Blizzard roster" in a WoW: Forever guild hub's settings
  * sheet (`HubModule.settingsSections`): the Blizzard guild slug (editable
- * with `canEdit`, prefilled with a suggestion), Save, "Sync now" once a slug
- * is set, and the last sync's status line (D2). Hidden on every other hub.
+ * with `canEdit` or by the rank-0 GM — ROK-2192 — prefilled with a
+ * suggestion), Save, "Sync now" once a slug is set, and the last sync's
+ * status line (D2). Hidden on every other hub.
  */
 import { useState, type JSX } from 'react';
 import type { GuildBlizzardRosterView } from '@raid-ledger/contract';
@@ -11,8 +12,9 @@ import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { SettingsSection } from '../../../components/hub/settings/settings-rows';
+import { canWriteHubSettings } from '../../../components/hub/settings/settings-access';
 import { toast } from '../../../lib/toast';
-import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
+import { isForeverGuildPage } from '../lib/forever-identity';
 import { useGuildBlizzardRoster, useSetBlizzardRosterSlug, useSyncBlizzardRoster } from '../hooks/use-guild-blizzard-roster';
 import { blizzardRosterStatusLine } from './blizzard-roster-status';
 import { BLIZZARD_ROSTER_SETTINGS_SECTION } from './blizzard-roster-section-id';
@@ -22,13 +24,13 @@ const BLURB = 'Read the member list from Blizzard instead of LedgerLink exports.
 /** The hub's settings-sheet section; renders nothing off a Forever guild hub. */
 export function BlizzardRosterSection({ page }: HubCtx): JSX.Element | null {
     const { guild, viewer } = page;
-    const forever = guild.kind === 'wow_guild' && guild.gameSlug === WOW_FOREVER_GAME_SLUG;
+    const forever = isForeverGuildPage(page);
     const query = useGuildBlizzardRoster(guild.id, forever);
     if (!forever || query.data === undefined) return null;
     return (
         <SettingsSection title="Blizzard roster" blurb={BLURB} testId="wow-blizzard-roster-section" sectionId={BLIZZARD_ROSTER_SETTINGS_SECTION}>
             <StatusLine roster={query.data} />
-            {viewer.canEdit
+            {canWriteHubSettings(viewer)
                 ? <SlugEditor guildId={guild.id} roster={query.data} />
                 : <SlugReadout slug={query.data.guildSlug} />}
         </SettingsSection>

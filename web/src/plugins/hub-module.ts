@@ -243,6 +243,12 @@ export interface HubModule {
      */
     settingsSections?: ComponentType<HubCtx>;
     /**
+     * ROK-2192: the kind's top in-game rank (`viewer.isGuildMaster`) may open
+     * settings on this page — only where the sheet holds a row a GM can write
+     * (WoW: the Forever guild's Blizzard roster). Unset = the GM gets no gear.
+     */
+    topRankOpensSettings?: (page: GuildPage) => boolean;
+    /**
      * ROK-2132 — what a non-member sees instead of the 403 notice when the page
      * answers `HUB_NOT_MEMBER` for this kind (WoW: the Forever join gate). It
      * gets only the hub id — the 403 carries no page data. Core wraps it in

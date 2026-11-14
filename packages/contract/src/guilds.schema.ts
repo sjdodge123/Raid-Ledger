@@ -59,8 +59,10 @@ export const GuildViewerAccessSchema = z
     notificationsMuted: z.boolean().optional(),
     /**
      * ROK-1815: `true` when the viewer's linked character holds rank 0 in the
-     * latest WoW snapshot; absent otherwise. A hero label only — it grants
-     * nothing (`GM_RANK_IMPLIES_EDIT = false`, ROK-1794).
+     * latest WoW snapshot; absent otherwise. The hero label; ROK-2192: also
+     * opens hub settings for the GM-allowed writes (Blizzard roster). Mirrors
+     * the api's `holdsTopRank`; it is not `canEdit` (`GM_RANK_IMPLIES_EDIT =
+     * false`, ROK-1794).
      */
     isGuildMaster: z.boolean().optional(),
     /**
