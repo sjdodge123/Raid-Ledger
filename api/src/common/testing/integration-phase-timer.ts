@@ -93,6 +93,21 @@ export function recordPhase(name: PhaseName, start: number): void {
   addPhase(currentTimings(), name, performance.now() - start);
 }
 
+/**
+ * Await `run` and record its duration under `name` (no-op record when timing
+ * is off). Like the inline mark/record pair it replaces, a rejection skips the
+ * record and propagates unchanged.
+ */
+export async function timePhase<T>(
+  name: PhaseName,
+  run: () => Promise<T>,
+): Promise<T> {
+  const start = phaseMark();
+  const result = await run();
+  recordPhase(name, start);
+  return result;
+}
+
 /** Record the migrate step: timed when it ran, "skipped" when it did not. */
 export function recordMigrate(start: number, ran: boolean): void {
   if (!isPhaseTimingEnabled()) return;

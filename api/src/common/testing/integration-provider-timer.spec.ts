@@ -10,7 +10,7 @@ function stepClock(step: number): () => number {
   return (): number => (t += step);
 }
 
-describe('integration provider timer (ROK-2196)', () => {
+describe('integration provider timer — wrapProviderInitHook (ROK-2196)', () => {
   it('records a provider onModuleInit duration under its name', async () => {
     const totals = new Map<string, number>();
     const original = jest.fn((): Promise<void> => Promise.resolve());
@@ -43,7 +43,9 @@ describe('integration provider timer (ROK-2196)', () => {
     await Promise.resolve(instance.onModuleInit());
     expect(instance.seen).toBe(1);
   });
+});
 
+describe('integration provider timer — collect + format (ROK-2196)', () => {
   it('collects each hooked instance once, skipping hookless ones', () => {
     const shared = { onModuleInit: (): void => undefined };
     const modules = [

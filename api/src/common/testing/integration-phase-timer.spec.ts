@@ -9,6 +9,7 @@ import {
   recordMigrate,
   recordPhase,
   reportPhaseTiming,
+  timePhase,
 } from './integration-phase-timer';
 
 describe('integration-phase-timer formatting (ROK-2196)', () => {
@@ -85,9 +86,23 @@ describe('integration-phase-timer env gate (ROK-2196)', () => {
     await app.callInitHook();
     reportPhaseTiming(`${process.cwd()}/src/a.integration.spec.ts`);
     expect(write).toHaveBeenCalledTimes(1);
-    const line = String(write.mock.calls[0]?.[0]);
+    const firstCall = write.mock.calls[0];
+    if (!firstCall) throw new Error('expected one stderr write');
+    const line = String(firstCall[0]);
     expect(line).toMatch(
       /^\[phase-timing\] src\/a\.integration\.spec\.ts import=n\/a .*init=n\/a migrate=skipped truncate=\d+ms\(×1\) .*total=\d+ms\n$/,
     );
+  });
+
+  it('timePhase records the phase and returns the run result', async () => {
+    process.env[PHASE_TIMING_ENV] = '1';
+    beginPhaseTiming();
+    await expect(timePhase('close', () => Promise.resolve(42))).resolves.toBe(
+      42,
+    );
+    reportPhaseTiming(`${process.cwd()}/b.spec.ts`);
+    const firstCall = write.mock.calls[0];
+    if (!firstCall) throw new Error('expected one stderr write');
+    expect(String(firstCall[0])).toMatch(/ close=\d+ms /);
   });
 });

@@ -4,6 +4,7 @@ import {
   seedWowReferenceData,
   WOW_BOOT_SEED_ENABLED,
 } from './wow-boot-seed';
+import { WowCommonModule } from './wow-common.module';
 
 describe('runWowBootSeed (ROK-2196)', () => {
   it('runs the boot seed when enabled (prod default)', async () => {
@@ -18,8 +19,16 @@ describe('runWowBootSeed (ROK-2196)', () => {
     expect(seed).not.toHaveBeenCalled();
   });
 
-  it('exposes a DI token the test factory can override', () => {
-    expect(typeof WOW_BOOT_SEED_ENABLED).toBe('symbol');
+  it('WowCommonModule enables the boot seed in prod via its DI token', () => {
+    const providers: unknown = Reflect.getMetadata(
+      'providers',
+      WowCommonModule,
+    );
+    expect(providers).toEqual(
+      expect.arrayContaining([
+        { provide: WOW_BOOT_SEED_ENABLED, useValue: true },
+      ]),
+    );
   });
 });
 
