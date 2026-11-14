@@ -24,6 +24,8 @@ export interface SettingsOverlayResult {
   inserted_if_absent?: string[];
   /** --sync-wins: bundle keys the sync had already written, left as synced. */
   kept_synced?: string[];
+  /** ROK-2202: shared keys the VM bundle holds a usable value for (names only). */
+  bundle_keys?: string[];
   /** Whether the container honoured --sync-wins (false: image or orchestrator predates it). */
   sync_wins?: boolean;
   /** The VM orchestrator rejected --sync-wins, so the full overlay ran instead. */
@@ -117,6 +119,40 @@ export function overlayDeployNotes(ov: SettingsOverlayResult, syncWins: boolean)
   const warning = syncWinsWarning(ov, syncWins);
   if (warning) notes.push(warning);
   return notes.map((n) => ` ${n}.`).join('');
+}
+
+/**
+ * ROK-2202: the shared key NAMES rl-reencrypt-settings.mjs skipped because the
+ * laptop value did not decrypt or was blank. Parsed from its stderr line
+ * `skipped_unusable: [a, b]`; [] when absent (e.g. an older script).
+ */
+export function parseSkippedUnusable(text: string | undefined): string[] {
+  const m = /^skipped_unusable: \[(.*)\]$/m.exec(text ?? '');
+  if (!m?.[1]) return [];
+  return m[1].split(',').map((k) => k.trim()).filter((k) => k !== '');
+}
+
+/**
+ * ROK-2202: shared keys that are still NOT usable in the env after the
+ * overlay — a key the bundle holds that was neither written, filled nor kept,
+ * plus a key the sync skipped as unusable that the overlay did not write.
+ * Sorted names, never values.
+ */
+export function missingSharedKeys(ov: SettingsOverlayResult, skipped: string[]): string[] {
+  if (!ov.ok) return [];
+  const written = new Set([...ov.applied, ...(ov.inserted_if_absent ?? [])]);
+  const present = new Set([...written, ...(ov.kept_synced ?? [])]);
+  const missing = new Set([
+    ...(ov.bundle_keys ?? []).filter((k) => !present.has(k)),
+    ...skipped.filter((k) => !written.has(k)),
+  ]);
+  return [...missing].sort();
+}
+
+/** The loud deploy-message note for missing shared keys ('' when none). */
+export function sharedKeysMissingNote(missing: string[]): string {
+  if (missing.length === 0) return '';
+  return ` WARNING: ${missing.length} shared key(s) missing in the env after the overlay: ${missing.join(', ')} — the features that need them will fail; refresh the bundle (RL_OPERATOR=1 rl settings push) or fix the laptop value, then re-run rl_env_deploy.`;
 }
 
 export interface RunOverlayOptions {

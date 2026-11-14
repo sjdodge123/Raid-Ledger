@@ -51,7 +51,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { runDeployChain, type ChainCtx } from '../env-deploy-steps.js';
-import { SYNC_WINS_NOT_HONOURED, countSharedKeys } from '../env-settings-overlay.js';
+import { SYNC_WINS_NOT_HONOURED, countSharedKeys, parseSkippedUnusable } from '../env-settings-overlay.js';
 import { buildSshArgs } from '../../exec.js';
 
 // What rl-infra/orchestrator/bin/env-settings-overlay ALWAYS writes, bundle or
@@ -363,5 +363,61 @@ describe('runSettingsOverlay — remote command', () => {
     const ov = await real.runSettingsOverlay('demo', { syncWins: true });
     expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --sync-wins`]);
     expect(ov).toMatchObject({ ok: false, applied: [], message: 'env not found: demo' });
+  });
+});
+
+// ROK-2202 — the sync skips a shared key whose laptop value is unusable (does
+// not decrypt / blank) and names it on stderr; the overlay's insert-if-absent
+// fills it from the bundle. A shared key the bundle holds that is STILL not in
+// the env after the overlay must be named loudly on the deploy result.
+describe('runDeployChain — unusable laptop keys (ROK-2202)', () => {
+  const SKIPPED_STDERR = 're-encrypted 11 row(s); decrypted 11, substituted 0 from source + 0 synthetic\nskipped_unusable: [blizzard_client_secret]\n';
+
+  it('parses the skipped key names from the sync stderr, and [] when there are none', () => {
+    expect(parseSkippedUnusable(SKIPPED_STDERR)).toEqual(['blizzard_client_secret']);
+    expect(parseSkippedUnusable('skipped_unusable: [a_key, b_key]')).toEqual(['a_key', 'b_key']);
+    expect(parseSkippedUnusable('skipped_unusable: []')).toEqual([]);
+    expect(parseSkippedUnusable(undefined)).toEqual([]);
+  });
+
+  it('names a skipped key on the sync_settings step, and a bundle fill leaves nothing missing', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true, stdout: '', stderr: SKIPPED_STDERR });
+    overlayRun.mockResolvedValue({
+      ok: true, applied: ALWAYS_SEEDED, sync_wins: true,
+      bundle_keys: ['blizzard_client_secret', 'itad_api_key'],
+      inserted_if_absent: ['blizzard_client_secret'], kept_synced: ['itad_api_key'],
+    });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(res.ok).toBe(true);
+    expect(cap.details.sync_settings ?? '').toContain('skipped_unusable: [blizzard_client_secret]');
+    expect(res).not.toHaveProperty('shared_keys_missing');
+  });
+
+  it('names a shared key the bundle holds that is still missing after the overlay', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true, stdout: '', stderr: SKIPPED_STDERR });
+    overlayRun.mockResolvedValue({
+      ok: true, applied: ALWAYS_SEEDED, sync_wins: true,
+      bundle_keys: ['blizzard_client_secret', 'itad_api_key'],
+      inserted_if_absent: [], kept_synced: ['itad_api_key'],
+    });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect((res as { shared_keys_missing?: string[] }).shared_keys_missing).toEqual(['blizzard_client_secret']);
+    expect(res.message).toContain('shared key(s) missing in the env after the overlay: blizzard_client_secret');
+    expect(cap.details.settings_overlay).toContain('missing: blizzard_client_secret');
+  });
+
+  it('a GOOD laptop value kept by sync-wins is not reported missing', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true, stdout: '', stderr: 'skipped_unusable: []\n' });
+    overlayRun.mockResolvedValue({
+      ok: true, applied: ALWAYS_SEEDED, sync_wins: true,
+      bundle_keys: ['blizzard_client_secret'], inserted_if_absent: [], kept_synced: ['blizzard_client_secret'],
+    });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(res.ok).toBe(true);
+    expect(res).not.toHaveProperty('shared_keys_missing');
+    expect(cap.details.sync_settings ?? '').not.toContain('skipped_unusable');
   });
 });

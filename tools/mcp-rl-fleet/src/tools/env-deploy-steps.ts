@@ -17,6 +17,9 @@ import {
   describeOverlayStep,
   describeSyncWinsCounts,
   overlayDeployNotes,
+  parseSkippedUnusable,
+  missingSharedKeys,
+  sharedKeysMissingNote,
   runSettingsOverlay,
 } from './env-settings-overlay.js';
 import { buildSshArgs } from '../exec.js';
@@ -175,6 +178,7 @@ export async function runDeployChain(
   // 4. Sync app_settings.
   let syncedSettings = false;
   let syncFailureDetail: string | undefined;
+  let skippedUnusable: string[] = [];
   if (!params.skip_sync) {
     t = now();
     ctx.setCurrent('syncing app_settings');
@@ -183,7 +187,10 @@ export async function runDeployChain(
       syncFailureDetail = sy.stderr || 'sync_settings step failed';
       ctx.recordStep('sync_settings', false, now() - t, undefined, syncFailureDetail);
     } else {
-      ctx.recordStep('sync_settings', true, now() - t);
+      // ROK-2202: shared keys the laptop held unusable values for (names only).
+      skippedUnusable = parseSkippedUnusable(sy.stderr);
+      const skippedNote = skippedUnusable.length ? `skipped_unusable: [${skippedUnusable.join(', ')}]` : undefined;
+      ctx.recordStep('sync_settings', true, now() - t, skippedNote);
       syncedSettings = true;
     }
   } else {
@@ -223,6 +230,7 @@ export async function runDeployChain(
   let overlayCounts = '';
   let overlayNotes = '';
   let overlayBundleWarning: string | null = null;
+  let sharedMissing: string[] = [];
   if (!params.skip_sync) {
     t = now();
     const syncWins = laptopSettings;
@@ -232,13 +240,17 @@ export async function runDeployChain(
     overlayWrote = overlayApplied + (ov.inserted_if_absent?.length ?? 0);
     overlaySharedKeys = countSharedKeys(ov.applied);
     overlayCounts = syncWins && ov.ok ? ` (${describeSyncWinsCounts(ov)})` : '';
-    overlayNotes = overlayDeployNotes(ov, syncWins);
+    // ROK-2202: a warning field, not a failed step — like bundle_warning, a
+    // missing shared key degrades one feature, so it must not fail the spin.
+    sharedMissing = missingSharedKeys(ov, skippedUnusable);
+    overlayNotes = overlayDeployNotes(ov, syncWins) + sharedKeysMissingNote(sharedMissing);
     overlayBundleWarning = ov.bundle_warning ?? null;
+    const missingDetail = sharedMissing.length ? `; missing: ${sharedMissing.join(', ')}` : '';
     ctx.recordStep(
       'settings_overlay',
       ov.ok,
       now() - t,
-      ov.ok ? describeOverlayStep(ov, syncWins) : undefined,
+      ov.ok ? describeOverlayStep(ov, syncWins) + missingDetail : undefined,
       ov.ok ? undefined : (ov.error ?? ov.message),
     );
   }
@@ -272,6 +284,7 @@ export async function runDeployChain(
     operator_admin: sp.operator_admin,
     expected_head: expectedHead,
     synced_head: syncedHead,
+    ...(sharedMissing.length ? { shared_keys_missing: sharedMissing } : {}),
   };
   if (settingsFailed) {
     return { ...base, ok: false, failed_step: 'sync_settings', error: 'sync_settings_failed', message: `FAILED: sync_settings did not succeed (${syncFailureDetail ?? 'unknown'}) and the VM bundle seeded NO shared API keys${overlayBundleWarning ? ` (${overlayBundleWarning})` : ''}. Container up at ${sp.url}${overlayApplied > 0 ? ' with its slot Discord identity' : ''} but NO shared credentials (ITAD/Blizzard/IGDB/LLM) — start Docker Desktop and re-run rl_env_deploy, or refresh the bundle with RL_OPERATOR=1 rl settings push.` };
