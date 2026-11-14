@@ -25,7 +25,7 @@ let mockDb: MockDb;
 let mockVoiceAttendanceService: { isUserActive: jest.Mock };
 let mockNotificationService: {
   getDiscordEmbedUrl: jest.Mock;
-  resolveVoiceChannelForEvent: jest.Mock;
+  resolveVoiceForEvent: jest.Mock;
   create: jest.Mock;
 };
 let mockClientService: {
@@ -76,7 +76,9 @@ beforeEach(() => {
     getDiscordEmbedUrl: jest
       .fn()
       .mockResolvedValue('https://discord.com/embed/1'),
-    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue('channel-123'),
+    resolveVoiceForEvent: jest
+      .fn()
+      .mockResolvedValue({ voiceChannelId: 'channel-123' }),
     create: jest.fn().mockResolvedValue(undefined),
   };
   mockClientService = {
@@ -775,7 +777,7 @@ describe('DepartureGraceProcessor — notification payload URLs', () => {
 
   it('omits discordUrl from payload when not available', async () => {
     mockNotificationService.getDiscordEmbedUrl.mockResolvedValue(null);
-    mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(null);
+    mockNotificationService.resolveVoiceForEvent.mockResolvedValue({});
 
     await processor.process(makeJob(jobData));
 
@@ -784,9 +786,9 @@ describe('DepartureGraceProcessor — notification payload URLs', () => {
   });
 
   it('includes voiceChannelId in payload when available', async () => {
-    mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
-      'vc-999',
-    );
+    mockNotificationService.resolveVoiceForEvent.mockResolvedValue({
+      voiceChannelId: 'vc-999',
+    });
 
     await processor.process(makeJob(jobData));
 
@@ -799,7 +801,7 @@ describe('DepartureGraceProcessor — notification payload URLs', () => {
 
   it('omits voiceChannelId from payload when not available', async () => {
     mockNotificationService.getDiscordEmbedUrl.mockResolvedValue(null);
-    mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(null);
+    mockNotificationService.resolveVoiceForEvent.mockResolvedValue({});
 
     await processor.process(makeJob(jobData));
 

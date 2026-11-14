@@ -259,7 +259,7 @@ describe('DiscordBotClientService — isConnected', () => {
   });
 
   it('should return false when client is not ready', () => {
-    void service.connect('valid-token');
+    void service.connect('valid-token').catch(() => {});
     expect(service.isConnected()).toBe(false);
   });
 
@@ -275,7 +275,7 @@ describe('DiscordBotClientService — getGuildInfo: edge cases', () => {
   });
 
   it('should return null when client is not ready', () => {
-    void service.connect('valid-token');
+    void service.connect('valid-token').catch(() => {});
     expect(service.getGuildInfo()).toBeNull();
   });
 
@@ -457,7 +457,7 @@ describe('DiscordBotClientService — checkPermissions', () => {
   });
 
   it('should return all false when client is not ready', () => {
-    void service.connect('valid-token');
+    void service.connect('valid-token').catch(() => {});
     const results = service.checkPermissions();
     expect(results).toHaveLength(REQUIRED_PERMISSIONS.length);
     results.forEach((r) => expect(r.granted).toBe(false));

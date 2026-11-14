@@ -280,7 +280,7 @@ export async function flushVoiceSessions(api: ApiClient): Promise<void> {
   await api.post("/admin/test/flush-voice-sessions", {});
 }
 
-/** Drain the embed sync BullMQ queue — DEMO_MODE only. */
+/** Wait for pending embed-sync work to land (server waits for idle queues; never deletes jobs) — DEMO_MODE only. */
 export async function flushEmbedQueue(api: ApiClient): Promise<void> {
   await api.post("/admin/test/flush-embed-queue", {});
 }

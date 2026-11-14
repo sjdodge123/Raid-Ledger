@@ -280,10 +280,11 @@ describe('reconcile provenance lookups (D9)', () => {
 
   it('resolvePollTarget turns the match id into the /schedule/:matchId link parts', async () => {
     const game = await createGame(testApp, 'Deep Rock Galactic');
-    // A SECOND match on the SAME lineup, so `lineup_id` and `id` are
-    // guaranteed to differ. Both tables are serial PKs, so a single-match
-    // fixture in a truncated database can have `lineup.id === match.id` and
-    // would pass even if the helper read the wrong column.
+    // TWO matches on the SAME lineup. Both tables are serial PKs from
+    // SEPARATE sequences, so any one match id can coincide with its
+    // `lineup_id` (seen at 22), and a coinciding pair would pass even if the
+    // helper read the wrong column. Two distinct match ids cannot BOTH equal
+    // the one lineup id, so the test resolves whichever of them differs.
     const firstMatchId = await createLineupMatch(
       testApp,
       testApp.seed.adminUser.id,
@@ -313,15 +314,15 @@ describe('reconcile provenance lookups (D9)', () => {
       'second',
     );
 
-    const target = await resolvePollTarget(testApp.db, second.id);
+    const matchId = second.id === first.lineupId ? firstMatchId : second.id;
+    const target = await resolvePollTarget(testApp.db, matchId);
 
-    expect(second.id).not.toBe(first.lineupId);
     // The route's FINAL segment is the MATCH id (`web/src/app-routes.tsx`);
     // a lineup id in that slot is a dead link no type-check can see.
     expect(target).toEqual({
       kind: 'poll',
       lineupId: first.lineupId,
-      matchId: second.id,
+      matchId,
     });
   });
 });

@@ -272,8 +272,7 @@ export class BenchPromotionProcessor
   ) {
     const discordUrl =
       await this.notificationService.getDiscordEmbedUrl(eventId);
-    const voiceChannelId =
-      await this.notificationService.resolveVoiceChannelForEvent(eventId);
+    const voice = await this.notificationService.resolveVoiceForEvent(eventId);
     await this.notificationService.create({
       userId,
       type: 'bench_promoted',
@@ -284,7 +283,7 @@ export class BenchPromotionProcessor
         role,
         position,
         ...(discordUrl ? { discordUrl } : {}),
-        ...(voiceChannelId ? { voiceChannelId } : {}),
+        ...voice,
       },
     });
   }

@@ -56,6 +56,31 @@ describe('useHubFilteredEvents + useCalendarHubFilter (ROK-1893 P4)', () => {
         expect(result.current.hubs.known.map((h) => h.id)).toEqual([SOLO.id, CREW.id]);
         expect(result.current.hubs.hiddenCount).toBe(1);
     });
+
+    it('lists the loaded hubs even when the game filter (None) hides every event', () => {
+        // #2132 verify lane: Games = None, reload → the Hubs group vanished,
+        // because hubs were learned only from the game-filtered events.
+        const loaded = EVENTS.map((e) => e.resource);
+        const { result } = renderHook(() => ({
+            visible: useHubFilteredEvents([], loaded),
+            hubs: useCalendarHubFilter(),
+        }));
+        expect(result.current.hubs.known.map((h) => h.name)).toEqual(['Alpha Solo', 'Seed Crew']);
+        expect(result.current.visible).toEqual([]);
+    });
+
+    it('does not learn hubs from loaded events the calendar hides (cancelled, rescheduling poll)', () => {
+        const GONE = { id: 11, name: 'Cancelled Only', kind: 'game_community' as const };
+        const POLL = { id: 12, name: 'Poll Only', kind: 'game_community' as const };
+        const loaded = [
+            ...EVENTS.map((e) => e.resource),
+            createMockEvent({ id: 5, hub: GONE, cancelledAt: '2026-11-01T00:00:00.000Z' }),
+            createMockEvent({ id: 6, hub: POLL, reschedulingPollId: 42 }),
+        ];
+        const { result } = renderHook(() => useCalendarHubFilter());
+        renderHook(() => useHubFilteredEvents([], loaded));
+        expect(result.current.known.map((h) => h.name)).toEqual(['Alpha Solo', 'Seed Crew']);
+    });
 });
 
 describe('useCalendarHubFilterStore.clearViewer (ROK-1893 P4)', () => {

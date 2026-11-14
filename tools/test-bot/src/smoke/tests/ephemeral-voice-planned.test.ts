@@ -27,6 +27,7 @@ import {
   flushEmbedQueue,
   channelForTest,
   channelForGame,
+  triggerReconciliation,
 } from '../fixtures.js';
 import {
   acquireScheduledEvents,
@@ -113,7 +114,10 @@ async function readVoiceLine(
     .find((e) => e.title?.includes(title));
   if (!embed) return { found: false, line: null };
   const lines = (embed.description ?? '').split('\n');
-  return { found: true, line: lines.find((l) => l.startsWith(SPEAKER)) ?? null };
+  return {
+    found: true,
+    line: lines.find((l) => l.startsWith(SPEAKER)) ?? null,
+  };
 }
 
 /** Poll until the embed's voice line satisfies `accept`; explicit failure. */
@@ -124,7 +128,10 @@ async function pollVoiceLine(
   accept: (line: string) => boolean,
   want: string,
 ): Promise<string> {
-  let last: { found: boolean; line: string | null } = { found: false, line: null };
+  let last: { found: boolean; line: string | null } = {
+    found: false,
+    line: null,
+  };
   try {
     return await pollForCondition(
       async () => {
@@ -165,10 +172,17 @@ async function assertPlannedEmbed(
   title: string,
   opensUnix: number,
 ): Promise<void> {
-  const line = await pollVoiceLine(ctx, channelId, title, () => true, 'a 🔊 line');
+  const line = await pollVoiceLine(
+    ctx,
+    channelId,
+    title,
+    () => true,
+    'a 🔊 line',
+  );
   const opens = `· opens <t:${opensUnix}:t>`;
   const problems: string[] = [];
-  if (!line.startsWith(`${SPEAKER} ⏰ `)) problems.push('missing "🔊 ⏰ " prefix');
+  if (!line.startsWith(`${SPEAKER} ⏰ `))
+    problems.push('missing "🔊 ⏰ " prefix');
   if (!line.includes(title)) problems.push(`missing title ${title}`);
   if (!line.includes(opens)) problems.push(`missing "${opens}"`);
   if (line.includes('<#')) problems.push('contains a <# channel mention');
@@ -205,6 +219,22 @@ async function assertLiveSe(
       `Live SE: expected channelId ${channelId}, got ${live.channelId ?? 'none'}`,
     );
   }
+}
+
+/**
+ * Best-effort barrier: nudge the event row to bind its SE before the channel
+ * is created. The SE create is fire-and-forget and binds its id only after
+ * Discord replies, so an SE visible in the guild may still be unbound. One
+ * reconciliation run adopts unbound events' live RL SEs, but it takes a
+ * bounded, unordered batch, so in a busy shared DB this event may not be in it
+ * and NO endpoint exposes the binding to poll on. Either outcome is correct:
+ * bound → the channel creation takes the normal repoint; still unbound → the
+ * create-time adopt path flips the SE to Voice itself. The assertions below
+ * hold on both paths; the adopt branch is pinned by
+ * scheduled-event.create.adopt-repoint.spec.ts.
+ */
+async function awaitSeBinding(ctx: TestContext): Promise<void> {
+  await triggerReconciliation(ctx.api);
 }
 
 /** Widen the create buffer so the event is inside it, then force the scan. */
@@ -268,15 +298,21 @@ async function reportOrphanSe(ctx: TestContext, seId: string): Promise<void> {
   console.warn(`[planned-voice] SE ${seId} survived event delete`);
   await se.delete().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[planned-voice] companion-bot delete of SE ${seId} failed: ${msg}`);
+    console.warn(
+      `[planned-voice] companion-bot delete of SE ${seId} failed: ${msg}`,
+    );
   });
 }
 
 /** Poll for the event's SE (2× timeout: reconciliation → BullMQ → Discord). */
 async function awaitSe(ctx: TestContext, title: string): Promise<SeView> {
-  return pollForCondition(() => findSeByTitle(title), ctx.config.timeoutMs * 2, {
-    intervalMs: 2000,
-  }).catch(() => {
+  return pollForCondition(
+    () => findSeByTitle(title),
+    ctx.config.timeoutMs * 2,
+    {
+      intervalMs: 2000,
+    },
+  ).catch(() => {
     throw new Error(`No Scheduled Event appeared for event "${title}"`);
   });
 }
@@ -310,7 +346,10 @@ const plannedVoiceSurfaces: SmokeTest = {
       const read = await ctx.api.get<{ game?: { name?: string } | null }>(
         `/events/${ev.id}`,
       );
-      const expectedName = expectedPlannedName(ev.title, read.game?.name ?? null);
+      const expectedName = expectedPlannedName(
+        ev.title,
+        read.game?.name ?? null,
+      );
       const se = await awaitSe(ctx, ev.title);
       seId = se.id;
       assertPlannedSe(se, expectedName);
@@ -319,11 +358,18 @@ const plannedVoiceSurfaces: SmokeTest = {
       );
       await assertPlannedEmbed(ctx, embedChannelId, ev.title, opensUnix);
 
+      await awaitSeBinding(ctx);
       channelId = await createChannelNow(ctx, ev.id, categoryId);
       await flushEmbedQueue(ctx.api);
       await assertLiveSe(ctx, seId, channelId);
       const mention = `<#${channelId}>`;
-      await pollVoiceLine(ctx, embedChannelId, ev.title, (l) => l.includes(mention), mention);
+      await pollVoiceLine(
+        ctx,
+        embedChannelId,
+        ev.title,
+        (l) => l.includes(mention),
+        mention,
+      );
     } finally {
       await teardown(ctx, ev.id, seId, channelId);
     }

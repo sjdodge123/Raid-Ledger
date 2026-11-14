@@ -27,7 +27,7 @@ describe('SignupsService — roster', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
   let mockRosterNotificationBuffer: {
     bufferLeave: jest.Mock;
@@ -99,7 +99,7 @@ describe('SignupsService — roster', () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue(null),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+      resolveVoiceForEvent: jest.fn().mockResolvedValue({}),
     };
     mockRosterNotificationBuffer = {
       bufferLeave: jest.fn(),

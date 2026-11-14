@@ -10,6 +10,9 @@
  * synced away days stop counting (Q12).
  * A job never runs alongside its own `-rerun` (or vice versa): it defers
  * itself first — `calendar-write-overlap.helpers.ts` explains why.
+ * ROK-2189: a provider TransientError / RateLimitError rethrown on a
+ * non-final attempt is marked so Sentry drops it (the same error object is
+ * rethrown, so BullMQ's backoff and Retry-After are unchanged).
  */
 import { Inject, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
@@ -25,6 +28,7 @@ import {
   CALENDAR_WRITE_QUEUE,
 } from '../calendar-sync.constants';
 import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
+import { markRetryPendingProviderError } from '../calendar-retry-report.helpers';
 import { deriveIfNeedsReconnect } from '../read/calendar-away-heal.helpers';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import type { CalendarWriteJobData } from './calendar-write.enqueue.helpers';
@@ -43,6 +47,9 @@ import {
   runCalendarWriteOff,
   type WriteOffOutcome,
 } from './calendar-write-off.helpers';
+
+type WriteJobOutcome =
+  ReconcileOutcome | WriteOffOutcome | CalendarDisconnectResult;
 
 @Processor(CALENDAR_WRITE_QUEUE, {
   concurrency: 2,
@@ -79,7 +86,18 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
   async process(
     job: Job<CalendarWriteJobData>,
     token?: string,
-  ): Promise<ReconcileOutcome | WriteOffOutcome | CalendarDisconnectResult> {
+  ): Promise<WriteJobOutcome> {
+    try {
+      return await this.run(job, token);
+    } catch (err) {
+      throw markRetryPendingProviderError(err, job);
+    }
+  }
+
+  private async run(
+    job: Job<CalendarWriteJobData>,
+    token: string | undefined,
+  ): Promise<WriteJobOutcome> {
     await deferWhileSiblingActive(this.queue, job, token);
     const { data } = job;
     const deps = { db: this.db, registry: this.registry };

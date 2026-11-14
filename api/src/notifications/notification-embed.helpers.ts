@@ -16,6 +16,7 @@ import {
 import { applyLfgInviteEmbed } from './lfg-affinity-dm.helpers';
 import { applyLfgPlayerInviteEmbed } from './notification-embed.lfg-player-invite';
 import { addPollHubField } from './notification-embed.poll-hub';
+import { dmVoiceFieldValue } from './notification-voice.helpers';
 
 /** Safely convert an unknown payload value to a string. */
 export function toStr(value: unknown): string {
@@ -194,17 +195,13 @@ function addFieldIf(
     embed.addFields({ name, value: toStr(payload[key]), inline });
 }
 
-/** Add a voice channel field if present. */
+/** Add a voice channel field: the live link, or a planned temporary channel. */
 function addVoiceChannelField(
   embed: EmbedBuilder,
   payload: Record<string, unknown>,
 ): void {
-  if (payload.voiceChannelId)
-    embed.addFields({
-      name: 'Voice Channel',
-      value: `<#${toStr(payload.voiceChannelId)}>`,
-      inline: true,
-    });
+  const value = dmVoiceFieldValue(payload);
+  if (value) embed.addFields({ name: 'Voice Channel', value, inline: true });
 }
 
 /** Field definitions per notification type: [payloadKey, fieldName] pairs + voice flag. */
@@ -217,6 +214,8 @@ const TYPE_FIELD_DEFS: Partial<
   member_returned: { fields: [['slotName', 'Slot']], voice: true },
   event_cancelled: { fields: [['eventTitle', 'Event']], voice: false },
   event_rescheduled: { fields: [], voice: true },
+  event_delayed: { fields: [], voice: true },
+  running_late: { fields: [], voice: true },
   bench_promoted: { fields: [], voice: true },
   tentative_displaced: { fields: [], voice: true },
   missed_event_nudge: { fields: [['eventTitle', 'Event']], voice: false },

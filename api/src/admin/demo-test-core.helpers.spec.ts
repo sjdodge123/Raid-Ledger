@@ -17,6 +17,8 @@ import {
   getNotificationsForTest,
 } from './demo-test-core.helpers';
 import { ConflictException, Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
+import { QueueHealthService } from '../queue/queue-health.service';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -144,16 +146,6 @@ describe('demo-test-core.helpers - queue flush and await', () => {
     expect(flushAll).toHaveBeenCalled();
   });
 
-  it('flushEmbedQueueForTest drains all queues', async () => {
-    const drainAll = jest.fn().mockResolvedValue(undefined);
-    const moduleRef = mockModuleRef({ QueueHealthService: { drainAll } });
-
-    const result = await flushEmbedQueueForTest(moduleRef);
-
-    expect(result).toEqual({ success: true });
-    expect(drainAll).toHaveBeenCalled();
-  });
-
   it('awaitProcessingForTest forwards the timeout', async () => {
     const awaitDrained = jest.fn().mockResolvedValue(undefined);
     const moduleRef = mockModuleRef({ QueueHealthService: { awaitDrained } });
@@ -268,5 +260,70 @@ describe('demo-test-core.helpers - getNotificationsForTest', () => {
     const where = renderWhere(db);
     expect(where.params).toEqual([3, 'dm']);
     expect(where.sql).toContain('"notifications"."type" = $2');
+  });
+});
+
+/** Fake BullMQ queue whose counts come from `waiting` (one value per poll). */
+function fakeQueue(
+  name: string,
+  waiting: number[],
+): Queue & {
+  drain: jest.Mock;
+} {
+  const counts = jest.fn();
+  for (const w of waiting) {
+    counts.mockResolvedValueOnce({ waiting: w, active: 0, delayed: 0 });
+  }
+  counts.mockResolvedValue({ waiting: waiting.at(-1) ?? 0, active: 0 });
+  const getFailed = jest.fn().mockResolvedValue([]);
+  return {
+    name,
+    getJobCounts: counts,
+    getFailed,
+    drain: jest.fn(),
+  } as unknown as Queue & { drain: jest.Mock };
+}
+
+/** A real QueueHealthService (1 ms polls) holding the given queue. */
+function realHealthModuleRef(queue: Queue): ModuleRef {
+  process.env.QUEUE_POLL_INTERVAL_MS = '1';
+  const qhs = new QueueHealthService();
+  delete process.env.QUEUE_POLL_INTERVAL_MS;
+  qhs.register(queue);
+  return mockModuleRef({ QueueHealthService: qhs });
+}
+
+describe('demo-test-core.helpers - flushEmbedQueueForTest waits, never deletes (tech-debt 2026-11-13)', () => {
+  it('waits for pending jobs to be processed instead of draining them', async () => {
+    const queue = fakeQueue('discord-embed-sync', [2, 1, 0]);
+
+    const result = await flushEmbedQueueForTest(realHealthModuleRef(queue));
+
+    expect(result).toEqual({ success: true });
+    // Pending embed re-syncs must run, not be thrown away mid-test.
+    expect(queue.drain).not.toHaveBeenCalled();
+    expect(queue.getJobCounts).toHaveBeenCalledTimes(3);
+  });
+
+  it('times out with the structured await-processing 409 body', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    const queue = fakeQueue('discord-embed-sync', [1]);
+
+    const err = await flushEmbedQueueForTest(
+      realHealthModuleRef(queue),
+      20,
+    ).then(
+      () => 'resolved without waiting for the busy queue',
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).getResponse()).toMatchObject({
+      error: 'await-processing-failed',
+      timeoutMs: 20,
+      busyQueues: [{ name: 'discord-embed-sync', waiting: 1 }],
+    });
+    expect(queue.drain).not.toHaveBeenCalled();
+    jest.restoreAllMocks();
   });
 });

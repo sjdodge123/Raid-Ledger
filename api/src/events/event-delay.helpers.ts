@@ -13,6 +13,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { NotificationService } from '../notifications/notification.service';
+import type { EventVoicePayload } from '../notifications/notification-voice.helpers';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { resolveUserTimezones } from '../notifications/timezone.helpers';
 import { REMINDER_WINDOWS } from '../notifications/event-reminder.constants';
@@ -65,7 +66,7 @@ function buildDelayPayload(
   newStart: Date,
   newEnd: Date,
   discordUrl: string | null,
-  voiceChannelId: string | null,
+  voice: EventVoicePayload,
 ): Record<string, unknown> {
   return {
     eventId,
@@ -74,7 +75,7 @@ function buildDelayPayload(
     newEndTime: newEnd.toISOString(),
     startTime: newStart.toISOString(),
     ...(discordUrl ? { discordUrl } : {}),
-    ...(voiceChannelId ? { voiceChannelId } : {}),
+    ...voice,
   };
 }
 
@@ -95,8 +96,7 @@ async function notifyEventDelayed(
   );
   if (usersToNotify.length === 0) return;
   const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
-  const voiceChannelId =
-    await notificationService.resolveVoiceChannelForEvent(eventId);
+  const voice = await notificationService.resolveVoiceForEvent(eventId);
   const tzMap = await resolveUserTimezones(db, usersToNotify, defaultTimezone);
   const payload = buildDelayPayload(
     eventId,
@@ -104,7 +104,7 @@ async function notifyEventDelayed(
     newStart,
     newEnd,
     discordUrl,
-    voiceChannelId,
+    voice,
   );
   await notificationService.createMany(
     usersToNotify.map((uid) => ({

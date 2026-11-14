@@ -65,6 +65,13 @@ export function useCastBracketVote() {
         onSuccess: () => {
             void qc.invalidateQueries({ queryKey: [...TIEBREAKER_KEY] });
         },
+        // A refused vote (already decided / matchup closed / finalizing) must
+        // not fail silently: tell the voter and refetch so the card stops
+        // showing the matchup as open.
+        onError: (err: Error) => {
+            toast.error(err.message || 'Vote failed');
+            void qc.invalidateQueries({ queryKey: [...TIEBREAKER_KEY] });
+        },
     });
 }
 

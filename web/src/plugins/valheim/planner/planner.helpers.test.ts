@@ -84,6 +84,18 @@ describe('formatting', () => {
         const lines = [{ prefab: 'Wood', need: 10, have: 4, short: 6 }, { prefab: 'Coal', need: 3, have: null, short: null }];
         expect(shoppingListText(lines, (p) => p)).toBe('Wood: 6\nCoal: 3');
     });
+    it('leaves out rows with nothing short, keeps rows without stock data', () => {
+        const lines = [
+            { prefab: 'Stone', need: 5, have: 9, short: 0 },
+            { prefab: 'Wood', need: 10, have: 7, short: 3 },
+            { prefab: 'Coal', need: 4, have: null, short: null },
+        ];
+        expect(shoppingListText(lines, (p) => p)).toBe('Wood: 3\nCoal: 4');
+    });
+    it('copies an empty list when nothing is short, like an empty plan', () => {
+        const lines = [{ prefab: 'Stone', need: 5, have: 9, short: 0 }];
+        expect(shoppingListText(lines, (p) => p)).toBe(shoppingListText([], (p) => p));
+    });
 });
 
 describe('viaChips', () => {
