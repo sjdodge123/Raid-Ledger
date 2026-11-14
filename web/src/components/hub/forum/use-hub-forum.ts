@@ -35,12 +35,14 @@ export function useForumThreads(guildId: number, enabled = true): UseInfiniteQue
     });
 }
 
-/** One thread with its first page of replies — the `?thread=<id>` target. */
-export function useForumThread(guildId: number, threadId: number | null): UseQueryResult<HubForumThread, Error> {
+/** One thread, its replies paged oldest-first by `nextReplyCursor` — the `?thread=<id>` target. */
+export function useForumThread(guildId: number, threadId: number | null): UseInfiniteQueryResult<InfiniteData<HubForumThread>, Error> {
     const viewer = useViewerCacheScope();
-    return useQuery({
+    return useInfiniteQuery({
         queryKey: [...hubForumKey(guildId), 'thread', threadId, viewer],
-        queryFn: () => fetchForumThread(guildId, threadId ?? 0),
+        queryFn: ({ pageParam }) => fetchForumThread(guildId, threadId ?? 0, pageParam),
+        initialPageParam: null as string | null,
+        getNextPageParam: (last) => last.nextReplyCursor,
         enabled: guildId > 0 && threadId !== null,
         retry: false,
     });
