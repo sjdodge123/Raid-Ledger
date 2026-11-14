@@ -15,10 +15,10 @@
  * scheduler cron cannot create the channel before the "planned" assertions.
  * Deterministic polling only — no fixed delays.
  */
-import { GuildScheduledEventEntityType } from "discord.js";
-import { getGuild } from "../../client.js";
-import { pollForCondition } from "../../helpers/polling.js";
-import { readLastMessages } from "../../helpers/messages.js";
+import { GuildScheduledEventEntityType } from 'discord.js';
+import { getGuild } from '../../client.js';
+import { pollForCondition } from '../../helpers/polling.js';
+import { readLastMessages } from '../../helpers/messages.js';
 import {
   createEvent,
   deleteEvent,
@@ -28,12 +28,12 @@ import {
   channelForTest,
   channelForGame,
   triggerReconciliation,
-} from "../fixtures.js";
+} from '../fixtures.js';
 import {
   acquireScheduledEvents,
   releaseScheduledEvents,
   releaseScheduledEventsAndRethrow,
-} from "../scheduled-events-toggle.js";
+} from '../scheduled-events-toggle.js';
 import {
   setEphemeralVoiceConfig,
   forceEphemeralScan,
@@ -41,10 +41,10 @@ import {
   resolveCategoryId,
   resolveGameId,
   reportOrphanChannel,
-} from "./ephemeral-voice.test.js";
-import type { SmokeTest, TestContext } from "../types.js";
+} from './ephemeral-voice.test.js';
+import type { SmokeTest, TestContext } from '../types.js';
 
-const SPEAKER = "\u{1F50A}"; // 🔊
+const SPEAKER = '\u{1F50A}'; // 🔊
 const BUFFER_MIN = 30;
 const SE_NAME_MAX = 100;
 
@@ -63,13 +63,13 @@ function expectedPlannedName(title: string, gameName: string | null): string {
       ? `${title} — ${gameName}`
       : title;
   const capped =
-    named.length <= SE_NAME_MAX ? named : named.slice(0, SE_NAME_MAX - 1) + "…";
-  const stripped = capped.replace(/\s+event\s*$/i, "");
+    named.length <= SE_NAME_MAX ? named : named.slice(0, SE_NAME_MAX - 1) + '…';
+  const stripped = capped.replace(/\s+event\s*$/i, '');
   const base = stripped.trim().length > 0 ? stripped : capped;
   const marked = `⏰ ${base}`;
   return marked.length <= SE_NAME_MAX
     ? marked
-    : marked.slice(0, SE_NAME_MAX - 1) + "…";
+    : marked.slice(0, SE_NAME_MAX - 1) + '…';
 }
 
 function toSeView(se: {
@@ -113,7 +113,7 @@ async function readVoiceLine(
     .flatMap((m) => m.embeds)
     .find((e) => e.title?.includes(title));
   if (!embed) return { found: false, line: null };
-  const lines = (embed.description ?? "").split("\n");
+  const lines = (embed.description ?? '').split('\n');
   return {
     found: true,
     line: lines.find((l) => l.startsWith(SPEAKER)) ?? null,
@@ -143,7 +143,7 @@ async function pollVoiceLine(
     );
   } catch {
     throw new Error(
-      `Embed voice line: expected ${want}; got ${last.found ? JSON.stringify(last.line) : "no embed for the event"}`,
+      `Embed voice line: expected ${want}; got ${last.found ? JSON.stringify(last.line) : 'no embed for the event'}`,
     );
   }
 }
@@ -177,7 +177,7 @@ async function assertPlannedEmbed(
     channelId,
     title,
     () => true,
-    "a 🔊 line",
+    'a 🔊 line',
   );
   const opens = `· opens <t:${opensUnix}:t>`;
   const problems: string[] = [];
@@ -185,10 +185,10 @@ async function assertPlannedEmbed(
     problems.push('missing "🔊 ⏰ " prefix');
   if (!line.includes(title)) problems.push(`missing title ${title}`);
   if (!line.includes(opens)) problems.push(`missing "${opens}"`);
-  if (line.includes("<#")) problems.push("contains a <# channel mention");
+  if (line.includes('<#')) problems.push('contains a <# channel mention');
   if (problems.length > 0) {
     throw new Error(
-      `Planned embed voice line ${JSON.stringify(line)}: ${problems.join("; ")}`,
+      `Planned embed voice line ${JSON.stringify(line)}: ${problems.join('; ')}`,
     );
   }
 }
@@ -216,7 +216,7 @@ async function assertLiveSe(
   });
   if (live.channelId !== channelId) {
     throw new Error(
-      `Live SE: expected channelId ${channelId}, got ${live.channelId ?? "none"}`,
+      `Live SE: expected channelId ${channelId}, got ${live.channelId ?? 'none'}`,
     );
   }
 }
@@ -318,8 +318,8 @@ async function awaitSe(ctx: TestContext, title: string): Promise<SeView> {
 }
 
 const plannedVoiceSurfaces: SmokeTest = {
-  name: "Planned temporary voice channel: embed name + open time, SE External → Voice once created",
-  category: "voice",
+  name: 'Planned temporary voice channel: embed name + open time, SE External → Voice once created',
+  category: 'voice',
   async run(ctx) {
     const categoryId = await resolveCategoryId(ctx);
     const gameId = channelForTest(ctx, 3).gameId ?? (await resolveGameId(ctx));
@@ -332,7 +332,7 @@ const plannedVoiceSurfaces: SmokeTest = {
     });
     await acquireScheduledEvents(ctx.api);
     const startTime = futureTime(60);
-    const ev = await createEvent(ctx.api, "planned-voice", {
+    const ev = await createEvent(ctx.api, 'planned-voice', {
       gameId,
       startTime,
       endTime: futureTime(120),
