@@ -81,6 +81,7 @@ export * from './schema/guild-member-level-events';
 export * from './schema/guild-editors';
 export * from './schema/guild-profiles';
 export * from './schema/hub-posts';
+export * from './schema/hub-forum';
 export * from './schema/hub-session-notes';
 export * from './schema/hub-media';
 export * from './schema/guild-recommended-addons';

@@ -29,6 +29,8 @@ import { HubWidgetPrefsService } from './hub-widget-prefs.service';
 import { HubPostRelayService } from './posts/hub-post-relay.service';
 import { HubPostsController } from './posts/hub-posts.controller';
 import { HubPostsService } from './posts/hub-posts.service';
+import { HubForumController } from './forum/hub-forum.controller';
+import { HubForumService } from './forum/hub-forum.service';
 import { HubSessionNoteController } from './session-note/hub-session-note.controller';
 import { HubSessionNoteService } from './session-note/hub-session-note.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
@@ -65,6 +67,7 @@ import {
     HubNotificationMuteController,
     GuildDiscordController,
     HubPostsController,
+    HubForumController,
     HubSessionNoteController,
     HubClaimController,
   ],
@@ -87,6 +90,7 @@ import {
     HubEventTagger,
     HubPostRelayService,
     HubPostsService,
+    HubForumService,
     HubSessionNoteService,
     CommunityHubKindAdapter,
     HubClaimRegistry,

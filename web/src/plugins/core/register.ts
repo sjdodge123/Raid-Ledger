@@ -22,6 +22,9 @@ import {
     useSteamAchievementsVisible,
     useSteamPlaytimeVisible,
 } from '../../components/hub/steam-stats/use-steam-stats-visible';
+import { LazyForumLatestWidget } from '../../components/hub/forum/forum-latest-widget-lazy';
+import { ForumLatestAction } from '../../components/hub/forum/forum-latest-action';
+import { useForumLatestVisible } from '../../components/hub/forum/use-forum-latest-visible';
 import { EventHubField } from './slots/event-hub-field';
 import { registerCoreGgCards } from './gg/register-core-gg-cards';
 
@@ -63,6 +66,22 @@ core.registerHubWidget({
     component: LazyHubSessionNoteWidget,
     action: HubSessionNoteAction,
     useVisible: useSessionNoteVisible,
+});
+
+// ROK-1175 — "Latest threads": the newest forum threads, every hub kind and game (core only),
+// right after "Before next session" (Q3: order 16, on by default). Members + staff; the forum
+// routes 403 visitors (Q1), and the card hides while the hub has no threads.
+core.registerHubWidget({
+    id: 'forum-latest',
+    title: 'Latest threads',
+    description: 'The newest forum threads.',
+    order: 16,
+    span: 1,
+    audience: 'members',
+    defaultOn: true,
+    component: LazyForumLatestWidget,
+    action: ForumLatestAction,
+    useVisible: useForumLatestVisible,
 });
 
 // ROK-1953 — the shared Steam cards, keyed by the hub game's Steam app id (the api's enable

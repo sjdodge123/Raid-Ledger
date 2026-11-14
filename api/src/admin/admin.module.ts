@@ -39,6 +39,7 @@ import { DemoTestGuildGameTextController } from './demo-test-guild-game-text.con
 import { DemoTestWowItemTooltipsController } from './demo-test-wow-item-tooltips.controller';
 import { DemoTestAttunementsController } from './demo-test-attunements.controller';
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
+import { DemoTestHubForumController } from './demo-test-hub-forum.controller';
 import { DemoTestChannelLifecycleController } from './demo-test-channel-lifecycle.controller';
 import { DemoTestCommunityHubsController } from './demo-test-community-hubs.controller';
 import { DemoTestBg3Controller } from './demo-test-bg3.controller';
@@ -159,6 +160,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestWowItemTooltipsController,
     DemoTestAttunementsController,
     DemoTestHubMemberController,
+    DemoTestHubForumController,
     DemoTestChannelLifecycleController,
     DemoTestCommunityHubsController,
     DemoTestBg3Controller,

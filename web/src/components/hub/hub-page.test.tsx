@@ -72,7 +72,7 @@ describe('GuildPage (ROK-1785)', () => {
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
-        expect(labels).toEqual(['Overview', 'Members', 'Events', 'Raids']);
+        expect(labels).toEqual(['Overview', 'Members', 'Events', 'Forum', 'Raids']);
     });
 
     it('the hero shows the addon-reported realm for a realm-less (Forever) guild', async () => {
@@ -332,7 +332,7 @@ describe('GuildPage — Posts tab (ROK-1868 V6)', () => {
         serveLatest(false);
         renderPage();
         await screen.findByTestId('guild-gm-post-empty');
-        expect(await tabLabels(), 'a hub with 0 posts must not show the Posts tab').toEqual(['Overview', 'Members', 'Events', 'Raids']);
+        expect(await tabLabels(), 'a hub with 0 posts must not show the Posts tab').toEqual(['Overview', 'Members', 'Events', 'Forum', 'Raids']);
     });
 
     it('pins Posts after Events once the hub has a post', async () => {
@@ -340,7 +340,7 @@ describe('GuildPage — Posts tab (ROK-1868 V6)', () => {
         serveLatest(true);
         renderPage();
         await screen.findByTestId('guild-gm-post-body');
-        expect(await tabLabels(), 'Posts is a core tab pinned after Events').toEqual(['Overview', 'Members', 'Events', 'Posts', 'Raids']);
+        expect(await tabLabels(), 'Posts is a core tab pinned after Events').toEqual(['Overview', 'Members', 'Events', 'Posts', 'Forum', 'Raids']);
     });
 
     it('#posts routes to the lazily-loaded Posts tab', async () => {
@@ -392,7 +392,7 @@ describe('GuildPage — overview-only visitors never see the member-only Posts t
         serveVisitor();
         renderPage();
         await screen.findByTestId('guild-gm-post-body');
-        expect(await tabLabels(), 'the member-only Posts tab must be hidden from a visitor').toEqual(['Overview', 'Members', 'Events', 'Raids']);
+        expect(await tabLabels(), 'the member-only Posts tab (and the Forum, Q1) must be hidden from a visitor').toEqual(['Overview', 'Members', 'Events', 'Raids']);
     });
 
     it('a visitor following ?post=<id>#posts lands on the Overview, not a 403 screen', async () => {

@@ -1769,6 +1769,15 @@ the list is empty or the members-only route answers 404. **Gallery** (ROK-1942, 
 CORE (`components/hub/gallery/`, §4.29) and registered by the built-in Core plugin (ROK-1969; offered on Valheim hubs until ROK-1965); `useVisible` shows it to every hub
 member, empty too (ROK-1965 D15: "No pictures yet. Add the first one." so someone can add the first picture); a visitor's
 404 hides it.
+**Latest threads** (`forum-latest`, ROK-1175, Core, order 16, span 1, `members`, on by default): up to
+`HUB_FORUM_LATEST_LIMIT` rows (title + §4.3 `success` Pinned pill, `text-xs text-muted` "N replies · 2 h ago"), each a
+router link to `?thread=<id>#forum`, and the `JumpLink` header action "Open the Forum". `useVisible` hides it from
+visitors (the forum routes 403 them) and while the hub has no threads; §4.5 `QuietEmpty` / §4.6 skeleton. It is the
+Overview face of core's **Forum** tab (`#forum`, core band after Posts, members + staff only — a staff viewer's ladder
+role is `leader`): §4.2 `StretchedAction` rows, a `Button` + phone `FAB` "New thread" (the FAB primitive's 768px split),
+§4.26 `LazyMarkdownEditor` bodies with a `Field` + `Input` + `CharCounter` title (120), `DiscardChangesConfirm` on
+leaving a draft, a "⋯" §4.11 `ActionMenuList` (dropdown ≥1024px, `BottomSheet` below; rows from the server's `can`
+flags) and a §4.4 delete confirm. No new pattern.
 **Achievement race** + **Playtime** (ROK-1953, Core, orders 50 / 52, span 1 each, `members`): the bodies are CORE
 (`components/hub/steam-stats/`), registered by Core with `games` omitted (every game) on `game_community` +
 `game_server` hubs; ONE query (`['hub-steam-stats', guildId]`, `GET /hubs/:guildId/steam-stats`) feeds both

@@ -8,6 +8,9 @@
  * ROK-1868 A5 — core's Posts tab joins the core band once the hub has a post,
  * for every hub kind (`#posts`, deep link `?post=<id>#posts`); it follows
  * Resources so Resources keeps its slot right after Events (ROK-1876).
+ * ROK-1175 — core's Forum tab follows Posts on every hub kind and is always
+ * shown to a reader (Q2: empty state "Start the first thread"); visitors have
+ * no Forum at all (Q1: members + staff read).
  */
 import type { HubCtx, HubModule, HubTab } from '../../plugins/hub-module';
 import { hubGameTabs } from '../../plugins/hub-game-tabs';
@@ -28,8 +31,13 @@ export function canOpenHubPosts(ctx: HubCtx): boolean {
     return ctx.page.viewer.role !== 'visitor';
 }
 
+/** The forum routes (`GET /guilds/:id/forum*`) are member + staff only (ROK-1175 Q1); visitors get no tab. */
+export function canOpenHubForum(ctx: HubCtx): boolean {
+    return ctx.page.viewer.role !== 'visitor';
+}
+
 /** Core's tab ids (`hubTabs` below); a module or game tab may not reuse one. Declared under `core` (ROK-1969). */
-export const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts'];
+export const CORE_TAB_IDS: readonly string[] = ['overview', 'members', 'events', 'resources', 'posts', 'forum'];
 
 /** Collided game-tab ids already warned about — the band is rebuilt on every cache change (`useHubTabs`), the warning once. */
 const warnedCollisions = new Set<string>();
@@ -69,6 +77,7 @@ export function hubTabs(mod: HubModule | undefined, ctx: HubCtx, showResources: 
         { id: 'events', label: 'Events', hidden: false },
         { id: 'resources', label: 'Resources', hidden: !showResources },
         { id: 'posts', label: hubCopy(ctx.page.guild.kind).postsTab, hidden: !hasPosts || !canOpenHubPosts(ctx) },
+        { id: 'forum', label: hubCopy(ctx.page.guild.kind).forumTab, hidden: !canOpenHubForum(ctx) },
         ...moduleTabs,
     ];
 }
