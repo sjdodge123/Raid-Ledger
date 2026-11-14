@@ -13,6 +13,8 @@ export const realDelay: DelayFn = (ms) =>
 
 export interface AutoConnectOptions {
   connect: () => Promise<void>;
+  /** True once an admin action or shutdown cancelled the auto-connect. */
+  cancelled?: () => boolean;
   /** False once something else (an admin reconnect) owns the connection. */
   shouldRetry: () => boolean;
   logger: Logger;
@@ -29,7 +31,8 @@ function messageOf(error: unknown): string {
  * Connect, retrying a transient failure with exponential backoff. A
  * definitive failure (invalid token, disallowed intents) and the last
  * attempt's failure are rethrown; a retry is skipped when `shouldRetry`
- * says another connect already took over.
+ * says another connect already took over, and no attempt starts once
+ * `cancelled` (checked before every attempt, so also after each backoff).
  */
 export async function connectWithRetry(
   opts: AutoConnectOptions,
@@ -37,7 +40,9 @@ export async function connectWithRetry(
   const max = opts.maxAttempts ?? AUTO_CONNECT_MAX_ATTEMPTS;
   const base = opts.baseDelayMs ?? AUTO_CONNECT_BASE_DELAY_MS;
   const delay = opts.delay ?? realDelay;
+  const cancelled = opts.cancelled ?? (() => false);
   for (let attempt = 1; ; attempt++) {
+    if (cancelled()) return;
     try {
       await opts.connect();
       return;

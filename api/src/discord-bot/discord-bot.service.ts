@@ -34,6 +34,8 @@ export class DiscordBotService
   private readonly logger = new Logger(DiscordBotService.name);
   /** Backoff wait between startup auto-connect attempts (swapped in tests). */
   autoConnectDelay: DelayFn = realDelay;
+  /** Bumped to cancel a running startup auto-connect (ROK-2198). */
+  private autoConnectGeneration = 0;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -50,15 +52,8 @@ export class DiscordBotService
       const config = await this.settingsService.getDiscordBotConfig();
       if (config?.enabled) {
         this.logger.log('Discord bot is configured and enabled, connecting...');
-        // ROK-2198: a transient first-login failure is retried, bounded.
-        await connectWithRetry({
-          connect: () => this.clientService.connect(config.token),
-          shouldRetry: () =>
-            !this.clientService.isConnected() &&
-            !this.clientService.isConnecting(),
-          logger: this.logger,
-          delay: this.autoConnectDelay,
-        });
+        // ROK-2198: retried in the background so boot never waits on Discord.
+        void this.autoConnect(config.token);
       }
     } catch (error) {
       this.logger.error(
@@ -68,10 +63,38 @@ export class DiscordBotService
     }
   }
 
+  /** Startup connect with bounded retries; stops once cancelled. */
+  private async autoConnect(token: string): Promise<void> {
+    const generation = ++this.autoConnectGeneration;
+    const cancelled = (): boolean => generation !== this.autoConnectGeneration;
+    try {
+      await connectWithRetry({
+        connect: () => this.clientService.connect(token),
+        cancelled,
+        shouldRetry: () =>
+          !this.clientService.isConnected() &&
+          !this.clientService.isConnecting(),
+        logger: this.logger,
+        delay: this.autoConnectDelay,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to auto-connect Discord bot on startup:',
+        error,
+      );
+    }
+  }
+
+  /** An admin action or shutdown now owns the connection. */
+  private cancelAutoConnect(): void {
+    this.autoConnectGeneration++;
+  }
+
   /**
    * Graceful shutdown.
    */
   async onModuleDestroy(): Promise<void> {
+    this.cancelAutoConnect();
     await this.clientService.disconnect();
   }
 
@@ -83,6 +106,7 @@ export class DiscordBotService
     this.logger.log(
       `handleConfigUpdate called with config: ${config ? `enabled=${String(config.enabled)}` : 'null'}`,
     );
+    this.cancelAutoConnect();
 
     if (!config || !config.enabled) {
       this.logger.log(
@@ -118,6 +142,7 @@ export class DiscordBotService
       return;
     }
 
+    this.cancelAutoConnect();
     try {
       this.logger.log('ensureConnected: starting bot connection...');
       await this.clientService.connect(config.token);
