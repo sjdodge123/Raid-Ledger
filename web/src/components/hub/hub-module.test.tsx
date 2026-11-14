@@ -70,7 +70,7 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
     it('puts the module tab between the core frame tabs and renders its panel', async () => {
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
-        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events', 'World']);
+        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events', 'Forum', 'World']);
 
         await userEvent.click(within(nav).getByRole('link', { name: 'World' }));
         await waitFor(() => expect(screen.getByTestId('module-tab-panel')).toHaveTextContent('World of Valheim Longhouse'));
@@ -87,7 +87,7 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
         usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: true });
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Server page sections' });
-        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events']);
+        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'Events', 'Forum']);
         expect(screen.queryByTestId('module-widget')).not.toBeInTheDocument();
     });
 
