@@ -53,6 +53,8 @@ export class DiscordBotClientService {
   private client: Client | null = null;
   private connecting = false;
   private connectTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Rejects the in-flight connect; a teardown settles it as superseded. */
+  private connectReject: ((error: Error) => void) | null = null;
   /** Bumped by every connect and disconnect; the latest call owns the client. */
   private ownerEpoch = 0;
   /** The in-flight destroy of a detached client, shared by concurrent callers. */
@@ -72,8 +74,10 @@ export class DiscordBotClientService {
     this.connecting = true;
 
     return new Promise<void>((resolve, reject) => {
+      this.connectReject = reject;
       this.connectTimeout = setTimeout(() => {
         this.connectTimeout = null;
+        this.connectReject = null;
         this.connecting = false;
         reject(new Error('Discord bot connection timed out after 15s'));
       }, 15_000);
@@ -101,6 +105,9 @@ export class DiscordBotClientService {
       clearTimeout(this.connectTimeout);
       this.connectTimeout = null;
     }
+    const rejectPending = this.connectReject;
+    this.connectReject = null;
+    rejectPending?.(supersededConnectError());
     const client = this.client;
     if (client && !this.pendingTeardown) {
       this.client = null;
@@ -336,6 +343,7 @@ export class DiscordBotClientService {
     const settle = (): void => {
       if (this.connectTimeout) clearTimeout(this.connectTimeout);
       this.connectTimeout = null;
+      this.connectReject = null;
       this.connecting = false;
     };
     return {

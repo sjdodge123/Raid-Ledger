@@ -28,6 +28,8 @@ import {
   createSession,
   leaveSession,
   parseGraceMinutes,
+  createSerialQueue,
+  closeActiveSessions,
 } from './voice-attendance.helpers';
 import * as classifyH from './voice-attendance-classify.helpers';
 import * as recoveryH from './voice-attendance-recovery.helpers';
@@ -46,6 +48,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   private sessions = new Map<string, InMemorySession>();
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private classifyRunning = false;
+  /** Flushes run one at a time: each starts after the previous settles. */
+  private readonly enqueueFlush = createSerialQueue();
   /** Track event IDs that have already been snapshotted (ROK-735). */
   private readonly snapshotted = new Set<number>();
   /** Track event IDs that have already been classified (ROK-861). */
@@ -76,11 +80,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     if (this.flushTimer) clearInterval(this.flushTimer);
     this.flushTimer = null;
-    try {
-      await this.flushToDb();
-    } catch (e) {
-      this.logger.error(`Final flush failed: ${e}`);
-    }
+    await this.flushToDb().catch((e) =>
+      this.logger.error(`Final flush failed: ${e}`),
+    );
   }
 
   handleJoin(
@@ -136,8 +138,15 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async flushToDb(): Promise<void> {
-    await flushH.flushDirtySessions(this.db, this.sessions, this.logger);
+  /**
+   * Write dirty sessions. Flushes are serialised: an interval flush still in
+   * flight must not commit its older row after a newer (post-leave) flush.
+   * The caller's own promise rejects on failure; later flushes still run.
+   */
+  flushToDb(): Promise<void> {
+    return this.enqueueFlush(async () => {
+      await flushH.flushDirtySessions(this.db, this.sessions, this.logger);
+    });
   }
 
   async classifyEvent(
@@ -265,10 +274,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     if (pending.length === 0) return;
     const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
     await this.flushToDb();
-    for (const ev of pending)
-      for (const [, s] of this.sessions)
-        if (s.eventId === ev.id && s.isActive)
-          this.handleLeave(ev.id, s.discordUserId);
+    closeActiveSessions(this.sessions, new Set(pending.map((e) => e.id)));
     await this.flushToDb();
     await this.classifyPendingEvents(pending, graceMs);
   }

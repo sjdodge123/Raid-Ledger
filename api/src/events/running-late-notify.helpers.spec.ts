@@ -24,7 +24,7 @@ describe('notifyAttendeeRunningLate', () => {
   let notificationService: {
     createMany: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
-    resolveVoiceChannelForEvent: jest.Mock;
+    resolveVoiceForEvent: jest.Mock;
   };
 
   const run = () =>
@@ -41,7 +41,9 @@ describe('notifyAttendeeRunningLate', () => {
     notificationService = {
       createMany: jest.fn().mockResolvedValue(undefined),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue('https://discord/msg'),
-      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue('voice-1'),
+      resolveVoiceForEvent: jest
+        .fn()
+        .mockResolvedValue({ voiceChannelId: 'voice-1' }),
     };
   });
 
@@ -65,6 +67,25 @@ describe('notifyAttendeeRunningLate', () => {
     expect(created[0]?.message).toBe(
       'hiphoptobop is running late to "D&d night".',
     );
+  });
+
+  it('carries a planned temporary voice channel instead of a link', async () => {
+    notificationService.resolveVoiceForEvent.mockResolvedValue({
+      plannedVoiceChannel: {
+        name: 'Raid Night',
+        opensAt: '2026-11-20T19:45:00.000Z',
+      },
+    });
+    mockDb.where.mockResolvedValue([{ userId: 1 }]);
+    await run();
+    const created = notificationService.createMany.mock.calls[0][0] as Array<{
+      payload: Record<string, unknown>;
+    }>;
+    expect(created[0]?.payload.plannedVoiceChannel).toEqual({
+      name: 'Raid Night',
+      opensAt: '2026-11-20T19:45:00.000Z',
+    });
+    expect(created[0]?.payload).not.toHaveProperty('voiceChannelId');
   });
 
   it('expires every notice at the event end (TDB:196)', async () => {

@@ -8,6 +8,7 @@ import { isValidIanaTimezone } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
+import type { PlannedEphemeralVoice } from '../discord-bot/services/planned-ephemeral-voice.helpers';
 
 /** Character info for a user. */
 export interface UserCharacter {
@@ -141,6 +142,16 @@ export function buildTitleTimeLabel(minutesUntil: number): string {
   return `in ${hours} Hours`;
 }
 
+/** The reminder's voice keys: a planned channel, else the channel link. */
+function reminderVoice(input: {
+  voiceChannelId?: string | null;
+  plannedVoiceChannel?: PlannedEphemeralVoice | null;
+}): Record<string, unknown> {
+  if (input.plannedVoiceChannel)
+    return { plannedVoiceChannel: input.plannedVoiceChannel };
+  return input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {};
+}
+
 /** Build the notification payload for a reminder. */
 export function buildReminderPayload(input: {
   eventId: number;
@@ -149,6 +160,8 @@ export function buildReminderPayload(input: {
   startTime: Date;
   discordUrl?: string | null;
   voiceChannelId?: string | null;
+  /** A planned temporary voice channel (wins over `voiceChannelId`). */
+  plannedVoiceChannel?: PlannedEphemeralVoice | null;
 }): Record<string, unknown> {
   return {
     eventId: input.eventId,
@@ -156,7 +169,7 @@ export function buildReminderPayload(input: {
     characterDisplay: input.characterDisplay,
     startTime: input.startTime.toISOString(),
     ...(input.discordUrl ? { discordUrl: input.discordUrl } : {}),
-    ...(input.voiceChannelId ? { voiceChannelId: input.voiceChannelId } : {}),
+    ...reminderVoice(input),
   };
 }
 

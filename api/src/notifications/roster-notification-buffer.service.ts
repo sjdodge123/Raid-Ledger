@@ -222,14 +222,13 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
   private async buildFlushPayload(
     action: BufferedRosterAction,
   ): Promise<Record<string, unknown>> {
-    const [discordUrl, voiceChannelId] = await Promise.all([
+    const [discordUrl, voice] = await Promise.all([
       this.notificationService.getDiscordEmbedUrl(action.eventId),
-      this.notificationService.resolveVoiceChannelForEvent(action.eventId),
+      this.notificationService.resolveVoiceForEvent(action.eventId),
     ]);
     const payload: Record<string, unknown> = { eventId: action.eventId };
     if (discordUrl) payload.discordUrl = discordUrl;
-    if (voiceChannelId) payload.voiceChannelId = voiceChannelId;
-    return payload;
+    return { ...payload, ...voice };
   }
 
   /** Notify organizer that a player left entirely. */
