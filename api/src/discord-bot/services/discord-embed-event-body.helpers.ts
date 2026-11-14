@@ -107,6 +107,21 @@ export function escapeHubName(name: string): string {
   return escaped.replace(/@/g, '@\u200b');
 }
 
+/**
+ * `🔊 ⏰ Stocks 5 man · opens <t:…:t>` — a temporary voice channel that is
+ * planned but not created yet (operator ruling 2026-11-13). The name is plain
+ * text: escaped like a hub name, with `<` broken so a title can never render
+ * as a mention or channel link.
+ */
+export function plannedVoiceLine(planned: {
+  name: string;
+  opensAt: string;
+}): string {
+  const name = escapeHubName(planned.name).replace(/</g, '<\u200b');
+  const unix = Math.floor(new Date(planned.opensAt).getTime() / 1000);
+  return `${SPEAKER} ${name} ${SEP} opens <t:${unix}:t>`;
+}
+
 /** `Hub: **<name>**`, with the name passed through {@link escapeHubName}. */
 export function hubLine(name: string): string {
   return `Hub: **${escapeHubName(name)}**`;
@@ -139,6 +154,8 @@ function stateLines(event: EmbedEventData, options: EventBodyOptions): string {
   const lines: string[] = [];
   if (TIMING_STATES.includes(state)) lines.push(timingLine(event));
   if (event.voiceChannelId) lines.push(`${SPEAKER} <#${event.voiceChannelId}>`);
+  else if (event.plannedVoiceChannel)
+    lines.push(plannedVoiceLine(event.plannedVoiceChannel));
   if (options.hubName) lines.push(hubLine(options.hubName));
   if (roster) pushBlock(lines, roster);
   if (state === EMBED_STATES.COMPLETED) {

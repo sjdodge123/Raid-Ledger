@@ -92,11 +92,16 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
           resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue(null),
+          // Optimistic like the real guard: a set override counts as voice.
+          overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
         },
       },
       {
         provide: SettingsService,
         useValue: {
+          getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+          getEphemeralVoiceCreateBufferMinutes: jest.fn().mockResolvedValue(30),
           getBranding: jest
             .fn()
             .mockResolvedValue({ communityName: 'Test Guild' }),
@@ -262,3 +267,91 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
     );
   });
 });
+
+describe('EmbedPosterService — planned temporary voice channel (2026-11-13)', () => {
+  it('shows the planned channel instead of the default voice binding', async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EmbedPosterService,
+        {
+          provide: DrizzleAsyncProvider,
+          useValue: {
+            select: jest.fn().mockReturnValue(plannedSelectChain()),
+            insert: jest.fn().mockReturnValue({
+              values: jest.fn().mockResolvedValue(undefined),
+            }),
+          },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: {
+            isConnected: jest.fn().mockReturnValue(true),
+            getGuildId: jest.fn().mockReturnValue('guild-1'),
+            sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
+          },
+        },
+        {
+          provide: DiscordEmbedFactory,
+          useValue: {
+            buildEventEmbed: jest
+              .fn()
+              .mockReturnValue({ embed: new EmbedBuilder() }),
+          },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: {
+            resolveChannelForEvent: jest.fn().mockResolvedValue('ch-1'),
+            resolveVoiceChannelHonoringOverride: jest
+              .fn()
+              .mockResolvedValue('default-vc'),
+          },
+        },
+        {
+          provide: SettingsService,
+          useValue: {
+            getBranding: jest.fn().mockResolvedValue({ communityName: 'G' }),
+            getClientUrl: jest.fn().mockResolvedValue(null),
+            getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
+            getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(true),
+            getEphemeralVoiceForced: jest.fn().mockResolvedValue(true),
+            getEphemeralVoiceCreateBufferMinutes: jest
+              .fn()
+              .mockResolvedValue(30),
+          },
+        },
+      ],
+    }).compile();
+    const factory = module.get(DiscordEmbedFactory);
+    const resolver = module.get(ChannelResolverService);
+    const start = new Date(Date.now() + 5 * 3_600_000);
+    const event: EmbedEventData = {
+      id: 42,
+      title: 'Stocks 5 man',
+      startTime: start.toISOString(),
+      endTime: new Date(start.getTime() + 3_600_000).toISOString(),
+      signupCount: 0,
+    };
+
+    await module.get(EmbedPosterService).postEmbed(42, event, 3);
+
+    const built = at(jest.mocked(factory.buildEventEmbed).mock.calls, 0)[0];
+    expect(built.plannedVoiceChannel).toEqual({
+      name: '⏰ Stocks 5 man',
+      opensAt: new Date(start.getTime() - 30 * 60_000).toISOString(),
+    });
+    expect(built.voiceChannelId).toBeUndefined();
+    expect(resolver.resolveVoiceChannelHonoringOverride).not.toHaveBeenCalled();
+  });
+});
+
+/** Every select resolves empty: no ephemeral row, no embed, no roster. */
+function plannedSelectChain(): Record<string, jest.Mock> {
+  const chain: Record<string, jest.Mock> = {};
+  for (const key of ['from', 'where', 'leftJoin', 'innerJoin', 'orderBy'])
+    chain[key] = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockResolvedValue([]);
+  chain.groupBy = jest.fn().mockResolvedValue([]);
+  chain.then = jest.fn((resolve: (v: unknown[]) => unknown) => resolve([]));
+  return chain;
+}

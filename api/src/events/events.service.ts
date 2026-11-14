@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { emitNewGroupTag } from './event-group-tag.helpers';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -29,6 +30,7 @@ import {
   buildEmbedEventData,
   getVariantContext,
 } from './event-response.helpers';
+import { embedVoiceDepsFrom } from './event-response-embed.helpers';
 import { queryEventList, queryUpcomingByUser } from './event-query.helpers';
 import { assembleDashboard } from './event-dashboard-build.helpers';
 import {
@@ -69,6 +71,7 @@ export class EventsService {
     private readonly activityLog: ActivityLogService,
     private readonly settingsService: SettingsService,
     private readonly notificationDedup: NotificationDedupService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   /** Creates a single or recurring event. */
@@ -304,10 +307,11 @@ export class EventsService {
     );
   }
 
-  /** Builds embed data for Discord embed rendering. */
+  /** Embed data incl. the shared voice line (planned temp channel or link). */
   async buildEmbedEventData(eventId: number): Promise<EmbedEventData> {
     const event = await this.findOne(eventId);
-    return buildEmbedEventData(this.db, event, eventId);
+    const voice = embedVoiceDepsFrom(this.moduleRef, this.settingsService);
+    return buildEmbedEventData(this.db, event, eventId, voice);
   }
 
   /**

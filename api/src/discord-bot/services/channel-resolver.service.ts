@@ -177,9 +177,11 @@ export class ChannelResolverService {
   /**
    * True when the override is a voice channel, or when the guild cache doesn't
    * know it (optimistic — may be an uncached voice channel). Mirrors
-   * resolveVoiceForEdit's guard so voice-ness lives in one place.
+   * resolveVoiceForEdit's guard so voice-ness lives in one place. Public so
+   * the planned temporary-channel decision (`hasVoiceOverride`) uses the
+   * same rule instead of a copy.
    */
-  private overrideIsVoiceChannel(override: string): boolean {
+  overrideIsVoiceChannel(override: string): boolean {
     const guild = this.clientService.getGuild();
     const cached = guild?.channels.cache.get(override);
     return !cached || cached.isVoiceBased();

@@ -109,6 +109,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       this.db,
       event,
       this.channelResolver,
+      this.settingsService,
     );
     const newState = computeEmbedState(event, eventData);
     const context = await this.buildContext(event);
@@ -179,6 +180,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       this.db,
       event,
       this.channelResolver,
+      this.settingsService,
     );
     // Same contract as `triggerSideEffects`: a Discord failure here must not
     // fail the sync job or hand BullMQ a retry.

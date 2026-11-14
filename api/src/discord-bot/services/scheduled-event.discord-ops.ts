@@ -1,7 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import {
   GuildScheduledEventStatus,
-  GuildScheduledEventEntityType,
   GuildScheduledEventPrivacyLevel,
   DiscordAPIError,
 } from 'discord.js';
@@ -21,6 +20,11 @@ import {
 } from './scheduled-event.channel-busy';
 import type { ScheduledEventRecord } from './scheduled-event.db-helpers';
 import { parseEventTimestampUtc } from './scheduled-event.revalidate';
+import {
+  seCreateEntity,
+  seEditEntity,
+  type SEPlace,
+} from './scheduled-event.planned-voice';
 
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
@@ -275,12 +279,16 @@ export async function resolveEditedScheduledEventName(
   return buildScheduledEventNameWithTime(eventData, await getTimezone());
 }
 
-/** Create a new Discord Scheduled Event via the API (ROK-755 extraction). */
+/**
+ * Create a new Discord Scheduled Event via the API (ROK-755 extraction). A
+ * voice channel id makes a Voice SE; a `{ location }` (planned temporary
+ * channel, 2026-11-13) makes an External SE with no channel.
+ */
 export async function tryCreateNewEvent(
   guild: Guild,
   eventId: number,
   eventData: ScheduledEventData,
-  voiceChannelId: string,
+  place: SEPlace,
   description: string,
 ): Promise<{ id: string }> {
   return timedDiscordCall(
@@ -291,8 +299,7 @@ export async function tryCreateNewEvent(
         scheduledStartTime: parseEventTimestampUtc(eventData.startTime),
         scheduledEndTime: parseEventTimestampUtc(eventData.endTime),
         privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-        entityType: GuildScheduledEventEntityType.Voice,
-        channel: voiceChannelId,
+        ...seCreateEntity(place),
         description,
       }),
     { eventId },
@@ -303,7 +310,8 @@ export async function tryCreateNewEvent(
  * Edit all fields of an existing Discord Scheduled Event (ROK-755 extraction).
  * `name` lets the caller substitute a pre-resolved SE name (e.g. the
  * time-suffixed ephemeral variant); when omitted it defaults to the clean
- * `buildScheduledEventName`.
+ * `buildScheduledEventName`. `place` sets the entity: a channel id → Voice in
+ * that channel, `{ location }` → External, null → entity left untouched.
  */
 export async function tryEditFullEvent(
   guild: Guild,
@@ -311,7 +319,7 @@ export async function tryEditFullEvent(
   seId: string,
   eventData: ScheduledEventData,
   description: string,
-  voiceChannelId: string | null,
+  place: SEPlace | null,
   name?: string,
 ): Promise<void> {
   await timedDiscordCall(
@@ -322,7 +330,7 @@ export async function tryEditFullEvent(
         scheduledStartTime: parseEventTimestampUtc(eventData.startTime),
         scheduledEndTime: parseEventTimestampUtc(eventData.endTime),
         description,
-        ...(voiceChannelId ? { channel: voiceChannelId } : {}),
+        ...seEditEntity(place || null),
       }),
     { eventId, op: 'update' },
   );

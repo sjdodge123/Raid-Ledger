@@ -16,7 +16,6 @@ import {
   type ScheduledEventData,
 } from './scheduled-event.helpers';
 import {
-  findStartCandidates,
   getScheduledEventId,
   getEventWithOverride,
   clearScheduledEventId,
@@ -31,7 +30,7 @@ import {
   resolveVoiceForEdit,
   resolveEditedScheduledEventName,
 } from './scheduled-event.discord-ops';
-import { pruneStartWarnings, startCandidate } from './scheduled-event.start';
+import { runStartPass } from './scheduled-event.start';
 import {
   createScheduledEventIdempotent,
   type GuildSECache,
@@ -42,6 +41,7 @@ import {
   type SECompletionRun,
 } from './scheduled-event.completion';
 import { completeAndSweep } from './scheduled-event.embed-completion';
+import { plannedSELocation } from './scheduled-event.planned-voice';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -96,15 +96,12 @@ export class ScheduledEventService {
       this.eventCache.getActiveEvents(new Date()).length === 0
     )
       return false;
-    const candidates = await findStartCandidates(this.db);
-    pruneStartWarnings(this.startWarned, candidates);
-    if (candidates.length === 0) return false;
-    const deps = {
+    return runStartPass(guild, {
+      db: this.db,
       logger: this.logger,
       warned: this.startWarned,
-      clear: (id: number) => clearScheduledEventId(this.db, id),
-    };
-    for (const c of candidates) await startCandidate(guild, c, deps);
+      channelResolver: this.channelResolver,
+    });
   }
 
   /** Cron: auto-complete Discord Scheduled Events past end time (ROK-717, ROK-860). */
@@ -189,6 +186,7 @@ export class ScheduledEventService {
             : {}),
           channelResolver: this.channelResolver,
           describe: (id, data) => desc(this.settingsService, id, data),
+          plannedVoiceSettings: this.settingsService,
         },
         cache,
       );
@@ -319,11 +317,14 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
   ): Promise<void> {
-    const d = await desc(this.settingsService, eventId, eventData);
+    const s = this.settingsService;
+    const d = await desc(s, eventId, eventData);
+    // A planned temporary channel keeps the SE External (2026-11-13).
+    const planDeps = { settings: s, channelResolver: this.channelResolver };
+    const loc = await plannedSELocation(this.db, planDeps, eventId, eventData);
     const vc = await resolveVoiceForEdit(event, gameId, this.channelResolver);
-    const name = await resolveEditedScheduledEventName(event, eventData, () =>
-      this.settingsService.getDefaultTimezone(),
-    );
+    const tz = () => s.getDefaultTimezone();
+    const name = await resolveEditedScheduledEventName(event, eventData, tz);
     try {
       await tryEditFullEvent(
         guild,
@@ -331,7 +332,7 @@ export class ScheduledEventService {
         event.discordScheduledEventId!,
         eventData,
         d,
-        vc,
+        loc ? { location: loc } : vc,
         name,
       );
     } catch (err) {

@@ -5,8 +5,16 @@ import { eq, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { EventResponseDto } from '@raid-ledger/contract';
+import type { ModuleRef } from '@nestjs/core';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
 import { toEmbedGame } from '../discord-bot/services/embed-game.helpers';
+import {
+  applyEmbedVoice,
+  type EmbedVoiceDeps,
+} from '../discord-bot/services/embed-voice.helpers';
+import { getEphemeralVoiceState } from '../discord-bot/services/ephemeral-voice.db-helpers';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import type { PlannedVoiceSettingsSource } from '../discord-bot/services/planned-ephemeral-voice.helpers';
 
 const INACTIVE_STATUSES = ['declined', 'roached_out', 'departed'];
 
@@ -100,8 +108,52 @@ function buildSignupMentions(
     }));
 }
 
-/** Builds the full embed event data for Discord rendering. */
+/**
+ * The voice deps for `buildEmbedEventData`, resolved lazily: the channel
+ * resolver lives in the Discord bot module, which imports the events module,
+ * so it is looked up at call time. Undefined when it is not registered (a
+ * unit-test module) — the embed then has no voice line, as before.
+ */
+export function embedVoiceDepsFrom(
+  providers: Pick<ModuleRef, 'get'>,
+  settings: PlannedVoiceSettingsSource,
+): EmbedVoiceDeps | undefined {
+  try {
+    const channelResolver = providers.get(ChannelResolverService, {
+      strict: false,
+    });
+    return { settings, channelResolver };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Builds the full embed event data for Discord rendering. With `voice` deps the
+ * result also carries the shared embed voice decision (`applyEmbedVoice`: the
+ * planned temporary channel, else the voice link), so every interactive writer
+ * (signup buttons, unfurls, share) renders the same voice line as the poster
+ * and the sync processor instead of wiping it.
+ */
 export async function buildEmbedEventData(
+  db: PostgresJsDatabase<typeof schema>,
+  event: EventResponseDto,
+  eventId: number,
+  voice?: EmbedVoiceDeps,
+): Promise<EmbedEventData> {
+  const data = await buildBaseEmbedEventData(db, event, eventId);
+  if (!voice) return data;
+  await applyEmbedVoice(voice, data, {
+    gameId: event.game?.id ?? null,
+    recurrenceGroupId: event.recurrenceGroupId ?? null,
+    notificationChannelOverride: event.notificationChannelOverride ?? null,
+    ephemeral: await getEphemeralVoiceState(db, eventId),
+  });
+  return data;
+}
+
+/** The embed data without the voice line (roster, counts, game). */
+async function buildBaseEmbedEventData(
   db: PostgresJsDatabase<typeof schema>,
   event: EventResponseDto,
   eventId: number,

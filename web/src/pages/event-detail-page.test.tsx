@@ -16,7 +16,7 @@
  * quest-coverage which are kept independent). MSW serves the fixture →
  * assertions pass. GREEN.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -26,6 +26,8 @@ import { render } from '@testing-library/react';
 import { server } from '../test/mocks/server';
 import { createTestQueryClient } from '../test/render-helpers';
 import { EventDetailPage } from './event-detail-page';
+import { useTimezoneStore } from '../stores/timezone-store';
+import type { VoiceChannelResponseDto } from '@raid-ledger/contract';
 
 const API_BASE = 'http://localhost:3000';
 const EVENT_ID = 4242;
@@ -204,14 +206,16 @@ function legacyRejectHandlers() {
     ];
 }
 
-function detailHandler(eventOverrides: Record<string, unknown> = {}) {
+type VoiceSlice = VoiceChannelResponseDto;
+
+function detailHandler(eventOverrides: Record<string, unknown> = {}, voiceChannel?: VoiceSlice) {
     return http.get(`${API_BASE}/events/:id/detail`, ({ params }) => {
         const requestedId = Number(params.id);
         if (requestedId !== EVENT_ID) {
             return HttpResponse.json({ error: 'not-found' }, { status: 404 });
         }
         const fixture = buildDetailFixture();
-        return HttpResponse.json({ ...fixture, event: { ...fixture.event, ...eventOverrides } });
+        return HttpResponse.json({ ...fixture, event: { ...fixture.event, ...eventOverrides }, voiceChannel: voiceChannel ?? fixture.voiceChannel });
     });
 }
 
@@ -242,9 +246,9 @@ function allowedSidebandHandlers() {
     ];
 }
 
-function renderEventDetailPage(eventOverrides: Record<string, unknown> = {}) {
+function renderEventDetailPage(eventOverrides: Record<string, unknown> = {}, voiceChannel?: VoiceSlice) {
     server.use(
-        detailHandler(eventOverrides),
+        detailHandler(eventOverrides, voiceChannel),
         ...allowedSidebandHandlers(),
         ...legacyRejectHandlers(),
     );
@@ -432,5 +436,41 @@ describe('EventDetailPage — Delete Event asks before deleting (TDB 2026-10-15 
         fireEvent.click(within(dialog).getByRole('button', { name: 'Keep Event' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         expect(deletes()).toBe(0);
+    });
+});
+
+describe('EventDetailPage — planned temporary voice channel (operator ruling 2026-11-13)', () => {
+    const originalResolved = useTimezoneStore.getState().resolved;
+    beforeEach(() => useTimezoneStore.setState({ resolved: 'UTC' }));
+    afterEach(() => useTimezoneStore.setState({ resolved: originalResolved }));
+
+    it('shows the planned channel name and when it opens, not a link', async () => {
+        renderEventDetailPage({}, { channelId: null, channelName: '⏰ Stocks 5 man', guildId: null, plannedOpensAt: '2026-08-10T20:30:00.000Z' });
+        const heading = await screen.findByRole('heading', { name: FIXTURE_TITLE }, { timeout: 4000 });
+        const bannerContent = heading.parentElement;
+        expect(bannerContent).toHaveTextContent('🔊 ⏰ Stocks 5 man · opens 8:30 PM');
+        expect(within(screen.getByTestId('event-banner-voice-channel')).queryByRole('link')).not.toBeInTheDocument();
+    });
+
+    it('shows a created channel by name with no "opens" suffix', async () => {
+        renderEventDetailPage();
+        const voice = await screen.findByTestId('event-banner-voice-channel', {}, { timeout: 4000 });
+        expect(voice).toHaveTextContent(FIXTURE_VOICE_CHANNEL_NAME);
+        expect(voice).not.toHaveTextContent('opens');
+    });
+
+    it('links a created channel to Discord over https (a discord:// link was dropped by the URL guard)', async () => {
+        renderEventDetailPage();
+        const voice = await screen.findByTestId('event-banner-voice-channel', {}, { timeout: 4000 });
+        expect(within(voice).getByRole('link', { name: FIXTURE_VOICE_CHANNEL_NAME })).toHaveAttribute(
+            'href',
+            'https://discord.com/channels/444555666/111222333',
+        );
+    });
+
+    it('shows no voice channel when there is neither a channel nor a plan', async () => {
+        renderEventDetailPage({}, { channelId: null, channelName: null, guildId: null });
+        await screen.findByText(FIXTURE_TITLE, {}, { timeout: 4000 });
+        expect(screen.queryByTestId('event-banner-voice-channel')).not.toBeInTheDocument();
     });
 });

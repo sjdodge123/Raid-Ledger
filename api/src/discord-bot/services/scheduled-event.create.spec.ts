@@ -86,6 +86,7 @@ function preamble(): CreatePreamble {
     gameId: 1,
     channelResolver: {
       resolveVoiceChannelHonoringOverride: jest.fn().mockResolvedValue('v'),
+      overrideIsVoiceChannel: jest.fn().mockReturnValue(true),
     },
     describe: jest.fn().mockResolvedValue('desc'),
   };

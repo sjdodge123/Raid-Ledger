@@ -454,6 +454,12 @@ export const VoiceChannelResponseSchema = z.object({
   channelId: z.string().nullable(),
   channelName: z.string().nullable(),
   guildId: z.string().nullable(),
+  /**
+   * Set while a temporary voice channel is planned but not created yet: the
+   * ISO time it opens. `channelName` then carries the planned name and
+   * `channelId` is null (operator ruling 2026-11-13). Additive.
+   */
+  plannedOpensAt: z.string().nullable().optional(),
 });
 export type VoiceChannelResponseDto = z.infer<
   typeof VoiceChannelResponseSchema

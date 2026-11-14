@@ -93,6 +93,12 @@ export interface EmbedEventData {
     badges?: GameBadgeInputs;
   } | null;
   voiceChannelId?: string | null;
+  /**
+   * A temporary voice channel that is planned but not created yet (operator
+   * ruling 2026-11-13). Rendered as plain text + open time; set only when
+   * `voiceChannelId` is not.
+   */
+  plannedVoiceChannel?: { name: string; opensAt: string } | null;
   /** ROK-1728: set on a series night ⇒ the embed gets a Join Series row. */
   recurrenceGroupId?: string | null;
 }
