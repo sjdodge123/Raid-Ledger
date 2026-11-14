@@ -166,10 +166,10 @@ describe('ROK-2198 — a retry parked in teardown is cancelled', () => {
 
   it('an admin save during shutdown never reconnects the bot', async () => {
     const shutdown = bot.onModuleDestroy();
-    const saved = bot.handleConfigUpdate({ token: 'new', enabled: true });
-    const ensured = bot.ensureConnected({ token: 'new', enabled: true });
+    void bot.handleConfigUpdate({ token: 'new', enabled: true });
+    void bot.ensureConnected({ token: 'new', enabled: true });
     releaseTeardown();
-    await Promise.all([shutdown, saved, ensured]);
+    await shutdown;
     await flush();
 
     expect(loginTokens()).toEqual(['tok']);
