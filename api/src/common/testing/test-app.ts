@@ -60,7 +60,9 @@ import {
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
 import { WOWHEAD_RESOLVER_DEPS } from '../../plugins/wow-common/wowhead-item/wow-item-meta.resolve';
 import { FOREVER_QUEST_AUTO_IMPORT_KICKS } from '../../plugins/wow-common/forever-quest-import/forever-quest-auto-import.service';
+import { WOW_BOOT_SEED_ENABLED } from '../../plugins/wow-common/wow-boot-seed';
 import { noNetworkWowheadDeps } from './wowhead-no-network';
+import { instrumentProviderInitHooks } from './integration-provider-timer';
 import { installValheimLinkBodyBypass } from '../../plugins/valheim/link/ingest/valheim-link-body-bypass';
 import { installCompanionBodyBypass } from '../../companion/ingest/companion-body-bypass';
 // ROK-1264: `supertest-persistent-agent` is intentionally NOT wired here.
@@ -245,6 +247,10 @@ async function buildNestApp(
     // ROK-2162: no boot / settings-save quest import; specs call it directly.
     .overrideProvider(FOREVER_QUEST_AUTO_IMPORT_KICKS)
     .useValue(false)
+    // ROK-2196: the setup file truncates right after init, so the ~6.6k-row
+    // WoW boot seed was wiped unread; specs that need it seed explicitly.
+    .overrideProvider(WOW_BOOT_SEED_ENABLED)
+    .useValue(false)
     .compile();
   recordPhase('module', moduleStart);
   const app = moduleRef.createNestApplication<NestExpressApplication>();
@@ -261,6 +267,7 @@ async function buildNestApp(
   // existing spec; specs that set Origin/Host exercise the real policy.
   applyCorsPolicy(app, { isProduction: false });
   instrumentLifecycleHooks(app);
+  instrumentProviderInitHooks(app);
   const initStart = phaseMark();
   await app.init();
   recordPhase('init', initStart);
