@@ -179,7 +179,7 @@ function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => computeDateRange(currentDate, view, isScheduleView), [currentDate, view, isScheduleView]);
     const { data: eventsData, isLoading, isFetching } = useEvents({ startAfter, endBefore, includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY, limit: 100 });
-    const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved));
+    const calendarEvents = useHubFilteredEvents(useCalendarEvents(eventsData, selectedGames, resolved), eventsData?.data);
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
     return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };

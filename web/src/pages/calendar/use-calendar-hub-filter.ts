@@ -46,13 +46,25 @@ onViewerChange(() => useCalendarHubFilterStore.getState().clearViewer());
 
 export const hubKeyOf = (e: Pick<EventResponseDto, 'hub'>): HubKey => e.hub?.id ?? NO_HUB;
 
-/** `CalendarView`: remember the loaded events' hubs, return the events whose hub is shown. */
-export function useHubFilteredEvents<T extends { resource: EventResponseDto }>(events: T[]): T[] {
+const hubsOf = (events: ReadonlyArray<Pick<EventResponseDto, 'hub'>>): EventHubRef[] =>
+    events.flatMap((e) => (e.hub ? [e.hub] : []));
+
+/**
+ * `CalendarView`: remember the loaded events' hubs, return the events whose hub
+ * is shown. Pass `loaded` — the fetched events BEFORE the game filter — so the
+ * Hubs group lists its hubs even when the game filter hides every event (Games
+ * = None survives a reload since #2132, and the store does not); without it
+ * the hubs are learned from `events` alone.
+ */
+export function useHubFilteredEvents<T extends { resource: EventResponseDto }>(
+    events: T[],
+    loaded?: ReadonlyArray<Pick<EventResponseDto, 'hub'>>,
+): T[] {
     const addKnown = useCalendarHubFilterStore((s) => s.addKnown);
     const hidden = useCalendarHubFilterStore((s) => s.hidden);
     useEffect(() => {
-        addKnown(events.flatMap((e) => (e.resource.hub ? [e.resource.hub] : [])));
-    }, [events, addKnown]);
+        addKnown(hubsOf(loaded ?? events.map((e) => e.resource)));
+    }, [events, loaded, addKnown]);
     return useMemo(() => (hidden.size === 0 ? events : events.filter((e) => !hidden.has(hubKeyOf(e.resource)))), [events, hidden]);
 }
 

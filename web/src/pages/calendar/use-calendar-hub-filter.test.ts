@@ -68,4 +68,16 @@ describe('useCalendarHubFilterStore.clearViewer (ROK-1893 P4)', () => {
         const after = useCalendarHubFilterStore.getState();
         expect({ known: after.known, hidden: [...after.hidden] }).toEqual({ known: [], hidden: [] });
     });
+
+    it('lists the loaded hubs even when the game filter (None) hides every event', () => {
+        // #2132 verify lane: Games = None, reload → the Hubs group vanished,
+        // because hubs were learned only from the game-filtered events.
+        const loaded = EVENTS.map((e) => e.resource);
+        const { result } = renderHook(() => ({
+            visible: useHubFilteredEvents([], loaded),
+            hubs: useCalendarHubFilter(),
+        }));
+        expect(result.current.hubs.known.map((h) => h.name)).toEqual(['Alpha Solo', 'Seed Crew']);
+        expect(result.current.visible).toEqual([]);
+    });
 });
