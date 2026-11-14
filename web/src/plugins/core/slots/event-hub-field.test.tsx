@@ -166,7 +166,9 @@ describe('EventHubField — a crafted ?guildId= (ROK-1817)', () => {
         expect(options, 'the list the edit form settled on').toEqual(['None', UNLISTED_HUB_LABEL, 'Seed Server']);
         expect(onGuildChange, 'edit mode must not clear a tag absent from the list').not.toHaveBeenCalled();
     });
+});
 
+describe('EventHubField — edit-mode stand-in for a tagged hub the viewer cannot list', () => {
     it('edit mode: an event tagged to a hub the viewer cannot list keeps that hub selected, as a stand-in option', async () => {
         serve([SERVER]);
         renderField(21);

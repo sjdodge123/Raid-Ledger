@@ -85,18 +85,6 @@ describe('Add my saves — cross-hub bind asks first', () => {
         expect(calls).toEqual(['bind']);
     });
 
-    it('while the bind request runs the checkboxes are locked, so a cross-hub hold cannot resend a stale pick', async () => {
-        let release: () => void = () => undefined;
-        const held = new Promise<void>((resolve) => { release = resolve; });
-        server.use(http.put(BG3_KEY_URL, async ({ request }) => { record(await request.json()); await held; return new HttpResponse(null, { status: 204 }); }));
-        const sheet = await addOne(userEvent.setup(), true);
-        await waitFor(() => expect(calls, 'the bind request is in flight').toEqual(['bind']));
-        for (const box of within(sheet).getAllByRole('checkbox')) expect(box, `"${box.closest('label')?.textContent ?? ''}" must be locked while the bind runs`).toBeDisabled();
-        release();
-        await settled();
-        expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
     it('Cancel sends nothing further and keeps the sheet open', async () => {
         server.use(bg3BindKeyCrossHubHandler(MOVE, record));
         const user = userEvent.setup();
@@ -150,5 +138,19 @@ describe('Add my saves — several holds, and failures that are not a hold', () 
         expect(screen.queryByTestId(CONFIRM)).not.toBeInTheDocument();
         expect(onClose).not.toHaveBeenCalled();
         vi.mocked(toast.error).mockClear();
+    });
+});
+
+describe('Add my saves — the pick is locked while a bind is in flight', () => {
+    it('while the bind request runs the checkboxes are locked, so a cross-hub hold cannot resend a stale pick', async () => {
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.put(BG3_KEY_URL, async ({ request }) => { record(await request.json()); await held; return new HttpResponse(null, { status: 204 }); }));
+        const sheet = await addOne(userEvent.setup(), true);
+        await waitFor(() => expect(calls, 'the bind request is in flight').toEqual(['bind']));
+        for (const box of within(sheet).getAllByRole('checkbox')) expect(box, `"${box.closest('label')?.textContent ?? ''}" must be locked while the bind runs`).toBeDisabled();
+        release();
+        await settled();
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
