@@ -7,6 +7,7 @@ import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import {
   CLOSE_WAIT_MS,
   InsightsFlights,
+  MAX_COMPUTE_ATTEMPTS,
   type FlightHooks,
 } from './roster-insights.cache-flight';
 
@@ -68,5 +69,44 @@ describe('InsightsFlights.close', () => {
     void flights.run('k', () => Promise.resolve(dto('new')));
     await flights.close();
     expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
+/**
+ * TECH-DEBT td8 — a warm asked for while the key is in flight is replayed
+ * when that compute exhausts its attempts without storing (every attempt
+ * superseded), so the key is not left cold for the next reader.
+ */
+describe('InsightsFlights.scheduleWarm while in flight', () => {
+  it('re-warms a key whose in-flight compute exhausts its attempts', async () => {
+    const hooks = makeHooks();
+    const flights = new InsightsFlights(hooks);
+    const compute = jest.fn(() => {
+      flights.bumpPrefix('k');
+      return Promise.resolve(dto('stale'));
+    });
+    const warm = jest.fn(() => Promise.resolve(dto('warm')));
+    const flight = flights.run('k', compute);
+    flights.scheduleWarm('k', warm);
+    const outcome = await flight;
+    // close() waits for the replayed warm, which is already running.
+    await flights.close();
+    expect(compute).toHaveBeenCalledTimes(MAX_COMPUTE_ATTEMPTS);
+    expect(outcome.current).toBe(false);
+    expect(warm).toHaveBeenCalledTimes(1);
+    expect(hooks.store).toHaveBeenCalledWith('k', dto('warm'));
+  });
+
+  it('drops the warm mark when the in-flight compute stores', async () => {
+    const hooks = makeHooks();
+    const flights = new InsightsFlights(hooks);
+    const warm = jest.fn(() => Promise.resolve(dto('warm')));
+    const flight = flights.run('k', () => Promise.resolve(dto('fresh')));
+    flights.scheduleWarm('k', warm);
+    expect((await flight).current).toBe(true);
+    await flights.close();
+    expect(warm).not.toHaveBeenCalled();
+    expect(hooks.store).toHaveBeenCalledTimes(1);
+    expect(hooks.store).toHaveBeenCalledWith('k', dto('fresh'));
   });
 });

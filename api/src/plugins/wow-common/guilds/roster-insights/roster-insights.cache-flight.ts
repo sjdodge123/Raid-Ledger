@@ -38,6 +38,8 @@ export class InsightsFlights {
   private readonly generations = new Map<string, number>();
   private readonly inFlight = new Map<string, Promise<ComputeOutcome>>();
   private readonly queued = new Map<string, InsightsCompute>();
+  /** Warms asked for while the key was in flight; replayed if it lands stale. */
+  private readonly rewarm = new Map<string, InsightsCompute>();
   private activeWarms = 0;
   private closed = false;
   private readonly logger = new Logger('RosterInsightsCache');
@@ -72,9 +74,17 @@ export class InsightsFlights {
     );
   }
 
-  /** Queue a background warm of `key` (no-op once closed or while running). */
+  /**
+   * Queue a background warm of `key` (no-op once closed). While the key is in
+   * flight the running compute absorbs the bump, so the warm is only marked —
+   * and replayed if that compute exhausts its attempts without storing.
+   */
   scheduleWarm(key: string, compute: InsightsCompute): void {
-    if (this.closed || this.inFlight.has(key)) return;
+    if (this.closed) return;
+    if (this.inFlight.has(key)) {
+      this.rewarm.set(key, compute);
+      return;
+    }
     this.queued.set(key, compute);
     this.drain();
   }
@@ -86,6 +96,7 @@ export class InsightsFlights {
   async close(): Promise<void> {
     this.closed = true;
     this.queued.clear();
+    this.rewarm.clear();
     await settleWithin([...this.inFlight.values()], CLOSE_WAIT_MS);
   }
 
@@ -94,12 +105,14 @@ export class InsightsFlights {
    * (stored), or `MAX_COMPUTE_ATTEMPTS` ran, or the coordinator closed
    * (returned, not stored — no new query once shutdown has begun). The
    * in-flight marker is cleared in the same tick as the final check, so a
-   * later invalidation always finds the key free.
+   * later invalidation always finds the key free. A superseded result with a
+   * warm marked meanwhile re-queues that warm, so the key does not stay cold.
    */
   private async attempts(
     key: string,
     compute: InsightsCompute,
   ): Promise<ComputeOutcome> {
+    let stale = false;
     try {
       let gen = this.generation(key);
       let data = await compute();
@@ -110,10 +123,19 @@ export class InsightsFlights {
       }
       const current = this.generation(key) === gen;
       if (current) this.hooks.store(key, data);
+      stale = !current;
       return { data, current };
     } finally {
       this.inFlight.delete(key);
+      this.replayRewarm(key, stale);
     }
+  }
+
+  /** Clear `key`'s warm mark; re-queue it when the compute landed stale. */
+  private replayRewarm(key: string, stale: boolean): void {
+    const compute = this.rewarm.get(key);
+    this.rewarm.delete(key);
+    if (stale && compute) this.scheduleWarm(key, compute);
   }
 
   private generation(key: string): number {
