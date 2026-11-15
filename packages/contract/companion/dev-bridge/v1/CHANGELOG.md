@@ -7,6 +7,25 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-15 (settled probe-queue behaviour written down — docs only, no wire change)
+
+Documents behaviour the companion and LedgerLink already settled; no schema,
+allowlist or fixture changed.
+
+- A full queue (50 probes for the flavor) makes POST answer 400
+  `invalid_request`.
+- DELETE on an `answered`, `expired` or `rejected` probe → 400; on an
+  already-`cancelled` one → 200 (idempotent).
+- `probe-list` is sorted newest first.
+- `ttlHours` is measured from the `probeId`'s ULID timestamp; the queue keeps
+  no separate queued-at.
+- A `fn` probe of a name-bearing function is answered `denied`
+  ("presence only"); `probe-result` gains no `presence` status in v1.
+- The allowlist `redact` rule on `GetGuildRosterInfo` is noted as inert (the
+  call is never made); it stays in `allowlist.json`.
+- `docs/runbooks/dev-bridge.md` gains the SavedVariables round-trip timing and
+  the ROK-2210 lesson on load-on-demand UI data.
+
 ## v1 — 2026-11-15 (probe consumer folds into LedgerLink; DungeonBuddy readable — ROK-2190, amended in place)
 
 Operator ruling 2026-11-15: no separate probe addon — LedgerLink is the dev
