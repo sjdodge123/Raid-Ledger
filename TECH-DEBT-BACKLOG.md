@@ -4362,3 +4362,6 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-15 — fix/overnight-td8-2026-11-15 (surfaced during the td8 delta review)
 
 - **low** `api/src/plugins/wow-common/guilds/roster-insights/roster-insights.cache-flight.ts:67-68` — if a compute throws synchronously (a non-async function), `attempts`' `finally` runs before `inFlight.set`, so the rejected flight stays in `inFlight` for good and that key is never computed again in this process. Pre-existing (the ordering predates td8; every current compute is async, so it does not fire today). Suggested: set `inFlight` before calling `attempts`, or wrap the call as `Promise.resolve().then(compute)`.
+
+### 2026-11-15 — fix/overnight-td10-2026-11-15 (resolutions)
+- **resolved** the `voice-activity.test.ts:1084-1101` (`rok943ClassifyAllStatuses`) entry dated 2026-11-12/13 ("attended: expected 4, got 0"): `injectVoiceSessionForTest` (`api/src/admin/demo-test-voice.helpers.ts`) now upserts on `(event_id, discord_user_id)` and clears `classification`, so a cron-written 0-second `no_show` row no longer swallows the injected session. Regression: `demo-test-voice.helpers.integration.spec.ts`.
