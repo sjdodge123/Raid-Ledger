@@ -22,10 +22,10 @@ import {
   type QuestDoneFn,
 } from './quest-progress-addon.helpers';
 import {
-  readinessColumns,
-  type ReadinessColumn,
-} from './event-quest-readiness.columns';
-import { characterSide, sharedSide } from './quest-faction.helpers';
+  characterSide,
+  isQuestUsableBySide,
+  sharedSide,
+} from './quest-faction.helpers';
 
 /** Contract caps (`wow-event-quest-readiness.schema.ts`). */
 export const MAX_READINESS_QUESTS = 200;
@@ -130,36 +130,23 @@ function perQuestFor(
   };
 }
 
-/** The signup's usable variant of each column, reported under its id. */
-function signupPerQuest(
-  s: ReadinessSignup,
-  columns: ReadinessColumn[],
-  progress: SignupProgress,
-  lookup: Map<number, DungeonQuestDto>,
-): PerQuest[] {
-  return columns.flatMap(({ quest, variants }) => {
-    const usable = variants.find((q) =>
-      isQuestUsableBy(q, s.charClass, s.charRace, s.charFaction),
-    );
-    if (!usable) return [];
-    const cell = perQuestFor(usable, progress, lookup);
-    return [{ ...cell, questId: quest.questId }];
-  });
-}
-
 function signupRow(
   s: ReadinessSignup,
-  columns: ReadinessColumn[],
+  quests: DungeonQuestDto[],
   input: ReadinessInput,
   manual: ManualProgressRow[],
 ): SignupRow {
   const progress = signupProgress(s, input, manual);
+  // Each cell keeps its own quest id: no same-name merge (ROK-2211 fix 1).
+  const usable = quests.filter((q) =>
+    isQuestUsableBy(q, s.charClass, s.charRace, s.charFaction),
+  );
   return {
     userId: s.userId,
     // The character the signup uses for this event (null = no character).
     characterId: s.characterId,
     name: (s.characterName ?? s.username).slice(0, 64),
-    perQuest: signupPerQuest(s, columns, progress, input.quests.lookup),
+    perQuest: usable.map((q) => perQuestFor(q, progress, input.quests.lookup)),
   };
 }
 
@@ -178,27 +165,26 @@ function groupManual(
 export function buildQuestReadiness(
   input: ReadinessInput,
 ): EventQuestReadinessDto {
-  // ROK-2211: a single-faction roster sees only its side's quests.
+  // ROK-2211: a guild is single-faction, so a roster that shares a side sees
+  // only the quests that side can take (neutral ones always stay). Same-name
+  // variants keep their own columns: they can be distinct chain steps.
   const side = sharedSide(
     input.signups.map((s) => characterSide(s.charRace, s.charFaction)),
   );
-  const eventQuests = input.quests.eventQuests.filter(
-    (q) => q.dungeonInstanceId !== null,
-  );
-  // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
-  const columns = readinessColumns(eventQuests, side).slice(
-    0,
-    MAX_READINESS_QUESTS,
-  );
+  const quests = input.quests.eventQuests
+    .filter((q) => q.dungeonInstanceId !== null)
+    .filter((q) => isQuestUsableBySide(q, side))
+    // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
+    .slice(0, MAX_READINESS_QUESTS);
   const manual = groupManual(input.manual);
   return {
-    quests: columns.map(({ quest: q }) => ({
+    quests: quests.map((q) => ({
       questId: q.questId,
       title: q.name.slice(0, 200),
       instanceId: q.dungeonInstanceId ?? 0,
     })),
     signups: input.signups
       .slice(0, MAX_READINESS_SIGNUPS)
-      .map((s) => signupRow(s, columns, input, manual.get(s.userId) ?? [])),
+      .map((s) => signupRow(s, quests, input, manual.get(s.userId) ?? [])),
   };
 }
