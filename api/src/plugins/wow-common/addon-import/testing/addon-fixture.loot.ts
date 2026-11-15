@@ -57,11 +57,21 @@ export function buildLootPayload(
   };
 }
 
-/** The golden `loot` fixture: two boss drops, a trash stack, a linked drop. */
+/**
+ * The golden `loot` fixture, oldest first (CONTRACT §3): three Lucifron
+ * drops inside one kill's 300 s attribution window (Q4) — two boss drops and
+ * a linked one — then a trash stack a day later.
+ */
 export function buildLootFixturePayload(): AddonLootExport {
+  const kill = buildLootDrop(0).at;
   return buildLootPayload([
     buildLootDrop(0),
-    buildLootDrop(1, { method: 'roll' }),
+    buildLootDrop(1, { at: kill + 60, method: 'roll' }),
+    buildLootDrop(3, {
+      at: kill + 120,
+      link: '|cffa335ee|Hitem:16803::::::::60:::::|h[Example Boots]|h|r',
+      method: 'unknown',
+    }),
     {
       at: FIXTURE_EXPORTED_AT - 2 * DAY,
       itemId: 12360,
@@ -71,9 +81,5 @@ export function buildLootFixturePayload(): AddonLootExport {
       instanceId: 409,
       difficultyId: 9,
     },
-    buildLootDrop(3, {
-      link: '|cffa335ee|Hitem:16803::::::::60:::::|h[Example Boots]|h|r',
-      method: 'unknown',
-    }),
   ]);
 }
