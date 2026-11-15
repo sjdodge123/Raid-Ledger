@@ -5,12 +5,18 @@
  * variants) are merged so only the best match for the character is shown.
  */
 import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
+import { isQuestUsableBySide, type QuestSide } from './quest-faction';
 
-/** Check if a quest is usable by a character's class/race */
+/**
+ * Check if a quest is usable by a character's class/race. With no race, the
+ * quest is judged by `side` (ROK-2211: the character's faction column or the
+ * guild's faction); neutral quests stay and an unknown side keeps everything.
+ */
 export function isQuestUsable(
     quest: EnrichedDungeonQuestDto,
     charClass: string | null,
     charRace: string | null,
+    side: QuestSide | null = null,
 ): boolean {
     const classRestrictions = quest.classRestriction as string[] | null;
     const raceRestrictions = quest.raceRestriction as string[] | null;
@@ -18,9 +24,10 @@ export function isQuestUsable(
     const classMatch = !classRestrictions || classRestrictions.length === 0
         || !charClass
         || classRestrictions.some(c => c.toLowerCase() === charClass.toLowerCase());
-    const raceMatch = !raceRestrictions || raceRestrictions.length === 0
-        || !charRace
-        || raceRestrictions.some(r => r.toLowerCase() === charRace.toLowerCase());
+    const raceMatch = charRace
+        ? !raceRestrictions || raceRestrictions.length === 0
+            || raceRestrictions.some(r => r.toLowerCase() === charRace.toLowerCase())
+        : isQuestUsableBySide(quest, side);
     return classMatch && raceMatch;
 }
 
