@@ -26,16 +26,21 @@ type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
 /** Tiebreaker row status values, mirroring the column's check constraint. */
 export type TiebreakerStatus = 'pending' | 'active' | 'resolved' | 'dismissed';
 
-/** Load a lineup and assert it is still in `voting`. Throws 404 / 400. */
+/**
+ * Load a lineup and assert it is still in `voting`. Throws 404 / 400.
+ * `lock: true` reads the row `FOR UPDATE` — pass the open transaction as `db`.
+ */
 export async function findAndValidateLineup(
   db: Db,
   lineupId: number,
+  opts: { lock?: boolean } = {},
 ): Promise<LineupRow> {
-  const [lineup] = await db
+  const query = db
     .select()
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
+  const [lineup] = opts.lock ? await query.for('update') : await query;
   if (!lineup) throw new NotFoundException('Lineup not found');
   if (lineup.status !== 'voting') {
     throw new BadRequestException('Lineup must be in voting status');
@@ -116,16 +121,7 @@ export async function createActiveTiebreaker(
  * then see its `activeTiebreakerId` (400, same as the unlocked check).
  */
 async function lockLineupForStart(db: Db, lineupId: number): Promise<void> {
-  const [locked] = await db
-    .select()
-    .from(schema.communityLineups)
-    .where(eq(schema.communityLineups.id, lineupId))
-    .limit(1)
-    .for('update');
-  if (!locked) throw new NotFoundException('Lineup not found');
-  if (locked.status !== 'voting') {
-    throw new BadRequestException('Lineup must be in voting status');
-  }
+  const locked = await findAndValidateLineup(db, lineupId, { lock: true });
   assertNoActiveTiebreaker(locked);
 }
 
