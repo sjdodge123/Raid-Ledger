@@ -138,3 +138,21 @@ describe('InsightsFlights.scheduleWarm while in flight', () => {
     expect(hooks.store).toHaveBeenCalledWith('k', dto('fresh'));
   });
 });
+
+/**
+ * TECH-DEBT td12 — a compute that throws synchronously (a non-async
+ * function) must free the key, so the next caller computes it again.
+ */
+describe('InsightsFlights.run with a synchronously throwing compute', () => {
+  it('rejects and leaves the key free for the next compute', async () => {
+    const flights = new InsightsFlights(makeHooks());
+    const boom = jest.fn((): Promise<WowRosterInsightsDto> => {
+      throw new Error('sync boom');
+    });
+    await expect(flights.run('k', boom)).rejects.toThrow('sync boom');
+    expect(flights.isRunning('k')).toBe(false);
+    const next = jest.fn(() => Promise.resolve(dto('next')));
+    expect((await flights.run('k', next)).current).toBe(true);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+});
