@@ -51,6 +51,7 @@ const signup = (i: number): ReadinessSignup => ({
   characterName: `Char${i}`,
   charClass: 'Warrior',
   charRace: 'Human',
+  charFaction: null,
 });
 
 async function readinessFor(count: number) {

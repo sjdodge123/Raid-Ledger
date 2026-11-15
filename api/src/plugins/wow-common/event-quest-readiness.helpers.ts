@@ -21,6 +21,11 @@ import {
   type MergedProgressRow,
   type QuestDoneFn,
 } from './quest-progress-addon.helpers';
+import {
+  characterSide,
+  isQuestUsableBySide,
+  sharedSide,
+} from './quest-faction.helpers';
 
 /** Contract caps (`wow-event-quest-readiness.schema.ts`). */
 export const MAX_READINESS_QUESTS = 200;
@@ -37,6 +42,8 @@ export interface ReadinessSignup {
   characterName: string | null;
   charClass: string | null;
   charRace: string | null;
+  /** Stored faction column; the side when the race is unknown (ROK-2211). */
+  charFaction: string | null;
 }
 
 /** Everything the builder needs, loaded in batched queries. */
@@ -130,8 +137,9 @@ function signupRow(
   manual: ManualProgressRow[],
 ): SignupRow {
   const progress = signupProgress(s, input, manual);
+  // Each cell keeps its own quest id: no same-name merge (ROK-2211 fix 1).
   const usable = quests.filter((q) =>
-    isQuestUsableBy(q, s.charClass, s.charRace),
+    isQuestUsableBy(q, s.charClass, s.charRace, s.charFaction),
   );
   return {
     userId: s.userId,
@@ -157,8 +165,15 @@ function groupManual(
 export function buildQuestReadiness(
   input: ReadinessInput,
 ): EventQuestReadinessDto {
+  // ROK-2211: a guild is single-faction, so a roster that shares a side sees
+  // only the quests that side can take (neutral ones always stay). Same-name
+  // variants keep their own columns: they can be distinct chain steps.
+  const side = sharedSide(
+    input.signups.map((s) => characterSide(s.charRace, s.charFaction)),
+  );
   const quests = input.quests.eventQuests
     .filter((q) => q.dungeonInstanceId !== null)
+    .filter((q) => isQuestUsableBySide(q, side))
     // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
     .slice(0, MAX_READINESS_QUESTS);
   const manual = groupManual(input.manual);
