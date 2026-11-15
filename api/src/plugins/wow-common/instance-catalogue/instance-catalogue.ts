@@ -10,22 +10,12 @@ import type {
   CatalogueCategory,
   CatalogueInstance,
   CatalogueVariant,
-  LevelSource,
 } from './instance-catalogue.types';
 
-export { FOREVER_SEED_ID_BASE } from './forever-new.data';
-
-/** List DTO: today's `WowInstance` plus the two catalogue fields. */
-export type CatalogueListDto = WowInstance & {
-  levelSource: LevelSource;
-  wowheadZoneId: number | null;
-};
-
-/** Detail DTO: today's `WowInstanceDetail` plus the two catalogue fields. */
-export type CatalogueDetailDto = WowInstanceDetail & {
-  levelSource: LevelSource;
-  wowheadZoneId: number | null;
-};
+export {
+  FOREVER_SEED_ID_BASE,
+  FOREVER_SEED_ID_SPAN,
+} from './forever-new.data';
 
 /** `getAnyVariant` preference (D6). */
 const ANY_VARIANT_ORDER: readonly CatalogueVariant[] = [
@@ -98,14 +88,22 @@ export function instanceName(id: number): string {
   return row ? (row.questName ?? row.name) : `Instance ${id}`;
 }
 
+/** Every row (parent and wings) a Wowhead zone id covers for a variant. */
+export function allByWowheadZoneId(
+  zoneId: number,
+  v: CatalogueVariant,
+): CatalogueInstance[] {
+  return CATALOGUE_ROWS.filter(
+    (r) => r.wowheadZoneId === zoneId && r.variants.includes(v),
+  );
+}
+
 /** The row a Wowhead zone id stands for, preferring a non-wing (parent) row. */
 export function byWowheadZoneId(
   zoneId: number,
   v: CatalogueVariant,
 ): CatalogueInstance | null {
-  const hits = CATALOGUE_ROWS.filter(
-    (r) => r.wowheadZoneId === zoneId && r.variants.includes(v),
-  );
+  const hits = allByWowheadZoneId(zoneId, v);
   return hits.find((r) => r.parentId === null) ?? hits[0] ?? null;
 }
 
@@ -123,7 +121,7 @@ export function lowestDungeonLevel(v: CatalogueVariant): number {
   return Math.min(...listInstances(v, 'dungeon').map((r) => r.minimumLevel));
 }
 
-export function toListDto(r: CatalogueInstance): CatalogueListDto {
+export function toListDto(r: CatalogueInstance): WowInstance {
   return {
     id: r.id,
     name: r.name,
@@ -136,10 +134,9 @@ export function toListDto(r: CatalogueInstance): CatalogueListDto {
   };
 }
 
-export function toDetailDto(r: CatalogueInstance): CatalogueDetailDto {
+export function toDetailDto(r: CatalogueInstance): WowInstanceDetail {
   return {
     ...toListDto(r),
-    minimumLevel: r.minimumLevel,
     maxPlayers: r.maxPlayers,
     category: r.category,
   };
