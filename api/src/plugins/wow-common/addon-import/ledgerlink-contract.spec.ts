@@ -1,6 +1,7 @@
 /**
- * LedgerLink v1 conformance + drift guard (ROK-1724). Raid Ledger owns the
- * addon wire format (`packages/contract/ledgerlink/v1/CONTRACT.md`):
+ * LedgerLink v1 + v2 conformance + drift guard (ROK-1724, ROK-2184). Raid
+ * Ledger owns the addon wire format (`packages/contract/ledgerlink/v{1,2}/
+ * CONTRACT.md`); for EACH version folder:
  * - every golden `fixtures/*.txt` decodes, with the REAL decoder, to its
  *   `.json` (single-section `{ pages, payload }`, mixed `{ sections }`); every `fixtures/invalid/*.txt` fails with its `.json` code;
  * - the committed `schema.json` equals a fresh generation from the Zod
@@ -10,10 +11,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  ADDON_EXPORT_ENVELOPE_VERSION,
   AddonImportErrorCodeSchema,
   COMPANION_WOW_LEDGERLINK_EXPORT_MAX,
   serializeLedgerLinkJsonSchema,
+  serializeLedgerLinkV2JsonSchema,
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
@@ -27,24 +28,32 @@ import {
   buildInstalledAddons,
   buildInstalledAddonsWorstCase,
 } from './testing/addon-fixture.installed';
-import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
+import {
+  fixtureViewWithSchema,
+  ledgerLinkFixtureView,
+} from './testing/ledgerlink-fixture-view';
 import {
   TALENT_COL_STEP,
   TALENT_ROW_ORIGIN,
   TALENT_ROW_STEP,
   clusterOrigins,
 } from '../forever-talents.adapter';
+import { buildLootFixturePayload } from './testing/addon-fixture.loot';
 import { pinExportClock } from './testing/pin-export-clock';
 
 pinExportClock();
 
-const V1 = join(
+const LEDGERLINK = join(
   __dirname,
   '../../../../../packages/contract/ledgerlink',
-  `v${ADDON_EXPORT_ENVELOPE_VERSION}`,
 );
+/** v1 is frozen (ROK-2184): its folder never follows the current version. */
+const V1 = join(LEDGERLINK, 'v1');
 const FIXTURES = join(V1, 'fixtures');
 const INVALID = join(FIXTURES, 'invalid');
+const V2 = join(LEDGERLINK, 'v2');
+const V2_FIXTURES = join(V2, 'fixtures');
+const V2_INVALID = join(V2_FIXTURES, 'invalid');
 
 const namesIn = (dir: string): string[] =>
   readdirSync(dir)
@@ -65,30 +74,32 @@ function decodeErrorCode(paste: string): string {
   return 'DECODED_WITHOUT_ERROR';
 }
 
+const V1_VALID = [
+  'char-forever-quests',
+  'char-forever-quests-log-only',
+  'char-forever-quests-truncated',
+  'char-forever-talents-named',
+  'char-installed-addons',
+  'char-mailworthy',
+  'char-mailworthy-template-only',
+  'char-normal',
+  'char-null-ruleset-no-guild',
+  'char-roleplaying',
+  'char-rppvp',
+  'guild-1-page',
+  'guild-3-pages',
+  'guild-8-pages-2000-members',
+  'guild-ingame-text',
+  'mixed-char-guild3-raid-shuffled',
+  'mixed-char-raid',
+  'raid',
+];
+
 describe('LedgerLink v1 golden fixtures — valid', () => {
   const names = namesIn(FIXTURES);
 
   it('ships the agreed valid cases', () => {
-    expect(names).toEqual([
-      'char-forever-quests',
-      'char-forever-quests-log-only',
-      'char-forever-quests-truncated',
-      'char-forever-talents-named',
-      'char-installed-addons',
-      'char-mailworthy',
-      'char-mailworthy-template-only',
-      'char-normal',
-      'char-null-ruleset-no-guild',
-      'char-roleplaying',
-      'char-rppvp',
-      'guild-1-page',
-      'guild-3-pages',
-      'guild-8-pages-2000-members',
-      'guild-ingame-text',
-      'mixed-char-guild3-raid-shuffled',
-      'mixed-char-raid',
-      'raid',
-    ]);
+    expect(names).toEqual(V1_VALID);
   });
 
   it.each(names)('%s.txt decodes to %s.json', (name) => {
@@ -239,8 +250,107 @@ describe('char-forever-talents-named — hints follow CONTRACT §3 (ROK-1758)', 
   });
 });
 
-describe('LedgerLink v1 schema.json drift guard', () => {
-  it('matches a fresh generation from AddonExportSchema', () => {
+describe('LedgerLink schema.json drift guard', () => {
+  it('v1 (frozen) matches a fresh generation from AddonExportSchema', () => {
     expect(read(V1, 'schema.json')).toBe(serializeLedgerLinkJsonSchema());
+  });
+
+  it('v2 matches a fresh generation from AddonExportV2Schema (AC 5)', () => {
+    expect(read(V2, 'schema.json')).toBe(serializeLedgerLinkV2JsonSchema());
+  });
+});
+
+const LOOT_VALID = ['loot', 'loot-empty-window', 'mixed-char-guild3-raid-loot'];
+
+const decodeView = (dir: string, name: string): object =>
+  ledgerLinkFixtureView(decodeImportPaste(read(dir, `${name}.txt`)));
+
+describe('LedgerLink v2 golden fixtures — valid (ROK-2184)', () => {
+  const names = namesIn(V2_FIXTURES);
+
+  it('ships a v2 twin of every v1 case plus the loot cases', () => {
+    expect(names).toEqual([...V1_VALID, ...LOOT_VALID].sort());
+  });
+
+  it.each(names)('%s.txt decodes to %s.json', (name) => {
+    const expected: unknown = JSON.parse(read(V2_FIXTURES, `${name}.json`));
+    expect(decodeView(V2_FIXTURES, name)).toEqual(expected);
+  });
+
+  it.each(V1_VALID)(
+    '%s: the !RL2! twin decodes to the v1 view, schema 2 (AC 2)',
+    (name) => {
+      expect(decodeView(V2_FIXTURES, name)).toEqual(
+        fixtureViewWithSchema(decodeView(FIXTURES, name), 2),
+      );
+    },
+  );
+});
+
+describe('LedgerLink v2 loot section decodes (ROK-2184)', () => {
+  const golden = buildLootFixturePayload();
+  const dropKeys = golden.data.drops.map(({ at, itemId, looterName }) => ({
+    at,
+    itemId,
+    looterName,
+  }));
+
+  it('loot.txt is the builder payload: window, quality floor, every drop', () => {
+    expect(decodeView(V2_FIXTURES, 'loot')).toMatchObject({
+      pages: 1,
+      payload: {
+        schema: 2,
+        section: 'loot',
+        who: golden.who,
+        data: {
+          windowStart: golden.data.windowStart,
+          windowEnd: golden.data.windowEnd,
+          minQuality: 2,
+          drops: dropKeys,
+        },
+      },
+    });
+  });
+
+  it('an empty window decodes with no drops', () => {
+    expect(decodeView(V2_FIXTURES, 'loot-empty-window')).toMatchObject({
+      pages: 1,
+      payload: { section: 'loot', data: { drops: [] } },
+    });
+  });
+
+  it('"Export all" + loot (loot token first) orders char → guild → raid → loot', () => {
+    const decoded = decodeImportPaste(
+      read(V2_FIXTURES, 'mixed-char-guild3-raid-loot.txt'),
+    );
+    expect(decoded.order).toEqual(['char', 'guild', 'raid', 'loot']);
+    expect(decoded.tokens).toBe(6);
+  });
+});
+
+describe('LedgerLink v2 golden fixtures — invalid (ROK-2184)', () => {
+  const names = namesIn(V2_INVALID);
+
+  it('ships the agreed loot, paging and version cases (AC 4)', () => {
+    expect(names).toEqual([
+      'loot-drop-outside-window',
+      'loot-encounter-name-without-id',
+      'loot-paged',
+      'loot-too-many-drops',
+      'loot-two-tokens',
+      'loot-unknown-key',
+      'mixed-v1-v2',
+      'unsupported-version',
+      'v1-loot-section',
+      'v2-header-schema-1',
+    ]);
+  });
+
+  it.each(names)('invalid/%s.txt is rejected with its code', (name) => {
+    const { code } = JSON.parse(read(V2_INVALID, `${name}.json`)) as {
+      code: string;
+    };
+    expect(AddonImportErrorCodeSchema.options).toContain(code);
+    expect(decodeErrorCode(read(V2_INVALID, `${name}.txt`))).toBe(code);
   });
 });

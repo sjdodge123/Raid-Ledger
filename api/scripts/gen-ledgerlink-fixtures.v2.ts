@@ -26,7 +26,10 @@ import {
   buildLootFixturePayload,
   buildLootPayload,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.loot';
-import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
+import {
+  fixtureViewWithSchema,
+  ledgerLinkFixtureView,
+} from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
 import {
   FIXTURE_NOW_MS,
   codeOf,
@@ -47,18 +50,6 @@ export function toV2Paste(v1Paste: string): string {
     payload.schema = 2;
     return `!RL2!${head}!${zip(payload)}`;
   });
-}
-
-/** A v1 fixture view with every payload's `schema` set to 2. */
-function withSchema2(view: unknown): unknown {
-  const bump = (p: unknown) => ({ ...(p as object), schema: 2 });
-  const v = view as { sections?: { payload: unknown }[]; payload?: unknown };
-  if (v.sections) {
-    return {
-      sections: v.sections.map((s) => ({ ...s, payload: bump(s.payload) })),
-    };
-  }
-  return { ...v, payload: bump(v.payload) };
 }
 
 const lootToken = (payload: unknown, page?: { n: number; of: number }) =>
@@ -182,11 +173,14 @@ export function buildV2Fixtures(v1Dir: string): FixtureFile[] {
     .sort()) {
     const name = f.slice(0, -'.txt'.length);
     const paste = toV2Paste(readFileSync(join(v1Dir, f), 'utf8'));
-    const v1View: unknown = JSON.parse(
+    const v1View: object = JSON.parse(
       readFileSync(join(v1Dir, `${name}.json`), 'utf8'),
     );
     const view = decodeView(name, paste);
-    if (view !== undefined && !isDeepStrictEqual(view, withSchema2(v1View)))
+    if (
+      view !== undefined &&
+      !isDeepStrictEqual(view, fixtureViewWithSchema(v1View, 2))
+    )
       problems.push(`${name}: v2 view differs from the v1 view (AC 2)`);
     if (name === 'mixed-char-guild3-raid-shuffled') shuffled = paste;
     emit(name, paste, view);

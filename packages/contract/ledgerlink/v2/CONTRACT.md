@@ -9,7 +9,7 @@ by the operator on 2026-11-15 (Q1–Q10, cited below).
 | Payload source of truth (Zod) | `packages/contract/src/wow-addon-v2.schema.ts` (`AddonExportV2Schema`) + `wow-addon-loot.schema.ts` (`loot`); the char/guild/raid `data` shapes are the v1 ones in `wow-addon-export.schema.ts` |
 | Header grammar, versions, limits | `wow-addon-v2.schema.ts` (`ADDON_IMPORT_PAGE_RE_V2`, `ADDON_EXPORT_ACCEPTED_VERSIONS`, `ADDON_IMPORT_MAX_TOKENS_V2`) + `wow-addon-import.schema.ts` (unchanged v1 limits and error codes) |
 | JSON Schema of one decoded payload (generated) | [`schema.json`](./schema.json) — `npm run gen:ledgerlink-schema -w @raid-ledger/contract` |
-| Golden fixtures | [`fixtures/`](./fixtures) — `node packages/contract/scripts/gen-ledgerlink-v2-fixtures.mjs` |
+| Golden fixtures | [`fixtures/`](./fixtures) — `cd api && npx ts-node scripts/gen-ledgerlink-fixtures.ts` (writes v1 unchanged + v2, each through the real decoder) |
 | v1 (frozen) | [`../v1/CONTRACT.md`](../v1/CONTRACT.md) |
 
 ## 0. What changes from v1 (**breaking**)
