@@ -5,14 +5,11 @@
  * `leader` on a community page (D4). ROK-2192 (operator ruling 2026-11-13):
  * the linked guild's rank-0 member (`viewer.isGuildMaster`, the GUID-linked
  * GM — the api's `holdsTopRank`, as for recruitment, ROK-1789 Q-A6) opens it
- * too, but only where the hub module says a GM has a row to write
- * (`HubModule.topRankOpensSettings` — WoW: Forever hubs); the sheet still
- * shows them only the non-Leader rows.
- *
- * Intentional, pending an operator question (ROK-2192 review m4): a delegated
- * editor (`canEdit` without `canManageEditors`) does NOT open the sheet, even
- * though the api admits them on the Blizzard roster writes. Do not widen this
- * without that ruling.
+ * too, and — ROK-2199 (operator ruling 2026-11-14) — so does a delegated
+ * editor (`canEdit`), both only where the hub module says that viewer has a
+ * row to write (`HubModule.topRankOpensSettings` — WoW: Forever hubs, the
+ * Blizzard roster). The sheet still shows them only the non-Leader rows: the
+ * Leader sections stay behind `canManageEditors` (`settings-sheet.tsx`).
  */
 import type { GuildPage, GuildViewerAccess } from '@raid-ledger/contract';
 import type { HubModule } from '../../../plugins/hub-module';
@@ -20,13 +17,14 @@ import type { HubModule } from '../../../plugins/hub-module';
 /** `true` when the viewer should see the settings trigger; `mod` is the hub kind's module, if its plugin is on. */
 export function canOpenHubSettings(page: GuildPage, mod?: Pick<HubModule, 'topRankOpensSettings'>): boolean {
     if (page.community !== undefined) return page.viewer.role === 'leader' || page.viewer.role === 'officer';
-    return page.viewer.canManageEditors || (page.viewer.isGuildMaster === true && mod?.topRankOpensSettings?.(page) === true);
+    return page.viewer.canManageEditors || (canWriteHubSettings(page.viewer) && mod?.topRankOpensSettings?.(page) === true);
 }
 
 /**
  * ROK-2192: `true` when the viewer may change the settings a GM is allowed
  * (the Blizzard roster slug / "Sync now") — an editor (`canEdit`) or the
- * linked guild's rank-0 GM. Mirrors the api's `GuildEditorOrTopRankGuard`.
+ * linked guild's rank-0 GM. Mirrors the api's `GuildEditorOrTopRankGuard`;
+ * ROK-2199: also who, besides the Leader, may open the sheet.
  */
 export function canWriteHubSettings(viewer: GuildViewerAccess): boolean {
     return viewer.canEdit || viewer.isGuildMaster === true;

@@ -114,7 +114,19 @@ vi.mock('node:child_process', async () => {
 // dns.promises.lookup('rl-infra.lan'). vi.resetModules() below wipes the
 // resolver memo every test, so without this stub the lookup is re-paid per
 // test and CI DNS latency (>100ms) starves the AC2 spawn-capture race.
+//
+// Clear RL_AGENT_TOKEN too: when the host shell exports it (an operator laptop
+// with ~/.config/raid-ledger/rl-agent-token loaded), curlOnVM streams the
+// token over ssh stdin via `spawn` instead of `execFile`, so the execFile
+// capture these cases assert on stays null. The fleet runner has no token.
 let savedProxmoxHost: string | undefined;
+let savedAgentToken: string | undefined;
+
+/** Restore one env var to its pre-test value (absent stays absent). */
+function restoreEnv(name: string, saved: string | undefined): void {
+  if (saved === undefined) delete process.env[name];
+  else process.env[name] = saved;
+}
 
 beforeEach(() => {
   lastExecFileArgs = null;
@@ -122,14 +134,13 @@ beforeEach(() => {
   allExecFileArgs.length = 0;
   savedProxmoxHost = process.env.RL_PROXMOX_HOST;
   process.env.RL_PROXMOX_HOST = '198.51.100.1';
+  savedAgentToken = process.env.RL_AGENT_TOKEN;
+  delete process.env.RL_AGENT_TOKEN;
 });
 
 afterEach(() => {
-  if (savedProxmoxHost === undefined) {
-    delete process.env.RL_PROXMOX_HOST;
-  } else {
-    process.env.RL_PROXMOX_HOST = savedProxmoxHost;
-  }
+  restoreEnv('RL_PROXMOX_HOST', savedProxmoxHost);
+  restoreEnv('RL_AGENT_TOKEN', savedAgentToken);
   vi.clearAllMocks();
 });
 

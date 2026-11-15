@@ -18,6 +18,7 @@ import { CronJob } from 'cron';
 import { CronJobService } from './cron-job.service';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { nonEmpty } from '../common/testing/narrow';
+import { deleteCronJobsByName } from '../common/testing/cron-job-cleanup';
 
 type Registrar = {
   getCronJobs(): {
@@ -28,6 +29,20 @@ type Registrar = {
 };
 
 const HOURLY = '0 * * * *';
+
+/**
+ * Every cron_jobs row this spec creates — by insert or by `syncJobs` with the
+ * fake registrars. Deleted before the first test (pre-dirty DB) and after each.
+ */
+const SPEC_JOB_NAMES = [
+  'fakeplug:stale',
+  'fakeplug:live',
+  'fakeplug:registry-only',
+  'test:core-job',
+  'ghostplug:old',
+  'boomplug:old',
+] as const;
+
 const liveRegistrar: Registrar = {
   getCronJobs: () => [
     { name: 'live', cronExpression: HOURLY, handler: () => Promise.resolve() },
@@ -91,6 +106,7 @@ function describeRetiredPluginJobs() {
 
   beforeAll(async () => {
     testApp = await getTestApp();
+    await deleteCronJobsByName(testApp.db, SPEC_JOB_NAMES);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
@@ -99,6 +115,7 @@ function describeRetiredPluginJobs() {
     await syncWith(new Map());
     spy?.mockRestore();
     spy = undefined;
+    await deleteCronJobsByName(testApp.db, SPEC_JOB_NAMES);
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });

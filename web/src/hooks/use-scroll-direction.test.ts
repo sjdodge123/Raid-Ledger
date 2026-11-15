@@ -28,28 +28,35 @@ function scrollTo(y: number): void {
     });
 }
 
+/** Phone viewport, frozen clock, synchronous rAF; a fresh store module per test. */
+async function loadStore(): Promise<HookModule> {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-14T12:00:00Z'));
+    vi.spyOn(window, 'matchMedia').mockImplementation(phoneMediaQuery);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number => {
+        cb(0);
+        return 0;
+    });
+    setScrollY(0);
+    vi.resetModules();
+    return import('./use-scroll-direction');
+}
+
+function restoreGlobals(): void {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    setScrollY(0);
+}
+
 describe('useScrollDirection — app-started scrolls (ignoreScrollFor)', () => {
     let mod: HookModule;
 
     beforeEach(async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
-        vi.setSystemTime(new Date('2026-11-14T12:00:00Z'));
-        vi.spyOn(window, 'matchMedia').mockImplementation(phoneMediaQuery);
-        vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number => {
-            cb(0);
-            return 0;
-        });
-        setScrollY(0);
-        vi.resetModules();
-        mod = await import('./use-scroll-direction');
+        mod = await loadStore();
     });
 
-    afterEach(() => {
-        vi.useRealTimers();
-        vi.unstubAllGlobals();
-        vi.restoreAllMocks();
-        setScrollY(0);
-    });
+    afterEach(restoreGlobals);
 
     it('reads a plain jump past the threshold as a user scroll down (control)', () => {
         const { result } = renderHook(() => mod.useScrollDirection());
@@ -72,6 +79,42 @@ describe('useScrollDirection — app-started scrolls (ignoreScrollFor)', () => {
         scrollTo(450);
         expect(result.current).toBe('up');
         scrollTo(600);
+        expect(result.current).toBe('down');
+    });
+
+});
+
+describe('useScrollDirection — a long app-started scroll stretches the window (td5 MINOR)', () => {
+    let mod: HookModule;
+
+    beforeEach(async () => {
+        mod = await loadStore();
+    });
+
+    afterEach(restoreGlobals);
+
+    it('stretches the window while a smooth scroll keeps sending frames past its end', () => {
+        const { result } = renderHook(() => mod.useScrollDirection());
+        const start = Date.now();
+        act(() => mod.ignoreScrollFor(1000));
+        for (const [at, y] of [[900, 300], [1000, 400], [1100, 500], [1200, 600]] as const) {
+            vi.setSystemTime(start + at);
+            scrollTo(y);
+        }
+        expect(result.current).toBeNull();
+    });
+
+    it('stops stretching at the cap, so a continuous scroll counts again after ~2 s', () => {
+        const { result } = renderHook(() => mod.useScrollDirection());
+        const start = Date.now();
+        act(() => mod.ignoreScrollFor(1000));
+        for (let at = 100; at <= 1900; at += 100) {
+            vi.setSystemTime(start + at);
+            scrollTo(at);
+        }
+        expect(result.current).toBeNull();
+        vi.setSystemTime(start + 2000);
+        scrollTo(2000);
         expect(result.current).toBe('down');
     });
 

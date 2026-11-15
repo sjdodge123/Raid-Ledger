@@ -243,9 +243,10 @@ export interface HubModule {
      */
     settingsSections?: ComponentType<HubCtx>;
     /**
-     * ROK-2192: the kind's top in-game rank (`viewer.isGuildMaster`) may open
-     * settings on this page — only where the sheet holds a row a GM can write
-     * (WoW: the Forever guild's Blizzard roster). Unset = the GM gets no gear.
+     * ROK-2192: the kind's top in-game rank (`viewer.isGuildMaster`) — and,
+     * ROK-2199, a delegated editor (`viewer.canEdit`) — may open settings on
+     * this page; only where the sheet holds a row they can write (WoW: the
+     * Forever guild's Blizzard roster). Unset = only the Leader gets the gear.
      */
     topRankOpensSettings?: (page: GuildPage) => boolean;
     /**

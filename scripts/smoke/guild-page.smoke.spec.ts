@@ -127,14 +127,29 @@ test('admin: the settings sheet holds the editors — the rank-1 grant inactive,
     });
 });
 
-test('officer (inactive rank-1 grant): sees the page, but no settings sheet and no editors', async ({ page }, testInfo) => {
+test('officer (granted by name): opens the Forever hub\'s settings to the Blizzard roster only — no editors (ROK-2199)', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('guild-overview')).toBeVisible();
-        await expect(page.getByTestId('guild-settings-trigger'), 'the sheet is Leader/admin only (D10/Q4)').toHaveCount(0);
-        await expect(page.getByTestId('guild-editors-panel'), 'managing editors is admin/operator-only').toHaveCount(0);
+        const trigger = page.getByTestId('guild-settings-trigger');
+        await expect(trigger, 'a delegated editor of a Forever hub gets the settings entry (ROK-2199)').toBeVisible();
+        await trigger.click();
+        const sheet = page.getByTestId('guild-settings-sheet');
+        await expect(sheet.getByTestId('wow-blizzard-roster-input'), 'the editor may set the Blizzard roster slug').toBeVisible({ timeout: 15_000 });
+        await expect(sheet.getByTestId('guild-editors-panel'), 'managing editors is admin/operator-only').toHaveCount(0);
+        await expect(sheet.getByTestId('guild-settings-discord'), 'the Discord channel row is Leader-only').toHaveCount(0);
+        await expect(sheet.getByTestId('guild-settings-visibility'), 'hiding the hub is Leader-only').toHaveCount(0);
     });
+});
+
+test('officer on a retail WoW hub: no settings sheet (D10/Q4 — nothing an editor writes there)', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'officer');
+        await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('guild-settings-trigger'), 'the sheet is Leader/admin only off a Forever hub').toHaveCount(0);
+        await expect(page.getByTestId('guild-editors-panel'), 'managing editors is admin/operator-only').toHaveCount(0);
+    }, 'world-of-warcraft');
 });
 
 test('#members deep-links straight to the Members tab, and the retired #roster still lands there', async ({ page }, testInfo) => {

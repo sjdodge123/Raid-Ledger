@@ -2,9 +2,10 @@
  * ROK-1830 S4 — the single settings entry point, in the hero's action area.
  * Rendered when `canOpenHubSettings` says so: the Leader (`canManageEditors`,
  * admin/operator today, spec Q1), a community Officer, and — ROK-2192 — the
- * rank-0 GM where `HubModule.topRankOpensSettings` allows it. WoW Officers
- * keep the inline content-edit affordances they already have and see no
- * trigger (D10/Q4).
+ * rank-0 GM and (ROK-2199) a delegated editor where
+ * `HubModule.topRankOpensSettings` allows it (WoW: Forever hubs). Elsewhere
+ * WoW Officers keep the inline content-edit affordances they already have and
+ * see no trigger (D10/Q4).
  */
 import type { JSX } from 'react';
 import { Cog6ToothIcon } from '@heroicons/react/24/outline';

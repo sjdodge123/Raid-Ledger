@@ -8,8 +8,8 @@ const Int4IdSchema = z.coerce.number().int().min(1).max(INT4_MAX);
 
 /**
  * Backlog 2026-10-12 — path-id pipe for `serial` ids: a positive int4, else
- * 400. `ParseIntPipe` let ids above int4 reach Postgres (22003 → 500). Same
- * rule as the plugin-owned `Bg3IdPipe` / `ArmoryIdPipe`, for core routes.
+ * 400. `ParseIntPipe` let ids above int4 reach Postgres (22003 → 500). The
+ * plugin-owned `Bg3IdPipe` / `ArmoryIdPipe` extend it.
  */
 export class Int4IdPipe implements PipeTransform<unknown, number> {
   /** Parse `value` as a positive int4 id or throw 400. */
