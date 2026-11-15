@@ -218,7 +218,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} roster={page.roster} />
             <EventDetailRoster roster={page.roster} event={page.event} />
             <ActivityTimeline entityType="event" entityId={page.eventId} />
-            <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id, guildId: page.event.guildId }} />
+            <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id, guildId: page.event.guildId, rosterCharacters: page.roster?.signups.map((s) => s.character) }} />
         </>
     );
 }

@@ -3,10 +3,12 @@
  *
  * Quests carry no faction field — the side is implied by `raceRestriction`
  * (null or [] = neutral, always kept). A guild is always single-faction, so a
- * viewer whose side is unknown falls back to the guild's faction.
+ * viewer whose side is unknown falls back to the side of the event's signups,
+ * then to the guild's faction.
  *
- * Mirrors the API lane's `deriveCharacterSide` / `isQuestUsableBySide`
- * (ROK-1758 web/api lockstep) and its race sets in `attunement-evaluate.ts`.
+ * Mirrors the api's `characterSide` / `isQuestUsableBySide` / `sharedSide` and
+ * their race sets in `api/src/plugins/wow-common/quest-faction.helpers.ts`
+ * (ROK-1758 web/api lockstep).
  */
 import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 import { factionKey, type FactionKey } from '../hub/wow-hero.helpers';
@@ -25,7 +27,7 @@ export function factionOfRace(race: string | null | undefined): QuestSide | null
 }
 
 /** The character's side: its race's faction, else its stored `faction` column; unknown → null. */
-export function deriveCharacterSide(
+export function characterSide(
     race: string | null | undefined,
     faction: string | null | undefined,
 ): QuestSide | null {
@@ -35,11 +37,27 @@ export function deriveCharacterSide(
 /**
  * True when a quest is takeable by `side`. Neutral quests (no race list) are
  * always kept; an unknown side keeps everything; a race list naming no known
- * race is kept rather than guessed at.
+ * race is kept rather than guessed at (unknown data is never hidden).
  */
 export function isQuestUsableBySide(quest: Pick<EnrichedDungeonQuestDto, 'raceRestriction'>, side: QuestSide | null): boolean {
     const races = quest.raceRestriction;
     if (!races || races.length === 0 || !side) return true;
     const sides = new Set(races.map(factionOfRace).filter((s): s is QuestSide => s !== null));
     return sides.size === 0 || sides.has(side);
+}
+
+/** The side a roster shares: unknowns ignored; disagreeing or all-unknown sides → null. */
+export function sharedSide(sides: Iterable<QuestSide | null>): QuestSide | null {
+    let shared: QuestSide | null = null;
+    for (const side of sides) {
+        if (side === null) continue;
+        if (shared !== null && shared !== side) return null;
+        shared = side;
+    }
+    return shared;
+}
+
+/** True when any quest is limited to one faction (its race list names a known race). */
+export function hasFactionQuest(quests: readonly Pick<EnrichedDungeonQuestDto, 'raceRestriction'>[]): boolean {
+    return quests.some((q) => (q.raceRestriction ?? []).some((r) => factionOfRace(r) !== null));
 }

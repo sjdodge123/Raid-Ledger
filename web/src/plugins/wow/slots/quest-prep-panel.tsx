@@ -15,8 +15,8 @@ import { QuestPrepNeededLine } from './quest-prep-needed-line';
 import { useQuestPrepTodo } from './use-quest-prep-todo';
 import type { QuestPrepTodo } from './quest-prep-todo';
 import { QuestPrepAsOfLine } from './quest-prep-asof-line';
-import type { QuestSide } from '../utils/quest-faction';
-import { filterUsableQuests, flattenQuestMap, useAllUsableQuests, useQuestSide } from './quest-prep-filter';
+import { hasFactionQuest, type QuestSide } from '../utils/quest-faction';
+import { filterUsableQuests, flattenQuestMap, useAllUsableQuests, useQuestSide, type RosterCharacter } from './quest-prep-filter';
 import './quest-prep-panel.css';
 
 /** Sub-group quests by practical pickup type */
@@ -34,8 +34,10 @@ interface QuestPrepPanelProps {
     eventId?: number;
     gameSlug?: string;
     characterId?: string;
-    /** ROK-2211: the event's guild — its faction is the fallback side. */
+    /** ROK-2211: the event's guild — its faction is the last-resort side. */
     guildId?: number | null;
+    /** ROK-2211: the signed-up characters — their shared side is the guild's. */
+    rosterCharacters?: RosterCharacter[];
 }
 
 interface ParsedInstance { id: number; name?: string | undefined }
@@ -137,7 +139,7 @@ function buildSharedProps(opts: BuildSharedPropsOptions): SharedQuestProps {
 }
 
 /** Quest Prep Panel main component */
-export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId, guildId }: QuestPrepPanelProps) {
+export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId, guildId, rosterCharacters }: QuestPrepPanelProps) {
     const { user } = useAuth();
     const variant = useMemo(() => slugToContentVariant(gameSlug), [gameSlug]);
     const parsedInstances = useParsedInstances(contentInstances);
@@ -146,11 +148,11 @@ export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterI
     const { data: coverage } = useQuestCoverage(eventId);
     const { data: prereqs } = useQuestPrereqs(eventId, gameSlug);
     const prereqsByQuest = usePrereqsByQuest(prereqs);
-    const { data: character } = useCharacterDetail(characterId);
+    const { data: character, isLoading: characterLoading } = useCharacterDetail(characterId);
     const wowheadVariant = character?.gameVariant ?? variant;
     const equippedBySlot = useEquippedSlotMap(character);
     const coverageMap = useCoverageMap(coverage);
-    const side = useQuestSide(character, guildId);
+    const side = useQuestSide(character, rosterCharacters, guildId, instanceIds.length > 0 && !characterLoading);
     const allUsable = useAllUsableQuests(questMap, character, side);
     const allFlat = useMemo(() => flattenQuestMap(questMap), [questMap]);
     const { expandedQuests, pendingQuestId, handleTogglePickedUp, toggleExpanded } = useQuestPrepState(eventId);
@@ -174,7 +176,7 @@ function QuestPrepBody({ instances, questMap, allUsable, character, side, shared
     return (
         <div className="quest-prep-panel">
             <QuestPrepHeader count={allUsable.length} prereqs={prereqs} todo={todo} />
-            {!side && <p className="text-xs text-muted" data-testid="quest-prep-faction-unknown">Faction unknown — showing both factions' quests</p>}
+            {!side && hasFactionQuest(allUsable) && <p className="text-xs text-muted" data-testid="quest-prep-faction-unknown">Faction unknown — showing both factions' quests</p>}
             {instances.length > 1
                 ? instances.map((inst) => (
                     <InstanceQuestSection key={inst.id} instance={inst} quests={questMap.get(inst.id) ?? []} character={character} side={side} {...shared} />

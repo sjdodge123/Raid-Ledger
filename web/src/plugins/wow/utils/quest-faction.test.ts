@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveCharacterSide, factionOfRace, isQuestUsableBySide } from './quest-faction';
+import { characterSide, factionOfRace, isQuestUsableBySide } from './quest-faction';
 import { isQuestUsable } from './quest-dedup';
 import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 
@@ -15,7 +15,7 @@ function quest(raceRestriction: string[] | null): EnrichedDungeonQuestDto {
     };
 }
 
-describe('factionOfRace / deriveCharacterSide', () => {
+describe('factionOfRace / characterSide', () => {
     it('maps display names and addon tokens to a side', () => {
         expect(factionOfRace('Night Elf')).toBe('alliance');
         expect(factionOfRace('Scourge')).toBe('horde');
@@ -23,9 +23,9 @@ describe('factionOfRace / deriveCharacterSide', () => {
     });
 
     it('prefers the race, falls back to the faction column, else null', () => {
-        expect(deriveCharacterSide('Orc', 'alliance')).toBe('horde');
-        expect(deriveCharacterSide(null, 'Alliance')).toBe('alliance');
-        expect(deriveCharacterSide(null, null)).toBeNull();
+        expect(characterSide('Orc', 'alliance')).toBe('horde');
+        expect(characterSide(null, 'Alliance')).toBe('alliance');
+        expect(characterSide(null, null)).toBeNull();
     });
 });
 

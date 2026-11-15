@@ -2,9 +2,10 @@
  * Quest Prep panel filtering: which of the event's quests the viewer can take.
  *
  * ROK-2211: the side comes from the viewer's character (race, else its
- * faction column); a viewer with no character or an unknown side falls back
- * to the event's guild faction (a guild is always single-faction). With no
- * side at all, both factions' quests show and the panel says so.
+ * faction column). A guild is always single-faction, so an unknown side falls
+ * back to the side the event's signed-up characters share, and only then to
+ * the guild page (membership-gated, so asked for only when still unknown).
+ * With no side at all, both factions' quests show and the panel says so.
  */
 import { useMemo } from 'react';
 import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
@@ -12,7 +13,7 @@ import type { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { useGuildPage } from '../../../components/hub/api/use-guild';
 import { factionKey } from '../hub/wow-hero.helpers';
 import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
-import { deriveCharacterSide, type QuestSide } from '../utils/quest-faction';
+import { characterSide, sharedSide, type QuestSide } from '../utils/quest-faction';
 
 export type PanelCharacter = ReturnType<typeof useCharacterDetail>['data'];
 
@@ -43,9 +44,24 @@ export function useAllUsableQuests(
     return useMemo(() => filterUsableQuests(flattenQuestMap(questMap), character, side), [questMap, character, side]);
 }
 
-/** The viewer's side: their character's, else the event guild's faction; null when neither is known. */
-export function useQuestSide(character: PanelCharacter, guildId: number | null | undefined): QuestSide | null {
-    const { data: guildPage } = useGuildPage(guildId ?? 0);
-    const own = deriveCharacterSide(character?.race, character?.faction);
-    return own ?? factionKey(guildPage?.guild.faction ?? null);
+/** A signed-up character's race / faction, as the event roster carries them. */
+export type RosterCharacter = { race?: string | null; faction?: string | null } | null | undefined;
+
+/** The side the event's signed-up characters share (null when unknown or mixed). */
+export function rosterSide(characters: readonly RosterCharacter[] | undefined): QuestSide | null {
+    return sharedSide((characters ?? []).map((c) => characterSide(c?.race, c?.faction)));
+}
+
+/**
+ * The viewer's side: their character's, else the signups' shared side, else the
+ * guild's faction. `lookupGuild` false (no dungeon, character still loading)
+ * keeps GET /guilds/:id from firing; it also never fires once a side is known.
+ */
+export function useQuestSide(
+    character: PanelCharacter, roster: readonly RosterCharacter[] | undefined,
+    guildId: number | null | undefined, lookupGuild: boolean,
+): QuestSide | null {
+    const known = characterSide(character?.race, character?.faction) ?? rosterSide(roster);
+    const { data: guildPage } = useGuildPage(known === null && lookupGuild ? guildId ?? 0 : 0);
+    return known ?? factionKey(guildPage?.guild.faction ?? null);
 }
