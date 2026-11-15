@@ -61,6 +61,22 @@ function scanText(text: string): CatalogueScanHit[] {
   return scanCatalogueSource(stripComments(text), VOCAB, NAME_RE);
 }
 
+/** Test mocks and DEMO_MODE wireframes may spell a level; tables still count. */
+const LEVEL_EXEMPT_DIRS = [
+  path.join('web', 'src', 'test'),
+  path.join('web', 'src', 'dev'),
+];
+
+function exemptLevels(
+  rel: string,
+  hits: CatalogueScanHit[],
+): CatalogueScanHit[] {
+  const exempt = LEVEL_EXEMPT_DIRS.some((d) =>
+    rel.startsWith(`${d}${path.sep}`),
+  );
+  return exempt ? hits.filter((h) => h.detector !== 'level-literal') : hits;
+}
+
 function scanTree(
   base: string,
   roots: readonly string[],
@@ -73,7 +89,10 @@ function scanTree(
       .filter((rel) => !skipDir || !rel.startsWith(`${skipDir}${path.sep}`))
       .map((rel): [string, CatalogueScanHit[]] => [
         rel,
-        scanText(fs.readFileSync(path.join(base, rel), 'utf8')),
+        exemptLevels(
+          rel,
+          scanText(fs.readFileSync(path.join(base, rel), 'utf8')),
+        ),
       ])
       .filter(([, hits]) => hits.length > 0),
   );
@@ -202,5 +221,41 @@ describe('instance-catalogue guard — detectors', () => {
         'const r = { minimumLevel: x.minimumLevel, maximumLevel: null };',
       ),
     ).toEqual([]);
+  });
+
+  it('ignores switch cases and ternaries that mention catalogue ids', () => {
+    const cases = 'switch (id) {\n  case 226:\n  case 240:\n  case 63:\n}';
+    const ternary =
+      'const a = x ? 226 : 240;\nconst b = y\n  ? 63\n  : 238;\nconst c = z ? 64 : 0;';
+    expect(scanText(cases)).toEqual([]);
+    expect(scanText(ternary)).toEqual([]);
+  });
+});
+
+describe('instance-catalogue guard — level-literal exempt dirs', () => {
+  const LEVEL = 'export const row = { minimumLevel: 13 };';
+  const ID_MAP = 'export const M = {\n  226: "a",\n  240: "b",\n  63: "c",\n};';
+  let dir = '';
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rok2210-exempt-'));
+    const write = (rel: string, text: string): void => {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), text);
+    };
+    write('web/src/test/mock-instances.ts', LEVEL);
+    write('web/src/dev/wireframe.tsx', LEVEL);
+    write('web/src/test/id-map.ts', ID_MAP);
+    write('web/src/pages/level.tsx', LEVEL);
+  });
+
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('skips level literals in test mocks and dev wireframes only', () => {
+    const found = scanTree(dir, ['web/src'], null);
+    expect([...found.keys()].sort()).toEqual([
+      path.join('web', 'src', 'pages', 'level.tsx'),
+      path.join('web', 'src', 'test', 'id-map.ts'),
+    ]);
   });
 });

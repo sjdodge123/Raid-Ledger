@@ -26,8 +26,9 @@ interface Found {
   index: number;
 }
 
-const ID_KEY_RE = /(?:^|[{,\s])(\d{2,8})\s*:/gm;
-const ID_VALUE_RE = /(?:^|[{,\s])\d{1,8}\s*:\s*(\d{2,8})\b/gm;
+/** Object keys only: a `{` or `,` must precede, so `case 226:` and ternaries pass. */
+const ID_KEY_RE = /[{,]\s*(\d{2,8})\s*:/g;
+const ID_VALUE_RE = /[{,]\s*\d{1,8}\s*:\s*(\d{2,8})\b/g;
 const LEVEL_LITERAL_RE = /minimumLevel\s*:\s*\d+/g;
 const MIN_DISTINCT = 3;
 
