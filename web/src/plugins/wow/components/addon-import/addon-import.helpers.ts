@@ -5,7 +5,7 @@
  */
 import {
     ADDON_IMPORT_MAX_BYTES,
-    ADDON_IMPORT_PAGE_RE,
+    ADDON_IMPORT_PAGE_RE_V2,
     WOW_FOREVER_RULESET_LABELS,
     WOW_FOREVER_SELECTABLE_RULESETS,
     type AddonImportResultDto,
@@ -17,7 +17,7 @@ import {
 } from '@raid-ledger/contract';
 import type { AddonImportConfirm } from './use-addon-import';
 
-const SECTION_LABELS: Record<string, string> = { char: 'Character', guild: 'Guild', raid: 'Raid' };
+const SECTION_LABELS: Record<string, string> = { char: 'Character', guild: 'Guild', raid: 'Raid', loot: 'Loot' };
 
 export function importStringBytes(text: string): number {
     return new TextEncoder().encode(text.trim()).length;
@@ -35,10 +35,13 @@ export function sendableImportString(text: string): string | null {
     return trimmed;
 }
 
-/** Chip label from the page header(s); null when the text is not a recognisable import string. */
+/**
+ * Chip label from the page header(s); null when the text is not a recognisable import string.
+ * The v2 grammar is version-agnostic, so it labels `!RL1!` and `!RL2!` (incl. `loot`) alike.
+ */
 export function importStringHeaderLabel(text: string): string | null {
     const pages = text.trim().split(/\s+/).filter(Boolean);
-    const first = pages.length ? ADDON_IMPORT_PAGE_RE.exec(pages[0] ?? '') : null;
+    const first = pages.length ? ADDON_IMPORT_PAGE_RE_V2.exec(pages[0] ?? '') : null;
     if (!first) return null;
     const [, version, section = '', page, of] = first;
     const label = SECTION_LABELS[section] ?? section;

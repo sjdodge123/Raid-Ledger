@@ -16,6 +16,11 @@ describe('importStringHeaderLabel', () => {
     it('counts several pasted pages', () => {
         expect(importStringHeaderLabel('!RL1!guild-1of3!QUJD\n!RL1!guild-2of3!QUJD')).toBe('Guild · 2 of 3 pages');
     });
+    it('ROK-2184: labels LedgerLink v2 tokens, including a loot token', () => {
+        expect(importStringHeaderLabel('!RL2!loot!QUJD')).toBe('Loot · RL2');
+        expect(importStringHeaderLabel('!RL2!char!QUJD')).toBe('Character · RL2');
+        expect(importStringHeaderLabel('!RL2!guild-1of3!QUJD')).toBe('Guild · page 1 of 3');
+    });
     it('returns null for text that is not an import string', () => {
         expect(importStringHeaderLabel('hello world')).toBeNull();
         expect(importStringHeaderLabel('')).toBeNull();
@@ -81,6 +86,13 @@ describe('summary copy', () => {
         const raid: AddonImportResultDto = { section: 'raid', status: 'preview', exportedAt: EXPORTED_AT, warnings: [], diff: {},
             summary: { pulls: 5, newPulls: 4, duplicatePulls: 1, kills: 3, wipes: 2 } };
         expect(summaryRows(raid)).toEqual([['Pulls', '5 (4 new, 1 already imported)'], ['Kills / wipes', '3 / 2']]);
+    });
+    it('ROK-2184: builds the loot history row and headline', () => {
+        const loot: AddonImportResultDto = { section: 'loot', status: 'applied', exportedAt: EXPORTED_AT, warnings: [], diff: {},
+            summary: { drops: 12, newDrops: 9, duplicateDrops: 3, windowStart: EXPORTED_AT - 30 * 86_400, windowEnd: EXPORTED_AT } };
+        expect(summaryRows(loot)).toEqual([['Loot drops', '12 (9 new, 3 already imported)']]);
+        expect(resultHeadline(loot)).toBe('Loot history imported.');
+        expect(resultHeadline({ ...loot, status: 'noop' })).toBe('Loot history already up to date — nothing changed.');
     });
     it('shows class and level changes', () => {
         expect(diffRows(charResult({ diff: { class: { from: null, to: 'Paladin' }, level: { from: 58, to: 60 } } })))
