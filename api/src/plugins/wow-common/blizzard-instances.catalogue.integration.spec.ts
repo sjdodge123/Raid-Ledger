@@ -91,7 +91,7 @@ describe('GET /blizzard/instances — catalogue variants (ROK-2210)', () => {
   it('carries the additive levelSource and wowheadZoneId fields', async () => {
     const rows = await list('wow_forever', 'dungeon');
     expect(rows.find((r) => r.id === 226)).toMatchObject({
-      levelSource: 'classic_era',
+      levelSource: 'in_game',
       wowheadZoneId: 2437,
     });
   });

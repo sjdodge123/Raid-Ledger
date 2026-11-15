@@ -165,7 +165,9 @@ describe('instance catalogue — names, levels, sources', () => {
       "The Shaper's Terrace",
     );
   });
+});
 
+describe('instance catalogue — Forever finder levels (ROK-2210)', () => {
   it('sets levelSource: classic_era on every classic_era row', () => {
     const era = allCatalogueRows().filter((r) =>
       r.variants.includes('classic_era'),
@@ -180,7 +182,10 @@ describe('instance catalogue — names, levels, sources', () => {
       .filter((r) => r.variants.includes('wow_forever'))
       .filter((r) => r.levelSource !== 'in_game')
       .map((r) => `${r.name}:${r.levelSource}`);
-    expect(notInGame).toEqual(['Barrow Deeps:community', 'Hyjal Summit:community']);
+    expect(notInGame).toEqual([
+      'Barrow Deeps:community',
+      'Hyjal Summit:community',
+    ]);
   });
 
   // The six rows the operator's in-game finder screenshot shows (2026-11-15).
@@ -191,23 +196,33 @@ describe('instance catalogue — names, levels, sources', () => {
     ['Blackfathom Deeps', 227, 24, 32],
     ['The Stockade', 238, 24, 32],
     ['Shadowfang Keep', 64, 20, 30],
-  ])('gives wow_forever %s (%i) the in-game finder span %i-%i', (name, id, min, max) => {
-    expect(getInstance(id, 'wow_forever')).toMatchObject({
-      name,
-      minimumLevel: min,
-      maximumLevel: max,
-      levelSource: 'in_game',
-    });
-  });
+  ])(
+    'gives wow_forever %s (%i) the in-game finder span %i-%i',
+    (name, id, min, max) => {
+      expect(getInstance(id, 'wow_forever')).toMatchObject({
+        name,
+        minimumLevel: min,
+        maximumLevel: max,
+        levelSource: 'in_game',
+      });
+    },
+  );
 
   it('gives Maraudon and every wing its single finder span 46-55 on wow_forever', () => {
     const spans = [232, 23201, 23202, 23203].map((id) => {
       const row = must(getInstance(id, 'wow_forever'), `${id} forever`);
       return `${id}:${row.minimumLevel}-${row.maximumLevel}`;
     });
-    expect(spans).toEqual(['232:46-55', '23201:46-55', '23202:46-55', '23203:46-55']);
+    expect(spans).toEqual([
+      '232:46-55',
+      '23201:46-55',
+      '23202:46-55',
+      '23203:46-55',
+    ]);
   });
+});
 
+describe('instance catalogue — editions, names, lowest level', () => {
   it('leaves the classic_era Razorfen Kraul row on its Classic levels', () => {
     expect(getInstance(234, 'classic_era')).toMatchObject({
       minimumLevel: 30,
@@ -228,7 +243,6 @@ describe('instance catalogue — names, levels, sources', () => {
       lootExpansion: 'forever',
     });
   });
-
   it('names instances like the quest views do today, plus the wings and seeds', () => {
     expect(instanceName(230)).toBe('Dire Maul');
     expect(instanceName(229)).toBe('Blackrock Spire');

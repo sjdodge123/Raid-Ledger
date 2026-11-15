@@ -133,10 +133,13 @@ describe('catalogueInstanceList (ROK-2210)', () => {
   it('carries levelSource and wowheadZoneId on every row', () => {
     const list = catalogueInstanceList('wow_forever');
     expect(list?.dungeons.find((d) => d.id === 226)).toMatchObject({
-      levelSource: 'classic_era',
+      levelSource: 'in_game',
       wowheadZoneId: 2437,
     });
     expect(list?.dungeons.find((d) => d.id === 90_000_001)).toMatchObject({
+      levelSource: 'in_game',
+    });
+    expect(list?.raids.find((r) => r.id === 90_000_010)).toMatchObject({
       levelSource: 'community',
     });
   });
@@ -149,14 +152,19 @@ describe('catalogueInstanceList (ROK-2210)', () => {
 
 /** ROK-2210 D6: catalogue ids resolve locally; journal ids stay the journal's. */
 describe('catalogueInstanceDetail (ROK-2210)', () => {
-  it.each(['wow_forever', 'classic_era', 'retail'] as const)(
+  // Forever carries the in-game finder span (59-60); the others stay Classic.
+  it.each([
+    ['wow_forever', 59],
+    ['classic_era', 55],
+    ['retail', 55],
+  ] as const)(
     'resolves UBRS 22901 for %s (not the SM: Graveyard id%%100 match)',
-    (variant) => {
+    (variant, minimumLevel) => {
       expect(catalogueInstanceDetail(22901, variant)).toMatchObject({
         name: 'Upper Blackrock Spire',
         category: 'dungeon',
         maxPlayers: 10,
-        minimumLevel: 55,
+        minimumLevel,
         maximumLevel: 60,
       });
     },

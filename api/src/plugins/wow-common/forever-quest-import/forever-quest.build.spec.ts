@@ -32,17 +32,18 @@ describe('buildForeverQuestDataset', () => {
     expect(summary.outOfBand).toEqual([]);
   });
 
+  // Seed 7 (Alcaz Prison) has finder band max 55 (ROK-2210).
   it('reports (and still writes) a zone row >5 levels above the band max', async () => {
-    const html = QUEST_4136.replace('Level: 53', 'Level: 59');
+    const html = QUEST_4136.replace('Level: 53', 'Level: 61');
     const { rows, summary } = await buildForeverQuestDataset(source(html));
     expect(summary.outOfBand).toEqual([
-      { questId: 4136, name: 'Ribbly Screwspigot', questLevel: 59, seedN: 7 },
+      { questId: 4136, name: 'Ribbly Screwspigot', questLevel: 61, seedN: 7 },
     ]);
     expect(rows.map((r) => r.questId)).toContain(4136);
   });
 
   it('keeps a row exactly 5 levels above the band max in band', async () => {
-    const html = QUEST_4136.replace('Level: 53', 'Level: 58');
+    const html = QUEST_4136.replace('Level: 53', 'Level: 60');
     const { summary } = await buildForeverQuestDataset(source(html));
     expect(summary.outOfBand).toEqual([]);
   });
