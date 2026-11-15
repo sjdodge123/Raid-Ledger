@@ -33,6 +33,8 @@ export interface EventSignupChar {
   characterId: string;
   charClass: string | null;
   charRace: string | null;
+  /** Stored faction column; the side when the race is unknown (ROK-2211). */
+  charFaction?: string | null | undefined;
 }
 
 /** A signed-up character whose snapshot carries a `quests` slice. */
@@ -185,8 +187,11 @@ export function buildViewerPrereqs(
     truncationCutoff(member.snapshot.quests),
   );
   const { charClass, charRace } = member;
+  const faction = member.charFaction ?? null;
   const usable = dedupeVariantsByName(
-    progress.eventQuests.filter((q) => isQuestUsableBy(q, charClass, charRace)),
+    progress.eventQuests.filter((q) =>
+      isQuestUsableBy(q, charClass, charRace, faction),
+    ),
     charClass,
     charRace,
   );
