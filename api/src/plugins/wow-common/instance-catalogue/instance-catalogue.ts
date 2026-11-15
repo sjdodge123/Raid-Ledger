@@ -12,10 +12,7 @@ import type {
   CatalogueVariant,
 } from './instance-catalogue.types';
 
-export {
-  FOREVER_SEED_ID_BASE,
-  FOREVER_SEED_ID_SPAN,
-} from './forever-new.data';
+export { FOREVER_SEED_ID_BASE, FOREVER_SEED_ID_SPAN } from './forever-new.data';
 
 /** `getAnyVariant` preference (D6). */
 const ANY_VARIANT_ORDER: readonly CatalogueVariant[] = [
@@ -121,7 +118,10 @@ export function lowestDungeonLevel(v: CatalogueVariant): number {
   return Math.min(...listInstances(v, 'dungeon').map((r) => r.minimumLevel));
 }
 
-export function toListDto(r: CatalogueInstance): WowInstance {
+/** The fields both DTOs carry, typed so `minimumLevel` stays required. */
+function baseFields(
+  r: CatalogueInstance,
+): WowInstance & Pick<WowInstanceDetail, 'minimumLevel'> {
   return {
     id: r.id,
     name: r.name,
@@ -134,9 +134,13 @@ export function toListDto(r: CatalogueInstance): WowInstance {
   };
 }
 
+export function toListDto(r: CatalogueInstance): WowInstance {
+  return baseFields(r);
+}
+
 export function toDetailDto(r: CatalogueInstance): WowInstanceDetail {
   return {
-    ...toListDto(r),
+    ...baseFields(r),
     maxPlayers: r.maxPlayers,
     category: r.category,
   };
