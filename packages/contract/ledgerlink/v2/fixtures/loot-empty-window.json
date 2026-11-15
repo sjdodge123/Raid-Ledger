@@ -1,7 +1,6 @@
 {
   "pages": 1,
   "payload": {
-    "schema": 2,
     "addonVersion": "0.1.0",
     "client": {
       "interface": 11507,
@@ -15,10 +14,7 @@
       "fullName": "Ana Forever",
       "raw": {
         "getUnitName": "Ana Forever",
-        "unitName": [
-          "Ana Forever",
-          null
-        ]
+        "unitName": ["Ana Forever",null]
       },
       "ruleset": "normal",
       "class": "PALADIN",
@@ -27,6 +23,7 @@
       "faction": "Alliance",
       "guildName": "Night Shift"
     },
+    "schema": 2,
     "section": "loot",
     "data": {
       "windowStart": 1787408000,

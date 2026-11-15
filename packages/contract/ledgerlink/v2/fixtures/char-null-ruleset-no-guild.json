@@ -1,7 +1,6 @@
 {
   "pages": 1,
   "payload": {
-    "schema": 2,
     "addonVersion": "0.1.0",
     "client": {
       "interface": 11507,
@@ -23,6 +22,7 @@
       "level": 60,
       "faction": "Alliance"
     },
+    "schema": 2,
     "section": "char",
     "data": {
       "gear": [

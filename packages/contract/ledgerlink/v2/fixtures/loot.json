@@ -1,7 +1,6 @@
 {
   "pages": 1,
   "payload": {
-    "schema": 2,
     "addonVersion": "0.1.0",
     "client": {
       "interface": 11507,
@@ -15,10 +14,7 @@
       "fullName": "Ana Forever",
       "raw": {
         "getUnitName": "Ana Forever",
-        "unitName": [
-          "Ana Forever",
-          null
-        ]
+        "unitName": ["Ana Forever",null]
       },
       "ruleset": "normal",
       "class": "PALADIN",
@@ -27,61 +23,17 @@
       "faction": "Alliance",
       "guildName": "Night Shift"
     },
+    "schema": 2,
     "section": "loot",
     "data": {
       "windowStart": 1787408000,
       "windowEnd": 1790000000,
       "minQuality": 2,
       "drops": [
-        {
-          "at": 1789740800,
-          "itemId": 16800,
-          "quantity": 1,
-          "quality": 4,
-          "looterName": "Ana Forever",
-          "looterGuid": "Player-4395-0ABCDEF0",
-          "method": "master",
-          "instanceId": 409,
-          "difficultyId": 9,
-          "encounterId": 663,
-          "encounterName": "Lucifron"
-        },
-        {
-          "at": 1789741100,
-          "itemId": 16801,
-          "quantity": 1,
-          "quality": 4,
-          "looterName": "Lootero",
-          "looterGuid": "Player-4395-00000002",
-          "method": "roll",
-          "instanceId": 409,
-          "difficultyId": 9,
-          "encounterId": 663,
-          "encounterName": "Lucifron"
-        },
-        {
-          "at": 1789827200,
-          "itemId": 12360,
-          "quantity": 3,
-          "looterName": "Lootera-Testrealm",
-          "method": "direct",
-          "instanceId": 409,
-          "difficultyId": 9
-        },
-        {
-          "at": 1789741700,
-          "itemId": 16803,
-          "quantity": 1,
-          "quality": 4,
-          "looterName": "Lootero",
-          "looterGuid": "Player-4395-00000002",
-          "method": "unknown",
-          "instanceId": 409,
-          "difficultyId": 9,
-          "encounterId": 663,
-          "encounterName": "Lucifron",
-          "link": "|cffa335ee|Hitem:16803::::::::60:::::|h[Example Boots]|h|r"
-        }
+        {"at":1789740800,"itemId":16800,"quantity":1,"quality":4,"looterName":"Ana Forever","looterGuid":"Player-4395-0ABCDEF0","method":"master","instanceId":409,"difficultyId":9,"encounterId":663,"encounterName":"Lucifron"},
+        {"at":1789741100,"itemId":16801,"quantity":1,"quality":4,"looterName":"Lootero","looterGuid":"Player-4395-00000002","method":"roll","instanceId":409,"difficultyId":9,"encounterId":663,"encounterName":"Lucifron"},
+        {"at":1789827200,"itemId":12360,"quantity":3,"looterName":"Lootera-Testrealm","method":"direct","instanceId":409,"difficultyId":9},
+        {"at":1789741700,"itemId":16803,"link":"|cffa335ee|Hitem:16803::::::::60:::::|h[Example Boots]|h|r","quantity":1,"quality":4,"looterName":"Lootero","looterGuid":"Player-4395-00000002","method":"unknown","instanceId":409,"difficultyId":9,"encounterId":663,"encounterName":"Lucifron"}
       ]
     }
   }

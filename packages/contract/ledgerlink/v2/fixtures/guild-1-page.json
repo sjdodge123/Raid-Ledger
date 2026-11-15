@@ -1,7 +1,6 @@
 {
   "pages": 1,
   "payload": {
-    "schema": 2,
     "addonVersion": "0.1.0",
     "client": {
       "interface": 11507,
@@ -24,6 +23,7 @@
       "faction": "Alliance",
       "guildName": "Night Shift"
     },
+    "schema": 2,
     "section": "guild",
     "data": {
       "name": "Night Shift",
