@@ -6,11 +6,11 @@
  *   cd api && npx ts-node scripts/prepare-forever-dungeon-quests.ts --fixtures <dir> [--out <file>]
  *   cd api && npx ts-node scripts/prepare-forever-dungeon-quests.ts --live [--max-requests 400]
  *
- * `--fixtures <dir>` reads `zone-<seedN>.html` (seedN = 1–11, see
- * `forever-instance-data.ts`) and `quest-<questId>.html`; no network.
+ * `--fixtures <dir>` reads `zone-<seedN>.html` (seedN = 1–11, the instance
+ * catalogue's Forever-new rows) and `quest-<questId>.html`; no network.
  * `--live` fetches through the ROK-1727 limiter + UA (≤1 req/s, 3 tries,
  * redirects followed) with a hard request cap, and exits "zones not mapped"
- * while `FOREVER_WOWHEAD_ZONES` is all null.
+ * while no seed row has a catalogue `wowheadZoneId`.
  *
  * Refuses to run under jest/CI (`JEST_WORKER_ID` / `CI`). Specs may pass
  * `allowUnderTest: true` to `runPrepare` for `--fixtures` only; `--live`
@@ -20,14 +20,15 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   buildForeverQuestDataset,
+  foreverSeedRows,
   type BuildSummary,
   type QuestPageSource,
 } from '../src/plugins/wow-common/forever-quest-import/forever-quest.build';
 import { createRetryingGetter } from '../src/plugins/wow-common/forever-quest-import/forever-quest.fetch';
 import {
-  FOREVER_WOWHEAD_ZONES,
-  unmappedZones,
-} from '../src/plugins/wow-common/forever-quest-import/forever-quest.zones';
+  FOREVER_SEED_ID_BASE,
+  getInstance,
+} from '../src/plugins/wow-common/instance-catalogue/instance-catalogue';
 import { WOWHEAD_USER_AGENT } from '../src/plugins/wow-common/wowhead-item/wowhead-item.fetch';
 import {
   WOWHEAD_MAX_TRIES_PER_RUN,
@@ -65,6 +66,13 @@ function fixtureSource(dir: string): QuestPageSource {
   };
 }
 
+/** Wowhead `/forever/zone=<id>` of seed instance n, or null (unmapped). */
+function seedZoneId(n: number): number | null {
+  return (
+    getInstance(FOREVER_SEED_ID_BASE + n, 'wow_forever')?.wowheadZoneId ?? null
+  );
+}
+
 function liveSource(maxRequests: number): QuestPageSource {
   const limiter = createWowheadLimiter();
   const get = createRetryingGetter({
@@ -76,7 +84,7 @@ function liveSource(maxRequests: number): QuestPageSource {
   });
   return {
     zonePage: (n) => {
-      const zoneId = FOREVER_WOWHEAD_ZONES[n];
+      const zoneId = seedZoneId(n);
       return zoneId ? get(`${WOWHEAD}/zone=${zoneId}`) : Promise.resolve(null);
     },
     questPage: (id) => get(`${WOWHEAD}/quest=${id}`),
@@ -125,7 +133,7 @@ function pickSource(
   if (underTest && (live || !opts.allowUnderTest))
     return 'refusing to run under jest/CI';
   if (!live) return fixtureSource(dir as string);
-  if (unmappedZones().length === Object.keys(FOREVER_WOWHEAD_ZONES).length)
+  if (foreverSeedRows().every((r) => r.wowheadZoneId === null))
     return 'zones not mapped';
   return liveSource(maxRequests);
 }

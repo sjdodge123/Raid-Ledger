@@ -1,18 +1,17 @@
 /**
  * ROK-2143: the 19 classic dungeons (keyed by the Blizzard journal instance
  * id `data/dungeon-quest-data.json` uses) → Blizzard quest-area id
- * (`/data/wow/quest/area/{id}`, classic AreaTable ids). Area ids come from the
- * retired Wowhead importer's zone table. `areaNames` are the names the
- * importer accepts from `quest/index` `areas[]`; a dungeon whose area name
- * does not match is skipped and reported (self-verification by name).
+ * (`/data/wow/quest/area/{id}`, classic AreaTable ids). `areaNames` are the
+ * names the importer accepts from `quest/index` `areas[]`; a dungeon whose
+ * area name does not match is skipped and reported (self-verification by name).
  * Only `verified` entries were checked against the live API (probe 2026-11-08).
- * Live run 3 (2026-11-09): Blizzard's `quest/area/index` (static-forever) does
- * not list the importer's 491 (Razorfen Kraul) or 1337 (Uldaman). It lists
- * "Razorfen Kraul" as area 1717 (our quest 1101 is filed there) and
- * "Uldaman" as 1517 (our quest 721 is filed there), so those are used. A
- * skipped dungeon still reports the name-alike areas and its sample quest's
- * area.
+ * ROK-2210: the area id is the instance catalogue's first Forever quest area
+ * (live run 3, 2026-11-09, moved Razorfen Kraul to 1717 and Uldaman to 1517 —
+ * Blizzard's `quest/area/index` does not list 491 / 1337). A skipped dungeon
+ * still reports the name-alike areas and its sample quest's area.
  */
+import { getInstance } from '../instance-catalogue/instance-catalogue';
+
 export interface ClassicQuestArea {
   dungeon: string;
   areaId: number;
@@ -21,39 +20,51 @@ export interface ClassicQuestArea {
   verified: boolean;
 }
 
-const area = (
-  dungeon: string,
-  areaId: number,
-  aliases: readonly string[] = [],
-  verified = false,
-): ClassicQuestArea => ({
-  dungeon,
-  areaId,
-  areaNames: [dungeon, ...aliases],
-  verified,
-});
+/** [journal instance id, dungeon name, extra accepted names, verified]. */
+type AreaDef = readonly [number, string, (readonly string[])?, boolean?];
 
-export const CLASSIC_QUEST_AREAS: Readonly<Record<number, ClassicQuestArea>> = {
-  63: area('The Deadmines', 1581, [], true),
-  64: area('Shadowfang Keep', 209),
-  226: area('Ragefire Chasm', 2437),
-  227: area('Blackfathom Deeps', 719),
-  228: area('Blackrock Depths', 1584),
-  229: area('Blackrock Spire', 1583),
-  230: area('Dire Maul', 2557),
-  231: area('Gnomeregan', 721),
-  232: area('Maraudon', 2100),
-  233: area('Razorfen Downs', 722),
-  234: area('Razorfen Kraul', 1717),
-  236: area('Stratholme', 2017),
-  237: area('Sunken Temple', 1477, ["The Temple of Atal'Hakkar"]),
-  238: area('The Stockade', 717, ['Stormwind Stockade'], true),
-  239: area('Uldaman', 1517),
-  240: area('Wailing Caverns', 718, [], true),
-  241: area("Zul'Farrak", 1176),
-  246: area('Scholomance', 2057),
-  316: area('Scarlet Monastery', 796),
-};
+const AREA_DEFS: readonly AreaDef[] = [
+  [63, 'The Deadmines', [], true],
+  [64, 'Shadowfang Keep'],
+  [226, 'Ragefire Chasm'],
+  [227, 'Blackfathom Deeps'],
+  [228, 'Blackrock Depths'],
+  [229, 'Blackrock Spire'],
+  [230, 'Dire Maul'],
+  [231, 'Gnomeregan'],
+  [232, 'Maraudon'],
+  [233, 'Razorfen Downs'],
+  [234, 'Razorfen Kraul'],
+  [236, 'Stratholme'],
+  [237, 'Sunken Temple', ["The Temple of Atal'Hakkar"]],
+  [238, 'The Stockade', ['Stormwind Stockade'], true],
+  [239, 'Uldaman'],
+  [240, 'Wailing Caverns', [], true],
+  [241, "Zul'Farrak"],
+  [246, 'Scholomance'],
+  [316, 'Scarlet Monastery'],
+];
+
+/** The catalogue's first Forever quest area of an instance; throws if none. */
+function catalogueAreaId(instanceId: number): number {
+  const row = getInstance(instanceId, 'wow_forever');
+  const areaId = row?.foreverQuestAreaIds[0];
+  if (areaId === undefined) {
+    throw new Error(`ROK-2210: no Forever quest area for ${instanceId}`);
+  }
+  return areaId;
+}
+
+function toEntry([id, dungeon, aliases = [], verified = false]: AreaDef): [
+  number,
+  ClassicQuestArea,
+] {
+  const areaNames = [dungeon, ...aliases];
+  return [id, { dungeon, areaId: catalogueAreaId(id), areaNames, verified }];
+}
+
+export const CLASSIC_QUEST_AREAS: Readonly<Record<number, ClassicQuestArea>> =
+  Object.fromEntries(AREA_DEFS.map(toEntry));
 
 /** All mapped journal instance ids, ascending. */
 export function classicQuestAreaInstanceIds(): number[] {

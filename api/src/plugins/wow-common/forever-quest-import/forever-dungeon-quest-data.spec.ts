@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { FOREVER_INSTANCES } from '../forever-instance-data';
+import { getInstance } from '../instance-catalogue/instance-catalogue';
 
 const rows = JSON.parse(
   readFileSync(
@@ -21,9 +21,10 @@ describe('shipped forever-dungeon-quest-data.json', () => {
 
   it('keys no row more than 5 levels above its instance band max', () => {
     const outOfBand = rows.filter((r) => {
-      const max = FOREVER_INSTANCES.find(
-        (i) => i.id === r.dungeonInstanceId,
-      )?.maximumLevel;
+      const max =
+        r.dungeonInstanceId === null
+          ? undefined
+          : getInstance(r.dungeonInstanceId, 'wow_forever')?.maximumLevel;
       return (
         max !== undefined && r.questLevel !== null && r.questLevel > max + 5
       );

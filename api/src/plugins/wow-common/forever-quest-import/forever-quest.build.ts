@@ -4,9 +4,11 @@
  * from the injected source; used by `api/scripts/prepare-forever-dungeon-quests.ts`.
  */
 import {
-  FOREVER_INSTANCES,
   FOREVER_SEED_ID_BASE,
-} from '../forever-instance-data';
+  getInstance,
+  listInstances,
+} from '../instance-catalogue/instance-catalogue';
+import type { CatalogueInstance } from '../instance-catalogue/instance-catalogue.types';
 import {
   parseQuestPage,
   parseZoneQuestList,
@@ -84,13 +86,32 @@ function checkBand(
   row: DungeonQuestRow,
   seedN: number,
 ): void {
-  const max = FOREVER_INSTANCES.find(
-    (i) => i.id === FOREVER_SEED_ID_BASE + seedN,
+  const max = getInstance(
+    FOREVER_SEED_ID_BASE + seedN,
+    'wow_forever',
   )?.maximumLevel;
   if (max === undefined || row.questLevel === null) return;
   if (row.questLevel <= max + BAND_SLACK) return;
   const { questId, name, questLevel } = row;
   state.summary.outOfBand.push({ questId, name, questLevel, seedN });
+}
+
+/**
+ * The name a zone page title must contain. ROK-2210 renamed two seeds to
+ * Blizzard's "The …" spelling; the check keeps accepting the name without it.
+ */
+function titleName(instanceName: string): string {
+  return instanceName.replace(/^The /, '');
+}
+
+/** ROK-2210: the Forever-new catalogue rows (seed ns 1–11), seed order. */
+export function foreverSeedRows(): CatalogueInstance[] {
+  return [
+    ...listInstances('wow_forever', 'dungeon'),
+    ...listInstances('wow_forever', 'raid'),
+  ]
+    .filter((r) => r.id > FOREVER_SEED_ID_BASE)
+    .sort((a, b) => a.id - b.id);
 }
 
 async function importZone(
@@ -102,7 +123,7 @@ async function importZone(
   const html = await source.zonePage(seedN);
   if (html === null) return;
   const title = TITLE_RE.exec(html)?.[1] ?? '';
-  if (!title.includes(instanceName)) {
+  if (!title.includes(titleName(instanceName))) {
     state.summary.zoneReports.push(
       `zone ${seedN} skipped: title "${title}" lacks "${instanceName}"`,
     );
@@ -139,7 +160,7 @@ export async function buildForeverQuestDataset(
   source: QuestPageSource,
 ): Promise<{ rows: DungeonQuestRow[]; summary: BuildSummary }> {
   const state = emptyState();
-  for (const instance of FOREVER_INSTANCES) {
+  for (const instance of foreverSeedRows()) {
     await importZone(
       source,
       state,

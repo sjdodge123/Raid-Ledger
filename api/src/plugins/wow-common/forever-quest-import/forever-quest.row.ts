@@ -3,7 +3,7 @@
  * `data/forever-dungeon-quest-data.json` row, Zod-validated.
  */
 import { z } from 'zod';
-import { FOREVER_SEED_ID_BASE } from '../forever-instance-data';
+import { FOREVER_SEED_ID_BASE } from '../instance-catalogue/instance-catalogue';
 import type {
   ParsedQuest,
   ParseSkip,
