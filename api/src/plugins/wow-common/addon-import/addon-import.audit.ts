@@ -34,7 +34,7 @@ export function isOverLimit(used: number, dryRun: boolean): boolean {
  */
 export type AddonImportAuditOutcome = Pick<
   AddonImportAuditInsert,
-  'section' | 'payloadSha256' | 'result' | 'characterId'
+  'section' | 'payloadSha256' | 'result' | 'characterId' | 'envelopeVersion'
 >;
 
 /**
@@ -148,12 +148,19 @@ export class AddonImportAuditService {
   }
 }
 
-function outcomeOf(row: AddonImportAuditInsert): AddonImportAuditOutcome {
+/**
+ * The finalising UPDATE's fields. ROK-2184: `envelopeVersion` too — else the
+ * decoded version never reaches the reserved row (only the sniffed one would).
+ */
+export function outcomeOf(
+  row: AddonImportAuditInsert,
+): AddonImportAuditOutcome {
   return {
     section: row.section,
     payloadSha256: row.payloadSha256,
     result: row.result,
     characterId: row.characterId,
+    envelopeVersion: row.envelopeVersion,
   };
 }
 

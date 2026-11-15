@@ -1,6 +1,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AddonImportStatus, WowRegion } from '@raid-ledger/contract';
 import type * as schema from '../../../drizzle/schema';
+import type { AnyAddonGuildExport } from './addon-import.pages';
 
 /** The transaction the service opens and hands to every apply step. */
 export type AddonImportTx = PostgresJsDatabase<typeof schema>;
@@ -22,6 +23,11 @@ export interface AddonApplyContext {
    * sections ran (`AddonBindingResult.pinGuid`); the raid takeover trusts it.
    */
   pendingGuid?: string | null;
+  /**
+   * ROK-2184 review #2 — the same paste's guild section, if any: the roster
+   * the loot section's exporter check reads first (`assertLootExporterInGuild`).
+   */
+  pasteGuild?: AnyAddonGuildExport;
 }
 
 /**

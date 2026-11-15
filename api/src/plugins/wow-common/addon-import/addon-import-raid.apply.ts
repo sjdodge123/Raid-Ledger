@@ -1,9 +1,9 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import type {
   AddonPull,
-  AddonRaidExport,
   AddonRaidImportSummarySchema,
 } from '@raid-ledger/contract';
+import type { DecodedAddonRaidExport } from './addon-import.decoder';
 import type { z } from 'zod';
 import {
   addonEncounterPulls,
@@ -51,7 +51,7 @@ export function rosterEntries(pull: AddonPull): AddonPullRosterEntry[] {
 
 export function pullRow(
   pull: AddonPull,
-  payload: AddonRaidExport,
+  payload: DecodedAddonRaidExport,
   ctx: AddonApplyContext,
 ): AddonEncounterPullInsert {
   return {
@@ -93,7 +93,7 @@ export function countNewPulls(
 
 async function countNew(
   ctx: AddonApplyContext,
-  payload: AddonRaidExport,
+  payload: DecodedAddonRaidExport,
 ): Promise<number> {
   const pulls = payload.data.pulls;
   if (pulls.length === 0) return 0;
@@ -121,7 +121,7 @@ async function countNew(
 /** Dry run: how many pulls would be new vs already reported. No writes. */
 export async function previewRaid(
   ctx: AddonApplyContext,
-  payload: AddonRaidExport,
+  payload: DecodedAddonRaidExport,
 ): Promise<RaidOutcome> {
   const fresh = await countNew(ctx, payload);
   return {
@@ -138,7 +138,7 @@ export async function previewRaid(
  */
 export async function applyRaid(
   ctx: AddonApplyContext,
-  payload: AddonRaidExport,
+  payload: DecodedAddonRaidExport,
 ): Promise<RaidOutcome> {
   const pulls = payload.data.pulls;
   if (pulls.length === 0) {

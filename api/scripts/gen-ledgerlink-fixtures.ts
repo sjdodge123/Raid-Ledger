@@ -1,7 +1,9 @@
 /**
- * Regenerates the LedgerLink v1 golden fixtures in
- * `packages/contract/ledgerlink/v1/fixtures/` from the synthetic fixture
- * builder (no real player data) and the REAL decoder (ROK-1724).
+ * Regenerates the LedgerLink golden fixtures from the synthetic fixture
+ * builder (no real player data) and the REAL decoder: `v1/fixtures/`
+ * (ROK-1724 — frozen, must stay byte-identical) and then `v2/fixtures/`
+ * (ROK-2184, `gen-ledgerlink-fixtures.v2.ts` — the only v2 source). v2 is
+ * validated in full before anything under `v2/` is written.
  *
  *   cd api && npx ts-node scripts/gen-ledgerlink-fixtures.ts
  *
@@ -21,7 +23,6 @@ import {
   type AddonImportErrorCode,
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
-import { AddonImportError } from '../src/plugins/wow-common/addon-import/addon-import.errors';
 import {
   FIXTURE_GUID,
   buildCharPayload,
@@ -52,8 +53,12 @@ import {
   buildCharInstalledAddonsPayload,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.installed';
 import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
+import { buildV2Fixtures } from './gen-ledgerlink-fixtures.v2';
+import { codeOf, fmt, writeFixtures } from './ledgerlink-fixtures.io';
 
-const OUT = join(__dirname, '../../packages/contract/ledgerlink/v1/fixtures');
+const LL = join(__dirname, '../../packages/contract/ledgerlink');
+const OUT = join(LL, 'v1/fixtures');
+const OUT_V2 = join(LL, 'v2/fixtures');
 /** Members per page the addon emits (LedgerLink `Guild.MEMBERS_PER_PAGE`). */
 const PER_PAGE = 250;
 
@@ -277,34 +282,6 @@ const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
   'mixed-11-tokens': ['PAGES_INCOMPLETE', mixed11Tokens],
 };
 
-/** Pretty JSON, but containers 4+ levels deep stay on one line. */
-function fmt(value: unknown, depth = 0): string {
-  if (value === null || typeof value !== 'object' || depth >= 4) {
-    return JSON.stringify(value);
-  }
-  const pad = '  '.repeat(depth + 1);
-  const end = '  '.repeat(depth);
-  const parts = Array.isArray(value)
-    ? value.map((v) => pad + fmt(v, depth + 1))
-    : Object.entries(value).map(
-        ([k, v]) => `${pad}${JSON.stringify(k)}: ${fmt(v, depth + 1)}`,
-      );
-  const [open, close] = Array.isArray(value) ? ['[', ']'] : ['{', '}'];
-  return parts.length
-    ? `${open}\n${parts.join(',\n')}\n${end}${close}`
-    : `${open}${close}`;
-}
-
-function codeOf(paste: string): AddonImportErrorCode | null {
-  try {
-    decodeImportPaste(paste);
-    return null;
-  } catch (err) {
-    if (err instanceof AddonImportError) return err.code;
-    throw err;
-  }
-}
-
 /** ROK-1742 AC7: 8 guild pages + a max-quests char + raid fit one paste. */
 function assertWorstCasePasteFits(): void {
   const paste = [
@@ -357,6 +334,9 @@ function main(): void {
   console.log(
     `wrote ${Object.keys(VALID).length} valid + ${Object.keys(INVALID).length} invalid fixtures to ${OUT}`,
   );
+  const v2 = buildV2Fixtures(OUT);
+  writeFixtures(OUT_V2, v2);
+  console.log(`wrote ${v2.length} v2 fixture files to ${OUT_V2}`);
 }
 
 main();

@@ -36,6 +36,7 @@ export function recordPasteFacts(
   if (!first) throw new AddonImportError('BAD_HEADER');
   facts.section = first.payload.section;
   facts.sha256 = first.sha256;
+  facts.envelopeVersion = paste.version;
   if (sections.length > 1) {
     facts.sections = sections.map((s) => ({
       section: s.payload.section,
@@ -59,6 +60,7 @@ export function auditRow(
     sizeBytes: facts.sizeBytes,
     dryRun: facts.dryRun,
     result,
+    envelopeVersion: facts.envelopeVersion,
   };
 }
 

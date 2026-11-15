@@ -8,6 +8,8 @@ import type { DecodedAddonPaste } from './addon-import.decoder';
  *
  *   1. the GUID pin lock   `(ADDON_GUID_LOCK_CLASS, hashtext('game:region:guid'))`
  *   2. the guild-import lock `hashtext('guild-import:game:region:nameKey')`
+ *      — the guild section's name and (ROK-2184) the loot section's
+ *      exporter guild, each once, in sorted key order (`guildLockKeys`).
  *   3. the roster-claim name lock `(ADDON_GUID_LOCK_CLASS, hashtext('claim-name:game:region:lower(name)'))`
  *      — taken only by the ROK-2128 roster claim, after (1); no import takes it.
  *   4. the character row `FOR NO KEY UPDATE` (ROK-2159 owner re-check) — a
@@ -77,9 +79,24 @@ export async function lockImportScope(
 ): Promise<void> {
   const { gameId, region, guid, paste } = scope;
   if (guid) await lockAddonGuid(tx, gameId, region, guid);
-  const guild = paste.sections.guild;
-  if (guild) {
-    const nameKey = guildNameKey(guild.payload.data.name);
+  for (const nameKey of guildLockKeys(paste)) {
     await lockGuildName(tx, gameId, region, nameKey);
   }
+}
+
+/**
+ * The (2) guild-import keys a paste locks, sorted so two imports needing
+ * several always take them in one order. The guild section locks its
+ * `data.name`; ROK-2184 — a `loot` section also locks its exporter's
+ * `who.guildName` key (the key its drops are stored under), so a loot-only
+ * paste queues behind any other import of that guild. An unguilded loot
+ * export ('' key) locks nothing: its unique-index insert is race-safe alone.
+ */
+export function guildLockKeys(paste: DecodedAddonPaste): string[] {
+  const keys = new Set<string>();
+  const { guild, loot } = paste.sections;
+  if (guild) keys.add(guildNameKey(guild.payload.data.name));
+  const lootKey = loot ? guildNameKey(loot.payload.who.guildName) : '';
+  if (lootKey) keys.add(lootKey);
+  return [...keys].sort();
 }

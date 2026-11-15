@@ -1,0 +1,1 @@
+ALTER TABLE "addon_import_audit" ADD COLUMN "envelope_version" smallint;

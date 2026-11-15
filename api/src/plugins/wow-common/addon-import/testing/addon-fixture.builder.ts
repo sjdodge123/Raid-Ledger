@@ -1,7 +1,7 @@
 import { deflateSync } from 'node:zlib';
 import type {
   AddonCharExport,
-  AddonExportSection,
+  AddonExportSectionV2,
   AddonGuildExport,
   AddonGuildMember,
   AddonRaidExport,
@@ -15,7 +15,8 @@ import type {
  * ROK-1723 strings exist they drop into `testing/fixtures/*.txt`.
  */
 export interface ImportStringOptions {
-  section?: AddonExportSection;
+  /** v2 adds `loot` (ROK-2184); the decoder decides what a version admits. */
+  section?: AddonExportSectionV2;
   version?: number;
   page?: { n: number; of: number };
 }
@@ -37,7 +38,7 @@ export function buildImportString(
 ): string {
   const section =
     opts.section ??
-    (payload as { section?: AddonExportSection }).section ??
+    (payload as { section?: AddonExportSectionV2 }).section ??
     'char';
   const compressed = deflateSync(Buffer.from(JSON.stringify(payload), 'utf8'));
   return wrapImportBytes(compressed, { ...opts, section });

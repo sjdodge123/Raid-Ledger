@@ -299,6 +299,11 @@ output with the same pipeline and compare), and must not keep an edited copy.
   operator confirms LedgerLink has shipped the new one. (Today the decoder
   accepts exactly `1`.)
 
+> **Superseded by v2 (ROK-2184, 2026-11-15).** v1 is frozen: no new fields.
+> New work targets `../v2/` (`!RL2!` envelope, payload `schema: 2`, new
+> `loot` section). The server accepts `!RL1!` and `!RL2!` during the
+> transition; one paste must use one version.
+
 ## 10. Change process
 
 1. Only a **Raid Ledger PR touching `packages/contract/ledgerlink/`** may
