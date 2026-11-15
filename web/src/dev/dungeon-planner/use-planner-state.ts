@@ -1,45 +1,76 @@
 /**
- * ROK-2207 prototype — the planner's local state over the fixtures and the
- * links it builds. The build keeps this state in the URL (spec D5).
+ * ROK-2207 prototype — the planner's state over the fixtures, restored from
+ * the URL on load (`?c=…&d=…`, OQ5) and the links it builds.
  */
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { WowInstanceDto } from '@raid-ledger/contract';
-import { CHARACTERS, DALARAN_ID, DEMO_GAME_ID, DEMO_GUILD_ID, DEMO_HUB_ID, INSTANCES } from './dungeon-planner.fixtures';
-import { createEventUrl, shareUrl, type PlannerCharacter } from './planner-helpers';
+import { DALARAN_ID, DEMO_GAME_ID, DEMO_GUILD_ID, ROSTER } from './dungeon-planner.fixtures';
+import { INSTANCES, instanceById } from './forever-dungeons.fixtures';
+import { createEventUrl, invitable, parsePlanQuery, shareUrl, type PlannerCharacter } from './planner-helpers';
 
-/** The planner's local state: one dungeon + up to five characters (starts with three). */
+export const MAX_CHARS = 5;
+export const MAX_DUNGEONS = 3;
+
+/** One plan: up to five roster characters and one (or, for OQ2 B, up to three) dungeons. */
 export interface PlannerState {
     instance: WowInstanceDto;
+    dungeons: WowInstanceDto[];
     chars: PlannerCharacter[];
-    setInstanceId: (id: number) => void;
-    remove: (name: string) => void;
-    addNext: () => void;
+    /** Roster rows not yet picked (the "+ Add character" picker's options). */
+    available: PlannerCharacter[];
     canAdd: boolean;
+    setInstanceId: (id: number) => void;
+    toggleDungeon: (id: number) => void;
+    add: (name: string) => void;
+    remove: (name: string) => void;
 }
 
-/** Local planner state over the fixtures. */
-export function usePlannerState(initialCount: number = 3): PlannerState {
-    const [instanceId, setInstanceId] = useState(DALARAN_ID);
-    const [names, setNames] = useState<string[]>(CHARACTERS.slice(0, initialCount).map((c) => c.name));
-    const instance = INSTANCES.find((i) => i.id === instanceId) ?? INSTANCES[0] ?? { id: 0, name: '—', expansion: '' };
-    const chars = CHARACTERS.filter((c) => names.includes(c.name));
-    const nextFree = CHARACTERS.find((c) => !names.includes(c.name));
+const FALLBACK: WowInstanceDto = { id: 0, name: '—', expansion: 'Forever' };
+
+/** Initial names + dungeon ids: the URL wins over the frame's defaults. */
+function useInitialPlan(names: string[], dungeonIds: number[]): { names: string[]; dungeonIds: number[] } {
+    const [params] = useSearchParams();
+    const fromUrl = parsePlanQuery(params.toString());
+    const known = (fromUrl.names ?? names).filter((n) => ROSTER.some((r) => r.name === n)).slice(0, MAX_CHARS);
+    const ids = (fromUrl.dungeonIds ?? dungeonIds).filter((id) => instanceById(id)).slice(0, MAX_DUNGEONS);
+    return { names: known, dungeonIds: ids.length ? ids : [DALARAN_ID] };
+}
+
+/** Planner state for one frame; `names`/`dungeonIds` are the defaults when the URL carries none. */
+export function usePlannerState(names: string[], dungeonIds: number[] = [DALARAN_ID]): PlannerState {
+    const initial = useInitialPlan(names, dungeonIds);
+    const [picked, setPicked] = useState<string[]>(initial.names);
+    const [ids, setIds] = useState<number[]>(initial.dungeonIds);
+    const dungeons = ids.flatMap((id) => instanceById(id) ?? []);
+    const chars = picked.flatMap((n) => ROSTER.find((r) => r.name === n) ?? []);
     return {
-        instance, chars, setInstanceId,
-        remove: (name) => setNames((n) => n.filter((x) => x !== name)),
-        addNext: () => { if (nextFree) setNames((n) => [...n, nextFree.name]); },
-        canAdd: nextFree !== undefined,
+        instance: dungeons[0] ?? INSTANCES[0] ?? FALLBACK, dungeons, chars,
+        available: ROSTER.filter((r) => !picked.includes(r.name)),
+        canAdd: picked.length < MAX_CHARS,
+        setInstanceId: (id) => setIds([id]),
+        toggleDungeon: (id) => setIds((cur) => toggled(cur, id)),
+        add: (name) => setPicked((n) => (n.length < MAX_CHARS && !n.includes(name) ? [...n, name] : n)),
+        remove: (name) => setPicked((n) => n.filter((x) => x !== name)),
     };
 }
 
-/** Share link + the two Create-event URLs for the current plan. */
-export function plannerLinks(s: PlannerState): { share: string; plain: string; invite: string } {
-    const ids = s.chars.flatMap((c) => (c.characterId ? [c.characterId] : []));
-    const base = { gameId: DEMO_GAME_ID, guildId: DEMO_GUILD_ID, instanceIds: [s.instance.id] };
+function toggled(cur: number[], id: number): number[] {
+    if (cur.includes(id)) return cur.length > 1 ? cur.filter((x) => x !== id) : cur;
+    return cur.length < MAX_DUNGEONS ? [...cur, id] : cur;
+}
+
+/** Share link (this page + `?c=…&d=…`) and the two Create-event URLs for one dungeon. */
+export function plannerLinks(s: PlannerState, instanceId: number = s.instance.id): {
+    share: string; plain: string; invite: string; inviteCount: number; excluded: string[];
+} {
+    const { ids, excluded } = invitable(s.chars);
+    const base = { gameId: DEMO_GAME_ID, guildId: DEMO_GUILD_ID, instanceIds: [instanceId] };
+    const page = `${window.location.origin}${window.location.pathname}`;
     return {
-        share: shareUrl(window.location.origin, { hubId: DEMO_HUB_ID, instanceId: s.instance.id, characterIds: ids }),
+        share: shareUrl(page, { names: s.chars.map((c) => c.name), dungeonIds: s.dungeons.map((d) => d.id) }),
         plain: createEventUrl(base),
         invite: createEventUrl({ ...base, inviteCharacterIds: ids }),
+        inviteCount: ids.length, excluded,
     };
 }
-
