@@ -167,42 +167,62 @@ describe('BlizzardService.fetchRealmList — stale and recovery paths', () => {
 });
 
 /**
- * ROK-1719 (OQ2): when Blizzard's journal is down, WoW: Forever still offers
- * the seeded instances — and that seed-only list is never cached.
+ * ROK-2210: classic_era / wow_forever are served from the catalogue — no token
+ * and no journal call, so they work with no Blizzard keys at all.
  */
-describe('BlizzardService.fetchAllInstances — Forever degraded mode', () => {
+describe('BlizzardService — catalogue-served variants (ROK-2210)', () => {
   afterEach(() => jest.restoreAllMocks());
-  const FULL = {
-    dungeons: [{ id: 63, name: 'Deadmines', expansion: 'Classic' }],
-    raids: [],
-  };
 
-  it('serves the 11 seeded instances instead of throwing, then recovers', async () => {
+  it.each(['wow_forever', 'classic_era'] as const)(
+    'lists %s with no token and no journal call',
+    async (variant) => {
+      const { service, getAccessToken } = setup();
+      const fetchAll = jest.spyOn(instFetch, 'fetchAllInstancesFromApi');
+      const list = await service.fetchAllInstances('us', variant);
+      expect(list.raids.map((r) => r.id)).toEqual(
+        expect.arrayContaining([741, 760, 754]),
+      );
+      expect([getAccessToken.mock.calls, fetchAll.mock.calls]).toEqual([
+        [],
+        [],
+      ]);
+    },
+  );
+
+  it('resolves a catalogue id detail with no token', async () => {
+    const { service, getAccessToken } = setup();
+    const detail = await service.fetchInstanceDetail(
+      22901,
+      'us',
+      'wow_forever',
+    );
+    expect(detail.name).toBe('Upper Blackrock Spire');
+    expect(getAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('sends a non-catalogue id (Scarlet Halls 311) to the journal', async () => {
+    const { service } = setup();
+    const journal = jest
+      .spyOn(instFetch, 'fetchInstanceDetailFromApi')
+      .mockResolvedValue({
+        id: 311,
+        name: 'Scarlet Halls',
+        expansion: 'Mists of Pandaria',
+        minimumLevel: null,
+        maxPlayers: 5,
+        category: 'dungeon',
+      });
+    await service.fetchInstanceDetail(311, 'us', 'wow_forever');
+    expect(journal).toHaveBeenCalledWith(311, 'us', 'wow_forever', 't');
+  });
+
+  it('still uses the journal list for retail', async () => {
     const { service } = setup();
     const fetchAll = jest
       .spyOn(instFetch, 'fetchAllInstancesFromApi')
-      .mockRejectedValueOnce(failed())
-      .mockResolvedValueOnce(FULL);
-    const degraded = await service.fetchAllInstances('us', 'wow_forever');
-    expect(degraded.dungeons.map((d) => d.id)).toHaveLength(9);
-    expect(degraded.raids.map((r) => r.name)).toEqual([
-      'Barrow Deeps',
-      'Hyjal Summit',
-    ]);
-    await expect(
-      service.fetchAllInstances('us', 'wow_forever'),
-    ).resolves.toEqual(FULL);
-    expect(fetchAll).toHaveBeenCalledTimes(2);
-  });
-
-  it('still throws for every other variant', async () => {
-    const { service } = setup();
-    jest
-      .spyOn(instFetch, 'fetchAllInstancesFromApi')
-      .mockRejectedValue(failed());
-    await expect(
-      service.fetchAllInstances('us', 'classic_era'),
-    ).rejects.toBeInstanceOf(BadGatewayException);
+      .mockResolvedValue({ dungeons: [], raids: [] });
+    await service.fetchAllInstances('us', 'retail');
+    expect(fetchAll).toHaveBeenCalledWith('us', 'retail', 't');
   });
 });
 
