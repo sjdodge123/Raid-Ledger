@@ -109,6 +109,8 @@ export interface DecodedAddonPaste {
   tokens: number;
   /** UTF-8 byte length of the whole trimmed input. */
   inputBytes: number;
+  /** ROK-2184 — the paste's one `!RLn!` envelope version (ruling Q6). */
+  version: AddonExportVersion;
 }
 
 const SAFE_KEY = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
@@ -291,6 +293,8 @@ export function decodeImportPaste(
     throw new AddonImportError('TOO_LARGE');
   if (input === '') throw new AddonImportError('BAD_HEADER');
   const groups = parsePaste(input);
+  const version = groups[0]?.headers[0]?.version;
+  if (version === undefined) throw new AddonImportError('BAD_HEADER');
   const mixed = groups.length > 1;
   const decoded = groups.map((g) =>
     decodeGroup(g, mixed ? g.bytes : inputBytes, mixed, nowMs),
@@ -301,6 +305,7 @@ export function decodeImportPaste(
     order: groups.map((g) => g.section),
     tokens: groups.reduce((n, g) => n + g.headers.length, 0),
     inputBytes,
+    version,
   };
 }
 

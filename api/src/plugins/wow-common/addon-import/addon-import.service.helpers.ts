@@ -36,6 +36,11 @@ export interface AttemptFacts {
    * row each. Empty for a single-section paste (one row, as before).
    */
   sections: SectionAuditFact[];
+  /**
+   * ROK-2184 — the `!RLn!` envelope version: sniffed from the raw header,
+   * then the decoded paste's version. Null when the header never parsed.
+   */
+  envelopeVersion: number | null;
 }
 
 /** One section of a mixed paste, for its own audit row. */
@@ -45,14 +50,31 @@ export interface SectionAuditFact {
   sizeBytes: number;
 }
 
-const SECTION_SNIFF = /^\s*!RL\d+!(char|guild|raid|loot)\b/;
+const SECTION_SNIFF = /^\s*!RL(\d+)!(char|guild|raid|loot)\b/;
+/** `addon_import_audit.envelope_version` is a smallint. */
+const SMALLINT_MAX = 32_767;
+
+function sniffHeader(raw: unknown): RegExpExecArray | null {
+  if (typeof raw !== 'string') return null;
+  return SECTION_SNIFF.exec(raw.slice(0, 32));
+}
 
 /** Header section without decoding anything (audit only). */
 export function sniffSection(raw: unknown): AddonExportSectionV2 | null {
-  if (typeof raw !== 'string') return null;
-  const match = SECTION_SNIFF.exec(raw.slice(0, 32));
-  const parsed = AddonExportSectionV2Schema.safeParse(match?.[1]);
+  const parsed = AddonExportSectionV2Schema.safeParse(sniffHeader(raw)?.[2]);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * ROK-2184 — the header's envelope version without decoding (audit only):
+ * any number, so a reject row records what was pasted. Null when the header
+ * doesn't parse or the number would overflow the smallint column.
+ */
+export function sniffEnvelopeVersion(raw: unknown): number | null {
+  const digits = sniffHeader(raw)?.[1];
+  if (digits === undefined) return null;
+  const version = Number(digits);
+  return version <= SMALLINT_MAX ? version : null;
 }
 
 /** Facts readable from the raw body before validation. */
@@ -66,6 +88,7 @@ export function rawFacts(body: unknown): AttemptFacts {
     sha256: null,
     auditId: null,
     sections: [],
+    envelopeVersion: sniffEnvelopeVersion(str),
   };
 }
 
