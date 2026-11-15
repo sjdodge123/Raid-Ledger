@@ -7,6 +7,7 @@
  */
 import {
   FOREVER_SEED_ID_BASE,
+  FOREVER_SEED_ID_SPAN,
   parentIdOf,
 } from './instance-catalogue/instance-catalogue';
 
@@ -27,7 +28,12 @@ export function resolveQuestInstanceIds(
   instanceId: number,
   aliases: Readonly<Record<number, number>> = FOREVER_JOURNAL_ALIASES,
 ): number[] {
-  if (instanceId > FOREVER_SEED_ID_BASE) return [instanceId];
+  if (
+    instanceId > FOREVER_SEED_ID_BASE &&
+    instanceId <= FOREVER_SEED_ID_BASE + FOREVER_SEED_ID_SPAN
+  ) {
+    return [instanceId];
+  }
   const seedId = aliases[instanceId];
   if (seedId !== undefined) return [instanceId, seedId];
   const parentId = parentIdOf(instanceId);

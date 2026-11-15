@@ -3,7 +3,7 @@
  * (id, variant): the same journal id has a `classic_era` row and a
  * `wow_forever` row (built by `foreverEdition`).
  */
-import type { WowGameVariant } from '@raid-ledger/contract';
+import type { WowGameVariant, WowInstanceDto } from '@raid-ledger/contract';
 
 /** The variants the catalogue serves; the others stay journal-served. */
 export type CatalogueVariant = Extract<
@@ -12,7 +12,7 @@ export type CatalogueVariant = Extract<
 >;
 
 /** Where a level range came from (`in_game` once the probe verifies it). */
-export type LevelSource = 'in_game' | 'classic_era' | 'community';
+export type LevelSource = NonNullable<WowInstanceDto['levelSource']>;
 
 export type CatalogueCategory = 'dungeon' | 'raid';
 

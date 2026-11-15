@@ -13,6 +13,9 @@ import type { CatalogueInstance } from './instance-catalogue.types';
 /** Reserved id range — clear of journal ids and synthetic wing ids. */
 export const FOREVER_SEED_ID_BASE = 90_000_000;
 
+/** Width of the reserved Forever seed id range above the base. */
+export const FOREVER_SEED_ID_SPAN = 999;
+
 const B = FOREVER_SEED_ID_BASE;
 
 export const FOREVER_NEW_ROWS: readonly CatalogueInstance[] = [

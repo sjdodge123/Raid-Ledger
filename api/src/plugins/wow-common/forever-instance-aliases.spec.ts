@@ -32,6 +32,14 @@ describe('FOREVER_JOURNAL_ALIASES (ROK-1748 D3/D4)', () => {
 });
 
 describe('resolveQuestInstanceIds', () => {
+  it('treats only the reserved seed span as seed ids (upper bound)', () => {
+    const past = FOREVER_SEED_ID_BASE + 1000;
+    expect(resolveQuestInstanceIds(past, { [past]: SEED_1 })).toEqual([
+      past,
+      SEED_1,
+    ]);
+  });
+
   it('returns a seed id alone (no /100 parent rule)', () => {
     expect(resolveQuestInstanceIds(SEED_1)).toEqual([SEED_1]);
   });

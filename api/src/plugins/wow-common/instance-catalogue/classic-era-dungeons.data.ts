@@ -15,7 +15,7 @@ export const CLASSIC_DUNGEON_DEFS: readonly ClassicDef[] = [
   dungeon([238, 'The Stockade', 'Stocks'], [22, 30, 5], [[717], 717]),
   dungeon([227, 'Blackfathom Deeps', 'BFD'], [24, 32, 5], [[719], 719]),
   dungeon([231, 'Gnomeregan', 'Gnomer'], [29, 38, 5], [[721, 133], 721]),
-  // Wowhead zone 491 ≠ quest area 1717 (import-forever-boss-loot.mjs).
+  // Wowhead zone 491 ≠ quest area 1717 (import-forever-boss-loot.ts).
   dungeon([234, 'Razorfen Kraul', 'RFK'], [30, 40, 5], [[1717], 491]),
   dungeon([316, 'Scarlet Monastery', 'SM'], [26, 40, 5], [[796], 796], {
     unlisted: true,
