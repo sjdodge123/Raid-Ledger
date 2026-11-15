@@ -48,7 +48,7 @@ Arguments: none → Phase A. `--resume <path to NIGHT-PLAN>` → skip to **Resum
 ## Phase B — run the night
 
 - Work the waves in order with the `/lead` §4 pipeline. At every seam (PR opened, gate finished, story merged or parked) append one line to NIGHT-PLAN §6: `HH:MMZ — <story>: <what happened> (PR/commit/task id)`. Keep `CURRENT-STATE.md` current at the same seams.
-- After each merge: `/lead` §4 step 9 close-out (Linear, sprint row, env, worktree).
+- After each merge: `/lead` §4 step 9 close-out (Linear, sprint row, backlog strike, env, worktree).
 - **Screens for the morning brief (operator ruling 2026-11-08).** Every story with a visible surface leaves its screens in `planning-artifacts/brief-media/YYYY-MM-DD/ROK-XXXX/` (MAIN checkout, absolute path; gitignored) BEFORE its env is destroyed — envs die and take the screens with them. Each `fleet-ui-verify` brief names that directory and asks for (a) the asserted-state screenshots it already takes (`<step>-<desktop|phone>-<dark|light>.png`) and (b) **one flow GIF**: the story's main flow as 4–10 frames at desktop `default-dark` (`flow-01.png`…), turned into `flow.gif` with `ffmpeg -y -framerate 1 -pattern_type glob -i 'flow-*.png' -vf "scale=960:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" flow.gif`. A story with a surface but no verify lane (a cosmetic trivial fix, a ruling mockup) gets a short Sonnet capture lane (Browser pane, magic link) before close-out. A parked ruling's mockup is captured the same way into its own folder. Check the folder exists at close-out; destroying the env first loses it.
 - Re-rank when reality diverges (a story finishes early, a PR goes red); note the change in §6 with the reason.
 
