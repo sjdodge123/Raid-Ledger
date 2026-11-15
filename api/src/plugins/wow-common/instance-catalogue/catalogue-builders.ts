@@ -6,10 +6,25 @@
 import type {
   CatalogueCategory,
   CatalogueInstance,
+  LevelSource,
 } from './instance-catalogue.types';
 
 /** [minimumLevel, maximumLevel, maxPlayers]. */
 export type LevelTriple = readonly [number, number, number];
+
+/** [minimumLevel, maximumLevel] from the Forever dungeon finder. */
+export type LevelSpan = readonly [number, number];
+
+type LevelFields = Pick<
+  CatalogueInstance,
+  'minimumLevel' | 'maximumLevel' | 'levelSource'
+>;
+
+/** The level fields of an in-game finder span. */
+function finderLevels(span: LevelSpan): LevelFields {
+  const [minimumLevel, maximumLevel] = span;
+  return { minimumLevel, maximumLevel, levelSource: 'in_game' };
+}
 
 export interface ClassicExtras {
   readonly parent?: number;
@@ -84,10 +99,15 @@ export function classicEraRow(def: ClassicDef): CatalogueInstance {
   };
 }
 
-/** The Forever version of a Classic row: same id/name/levels, Forever loot. */
+/**
+ * The Forever version of a Classic row: same id/name, Forever loot. A
+ * `finder` span (Forever dungeon finder) replaces the Classic levels and
+ * marks them `in_game`; without one the Classic levels carry over.
+ */
 export function foreverEdition(
   row: CatalogueInstance,
   areas: readonly number[],
+  finder?: LevelSpan,
 ): CatalogueInstance {
   return {
     ...row,
@@ -95,15 +115,17 @@ export function foreverEdition(
     expansion: 'Forever',
     lootExpansion: 'forever',
     foreverQuestAreaIds: areas,
+    ...(finder !== undefined ? finderLevels(finder) : {}),
   };
 }
 
-/** A Forever-new instance (no Classic counterpart; community levels). */
+/** A Forever-new instance (no Classic counterpart); `levelSource` says where its levels came from. */
 export function foreverNew(
   head: readonly [number, string, string],
   category: CatalogueCategory,
   levels: LevelTriple,
   where: readonly [readonly number[], number | null],
+  levelSource: LevelSource,
 ): CatalogueInstance {
   const [id, name, shortName] = head;
   const [minimumLevel, maximumLevel, maxPlayers] = levels;
@@ -119,7 +141,7 @@ export function foreverNew(
     listed: true,
     minimumLevel,
     maximumLevel,
-    levelSource: 'community',
+    levelSource,
     maxPlayers,
     foreverQuestAreaIds,
     wowheadZoneId,

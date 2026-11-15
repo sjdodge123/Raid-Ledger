@@ -166,15 +166,54 @@ describe('instance catalogue — names, levels, sources', () => {
     );
   });
 
-  it('sets levelSource: classic_era for Classic rows and their Forever editions, community for Forever-new', () => {
-    const seedSources = SEED_IDS.map(
-      (id) => getInstance(id, 'wow_forever')?.levelSource,
+  it('sets levelSource: classic_era on every classic_era row', () => {
+    const era = allCatalogueRows().filter((r) =>
+      r.variants.includes('classic_era'),
     );
-    expect(new Set(seedSources)).toEqual(new Set(['community']));
-    const editions = allCatalogueRows().filter((r) => !SEED_IDS.includes(r.id));
-    expect(new Set(editions.map((r) => r.levelSource))).toEqual(
+    expect(new Set(era.map((r) => r.levelSource))).toEqual(
       new Set(['classic_era']),
     );
+  });
+
+  it('sets levelSource: in_game on every wow_forever row but the two unreleased raids', () => {
+    const notInGame = allCatalogueRows()
+      .filter((r) => r.variants.includes('wow_forever'))
+      .filter((r) => r.levelSource !== 'in_game')
+      .map((r) => `${r.name}:${r.levelSource}`);
+    expect(notInGame).toEqual(['Barrow Deeps:community', 'Hyjal Summit:community']);
+  });
+
+  // The six rows the operator's in-game finder screenshot shows (2026-11-15).
+  it.each([
+    ['Razorfen Kraul', 234, 29, 38],
+    ['City of Dalaran', FOREVER_SEED_ID_BASE + 4, 28, 35],
+    ['Excavation Site: Wetlands', FOREVER_SEED_ID_BASE + 3, 26, 33],
+    ['Blackfathom Deeps', 227, 24, 32],
+    ['The Stockade', 238, 24, 32],
+    ['Shadowfang Keep', 64, 20, 30],
+  ])('gives wow_forever %s (%i) the in-game finder span %i-%i', (name, id, min, max) => {
+    expect(getInstance(id, 'wow_forever')).toMatchObject({
+      name,
+      minimumLevel: min,
+      maximumLevel: max,
+      levelSource: 'in_game',
+    });
+  });
+
+  it('gives Maraudon and every wing its single finder span 46-55 on wow_forever', () => {
+    const spans = [232, 23201, 23202, 23203].map((id) => {
+      const row = must(getInstance(id, 'wow_forever'), `${id} forever`);
+      return `${id}:${row.minimumLevel}-${row.maximumLevel}`;
+    });
+    expect(spans).toEqual(['232:46-55', '23201:46-55', '23202:46-55', '23203:46-55']);
+  });
+
+  it('leaves the classic_era Razorfen Kraul row on its Classic levels', () => {
+    expect(getInstance(234, 'classic_era')).toMatchObject({
+      minimumLevel: 30,
+      maximumLevel: 40,
+      levelSource: 'classic_era',
+    });
   });
 
   it('keeps the Forever edition in step with its classic_era row', () => {
@@ -182,8 +221,8 @@ describe('instance catalogue — names, levels, sources', () => {
     const forever = must(getInstance(234, 'wow_forever'), '234 forever');
     expect(forever).toMatchObject({
       name: era.name,
-      minimumLevel: era.minimumLevel,
-      maximumLevel: era.maximumLevel,
+      shortName: era.shortName,
+      maxPlayers: era.maxPlayers,
       wowheadZoneId: 491,
       foreverQuestAreaIds: [1717],
       lootExpansion: 'forever',
