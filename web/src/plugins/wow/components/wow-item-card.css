@@ -90,29 +90,34 @@
     text-decoration: underline;
 }
 
-/* Quality text colors */
+/* Quality text colors — the same token mixes as Quest Prep's `.quality-*`
+   (ROK-2183), so the names read on light themes as well as dark. */
 .wow-item-card__name--poor {
-    color: #9d9d9d;
+    color: var(--color-muted);
 }
 
 .wow-item-card__name--common {
-    color: #d4d4d8;
+    color: var(--color-foreground);
 }
 
 .wow-item-card__name--uncommon {
-    color: #4ade80;
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
 }
 
 .wow-item-card__name--rare {
-    color: #60a5fa;
+    color: color-mix(in srgb, var(--color-faction-alliance) 55%, var(--color-foreground));
 }
 
 .wow-item-card__name--epic {
-    color: #c084fc;
+    color: color-mix(in srgb, var(--color-item-level) 50%, var(--color-foreground));
 }
 
 .wow-item-card__name--legendary {
-    color: #fb923c;
+    color: color-mix(
+        in srgb,
+        color-mix(in srgb, var(--color-warning) 70%, var(--color-danger)) 55%,
+        var(--color-foreground)
+    );
 }
 
 /* Meta line: slot · subclass */
@@ -135,7 +140,7 @@
 /* Enchant line */
 .wow-item-card__enchant {
     font-size: 0.625rem;
-    color: #4ade80;
+    color: color-mix(in srgb, var(--color-success) 50%, var(--color-foreground));
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
