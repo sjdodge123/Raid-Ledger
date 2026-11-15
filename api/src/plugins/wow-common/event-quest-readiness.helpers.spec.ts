@@ -92,7 +92,8 @@ describe('buildQuestReadiness (ROK-1911)', () => {
   const body = BODY;
 
   it('lists the event quests (instance match only, chain steps excluded)', () => {
-    expect(body.quests.map((q) => q.questId).sort()).toEqual([200, 300, 500]);
+    // 500 is Horde-only: the all-Alliance roster never gets it (ROK-2211).
+    expect(body.quests.map((q) => q.questId).sort()).toEqual([200, 300]);
     expect(body.quests[0]).toMatchObject({ instanceId: 63 });
   });
 
@@ -157,7 +158,18 @@ describe('buildQuestReadiness roster (ROK-1911)', () => {
 
   it('skips quests the character race cannot take (ROK-1758)', () => {
     expect(stateOf(body, 1, 500)).toBeUndefined();
-    expect(stateOf(body, 3, 500)).toBeDefined();
+    // Roster side unknown (no race, no faction): no filter, as before ROK-2211.
+    const unknownSide = buildQuestReadiness({
+      quests: SET,
+      signups: [
+        signup(1, C1, { charRace: null }),
+        signup(3, null, { charRace: null }),
+      ],
+      snapshots: new Map(),
+      manual: [],
+    });
+    expect(unknownSide.quests.map((q) => q.questId)).toContain(500);
+    expect(stateOf(unknownSide, 3, 500)).toBeDefined();
   });
 
   it('parses against EventQuestReadinessSchema', () => {
