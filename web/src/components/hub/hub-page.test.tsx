@@ -15,6 +15,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { ErrorState, GuildPage } from './hub-page';
 import { withHttpStatus } from '../../lib/api/api-error';
+import { blizzardRosterHandlers, buildBlizzardRosterView } from '../../test/mocks/blizzard-roster-handlers';
 
 const BASE = 'http://localhost:3000/guilds/7';
 const LINKED_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
@@ -254,6 +255,41 @@ describe('GuildPage — the rank-0 GM settings entry (ROK-2192)', () => {
         renderPage();
         await screen.findByTestId('guild-members-summary');
         expect(screen.getByTestId('guild-settings-trigger'), 'the Forever GM may write the Blizzard roster slug').toBeInTheDocument();
+    });
+});
+
+describe('GuildPage — the delegated editor settings entry (ROK-2199)', () => {
+    function editorPage(gameSlug: string, canEdit = true): GuildPageDto {
+        const page = makePage(false);
+        return { ...page, guild: { ...page.guild, gameSlug }, viewer: { role: 'officer', canEdit, canManageEditors: false } };
+    }
+
+    it('gives a delegated editor of a WoW: Forever hub the trigger, and a sheet holding only the Blizzard roster', async () => {
+        serve(editorPage('world-of-warcraft-forever'));
+        server.use(...blizzardRosterHandlers(buildBlizzardRosterView({ guildSlug: 'iron-vanguard' })));
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        const sheet = await screen.findByTestId('guild-settings-sheet');
+        expect(await within(sheet).findByTestId('wow-blizzard-roster-input'), 'the editor may change the Blizzard roster slug').toHaveValue('iron-vanguard');
+        expect(within(sheet).getByTestId('wow-blizzard-roster-sync'), 'and Sync now').toBeInTheDocument();
+        expect(within(sheet).queryByTestId('guild-editors-panel'), 'managing editors stays Leader-only').toBeNull();
+        expect(within(sheet).queryByTestId('guild-settings-discord'), 'the Discord channel stays Leader-only').toBeNull();
+        expect(within(sheet).queryByTestId('guild-settings-visibility'), 'hiding the hub stays Leader-only').toBeNull();
+        expect(editorCalls, 'the Leader-only editors list is never fetched').toBe(0);
+    });
+
+    it('gives a delegated editor of a retail WoW hub no trigger — the roster is Forever-only', async () => {
+        serve(editorPage('world-of-warcraft'));
+        renderPage();
+        await screen.findByTestId('guild-members-summary');
+        expect(screen.queryByTestId('guild-settings-trigger'), 'an editor off a Forever hub must not get a gear that opens an empty sheet').toBeNull();
+    });
+
+    it('gives a Forever hub member who is not an editor no trigger', async () => {
+        serve(editorPage('world-of-warcraft-forever', false));
+        renderPage();
+        await screen.findByTestId('guild-members-summary');
+        expect(screen.queryByTestId('guild-settings-trigger'), 'a non-editor gets no settings entry point').toBeNull();
     });
 });
 
