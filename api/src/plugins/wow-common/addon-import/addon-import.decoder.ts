@@ -294,6 +294,8 @@ export function decodeImportPaste(
   if (input === '') throw new AddonImportError('BAD_HEADER');
   const groups = parsePaste(input);
   const version = groups[0]?.headers[0]?.version;
+  // Unreachable (defensive): `input` is non-empty and parsePaste throws on
+  // any token without a valid header, so the first group always has one.
   if (version === undefined) throw new AddonImportError('BAD_HEADER');
   const mixed = groups.length > 1;
   const decoded = groups.map((g) =>

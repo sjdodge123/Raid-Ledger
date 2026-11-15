@@ -26,6 +26,11 @@ import { pinExportClock } from './testing/pin-export-clock';
 
 pinExportClock();
 
+function must<T>(value: T | undefined, label: string): T {
+  if (value === undefined) throw new Error(`missing ${label}`);
+  return value;
+}
+
 const v1Char = (): string => buildImportString(buildCharPayload());
 const v2Loot = (): string =>
   buildImportString(buildLootPayload([buildLootDrop(0)]), { version: 2 });
@@ -126,7 +131,10 @@ describe('finishAttempt — mixed paste', () => {
       result: 'applied',
       perSection: ['applied', 'noop'],
     });
-    const rows = recordSections.mock.calls[0]?.[0] as AddonImportAuditInsert[];
+    const rows = must(
+      recordSections.mock.calls[0],
+      'recordSections call',
+    )[0] as AddonImportAuditInsert[];
     expect(rows.map((r) => r.envelopeVersion)).toEqual([2, 2]);
   });
 });
