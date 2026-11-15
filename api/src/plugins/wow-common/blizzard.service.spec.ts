@@ -177,7 +177,9 @@ describe('BlizzardService — catalogue-served variants (ROK-2210)', () => {
     'lists %s with no token and no journal call',
     async (variant) => {
       const { service, getAccessToken } = setup();
-      const fetchAll = jest.spyOn(instFetch, 'fetchAllInstancesFromApi');
+      const fetchAll = jest
+        .spyOn(instFetch, 'fetchAllInstancesFromApi')
+        .mockResolvedValue({ dungeons: [], raids: [] });
       const list = await service.fetchAllInstances('us', variant);
       expect(list.raids.map((r) => r.id)).toEqual(
         expect.arrayContaining([741, 760, 754]),
