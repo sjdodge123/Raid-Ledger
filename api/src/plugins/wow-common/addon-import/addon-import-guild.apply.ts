@@ -1,8 +1,6 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import type {
-  AddonGuildExport,
-  AddonGuildImportSummarySchema,
-} from '@raid-ledger/contract';
+import type { AddonGuildImportSummarySchema } from '@raid-ledger/contract';
+import type { AnyAddonGuildExport } from './addon-import.pages';
 import type { z } from 'zod';
 import { guildMembers, guilds } from '../../../drizzle/schema';
 import { upsertMembersLoggingDings } from './addon-import-guild.members';
@@ -41,7 +39,7 @@ type GuildOutcome = AddonSectionOutcome<AddonGuildSummary>;
  * plus a NEWER snapshot (`isStaleGuildSnapshot`) and the clock rule, is all
  * an importer needs to replace a guild's roster — no grant.
  */
-export function assertExporterInGuild(payload: AddonGuildExport): void {
+export function assertExporterInGuild(payload: AnyAddonGuildExport): void {
   const guid = payload.who.guid;
   if (!payload.data.members.some((m) => m.guid === guid)) {
     throw new AddonImportError('NOT_IN_GUILD');
@@ -61,7 +59,7 @@ export function isStaleGuildSnapshot(
 }
 
 export function buildGuildSummary(
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
   pages: number,
   newMembers: number,
 ): AddonGuildSummary {
@@ -116,7 +114,7 @@ type StoredGuild = Awaited<ReturnType<typeof loadGuild>>;
 async function guardExisting(
   ctx: AddonApplyContext,
   guild: StoredGuild,
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
 ): Promise<RosterCheck & { stale: boolean }> {
   const none = { removed: 0, added: 0 };
   if (!guild) return { stale: false, delta: none, flag: null };
@@ -136,7 +134,7 @@ async function guardExisting(
 /** Dry run: NOT_IN_GUILD / stale checks + new-vs-updated counts (no flag). */
 export async function previewGuild(
   ctx: AddonApplyContext,
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
   pages: number,
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);
@@ -150,7 +148,7 @@ export async function previewGuild(
 
 /** Guild columns an addon snapshot owns (insert + conflict update). */
 export function guildSet(
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
   seenAt: Date = receivedSnapshotAt(payload.data.snapshotAt),
 ) {
   return {
@@ -183,7 +181,7 @@ export function guildConflictSet(set: ReturnType<typeof guildSet>) {
  */
 async function upsertGuild(
   ctx: AddonApplyContext,
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
   seenAt: Date,
 ): Promise<number | undefined> {
   const set = guildSet(payload, seenAt);
@@ -217,7 +215,7 @@ async function upsertGuild(
  */
 export async function applyGuild(
   ctx: AddonApplyContext,
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
   pages: number,
 ): Promise<GuildOutcome> {
   assertExporterInGuild(payload);

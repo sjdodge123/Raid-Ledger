@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
-import type { AddonGuildExport } from '@raid-ledger/contract';
+import type { AnyAddonGuildExport } from './addon-import.pages';
 import * as schema from '../../../drizzle/schema';
 import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
@@ -349,7 +349,7 @@ export async function checkRosterChange(
 export async function checkRosterReplace(
   ctx: AddonApplyContext,
   guildId: number,
-  payload: AddonGuildExport,
+  payload: AnyAddonGuildExport,
   order: SnapshotOrder,
 ): Promise<RosterCheck> {
   const { members } = payload.data;

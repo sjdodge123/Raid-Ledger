@@ -1,7 +1,8 @@
 import {
   ADDON_IMPORT_MAX_BYTES,
+  AddonExportSectionV2Schema,
   AddonImportRequestSchema,
-  type AddonExportSection,
+  type AddonExportSectionV2,
   type AddonImportRequestDto,
   type AddonImportResultDto,
   type AddonImportRulesetInferenceDto,
@@ -20,12 +21,13 @@ import { previewCharThenMailworthy } from './addon-import-char.mailworthy.previe
 import { withCharInstalledAddonsPreview } from './addon-import-char.installed';
 import { applyGuild, previewGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
+import { applyLootImport } from './addon-import-loot.apply';
 
 /** What the service knows about an attempt, for the audit row + log line. */
 export interface AttemptFacts {
   sizeBytes: number;
   dryRun: boolean;
-  section: AddonExportSection | null;
+  section: AddonExportSectionV2 | null;
   sha256: string | null;
   /** The reserved audit row (limit check passed), finalised by `finish`. */
   auditId: number | null;
@@ -38,18 +40,19 @@ export interface AttemptFacts {
 
 /** One section of a mixed paste, for its own audit row. */
 export interface SectionAuditFact {
-  section: AddonExportSection;
+  section: AddonExportSectionV2;
   sha256: string;
   sizeBytes: number;
 }
 
-const SECTION_SNIFF = /^\s*!RL\d+!(char|guild|raid)\b/;
+const SECTION_SNIFF = /^\s*!RL\d+!(char|guild|raid|loot)\b/;
 
 /** Header section without decoding anything (audit only). */
-export function sniffSection(raw: unknown): AddonExportSection | null {
+export function sniffSection(raw: unknown): AddonExportSectionV2 | null {
   if (typeof raw !== 'string') return null;
   const match = SECTION_SNIFF.exec(raw.slice(0, 32));
-  return (match?.[1] as AddonExportSection | undefined) ?? null;
+  const parsed = AddonExportSectionV2Schema.safeParse(match?.[1]);
+  return parsed.success ? parsed.data : null;
 }
 
 /** Facts readable from the raw body before validation. */
@@ -123,7 +126,10 @@ export function runSection(
       ? previewGuild(ctx, payload, pages)
       : applyGuild(ctx, payload, pages);
   }
-  return dryRun ? previewRaid(ctx, payload) : applyRaid(ctx, payload);
+  if (payload.section === 'raid') {
+    return dryRun ? previewRaid(ctx, payload) : applyRaid(ctx, payload);
+  }
+  return applyLootImport(ctx, payload, dryRun);
 }
 
 /** The 200 body. A stale export also carries a `STALE_EXPORT` warning. */

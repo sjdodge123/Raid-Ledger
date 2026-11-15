@@ -3,21 +3,32 @@ import { inflateSync } from 'node:zlib';
 import {
   ADDON_IMPORT_MAX_BYTES,
   ADDON_IMPORT_MAX_DECODED_BYTES,
+  ADDON_EXPORT_V2_ENVELOPE_VERSION,
   AddonExportSchema,
+  AddonExportV2Schema,
   type AddonCharExport,
+  type AddonCharExportV2,
   type AddonCharSnapshotData,
   type AddonExport,
-  type AddonExportSection,
-  type AddonGuildExport,
+  type AddonExportSectionV2,
+  type AddonExportV2,
+  type AddonExportVersion,
   type AddonInstalledList,
+  type AddonLootExport,
   type AddonMailworthy,
   type AddonRaidExport,
+  type AddonRaidExportV2,
 } from '@raid-ledger/contract';
 import { dedupeInstalled } from './addon-import-char.installed.helpers';
 import { assertPlausibleExportTimes, exportClock } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
-import { mergeGuildPages, type AddonPageHeader } from './addon-import.pages';
+import {
+  mergeGuildPages,
+  NEWER_VERSION_MESSAGE,
+  type AddonPageHeader,
+  type AnyAddonGuildExport,
+} from './addon-import.pages';
 import {
   ADDON_SECTION_LABEL,
   assertSameExporter,
@@ -26,12 +37,19 @@ import {
 } from './addon-import.paste';
 import {
   sanitizeGuildExport,
+  sanitizeLootExport,
   sanitizeStrings,
   toCharSnapshotData,
 } from './addon-import.sanitize';
 
-/** Char export with `data` already in the frozen snapshot shape. */
-export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
+/** One page's validated body, from either envelope version (ROK-2184). */
+type AnyAddonExport = AddonExport | AddonExportV2;
+
+/** Char export (v1 or v2) with `data` already in the frozen snapshot shape. */
+export type DecodedAddonCharExport = Omit<
+  AddonCharExport | AddonCharExportV2,
+  'data'
+> & {
   data: AddonCharSnapshotData;
   /**
    * `data.mailworthy` lifted beside the frozen snapshot `data` (ROK-2148):
@@ -41,9 +59,17 @@ export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
   /** `data.addons` lifted the same way (ROK-2147): never in the snapshot. */
   addons?: AddonInstalledList;
 };
-/** Validated + sanitised payload, discriminated by `section`. */
+/** A raid export from either envelope version. */
+export type DecodedAddonRaidExport = AddonRaidExport | AddonRaidExportV2;
+/**
+ * Validated + sanitised payload, discriminated by `section`; `schema` keeps
+ * the envelope version (1 or 2). `loot` only ever comes from a v2 string.
+ */
 export type DecodedAddonExport =
-  DecodedAddonCharExport | AddonGuildExport | AddonRaidExport;
+  | DecodedAddonCharExport
+  | AnyAddonGuildExport
+  | DecodedAddonRaidExport
+  | AddonLootExport;
 
 /** One decoded section of a paste. */
 export interface DecodedAddonSection<
@@ -69,15 +95,16 @@ export type DecodedAddonImport = DecodedAddonSection;
 
 export interface DecodedAddonSections {
   char?: DecodedAddonSection<DecodedAddonCharExport>;
-  guild?: DecodedAddonSection<AddonGuildExport>;
-  raid?: DecodedAddonSection<AddonRaidExport>;
+  guild?: DecodedAddonSection<AnyAddonGuildExport>;
+  raid?: DecodedAddonSection<DecodedAddonRaidExport>;
+  loot?: DecodedAddonSection<AddonLootExport>;
 }
 
-/** A whole paste: 1–3 sections (ROK-1737 "Export all"). */
+/** A whole paste: 1–4 sections (ROK-1737 "Export all"; v2 adds loot). */
 export interface DecodedAddonPaste {
   sections: DecodedAddonSections;
-  /** Present sections in canonical order char → guild → raid. */
-  order: AddonExportSection[];
+  /** Present sections in canonical order char → guild → raid → loot. */
+  order: AddonExportSectionV2[];
   /** Whitespace-separated tokens in the paste. */
   tokens: number;
   /** UTF-8 byte length of the whole trimmed input. */
@@ -133,7 +160,30 @@ function inflatePage(body: string): Buffer {
   }
 }
 
-function decodePage(header: AddonPageHeader): AddonExport {
+/**
+ * ROK-2184 — a v2 header around a body whose `schema` is not 2 is a version
+ * mismatch, not a bad payload (keeps `!RL2!` + `schema: 1` at its v1 code).
+ * A v1 header keeps its v1 behaviour: the strict schema rejects it.
+ */
+function assertPayloadVersion(json: unknown, version: AddonExportVersion): void {
+  if (version !== ADDON_EXPORT_V2_ENVELOPE_VERSION) return;
+  const declared =
+    typeof json === 'object' && json !== null && 'schema' in json
+      ? json.schema
+      : undefined;
+  if (typeof declared === 'number' && declared !== version) {
+    throw new AddonImportError('UNSUPPORTED_VERSION', NEWER_VERSION_MESSAGE);
+  }
+}
+
+/** The strict schema of the header's version. */
+function parseVersioned(json: unknown, version: AddonExportVersion) {
+  return version === ADDON_EXPORT_V2_ENVELOPE_VERSION
+    ? AddonExportV2Schema.safeParse(json)
+    : AddonExportSchema.safeParse(json);
+}
+
+function decodePage(header: AddonPageHeader): AnyAddonExport {
   let json: unknown;
   try {
     json = JSON.parse(inflatePage(header.body).toString('utf8'));
@@ -142,7 +192,8 @@ function decodePage(header: AddonPageHeader): AddonExport {
     throw new AddonImportError('CUT_OFF');
   }
   assertStructuralLimits(json);
-  const parsed = AddonExportSchema.safeParse(json);
+  assertPayloadVersion(json, header.version);
+  const parsed = parseVersioned(json, header.version);
   if (!parsed.success) {
     throw new AddonImportError(
       'INVALID_PAYLOAD',
@@ -159,13 +210,15 @@ function decodePage(header: AddonPageHeader): AddonExport {
 }
 
 /** Sanitise exactly once (stripping is not idempotent: `||c…` → `|c…`). */
-function finalize(pages: AddonExport[]): DecodedAddonExport {
+function finalize(pages: AnyAddonExport[]): DecodedAddonExport {
   const [first] = pages;
   if (!first) throw new AddonImportError('BAD_HEADER');
   if (first.section === 'guild') {
-    return sanitizeGuildExport(mergeGuildPages(pages as AddonGuildExport[]));
+    const guild = pages.flatMap((p) => (p.section === 'guild' ? [p] : []));
+    return sanitizeGuildExport(mergeGuildPages(guild));
   }
   if (first.section === 'raid') return sanitizeStrings(first);
+  if (first.section === 'loot') return sanitizeLootExport(first);
   const { data, ...envelope } = first;
   const { mailworthy, addons } = data;
   return {
@@ -203,18 +256,21 @@ function decodeGroup(
 }
 
 function toSections(decoded: DecodedAddonSection[]): DecodedAddonSections {
-  const sections: Partial<Record<AddonExportSection, DecodedAddonSection>> = {};
+  const sections: Partial<Record<AddonExportSectionV2, DecodedAddonSection>> =
+    {};
   for (const d of decoded) sections[d.payload.section] = d;
   return sections as DecodedAddonSections;
 }
 
 /**
- * Decode a paste of one or more `!RL1!<section>[-<n>of<m>]!<base64(zlib(json))>`
- * tokens — one char, one guild export (unpaged or every page once) and one
- * raid, any order (ROK-1737). Order of guards, each before the next
- * allocates anything: input bytes → token count → headers + grouping +
- * page set → per section, per page: base64 length → bounded inflate → JSON
- * → structural limits → strict schema → same exporter across sections.
+ * Decode a paste of one or more `!RL<v>!<section>[-<n>of<m>]!<base64(zlib(json))>`
+ * tokens, v ∈ {1, 2} and one version per paste (ROK-2184) — one char, one
+ * guild export (unpaged or every page once), one raid and (v2 only) one
+ * loot, any order (ROK-1737). Order of guards, each before the next
+ * allocates anything: input bytes → token count → headers + version +
+ * grouping + page set → per section, per page: base64 length → bounded
+ * inflate → JSON → structural limits → payload version → strict schema of
+ * that version → same exporter across sections.
  * All-or-nothing: any failure rejects the whole paste. Throws
  * `AddonImportError`; never echoes input. `nowMs` is the server clock the
  * export timestamps are bounded by (defaults to `exportClock`).

@@ -1,11 +1,12 @@
 import {
   AddonCharSnapshotDataSchema,
-  type AddonGuildExport,
+  type AddonLootExport,
   type AddonCharData,
   type AddonCharSnapshotData,
   type AddonSnapshotGearItem,
 } from '@raid-ledger/contract';
 import { parseLinkDisplay } from './addon-import.link-name';
+import type { AnyAddonGuildExport } from './addon-import.pages';
 
 /**
  * WoW UI escape sequences, matched left-to-right in ONE pass so `||` (a
@@ -42,7 +43,9 @@ export function sanitizeStrings<T>(value: T): T {
  * kept). They are text the hub stores and copies back in game, not display
  * strings; ingest strips only the control characters the hub's save rejects.
  */
-export function sanitizeGuildExport(guild: AddonGuildExport): AddonGuildExport {
+export function sanitizeGuildExport(
+  guild: AnyAddonGuildExport,
+): AnyAddonGuildExport {
   const sanitized = sanitizeStrings(guild);
   const { motd, infoText } = guild.data;
   return {
@@ -53,6 +56,20 @@ export function sanitizeGuildExport(guild: AddonGuildExport): AddonGuildExport {
       ...(infoText !== undefined ? { infoText } : {}),
     },
   };
+}
+
+/**
+ * ROK-2184 — sanitise a loot export, but keep each drop's raw item `link`
+ * VERBATIM: it is parsed (item id / bonus ids), never displayed raw, and
+ * stripping `|H…|h` would erase it.
+ */
+export function sanitizeLootExport(loot: AddonLootExport): AddonLootExport {
+  const sanitized = sanitizeStrings(loot);
+  const drops = sanitized.data.drops.map((drop, i) => {
+    const link = loot.data.drops[i]?.link;
+    return link === undefined ? drop : { ...drop, link };
+  });
+  return { ...sanitized, data: { ...sanitized.data, drops } };
 }
 
 const INT4_MAX = 2_147_483_647;
