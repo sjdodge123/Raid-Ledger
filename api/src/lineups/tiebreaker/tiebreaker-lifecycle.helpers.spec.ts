@@ -38,6 +38,18 @@ describe('createActiveTiebreaker — locked re-check', () => {
     expect(db.insert).not.toHaveBeenCalled();
   });
 
+  it('rejects with the "voting" 400 when the LOCKED row left voting, inserting nothing', async () => {
+    db.for.mockResolvedValueOnce([{ ...lineupRow(null), status: 'decided' }]);
+
+    const run = createActiveTiebreaker(db as never, 7, VETO, TIES);
+
+    await expect(run).rejects.toThrow(
+      new BadRequestException('Lineup must be in voting status'),
+    );
+    expect(db.for).toHaveBeenCalledWith('update');
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
   it('locks the lineup row before inserting when none is active', async () => {
     db.for.mockResolvedValueOnce([lineupRow(null)]);
     db.returning.mockResolvedValueOnce([{ id: 5, lineupId: 7 }]);
