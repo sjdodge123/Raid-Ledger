@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { getMyCharacters, getUserCharacters } from '../lib/api-client';
 
+/** Per-caller query tuning for {@link useMyCharacters}. */
+export interface MyCharactersOptions {
+    /** Retries on a failed load (default: the client's). A caller that gates a UI on the load passes 1. */
+    retry?: number;
+}
+
 /**
  * Hook for fetching current user's characters.
  * Optionally filtered by gameId for signup confirmation (ROK-131).
  */
-export function useMyCharacters(gameId?: number, enabled = true) {
+export function useMyCharacters(gameId?: number, enabled = true, options: MyCharactersOptions = {}) {
     return useQuery({
         queryKey: ['me', 'characters', gameId],
         queryFn: () => getMyCharacters(gameId),
         enabled,
+        ...options,
     });
 }
 

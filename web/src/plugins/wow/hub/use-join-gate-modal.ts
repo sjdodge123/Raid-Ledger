@@ -30,7 +30,8 @@ export interface GateModalState {
  */
 export function useGateModal(guildId: number, gameId: number | undefined): GateModalState {
     const queryClient = useQueryClient();
-    const chars = useMyCharacters(gameId, gameId !== undefined);
+    // One retry: the gate's buttons stay busy until this settles, so the error fallback must not wait ~7s.
+    const chars = useMyCharacters(gameId, gameId !== undefined, { retry: 1 });
     const [tab, setTab] = useState<GateTab | null>(null);
     const [baseline, setBaseline] = useState<ReadonlySet<string> | null>(null);
     // The warning is about a gate action, so it waits for the modal to have opened.

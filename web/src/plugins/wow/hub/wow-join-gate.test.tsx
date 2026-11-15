@@ -30,7 +30,7 @@ let charsServed = 0;
 vi.mock('../../../hooks/use-characters', async () => {
     const { useQuery } = await import('@tanstack/react-query');
     return {
-        useMyCharacters: (gameId?: number, enabled = true) => useQuery({
+        useMyCharacters: (gameId?: number, enabled = true, options: { retry?: number } = {}) => useQuery({
             queryKey: ['me', 'characters', gameId ?? null],
             queryFn: async () => {
                 await charsReady;
@@ -38,6 +38,7 @@ vi.mock('../../../hooks/use-characters', async () => {
                 return { data: [...myChars], meta: { total: myChars.length } };
             },
             enabled,
+            ...options,
         }),
     };
 });
@@ -86,6 +87,13 @@ function serve(gate: WowGuildJoinGateDto | null = GATE, pageBody = notMember): v
 
 function Search(): JSX.Element {
     return <span data-testid="search">{useLocation().search}</span>;
+}
+
+/** A gate action once the characters baseline has loaded (it is busy until then). */
+async function readyAction(name: string): Promise<HTMLElement> {
+    const button = await screen.findByRole('button', { name });
+    await waitFor(() => expect(button, `${name} stays busy until the baseline loads`).toBeEnabled());
+    return button;
 }
 
 function renderPage(path = '/hubs/7') {
@@ -140,7 +148,7 @@ describe('WoW join gate — actions (AC 2, 3)', () => {
     it('Pick my character opens Add character on the roster tab, filtered to this guild', async () => {
         serve();
         renderPage();
-        await userEvent.click(await screen.findByRole('button', { name: 'Pick my character' }));
+        await userEvent.click(await readyAction('Pick my character'));
         const modal = await screen.findByTestId('add-character-modal');
         expect(modal).toHaveAttribute('data-tab', 'roster');
         expect(modal).toHaveAttribute('data-guild', '7');
@@ -150,17 +158,41 @@ describe('WoW join gate — actions (AC 2, 3)', () => {
     it('Import from Armory opens Add character on the Import tab', async () => {
         serve();
         renderPage();
-        await userEvent.click(await screen.findByRole('button', { name: 'Import from Armory' }));
+        await userEvent.click(await readyAction('Import from Armory'));
         expect(await screen.findByTestId('add-character-modal')).toHaveAttribute('data-tab', 'import');
     });
 
+    it('both actions are disabled and busy while the characters baseline loads', async () => {
+        charsReady = new Promise<void>(() => undefined);
+        serve();
+        renderPage();
+        await screen.findByTestId('wow-join-gate');
+        for (const name of ['Pick my character', 'Import from Armory']) {
+            const button = screen.getByRole('button', { name });
+            expect(button, `${name} must be disabled before the baseline exists`).toBeDisabled();
+            expect(button, `${name} must announce it is busy`).toHaveAttribute('aria-busy', 'true');
+        }
+    });
+
+    it('both actions enable once the baseline loads', async () => {
+        let release: () => void = () => undefined;
+        charsReady = new Promise<void>((resolve) => { release = resolve; });
+        serve();
+        renderPage();
+        await screen.findByTestId('wow-join-gate');
+        release();
+        for (const name of ['Pick my character', 'Import from Armory']) {
+            const button = await readyAction(name);
+            expect(button, `${name} drops aria-busy once ready`).not.toHaveAttribute('aria-busy');
+        }
+    });
 });
 
 describe('WoW join gate — after the modal (AC 4, 8, Ruling 9)', () => {
     it('a claim that confers membership lands on the guild page without a reload', async () => {
         serve();
         renderPage();
-        await userEvent.click(await screen.findByRole('button', { name: 'Pick my character' }));
+        await userEvent.click(await readyAction('Pick my character'));
         pageIsMember = true;
         await userEvent.click(await screen.findByRole('button', { name: 'stub-claim' }));
         expect(await screen.findByRole('navigation', { name: 'Guild page sections' })).toBeInTheDocument();
@@ -170,7 +202,7 @@ describe('WoW join gate — after the modal (AC 4, 8, Ruling 9)', () => {
     it('a claim that leaves the page 403 shows the warning banner instead of looping', async () => {
         serve();
         renderPage();
-        await userEvent.click(await screen.findByRole('button', { name: 'Pick my character' }));
+        await userEvent.click(await readyAction('Pick my character'));
         await userEvent.click(await screen.findByRole('button', { name: 'stub-claim' }));
         expect(await screen.findByTestId('wow-join-gate-warning')).toHaveTextContent(NOT_LINKED_WARNING);
         expect(screen.getByTestId('wow-join-gate')).toBeInTheDocument();
