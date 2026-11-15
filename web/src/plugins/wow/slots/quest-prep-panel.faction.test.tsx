@@ -14,6 +14,8 @@ import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 const mocks = vi.hoisted(() => ({
     character: null as null | { race: string | null; faction: 'alliance' | 'horde' | null; class: string | null },
     guildFaction: null as string | null,
+    /** Every guildId useGuildPage was called with (0 = the query is disabled). */
+    guildCalls: [] as number[],
 }));
 
 vi.mock('../../../hooks/use-auth', () => ({
@@ -25,9 +27,10 @@ vi.mock('../../../hooks/use-character-detail', () => ({
     useCharacterDetail: () => ({ data: mocks.character, isLoading: false }),
 }));
 vi.mock('../../../components/hub/api/use-guild', () => ({
-    useGuildPage: (guildId: number) => ({
-        data: guildId > 0 && mocks.guildFaction !== null ? { guild: { faction: mocks.guildFaction } } : undefined,
-    }),
+    useGuildPage: (guildId: number) => {
+        mocks.guildCalls.push(guildId);
+        return { data: guildId > 0 && mocks.guildFaction !== null ? { guild: { faction: mocks.guildFaction } } : undefined };
+    },
 }));
 vi.mock('../hooks/use-wowhead-tooltips', () => ({ useWowheadTooltips: () => {} }));
 
@@ -49,12 +52,15 @@ const QUESTS = [
     q(3, 'Neutral Quest', []),
 ];
 
-function renderPanel(guildId: number | null) {
+type Roster = { race?: string | null; faction?: string | null }[];
+
+function renderPanel(guildId: number | null, rosterCharacters?: Roster, quests = QUESTS) {
     server.use(
-        http.get(`${API}/plugins/wow-classic/instances/${INSTANCE.id}/quests/enriched`, () => HttpResponse.json(QUESTS)),
+        http.get(`${API}/plugins/wow-classic/instances/${INSTANCE.id}/quests/enriched`, () => HttpResponse.json(quests)),
         http.get(`${API}/plugins/wow-classic/events/:eventId/quest-coverage`, () => HttpResponse.json([])),
     );
-    return renderWithProviders(<QuestPrepPanel contentInstances={[INSTANCE]} eventId={1} gameSlug="wow-classic-era" guildId={guildId} />);
+    return renderWithProviders(<QuestPrepPanel contentInstances={[INSTANCE]} eventId={1} gameSlug="wow-classic-era" guildId={guildId}
+        {...(rosterCharacters ? { rosterCharacters } : {})} />);
 }
 
 describe('QuestPrepPanel — faction filter (ROK-2211)', () => {
@@ -62,6 +68,7 @@ describe('QuestPrepPanel — faction filter (ROK-2211)', () => {
         server.resetHandlers();
         mocks.character = null;
         mocks.guildFaction = null;
+        mocks.guildCalls = [];
     });
 
     it('filters a raceless character by its faction column', async () => {
@@ -87,5 +94,29 @@ describe('QuestPrepPanel — faction filter (ROK-2211)', () => {
         expect(await screen.findByText('Alliance Only Quest')).toBeInTheDocument();
         expect(screen.getByText('Horde Only Quest')).toBeInTheDocument();
         expect(screen.getByTestId('quest-prep-faction-unknown')).toHaveTextContent("Faction unknown — showing both factions' quests");
+    });
+
+    it("uses the signups' shared side before the guild page when the viewer has no character", async () => {
+        mocks.guildFaction = 'Alliance';
+        renderPanel(7, [{ race: 'Orc' }, { race: null, faction: 'horde' }, { race: null }]);
+        // Neutral always renders, so the side assertions below fail on their own message.
+        expect(await screen.findByText('Neutral Quest')).toBeInTheDocument();
+        expect(screen.queryByText('Alliance Only Quest')).not.toBeInTheDocument();
+        expect(screen.queryByText('Horde Only Quest')).toBeInTheDocument();
+        expect(mocks.guildCalls.filter((id) => id !== 0)).toEqual([]);
+    });
+
+    it("never asks for the guild page when the viewer's side is known", async () => {
+        mocks.character = { race: 'Human', faction: null, class: 'Warrior' };
+        renderPanel(7);
+        expect(await screen.findByText('Alliance Only Quest')).toBeInTheDocument();
+        expect(mocks.guildCalls.length).toBeGreaterThan(0);
+        expect(mocks.guildCalls.filter((id) => id !== 0)).toEqual([]);
+    });
+
+    it('shows no "faction unknown" note when the dungeon has no faction quests', async () => {
+        renderPanel(null, undefined, [q(3, 'Neutral Quest', []), q(4, 'Other Neutral', null)]);
+        expect(await screen.findByText('Neutral Quest')).toBeInTheDocument();
+        expect(screen.queryByTestId('quest-prep-faction-unknown')).not.toBeInTheDocument();
     });
 });
