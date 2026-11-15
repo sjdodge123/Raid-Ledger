@@ -100,10 +100,16 @@ function raidRows(s: Extract<AddonImportResultDto, { section: 'raid' }>['summary
     ];
 }
 
+/** ROK-2184 — a LedgerLink v2 loot section (history only; no Loot tab yet). */
+function lootRows(s: Extract<AddonImportResultDto, { section: 'loot' }>['summary']): Row[] {
+    return [['Loot drops', `${s.drops} (${s.newDrops} new, ${s.duplicateDrops} already imported)`]];
+}
+
 export function summaryRows(result: AddonImportResultDto): Row[] {
     if (result.section === 'char') return charRows(result.summary);
     if (result.section === 'guild') return guildRows(result.summary);
-    return raidRows(result.summary);
+    if (result.section === 'raid') return raidRows(result.summary);
+    return lootRows(result.summary);
 }
 
 export function diffRows(result: AddonImportResultDto): Row[] {
@@ -124,6 +130,7 @@ const SECTION_NOUN: Record<AddonImportResultDto['section'], string> = {
     char: 'Character data',
     guild: 'Guild roster',
     raid: 'Boss pulls',
+    loot: 'Loot history',
 };
 
 /** ROK-2148: a stale char export can still carry newer Mailworthy givers. */
