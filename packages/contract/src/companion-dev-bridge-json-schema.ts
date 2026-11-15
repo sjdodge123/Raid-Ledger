@@ -42,7 +42,7 @@ export const DEV_BRIDGE_SCHEMA_ID =
  * RECEIVES (`probe-request` from agents, `probe-result` and
  * `ledgerlink-snapshot` from the addons) are
  * generated in input mode; everything the companion SENDS (including the
- * Queue.lua JSON, `probe-queue`) in output mode.
+ * DevQueue.lua JSON, `probe-queue`) in output mode.
  */
 export const DEV_BRIDGE_MESSAGES = {
     'probe-request': DevBridgeProbeRequestSchema,

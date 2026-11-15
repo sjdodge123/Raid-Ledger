@@ -29,6 +29,11 @@ import {
     DEV_BRIDGE_MESSAGES,
     serializeDevBridgeJsonSchema,
 } from '../companion-dev-bridge-json-schema.js';
+import {
+    DEV_BRIDGE_PROBE_QUEUE_FILE,
+    DEV_BRIDGE_PROBE_QUEUE_GLOBAL,
+    DEV_BRIDGE_PROBE_RESULTS_MAX,
+} from '../companion-dev-bridge-queue.schema.js';
 
 const V1 = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'companion', 'dev-bridge', 'v1');
 const FIX = join(V1, 'fixtures');
@@ -115,12 +120,12 @@ describe('dev-bridge v1 addon SavedVariables allowlist (GET /dev/v1/addons/<fold
     /** `!BugGrabber` → `sv-raw--addon-buggrabber`. */
     const fixtureOf = (folder: string): string => `sv-raw--addon-${folder.replace(/^!/, '').toLowerCase()}`;
 
-    it('lists exactly Mailworthy and !BugGrabber — never LedgerLink, which has its own route', () => {
-        expect([...DEV_BRIDGE_SV_READABLE_ADDONS]).toEqual(['Mailworthy', '!BugGrabber']);
+    it('lists exactly Mailworthy, !BugGrabber and DungeonBuddy — never LedgerLink, which has its own route', () => {
+        expect([...DEV_BRIDGE_SV_READABLE_ADDONS]).toEqual(['Mailworthy', '!BugGrabber', 'DungeonBuddy']);
         expect(DevBridgeSvReadableAddonSchema.options).toEqual([...DEV_BRIDGE_SV_READABLE_ADDONS]);
     });
 
-    it.each(['LedgerLink', 'EnhanceQoL', 'mailworthy', 'BugGrabber', '../Mailworthy', ''])(
+    it.each(['LedgerLink', 'EnhanceQoL', 'mailworthy', 'BugGrabber', 'dungeonbuddy', '../Mailworthy', ''])(
         'refuses folder %j',
         (folder) => {
             expect(DevBridgeSvReadableAddonSchema.safeParse(folder).success).toBe(false);
@@ -142,6 +147,31 @@ describe('dev-bridge v1 addon SavedVariables allowlist (GET /dev/v1/addons/<fold
         for (const folder of DEV_BRIDGE_SV_READABLE_ADDONS) {
             expect({ folder, named: description.includes(folder) }).toEqual({ folder, named: true });
         }
+    });
+});
+
+describe('dev-bridge v1 probe consumer is LedgerLink itself (ROK-2190 amendment)', () => {
+    it('pins the queue file, its global and the result cap', () => {
+        expect({ DEV_BRIDGE_PROBE_QUEUE_FILE, DEV_BRIDGE_PROBE_QUEUE_GLOBAL, DEV_BRIDGE_PROBE_RESULTS_MAX }).toEqual({
+            DEV_BRIDGE_PROBE_QUEUE_FILE: 'Interface/AddOns/LedgerLink/DevQueue.lua',
+            DEV_BRIDGE_PROBE_QUEUE_GLOBAL: 'RaidLedgerProbeQueue',
+            DEV_BRIDGE_PROBE_RESULTS_MAX: 50,
+        });
+    });
+
+    it('CONTRACT.md names the LedgerLink queue path and the LedgerLinkDB.dev.probes result key', () => {
+        const doc = read(V1, 'CONTRACT.md');
+        expect({
+            queue: doc.includes(`<flavor>/${DEV_BRIDGE_PROBE_QUEUE_FILE}`),
+            results: doc.includes('LedgerLinkDB.dev.probes[probeId]'),
+        }).toEqual({ queue: true, results: true });
+    });
+
+    it('no current doc, fixture or schema names the dropped LedgerLinkProbe addon (CHANGELOG keeps history)', () => {
+        const files = readdirSync(V1, { recursive: true, encoding: 'utf8' })
+            .filter((f) => /\.(md|json)$/.test(f) && f !== 'CHANGELOG.md');
+        const naming = files.filter((f) => read(V1, f).includes('LedgerLinkProbe'));
+        expect(naming).toEqual([]);
     });
 });
 
