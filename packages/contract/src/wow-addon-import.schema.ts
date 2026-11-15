@@ -211,6 +211,16 @@ export const AddonRaidImportSummarySchema = z.object({
     wipes: n,
 });
 
+/** ROK-2184 — what a v2 `loot` import reports back (mirrors the raid summary). */
+export const AddonLootImportSummarySchema = z.object({
+    drops: z.number().int().nonnegative(),
+    newDrops: z.number().int().nonnegative(),
+    duplicateDrops: z.number().int().nonnegative(),
+    windowStart: z.number().int(),
+    windowEnd: z.number().int(),
+});
+export type AddonLootImportSummary = z.infer<typeof AddonLootImportSummarySchema>;
+
 const sectionBase = {
     status: AddonImportStatusSchema,
     /** Unix seconds from the payload. */
@@ -225,6 +235,7 @@ export const AddonImportSectionResultSchema = z.discriminatedUnion('section', [
     z.object({ ...sectionBase, section: z.literal('char'), summary: AddonCharImportSummarySchema }),
     z.object({ ...sectionBase, section: z.literal('guild'), summary: AddonGuildImportSummarySchema }),
     z.object({ ...sectionBase, section: z.literal('raid'), summary: AddonRaidImportSummarySchema }),
+    z.object({ ...sectionBase, section: z.literal('loot'), summary: AddonLootImportSummarySchema }),
 ]);
 export type AddonImportSectionResultDto = z.infer<typeof AddonImportSectionResultSchema>;
 
@@ -246,13 +257,14 @@ const resultBase = {
     warnings: z.array(AddonImportWarningSchema),
     diff: AddonImportDiffSchema,
     /**
-     * ROK-1737 — present only for a paste with 2–3 sections, one entry per
-     * section in canonical order char → guild → raid. The top-level
+     * ROK-1737 — present only for a paste with 2–4 sections, one entry per
+     * section in canonical order char → guild → raid → loot (ROK-2184: v2
+     * adds `loot`). The top-level
      * `section`/`status`/`exportedAt`/`summary` then mirror the FIRST entry,
      * and `warnings` carries `STALE_EXPORT` when ANY section is stale. A
      * single-section paste omits it (body unchanged since ROK-1724).
      */
-    sections: z.array(AddonImportSectionResultSchema).min(2).max(3).optional(),
+    sections: z.array(AddonImportSectionResultSchema).min(2).max(4).optional(),
     /**
      * ROK-1739 — present only when the export's `who.ruleset` was null and the
      * realm resolved; `realmName` is the export's raw `GetRealmName()` text.
@@ -265,6 +277,7 @@ export const AddonImportResultSchema = z.discriminatedUnion('section', [
     z.object({ ...resultBase, section: z.literal('char'), summary: AddonCharImportSummarySchema }),
     z.object({ ...resultBase, section: z.literal('guild'), summary: AddonGuildImportSummarySchema }),
     z.object({ ...resultBase, section: z.literal('raid'), summary: AddonRaidImportSummarySchema }),
+    z.object({ ...resultBase, section: z.literal('loot'), summary: AddonLootImportSummarySchema }),
 ]);
 export type AddonImportResultDto = z.infer<typeof AddonImportResultSchema>;
 

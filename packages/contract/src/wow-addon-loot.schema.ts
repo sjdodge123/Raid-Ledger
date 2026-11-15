@@ -111,12 +111,6 @@ export const AddonLootDataSchema = z.object({
 });
 export type AddonLootData = z.infer<typeof AddonLootDataSchema>;
 
-/** What a `loot` import reports back (mirrors the raid summary). */
-export const AddonLootImportSummarySchema = z.object({
-    drops: z.number().int().nonnegative(),
-    newDrops: z.number().int().nonnegative(),
-    duplicateDrops: z.number().int().nonnegative(),
-    windowStart: z.number().int(),
-    windowEnd: z.number().int(),
-});
-export type AddonLootImportSummary = z.infer<typeof AddonLootImportSummarySchema>;
+// `AddonLootImportSummarySchema` lives in `wow-addon-import.schema.ts` beside
+// the other import summaries: importing it from here made a module cycle
+// (export → import → loot → export).
