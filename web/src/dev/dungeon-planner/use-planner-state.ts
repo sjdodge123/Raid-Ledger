@@ -29,17 +29,20 @@ export interface PlannerState {
 const FALLBACK: WowInstanceDto = { id: 0, name: '—', expansion: 'Forever' };
 
 /** Initial names + dungeon ids: the URL wins over the frame's defaults. */
-function useInitialPlan(names: string[], dungeonIds: number[]): { names: string[]; dungeonIds: number[] } {
+function useInitialPlan(names: string[], dungeonIds: number[], readUrl: boolean): { names: string[]; dungeonIds: number[] } {
     const [params] = useSearchParams();
-    const fromUrl = parsePlanQuery(params.toString());
+    const fromUrl = readUrl ? parsePlanQuery(params.toString()) : {};
     const known = (fromUrl.names ?? names).filter((n) => ROSTER.some((r) => r.name === n)).slice(0, MAX_CHARS);
     const ids = (fromUrl.dungeonIds ?? dungeonIds).filter((id) => instanceById(id)).slice(0, MAX_DUNGEONS);
     return { names: known, dungeonIds: ids.length ? ids : [DALARAN_ID] };
 }
 
-/** Planner state for one frame; `names`/`dungeonIds` are the defaults when the URL carries none. */
-export function usePlannerState(names: string[], dungeonIds: number[] = [DALARAN_ID]): PlannerState {
-    const initial = useInitialPlan(names, dungeonIds);
+/**
+ * Planner state for one frame; `names`/`dungeonIds` are the defaults when the URL carries none.
+ * `readUrl: false` pins a frame to its defaults (the empty-group frame).
+ */
+export function usePlannerState(names: string[], dungeonIds: number[] = [DALARAN_ID], readUrl: boolean = true): PlannerState {
+    const initial = useInitialPlan(names, dungeonIds, readUrl);
     const [picked, setPicked] = useState<string[]>(initial.names);
     const [ids, setIds] = useState<number[]>(initial.dungeonIds);
     const dungeons = ids.flatMap((id) => instanceById(id) ?? []);

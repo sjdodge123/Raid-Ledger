@@ -14,7 +14,9 @@ import { Button } from '../../components/ui/button';
 import { SchemeSwitcher, SideBySideToggle } from '../design-system/scheme-controls';
 import { useForcedDarkRoot } from '../design-system/scheme-hooks';
 import { DualFamily } from '../design-system/dual-family';
-import { PlannerBody, PlannerWidget, type Layout } from './planner-view';
+import { PlannerBody, type Layout } from './planner-view';
+import { PlannerCompare } from './planner-compare';
+import { DALARAN_ID, SFK_ID } from './forever-dungeons.fixtures';
 import { usePlannerState } from './use-planner-state';
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -59,22 +61,24 @@ function MockTabs(): JSX.Element {
     );
 }
 
+const STORY = ['Aelin', 'Brann', 'Corra', 'Dorn', 'Esk'];
+
 function Frames({ layout }: { layout: Layout }): JSX.Element {
-    const a = usePlannerState(3);
-    const b = usePlannerState(5);
+    const ruled = usePlannerState(STORY);
+    const empty = usePlannerState([], [DALARAN_ID], false);
+    const one = usePlannerState(STORY);
+    const many = usePlannerState(STORY, [DALARAN_ID, SFK_ID]);
     return (
         <div className="space-y-8">
-            <Decision title="OQ1 — Tab or widget?" note="A tab has room for the quest breakdown and a URL a forum post can point at; a widget card cannot hold the breakdown.">
-                <Option label="Option A (recommended) — hub tab"><Sized layout={layout}><MockTabs /><PlannerBody s={a} layout={layout} invite={false} /></Sized></Option>
-                <Option label="Option B — Overview widget"><Sized layout={layout}><PlannerWidget s={a} /></Sized></Option>
+            <Decision title="Ruled — hub tab, event-page quest grouping, both Create-event buttons"
+                note="OQ1 A (tab), quest layout A (the event page's grouping), OQ3 B (plain pre-fill + invite). Esk has no linked character, so “invite these” counts 4. Copy link writes ?c=…&d=… — open it to restore the plan.">
+                <Option label="Group of 5"><Sized layout={layout}><MockTabs /><PlannerBody s={ruled} layout={layout} /></Sized></Option>
+                <Option label="Empty group (0 characters)"><Sized layout={layout}><PlannerBody s={empty} layout={layout} /></Sized></Option>
             </Decision>
-            <Decision title="OQ3 — Create-event buttons" note="Both link to /events/new with gameId, guildId and contentInstanceIds; Option B adds inviteCharacterIds. The real form reads only gameId today — it ignores the new params until the build.">
-                <Option label="Option A (recommended) — pre-fill only"><Sized layout={layout}><PlannerBody s={b} layout={layout} invite={false} /></Sized></Option>
-                <Option label="Option B — also invite the group"><Sized layout={layout}><PlannerBody s={b} layout={layout} invite /></Sized></Option>
-            </Decision>
-            <Decision title="Quest layout — grouped vs matrix" note="Grouped is the event page's format with a chip per character (new pattern); the matrix is the existing Dungeon quests widget table.">
-                <Option label="Option A (recommended) — event-page grouping"><Sized layout={layout}><PlannerBody s={b} layout={layout} invite={false} /></Sized></Option>
-                <Option label="Option B — QuestMatrix"><Sized layout={layout}><PlannerBody s={b} layout={layout} invite={false} questLayout="matrix" /></Sized></Option>
+            <Decision title="OQ2 — One dungeon or several per plan?"
+                note="B compares the same group across 2–3 dungeons: in range, quests available / shareable / prereq-blocked, then the full breakdown on demand, with a Create event per dungeon. Quest fixtures exist for City of Dalaran and Shadowfang Keep; other dungeons show the empty state.">
+                <Option label="Option A (recommended) — one dungeon per plan"><Sized layout={layout}><PlannerBody s={one} layout={layout} /></Sized></Option>
+                <Option label="Option B — several dungeons per plan"><Sized layout={layout}><PlannerCompare s={many} layout={layout} /></Sized></Option>
             </Decision>
         </div>
     );
@@ -85,9 +89,9 @@ function Intro(): JSX.Element {
         <header className="mb-5 border-b border-edge pb-3">
             <h1 className="text-xl font-semibold text-foreground">ROK-2207 — Dungeon planner (WoW: Forever hub)</h1>
             <p className="mt-1 text-sm text-secondary">
-                Pick up to 5 characters and a dungeon; see level fit and the dungeon’s quests in the event page’s format, then
-                copy a link for a forum post or create a pre-filled event. Mocked data only — nothing here talks to the API.
-                Characters: Aelin (in range), Brann (chain prerequisites unmet), Corra (below range), Dorn (above range), Esk (no linked character).
+                Pick up to 5 roster characters and a Forever dungeon; see level fit and the dungeon’s quests in the event page’s
+                format, then copy a link for a forum post or create a pre-filled event. Mocked data only — nothing here talks to
+                the API. Forever dungeons only (audit §a); level ranges are not verified for Forever yet.
             </p>
         </header>
     );
