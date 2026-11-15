@@ -1,8 +1,9 @@
 # RL Companion dev bridge — v1
 
 **Owner: Raid Ledger** (story ROK-2055). rl-companion (the `/dev/v1/*`
-listener) and the dev-only **LedgerLinkProbe** addon pin a copy of this folder
-and validate against it in their own CI. Only a Raid Ledger PR touching this
+listener) and **LedgerLink** (whose `/rl dev on` mode is the in-game probe
+consumer — ROK-2190; there is no separate probe addon) pin a copy of this
+folder and validate against it in their own CI. Only a Raid Ledger PR touching this
 folder changes the format. If this prose and the Zod source disagree, **the Zod
 source wins** and the prose is the bug.
 
@@ -114,10 +115,11 @@ percent-decoding, so `!BugGrabber` and `%21BugGrabber` are the same folder):
 |---|---|---|
 | `Mailworthy` | `MailworthyDB` (`selftest` holds the self-test report) | the operator's own addon |
 | `!BugGrabber` | `BugGrabberDB` | holds only captured Lua errors |
+| `DungeonBuddy` | UNVERIFIED — the companion serves whatever `DungeonBuddy.lua` holds (`fixtures/sv-raw--addon-dungeonbuddy.json` is illustrative) | a dungeon-guide addon, believed to hold only dungeon/quest guide data (possibly dungeon level ranges); contents UNVERIFIED (operator ruling 2026-11-15) |
 
 **Why an allowlist.** Other addons' saved data can hold whispers and chat
 history (EnhanceQoL's IM history, for one), so the bridge reads only addons
-the operator owns or that hold only error reports. LedgerLink is not in the
+the operator owns, that hold only error reports, or that hold only guide data. LedgerLink is not in the
 list: it has its own route. Adding a folder is an **additive** change (stays
 v1); removing one is breaking. Like `sv-raw` everywhere, the text is returned
 as-is (operator's own LAN tool).
@@ -272,7 +274,7 @@ reason as a new `status`.
   a 26-char `probeId`, with `flavor` replaced by a 34-char folder name (the
   longest `_[a-z0-9_]{1,32}_` allows) — serialised, is **≤ 4 KiB**
   (`DEV_BRIDGE_PROBE_REQUEST_MAX_BYTES`, `devBridgeProbeRequestWorstBytes`).
-  POST, the Queue.lua entry and the `probe-detail` echo all measure that same
+  POST, the DevQueue.lua entry and the `probe-detail` echo all measure that same
   form, so a request the bridge accepts always fits as a queue entry and as
   an echo whatever flavor it resolves to. In practice a POST body with
   `flavor: "auto"` is ≤ 4,027 B (`fixtures/probe-request--max-size.json`;
@@ -289,7 +291,7 @@ reason as a new `status`.
 
 ## Allowlist (`allowlist.json`)
 
-Both rl-companion (on POST) and LedgerLinkProbe (before each call) apply the
+Both rl-companion (on POST) and LedgerLink (before each call) apply the
 same table. **Deny wins.** Words come from the `tokenizer` rule (camel-case +
 `_` split; `GetCVar` → `Get`,`C`,`Var`).
 
@@ -324,8 +326,13 @@ same table. **Deny wins.** Words come from the `tokenizer` rule (camel-case +
 
 ## Probe result (`probe-result`)
 
-What LedgerLinkProbe stores as a JSON string in
-`LedgerLinkProbeDB.results[probeId]`, and what `probe-detail.result` carries.
+What LedgerLink stores as a JSON string in
+`LedgerLinkDB.dev.probes[probeId]` (account-wide SavedVariables, written on
+`PLAYER_LOGOUT` like the dev snapshot), and what `probe-detail.result`
+carries. `addonVersion` is LedgerLink's version. LedgerLink keeps at most
+`DEV_BRIDGE_PROBE_RESULTS_MAX` (50) results, pruning expired ones (past the
+probe's `ttlHours`) and then the oldest. Name-bearing functions
+(`DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`) stay presence-only here too.
 
 - `{ probeId, capturedAt, addonVersion, calls, truncated }`; each call
   `{ id, status: ok|missing|error|denied, values?, error?, iterations?, truncated? }`;
@@ -349,8 +356,9 @@ What LedgerLinkProbe stores as a JSON string in
 
 ## Queue file (data, never code)
 
-rl-companion writes `<flavor>/Interface/AddOns/LedgerLinkProbe/Queue.lua` as
-the single assignment `RaidLedgerProbeQueue = [==[<JSON>]==]`, choosing the
+rl-companion writes `<flavor>/Interface/AddOns/LedgerLink/DevQueue.lua`
+(`DEV_BRIDGE_PROBE_QUEUE_FILE`) as the single assignment
+`RaidLedgerProbeQueue = [==[<JSON>]==]` (`DEV_BRIDGE_PROBE_QUEUE_GLOBAL`), choosing the
 long-bracket level so the JSON cannot close it, written atomically (temp +
 rename). The JSON is `$defs/probe-queue`:
 `{ "queueVersion": 1, "probes": [ … ≤50 … ] }`, oldest first. Each entry is the
@@ -360,15 +368,22 @@ plus the companion-assigned `probeId`; the allowlist and the 4 KiB request cap
 (measured as above, so any accepted POST fits) apply. `fixtures/probe-queue.json` carries an arg holding `]]`, `]==]`, a
 quote, a backslash and a newline.
 
+LedgerLink lists `DevQueue.lua` in its TOC as an empty stub (no assignment),
+so the file always exists and the companion only ever overwrites it.
+LedgerLink reads the queue **only while `/rl dev on`**; with dev mode off it
+ignores the global entirely — no call runs and nothing is stored. A queue
+written while dev mode is off simply waits (or expires).
+
 ## LedgerLink dev snapshot (`ledgerlink-snapshot`) — ROK-2072
 
 **Where it lives.** Only while the operator has typed `/rl dev on`, LedgerLink
 keeps `LedgerLinkDB.dev = { v = 1, enabledAt = <unix s>, snapshots = { [<guid>]
-= "<JSON>" } }` in the account-wide SavedVariables file and rewrites the
+= "<JSON>" }, probes = { [<probeId>] = "<JSON probe-result>" } }` (`probes`
+per "Probe result" above) in the account-wide SavedVariables file and rewrites the
 current character's entry on every `PLAYER_LOGOUT` (`/reload`, logout, exit).
 Each value is ONE JSON string that validates against `$defs/ledgerlink-snapshot`
 (input mode — the companion receives it). `/rl dev off` (and the default)
-leaves no `dev` key at all. At most 10 characters are held.
+leaves no `dev` key at all (so no `probes` either). At most 10 characters are held.
 
 **Privacy (D3/D4).** The snapshot itself carries no name, realm, guild or
 GUID: `character` is `{ class, level, faction, inGuild }` only, and

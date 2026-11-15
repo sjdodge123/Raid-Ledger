@@ -1,0 +1,9 @@
+{
+  "flavor": "_anniversary_",
+  "scope": "account",
+  "path": "_anniversary_/WTF/Account/TESTACCOUNT/SavedVariables/DungeonBuddy.lua",
+  "bytes": 169,
+  "mtime": "2026-11-01T18:30:00Z",
+  "text": "DungeonBuddyDB = {\n\t[\"dungeons\"] = {\n\t\t[\"Deadmines\"] = { [\"minLevel\"] = 17, [\"maxLevel\"] = 26 },\n\t\t[\"Wailing Caverns\"] = { [\"minLevel\"] = 17, [\"maxLevel\"] = 24 },\n\t},\n}\n",
+  "next": null
+}

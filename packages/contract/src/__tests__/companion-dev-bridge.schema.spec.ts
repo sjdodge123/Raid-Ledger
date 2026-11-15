@@ -1,6 +1,6 @@
 /**
  * ROK-2055 — dev-bridge v1 probe grammar + allowlist (§5.1). The allowlist's
- * `examples` are the shared vectors rl-companion and LedgerLinkProbe test too.
+ * `examples` are the shared vectors rl-companion and LedgerLink (dev mode) test too.
  */
 import { describe, expect, it } from 'vitest';
 import {

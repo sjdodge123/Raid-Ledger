@@ -28,7 +28,7 @@ script in game, or `/reload` for you.**
 | Is the bridge up, which flavors exist, is WoW running | `/dev/v1/health` |
 | Installed addons (from `.toc` headers) | `/dev/v1/addons?flavor=<flavor>` |
 | LedgerLink SavedVariables, raw text | `/dev/v1/ledgerlink/sv?flavor=<flavor>&scope=account` |
-| Mailworthy / BugGrabber SavedVariables, raw text (only these two) | `/dev/v1/addons/Mailworthy/sv?flavor=<flavor>&scope=account` (or `/dev/v1/addons/!BugGrabber/sv?…`; `%21BugGrabber` also works) |
+| Mailworthy / BugGrabber / DungeonBuddy SavedVariables, raw text (only these three) | `/dev/v1/addons/Mailworthy/sv?flavor=<flavor>&scope=account` (or `/dev/v1/addons/!BugGrabber/sv?…` — `%21BugGrabber` also works — or `/dev/v1/addons/DungeonBuddy/sv?…`) |
 | LedgerLink SavedVariables, parsed (GUIDs hashed) | `/dev/v1/ledgerlink/sv/parsed?flavor=<flavor>` |
 | Probe status / answer | `/dev/v1/probes`, `/dev/v1/probes/<probeId>` |
 | Companion log (redacted) | `/dev/v1/logs?since=<iso>&level=warn` |
@@ -55,6 +55,12 @@ over queuing a probe whenever the snapshot already holds the fact.
 
 ## Probes — execute tier (the operator approves each)
 
+Probes run inside **LedgerLink** itself — there is no separate probe addon.
+rl-companion writes the queue to `<flavor>/Interface/AddOns/LedgerLink/DevQueue.lua`
+and LedgerLink saves each answer under `LedgerLinkDB.dev.probes`. LedgerLink
+runs them **only while the operator has `/rl dev on`**; with dev mode off a
+probe just waits until it expires.
+
 1. Write a `probe-request` (CONTRACT.md → "Probe request"): read-only calls
    only. Check each `fn` against `allowlist.json` first — a function whose name
    starts with `Get`/`Is`/`Has`/`Can`/`Unit`/`Num` and holds no deny word.
@@ -73,7 +79,7 @@ over queuing a probe whenever the snapshot already holds the fact.
 5. Cancel a probe you no longer need: `DELETE /dev/v1/probes/<probeId>` (execute tier).
 
 A question the grammar cannot express (it needs a loop over a table, a
-callback, a write) is not a probe: file a LedgerLinkProbe release request in
+callback, a write) is not a probe: request a LedgerLink dev-mode change in
 the ledger-link repo via a Raid Ledger story.
 
 ## Privacy

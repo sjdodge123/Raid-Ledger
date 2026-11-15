@@ -13,11 +13,13 @@
       "loadOnDemand": false
     },
     {
-      "folder": "LedgerLinkProbe",
-      "title": null,
+      "folder": "Mailworthy",
+      "title": "Mailworthy",
       "version": null,
       "interface": "11507, 20505",
-      "savedVariables": [],
+      "savedVariables": [
+        "MailworthyDB"
+      ],
       "loadOnDemand": false
     }
   ]
