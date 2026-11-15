@@ -42,6 +42,7 @@ import { closeTestSharedRedis } from '../../queue/queue.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { ensureTestDbMigrated } from './integration-migrations';
+import { workerDbUrl } from './integration-worker-dbs';
 import {
   instrumentLifecycleHooks,
   phaseMark,
@@ -152,6 +153,9 @@ async function provisionDatabase(): Promise<{
 }> {
   // Setup-owned URI first: with it present, a local `CI=true` run can't fall
   // through to an `api/.env` DATABASE_URL that points at the live DB.
+  // ROK-2200 spike: per-worker clone when RL_INTEGRATION_WORKERS >= 2.
+  const perWorker = workerDbUrl();
+  if (perWorker) return { connectionString: perWorker, container: null };
   const shared = ownedSharedTestDbUrl();
   if (shared) return { connectionString: shared, container: null };
   if (process.env.CI === 'true' && process.env.DATABASE_URL) {

@@ -30,6 +30,11 @@ import {
   markTestDbMigrated,
   runTestMigrations,
 } from './integration-migrations';
+import {
+  WORKER_DB_URLS_ENV,
+  cloneWorkerDbs,
+  requestedWorkers,
+} from './integration-worker-dbs';
 
 /** globalSetup and globalTeardown share the outer realm's globalThis. */
 export const CONTAINER_KEY = '__rl_integration_pg_container';
@@ -43,14 +48,34 @@ export default async function integrationGlobalSetup(): Promise<void> {
   delete process.env[SHARED_TEST_DB_URL_ENV];
   delete process.env[SHARED_TEST_DB_OWNER_ENV];
   delete process.env[MIGRATED_TEST_DB_URL_ENV];
+  delete process.env[WORKER_DB_URLS_ENV];
   const ciDbUrl = process.env.DATABASE_URL;
   if (process.env.CI === 'true' && ciDbUrl) {
     await runTestMigrations(ciDbUrl);
-    markTestDbMigrated(ciDbUrl);
+    await markMigrated(ciDbUrl);
     return;
   }
   const container = await startTestPostgres();
   (globalThis as GlobalWithContainer)[CONTAINER_KEY] = container;
   process.env[SHARED_TEST_DB_URL_ENV] = container.getConnectionUri();
   process.env[SHARED_TEST_DB_OWNER_ENV] = SHARED_TEST_DB_OWNER;
+  if (requestedWorkers() > 1) {
+    await runTestMigrations(container.getConnectionUri());
+    await markMigrated(container.getConnectionUri());
+  }
+}
+
+/**
+ * Record `baseUrl` as migrated; in ROK-2200 per-worker mode also clone it
+ * once per worker and record those clones (already migrated via TEMPLATE).
+ */
+async function markMigrated(baseUrl: string): Promise<void> {
+  const workers = requestedWorkers();
+  if (workers < 2) {
+    markTestDbMigrated(baseUrl);
+    return;
+  }
+  const urls = await cloneWorkerDbs(baseUrl, workers);
+  process.env[WORKER_DB_URLS_ENV] = urls.join(' ');
+  markTestDbMigrated([baseUrl, ...urls].join(' '));
 }

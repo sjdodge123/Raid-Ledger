@@ -41,7 +41,12 @@ module.exports = {
   // ("recommend the dev verify ROK-1091 still reproduces after the new
   // reset hook lands; if so, file a follow-up") — once that lands, this
   // can ratchet up to 2 (and CI sharding stays orthogonal).
-  maxWorkers: 1,
+  // ROK-2200 spike: RL_INTEGRATION_WORKERS=<n> runs n workers, each on its
+  // own cloned DB (integration-worker-dbs.ts). Unset = 1, unchanged.
+  maxWorkers:
+    Number(process.env.RL_INTEGRATION_WORKERS) > 1
+      ? Number(process.env.RL_INTEGRATION_WORKERS)
+      : 1,
   // ROK-1058 AC3: file-order randomization is opt-in via the CLI `--randomize`
   // flag (passed by the CI matrix). Local default stays deterministic so
   // bisecting a true cross-suite flake remains tractable. CI's `run: [1,2,3]`
