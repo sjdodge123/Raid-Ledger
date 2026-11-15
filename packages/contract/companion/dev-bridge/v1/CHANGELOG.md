@@ -7,6 +7,42 @@ the safety net and needs an explicit operator ruling. Anything else is
 breaking and gets a new `vN/` folder; rl-companion accepts the current and
 previous version during the transition.
 
+## v1 — 2026-11-15 (probe consumer folds into LedgerLink; DungeonBuddy readable — ROK-2190, amended in place)
+
+Operator ruling 2026-11-15: no separate probe addon — LedgerLink is the dev
+tunnel into the game. The planned **LedgerLinkProbe** addon is dropped.
+
+- **Queue file** moves from `<flavor>/Interface/AddOns/LedgerLinkProbe/Queue.lua`
+  to `<flavor>/Interface/AddOns/LedgerLink/DevQueue.lua` (new exports
+  `DEV_BRIDGE_PROBE_QUEUE_FILE`, `DEV_BRIDGE_PROBE_QUEUE_GLOBAL`). Same single
+  assignment `RaidLedgerProbeQueue = [==[<JSON>]==]`, same `probe-queue` JSON,
+  same atomic write. LedgerLink ships `DevQueue.lua` in its TOC as an empty
+  stub and consumes the queue **only while `/rl dev on`**; with dev mode off
+  it ignores the queue.
+- **Results** move from `LedgerLinkProbeDB.results[probeId]` to
+  `LedgerLinkDB.dev.probes[probeId]` (account-wide SavedVariables, written on
+  `PLAYER_LOGOUT` like the dev snapshot), ≤ 50 entries
+  (`DEV_BRIDGE_PROBE_RESULTS_MAX`), expired then oldest pruned.
+  `addonVersion` is LedgerLink's version. The `probe-request`,
+  `probe-result`, `probe-queue` and allowlist shapes and semantics are
+  unchanged (LedgerLink applies the pinned allowlist before each call;
+  name-bearing functions stay presence-only).
+- **Why v1 is amended in place rather than bumped:** the move of the queue
+  path and result key would be **breaking** for an implementation pinned to
+  the old locations — but none exists. Neither consumer was ever built
+  (the planned ROK-2190 LedgerLinkProbe addon and ROK-2191 companion probe routes; rl-companion's
+  latest release v0.1.0-test.6 serves no `/dev/v1/probes*` route), so nothing
+  can break. No JSON shape changed: `schema.json` differs only in its
+  description (the readable-folder list).
+- **`DungeonBuddy`** joins `DEV_BRIDGE_SV_READABLE_ADDONS` /
+  `DevBridgeSvReadableAddonSchema` (a dungeon-guide addon, believed to hold
+  only dungeon/quest guide data; contents UNVERIFIED, operator ruling
+  2026-11-15). Adding a folder is **additive**. Its saved-variable name is
+  UNVERIFIED; the companion serves whatever `DungeonBuddy.lua` holds.
+  New fixture `sv-raw--addon-dungeonbuddy.json` (illustrative text).
+- Fixture `addons.json`: the `LedgerLinkProbe` row is replaced by a
+  `Mailworthy` row.
+
 ## v1 — 2026-11-06 (snapshot ruleset gains rppvp, additive)
 
 - `ledgerlink-snapshot` `ruleset.ledgerLink.value` now reuses the shared

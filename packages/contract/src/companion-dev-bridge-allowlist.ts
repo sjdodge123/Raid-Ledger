@@ -2,7 +2,7 @@
 // Companion dev bridge v1 — probe function allowlist (ROK-2055 §5.1, D2).
 // `packages/contract/companion/dev-bridge/v1/allowlist.json` is GENERATED from
 // `DEV_BRIDGE_PROBE_ALLOWLIST` (scripts/gen-companion-schemas.mjs). rl-companion
-// (on POST /dev/v1/probes) and the LedgerLinkProbe addon (before each call)
+// (on POST /dev/v1/probes) and LedgerLink's dev mode (before each call)
 // pin that file and apply the SAME table; its `examples` are the shared test
 // vectors. The deny rules always win over the allow rules.
 // ============================================================
