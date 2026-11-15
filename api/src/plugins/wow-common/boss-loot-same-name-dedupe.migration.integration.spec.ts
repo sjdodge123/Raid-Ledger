@@ -156,6 +156,11 @@ describe('ROK-2197 migration 0300: same-name boss loot dedupe', () => {
 
   beforeAll(async () => {
     testApp = await getTestApp();
+  });
+
+  // Every test starts from a fresh seed + the recreated old shape, so the
+  // suite holds under `--randomize`; each test runs the migration itself.
+  beforeEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
     const seeder = testApp.app.get(BossEncounterSeeder, { strict: false });
     await seeder.seed();
@@ -181,11 +186,13 @@ describe('ROK-2197 migration 0300: same-name boss loot dedupe', () => {
 
   it('a re-run deletes nothing', async () => {
     await runMigration();
+    await runMigration();
     await expectBundledSplit(control);
     expect(await lootOfExpansion('tbc')).toBe(tbcSeeded + 1);
   });
 
   it('a re-seed after the migration does not regrow the copies', async () => {
+    await runMigration();
     const seeder = testApp.app.get(BossEncounterSeeder, { strict: false });
     await seeder.seed();
     await expectBundledSplit(control);
