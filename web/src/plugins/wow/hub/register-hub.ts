@@ -73,7 +73,7 @@ export const wowHubModule: HubModule = {
     editorDelegation: WowEditorDelegation,
     /** ROK-1928 A4: the Forever guild's Blizzard roster slug + sync status (renders nothing elsewhere). */
     settingsSections: BlizzardRosterSection,
-    /** ROK-2192: the rank-0 GM opens settings only on a Forever hub, where the Blizzard roster is theirs to write. */
+    /** ROK-2192/2199: the rank-0 GM and a delegated editor open settings only on a Forever hub, where the Blizzard roster is theirs to write. */
     topRankOpensSettings: isForeverGuildPage,
     /** ROK-2132: a non-member of a Forever guild gets the join gate instead of the 403 notice. */
     nonMemberGate: WowJoinGate,
