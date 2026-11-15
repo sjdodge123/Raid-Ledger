@@ -9,9 +9,22 @@
 import type { ForeverProbeEndpoint } from '@raid-ledger/contract';
 import type { ProbeTarget } from './forever-namespace-probe.forever';
 import type { ProbeUrl } from './forever-namespace-probe.helpers';
+import { getInstance } from './instance-catalogue/instance-catalogue';
 
-/** The Stockade's zone (area) id. */
-export const PROBE_QUEST_AREA_ID = 717;
+/** The Stockade's journal instance id. */
+const STOCKADE_ID = 238;
+
+/** The Stockade's Forever quest-area id, from the instance catalogue. */
+export const PROBE_QUEST_AREA_ID = stockadeQuestAreaId();
+
+function stockadeQuestAreaId(): number {
+  const areaId = getInstance(STOCKADE_ID, 'wow_forever')
+    ?.foreverQuestAreaIds[0];
+  if (areaId === undefined) {
+    throw new Error(`ROK-2210: no Forever quest area for ${STOCKADE_ID}`);
+  }
+  return areaId;
+}
 
 /**
  * Classic dungeon quests, all with reward items: 378 The Fury Runs Deep
