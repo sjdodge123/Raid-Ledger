@@ -7,6 +7,7 @@ import type { WowRosterInsightsDto } from '@raid-ledger/contract';
 import {
   CLOSE_WAIT_MS,
   InsightsFlights,
+  MAX_COMPUTE_ATTEMPTS,
   type FlightHooks,
 } from './roster-insights.cache-flight';
 
@@ -68,5 +69,72 @@ describe('InsightsFlights.close', () => {
     void flights.run('k', () => Promise.resolve(dto('new')));
     await flights.close();
     expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
+/**
+ * TECH-DEBT td8 — a warm asked for while the key is in flight is replayed
+ * when that compute exhausts its attempts without storing (every attempt
+ * superseded), so the key is not left cold for the next reader.
+ */
+describe('InsightsFlights.scheduleWarm while in flight', () => {
+  it('re-warms a key whose in-flight compute exhausts its attempts', async () => {
+    const hooks = makeHooks();
+    const flights = new InsightsFlights(hooks);
+    const compute = jest.fn(() => {
+      flights.bumpPrefix('k');
+      return Promise.resolve(dto('stale'));
+    });
+    const warm = jest.fn(() => Promise.resolve(dto('warm')));
+    const flight = flights.run('k', compute);
+    flights.scheduleWarm('k', warm);
+    const outcome = await flight;
+    // close() waits for the replayed warm, which is already running.
+    await flights.close();
+    expect(compute).toHaveBeenCalledTimes(MAX_COMPUTE_ATTEMPTS);
+    expect(outcome.current).toBe(false);
+    expect(warm).toHaveBeenCalledTimes(1);
+    expect(hooks.store).toHaveBeenCalledWith('k', dto('warm'));
+  });
+
+  it('replays a mark once — the replayed warm takes no mark of its own', async () => {
+    const hooks = makeHooks();
+    const flights = new InsightsFlights(hooks);
+    const superseded = jest.fn(() => {
+      flights.bumpPrefix('k');
+      return Promise.resolve(dto('stale'));
+    });
+    // Every warm attempt asks for another warm and is superseded; the cap
+    // only keeps a regression (self-re-marking replay) from spinning forever.
+    const warm = jest.fn(async () => {
+      await Promise.resolve();
+      if (warm.mock.calls.length < 10) flights.scheduleWarm('k', warm);
+      flights.bumpPrefix('k');
+      return dto('stale');
+    });
+    const flight = flights.run('k', superseded);
+    flights.scheduleWarm('k', warm);
+    await flight;
+    expect(flights.isRunning('k')).toBe(true);
+    const unused = jest.fn(() => Promise.resolve(dto('unused')));
+    expect((await flights.run('k', unused)).current).toBe(false);
+    expect(warm).toHaveBeenCalledTimes(MAX_COMPUTE_ATTEMPTS);
+    expect(flights.isRunning('k')).toBe(false);
+    expect(unused).not.toHaveBeenCalled();
+    expect(hooks.store).not.toHaveBeenCalled();
+    await flights.close();
+  });
+
+  it('drops the warm mark when the in-flight compute stores', async () => {
+    const hooks = makeHooks();
+    const flights = new InsightsFlights(hooks);
+    const warm = jest.fn(() => Promise.resolve(dto('warm')));
+    const flight = flights.run('k', () => Promise.resolve(dto('fresh')));
+    flights.scheduleWarm('k', warm);
+    expect((await flight).current).toBe(true);
+    await flights.close();
+    expect(warm).not.toHaveBeenCalled();
+    expect(hooks.store).toHaveBeenCalledTimes(1);
+    expect(hooks.store).toHaveBeenCalledWith('k', dto('fresh'));
   });
 });
