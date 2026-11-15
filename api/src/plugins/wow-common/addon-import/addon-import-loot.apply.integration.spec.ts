@@ -261,7 +261,9 @@ describe('ROK-2184 loot import — two exporters, overlapping windows', () => {
       newDrops: 2,
       duplicateDrops: 2,
     });
-    const rows = await lootRows();
+    // Within one import rows insert in dedup-key order (review #3), so `id`
+    // order is not drop order — compare by item.
+    const rows = (await lootRows()).sort((x, y) => x.itemId - y.itemId);
     expect(rows.map((r) => [r.itemId, r.reportedByUserId])).toEqual([
       [16800, a.userId],
       [16801, a.userId],
