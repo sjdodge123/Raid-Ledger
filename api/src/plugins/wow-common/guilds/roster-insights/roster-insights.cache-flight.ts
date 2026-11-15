@@ -11,6 +11,15 @@ export const CLOSE_WAIT_MS = 5_000;
 /** One uncached compute of a key. */
 export type InsightsCompute = () => Promise<WowRosterInsightsDto>;
 
+/** Invoke `compute` now; a synchronous throw becomes a rejected promise. */
+function startCompute(compute: InsightsCompute): Promise<WowRosterInsightsDto> {
+  try {
+    return compute();
+  } catch (err: unknown) {
+    return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 /** A finished compute; `current` false = every attempt was superseded. */
 export interface ComputeOutcome {
   data: WowRosterInsightsDto;
@@ -119,10 +128,12 @@ export class InsightsFlights {
     let stale = false;
     try {
       let gen = this.generation(key);
-      // Call through a resolved promise: a compute that throws synchronously
-      // must still reject after `run` has recorded the flight, or this
-      // `finally` runs first and the rejected flight sticks in `inFlight`.
-      let data = await Promise.resolve().then(compute);
+      // A compute that throws synchronously must still reject AFTER `run` has
+      // recorded the flight, or this `finally` runs first and the rejected
+      // flight sticks in `inFlight`. `startCompute` keeps the call itself
+      // synchronous (callers count it straight after `run`) and turns the
+      // throw into a rejection, which `await` delivers a microtask later.
+      let data = await startCompute(compute);
       for (let n = 1; n < MAX_COMPUTE_ATTEMPTS; n++) {
         if (this.closed || this.generation(key) === gen) break;
         gen = this.generation(key);
