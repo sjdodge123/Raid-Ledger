@@ -32,6 +32,7 @@ import {
   FIXTURE_ITEM_LINK,
   wrapImportBytes,
 } from './testing/addon-fixture.builder';
+import { buildLootDrop, buildLootPayload } from './testing/addon-fixture.loot';
 import { pinExportClock } from './testing/pin-export-clock';
 
 pinExportClock();
@@ -252,9 +253,10 @@ describe('decodeImportString — header + base64', () => {
     expect(err.body.message).toMatch(/raid ledger needs an update/i);
   });
 
-  it('rejects a v2 header around a schema-1 body as UNSUPPORTED_VERSION', () => {
+  it('rejects a v2 header around a schema-1 body as UNSUPPORTED_VERSION with a mismatch message', () => {
     const err = expectReject(`!RL2!char!${body}`, 'UNSUPPORTED_VERSION');
-    expect(err.body.message).toMatch(/raid ledger needs an update/i);
+    expect(err.body.message).toMatch(/header and contents disagree/i);
+    expect(err.body.message).not.toMatch(/raid ledger needs an update/i);
   });
 
   it('rejects a string truncated by 10 characters as CUT_OFF', () => {
@@ -548,6 +550,21 @@ describe('decodeImportPaste — v1 and v2 envelopes (ROK-2184)', () => {
     expect(decoded.sections.loot?.payload).toEqual(
       (fixtureView('v2', 'loot') as { payload: unknown }).payload,
     );
+  });
+
+  it('strips control characters from a loot link but keeps its WoW escapes', () => {
+    const clean = '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunderfury]|h|r';
+    const dirty =
+      '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunder\u0000fury]|h\u0007|r';
+    const s = buildImportString(
+      {
+        ...buildLootPayload([buildLootDrop(0, { link: dirty })]),
+        who: buildWho(),
+      },
+      { version: 2 },
+    );
+    const drops = decodeImportPaste(s).sections.loot?.payload.data.drops;
+    expect(drops?.[0]?.link).toBe(clean);
   });
 
   it('decodes a v2 "Export all" with loot in canonical order', () => {

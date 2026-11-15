@@ -43,7 +43,7 @@ export const guildLootDrops = pgTable(
     itemId: integer('item_id').notNull(),
     quantity: integer('quantity').notNull(),
     quality: integer('quality'),
-    /** Raw item link as received (the decoder already sanitised it). */
+    /** Item link as received: WoW escapes kept, control characters stripped by the decoder. */
     link: varchar('link', { length: 512 }),
     /** master | roll | direct | unknown. */
     method: varchar('method', { length: 10 }).notNull(),

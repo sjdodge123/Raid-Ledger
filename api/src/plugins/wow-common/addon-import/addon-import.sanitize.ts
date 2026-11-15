@@ -60,14 +60,17 @@ export function sanitizeGuildExport(
 
 /**
  * ROK-2184 — sanitise a loot export, but keep each drop's raw item `link`
- * VERBATIM: it is parsed (item id / bonus ids), never displayed raw, and
- * stripping `|H…|h` would erase it.
+ * escapes (`|c…|H…|h…|h|r`): it is parsed (item id / bonus ids), never
+ * displayed raw, and stripping `|H…|h` would erase it. Control characters
+ * ARE removed from it (a NUL would fail the varchar insert with a 500).
  */
 export function sanitizeLootExport(loot: AddonLootExport): AddonLootExport {
   const sanitized = sanitizeStrings(loot);
   const drops = sanitized.data.drops.map((drop, i) => {
     const link = loot.data.drops[i]?.link;
-    return link === undefined ? drop : { ...drop, link };
+    return link === undefined
+      ? drop
+      : { ...drop, link: link.replace(CONTROL_RE, '') };
   });
   return { ...sanitized, data: { ...sanitized.data, drops } };
 }
