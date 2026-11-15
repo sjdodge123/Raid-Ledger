@@ -14,6 +14,7 @@ import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 const mocks = vi.hoisted(() => ({
     character: null as null | { race: string | null; faction: 'alliance' | 'horde' | null; class: string | null },
     guildFaction: null as string | null,
+    characterLoading: false,
     /** Every guildId useGuildPage was called with (0 = the query is disabled). */
     guildCalls: [] as number[],
 }));
@@ -24,7 +25,7 @@ vi.mock('../../../hooks/use-auth', () => ({
     getAuthToken: () => 'fake-token',
 }));
 vi.mock('../../../hooks/use-character-detail', () => ({
-    useCharacterDetail: () => ({ data: mocks.character, isLoading: false }),
+    useCharacterDetail: () => ({ data: mocks.character, isLoading: mocks.characterLoading }),
 }));
 vi.mock('../../../components/hub/api/use-guild', () => ({
     useGuildPage: (guildId: number) => {
@@ -68,6 +69,7 @@ describe('QuestPrepPanel — faction filter (ROK-2211)', () => {
         server.resetHandlers();
         mocks.character = null;
         mocks.guildFaction = null;
+        mocks.characterLoading = false;
         mocks.guildCalls = [];
     });
 
@@ -102,7 +104,7 @@ describe('QuestPrepPanel — faction filter (ROK-2211)', () => {
         // Neutral always renders, so the side assertions below fail on their own message.
         expect(await screen.findByText('Neutral Quest')).toBeInTheDocument();
         expect(screen.queryByText('Alliance Only Quest')).not.toBeInTheDocument();
-        expect(screen.queryByText('Horde Only Quest')).toBeInTheDocument();
+        expect(screen.getByText('Horde Only Quest')).toBeInTheDocument();
         expect(mocks.guildCalls.filter((id) => id !== 0)).toEqual([]);
     });
 
@@ -110,6 +112,15 @@ describe('QuestPrepPanel — faction filter (ROK-2211)', () => {
         mocks.character = { race: 'Human', faction: null, class: 'Warrior' };
         renderPanel(7);
         expect(await screen.findByText('Alliance Only Quest')).toBeInTheDocument();
+        expect(mocks.guildCalls.length).toBeGreaterThan(0);
+        expect(mocks.guildCalls.filter((id) => id !== 0)).toEqual([]);
+    });
+
+    it("never asks for the guild page while the viewer's character is loading", async () => {
+        mocks.characterLoading = true;
+        mocks.guildFaction = 'Alliance';
+        renderPanel(7);
+        expect(await screen.findByText('Neutral Quest')).toBeInTheDocument();
         expect(mocks.guildCalls.length).toBeGreaterThan(0);
         expect(mocks.guildCalls.filter((id) => id !== 0)).toEqual([]);
     });
