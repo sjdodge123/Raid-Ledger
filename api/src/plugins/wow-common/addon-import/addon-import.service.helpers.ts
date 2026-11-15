@@ -1,7 +1,8 @@
 import {
   ADDON_IMPORT_MAX_BYTES,
+  AddonExportSectionV2Schema,
   AddonImportRequestSchema,
-  type AddonExportSection,
+  type AddonExportSectionV2,
   type AddonImportRequestDto,
   type AddonImportResultDto,
   type AddonImportRulesetInferenceDto,
@@ -20,12 +21,13 @@ import { previewCharThenMailworthy } from './addon-import-char.mailworthy.previe
 import { withCharInstalledAddonsPreview } from './addon-import-char.installed';
 import { applyGuild, previewGuild } from './addon-import-guild.apply';
 import { applyRaid, previewRaid } from './addon-import-raid.apply';
+import { applyLootImport } from './addon-import-loot.apply';
 
 /** What the service knows about an attempt, for the audit row + log line. */
 export interface AttemptFacts {
   sizeBytes: number;
   dryRun: boolean;
-  section: AddonExportSection | null;
+  section: AddonExportSectionV2 | null;
   sha256: string | null;
   /** The reserved audit row (limit check passed), finalised by `finish`. */
   auditId: number | null;
@@ -34,22 +36,45 @@ export interface AttemptFacts {
    * row each. Empty for a single-section paste (one row, as before).
    */
   sections: SectionAuditFact[];
+  /**
+   * ROK-2184 — the `!RLn!` envelope version: sniffed from the raw header,
+   * then the decoded paste's version. Null when the header never parsed.
+   */
+  envelopeVersion: number | null;
 }
 
 /** One section of a mixed paste, for its own audit row. */
 export interface SectionAuditFact {
-  section: AddonExportSection;
+  section: AddonExportSectionV2;
   sha256: string;
   sizeBytes: number;
 }
 
-const SECTION_SNIFF = /^\s*!RL\d+!(char|guild|raid)\b/;
+const SECTION_SNIFF = /^\s*!RL(\d+)!(char|guild|raid|loot)\b/;
+/** `addon_import_audit.envelope_version` is a smallint. */
+const SMALLINT_MAX = 32_767;
+
+function sniffHeader(raw: unknown): RegExpExecArray | null {
+  if (typeof raw !== 'string') return null;
+  return SECTION_SNIFF.exec(raw.slice(0, 32));
+}
 
 /** Header section without decoding anything (audit only). */
-export function sniffSection(raw: unknown): AddonExportSection | null {
-  if (typeof raw !== 'string') return null;
-  const match = SECTION_SNIFF.exec(raw.slice(0, 32));
-  return (match?.[1] as AddonExportSection | undefined) ?? null;
+export function sniffSection(raw: unknown): AddonExportSectionV2 | null {
+  const parsed = AddonExportSectionV2Schema.safeParse(sniffHeader(raw)?.[2]);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * ROK-2184 — the header's envelope version without decoding (audit only):
+ * any number, so a reject row records what was pasted. Null when the header
+ * doesn't parse or the number would overflow the smallint column.
+ */
+export function sniffEnvelopeVersion(raw: unknown): number | null {
+  const digits = sniffHeader(raw)?.[1];
+  if (digits === undefined) return null;
+  const version = Number(digits);
+  return version <= SMALLINT_MAX ? version : null;
 }
 
 /** Facts readable from the raw body before validation. */
@@ -63,6 +88,7 @@ export function rawFacts(body: unknown): AttemptFacts {
     sha256: null,
     auditId: null,
     sections: [],
+    envelopeVersion: sniffEnvelopeVersion(str),
   };
 }
 
@@ -123,7 +149,10 @@ export function runSection(
       ? previewGuild(ctx, payload, pages)
       : applyGuild(ctx, payload, pages);
   }
-  return dryRun ? previewRaid(ctx, payload) : applyRaid(ctx, payload);
+  if (payload.section === 'raid') {
+    return dryRun ? previewRaid(ctx, payload) : applyRaid(ctx, payload);
+  }
+  return applyLootImport(ctx, payload, dryRun);
 }
 
 /** The 200 body. A stale export also carries a `STALE_EXPORT` warning. */

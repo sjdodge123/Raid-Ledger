@@ -34,7 +34,7 @@ import {
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
   DesignSystemPage,
-  SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
+  SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, DungeonPlannerWireframePage, ViewportProbePage,
   ValheimCharacterPage,
   CompanionLinkPage,
   ClaimPage,
@@ -143,6 +143,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/server-schedule" element={<ServerScheduleWireframesPage />} />
       <Route path="/dev/wireframes/community-hubs" element={<CommunityHubWireframesPage />} />
       <Route path="/dev/wireframes/hub-posts" element={<HubPostsWireframesPage />} />
+      <Route path="/dev/wireframes/dungeon-planner" element={<DungeonPlannerWireframePage />} />
       <Route path="/dev/viewport-probe" element={<ViewportProbePage />} />
     </>
   );

@@ -280,6 +280,9 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1724: shared community records the user only reported/captured (SET
   // NULL) — a raid pull or guild roster row belongs to the guild, not the user.
   schema.addonEncounterPulls,
+  // ROK-2184: `reported_by_user_id` is SET NULL; a guild's loot history belongs
+  // to the guild, not to the member whose LedgerLink paste reported the drop.
+  schema.guildLootDrops,
   schema.guildMembers,
   // ROK-1785: `granted_by` is SET NULL; the grant belongs to the guild page,
   // not to the admin who made it, so it survives the granter's wipe.

@@ -12,6 +12,7 @@ import type { EnrichedDungeonQuestDto, EventQuestPrereqsResponse } from '@raid-l
 
 vi.mock('../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: { id: 1 }, isAuthenticated: true }),
+    useViewerCacheScope: () => 1,
     getAuthToken: () => 'fake-token',
 }));
 vi.mock('../../../hooks/use-character-detail', () => ({

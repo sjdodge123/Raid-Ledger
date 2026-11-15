@@ -86,6 +86,7 @@ export async function loadReadinessRoster(
       characterName: c.name,
       charClass: c.class,
       charRace: c.race,
+      charFaction: c.faction,
     })
     .from(s)
     .innerJoin(schema.users, eq(schema.users.id, s.userId))

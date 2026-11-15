@@ -105,6 +105,7 @@ interface SignupCharRow {
   username: string;
   charClass?: string | null | undefined;
   charRace?: string | null | undefined;
+  charFaction?: string | null | undefined;
 }
 
 /** Keep rows with a user and a character, class/race defaulted to null. */
@@ -117,6 +118,7 @@ function toSignupChar(r: SignupCharRow): EventSignupChar[] {
       username: r.username,
       charClass: r.charClass ?? null,
       charRace: r.charRace ?? null,
+      charFaction: r.charFaction ?? null,
     },
   ];
 }
@@ -135,6 +137,7 @@ async function loadSignupChars(
       username: schema.users.username,
       charClass: schema.characters.class,
       charRace: schema.characters.race,
+      charFaction: schema.characters.faction,
     })
     .from(s)
     .innerJoin(schema.users, eq(schema.users.id, s.userId))

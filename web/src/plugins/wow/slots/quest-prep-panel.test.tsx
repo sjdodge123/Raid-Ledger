@@ -19,6 +19,7 @@ import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 
 vi.mock('../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: { id: 1 }, isAuthenticated: true }),
+    useViewerCacheScope: () => 1,
     getAuthToken: () => 'fake-token',
 }));
 

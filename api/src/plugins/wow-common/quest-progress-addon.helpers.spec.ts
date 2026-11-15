@@ -363,6 +363,31 @@ describe('isQuestUsableBy (mirrors web isQuestUsable)', () => {
   });
 });
 
+describe('isQuestUsableBy faction column fallback (ROK-2211)', () => {
+  const ALLIANCE = ['Human', 'Dwarf', 'Night Elf', 'Gnome'];
+  const HORDE = ['Orc', 'Undead', 'Tauren', 'Troll'];
+  const q = (race: string[] | null) => ({
+    raceRestriction: race,
+    classRestriction: null,
+  });
+
+  it('a raceless character with a Horde faction column drops Alliance quests', () => {
+    expect(isQuestUsableBy(q(ALLIANCE), 'Mage', null, 'Horde')).toBe(false);
+    expect(isQuestUsableBy(q(HORDE), 'Mage', null, 'Horde')).toBe(true);
+  });
+
+  it('keeps neutral quests and passes everything with no faction either', () => {
+    expect(isQuestUsableBy(q(null), 'Mage', null, 'Alliance')).toBe(true);
+    expect(isQuestUsableBy(q([]), 'Mage', null, 'Alliance')).toBe(true);
+    expect(isQuestUsableBy(q(ALLIANCE), 'Mage', null, null)).toBe(true);
+  });
+
+  it('a known race still decides, ahead of the faction column', () => {
+    expect(isQuestUsableBy(q(HORDE), 'Mage', 'Orc', 'Alliance')).toBe(true);
+    expect(isQuestUsableBy(q(['Undead']), 'Mage', 'Orc', 'Horde')).toBe(false);
+  });
+});
+
 describe('truncation (completedTruncated, ROK-1758)', () => {
   it('cutoff is the highest completed id only when truncated', () => {
     expect(truncationCutoff({ completed: [5, 90, 12] })).toBeUndefined();

@@ -45,6 +45,8 @@ const FIXTURES = join(
 );
 const fixture = (name: string): string =>
   readFileSync(join(FIXTURES, `${name}.txt`), 'utf8');
+const v2Fixture = (name: string): string =>
+  readFileSync(join(FIXTURES, '../../v2/fixtures', `${name}.txt`), 'utf8');
 
 let testApp: TestApp;
 let gameId: number;
@@ -230,6 +232,21 @@ describe('create route — unpinned char export (AC2)', () => {
     expect(id).not.toBe(bob);
     expect((await charRow(id)).isMain).toBe(false);
     expect((await charRow(bob)).isMain).toBe(true);
+  });
+});
+
+describe('create route — envelope_version (ROK-2184)', () => {
+  it('ROK-2184: a `!RL2!` paste is audited with envelope_version 2, a `!RL1!` one with 1', async () => {
+    const { token } = await member('anacreatev2');
+    const v2 = v2Fixture('char-normal');
+    expect(v2.startsWith('!RL2!')).toBe(true);
+    expect((await preview(token, fixture('char-normal'))).status).toBe(200);
+    expect((await applyNew(token, v2)).status).toBe(200);
+    const rows = await audits();
+    expect(rows.map((r) => [r.dryRun, r.envelopeVersion])).toEqual([
+      [true, 1],
+      [false, 2],
+    ]);
   });
 });
 

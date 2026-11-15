@@ -51,6 +51,8 @@ const CAPTURED = '2026-09-22T00:00:00Z';
 
 const pasteFixture = (name: string): string =>
   readFileSync(join(LEDGERLINK, `${name}.txt`), 'utf8');
+const pasteFixtureV2 = (name: string): string =>
+  readFileSync(join(ROOT, 'ledgerlink/v2/fixtures', `${name}.txt`), 'utf8');
 const rawCompanion = (name: string): unknown =>
   JSON.parse(readFileSync(join(COMPANION, `${name}.json`), 'utf8')) as unknown;
 const companionFixture = (name: string): WowLedgerlinkMessage => ({
@@ -299,6 +301,20 @@ describe('sections, replays and staleness', () => {
     expectAccepted(await post(a.token, at(FIXTURE_EXPORTED_AT)));
     expect(await snapshots()).toEqual(before);
     expect(await settledAudit()).toEqual(['applied', 'stale']);
+  });
+});
+
+describe('ROK-2184 — envelope_version via the companion', () => {
+  it('ROK-2184: a companion message carrying a `!RL2!` string is audited with envelope_version 2', async () => {
+    const a = await member('ll-v2');
+    const v2 = pasteFixtureV2('char-normal');
+    expect(v2.startsWith('!RL2!')).toBe(true);
+    expectAccepted(await post(a.token, message(v2)));
+    expect(await settledAudit()).toEqual(['applied']);
+    const rows = await testApp.db
+      .select({ v: schema.addonImportAudit.envelopeVersion })
+      .from(schema.addonImportAudit);
+    expect(rows.map((r) => r.v)).toEqual([2]);
   });
 });
 

@@ -33,6 +33,8 @@ export interface EventSignupChar {
   characterId: string;
   charClass: string | null;
   charRace: string | null;
+  /** Stored faction column; the side when the race is unknown (ROK-2211). */
+  charFaction?: string | null | undefined;
 }
 
 /** A signed-up character whose snapshot carries a `quests` slice. */
@@ -165,6 +167,20 @@ export function groupCoverage(rows: CoverageRow[]): QuestCoverageEntry[] {
   return [...map].map(([questId, coveredBy]) => ({ questId, coveredBy }));
 }
 
+/** The member's usable event quests, one per same-name variant (ROK-1758/2211). */
+function usableQuestsFor(
+  quests: DungeonQuestDto[],
+  member: EventSignupChar,
+): DungeonQuestDto[] {
+  const { charClass, charRace } = member;
+  const faction = member.charFaction ?? null;
+  return dedupeVariantsByName(
+    quests.filter((q) => isQuestUsableBy(q, charClass, charRace, faction)),
+    charClass,
+    charRace,
+  );
+}
+
 /**
  * The viewer's chain state over the event's quests (D11/D12). Only quests the
  * viewer's class/race can take count — one variant per name, as the panel
@@ -184,12 +200,7 @@ export function buildViewerPrereqs(
     rows,
     truncationCutoff(member.snapshot.quests),
   );
-  const { charClass, charRace } = member;
-  const usable = dedupeVariantsByName(
-    progress.eventQuests.filter((q) => isQuestUsableBy(q, charClass, charRace)),
-    charClass,
-    charRace,
-  );
+  const usable = usableQuestsFor(progress.eventQuests, member);
   const quests = buildPrereqState(usable, progress.lookup, doneFn);
   return {
     characterId: member.characterId,
