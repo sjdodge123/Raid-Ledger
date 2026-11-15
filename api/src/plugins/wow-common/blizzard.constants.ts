@@ -99,15 +99,6 @@ export interface WowInstanceDetail extends WowInstance {
   category: 'dungeon' | 'raid';
 }
 
-/** Sub-instance definition for Classic dungeon complexes */
-export interface SubInstance {
-  idSuffix: number;
-  name: string;
-  shortName: string;
-  minimumLevel: number;
-  maximumLevel: number;
-}
-
 // ── Cache Types ──────────────────────────────────────────────────────────────
 
 export type RealmCacheEntry = MemoryCacheEntry<WowRealm[]>;
