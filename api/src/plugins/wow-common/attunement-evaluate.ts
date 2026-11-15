@@ -9,6 +9,11 @@ import {
   type AttunementQuestStep,
 } from './data/forever-attunements';
 import type { EffectiveQuests } from './forever-quest-source.helpers';
+import {
+  factionOfColumn,
+  factionOfRace,
+  type FactionSide,
+} from './quest-faction.helpers';
 import { truncationCutoff } from './quest-progress-addon.helpers';
 
 /**
@@ -23,7 +28,9 @@ import { truncationCutoff } from './quest-progress-addon.helpers';
  * quest alone = attuned (ruling Q3).
  */
 
-export type AttunementFactionSide = 'horde' | 'alliance';
+/** Moved to `quest-faction.helpers.ts` (ROK-2211); re-exported for callers. */
+export type AttunementFactionSide = FactionSide;
+export { factionOfColumn, factionOfRace };
 
 /** A def as shown: its confirmed quest steps and level gate. */
 export interface VisibleDef {
@@ -38,42 +45,6 @@ export type AttunementVerdict = Omit<
   WowAttunementResultDto,
   'key' | 'belowLevel' | 'requiredLevel'
 >;
-
-const HORDE_RACES = new Set([
-  'orc',
-  'undead',
-  'scourge',
-  'tauren',
-  'troll',
-  'blood elf',
-  'bloodelf',
-]);
-const ALLIANCE_RACES = new Set([
-  'human',
-  'dwarf',
-  'night elf',
-  'nightelf',
-  'gnome',
-  'draenei',
-]);
-
-/** A race (display name or addon token) → its faction; unknown → null. */
-export function factionOfRace(
-  race: string | null | undefined,
-): AttunementFactionSide | null {
-  const key = race?.trim().toLowerCase() ?? '';
-  if (HORDE_RACES.has(key)) return 'horde';
-  if (ALLIANCE_RACES.has(key)) return 'alliance';
-  return null;
-}
-
-/** A stored faction column ("Horde", "alliance") → its side; else null. */
-export function factionOfColumn(
-  faction: string | null | undefined,
-): AttunementFactionSide | null {
-  const key = faction?.trim().toLowerCase();
-  return key === 'horde' || key === 'alliance' ? key : null;
-}
 
 /**
  * One character's completed-id Set and truncation cut-off, built ONCE per

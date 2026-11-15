@@ -14,6 +14,7 @@ import type {
 } from '@raid-ledger/contract';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import { walkChainInMemory } from './dungeon-quests.helpers';
+import { factionOfColumn, isQuestUsableBySide } from './quest-faction.helpers';
 
 /** The `quests` slice of a schema-2 LedgerLink character snapshot. */
 export interface AddonQuestsSlice {
@@ -208,16 +209,18 @@ function passes(list: string[] | null, value: string | null): boolean {
 /**
  * Whether a character of this class/race can take the quest. Mirrors
  * `web/src/plugins/wow/utils/quest-dedup.ts::isQuestUsable` (ROK-1758).
+ * ROK-2211: a raceless character falls back to its stored `faction` column,
+ * so the other faction's quests drop; no race and no faction = no race limit.
  */
 export function isQuestUsableBy(
   quest: QuestRestrictions,
   charClass: string | null,
   charRace: string | null,
+  charFaction: string | null = null,
 ): boolean {
-  return (
-    passes(quest.classRestriction, charClass) &&
-    passes(quest.raceRestriction, charRace)
-  );
+  if (!passes(quest.classRestriction, charClass)) return false;
+  if (charRace) return passes(quest.raceRestriction, charRace);
+  return isQuestUsableBySide(quest, factionOfColumn(charFaction));
 }
 
 /** A step still to do: not done, and not unknown (ROK-1758). */
