@@ -34,9 +34,12 @@ export interface AddonPageHeader {
 
 const OLDEST_VERSION = Math.min(...ADDON_EXPORT_ACCEPTED_VERSIONS);
 
-/** Too-new string (or a payload `schema` that disagrees with its header). */
+/** Too-new string. */
 export const NEWER_VERSION_MESSAGE =
   'Raid Ledger needs an update to read this string.';
+/** A payload `schema` that disagrees with its `!RLn!` header (ROK-2184). */
+export const MISMATCHED_VERSION_MESSAGE =
+  "This string's header and contents disagree on the addon version — export it again.";
 /** Ruling Q6 — one paste = one envelope version. */
 export const MIXED_VERSION_MESSAGE =
   'These strings come from different addon versions.';

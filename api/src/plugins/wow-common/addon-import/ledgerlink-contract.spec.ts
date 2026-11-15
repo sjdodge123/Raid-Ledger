@@ -339,6 +339,7 @@ describe('LedgerLink v2 golden fixtures — invalid (ROK-2184)', () => {
       'loot-too-many-drops',
       'loot-two-tokens',
       'loot-unknown-key',
+      'loot-window-end-before-start',
       'mixed-v1-v2',
       'unsupported-version',
       'v1-loot-section',

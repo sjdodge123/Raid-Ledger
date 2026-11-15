@@ -25,7 +25,7 @@ import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
 import {
   mergeGuildPages,
-  NEWER_VERSION_MESSAGE,
+  MISMATCHED_VERSION_MESSAGE,
   type AddonPageHeader,
   type AnyAddonGuildExport,
 } from './addon-import.pages';
@@ -175,7 +175,10 @@ function assertPayloadVersion(
       ? json.schema
       : undefined;
   if (typeof declared === 'number' && declared !== version) {
-    throw new AddonImportError('UNSUPPORTED_VERSION', NEWER_VERSION_MESSAGE);
+    throw new AddonImportError(
+      'UNSUPPORTED_VERSION',
+      MISMATCHED_VERSION_MESSAGE,
+    );
   }
 }
 
