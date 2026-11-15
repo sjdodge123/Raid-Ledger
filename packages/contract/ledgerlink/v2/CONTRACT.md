@@ -77,7 +77,7 @@ Each `drops[]` entry (`.strict()`):
 |---|---|---|
 | `at` | int unix s | `GetServerTime()` when the loot line arrived; `windowStart ≤ at ≤ windowEnd` |
 | `itemId` | int ≥ 1 | parsed from `|Hitem:<id>:` |
-| `link` | string ≤ 512, optional | raw `|Hitem:…|h[…]|h` as received; omit when not available |
+| `link` | string 1–512, optional | raw `|Hitem:…|h[…]|h` as received; omit when not available (never `""`). The server keeps WoW escape sequences and strips control characters |
 | `quantity` | int 1–1000 | stack size received; `1` when the line has no multiplier |
 | `quality` | int 0–7, optional | link colour / `GetItemInfo`; omit when unknown |
 | `looterName` | string 1–100 | `Name-Realm` when the client gives a realm, else bare `Name` |
@@ -86,12 +86,19 @@ Each `drops[]` entry (`.strict()`):
 | `instanceId` | int, optional | `GetInstanceInfo()` id (same id space as v1 `raid` `pulls[].instanceId`) |
 | `difficultyId` | int, optional | `GetInstanceInfo()` difficulty id |
 | `encounterId` | int, optional | the boss the drop is attributed to; omit for trash / unknown |
-| `encounterName` | string ≤ 128, optional | `ENCOUNTER_END` name; **only together with `encounterId`** |
+| `encounterName` | string 1–128, optional | `ENCOUNTER_END` name; **only together with `encounterId`** |
 
 **Boss attribution (ruling Q4, addon-side):** tag a drop with the most recent
 `ENCOUNTER_END` with `success = 1` **in the same instance** whose end is ≤ 300 s
 (`ADDON_LOOT_ATTRIBUTION_WINDOW_SECONDS`) before `at`; otherwise omit
 `encounterId` / `encounterName`. The server stores the attribution as sent.
+
+**Cross-field rules are Zod-only.** Three rules — `encounterName` only with
+`encounterId`, `windowStart ≤ at ≤ windowEnd`, and `windowEnd ≥ windowStart` —
+live in `superRefine` and are **not** in `schema.json`. Validating against
+`schema.json` alone misses them; the invalid fixtures
+`loot-encounter-name-without-id`, `loot-drop-outside-window` and
+`loot-window-end-before-start` cover them.
 
 **What to record (rulings Q9 / Q10):** only while the player is in a party or
 raid **inside an instance** (no solo / open-world loot); every group member's
@@ -171,7 +178,8 @@ case is `invalid/<name>.txt` + `invalid/<name>.json` (`{ code }`).
   re-encoded as `!RL2!`, the payload identical apart from `schema: 2`.
 - New valid: `loot`, `loot-empty-window`, `mixed-char-guild3-raid-loot`.
 - New invalid: `loot-too-many-drops`, `loot-unknown-key`,
-  `loot-drop-outside-window`, `loot-encounter-name-without-id`, `loot-paged`,
+  `loot-drop-outside-window`, `loot-encounter-name-without-id`,
+  `loot-window-end-before-start`, `loot-paged`,
   `loot-two-tokens`, `v1-loot-section`, `mixed-v1-v2`, `v2-header-schema-1`,
   `unsupported-version` (`!RL3!`).
 
@@ -199,6 +207,11 @@ LedgerLink pins a copy of `v2/` and validates its own output against
 - Additive within v2 follows v1 §9: a new **optional** key the server ignores
   stays v2 and ships server-first. A new section, a tightened limit or a
   renamed key is breaking → `v3/`.
+- **v2 `char` / `guild` / `raid` reuse the v1 data schemas**
+  (`wow-addon-v2.schema.ts`), and `v1/schema.json` is drift-guarded against the
+  live Zod. An additive v2 change to one of those sections therefore **first
+  forks that data schema into a v2 copy**, then changes the copy — editing the
+  shared schema turns the v1 drift guard red.
 
 ## 10. Change process
 

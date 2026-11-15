@@ -21,7 +21,10 @@ import {
   type AddonLootExport,
 } from '@raid-ledger/contract';
 import { decodeImportPaste } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
-import { buildImportString } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
+import {
+  FIXTURE_EXPORTED_AT,
+  buildImportString,
+} from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
 import {
   buildLootDrop,
   buildLootFixturePayload,
@@ -108,6 +111,15 @@ function lootInvalidCases(): InvalidCases {
       one(buildLootDrop(0, { at: 1_790_000_060 })),
     ],
     'loot-encounter-name-without-id': ['INVALID_PAYLOAD', one(noEncounterId)],
+    'loot-window-end-before-start': [
+      'INVALID_PAYLOAD',
+      lootToken(
+        buildLootPayload([], {
+          windowStart: FIXTURE_EXPORTED_AT,
+          windowEnd: FIXTURE_EXPORTED_AT - 60,
+        }),
+      ),
+    ],
     'loot-paged': ['BAD_HEADER', paged.join('\n')],
     'loot-two-tokens': [
       'PAGES_INCOMPLETE',
