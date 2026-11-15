@@ -2094,6 +2094,13 @@
       "when": 1794641367214,
       "tag": "0299_hub_forum",
       "breakpoints": true
+    },
+    {
+      "idx": 300,
+      "version": "7",
+      "when": 1794717311365,
+      "tag": "0300_dedupe_same_name_boss_loot",
+      "breakpoints": true
     }
   ]
 }
