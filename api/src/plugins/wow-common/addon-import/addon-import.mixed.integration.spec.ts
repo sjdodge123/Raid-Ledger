@@ -468,6 +468,13 @@ describe('ROK-2184 — v2 mixed paste with loot', () => {
       { snapshots: 0, guilds: 0, members: 0, pulls: 0 },
       0,
     ]);
+    // ROK-2184: a preview records the version too, on every section row.
+    expect((await audits()).map((r) => [r.dryRun, r.envelopeVersion])).toEqual([
+      [true, 2],
+      [true, 2],
+      [true, 2],
+      [true, 2],
+    ]);
   });
 
   it('apply writes all four sections; one audit row per section, loot included', async () => {
@@ -496,6 +503,8 @@ describe('ROK-2184 — v2 mixed paste with loot', () => {
       ['raid', 'applied'],
       ['loot', 'applied'],
     ]);
+    // ROK-2184: the finalised reservation AND the three extra rows carry v2.
+    expect(rows.map((r) => r.envelopeVersion)).toEqual([2, 2, 2, 2]);
     expect(JSON.stringify(rows)).not.toContain('!RL2!');
   });
 
@@ -516,6 +525,10 @@ describe('ROK-2184 — v2 mixed paste with loot', () => {
       { snapshots: 0, guilds: 0, members: 0, pulls: 0 },
       0,
     ]);
+    // ROK-2184: the reject row records the FIRST token's sniffed `!RL1!`.
+    expect((await audits()).map((r) => [r.result, r.envelopeVersion])).toEqual([
+      ['UNSUPPORTED_VERSION', 1],
+    ]);
   });
 
   it('a v1 Export all still applies exactly its v1 sections and stores no loot (AC 1)', async () => {
@@ -534,5 +547,47 @@ describe('ROK-2184 — v2 mixed paste with loot', () => {
       { snapshots: 1, guilds: 0, members: 0, pulls: 1 },
       0,
     ]);
+    expect((await audits()).map((r) => r.envelopeVersion)).toEqual([1, 1]);
+  });
+});
+
+/**
+ * ROK-2184 — `addon_import_audit.envelope_version` on single-section
+ * pastes: the decoded version on an import, the sniffed one on a reject,
+ * NULL when the header never parsed (the v1-retirement query's input).
+ */
+describe('ROK-2184 — audit envelope_version', () => {
+  const lastAudit = async () => {
+    const rows = await audits();
+    const row = rows[rows.length - 1];
+    if (!row) throw new Error('no audit row');
+    return [row.result, row.envelopeVersion];
+  };
+
+  it('a v1 char apply → 1', async () => {
+    const { token, charId } = await memberWithChar('r2184evv1');
+    const res = await post(token, charId, fixture('char-normal'), false);
+    expect(res.status).toBe(200);
+    expect(await lastAudit()).toEqual(['applied', 1]);
+  });
+
+  it('a v2 char apply → 2', async () => {
+    const { token, charId } = await memberWithChar('r2184evv2');
+    const res = await post(token, charId, v2Fixture('char-normal'), false);
+    expect(res.status).toBe(200);
+    expect(await lastAudit()).toEqual(['applied', 2]);
+  });
+
+  it('an unsupported !RL7! header → the reject row records 7', async () => {
+    const { token, charId } = await memberWithChar('r2184evv7');
+    const res = await post(token, charId, '!RL7!char!AAAA', false);
+    expect(res.status).toBe(422);
+    expect(await lastAudit()).toEqual(['UNSUPPORTED_VERSION', 7]);
+  });
+
+  it('a garbage paste (BAD_HEADER) → NULL', async () => {
+    const { token, charId } = await memberWithChar('r2184evnull');
+    await post(token, charId, 'not an addon string', false);
+    expect(await lastAudit()).toEqual(['BAD_HEADER', null]);
   });
 });
