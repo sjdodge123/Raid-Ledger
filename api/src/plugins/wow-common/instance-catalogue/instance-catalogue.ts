@@ -12,7 +12,9 @@ import type {
   CatalogueVariant,
 } from './instance-catalogue.types';
 
-export { FOREVER_SEED_ID_BASE, FOREVER_SEED_ID_SPAN } from './forever-new.data';
+import { FOREVER_SEED_ID_BASE, FOREVER_SEED_ID_SPAN } from './forever-new.data';
+
+export { FOREVER_SEED_ID_BASE, FOREVER_SEED_ID_SPAN };
 
 /** `getAnyVariant` preference (D6). */
 const ANY_VARIANT_ORDER: readonly CatalogueVariant[] = [
@@ -110,6 +112,18 @@ export function byForeverQuestAreaId(areaId: number): CatalogueInstance[] {
     (r) =>
       r.variants.includes('wow_forever') &&
       r.foreverQuestAreaIds.includes(areaId),
+  );
+}
+
+/**
+ * ROK-1908: the Forever-new rows (the reserved seed id range), in catalogue
+ * order — the quest import crawls their `foreverQuestAreaIds`.
+ */
+export function foreverNewRows(): CatalogueInstance[] {
+  return CATALOGUE_ROWS.filter(
+    (r) =>
+      r.id > FOREVER_SEED_ID_BASE &&
+      r.id <= FOREVER_SEED_ID_BASE + FOREVER_SEED_ID_SPAN,
   );
 }
 
