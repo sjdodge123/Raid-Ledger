@@ -115,7 +115,7 @@ percent-decoding, so `!BugGrabber` and `%21BugGrabber` are the same folder):
 |---|---|---|
 | `Mailworthy` | `MailworthyDB` (`selftest` holds the self-test report) | the operator's own addon |
 | `!BugGrabber` | `BugGrabberDB` | holds only captured Lua errors |
-| `DungeonBuddy` | UNVERIFIED — the companion serves whatever `DungeonBuddy.lua` holds (`fixtures/sv-raw--addon-dungeonbuddy.json` is illustrative) | a dungeon-guide addon; holds dungeon/quest guide data (possibly dungeon level ranges), no chat |
+| `DungeonBuddy` | UNVERIFIED — the companion serves whatever `DungeonBuddy.lua` holds (`fixtures/sv-raw--addon-dungeonbuddy.json` is illustrative) | a dungeon-guide addon, believed to hold only dungeon/quest guide data (possibly dungeon level ranges); contents UNVERIFIED (operator ruling 2026-11-15) |
 
 **Why an allowlist.** Other addons' saved data can hold whispers and chat
 history (EnhanceQoL's IM history, for one), so the bridge reads only addons

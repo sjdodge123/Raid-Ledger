@@ -30,14 +30,15 @@ tunnel into the game. The planned **LedgerLinkProbe** addon is dropped.
 - **Why v1 is amended in place rather than bumped:** the move of the queue
   path and result key would be **breaking** for an implementation pinned to
   the old locations — but none exists. Neither consumer was ever built
-  (ROK-2190 LedgerLinkProbe and ROK-2191 companion probe routes; rl-companion's
+  (the planned ROK-2190 LedgerLinkProbe addon and ROK-2191 companion probe routes; rl-companion's
   latest release v0.1.0-test.6 serves no `/dev/v1/probes*` route), so nothing
   can break. No JSON shape changed: `schema.json` differs only in its
   description (the readable-folder list).
 - **`DungeonBuddy`** joins `DEV_BRIDGE_SV_READABLE_ADDONS` /
-  `DevBridgeSvReadableAddonSchema` (a dungeon-guide addon; holds dungeon/quest
-  guide data, no chat). Adding a folder is **additive**. Its saved-variable
-  name is UNVERIFIED; the companion serves whatever `DungeonBuddy.lua` holds.
+  `DevBridgeSvReadableAddonSchema` (a dungeon-guide addon, believed to hold
+  only dungeon/quest guide data; contents UNVERIFIED, operator ruling
+  2026-11-15). Adding a folder is **additive**. Its saved-variable name is
+  UNVERIFIED; the companion serves whatever `DungeonBuddy.lua` holds.
   New fixture `sv-raw--addon-dungeonbuddy.json` (illustrative text).
 - Fixture `addons.json`: the `LedgerLinkProbe` row is replaced by a
   `Mailworthy` row.

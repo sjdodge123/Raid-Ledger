@@ -79,7 +79,9 @@ export const DevBridgeSvScopeSchema = z.enum(['account', 'character']);
  * Addon folders whose SavedVariables `GET /dev/v1/addons/<folder>/sv` may
  * read (body `sv-raw`). Other addons' saved data can hold whispers and chat
  * history, so only addons the operator owns, that hold only error reports, or
- * that hold only guide data (DungeonBuddy: dungeon/quest guides) are listed. LedgerLink is not here: it has its own `ledgerlink/sv` route.
+ * that are believed to hold only guide data are listed (DungeonBuddy:
+ * dungeon/quest guides; contents UNVERIFIED, operator ruling 2026-11-15).
+ * LedgerLink is not here: it has its own `ledgerlink/sv` route.
  * Adding a folder is additive; any other folder is a 404 `not_found`.
  */
 export const DEV_BRIDGE_SV_READABLE_ADDONS = ['Mailworthy', '!BugGrabber', 'DungeonBuddy'] as const;
