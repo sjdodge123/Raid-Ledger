@@ -56,7 +56,9 @@ export function characterSide(
 /**
  * Whether a character of `side` can take the quest: neutral (null / empty
  * `raceRestriction`) → true; unknown side → true (no filter, as before
- * ROK-2211); else true iff a listed race belongs to that side.
+ * ROK-2211); a race list naming no known race → true (unknown data is never
+ * hidden); else true iff a listed race belongs to that side. Mirrors web
+ * `utils/quest-faction.ts::isQuestUsableBySide`.
  */
 export function isQuestUsableBySide(
   quest: { raceRestriction: string[] | null },
@@ -64,7 +66,8 @@ export function isQuestUsableBySide(
 ): boolean {
   const races = quest.raceRestriction;
   if (!races || races.length === 0 || side === null) return true;
-  return races.some((race) => factionOfRace(race) === side);
+  const sides = races.map(factionOfRace).filter((s) => s !== null);
+  return sides.length === 0 || sides.includes(side);
 }
 
 /**

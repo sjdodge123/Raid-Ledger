@@ -34,6 +34,13 @@ describe('isQuestUsableBySide (ROK-2211)', () => {
     expect(isQuestUsableBySide(quest([]), 'horde')).toBe(true);
   });
 
+  it('keeps a quest whose race list names no known race', () => {
+    expect(isQuestUsableBySide(quest(['Pandaren']), 'horde')).toBe(true);
+    expect(isQuestUsableBySide(quest(['Pandaren', 'Human']), 'horde')).toBe(
+      false,
+    );
+  });
+
   it('an unknown side keeps every quest (no filter)', () => {
     expect(isQuestUsableBySide(quest(ALLIANCE), null)).toBe(true);
     expect(isQuestUsableBySide(quest(HORDE), null)).toBe(true);
