@@ -19,7 +19,8 @@ const FIT_TONE: Record<LevelFit, StatusChipTone> = { in: 'success', below: 'warn
 export function LevelsList({ chars, instance }: { chars: PlannerCharacter[]; instance: WowInstanceDto }): JSX.Element {
     return (
         <section aria-labelledby="planner-levels" className="space-y-1">
-            <h3 id="planner-levels" className="text-xs font-semibold uppercase tracking-wide text-muted">Levels</h3>
+            <h3 id="planner-levels" className="scroll-mb-24 text-xs font-semibold uppercase tracking-wide text-muted">Levels</h3>
+            {chars.length === 0 && <p className="text-sm text-muted">No characters yet — add up to 5 from the roster.</p>}
             <ul className="space-y-1">
                 {chars.map((c) => {
                     const fit = levelFit(c.level, instance);
@@ -126,6 +127,14 @@ function summary(quests: EnrichedDungeonQuestDto[], signups: Signup[]): string {
 
 /** QUEST PREP: the event page's location + pickup grouping with a chip per character. */
 export function QuestBreakdown({ quests, signups }: { quests: EnrichedDungeonQuestDto[]; signups: Signup[] }): JSX.Element {
+    if (quests.length === 0) {
+        return (
+            <section aria-labelledby="planner-quests" className="space-y-1">
+                <h3 id="planner-quests" className="text-xs font-semibold uppercase tracking-wide text-muted">Quest prep</h3>
+                <p className="text-sm text-muted">No quest data for this dungeon yet.</p>
+            </section>
+        );
+    }
     return (
         <section aria-labelledby="planner-quests" className="space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">

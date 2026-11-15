@@ -1,86 +1,70 @@
 /**
- * ROK-2207 prototype — the planner body (desktop or phone layout) and the
- * cramped Overview-widget alternative (OQ1 Option B). State is local; the
- * build keeps it in the URL (spec D5).
+ * ROK-2207 prototype — the planner tab body (OQ1 ruled: hub tab) for one
+ * dungeon, desktop or phone. Quest layout is the event page's grouping (ruled);
+ * the Create-event set is OQ3 Option B (ruled).
  */
 import { useMemo, type JSX } from 'react';
-import { Link } from 'react-router-dom';
-import { QuestMatrix } from '../../plugins/wow/hub-widgets/dungeon-quests-matrix';
-import { DALARAN_ID, DALARAN_QUESTS, INSTANCES, MATRIX_QUESTS, readinessFor } from './dungeon-planner.fixtures';
+import { questsFor, readinessFor } from './dungeon-planner.fixtures';
+import { INSTANCES } from './forever-dungeons.fixtures';
 import { plannerLinks, type PlannerState } from './use-planner-state';
 import { instanceRange } from './planner-helpers';
-import { CopyLinkButton, CreateEventButtons, DungeonLinks, DungeonPicker, GroupChips } from './planner-controls';
+import { CopyLinkButton, CreateEventButtons, DungeonPicker, UnverifiedHint, WowheadLink } from './planner-controls';
+import { GroupChips } from './character-picker';
 import { LevelsList, QuestBreakdown } from './planner-breakdown';
 
 export type Layout = 'desktop' | 'phone';
-export type QuestLayout = 'grouped' | 'matrix';
 export type { PlannerState } from './use-planner-state';
 
-function QuestSection({ s, questLayout }: { s: PlannerState; questLayout: QuestLayout }): JSX.Element {
-    const signups = useMemo(() => readinessFor(s.chars), [s.chars]);
-    if (s.instance.id !== DALARAN_ID) {
-        return <p className="text-sm text-muted">Prototype fixtures only carry quests for City of Dalaran — pick it to see the breakdown.</p>;
-    }
-    if (questLayout === 'matrix') return <QuestMatrix quests={MATRIX_QUESTS} signups={signups} label="Quest readiness" />;
-    return <QuestBreakdown quests={DALARAN_QUESTS} signups={signups} />;
+function QuestSection({ s }: { s: PlannerState }): JSX.Element {
+    const signups = useMemo(() => readinessFor(s.chars, s.instance.id), [s.chars, s.instance.id]);
+    return <QuestBreakdown quests={questsFor(s.instance.id)} signups={signups} />;
 }
 
 function DungeonSection({ s, phone }: { s: PlannerState; phone: boolean }): JSX.Element {
     return (
-        <div className={phone ? 'space-y-3' : 'grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4'}>
-            <div className="space-y-1">
+        <div className="space-y-1">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                     Dungeon · {s.instance.name} {instanceRange(s.instance)}
                 </p>
-                <DungeonPicker instances={INSTANCES} selectedId={s.instance.id} onSelect={s.setInstanceId} />
+                {!phone && <UnverifiedHint />}
+                <WowheadLink instance={s.instance} />
             </div>
-            <DungeonLinks instance={s.instance} />
+            <DungeonPicker instances={INSTANCES} selectedId={s.instance.id} onSelect={s.setInstanceId} phone={phone} />
         </div>
     );
 }
 
-/** The full planner (tab body) in one layout. `invite` toggles OQ3 Option B's extra button. */
-export function PlannerBody({ s, layout, invite, questLayout = 'grouped' }: {
-    s: PlannerState; layout: Layout; invite: boolean; questLayout?: QuestLayout;
-}): JSX.Element {
+/** Create-event set for the current plan (shared by the header and the phone's sticky bar). */
+function Actions({ s }: { s: PlannerState }): JSX.Element {
     const l = plannerLinks(s);
+    return <CreateEventButtons plainUrl={l.plain} inviteUrl={l.invite} inviteCount={l.inviteCount}
+        excluded={l.excluded} empty={s.chars.length === 0} />;
+}
+
+/** The full planner (hub tab body) in one layout. */
+export function PlannerBody({ s, layout }: { s: PlannerState; layout: Layout }): JSX.Element {
     const phone = layout === 'phone';
     return (
-        <div className="space-y-4 rounded-lg border border-edge bg-surface p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
-                <div className="flex flex-wrap gap-2">
-                    <CopyLinkButton url={l.share} />
-                    {!phone && <CreateEventButtons plainUrl={l.plain} inviteUrl={l.invite} invite={invite} count={s.chars.length} />}
+        <div className="rounded-lg border border-edge bg-surface p-4">
+            <div className={`space-y-4 ${phone ? 'pb-6' : ''}`}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
+                    <div className="flex flex-wrap items-start gap-2">
+                        <CopyLinkButton url={plannerLinks(s).share} />
+                        {!phone && <Actions s={s} />}
+                    </div>
                 </div>
+                <DungeonSection s={s} phone={phone} />
+                <GroupChips s={s} instance={s.instance} />
+                <div className="border-t border-edge-subtle pt-3"><LevelsList chars={s.chars} instance={s.instance} /></div>
+                <div className="border-t border-edge-subtle pt-3"><QuestSection s={s} /></div>
             </div>
-            <DungeonSection s={s} phone={phone} />
-            <GroupChips chars={s.chars} instance={s.instance} onRemove={s.remove} onAdd={s.addNext} canAdd={s.canAdd} />
-            <div className="border-t border-edge-subtle pt-3"><LevelsList chars={s.chars} instance={s.instance} /></div>
-            <div className="border-t border-edge-subtle pt-3"><QuestSection s={s} questLayout={questLayout} /></div>
             {phone && (
                 <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-edge bg-surface p-3">
-                    <CreateEventButtons plainUrl={l.plain} inviteUrl={l.invite} invite={invite} count={s.chars.length} />
+                    <Actions s={s} />
                 </div>
             )}
-        </div>
-    );
-}
-
-/** OQ1 Option B — the same planner squeezed into an Overview widget card. */
-export function PlannerWidget({ s }: { s: PlannerState }): JSX.Element {
-    const l = plannerLinks(s);
-    return (
-        <div className="max-w-xl space-y-3 rounded-lg border border-edge bg-surface p-4">
-            <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-foreground">Dungeon planner</h3>
-                <CopyLinkButton url={l.share} />
-            </div>
-            <p className="text-sm text-secondary">{s.instance.name} · {instanceRange(s.instance)}</p>
-            <GroupChips chars={s.chars} instance={s.instance} onRemove={s.remove} onAdd={s.addNext} canAdd={s.canAdd} />
-            <LevelsList chars={s.chars} instance={s.instance} />
-            <p className="text-xs text-muted">7 quests — no room for the breakdown in a card.</p>
-            <Link to="#" className="text-sm text-secondary hover:underline">Open the full planner ▸</Link>
         </div>
     );
 }
