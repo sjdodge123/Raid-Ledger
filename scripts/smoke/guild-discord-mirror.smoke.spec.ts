@@ -128,8 +128,13 @@ test('officer: can edit content but gets no channel picker (ROK-1830 D10/Q4)', a
         await signInOnboardedMember(page, fx.guild.users.officer.userId);
         await openOverview(page, fx.guild.guildId);
         await expectThreeLatest(page, fx.channelId);
-        await expect(page.getByTestId('guild-settings-trigger'), 'the settings sheet is Leader/admin only').toHaveCount(0);
-        await expect(page.getByTestId('guild-discord-change'), 'and with it the channel picker').toHaveCount(0);
+        await expect(page.getByTestId('guild-discord-change'), 'no channel picker on the Overview card').toHaveCount(0);
+        // ROK-2199: on a Forever hub the editor opens settings for the Blizzard roster — never the channel row.
+        await page.getByTestId('guild-settings-trigger').click();
+        const sheet = page.getByTestId('guild-settings-sheet');
+        await expect(sheet.getByTestId('wow-blizzard-roster-section')).toBeVisible({ timeout: 15_000 });
+        await expect(sheet.getByTestId('guild-settings-discord'), 'the Discord channel row is Leader-only').toHaveCount(0);
+        await expect(sheet.getByTestId('guild-settings-choose-channel'), 'and with it the channel picker').toHaveCount(0);
     });
 });
 
