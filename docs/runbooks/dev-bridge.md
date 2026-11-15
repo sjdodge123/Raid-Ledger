@@ -67,16 +67,54 @@ probe just waits until it expires.
    Use `presence` to ask "does this API exist" without calling it.
 2. Submit: `http_rl-companion_request { method: "POST", path: "/dev/v1/probes", body: {…} }`.
    skeleton-key shows the operator an approval prompt. A 202 returns the
-   `probeId`; a 400 lists the refused paths; a 409 `probes_disabled` means the
+   `probeId`; a 400 lists the refused paths (or the flavor's queue already
+   holds 50 probes — cancel stale ones first); a 409 `probes_disabled` means the
    operator has "Allow probes" off — tell them, do not retry.
 3. **Carry on with other work.** Per R1 the answer arrives in normal play: the
    probe runs at the next UI load (login or `/reload`) and its result is saved
    at the next `/reload`, logout or exit. Nothing in this system forces or
    speeds that up, and you must not ask the operator to.
 4. Later, read `/dev/v1/probes/<probeId>`: `answered` carries `result`;
-   `expired` means no save happened within `ttlHours` (default 72) — resubmit
+   `expired` means no save happened within `ttlHours` (default 72, counted
+   from the time in the `probeId`) — resubmit
    only if still needed; `rejected` carries `error`.
 5. Cancel a probe you no longer need: `DELETE /dev/v1/probes/<probeId>` (execute tier).
+   Cancelling twice is harmless (200 again); a probe that is already
+   `answered`, `expired` or `rejected` cannot be cancelled (400).
+
+### Timing — the SavedVariables round-trip
+
+The game writes SavedVariables only at `/reload` or logout, so an answer
+needs two saves after the POST:
+
+1. `/rl dev on` (once; it persists).
+2. A `/reload` (or login) — LedgerLink picks up the queue and runs the probe
+   at its `after` event.
+3. Another `/reload` or a logout — the answer is saved to
+   `LedgerLinkDB.dev.probes`.
+4. The companion then needs time to notice the save and flip the probe to
+   `answered`. Observed 2026-11-15: ~10 min after the save for the first
+   probe, ~1 min for the second.
+
+This is for planning, not a request: these steps happen in the operator's
+normal play. Do not ask them to `/reload` for you; read the probe again
+later, and if it is still `queued` after a save, allow several minutes
+before concluding anything.
+
+### Load-on-demand UI data cannot be probed (ROK-2210, 2026-11-15)
+
+Probes run at a login event (`after`), before the operator opens any window.
+Data a Blizzard UI loads on demand is empty then: the Classic-style group
+finder (`C_LFGList` categories/activities, `LFGBrowseFrame`) fills only when
+the window opens, so a probe of it returns nothing useful.
+`GetLFGDungeonInfo` is not a substitute — it gives one level per dungeon,
+not the finder's level span.
+
+For **static client data** such as the finder's level spans, read the
+client's DB2 tables instead of queuing another probe. wago.tools carries the
+Forever client as product `wowf`, e.g.
+`https://wago.tools/db2/GroupFinderActivity/csv?build=1.60.1.70938`
+(pick the build the dev snapshot's `clientBuild` reports).
 
 A question the grammar cannot express (it needs a loop over a table, a
 callback, a write) is not a probe: request a LedgerLink dev-mode change in

@@ -101,6 +101,17 @@ skeleton-key). Agent how-to: `docs/runbooks/dev-bridge.md`.
 - Probe `status`: `queued` → `answered` | `expired` (past `ttlHours`) |
   `rejected` (the stored result failed `probe-result`; `error` says why) |
   `cancelled` (after DELETE).
+- `probeId` is a ULID; `ttlHours` is measured from **its timestamp** (the
+  moment the companion queued the probe). The queue keeps no separate
+  queued-at, so a probe expires `ttlHours` after the time encoded in its id.
+- POST when the resolved flavor's queue already holds 50 probes (the
+  `probe-queue` cap) → 400 `invalid_request`; nothing is queued. Cancel or
+  wait out older probes first.
+- DELETE on a `queued` probe → 200 `probe-cancelled`. DELETE on a probe that
+  is already `cancelled` → 200 again (idempotent). DELETE on an `answered`,
+  `expired` or `rejected` probe → 400 `invalid_request`: those states are
+  final.
+- `probe-list` is sorted **newest first**.
 
 ## Other addons' SavedVariables (`/dev/v1/addons/<folder>/sv`)
 
@@ -307,6 +318,10 @@ same table. **Deny wins.** Words come from the `tokenizer` rule (camel-case +
    (so `time` is allowed, `SomeAddon.time` is not).
 4. `redact`: listed 1-based return slots (officer note of
    `GetGuildRosterInfo`) are replaced by `replacement` before storing.
+   **Inert in v1:** `GetGuildRosterInfo` is name-bearing, so LedgerLink never
+   makes the call (see "Probe result") and this rule never fires. It stays in
+   `allowlist.json` — removing it would change the pinned allowlist — and
+   would apply if a later version ever let a name-bearing call run.
 5. `examples.allowed` / `examples.denied` are shared test vectors every
    implementation must agree on. `examples.denyListed` all start with a read
    prefix, so only the deny rules refuse them — one per `denyWords` /
@@ -333,6 +348,12 @@ carries. `addonVersion` is LedgerLink's version. LedgerLink keeps at most
 `DEV_BRIDGE_PROBE_RESULTS_MAX` (50) results, pruning expired ones (past the
 probe's `ttlHours`) and then the oldest. Name-bearing functions
 (`DEV_BRIDGE_SNAPSHOT_NAME_BEARING_FNS`) stay presence-only here too.
+
+- A `fn` call whose function would return names is **not made**; it is
+  answered `status: "denied"` ("presence only"). Unlike the dev snapshot,
+  `probe-result` has no `presence` status: `denied` is the documented v1
+  answer, and v1 adds no new status (that would be breaking). Ask with a
+  `presence` call instead to learn whether such a function exists.
 
 - `{ probeId, capturedAt, addonVersion, calls, truncated }`; each call
   `{ id, status: ok|missing|error|denied, values?, error?, iterations?, truncated? }`;
