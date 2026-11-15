@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * ROK-2170: turn Wowhead "Forever" zone-page captures into `expansion: 'forever'`
  * rows in `src/plugins/wow-common/data/boss-loot-data.json`.
@@ -8,37 +7,69 @@
  * the network. A row is written only when a drop's source is a boss LISTED for
  * that instance in `boss-encounter-data.json`; zone drops, trash and unlisted
  * rares are reported and skipped. Re-running is a no-op for rows already there.
+ * ROK-2210: the capture's Wowhead zone id resolves to an instance through the
+ * instance catalogue (`byWowheadZoneId`), so this is TypeScript now.
  *
  * Usage (from `api/`):
- *   node scripts/import-forever-boss-loot.mjs <capture.json> [...more]   # dry run
- *   node scripts/import-forever-boss-loot.mjs --write <capture.json> [...more]
+ *   npx tsx scripts/import-forever-boss-loot.ts <capture.json> [...more]   # dry run
+ *   npx tsx scripts/import-forever-boss-loot.ts --write <capture.json> [...more]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { byWowheadZoneId } from '../src/plugins/wow-common/instance-catalogue/instance-catalogue';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = resolve(HERE, '../src/plugins/wow-common/data');
+const DATA_DIR = resolve(__dirname, '../src/plugins/wow-common/data');
 const LOOT_FILE = resolve(DATA_DIR, 'boss-loot-data.json');
 const BOSS_FILE = resolve(DATA_DIR, 'boss-encounter-data.json');
 const ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/large';
 
-/** Wowhead zone id → the instance id the bundled boss rows use. */
-const ZONE_TO_INSTANCE = {
-  717: 238, // The Stockade
-  1581: 63, // The Deadmines
-  209: 64, // Shadowfang Keep
-  2437: 226, // Ragefire Chasm
-  719: 227, // Blackfathom Deeps
-  491: 234, // Razorfen Kraul
-  722: 233, // Razorfen Downs
-  1477: 237, // The Temple of Atal'Hakkar
-  1583: 229, // Lower Blackrock Spire
-  2057: 246, // Scholomance
-};
+interface CaptureDrop {
+  itemId: number;
+  name: string;
+  quality: number;
+  icon?: string;
+  slot?: string | null;
+  type?: string | null;
+  itemLevel?: number | null;
+  source?: string | null;
+}
+
+interface Capture {
+  zone: string;
+  zoneId: number;
+  totalShown: number;
+  drops: CaptureDrop[];
+}
+
+interface BossRow {
+  name: string;
+  instanceId: number;
+  expansion: string;
+}
+
+interface LootRow {
+  bossName: string;
+  expansion: string;
+  itemId: number;
+  itemName: string;
+  slot: string | null;
+  quality: string;
+  itemLevel: number | null;
+  dropRate: null;
+  classRestrictions: null;
+  iconUrl: string;
+  itemSubclass: string | null;
+}
+
+interface Plan {
+  zone: string;
+  listed: string[];
+  rows: LootRow[];
+  skipped: CaptureDrop[];
+}
 
 /** Wowhead quality number (the q0..q5 link class) → the quality name. */
-const QUALITY_NAMES = [
+const QUALITY_NAMES: readonly string[] = [
   'Poor',
   'Common',
   'Uncommon',
@@ -51,7 +82,7 @@ const QUALITY_NAMES = [
  * A Wowhead source that is a listed boss under another name. Sneed climbs
  * out of Sneed's Shredder and the boss list has one row for the encounter.
  */
-const SOURCE_ALIASES = {
+const SOURCE_ALIASES: Readonly<Record<string, string>> = {
   Sneed: "Sneed's Shredder",
   // Spelling: Wowhead has a lower-case r, the bundled boss row does not.
   'Ghamoo-ra': 'Ghamoo-Ra',
@@ -64,7 +95,9 @@ const SOURCE_ALIASES = {
  * keyed by the capture's zone id. Operator ruling 2026-11-11: Wowhead's
  * Forever page does not attribute these to the Avatar of Hakkar.
  */
-const ITEM_BOSS_OVERRIDES = {
+const ITEM_BOSS_OVERRIDES: Readonly<
+  Record<number, Readonly<Record<number, string>>>
+> = {
   1477: {
     10838: 'Avatar of Hakkar', // Might of Hakkar
     10844: 'Avatar of Hakkar', // Spire of Hakkar
@@ -74,7 +107,7 @@ const ITEM_BOSS_OVERRIDES = {
 };
 
 /** Wowhead slot label → the slot vocabulary the loot file already uses. */
-const SLOT_MAP = {
+const SLOT_MAP: Readonly<Record<string, string | null>> = {
   Head: 'Head',
   Neck: 'Neck',
   Shoulder: 'Shoulder',
@@ -101,7 +134,7 @@ const SLOT_MAP = {
 };
 
 /** Wowhead type label → the itemSubclass vocabulary the loot file already uses. */
-const TYPE_MAP = {
+const TYPE_MAP: Readonly<Record<string, string | null>> = {
   'Cloth Armor': 'Cloth',
   'Leather Armor': 'Leather',
   'Mail Armor': 'Mail',
@@ -141,16 +174,21 @@ const TYPE_MAP = {
   'Fishing Book': 'Fishing',
 };
 
-function fail(message) {
+function fail(message: string): never {
   console.error(`import-forever-boss-loot: ${message}`);
   process.exit(1);
 }
 
-function readJson(file) {
-  return JSON.parse(readFileSync(file, 'utf8'));
+function readJson<T>(file: string): T {
+  return JSON.parse(readFileSync(file, 'utf8')) as T;
 }
 
-function mapped(table, value, kind, drop) {
+function mapped(
+  table: Readonly<Record<string, string | null>>,
+  value: string | null | undefined,
+  kind: string,
+  drop: CaptureDrop,
+): string | null {
   if (value === null || value === undefined || value === '') return null;
   const out = table[value];
   if (out === undefined) {
@@ -159,7 +197,7 @@ function mapped(table, value, kind, drop) {
   return out;
 }
 
-function toRow(bossName, drop) {
+function checkDrop(bossName: string, drop: CaptureDrop): string {
   if (!Number.isInteger(drop.itemId) || drop.itemId <= 0) {
     fail(
       `item ${JSON.stringify(drop.itemId)} on ${bossName} is not a positive integer id`,
@@ -175,6 +213,11 @@ function toRow(bossName, drop) {
   if (!/^[a-z0-9_-]+$/.test(drop.icon ?? '')) {
     fail(`item ${drop.itemId} (${drop.name}) has no valid icon`);
   }
+  return quality;
+}
+
+function toRow(bossName: string, drop: CaptureDrop): LootRow {
+  const quality = checkDrop(bossName, drop);
   return {
     bossName,
     expansion: 'forever',
@@ -185,46 +228,70 @@ function toRow(bossName, drop) {
     itemLevel: drop.itemLevel ?? null,
     dropRate: null,
     classRestrictions: null,
-    iconUrl: `${ICON_BASE}/${drop.icon}.jpg`,
+    iconUrl: `${ICON_BASE}/${drop.icon ?? ''}.jpg`,
     itemSubclass: mapped(TYPE_MAP, drop.type, 'type', drop),
   };
 }
 
-/** Rows + a report for one capture file. */
-function planCapture(capture, bosses) {
-  const instanceId = ZONE_TO_INSTANCE[capture.zoneId];
-  if (!instanceId) fail(`no instance mapping for zone ${capture.zoneId}`);
+/** The instance a capture's Wowhead zone belongs to (instance catalogue). */
+function instanceFor(capture: Capture): number {
+  const row = byWowheadZoneId(capture.zoneId, 'wow_forever');
+  if (!row) fail(`no instance mapping for zone ${capture.zoneId}`);
+  return row.id;
+}
+
+function checkCapture(capture: Capture): void {
   if (capture.drops.length !== capture.totalShown) {
     fail(
       `${capture.zone}: ${capture.drops.length} rows captured but the page showed ${capture.totalShown}`,
     );
   }
-  const listed = bosses
-    .filter((b) => b.instanceId === instanceId && b.expansion === 'classic')
-    .map((b) => b.name);
-  const rows = [];
-  const skipped = [];
+}
+
+function overridesFor(
+  capture: Capture,
+  listed: string[],
+): Readonly<Record<number, string>> {
   const overrides = ITEM_BOSS_OVERRIDES[capture.zoneId] ?? {};
   for (const boss of Object.values(overrides)) {
     if (!listed.includes(boss)) {
-      fail(`${capture.zone}: override boss ${boss} is not listed for the instance`);
+      fail(
+        `${capture.zone}: override boss ${boss} is not listed for the instance`,
+      );
     }
   }
-  const overridden = new Set();
+  return overrides;
+}
+
+/** Bosses a drop's Wowhead source names, among the listed ones. */
+function sourceBosses(drop: CaptureDrop, listed: string[]): string[] {
+  return String(drop.source ?? '')
+    .split('|')
+    .map((s) => s.trim())
+    .map((s) => SOURCE_ALIASES[s] ?? s)
+    .filter((s) => listed.includes(s));
+}
+
+/** Rows + a report for one capture file. */
+function planCapture(capture: Capture, bosses: BossRow[]): Plan {
+  const instanceId = instanceFor(capture);
+  checkCapture(capture);
+  const listed = bosses
+    .filter((b) => b.instanceId === instanceId && b.expansion === 'classic')
+    .map((b) => b.name);
+  const plan: Plan = { zone: capture.zone, listed, rows: [], skipped: [] };
+  const overrides = overridesFor(capture, listed);
+  const overridden = new Set<string>();
   for (const drop of capture.drops) {
     const override = overrides[drop.itemId];
     if (override) {
       overridden.add(String(drop.itemId));
-      rows.push(toRow(override, drop));
+      plan.rows.push(toRow(override, drop));
       continue;
     }
-    const sources = String(drop.source ?? '')
-      .split('|')
-      .map((s) => s.trim())
-      .map((s) => SOURCE_ALIASES[s] ?? s);
-    const hits = sources.filter((s) => listed.includes(s));
-    if (hits.length === 0) skipped.push(drop);
-    for (const boss of hits) rows.push(toRow(boss, drop));
+    const hits = sourceBosses(drop, listed);
+    if (hits.length === 0) plan.skipped.push(drop);
+    for (const boss of hits) plan.rows.push(toRow(boss, drop));
   }
   // A mistyped override id would otherwise do nothing, silently.
   for (const itemId of Object.keys(overrides)) {
@@ -232,10 +299,10 @@ function planCapture(capture, bosses) {
       fail(`${capture.zone}: override item ${itemId} is not in the capture`);
     }
   }
-  return { zone: capture.zone, listed, rows, skipped };
+  return plan;
 }
 
-function report(plan, added) {
+function report(plan: Plan, added: number): void {
   console.log(`\n== ${plan.zone} ==`);
   for (const boss of plan.listed) {
     const n = plan.rows.filter((r) => r.bossName === boss).length;
@@ -247,28 +314,34 @@ function report(plan, added) {
   console.log(`  new rows: ${added}`);
 }
 
-function main() {
+const rowKey = (r: LootRow): string =>
+  `${r.bossName}::${r.expansion}::${r.itemId}`;
+
+/** Appends a plan's unseen rows to `loot`; returns how many were added. */
+function applyPlan(plan: Plan, loot: LootRow[], seen: Set<string>): number {
+  let added = 0;
+  for (const row of plan.rows) {
+    if (seen.has(rowKey(row))) continue;
+    seen.add(rowKey(row));
+    loot.push(row);
+    added += 1;
+  }
+  return added;
+}
+
+function main(): void {
   const args = process.argv.slice(2);
   const write = args.includes('--write');
   const files = args.filter((a) => a !== '--write');
   if (files.length === 0) fail('pass at least one capture file');
 
-  const loot = readJson(LOOT_FILE);
-  const bosses = readJson(BOSS_FILE);
-  const seen = new Set(
-    loot.map((r) => `${r.bossName}::${r.expansion}::${r.itemId}`),
-  );
+  const loot = readJson<LootRow[]>(LOOT_FILE);
+  const bosses = readJson<BossRow[]>(BOSS_FILE);
+  const seen = new Set(loot.map(rowKey));
   let total = 0;
   for (const file of files) {
-    const plan = planCapture(readJson(resolve(file)), bosses);
-    let added = 0;
-    for (const row of plan.rows) {
-      const key = `${row.bossName}::${row.expansion}::${row.itemId}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      loot.push(row);
-      added += 1;
-    }
+    const plan = planCapture(readJson<Capture>(resolve(file)), bosses);
+    const added = applyPlan(plan, loot, seen);
     report(plan, added);
     total += added;
   }
