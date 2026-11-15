@@ -30,7 +30,7 @@ export interface GateModalState {
  */
 export function useGateModal(guildId: number, gameId: number | undefined): GateModalState {
     const queryClient = useQueryClient();
-    // One retry: the gate's buttons stay busy until this settles, so the error fallback must not wait ~7s.
+    // One retry: the gate's buttons stay busy until this settles, so the error fallback must not wait through the client's default retries.
     const chars = useMyCharacters(gameId, gameId !== undefined, { retry: 1 });
     const [tab, setTab] = useState<GateTab | null>(null);
     const [baseline, setBaseline] = useState<ReadonlySet<string> | null>(null);

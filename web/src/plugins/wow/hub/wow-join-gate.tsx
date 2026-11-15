@@ -83,15 +83,16 @@ function GateLoading(): JSX.Element {
 }
 
 /**
- * The two ways in. Busy (disabled + the Button's `loading` spinner/`aria-busy`)
+ * The two ways in. Busy (the Button's `loading`: spinner, `aria-busy` +
+ * `aria-disabled`, clicks swallowed but still focusable)
  * until the modal can mount — the characters baseline and the game registry —
  * so a click never does nothing visible (TDB 2026-11-09).
  */
 function GateActions({ busy, open }: { busy: boolean; open: (tab: GateTab) => void }): JSX.Element {
     return (
         <div className="flex flex-col justify-center gap-2 sm:flex-row">
-            <Button loading={busy} disabled={busy} onClick={() => open('roster')} className="w-full sm:w-auto">{PICK_CHARACTER_LABEL}</Button>
-            <Button variant="secondary" loading={busy} disabled={busy} onClick={() => open('import')} className="w-full sm:w-auto">{IMPORT_ARMORY_LABEL}</Button>
+            <Button loading={busy} onClick={() => open('roster')} className="w-full sm:w-auto">{PICK_CHARACTER_LABEL}</Button>
+            <Button variant="secondary" loading={busy} onClick={() => open('import')} className="w-full sm:w-auto">{IMPORT_ARMORY_LABEL}</Button>
         </div>
     );
 }

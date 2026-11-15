@@ -92,7 +92,7 @@ function Search(): JSX.Element {
 /** A gate action once the characters baseline has loaded (it is busy until then). */
 async function readyAction(name: string): Promise<HTMLElement> {
     const button = await screen.findByRole('button', { name });
-    await waitFor(() => expect(button, `${name} stays busy until the baseline loads`).toBeEnabled());
+    await waitFor(() => expect(button, `${name} stays busy until the baseline loads`).not.toHaveAttribute('aria-busy'));
     return button;
 }
 
@@ -169,7 +169,8 @@ describe('WoW join gate — actions (AC 2, 3)', () => {
         await screen.findByTestId('wow-join-gate');
         for (const name of ['Pick my character', 'Import from Armory']) {
             const button = screen.getByRole('button', { name });
-            expect(button, `${name} must be disabled before the baseline exists`).toBeDisabled();
+            expect(button, `${name} must be aria-disabled before the baseline exists`).toHaveAttribute('aria-disabled', 'true');
+            expect(button, `${name} stays focusable while busy`).not.toBeDisabled();
             expect(button, `${name} must announce it is busy`).toHaveAttribute('aria-busy', 'true');
         }
     });
