@@ -4344,8 +4344,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-14 — perf/rok-2196-truncate (surfaced during the option C delta review)
 
 - **low** `api/src/common/testing/integration-truncate.integration.spec.ts:44-58` — the "role back to origin" test passes even if `set_config(...,true)` became session-wide, because the DO block's last line already restores `origin`; it only guards the success path. Suggested: add a case where the reset raises after setting `replica` (e.g. a builder hook that injects a failing statement) and assert `origin` on every pooled connection.
-- **nit** `api/src/common/testing/integration-phase-timer.ts:15` — comment says "no extra awaits" with the flag off, but `timePhase` adds one async wrapper + one `performance.now()` per call. Suggested: reword.
-- **nit** `api/src/common/testing/integration-truncate.integration.spec.ts:46` — the 10-read fan-out assumes the test pool max of 10 (`test-app.ts:171`). Suggested: read the pool size from the shared constant.
+- ~~**nit** `api/src/common/testing/integration-phase-timer.ts:15` — comment says "no extra awaits" with the flag off, but `timePhase` adds one async wrapper + one `performance.now()` per call. Suggested: reword.~~ — **fixed in td12 (2026-11-15)**
+- ~~**nit** `api/src/common/testing/integration-truncate.integration.spec.ts:46` — the 10-read fan-out assumes the test pool max of 10 (`test-app.ts:171`). Suggested: read the pool size from the shared constant.~~ — **fixed in td12 (2026-11-15)**
 
 ### 2026-11-14 — fix/overnight-td7-2026-11-14 (resolutions)
 
@@ -4361,4 +4361,4 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 ### 2026-11-15 — fix/overnight-td8-2026-11-15 (surfaced during the td8 delta review)
 
-- **low** `api/src/plugins/wow-common/guilds/roster-insights/roster-insights.cache-flight.ts:67-68` — if a compute throws synchronously (a non-async function), `attempts`' `finally` runs before `inFlight.set`, so the rejected flight stays in `inFlight` for good and that key is never computed again in this process. Pre-existing (the ordering predates td8; every current compute is async, so it does not fire today). Suggested: set `inFlight` before calling `attempts`, or wrap the call as `Promise.resolve().then(compute)`.
+- ~~**low** `api/src/plugins/wow-common/guilds/roster-insights/roster-insights.cache-flight.ts:67-68` — if a compute throws synchronously (a non-async function), `attempts`' `finally` runs before `inFlight.set`, so the rejected flight stays in `inFlight` for good and that key is never computed again in this process. Pre-existing (the ordering predates td8; every current compute is async, so it does not fire today). Suggested: set `inFlight` before calling `attempts`, or wrap the call as `Promise.resolve().then(compute)`.~~ — **fixed in td12 (2026-11-15)**
