@@ -30,31 +30,44 @@ function resolveTimestamps(p: InjectVoiceSessionParams): {
   return { join, leave };
 }
 
-/** Insert a synthetic voice session row into the DB (ROK-943 smoke test). */
+/**
+ * Write a synthetic voice session row for (event, Discord user) (ROK-943 smoke
+ * test). Upserts: the minute classify cron can reach a just-ended test event
+ * between its signups and this call and write a 0-second `no_show` row for
+ * every signup; an insert-or-skip would then keep that row and the smoke would
+ * classify only no-shows. The injected session replaces it, classification
+ * cleared, so trigger-classify sees the session the test asked for.
+ */
 export async function injectVoiceSessionForTest(
   db: PostgresJsDatabase<typeof schema>,
   p: InjectVoiceSessionParams,
 ): Promise<void> {
   const { join, leave } = resolveTimestamps(p);
+  const session = {
+    userId: p.userId,
+    discordUsername: 'smoke-test',
+    firstJoinAt: join,
+    lastLeaveAt: leave,
+    totalDurationSec: p.durationSec,
+    segments: [
+      {
+        joinAt: join.toISOString(),
+        leaveAt: leave.toISOString(),
+        durationSec: p.durationSec,
+      },
+    ],
+    classification: null,
+  };
   await db
     .insert(tables.eventVoiceSessions)
-    .values({
-      eventId: p.eventId,
-      userId: p.userId,
-      discordUserId: p.discordUserId,
-      discordUsername: 'smoke-test',
-      firstJoinAt: join,
-      lastLeaveAt: leave,
-      totalDurationSec: p.durationSec,
-      segments: [
-        {
-          joinAt: join.toISOString(),
-          leaveAt: leave.toISOString(),
-          durationSec: p.durationSec,
-        },
+    .values({ eventId: p.eventId, discordUserId: p.discordUserId, ...session })
+    .onConflictDoUpdate({
+      target: [
+        tables.eventVoiceSessions.eventId,
+        tables.eventVoiceSessions.discordUserId,
       ],
-    })
-    .onConflictDoNothing();
+      set: session,
+    });
 }
 
 /** Flush in-memory voice attendance sessions to the DB (ROK-1072 extraction). */
