@@ -13,6 +13,14 @@ export const WowInstanceSchema = z.object({
     expansion: z.string(),
     minimumLevel: z.number().int().nullable().optional(),
     maximumLevel: z.number().int().nullable().optional(),
+    /**
+     * ROK-2210 (additive): where the level range comes from. Set on rows the
+     * instance catalogue serves (`classic_era`, `wow_forever`); absent on
+     * journal-served rows.
+     */
+    levelSource: z.enum(['in_game', 'classic_era', 'community']).optional(),
+    /** ROK-2210 (additive): Wowhead zone id; null = none known. Catalogue rows only. */
+    wowheadZoneId: z.number().int().nullable().optional(),
 });
 
 export type WowInstanceDto = z.infer<typeof WowInstanceSchema>;

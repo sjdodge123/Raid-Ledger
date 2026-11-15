@@ -7,6 +7,7 @@ import {
   FOREVER_NAMESPACE_ALIAS,
   resolveBlizzardNamespacePrefix,
 } from './forever-namespace.resolver';
+import type { LevelSource } from './instance-catalogue/instance-catalogue.types';
 
 // ── Exported Interfaces ──────────────────────────────────────────────────────
 
@@ -84,6 +85,10 @@ export interface WowInstance {
   expansion: string;
   minimumLevel?: number | null;
   maximumLevel?: number | null;
+  /** ROK-2210: set on catalogue-served rows (`classic_era`, `wow_forever`). */
+  levelSource?: LevelSource;
+  /** ROK-2210: Wowhead zone id of a catalogue-served row; null = none known. */
+  wowheadZoneId?: number | null;
 }
 
 /** Enriched instance detail with level requirements */

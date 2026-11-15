@@ -6,13 +6,14 @@ import type { WowGameVariant } from '@raid-ledger/contract';
 import type { WowInstance, WowInstanceDetail } from './blizzard.constants';
 import { getNamespacePrefixes } from './blizzard.constants';
 import { blizzardUpstreamError } from './blizzard-upstream-error';
-
 import {
-  CLASSIC_SUB_INSTANCES,
-  CLASSIC_INSTANCE_LEVELS,
-  getShortName,
-} from './blizzard-instance-data';
-import { FOREVER_EXPANSION } from './forever-instance-data';
+  getInstance,
+  listInstances,
+} from './instance-catalogue/instance-catalogue';
+import {
+  journalLevelOverlay,
+  journalShortName,
+} from './instance-catalogue/journal-overlay.data';
 
 type Logger = { error: (msg: string) => void; warn: (msg: string) => void };
 
@@ -22,10 +23,10 @@ export function enrichInstance(
   gameVariant: WowGameVariant,
 ): WowInstance {
   const levels =
-    gameVariant !== 'retail' ? CLASSIC_INSTANCE_LEVELS[inst.name] : undefined;
+    gameVariant !== 'retail' ? journalLevelOverlay(inst.name) : null;
   return {
     ...inst,
-    shortName: inst.shortName ?? getShortName(inst.name),
+    shortName: inst.shortName ?? journalShortName(inst.name),
     minimumLevel: inst.minimumLevel ?? levels?.minimumLevel ?? null,
     maximumLevel: inst.maximumLevel ?? levels?.maximumLevel ?? null,
   };
@@ -154,11 +155,8 @@ const CLASSIC_THROUGH_CATA = [
 const VARIANT_INSTANCE_EXPANSIONS: Partial<
   Record<WowGameVariant, ReadonlySet<string>>
 > = {
+  // ROK-2210: `wow_forever` is catalogue-served and never reaches the journal.
   classic_era: new Set(['Classic']),
-  // ROK-1719: WoW: Forever keeps the vanilla set and adds its own instances.
-  // Until the journal exposes a `Forever` tier they come from the hand seed
-  // (forever-instance-data.ts); a journal `Forever` tier passes through here.
-  wow_forever: new Set(['Classic', FOREVER_EXPANSION]),
   classic: new Set(CLASSIC_THROUGH_CATA),
   classic_anniversary: new Set(CLASSIC_THROUGH_CATA),
 };
@@ -177,24 +175,25 @@ export function filterByVariant(
   };
 }
 
-/** Expand sub-instances for classic variants. */
+/** The wings replacing an unlisted catalogue parent (316 SM, 232 Maraudon). */
+function wingsOf(inst: WowInstance): WowInstance[] | null {
+  const parent = getInstance(inst.id, 'classic_era');
+  if (!parent || parent.listed) return null;
+  return listInstances('classic_era', parent.category)
+    .filter((r) => r.parentId === parent.id)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      shortName: r.shortName,
+      expansion: inst.expansion,
+      minimumLevel: r.minimumLevel,
+      maximumLevel: r.maximumLevel,
+    }));
+}
+
+/** Expand sub-instances for journal-served classic variants (ROK-2210: wing rows come from the catalogue). */
 export function expandSubInstances(instances: WowInstance[]): WowInstance[] {
-  const result: WowInstance[] = [];
-  for (const inst of instances) {
-    const subs = CLASSIC_SUB_INSTANCES[inst.name];
-    if (subs) {
-      for (const sub of subs)
-        result.push({
-          id: inst.id * 100 + sub.idSuffix,
-          name: sub.name,
-          shortName: sub.shortName,
-          expansion: inst.expansion,
-          minimumLevel: sub.minimumLevel,
-          maximumLevel: sub.maximumLevel,
-        });
-    } else result.push(inst);
-  }
-  return result;
+  return instances.flatMap((inst) => wingsOf(inst) ?? [inst]);
 }
 
 /** Deduplicate instances by ID. */
@@ -225,38 +224,15 @@ export function buildInstanceDetail(
   const category: 'dungeon' | 'raid' =
     data.category?.type?.toLowerCase() === 'raid' ? 'raid' : 'dungeon';
   const levelOverride =
-    gameVariant !== 'retail' ? CLASSIC_INSTANCE_LEVELS[data.name] : undefined;
+    gameVariant !== 'retail' ? journalLevelOverlay(data.name) : null;
   return {
     id: data.id,
     name: data.name,
-    shortName: getShortName(data.name),
+    shortName: journalShortName(data.name),
     expansion: data.expansion?.name ?? 'Unknown',
     minimumLevel: levelOverride?.minimumLevel ?? data.minimum_level ?? null,
     maximumLevel: levelOverride?.maximumLevel ?? null,
     maxPlayers,
     category,
   };
-}
-
-/** Resolve a synthetic sub-instance by ID. */
-export function resolveSyntheticInstance(
-  instanceId: number,
-): WowInstanceDetail | null {
-  const suffix = instanceId % 100;
-  for (const [, subs] of Object.entries(CLASSIC_SUB_INSTANCES)) {
-    for (const sub of subs) {
-      if (sub.idSuffix === suffix)
-        return {
-          id: instanceId,
-          name: sub.name,
-          shortName: sub.shortName,
-          expansion: 'Classic',
-          minimumLevel: sub.minimumLevel,
-          maximumLevel: sub.maximumLevel,
-          maxPlayers: 5,
-          category: 'dungeon',
-        };
-    }
-  }
-  return null;
 }

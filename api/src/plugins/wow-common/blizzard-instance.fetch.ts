@@ -1,6 +1,10 @@
 /**
  * High-level instance API orchestration helpers for BlizzardService.
  * Composes the lower-level helpers in blizzard-instance.helpers.ts.
+ *
+ * ROK-2210: `classic_era` and `wow_forever` are served from the instance
+ * catalogue (no token, no cache, no Blizzard call); every other variant keeps
+ * the live journal.
  */
 import { HttpException, NotFoundException } from '@nestjs/common';
 import type { WowGameVariant } from '@raid-ledger/contract';
@@ -10,29 +14,44 @@ import type {
 } from './blizzard.constants';
 import * as instH from './blizzard-instance.helpers';
 import { blizzardUpstreamError } from './blizzard-upstream-error';
-import {
-  findForeverSeedInstance,
-  mergeForeverSeed,
-  withForeverSeedDetail,
-} from './forever-instance-data';
+import * as catalogue from './instance-catalogue/instance-catalogue';
 
-type ExpansionDetails = Awaited<ReturnType<typeof instH.fetchExpansionDetails>>;
+/** Journal ids stay below this; wings (31601, 22901) and 900000xx do not. */
+const LAST_JOURNAL_ID = 10_000;
 
-/**
- * ROK-1719: a failed journal-expansion call is dropped as null. For Forever
- * that would cache a seed-only (no vanilla) list for 24h, so a missing
- * Classic tier throws instead — BlizzardService serves the seed uncached.
- * Forever only: other variants keep their existing partial-list behaviour.
- */
-function assertForeverHasClassic(details: ExpansionDetails): void {
-  if (details.some((d) => d?.expansionName === 'Classic')) return;
-  throw blizzardUpstreamError(
-    502,
-    'instances',
-    'WoW: Forever instance list is missing the Classic journal tier. Please try again later.',
-  );
+/** The catalogue list for a catalogue-served variant, else null (journal). */
+export function catalogueInstanceList(
+  gameVariant: WowGameVariant,
+): InstanceListCacheData | null {
+  if (!catalogue.servesVariant(gameVariant)) return null;
+  const list = (c: 'dungeon' | 'raid') =>
+    catalogue.listInstances(gameVariant, c).map(catalogue.toListDto);
+  return { dungeons: list('dungeon'), raids: list('raid') };
 }
 
+/**
+ * D6: a catalogue variant resolves (id, variant) then any variant, so a saved
+ * event's id resolves whatever the viewer's variant. A journal variant only
+ * resolves the synthetic ids the journal does not know (wings, Forever-new);
+ * real journal ids keep the journal path. Null = ask the journal.
+ */
+export function catalogueInstanceDetail(
+  instanceId: number,
+  gameVariant: WowGameVariant,
+): WowInstanceDetail | null {
+  let row = null;
+  if (catalogue.servesVariant(gameVariant))
+    row =
+      catalogue.getInstance(instanceId, gameVariant) ??
+      catalogue.getAnyVariant(instanceId);
+  else if (instanceId > LAST_JOURNAL_ID)
+    row =
+      catalogue.getInstance(instanceId, 'classic_era') ??
+      catalogue.getAnyVariant(instanceId);
+  return row ? catalogue.toDetailDto(row) : null;
+}
+
+/** Journal-served variants (retail, classic, classic_anniversary). */
 export async function fetchAllInstancesFromApi(
   region: string,
   gameVariant: WowGameVariant,
@@ -45,7 +64,6 @@ export async function fetchAllInstancesFromApi(
     `static-${region}`,
     token,
   );
-  if (gameVariant === 'wow_forever') assertForeverHasClassic(details);
   let { dungeons, raids } = instH.mergeExpansionInstances(details);
   ({ dungeons, raids } = instH.filterByVariant(dungeons, raids, gameVariant));
   dungeons = instH.deduplicateById(dungeons);
@@ -53,12 +71,6 @@ export async function fetchAllInstancesFromApi(
   if (gameVariant !== 'retail') {
     dungeons = instH.expandSubInstances(dungeons);
     raids = instH.expandSubInstances(raids);
-  }
-  if (gameVariant === 'wow_forever') {
-    // ROK-1719: seeded Forever instances carry explicit levels, so
-    // enrichInstance never applies the name-keyed (TBC) Hyjal Summit 70.
-    dungeons = mergeForeverSeed(dungeons, 'dungeon');
-    raids = mergeForeverSeed(raids, 'raid');
   }
   return {
     dungeons: dungeons.map((i) => instH.enrichInstance(i, gameVariant)),
@@ -86,15 +98,6 @@ export async function fetchInstanceDetailFromApi(
   gameVariant: WowGameVariant,
   token: string,
 ): Promise<WowInstanceDetail> {
-  // ROK-1719: before the synthetic branch — 90_000_001 % 100 would otherwise
-  // resolve to a Scarlet Monastery wing. Variant-independent on purpose: a
-  // saved event's id must resolve whatever the viewer's variant mapping.
-  const seeded = findForeverSeedInstance(instanceId);
-  if (seeded) return seeded;
-  if (instanceId > 10000) {
-    const synth = instH.resolveSyntheticInstance(instanceId);
-    if (synth) return synth;
-  }
   const url = `https://${region}.api.blizzard.com/data/wow/journal-instance/${instanceId}?namespace=static-${region}&locale=en_US`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -108,5 +111,5 @@ export async function fetchInstanceDetailFromApi(
     category?: { type: string };
     expansion?: { name: string };
   };
-  return withForeverSeedDetail(instH.buildInstanceDetail(data, gameVariant));
+  return instH.buildInstanceDetail(data, gameVariant);
 }

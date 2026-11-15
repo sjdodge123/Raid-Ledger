@@ -31,7 +31,6 @@ import {
   fetchForeverRulesetRaw,
   type ForeverRulesetFetchOutcome,
 } from './blizzard-forever-ruleset.fetch';
-import { foreverSeedOnlyList } from './forever-instance-data';
 import { isNamespaceRefusal } from './blizzard-upstream-error';
 import {
   FOREVER_NAMESPACE_ALIAS,
@@ -297,29 +296,20 @@ export class BlizzardService {
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<{ dungeons: WowInstance[]; raids: WowInstance[] }> {
-    const load = () =>
-      memorySwr({
-        cache: this.instanceListCache,
-        key: `${region}:${gameVariant}`,
-        ttlMs: INSTANCE_CACHE_TTL,
-        maxEntries: INSTANCE_LIST_CACHE_MAX,
-        fetcher: async () => {
-          const token = await this.auth.getAccessToken(region);
-          return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
-        },
-      });
-    if (gameVariant !== 'wow_forever') return load();
-    // ROK-1719: Forever planning survives a Blizzard outage with the seeded
-    // instances. Deliberately outside the SWR fetcher so the seed-only list
-    // is never cached over the full journal list.
-    try {
-      return await load();
-    } catch (err) {
-      this.logger.warn(
-        `Forever instance list served seed-only: ${(err as Error).message}`,
-      );
-      return foreverSeedOnlyList();
-    }
+    // ROK-2210: classic_era / wow_forever come from the catalogue — no token,
+    // no cache, and no outage path (the data is static).
+    const local = instFetch.catalogueInstanceList(gameVariant);
+    if (local) return local;
+    return memorySwr({
+      cache: this.instanceListCache,
+      key: `${region}:${gameVariant}`,
+      ttlMs: INSTANCE_CACHE_TTL,
+      maxEntries: INSTANCE_LIST_CACHE_MAX,
+      fetcher: async () => {
+        const token = await this.auth.getAccessToken(region);
+        return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
+      },
+    });
   }
 
   async fetchInstanceDetail(
@@ -327,6 +317,9 @@ export class BlizzardService {
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<WowInstanceDetail> {
+    // ROK-2210 D6: catalogue ids resolve locally; the rest ask the journal.
+    const local = instFetch.catalogueInstanceDetail(instanceId, gameVariant);
+    if (local) return local;
     return memorySwr({
       cache: this.instanceDetailCache,
       key: `${region}:${gameVariant}:${instanceId}`,
