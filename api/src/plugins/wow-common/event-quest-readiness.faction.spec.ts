@@ -97,8 +97,11 @@ describe('buildQuestReadiness faction filter (ROK-2211)', () => {
     expect(orc?.perQuest.some((p) => p.questId === 801)).toBe(false);
   });
 
-  it('a raceless signup with a Horde faction column gets no Alliance cells', () => {
-    const row = build(HORDE_ROSTER).signups.find((s) => s.userId === 2);
+  it('a raceless Horde-column signup gets no Alliance cells in a mixed roster', () => {
+    // Human + raceless Horde: sides unknown-or-mixed, so every column stays.
+    const body = build([signup(1, 'Human', null), signup(2, null, 'Horde')]);
+    expect(body.quests.map((q) => q.questId)).toContain(600);
+    const row = body.signups.find((s) => s.userId === 2);
     expect(row?.perQuest.map((p) => p.questId)).not.toContain(600);
   });
 
