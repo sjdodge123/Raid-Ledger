@@ -165,7 +165,10 @@ function inflatePage(body: string): Buffer {
  * mismatch, not a bad payload (keeps `!RL2!` + `schema: 1` at its v1 code).
  * A v1 header keeps its v1 behaviour: the strict schema rejects it.
  */
-function assertPayloadVersion(json: unknown, version: AddonExportVersion): void {
+function assertPayloadVersion(
+  json: unknown,
+  version: AddonExportVersion,
+): void {
   if (version !== ADDON_EXPORT_V2_ENVELOPE_VERSION) return;
   const declared =
     typeof json === 'object' && json !== null && 'schema' in json

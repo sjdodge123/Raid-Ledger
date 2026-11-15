@@ -73,7 +73,8 @@ export function parsePageHeader(token: string): AddonPageHeader {
     throw new AddonImportError('UNSUPPORTED_VERSION', versionMessage(version));
   }
   const section = headerSection(version, m[2]);
-  if (m[3] === undefined) return { version, section, page: null, of: null, body };
+  if (m[3] === undefined)
+    return { version, section, page: null, of: null, body };
   const page = Number(m[3]);
   const of = Number(m[4]);
   if (
@@ -125,7 +126,10 @@ export function assertPageSet(headers: AddonPageHeader[]): AddonPageHeader[] {
   return [...headers].sort((a, b) => (a.page ?? 0) - (b.page ?? 0));
 }
 
-function samePageExport(a: AnyAddonGuildExport, b: AnyAddonGuildExport): boolean {
+function samePageExport(
+  a: AnyAddonGuildExport,
+  b: AnyAddonGuildExport,
+): boolean {
   return (
     a.schema === b.schema &&
     a.who.guid === b.who.guid &&
@@ -167,7 +171,10 @@ export function mergeGuildPages(
       'The guild roster lists a member twice.',
     );
   }
-  const merged = revalidateGuild({ ...first, data: { ...first.data, members } });
+  const merged = revalidateGuild({
+    ...first,
+    data: { ...first.data, members },
+  });
   if (!merged) {
     throw new AddonImportError(
       'INVALID_PAYLOAD',
