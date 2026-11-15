@@ -1,6 +1,6 @@
 {
-  "id": "e5a886a2-df04-42b8-969f-18f1e8e981b7",
-  "prevId": "c9be981f-76c4-47bf-a0d7-a52c7b69ad66",
+  "id": "c9be981f-76c4-47bf-a0d7-a52c7b69ad66",
+  "prevId": "4a97ff73-29b4-4952-9eb4-b0c32bc38ff4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -11641,12 +11641,6 @@
           "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true
-        },
-        "envelope_version": {
-          "name": "envelope_version",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",

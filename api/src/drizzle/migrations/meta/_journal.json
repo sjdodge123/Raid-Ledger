@@ -2098,15 +2098,22 @@
     {
       "idx": 300,
       "version": "7",
-      "when": 1794718540726,
-      "tag": "0300_guild_loot_drops",
+      "when": 1794717311365,
+      "tag": "0300_dedupe_same_name_boss_loot",
       "breakpoints": true
     },
     {
       "idx": 301,
       "version": "7",
+      "when": 1794718540726,
+      "tag": "0301_guild_loot_drops",
+      "breakpoints": true
+    },
+    {
+      "idx": 302,
+      "version": "7",
       "when": 1794764647751,
-      "tag": "0301_addon_import_audit_envelope_version",
+      "tag": "0302_addon_import_audit_envelope_version",
       "breakpoints": true
     }
   ]
