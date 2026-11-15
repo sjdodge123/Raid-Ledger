@@ -82,6 +82,22 @@ function GateLoading(): JSX.Element {
     );
 }
 
+/**
+ * The two ways in. Busy (the Button's `loading`: spinner, `aria-busy` +
+ * `aria-disabled`, clicks swallowed but still focusable)
+ * until the modal can mount — the characters baseline and the game registry —
+ * so a click never does nothing visible (TDB 2026-11-09).
+ */
+function GateActions({ busy, open }: { busy: boolean; open: (tab: GateTab) => void }): JSX.Element {
+    return (
+        <div className="flex flex-col justify-center gap-2 sm:flex-row">
+            <Button loading={busy} onClick={() => open('roster')} className="w-full sm:w-auto">{PICK_CHARACTER_LABEL}</Button>
+            <Button variant="secondary" loading={busy} onClick={() => open('import')} className="w-full sm:w-auto">{IMPORT_ARMORY_LABEL}</Button>
+        </div>
+    );
+}
+
+/** The non-member gate for a WoW: Forever guild hub (see the file header). */
 export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element {
     const gate = useJoinGate(guildId);
     const guild = gate.data?.guild;
@@ -100,10 +116,7 @@ export function WowJoinGate({ guildId }: { guildId: number }): JSX.Element {
             {modal.gained && !pageFetching && <NotLinkedWarning />}
             <GateHeader guild={guild} />
             <p className="mx-auto mb-5 mt-4 max-w-md text-secondary">{JOIN_GATE_LINE}</p>
-            <div className="flex flex-col justify-center gap-2 sm:flex-row">
-                <Button onClick={() => modal.open('roster')} className="w-full sm:w-auto">{PICK_CHARACTER_LABEL}</Button>
-                <Button variant="secondary" onClick={() => modal.open('import')} className="w-full sm:w-auto">{IMPORT_ARMORY_LABEL}</Button>
-            </div>
+            <GateActions busy={!modal.ready || registryLoading} open={modal.open} />
             {gate.data.viewer.hasForeverCharacter && <NotOnRosterHint />}
             {modal.tab !== null && modal.ready && !registryLoading && (
                 <JoinGateClaimModal tab={modal.tab} guildId={guild.id} onClose={modal.close} />
