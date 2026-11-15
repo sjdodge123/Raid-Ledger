@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { DUNGEON_INSTANCE_NAMES } from './dungeon-instance-names';
+import { instanceName } from './instance-catalogue/instance-catalogue';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 
 interface Row {
@@ -72,7 +72,7 @@ describe('bundled classic dungeon quest data (ROK-2143)', () => {
         (r) =>
           r.dungeonInstanceId !== null &&
           !INSIDE_DUNGEON_QUEST_IDS.has(r.questId) &&
-          r.questGiverZone === DUNGEON_INSTANCE_NAMES[r.dungeonInstanceId],
+          r.questGiverZone === instanceName(r.dungeonInstanceId),
       )
       .map((r) => r.questId);
     expect(own).toEqual([]);

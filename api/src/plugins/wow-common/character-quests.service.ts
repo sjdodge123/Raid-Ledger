@@ -13,7 +13,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { loadCharacterAttunements } from './character-attunements';
 import { buildCharacterQuests } from './character-quests.helpers';
-import { instanceName } from './dungeon-instance-names';
+import { instanceName } from './instance-catalogue/instance-catalogue';
 import { VARIANT_EXPANSIONS, toDto } from './dungeon-quests.helpers';
 import { applyKnownQuestOverlay } from './dungeon-quests.overlay';
 import type { DungeonQuestDto } from './dungeon-quests.types';

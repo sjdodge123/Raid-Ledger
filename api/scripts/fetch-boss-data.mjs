@@ -156,26 +156,6 @@ const EXPANSION_MAP = {
   'Cataclysm': 'cata',
 };
 
-// --- Sub-instance parent mapping ---
-const SUB_INSTANCE_PARENTS = {
-  // Dire Maul variants
-  230: 230,   // DM:West (Capital Gardens) — standalone journal entry
-  1276: 1276, // DM:East (Warpwood Quarter) — standalone journal entry
-  1277: 1277, // DM:North (Gordok Commons) — standalone journal entry
-  // Stratholme variants
-  236: 236,   // Strat:Live (Main Gate) — standalone
-  1292: 1292, // Strat:UD (Service Entrance) — standalone
-  // Maraudon sub-instances
-  23201: 232,
-  23202: 232,
-  23203: 232,
-  // SM sub-instances
-  31601: 316,
-  31602: 316,
-  31603: 316,
-  31604: 316,
-};
-
 // Instances that need boss data — all Classic through Cata
 // Only includes instances NOT already in the JSON files
 const MISSING_INSTANCES = [

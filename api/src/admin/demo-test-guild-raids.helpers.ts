@@ -19,6 +19,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import { SEED_GUILD_REGION } from './demo-test-guild.helpers';
+import { getInstance } from '../plugins/wow-common/instance-catalogue/instance-catalogue';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -28,14 +29,20 @@ const SLOT_CONFIG = { type: 'mmo', tank: 2, healer: 4, dps: 14 };
 const HOUR = 3600 * 1000;
 const WEEK = 7 * 24 * HOUR;
 const SERIES_NIGHTS = 3;
-/** ROK-1926 — the first night's raid; the id is synthetic (journal not live). */
-const SEED_RAID_INSTANCE = {
-  id: 90_000_001,
-  name: 'Molten Core',
-  shortName: 'MC',
-  category: 'raid',
-  minimumLevel: 60,
-};
+/** Molten Core's journal instance id. */
+const MOLTEN_CORE_ID = 741;
+/**
+ * ROK-1926 — the first night's raid: Molten Core from the instance catalogue.
+ * ROK-2210: it used to carry id 90000001, which is The Hall of Thanes.
+ */
+const SEED_RAID_INSTANCE = seedRaidInstance();
+
+function seedRaidInstance() {
+  const mc = getInstance(MOLTEN_CORE_ID, 'wow_forever');
+  if (!mc) throw new Error(`ROK-2210: catalogue has no ${MOLTEN_CORE_ID}`);
+  const { id, name, shortName, category, minimumLevel } = mc;
+  return { id, name, shortName, category, minimumLevel };
+}
 const UNDER_LEVEL = 52;
 /** ROK-1926 — the member's level-52 alt that signs the first raid night. */
 export const SEED_UNDER_LEVEL_ALT = 'Daenvar';

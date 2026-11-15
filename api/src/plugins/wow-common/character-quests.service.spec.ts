@@ -10,7 +10,7 @@ import { effectiveQuests } from './forever-quest-source.helpers';
 import { loadForeverQuestSources } from './forever-quest-source.query';
 import { buildCharacterQuests } from './character-quests.helpers';
 import { loadCharacterAttunements } from './character-attunements';
-import { instanceName } from './dungeon-instance-names';
+import { instanceName } from './instance-catalogue/instance-catalogue';
 import type { SettingsService } from '../../settings/settings.service';
 
 jest.mock('./forever-quest-source.query');

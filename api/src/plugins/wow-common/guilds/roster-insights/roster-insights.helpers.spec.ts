@@ -67,6 +67,10 @@ function row(name: string, o: RowOpts = {}): InsightRow {
 }
 
 describe('roster-insights levels', () => {
+  it('sets the dungeon-eligible bar at level 13 (catalogue, ROK-2210)', () => {
+    expect(LOWEST_DUNGEON_LEVEL).toBe(13);
+  });
+
   it('median handles odd, even and empty lists', () => {
     expect(median([5, 1, 3])).toBe(3);
     expect(median([10, 20, 30, 40])).toBe(25);

@@ -2,7 +2,7 @@ import { copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { runPrepare } from '../../../../scripts/prepare-forever-dungeon-quests';
-import { FOREVER_SEED_ID_BASE } from '../forever-instance-data';
+import { FOREVER_SEED_ID_BASE } from '../instance-catalogue/instance-catalogue';
 
 const FIXTURES = join(__dirname, '../testing/fixtures/wowhead-quests');
 

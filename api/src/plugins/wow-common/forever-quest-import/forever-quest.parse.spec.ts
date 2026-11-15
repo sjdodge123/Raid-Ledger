@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { FOREVER_SEED_ID_BASE } from '../forever-instance-data';
+import { FOREVER_SEED_ID_BASE } from '../instance-catalogue/instance-catalogue';
 import {
   parseQuestPage,
   parseZoneQuestList,

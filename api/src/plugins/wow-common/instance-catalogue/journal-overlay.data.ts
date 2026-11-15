@@ -1,72 +1,13 @@
 /**
- * Static instance data for Classic WoW dungeons and raids.
- * Extracted from blizzard.service.ts for file size compliance (ROK-711).
+ * ROK-2210: name-keyed level ranges and short names for the JOURNAL-served
+ * WoW variants (`retail`, `classic`, `classic_anniversary`). Moved verbatim
+ * from `blizzard-instance-data.ts` so the instance-catalogue guard can forbid
+ * such tables everywhere else. Catalogue-served variants (`classic_era`,
+ * `wow_forever`) read `instance-catalogue.ts`, never this file.
  */
-import type { SubInstance } from './blizzard.constants';
 
-/**
- * Classic dungeon complexes that should be expanded into their individual wings.
- * The retail journal combines these, but Classic has them as separate instances.
- * Key = parent instance name (must match Blizzard journal name exactly).
- */
-export const CLASSIC_SUB_INSTANCES: Record<string, SubInstance[]> = {
-  'Scarlet Monastery': [
-    {
-      idSuffix: 1,
-      name: 'SM: Graveyard',
-      shortName: 'SM:GY',
-      minimumLevel: 26,
-      maximumLevel: 32,
-    },
-    {
-      idSuffix: 2,
-      name: 'SM: Library',
-      shortName: 'SM:Lib',
-      minimumLevel: 29,
-      maximumLevel: 33,
-    },
-    {
-      idSuffix: 3,
-      name: 'SM: Armory',
-      shortName: 'SM:Arm',
-      minimumLevel: 32,
-      maximumLevel: 36,
-    },
-    {
-      idSuffix: 4,
-      name: 'SM: Cathedral',
-      shortName: 'SM:Cath',
-      minimumLevel: 34,
-      maximumLevel: 40,
-    },
-  ],
-  Maraudon: [
-    {
-      idSuffix: 1,
-      name: 'Maraudon: Purple',
-      shortName: 'Mara:P',
-      minimumLevel: 40,
-      maximumLevel: 49,
-    },
-    {
-      idSuffix: 2,
-      name: 'Maraudon: Orange',
-      shortName: 'Mara:O',
-      minimumLevel: 40,
-      maximumLevel: 49,
-    },
-    {
-      idSuffix: 3,
-      name: 'Maraudon: Pristine Waters',
-      shortName: 'Mara:PW',
-      minimumLevel: 46,
-      maximumLevel: 55,
-    },
-  ],
-};
-
-/** Instance short names for display */
-export const INSTANCE_SHORT_NAMES: Record<string, string> = {
+/** Instance short names for display (journal names). */
+const INSTANCE_SHORT_NAMES: Readonly<Record<string, string>> = {
   'Ragefire Chasm': 'RFC',
   'Wailing Caverns': 'WC',
   Deadmines: 'DM',
@@ -145,15 +86,9 @@ export const INSTANCE_SHORT_NAMES: Record<string, string> = {
   'Ruby Sanctum': 'RS',
 };
 
-/** Get the short name for an instance, falling back to the full name. */
-export function getShortName(name: string): string {
-  return INSTANCE_SHORT_NAMES[name] ?? name;
-}
-
-/** Classic instance level ranges (accurate per-expansion data). */
-export const CLASSIC_INSTANCE_LEVELS: Record<
-  string,
-  { minimumLevel: number; maximumLevel: number }
+/** Instance level ranges by journal name (Classic → Cata). */
+const JOURNAL_INSTANCE_LEVELS: Readonly<
+  Record<string, { minimumLevel: number; maximumLevel: number }>
 > = {
   'Ragefire Chasm': { minimumLevel: 13, maximumLevel: 18 },
   'Wailing Caverns': { minimumLevel: 17, maximumLevel: 24 },
@@ -247,3 +182,27 @@ export const CLASSIC_INSTANCE_LEVELS: Record<
   Firelands: { minimumLevel: 85, maximumLevel: 85 },
   'Dragon Soul': { minimumLevel: 85, maximumLevel: 85 },
 };
+
+/** Short name for a journal instance, falling back to the full name. */
+export function journalShortName(name: string): string {
+  return INSTANCE_SHORT_NAMES[name] ?? name;
+}
+
+/** Level range for a journal instance by name, or null when unknown. */
+export function journalLevelOverlay(
+  name: string,
+): { minimumLevel: number; maximumLevel: number } | null {
+  const hit = JOURNAL_INSTANCE_LEVELS[name];
+  return hit ? { ...hit } : null;
+}
+
+/** Every journal name the overlay knows (for parity specs). */
+export function journalOverlayNames(): {
+  shortNames: readonly string[];
+  levels: readonly string[];
+} {
+  return {
+    shortNames: Object.keys(INSTANCE_SHORT_NAMES),
+    levels: Object.keys(JOURNAL_INSTANCE_LEVELS),
+  };
+}

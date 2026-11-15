@@ -1,14 +1,15 @@
 import type { WowRosterInsightsDto } from '@raid-ledger/contract';
-import { CLASSIC_INSTANCE_LEVELS } from '../../blizzard-instance-data';
+import { lowestDungeonLevel } from '../../instance-catalogue/instance-catalogue';
 import type { InsightRow } from './roster-insights.types';
 
 /** WoW: Forever level cap (Classic rules). */
 export const FOREVER_LEVEL_CAP = 60;
 
-/** Lowest dungeon entry level (Ragefire Chasm) — the dungeon-eligible bar. */
-export const LOWEST_DUNGEON_LEVEL: number = Math.min(
-  ...Object.values(CLASSIC_INSTANCE_LEVELS).map((l) => l.minimumLevel),
-);
+/**
+ * Lowest Forever dungeon entry level — the dungeon-eligible bar. ROK-2210:
+ * read from the instance catalogue (Ragefire Chasm / The Hall of Thanes, 13).
+ */
+export const LOWEST_DUNGEON_LEVEL: number = lowestDungeonLevel('wow_forever');
 
 type Levels = WowRosterInsightsDto['levels'];
 type ClassEntry = WowRosterInsightsDto['classes'][number];
