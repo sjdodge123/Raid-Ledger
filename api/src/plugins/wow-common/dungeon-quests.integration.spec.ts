@@ -14,6 +14,7 @@ import type { ItemTooltip } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { WOWHEAD_TOOLTIP_PARSE_VERSION } from './wowhead-item/wowhead-item.types';
 import { defined } from '../../common/testing/narrow';
+import { selectLootRows } from './dungeon-quests.helpers';
 
 /** Insert a dungeon quest directly and return the row. */
 async function insertQuest(
@@ -334,6 +335,40 @@ async function testLootRowsMergeNullSubclass() {
   ]);
 }
 
+const SPLIT_REWARD_ID = 991005;
+
+/** One boss of `expansion` holding a loot row of `SPLIT_REWARD_ID`. */
+async function insertSplitLoot(expansion: string, quality: string) {
+  const [boss] = await testApp.db
+    .insert(schema.wowClassicBosses)
+    .values({ instanceId: 404, name: `${expansion} Boss`, order: 1, expansion })
+    .returning();
+  await testApp.db.insert(schema.wowClassicBossLoot).values({
+    bossId: defined(boss, `inserted ${expansion} boss`).id,
+    itemId: SPLIT_REWARD_ID,
+    itemName: 'Split Drop Boots',
+    quality,
+    expansion,
+  });
+}
+
+/**
+ * ROK-2170 (td8): the SQL itself keeps Forever loot rows away from a Classic
+ * variant — the in-memory `pickLootRows` filter is a second line, not the
+ * only one.
+ */
+async function testLootSelectExcludesForeverRows() {
+  await insertSplitLoot('classic', 'Uncommon');
+  await insertSplitLoot('forever', 'Rare');
+  const classic = await selectLootRows(testApp.db, [SPLIT_REWARD_ID], false);
+  expect(classic.map((row) => row.expansion)).toEqual(['classic']);
+  const forever = await selectLootRows(testApp.db, [SPLIT_REWARD_ID], true);
+  expect(forever.map((row) => row.expansion).sort()).toEqual([
+    'classic',
+    'forever',
+  ]);
+}
+
 describe('Dungeon Quests — enriched quests (integration)', () => {
   beforeAll(() => setupTestApp());
   afterEach(() => cleanupTestApp());
@@ -382,6 +417,9 @@ describe('Dungeon Quests — enriched quests (integration)', () => {
 
     it('fills a null loot itemSubclass from another row of the same item', () =>
       testLootRowsMergeNullSubclass());
+
+    it('the loot select returns Forever rows only when Forever is preferred', () =>
+      testLootSelectExcludesForeverRows());
 
     it('should return 400 for invalid variant', async () => {
       const res = await testApp.request.get(
