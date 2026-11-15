@@ -1,53 +1,67 @@
 /**
  * ROK-2207 prototype fixtures — illustrative only (quest ids/titles are made
  * up or approximate; the real data comes from `loadEventQuestSet` in the build).
- * Only City of Dalaran and Shadowfang Keep carry quests, so the OQ2 comparison
- * has real numbers and every other dungeon shows the empty state.
+ * Only City of Dalaran and Shadowfang Keep carry quests; every other dungeon
+ * shows the empty state. The demo guild is Alliance (a guild is one faction);
+ * Dalaran carries a same-name Alliance/Horde pair plus a Horde-only quest so
+ * the faction filter visibly hides something.
  */
 import type { EnrichedDungeonQuestDto, EventQuestReadinessDto, QuestReadinessState } from '@raid-ledger/contract';
 import type { PlannerCharacter } from './planner-helpers';
+import type { GuildFaction, PlannerQuest, QuestFaction } from './planner-faction';
 import { DALARAN_ID, SFK_ID } from './forever-dungeons.fixtures';
 
 export { DALARAN_ID, SFK_ID } from './forever-dungeons.fixtures';
 export const DEMO_HUB_ID = 12;
 export const DEMO_GAME_ID = 7;
 export const DEMO_GUILD_ID = 3;
+/** The demo guild's single faction (ruling ~19:05Z: no guild has both). */
+export const DEMO_GUILD_FACTION: GuildFaction = 'alliance';
 
-function quest(id: number, dungeon: number, name: string, o: Partial<EnrichedDungeonQuestDto>): EnrichedDungeonQuestDto {
+function quest(
+    id: number, dungeon: number, name: string, o: Partial<EnrichedDungeonQuestDto>, faction: QuestFaction = 'neutral',
+): PlannerQuest {
     return {
         questId: id, dungeonInstanceId: dungeon, name, questLevel: 30, requiredLevel: 26, expansion: 'classic',
         questGiverNpc: null, questGiverZone: null, prevQuestId: null, nextQuestId: null, rewardsJson: null,
         objectives: null, classRestriction: null, raceRestriction: null, startsInsideDungeon: false, sharable: false,
-        rewardXp: null, rewardGold: null, rewardType: null, rewards: null, prerequisiteChain: null, ...o,
+        rewardXp: null, rewardGold: null, rewardType: null, rewards: null, prerequisiteChain: null, ...o, faction,
     };
 }
 
 const D = DALARAN_ID;
 const S = SFK_ID;
 
-/** Quests per dungeon id. Dalaran: 2 sharable, 2 chain, 1 solo, 2 inside. SFK: 2 sharable, 2 chain, 1 solo, 1 inside. */
-export const QUESTS_BY_DUNGEON: Readonly<Record<number, EnrichedDungeonQuestDto[]>> = {
+/**
+ * Quests per dungeon id, every one tagged alliance / horde / neutral. Dalaran (Alliance view): 2 sharable,
+ * 2 chain, 2 solo, 2 inside; hidden: the Horde "The Archmage's Errand" and "Sunreaver Orders".
+ * New rows are appended so the hand-tuned readiness cells below keep their indices.
+ */
+export const QUESTS_BY_DUNGEON: Readonly<Record<number, PlannerQuest[]>> = {
     [D]: [
         quest(9100001, D, 'The Violet Hold', { sharable: true, questGiverNpc: 'Warden Alturas' }),
         quest(9100002, D, 'Shards of the Kirin Tor', { sharable: true, questGiverNpc: 'Archmage Celindra' }),
         quest(9100003, D, 'Arcane Remnants', { prevQuestId: 9100010, sharable: true }),
-        quest(9100004, D, "The Archmage's Errand", { prevQuestId: 9100011 }),
+        quest(9100004, D, "The Archmage's Errand", { prevQuestId: 9100011 }, 'alliance'),
         quest(9100005, D, "Mage-Guard's Badge", { classRestriction: ['Mage'] }),
         quest(9100006, D, 'Whispers Below', { startsInsideDungeon: true, sharable: true }),
         quest(9100007, D, 'The Sunken Archive', { startsInsideDungeon: true }),
+        quest(9100104, D, "The Archmage's Errand", { prevQuestId: 9100111 }, 'horde'),
+        quest(9100108, D, 'Sunreaver Orders', { questGiverNpc: 'Magister Hathorel' }, 'horde'),
+        quest(9100109, D, 'Silver Covenant Dispatch', { questGiverNpc: 'Vereesa Windrunner' }, 'alliance'),
     ],
     [S]: [
-        quest(1013, S, 'The Book of Ur', { questGiverNpc: 'Keeper Bel\'dugur' }),
-        quest(1014, S, 'Arugal Must Die', { sharable: true, questGiverNpc: 'Dalar Dawnweaver' }),
-        quest(1098, S, 'Deathstalkers in Shadowfang', { sharable: true, questGiverNpc: 'High Executor Hadrec' }),
-        quest(1654, S, 'The Test of Righteousness', { prevQuestId: 1653, classRestriction: ['Paladin'] }),
+        quest(1013, S, 'The Book of Ur', { questGiverNpc: 'Keeper Bel\'dugur' }, 'horde'),
+        quest(1014, S, 'Arugal Must Die', { sharable: true, questGiverNpc: 'Dalar Dawnweaver' }, 'horde'),
+        quest(1098, S, 'Deathstalkers in Shadowfang', { sharable: true, questGiverNpc: 'High Executor Hadrec' }, 'horde'),
+        quest(1654, S, 'The Test of Righteousness', { prevQuestId: 1653, classRestriction: ['Paladin'] }, 'alliance'),
         quest(1740, S, "The Orb of Soran'ruk", { prevQuestId: 1739, classRestriction: ['Warlock'] }),
         quest(1999, S, 'Sorcerer Ashcrombe', { startsInsideDungeon: true, sharable: true }),
     ],
 };
 
 /** Quests for a dungeon; empty when the fixtures carry none (→ empty state). */
-export function questsFor(instanceId: number): EnrichedDungeonQuestDto[] {
+export function questsFor(instanceId: number): PlannerQuest[] {
     return QUESTS_BY_DUNGEON[instanceId] ?? [];
 }
 

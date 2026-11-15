@@ -1,10 +1,12 @@
 /**
  * ROK-2207 prototype — the planner tab body (OQ1 ruled: hub tab) for one
  * dungeon, desktop or phone. Quest layout is the event page's grouping (ruled);
- * the Create-event set is OQ3 Option B (ruled).
+ * the Create-event set is OQ3 Option B (ruled); one dungeon per plan (OQ2 A,
+ * ruled); quests filtered to the guild's single faction (ruled ~19:05Z).
  */
 import { useMemo, type JSX } from 'react';
-import { questsFor, readinessFor } from './dungeon-planner.fixtures';
+import { DEMO_GUILD_FACTION, questsFor, readinessFor } from './dungeon-planner.fixtures';
+import { FACTION_LABEL, hiddenNote, questsForGuild, type GuildFaction } from './planner-faction';
 import { INSTANCES } from './forever-dungeons.fixtures';
 import { plannerLinks, type PlannerState } from './use-planner-state';
 import { instanceRange } from './planner-helpers';
@@ -17,7 +19,18 @@ export type { PlannerState } from './use-planner-state';
 
 function QuestSection({ s }: { s: PlannerState }): JSX.Element {
     const signups = useMemo(() => readinessFor(s.chars, s.instance.id), [s.chars, s.instance.id]);
-    return <QuestBreakdown quests={questsFor(s.instance.id)} signups={signups} />;
+    const { shown, hidden } = questsForGuild(questsFor(s.instance.id), DEMO_GUILD_FACTION);
+    return <QuestBreakdown quests={shown} signups={signups} note={hiddenNote(hidden, DEMO_GUILD_FACTION)} />;
+}
+
+const FACTION_PILL: Readonly<Record<GuildFaction, string>> = {
+    alliance: 'border-faction-alliance/30 bg-faction-alliance/10 text-faction-alliance',
+    horde: 'border-faction-horde/30 bg-faction-horde/10 text-faction-horde',
+};
+
+/** The guild's faction — the quest list shows only its quests (plus neutral ones). */
+function FactionPill({ faction }: { faction: GuildFaction }): JSX.Element {
+    return <span className={`rounded-full border px-2 py-0.5 text-xs ${FACTION_PILL[faction]}`}>{FACTION_LABEL[faction]} guild</span>;
 }
 
 function DungeonSection({ s, phone }: { s: PlannerState; phone: boolean }): JSX.Element {
@@ -49,7 +62,10 @@ export function PlannerBody({ s, layout }: { s: PlannerState; layout: Layout }):
         <div className="rounded-lg border border-edge bg-surface p-4">
             <div className={`space-y-4 ${phone ? 'pb-6' : ''}`}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
+                        <FactionPill faction={DEMO_GUILD_FACTION} />
+                    </div>
                     <div className="flex flex-wrap items-start gap-2">
                         <CopyLinkButton url={plannerLinks(s).share} />
                         {!phone && <Actions s={s} />}

@@ -15,8 +15,7 @@ import { SchemeSwitcher, SideBySideToggle } from '../design-system/scheme-contro
 import { useForcedDarkRoot } from '../design-system/scheme-hooks';
 import { DualFamily } from '../design-system/dual-family';
 import { PlannerBody, type Layout } from './planner-view';
-import { PlannerCompare } from './planner-compare';
-import { DALARAN_ID, SFK_ID } from './forever-dungeons.fixtures';
+import { DALARAN_ID } from './forever-dungeons.fixtures';
 import { usePlannerState } from './use-planner-state';
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -65,20 +64,13 @@ const STORY = ['Aelin', 'Brann', 'Corra', 'Dorn', 'Esk'];
 
 function Frames({ layout }: { layout: Layout }): JSX.Element {
     const ruled = usePlannerState(STORY);
-    const empty = usePlannerState([], [DALARAN_ID], false);
-    const one = usePlannerState(STORY);
-    const many = usePlannerState(STORY, [DALARAN_ID, SFK_ID]);
+    const empty = usePlannerState([], DALARAN_ID, false);
     return (
         <div className="space-y-8">
-            <Decision title="Ruled — hub tab, event-page quest grouping, both Create-event buttons"
-                note="OQ1 A (tab), quest layout A (the event page's grouping), OQ3 B (plain pre-fill + invite). Esk has no linked character, so “invite these” counts 4. Copy link writes ?c=…&d=… — open it to restore the plan.">
+            <Decision title="Ruled — hub tab, one dungeon per plan, event-page quest grouping, both Create-event buttons"
+                note="OQ1 A (tab), OQ2 A (one dungeon), quest layout A (the event page's grouping), OQ3 B (plain pre-fill + invite). The demo guild is Alliance: only Alliance and neutral quests show — City of Dalaran's Horde “The Archmage's Errand” and “Sunreaver Orders” are hidden. Esk has no linked character, so “invite these” counts 4. Copy link writes ?c=…&d=… — open it to restore the plan.">
                 <Option label="Group of 5"><Sized layout={layout}><MockTabs /><PlannerBody s={ruled} layout={layout} /></Sized></Option>
                 <Option label="Empty group (0 characters)"><Sized layout={layout}><PlannerBody s={empty} layout={layout} /></Sized></Option>
-            </Decision>
-            <Decision title="OQ2 — One dungeon or several per plan?"
-                note="B compares the same group across 2–3 dungeons: in range, quests available / shareable / prereq-blocked, then the full breakdown on demand, with a Create event per dungeon. Quest fixtures exist for City of Dalaran and Shadowfang Keep; other dungeons show the empty state.">
-                <Option label="Option A (recommended) — one dungeon per plan"><Sized layout={layout}><PlannerBody s={one} layout={layout} /></Sized></Option>
-                <Option label="Option B — several dungeons per plan"><Sized layout={layout}><PlannerCompare s={many} layout={layout} /></Sized></Option>
             </Decision>
         </div>
     );
@@ -91,7 +83,8 @@ function Intro(): JSX.Element {
             <p className="mt-1 text-sm text-secondary">
                 Pick up to 5 roster characters and a Forever dungeon; see level fit and the dungeon’s quests in the event page’s
                 format, then copy a link for a forum post or create a pre-filled event. Mocked data only — nothing here talks to
-                the API. Forever dungeons only (audit §a); level ranges are not verified for Forever yet.
+                the API. Forever dungeons only (audit §a); level ranges are not verified for Forever yet. A guild is one
+                faction, so quests are filtered to the guild's faction (neutral quests always show).
             </p>
         </header>
     );

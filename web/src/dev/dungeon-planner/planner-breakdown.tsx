@@ -125,13 +125,17 @@ function summary(quests: EnrichedDungeonQuestDto[], signups: Signup[]): string {
     return `${quests.length} quests · ${grab} shareable to grab · ${chains} chains incomplete`;
 }
 
-/** QUEST PREP: the event page's location + pickup grouping with a chip per character. */
-export function QuestBreakdown({ quests, signups }: { quests: EnrichedDungeonQuestDto[]; signups: Signup[] }): JSX.Element {
+/** QUEST PREP: the event page's location + pickup grouping with a chip per character; `note` = the faction-filter line. */
+export function QuestBreakdown({ quests, signups, note }: {
+    quests: EnrichedDungeonQuestDto[]; signups: Signup[]; note: string | null;
+}): JSX.Element {
+    const noteLine = note && <p className="text-xs text-dim">{note}</p>;
     if (quests.length === 0) {
         return (
             <section aria-labelledby="planner-quests" className="space-y-1">
                 <h3 id="planner-quests" className="text-xs font-semibold uppercase tracking-wide text-muted">Quest prep</h3>
                 <p className="text-sm text-muted">No quest data for this dungeon yet.</p>
+                {noteLine}
             </section>
         );
     }
@@ -143,6 +147,7 @@ export function QuestBreakdown({ quests, signups }: { quests: EnrichedDungeonQue
                 </h3>
                 <span className="text-xs text-dim">as of 2h ago</span>
             </div>
+            {noteLine}
             <LocationGroup title="Get before you go in" icon="🗺️" quests={quests.filter((q) => !q.startsInsideDungeon)} signups={signups} />
             <LocationGroup title="Picked up inside" hint="Get these during the run" icon="🏰"
                 quests={quests.filter((q) => q.startsInsideDungeon)} signups={signups} />

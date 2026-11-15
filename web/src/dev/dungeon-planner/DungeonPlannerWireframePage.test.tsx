@@ -1,6 +1,7 @@
 /**
  * ROK-2207 — the dungeon-planner wireframe mounts in DEMO_MODE, lists Forever
- * dungeons only, shows the OQ2 options, restores a plan from the URL and its
+ * dungeons only, shows only the decided design (one dungeon per plan), filters
+ * quests to the guild's faction, restores a plan from the URL and its
  * Create-event links carry the proposed pre-fill.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -18,12 +19,23 @@ describe('DungeonPlannerWireframePage', () => {
         mockUseSystemStatus.mockReturnValue({ data: { demoMode: true }, isLoading: false });
     });
 
-    it('shows the OQ2 options and no pruned variants', () => {
+    it('shows only the decided design — no OQ2 "several dungeons" variant, no pruned variants', () => {
         renderWithProviders(<DungeonPlannerWireframePage />);
         expect(screen.getByRole('heading', { level: 1, name: /ROK-2207/ })).toBeInTheDocument();
-        expect(screen.getByText('Option A (recommended) — one dungeon per plan')).toBeInTheDocument();
-        expect(screen.getByText('Option B — several dungeons per plan')).toBeInTheDocument();
+        expect(screen.queryByText(/several dungeons per plan/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('combobox', { name: 'Add a dungeon to compare' })).not.toBeInTheDocument();
         expect(screen.queryByText('Option B — Overview widget')).not.toBeInTheDocument();
+    });
+
+    it('shows only the Alliance guild’s quests: the Horde ones are hidden and counted', () => {
+        renderWithProviders(<DungeonPlannerWireframePage />);
+        expect(screen.getAllByText('Alliance guild').length).toBeGreaterThan(0);
+        expect(screen.queryByRole('link', { name: /Sunreaver Orders/ })).not.toBeInTheDocument();
+        expect(screen.getAllByRole('link', { name: 'Silver Covenant Dispatch ↗' }).length).toBeGreaterThan(0);
+        const errands = screen.getAllByRole('link', { name: "The Archmage's Errand ↗" });
+        expect(errands.map((a) => a.getAttribute('href') ?? '').every((h) => h.includes('9100004'))).toBe(true);
+        expect(errands.some((a) => (a.getAttribute('href') ?? '').includes('9100104'))).toBe(false);
+        expect(screen.getAllByText('2 Horde quests hidden — this is an Alliance guild.').length).toBeGreaterThan(0);
     });
 
     it('lists Forever dungeons only, Upper Blackrock Spire in, Scarlet Halls out', () => {

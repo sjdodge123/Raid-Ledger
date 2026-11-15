@@ -77,13 +77,13 @@ function LinkOrDisabled({ to, label, primary, disabled }: { to: string; label: s
 }
 
 /** OQ3 Option B: plain pre-fill + "& invite these N" (N = characters actually passed). */
-export function CreateEventButtons({ plainUrl, inviteUrl, inviteCount, excluded, empty, plainLabel = 'Create event ▸' }: {
-    plainUrl: string; inviteUrl: string; inviteCount: number; excluded: string[]; empty: boolean; plainLabel?: string;
+export function CreateEventButtons({ plainUrl, inviteUrl, inviteCount, excluded, empty }: {
+    plainUrl: string; inviteUrl: string; inviteCount: number; excluded: string[]; empty: boolean;
 }): JSX.Element {
     return (
         <div className="space-y-1">
             <div className="flex flex-wrap gap-2">
-                <LinkOrDisabled to={plainUrl} label={plainLabel} primary disabled={empty} />
+                <LinkOrDisabled to={plainUrl} label="Create event ▸" primary disabled={empty} />
                 <LinkOrDisabled to={inviteUrl} label={`Create event & invite these ${inviteCount}`} primary={false}
                     disabled={empty || inviteCount === 0} />
             </div>
