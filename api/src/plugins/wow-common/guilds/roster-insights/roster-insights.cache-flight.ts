@@ -119,7 +119,10 @@ export class InsightsFlights {
     let stale = false;
     try {
       let gen = this.generation(key);
-      let data = await compute();
+      // Call through a resolved promise: a compute that throws synchronously
+      // must still reject after `run` has recorded the flight, or this
+      // `finally` runs first and the rejected flight sticks in `inFlight`.
+      let data = await Promise.resolve().then(compute);
       for (let n = 1; n < MAX_COMPUTE_ATTEMPTS; n++) {
         if (this.closed || this.generation(key) === gen) break;
         gen = this.generation(key);
