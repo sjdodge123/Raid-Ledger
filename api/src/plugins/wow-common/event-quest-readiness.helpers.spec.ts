@@ -45,6 +45,7 @@ const signup = (
   characterName: characterId ? `C${userId}` : null,
   charClass: null,
   charRace: 'Human',
+  charFaction: null,
   ...extra,
 });
 

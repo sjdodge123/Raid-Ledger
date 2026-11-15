@@ -21,6 +21,11 @@ import {
   type MergedProgressRow,
   type QuestDoneFn,
 } from './quest-progress-addon.helpers';
+import {
+  readinessColumns,
+  type ReadinessColumn,
+} from './event-quest-readiness.columns';
+import { characterSide, sharedSide } from './quest-faction.helpers';
 
 /** Contract caps (`wow-event-quest-readiness.schema.ts`). */
 export const MAX_READINESS_QUESTS = 200;
@@ -37,6 +42,8 @@ export interface ReadinessSignup {
   characterName: string | null;
   charClass: string | null;
   charRace: string | null;
+  /** Stored faction column; the side when the race is unknown (ROK-2211). */
+  charFaction: string | null;
 }
 
 /** Everything the builder needs, loaded in batched queries. */
@@ -123,22 +130,36 @@ function perQuestFor(
   };
 }
 
+/** The signup's usable variant of each column, reported under its id. */
+function signupPerQuest(
+  s: ReadinessSignup,
+  columns: ReadinessColumn[],
+  progress: SignupProgress,
+  lookup: Map<number, DungeonQuestDto>,
+): PerQuest[] {
+  return columns.flatMap(({ quest, variants }) => {
+    const usable = variants.find((q) =>
+      isQuestUsableBy(q, s.charClass, s.charRace, s.charFaction),
+    );
+    if (!usable) return [];
+    const cell = perQuestFor(usable, progress, lookup);
+    return [{ ...cell, questId: quest.questId }];
+  });
+}
+
 function signupRow(
   s: ReadinessSignup,
-  quests: DungeonQuestDto[],
+  columns: ReadinessColumn[],
   input: ReadinessInput,
   manual: ManualProgressRow[],
 ): SignupRow {
   const progress = signupProgress(s, input, manual);
-  const usable = quests.filter((q) =>
-    isQuestUsableBy(q, s.charClass, s.charRace),
-  );
   return {
     userId: s.userId,
     // The character the signup uses for this event (null = no character).
     characterId: s.characterId,
     name: (s.characterName ?? s.username).slice(0, 64),
-    perQuest: usable.map((q) => perQuestFor(q, progress, input.quests.lookup)),
+    perQuest: signupPerQuest(s, columns, progress, input.quests.lookup),
   };
 }
 
@@ -157,19 +178,27 @@ function groupManual(
 export function buildQuestReadiness(
   input: ReadinessInput,
 ): EventQuestReadinessDto {
-  const quests = input.quests.eventQuests
-    .filter((q) => q.dungeonInstanceId !== null)
-    // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
-    .slice(0, MAX_READINESS_QUESTS);
+  // ROK-2211: a single-faction roster sees only its side's quests.
+  const side = sharedSide(
+    input.signups.map((s) => characterSide(s.charRace, s.charFaction)),
+  );
+  const eventQuests = input.quests.eventQuests.filter(
+    (q) => q.dungeonInstanceId !== null,
+  );
+  // Capped at 100 signups / 200 quests; a `truncated` flag is a contract follow-up.
+  const columns = readinessColumns(eventQuests, side).slice(
+    0,
+    MAX_READINESS_QUESTS,
+  );
   const manual = groupManual(input.manual);
   return {
-    quests: quests.map((q) => ({
+    quests: columns.map(({ quest: q }) => ({
       questId: q.questId,
       title: q.name.slice(0, 200),
       instanceId: q.dungeonInstanceId ?? 0,
     })),
     signups: input.signups
       .slice(0, MAX_READINESS_SIGNUPS)
-      .map((s) => signupRow(s, quests, input, manual.get(s.userId) ?? [])),
+      .map((s) => signupRow(s, columns, input, manual.get(s.userId) ?? [])),
   };
 }
