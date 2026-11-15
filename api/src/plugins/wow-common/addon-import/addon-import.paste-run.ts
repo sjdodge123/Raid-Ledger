@@ -46,8 +46,10 @@ export async function runPaste(
   dryRun: boolean,
 ): Promise<PasteSectionRun[]> {
   const runs: PasteSectionRun[] = [];
+  const guild = paste.sections.guild?.payload;
+  const pasteGuild = guild ? { pasteGuild: guild } : {};
   for (const decoded of pasteSections(paste)) {
-    const sectionCtx = { ...ctx, sha256: decoded.sha256 };
+    const sectionCtx = { ...ctx, ...pasteGuild, sha256: decoded.sha256 };
     runs.push({
       decoded,
       outcome: await runSection(sectionCtx, decoded, dryRun),

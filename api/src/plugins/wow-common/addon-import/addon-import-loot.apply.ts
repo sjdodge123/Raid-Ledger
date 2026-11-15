@@ -9,10 +9,11 @@ import {
   type AddonApplyContext,
   type AddonSectionOutcome,
 } from './addon-import-apply.types';
+import { assertLootExporterInGuild } from './addon-import-loot.guild';
 import {
   countNewDrops,
   lootAtBucket,
-  lootDropRow,
+  lootDropRows,
   lootKeyString,
 } from './addon-import-loot.keys';
 
@@ -30,6 +31,11 @@ import {
  * of one guild are also serialised on the guild-import lock, which
  * `lockImportScope` takes for the loot section's guild key before any
  * section runs (apply only — previews take no lock).
+ *
+ * Both paths first require the exporter on the guild's roster
+ * (`assertLootExporterInGuild` → `NOT_IN_GUILD`); unguilded loot skips it.
+ * Rows insert in `lootKeyString` order, so two concurrent unguilded imports
+ * (no guild lock) lock overlapping keys in one order and cannot deadlock.
  *
  * Contract: `dryRun` → reads only, `status: 'preview'`; otherwise writes in
  * `ctx.tx` and returns `applied` (≥ 1 new drop) or `noop` (all duplicates).
@@ -84,6 +90,7 @@ async function previewLoot(
   ctx: AddonApplyContext,
   payload: AddonLootExport,
 ): Promise<LootOutcome> {
+  await assertLootExporterInGuild(ctx, payload);
   const { drops } = payload.data;
   const fresh =
     drops.length === 0
@@ -97,13 +104,14 @@ async function applyLoot(
   ctx: AddonApplyContext,
   payload: AddonLootExport,
 ): Promise<LootOutcome> {
+  await assertLootExporterInGuild(ctx, payload);
   const { drops } = payload.data;
   if (drops.length === 0) {
     return { status: 'noop', summary: buildLootSummary(payload, 0) };
   }
   const inserted = await ctx.tx
     .insert(guildLootDrops)
-    .values(drops.map((d) => lootDropRow(d, payload, ctx)))
+    .values(lootDropRows(drops, payload, ctx))
     .onConflictDoNothing()
     .returning({ id: guildLootDrops.id });
   return {

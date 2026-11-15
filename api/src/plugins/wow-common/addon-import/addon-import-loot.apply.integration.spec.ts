@@ -22,7 +22,10 @@ import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import {
   FIXTURE_EXPORTED_AT,
+  FIXTURE_GUID,
+  buildGuildPayload,
   buildImportString,
+  buildMember,
   buildWho,
 } from './testing/addon-fixture.builder';
 import { buildLootDrop, buildLootPayload } from './testing/addon-fixture.loot';
@@ -128,6 +131,38 @@ const lootRows = () =>
     .from(schema.guildLootDrops)
     .orderBy(schema.guildLootDrops.id);
 
+/**
+ * Review #2 — guilded loot needs the exporter on the guild's latest stored
+ * roster: seed 'Night Shift' (Ana + Bob in its latest snapshot).
+ */
+async function seedRoster(guids: string[]): Promise<number> {
+  const seenAt = new Date(FIXTURE_EXPORTED_AT * 1000);
+  const [guild] = nonEmpty(
+    await testApp.db
+      .insert(schema.guilds)
+      .values({
+        gameId,
+        region: 'us',
+        name: 'Night Shift',
+        nameKey: 'night shift',
+        source: 'addon_import',
+        lastSnapshotAt: seenAt,
+      })
+      .returning(),
+    'guild',
+  );
+  await testApp.db.insert(schema.guildMembers).values(
+    guids.map((guid, i) => ({
+      guildId: guild.id,
+      guid,
+      characterName: `Member ${i}`,
+      source: 'addon_import',
+      lastSeenAt: seenAt,
+    })),
+  );
+  return guild.id;
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
 });
@@ -137,6 +172,7 @@ beforeEach(async () => {
   const registry = testApp.app.get(PluginRegistryService);
   await registry.ensureInstalled('blizzard');
   await registry.activate('blizzard');
+  await seedRoster([FIXTURE_GUID, BOB_GUID]);
 });
 
 afterEach(async () => {
@@ -372,4 +408,81 @@ describe('ROK-2184 loot import — guild scope', () => {
       expect(inserted).toBe(6);
     },
   );
+});
+
+describe('ROK-2184 loot import — exporter must be on the guild roster (review #2)', () => {
+  /** Bob soft-removed: his row predates the guild's latest snapshot. */
+  async function dropBobFromLatestSnapshot() {
+    await testApp.db
+      .update(schema.guildMembers)
+      .set({ lastSeenAt: new Date((FIXTURE_EXPORTED_AT - 86_400) * 1000) })
+      .where(eq(schema.guildMembers.guid, BOB_GUID));
+  }
+
+  it.each([true, false])(
+    "a non-member's guilded loot is refused NOT_IN_GUILD (dryRun %s), nothing stored",
+    async (dryRun) => {
+      const b = await bob();
+      await dropBobFromLatestSnapshot();
+      const res = await post(
+        b.token,
+        b.charId,
+        lootPaste([dropAt(0, 5)], bobWho()),
+        dryRun,
+      );
+      expect([res.status, res.body.code]).toEqual([422, 'NOT_IN_GUILD']);
+      expect(await lootRows()).toHaveLength(0);
+    },
+  );
+
+  it('a guild with no stored roster refuses NOT_IN_GUILD; the member of a stored roster is stored', async () => {
+    const a = await ana();
+    const other = { ...buildWho(), guildName: 'Day Shift' };
+    const refused = await post(
+      a.token,
+      a.charId,
+      lootPaste([dropAt(0, 5)], other),
+      false,
+    );
+    expect([refused.status, refused.body.code]).toEqual([422, 'NOT_IN_GUILD']);
+    const stored = await post(
+      a.token,
+      a.charId,
+      lootPaste([dropAt(0, 5)]),
+      false,
+    );
+    expect([stored.status, stored.body.status]).toEqual([200, 'applied']);
+    expect((await lootRows()).map((r) => r.guildKey)).toEqual(['night shift']);
+  });
+
+  it("the same paste's guild section is the roster: a first-ever guild + loot preview passes", async () => {
+    const a = await ana();
+    const who = { ...buildWho(), guildName: 'Day Shift' };
+    const base = buildGuildPayload([buildMember(0, { guid: FIXTURE_GUID })]);
+    const guild = {
+      ...base,
+      schema: 2,
+      who,
+      data: { ...base.data, name: 'Day Shift' },
+    };
+    const paste = [
+      lootPaste([dropAt(0, 5)], who),
+      buildImportString(guild, { version: 2 }),
+    ].join('\n');
+    const res = await post(a.token, a.charId, paste, true);
+    expect([res.status, res.body.code]).toEqual([200, undefined]);
+    expect(await lootRows()).toHaveLength(0);
+  });
+
+  it("unguilded loot is not checked: a soft-removed member's solo loot stores", async () => {
+    const b = await bob();
+    await dropBobFromLatestSnapshot();
+    const res = await post(
+      b.token,
+      b.charId,
+      lootPaste([dropAt(0, 5)], unguilded(bobWho())),
+      false,
+    );
+    expect([res.status, res.body.status]).toEqual([200, 'applied']);
+  });
 });
