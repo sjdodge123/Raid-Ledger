@@ -9,7 +9,7 @@
  */
 import { count, eq, sql } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { getTestApp, type TestApp } from './test-app';
+import { getTestApp, TEST_DB_POOL_MAX, type TestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
 import { nonEmpty } from './narrow';
 
@@ -42,17 +42,17 @@ describe('truncateAllTables single-statement reset (integration)', () => {
 
   it('leaves every pooled connection with session_replication_role = origin', async () => {
     testApp.seed = await truncateAllTables(testApp.db);
-    // Ten parallel reads fan out over the pool (max 10), so the connection
-    // that ran the DO block is among them.
+    // One parallel read per pooled connection fans out over the whole pool,
+    // so the connection that ran the DO block is among them.
     const results = await Promise.all(
-      Array.from({ length: 10 }, () =>
+      Array.from({ length: TEST_DB_POOL_MAX }, () =>
         testApp.db.execute<{ role: string }>(
           sql`SELECT current_setting('session_replication_role') AS role`,
         ),
       ),
     );
     const roles = results.flatMap((rows) => Array.from(rows, (r) => r.role));
-    expect(roles).toHaveLength(10);
+    expect(roles).toHaveLength(TEST_DB_POOL_MAX);
     expect(new Set(roles)).toEqual(new Set(['origin']));
   });
 

@@ -12,8 +12,9 @@
  * The bracketed `truncate.*` split (summed over every truncate call) appears
  * only when `truncateAllTables` recorded its sub-phases.
  *
- * Unset, every entry point is a no-op apart from a `performance.now()` read:
- * no output, no extra awaits, no behaviour change. State lives on the spec
+ * Unset, nothing is printed and behaviour is unchanged; the only cost is a
+ * `performance.now()` read per entry point, plus one async wrapper (and its
+ * await) per `timePhase` call. State lives on the spec
  * file's own sandbox `globalThis` so a `jest.resetModules()` cannot split it.
  */
 import * as path from 'path';
