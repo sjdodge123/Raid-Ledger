@@ -12,6 +12,7 @@ import { REDIS_CLIENT } from '../../redis/redis.module';
 import { redisSwr } from '../../common/swr-cache';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { loadBossLoot } from './boss-loot.query';
+import { resolveSubInstance } from './boss-encounters.wings';
 
 /** Cache key prefix for WoW Classic boss data */
 const CACHE_PREFIX = 'wow:bosses';
@@ -31,32 +32,6 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   // ROK-1719: vanilla content plus Forever's own; ROK-2170: a boss's forever
   // loot rows replace its classic ones (see preferForeverLoot in boss-loot.query.ts).
   wow_forever: ['classic', 'forever'],
-};
-
-/**
- * Sub-instance wing-to-boss mapping for multi-wing dungeons.
- *
- * Synthetic sub-instance IDs are generated as `parentId * 100 + suffix`
- * (e.g., SM parent = 316, SM:Armory = 31603). Boss data is seeded under
- * the parent instance ID, so when a sub-instance is queried we need to
- * filter the parent's boss list to only the bosses belonging to that wing.
- *
- * Key format: `${parentId}:${suffix}` — value is the set of boss names.
- */
-const SUB_INSTANCE_BOSSES: Record<string, Set<string>> = {
-  // Scarlet Monastery (parent 316)
-  '316:1': new Set(['Interrogator Vishas', 'Bloodmage Thalnos']), // SM: Graveyard
-  '316:2': new Set(['Houndmaster Loksey', 'Arcanist Doan']), // SM: Library
-  '316:3': new Set(['Herod']), // SM: Armory
-  '316:4': new Set([
-    'High Inquisitor Fairbanks',
-    'Scarlet Commander Mograine',
-    'High Inquisitor Whitemane',
-  ]), // SM: Cathedral
-  // Maraudon (journal parent 232)
-  '232:1': new Set(['Noxxion', 'Razorlash', 'Lord Vyletongue']), // Purple
-  '232:2': new Set(['Celebras the Cursed', 'Landslide']), // Orange
-  '232:3': new Set(['Tinkerer Gizlock', 'Rotgrip', 'Princess Theradras']), // Inner
 };
 
 /**
@@ -105,25 +80,12 @@ export class BossEncountersService {
     return result ?? [];
   }
 
-  /** Resolve sub-instance ID to parent + wing boss filter. */
-  private resolveSubInstance(instanceId: number): {
-    queryId: number;
-    wingBossNames?: Set<string> | undefined;
-  } {
-    if (instanceId <= 10000) return { queryId: instanceId };
-    const parentId = Math.floor(instanceId / 100);
-    return {
-      queryId: parentId,
-      wingBossNames: SUB_INSTANCE_BOSSES[`${parentId}:${instanceId % 100}`],
-    };
-  }
-
   private async fetchBossesForInstance(
     instanceId: number,
     variant: string,
   ): Promise<BossEncounterDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
-    const { queryId, wingBossNames } = this.resolveSubInstance(instanceId);
+    const { queryId, wingBossNames } = resolveSubInstance(instanceId);
     const rows = await this.db
       .select()
       .from(wowClassicBosses)
