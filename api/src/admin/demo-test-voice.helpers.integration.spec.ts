@@ -10,7 +10,10 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
-import { injectVoiceSessionForTest } from './demo-test-voice.helpers';
+import {
+  injectVoiceSessionForTest,
+  triggerClassifyForTest,
+} from './demo-test-voice.helpers';
 
 const DISCORD_ID = '1494000000000000943';
 
@@ -41,6 +44,42 @@ async function seedEndedEvent(): Promise<{ id: number; start: Date }> {
     'event',
   );
   return { id: event.id, start };
+}
+
+/** The cron's no-show pair: a 0-second no_show session + voice attendance. */
+async function seedCronNoShow(
+  event: { id: number; start: Date },
+  attendance: { status: string; source: string },
+): Promise<void> {
+  await testApp.db.insert(schema.eventVoiceSessions).values({
+    eventId: event.id,
+    userId: testApp.seed.adminUser.id,
+    discordUserId: DISCORD_ID,
+    discordUsername: 'Unknown',
+    firstJoinAt: event.start,
+    lastLeaveAt: event.start,
+    totalDurationSec: 0,
+    classification: 'no_show',
+  });
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId: event.id,
+    userId: testApp.seed.adminUser.id,
+    discordUserId: DISCORD_ID,
+    attendanceStatus: attendance.status,
+    attendanceSource: attendance.source,
+    attendanceRecordedAt: new Date(),
+  });
+}
+
+async function readAttendance(eventId: number) {
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId)),
+    'signup',
+  );
+  return row;
 }
 
 async function readSession(eventId: number) {
@@ -97,5 +136,40 @@ describe('injectVoiceSessionForTest', () => {
     const rows = await readSession(event.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.totalDurationSec).toBe(1200);
+  });
+
+  it('a re-classify after the inject records the injected session, not the cron no-show', async () => {
+    const event = await seedEndedEvent();
+    await seedCronNoShow(event, { status: 'no_show', source: 'voice' });
+
+    await injectVoiceSessionForTest(testApp.db, {
+      eventId: event.id,
+      discordUserId: DISCORD_ID,
+      userId: testApp.seed.adminUser.id,
+      durationSec: 3300,
+    });
+    await triggerClassifyForTest(testApp.db, event.id);
+
+    const signup = await readAttendance(event.id);
+    expect(signup.attendanceStatus).toBe('attended');
+    expect(signup.attendanceSource).toBe('voice');
+    const [session] = nonEmpty(await readSession(event.id), 'session');
+    expect(session.classification).not.toBe('no_show');
+  });
+
+  it('keeps attendance an organizer recorded', async () => {
+    const event = await seedEndedEvent();
+    await seedCronNoShow(event, { status: 'excused', source: 'manual' });
+
+    await injectVoiceSessionForTest(testApp.db, {
+      eventId: event.id,
+      discordUserId: DISCORD_ID,
+      userId: testApp.seed.adminUser.id,
+      durationSec: 3300,
+    });
+
+    const signup = await readAttendance(event.id);
+    expect(signup.attendanceStatus).toBe('excused');
+    expect(signup.attendanceSource).toBe('manual');
   });
 });
