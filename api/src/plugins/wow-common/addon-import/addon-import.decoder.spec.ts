@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import zlib from 'node:zlib';
 import {
   ADDON_IMPORT_MAX_BYTES,
@@ -6,7 +8,12 @@ import {
   AddonImportErrorCodeSchema,
   type AddonImportErrorCode,
 } from '@raid-ledger/contract';
-import { decodeImportString } from './addon-import.decoder';
+import { decodeImportPaste, decodeImportString } from './addon-import.decoder';
+import {
+  assertOneVersion,
+  MIXED_VERSION_MESSAGE,
+  parsePageHeader,
+} from './addon-import.pages';
 import { AddonImportError } from './addon-import.errors';
 import {
   ADDON_JSON_MAX_ARRAY,
@@ -25,6 +32,7 @@ import {
   FIXTURE_ITEM_LINK,
   wrapImportBytes,
 } from './testing/addon-fixture.builder';
+import { buildLootDrop, buildLootPayload } from './testing/addon-fixture.loot';
 import { pinExportClock } from './testing/pin-export-clock';
 
 pinExportClock();
@@ -241,8 +249,14 @@ describe('decodeImportString — header + base64', () => {
   });
 
   it('rejects a newer envelope version, saying Raid Ledger needs an update', () => {
-    const err = expectReject(`!RL2!char!${body}`, 'UNSUPPORTED_VERSION');
+    const err = expectReject(`!RL3!char!${body}`, 'UNSUPPORTED_VERSION');
     expect(err.body.message).toMatch(/raid ledger needs an update/i);
+  });
+
+  it('rejects a v2 header around a schema-1 body as UNSUPPORTED_VERSION with a mismatch message', () => {
+    const err = expectReject(`!RL2!char!${body}`, 'UNSUPPORTED_VERSION');
+    expect(err.body.message).toMatch(/header and contents disagree/i);
+    expect(err.body.message).not.toMatch(/raid ledger needs an update/i);
   });
 
   it('rejects a string truncated by 10 characters as CUT_OFF', () => {
@@ -491,5 +505,147 @@ describe('sanitize helpers', () => {
     ['non-numeric id', '|Hitem:abc|h', { itemId: null, bonusIds: [] }],
   ])('degrades safely: %s', (_label, link, expected) => {
     expect(parseItemLink(link)).toEqual(expected);
+  });
+});
+
+// ROK-2184 — LedgerLink v1 + v2 acceptance: version × section matrix (AC 1, 2, 4).
+const LEDGERLINK = join(
+  __dirname,
+  '../../../../../packages/contract/ledgerlink',
+);
+const fixtureText = (version: 'v1' | 'v2', name: string): string =>
+  readFileSync(join(LEDGERLINK, version, 'fixtures', `${name}.txt`), 'utf8');
+const fixtureView = (version: 'v1' | 'v2', name: string): unknown =>
+  JSON.parse(
+    readFileSync(join(LEDGERLINK, version, 'fixtures', `${name}.json`), 'utf8'),
+  );
+
+describe('decodeImportPaste — v1 and v2 envelopes (ROK-2184)', () => {
+  it.each([
+    'char-normal',
+    'guild-1-page',
+    'guild-3-pages',
+    'raid',
+    'mixed-char-raid',
+  ])(
+    'decodes the !RL2! twin of %s to the v1 sections with schema 2',
+    (name) => {
+      const v1 = decodeImportPaste(fixtureText('v1', name));
+      const v2 = decodeImportPaste(fixtureText('v2', name));
+      expect(v2.order).toEqual(v1.order);
+      for (const section of v1.order) {
+        const one = v1.sections[section];
+        expect(one?.payload.schema).toBe(1);
+        expect(v2.sections[section]?.payload).toEqual({
+          ...one?.payload,
+          schema: 2,
+        });
+      }
+    },
+  );
+
+  it('decodes a v2 loot string verbatim, raw item links kept', () => {
+    const decoded = decodeImportPaste(fixtureText('v2', 'loot'));
+    expect(decoded.order).toEqual(['loot']);
+    expect(decoded.sections.loot?.payload).toEqual(
+      (fixtureView('v2', 'loot') as { payload: unknown }).payload,
+    );
+  });
+
+  it('strips control characters from a loot link but keeps its WoW escapes', () => {
+    const clean = '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunderfury]|h|r';
+    const dirty =
+      '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunder\u0000fury]|h\u0007\u0085|r';
+    const s = buildImportString(
+      {
+        ...buildLootPayload([buildLootDrop(0, { link: dirty })]),
+        who: buildWho(),
+      },
+      { version: 2 },
+    );
+    const drops = decodeImportPaste(s).sections.loot?.payload.data.drops;
+    expect(drops?.[0]?.link).toBe(clean);
+  });
+
+  it('omits a loot link made only of control characters', () => {
+    const s = buildImportString(
+      {
+        ...buildLootPayload([buildLootDrop(0, { link: '\u0000\u0007\u009f' })]),
+        who: buildWho(),
+      },
+      { version: 2 },
+    );
+    const drop = decodeImportPaste(s).sections.loot?.payload.data.drops[0];
+    expect(drop).toBeDefined();
+    expect(drop && 'link' in drop).toBe(false);
+  });
+
+  it('decodes a v2 "Export all" with loot in canonical order', () => {
+    const decoded = decodeImportPaste(
+      fixtureText('v2', 'mixed-char-guild3-raid-loot'),
+    );
+    expect(decoded.order).toEqual(['char', 'guild', 'raid', 'loot']);
+    expect(decoded.tokens).toBe(6);
+  });
+
+  it.each(
+    readdirSync(join(LEDGERLINK, 'v2', 'fixtures', 'invalid'))
+      .filter((f) => f.endsWith('.txt'))
+      .map((f) => f.replace(/\.txt$/, '')),
+  )('rejects v2 invalid fixture %s with its declared code', (name) => {
+    const { code } = fixtureView('v2', `invalid/${name}`) as {
+      code: AddonImportErrorCode;
+    };
+    expectReject(fixtureText('v2', `invalid/${name}`), code);
+  });
+
+  it('rejects a v1 header carrying the loot section as BAD_HEADER', () => {
+    const loot = fixtureText('v2', 'loot').trim();
+    expectReject(loot.replace(/^!RL2!/, '!RL1!'), 'BAD_HEADER');
+  });
+
+  it('rejects a mixed !RL1! / !RL2! paste as UNSUPPORTED_VERSION', () => {
+    const paste = `${fixtureText('v1', 'char-normal').trim()}\n${fixtureText('v2', 'raid').trim()}`;
+    const err = expectReject(paste, 'UNSUPPORTED_VERSION');
+    expect(err.body.message).toBe(MIXED_VERSION_MESSAGE);
+  });
+
+  it('keeps the v1 token cap at 10 while v2 admits 11', () => {
+    const v1Pages = fixtureText('v1', 'guild-1-page').trim();
+    expectReject(Array(11).fill(v1Pages).join('\n'), 'PAGES_INCOMPLETE');
+    const v2Pages = fixtureText('v2', 'guild-1-page').trim();
+    expectReject(Array(12).fill(v2Pages).join('\n'), 'PAGES_INCOMPLETE');
+  });
+});
+
+describe('assertOneVersion (ROK-2184 ruling Q6)', () => {
+  const body = 'eJxLy8xLBQAGSwJF';
+  it('returns the single version of a one-version paste', () => {
+    const headers = [`!RL2!char!${body}`, `!RL2!loot!${body}`].map(
+      parsePageHeader,
+    );
+    expect(assertOneVersion(headers)).toBe(2);
+  });
+
+  it('rejects headers of two versions with the mixed-version message', () => {
+    const headers = [`!RL1!char!${body}`, `!RL2!raid!${body}`].map(
+      parsePageHeader,
+    );
+    let caught: unknown;
+    try {
+      assertOneVersion(headers);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(AddonImportError);
+    const err = caught as AddonImportError;
+    expect(err.body.code).toBe('UNSUPPORTED_VERSION');
+    expect(err.body.message).toBe(MIXED_VERSION_MESSAGE);
+  });
+
+  it('rejects a paged loot header as BAD_HEADER', () => {
+    expect(() => parsePageHeader(`!RL2!loot-1of2!${body}`)).toThrow(
+      AddonImportError,
+    );
   });
 });

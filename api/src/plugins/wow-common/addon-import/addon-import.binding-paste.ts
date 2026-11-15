@@ -1,4 +1,4 @@
-import type { AddonExportSection } from '@raid-ledger/contract';
+import type { AddonExportSectionV2 } from '@raid-ledger/contract';
 import {
   bindToCharacter,
   type AddonBindingCharacter,
@@ -9,7 +9,7 @@ import {
 
 /** A decoded section's envelope as the paste binding reads it. */
 export interface AddonBindingSection extends AddonBindingPayload {
-  section: AddonExportSection;
+  section: AddonExportSectionV2;
   exportedAt: number;
 }
 

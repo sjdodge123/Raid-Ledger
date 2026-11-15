@@ -229,6 +229,9 @@ export * from './wow-addon-import.schema.js';
 export * from './wow-addon-mailworthy.schema.js';
 // Installed addons on the LedgerLink char export (ROK-2147).
 export * from './wow-addon-installed.schema.js';
+// LedgerLink v2 (ROK-2184): `loot` section + the `!RL2!` envelope.
+export * from './wow-addon-loot.schema.js';
+export * from './wow-addon-v2.schema.js';
 export * from './wow-guild-contributions.schema.js';
 export * from './wow-forever-realm-rulesets.schema.js';
 // WoW: Forever classic quest import run report (ROK-2143).

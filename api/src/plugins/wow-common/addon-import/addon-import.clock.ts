@@ -7,8 +7,8 @@ import type { DecodedAddonExport } from './addon-import.decoder';
  * `last_snapshot_at` freshness check and lock the guild against honest
  * imports. Bound every export timestamp by the SERVER clock at decode time:
  * nothing more than a day ahead (clock skew), and the export itself / a guild
- * snapshot no older than a year. Raid pulls only get the future bound — an
- * old pull history is legitimate.
+ * snapshot no older than a year. Raid pulls and (ROK-2184 D9) loot drops /
+ * the loot window only get the future bound — old history is legitimate.
  */
 const DAY_S = 86_400;
 export const EXPORT_MAX_FUTURE_S = DAY_S;
@@ -36,6 +36,11 @@ function exportStamps(p: DecodedAddonExport): {
   if (p.section === 'raid') {
     const pulls = p.data.pulls.flatMap((pull) => [pull.startAt, pull.endAt]);
     return { recent: [p.exportedAt], past: pulls };
+  }
+  if (p.section === 'loot') {
+    const { windowStart, windowEnd, drops } = p.data;
+    const at = drops.map((drop) => drop.at);
+    return { recent: [p.exportedAt], past: [windowStart, windowEnd, ...at] };
   }
   return { recent: [p.exportedAt], past: [] };
 }

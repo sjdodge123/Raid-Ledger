@@ -71,6 +71,7 @@ export * from './schema/discord-thread-messages';
 export * from './schema/character-addon-snapshots';
 export * from './schema/character-installed-addons';
 export * from './schema/addon-encounter-pulls';
+export * from './schema/guild-loot-drops';
 export * from './schema/addon-import-audit';
 export * from './schema/wow-item-meta';
 export * from './schema/guilds';

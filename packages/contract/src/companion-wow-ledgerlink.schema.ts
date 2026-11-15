@@ -27,7 +27,7 @@ export const COMPANION_WOW_LEDGERLINK_EXPORT_MAX = 260_096;
 /** Decoded JSON body cap for a `wow-ledgerlink` v1 message: the global ceiling. */
 export const COMPANION_WOW_LEDGERLINK_MAX_BYTES = COMPANION_MESSAGE_MAX_BYTES;
 
-/** The payload: one LedgerLink v1 export string (one or more `!RL1!` tokens, newline-separated). */
+/** The payload: one LedgerLink v1 or v2 export string (one or more `!RL1!` or `!RL2!` tokens, newline-separated). */
 export const WowLedgerlinkPayloadSchema = z.object({
     exportString: z.string().min(1).max(COMPANION_WOW_LEDGERLINK_EXPORT_MAX),
 }).strict();
