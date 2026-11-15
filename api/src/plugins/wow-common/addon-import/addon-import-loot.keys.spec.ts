@@ -10,6 +10,7 @@ import {
   countNewDrops,
   lootAtBucket,
   lootDropRow,
+  lootDropRows,
   lootKeyOfDrop,
   lootKeyString,
   lootLooterKey,
@@ -128,6 +129,31 @@ describe('lootDropRow', () => {
       link: null,
       quality: null,
     });
+  });
+
+  it('lootDropRows sorts rows by dedup key, whatever the payload order', () => {
+    const drops = [3, 0, 2, 1].map((i) =>
+      buildLootDrop(i, { looterName: `L${i}`, looterGuid: `G-${3 - i}` }),
+    );
+    const rows = lootDropRows(drops, buildLootPayload(drops), ctx);
+    const keys = rows.map((r) =>
+      lootKeyString({ ...r, instanceId: r.instanceId ?? null }),
+    );
+    expect(keys).toEqual([...keys].sort());
+    expect(rows.map((r) => r.looterKey)).toEqual(['G-0', 'G-1', 'G-2', 'G-3']);
+    const reversed = lootDropRows(
+      [...drops].reverse(),
+      buildLootPayload(drops),
+      ctx,
+    );
+    expect(reversed.map((r) => r.itemId)).toEqual(rows.map((r) => r.itemId));
+  });
+
+  it("lootDropRows keeps a payload's duplicate keys in payload order (first copy wins)", () => {
+    const first = buildLootDrop(0, { quality: 3 });
+    const second = buildLootDrop(0, { quality: 4 });
+    const rows = lootDropRows([first, second], buildLootPayload([first]), ctx);
+    expect(rows.map((r) => r.quality)).toEqual([3, 4]);
   });
 });
 

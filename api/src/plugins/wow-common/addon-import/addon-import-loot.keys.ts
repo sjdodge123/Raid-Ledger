@@ -95,3 +95,19 @@ export function lootDropRow(
     payloadSha256: ctx.sha256,
   };
 }
+
+/**
+ * Every drop's row, sorted by dedup key (`lootKeyString`, code-unit order;
+ * stable, so a payload's first copy of a key still wins). Unguilded imports
+ * take no lock: one key order means overlapping inserts never deadlock.
+ */
+export function lootDropRows(
+  drops: AddonLootDrop[],
+  payload: AddonLootExport,
+  ctx: AddonApplyContext,
+): GuildLootDropInsert[] {
+  return drops
+    .map((drop) => ({ key: lootKeyString(lootKeyOfDrop(drop)), drop }))
+    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+    .map(({ drop }) => lootDropRow(drop, payload, ctx));
+}
