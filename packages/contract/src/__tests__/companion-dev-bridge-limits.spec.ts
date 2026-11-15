@@ -1,8 +1,8 @@
 /**
- * ROK-2055 — dev-bridge v1 size guarantees, the Queue.lua payload and log redaction.
+ * ROK-2055 — dev-bridge v1 size guarantees, the DevQueue.lua payload and log redaction.
  * - every `/dev/v1/*` body is ≤ DEV_BRIDGE_PAGE_MAX_BYTES serialised (UTF-8), enforced by the schema;
  * - the echoed probe request and each probe-result item are byte-capped so ONE page always fits;
- * - the Queue.lua JSON (`probe-queue`) is the request in output form + `probeId`, flavor resolved;
+ * - the DevQueue.lua JSON (`probe-queue`) is the request in output form + `probeId`, flavor resolved;
  * - log lines refuse a bearer value in any letter case.
  */
 import { describe, expect, it } from 'vitest';
@@ -65,7 +65,7 @@ describe('probe request size cap (Codex P2-a, round-2 MAJOR-1)', () => {
         expect(DevBridgeProbeRequestSchema.safeParse(atCap).success).toBe(true);
     });
 
-    it('the same request, queued with the longest flavor and a probeId, is a valid Queue.lua entry', () => {
+    it('the same request, queued with the longest flavor and a probeId, is a valid DevQueue.lua entry', () => {
         const res = DevBridgeProbeQueueFileSchema.safeParse({ queueVersion: 1, probes: [entry] });
         expect(paths(res)).toEqual([]);
     });
@@ -117,7 +117,7 @@ describe('probe result item caps (Codex P2-a)', () => {
     });
 });
 
-describe('probe-queue (Queue.lua payload, MAJOR-2)', () => {
+describe('probe-queue (DevQueue.lua payload, MAJOR-2)', () => {
     const entry = {
         probeId: ID,
         title: 'Quote check',
