@@ -40,6 +40,8 @@ export class InsightsFlights {
   private readonly queued = new Map<string, InsightsCompute>();
   /** Warms asked for while the key was in flight; replayed if it lands stale. */
   private readonly rewarm = new Map<string, InsightsCompute>();
+  /** Keys whose in-flight compute is itself a warm (takes no mark). */
+  private readonly warming = new Set<string>();
   private activeWarms = 0;
   private closed = false;
   private readonly logger = new Logger('RosterInsightsCache');
@@ -77,12 +79,14 @@ export class InsightsFlights {
   /**
    * Queue a background warm of `key` (no-op once closed). While the key is in
    * flight the running compute absorbs the bump, so the warm is only marked —
-   * and replayed if that compute exhausts its attempts without storing.
+   * and replayed if that compute exhausts its attempts without storing. A
+   * running warm (first or replayed) takes no mark: a key superseded on every
+   * attempt gets at most one replay, then stays cold until the next get.
    */
   scheduleWarm(key: string, compute: InsightsCompute): void {
     if (this.closed) return;
     if (this.inFlight.has(key)) {
-      this.rewarm.set(key, compute);
+      if (!this.warming.has(key)) this.rewarm.set(key, compute);
       return;
     }
     this.queued.set(key, compute);
@@ -127,6 +131,7 @@ export class InsightsFlights {
       return { data, current };
     } finally {
       this.inFlight.delete(key);
+      this.warming.delete(key);
       this.replayRewarm(key, stale);
     }
   }
@@ -156,6 +161,7 @@ export class InsightsFlights {
 
   private startWarm(key: string, compute: InsightsCompute): void {
     this.activeWarms++;
+    this.warming.add(key);
     void this.run(key, compute)
       .catch((err: unknown) =>
         this.warn(`roster-insights warm failed for ${key}`, err),

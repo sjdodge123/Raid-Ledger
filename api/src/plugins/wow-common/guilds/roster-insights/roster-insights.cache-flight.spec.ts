@@ -97,6 +97,34 @@ describe('InsightsFlights.scheduleWarm while in flight', () => {
     expect(hooks.store).toHaveBeenCalledWith('k', dto('warm'));
   });
 
+  it('replays a mark once — the replayed warm takes no mark of its own', async () => {
+    const hooks = makeHooks();
+    const flights = new InsightsFlights(hooks);
+    const superseded = jest.fn(() => {
+      flights.bumpPrefix('k');
+      return Promise.resolve(dto('stale'));
+    });
+    // Every warm attempt asks for another warm and is superseded; the cap
+    // only keeps a regression (self-re-marking replay) from spinning forever.
+    const warm = jest.fn(async () => {
+      await Promise.resolve();
+      if (warm.mock.calls.length < 10) flights.scheduleWarm('k', warm);
+      flights.bumpPrefix('k');
+      return dto('stale');
+    });
+    const flight = flights.run('k', superseded);
+    flights.scheduleWarm('k', warm);
+    await flight;
+    expect(flights.isRunning('k')).toBe(true);
+    const unused = jest.fn(() => Promise.resolve(dto('unused')));
+    expect((await flights.run('k', unused)).current).toBe(false);
+    expect(warm).toHaveBeenCalledTimes(MAX_COMPUTE_ATTEMPTS);
+    expect(flights.isRunning('k')).toBe(false);
+    expect(unused).not.toHaveBeenCalled();
+    expect(hooks.store).not.toHaveBeenCalled();
+    await flights.close();
+  });
+
   it('drops the warm mark when the in-flight compute stores', async () => {
     const hooks = makeHooks();
     const flights = new InsightsFlights(hooks);
