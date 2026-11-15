@@ -20,6 +20,7 @@ import { SETTING_KEYS } from '../../../drizzle/schema/app-settings';
 import { SettingsService } from '../../../settings/settings.service';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_QUEST_IMPORT_KEY } from '../forever.settings';
+import { questAreaTargets } from './forever-quest-areas';
 import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
   FOREVER_QUEST_IMPORT_RUNNING_CODE,
@@ -199,7 +200,8 @@ describe('POST /admin/plugins/blizzard/forever-quests/import (ROK-2143)', () => 
     const { body } = await testApp.request.get(ROUTE).set(auth(adminToken));
     expect(body.status).toBe('succeeded');
     expect(typeof body.finishedAt).toBe('string');
-    expect(body.mismatchedAreas).toHaveLength(18);
+    // Every crawled area but The Stockade (ROK-1908: Forever-new ones too).
+    expect(body.mismatchedAreas).toHaveLength(questAreaTargets().length - 1);
     expect(body.mismatchedAreas).toContainEqual(
       expect.objectContaining({
         instanceId: 63,

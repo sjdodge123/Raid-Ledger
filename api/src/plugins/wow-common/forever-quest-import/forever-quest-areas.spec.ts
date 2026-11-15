@@ -54,8 +54,10 @@ describe('foreverQuestAreaTargets (ROK-1908)', () => {
     ];
     for (const [areaId, name] of seen) {
       const entry = byArea.get(areaId);
-      expect({ areaId, matches: entry ? areaNameMatches(entry, name) : null })
-        .toEqual({ areaId, matches: true });
+      expect({
+        areaId,
+        matches: entry ? areaNameMatches(entry, name) : null,
+      }).toEqual({ areaId, matches: true });
     }
   });
 });
@@ -73,7 +75,9 @@ describe('questAreaTargets (ROK-1908)', () => {
 describe('primaryQuestArea (ROK-1908)', () => {
   it("is an instance's first catalogue area, else null", () => {
     expect(primaryQuestArea(DALARAN)?.areaId).toBe(16544);
-    expect(primaryQuestArea(234)?.areaId).toBe(CLASSIC_QUEST_AREAS[234]?.areaId);
+    expect(primaryQuestArea(234)?.areaId).toBe(
+      CLASSIC_QUEST_AREAS[234]?.areaId,
+    );
     expect(primaryQuestArea(1)).toBeNull();
   });
 });
