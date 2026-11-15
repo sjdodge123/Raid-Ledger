@@ -2,9 +2,11 @@
  * ROK-2210 guard: every WoW Classic/Forever instance id→name, name→level and
  * zone→id table lives in `instance-catalogue/`. A source scan (comments
  * stripped) of api/src, api/scripts and web/src fails on a new hand-rolled
- * table anywhere else. Lanes 1b–1d shrink PENDING_MIGRATION; 1d ends it empty.
+ * table anywhere else. Lanes 1b–1d migrated every pending file; the list is
+ * now empty and must stay so. A fixture tree proves each detector still fires.
  */
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { stripComments } from '../../../common/testing/strip-comments';
 import {
@@ -24,25 +26,10 @@ const TEST_RE = /\.(spec|test)\.(ts|tsx|mjs|js)$|\.d\.ts$/;
 const SMALL_IDS = new Set([63, 64, 76]);
 
 /**
- * Files lanes 1b–1d migrate onto the catalogue. Never add to this list;
- * each lane deletes the entries it converts (one per line — R8).
+ * Files awaiting migration onto the catalogue. Lanes 1b–1d emptied it; a
+ * test asserts it stays empty — a real exemption goes in ALLOWED with a reason.
  */
-const PENDING_MIGRATION: readonly string[] = [
-  // lane 1b — §f 15 (old name-keyed level/short-name tables)
-  'api/src/plugins/wow-common/blizzard-instance-data.ts',
-  // lane 1c — §f 6 (JOURNAL_NAMES id→name map)
-  'api/src/plugins/wow-common/dungeon-instance-names.ts',
-  // lane 1c — §f 6 (CLASSIC_WING_PARENT_IDS)
-  'api/src/plugins/wow-common/forever-instance-aliases.ts',
-  // lane 1d — §f 9 (CLASSIC_QUEST_AREAS keyed by instance id)
-  'api/src/plugins/wow-common/forever-quest-import/classic-quest-areas.ts',
-  // lane 1d — §f 12 (ZONE_TO_INSTANCE zone→id map)
-  'api/scripts/import-forever-boss-loot.mjs',
-  // lane 1d — NOT in the spec §f list: SUB_INSTANCE_PARENTS wing map (found by 1a)
-  'api/scripts/fetch-boss-data.mjs',
-  // lane 1d — §f 17 (demo raid fixture: 90_000_001 "Molten Core" literal)
-  'api/src/admin/demo-test-guild-raids.helpers.ts',
-];
+const PENDING_MIGRATION: readonly string[] = [];
 
 /** Legitimate non-catalogue tables, each with its reason. */
 const ALLOWED: Readonly<Record<string, string>> = {};
@@ -74,15 +61,28 @@ function scanText(text: string): CatalogueScanHit[] {
   return scanCatalogueSource(stripComments(text), VOCAB, NAME_RE);
 }
 
-const OFFENDERS: ReadonlyMap<string, CatalogueScanHit[]> = new Map(
-  ROOTS.flatMap((root) => walk(path.join(REPO, root)))
-    .map((file) => path.relative(REPO, file))
-    .filter((rel) => !rel.startsWith(`${MODULE_DIR}${path.sep}`))
-    .map((rel): [string, CatalogueScanHit[]] => [
-      rel,
-      scanText(fs.readFileSync(path.join(REPO, rel), 'utf8')),
-    ])
-    .filter(([, hits]) => hits.length > 0),
+function scanTree(
+  base: string,
+  roots: readonly string[],
+  skipDir: string | null,
+): Map<string, CatalogueScanHit[]> {
+  return new Map(
+    roots
+      .flatMap((root) => walk(path.join(base, root)))
+      .map((file) => path.relative(base, file))
+      .filter((rel) => !skipDir || !rel.startsWith(`${skipDir}${path.sep}`))
+      .map((rel): [string, CatalogueScanHit[]] => [
+        rel,
+        scanText(fs.readFileSync(path.join(base, rel), 'utf8')),
+      ])
+      .filter(([, hits]) => hits.length > 0),
+  );
+}
+
+const OFFENDERS: ReadonlyMap<string, CatalogueScanHit[]> = scanTree(
+  REPO,
+  ROOTS,
+  MODULE_DIR,
 );
 
 function describeHits(file: string, hits: CatalogueScanHit[]): string {
@@ -94,24 +94,76 @@ function describeHits(file: string, hits: CatalogueScanHit[]): string {
 
 describe('instance-catalogue guard — scan', () => {
   it('finds no hand-rolled instance table outside the catalogue module', () => {
-    const exempt = new Set([...PENDING_MIGRATION, ...Object.keys(ALLOWED)]);
+    const exempt = new Set(Object.keys(ALLOWED));
     const fresh = [...OFFENDERS]
       .filter(([file]) => !exempt.has(file))
       .map(([file, hits]) => describeHits(file, hits));
     expect(fresh).toEqual([]);
   });
 
-  it('keeps every exemption live (a migrated file must leave the list)', () => {
-    const stale = [...PENDING_MIGRATION, ...Object.keys(ALLOWED)].filter(
-      (file) => !OFFENDERS.has(file),
-    );
+  it('has no pending migrations left (never re-add an exemption here)', () => {
+    expect(PENDING_MIGRATION).toEqual([]);
+  });
+
+  it('keeps every ALLOWED exemption live (a cleaned file must leave it)', () => {
+    const stale = Object.keys(ALLOWED).filter((file) => !OFFENDERS.has(file));
     expect(stale).toEqual([]);
   });
 
-  it('scans a real tree (sanity)', () => {
-    expect(OFFENDERS.size).toBeGreaterThan(0);
+  it('scans the real tree with the real catalogue vocabulary', () => {
+    expect(
+      ROOTS.flatMap((r) => walk(path.join(REPO, r))).length,
+    ).toBeGreaterThan(100);
     expect(VOCAB.ids.has(22901)).toBe(true);
     expect(VOCAB.names).toContain('Blackrock Spire');
+  });
+});
+
+describe('instance-catalogue guard — fixture tree (positive case)', () => {
+  const FIXTURE = [
+    '// a hand-rolled table the guard must catch',
+    'export const NAMES = {',
+    "  226: 'Ragefire Chasm',",
+    "  240: 'Wailing Caverns',",
+    "  63: 'Deadmines',",
+    '};',
+    'export const LEVELS = {',
+    '  "Ragefire Chasm": 13,',
+    '  "Wailing Caverns": 17,',
+    "  'Blackrock Spire': 55,",
+    '};',
+    'export const ROWS = [{ id: 226, minimumLevel: 13 }];',
+    'export const ZONE_TO_INSTANCE = {',
+    '  717: 238,',
+    '  1581: 63,',
+    '  491: 234,',
+    '};',
+  ].join('\n');
+  let dir = '';
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rok2210-guard-'));
+    fs.mkdirSync(path.join(dir, 'src'));
+    fs.writeFileSync(path.join(dir, 'src', 'hand-rolled.ts'), FIXTURE);
+    fs.writeFileSync(path.join(dir, 'src', 'clean.ts'), 'export const x = 1;');
+  });
+
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('reports only the hand-rolled file, through every detector', () => {
+    const found = scanTree(dir, ['src'], null);
+    expect([...found.keys()]).toEqual([path.join('src', 'hand-rolled.ts')]);
+    const detectors = new Set(
+      (found.get(path.join('src', 'hand-rolled.ts')) ?? []).map(
+        (h) => h.detector,
+      ),
+    );
+    expect([...detectors].sort()).toEqual([
+      'id-map',
+      'level-literal',
+      'name-map',
+      'zone-map',
+    ]);
   });
 });
 
