@@ -21,6 +21,10 @@ import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { CronJobService } from './cron-job.service';
 import { nonEmpty } from '../common/testing/narrow';
+import { createCronJobNameTracker } from '../common/testing/cron-job-cleanup';
+
+/** This spec's own cron_jobs rows, deleted after each test. */
+const jobNames = createCronJobNameTracker();
 
 /** Insert a test cron job directly into DB and return its ID. */
 async function insertTestJob(
@@ -28,6 +32,7 @@ async function insertTestJob(
   name: string,
   overrides: Partial<typeof schema.cronJobs.$inferInsert> = {},
 ): Promise<number> {
+  await jobNames.claim(testApp.db, name);
   const [job] = nonEmpty(
     await testApp.db
       .insert(schema.cronJobs)
@@ -65,6 +70,7 @@ function describeFkRecovery() {
   });
 
   afterEach(async () => {
+    await jobNames.cleanup(testApp.db);
     testApp.seed = await truncateAllTables(testApp.db);
   });
 
