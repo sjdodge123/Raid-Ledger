@@ -37,6 +37,34 @@ function selectRefreshableGames(db: PostgresJsDatabase<typeof schema>) {
     );
 }
 
+const MAX_BATCH_ATTEMPTS = 2;
+const BATCH_RETRY_DELAY_MS = 1000;
+
+/** Timeout, network failure or IGDB 5xx — a second try usually lands. */
+function isTransientIgdbError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return true;
+  if (err instanceof TypeError && err.message === 'fetch failed') return true;
+  return /IGDB API error 5\d\d/.test(err.message);
+}
+
+/** One batch query, retried once after a short backoff on a transient error. */
+async function queryBatchWithRetry(
+  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
+  body: string,
+): Promise<IgdbApiGame[]> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await queryIgdb(body);
+    } catch (err) {
+      if (attempt >= MAX_BATCH_ATTEMPTS || !isTransientIgdbError(err)) {
+        throw err;
+      }
+      await delay(BATCH_RETRY_DELAY_MS * attempt);
+    }
+  }
+}
+
 /**
  * Refresh existing non-hidden, non-banned games that have an IGDB id, in batches.
  * @param db - Database connection
@@ -62,7 +90,8 @@ export async function refreshExistingGames(
       .map((g) => g.igdbId)
       .join(',');
     try {
-      const apiGames = await queryIgdb(
+      const apiGames = await queryBatchWithRetry(
+        queryIgdb,
         `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids})${adultThemeFilter}; limit 10;`,
       );
       await upsertGamesFromApi(db, apiGames, onGameChanged);
