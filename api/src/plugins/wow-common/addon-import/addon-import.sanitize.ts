@@ -18,6 +18,9 @@ const ESCAPE_RE =
   /\|\||\|c[0-9a-fA-F]{8}|\|cn[^:|]{0,64}:|\|r|\|H[^|]*\|h|\|h|\|T[^|]*\|t|\|A[^|]*\|a|\|K[^|]*\|k|\|n/g;
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f]/g;
+/** C0 + DEL + C1 — stripped from a raw item link (cf. `addon-import.link-name.ts`). */
+// eslint-disable-next-line no-control-regex
+const LINK_CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/g;
 
 /** Strip colour/link/texture escapes and control characters from a display string. */
 export function stripEscapes(value: string): string {
@@ -61,16 +64,22 @@ export function sanitizeGuildExport(
 /**
  * ROK-2184 — sanitise a loot export, but keep each drop's raw item `link`
  * escapes (`|c…|H…|h…|h|r`): it is parsed (item id / bonus ids), never
- * displayed raw, and stripping `|H…|h` would erase it. Control characters
- * ARE removed from it (a NUL would fail the varchar insert with a 500).
+ * displayed raw, and stripping `|H…|h` would erase it. C0/C1 control
+ * characters ARE removed from it (a NUL would fail the varchar insert with a
+ * 500); a link left empty by that is omitted.
  */
 export function sanitizeLootExport(loot: AddonLootExport): AddonLootExport {
   const sanitized = sanitizeStrings(loot);
   const drops = sanitized.data.drops.map((drop, i) => {
     const link = loot.data.drops[i]?.link;
-    return link === undefined
-      ? drop
-      : { ...drop, link: link.replace(CONTROL_RE, '') };
+    if (link === undefined) return drop;
+    const cleaned = link.replace(LINK_CONTROL_RE, '');
+    if (cleaned !== '') return { ...drop, link: cleaned };
+    // A link of control characters only: the field is optional, so drop it
+    // rather than store `''`.
+    const withoutLink = { ...drop };
+    delete withoutLink.link;
+    return withoutLink;
   });
   return { ...sanitized, data: { ...sanitized.data, drops } };
 }

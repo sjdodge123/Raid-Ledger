@@ -555,7 +555,7 @@ describe('decodeImportPaste — v1 and v2 envelopes (ROK-2184)', () => {
   it('strips control characters from a loot link but keeps its WoW escapes', () => {
     const clean = '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunderfury]|h|r';
     const dirty =
-      '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunder\u0000fury]|h\u0007|r';
+      '|cffa335ee|Hitem:19019::::::::60:::::|h[Thunder\u0000fury]|h\u0007\u0085|r';
     const s = buildImportString(
       {
         ...buildLootPayload([buildLootDrop(0, { link: dirty })]),
@@ -565,6 +565,19 @@ describe('decodeImportPaste — v1 and v2 envelopes (ROK-2184)', () => {
     );
     const drops = decodeImportPaste(s).sections.loot?.payload.data.drops;
     expect(drops?.[0]?.link).toBe(clean);
+  });
+
+  it('omits a loot link made only of control characters', () => {
+    const s = buildImportString(
+      {
+        ...buildLootPayload([buildLootDrop(0, { link: '\u0000\u0007\u009f' })]),
+        who: buildWho(),
+      },
+      { version: 2 },
+    );
+    const drop = decodeImportPaste(s).sections.loot?.payload.data.drops[0];
+    expect(drop).toBeDefined();
+    expect(drop && 'link' in drop).toBe(false);
   });
 
   it('decodes a v2 "Export all" with loot in canonical order', () => {
