@@ -61,8 +61,11 @@ export const AddonLootDropSchema = z.object({
     /** `GetServerTime()` when the loot line arrived. */
     at: unixSeconds,
     itemId: z.number().int().positive().max(INT4_MAX),
-    /** Raw link as received; the server strips escapes. Omit when unavailable. */
-    link: z.string().max(ADDON_LOOT_LINK_MAX).optional(),
+    /**
+     * Raw link as received; the server keeps WoW escape sequences and strips
+     * control characters. Omit when unavailable (never `''`).
+     */
+    link: z.string().min(1).max(ADDON_LOOT_LINK_MAX).optional(),
     quantity: z.number().int().min(1).max(ADDON_LOOT_QUANTITY_MAX),
     /** From the link colour / `GetItemInfo`; omit when unknown. */
     quality: quality.optional(),
@@ -76,7 +79,7 @@ export const AddonLootDropSchema = z.object({
     difficultyId: id.optional(),
     /** The boss the drop is attributed to (Q4); omit for trash / unknown. */
     encounterId: id.optional(),
-    encounterName: z.string().max(ADDON_LOOT_ENCOUNTER_NAME_MAX).optional(),
+    encounterName: z.string().min(1).max(ADDON_LOOT_ENCOUNTER_NAME_MAX).optional(),
 }).strict().superRefine((drop, ctx) => {
     if (drop.encounterName !== undefined && drop.encounterId === undefined) {
         ctx.addIssue({

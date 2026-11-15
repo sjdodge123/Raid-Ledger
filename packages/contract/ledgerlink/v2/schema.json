@@ -1463,6 +1463,7 @@
                   },
                   "link": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 512
                   },
                   "quantity": {
@@ -1510,6 +1511,7 @@
                   },
                   "encounterName": {
                     "type": "string",
+                    "minLength": 1,
                     "maxLength": 128
                   }
                 },
