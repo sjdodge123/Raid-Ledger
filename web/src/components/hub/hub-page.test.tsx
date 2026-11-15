@@ -459,4 +459,25 @@ describe('GuildPage — Blizzard guild state banner (ROK-1170)', () => {
         await userEvent.click(within(banner).getByRole('button', { name: 'Update the guild path' }));
         expect(await screen.findByTestId('guild-settings-sheet')).toBeInTheDocument();
     });
+
+    describe('a delegated editor of a WoW: Forever hub (ROK-2199)', () => {
+        // jsdom has no scrollIntoView; the section-focus hook falls back to it when no ancestor computes as a scroller.
+        const original = Element.prototype.scrollIntoView;
+        beforeEach(() => { Element.prototype.scrollIntoView = () => undefined; });
+        afterEach(() => { Element.prototype.scrollIntoView = original; });
+
+        it('"Update the guild path" opens the settings sheet on the Blizzard roster section', async () => {
+            const page = disbanded(makePage(false));
+            serve({ ...page, guild: { ...page.guild, gameSlug: 'world-of-warcraft-forever' }, viewer: { role: 'officer', canEdit: true, canManageEditors: false } });
+            server.use(...blizzardRosterHandlers(buildBlizzardRosterView({ guildSlug: 'iron-vanguard' })));
+            renderPage();
+            const banner = await screen.findByTestId('wow-guild-state-banner');
+            await userEvent.click(within(banner).getByRole('button', { name: 'Update the guild path' }));
+            const sheet = await screen.findByTestId('guild-settings-sheet');
+            const input = await within(sheet).findByTestId('wow-blizzard-roster-input');
+            expect(input.closest('[data-settings-section]'), 'the slug field sits in the Blizzard roster section').toHaveAttribute('data-settings-section', 'blizzard-roster');
+            await waitFor(() => expect(input, 'the sheet opens focused on the Blizzard roster slug (ROK-2188)').toHaveFocus());
+            expect(within(sheet).queryByTestId('guild-editors-panel'), 'the Leader-only sections stay hidden from an editor').toBeNull();
+        });
+    });
 });

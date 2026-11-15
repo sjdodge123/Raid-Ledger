@@ -46,7 +46,7 @@ import { canPagePastEvents } from './api/use-guild-past-events';
 /** Re-exported for the page's existing specs (moved to `hub-page-error.tsx`, ROK-2132). */
 export { ErrorState };
 
-/** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
+/** Gated by `canOpenHubSettings` (the Leader/admin, or — via the hub module's hook — a Forever hub's GM or delegated editor) and opened on demand, so neither chunk rides in the page bundle. */
 const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
 /** ROK-1868 — the Posts tab (feed, composer, deep link) loads only when opened. */
 const HubPostsTab = lazy(() => import('./posts/posts-tab').then((m) => ({ default: m.HubPostsTab })));
@@ -174,8 +174,10 @@ function useHubSettingsState(canManage: boolean, canPick: boolean) {
     // The hero trigger's onClick would hand openSettings a MouseEvent as `target`.
     const openSettingsTop = useCallback(() => openSettings(), [openSettings]);
     const onClose = useCallback(() => setRequested('closed'), []);
-    // Both overlays are Leader-only, so the rights gate the RENDER rather than
-    // an effect that resets the state: a refetched page that demotes the viewer
+    // Each overlay is gated (the sheet by `canOpenHubSettings` — the
+    // Leader/admin, or via the hub module's hook a Forever hub's GM or
+    // delegated editor; the picker by `canUseHubChannelPicker`, Leader-only),
+    // so the rights gate the RENDER rather than an effect that resets the state: a refetched page that demotes the viewer
     // mid-session takes the open dialog off the screen in the same commit, and
     // nothing cascades. (The stale request is harmless — a re-promoted viewer
     // reopens from the trigger.)
