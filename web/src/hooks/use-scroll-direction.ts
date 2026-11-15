@@ -20,6 +20,12 @@ let listenerAttached = false;
 let subscriberCount = 0;
 /** Epoch ms until which scrolls are app-started, not the user's (calendar smooth scroll, backlog 2026-10-21). */
 let ignoreUntil = 0;
+/** Epoch ms past which an ignore window can no longer stretch. */
+let ignoreCap = 0;
+/** A scroll frame inside the window keeps it open this much longer (a smooth scroll still running). */
+const IGNORE_STRETCH_MS = 150;
+/** The longest one ignore window can stretch to, from the call that opened it. */
+const IGNORE_MAX_MS = 2000;
 const subscribers = new Set<() => void>();
 
 function notify() {
@@ -28,9 +34,13 @@ function notify() {
 
 function update() {
     const currentY = window.scrollY;
+    const now = Date.now();
 
-    if (Date.now() < ignoreUntil) {
-        // App-started scroll: keep the direction, track the position.
+    if (now < ignoreUntil) {
+        // App-started scroll: keep the direction, track the position, and keep
+        // the window open while frames keep arriving (up to the cap), so a long
+        // smooth scroll's last frames do not read as the user scrolling down.
+        ignoreUntil = Math.min(ignoreCap, Math.max(ignoreUntil, now + IGNORE_STRETCH_MS));
         lastScrollY = currentY;
         ticking = false;
         return;
@@ -112,10 +122,15 @@ function subscribe(cb: () => void) {
  * scrolling: the direction stays as it is and only the last position is
  * kept in sync. User scrolls after the window are measured from there.
  * Overlapping calls keep the later end, so a short call never cuts a longer one.
+ * While scroll frames keep arriving the window stretches past `ms` until the
+ * first quiet gap of {@link IGNORE_STRETCH_MS}, capped at {@link IGNORE_MAX_MS}
+ * (or `ms`, if longer) from this call.
  */
 export function ignoreScrollFor(ms: number): void {
+    const now = Date.now();
     // Never shorten a window that is already running.
-    ignoreUntil = Math.max(ignoreUntil, Date.now() + ms);
+    ignoreUntil = Math.max(ignoreUntil, now + ms);
+    ignoreCap = Math.max(ignoreCap, now + Math.max(ms, IGNORE_MAX_MS));
     lastScrollY = window.scrollY;
 }
 
