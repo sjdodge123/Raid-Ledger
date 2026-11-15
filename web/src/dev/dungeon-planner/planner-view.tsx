@@ -8,7 +8,7 @@ import { useMemo, type JSX } from 'react';
 import { DEMO_GUILD_FACTION, questsFor, readinessFor } from './dungeon-planner.fixtures';
 import { FACTION_LABEL, hiddenNote, questsForGuild, type GuildFaction } from './planner-faction';
 import { INSTANCES } from './forever-dungeons.fixtures';
-import { plannerLinks, type PlannerState } from './use-planner-state';
+import { plannerLinks, type PlannerLinks, type PlannerState } from './use-planner-state';
 import { instanceRange } from './planner-helpers';
 import { CopyLinkButton, CreateEventButtons, DungeonPicker, UnverifiedHint, WowheadLink } from './planner-controls';
 import { GroupChips } from './character-picker';
@@ -49,8 +49,7 @@ function DungeonSection({ s, phone }: { s: PlannerState; phone: boolean }): JSX.
 }
 
 /** Create-event set for the current plan (shared by the header and the phone's sticky bar). */
-function Actions({ s }: { s: PlannerState }): JSX.Element {
-    const l = plannerLinks(s);
+function Actions({ s, l }: { s: PlannerState; l: PlannerLinks }): JSX.Element {
     return <CreateEventButtons plainUrl={l.plain} inviteUrl={l.invite} inviteCount={l.inviteCount}
         excluded={l.excluded} empty={s.chars.length === 0} />;
 }
@@ -58,6 +57,7 @@ function Actions({ s }: { s: PlannerState }): JSX.Element {
 /** The full planner (hub tab body) in one layout. */
 export function PlannerBody({ s, layout }: { s: PlannerState; layout: Layout }): JSX.Element {
     const phone = layout === 'phone';
+    const links = plannerLinks(s);
     return (
         <div className="rounded-lg border border-edge bg-surface p-4">
             <div className={`space-y-4 ${phone ? 'pb-6' : ''}`}>
@@ -67,8 +67,8 @@ export function PlannerBody({ s, layout }: { s: PlannerState; layout: Layout }):
                         <FactionPill faction={DEMO_GUILD_FACTION} />
                     </div>
                     <div className="flex flex-wrap items-start gap-2">
-                        <CopyLinkButton url={plannerLinks(s).share} />
-                        {!phone && <Actions s={s} />}
+                        <CopyLinkButton url={links.share} />
+                        {!phone && <Actions s={s} l={links} />}
                     </div>
                 </div>
                 <DungeonSection s={s} phone={phone} />
@@ -78,7 +78,7 @@ export function PlannerBody({ s, layout }: { s: PlannerState; layout: Layout }):
             </div>
             {phone && (
                 <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-edge bg-surface p-3">
-                    <Actions s={s} />
+                    <Actions s={s} l={links} />
                 </div>
             )}
         </div>

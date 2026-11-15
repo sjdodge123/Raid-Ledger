@@ -3,7 +3,7 @@
  * the URL on load (`?c=…&d=…`, OQ5) and the links it builds. One dungeon per
  * plan (OQ2 ruled ~19:00Z).
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { WowInstanceDto } from '@raid-ledger/contract';
 import { DALARAN_ID, DEMO_GAME_ID, DEMO_GUILD_ID, ROSTER } from './dungeon-planner.fixtures';
@@ -43,9 +43,11 @@ export function usePlannerState(names: string[], dungeonId: number = DALARAN_ID,
     const initial = useInitialPlan(names, dungeonId, readUrl);
     const [picked, setPicked] = useState<string[]>(initial.names);
     const [id, setId] = useState<number>(initial.dungeonId);
+    // Stable across renders so consumers' memos (e.g. quest readiness) only recompute on a pick change.
+    const chars = useMemo(() => picked.flatMap((n) => ROSTER.find((r) => r.name === n) ?? []), [picked]);
     return {
         instance: instanceById(id) ?? INSTANCES[0] ?? FALLBACK,
-        chars: picked.flatMap((n) => ROSTER.find((r) => r.name === n) ?? []),
+        chars,
         available: ROSTER.filter((r) => !picked.includes(r.name)),
         canAdd: picked.length < MAX_CHARS,
         setInstanceId: setId,
@@ -54,10 +56,13 @@ export function usePlannerState(names: string[], dungeonId: number = DALARAN_ID,
     };
 }
 
-/** Share link (this page + `?c=…&d=…`) and the two Create-event URLs for the plan's dungeon. */
-export function plannerLinks(s: PlannerState): {
+/** The links one plan builds. */
+export interface PlannerLinks {
     share: string; plain: string; invite: string; inviteCount: number; excluded: string[];
-} {
+}
+
+/** Share link (this page + `?c=…&d=…`) and the two Create-event URLs for the plan's dungeon. */
+export function plannerLinks(s: PlannerState): PlannerLinks {
     const { ids, excluded } = invitable(s.chars);
     const base = { gameId: DEMO_GAME_ID, guildId: DEMO_GUILD_ID, instanceIds: [s.instance.id] };
     const page = `${window.location.origin}${window.location.pathname}`;

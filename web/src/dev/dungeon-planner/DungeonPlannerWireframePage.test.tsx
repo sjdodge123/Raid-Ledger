@@ -19,12 +19,14 @@ describe('DungeonPlannerWireframePage', () => {
         mockUseSystemStatus.mockReturnValue({ data: { demoMode: true }, isLoading: false });
     });
 
-    it('shows only the decided design — no OQ2 "several dungeons" variant, no pruned variants', () => {
+    it('shows only the decided design — one ruled frame, two planners, one Create-event set each', () => {
         renderWithProviders(<DungeonPlannerWireframePage />);
         expect(screen.getByRole('heading', { level: 1, name: /ROK-2207/ })).toBeInTheDocument();
-        expect(screen.queryByText(/several dungeons per plan/)).not.toBeInTheDocument();
-        expect(screen.queryByRole('combobox', { name: 'Add a dungeon to compare' })).not.toBeInTheDocument();
-        expect(screen.queryByText('Option B — Overview widget')).not.toBeInTheDocument();
+        // One decision frame with two planners (group of 5 + empty group) and one Create-event set each.
+        expect(screen.getAllByRole('heading', { level: 2, name: /^Ruled/ })).toHaveLength(1);
+        expect(screen.getAllByRole('heading', { level: 2, name: 'Dungeon planner' })).toHaveLength(2);
+        expect(screen.getAllByRole('link', { name: 'Create event ▸' })).toHaveLength(1);
+        expect(screen.getAllByRole('button', { name: 'Create event ▸' })).toHaveLength(1);
     });
 
     it('shows only the Alliance guild’s quests: the Horde ones are hidden and counted', () => {
@@ -65,6 +67,11 @@ describe('DungeonPlannerWireframePage', () => {
         const link = must(screen.getAllByRole('link', { name: 'Create event ▸' })[0], 'create link');
         expect(link.getAttribute('href')).toContain('contentInstanceIds=226');
         expect(screen.getAllByText('No quest data for this dungeon yet.').length).toBeGreaterThan(0);
+        // c=Dorn replaces the frame's default five: the restored group is Dorn alone.
+        expect(screen.getByText('Group (1/5)')).toBeInTheDocument();
+        const levels = must(screen.getAllByRole('region', { name: 'Levels' })[0], 'levels section');
+        expect(within(levels).getByText('Dorn')).toBeInTheDocument();
+        expect(within(levels).queryByText('Aelin')).not.toBeInTheDocument();
     });
 
     it('marks who can share a quest and whose prerequisites are unmet', () => {
