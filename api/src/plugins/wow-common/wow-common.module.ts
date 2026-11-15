@@ -75,6 +75,7 @@ import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
+import { InstanceCatalogueService } from './instance-catalogue/instance-catalogue.service';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
 import { WowGgCardRegistration } from './gg/wow-gg.registration';
@@ -108,6 +109,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     ...guildHub.CONTROLLERS,
   ],
   providers: [
+    InstanceCatalogueService,
     // ROK-2187: the WoW levels-dinged GG <year> card.
     WowGgCardRegistration,
     BlizzardService,
@@ -163,6 +165,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     LedgerlinkRulesetNoticeService,
   ],
   exports: [
+    InstanceCatalogueService,
     BlizzardService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
