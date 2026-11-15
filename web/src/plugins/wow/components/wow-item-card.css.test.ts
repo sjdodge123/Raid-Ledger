@@ -24,6 +24,11 @@ describe('wow-item-card.css text colours', () => {
         expect(rule).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);
     });
 
+    it("the name link inherits the card's colour over Wowhead's colorLinks `.qN` paint", () => {
+        // `.q3 { color: #0070dd }` from Wowhead out-ranked a plain `color: inherit` on the link.
+        expect(declarations('.wow-item-card .wow-item-card__name a')).toMatch(/color:\s*inherit\s*!important/);
+    });
+
     it('the enchant line uses theme tokens', () => {
         const rule = declarations('.wow-item-card__enchant');
         expect(rule).toMatch(/color:[^;]*var\(--color-/);

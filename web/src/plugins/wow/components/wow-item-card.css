@@ -81,8 +81,10 @@
     white-space: nowrap;
 }
 
-.wow-item-card__name a {
-    color: inherit;
+/* Wowhead's tooltip script runs with colorLinks: true and paints its own `.qN`
+   quality colour on the link; the card's token colour (below) must win. */
+.wow-item-card .wow-item-card__name a {
+    color: inherit !important;
     text-decoration: none;
 }
 
