@@ -15,12 +15,17 @@ import { CronJobService } from './cron-job.service';
 import { computeNextRun } from './cron-job.helpers';
 import type { CronRunBookkeeping } from './cron-job.bookkeeping';
 import { at, nonEmpty } from '../common/testing/narrow';
+import { createCronJobNameTracker } from '../common/testing/cron-job-cleanup';
+
+/** This spec's own cron_jobs rows, deleted after each test. */
+const jobNames = createCronJobNameTracker();
 
 async function insertJob(
   testApp: TestApp,
   name: string,
   cronExpression = '*/5 * * * *',
 ): Promise<number> {
+  await jobNames.claim(testApp.db, name);
   const [job] = nonEmpty(
     await testApp.db
       .insert(schema.cronJobs)
@@ -66,6 +71,7 @@ function describeBatching() {
   afterEach(async () => {
     jest.restoreAllMocks();
     await svc.flushLastRunUpdates(); // never leak a queue into the next test
+    await jobNames.cleanup(testApp.db);
     testApp.seed = await truncateAllTables(testApp.db);
   });
 

@@ -7,6 +7,7 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { refreshExistingGames } from './igdb-sync.helpers';
+import { upsertGamesFromApi } from './igdb-upsert.helpers';
 
 jest.mock('./igdb-upsert.helpers', () => ({
   upsertGamesFromApi: jest.fn().mockResolvedValue(undefined),
@@ -40,5 +41,35 @@ describe('refreshExistingGames (ROK-1715)', () => {
     await refreshExistingGames(db as never, queryIgdb, '');
     expect(queryIgdb).toHaveBeenCalledTimes(1);
     expect(queryIgdb.mock.calls[0][0]).toContain('where id = (101,417650)');
+  });
+});
+
+describe('refreshExistingGames batch retry (prod logs 2026-11-09..11)', () => {
+  const timeout = () =>
+    Object.assign(new Error('The operation was aborted due to timeout'), {
+      name: 'TimeoutError',
+    });
+
+  it('retries a timed-out batch once and upserts + counts its games', async () => {
+    const { db } = fakeDb([{ igdbId: 101 }]);
+    const games = [{ id: 101, name: 'Valheim' }];
+    const queryIgdb = jest
+      .fn()
+      .mockRejectedValueOnce(timeout())
+      .mockResolvedValueOnce(games);
+    const refreshed = await refreshExistingGames(db as never, queryIgdb, '');
+    expect(queryIgdb).toHaveBeenCalledTimes(2);
+    expect(upsertGamesFromApi).toHaveBeenLastCalledWith(db, games, undefined);
+    expect(refreshed).toBe(1);
+  });
+
+  it('does not retry a non-transient error and drops the batch', async () => {
+    const { db } = fakeDb([{ igdbId: 101 }]);
+    const queryIgdb = jest
+      .fn()
+      .mockRejectedValue(new Error('IGDB API error 400: Bad Request'));
+    const refreshed = await refreshExistingGames(db as never, queryIgdb, '');
+    expect(queryIgdb).toHaveBeenCalledTimes(1);
+    expect(refreshed).toBe(0);
   });
 });

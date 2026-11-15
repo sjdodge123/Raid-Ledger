@@ -259,7 +259,7 @@ function mergeLootRows(
 }
 
 /** Boss-loot rows for the reward ids; Forever rows only when preferred. */
-async function selectLootRows(
+export async function selectLootRows(
   db: PostgresJsDatabase<typeof schema>,
   itemIds: number[],
   preferForever: boolean,

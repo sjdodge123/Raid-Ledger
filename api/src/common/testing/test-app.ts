@@ -104,6 +104,9 @@ export interface TestApp {
  */
 export const INSTANCE_KEY = '__raid_ledger_test_app';
 
+/** Size of the app-level postgres.js pool every integration spec shares. */
+export const TEST_DB_POOL_MAX = 10;
+
 function getInstance(): TestApp | null {
   return (
     (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] ?? null
@@ -168,7 +171,7 @@ async function setupDatabase(connectionString: string): Promise<{
 }> {
   const migrateStart = phaseMark();
   recordMigrate(migrateStart, await ensureTestDbMigrated(connectionString));
-  const appClient = postgres(connectionString, { max: 10 });
+  const appClient = postgres(connectionString, { max: TEST_DB_POOL_MAX });
   return { db: drizzle(appClient, { schema }), appClient };
 }
 
