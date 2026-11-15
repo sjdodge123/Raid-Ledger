@@ -6,7 +6,7 @@ import { companionDisplayTextSchema, CompanionTimestampSchema, CompanionVersionS
 // Companion dev bridge v1 (ROK-2055) — the LAN-only developer side channel
 // on rl-companion that skeleton-key reads (`/dev/v1/*`). Raid Ledger owns the
 // wire format (`packages/contract/companion/dev-bridge/v1/`); rl-companion and
-// the dev-only LedgerLinkProbe addon pin it. NOT a companion-envelope message:
+// LedgerLink (whose `/rl dev on` mode runs probes) pin it. NOT a companion-envelope message:
 // it is not in `COMPANION_CONTRACTS` and the Raid Ledger server never reads it.
 // This file: shared primitives + ProbeRequest (§5.1) + ProbeResult.
 // Endpoint bodies (§6): `companion-dev-bridge-endpoints.schema.ts`.
@@ -24,7 +24,7 @@ export const DEV_BRIDGE_PROBE_RESULT_MAX_BYTES = 65_536;
 /**
  * A probe request's LARGEST derived form, serialised, stays at or under this:
  * output form (defaults filled) plus a `probeId`, with `flavor` at its longest
- * (34 chars). POST, the Queue.lua entry and the probe-detail echo all measure
+ * (34 chars). POST, the DevQueue.lua entry and the probe-detail echo all measure
  * that same form (`devBridgeProbeRequestWorstBytes`), so a request the bridge
  * accepts always fits as a queue entry and as an echo.
  */
@@ -227,7 +227,7 @@ export type DevBridgeEchoedProbeRequest = z.output<typeof DevBridgeEchoedProbeRe
 export type DevBridgeProbeRequestInput = z.input<typeof DevBridgeProbeRequestSchema>;
 
 // ------------------------------------------------------------
-// ProbeResult — what LedgerLinkProbe stores in LedgerLinkProbeDB.results[id]
+// ProbeResult — what LedgerLink stores in LedgerLinkDB.dev.probes[probeId]
 // (a JSON string) and the companion serves at /dev/v1/probes/:id.
 // Values nest Lua tables at most 3 deep; ≤40 entries per table; strings ≤512.
 // ------------------------------------------------------------
