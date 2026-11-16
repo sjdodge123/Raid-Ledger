@@ -25,6 +25,7 @@ import {
   characterSide,
   isQuestUsableBySide,
   sharedSide,
+  type FactionSide,
 } from './quest-faction.helpers';
 
 /** Contract caps (`wow-event-quest-readiness.schema.ts`). */
@@ -53,6 +54,27 @@ export interface ReadinessInput {
   /** Effective quest data per character (ROK-2109: addon or Armory). */
   snapshots: Map<string, EffectiveQuests>;
   manual: ManualProgressRow[];
+}
+
+/** Builder options; omitted fields keep the event behaviour. */
+export interface ReadinessOptions {
+  /**
+   * The side to filter quest columns by, already resolved by the caller
+   * (ROK-2214: the guild's side). Absent → the signups' shared side.
+   * `null` → no side filter.
+   */
+  side?: FactionSide | null;
+}
+
+/** The column side: the caller's resolved side, else the roster's shared one. */
+function columnSide(
+  signups: readonly ReadinessSignup[],
+  options: ReadinessOptions,
+): FactionSide | null {
+  if (options.side !== undefined) return options.side;
+  return sharedSide(
+    signups.map((s) => characterSide(s.charRace, s.charFaction)),
+  );
 }
 
 /** One signup's merged rows + a done lookup (unknown without a snapshot). */
@@ -164,13 +186,12 @@ function groupManual(
  */
 export function buildQuestReadiness(
   input: ReadinessInput,
+  options: ReadinessOptions = {},
 ): EventQuestReadinessDto {
   // ROK-2211: a guild is single-faction, so a roster that shares a side sees
   // only the quests that side can take (neutral ones always stay). Same-name
   // variants keep their own columns: they can be distinct chain steps.
-  const side = sharedSide(
-    input.signups.map((s) => characterSide(s.charRace, s.charFaction)),
-  );
+  const side = columnSide(input.signups, options);
   const quests = input.quests.eventQuests
     .filter((q) => q.dungeonInstanceId !== null)
     .filter((q) => isQuestUsableBySide(q, side))
