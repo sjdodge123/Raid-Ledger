@@ -30,6 +30,7 @@ import type { EventThreadActor } from './event-discussion.access';
 import {
   findEventForSync,
   findLiveEventThread,
+  findReplyHome,
   newestLiveReplies,
   type LiveEventThread,
 } from './event-discussion.queries';
@@ -38,6 +39,7 @@ import { resolveEventThread } from './forum-thread.context';
 
 export const EVENT_NOT_FOUND = 'Event not found';
 export const DISCUSSION_NOT_FOUND = 'This event has no discussion';
+export const REPLY_NOT_FOUND = 'Reply not found';
 
 @Injectable()
 export class EventDiscussionService {
@@ -117,16 +119,25 @@ export class EventDiscussionService {
       .updateReply(actor, guildId, id, replyId, input);
   }
 
-  /** `DELETE events/:id/discussion/replies/:replyId`. */
+  /**
+   * `DELETE events/:id/discussion/replies/:replyId` — resolved through the
+   * reply's OWN thread (live or detached by an untag/retag), not the event's
+   * live one, so an author can always remove what they wrote (§6 "delete own:
+   * yes"). 404 unless that thread discusses this event; moderation unchanged.
+   */
   async deleteReply(
     actor: GuildActor,
     eventId: number,
     replyId: number,
   ): Promise<void> {
-    const live = await this.requireLive(actor, eventId);
+    const home = await findReplyHome(this.db, replyId);
+    if (!home || home.eventId !== eventId) {
+      throw new NotFoundException(REPLY_NOT_FOUND);
+    }
+    await this.requireHub(actor, home.guildId);
     await this.forum
       .forEventScope()
-      .deleteReply(actor, live.guildId, live.id, replyId);
+      .deleteReply(actor, home.guildId, home.threadId, replyId);
   }
 
   private async latest(

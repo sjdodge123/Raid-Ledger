@@ -23,7 +23,11 @@ import {
   FORUM_NOT_SIGNED_UP,
   FORUM_THREAD_READ_ONLY,
 } from './event-discussion.access';
-import { DISCUSSION_NOT_FOUND } from './event-discussion.service';
+import {
+  DISCUSSION_NOT_FOUND,
+  REPLY_NOT_FOUND,
+} from './event-discussion.service';
+import { syncEventDiscussion } from './event-discussion.sync';
 import {
   addEventThread,
   as,
@@ -184,6 +188,43 @@ describe('ROK-2226 §6 — delete own, for everyone (review MINOR-2)', () => {
     );
     expect((await deleteAs(s, 'pug', own.id)).status).toBe(204);
     expect(await liveBodies(s)).toEqual(['member text']);
+  });
+});
+
+describe('ROK-2226 §6 — delete own after untag / retag (Codex P2)', () => {
+  it('an untagged event: the non-member author still deletes their own reply (204)', async () => {
+    const s = await newScene(ctx);
+    const own = await reply(s, 'pug', 'mine');
+    const theirs = await reply(s, 'signed', 'member text');
+    await untagEvent(ctx, s.eventId);
+    expect(outcome(await deleteAs(s, 'pug', theirs.id))).toEqual(
+      deny(403, FORUM_NOT_MEMBER),
+    );
+    expect(outcome(await deleteAs(s, 'pug', own.id))).toEqual({
+      status: 204,
+      message: undefined,
+    });
+    expect(await liveBodies(s)).toEqual(['member text']);
+  });
+
+  it('a retagged event: the old reply is deleted from the old thread; other events 404', async () => {
+    const s = await newScene(ctx);
+    const other = await newScene(ctx);
+    const own = await reply(s, 'pug', 'mine');
+    await ctx.posts.testApp.db
+      .update(schema.events)
+      .set({ guildId: other.guildId })
+      .where(eq(schema.events.id, s.eventId));
+    await syncEventDiscussion(ctx.posts.testApp.db, s.eventId, new Date());
+    const wrong = `/events/${other.eventId}/discussion/replies/${own.id}`;
+    expect(outcome(await as(ctx, 'pug', 'delete', wrong))).toEqual(
+      deny(404, REPLY_NOT_FOUND),
+    );
+    expect(outcome(await deleteAs(s, 'pug', own.id))).toEqual({
+      status: 204,
+      message: undefined,
+    });
+    expect(await liveBodies(s)).toEqual([]);
   });
 });
 

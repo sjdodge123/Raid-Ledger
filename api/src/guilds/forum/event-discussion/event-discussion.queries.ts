@@ -115,3 +115,30 @@ export async function newestLiveReplies(
     .map((row) => ({ reply: row.reply, author: row.author }))
     .reverse();
 }
+
+/** The thread a reply lives in — live OR detached — for reply deletion. */
+export interface ReplyHome {
+  guildId: number;
+  threadId: number;
+  eventId: number | null;
+}
+
+/**
+ * Where reply `replyId` lives, or null. Codex P2: deletion resolves through
+ * the reply's OWN thread, so an untag/retag (which detaches it) never strands
+ * an author's reply behind the event's newer live thread.
+ */
+export async function findReplyHome(
+  db: Db,
+  replyId: number,
+): Promise<ReplyHome | null> {
+  const r = schema.hubForumReplies;
+  const t = schema.hubForumThreads;
+  const [row] = await db
+    .select({ guildId: t.guildId, threadId: t.id, eventId: t.eventId })
+    .from(r)
+    .innerJoin(t, eq(t.id, r.threadId))
+    .where(eq(r.id, replyId))
+    .limit(1);
+  return row ?? null;
+}

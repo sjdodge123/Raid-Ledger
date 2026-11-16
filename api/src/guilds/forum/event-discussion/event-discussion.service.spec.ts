@@ -21,12 +21,14 @@ import { eventThreadActor } from './event-discussion.access';
 import {
   findEventForSync,
   findLiveEventThread,
+  findReplyHome,
   newestLiveReplies,
 } from './event-discussion.queries';
 import {
   DISCUSSION_NOT_FOUND,
   EVENT_NOT_FOUND,
   EventDiscussionService,
+  REPLY_NOT_FOUND,
 } from './event-discussion.service';
 import { syncEventDiscussion } from './event-discussion.sync';
 import { resolveEventThread } from './forum-thread.context';
@@ -47,6 +49,7 @@ jest.mock('./forum-thread.context', () => ({ resolveEventThread: jest.fn() }));
 jest.mock('./event-discussion.queries', () => ({
   findEventForSync: jest.fn(),
   findLiveEventThread: jest.fn(),
+  findReplyHome: jest.fn(),
   newestLiveReplies: jest.fn(),
 }));
 
@@ -151,6 +154,11 @@ function build(): EventDiscussionService {
 beforeEach(() => {
   jest.mocked(findEventForSync).mockResolvedValue(EVENT);
   jest.mocked(findLiveEventThread).mockResolvedValue(LIVE);
+  jest.mocked(findReplyHome).mockResolvedValue({
+    guildId: 7,
+    threadId: 21,
+    eventId: 5,
+  });
   jest.mocked(findThread).mockResolvedValue(record(4));
   jest.mocked(newestLiveReplies).mockResolvedValue([reply(31), reply(32)]);
   hubKinds.forGuild.mockResolvedValue({});
@@ -311,6 +319,38 @@ describe('ROK-2226 EventDiscussionService — hidden or archived hub (Codex P1)'
       HIDDEN,
     );
     expect(assertNotHidden).toHaveBeenCalledWith({}, viewer, 7);
+    expect(forum.forEventScope).not.toHaveBeenCalled();
+  });
+});
+
+describe("ROK-2226 EventDiscussionService.deleteReply — the reply's own thread (Codex P2)", () => {
+  it('deletes through a detached (untagged/retagged) thread, never the live one', async () => {
+    jest.mocked(findReplyHome).mockResolvedValue({
+      guildId: 4,
+      threadId: 20,
+      eventId: 5,
+    });
+    await build().deleteReply(viewer, 5, 31);
+    expect(findReplyHome).toHaveBeenCalledWith({}, 31);
+    expect(findLiveEventThread).not.toHaveBeenCalled();
+    expect(scoped.deleteReply).toHaveBeenCalledWith(viewer, 4, 20, 31);
+  });
+
+  it('still deletes after the event lost its live thread entirely', async () => {
+    jest.mocked(findLiveEventThread).mockResolvedValue(null);
+    await build().deleteReply(viewer, 5, 31);
+    expect(scoped.deleteReply).toHaveBeenCalledWith(viewer, 7, 21, 31);
+  });
+
+  it.each([
+    ['a missing reply', null],
+    ["another event's reply", { guildId: 7, threadId: 22, eventId: 6 }],
+    ['a normal-thread reply', { guildId: 7, threadId: 23, eventId: null }],
+  ])('404s %s without delegating', async (_label, home) => {
+    jest.mocked(findReplyHome).mockResolvedValue(home);
+    await expect(build().deleteReply(viewer, 5, 31)).rejects.toThrow(
+      new NotFoundException(REPLY_NOT_FOUND),
+    );
     expect(forum.forEventScope).not.toHaveBeenCalled();
   });
 });
