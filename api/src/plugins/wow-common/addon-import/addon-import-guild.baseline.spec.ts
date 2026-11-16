@@ -6,6 +6,7 @@ import {
   blizzardCanSee,
   ledgerLinkCanSee,
   previousImportAt,
+  previousSyncAt,
   sourceBaseline,
   type RosterClock,
   type StoredRosterRow,
@@ -25,6 +26,7 @@ const row = (
   live: false,
   lastSeenAt: null,
   ledgerlinkSeenAt: null,
+  blizzardSeenAt: null,
   ...over,
 });
 
@@ -68,15 +70,53 @@ describe('previousImportAt', () => {
   });
 });
 
-describe('sourceBaseline', () => {
-  it('by id after an import: live rows plus the rows the last sync stamped', () => {
+describe('previousSyncAt', () => {
+  it('is the newest blizzard_seen_at, whatever an import stamped since', () => {
     const rows = [
-      row(1, { blizzardId: 9, live: true, lastSeenAt: at(20) }),
-      row(2, { live: true, lastSeenAt: at(20) }),
-      row(3, { guid: null, blizzardId: 8, lastSeenAt: at(10) }),
-      row(4, { guid: null, blizzardId: 7, lastSeenAt: at(-60) }),
+      row(1, { blizzardId: 9, blizzardSeenAt: at(10), lastSeenAt: at(20) }),
+      row(2, { blizzardId: 8, blizzardSeenAt: at(-60) }),
+      row(3, { lastSeenAt: at(30), ledgerlinkSeenAt: at(30) }),
+    ];
+    expect(previousSyncAt(rows)).toEqual(at(10));
+  });
+
+  it('is null when no sync ever listed a member', () => {
+    expect(previousSyncAt([row(1, { ledgerlinkSeenAt: at(0) })])).toBeNull();
+  });
+});
+
+describe('sourceBaseline', () => {
+  it('by id after an import: the rows the last sync listed plus live rows it cannot see', () => {
+    const rows = [
+      row(1, { blizzardId: 9, live: true, blizzardSeenAt: at(10) }),
+      row(2, { live: true, lastSeenAt: at(20), ledgerlinkSeenAt: at(20) }),
+      row(3, { guid: null, blizzardId: 8, blizzardSeenAt: at(10) }),
+      row(4, { guid: null, blizzardId: 7, blizzardSeenAt: at(-60) }),
     ];
     expect(ids(sourceBaseline(rows, 'id', afterImport))).toEqual([1, 2, 3]);
+  });
+
+  it('by id: a paired row an import keeps live but the last sync dropped is out', () => {
+    const rows = [
+      row(1, { blizzardId: 9, live: true, blizzardSeenAt: at(10) }),
+      row(2, {
+        blizzardId: 8,
+        live: true,
+        lastSeenAt: at(20),
+        ledgerlinkSeenAt: at(20),
+        blizzardSeenAt: at(-60),
+      }),
+    ];
+    expect(ids(sourceBaseline(rows, 'id', afterImport))).toEqual([1]);
+  });
+
+  it('by id with no sync on record (slug reset): every live row', () => {
+    const rows = [
+      row(1, { blizzardId: 9, live: true, blizzardSeenAt: at(-60) }),
+      row(2, { guid: null, blizzardId: 8, blizzardSeenAt: at(-60) }),
+    ];
+    const clock = { lastSnapshotAt: at(20), blizzardSyncedAt: null };
+    expect(ids(sourceBaseline(rows, 'id', clock))).toEqual([1]);
   });
 
   it('by GUID after a sync: the rows the last import listed plus live GUID-less rows', () => {

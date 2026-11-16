@@ -165,6 +165,10 @@ async function syncAt(
   const m = schema.guildMembers;
   await testApp.db.update(m).set({ lastSeenAt: to }).where(eq(m.lastSeenAt, t));
   await testApp.db
+    .update(m)
+    .set({ blizzardSeenAt: to })
+    .where(eq(m.blizzardSeenAt, t));
+  await testApp.db
     .update(schema.guilds)
     .set({ lastSnapshotAt: to, blizzardRosterSyncedAt: to })
     .where(eq(schema.guilds.id, guildId));
@@ -311,5 +315,32 @@ describe('ROK-2225 review — each source measures against its own last snapshot
       removed: 1,
       dropsEditor: true,
     });
+  });
+
+  it('(d) a paired editor the Blizzard sync dropped but LedgerLink still lists counts and flags once', async () => {
+    const { who, guildId } = await seedGuild();
+    await grantEditor(guildId, 'Rok Androl');
+    const withoutRok = PAIRED.filter((n) => n !== 'Rok Androl');
+    await syncAt(guildId, blizzardRoster(), 60);
+    await addonImport(who, ledgerLinkRoster(), 2);
+    await syncAt(guildId, blizzardRoster(withoutRok), 180);
+    const first = await editorFlags();
+    expect(first.length).toBeGreaterThan(0);
+    await addonImport(who, ledgerLinkRoster(), 4);
+    await syncAt(guildId, blizzardRoster(withoutRok), 300);
+    await addonImport(who, ledgerLinkRoster(), 6);
+    await syncAt(guildId, blizzardRoster(withoutRok), 420);
+    await addonImport(who, ledgerLinkRoster(), 8);
+    expect(await churn()).toEqual([
+      '0/2',
+      '0/0',
+      '1/0',
+      '0/0',
+      '0/0',
+      '0/0',
+      '0/0',
+      '0/0',
+    ]);
+    expect((await editorFlags()).length).toBe(first.length);
   });
 });
