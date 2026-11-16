@@ -21,6 +21,9 @@ export const FORUM_EDIT_WINDOW_CLOSED = 'Edit window closed';
 export const FORUM_NOT_AUTHOR = 'Only the author can edit this';
 /** Q8: a removed message cannot be edited or removed again. */
 export const FORUM_ALREADY_DELETED = 'This message was deleted';
+/** ROK-2208 R3: Discord is the authority for messages posted there. */
+export const FORUM_DISCORD_ORIGIN =
+  'This was posted from Discord. Edit it on Discord.';
 /** Neither the author nor a moderator. */
 export const FORUM_CANNOT_DELETE =
   'Only the author or a moderator can remove this';
@@ -59,6 +62,8 @@ export function assertCanEdit(
   if (canFor(actor, row, { now, pinnable: false }).edit) return;
   if (row.deletedAt !== null)
     throw new ForbiddenException(FORUM_ALREADY_DELETED);
+  if (row.authorDiscordId !== null)
+    throw new ForbiddenException(FORUM_DISCORD_ORIGIN);
   if (row.authorId !== actor.userId)
     throw new ForbiddenException(FORUM_NOT_AUTHOR);
   throw new ForbiddenException(FORUM_EDIT_WINDOW_CLOSED);
@@ -75,6 +80,7 @@ export function removalFor(
       throw new ForbiddenException(FORUM_ALREADY_DELETED);
     throw new ForbiddenException(FORUM_CANNOT_DELETE);
   }
-  const as = row.authorId === actor.userId ? 'author' : 'moderator';
+  const own = row.authorId === actor.userId && row.authorDiscordId === null;
+  const as = own ? 'author' : 'moderator';
   return { by: actor.userId, as, now };
 }
