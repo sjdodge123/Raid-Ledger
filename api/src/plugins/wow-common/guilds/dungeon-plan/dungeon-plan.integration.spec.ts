@@ -63,7 +63,7 @@ const guilds = {} as Record<
 type Who = 'lead' | 'outsider' | 'hordeA' | 'hordeB' | 'otherOwner';
 const users = {} as Record<Who, { id: number; token: string }>;
 const chars = {} as Record<
-  'below' | 'inRange' | 'above' | 'noLevel' | 'other' | 'wouldBe',
+  'below' | 'inRange' | 'above' | 'noLevel' | 'orcAlt' | 'other' | 'wouldBe',
   string
 >;
 const hordeChars: string[] = [];
@@ -215,6 +215,15 @@ async function seedAllianceRoster(): Promise<void> {
   chars.inRange = await seedChar({ ...own, name: 'Inrangea', level: min });
   chars.above = await seedChar({ ...own, name: 'Abovea', level: max + 1 });
   chars.noLevel = await seedChar({ ...own, name: 'Nolevela', level: null });
+  // A Horde-race alt on the Alliance roster: with a Human it makes the
+  // characters' side mixed, so the readiness builder's own side filter is off
+  // and only the guild pre-filter can hide quests (I6).
+  chars.orcAlt = await seedChar({
+    ...own,
+    race: 'Orc',
+    name: 'Orcalta',
+    level: 30,
+  });
   await testApp.db.insert(schema.characterAddonSnapshots).values({
     characterId: chars.below,
     section: 'char',
@@ -416,7 +425,8 @@ describe('dungeon-plan — roster-only characters (I5)', () => {
 
 describe('dungeon-plan — faction filter (I6, I7, I10)', () => {
   it('I6: an ALLIANCE guild hides both Horde-only quests and keeps the neutral ones', async () => {
-    const body = await plan(guilds.alliance, [chars.inRange]);
+    const body = await plan(guilds.alliance, [chars.inRange, chars.orcAlt]);
+    expect(body.characters).toHaveLength(2);
     expect(questIds(body)).toEqual(
       [Q.alliance, ...NEUTRAL].sort((a, b) => a - b),
     );
