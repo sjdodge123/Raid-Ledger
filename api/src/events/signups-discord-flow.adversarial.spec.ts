@@ -85,7 +85,7 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDiscordH.insertDiscordSignupRow.mockResolvedValue([insertedSignup]);
-    mockDiscordH.allocateDiscordSlot.mockResolvedValue(undefined);
+    mockDiscordH.allocateDiscordSlot.mockResolvedValue(false);
     mockSignupH.checkDiscordSignupAutoBench.mockResolvedValue(false);
     mockRosterQH.findNextPosition.mockResolvedValue(1);
     mockRosterQH.getAssignedSlotRole.mockResolvedValue(null);
@@ -121,6 +121,37 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
     expect(deps.logger.log).toHaveBeenCalledWith(
       expect.stringContaining('Auto-benched'),
     );
+  });
+
+  it('benches the signup when MMO allocation found no slot (web parity, ROK-2203)', async () => {
+    // e.g. a tank PUG when the tank slot is full but the roster is not.
+    mockDiscordH.allocateDiscordSlot.mockResolvedValue(true);
+    const deps = createMockDeps();
+    const tx = createMockTx();
+
+    await discordSignupTxBody(deps, tx, mockEvent, 1, mockDto);
+
+    expect(tx.insert).toHaveBeenCalled();
+    expect(deps.logger.log).toHaveBeenCalledWith(
+      'Auto-benched anonymous signup 42 at bench position 1',
+    );
+  });
+
+  it('does not bench when MMO allocation assigned a slot', async () => {
+    mockDiscordH.allocateDiscordSlot.mockResolvedValue(true);
+    const deps = createMockDeps();
+    const tx = createMockTx();
+    (tx.select as jest.Mock).mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([{ id: 7 }]),
+        }),
+      }),
+    });
+
+    await discordSignupTxBody(deps, tx, mockEvent, 1, mockDto);
+
+    expect(tx.insert).not.toHaveBeenCalled();
   });
 
   it('returns existing signup on duplicate insert', async () => {

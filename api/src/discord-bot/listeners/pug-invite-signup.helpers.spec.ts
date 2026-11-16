@@ -2,6 +2,7 @@
  * Unit tests for PUG-invite signups: linked PUGs use the web path, anonymous
  * PUGs use signupDiscord so both share the ROK-2203 auto-bench/displacement rule.
  */
+import { ConflictException } from '@nestjs/common';
 import { createPugSignup } from './pug-invite-signup.helpers';
 import type { PugInviteDeps } from './pug-invite.helpers';
 
@@ -101,11 +102,25 @@ describe('PUG signup — anonymous path', () => {
     );
   });
 
-  it('logs a warning instead of throwing when signupDiscord fails', async () => {
+  it('returns null when the signup was created', async () => {
+    const deps = createMockDeps();
+    mockNoLinkedUser(deps);
+    await expect(
+      createPugSignup(
+        deps,
+        mockSlot as Parameters<typeof createPugSignup>[1],
+        'dps',
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('returns the closed-signups reason instead of "Accepted" (ROK-2203)', async () => {
+    const reason =
+      'This event is being rescheduled via a scheduling poll and is no longer accepting signups.';
     const deps = createMockDeps();
     mockNoLinkedUser(deps);
     (deps.signupsService.signupDiscord as jest.Mock).mockRejectedValueOnce(
-      new Error('Event has ended'),
+      new ConflictException(reason),
     );
     await expect(
       createPugSignup(
@@ -113,10 +128,25 @@ describe('PUG signup — anonymous path', () => {
         mockSlot as Parameters<typeof createPugSignup>[1],
         'dps',
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(reason);
     expect(deps.logger.warn).toHaveBeenCalledWith(
-      'Failed to create anonymous signup for PUG PugPlayer: Event has ended',
+      `Failed to create anonymous signup for PUG PugPlayer: ${reason}`,
     );
+  });
+
+  it('returns the generic button-path copy for an unexpected failure', async () => {
+    const deps = createMockDeps();
+    mockNoLinkedUser(deps);
+    (deps.signupsService.signupDiscord as jest.Mock).mockRejectedValueOnce(
+      new Error('db down'),
+    );
+    await expect(
+      createPugSignup(
+        deps,
+        mockSlot as Parameters<typeof createPugSignup>[1],
+        'dps',
+      ),
+    ).resolves.toBe('Something went wrong. Please try again.');
   });
 });
 

@@ -285,22 +285,35 @@ export async function discordSignupTxBody(
     };
   }
   const inserted = defined(rows[0], 'inserted Discord signup row');
+  await placeDiscordSignup(deps, tx, event, eventId, inserted, dto);
+  deps.logger.log(
+    `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
+  );
+  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
+  return { signup: inserted, assignedSlot };
+}
+
+/**
+ * Bench or allocate a new anonymous Discord/PUG signup. Like the web path's
+ * `runAutoAllocWithBenchFallback`, an MMO allocation that found no slot (e.g.
+ * its role is full but the roster is not) benches the signup (ROK-2203).
+ */
+async function placeDiscordSignup(
+  deps: FlowDeps,
+  tx: Tx,
+  event: typeof schema.events.$inferSelect,
+  eventId: number,
+  inserted: typeof schema.eventSignups.$inferSelect,
+  dto: CreateDiscordSignupDto,
+): Promise<void> {
   const autoBench = await signupH.checkDiscordSignupAutoBench(
     tx,
     event,
     eventId,
     dto,
   );
-  if (autoBench) {
-    await assignBenchFallback(
-      deps,
-      tx,
-      eventId,
-      inserted.id,
-      'anonymous signup',
-    );
-  } else {
-    await discordH.allocateDiscordSlot(
+  if (!autoBench) {
+    const ranMmo = await discordH.allocateDiscordSlot(
       tx,
       event,
       eventId,
@@ -308,10 +321,7 @@ export async function discordSignupTxBody(
       dto,
       (t, eId, sId, sc) => deps.autoAllocateSignup(t, eId, sId, sc),
     );
+    if (!ranMmo || (await checkHasAssignment(tx, inserted.id))) return;
   }
-  deps.logger.log(
-    `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
-  );
-  const assignedSlot = await rosterQH.getAssignedSlotRole(tx, inserted.id);
-  return { signup: inserted, assignedSlot };
+  await assignBenchFallback(deps, tx, eventId, inserted.id, 'anonymous signup');
 }

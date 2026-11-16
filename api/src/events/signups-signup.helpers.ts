@@ -69,7 +69,7 @@ export async function checkAutoBench(
 /**
  * Whether the event's occupied, non-bench roster slots have reached its cap
  * (`resolveEventCapacity`; no cap ⇒ never full). This is THE definition of
- * "full": signup auto-bench uses it via `checkAutoBench`, and the lineup
+ * "full": signup auto-bench uses it via `resolveAutoBench`, and the lineup
  * EVENT CREATED card (ROK-2054) uses it for its "full" copy, so the two cannot
  * drift. A signup with no roster assignment (an unassigned MMO voter) or a
  * bench assignment does not occupy a slot.

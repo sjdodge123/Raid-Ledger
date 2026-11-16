@@ -16,7 +16,10 @@ import {
   buildRoleSelectContent,
   capitalizeRole,
 } from './pug-invite.helpers';
-import { createPugSignup } from './pug-invite-signup.helpers';
+import {
+  createPugSignup,
+  replyPugSignupFailed,
+} from './pug-invite-signup.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 import { defined } from '../../common/defined.helpers';
 
@@ -175,7 +178,8 @@ async function acceptWithCharacter(
 ): Promise<void> {
   const effectiveRole = character.roleOverride ?? character.role ?? 'dps';
   await updateSlotAccepted(deps, pugSlotId, effectiveRole, character);
-  await createPugSignup(deps, slot, effectiveRole);
+  const failure = await createPugSignup(deps, slot, effectiveRole);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   await replyCharAccepted(interaction, deps, slot, character.name);
 }
 
@@ -235,7 +239,8 @@ async function doPugRoleSelect(
     ? await resolveCharClassSpec(deps, interaction.user.id, slot, characterName)
     : null;
   await updateSlotWithRole(deps, pugSlotId, selectedRole, charInfo);
-  await createPugSignup(deps, slot, selectedRole);
+  const failure = await createPugSignup(deps, slot, selectedRole);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   await replyRoleAccepted(interaction, deps, slot, selectedRole, characterName);
 }
 

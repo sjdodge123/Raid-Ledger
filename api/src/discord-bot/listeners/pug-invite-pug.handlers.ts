@@ -17,7 +17,10 @@ import {
   buildCharacterOptions,
 } from './pug-invite.helpers';
 import { showPugRoleSelect } from './pug-invite-pug-select.handlers';
-import { createPugSignup } from './pug-invite-signup.helpers';
+import {
+  createPugSignup,
+  replyPugSignupFailed,
+} from './pug-invite-signup.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
@@ -224,7 +227,8 @@ async function finalizePugAccept(
     .update(schema.pugSlots)
     .set({ status: 'accepted', updatedAt: new Date() })
     .where(eq(schema.pugSlots.id, slot.id));
-  await createPugSignup(deps, slot, slot.role);
+  const failure = await createPugSignup(deps, slot, slot.role);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   const embed = buildAcceptedEmbed(
     `You accepted the invite for **${eventTitle}**! See you there!`,
   );

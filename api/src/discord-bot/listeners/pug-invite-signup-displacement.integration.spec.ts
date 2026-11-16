@@ -159,6 +159,16 @@ async function testPugTakesOpenSlot() {
   }).toEqual({ pug: 'dps', nonBenchCount: 5 });
 }
 
+/** Same outcome as a web `slotRole: 'tank'` signup (runAutoAllocWithBenchFallback). */
+async function testTankPugBenchedWhenTankFull() {
+  const r = await seedRoster(2);
+  const pug = await pugAccepts(r.eventId, 'tank');
+  expect({
+    pug: await roleOf(pug),
+    nonBenchCount: await nonBenchCount(r.eventId),
+  }).toEqual({ pug: 'bench', nonBenchCount: 4 });
+}
+
 describe('Anonymous PUG-invite signup displacement (integration, ROK-2203)', () => {
   beforeAll(() => setupAll());
   afterEach(() => resetAfterEach());
@@ -169,4 +179,6 @@ describe('Anonymous PUG-invite signup displacement (integration, ROK-2203)', () 
     testPugBenchedOnConfirmedFullRoster());
   it('P3: an open dps slot is taken by the PUG directly', () =>
     testPugTakesOpenSlot());
+  it('P4: a tank PUG is benched when tank is full but dps is open (web parity)', () =>
+    testTankPugBenchedWhenTankFull());
 });

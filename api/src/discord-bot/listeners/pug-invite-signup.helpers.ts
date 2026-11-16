@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { PugInviteDeps } from './pug-invite.helpers';
@@ -14,20 +15,45 @@ const DISCORD_ROLES: readonly DiscordRole[] = [
   'player',
 ];
 
-/** Create an event signup + roster for an accepted PUG. */
+/** The Discord-button path's copy for a failed signup (signup-interaction.listener). */
+const SIGNUP_FAILED_REPLY = 'Something went wrong. Please try again.';
+
+/**
+ * Create an event signup + roster for an accepted PUG.
+ * @returns null when the signup was created (or there is no Discord id), else
+ * the reply to show instead of "Accepted!" — the 409 reason (e.g. signups
+ * closed) or the generic failure copy, as the Discord signup button replies.
+ */
 export async function createPugSignup(
   deps: PugInviteDeps,
   slot: PugSlot,
   role: string,
-): Promise<void> {
+): Promise<string | null> {
   const discordUserId = slot.discordUserId;
-  if (!discordUserId) return;
+  if (!discordUserId) return null;
   const linkedUser = await findLinkedUser(deps, discordUserId);
   if (linkedUser) {
-    await createLinkedPugSignup(deps, slot, linkedUser, role);
-    return;
+    return createLinkedPugSignup(deps, slot, linkedUser, role);
   }
-  await createAnonymousPugSignup(deps, slot, discordUserId, role);
+  return createAnonymousPugSignup(deps, slot, discordUserId, role);
+}
+
+/** Reply copy for a signup that threw: the 409 reason, else generic copy. */
+function signupFailureReply(err: unknown): string {
+  if (err instanceof HttpException && err.getStatus() === 409) {
+    return err.message;
+  }
+  return SIGNUP_FAILED_REPLY;
+}
+
+/** Replace the accept reply with why no signup was created. */
+export async function replyPugSignupFailed(
+  interaction: {
+    editReply(options: { content: string; components: [] }): Promise<unknown>;
+  },
+  reply: string,
+): Promise<void> {
+  await interaction.editReply({ content: reply, components: [] });
 }
 
 async function findLinkedUser(
@@ -48,7 +74,7 @@ async function createLinkedPugSignup(
   slot: PugSlot,
   linkedUser: { id: number },
   role: string,
-): Promise<void> {
+): Promise<string | null> {
   await deleteOrphanedAnonymousSignup(deps, slot);
   try {
     const result = await deps.signupsService.signup(
@@ -59,10 +85,12 @@ async function createLinkedPugSignup(
     deps.logger.log(
       `Created signup ${result.id} for PUG ${slot.discordUsername} (linked user ${linkedUser.id}) on event ${slot.eventId}`,
     );
+    return null;
   } catch (err) {
     deps.logger.warn(
       `Failed to create signup for PUG ${slot.discordUsername}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
+    return signupFailureReply(err);
   }
 }
 
@@ -91,7 +119,7 @@ async function createAnonymousPugSignup(
   slot: PugSlot,
   discordUserId: string,
   role: string,
-): Promise<void> {
+): Promise<string | null> {
   try {
     const result = await deps.signupsService.signupDiscord(slot.eventId, {
       discordUserId,
@@ -102,10 +130,12 @@ async function createAnonymousPugSignup(
     deps.logger.log(
       `Created anonymous signup ${result.id} for PUG ${slot.discordUsername} on event ${slot.eventId} (${result.assignedSlot ?? 'unassigned'})`,
     );
+    return null;
   } catch (err) {
     deps.logger.warn(
       `Failed to create anonymous signup for PUG ${slot.discordUsername}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
+    return signupFailureReply(err);
   }
 }
 
