@@ -39,6 +39,7 @@ import {
   staticGateGreen,
 } from './gate-summary.js';
 import { isSplitParent, parallelParentUnmerged } from './tools/task-parallel.js';
+import { gateVerifiedVeto } from './gate-verified.js';
 
 /** The validate-ci.sh summary row (and orchestrator step name) we key on. */
 export const PLAYWRIGHT_STEP = 'Playwright (desktop + mobile)';
@@ -156,6 +157,8 @@ export interface SentinelAnnotation {
   surface_hash: string | null;
   /** Why no sentinel could be named, when the tier itself passed (ROK-1566). */
   surface_error?: string;
+  /** ROK-2205: why a green-looking run was NOT gate_verified (e.g. a stale sync). */
+  gate_error?: string;
 }
 
 /**
@@ -180,7 +183,11 @@ export interface SentinelOptions {
 }
 
 /** The "no sentinel" annotation, with both the new and legacy field names. */
-function notVerified(surfaceHash: string | null, surfaceError?: string): SentinelAnnotation {
+function notVerified(
+  surfaceHash: string | null,
+  surfaceError?: string,
+  gateError?: string,
+): SentinelAnnotation {
   return {
     playwright_verified: false,
     playwright_sentinel: null,
@@ -189,6 +196,7 @@ function notVerified(surfaceHash: string | null, surfaceError?: string): Sentine
     gate_tier: null,
     surface_hash: surfaceHash,
     ...(surfaceError ? { surface_error: surfaceError } : {}),
+    ...(gateError ? { gate_error: gateError } : {}),
   };
 }
 
@@ -242,6 +250,10 @@ export function evaluateSentinel(
   if (!sha) return null;
   const surface = lookupTaskSurfaceHash(taskId, mapPath);
   if (!isTerminalStatus(status.mcp_runtime_status)) return null;
+  // ROK-2205: green rows from a stale sync (or a run already judged not
+  // gate_verified) describe other code — never a sentinel, and say why.
+  const veto = gateVerifiedVeto(status, sha);
+  if (veto) return notVerified(surface, undefined, veto);
   const tier = resolveGateTier(status);
   if (!tier) return notVerified(surface);
   const dir = opts.dir ?? sentinelDir();
@@ -265,7 +277,9 @@ export function evaluateSentinel(
   if (surface === 'nosurface') return verifiedAnnotation(null, tier, surface);
   const name = `${SENTINEL_PREFIX}${surface}`;
   const names = [name];
+  // ROK-2205: the push hook refuses any sentinel without gate_verified: true.
   const body = JSON.stringify({
+    gate_verified: true,
     sha,
     surface,
     tier,
