@@ -116,6 +116,9 @@ export const INSIDE_DUNGEON_QUESTS: readonly InsideQuest[] = [
   q(3523, 'Scourge of the Downs', 'Razorfen Downs'),
   q(3525, 'Extinguishing the Idol', 'Razorfen Downs'),
   q(1144, 'Willix the Importer', 'Razorfen Kraul'),
+  // ROK-2220: the dying Heralath Fallowbrook gives it inside the Kraul;
+  // operator-confirmed in game 2026-11-16.
+  q(1142, 'Mortality Wanes', 'Razorfen Kraul'),
   q(5122, 'The Medallion of Faith', 'Stratholme', false),
   q(5125, "Aurius' Reckoning", 'Stratholme', false),
   q(5262, 'The Truth Comes Crashing Down', 'Stratholme'),
