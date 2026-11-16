@@ -56,16 +56,36 @@ let testApp: TestApp;
 let adminToken: string;
 let foreverGame: number;
 let classicGame: number;
-const guilds = {} as Record<
-  'alliance' | 'horde' | 'neutral' | 'empty' | 'other' | 'hidden',
-  number
->;
+type GuildKey = 'alliance' | 'horde' | 'neutral' | 'empty' | 'other' | 'hidden';
 type Who = 'lead' | 'outsider' | 'hordeA' | 'hordeB' | 'otherOwner';
-const users = {} as Record<Who, { id: number; token: string }>;
-const chars = {} as Record<
-  'below' | 'inRange' | 'above' | 'noLevel' | 'orcAlt' | 'other' | 'wouldBe',
-  string
->;
+type CharKey =
+  'below' | 'inRange' | 'above' | 'noLevel' | 'orcAlt' | 'other' | 'wouldBe';
+/** Filled in `beforeAll`; an unseeded 0 / '' id fails the request loudly. */
+const guilds: Record<GuildKey, number> = {
+  alliance: 0,
+  horde: 0,
+  neutral: 0,
+  empty: 0,
+  other: 0,
+  hidden: 0,
+};
+const noUser = () => ({ id: 0, token: '' });
+const users: Record<Who, { id: number; token: string }> = {
+  lead: noUser(),
+  outsider: noUser(),
+  hordeA: noUser(),
+  hordeB: noUser(),
+  otherOwner: noUser(),
+};
+const chars: Record<CharKey, string> = {
+  below: '',
+  inRange: '',
+  above: '',
+  noLevel: '',
+  orcAlt: '',
+  other: '',
+  wouldBe: '',
+};
 const hordeChars: string[] = [];
 let fetchSpy: jest.SpyInstance;
 
@@ -127,6 +147,8 @@ interface CharSeed {
   name: string;
   race: string;
   level: number | null;
+  /** `characters.level` when it differs from the roster level (I9). */
+  charLevel?: number;
   guildId?: number;
   gameId?: number;
 }
@@ -143,7 +165,7 @@ async function seedChar(c: CharSeed): Promise<string> {
         name: c.name,
         class: 'Warrior',
         race: c.race,
-        level: c.level,
+        level: c.charLevel ?? c.level,
         region: 'us',
         addonGuid: guid,
       })
@@ -212,7 +234,14 @@ async function seedAllianceRoster(): Promise<void> {
   const max = DUNGEON.maximumLevel;
   const own = { userId: lead, race: 'Human', guildId: g };
   chars.below = await seedChar({ ...own, name: 'Belowa', level: min - 1 });
-  chars.inRange = await seedChar({ ...own, name: 'Inrangea', level: min });
+  // Its `characters.level` would read 'above'; the newer roster level fact
+  // ('in') must win, proving the level comes from the facts (I9).
+  chars.inRange = await seedChar({
+    ...own,
+    name: 'Inrangea',
+    level: min,
+    charLevel: max + 5,
+  });
   chars.above = await seedChar({ ...own, name: 'Abovea', level: max + 1 });
   chars.noLevel = await seedChar({ ...own, name: 'Nolevela', level: null });
   // A Horde-race alt on the Alliance roster: with a Human it makes the
@@ -433,6 +462,19 @@ describe('dungeon-plan — faction filter (I6, I7, I10)', () => {
     expect(body.hiddenOtherFaction).toBe(2);
     expect(body.side).toBe('alliance');
     expect(body.sideSource).toBe('guild');
+  });
+
+  it('I6 (R3): an ALLIANCE guild with only a Horde character picked keeps the Alliance quest', async () => {
+    const body = await plan(guilds.alliance, [chars.orcAlt]);
+    expect(body.side).toBe('alliance');
+    expect(body.sideSource).toBe('guild');
+    expect(questIds(body)).toEqual(
+      [Q.alliance, ...NEUTRAL].sort((a, b) => a - b),
+    );
+    expect(body.hiddenOtherFaction).toBe(2);
+    // The column stays; the Orc just has no cell on the Human-only quest.
+    const row = defined(body.readiness.signups[0], 'signup');
+    expect(row.perQuest.map((p) => p.questId)).not.toContain(Q.alliance);
   });
 
   it("I6 mirror: a 'Horde' guild hides the Alliance-only quest", async () => {
