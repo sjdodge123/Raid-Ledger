@@ -313,6 +313,7 @@ export * from './wow-roster-attunements.schema.js';
 export * from './wow-character-attunements.schema.js';
 export * from './wow-recent-dings.schema.js';
 export * from './wow-event-quest-readiness.schema.js';
+export * from './wow-dungeon-plan.schema.js';
 export * from './wow-event-raid-readiness.schema.js';
 // ROK-2128: Add character → Guild roster pick list + admin Change owner.
 export * from './wow-roster-claim.schema.js';

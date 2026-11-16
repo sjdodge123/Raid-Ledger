@@ -203,3 +203,41 @@ describe('reputation rewards (ROK-2161)', () => {
     });
   });
 });
+
+/**
+ * Characterization lock of the ROK-1908 ruling (curated Forever rows keep
+ * their own level, giver, chain and sharable fields). It passes on main by
+ * design — no merge code changed — and guards the ruling against regression;
+ * it does not prove new behaviour.
+ */
+describe('mergeBlizzardOverlay — curated Forever rows (ROK-1908)', () => {
+  /** The bundled City of Dalaran row (quest 92456) as the JSON seeds it. */
+  const dalaran = curated({
+    questId: 92456,
+    dungeonInstanceId: 90_000_004,
+    name: 'A Green Sample',
+    questLevel: 33,
+    requiredLevel: 24,
+    expansion: 'forever',
+    questGiverNpc: 'Shylamiir',
+    questGiverZone: null,
+    nextQuestId: 92457,
+    objectives: null,
+    startsInsideDungeon: false,
+    sharable: true,
+  });
+
+  it('keeps the curated level, giver, chain and sharable fields', () => {
+    const merged = mergeBlizzardOverlay(
+      dalaran,
+      overlay({ questId: 92456, title: 'A Green Sample', rewardXp: 9400 }),
+    );
+    expect(merged).toEqual({
+      ...dalaran,
+      name: 'A Green Sample',
+      rewardXp: 9400,
+      rewardGold: 1800,
+      rewardsJson: [918],
+    });
+  });
+});

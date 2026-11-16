@@ -31,3 +31,17 @@ export function prerequisiteCount(quest: { questId: number; prerequisiteChain: {
 export function formatReputationReward(reward: { factionName: string; amount: number }): string {
     return `${reward.amount > 0 ? '+' : ''}${reward.amount.toLocaleString()} ${reward.factionName}`;
 }
+
+/**
+ * The header level label: the quest's own level, else (ROK-1908) its dungeon's
+ * catalogue level band for an imported quest with none; null when neither.
+ */
+export function questLevelLabel(quest: {
+    questLevel: number | null;
+    levelBand?: { min: number; max: number } | null | undefined;
+}): string | null {
+    if (quest.questLevel) return `Lv${quest.questLevel}`;
+    const band = quest.levelBand;
+    if (!band) return null;
+    return band.min === band.max ? `Lv${band.min}` : `Lv${band.min}\u2013${band.max}`;
+}

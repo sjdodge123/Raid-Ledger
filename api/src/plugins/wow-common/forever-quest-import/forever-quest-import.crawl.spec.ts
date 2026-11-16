@@ -7,6 +7,7 @@ import {
   CLASSIC_QUEST_AREAS,
   classicQuestAreaInstanceIds,
 } from './classic-quest-areas';
+import { questAreaTargets } from './forever-quest-areas';
 import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
   QUEST_IMPORT_NO_AREAS_MESSAGE,
@@ -21,13 +22,12 @@ import {
   emptyQuestImportReport,
 } from './forever-quest-import.report';
 
-/** Every mapped area as a Blizzard `{ id, name }` area entry. */
+/** Every crawled area (classic + Forever-new) as a Blizzard area entry. */
 function mappedAreas(): { id: number; name: string }[] {
-  return classicQuestAreaInstanceIds().flatMap((id) => {
-    const entry = CLASSIC_QUEST_AREAS[id];
-    if (!entry) return [];
-    return [{ id: entry.areaId, name: entry.areaNames[0] ?? entry.dungeon }];
-  });
+  return questAreaTargets().map(({ entry }) => ({
+    id: entry.areaId,
+    name: entry.areaNames[0] ?? entry.dungeon,
+  }));
 }
 
 /** An index naming every mapped area, so each one is requested (and 404s). */
@@ -116,7 +116,7 @@ const LINKED_INDEX = {
   areas: link('quest/area/index'),
   types: link('quest/type/index'),
 };
-const MAPPED = classicQuestAreaInstanceIds().length;
+const MAPPED = questAreaTargets().length;
 
 /** Deps answering by URL path; every fetched URL lands in `urls`. */
 function routed(
@@ -566,5 +566,68 @@ describe('QuestImportCrawl — the item-level probe is evidence only (codex P2 4
     );
     expect(report.itemLevelProbe).toBeNull();
     expect(report.errors.filter((e) => e.startsWith('item/'))).toEqual([]);
+  });
+});
+
+describe('QuestImportCrawl — Forever-new quest areas (ROK-1908)', () => {
+  const DALARAN = 90_000_004;
+
+  it('lists both City of Dalaran areas and files their quests under the seed instance', async () => {
+    const urls: string[] = [];
+    const saved: { questId: number; areaId: number; dungeon: number | null }[] =
+      [];
+    const base = routed(urls, (path) => {
+      if (path === 'quest/index') return ok({ areas: mappedAreas() });
+      if (path === 'quest/area/16560')
+        return ok({ quests: [{ id: 92470, name: 'Arcane Ruin' }] });
+      if (path === 'quest/92470') {
+        const area = { id: 16560, name: 'City of Dalaran' };
+        return ok({ id: 92470, title: 'Arcane Ruin', area });
+      }
+      if (path.startsWith('quest/area/')) return ok({ quests: [] });
+      return NOT_FOUND;
+    });
+    const { report, err } = await runCrawl({
+      ...base,
+      saveQuest: (row) => {
+        const dungeon = row.dungeonInstanceId ?? null;
+        saved.push({ questId: row.questId, areaId: row.areaId, dungeon });
+        return Promise.resolve();
+      },
+    });
+    expect(err).toBeNull();
+    expect(report.mismatchedAreas).toEqual([]);
+    expect(
+      urls.filter((u) => /quest\/area\/(16544|16560)\?/.test(u)),
+    ).toHaveLength(2);
+    expect(urls.some((u) => /quest\/area\/279\?/.test(u))).toBe(false);
+    expect(saved).toEqual([
+      { questId: 92470, areaId: 16560, dungeon: DALARAN },
+    ]);
+  });
+
+  it("re-fetches a Forever dungeon's unlisted bundled quest under its first area", async () => {
+    const saved: { questId: number; areaId: number; dungeon: number | null }[] =
+      [];
+    const base = routed([], (path) => {
+      if (path === 'quest/index') return ok({ areas: mappedAreas() });
+      if (path === 'quest/92456')
+        return ok({ id: 92456, title: 'A Green Sample' });
+      if (path.startsWith('quest/area/')) return ok({ quests: [] });
+      return NOT_FOUND;
+    });
+    const { err } = await runCrawl({
+      ...base,
+      knownQuests: new Map([[92456, DALARAN]]),
+      saveQuest: (row) => {
+        const dungeon = row.dungeonInstanceId ?? null;
+        saved.push({ questId: row.questId, areaId: row.areaId, dungeon });
+        return Promise.resolve();
+      },
+    });
+    expect(err).toBeNull();
+    expect(saved).toEqual([
+      { questId: 92456, areaId: 16544, dungeon: DALARAN },
+    ]);
   });
 });

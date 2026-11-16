@@ -219,3 +219,25 @@ describe('QuestCard — reputation rewards (ROK-2161)', () => {
         expect(screen.queryByTestId('quest-reward-reputation')).toBeNull();
     });
 });
+
+describe('QuestCardHeader — dungeon level band (ROK-1908)', () => {
+    function renderHeader(overrides: Partial<EnrichedDungeonQuestDto>) {
+        return render(
+            <QuestCard quest={createQuest(overrides)} questCoverage={undefined} currentUserId={1} eventId={1}
+                wowheadVariant="classic" isExpanded={false} pendingQuestId={null}
+                equippedBySlot={new Map()} charClass={null} characterId={undefined}
+                onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />,
+        );
+    }
+
+    it('shows the dungeon level band where the quest level would be when the quest has none', () => {
+        renderHeader({ questLevel: null, requiredLevel: null, levelBand: { min: 22, max: 30 } });
+        expect(screen.getByText('(Lv22\u201330)')).toHaveClass('quest-card__level');
+    });
+
+    it('keeps the quest\'s own level over a band', () => {
+        renderHeader({ questLevel: 25, levelBand: { min: 22, max: 30 } });
+        expect(screen.getByText('(Lv25)')).toHaveClass('quest-card__level');
+        expect(screen.queryByText(/Lv22/)).toBeNull();
+    });
+});
