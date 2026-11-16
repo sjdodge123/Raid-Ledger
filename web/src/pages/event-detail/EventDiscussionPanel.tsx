@@ -186,6 +186,15 @@ function PanelThread({
     );
 }
 
+/**
+ * The thread itself failed — its first load or a refetch (a withdrawn signup
+ * 403s) — as opposed to a "Show more replies" page. TanStack keeps the last
+ * good data on a failed refetch, so the panel must not render it (Codex P2).
+ */
+function threadFailed(query: ThreadQuery): boolean {
+    return query.isError && !query.isFetchNextPageError;
+}
+
 /** Skeleton while the thread loads; the 403 / other-failure line when it fails. */
 function PanelLoadState({ query }: { query: ThreadQuery }): JSX.Element | null {
     if (query.isPending) {
@@ -197,7 +206,7 @@ function PanelLoadState({ query }: { query: ThreadQuery }): JSX.Element | null {
             />
         );
     }
-    if (!query.isError) return null;
+    if (!threadFailed(query)) return null;
     return (
         <p role="alert" className="text-sm text-danger">
             {httpStatusOf(query.error) === 403
@@ -218,7 +227,7 @@ export function EventDiscussionPanel({
     signup,
 }: EventDiscussionPanelProps): JSX.Element {
     const query = useEventDiscussionThread(event.id, true);
-    const thread = query.data?.pages[0];
+    const thread = threadFailed(query) ? undefined : query.data?.pages[0];
     return (
         <section
             className="mb-6 rounded-xl border border-edge bg-surface p-4"

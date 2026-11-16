@@ -213,6 +213,34 @@ describe('EventDiscussionPanel — thread load failures', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(copy);
         expect(screen.queryByTestId('forum-reply-composer')).toBeNull();
     });
+
+    it('a 403 on a refetch (signup withdrawn) drops the cached replies and composer', async () => {
+        let forbidden = false;
+        server.use(
+            http.get(`${BASE}/thread`, () =>
+                forbidden
+                    ? HttpResponse.json({ message: 'x' }, { status: 403 })
+                    : HttpResponse.json(thread()),
+            ),
+        );
+        servePost(201);
+        renderPanel();
+        expect(await screen.findByText('Bringing potions.')).toBeInTheDocument();
+        forbidden = true;
+        await userEvent.type(screen.getByTestId('forum-reply-input'), 'Bye');
+        await userEvent.click(screen.getByTestId('forum-reply-submit'));
+        await waitFor(() =>
+            expect(
+                screen.queryByTestId('forum-reply-composer'),
+                'a revoked viewer keeps no enabled composer from the stale cache',
+            ).toBeNull(),
+        );
+        expect(
+            screen.queryByText('Bringing potions.'),
+            'the stale replies are no longer shown after the 403',
+        ).toBeNull();
+        expect(screen.getByRole('alert')).toHaveTextContent(DISCUSSION_FORBIDDEN);
+    });
 });
 
 describe('signedUpLabel', () => {
