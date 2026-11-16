@@ -30,7 +30,7 @@ const EVENT: EventRow = {
   cancelledAt: null,
   gameId: 3,
   slotConfig: { type: 'mmo' },
-} as EventRow;
+};
 
 function mockDeps(): RescheduleDeps {
   return {
