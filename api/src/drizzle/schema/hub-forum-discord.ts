@@ -147,6 +147,20 @@ export const hubForumDiscordLinks = pgTable(
   ],
 );
 
+/**
+ * ROK-2208 OQ-4: a shared forum's post that is not synced (untagged or more
+ * than one hub tag) gets ONE bot reply. The row is the "already told" record:
+ * the bot sends only when its `INSERT … ON CONFLICT DO NOTHING` returns a
+ * row, so restarts, reconcile and races never double-post.
+ */
+export const hubForumDiscordNotices = pgTable('hub_forum_discord_notices', {
+  discordThreadId: varchar('discord_thread_id', { length: 32 }).primaryKey(),
+  forumId: integer('forum_id')
+    .notNull()
+    .references(() => hubForumDiscordForums.id, { onDelete: 'cascade' }),
+  sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type HubForumDiscordForumSelect =
   typeof hubForumDiscordForums.$inferSelect;
 export type HubForumDiscordForumInsert =

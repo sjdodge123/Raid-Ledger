@@ -1,5 +1,5 @@
 {
-  "id": "d26d1d30-e049-4c6e-aa7c-9690ca120008",
+  "id": "930ddbe3-a7d4-47e1-9e03-33f98b4ed291",
   "prevId": "e5a886a2-df04-42b8-969f-18f1e8e981b7",
   "version": "7",
   "dialect": "postgresql",
@@ -15135,6 +15135,52 @@
           "value": "\"hub_forum_discord_links\".\"sync_state\" IN ('pending', 'synced', 'failed')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.hub_forum_discord_notices": {
+      "name": "hub_forum_discord_notices",
+      "schema": "",
+      "columns": {
+        "discord_thread_id": {
+          "name": "discord_thread_id",
+          "type": "varchar(32)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "forum_id": {
+          "name": "forum_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "hub_forum_discord_notices_forum_id_hub_forum_discord_forums_id_fk": {
+          "name": "hub_forum_discord_notices_forum_id_hub_forum_discord_forums_id_fk",
+          "tableFrom": "hub_forum_discord_notices",
+          "tableTo": "hub_forum_discord_forums",
+          "columnsFrom": [
+            "forum_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.hub_session_note_items": {

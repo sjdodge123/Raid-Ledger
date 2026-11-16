@@ -42,6 +42,12 @@ CREATE TABLE "hub_forum_discord_links" (
 	CONSTRAINT "hub_forum_discord_links_sync_state" CHECK ("hub_forum_discord_links"."sync_state" IN ('pending', 'synced', 'failed'))
 );
 --> statement-breakpoint
+CREATE TABLE "hub_forum_discord_notices" (
+	"discord_thread_id" varchar(32) PRIMARY KEY NOT NULL,
+	"forum_id" integer NOT NULL,
+	"sent_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "hub_forum_replies" ADD COLUMN "author_discord_id" varchar(32);--> statement-breakpoint
 ALTER TABLE "hub_forum_replies" ADD COLUMN "author_discord_name" varchar(100);--> statement-breakpoint
 ALTER TABLE "hub_forum_replies" ADD COLUMN "author_discord_avatar" varchar(64);--> statement-breakpoint
@@ -54,6 +60,7 @@ ALTER TABLE "hub_forum_discord_bindings" ADD CONSTRAINT "hub_forum_discord_bindi
 ALTER TABLE "hub_forum_discord_links" ADD CONSTRAINT "hub_forum_discord_links_guild_id_guilds_id_fk" FOREIGN KEY ("guild_id") REFERENCES "public"."guilds"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "hub_forum_discord_links" ADD CONSTRAINT "hub_forum_discord_links_thread_id_hub_forum_threads_id_fk" FOREIGN KEY ("thread_id") REFERENCES "public"."hub_forum_threads"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "hub_forum_discord_links" ADD CONSTRAINT "hub_forum_discord_links_reply_id_hub_forum_replies_id_fk" FOREIGN KEY ("reply_id") REFERENCES "public"."hub_forum_replies"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "hub_forum_discord_notices" ADD CONSTRAINT "hub_forum_discord_notices_forum_id_hub_forum_discord_forums_id_fk" FOREIGN KEY ("forum_id") REFERENCES "public"."hub_forum_discord_forums"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "uq_hub_forum_discord_bindings_forum_tag" ON "hub_forum_discord_bindings" USING btree ("forum_id","tag_id") WHERE "hub_forum_discord_bindings"."tag_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "idx_hub_forum_discord_bindings_forum_id" ON "hub_forum_discord_bindings" USING btree ("forum_id");--> statement-breakpoint
 CREATE INDEX "idx_hub_forum_discord_bindings_ack_by" ON "hub_forum_discord_bindings" USING btree ("ack_by");--> statement-breakpoint
