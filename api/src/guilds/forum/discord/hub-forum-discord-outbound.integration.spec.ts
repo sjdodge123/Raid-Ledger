@@ -145,7 +145,7 @@ describe('ROK-2208 outbound RL → Discord', () => {
     const threadId = await newThread(b);
     await synced();
     expect(out.spies.createPost).toHaveBeenCalledTimes(1);
-    const [target, post, author] = nonEmpty(
+    const [[target, post, author]] = nonEmpty(
       out.spies.createPost.mock.calls,
       'createPost',
     );
@@ -173,7 +173,7 @@ describe('ROK-2208 outbound RL → Discord', () => {
     await bind(g, { mode: 'create' });
     const threadId = await newThread(g);
     await synced();
-    const [, post] = nonEmpty(out.spies.createPost.mock.calls, 'createPost');
+    const [[, post]] = nonEmpty(out.spies.createPost.mock.calls, 'createPost');
     expect(post.tagIds).toEqual([]);
     const [link] = nonEmpty(await linkRows(threadId), 'link');
     const edit = { title: 'Raid night moved', body: 'Now Friday' };
