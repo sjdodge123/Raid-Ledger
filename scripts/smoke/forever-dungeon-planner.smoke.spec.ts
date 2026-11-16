@@ -186,6 +186,8 @@ test.describe('Dungeon planner tab on WoW: Forever guild hubs (ROK-2216)', () =>
             expect(new URL(copied).searchParams.get('d'), 'the URL carries the dungeon').toBe(String(plan.instanceId));
             expect(new URL(copied).hash, 'the URL opens the planner tab').toBe(`#${TAB_ID}`);
 
+            // A same-URL goto is an in-page hash jump; leave the page first so the link is truly re-opened.
+            await page.goto('about:blank');
             await openPlanner(page, copied);
             await expectDungeonPicked(page, testInfo, plan);
             await expect(planner(page).getByTestId('planner-group').getByTestId(/^planner-chip-/), 'all 3 picks are restored')
