@@ -20,6 +20,8 @@ export interface PlannerState {
     available: RosterPick[];
     /** False once five characters are picked. */
     canAdd: boolean;
+    /** The link's own tokens (URL state) — what Copy link shares, even before the roster loads. */
+    linkTokens: PlanToken[];
     /** Claimed picks' character ids — the only ids the plan API and invites take. */
     characterIds: string[];
     setInstanceId: (id: number | null) => void;
@@ -65,7 +67,7 @@ export function usePlannerState(roster: Pick<WowRosterInsightsDto, 'classes'> | 
         write({ ...plan, tokens: [...tokens, option.token] });
     };
     return {
-        instanceId: plan.instanceId, picks, canAdd,
+        instanceId: plan.instanceId, picks, canAdd, linkTokens: plan.tokens,
         available: options.filter((o) => !picks.some((p) => p.key === o.key)),
         characterIds: toCharacterIds(tokens),
         setInstanceId: (id) => write({ ...plan, instanceId: id, tokens }),

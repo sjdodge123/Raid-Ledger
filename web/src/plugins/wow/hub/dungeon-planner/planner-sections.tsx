@@ -5,21 +5,23 @@
  */
 import type { JSX } from 'react';
 import type { DungeonPlanDto, EnrichedDungeonQuestDto, WowInstanceDto } from '@raid-ledger/contract';
+import { DialogBanner } from '../../../../components/ui/dialog-banner';
+import { Pill } from '../../../../components/hub/hub-bits';
 import { DungeonPicker, UnverifiedHint, WowheadLink } from './planner-controls';
 import { instanceRange } from './planner-display';
 import { QuestBreakdown } from './planner-breakdown';
 import { hiddenFactionNote } from './planner-faction';
 
-const FACTION_PILL: Readonly<Record<'alliance' | 'horde', { cls: string; label: string }>> = {
-    alliance: { cls: 'border-faction-alliance/30 bg-faction-alliance/10 text-faction-alliance', label: 'Alliance' },
-    horde: { cls: 'border-faction-horde/30 bg-faction-horde/10 text-faction-horde', label: 'Horde' },
-};
+const FACTION_PILL = {
+    alliance: { tone: 'faction-alliance', label: 'Alliance' },
+    horde: { tone: 'faction-horde', label: 'Horde' },
+} as const;
 
 /** "Alliance guild" — shown when the quest list is filtered by the guild's faction. */
 export function FactionPill({ plan }: { plan: DungeonPlanDto | undefined }): JSX.Element | null {
     if (!plan?.side || plan.sideSource !== 'guild') return null;
-    const { cls, label } = FACTION_PILL[plan.side];
-    return <span className={`rounded-full border px-2 py-0.5 text-xs ${cls}`}>{label} guild</span>;
+    const { tone, label } = FACTION_PILL[plan.side];
+    return <Pill tone={tone} title="Quests are filtered to this faction">{label} guild</Pill>;
 }
 
 interface DungeonSectionProps {
@@ -50,6 +52,8 @@ interface QuestSectionProps {
     plan: { data: DungeonPlanDto | undefined; isLoading: boolean; isError: boolean };
     /** The dungeon's enriched quests (grouping metadata); undefined while loading. */
     enriched: EnrichedDungeonQuestDto[] | undefined;
+    /** True when the enriched-quests request failed. */
+    enrichedError: boolean;
 }
 
 /** Only quests the plan API listed (side-filtered, ROK-2214 L11), in the enriched order. */
@@ -59,9 +63,10 @@ function planQuests(plan: DungeonPlanDto, enriched: EnrichedDungeonQuestDto[]): 
 }
 
 /** QUEST PREP for the picked dungeon, or the state that stands in for it. */
-export function QuestSection({ instanceId, plan, enriched }: QuestSectionProps): JSX.Element {
+export function QuestSection({ instanceId, plan, enriched, enrichedError }: QuestSectionProps): JSX.Element {
     if (instanceId === null) return <p className="text-sm text-muted">Pick a dungeon to see its quests and who is ready.</p>;
-    if (plan.isError) return <p className="text-sm text-danger">Couldn't load this plan. Try another dungeon or reload.</p>;
+    if (plan.isError) return <DialogBanner tone="danger" spacing="" testId="planner-plan-error">Couldn't load this plan. Try another dungeon or reload.</DialogBanner>;
+    if (enrichedError) return <DialogBanner tone="danger" spacing="" testId="planner-quests-error">Couldn't load this dungeon's quests. Reload to try again.</DialogBanner>;
     if (plan.isLoading || !plan.data || !enriched) return <p className="text-sm text-muted">Loading quests…</p>;
     return (
         <QuestBreakdown quests={planQuests(plan.data, enriched)} signups={plan.data.readiness.signups}

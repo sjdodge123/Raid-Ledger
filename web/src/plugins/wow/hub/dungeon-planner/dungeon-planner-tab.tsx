@@ -31,7 +31,8 @@ function eventLinks(page: HubCtx['page'], s: PlannerState, plan: DungeonPlanDto 
         plain: s.instanceId === null ? null : createEventUrl(base),
         invite: createEventUrl({ ...base, inviteCharacterIds }),
         inviteCount: inviteCharacterIds.length,
-        excluded: s.picks.filter((p) => !p.claimed || dropped.has(p.key)).map((p) => p.name),
+        unlinked: s.picks.filter((p) => !p.claimed).map((p) => p.name),
+        dropped: s.picks.filter((p) => p.claimed && dropped.has(p.key)).map((p) => p.name),
     };
 }
 
@@ -48,10 +49,11 @@ interface ColumnsProps {
     marks: { below: Set<string>; dropped: Set<string> };
     desktop: boolean;
     enriched: EnrichedDungeonQuestDto[] | undefined;
+    enrichedError: boolean;
 }
 
 /** Controls + levels on the left, quest prep on the right at ≥1024px; stacked below. */
-function PlannerColumns({ s, instances, plan, marks, desktop, enriched }: ColumnsProps): JSX.Element {
+function PlannerColumns({ s, instances, plan, marks, desktop, enriched, enrichedError }: ColumnsProps): JSX.Element {
     return (
         <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-6 lg:space-y-0">
             <div className="space-y-4">
@@ -61,7 +63,7 @@ function PlannerColumns({ s, instances, plan, marks, desktop, enriched }: Column
                 {plan.data && <div className="border-t border-edge-subtle pt-3"><LevelsList plan={plan.data} /></div>}
             </div>
             <div className="border-t border-edge-subtle pt-3 lg:border-t-0 lg:pt-0">
-                <QuestSection instanceId={s.instanceId} plan={plan} enriched={enriched} />
+                <QuestSection instanceId={s.instanceId} plan={plan} enriched={enriched} enrichedError={enrichedError} />
             </div>
         </div>
     );
@@ -76,7 +78,7 @@ export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.E
     const enriched = useEnrichedQuests(s.instanceId === null ? [] : [s.instanceId], VARIANT);
     const marks = useMemo(() => planMarks(plan.data), [plan.data]);
     const links = eventLinks(page, s, plan.data, marks.dropped);
-    const share = shareUrl(window.location.origin, page.guild.id, { instanceId: s.instanceId, tokens: s.picks.map((p) => p.token) });
+    const share = shareUrl(window.location.origin, page.guild.id, { instanceId: s.instanceId, tokens: s.linkTokens });
     const actions = <CreateEventButtons links={links} />;
     return (
         <div className="rounded-lg border border-edge bg-surface p-4" data-testid="dungeon-planner">
@@ -89,9 +91,12 @@ export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.E
                     <div className="flex flex-wrap items-start gap-2"><CopyLinkButton url={share} />{desktop && actions}</div>
                 </div>
                 <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
-                    enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} />
+                    enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} enrichedError={enriched.isError} />
             </div>
-            {!desktop && <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-edge bg-surface p-3">{actions}</div>}
+            {!desktop && (
+                <div data-testid="planner-mobile-actions"
+                    className="sticky bottom-[var(--bottom-nav-clearance)] -mx-4 -mb-4 border-t border-edge bg-surface p-3 md:bottom-0">{actions}</div>
+            )}
         </div>
     );
 }

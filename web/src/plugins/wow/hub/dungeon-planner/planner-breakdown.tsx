@@ -1,7 +1,7 @@
 /**
  * ROK-2216 — the planner's LEVELS list and QUEST PREP breakdown (port of the
  * ROK-2207 prototype). The breakdown uses the event page's grouping from the
- * shared `quest-prep-groups.ts` (location → Sharable / Requires quest chain /
+ * shared `quest-prep-groups.ts` (location → Shareable / Requires quest chain /
  * Must pick up yourself) with a chip per picked claimed character.
  */
 import type { JSX } from 'react';
@@ -57,7 +57,7 @@ function LocationGroup({ title, hint, icon, quests, signups }: GroupProps & { ti
         <div className="space-y-2">
             <p className="text-sm font-semibold text-foreground"><span aria-hidden="true">{icon}</span> {title} ({quests.length})</p>
             {hint && <p className="text-xs text-muted">{hint}</p>}
-            <SubGroup label="Sharable" icon="🔗" quests={sharable} signups={signups} />
+            <SubGroup label="Shareable" icon="🔗" quests={sharable} signups={signups} />
             <SubGroup label="Requires quest chain" icon="⛓" quests={chain} signups={signups} />
             <SubGroup label="Must pick up yourself" icon="👤" quests={solo} signups={signups} />
         </div>

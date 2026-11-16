@@ -32,6 +32,8 @@ describe('usePlannerState', () => {
         const { result } = render(`/hubs/7?c=${STALE},m12#dungeon-planner`, null);
         expect(result.current.loc.search).toBe(`?c=${STALE},m12`);
         expect(result.current.state.characterIds).toEqual([STALE]);
+        expect(result.current.state.picks).toEqual([]);
+        expect(result.current.state.linkTokens).toEqual([{ kind: 'character', characterId: STALE }, { kind: 'member', memberId: 12 }]);
     });
 
     it('adds and removes picks through the URL', () => {

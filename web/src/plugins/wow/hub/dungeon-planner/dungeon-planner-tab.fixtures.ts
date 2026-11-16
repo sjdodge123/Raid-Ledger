@@ -55,11 +55,12 @@ export function makePlan(over: Partial<DungeonPlanDto> = {}): DungeonPlanDto {
     };
 }
 
-/** Instances list, enriched quests and the plan read (`onPlan` sees each plan request URL). */
-export function plannerHandlers(opts: { instance?: WowInstanceDto; plan?: DungeonPlanDto; onPlan?: (url: URL) => void } = {}): ReturnType<typeof http.get>[] {
+/** Instances list, enriched quests (`questsError` = 500) and the plan read (`onPlan` sees each plan request URL). */
+export function plannerHandlers(opts: { instance?: WowInstanceDto; plan?: DungeonPlanDto; onPlan?: (url: URL) => void; questsError?: boolean } = {}): ReturnType<typeof http.get>[] {
     return [
         http.get(`${API}/blizzard/instances`, () => HttpResponse.json({ data: [opts.instance ?? INSTANCE] })),
-        http.get(`${API}/plugins/wow-classic/instances/:id/quests/enriched`, () => HttpResponse.json(QUESTS)),
+        http.get(`${API}/plugins/wow-classic/instances/:id/quests/enriched`, () => (
+            opts.questsError ? HttpResponse.json({ message: 'boom' }, { status: 500 }) : HttpResponse.json(QUESTS))),
         http.get(`${API}/plugins/wow/guilds/:id/dungeon-plan`, ({ request }) => {
             opts.onPlan?.(new URL(request.url));
             return HttpResponse.json(opts.plan ?? makePlan());

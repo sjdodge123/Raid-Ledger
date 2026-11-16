@@ -4,7 +4,7 @@
  * `Select` below), the Wowhead zone link (OQ7), Copy link (OQ5) and the
  * Create-event buttons (OQ3 Option B → ROK-2215's `/events/new` pre-fill).
  */
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { WowInstanceDto } from '@raid-ledger/contract';
 import { Button } from '../../../../components/ui/button';
@@ -27,7 +27,7 @@ function DungeonList({ instances, selectedId, onSelect }: PickerProps): JSX.Elem
             {instances.map((inst) => (
                 <li key={inst.id} className="border-b border-edge-subtle last:border-b-0">
                     <Button variant="bare" onClick={() => onSelect(inst.id)} aria-pressed={inst.id === selectedId}
-                        className={`flex min-h-[44px] w-full !justify-start gap-2 px-3 text-left text-sm ${inst.id === selectedId ? 'bg-success/10 text-success' : 'text-foreground hover:bg-overlay'}`}>
+                        className={`flex min-h-[44px] w-full gap-2 px-3 text-left text-sm ${inst.id === selectedId ? 'bg-success/10 text-success' : 'text-foreground hover:bg-overlay'}`}>
                         <span className="min-w-0 flex-1 truncate">{inst.name} <span className="text-xs text-muted">· {inst.expansion}</span></span>
                         <span className="shrink-0 text-xs text-secondary">{instanceRange(inst)}</span>
                         <UnverifiedHint instance={inst} />
@@ -59,9 +59,17 @@ export function WowheadLink({ instance }: { instance: WowInstanceDto }): JSX.Ele
     );
 }
 
+/** How long "Copied" shows before the button reads "Copy link" again. */
+export const COPIED_RESET_MS = 2000;
+
 /** Copy the stateless share link (OQ5) for a forum post or Discord. */
 export function CopyLinkButton({ url }: { url: string }): JSX.Element {
     const [copied, setCopied] = useState(false);
+    useEffect(() => {
+        if (!copied) return undefined;
+        const timer = window.setTimeout(() => setCopied(false), COPIED_RESET_MS);
+        return () => window.clearTimeout(timer);
+    }, [copied]);
     const copy = (): void => {
         void navigator.clipboard?.writeText(url).then(() => setCopied(true), () => setCopied(false));
     };
@@ -75,11 +83,25 @@ function LinkOrDisabled({ to, label, primary, disabled }: { to: string; label: s
 }
 
 /** The Create-event pair; N = claimed characters the plan API kept (spec L12). */
-export interface CreateEventLinks { plain: string | null; invite: string; inviteCount: number; excluded: string[] }
+export interface CreateEventLinks {
+    plain: string | null;
+    invite: string;
+    inviteCount: number;
+    /** Unclaimed picks — no linked character, so nothing to invite. */
+    unlinked: string[];
+    /** Claimed picks the plan API dropped — no longer on the roster. */
+    dropped: string[];
+}
 
-/** OQ3 Option B: plain pre-fill + "& invite these N"; names without quest data are listed as not invited. */
+/** "Alt has no linked character — not invited." (null when nobody is listed). */
+function NotInvitedLine({ names, one, many }: { names: string[]; one: string; many: string }): JSX.Element | null {
+    if (names.length === 0) return null;
+    return <p className="text-xs text-muted">{names.join(', ')} {names.length === 1 ? one : many} — not invited.</p>;
+}
+
+/** OQ3 Option B: plain pre-fill + "& invite these N"; picks that can't be invited are listed with why. */
 export function CreateEventButtons({ links }: { links: CreateEventLinks }): JSX.Element {
-    const { plain, invite, inviteCount, excluded } = links;
+    const { plain, invite, inviteCount, unlinked, dropped } = links;
     return (
         <div className="space-y-1">
             <div className="flex flex-wrap gap-2">
@@ -87,9 +109,8 @@ export function CreateEventButtons({ links }: { links: CreateEventLinks }): JSX.
                 <LinkOrDisabled to={invite} label={`Create event & invite these ${inviteCount}`} primary={false}
                     disabled={plain === null || inviteCount === 0} />
             </div>
-            {excluded.length > 0 && (
-                <p className="text-xs text-muted">{excluded.join(', ')} {excluded.length === 1 ? 'has' : 'have'} no linked character — not invited.</p>
-            )}
+            <NotInvitedLine names={unlinked} one="has no linked character" many="have no linked character" />
+            <NotInvitedLine names={dropped} one="is no longer on the roster" many="are no longer on the roster" />
         </div>
     );
 }
