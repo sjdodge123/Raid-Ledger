@@ -26,6 +26,17 @@ export interface DungeonQuestDto {
   rewardType: string | null;
   /** ROK-2161: non-zero Blizzard reputation rewards; key absent when none. */
   reputationRewards?: QuestReputationReward[];
+  /**
+   * ROK-1908: the dungeon's catalogue level band — only on an imported quest
+   * with no level of its own; absent on curated quests.
+   */
+  levelBand?: QuestLevelBand | null;
+}
+
+/** A dungeon's catalogue level span (ROK-1908). */
+export interface QuestLevelBand {
+  min: number;
+  max: number;
 }
 
 /** One reputation reward on a quest card (ROK-2161). */

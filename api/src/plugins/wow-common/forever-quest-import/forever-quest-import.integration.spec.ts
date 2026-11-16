@@ -199,7 +199,8 @@ describe('POST /admin/plugins/blizzard/forever-quests/import (ROK-2143)', () => 
     const { body } = await testApp.request.get(ROUTE).set(auth(adminToken));
     expect(body.status).toBe('succeeded');
     expect(typeof body.finishedAt).toBe('string');
-    expect(body.mismatchedAreas).toHaveLength(18);
+    // Every crawled area but The Stockade: 19 classic + 12 Forever-new (ROK-1908) − 1.
+    expect(body.mismatchedAreas).toHaveLength(30);
     expect(body.mismatchedAreas).toContainEqual(
       expect.objectContaining({
         instanceId: 63,

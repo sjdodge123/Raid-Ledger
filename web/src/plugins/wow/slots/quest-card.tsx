@@ -6,7 +6,7 @@ import { useId } from 'react';
 import type { EnrichedDungeonQuestDto, QuestCoverageEntry, EquipmentItemDto, QuestPrereqState } from '@raid-ledger/contract';
 import { getWowheadQuestUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import { QuestRewardItems } from './quest-reward-items';
-import { formatGold, formatReputationReward, prerequisiteCount } from './quest-card-constants';
+import { formatGold, formatReputationReward, prerequisiteCount, questLevelLabel } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
@@ -108,6 +108,7 @@ function QuestCardHeader({ quest, isExpanded, bodyId, prereqTotal, completed, wo
     quest: EnrichedDungeonQuestDto; isExpanded: boolean; bodyId: string; prereqTotal: number;
     completed: boolean; wowheadVariant: string; onToggle: () => void;
 }) {
+    const levelLabel = questLevelLabel(quest);
     return (
         <div className="quest-card__header-wrapper">
             <div className="quest-card__header" onClick={onToggle}
@@ -117,7 +118,7 @@ function QuestCardHeader({ quest, isExpanded, bodyId, prereqTotal, completed, wo
                 <div className="quest-card__info">
                     <span className="quest-card__name">
                         {quest.name}
-                        {quest.questLevel && <span className="quest-card__level"> (Lv{quest.questLevel})</span>}
+                        {levelLabel && <span className="quest-card__level"> ({levelLabel})</span>}
                     </span>
                     {prereqTotal > 0 && (
                         <span className="quest-card__prereq-badge" title={`Requires ${prereqTotal} prerequisite quest(s)`}>Chain</span>

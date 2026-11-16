@@ -94,7 +94,7 @@ export class DungeonQuestsService {
     return applyInstanceOverlay(
       { db: this.db, settings: this.settings },
       rows.map((row) => toDto(row)),
-      { instanceIds, expansions },
+      { instanceIds, expansions, variant },
     );
   }
 
