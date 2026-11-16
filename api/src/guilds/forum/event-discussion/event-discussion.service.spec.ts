@@ -2,12 +2,13 @@
  * ROK-2226 §6.1 — EventDiscussionService: the card summary (404 / none /
  * ready / header-only) and the event-scoped delegation to HubForumService.
  */
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type {
   HubForumReplySelect,
   HubForumThreadSelect,
 } from '../../../drizzle/schema/hub-forum';
 import type { GuildAccessService } from '../../guild-access.service';
+import type { HubKindRegistry } from '../../hub-kind.registry';
 import type { HubForumThreadRecord } from '../hub-forum.mappers';
 import { findThread, type Db } from '../hub-forum.queries';
 import type { HubForumService } from '../hub-forum.service';
@@ -26,6 +27,9 @@ import { syncEventDiscussion } from './event-discussion.sync';
 import { resolveEventThread } from './forum-thread.context';
 
 jest.mock('../hub-forum.queries', () => ({ findThread: jest.fn() }));
+jest.mock('../../guild-core.queries', () => ({
+  findGuildKind: jest.fn(async () => 'valheim'),
+}));
 jest.mock('./event-discussion.sync', () => ({
   syncEventDiscussion: jest.fn(),
 }));
@@ -110,6 +114,16 @@ const scoped = {
   deleteReply: jest.fn(),
 };
 const forum = { forEventScope: jest.fn(() => scoped) };
+/** Owning plugin active by default; a spec flips both seams to "inactive". */
+const hubKinds = { forGuild: jest.fn(), require: jest.fn() };
+const PLUGIN_OFF = new ForbiddenException('Plugin "valheim" is not active');
+
+function pluginOff(): void {
+  hubKinds.forGuild.mockResolvedValue(undefined);
+  hubKinds.require.mockImplementation(() => {
+    throw PLUGIN_OFF;
+  });
+}
 
 function build(): EventDiscussionService {
   const db = {} as Db;
@@ -118,6 +132,7 @@ function build(): EventDiscussionService {
     db,
     access,
     forum as unknown as HubForumService,
+    hubKinds as unknown as HubKindRegistry,
   );
   svc.now = () => NOW;
   return svc;
@@ -128,6 +143,8 @@ beforeEach(() => {
   jest.mocked(findLiveEventThread).mockResolvedValue(LIVE);
   jest.mocked(findThread).mockResolvedValue(record(4));
   jest.mocked(newestLiveReplies).mockResolvedValue([reply(31), reply(32)]);
+  hubKinds.forGuild.mockResolvedValue({});
+  hubKinds.require.mockReturnValue({});
 });
 afterEach(() => jest.clearAllMocks());
 
@@ -225,5 +242,32 @@ describe('ROK-2226 EventDiscussionService — event-scoped delegation', () => {
       new NotFoundException(DISCUSSION_NOT_FOUND),
     );
     expect(scoped.createReply).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2226 EventDiscussionService — inactive owning plugin', () => {
+  it('summary reports none (no card) while the hub plugin is inactive', async () => {
+    pluginOff();
+    jest.mocked(resolveEventThread).mockResolvedValue({
+      who: who({ isMember: true, isSignedUp: true }),
+      lock: null,
+      isMember: true,
+    });
+    await expect(build().summary(viewer, 5)).resolves.toEqual({
+      state: 'none',
+    });
+    expect(hubKinds.forGuild).toHaveBeenCalledWith(7);
+  });
+
+  it('thread and reply routes 403 before delegating', async () => {
+    pluginOff();
+    const svc = build();
+    await expect(svc.thread(viewer, 5, {})).rejects.toBe(PLUGIN_OFF);
+    await expect(svc.createReply(viewer, 5, { body: 'x' })).rejects.toBe(
+      PLUGIN_OFF,
+    );
+    await expect(svc.deleteReply(viewer, 5, 31)).rejects.toBe(PLUGIN_OFF);
+    expect(hubKinds.require).toHaveBeenCalledWith('valheim');
+    expect(forum.forEventScope).not.toHaveBeenCalled();
   });
 });

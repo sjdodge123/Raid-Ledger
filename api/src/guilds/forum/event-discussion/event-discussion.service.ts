@@ -19,6 +19,8 @@ import {
   GuildAccessService,
   type GuildActor,
 } from '../../guild-access.service';
+import { findGuildKind } from '../../guild-core.queries';
+import { HubKindRegistry } from '../../hub-kind.registry';
 import { canFor } from '../hub-forum.helpers';
 import { toForumReply, type HubForumThreadRecord } from '../hub-forum.mappers';
 import { findThread, type Db } from '../hub-forum.queries';
@@ -45,6 +47,7 @@ export class EventDiscussionService {
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly access: GuildAccessService,
     private readonly forum: HubForumService,
+    private readonly hubKinds: HubKindRegistry,
   ) {}
 
   /** `GET events/:id/discussion` — the event-page card. */
@@ -57,6 +60,8 @@ export class EventDiscussionService {
     const live = await findLiveEventThread(this.db, eventId);
     const record = live && (await findThread(this.db, live.guildId, live.id));
     if (!live || !record) return { state: 'none' };
+    // Inactive owning plugin ⇒ the hub's behaviours do not run (CLAUDE.md).
+    if (!(await this.hubKinds.forGuild(live.guildId))) return { state: 'none' };
     const deps = { db: this.db, access: this.access, now };
     const { who, lock, isMember } = await resolveEventThread(
       deps,
@@ -140,10 +145,13 @@ export class EventDiscussionService {
     return rows.map((r) => toForumReply(r, canFor(who, r.reply, opts)));
   }
 
-  /** The event's live thread, or 404 (missing event or no thread). */
+  /** The event's live thread: 404 (missing event / no thread), 403 (plugin off). */
   private async requireLive(eventId: number): Promise<LiveEventThread> {
     const live = await findLiveEventThread(this.db, eventId);
     if (!live) throw new NotFoundException(DISCUSSION_NOT_FOUND);
+    // HubKindActiveGuard's 403 while the hub's owning plugin is inactive.
+    const kind = await findGuildKind(this.db, live.guildId);
+    if (kind !== null) this.hubKinds.require(kind);
     return live;
   }
 }
