@@ -85,7 +85,7 @@ describe('Discord forum section — turning it on', () => {
         await waitFor(() => expect(calls.puts).toEqual([{ mode: 'create', target: 'shared', ack: true }]));
     });
     it('shows the server’s refusal inline', async () => {
-        serve({ binding: null }, [forumDiscordChannel()], () => HttpResponse.json({ message: 'The Discord bot is offline.' }, { status: 500 }));
+        serve({ binding: null }, [forumDiscordChannel()], () => HttpResponse.json({ message: 'The Discord bot is offline.' }, { status: 503 }));
         renderSheet(page('game_community', LEADER));
         await userEvent.click(await screen.findByTestId('hub-forum-discord-ack'));
         await userEvent.click(screen.getByTestId('hub-forum-discord-turn-on'));
@@ -109,6 +109,16 @@ describe('Discord forum section — bound', () => {
         await userEvent.click(screen.getByTestId('hub-forum-discord-unlink'));
         await screen.findByTestId('hub-forum-discord-unlink-dialog');
         expect(screen.queryByTestId('hub-forum-discord-also-delete')).not.toBeInTheDocument();
+    });
+    it('labels the chip from health and still lets a Leader unlink while the bot is offline', async () => {
+        const calls = serve({ binding: forumDiscordBinding({ health: 'bot-offline' }) });
+        renderSheet(page('game_community', LEADER));
+        expect(await screen.findByTestId('hub-forum-discord-state')).toHaveTextContent('Paused: bot offline');
+        await userEvent.click(screen.getByTestId('hub-forum-discord-unlink'));
+        await screen.findByTestId('hub-forum-discord-unlink-dialog');
+        expect(screen.queryByTestId('hub-forum-discord-also-delete')).not.toBeInTheDocument();
+        await userEvent.click(screen.getByTestId('hub-forum-discord-unlink-confirm'));
+        await waitFor(() => expect(calls.deletes).toEqual(['']));
     });
     it('lists missing bot permissions in a banner', async () => {
         serve({ binding: forumDiscordBinding({ health: 'missing-perms', missingPermissions: ['ManageWebhooks', 'ManageThreads'] }) });

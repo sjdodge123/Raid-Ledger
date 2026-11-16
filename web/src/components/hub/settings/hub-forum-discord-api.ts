@@ -16,7 +16,7 @@ import {
 import { fetchApi } from '../../../lib/api-client';
 
 export type {
-    HubForumDiscordBinding, HubForumDiscordChannelOption, HubForumDiscordChannelOptions,
+    HubForumDiscordBinding, HubForumDiscordChannelOption, HubForumDiscordChannelOptions, HubForumDiscordHealth,
     HubForumDiscordMode, HubForumDiscordPreflight, HubForumDiscordSharedOption, HubForumDiscordStatus,
     HubForumDiscordTarget, PutHubForumDiscordInput,
 } from '@raid-ledger/contract';

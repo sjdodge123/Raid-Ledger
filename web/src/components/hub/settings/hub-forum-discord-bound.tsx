@@ -1,9 +1,10 @@
 /**
  * ROK-2208 S3 — the bound "Discord forum" state (approved Q10 mockup):
- * a "Syncing" `StatusChip`, the channel, the shared line, the cut-off date,
+ * a `StatusChip` labelled from health (Syncing / Paused / Needs attention), the channel, the shared line, the cut-off date,
  * a §4.7 `DialogBanner` while the bot is degraded, and Unlink behind a
  * confirm (`Modal` ≥1024px, `BottomSheet` below). "Also delete the Discord
- * forum" is offered only for a bot-made, unshared forum (Q8). No Pause (Q7).
+ * forum" is offered only for a bot-made, unshared forum (Q8), and not while
+ * the bot is offline (Unlink itself still works offline). No Pause (Q7).
  */
 import { useState, type JSX } from 'react';
 import { Button } from '../../ui/button';
@@ -14,9 +15,16 @@ import { BottomSheet } from '../../ui/bottom-sheet';
 import { StatusChip } from '../../ui/status-chip';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
-import type { HubForumDiscordBinding } from './hub-forum-discord-api';
+import type { HubForumDiscordBinding, HubForumDiscordHealth } from './hub-forum-discord-api';
 import { canDeleteForum, healthMessage, sharedLine } from './hub-forum-discord.helpers';
 import { useUnlinkHubForumDiscord } from './use-hub-forum-discord';
+
+const STATE: Record<HubForumDiscordHealth, { tone: 'success' | 'warning'; label: string }> = {
+    ok: { tone: 'success', label: 'Syncing' },
+    'bot-offline': { tone: 'warning', label: 'Paused: bot offline' },
+    'missing-perms': { tone: 'warning', label: 'Needs attention' },
+    'channel-missing': { tone: 'warning', label: 'Needs attention' },
+};
 
 interface ConfirmProps { guildId: number; binding: HubForumDiscordBinding; onClose: () => void }
 
@@ -35,7 +43,7 @@ function UnlinkConfirm({ guildId, binding, onClose }: ConfirmProps): JSX.Element
         <Shell isOpen onClose={onClose} title="Unlink the Discord forum?" footer={footer}>
             <div className="flex flex-col gap-3" data-testid="hub-forum-discord-unlink-dialog">
                 <p className="text-sm text-secondary">Threads stay on both sides; new posts stop syncing.</p>
-                {canDeleteForum(binding) ? (
+                {canDeleteForum(binding) && binding.health !== 'bot-offline' ? (
                     <Checkbox label={`Also delete #${binding.channelName || 'the forum'} on Discord`} checked={alsoDelete}
                         data-testid="hub-forum-discord-also-delete" onChange={(e) => setAlsoDelete(e.target.checked)} />
                 ) : binding.shared && <p className="text-sm text-muted">Other hubs share this forum, so it stays on Discord.</p>}
@@ -47,10 +55,11 @@ function UnlinkConfirm({ guildId, binding, onClose }: ConfirmProps): JSX.Element
 
 function BindingLines({ binding }: { binding: HubForumDiscordBinding }): JSX.Element {
     const shared = sharedLine(binding);
+    const state = STATE[binding.health];
     return (
         <div className="flex flex-col gap-1 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-                <StatusChip tone={binding.health === 'ok' ? 'success' : 'warning'} title="Discord forum sync">Syncing</StatusChip>
+                <span data-testid="hub-forum-discord-state"><StatusChip tone={state.tone} title="Discord forum sync">{state.label}</StatusChip></span>
                 <span className="font-medium text-foreground" data-testid="hub-forum-discord-channel-name">#{binding.channelName || binding.channelId}</span>
             </div>
             {shared && <p className="text-secondary" data-testid="hub-forum-discord-shared">{shared}</p>}
@@ -74,7 +83,7 @@ export function HubForumDiscordBound({ guildId, binding, canManage }: HubForumDi
                 : <DialogBanner tone="warning" role="status" spacing="" testId="hub-forum-discord-health">{health}</DialogBanner>)}
             {canManage && (
                 <div>
-                    <Button variant="destructive-soft" size="sm" disabled={offline} onClick={() => setConfirming(true)}
+                    <Button variant="destructive-soft" size="sm" onClick={() => setConfirming(true)}
                         data-testid="hub-forum-discord-unlink">Unlink</Button>
                 </div>
             )}
