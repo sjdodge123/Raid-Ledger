@@ -4,8 +4,9 @@
  * bindings for a joined channel and route to the game-binding / general-lobby
  * handlers. handleChannelJoin is re-entrant (presence recheck re-invokes it).
  */
-import { ActivityType, type GuildMember, type Presence } from 'discord.js';
+import type { GuildMember, Presence } from 'discord.js';
 import type { Logger } from '@nestjs/common';
+import { firstPlayingGameName } from '../services/presence-launcher-activities';
 import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import {
   buildDiscordMember,
@@ -113,10 +114,12 @@ export async function handlePresenceUpdate(
   }
 }
 
-/** The Playing activity name of a presence, or null when none. */
+/**
+ * The Playing GAME name of a presence, or null when none — launchers are
+ * skipped (ROK-2204) so CurseForge listed first never masks the bound game.
+ */
 function playingName(p: Presence | null | undefined): string | null {
-  const playing = p?.activities?.find((a) => a.type === ActivityType.Playing);
-  return playing?.name ?? null;
+  return firstPlayingGameName(p?.activities);
 }
 
 /**

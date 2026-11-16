@@ -3,7 +3,7 @@ import { bestEffortInit } from '../../common/lifecycle.util';
 import { and, eq, ilike, sql } from 'drizzle-orm';
 import { escapeLikePattern } from '../../common/search.util';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { ActivityType, type GuildMember } from 'discord.js';
+import type { GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { groupByGame, applyConsensus } from './presence-game-detector.helpers';
@@ -11,6 +11,10 @@ import {
   pickNormalizedTitleMatch,
   TRIGRAM_CANDIDATE_LIMIT,
 } from './presence-game-match.helpers';
+import {
+  firstPlayingGameName,
+  isLauncherActivity,
+} from './presence-launcher-activities';
 
 /** TTL for manual /playing overrides (30 minutes). */
 const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
@@ -30,6 +34,17 @@ const GAME_CACHE_TTL_MS = 10 * 60 * 1000;
  * normalization.
  */
 const TRIGRAM_SIMILARITY_THRESHOLD = 0.5;
+
+/** The no-game result (no presence, or only a launcher presence). */
+const NO_GAME = { gameId: null, gameName: 'Untitled Gaming Session' } as const;
+
+/**
+ * First Playing activity that is a game, skipping launchers such as
+ * CurseForge (ROK-2204) so a game shown alongside one still wins.
+ */
+function firstPlayingGame(member: GuildMember): string | null {
+  return firstPlayingGameName(member.presence?.activities);
+}
 
 /** Result of game detection for a set of members. */
 export interface DetectedGameGroup {
@@ -170,10 +185,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
         result.set(member.id, override);
         continue;
       }
-      const playing = member.presence?.activities?.find(
-        (a) => a.type === ActivityType.Playing,
-      );
-      result.set(member.id, playing?.name ?? null);
+      result.set(member.id, firstPlayingGame(member));
     }
     return result;
   }
@@ -188,10 +200,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
     >();
     for (const [memberId, name] of activities) {
       if (!name) {
-        result.set(memberId, {
-          gameId: null,
-          gameName: 'Untitled Gaming Session',
-        });
+        result.set(memberId, { ...NO_GAME });
         continue;
       }
       result.set(memberId, await this.resolveGame(name));
@@ -213,11 +222,9 @@ export class PresenceGameDetectorService implements OnModuleInit {
     }
 
     // Read Discord Rich Presence
-    const playingActivity = member.presence?.activities?.find(
-      (a) => a.type === ActivityType.Playing,
-    );
+    const playingGame = firstPlayingGame(member);
 
-    if (!playingActivity) {
+    if (playingGame === null) {
       const activitySummary = member.presence?.activities?.length
         ? member.presence.activities
             .map((a) => `${a.type}:${a.name}`)
@@ -226,19 +233,21 @@ export class PresenceGameDetectorService implements OnModuleInit {
       this.logger.debug(
         `No Playing activity for member ${member.id} (activities: [${activitySummary}])`,
       );
-      return { gameId: null, gameName: 'Untitled Gaming Session' };
+      return { ...NO_GAME };
     }
 
-    return this.resolveGame(playingActivity.name);
+    return this.resolveGame(playingGame);
   }
 
   /**
    * Resolve a Discord activity name to a game in the registry.
+   * Launcher names (ROK-2204) short-circuit to no game without a lookup.
    * Pipeline: manual mappings -> exact match -> case-insensitive match
    */
   async resolveGame(
     activityName: string,
   ): Promise<{ gameId: number | null; gameName: string }> {
+    if (isLauncherActivity(activityName)) return { ...NO_GAME };
     const cached = this.gameCache.get(activityName);
     if (cached && Date.now() - cached.cachedAt < GAME_CACHE_TTL_MS) {
       return { gameId: cached.gameId, gameName: cached.gameName };
