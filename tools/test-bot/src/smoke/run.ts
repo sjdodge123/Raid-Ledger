@@ -72,6 +72,7 @@ import { lfgInviteTests } from "./tests/lfg-invite.test.js";
 import { gameRoleTests } from "./tests/game-role.test.js";
 import { joinPostTests } from "./tests/join-post.test.js";
 import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
+import { hubForumDiscordBindingTests } from "./tests/hub-forum-discord-binding.test.js";
 import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
 import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
 import { seriesSignupEmbedTests } from "./tests/series-signup-embed.test.js";
@@ -244,6 +245,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...gameRoleTests,
     ...joinPostTests,
     ...guildDiscordMirrorTests,
+    ...hubForumDiscordBindingTests,
     ...channelLifecycleTests,
     ...embedHubLinkTests,
     ...seriesSignupEmbedTests,

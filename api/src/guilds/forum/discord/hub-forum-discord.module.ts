@@ -3,8 +3,10 @@ import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { DiscordBotModule } from '../../../discord-bot/discord-bot.module';
 import { DrizzleModule } from '../../../drizzle/drizzle.module';
 import { registerHubIngestSource } from '../../../hub-media/hub-media-ingest-sources';
+import { SettingsModule } from '../../../settings/settings.module';
 import { GuildsCoreModule } from '../../guilds-core.module';
 import { HubForumDiscordController } from './hub-forum-discord.controller';
+import { HubForumDiscordDemoTestController } from './hub-forum-discord.demo-test.controller';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 
@@ -13,8 +15,8 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
  * the outbound/inbound/reconcile lanes add their providers here.
  */
 @Module({
-  imports: [DrizzleModule, DiscordBotModule, GuildsCoreModule],
-  controllers: [HubForumDiscordController],
+  imports: [DrizzleModule, DiscordBotModule, GuildsCoreModule, SettingsModule],
+  controllers: [HubForumDiscordController, HubForumDiscordDemoTestController],
   providers: [HubForumDiscordGateway, HubForumDiscordService],
   exports: [HubForumDiscordGateway],
 })
