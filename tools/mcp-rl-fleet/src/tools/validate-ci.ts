@@ -234,6 +234,8 @@ export async function execute(
   // ROK-2205 M1: run the stale-build sync guard (sync-guard.ts) BEFORE dispatch
   // and record its verdict for the task — a run on an unverified /workspace
   // never earns the pre-push sentinel (2026-11-15: all PASS on stale files).
+  // Codex P2: check-only, capped at GATE_SYNC_BUDGET_MS (gate-sync.ts) so the
+  // dispatch never runs a force-resync inside the 120s MCP call.
   const sync = await verifyGateSync(slot, params.worktree_path);
   // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
   // --static / --only-unit / --only-integration runs to 1800s.

@@ -85,7 +85,9 @@ describe('rl_validate_ci → rl_task_status — the dispatch-time sync guard (RO
     guard.result = { ok: true, expected_head: FULL_SHA, synced_head: FULL_SHA, resynced: false, attempts: 1, flush_ok: true, message: 'ok' };
     await execute({ args: ['--static'], worktree_path: WORKTREE });
 
-    expect(ensureSyncedHead).toHaveBeenCalledWith({ slot: 2, worktree_path: WORKTREE });
+    expect(ensureSyncedHead).toHaveBeenCalledWith(
+      expect.objectContaining({ slot: 2, worktree_path: WORKTREE, check_only: true }),
+    );
   });
 
   it('refuses the sentinel on an all-PASS run whose runner tree was stale', async () => {
