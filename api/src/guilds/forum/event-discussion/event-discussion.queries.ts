@@ -2,9 +2,10 @@
  * ROK-2226 — event discussion reads: the event row the reconciler needs, the
  * event's live thread, and whether a user is signed up to the event.
  */
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
-import type { Db } from '../hub-forum.queries';
+import type { HubForumReplyRecord } from '../hub-forum.mappers';
+import { selectReplies, type Db } from '../hub-forum.queries';
 
 /** A db handle or a transaction from `db.transaction`. */
 export type DbOrTx = Db | Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -95,4 +96,22 @@ export async function isEventSignup(
     )
     .limit(1);
   return row !== undefined;
+}
+
+/** The `limit` newest live replies of a thread, oldest first (the event card). */
+export async function newestLiveReplies(
+  db: Db,
+  threadId: number,
+  limit: number,
+): Promise<HubForumReplyRecord[]> {
+  const r = schema.hubForumReplies;
+  const rows = await selectReplies(
+    db,
+    and(eq(r.threadId, threadId), isNull(r.deletedAt)),
+  )
+    .orderBy(desc(r.createdAt), desc(r.id))
+    .limit(limit);
+  return rows
+    .map((row) => ({ reply: row.reply, author: row.author }))
+    .reverse();
 }

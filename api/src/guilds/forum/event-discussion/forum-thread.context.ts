@@ -1,0 +1,92 @@
+/**
+ * ROK-2226 §6 — one thread plus who is looking, for every hub-forum route
+ * that reads or writes inside a thread. A normal thread keeps the ROK-1175
+ * rules (member/staff or 403, 403 before 404); an event thread resolves the
+ * §6 matrix, so a signed-up non-member can read and write that one thread.
+ */
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import type { HubForumLock } from '@raid-ledger/contract';
+import type {
+  GuildAccessService,
+  GuildActor,
+} from '../../guild-access.service';
+import { FORUM_NOT_MEMBER, resolveForumActor } from '../hub-forum.access';
+import type { HubForumActor } from '../hub-forum.helpers';
+import type { HubForumThreadRecord } from '../hub-forum.mappers';
+import { findThread, type Db } from '../hub-forum.queries';
+import {
+  eventThreadActor,
+  eventThreadLock,
+  type EventThreadActor,
+} from './event-discussion.access';
+import { isEventSignup } from './event-discussion.queries';
+
+/** The thread, the viewer's forum rights and the event-thread extras. */
+export interface ForumThreadContext {
+  record: HubForumThreadRecord;
+  who: HubForumActor;
+  /** May post a reply now (normal thread: always, for a member). */
+  canReply: boolean;
+  /** §5.4 read-only state; null while writable or for a normal thread. */
+  lock: HubForumLock | null;
+}
+
+/** Deps the resolver needs from the calling service. */
+export interface ForumThreadDeps {
+  db: Db;
+  access: GuildAccessService;
+  now: Date;
+}
+
+/** §6 facts for an event thread; signup/creator only count while attached. */
+async function eventActor(
+  deps: ForumThreadDeps,
+  actor: GuildActor,
+  record: HubForumThreadRecord,
+): Promise<EventThreadActor> {
+  const { thread } = record;
+  const isMember = await deps.access.canView(actor, thread.guildId);
+  const canModerate =
+    isMember && (await deps.access.canEdit(actor, thread.guildId));
+  const event = thread.eventDetachedAt === null ? (record.event ?? null) : null;
+  const isSignedUp =
+    event !== null && (await isEventSignup(deps.db, event.id, actor.id));
+  const isCreator = event !== null && event.creatorId === actor.id;
+  return eventThreadActor(actor.id, {
+    isMember,
+    canModerate,
+    isSignedUp,
+    isCreator,
+  });
+}
+
+/**
+ * Load `threadId` in `guildId` and resolve the viewer. 403 (not a reader)
+ * before 404 for normal threads, exactly as before ROK-2226.
+ */
+export async function forumThreadContext(
+  deps: ForumThreadDeps,
+  actor: GuildActor,
+  target: { guildId: number; threadId: number },
+): Promise<ForumThreadContext> {
+  const record = await findThread(deps.db, target.guildId, target.threadId);
+  if (!record || record.thread.eventId === null) {
+    const who = await resolveForumActor(deps.access, actor, target.guildId);
+    if (!record) throw new NotFoundException('Thread not found');
+    return { record, who, canReply: true, lock: null };
+  }
+  const { who, lock } = await resolveEventThread(deps, actor, record);
+  if (!who.canRead) throw new ForbiddenException(FORUM_NOT_MEMBER);
+  return { record, who, canReply: who.canReply, lock };
+}
+
+/** An event thread's viewer rights + read-only state, never throwing (the card). */
+export async function resolveEventThread(
+  deps: ForumThreadDeps,
+  actor: GuildActor,
+  record: HubForumThreadRecord,
+): Promise<{ who: EventThreadActor; lock: HubForumLock | null }> {
+  const who = await eventActor(deps, actor, record);
+  const exists = (record.event ?? null) !== null;
+  return { who, lock: eventThreadLock(record.thread, exists, deps.now) };
+}

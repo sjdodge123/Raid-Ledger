@@ -7,6 +7,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { Db } from '../hub-forum.queries';
@@ -25,6 +26,9 @@ export function lifecycleEventId(payload: unknown): number | null {
 @Injectable()
 export class EventDiscussionListener {
   private readonly logger = new Logger(EventDiscussionListener.name);
+  /** Hub behaviour (ruling 9) — read by the A3 ownership guard's listener scan. */
+  readonly hubBehaviour = 'event-discussion';
+  readonly ownerPluginId = CORE_PLUGIN_ID;
 
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 

@@ -15,6 +15,7 @@ import type {
 } from '@raid-ledger/contract';
 import { mediaSourceGates, mediaSubjects } from './hub-registration-scan.media';
 import { ggCards } from './hub-registration-scan.gg';
+import { eventListeners } from './hub-registration-scan.listeners';
 
 /** One comment-stripped source file, path relative to `api/src`. */
 export interface ScanSource {
@@ -332,6 +333,7 @@ export function scanHubRegistrations(
     ...companionHandlers(sources, ctx),
     ...mediaSourceGates(sources, ctx),
     ...ggCards(sources, ctx),
+    ...eventListeners(sources, ctx),
   ];
   return {
     keys: found.flatMap((f) => (f.key === undefined ? [] : [f.key])),
