@@ -34,6 +34,16 @@ DIR="${RL_PLAYWRIGHT_SENTINEL_DIR:-/tmp}"
 # things the surface hash does NOT cover (deps, fixtures, the env itself).
 fresh() { [ -f "$1" ] && [ -n "$(find "$1" -mmin -1440 2>/dev/null)" ]; }
 
-fresh "$DIR/.playwright-verified-$H" && allow surface
+# ROK-2205: the sentinel must record gate_verified: true. A run reporting all
+# PASS while the runner was synced to an old commit (2026-11-15) wrote one
+# anyway; the MCP server now refuses to, and this check fails closed on every
+# sentinel written before the field existed (empty body, `{}`, or false).
+verified() { grep -Eq '"gate_verified"[[:space:]]*:[[:space:]]*true' "$1" 2>/dev/null; }
 
-deny "Smoke tests not verified for web surface $H (checked in $(pwd)). Run Playwright on the fleet (rl_validate_ci --only-e2e / --full - the MCP server writes the sentinel on a PASS), or locally via /push, which after a local PASS touches "'/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)'" (the body may be empty)."
+S="$DIR/.playwright-verified-$H"
+if fresh "$S"; then
+  verified "$S" && allow surface
+  deny "The sentinel for web surface $H ($S) does not record gate_verified: true - it predates ROK-2205 or came from a run that was not verified (e.g. a stale runner sync). Re-run the gate (rl_validate_ci) and read the terminal result with rl_task_status log_tail_bytes:3000 on a run that reports gate_verified: true; the MCP server then rewrites the sentinel."
+fi
+
+deny "Smoke tests not verified for web surface $H (checked in $(pwd)). Run the gate on the fleet (rl_validate_ci --scoped / --static / --only-e2e - the MCP server writes the sentinel on a gate_verified PASS; read it with rl_task_status log_tail_bytes:3000), or locally via /push, which after a local PASS writes "'{"gate_verified":true}'" to "'/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)'"."
