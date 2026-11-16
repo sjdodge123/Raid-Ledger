@@ -32,6 +32,7 @@ import {
   HubForumService,
 } from './hub-forum.service';
 import * as writes from './hub-forum.writes';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 jest.mock('./hub-forum.queries', () => ({
   findThread: jest.fn(),
@@ -108,7 +109,11 @@ function build(canView = true, canEdit = false): HubForumService {
     canEdit: jest.fn().mockResolvedValue(canEdit),
   };
   const db: Partial<Db> = {};
-  const service = new HubForumService(db as Db, fake as GuildAccessService);
+  const service = new HubForumService(
+    db as Db,
+    fake as GuildAccessService,
+    new EventEmitter2(),
+  );
   service.now = () => NOW;
   return service;
 }
@@ -267,7 +272,7 @@ describe('ROK-1175 HubForumService — views', () => {
       canView: jest.fn().mockResolvedValue(true),
       canEdit: jest.fn().mockResolvedValue(true),
     };
-    const s = new HubForumService({} as Db, fake as never);
+    const s = new HubForumService({} as Db, fake as never, new EventEmitter2());
     await s.list(other, 7, {});
     await s.latest(other, 7);
     await s.setPin(other, 7, 21, true);
