@@ -3,9 +3,12 @@
  * ids, plus the creator/staff gate on the endpoint.
  */
 import { ForbiddenException } from '@nestjs/common';
+import type { EventResponseDto } from '@raid-ledger/contract';
 import {
   assertCanInviteCharacters,
+  inviteCharactersAsCaller,
   planCharacterInvites,
+  type CharacterInviteDeps,
   type CharacterOwnerRow,
 } from './event-invite-characters.helpers';
 
@@ -123,5 +126,27 @@ describe('assertCanInviteCharacters', () => {
     expect(() => assertCanInviteCharacters(event, 99, false)).toThrow(
       new ForbiddenException('Only the event creator can invite characters'),
     );
+  });
+});
+
+describe('inviteCharactersAsCaller', () => {
+  it('refuses a non-creator non-staff caller before touching the db', async () => {
+    const select = jest.fn();
+    const deps = {
+      db: { select } as unknown as CharacterInviteDeps['db'],
+      notificationService: {} as CharacterInviteDeps['notificationService'],
+      eventEmitter: {} as CharacterInviteDeps['eventEmitter'],
+      logger: { log: jest.fn() } as unknown as CharacterInviteDeps['logger'],
+      findOne: jest
+        .fn()
+        .mockResolvedValue({ creator: { id: CREATOR_ID } } as EventResponseDto),
+    };
+    await expect(
+      inviteCharactersAsCaller(deps, 7, 99, false, [C_B]),
+    ).rejects.toThrow(
+      new ForbiddenException('Only the event creator can invite characters'),
+    );
+    expect(deps.findOne).toHaveBeenCalledWith(7);
+    expect(select).not.toHaveBeenCalled();
   });
 });

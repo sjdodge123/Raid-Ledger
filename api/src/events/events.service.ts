@@ -9,6 +9,7 @@ import {
   CreateEventDto,
   UpdateEventDto,
   EventResponseDto,
+  InviteCharactersResultDto,
   EventListResponseDto,
   EventListQueryDto,
   DashboardResponseDto,
@@ -53,6 +54,7 @@ import {
   persistEventUpdate,
 } from './event-update.helpers';
 import { inviteMemberToEvent } from './event-invite.helpers';
+import { inviteCharactersAsCaller } from './event-invite-characters.helpers';
 import { setEventReportLink } from './event-report-link.helpers';
 import { findOneEvent, findEventsByIds } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -304,6 +306,31 @@ export class EventsService {
       eventId,
       inviterId,
       discordId,
+    );
+  }
+
+  /**
+   * ROK-2215: invites the owners of planned characters. Event creator or
+   * operator/admin only (403 otherwise); skips are reported, never thrown.
+   */
+  async inviteCharacters(
+    eventId: number,
+    callerId: number,
+    isAdmin: boolean,
+    characterIds: string[],
+  ): Promise<InviteCharactersResultDto> {
+    return inviteCharactersAsCaller(
+      {
+        db: this.db,
+        notificationService: this.notificationService,
+        eventEmitter: this.eventEmitter,
+        logger: this.logger,
+        findOne: (id: number) => this.findOne(id),
+      },
+      eventId,
+      callerId,
+      isAdmin,
+      characterIds,
     );
   }
 
