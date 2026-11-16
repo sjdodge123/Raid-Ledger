@@ -510,3 +510,36 @@ describe('WowItemMetaService — a stale-tooltip re-probe settles (ROK-2176 revi
     expect(dueAfter(set)).toBe(false);
   });
 });
+
+describe('WowItemMetaService.idle — teardown drain (main-red 2026-11-16)', () => {
+  it('waits for an un-awaited enqueue to write its row and free its id', async () => {
+    const inner = fetchStub({ 16: [{ status: 200, body: HIT }] });
+    let release = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gated: ReturnType<typeof fetchStub> = {
+      urls: inner.urls,
+      fn: jest.fn<ReturnType<WowheadFetch>, Parameters<WowheadFetch>>(
+        (...args) => gate.then(() => inner.fn(...args)),
+      ),
+    };
+    const { service, writes } = setup({ fetch: gated });
+    void service.enqueue([19019]);
+    let idle = false;
+    const drained = service.idle().then(() => {
+      idle = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect({ idle, writes: writes.length }).toEqual({ idle: false, writes: 0 });
+    release();
+    await drained;
+    expect(writes.map((w) => w.row.itemId)).toEqual([19019]);
+    expect(service['inFlight'].size).toBe(0);
+  });
+
+  it('resolves at once with nothing pending', async () => {
+    const { service } = setup({ fetch: fetchStub({}) });
+    await expect(service.idle()).resolves.toBeUndefined();
+  });
+});
