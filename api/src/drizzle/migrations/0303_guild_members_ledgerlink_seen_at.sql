@@ -5,16 +5,18 @@ ALTER TABLE "guild_members" ADD COLUMN "blizzard_seen_at" timestamp with time zo
 -- latest Blizzard sync (it was an import); otherwise the newest last_seen_at
 -- of an import-only row (GUID, no Blizzard id: the sync never stamps those),
 -- or the latest snapshot when no such row exists (fully paired guild).
--- Every GUID row stamped at or after that anchor gets the anchor itself, so
--- nothing sits above it and the first post-deploy import measures against
--- the rows that import listed. Older GUID rows keep last_seen_at; GUID-less
--- rows were never listed by an import and stay NULL.
+-- GUID rows stamped before that anchor keep last_seen_at. At or after it,
+-- only rows live at the latest snapshot, or import-only rows, get the anchor
+-- itself. A paired row a sync stamped after the anchor that is not live now
+-- has left since: it stays NULL (not in the last import) instead of being
+-- re-counted as removed by the first post-deploy import. No anchor (or no
+-- last_seen_at): rows keep last_seen_at. GUID-less rows stay NULL.
 WITH "li" AS (
   SELECT "guild_id", max("last_seen_at") AS "t" FROM "guild_members"
   WHERE "guid" IS NOT NULL AND "blizzard_character_id" IS NULL
   GROUP BY "guild_id"
 ), "a" AS (
-  SELECT g."id" AS "guild_id", CASE
+  SELECT g."id" AS "guild_id", g."last_snapshot_at" AS "snap", CASE
     WHEN g."blizzard_roster_synced_at" < g."last_snapshot_at"
     THEN g."last_snapshot_at"
     ELSE coalesce("li"."t", g."last_snapshot_at")
@@ -23,8 +25,11 @@ WITH "li" AS (
 )
 UPDATE "guild_members" AS gm
 SET "ledgerlink_seen_at" = CASE
-  WHEN gm."last_seen_at" >= "a"."t" THEN "a"."t"
-  ELSE gm."last_seen_at"
+  WHEN "a"."t" IS NULL OR gm."last_seen_at" IS NULL
+    OR gm."last_seen_at" < "a"."t" THEN gm."last_seen_at"
+  WHEN "a"."snap" IS NULL OR gm."last_seen_at" >= "a"."snap"
+    OR gm."blizzard_character_id" IS NULL THEN "a"."t"
+  ELSE NULL
 END
 FROM "a"
 WHERE "a"."guild_id" = gm."guild_id" AND gm."guid" IS NOT NULL;--> statement-breakpoint

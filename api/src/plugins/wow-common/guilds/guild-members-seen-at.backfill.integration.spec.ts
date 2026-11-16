@@ -150,16 +150,14 @@ describe('ROK-2225 0303 backfill — first post-deploy import', () => {
     ['I -> S1 -> S2', S2],
     ['slug reset (no sync on record)', null],
   ])(
-    '(ii) %s, a paired member gone at S2: same import is 0/0, no flag',
+    '(ii) %s, a paired member gone at S2: the import without him is 0/0, no flag',
     async (_label, synced) => {
-      const listed = [
-        ...paired(5, S2),
-        { name: 'Gone', guid: 'GX', bid: 950, seen: S1 },
-        ...importOnly(5, I),
-      ];
+      const listed = [...paired(5, S2), ...importOnly(5, I)];
+      const gone = { name: 'Gone', guid: 'GX', bid: 950, seen: S1 };
       const fay = { name: 'Fay', guid: null, bid: 990, seen: S2 };
       const guildId = await seedGuild({ synced, snapshot: S2 }, [
         ...listed,
+        gone,
         fay,
       ]);
       await runBackfill();
@@ -183,6 +181,25 @@ describe('ROK-2225 0303 backfill — first post-deploy import', () => {
     ]);
     await runBackfill();
     expect(await measure(guildId, importOf(listed))).toBe('0/0');
+  });
+
+  it('(iv) latest snapshot a sync, only import-only row long departed: paired leavers since are not re-counted', async () => {
+    const live = paired(6, S2);
+    const leftSince = Array.from({ length: 5 }, (_, i) => ({
+      name: `Left${i}`,
+      guid: `GL${i}`,
+      bid: 800 + i,
+      seen: S1,
+    }));
+    const guildId = await seedGuild({ synced: S2, snapshot: S2 }, [
+      ...live,
+      ...leftSince,
+      ...importOnly(1, at(0)),
+    ]);
+    await runBackfill();
+    // The departed import-only row may have been in the last import: it
+    // counts as removed once. The paired leavers must not count again.
+    expect(await measure(guildId, importOf(live))).toBe('1/0');
   });
 });
 
