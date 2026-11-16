@@ -1224,7 +1224,8 @@ three places, all fixed together in ROK-1565: the sentinel's summary parser
 
 | Field | Meaning |
 |-------|---------|
-| `gate_verified` | The pre-push gate was satisfied for the synced worktree: the surface-keyed sentinel was written, or the run is `nosurface` (no file needed — the hook allows it outright). |
+| `gate_verified` | The pre-push gate was satisfied for the synced worktree: the surface-keyed sentinel was written, or the run is `nosurface` (no file needed — the hook allows it outright). ROK-2205: never true (and no sentinel is written) when the status already says `gate_verified: false` or reports a `synced_head` other than the HEAD recorded at dispatch; every sentinel body records `"gate_verified": true`, and the push hook refuses one that does not. |
+| `gate_error` | ROK-2205: why a green-looking run was not `gate_verified` (e.g. a stale sync); absent otherwise. |
 | `gate_sentinel` | Path of the surface-keyed sentinel; `null` for a `nosurface` run (nothing is written) and whenever `gate_verified` is false. |
 | `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed) — set for a `nosurface` pass too — or `null` whenever `gate_verified` is false. |
 | `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
