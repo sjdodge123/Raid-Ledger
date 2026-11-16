@@ -8,6 +8,7 @@ import { getWowheadQuestUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import { QuestRewardItems } from './quest-reward-items';
 import { formatGold, formatReputationReward, prerequisiteCount, questLevelLabel } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
+import { EscortChip } from '../lib/escort-chip';
 import { asDatedSource, formatSourceLine, type DatedSource } from '../lib/addon-source-line';
 
 /**
@@ -123,6 +124,7 @@ function QuestCardHeader({ quest, isExpanded, bodyId, prereqTotal, completed, wo
                     {prereqTotal > 0 && (
                         <span className="quest-card__prereq-badge" title={`Requires ${prereqTotal} prerequisite quest(s)`}>Chain</span>
                     )}
+                    <EscortChip isEscort={quest.isEscort} className="shrink-0" />
                     {completed && <DonePill />}
                 </div>
             </div>

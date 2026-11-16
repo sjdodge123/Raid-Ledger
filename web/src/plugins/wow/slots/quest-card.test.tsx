@@ -241,3 +241,26 @@ describe('QuestCardHeader — dungeon level band (ROK-1908)', () => {
         expect(screen.queryByText(/Lv22/)).toBeNull();
     });
 });
+
+describe('QuestCardHeader — escort marker (ROK-2224)', () => {
+    function renderCard(overrides: Partial<EnrichedDungeonQuestDto>) {
+        return render(
+            <QuestCard quest={createQuest(overrides)} questCoverage={undefined} currentUserId={1} eventId={1}
+                wowheadVariant="classic" isExpanded={false} pendingQuestId={null} equippedBySlot={new Map()}
+                charClass={null} characterId={undefined} onToggleExpanded={vi.fn()} onTogglePickedUp={vi.fn()} />,
+        );
+    }
+
+    it('shows an "Escort" chip with its explanation when the quest is an escort', () => {
+        renderCard({ isEscort: true });
+        expect(screen.getByText('Escort')).toHaveAttribute('title', expect.stringContaining('Escort quest'));
+    });
+
+    it('shows no "Escort" chip when isEscort is false or absent', () => {
+        const { unmount } = renderCard({ isEscort: false });
+        expect(screen.queryByText('Escort'), 'isEscort: false').toBeNull();
+        unmount();
+        renderCard({});
+        expect(screen.queryByText('Escort'), 'isEscort absent').toBeNull();
+    });
+});
