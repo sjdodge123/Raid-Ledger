@@ -3,7 +3,7 @@ import { bestEffortInit } from '../../common/lifecycle.util';
 import { and, eq, ilike, sql } from 'drizzle-orm';
 import { escapeLikePattern } from '../../common/search.util';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { ActivityType, type GuildMember } from 'discord.js';
+import type { GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { groupByGame, applyConsensus } from './presence-game-detector.helpers';
@@ -11,7 +11,10 @@ import {
   pickNormalizedTitleMatch,
   TRIGRAM_CANDIDATE_LIMIT,
 } from './presence-game-match.helpers';
-import { isLauncherActivity } from './presence-launcher-activities';
+import {
+  firstPlayingGameName,
+  isLauncherActivity,
+} from './presence-launcher-activities';
 
 /** TTL for manual /playing overrides (30 minutes). */
 const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
@@ -39,10 +42,8 @@ const NO_GAME = { gameId: null, gameName: 'Untitled Gaming Session' } as const;
  * First Playing activity that is a game, skipping launchers such as
  * CurseForge (ROK-2204) so a game shown alongside one still wins.
  */
-function firstPlayingGame(member: GuildMember): { name: string } | undefined {
-  return member.presence?.activities?.find(
-    (a) => a.type === ActivityType.Playing && !isLauncherActivity(a.name),
-  );
+function firstPlayingGame(member: GuildMember): string | null {
+  return firstPlayingGameName(member.presence?.activities);
 }
 
 /** Result of game detection for a set of members. */
@@ -184,7 +185,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
         result.set(member.id, override);
         continue;
       }
-      result.set(member.id, firstPlayingGame(member)?.name ?? null);
+      result.set(member.id, firstPlayingGame(member));
     }
     return result;
   }
@@ -221,9 +222,9 @@ export class PresenceGameDetectorService implements OnModuleInit {
     }
 
     // Read Discord Rich Presence
-    const playingActivity = firstPlayingGame(member);
+    const playingGame = firstPlayingGame(member);
 
-    if (!playingActivity) {
+    if (playingGame === null) {
       const activitySummary = member.presence?.activities?.length
         ? member.presence.activities
             .map((a) => `${a.type}:${a.name}`)
@@ -235,7 +236,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
       return { ...NO_GAME };
     }
 
-    return this.resolveGame(playingActivity.name);
+    return this.resolveGame(playingGame);
   }
 
   /**

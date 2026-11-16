@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { ActivityType, Events, type Presence } from 'discord.js';
-import { isLauncherActivity } from '../services/presence-launcher-activities';
+import { Events, type Presence } from 'discord.js';
+import { playingGameNames } from '../services/presence-launcher-activities';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
@@ -116,18 +116,4 @@ export class ActivityListener {
     this.userCache.set(discordUserId, userId);
     return userId;
   }
-}
-
-/**
- * Names of the "Playing" activities in a presence that are games — launchers
- * (CurseForge, Battle.net, ...) are dropped so they never open a session.
- * @param activities - the presence's activities
- */
-function playingGameNames(
-  activities: readonly Presence['activities'][number][],
-): string[] {
-  return activities
-    .filter((a) => a.type === ActivityType.Playing)
-    .filter((a) => !isLauncherActivity(a.name))
-    .map((a) => a.name);
 }
