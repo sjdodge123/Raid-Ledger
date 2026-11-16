@@ -17,8 +17,10 @@ import { AuthGuard } from '@nestjs/passport';
 import { HubVisibleGuard } from '../../../guilds/hub-visible.guard';
 import {
   DeleteGuildEditorParamsSchema,
+  DungeonPlanQuerySchema,
   GuildListQuerySchema,
   type CharacterGuild,
+  type DungeonPlanDto,
   type GuildEditor,
   type GuildEditorList,
   type GuildPage,
@@ -41,6 +43,7 @@ import { GuildRaidsService } from './guild-raids.service';
 import { RosterInsightsService } from './roster-insights/roster-insights.service';
 import { RecentDingsService } from './recent-dings/recent-dings.service';
 import { JoinGateService } from './join-gate/join-gate.service';
+import { DungeonPlanService } from './dungeon-plan/dungeon-plan.service';
 
 const jwt = AuthGuard('jwt');
 
@@ -62,6 +65,7 @@ export class GuildsController {
     private readonly insightsSvc: RosterInsightsService,
     private readonly dingsSvc: RecentDingsService,
     private readonly joinGate: JoinGateService,
+    private readonly dungeonPlans: DungeonPlanService,
   ) {}
 
   @Get()
@@ -139,6 +143,23 @@ export class GuildsController {
     @Query('mainsOnly') mainsOnly?: string,
   ): Promise<WowRosterInsightsDto> {
     return this.insightsSvc.insights(req.user, id, mainsOnly === 'true');
+  }
+
+  /**
+   * ROK-2214 — dungeon plan: one Forever dungeon + ≤5 claimed roster
+   * characters' levels and quest readiness. Anyone who can view the hub.
+   */
+  @Get(':id/dungeon-plan')
+  @UseGuards(jwt, HubVisibleGuard)
+  dungeonPlan(
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: unknown,
+  ): Promise<DungeonPlanDto> {
+    const parsed = DungeonPlanQuerySchema.safeParse(query);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.dungeonPlans.plan(id, parsed.data);
   }
 
   /** ROK-1919 — Forever "Recent dings" (last 30 days). Anyone who can view the hub. */

@@ -125,6 +125,17 @@ describe('roster-insights classes', () => {
       level: null,
     });
   });
+
+  it('carries the roster memberId on each member when known (ROK-2214 Q1)', () => {
+    const got = computeClasses([
+      { ...row('unclaimed', { cls: 'Rogue' }), memberId: 41 },
+      { ...row('legacy', { cls: 'Rogue' }), memberId: null },
+    ]);
+    expect(got[0]?.members).toEqual([
+      { name: 'unclaimed', characterId: null, level: null, memberId: 41 },
+      { name: 'legacy', characterId: null, level: null },
+    ]);
+  });
 });
 
 describe('roster-insights roles', () => {

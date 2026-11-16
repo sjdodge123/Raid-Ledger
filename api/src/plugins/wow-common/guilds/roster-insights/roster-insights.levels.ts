@@ -70,6 +70,8 @@ export function computeClasses(rows: readonly InsightRow[]): ClassEntry[] {
       name: row.name,
       characterId: row.characterId,
       level: levelOf(row),
+      // ROK-2214 Q1: keys an unclaimed member (the planner picker).
+      ...(typeof row.memberId === 'number' ? { memberId: row.memberId } : {}),
     });
     byClass.set(name, entry);
   }

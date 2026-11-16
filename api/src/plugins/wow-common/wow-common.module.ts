@@ -45,6 +45,7 @@ import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { EventQuestReadinessController } from './event-quest-readiness.controller';
 import { EventQuestReadinessService } from './event-quest-readiness.service';
+import { DungeonPlanService } from './guilds/dungeon-plan/dungeon-plan.service';
 import { EventRaidReadinessController } from './event-raid-readiness.controller';
 import { EventRaidReadinessService } from './event-raid-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
@@ -137,6 +138,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     QuestProgressService,
     QuestProgressReadService,
     EventQuestReadinessService,
+    DungeonPlanService,
     EventRaidReadinessService,
     ...addonImport.PROVIDERS,
     // ROK-2124: Forever Armory auto-link (import nudge + hourly job).
