@@ -521,7 +521,7 @@ describe('WowItemMetaService.idle — teardown drain (main-red 2026-11-16)', () 
     const gated: ReturnType<typeof fetchStub> = {
       urls: inner.urls,
       fn: jest.fn<ReturnType<WowheadFetch>, Parameters<WowheadFetch>>(
-        (url) => gate.then(() => inner.fn(url)),
+        (...args) => gate.then(() => inner.fn(...args)),
       ),
     };
     const { service, writes } = setup({ fetch: gated });
