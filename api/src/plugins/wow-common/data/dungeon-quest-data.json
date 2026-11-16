@@ -1185,8 +1185,13 @@
     ],
     "objectives": "Find and return Treshala's Pendant to Treshala Fallowbrook in Darnassus.",
     "classRestriction": null,
-    "raceRestriction": null,
-    "startsInsideDungeon": false,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": null,
@@ -1666,7 +1671,12 @@
     ],
     "objectives": "Bring Razorflank's Heart to Auld Stonespire in Thunder Bluff.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
