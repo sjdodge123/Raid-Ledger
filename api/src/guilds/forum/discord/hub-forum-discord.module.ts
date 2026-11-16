@@ -7,6 +7,9 @@ import { SettingsModule } from '../../../settings/settings.module';
 import { GuildsCoreModule } from '../../guilds-core.module';
 import { HubForumDiscordController } from './hub-forum-discord.controller';
 import { HubForumDiscordDemoTestController } from './hub-forum-discord.demo-test.controller';
+import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
+import { HubForumDiscordOutboundListener } from './hub-forum-discord-outbound.listener';
+import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 
@@ -17,8 +20,14 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
 @Module({
   imports: [DrizzleModule, DiscordBotModule, GuildsCoreModule, SettingsModule],
   controllers: [HubForumDiscordController, HubForumDiscordDemoTestController],
-  providers: [HubForumDiscordGateway, HubForumDiscordService],
-  exports: [HubForumDiscordGateway],
+  providers: [
+    HubForumDiscordGateway,
+    HubForumDiscordService,
+    HubForumDiscordOutboundGateway,
+    HubForumDiscordOutboundService,
+    HubForumDiscordOutboundListener,
+  ],
+  exports: [HubForumDiscordGateway, HubForumDiscordOutboundService],
 })
 export class HubForumDiscordModule implements OnModuleInit {
   /** CLAUDE.md plugin ownership: the sync is a Core ingest source. */
