@@ -2219,10 +2219,16 @@ Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/
 - **Discussion card** (`pages/event-detail/EventDiscussionCard.tsx`) — after the Signups roster, before Activity. Same frame as the
   page's other cards (`bg-surface border-edge rounded-xl p-4`). A compact reply preview: 28px `AvatarWithFallback`, name
   (`text-foreground`), time (`text-dim`), body `line-clamp-2` `text-secondary`, rows split by `border-edge-subtle`. Empty =
-  `QuietEmpty`. The CTA is a router `Link` styled with `buttonClass` and NAVIGATES to `/hubs/<id>?thread=<id>#forum` —
-  never an inline composer (Q2). Reader without write → muted "Sign up to join the discussion." + secondary "Read the full
+  `QuietEmpty`. The CTA is a router `Link` styled with `buttonClass` and NAVIGATES to `/events/<id>?discussion=1` (the panel
+  below) — never an inline composer (Q2). Reader without write → muted "Sign up to join the discussion." + a small primary
+  "Sign up" `Button` running the page's own signup action (absent when the viewer cannot join) + secondary "Read the full
   thread"; cannot read → header + count only; locked → neutral `Pill` "Closed" + `ForumLockBar`. `forum-latest-widget`
   lists titles, not reply bodies, so it does not fit here.
+- **Discussion panel** (`pages/event-detail/EventDiscussionPanel.tsx`, L4b) — `?discussion=1` swaps the card for the full
+  thread in the same card frame: "← Back to event" (the Back-to-Forum idiom), title + `ForumEventPills`, a muted
+  `UsersIcon` "N / M signed up" line, `ForumLockBar` when locked, then the forum's own `ForumMessage` root (no menu — the
+  root is system-managed), `ForumReplyItemView` rows, `MoreReplies` and `ForumReplyComposerView` — the hub thread's parts
+  fed by the event-scoped routes, so a signed-up non-member never meets the members-only hub forum (OQ-11).
 - **Forum event header** (`components/hub/forum/forum-event-header.tsx`) — a `bg-surface border-edge rounded-lg` box above an
   event thread's root: date · time range (viewer TZ), `Pill tone="warning"` Cancelled, "View event →" (`text-success` link,
   the Back-to-Forum idiom), then `ForumLockBar` when locked.
