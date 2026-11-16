@@ -3,7 +3,8 @@
  * `areas[]` when inline, else `quest/area/index`, which the documented
  * `quest/index` only links to; verifies the area map by name; no areas, or
  * no mapped area found, fails the run), `quest/area/{id}` per mapped
- * dungeon, then `quest/{id}` for
+ * area (the classic dungeons plus, ROK-1908, every Forever-new instance's
+ * catalogue quest areas), then `quest/{id}` for
  * every listed quest, every quest of ours the area did not list, and their
  * prerequisites (visited set, depth cap). Every request re-checks the kill
  * switch and is spaced {@link FOREVER_QUEST_IMPORT_SPACING_MS}; a fatal
@@ -29,13 +30,12 @@ import {
 } from './blizzard-quest.parse';
 import { toOverlayRow } from './forever-quest-import.overlay-row';
 import {
-  CLASSIC_QUEST_AREAS,
   areaNameCandidates,
   areaNameMatches,
-  classicQuestAreaInstanceIds,
   firstKnownQuestId,
   type ClassicQuestArea,
 } from './classic-quest-areas';
+import { primaryQuestArea, questAreaTargets } from './forever-quest-areas';
 import { FOREVER_QUEST_IMPORT_OFF_MESSAGE } from './forever-quest-import-switch';
 import {
   FOREVER_QUEST_IMPORT_MAX_DEPTH,
@@ -136,7 +136,7 @@ export class QuestImportCrawl {
 
   /** Every mapped area missing or misnamed = a broken map, not a success. */
   private assertSomeAreaMapped(): void {
-    const mapped = classicQuestAreaInstanceIds().length;
+    const mapped = questAreaTargets().length;
     if (mapped > 0 && this.report.mismatchedAreas.length >= mapped) {
       throw new QuestImportAbort(questImportNoMappedAreasMessage(mapped));
     }
@@ -168,9 +168,7 @@ export class QuestImportCrawl {
   /** Verify + list each mapped area; returns the instance ids imported. */
   private async listAreas(areas: BlizzardRef[]): Promise<Set<number>> {
     const imported = new Set<number>();
-    for (const instanceId of classicQuestAreaInstanceIds()) {
-      const entry = CLASSIC_QUEST_AREAS[instanceId];
-      if (!entry) continue;
+    for (const { instanceId, entry } of questAreaTargets()) {
       const actual = areas.find((a) => a.id === entry.areaId);
       if (!actual || !areaNameMatches(entry, actual.name)) {
         this.report.mismatchedAreas.push(
@@ -257,7 +255,7 @@ export class QuestImportCrawl {
   /** Our quests in an imported dungeon that its area did not list. */
   private enqueueUnlisted(imported: Set<number>): void {
     for (const [questId, instanceId] of this.deps.knownQuests) {
-      const entry = CLASSIC_QUEST_AREAS[instanceId];
+      const entry = primaryQuestArea(instanceId);
       if (!entry || !imported.has(instanceId)) continue;
       this.enqueue({
         questId,
