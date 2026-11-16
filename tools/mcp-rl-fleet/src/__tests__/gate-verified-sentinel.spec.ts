@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { evaluateSentinel, recordTaskSha, SENTINEL_PREFIX } from '../playwright-sentinel.js';
 import type { ExecuteStatusReturn } from '../tools/task-schemas.js';
+import type { GateSyncRecord } from '../gate-verified.js';
 
 const SHA = '8fd1f515';
 const FULL_SHA = `${SHA}0123456789abcdef0123456789abcdef`;
@@ -102,5 +103,60 @@ describe('evaluateSentinel — gate_verified is required (ROK-2205)', () => {
 
     const body: unknown = JSON.parse(readFileSync(sentinelPath(), 'utf8'));
     expect(body).toMatchObject({ gate_verified: true, sha: SHA, surface: SURFACE });
+  });
+
+  it('writes NO sentinel for a synced_head that is only a short prefix (review m3)', () => {
+    const result = evaluateSentinel(status({ synced_head: SHA.slice(0, 2) }), { dir, mapPath });
+
+    expect(result?.gate_verified).toBe(false);
+    expect(existsSync(sentinelPath())).toBe(false);
+  });
+});
+
+// Review M1: validate-ci runs the stale-build sync guard at dispatch and records
+// its verdict next to the sha; the terminal read must honour that record.
+describe('evaluateSentinel — the dispatch-time sync record (ROK-2205 M1)', () => {
+  const STUCK: GateSyncRecord = {
+    ok: false,
+    expected_head: FULL_SHA,
+    synced_head: null,
+    message: 'sync_stuck',
+  };
+
+  it('writes NO sentinel when the sync guard could not verify the runner tree', () => {
+    recordTaskSha(TASK_ID, SHA, mapPath, SURFACE, STUCK);
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result?.gate_verified).toBe(false);
+    expect(existsSync(sentinelPath())).toBe(false);
+    expect(result?.gate_error).toMatch(/stale sync/i);
+    expect(result?.gate_error).toMatch(/rl_force_resync/);
+  });
+
+  it('writes NO sentinel when the guard verified a HEAD other than the recorded sha', () => {
+    const other: GateSyncRecord = { ok: true, expected_head: OLD_MAIN, synced_head: OLD_MAIN };
+    recordTaskSha(TASK_ID, SHA, mapPath, SURFACE, other);
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result?.gate_verified).toBe(false);
+    expect(existsSync(sentinelPath())).toBe(false);
+  });
+
+  it('writes the sentinel when the guard verified the recorded HEAD', () => {
+    const good: GateSyncRecord = { ok: true, expected_head: FULL_SHA, synced_head: FULL_SHA };
+    recordTaskSha(TASK_ID, SHA, mapPath, SURFACE, good);
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result?.gate_verified).toBe(true);
+    expect(existsSync(sentinelPath())).toBe(true);
+  });
+
+  it('words a vetoed nosurface run as advisory — the hook needs no sentinel (review m2)', () => {
+    recordTaskSha(TASK_ID, SHA, mapPath, 'nosurface', STUCK);
+    const result = evaluateSentinel(status(), { dir, mapPath });
+
+    expect(result?.gate_verified).toBe(false);
+    expect(result?.gate_error).toMatch(/^Advisory/);
+    expect(result?.gate_error).toMatch(/does not need a sentinel/);
   });
 });

@@ -39,7 +39,7 @@ import {
   staticGateGreen,
 } from './gate-summary.js';
 import { isSplitParent, parallelParentUnmerged } from './tools/task-parallel.js';
-import { gateVerifiedVeto } from './gate-verified.js';
+import { gateVerifiedVeto, type GateSyncRecord } from './gate-verified.js';
 
 /** The validate-ci.sh summary row (and orchestrator step name) we key on. */
 export const PLAYWRIGHT_STEP = 'Playwright (desktop + mobile)';
@@ -64,6 +64,8 @@ interface ShaRecord {
   recorded_at: string;
   /** ROK-1566: the web-surface diff hash the run covers, when resolvable. */
   surface?: string;
+  /** ROK-2205 M1: the sync guard's verdict at dispatch. */
+  sync?: GateSyncRecord;
 }
 type ShaMap = Record<string, ShaRecord>;
 
@@ -86,11 +88,17 @@ export function recordTaskSha(
   sha: string,
   path = shaMapPath(),
   surface?: string,
+  sync?: GateSyncRecord,
 ): void {
   if (!taskId || !sha) return;
   try {
     const map = readMap(path);
-    map[taskId] = { sha, recorded_at: new Date().toISOString(), ...(surface ? { surface } : {}) };
+    map[taskId] = {
+      sha,
+      recorded_at: new Date().toISOString(),
+      ...(surface ? { surface } : {}),
+      ...(sync ? { sync } : {}),
+    };
     const kept = Object.entries(map)
       .sort((a, b) => (a[1].recorded_at < b[1].recorded_at ? 1 : -1))
       .slice(0, MAX_ENTRIES);
@@ -114,6 +122,11 @@ export function lookupTaskSurfaceHash(
   path = shaMapPath(),
 ): string | null {
   return readMap(path)[taskId]?.surface ?? null;
+}
+
+/** The sync guard's dispatch-time verdict for this task, or null (ROK-2205 M1). */
+export function lookupTaskSync(taskId: string, path = shaMapPath()): GateSyncRecord | null {
+  return readMap(path)[taskId]?.sync ?? null;
 }
 
 /** Last Playwright row in a validate-ci SUMMARY block, or null when absent. */
@@ -252,8 +265,8 @@ export function evaluateSentinel(
   if (!isTerminalStatus(status.mcp_runtime_status)) return null;
   // ROK-2205: green rows from a stale sync (or a run already judged not
   // gate_verified) describe other code — never a sentinel, and say why.
-  const veto = gateVerifiedVeto(status, sha);
-  if (veto) return notVerified(surface, undefined, veto);
+  const veto = gateVerifiedVeto(status, sha, lookupTaskSync(taskId, mapPath));
+  if (veto) return notVerified(surface, undefined, vetoWording(veto, surface));
   const tier = resolveGateTier(status);
   if (!tier) return notVerified(surface);
   const dir = opts.dir ?? sentinelDir();
@@ -293,6 +306,12 @@ export function evaluateSentinel(
     return notVerified(surface);
   }
   return verifiedAnnotation(join(dir, name), tier, surface);
+}
+
+/** Review m2: a nosurface push needs no sentinel, so a veto there is advice only. */
+function vetoWording(veto: string, surface: string | null): string {
+  if (surface !== 'nosurface') return veto;
+  return `Advisory — the push hook does not need a sentinel for this diff (no web surface), but this run tested other code: ${veto}`;
 }
 
 /** The "gate satisfied" annotation; `written` is null when no file was needed. */

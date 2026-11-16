@@ -33,6 +33,7 @@ import {
 import * as task from './task.js';
 import { recordTaskSha, shaMapPath } from '../playwright-sentinel.js';
 import { resolveWorktreeShortSha, resolveWorktreeSurfaceHash } from './worktree-sha.js';
+import { verifyGateSync } from '../gate-sync.js';
 import { resolveValidateCiWeight, weightFlag, type TaskWeight } from './task-weight.js';
 import { dispatchWithWeightFallback } from './task-weight-fallback.js';
 import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
@@ -143,6 +144,10 @@ export interface ValidateCiAsyncResult {
   slot?: number | undefined;
   /** ROK-1470 admission weight the run was dispatched with. */
   weight?: TaskWeight | undefined;
+  /** ROK-2205 M1: the sync guard confirmed /workspace matched the worktree HEAD at dispatch. */
+  sync_verified?: boolean | undefined;
+  /** Why it could not — this run will not earn a pre-push sentinel. */
+  sync_warning?: string | undefined;
   error?: string | undefined;
   stderr?: string | undefined;
   message?: string | undefined;
@@ -226,6 +231,10 @@ export async function execute(
   const innerCmd =
     `${innerEnv}bash /workspace/scripts/validate-ci.sh ${extraArgs}`.trim();
   const taskId = newTaskId();
+  // ROK-2205 M1: run the stale-build sync guard (sync-guard.ts) BEFORE dispatch
+  // and record its verdict for the task — a run on an unverified /workspace
+  // never earns the pre-push sentinel (2026-11-15: all PASS on stale files).
+  const sync = await verifyGateSync(slot, params.worktree_path);
   // TDB:1452: whole-gate / e2e / un-narrowed full runs default to 5400s;
   // --static / --only-unit / --only-integration runs to 1800s.
   const childS = resolveValidateCiTimeout(resolveArgs(params), params.timeout_seconds);
@@ -299,6 +308,7 @@ export async function execute(
     await resolveWorktreeShortSha(params.worktree_path),
     shaMapPath(),
     await resolveWorktreeSurfaceHash(params.worktree_path),
+    sync,
   );
   const logUrl = `https://${FLEET_DOMAIN}/api/tasks/${finalTaskId}/log`;
 
@@ -312,6 +322,8 @@ export async function execute(
       mcp_runtime_status: 'running',
       slot: slot ?? undefined,
       weight,
+      sync_verified: sync.ok,
+      ...(sync.ok ? {} : { sync_warning: `${sync.message ?? 'unverified'} — run rl_force_resync and re-dispatch; this run cannot write the pre-push sentinel.` }),
     };
   }
 
