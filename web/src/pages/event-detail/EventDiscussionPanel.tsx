@@ -30,6 +30,7 @@ import {
     DiscussionSignupNote,
     type DiscussionSignup,
 } from './event-discussion-card-parts';
+import { signedUpLabel } from './event-discussion-labels';
 import { discussionOpenFromSearch } from './event-discussion-link';
 import {
     eventReplyFailureCopy,
@@ -48,16 +49,6 @@ type PanelEvent = Pick<
     EventResponseDto,
     'id' | 'guildId' | 'hub' | 'signupCount' | 'maxAttendees'
 >;
-
-/** "18 / 40 signed up", or "18 signed up" without a cap (mockup thread header). */
-export function signedUpLabel(
-    event: Pick<PanelEvent, 'signupCount' | 'maxAttendees'>,
-): string {
-    const cap = event.maxAttendees ?? null;
-    return cap === null
-        ? `${event.signupCount} signed up`
-        : `${event.signupCount} / ${cap} signed up`;
-}
 
 function BackToEvent({ eventId }: { eventId: number }): JSX.Element {
     return (
@@ -101,36 +92,28 @@ function ThreadHead({
     );
 }
 
-interface ThreadProps {
-    event: PanelEvent;
-    thread: HubForumThread;
-    signup: DiscussionSignup | undefined;
-    query: ReturnType<typeof useEventDiscussionThread>;
-}
+type ThreadQuery = ReturnType<typeof useEventDiscussionThread>;
 
-function PanelThread({
-    event,
-    thread,
-    signup,
+/** The loaded replies (edit/delete via the event routes) and "Show more replies". */
+function PanelReplies({
+    eventId,
+    threadId,
     query,
-}: ThreadProps): JSX.Element {
-    const update = useUpdateEventReply(event.id);
-    const remove = useDeleteEventReply(event.id);
-    const create = useCreateEventReply(event.id);
+}: {
+    eventId: number;
+    threadId: number;
+    query: ThreadQuery;
+}): JSX.Element {
+    const update = useUpdateEventReply(eventId);
+    const remove = useDeleteEventReply(eventId);
     const replies = query.data?.pages.flatMap((p) => p.replies) ?? [];
-    const canReply = thread.canReply === true && thread.deleted === null;
     return (
-        <div className="flex flex-col gap-3">
-            <ThreadHead event={event} thread={thread} />
-            <ForumMessage message={thread} testId="forum-thread-root" />
-            <p className="text-xs text-muted">
-                {replyCountLabel(thread.replyCount)}
-            </p>
+        <>
             <ul className="flex flex-col gap-2">
                 {replies.map((r) => (
                     <ForumReplyItemView
                         key={r.id}
-                        threadId={thread.id}
+                        threadId={threadId}
                         reply={r}
                         highlighted={false}
                         update={update}
@@ -139,17 +122,88 @@ function PanelThread({
                 ))}
             </ul>
             <MoreReplies query={query} />
-            {canReply && (
-                <ForumReplyComposerView
-                    threadId={thread.id}
-                    create={create}
-                    failureCopy={eventReplyFailureCopy}
-                />
-            )}
-            {!canReply && thread.lock == null && (
-                <DiscussionSignupNote signup={signup} />
-            )}
+        </>
+    );
+}
+
+/** The composer when the viewer may reply; otherwise the sign-up note (none once locked). */
+function PanelReplyFoot({
+    eventId,
+    thread,
+    signup,
+}: {
+    eventId: number;
+    thread: HubForumThread;
+    signup: DiscussionSignup | undefined;
+}): JSX.Element | null {
+    const create = useCreateEventReply(eventId);
+    const canReply = thread.canReply === true && thread.deleted === null;
+    if (canReply) {
+        return (
+            <ForumReplyComposerView
+                threadId={thread.id}
+                create={create}
+                failureCopy={eventReplyFailureCopy}
+            />
+        );
+    }
+    return thread.lock == null ? (
+        <DiscussionSignupNote signup={signup} />
+    ) : null;
+}
+
+interface ThreadProps {
+    event: PanelEvent;
+    thread: HubForumThread;
+    signup: DiscussionSignup | undefined;
+    query: ThreadQuery;
+}
+
+function PanelThread({
+    event,
+    thread,
+    signup,
+    query,
+}: ThreadProps): JSX.Element {
+    return (
+        <div className="flex flex-col gap-3">
+            <ThreadHead event={event} thread={thread} />
+            <ForumMessage message={thread} testId="forum-thread-root" />
+            <p className="text-xs text-muted">
+                {replyCountLabel(thread.replyCount)}
+            </p>
+            <PanelReplies
+                eventId={event.id}
+                threadId={thread.id}
+                query={query}
+            />
+            <PanelReplyFoot
+                eventId={event.id}
+                thread={thread}
+                signup={signup}
+            />
         </div>
+    );
+}
+
+/** Skeleton while the thread loads; the 403 / other-failure line when it fails. */
+function PanelLoadState({ query }: { query: ThreadQuery }): JSX.Element | null {
+    if (query.isPending) {
+        return (
+            <div
+                className="h-32 animate-pulse rounded-lg border border-edge bg-panel"
+                aria-busy="true"
+                aria-label="Loading discussion"
+            />
+        );
+    }
+    if (!query.isError) return null;
+    return (
+        <p role="alert" className="text-sm text-danger">
+            {httpStatusOf(query.error) === 403
+                ? DISCUSSION_FORBIDDEN
+                : DISCUSSION_LOAD_FAILED}
+        </p>
     );
 }
 
@@ -172,20 +226,7 @@ export function EventDiscussionPanel({
             aria-label="Event discussion"
         >
             <BackToEvent eventId={event.id} />
-            {query.isPending && (
-                <div
-                    className="h-32 animate-pulse rounded-lg border border-edge bg-panel"
-                    aria-busy="true"
-                    aria-label="Loading discussion"
-                />
-            )}
-            {query.isError && (
-                <p role="alert" className="text-sm text-danger">
-                    {httpStatusOf(query.error) === 403
-                        ? DISCUSSION_FORBIDDEN
-                        : DISCUSSION_LOAD_FAILED}
-                </p>
-            )}
+            <PanelLoadState query={query} />
             {thread !== undefined && (
                 <PanelThread
                     event={event}

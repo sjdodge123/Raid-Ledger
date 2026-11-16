@@ -19,16 +19,16 @@ import {
     buildForumThreadEvent,
 } from '../../test/factories/hub-forum';
 import type { MarkdownEditorProps } from '../../components/ui/markdown/lazy-markdown-editor';
-import { lockReasonCopy } from '../../components/hub/forum/forum-event-header';
+import { lockReasonCopy } from '../../components/hub/forum/forum-event-format';
 import { DISCUSSION_SIGN_UP } from './event-discussion-card-parts';
 import {
     DISCUSSION_FORBIDDEN,
     DISCUSSION_LOAD_FAILED,
     EventDiscussionPanel,
     EventDiscussionSection,
-    signedUpLabel,
     type EventDiscussionPanelProps,
 } from './EventDiscussionPanel';
+import { signedUpLabel } from './event-discussion-labels';
 import {
     EVENT_REPLY_NOT_SIGNED_UP,
     EVENT_REPLY_READ_ONLY,
@@ -190,9 +190,10 @@ describe('EventDiscussionPanel — reader and locked', () => {
     it('locked: the reason line, no composer and no sign-up note', async () => {
         serveThread(thread({ canReply: false, lock: buildForumLock() }));
         renderPanel({ signup: { onSignup: vi.fn(), pending: false } });
-        expect(
-            await screen.findByText(lockReasonCopy('event-ended')),
-        ).toBeInTheDocument();
+        // The reason sits inside the bar's larger "Discussion closed · Read-only since … · <reason>" span.
+        expect(await screen.findByTestId('forum-lock-bar')).toHaveTextContent(
+            lockReasonCopy('event-ended'),
+        );
         expect(screen.queryByTestId('forum-reply-composer')).toBeNull();
         expect(screen.queryByTestId('event-discussion-signup-note')).toBeNull();
     });
