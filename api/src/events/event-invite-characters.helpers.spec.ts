@@ -6,6 +6,7 @@ import { ForbiddenException } from '@nestjs/common';
 import {
   assertCanInviteCharacters,
   inviteCharactersAsCaller,
+  normaliseCharacterIds,
   planCharacterInvites,
   type CharacterInviteDeps,
   type CharacterOwnerRow,
@@ -120,6 +121,23 @@ describe('planCharacterInvites', () => {
       C_MISSING,
       C_LOCAL,
     ]);
+  });
+
+  it('matches an upper-case request id to the lower-case row Postgres returns', () => {
+    const lower = 'abcdef00-0000-4000-8000-00000000000a';
+    const rows = [row(lower, 'Eira', 6, '100000000000000006')];
+    const ids = [lower.toUpperCase(), 'ABCDEF00-0000-4000-8000-00000000000A'];
+    const plan = planCharacterInvites(rows, ids, CREATOR_ID);
+    expect(plan.skipped).toEqual([]);
+    expect(plan.targets.map((t) => t.characterId)).toEqual([lower]);
+  });
+});
+
+describe('normaliseCharacterIds', () => {
+  it('lower-cases, de-duplicates across casing and keeps request order', () => {
+    expect(
+      normaliseCharacterIds(['B-UUID', 'a-uuid', 'b-uuid', 'A-UUID']),
+    ).toEqual(['b-uuid', 'a-uuid']);
   });
 });
 

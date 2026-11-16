@@ -88,6 +88,14 @@ function classifyRow(
 }
 
 /**
+ * Lower-cases character UUIDs (Postgres returns them lower-case) and drops
+ * repeats across casing, keeping request order.
+ */
+export function normaliseCharacterIds(ids: string[]): string[] {
+  return [...new Set(ids.map((id) => id.toLowerCase()))];
+}
+
+/**
  * Pure: decides targets and skips in request order. First character per
  * owner wins; the inviter's own character is dropped with no entry.
  */
@@ -99,7 +107,7 @@ export function planCharacterInvites(
   const byId = new Map(rows.map((r) => [r.characterId, r]));
   const seenOwners = new Set<number>();
   const plan: CharacterInvitePlan = { targets: [], skipped: [] };
-  for (const id of new Set(ids)) {
+  for (const id of normaliseCharacterIds(ids)) {
     const row = byId.get(id);
     if (!row) {
       plan.skipped.push({
@@ -161,8 +169,9 @@ export async function inviteCharactersToEvent(
   event: EventResponseDto,
   eventId: number,
   inviterId: number,
-  ids: string[],
+  requestedIds: string[],
 ): Promise<InviteCharactersResultDto> {
+  const ids = normaliseCharacterIds(requestedIds);
   const rows = await loadCharacterOwners(deps.db, ids);
   const plan = planCharacterInvites(rows, ids, inviterId);
   const result: InviteCharactersResultDto = {
