@@ -44,7 +44,7 @@ export function toInboundMessage(m: Message): InboundMessage {
     webhookId: m.webhookId,
     content: m.content,
     mentions: new Map(
-      m.mentions.users.map((u) => [
+      m.mentions.users.map((u): [string, string] => [
         u.id,
         named(u.id, u.globalName ?? u.username),
       ]),
