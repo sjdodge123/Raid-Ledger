@@ -101,15 +101,13 @@ async function forum(shared: boolean): Promise<Forum> {
     await ctx.testApp.db.update(b).set({ tagId: 'tA' }).where(eq(b.guildId, g));
     const now = new Date();
     const other = await newHub(ctx);
-    await ctx.testApp.db
-      .insert(b)
-      .values({
-        guildId: other,
-        forumId: row.forumId,
-        tagId: 'tB',
-        ackAt: now,
-        boundAt: now,
-      });
+    await ctx.testApp.db.insert(b).values({
+      guildId: other,
+      forumId: row.forumId,
+      tagId: 'tB',
+      ackAt: now,
+      boundAt: now,
+    });
   }
   ctx.testApp.app.get(HubForumDiscordRouteResolver).invalidate();
   return row;
