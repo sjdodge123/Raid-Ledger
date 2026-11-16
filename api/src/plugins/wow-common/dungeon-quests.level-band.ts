@@ -17,14 +17,19 @@ import type { QuestLevelBand } from './dungeon-quests.types';
  */
 export const OVERLAY_BAND_VARIANT: CatalogueVariant = 'wow_forever';
 
-function asCatalogueVariant(v: string): CatalogueVariant | null {
-  return v === 'classic_era' || v === 'wow_forever' ? v : null;
+/**
+ * Only a Forever guild reads the Forever finder spans; every other variant
+ * (classic_era, classic_era_sod, classic_anniversary, classic, retail) reads
+ * the classic_era row, so a Classic guild never shows a Forever band.
+ */
+function asCatalogueVariant(v: string): CatalogueVariant {
+  return v === 'wow_forever' ? 'wow_forever' : 'classic_era';
 }
 
 /**
  * The catalogue band of `instanceId` for `variant` (falling back to any
- * variant's row when the variant has none), or null for no dungeon / an id
- * outside the catalogue.
+ * variant's row only for an id the variant lacks, i.e. a Forever-only
+ * dungeon), or null for no dungeon / an id outside the catalogue.
  */
 export function instanceLevelBand(
   instanceId: number | null,
@@ -32,7 +37,6 @@ export function instanceLevelBand(
 ): QuestLevelBand | null {
   if (instanceId === null) return null;
   const v = asCatalogueVariant(variant);
-  const row =
-    (v ? getInstance(instanceId, v) : null) ?? getAnyVariant(instanceId);
+  const row = getInstance(instanceId, v) ?? getAnyVariant(instanceId);
   return row ? { min: row.minimumLevel, max: row.maximumLevel } : null;
 }
