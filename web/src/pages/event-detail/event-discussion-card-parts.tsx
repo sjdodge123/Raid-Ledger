@@ -20,7 +20,7 @@ import {
     forumAgo,
     forumAuthorName,
 } from '../../components/hub/forum/forum-thread.helpers';
-import { discussionPanelHref } from './event-discussion-link';
+import { discussionCtaHref } from './event-discussion-link';
 
 export const DISCUSSION_EMPTY = 'No messages yet — be the first.';
 export const DISCUSSION_SIGN_UP = 'Sign up to join the discussion.';
@@ -83,16 +83,19 @@ export function DiscussionReplies({
     );
 }
 
+/** Members → the hub thread; everyone else → the event-page panel (§7). */
 function ThreadLink({
     eventId,
+    d,
     primary,
 }: {
     eventId: number;
+    d: EventDiscussionReady;
     primary: boolean;
 }): JSX.Element {
     return (
         <Link
-            to={discussionPanelHref(eventId)}
+            to={discussionCtaHref(eventId, d)}
             data-testid="event-discussion-cta"
             className={buttonClass({
                 variant: primary ? 'primary' : 'secondary',
@@ -162,7 +165,7 @@ export function DiscussionFoot({
                 <DiscussionSignupNote signup={signup} />
             )}
             {reply && <span className="hidden sm:block" />}
-            <ThreadLink eventId={eventId} primary={reply} />
+            <ThreadLink eventId={eventId} d={d} primary={reply} />
         </div>
     );
 }

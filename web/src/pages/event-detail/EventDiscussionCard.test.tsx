@@ -248,3 +248,26 @@ describe('EventDiscussionCard — reader Sign up (mockup, ROK-2226 L4b)', () => 
         expect(screen.queryByTestId('event-discussion-signup')).toBeNull();
     });
 });
+
+describe('EventDiscussionCard — CTA target by membership (ROK-2226 §7 / AC13)', () => {
+    it('a hub member is linked to the hub thread', async () => {
+        serve(buildEventDiscussion({ guildId: 7, threadId: 5, member: true }));
+        renderCard();
+        expect(
+            await screen.findByTestId('event-discussion-cta'),
+        ).toHaveAttribute('href', '/hubs/7?thread=5#forum');
+    });
+
+    it('a signed-up non-member is linked to the event-page panel', async () => {
+        serve(
+            buildEventDiscussion({
+                member: false,
+                can: { read: true, reply: true },
+            }),
+        );
+        renderCard();
+        const cta = await screen.findByTestId('event-discussion-cta');
+        expect(cta).toHaveTextContent('Join the discussion');
+        expect(cta).toHaveAttribute('href', THREAD_HREF);
+    });
+});
