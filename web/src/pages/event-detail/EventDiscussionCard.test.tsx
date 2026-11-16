@@ -3,7 +3,8 @@
  * hidden (logged out, untagged, hidden hub, `none`, error), empty, replies +
  * Join, can-read-cannot-reply, header + count only, and locked (each reason).
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type {
@@ -26,7 +27,7 @@ import {
 } from './EventDiscussionCard';
 
 const SUMMARY = 'http://localhost:3000/events/42/discussion';
-const THREAD_HREF = '/hubs/7?thread=5#forum';
+const THREAD_HREF = '/events/42?discussion=1';
 const EVENT: EventDiscussionCardProps['event'] = {
     id: 42,
     guildId: 7,
@@ -214,4 +215,30 @@ describe('EventDiscussionCard — visible states (ROK-2226 §7)', () => {
             ).toBeNull();
         },
     );
+});
+
+describe('EventDiscussionCard — reader Sign up (mockup, ROK-2226 L4b)', () => {
+    const READER = buildEventDiscussion({ can: { read: true, reply: false } });
+
+    it('runs the page signup action from the Sign up button', async () => {
+        const onSignup = vi.fn();
+        serve(READER);
+        renderCard({ signup: { onSignup, pending: false } });
+        await userEvent.click(await screen.findByTestId('event-discussion-signup'));
+        expect(onSignup).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers no Sign up button when the page passes no signup action', async () => {
+        serve(READER);
+        renderCard();
+        expect(await screen.findByTestId('event-discussion-signup-note')).toBeInTheDocument();
+        expect(screen.queryByTestId('event-discussion-signup')).toBeNull();
+    });
+
+    it('offers no Sign up button to a viewer who can already reply', async () => {
+        serve(buildEventDiscussion());
+        renderCard({ signup: { onSignup: vi.fn(), pending: false } });
+        expect(await screen.findByTestId('event-discussion-cta')).toHaveTextContent('Join the discussion');
+        expect(screen.queryByTestId('event-discussion-signup')).toBeNull();
+    });
 });
