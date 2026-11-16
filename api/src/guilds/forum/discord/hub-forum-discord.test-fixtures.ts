@@ -29,6 +29,7 @@ export function fakeForum(over: Partial<ForumInfo> = {}): ForumInfo {
     tags: [],
     missing: [],
     canManage: true,
+    isPublic: true,
     ...over,
   };
 }
@@ -70,8 +71,8 @@ function readSpies(
 /** Writes: create/delete forums, webhooks, tags. */
 function writeSpies(gw: HubForumDiscordGateway, forums: Forums) {
   return {
-    createForum: jest.spyOn(gw, 'createForum').mockImplementation(() => {
-      const f = fakeForum();
+    createForum: jest.spyOn(gw, 'createForum').mockImplementation((name) => {
+      const f = fakeForum({ name });
       forums.set(f.id, f);
       return Promise.resolve(copy(f));
     }),

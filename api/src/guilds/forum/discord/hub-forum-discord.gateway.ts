@@ -2,10 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   ChannelFlags,
   ChannelType,
+  PermissionFlagsBits,
   type ForumChannel,
   type Guild,
 } from 'discord.js';
-import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import {
   FORUM_WEBHOOK_NAME,
@@ -22,6 +22,8 @@ export interface ForumInfo {
   missing: string[];
   /** The bot holds Manage Channels here (tag + flag edits). */
   canManage: boolean;
+  /** @everyone can view it (MAJOR-4: private forums are never bound). */
+  isPublic: boolean;
 }
 
 const REASON = 'Raid Ledger hub forum sync';
@@ -83,11 +85,11 @@ export class HubForumDiscordGateway {
     );
   }
 
-  /** Create the bot-managed forum (`#hub-forums`, no REQUIRE_TAG yet). */
-  async createForum(): Promise<ForumInfo> {
+  /** Create a bot-managed forum named `name` (no REQUIRE_TAG yet). */
+  async createForum(name: string): Promise<ForumInfo> {
     const guild = this.requireGuild();
     const forum = await guild.channels.create({
-      name: HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME,
+      name,
       type: ChannelType.GuildForum,
       topic: TOPIC,
       reason: REASON,
@@ -206,5 +208,8 @@ function toInfo(guild: Guild, forum: ForumChannel): ForumInfo {
     tags: forum.availableTags.map((t) => ({ id: t.id, name: t.name })),
     missing: missingForumPermissions((f) => perms?.has(f) ?? false, false),
     canManage: perms?.has(MANAGE_CHANNELS.flag) ?? false,
+    isPublic: forum
+      .permissionsFor(guild.roles.everyone)
+      .has(PermissionFlagsBits.ViewChannel),
   };
 }
