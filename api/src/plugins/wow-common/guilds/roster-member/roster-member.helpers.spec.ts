@@ -120,6 +120,7 @@ const row = (over: Partial<RosterMemberRow> = {}): RosterMemberRow => ({
   updatedAt: SYNCED,
   claimedCharacterId: null,
   unclaimed: true,
+  identityClaimable: true,
   snapshot: armory(),
   ...over,
 });
