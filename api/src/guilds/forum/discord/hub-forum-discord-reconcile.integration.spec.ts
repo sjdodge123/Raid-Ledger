@@ -302,6 +302,83 @@ describe('ROK-2208 §5.6 outbound retry sweep', () => {
   });
 });
 
+describe('review MAJOR-3: the retry queue never stalls', () => {
+  it('a placeholder reply under a deleted post is closed out of the queue', async () => {
+    const { g } = await boundHub();
+    const { thread, link } = await queuedThread(g, 'rc-gone-parent', {
+      syncState: 'synced',
+      attempts: 0,
+    });
+    const l = schema.hubForumDiscordLinks;
+    await ctx.testApp.db
+      .update(l)
+      .set({ discordDeletedAt: new Date() })
+      .where(eq(l.id, link.id));
+    const [r] = nonEmpty(
+      await ctx.testApp.db
+        .insert(schema.hubForumReplies)
+        .values({
+          guildId: g,
+          threadId: thread.id,
+          body: 'orphan',
+          authorId: adminId,
+        })
+        .returning(),
+      'reply',
+    );
+    await ctx.testApp.db.insert(l).values({
+      guildId: g,
+      kind: 'reply',
+      threadId: thread.id,
+      replyId: r.id,
+      discordThreadId: link.discordThreadId,
+      discordMessageId: unsentId('reply', r.id),
+      origin: 'raidledger',
+      syncState: 'pending',
+      createdAt: new Date(Date.now() - 10 * HOUR),
+    });
+    await sync.retrySweep();
+    expect(out.spies.createReply).not.toHaveBeenCalled();
+    expect(await linkOf(unsentId('reply', r.id))).toMatchObject({
+      syncState: 'failed',
+      attempts: 5,
+      lastError: expect.stringContaining('Nothing left to send'),
+    });
+  });
+
+  it('a due row is retried even behind 100 not-yet-due rows', async () => {
+    const { g } = await boundHub();
+    const db = ctx.testApp.db;
+    const waiting = await db
+      .insert(schema.hubForumThreads)
+      .values(
+        Array.from({ length: 100 }, (_, i) => ({
+          guildId: g,
+          title: `rc-wait-${i}`,
+          body: 'not due',
+          authorId: adminId,
+        })),
+      )
+      .returning();
+    await db.insert(schema.hubForumDiscordLinks).values(
+      waiting.map((t) => ({
+        guildId: g,
+        kind: 'thread',
+        threadId: t.id,
+        discordThreadId: unsentId('thread', t.id),
+        discordMessageId: unsentId('thread', t.id),
+        origin: 'raidledger',
+        syncState: 'failed',
+        attempts: 4, // backoff 75 min from created_at (now) → not due
+      })),
+    );
+    await queuedThread(g, 'rc-due-last', { syncState: 'failed', attempts: 1 });
+    await sync.retrySweep();
+    expect(sentTitles()).toContain('rc-due-last');
+    expect(sentTitles()).not.toContain('rc-wait-0');
+  });
+});
+
 describe('ROK-2208 §5.6 reconcile on reconnect', () => {
   it('imports a message newer than the newest link and skips an older one', async () => {
     const { channelId } = await boundHub();

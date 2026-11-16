@@ -10,6 +10,7 @@ import {
   replayAfter,
   retryDelayMs,
   retryOp,
+  retryStalled,
 } from './hub-forum-discord-sync-rules';
 
 const MIN = 60_000;
@@ -108,5 +109,50 @@ describe('retryOp (what the sweep re-drives)', () => {
 
   it('nothing to do once the Discord side is gone', () => {
     expect(retryOp({ ...sent, discordDeletedAt: now }, false)).toBeNull();
+  });
+});
+
+describe('retryStalled (review MAJOR-3: a row retry() can never send leaves the queue)', () => {
+  const before = { syncState: 'pending', attempts: 0, discordDeletedAt: null };
+  const reply = {
+    kind: 'reply' as const,
+    discordMessageId: unsentId('reply', 9),
+  };
+  const livePost = {
+    discordMessageId: unsentId('thread', 3),
+    attempts: 1,
+    discordDeletedAt: null,
+  };
+
+  it('is stalled when the row came back exactly as it went in', () => {
+    expect(retryStalled({ ...before, ...reply }, { ...before }, null)).toBe(
+      true,
+    );
+  });
+
+  it('is not stalled once the attempt changed the row (sent, failed or deleted)', () => {
+    const row = { ...before, ...reply };
+    expect(retryStalled(row, { ...before, syncState: 'synced' }, null)).toBe(
+      false,
+    );
+    expect(retryStalled(row, { ...before, attempts: 1 }, null)).toBe(false);
+    expect(retryStalled(row, { ...before, discordDeletedAt: now }, null)).toBe(
+      false,
+    );
+    expect(retryStalled(row, null, null)).toBe(false);
+  });
+
+  it('a placeholder reply waiting on a still-retryable post is not stalled', () => {
+    expect(retryStalled({ ...before, ...reply }, { ...before }, livePost)).toBe(
+      false,
+    );
+  });
+
+  it('a reply under a dead or deleted post IS stalled', () => {
+    const row = { ...before, ...reply };
+    const dead = { ...livePost, attempts: RETRY_MAX_ATTEMPTS };
+    const gone = { ...livePost, discordDeletedAt: now };
+    expect(retryStalled(row, { ...before }, dead)).toBe(true);
+    expect(retryStalled(row, { ...before }, gone)).toBe(true);
   });
 });
