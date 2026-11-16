@@ -1,8 +1,10 @@
 /**
  * ROK-2226 §6 — one thread plus who is looking, for every hub-forum route
  * that reads or writes inside a thread. A normal thread keeps the ROK-1175
- * rules (member/staff or 403, 403 before 404); an event thread resolves the
- * §6 matrix, so a signed-up non-member can read and write that one thread.
+ * rules (member/staff or 403, 403 before 404). The hub routes stay member-only
+ * for every thread (403 before any lookup); inside an event thread the §6
+ * matrix then decides reply/edit/moderate. A signed-up non-member reads and
+ * writes through `events/:id/discussion` (§6.1), never through these routes.
  */
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { HubForumLock } from '@raid-ledger/contract';
@@ -61,19 +63,19 @@ async function eventActor(
 }
 
 /**
- * Load `threadId` in `guildId` and resolve the viewer. 403 (not a reader)
- * before 404 for normal threads, exactly as before ROK-2226.
+ * Load `threadId` in `guildId` and resolve the viewer. 403 (not a member)
+ * before any lookup, exactly as before ROK-2226.
  */
 export async function forumThreadContext(
   deps: ForumThreadDeps,
   actor: GuildActor,
   target: { guildId: number; threadId: number },
 ): Promise<ForumThreadContext> {
+  const member = await resolveForumActor(deps.access, actor, target.guildId);
   const record = await findThread(deps.db, target.guildId, target.threadId);
-  if (!record || record.thread.eventId === null) {
-    const who = await resolveForumActor(deps.access, actor, target.guildId);
-    if (!record) throw new NotFoundException('Thread not found');
-    return { record, who, canReply: true, lock: null };
+  if (!record) throw new NotFoundException('Thread not found');
+  if (record.thread.eventId === null) {
+    return { record, who: member, canReply: true, lock: null };
   }
   const { who, lock } = await resolveEventThread(deps, actor, record);
   if (!who.canRead) throw new ForbiddenException(FORUM_NOT_MEMBER);

@@ -15,8 +15,13 @@ import {
 
 type Found = { key?: string; problem?: string };
 
-const BEHAVIOUR = /readonly hubBehaviour(?::\s*\w+)?\s*=\s*([\w.']+)/;
-const OWNER = /readonly ownerPluginId(?::\s*\w+)?\s*=\s*([\w.']+)/;
+const EXPR = String.raw`('[^']*'|[\w.]+)`;
+const BEHAVIOUR = new RegExp(
+  String.raw`readonly hubBehaviour(?::\s*\w+)?\s*=\s*` + EXPR,
+);
+const OWNER = new RegExp(
+  String.raw`readonly ownerPluginId(?::\s*\w+)?\s*=\s*` + EXPR,
+);
 const LIFECYCLE = /@OnEvent\(\s*APP_EVENT_EVENTS\./;
 
 /** One source's declared listener behaviour, if it declares one. */
