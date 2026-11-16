@@ -15,6 +15,10 @@ import { getAdminToken } from './api-helpers';
 import { seedCommunityHubs } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 
+const PREFLIGHT = {
+    botOnline: true, missingToCreate: [], suggestedName: 'seed-crew',
+    shared: { channelId: '223456789012345678', name: 'hub-forums', sharedWith: 1, tagsUsed: 2, tagsFree: 18, tagName: 'Seed Crew', missingPermissions: [] },
+};
 const SHARED = { id: '223456789012345678', name: 'hub-forums', sharedWith: 1, tagsFree: 18 };
 
 interface Stub { puts: unknown[]; deletes: string[]; bound: boolean }
@@ -29,6 +33,7 @@ function binding(): Record<string, unknown> {
 async function stubForumDiscord(page: Page, hubId: number): Promise<Stub> {
     const stub: Stub = { puts: [], deletes: [], bound: false };
     const path = `/guilds/${hubId}/forum-discord`;
+    await page.route((url) => url.pathname.endsWith(`${path}/preflight`), (route: Route) => route.fulfill({ json: PREFLIGHT }));
     await page.route((url) => url.pathname.endsWith(`${path}/channels`), (route: Route) => route.fulfill({ json: { channels: [SHARED] } }));
     await page.route((url) => url.pathname.endsWith(path), async (route: Route) => {
         const method = route.request().method();
@@ -64,12 +69,13 @@ test.describe('Hub settings — Discord forum (ROK-2208)', () => {
         const section = page.getByTestId('guild-settings-forum-discord');
         await section.scrollIntoViewIfNeeded();
 
-        await expect(section.getByTestId('hub-forum-discord-channel')).toHaveValue(SHARED.id);
+        await expect(section.getByTestId('hub-forum-discord-preflight')).toBeVisible();
+        await expect(section.getByRole('radio', { name: /Shared server forum/ })).toBeChecked();
         const turnOn = section.getByTestId('hub-forum-discord-turn-on');
         await expect(turnOn).toBeDisabled();
         await section.getByTestId('hub-forum-discord-ack').check();
         await turnOn.click();
-        await expect.poll(() => stub.puts).toEqual([{ mode: 'existing', channelId: SHARED.id, ack: true }]);
+        await expect.poll(() => stub.puts).toEqual([{ mode: 'create', target: 'shared', ack: true }]);
         await expect(section.getByTestId('hub-forum-discord-channel-name')).toHaveText('#hub-forums');
         await expect(section.getByTestId('hub-forum-discord-shared')).toHaveText('Shared with 1 other hub · tag Seed Crew');
 
