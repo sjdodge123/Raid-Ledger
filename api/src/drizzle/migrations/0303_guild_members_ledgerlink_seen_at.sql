@@ -1,4 +1,5 @@
 ALTER TABLE "guild_members" ADD COLUMN "ledgerlink_seen_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "guild_members" ADD COLUMN "blizzard_seen_at" timestamp with time zone;--> statement-breakpoint
 -- ROK-2225 backfill, self-contained (no app code). A GUID row's last_seen_at is
 -- the last LedgerLink import's stamp, unless the guild's latest Blizzard sync
 -- stamped it; then the import before that sync is dated by the newest GUID row
@@ -16,4 +17,17 @@ SET "ledgerlink_seen_at" = CASE
   )
 END
 FROM "guilds" AS g
-WHERE g."id" = gm."guild_id" AND gm."guid" IS NOT NULL;
+WHERE g."id" = gm."guild_id" AND gm."guid" IS NOT NULL;--> statement-breakpoint
+-- ROK-2225 backfill, self-contained (no app code). Every row the guild's
+-- latest Blizzard sync listed got last_seen_at = blizzard_roster_synced_at,
+-- so rows Blizzard can see (a Blizzard id, or no GUID) stamped at or after it
+-- are taken as that sync's roster, all with the sync's own instant. A later
+-- import can re-stamp a row the sync dropped; such a row counts as removed
+-- once on the next sync, then falls out. Other rows stay NULL.
+UPDATE "guild_members" AS gm
+SET "blizzard_seen_at" = g."blizzard_roster_synced_at"
+FROM "guilds" AS g
+WHERE g."id" = gm."guild_id"
+  AND g."blizzard_roster_synced_at" IS NOT NULL
+  AND (gm."blizzard_character_id" IS NOT NULL OR gm."guid" IS NULL)
+  AND gm."last_seen_at" >= g."blizzard_roster_synced_at";

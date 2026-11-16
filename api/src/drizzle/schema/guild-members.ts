@@ -47,6 +47,12 @@ export const guildMembers = pgTable(
      */
     ledgerlinkSeenAt: timestamp('ledgerlink_seen_at', { withTimezone: true }),
     /**
+     * ROK-2225: the instant of the last Blizzard roster sync that listed this
+     * row. Only the sync stamps it (imports never do), so the sync's churn
+     * baseline is its own previous roster. NULL = never listed.
+     */
+    blizzardSeenAt: timestamp('blizzard_seen_at', { withTimezone: true }),
+    /**
      * ROK-1916 D1/D3: the export's wire presence, stored verbatim. NULL =
      * never reported (rows before ROK-1916, Blizzard rows) — no default.
      */

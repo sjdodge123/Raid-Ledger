@@ -12502,6 +12502,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "blizzard_seen_at": {
+          "name": "blizzard_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "online_at_export": {
           "name": "online_at_export",
           "type": "boolean",
