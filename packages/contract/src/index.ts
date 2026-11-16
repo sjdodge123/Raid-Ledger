@@ -361,3 +361,4 @@ export * from './companion-devices.schema.js';
 // GG <year> — yearly personalised story snapshot, cards, share + admin DTOs (ROK-2187).
 export * from './gg-cards.schema.js';
 export * from './gg.schema.js';
+export * from './event-invite-characters.schema.js';
