@@ -11,5 +11,7 @@ const API_BASE = 'http://localhost:3000';
 const NONE: EventDiscussion = { state: 'none' };
 
 export const eventDiscussionHandlers = [
-    http.get(`${API_BASE}/events/:id/discussion`, () => HttpResponse.json(NONE)),
+    http.get(`${API_BASE}/events/:id/discussion`, () =>
+        HttpResponse.json(NONE),
+    ),
 ];

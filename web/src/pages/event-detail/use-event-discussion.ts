@@ -4,7 +4,10 @@
  * `latestReplies` depend on who is asking (signed up, member, visitor).
  */
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { EventDiscussionSchema, type EventDiscussion } from '@raid-ledger/contract';
+import {
+    EventDiscussionSchema,
+    type EventDiscussion,
+} from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 import { useViewerCacheScope } from '../../hooks/use-auth';
 
@@ -14,12 +17,17 @@ export function eventDiscussionKey(eventId: number): readonly unknown[] {
 }
 
 /** The card summary: `none`, or the thread ids, reply count, ≤3 newest replies, lock and `can`. */
-export function fetchEventDiscussion(eventId: number): Promise<EventDiscussion> {
+export function fetchEventDiscussion(
+    eventId: number,
+): Promise<EventDiscussion> {
     return fetchApi(`/events/${eventId}/discussion`, {}, EventDiscussionSchema);
 }
 
 /** The summary query; `enabled` false (logged out, untagged, hidden hub) never fetches. */
-export function useEventDiscussion(eventId: number, enabled: boolean): UseQueryResult<EventDiscussion, Error> {
+export function useEventDiscussion(
+    eventId: number,
+    enabled: boolean,
+): UseQueryResult<EventDiscussion, Error> {
     const viewer = useViewerCacheScope();
     return useQuery({
         queryKey: [...eventDiscussionKey(eventId), viewer],
