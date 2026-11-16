@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
+import * as rescheduleBack from './reschedule-back.handlers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
@@ -194,6 +195,21 @@ describe('RescheduleResponseListener — menus', () => {
 
   describe('handleSelectMenuInteraction — routing', () => {
     selectMenuRoutingTests();
+  });
+
+  describe('handleButtonInteraction — Back routing (ROK-2228)', () => {
+    it('hands a char_back: click to the reschedule Back handler, not deferReply', async () => {
+      const route = jest
+        .spyOn(rescheduleBack, 'routeRescheduleBack')
+        .mockReturnValue(true);
+      const interaction = makeButtonInteraction(
+        'char_back:reschedule_char_select:42:tentative',
+      );
+      await listener.handleButtonInteraction(interaction);
+      expect(route).toHaveBeenCalledWith(interaction, expect.anything());
+      expect(interaction.deferReply).not.toHaveBeenCalled();
+      route.mockRestore();
+    });
   });
 
   describe('handleCharacterSelect', () => {
