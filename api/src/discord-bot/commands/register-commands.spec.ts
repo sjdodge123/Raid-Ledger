@@ -207,8 +207,73 @@ describe('RegisterCommandsService — skip conditions', () => {
   });
 
   it('should handle REST API errors gracefully', async () => {
-    mockRestPut.mockRejectedValue(new Error('Discord API error'));
-    await expect(service.registerCommands()).resolves.not.toThrow();
+    jest.useFakeTimers();
+    try {
+      mockRestPut.mockRejectedValue(new Error('Discord API error'));
+      const done = service.registerCommands();
+      await jest.runAllTimersAsync();
+      await expect(done).resolves.not.toThrow();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('RegisterCommandsService — registration retry (ROK-2204)', () => {
+  let service: RegisterCommandsService;
+  let mockRestPut: jest.Mock;
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(async () => {
+    jest.useFakeTimers();
+    mockRestPut = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await buildModule(mockRestPut);
+    service = module.get(RegisterCommandsService);
+    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+    jest.clearAllMocks();
+  });
+
+  /** Global-route PUTs carrying the command bodies (not the guild clear). */
+  function registerAttempts(): number {
+    return putCalls(mockRestPut).filter(([r]) => r === '/global-route').length;
+  }
+
+  it('retries after a connect timeout and registers on the 2nd attempt', async () => {
+    mockRestPut.mockRejectedValueOnce(new Error('ConnectTimeoutError'));
+    const done = service.registerCommands();
+
+    await jest.advanceTimersByTimeAsync(0);
+    expect(registerAttempts()).toBe(1);
+    await jest.advanceTimersByTimeAsync(1999);
+    expect(registerAttempts()).toBe(1);
+    await jest.advanceTimersByTimeAsync(1);
+    await done;
+
+    expect(registerAttempts()).toBe(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('backs off 2s then 4s and stops after 3 attempts', async () => {
+    mockRestPut.mockRejectedValue(new Error('ConnectTimeoutError'));
+    const done = service.registerCommands();
+
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(registerAttempts()).toBe(2);
+    await jest.advanceTimersByTimeAsync(3999);
+    expect(registerAttempts()).toBe(2);
+    await jest.advanceTimersByTimeAsync(1);
+    await done;
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(registerAttempts()).toBe(3);
+    expect(jest.getTimerCount()).toBe(0);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 });
 

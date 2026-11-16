@@ -28,6 +28,17 @@ import {
   staleGlobalMessage,
 } from './register-commands.fleet';
 
+/** Registration attempts per CONNECTED event before giving up (ROK-2204). */
+export const REGISTER_MAX_ATTEMPTS = 3;
+
+/** First retry delay; doubles per attempt (2s, then 4s) (ROK-2204). */
+export const REGISTER_RETRY_BASE_MS = 2000;
+
+/** Resolve after `ms` — a timer, so fake timers drive it in specs. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Describes a slash command handler that can be registered with Discord.
  */
@@ -95,18 +106,52 @@ export class RegisterCommandsService {
       return;
     }
     const commands = this.getCommandHandlers().map((h) => h.getDefinition());
-    try {
+    await this.withRetry(() => {
       const rest = new REST({ version: '10' }).setToken(config.token);
-      if (isFleetSlotBot()) {
-        await this.registerFleetGuildCommands(rest, clientId, commands);
+      return this.registerOnce(rest, clientId, commands);
+    });
+  }
+
+  /**
+   * Run `attempt` up to REGISTER_MAX_ATTEMPTS times with exponential backoff
+   * (ROK-2204): a transient `ConnectTimeoutError` on boot used to leave the
+   * commands unregistered until the next restart. Never throws.
+   */
+  private async withRetry(attempt: () => Promise<void>): Promise<void> {
+    for (let n = 1; n <= REGISTER_MAX_ATTEMPTS; n++) {
+      try {
+        await attempt();
         return;
+      } catch (error) {
+        if (n === REGISTER_MAX_ATTEMPTS) {
+          this.logger.error(
+            `Failed to register slash commands after ${n} attempts:`,
+            error,
+          );
+          return;
+        }
+        const waitMs = REGISTER_RETRY_BASE_MS * 2 ** (n - 1);
+        this.logger.warn(
+          `Slash-command registration attempt ${n}/${REGISTER_MAX_ATTEMPTS} failed (${String(error)}); retrying in ${waitMs}ms`,
+        );
+        await delay(waitMs);
       }
-      await rest.put(Routes.applicationCommands(clientId), { body: commands });
-      await this.clearStaleGuildCommands(rest, clientId);
-      this.logger.log(`Registered ${commands.length} global slash command(s)`);
-    } catch (error) {
-      this.logger.error('Failed to register slash commands:', error);
     }
+  }
+
+  /** One registration attempt: guild-scoped for fleet slots, else global. */
+  private async registerOnce(
+    rest: REST,
+    clientId: string,
+    commands: RESTPostAPIChatInputApplicationCommandsJSONBody[],
+  ): Promise<void> {
+    if (isFleetSlotBot()) {
+      await this.registerFleetGuildCommands(rest, clientId, commands);
+      return;
+    }
+    await rest.put(Routes.applicationCommands(clientId), { body: commands });
+    await this.clearStaleGuildCommands(rest, clientId);
+    this.logger.log(`Registered ${commands.length} global slash command(s)`);
   }
 
   /**

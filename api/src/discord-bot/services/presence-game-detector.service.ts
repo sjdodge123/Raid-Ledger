@@ -11,6 +11,7 @@ import {
   pickNormalizedTitleMatch,
   TRIGRAM_CANDIDATE_LIMIT,
 } from './presence-game-match.helpers';
+import { isLauncherActivity } from './presence-launcher-activities';
 
 /** TTL for manual /playing overrides (30 minutes). */
 const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
@@ -30,6 +31,19 @@ const GAME_CACHE_TTL_MS = 10 * 60 * 1000;
  * normalization.
  */
 const TRIGRAM_SIMILARITY_THRESHOLD = 0.5;
+
+/** The no-game result (no presence, or only a launcher presence). */
+const NO_GAME = { gameId: null, gameName: 'Untitled Gaming Session' } as const;
+
+/**
+ * First Playing activity that is a game, skipping launchers such as
+ * CurseForge (ROK-2204) so a game shown alongside one still wins.
+ */
+function firstPlayingGame(member: GuildMember): { name: string } | undefined {
+  return member.presence?.activities?.find(
+    (a) => a.type === ActivityType.Playing && !isLauncherActivity(a.name),
+  );
+}
 
 /** Result of game detection for a set of members. */
 export interface DetectedGameGroup {
@@ -170,10 +184,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
         result.set(member.id, override);
         continue;
       }
-      const playing = member.presence?.activities?.find(
-        (a) => a.type === ActivityType.Playing,
-      );
-      result.set(member.id, playing?.name ?? null);
+      result.set(member.id, firstPlayingGame(member)?.name ?? null);
     }
     return result;
   }
@@ -188,10 +199,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
     >();
     for (const [memberId, name] of activities) {
       if (!name) {
-        result.set(memberId, {
-          gameId: null,
-          gameName: 'Untitled Gaming Session',
-        });
+        result.set(memberId, { ...NO_GAME });
         continue;
       }
       result.set(memberId, await this.resolveGame(name));
@@ -213,9 +221,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
     }
 
     // Read Discord Rich Presence
-    const playingActivity = member.presence?.activities?.find(
-      (a) => a.type === ActivityType.Playing,
-    );
+    const playingActivity = firstPlayingGame(member);
 
     if (!playingActivity) {
       const activitySummary = member.presence?.activities?.length
@@ -226,7 +232,7 @@ export class PresenceGameDetectorService implements OnModuleInit {
       this.logger.debug(
         `No Playing activity for member ${member.id} (activities: [${activitySummary}])`,
       );
-      return { gameId: null, gameName: 'Untitled Gaming Session' };
+      return { ...NO_GAME };
     }
 
     return this.resolveGame(playingActivity.name);
@@ -234,11 +240,13 @@ export class PresenceGameDetectorService implements OnModuleInit {
 
   /**
    * Resolve a Discord activity name to a game in the registry.
+   * Launcher names (ROK-2204) short-circuit to no game without a lookup.
    * Pipeline: manual mappings -> exact match -> case-insensitive match
    */
   async resolveGame(
     activityName: string,
   ): Promise<{ gameId: number | null; gameName: string }> {
+    if (isLauncherActivity(activityName)) return { ...NO_GAME };
     const cached = this.gameCache.get(activityName);
     if (cached && Date.now() - cached.cachedAt < GAME_CACHE_TTL_MS) {
       return { gameId: cached.gameId, gameName: cached.gameName };
