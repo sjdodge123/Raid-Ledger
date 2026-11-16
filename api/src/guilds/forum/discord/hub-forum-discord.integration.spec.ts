@@ -151,8 +151,15 @@ async function syncedThread(g: number, discordId: string): Promise<void> {
   });
 }
 
-/** `outsider` becomes the WoW hub's GM (rank 0) — a non-community leader. */
-async function makeGm(g: number): Promise<void> {
+/**
+ * `outsider` becomes the WoW hub's GM (rank 0) on the live roster; returns
+ * the member row id. Rank 0 alone is a ladder MEMBER, not an Officer:
+ * `GM_RANK_IMPLIES_EDIT = false` (wow-hub-kind.adapter.ts) because rank 0 is
+ * self-reported via unsigned exports, and every top-rank right is its own
+ * operator ruling. A GM manages the hub through a staff `guild_editors`
+ * grant (`grantGm`), which makes them an Officer on the ladder.
+ */
+async function makeGm(g: number): Promise<number> {
   const guid = `Player-1-hfdbind-gm-${g}`;
   const name = `Gm${g}`;
   await ctx.testApp.db.insert(schema.characters).values({
@@ -163,16 +170,30 @@ async function makeGm(g: number): Promise<void> {
     role: 'dps',
     isMain: false,
   });
-  await ctx.testApp.db.insert(schema.guildMembers).values({
-    guildId: g,
-    guid,
-    characterName: name,
-    rankIndex: 0,
-    rankName: 'Guild Master',
-    source: 'addon_import',
-    // The posts fixtures' roster snapshot: rows seen at it are the live roster.
-    lastSeenAt: new Date('2026-10-12T20:00:00.000Z'),
-  });
+  const [m] = nonEmpty(
+    await ctx.testApp.db
+      .insert(schema.guildMembers)
+      .values({
+        guildId: g,
+        guid,
+        characterName: name,
+        rankIndex: 0,
+        rankName: 'Guild Master',
+        source: 'addon_import',
+        // The posts fixtures' roster snapshot: rows seen at it are the live roster.
+        lastSeenAt: new Date('2026-10-12T20:00:00.000Z'),
+      })
+      .returning({ id: schema.guildMembers.id }),
+    'gm member',
+  );
+  return m.id;
+}
+
+/** Staff confirm the GM's link with a member-kind editor grant. */
+async function grantGm(g: number, memberId: number): Promise<void> {
+  await ctx.testApp.db
+    .insert(schema.guildEditors)
+    .values({ guildId: g, kind: 'member', guildMemberId: memberId });
 }
 
 describe('ROK-2208 binding — permission matrix (§6)', () => {
@@ -196,13 +217,23 @@ describe('ROK-2208 binding — permission matrix (§6)', () => {
     expect((await as('outsider', 'get', route(g))).status).toBe(403);
   });
 
-  // §6 also gives this GM read access; GuildEditorGuard answers 403 for the
-  // seeded GM today — flagged to the Lead (L2b), not asserted here.
-  it("a WoW hub's GM (not a community hub) may not bind (OQ-7)", async () => {
-    const g = await newHub(ctx);
-    await makeGm(g);
-    expect((await create(g, 'outsider')).status).toBe(403);
-    expect(fake.spies.createForum).not.toHaveBeenCalled();
+  it("a WoW hub's GM reads the status once staff-confirmed, never binds (OQ-7)", async () => {
+    const { g, channelId } = await boundHub();
+    const memberId = await makeGm(g);
+    // Rank 0 alone is a ladder member: no section, no status.
+    expect((await as('outsider', 'get', route(g))).status).toBe(403);
+    await grantGm(g, memberId);
+    const gm = await statusOf(g, 'outsider');
+    expect(gm.binding?.channelId).toBe(channelId);
+    // Not a community hub, so `canManageDiscord` refuses every write.
+    const other = await newHub(ctx);
+    const otherGm = await makeGm(other);
+    await grantGm(other, otherGm);
+    expect((await create(other, 'outsider')).status).toBe(403);
+    expect((await as('outsider', 'delete', route(g))).status).toBe(403);
+    expect(fake.spies.createForum).toHaveBeenCalledTimes(1);
+    expect(await bindingRow(g)).not.toBeNull();
+    expect(await bindingRow(other)).toBeNull();
   });
 });
 
