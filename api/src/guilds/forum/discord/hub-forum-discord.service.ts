@@ -1,8 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type {
-  HubForumDiscordChannelOptions,
-  HubForumDiscordHealth,
-  HubForumDiscordStatus,
+import {
+  HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME as SHARED_NAME,
+  type HubForumDiscordChannelOptions,
+  type HubForumDiscordHealth,
+  type HubForumDiscordPreflight,
+  type HubForumDiscordStatus,
+  type PutHubForumDiscordInput,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { isUniqueViolation } from '../../../events/signups-roster-slot.helpers';
@@ -12,15 +15,22 @@ import {
   type ForumInfo,
 } from './hub-forum-discord.gateway';
 import {
+  channelPrivate,
+  forumChannelName,
   forumDiscordError,
   parseBindBody,
-  tagsFree,
 } from './hub-forum-discord.helpers';
 import {
-  bindingCountsByChannel,
+  channelOptions,
+  findSharedForum,
+  preflight,
+  suggestedForumName,
+} from './hub-forum-discord.picker';
+import {
   deleteBinding,
   deleteForumRow,
   findBinding,
+  hubName,
   inUseChannelIds,
   insertBinding,
   listForumBindings,
@@ -82,30 +92,14 @@ export class HubForumDiscordService {
     };
   }
 
-  /**
-   * `GET channels` — forums the hub may bind. `tagsFree` reserves the first
-   * hub's tag on a forum one hub already uses; 0 = shared option unavailable.
-   */
+  /** `GET channels` — public forums the hub may bind (see `channelOptions`). */
   async channels(): Promise<HubForumDiscordChannelOptions> {
-    const discordGuildId = this.requireOnline();
-    const [inUse, counts] = await Promise.all([
-      inUseChannelIds(this.db, discordGuildId),
-      bindingCountsByChannel(this.db),
-    ]);
-    const channels = this.gateway
-      .listForums()
-      .filter((f) => !inUse.has(f.id))
-      .map((f) => {
-        const sharedWith = counts.get(f.id) ?? 0;
-        const reserved = sharedWith === 1 ? 1 : 0;
-        return {
-          id: f.id,
-          name: f.name,
-          sharedWith,
-          tagsFree: tagsFree(f.tags.length + reserved),
-        };
-      });
-    return { channels };
+    return channelOptions(this.db, this.gateway, this.requireOnline());
+  }
+
+  /** `GET preflight` — bot online, missing perms, the shared option. */
+  preflight(guildId: number): Promise<HubForumDiscordPreflight> {
+    return preflight(this.db, this.gateway, guildId);
   }
 
   /** `PUT` — bind the hub (create a forum or join an existing one). */
@@ -117,14 +111,11 @@ export class HubForumDiscordService {
     const input = parseBindBody(body);
     if (await findBinding(this.db, guildId)) throw alreadyBound();
     const discordGuildId = this.requireOnline();
-    const info =
-      input.mode === 'create'
-        ? await this.createForum()
-        : await this.existingForum(discordGuildId, input.channelId ?? '');
+    const { info, managed } = await this.target(discordGuildId, guildId, input);
     const forum = await upsertForum(this.db, {
       discordGuildId,
       channelId: info.id,
-      managed: input.mode === 'create',
+      managed,
     });
     const tagId = await shareForumTags(this.db, this.gateway, {
       guildId,
@@ -197,10 +188,46 @@ export class HubForumDiscordService {
     return id;
   }
 
-  private async createForum(): Promise<ForumInfo> {
+  /**
+   * Q10(c) — the forum to bind: `existing` as picked; `create` + `shared`
+   * joins the one `#hub-forums` (made only when none exists); `create` +
+   * `own` makes a forum named from the request or the hub.
+   */
+  private async target(
+    discordGuildId: string,
+    guildId: number,
+    input: PutHubForumDiscordInput,
+  ): Promise<{ info: ForumInfo; managed: boolean }> {
+    if (input.mode === 'existing') {
+      const id = input.channelId ?? '';
+      return {
+        info: await this.existingForum(discordGuildId, id),
+        managed: false,
+      };
+    }
+    if (input.target === 'shared') {
+      const found = await findSharedForum(
+        this.db,
+        this.gateway,
+        discordGuildId,
+      );
+      if (found) {
+        const info = await this.existingForum(discordGuildId, found.id);
+        return { info, managed: false };
+      }
+      return { info: await this.createForum(SHARED_NAME), managed: true };
+    }
+    const name =
+      input.name !== undefined
+        ? forumChannelName(input.name)
+        : suggestedForumName((await hubName(this.db, guildId)) ?? 'Hub');
+    return { info: await this.createForum(name), managed: true };
+  }
+
+  private async createForum(name: string): Promise<ForumInfo> {
     const missing = this.gateway.missingToCreate();
     if (missing.length > 0) throw missingPerms(missing);
-    return this.gateway.createForum();
+    return this.gateway.createForum(name);
   }
 
   private async existingForum(
@@ -222,6 +249,7 @@ export class HubForumDiscordService {
         'That channel is already the LFG board or a hub mirror/media channel.',
       );
     }
+    if (!info.isPublic) throw channelPrivate();
     if (info.missing.length > 0) throw missingPerms(info.missing);
     return info;
   }

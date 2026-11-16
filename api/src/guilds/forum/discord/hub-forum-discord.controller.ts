@@ -15,6 +15,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import type {
   HubForumDiscordChannelOptions,
+  HubForumDiscordPreflight,
   HubForumDiscordStatus,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../../auth/types';
@@ -54,7 +55,15 @@ export class HubForumDiscordController {
     return this.service.channels();
   }
 
-  /** Bind: `{ mode, channelId?, ack: true }`. */
+  /** Before binding: bot online, missing perms, the shared #hub-forums. */
+  @Get('preflight')
+  @UseGuards(jwt, GuildLeaderGuard)
+  @Header('Cache-Control', NO_STORE)
+  preflight(@Id() id: number): Promise<HubForumDiscordPreflight> {
+    return this.service.preflight(id);
+  }
+
+  /** Bind: `{ mode, channelId?, target?, name?, ack: true }`. */
   @Put()
   @UseGuards(jwt, GuildLeaderGuard)
   bind(
