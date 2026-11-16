@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { ActivityType, Events, type Presence } from 'discord.js';
+import { isLauncherActivity } from '../services/presence-launcher-activities';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
@@ -12,6 +13,7 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
  *
  * Filters:
  * - Only processes ActivityType.Playing (ignores Streaming, Listening, etc.)
+ * - Skips launchers such as CurseForge — they are not games (ROK-2204)
  * - Only tracks users who have linked RL accounts (looked up by Discord ID)
  *
  * Registered on bot connect, unregistered on bot disconnect.
@@ -81,14 +83,9 @@ export class ActivityListener {
 
     const now = new Date();
 
-    // Extract playing activities from old and new presences
-    const oldGames = (oldPresence?.activities ?? [])
-      .filter((a) => a.type === ActivityType.Playing)
-      .map((a) => a.name);
-
-    const newGames = newPresence.activities
-      .filter((a) => a.type === ActivityType.Playing)
-      .map((a) => a.name);
+    // Extract playing activities (launchers excluded) from both presences
+    const oldGames = playingGameNames(oldPresence?.activities ?? []);
+    const newGames = playingGameNames(newPresence.activities);
 
     // Detect stopped games (in old but not in new)
     for (const gameName of oldGames) {
@@ -119,4 +116,18 @@ export class ActivityListener {
     this.userCache.set(discordUserId, userId);
     return userId;
   }
+}
+
+/**
+ * Names of the "Playing" activities in a presence that are games — launchers
+ * (CurseForge, Battle.net, ...) are dropped so they never open a session.
+ * @param activities - the presence's activities
+ */
+function playingGameNames(
+  activities: readonly Presence['activities'][number][],
+): string[] {
+  return activities
+    .filter((a) => a.type === ActivityType.Playing)
+    .filter((a) => !isLauncherActivity(a.name))
+    .map((a) => a.name);
 }
