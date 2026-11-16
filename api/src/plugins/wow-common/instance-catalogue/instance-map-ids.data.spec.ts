@@ -50,13 +50,15 @@ describe('DUNGEON_MAP_TO_JOURNAL', () => {
   });
 });
 
+/** The fields of a bundled boss row these assertions read. */
+interface BossRow {
+  instanceId: number;
+  name: string;
+  order: number;
+  expansion: string;
+}
+
 describe('FOREVER_DUNGEON_MAP_TO_SEED (ROK-2219)', () => {
-  type BossRow = {
-    instanceId: number;
-    name: string;
-    order: number;
-    expansion: string;
-  };
   const bosses: readonly BossRow[] = bossData;
   const foreverBosses = (seedId: number): BossRow[] =>
     bosses.filter((b) => b.instanceId === seedId && b.expansion === 'forever');
