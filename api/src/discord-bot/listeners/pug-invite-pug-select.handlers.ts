@@ -177,9 +177,10 @@ async function acceptWithCharacter(
   character: CharFields,
 ): Promise<void> {
   const effectiveRole = character.roleOverride ?? character.role ?? 'dps';
-  await updateSlotAccepted(deps, pugSlotId, effectiveRole, character);
+  // Signup first: a rejected one must leave the invite retryable (ROK-2203).
   const failure = await createPugSignup(deps, slot, effectiveRole);
   if (failure) return replyPugSignupFailed(interaction, failure);
+  await updateSlotAccepted(deps, pugSlotId, effectiveRole, character);
   await replyCharAccepted(interaction, deps, slot, character.name);
 }
 
@@ -238,9 +239,10 @@ async function doPugRoleSelect(
   const charInfo = characterName
     ? await resolveCharClassSpec(deps, interaction.user.id, slot, characterName)
     : null;
-  await updateSlotWithRole(deps, pugSlotId, selectedRole, charInfo);
+  // Signup first: a rejected one must leave the invite retryable (ROK-2203).
   const failure = await createPugSignup(deps, slot, selectedRole);
   if (failure) return replyPugSignupFailed(interaction, failure);
+  await updateSlotWithRole(deps, pugSlotId, selectedRole, charInfo);
   await replyRoleAccepted(interaction, deps, slot, selectedRole, characterName);
 }
 

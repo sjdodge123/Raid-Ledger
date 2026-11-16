@@ -223,12 +223,14 @@ async function finalizePugAccept(
   slot: PugSlot,
   eventTitle: string,
 ): Promise<void> {
+  // Persist `accepted` only once the signup exists: a rejected signup must
+  // leave the invite retryable (ROK-2203).
+  const failure = await createPugSignup(deps, slot, slot.role);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   await deps.db
     .update(schema.pugSlots)
     .set({ status: 'accepted', updatedAt: new Date() })
     .where(eq(schema.pugSlots.id, slot.id));
-  const failure = await createPugSignup(deps, slot, slot.role);
-  if (failure) return replyPugSignupFailed(interaction, failure);
   const embed = buildAcceptedEmbed(
     `You accepted the invite for **${eventTitle}**! See you there!`,
   );
