@@ -126,6 +126,15 @@ export const INSIDE_DUNGEON_QUESTS: readonly InsideQuest[] = [
   q(2278, 'The Platinum Discs', 'Uldaman'),
   q(2279, 'The Platinum Discs', 'Uldaman'),
   q(2280, 'The Platinum Discs', 'Uldaman'),
+  // ROK-2223: offline cross-check + Blizzard quest text place the giver past
+  // the portal (the paladin's corpse "in the depths of Uldaman", Awbee "here
+  // in this doomed place", Lydros's librams "lost in this wing").
+  q(2201, 'Find the Gems', 'Uldaman', false),
+  q(2318, 'Translating the Journal', 'Uldaman', false),
+  q(5160, 'The Matron Protectorate', 'Blackrock Spire', false),
+  q(7483, 'Libram of Rapidity', 'Dire Maul', false),
+  q(7484, 'Libram of Focus', 'Dire Maul', false),
+  q(7485, 'Libram of Protection', 'Dire Maul', false),
 ];
 
 export const INSIDE_DUNGEON_QUEST_IDS: ReadonlySet<number> = new Set(

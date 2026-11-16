@@ -672,7 +672,12 @@
     ],
     "objectives": "Find the Deathstalker Adamant and Deathstalker Vincent.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -993,7 +998,12 @@
     ],
     "objectives": "Kill Arugal and bring his head to Dalar Dawnweaver at the Sepulcher.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -1237,7 +1247,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -1261,7 +1271,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -1364,7 +1374,12 @@
     ],
     "objectives": "Bring a Prismatic Punch Card to Master Mechanic Castpipe in Ironforge.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -1856,7 +1871,12 @@
     ],
     "objectives": "Retrieve the Rig Blueprints and Thermaplugg's Safe Combination from Gnomeregan and bring them to Nogg in Orgrimmar.\n",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -1877,7 +1897,12 @@
     "rewardsJson": null,
     "objectives": "Speak with Scooty in Booty Bay.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -1900,7 +1925,12 @@
     ],
     "objectives": "Wait for Scooty to calibrate the Goblin Transponder.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -2053,7 +2083,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -2251,7 +2281,12 @@
     "rewardsJson": null,
     "objectives": "Look for a valuable necklace within the Uldaman dig site and bring it back to Dran Droffers in Orgrimmar.  The necklace may be damaged.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -2272,7 +2307,12 @@
     "rewardsJson": null,
     "objectives": "Find a clue as to the gems' whereabouts in the depths of Uldaman.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -2319,8 +2359,13 @@
     "rewardsJson": null,
     "objectives": "Find someone who can translate the paladin's journal.  The closest location that might have someone is Kargath, in the Badlands.",
     "classRestriction": null,
-    "raceRestriction": null,
-    "startsInsideDungeon": false,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
     "rewardXp": null,
@@ -2340,7 +2385,12 @@
     "rewardsJson": null,
     "objectives": "Let Jarkal borrow the necklace.  In exchange, he will translate the journal for you.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -2425,7 +2475,7 @@
       "Dwarf",
       "Human"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
     "rewardXp": null,
@@ -2908,7 +2958,12 @@
     ],
     "objectives": "Collect 20 Fetishes of Hakkar and bring them to Fel'Zerul in Stonard.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -3608,7 +3663,7 @@
       "Orc"
     ],
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "none",
     "rewardXp": null,
     "rewardGold": null
@@ -3679,7 +3734,12 @@
     "rewardsJson": null,
     "objectives": "Venture to Blackrock Depths and destroy the vile aggressors!$B$BWarlord Goretooth wants you to kill 10 Anvilrage Medics, 10 Anvilrage Soldiers and 10 Anvilrage Officers. Return to him once your task is complete.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -3929,7 +3989,12 @@
     "rewardsJson": null,
     "objectives": "Speak with Shadowmaster Vivian Lagrave in Kargath.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -3955,7 +4020,12 @@
     ],
     "objectives": "Bring the Lost Thunderbrew Recipe to Vivian Lagrave in Kargath.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -4237,7 +4307,7 @@
       "Orc"
     ],
     "startsInsideDungeon": false,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "none",
     "rewardXp": null,
     "rewardGold": null
@@ -4256,7 +4326,12 @@
     "rewardsJson": null,
     "objectives": "Travel to the Burning Steppes and find Grark Lorkrub. You recall Lexlort mentioning that he was last seen in a massive Blackrock fortress.$B$BWhen you find Grark Lorkrub, use the Thorium Shackles to bind him and then lead him back through Blackrock Mountain to the Searing Gorge. Lexlort will have his men waiting on the other side to take Grark into custody.\n",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -4368,7 +4443,7 @@
       "Human"
     ],
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -4789,7 +4864,12 @@
     ],
     "objectives": "Take Bijou's Reconnaissance Report back to Grandmaster Lexlort in Kargath.\n",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
@@ -5058,7 +5138,12 @@
     ],
     "objectives": "Slay Highlord Omokk, War Master Voone, and Overlord Wyrmthalak. Recover Important Blackrock Documents. Return to Warlord Goretooth in Kargath when the mission has been accomplished.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -5175,7 +5260,7 @@
     "questGiverNpc": "Aurius",
     "questGiverZone": null,
     "prevQuestId": null,
-    "nextQuestId": null,
+    "nextQuestId": "5125",
     "rewardsJson": null,
     "objectives": "",
     "classRestriction": null,
@@ -5195,7 +5280,7 @@
     "expansion": "classic",
     "questGiverNpc": "Aurius",
     "questGiverZone": null,
-    "prevQuestId": null,
+    "prevQuestId": "5122",
     "nextQuestId": null,
     "rewardsJson": [
       17044,
@@ -5250,7 +5335,7 @@
     "objectives": "Travel to Winterspring and find Haleh. Give her Awbee's scale.",
     "classRestriction": null,
     "raceRestriction": null,
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",
     "rewardXp": null,
@@ -6257,7 +6342,7 @@
       "Dwarf",
       "Human"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": null,
@@ -6285,7 +6370,7 @@
       "Dwarf",
       "Human"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": null,
@@ -6313,7 +6398,7 @@
       "Dwarf",
       "Human"
     ],
-    "startsInsideDungeon": false,
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": null,
@@ -9524,7 +9609,12 @@
     ],
     "objectives": "Collect 10 Shadowshard Fragments from Maraudon and return them to Uthel'nay in Orgrimmar.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -9708,7 +9798,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null

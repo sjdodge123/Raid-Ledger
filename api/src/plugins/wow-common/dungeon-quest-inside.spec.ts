@@ -36,9 +36,9 @@ describe('dungeon quests acquired inside the instance (ROK-2142)', () => {
     expect(inside.map((row) => row.name)).toEqual([]);
   });
 
-  it('curates exactly 71 inside quests with no duplicates', () => {
-    expect(INSIDE_DUNGEON_QUESTS).toHaveLength(71);
-    expect(INSIDE_DUNGEON_QUEST_IDS.size).toBe(71);
+  it('curates exactly 77 inside quests with no duplicates', () => {
+    expect(INSIDE_DUNGEON_QUESTS).toHaveLength(77);
+    expect(INSIDE_DUNGEON_QUEST_IDS.size).toBe(77);
   });
 
   it('bundled Classic data flags exactly the allowlist as inside', () => {
