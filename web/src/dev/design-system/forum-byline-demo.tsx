@@ -6,16 +6,17 @@
  * `forum-message.tsx` uses. Tokens only, so it flips with the colour family.
  */
 import type { JSX } from 'react';
+import type { HubPostPerson } from '@raid-ledger/contract';
 import { forumByline, type ForumBylineSource } from '../../components/hub/forum/forum-byline';
 import { Pill } from '../../components/hub/hub-bits';
 import { StateFrame } from './design-system-bits';
 
-const PERSON = { id: 1, displayName: 'Mirelle', avatarUrl: null } as unknown as NonNullable<ForumBylineSource['author']>;
+const PERSON: HubPostPerson = { userId: 1, displayName: 'Mirelle', avatarUrl: null };
 
 const SAMPLES: Array<{ label: string; message: ForumBylineSource }> = [
-    { label: 'Raid Ledger post', message: { author: PERSON, source: 'web' as ForumBylineSource['source'] } },
+    { label: 'Raid Ledger post', message: { author: PERSON, source: 'raidledger' } },
     { label: 'Linked, from Discord', message: { author: PERSON, source: 'discord' } },
-    { label: 'Guest Discord author', message: { author: null, discordAuthor: { name: 'Thornwick', avatarUrl: null } as never } },
+    { label: 'Guest Discord author', message: { author: null, source: 'discord', discordAuthor: { name: 'Thornwick', avatarUrl: null } } },
 ];
 
 /** One frame: each byline case with its chip (shown only when `viaDiscord`). */
