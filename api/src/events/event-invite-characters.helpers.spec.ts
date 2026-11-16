@@ -3,7 +3,6 @@
  * ids, plus the creator/staff gate on the endpoint.
  */
 import { ForbiddenException } from '@nestjs/common';
-import type { EventResponseDto } from '@raid-ledger/contract';
 import {
   assertCanInviteCharacters,
   inviteCharactersAsCaller,
@@ -137,12 +136,10 @@ describe('inviteCharactersAsCaller', () => {
       notificationService: {} as CharacterInviteDeps['notificationService'],
       eventEmitter: {} as CharacterInviteDeps['eventEmitter'],
       logger: { log: jest.fn() } as unknown as CharacterInviteDeps['logger'],
-      findOne: jest
-        .fn()
-        .mockResolvedValue({ creator: { id: CREATOR_ID } } as EventResponseDto),
+      findOne: jest.fn().mockResolvedValue({ creator: { id: CREATOR_ID } }),
     };
     await expect(
-      inviteCharactersAsCaller(deps, 7, 99, false, [C_B]),
+      inviteCharactersAsCaller(deps, 7, { id: 99, isAdmin: false }, [C_B]),
     ).rejects.toThrow(
       new ForbiddenException('Only the event creator can invite characters'),
     );

@@ -109,3 +109,16 @@ export async function findEventsByIds(
     .leftJoin(sq, eq(schema.events.id, sq.eventId))
     .where(inArray(schema.events.id, ids));
 }
+
+/** Throws NotFoundException if the event does not exist. */
+export async function assertEventExists(
+  db: PostgresJsDatabase<typeof schema>,
+  id: number,
+): Promise<void> {
+  const [row] = await db
+    .select({ id: schema.events.id })
+    .from(schema.events)
+    .where(eq(schema.events.id, id))
+    .limit(1);
+  if (!row) throw new NotFoundException(`Event with ID ${id} not found`);
+}

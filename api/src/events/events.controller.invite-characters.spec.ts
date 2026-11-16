@@ -69,6 +69,6 @@ describe('POST /events/:id/invite-characters — delegation (ROK-2215)', () => {
     await expect(
       controller.inviteCharacters(7, asRole(role), { characterIds: [C1] }),
     ).resolves.toEqual(RESULT);
-    expect(inviteCharacters).toHaveBeenCalledWith(7, 5, isAdmin, [C1]);
+    expect(inviteCharacters).toHaveBeenCalledWith(7, { id: 5, isAdmin }, [C1]);
   });
 });

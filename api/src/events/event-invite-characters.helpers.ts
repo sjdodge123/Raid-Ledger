@@ -186,11 +186,10 @@ export async function inviteCharactersAsCaller(
     findOne: (id: number) => Promise<EventResponseDto>;
   },
   eventId: number,
-  callerId: number,
-  isAdmin: boolean,
+  caller: { id: number; isAdmin: boolean },
   ids: string[],
 ): Promise<InviteCharactersResultDto> {
   const event = await deps.findOne(eventId);
-  assertCanInviteCharacters(event, callerId, isAdmin);
-  return inviteCharactersToEvent(deps, event, eventId, callerId, ids);
+  assertCanInviteCharacters(event, caller.id, caller.isAdmin);
+  return inviteCharactersToEvent(deps, event, eventId, caller.id, ids);
 }

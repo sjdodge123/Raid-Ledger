@@ -278,8 +278,7 @@ export class EventsController {
       const dto = InviteCharactersSchema.parse(body);
       return await this.eventsService.inviteCharacters(
         eventId,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
+        { id: req.user.id, isAdmin: isOperatorOrAdmin(req.user.role) },
         dto.characterIds,
       );
     } catch (error) {

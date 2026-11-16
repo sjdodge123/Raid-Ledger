@@ -1,7 +1,6 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { emitNewGroupTag } from './event-group-tag.helpers';
-import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -56,7 +55,11 @@ import {
 import { inviteMemberToEvent } from './event-invite.helpers';
 import { inviteCharactersAsCaller } from './event-invite-characters.helpers';
 import { setEventReportLink } from './event-report-link.helpers';
-import { findOneEvent, findEventsByIds } from './event-find.helpers';
+import {
+  findOneEvent,
+  findEventsByIds,
+  assertEventExists,
+} from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
 
@@ -81,12 +84,8 @@ export class EventsService {
     creatorId: number,
     dto: CreateEventDto,
   ): Promise<EventResponseDto & { allEventIds?: number[] }> {
-    return runCreateEvent(
-      this.createFlowDeps(),
-      this.activityLog,
-      creatorId,
-      dto,
-    );
+    const deps = this.createFlowDeps();
+    return runCreateEvent(deps, this.activityLog, creatorId, dto);
   }
 
   /** Lists events with filtering and pagination. */
@@ -94,19 +93,13 @@ export class EventsService {
     query: EventListQueryDto,
     authenticatedUserId?: number,
   ): Promise<EventListResponseDto> {
-    return queryEventList(this.db, query, authenticatedUserId, (row, preview) =>
-      mapEventToResponse(row, preview),
-    );
+    const id = authenticatedUserId;
+    return queryEventList(this.db, query, id, mapEventToResponse);
   }
 
   /** Throws NotFoundException if the event does not exist. */
   async exists(id: number): Promise<void> {
-    const [row] = await this.db
-      .select({ id: schema.events.id })
-      .from(schema.events)
-      .where(eq(schema.events.id, id))
-      .limit(1);
-    if (!row) throw new NotFoundException(`Event with ID ${id} not found`);
+    await assertEventExists(this.db, id);
   }
 
   /** Finds a single event by ID with creator and game data. */
@@ -134,9 +127,7 @@ export class EventsService {
     userId: number,
     limit = 6,
   ): Promise<UserEventSignupsResponseDto> {
-    return queryUpcomingByUser(this.db, userId, limit, (row) =>
-      mapEventToResponse(row),
-    );
+    return queryUpcomingByUser(this.db, userId, limit, mapEventToResponse);
   }
 
   /** Updates an event's fields after ownership verification. */
@@ -214,14 +205,8 @@ export class EventsService {
     to?: string,
   ): Promise<RosterAvailabilityResponse> {
     const event = await this.findOne(eventId);
-    return queryRosterAvailability(
-      this.db,
-      this.availabilityService,
-      event,
-      eventId,
-      from,
-      to,
-    );
+    const avail = this.availabilityService;
+    return queryRosterAvailability(this.db, avail, event, eventId, from, to);
   }
 
   /** Returns aggregate game-time heatmap for an event's roster. */
@@ -315,23 +300,11 @@ export class EventsService {
    */
   async inviteCharacters(
     eventId: number,
-    callerId: number,
-    isAdmin: boolean,
+    caller: { id: number; isAdmin: boolean },
     characterIds: string[],
   ): Promise<InviteCharactersResultDto> {
-    return inviteCharactersAsCaller(
-      {
-        db: this.db,
-        notificationService: this.notificationService,
-        eventEmitter: this.eventEmitter,
-        logger: this.logger,
-        findOne: (id: number) => this.findOne(id),
-      },
-      eventId,
-      callerId,
-      isAdmin,
-      characterIds,
-    );
+    const deps = this.createFlowDeps();
+    return inviteCharactersAsCaller(deps, eventId, caller, characterIds);
   }
 
   /** Embed data incl. the shared voice line (planned temp channel or link). */
