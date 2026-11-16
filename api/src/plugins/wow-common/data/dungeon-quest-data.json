@@ -6244,19 +6244,14 @@
     "expansion": "classic",
     "questGiverNpc": "Lorekeeper Lydros",
     "questGiverZone": null,
-    "prevQuestId": "7482",
+    "prevQuestId": null,
     "nextQuestId": null,
     "rewardsJson": [
       18329
     ],
     "objectives": "Bring a Libram of Rapidity, 1 Pristine Black Diamond, 2 Large Brilliant Shards, and 2 Blood of Heroes to Lorekeeper Lydros in Dire Maul to receive an Arcanum of Rapidity.",
     "classRestriction": null,
-    "raceRestriction": [
-      "Gnome",
-      "Night Elf",
-      "Dwarf",
-      "Human"
-    ],
+    "raceRestriction": null,
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -6272,19 +6267,14 @@
     "expansion": "classic",
     "questGiverNpc": "Lorekeeper Lydros",
     "questGiverZone": null,
-    "prevQuestId": "7482",
+    "prevQuestId": null,
     "nextQuestId": null,
     "rewardsJson": [
       18330
     ],
     "objectives": "Bring a Libram of Focus, 1 Pristine Black Diamond, 4 Large Brilliant Shards, and 2 Skin of Shadow to Lorekeeper Lydros in Dire Maul to receive an Arcanum of Focus.",
     "classRestriction": null,
-    "raceRestriction": [
-      "Gnome",
-      "Night Elf",
-      "Dwarf",
-      "Human"
-    ],
+    "raceRestriction": null,
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -6300,19 +6290,14 @@
     "expansion": "classic",
     "questGiverNpc": "Lorekeeper Lydros",
     "questGiverZone": null,
-    "prevQuestId": "7482",
+    "prevQuestId": null,
     "nextQuestId": null,
     "rewardsJson": [
       18331
     ],
     "objectives": "Bring a Libram of Protection, 1 Pristine Black Diamond, 2 Large Brilliant Shards, and 1 Frayed Abomination Stitching to Lorekeeper Lydros in Dire Maul to receive an Arcanum of Protection.",
     "classRestriction": null,
-    "raceRestriction": [
-      "Gnome",
-      "Night Elf",
-      "Dwarf",
-      "Human"
-    ],
+    "raceRestriction": null,
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -6983,12 +6968,7 @@
     "rewardsJson": null,
     "objectives": "Venture to the Molten Core entry portal in Blackrock Depths and recover a Core Fragment. Return to Lothos Riftwaker in Blackrock Mountain when you have recovered the Core Fragment.",
     "classRestriction": null,
-    "raceRestriction": [
-      "Gnome",
-      "Night Elf",
-      "Dwarf",
-      "Human"
-    ],
+    "raceRestriction": null,
     "startsInsideDungeon": false,
     "sharable": false,
     "rewardType": "none",
