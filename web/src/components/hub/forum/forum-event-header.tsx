@@ -4,52 +4,15 @@
  * Cancelled pill, "View event →" back to `/events/<id>`, and the read-only
  * line once the thread locks. `ForumEventPills` is the list/Latest row badge
  * pair ("Event · Sat 22 Nov", "Closed"). Tokens and the shared `Pill` only.
+ * Text formatting lives in `forum-event-format.ts`.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarIcon, LockClosedIcon } from '@heroicons/react/24/outline';
-import type {
-    HubForumLock,
-    HubForumLockReason,
-    HubForumThreadEvent,
-} from '@raid-ledger/contract';
+import type { HubForumLock, HubForumThreadEvent } from '@raid-ledger/contract';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Pill } from '../hub-bits';
-
-const LOCK_REASON_COPY: Record<HubForumLockReason, string> = {
-    'event-ended': 'Closed 24 h after the event ended',
-    'event-detached': 'This event moved to another hub',
-    'event-deleted': 'This event was deleted',
-};
-
-/** Why an event thread is read-only, as one sentence. */
-export function lockReasonCopy(reason: HubForumLockReason): string {
-    return LOCK_REASON_COPY[reason];
-}
-
-/** "Sat 22 Nov" in the viewer's timezone. */
-export function eventShortDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(undefined, {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-    });
-}
-
-/** "19:00–22:00" in the viewer's timezone. */
-export function eventTimeRange(startIso: string, endIso: string): string {
-    const time = (iso: string): string =>
-        new Date(iso).toLocaleTimeString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    return `${time(startIso)}–${time(endIso)}`;
-}
-
-/** "Read-only since Mon 24 Nov · Closed 24 h after the event ended". */
-export function lockLine(lock: HubForumLock): string {
-    return `Read-only since ${eventShortDate(lock.at)} · ${lockReasonCopy(lock.reason)}`;
-}
+import { eventShortDate, eventTimeRange, lockLine } from './forum-event-format';
 
 /** The row badges of an event thread: "Event · <date>" and, once locked, "Closed". */
 export function ForumEventPills({
@@ -95,6 +58,31 @@ export function ForumLockBar({ lock }: { lock: HubForumLock }): JSX.Element {
     );
 }
 
+/** Date, time range, Cancelled pill and "View event →" for an event thread. */
+function ForumEventFacts({
+    event,
+}: {
+    event: HubForumThreadEvent;
+}): JSX.Element {
+    return (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-surface px-3.5 py-3">
+            <span className="inline-flex flex-1 items-center gap-1.5 text-sm text-secondary">
+                <CalendarIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {eventShortDate(event.startTime)} ·{' '}
+                {eventTimeRange(event.startTime, event.endTime)}
+                {event.cancelled && <Pill tone="warning">Cancelled</Pill>}
+            </span>
+            <Link
+                to={`/events/${event.id}`}
+                data-testid="forum-event-link"
+                className={`rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}
+            >
+                View event →
+            </Link>
+        </div>
+    );
+}
+
 /** The event facts box above an event thread (see file docstring). */
 export function ForumEventHeader({
     event,
@@ -105,24 +93,7 @@ export function ForumEventHeader({
 }): JSX.Element {
     return (
         <div className="flex flex-col gap-2" data-testid="forum-event-header">
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-edge bg-surface px-3.5 py-3">
-                <span className="inline-flex flex-1 items-center gap-1.5 text-sm text-secondary">
-                    <CalendarIcon
-                        className="h-4 w-4 shrink-0"
-                        aria-hidden="true"
-                    />
-                    {eventShortDate(event.startTime)} ·{' '}
-                    {eventTimeRange(event.startTime, event.endTime)}
-                    {event.cancelled && <Pill tone="warning">Cancelled</Pill>}
-                </span>
-                <Link
-                    to={`/events/${event.id}`}
-                    data-testid="forum-event-link"
-                    className={`rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}
-                >
-                    View event →
-                </Link>
-            </div>
+            <ForumEventFacts event={event} />
             {lock != null && <ForumLockBar lock={lock} />}
         </div>
     );

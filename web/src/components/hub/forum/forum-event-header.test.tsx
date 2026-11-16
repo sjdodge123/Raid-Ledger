@@ -15,12 +15,8 @@ import {
     buildForumThreadEvent,
 } from '../../../test/factories/hub-forum';
 import type { MarkdownEditorProps } from '../../ui/markdown/lazy-markdown-editor';
-import {
-    ForumEventHeader,
-    ForumEventPills,
-    eventShortDate,
-    lockReasonCopy,
-} from './forum-event-header';
+import { ForumEventHeader, ForumEventPills } from './forum-event-header';
+import { eventShortDate, lockReasonCopy } from './forum-event-format';
 import { HubForumTab } from './forum-tab';
 
 vi.mock('../../ui/markdown/lazy-markdown-editor', async () => {

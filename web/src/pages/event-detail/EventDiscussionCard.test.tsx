@@ -18,7 +18,7 @@ import {
     buildForumLock,
     buildForumReply,
 } from '../../test/factories/hub-forum';
-import { lockReasonCopy } from '../../components/hub/forum/forum-event-header';
+import { lockReasonCopy } from '../../components/hub/forum/forum-event-format';
 import {
     DISCUSSION_EMPTY,
     DISCUSSION_SIGN_UP,
