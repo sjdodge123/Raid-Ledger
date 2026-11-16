@@ -28,6 +28,8 @@ export interface GameDetailsSectionProps {
     onDescriptionChange: (description: string, isAutoSuggested: boolean) => void;
     onSelectedInstancesChange: (instances: Record<string, unknown>[]) => void;
     onEventTypeDefaults?: (defaults: Partial<SlotState>) => void;
+    /** ROK-2215: a fresh plan prefill — the auto-matched type also applies its defaults, like a manual pick. */
+    autoMatchAppliesDefaults?: boolean;
     interestCount?: number;
     interestLoading?: boolean;
     slotBetween?: React.ReactNode;
@@ -170,20 +172,26 @@ function inferContentType(
     return null;
 }
 
-/** Auto-set eventTypeId from existing content instances (edit mode). */
+/**
+ * Auto-set eventTypeId from existing content instances (edit mode, plan prefill).
+ * `onDefaults` (fresh plan prefill only) also applies the matched type's defaults.
+ */
 function useAutoMatchEventType(
     eventTypeId: number | null,
     selectedInstances: Record<string, unknown>[],
-    eventTypes: Array<{ id: number; slug: string }>,
+    eventTypes: EventTypeDto[],
     onEventTypeIdChange: (id: number | null) => void,
+    onDefaults?: (defaults: Partial<SlotState>) => void,
 ) {
     useEffect(() => {
         if (eventTypeId !== null || selectedInstances.length === 0 || eventTypes.length === 0) return;
         const category = selectedInstances[0]?.category as string | undefined;
         if (!category) return;
         const match = eventTypes.find(et => getContentType(et.slug) === category);
-        if (match) onEventTypeIdChange(match.id);
-    }, [eventTypes, eventTypeId, selectedInstances, onEventTypeIdChange]);
+        if (!match) return;
+        onEventTypeIdChange(match.id);
+        if (onDefaults) onDefaults(applyEventTypeDefaults(match));
+    }, [eventTypes, eventTypeId, selectedInstances, onEventTypeIdChange, onDefaults]);
 }
 
 function useGameDetailsData(props: GameDetailsSectionProps) {
@@ -224,7 +232,7 @@ export function GameDetailsSection(props: GameDetailsSectionProps) {
         interestCount, interestLoading, slotBetween,
     } = props;
     const d = useGameDetailsData(props);
-    useAutoMatchEventType(eventTypeId, props.selectedInstances, d.eventTypes, onEventTypeIdChange);
+    useAutoMatchEventType(eventTypeId, props.selectedInstances, d.eventTypes, onEventTypeIdChange, props.autoMatchAppliesDefaults ? onEventTypeDefaults : undefined);
 
     return (
         <>

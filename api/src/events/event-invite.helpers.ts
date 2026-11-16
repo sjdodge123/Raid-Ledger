@@ -12,7 +12,7 @@ import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { MEMBER_INVITE_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { MemberInviteCreatedPayload } from '../discord-bot/discord-bot.constants';
 
-type UserBasic = { id: number; username: string };
+export type UserBasic = { id: number; username: string };
 
 /** Finds a registered user by Discord ID or throws. */
 export async function findUserByDiscordId(
@@ -32,22 +32,32 @@ export async function findUserByDiscordId(
   return user;
 }
 
-/** Checks that the user is not already signed up for the event. */
-export async function assertNotSignedUp(
+/** True when the user already has a signup row for the event. */
+export async function isSignedUp(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-  user: UserBasic,
-): Promise<void> {
+  userId: number,
+): Promise<boolean> {
   const [existing] = await db
     .select({ id: schema.eventSignups.id })
     .from(schema.eventSignups)
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),
-        eq(schema.eventSignups.userId, user.id),
+        eq(schema.eventSignups.userId, userId),
       ),
-    );
-  if (existing) {
+    )
+    .limit(1);
+  return existing !== undefined;
+}
+
+/** Checks that the user is not already signed up for the event. */
+export async function assertNotSignedUp(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  user: UserBasic,
+): Promise<void> {
+  if (await isSignedUp(db, eventId, user.id)) {
     throw new BadRequestException(
       `${user.username} is already signed up for this event`,
     );
@@ -78,8 +88,35 @@ export async function inviteMemberFlow(
   discordId: string,
 ): Promise<{ message: string; targetUser: UserBasic }> {
   const targetUser = await findUserByDiscordId(db, discordId);
-  await assertNotSignedUp(db, eventId, targetUser);
   const inviterName = await getInviterUsername(db, inviterId);
+  await inviteUserToEvent(
+    db,
+    notificationService,
+    eventEmitter,
+    event,
+    eventId,
+    inviterName,
+    targetUser,
+    discordId,
+  );
+  return { message: `Invite sent to ${targetUser.username}`, targetUser };
+}
+
+/**
+ * User-keyed invite (ROK-2215): refuses a user already signed up (400), then
+ * creates the notification and emits the Discord DM event.
+ */
+export async function inviteUserToEvent(
+  db: PostgresJsDatabase<typeof schema>,
+  notificationService: NotificationService,
+  eventEmitter: EventEmitter2,
+  event: EventResponseDto,
+  eventId: number,
+  inviterName: string,
+  targetUser: UserBasic,
+  discordId: string,
+): Promise<void> {
+  await assertNotSignedUp(db, eventId, targetUser);
   await emitMemberInvite(
     notificationService,
     eventEmitter,
@@ -89,7 +126,6 @@ export async function inviteMemberFlow(
     inviterName,
     discordId,
   );
-  return { message: `Invite sent to ${targetUser.username}`, targetUser };
 }
 
 /** Creates the invite notification and emits a Discord event if needed. */

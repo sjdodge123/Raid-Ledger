@@ -64,6 +64,12 @@ export interface EventFormProps {
      *  submitted. Distinct from `followupForEventId`, which is the server's
      *  fan-out signal and fires on the event path only. */
     copyFromEvent?: EventResponseDto | null;
+    /** ROK-2215: instances a plan link pre-selects (create mode only). */
+    initialInstances?: Record<string, unknown>[] | undefined;
+    /** ROK-2215: plan characters whose owners are invited after create (create mode, not a lock-in). */
+    inviteCharacterIds?: string[] | undefined;
+    /** ROK-2215: the names the page resolved for `inviteCharacterIds`. */
+    inviteNames?: { names: string[]; unresolved: number } | undefined;
 }
 
 export const RECURRENCE_OPTIONS = [

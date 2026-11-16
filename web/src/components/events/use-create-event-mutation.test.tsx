@@ -7,18 +7,19 @@ import type { ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
-import { completeStandalonePoll, createEvent, lockInSchedulingPoll, updateEvent } from '../../lib/api-client';
+import { completeStandalonePoll, createEvent, inviteCharacters, lockInSchedulingPoll, updateEvent } from '../../lib/api-client';
 import { withHttpStatus } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
+import { must } from '../../test/must';
 import { invalidateHubPolls } from '../hub/events/hub-polls-api';
 import { FALLBACK_TOAST } from './use-bench-pick';
-import { LOCK_IN_LOST_TOAST, useCreateEventMutation, type CreateEventMutationOptions } from './use-create-event-mutation';
+import { INVITES_FAILED_TOAST, LOCK_IN_LOST_TOAST, inviteSkipNote, useCreateEventMutation, type CreateEventMutationOptions } from './use-create-event-mutation';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate }));
 vi.mock('../../lib/api-client', () => ({
     createEvent: vi.fn(), updateEvent: vi.fn(), updateSeries: vi.fn(),
-    lockInSchedulingPoll: vi.fn(), completeStandalonePoll: vi.fn(),
+    lockInSchedulingPoll: vi.fn(), completeStandalonePoll: vi.fn(), inviteCharacters: vi.fn(),
 }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock('../hub/events/hub-polls-api', () => ({ invalidateHubPolls: vi.fn() }));
@@ -117,5 +118,62 @@ describe('useCreateEventMutation — without a poll (unchanged)', () => {
         await submit({});
         expect(toast.error).toHaveBeenCalledWith('Conflict');
         expect(mockNavigate).not.toHaveBeenCalled();
+    });
+});
+
+describe('useCreateEventMutation — plan invites (ROK-2215 W8/W9)', () => {
+    const ID1 = '00000000-0000-4000-8000-000000000001';
+    const ID2 = '00000000-0000-4000-8000-000000000002';
+    const IDS = [ID1, ID2];
+    const NONE = { invited: [], skipped: [] };
+
+    it('W8: invites the plan characters once after create, and still navigates', async () => {
+        vi.mocked(createEvent).mockResolvedValue(EVENT);
+        vi.mocked(inviteCharacters).mockResolvedValue(NONE);
+        await submit({ inviteCharacterIds: IDS });
+        expect(inviteCharacters).toHaveBeenCalledTimes(1);
+        expect(inviteCharacters).toHaveBeenCalledWith(77, IDS);
+        expect(mockNavigate).toHaveBeenCalledWith('/events/77');
+        // The toast fires in the invite promise's .then; settle it before the negative check.
+        await must(vi.mocked(inviteCharacters).mock.results[0], 'invite result').value;
+        expect(toast.warning).not.toHaveBeenCalled();
+        expect(inviteSkipNote(NONE)).toBeNull();
+    });
+
+    it('W8: a rejected invite call toasts an error and keeps the event', async () => {
+        vi.mocked(createEvent).mockResolvedValue(EVENT);
+        vi.mocked(inviteCharacters).mockRejectedValue(new Error('boom'));
+        await submit({ inviteCharacterIds: IDS });
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith(INVITES_FAILED_TOAST));
+        expect(mockNavigate).toHaveBeenCalledWith('/events/77');
+    });
+
+    it('W8: never invites in edit mode or on a poll lock-in', async () => {
+        vi.mocked(updateEvent).mockResolvedValue(EVENT);
+        vi.mocked(lockInSchedulingPoll).mockResolvedValue({ event: EVENT, benchPickFallback: false });
+        await submit({ isEditMode: true, editEventId: 77, inviteCharacterIds: IDS });
+        await submit({ ...LOCK, inviteCharacterIds: IDS });
+        expect(inviteCharacters).not.toHaveBeenCalled();
+    });
+
+    it('W9: a skipped owner gets a warning toast naming the character', async () => {
+        vi.mocked(createEvent).mockResolvedValue(EVENT);
+        vi.mocked(inviteCharacters).mockResolvedValue({
+            invited: [],
+            skipped: [
+                { characterId: ID1, characterName: 'Brann', reason: 'no_discord' },
+                { characterId: ID2, characterName: 'Corra', reason: 'already_signed_up' },
+            ],
+        });
+        await submit({ inviteCharacterIds: IDS });
+        await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Not invited (no linked Discord): Brann. Already signed up: Corra'));
+    });
+
+    it('W9: a deactivated owner is named in the skip note', () => {
+        const note = inviteSkipNote({
+            invited: [],
+            skipped: [{ characterId: ID1, characterName: 'Dagny', reason: 'deactivated' }],
+        });
+        expect(note).toBe('Not invited (account deactivated): Dagny');
     });
 });

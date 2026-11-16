@@ -4,6 +4,9 @@ import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useEvent } from '../hooks/use-events';
 import { CreateEventForm } from '../components/events/create-event-form';
+import { usePluginsHydrated } from '../hooks/use-plugins';
+import { useEventPlanPrefill, type EventPlanPrefill } from '../plugins/event-plan-prefill';
+import { parsePositiveIntList, parseUuidList } from './create-event-prefill';
 
 /**
  * Page for creating a new event.
@@ -39,11 +42,13 @@ export function CreateEventPage() {
     const copyFromEventId = searchParams.get('copyFromEventId') ? parseInt(searchParams.get('copyFromEventId')!, 10) : null;
     const { data: copyFromEvent, isLoading: copyLoading, isError: copyFailed } = useEvent(copyFromEventId ?? 0);
 
+    const plan = usePlanPrefill(searchParams, initialGame?.slug ?? null, initialGuildId);
+
     const hasGameParam = !!searchParams.get('gameId');
     // The form seeds its state once, in a useState initializer — render it only
     // after the prefill source resolves, or it opens blank and never refills.
     // A failed fetch falls through to a blank form rather than blocking create.
-    if (isLoading || (hasGameParam && registryLoading) || (copyFromEventId && copyLoading && !copyFailed)) return <PageSpinner />;
+    if (isLoading || (hasGameParam && registryLoading) || (copyFromEventId && copyLoading && !copyFailed) || plan.isLoading) return <PageSpinner />;
     if (!isAuthenticated) return <Navigate to="/events" replace />;
 
     return (
@@ -59,7 +64,8 @@ export function CreateEventPage() {
                     </p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} schedulingLineupId={schedulingLineupId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} initialGuildId={initialGuildId} />
+                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} schedulingLineupId={schedulingLineupId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} initialGuildId={initialGuildId}
+                        initialInstances={plan.initialInstances} inviteCharacterIds={plan.inviteCharacterIds} inviteNames={plan.inviteNames} />
                 </div>
             </div>
         </div>
@@ -76,6 +82,26 @@ function initialGuildFor(params: URLSearchParams, gameResolved: boolean): number
     const guildId = parsePositiveInt(params.get('guildId'));
     if (params.get('gameId') && !gameResolved && !params.get('matchId')) return null;
     return guildId;
+}
+
+/**
+ * ROK-2215 — a dungeon-plan link (`contentInstanceIds`, `inviteCharacterIds`),
+ * resolved by whichever active plugin provides plan pre-fill (the WoW plugin);
+ * with none active both params are ignored (L8). L3: the page waits for the
+ * provider (the form seeds once); a failed fetch just drops the pre-fill.
+ * On a cold load the plugin store starts as core-only, so a plan link also
+ * waits for plugin hydration — otherwise the provider reads as off and the plan is lost.
+ */
+function usePlanPrefill(params: URLSearchParams, gameSlug: string | null, guildId: number | null): EventPlanPrefill {
+    const rawInstances = params.get('contentInstanceIds');
+    const rawInvites = params.get('inviteCharacterIds');
+    const instanceIds = useMemo(() => parsePositiveIntList(rawInstances), [rawInstances]);
+    const inviteCharacterIds = useMemo(() => parseUuidList(rawInvites), [rawInvites]);
+    const request = useMemo(() => ({ gameSlug, guildId, instanceIds, inviteCharacterIds }), [gameSlug, guildId, instanceIds, inviteCharacterIds]);
+    const plan = useEventPlanPrefill(request);
+    const hydrated = usePluginsHydrated();
+    const hasPlan = params.has('contentInstanceIds') || params.has('inviteCharacterIds');
+    return { ...plan, isLoading: (hasPlan && !hydrated) || plan.isLoading };
 }
 
 /** A positive integer query param, else null. */

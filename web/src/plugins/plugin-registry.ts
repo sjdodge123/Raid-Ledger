@@ -4,6 +4,7 @@ import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer'
 import type { HubModule, HubModuleRegistration, HubTab } from './hub-module';
 import { addGameServerProvider, clearGameServerProviders } from './game-server-status';
 import { addEventReportLinkPredicate, clearEventReportLinkPredicates, type EventReportLinkPredicate } from './event-report-links';
+import { addEventPlanPrefillProvider, clearEventPlanPrefillProviders, type EventPlanPrefillHook } from './event-plan-prefill';
 import { addHubGameWidget, clearHubGameWidgets, type HubGameWidget } from './hub-game-widgets';
 import { addHubGameTab, clearHubGameTabs } from './hub-game-tabs';
 import { addGgCard, type GgCardRegistration } from './gg-cards';
@@ -84,6 +85,8 @@ export interface PluginHandle {
     registerGameServerProvider(): void;
     /** Declare which of this plugin's games take a report link on the event page — core shows the Logs card only for those, while this plugin is active. */
     registerEventReportLinks(supports: EventReportLinkPredicate): void;
+    /** Resolve a Create Event plan link (dungeon pre-fill + invite names) while this plugin is active (ROK-2215). One provider per app. */
+    registerEventPlanPrefill(usePrefill: EventPlanPrefillHook): void;
     /** Register this plugin's hub module — the tabs, widgets, member columns and hero pills for one `kind` (ROK-1830). */
     registerHubModule(module: HubModule): void;
     /** Add a game-scoped Overview widget to every hub of `widget.games` (ROK-1909). Re-registering an id replaces it. */
@@ -153,6 +156,14 @@ function addCalendarLayer(registration: CalendarLayerRegistration): void {
     layerRegistry.set(key, registration);
 }
 
+/** The handle methods that feed the core event pages (report links, plan pre-fill). */
+function eventPageMethods(slug: string): Pick<PluginHandle, 'registerEventReportLinks' | 'registerEventPlanPrefill'> {
+    return {
+        registerEventReportLinks: (supports) => addEventReportLinkPredicate(slug, supports),
+        registerEventPlanPrefill: (usePrefill) => addEventPlanPrefillProvider(slug, usePrefill),
+    };
+}
+
 /**
  * Register a plugin with badge metadata and receive a handle for slot registration.
  * Plugins MUST call this before registering any slots — the handle enforces this contract.
@@ -178,7 +189,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerGameServerProvider() {
             addGameServerProvider(slug);
         },
-        registerEventReportLinks: (supports) => addEventReportLinkPredicate(slug, supports),
+        ...eventPageMethods(slug),
         registerHubModule(module) {
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
         },
@@ -249,6 +260,7 @@ export function clearRegistry(): void {
     layersFrozen = false;
     clearGameServerProviders();
     clearEventReportLinkPredicates();
+    clearEventPlanPrefillProviders();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */

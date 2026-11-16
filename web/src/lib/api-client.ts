@@ -141,6 +141,7 @@ export {
     updatePugSlot,
     deletePugSlot,
     inviteMember,
+    inviteCharacters,
     listDiscordMembers,
     searchDiscordMembers,
     resolveInviteCode,

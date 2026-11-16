@@ -35,6 +35,8 @@ import {
   DashboardResponseDto,
   AggregateGameTimeResponse,
   ShareEventResponseDto,
+  InviteCharactersSchema,
+  type InviteCharactersResultDto,
   type ActivityTimelineResponseDto,
 } from '@raid-ledger/contract';
 import type { PublicEventResponseDto } from '@raid-ledger/contract';
@@ -262,6 +264,26 @@ export class EventsController {
       isOperatorOrAdmin(req.user.role),
       body.discordId,
     );
+  }
+
+  /** ROK-2215: invite planned characters' owners (creator or staff only). */
+  @Post(':id/invite-characters')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  async inviteCharacters(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<InviteCharactersResultDto> {
+    try {
+      const dto = InviteCharactersSchema.parse(body);
+      return await this.eventsService.inviteCharacters(
+        eventId,
+        { id: req.user.id, isAdmin: isOperatorOrAdmin(req.user.role) },
+        dto.characterIds,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   @Post(':id/share')
