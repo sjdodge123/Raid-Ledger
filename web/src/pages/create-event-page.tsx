@@ -5,6 +5,7 @@ import { useGameRegistry } from '../hooks/use-game-registry';
 import { useEvent } from '../hooks/use-events';
 import { CreateEventForm } from '../components/events/create-event-form';
 import { usePluginStore, isSlugActive } from '../stores/plugin-store';
+import { usePluginsHydrated } from '../hooks/use-plugins';
 import { useInstancePrefill } from '../plugins/wow/hooks/use-instance-prefill';
 import { useCharacterNames } from '../plugins/wow/hooks/use-character-names';
 import { parsePositiveIntList, parseUuidList } from './create-event-prefill';
@@ -96,6 +97,8 @@ interface PlanPrefill {
  * ROK-2215 — a dungeon-plan link (`contentInstanceIds`, `inviteCharacterIds`).
  * L8: with the Blizzard plugin off both params are ignored. L3: the page waits
  * for the dungeon list (the form seeds once); a failed list fetch just drops it.
+ * On a cold load the plugin store starts as core-only, so a plan link also
+ * waits for plugin hydration — otherwise Blizzard reads as off and the plan is lost.
  */
 function usePlanPrefill(params: URLSearchParams, gameSlug: string | null, guildId: number | null): PlanPrefill {
     const blizzardActive = usePluginStore((st) => isSlugActive(st.activeSlugs, 'blizzard'));
@@ -105,7 +108,9 @@ function usePlanPrefill(params: URLSearchParams, gameSlug: string | null, guildI
     const inviteCharacterIds = useMemo(() => parseUuidList(rawInvites), [rawInvites]);
     const prefill = useInstancePrefill(gameSlug, instanceIds);
     const inviteNames = useCharacterNames(guildId, inviteCharacterIds);
-    return { initialInstances: prefill.instances, inviteCharacterIds, inviteNames, isLoading: prefill.isLoading };
+    const hydrated = usePluginsHydrated();
+    const hasPlan = params.has('contentInstanceIds') || params.has('inviteCharacterIds');
+    return { initialInstances: prefill.instances, inviteCharacterIds, inviteNames, isLoading: (hasPlan && !hydrated) || prefill.isLoading };
 }
 
 /** A positive integer query param, else null. */

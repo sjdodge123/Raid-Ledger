@@ -4,7 +4,7 @@
  * resolved dungeon and the roster names, and does nothing with the Blizzard plugin off.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { renderWithProviders } from '../test/render-helpers';
 import { usePluginStore } from '../stores/plugin-store';
 import { CreateEventPage } from './create-event-page';
@@ -19,6 +19,8 @@ vi.mock('../hooks/use-auth', () => ({ useAuth: () => ({ isAuthenticated: true, i
 vi.mock('../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: [{ id: 3, name: 'WoW Forever', slug: 'world-of-warcraft-forever' }], isLoading: false }),
 }));
+// A cold load: /system/status still in flight (neither data nor an error yet).
+vi.mock('../hooks/use-system-status', () => ({ useSystemStatus: () => ({ data: undefined, isError: false }) }));
 vi.mock('../hooks/use-events', () => ({ useEvent: () => ({ data: undefined, isLoading: false, isError: false }) }));
 vi.mock('../plugins/wow/hooks/use-wow-instances', () => ({
     useWowInstances: (variant?: string, type?: string) => (variant && type === 'dungeon'
@@ -41,7 +43,7 @@ const PLAN = `/events/new?gameId=3&guildId=7&contentInstanceIds=90000004&inviteC
 
 beforeEach(() => {
     stub.instancesLoading = false;
-    usePluginStore.setState({ activeSlugs: new Set(['core', 'blizzard']), initialized: true });
+    usePluginStore.setState({ activeSlugs: new Set(['core', 'blizzard']), initialized: true, settled: true });
 });
 
 describe('CreateEventPage — dungeon-plan link (ROK-2215)', () => {
@@ -62,6 +64,22 @@ describe('CreateEventPage — dungeon-plan link (ROK-2215)', () => {
         expect(form).toHaveAttribute('data-invites', '3');
         expect(form).toHaveAttribute('data-names', 'Aelin,Brann');
         expect(form).toHaveAttribute('data-unresolved', '1');
+    });
+
+    it('cold load: waits for plugin hydration, then hands the form the dungeon and invites', () => {
+        usePluginStore.setState({ activeSlugs: new Set(['core']), initialized: false, settled: false });
+        renderWithProviders(<CreateEventPage />, { initialEntries: [PLAN] });
+        expect(screen.queryByTestId('form'), 'the form seeds once, so it must not mount before plugins hydrate').not.toBeInTheDocument();
+        act(() => usePluginStore.getState().setActiveSlugs(['blizzard']));
+        const form = screen.getByTestId('form');
+        expect(form).toHaveAttribute('data-instances', 'Wailing Caverns:dungeon');
+        expect(form).toHaveAttribute('data-invites', '3');
+    });
+
+    it('cold load without plan params never waits for plugin hydration', () => {
+        usePluginStore.setState({ activeSlugs: new Set(['core']), initialized: false, settled: false });
+        renderWithProviders(<CreateEventPage />, { initialEntries: ['/events/new?gameId=3'] });
+        expect(screen.getByTestId('form')).toBeInTheDocument();
     });
 
     it('W6: with the Blizzard plugin off, the plan params do nothing', () => {
