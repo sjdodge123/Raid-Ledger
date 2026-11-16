@@ -5,13 +5,15 @@
  */
 import { useState } from 'react';
 import type { BossLootDto, EquipmentItemDto } from '@raid-ledger/contract';
-import { isUsableByClass } from './boss-loot-constants';
+import { isUsableByClass, LOOT_LOAD_ERROR_MESSAGE } from './boss-loot-constants';
 import { ItemCompareRow } from '../components/item-compare-row';
 
 /** Props for BossLootBody */
 export interface BossLootBodyProps {
     loot: BossLootDto[] | undefined;
     isLoading: boolean;
+    /** The loot request failed: show the neutral error line, not `emptyMessage`. */
+    isError?: boolean | undefined;
     wowheadVariant: string;
     equippedBySlot: Map<string, EquipmentItemDto>;
     characterClass?: string | null | undefined;
@@ -32,12 +34,13 @@ function LootFilterToggle({ filterUsable, onToggle }: { filterUsable: boolean; o
 
 /** Loot table rendered under an expanded boss row */
 export function BossLootBody({
-    loot, isLoading, wowheadVariant,
+    loot, isLoading, isError, wowheadVariant,
     equippedBySlot, characterClass, hasCharacter, emptyMessage,
 }: BossLootBodyProps) {
     const [filterUsable, setFilterUsable] = useState(false);
 
     if (isLoading) return <div className="boss-loot-body"><div className="boss-loot-body__loading">Loading loot&hellip;</div></div>;
+    if (isError) return <div className="boss-loot-body"><div className="boss-loot-body__empty">{LOOT_LOAD_ERROR_MESSAGE}</div></div>;
     if (!loot || loot.length === 0) return <div className="boss-loot-body"><div className="boss-loot-body__empty">{emptyMessage}</div></div>;
 
     const hasClassRestrictions = loot.some((item) => item.classRestrictions && item.classRestrictions.length > 0);

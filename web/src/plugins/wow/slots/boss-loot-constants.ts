@@ -24,6 +24,9 @@ export function isUsableByClass(item: BossLootDto, characterClass?: string | nul
 }
 
 /** Empty loot copy for every variant except Forever (unchanged). */
+/** Shown when the loot request itself failed — never the variant's empty copy (ROK-2209 review). */
+export const LOOT_LOAD_ERROR_MESSAGE = "Couldn't load loot.";
+
 export const NO_LOOT_MESSAGE = 'No loot data available';
 
 /**

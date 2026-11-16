@@ -152,7 +152,7 @@ function BossRow({
     equippedBySlot: Map<string, EquipmentItemDto>;
     characterClass?: string | null | undefined; hasCharacter: boolean;
 }) {
-    const { data: loot, isLoading: lootLoading } = useLootForBoss(
+    const { data: loot, isLoading: lootLoading, isError: lootError } = useLootForBoss(
         isExpanded ? boss.id : undefined, variant,
     );
     useWowheadTooltips([loot]);
@@ -162,7 +162,7 @@ function BossRow({
             <BossRowHeader boss={boss} isExpanded={isExpanded} onToggle={onToggle} wowheadVariant={wowheadVariant} />
             {isExpanded && (
                 <BossLootBody
-                    loot={loot} isLoading={lootLoading} wowheadVariant={wowheadVariant}
+                    loot={loot} isLoading={lootLoading} isError={lootError} wowheadVariant={wowheadVariant}
                     equippedBySlot={equippedBySlot} characterClass={characterClass}
                     hasCharacter={hasCharacter} emptyMessage={lootEmptyMessage(variant)}
                 />
