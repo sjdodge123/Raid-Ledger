@@ -9,36 +9,51 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import type { CreateSignupDto } from '@raid-ledger/contract';
 import type { Tx, EventRow } from './signups.service.types';
 
 const DISPLACEABLE_ROLES: readonly string[] = ['tank', 'healer', 'dps'];
 
+/**
+ * Path-neutral view of an incoming signup for the full-roster rule (ROK-2203):
+ * the web dto and the anonymous Discord dto both map onto it, so every signup
+ * path shares one displacement predicate.
+ */
+export interface IncomingSignupRoles {
+  /** Single requested role (web `slotRole`, Discord `role`). */
+  slotRole?: string | null | undefined;
+  /** Multi-role preferences; win over `slotRole` when non-empty. */
+  preferredRoles?: readonly string[] | null | undefined;
+  /** Web path: the signing-up user, checked for an existing tentative row. */
+  userId?: number | null | undefined;
+  /** Anonymous path: the newcomer itself signs up as tentative. */
+  tentative?: boolean | undefined;
+}
+
 /** The incoming signup's roles that a tentative occupant can be bumped from. */
-export function displaceableRoles(dto: CreateSignupDto): string[] {
-  const prefs = dto.preferredRoles?.length ? dto.preferredRoles : null;
-  const raw: string[] = prefs ?? (dto.slotRole ? [dto.slotRole] : []);
+export function displaceableRoles(req: IncomingSignupRoles): string[] {
+  const prefs = req.preferredRoles?.length ? req.preferredRoles : null;
+  const raw: readonly string[] = prefs ?? (req.slotRole ? [req.slotRole] : []);
   return raw.filter((r) => DISPLACEABLE_ROLES.includes(r));
 }
 
 /**
  * True when the incoming signup may bump a tentative occupant: MMO event, not
- * a bench request, at least one tank/healer/dps preference, the incoming user
- * is not themselves tentative on this event (the duplicate re-signup path),
- * and a tentative player holds one of those roles.
+ * a bench request, at least one tank/healer/dps preference, the newcomer is
+ * not itself tentative (an anonymous tentative signup, or the web duplicate
+ * re-signup path), and a tentative player holds one of those roles.
  */
 export async function hasDisplaceableTentative(
   tx: Tx,
   eventRow: Pick<EventRow, 'slotConfig'>,
   eventId: number,
-  dto: CreateSignupDto,
-  userId: number,
+  req: IncomingSignupRoles,
 ): Promise<boolean> {
   const slotConfig = eventRow.slotConfig as Record<string, unknown> | null;
-  if (slotConfig?.type !== 'mmo' || dto.slotRole === 'bench') return false;
-  const roles = displaceableRoles(dto);
-  if (roles.length === 0) return false;
-  if (await isUserTentative(tx, eventId, userId)) return false;
+  if (slotConfig?.type !== 'mmo' || req.slotRole === 'bench') return false;
+  const roles = displaceableRoles(req);
+  if (roles.length === 0 || req.tentative) return false;
+  if (req.userId != null && (await isUserTentative(tx, eventId, req.userId)))
+    return false;
   return hasTentativeOccupant(tx, eventId, roles);
 }
 

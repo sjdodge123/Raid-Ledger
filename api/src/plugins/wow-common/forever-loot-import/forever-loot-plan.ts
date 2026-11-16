@@ -43,6 +43,8 @@ export interface BossRow {
 export interface LootRow {
   bossName: string;
   expansion: string;
+  /** ROK-2209: the listed boss's instance, so a shared name never guesses. */
+  instanceId: number;
   itemId: number;
   itemName: string;
   slot: string | null;
@@ -98,11 +100,23 @@ function checkDrop(bossName: string, drop: CaptureDrop): string {
   return quality;
 }
 
-function toRow(bossName: string, drop: CaptureDrop): LootRow {
+/** Listed boss name → its instance id; `null` when two instances share it. */
+type ListedBosses = ReadonlyMap<string, number | null>;
+
+function toRow(
+  bossName: string,
+  listed: ListedBosses,
+  drop: CaptureDrop,
+): LootRow {
+  const instanceId = listed.get(bossName);
+  if (instanceId === undefined || instanceId === null) {
+    fail(`${bossName} is not listed on exactly one instance of the zone`);
+  }
   const quality = checkDrop(bossName, drop);
   return {
     bossName,
     expansion: 'forever',
+    instanceId,
     itemId: drop.itemId,
     itemName: drop.name,
     slot: mapped(SLOT_MAP, drop.slot, 'slot', drop),
@@ -154,12 +168,20 @@ function sourceBosses(drop: CaptureDrop, listed: string[]): string[] {
     .filter((s) => listed.includes(s));
 }
 
-/** Classic boss names listed for any instance the capture's zone covers. */
-function listedBosses(capture: Capture, bosses: readonly BossRow[]): string[] {
+/** Classic bosses listed for any instance the capture's zone covers. */
+function listedBosses(
+  capture: Capture,
+  bosses: readonly BossRow[],
+): ListedBosses {
   const ids = instanceIdsFor(capture);
-  return bosses
-    .filter((b) => ids.has(b.instanceId) && b.expansion === 'classic')
-    .map((b) => b.name);
+  const out = new Map<string, number | null>();
+  for (const b of bosses) {
+    if (!ids.has(b.instanceId) || b.expansion !== 'classic') continue;
+    const seen = out.get(b.name);
+    const unique = seen === undefined || seen === b.instanceId;
+    out.set(b.name, unique ? b.instanceId : null);
+  }
+  return out;
 }
 
 /** Rows + a report for one capture; throws on a malformed capture. */
@@ -167,7 +189,8 @@ export function planCapture(
   capture: Capture,
   bosses: readonly BossRow[],
 ): Plan {
-  const listed = listedBosses(capture, bosses);
+  const byName = listedBosses(capture, bosses);
+  const listed = [...byName.keys()];
   checkCapture(capture);
   const plan: Plan = { zone: capture.zone, listed, rows: [], skipped: [] };
   const overrides = overridesFor(capture, listed);
@@ -176,12 +199,12 @@ export function planCapture(
     const override = overrides[drop.itemId];
     if (override) {
       overridden.add(String(drop.itemId));
-      plan.rows.push(toRow(override, drop));
+      plan.rows.push(toRow(override, byName, drop));
       continue;
     }
     const hits = sourceBosses(drop, listed);
     if (hits.length === 0) plan.skipped.push(drop);
-    for (const boss of hits) plan.rows.push(toRow(boss, drop));
+    for (const boss of hits) plan.rows.push(toRow(boss, byName, drop));
   }
   // A mistyped override id would otherwise do nothing, silently.
   for (const itemId of Object.keys(overrides)) {

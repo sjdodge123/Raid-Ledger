@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { BossEncounterDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -36,10 +37,30 @@ function serveBosses(byInstance: Record<number, BossEncounterDto[]>) {
     return () => calls;
 }
 
-function renderPanel(contentInstances: Record<string, unknown>[]) {
+function renderPanel(contentInstances: Record<string, unknown>[], gameSlug = 'world-of-warcraft-forever') {
     return renderWithProviders(
-        <BossLootPanel contentInstances={contentInstances} gameSlug="world-of-warcraft-forever" />,
+        <BossLootPanel contentInstances={contentInstances} gameSlug={gameSlug} />,
     );
+}
+
+/** Serve an empty loot list for every boss; returns the variants requested. */
+function serveEmptyLoot(status = 200) {
+    const variants: (string | null)[] = [];
+    server.use(http.get(`${API}/plugins/wow-classic/bosses/:id/loot`, ({ request }) => {
+        variants.push(new URL(request.url).searchParams.get('variant'));
+        return status === 200 ? HttpResponse.json([]) : HttpResponse.json({ message: 'boom' }, { status });
+    }));
+    return variants;
+}
+
+/** Expand the only boss and return its empty-loot element plus the loot variants requested. */
+async function expandBossWithNoLoot(gameSlug: string, expectedText: string, status = 200) {
+    serveBosses({ [DEADMINES.id]: [boss(DEADMINES.id)] });
+    const variants = serveEmptyLoot(status);
+    renderPanel([DEADMINES], gameSlug);
+    await userEvent.setup().click(await screen.findByText('Edwin VanCleef'));
+    const empty = await screen.findByText(expectedText);
+    return { empty, variants };
 }
 
 describe('BossLootPanel — bossless instances (ROK-1719)', () => {
@@ -64,5 +85,28 @@ describe('BossLootPanel — bossless instances (ROK-1719)', () => {
         renderPanel([DEADMINES]);
         await screen.findByText('Edwin VanCleef');
         expect(screen.getByRole('link', { name: 'View on Wowhead' })).toHaveAttribute('target', '_blank');
+    });
+});
+
+describe('BossLootPanel — boss with no loot (ROK-2209)', () => {
+    const FOREVER_COPY = "Forever loot for this boss isn't captured yet.";
+
+    it('says Forever loot is not captured yet on a Forever event', async () => {
+        const { empty, variants } = await expandBossWithNoLoot('world-of-warcraft-forever', FOREVER_COPY);
+        expect(empty).toHaveTextContent(FOREVER_COPY);
+        expect(screen.queryByText('No loot data available'), 'Forever must not show the generic empty copy').toBeNull();
+        expect(variants).toEqual(['wow_forever']);
+    });
+
+    it('keeps "No loot data available" on a Classic event', async () => {
+        const { empty, variants } = await expandBossWithNoLoot('world-of-warcraft-classic', 'No loot data available');
+        expect(empty).toHaveTextContent('No loot data available');
+        expect(screen.queryByText(FOREVER_COPY), 'Classic must not show the Forever copy').toBeNull();
+        expect(variants).toEqual(['classic_era']);
+    });
+
+    it('a failed loot request says it could not load, not "not captured"', async () => {
+        await expandBossWithNoLoot('world-of-warcraft-forever', "Couldn't load loot.", 500);
+        expect(screen.queryByText(FOREVER_COPY), 'an error must not read as uncaptured loot').toBeNull();
     });
 });
