@@ -29,6 +29,7 @@ packages:
   - rsync
   - git
   - unzip
+  - inotify-tools
   - software-properties-common
 
 write_files:
