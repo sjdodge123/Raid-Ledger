@@ -74,6 +74,7 @@ import { joinPostTests } from "./tests/join-post.test.js";
 import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
 import { hubForumDiscordBindingTests } from "./tests/hub-forum-discord-binding.test.js";
 import { hubForumDiscordOutboundTests } from "./tests/hub-forum-discord-outbound.test.js";
+import { hubForumDiscordInboundTests } from "./tests/hub-forum-discord-inbound.test.js";
 import { channelLifecycleTests } from "./tests/channel-lifecycle.test.js";
 import { embedHubLinkTests } from "./tests/embed-hub-link.test.js";
 import { seriesSignupEmbedTests } from "./tests/series-signup-embed.test.js";
@@ -248,6 +249,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...guildDiscordMirrorTests,
     ...hubForumDiscordBindingTests,
     ...hubForumDiscordOutboundTests,
+    ...hubForumDiscordInboundTests,
     ...channelLifecycleTests,
     ...embedHubLinkTests,
     ...seriesSignupEmbedTests,
