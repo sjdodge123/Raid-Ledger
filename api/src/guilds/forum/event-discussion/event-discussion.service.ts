@@ -78,7 +78,7 @@ export class EventDiscussionService {
     query: unknown,
   ): Promise<HubForumThread> {
     const live = await this.requireLive(eventId);
-    return this.forum.get(actor, live.guildId, live.id, query);
+    return this.forum.forEventScope().get(actor, live.guildId, live.id, query);
   }
 
   /** `POST events/:id/discussion/replies`. */
@@ -88,7 +88,9 @@ export class EventDiscussionService {
     input: unknown,
   ): Promise<HubForumReply> {
     const live = await this.requireLive(eventId);
-    return this.forum.createReply(actor, live.guildId, live.id, input);
+    return this.forum
+      .forEventScope()
+      .createReply(actor, live.guildId, live.id, input);
   }
 
   /** `PATCH events/:id/discussion/replies/:replyId`. */
@@ -100,7 +102,9 @@ export class EventDiscussionService {
   ): Promise<HubForumReply> {
     const live = await this.requireLive(eventId);
     const { guildId, id } = live;
-    return this.forum.updateReply(actor, guildId, id, replyId, input);
+    return this.forum
+      .forEventScope()
+      .updateReply(actor, guildId, id, replyId, input);
   }
 
   /** `DELETE events/:id/discussion/replies/:replyId`. */
@@ -110,7 +114,9 @@ export class EventDiscussionService {
     replyId: number,
   ): Promise<void> {
     const live = await this.requireLive(eventId);
-    await this.forum.deleteReply(actor, live.guildId, live.id, replyId);
+    await this.forum
+      .forEventScope()
+      .deleteReply(actor, live.guildId, live.id, replyId);
   }
 
   private async latest(

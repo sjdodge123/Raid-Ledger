@@ -63,19 +63,25 @@ async function eventActor(
 }
 
 /**
- * Load `threadId` in `guildId` and resolve the viewer. 403 (not a member)
- * before any lookup, exactly as before ROK-2226.
+ * Load `threadId` in `guildId` and resolve the viewer. Hub routes: 403 (not
+ * a member) before any lookup, exactly as before ROK-2226. `eventScoped`
+ * (the `events/:id/discussion` routes, already narrowed to the event's live
+ * thread) skips the member gate so the §6 matrix alone decides.
  */
 export async function forumThreadContext(
   deps: ForumThreadDeps,
   actor: GuildActor,
-  target: { guildId: number; threadId: number },
+  target: { guildId: number; threadId: number; eventScoped?: boolean },
 ): Promise<ForumThreadContext> {
-  const member = await resolveForumActor(deps.access, actor, target.guildId);
+  const member = target.eventScoped
+    ? null
+    : await resolveForumActor(deps.access, actor, target.guildId);
   const record = await findThread(deps.db, target.guildId, target.threadId);
   if (!record) throw new NotFoundException('Thread not found');
   if (record.thread.eventId === null) {
-    return { record, who: member, canReply: true, lock: null };
+    const who =
+      member ?? (await resolveForumActor(deps.access, actor, target.guildId));
+    return { record, who, canReply: true, lock: null };
   }
   const { who, lock } = await resolveEventThread(deps, actor, record);
   if (!who.canRead) throw new ForbiddenException(FORUM_NOT_MEMBER);

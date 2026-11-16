@@ -81,6 +81,9 @@ export class HubForumService {
   /** Clock seam (AC4 edit window) — specs pin it; never `sleep`. */
   now: () => Date = () => new Date();
 
+  /** Set only on the {@link forEventScope} view. */
+  private eventScoped = false;
+
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly access: GuildAccessService,
@@ -275,7 +278,18 @@ export class HubForumService {
     threadId: number,
   ): Promise<Ctx> {
     const deps = { db: this.db, access: this.access, now: this.now() };
-    return forumThreadContext(deps, actor, { guildId, threadId });
+    const eventScoped = this.eventScoped;
+    return forumThreadContext(deps, actor, { guildId, threadId, eventScoped });
+  }
+
+  /**
+   * ROK-2226 §6.1 — this service as seen from `events/:id/discussion`: the
+   * same routes minus the hub-member gate (the §6 matrix decides).
+   */
+  forEventScope(): HubForumService {
+    return Object.assign(Object.create(this) as HubForumService, {
+      eventScoped: true,
+    });
   }
 
   private async view(
