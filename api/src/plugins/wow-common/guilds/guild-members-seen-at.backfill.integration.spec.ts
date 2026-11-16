@@ -146,7 +146,7 @@ describe('ROK-2225 0303 backfill — first post-deploy import', () => {
     expect(await measure(guildId, importOf(members))).toBe('0/0');
   });
 
-  it.each([
+  it.each<[string, Date | null]>([
     ['I -> S1 -> S2', S2],
     ['slug reset (no sync on record)', null],
   ])(
