@@ -2211,3 +2211,20 @@ Save-Data or an `effectiveType` below 4g (`ggPrefersLowData`, `components/gg/gg-
 only: `KenBurnsBackground still`, and the top-game trailer player is replaced by a muted note. The Summary
 card ends with the share panel and a `Button secondary` "Replay" that remounts the story at the intro gate.
 
+
+### 4.35 Event discussion — event-page card + forum event header (ROK-2226)
+
+Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/design-system` → Primitives → "Event discussion".
+
+- **Discussion card** (`pages/event-detail/EventDiscussionCard.tsx`) — after the Signups roster, before Activity. Same frame as the
+  page's other cards (`bg-surface border-edge rounded-xl p-4`). A compact reply preview: 28px `AvatarWithFallback`, name
+  (`text-foreground`), time (`text-dim`), body `line-clamp-2` `text-secondary`, rows split by `border-edge-subtle`. Empty =
+  `QuietEmpty`. The CTA is a router `Link` styled with `buttonClass` and NAVIGATES to `/hubs/<id>?thread=<id>#forum` —
+  never an inline composer (Q2). Reader without write → muted "Sign up to join the discussion." + secondary "Read the full
+  thread"; cannot read → header + count only; locked → neutral `Pill` "Closed" + `ForumLockBar`. `forum-latest-widget`
+  lists titles, not reply bodies, so it does not fit here.
+- **Forum event header** (`components/hub/forum/forum-event-header.tsx`) — a `bg-surface border-edge rounded-lg` box above an
+  event thread's root: date · time range (viewer TZ), `Pill tone="warning"` Cancelled, "View event →" (`text-success` link,
+  the Back-to-Forum idiom), then `ForumLockBar` when locked.
+- **Row pills** (`ForumEventPills`) — neutral `Pill` "Event · Sat 22 Nov" (calendar icon) and "Closed" (lock icon) on Forum list
+  and Latest rows. **DON'T** build a separate "via Discord" chip for Discord-synced replies here — reuse the ROK-2208 one.
