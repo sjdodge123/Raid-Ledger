@@ -12,7 +12,8 @@ import type { AddonImportTx } from './addon-import-apply.types';
  *   (stamped only by the sync) equals the newest one — plus live rows it
  *   cannot see (LedgerLink-only GUID rows), which it may pair but never
  *   removes. A paired row an import keeps live after the sync dropped it is
- *   not re-counted. With no sync on record (slug reset): every live row.
+ *   not re-counted. With no sync on record (slug reset), or a sync on record
+ *   but no row carrying its stamp: every live row.
  * - LedgerLink: the GUID rows its last import listed — those whose
  *   `ledgerlink_seen_at` (stamped only by imports) equals the newest one —
  *   plus live GUID-less rows, which it may adopt but never removes. A paired
@@ -95,12 +96,12 @@ function blizzardBaseline(
   rows: readonly StoredRosterRow[],
   clock: RosterClock,
 ): StoredRosterRow[] {
-  if (clock.blizzardSyncedAt === null) return rows.filter((r) => r.live);
   const t = previousSyncAt(rows);
+  if (clock.blizzardSyncedAt === null || t === null) {
+    return rows.filter((r) => r.live);
+  }
   return rows.filter(
-    (r) =>
-      (r.live && !blizzardCanSee(r)) ||
-      (t !== null && seenSince(r.blizzardSeenAt, t)),
+    (r) => (r.live && !blizzardCanSee(r)) || seenSince(r.blizzardSeenAt, t),
   );
 }
 

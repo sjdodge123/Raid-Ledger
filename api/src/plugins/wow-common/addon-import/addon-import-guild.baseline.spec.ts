@@ -119,6 +119,15 @@ describe('sourceBaseline', () => {
     expect(ids(sourceBaseline(rows, 'id', clock))).toEqual([1]);
   });
 
+  it('by id with a sync on record but no blizzard_seen_at stamp: every live row', () => {
+    const rows = [
+      row(1, { blizzardId: 9, live: true }),
+      row(2, { guid: null, blizzardId: 8, live: true }),
+      row(3, { blizzardId: 7 }),
+    ];
+    expect(ids(sourceBaseline(rows, 'id', afterImport))).toEqual([1, 2]);
+  });
+
   it('by GUID after a sync: the rows the last import listed plus live GUID-less rows', () => {
     const rows = [
       row(1, {
