@@ -129,12 +129,7 @@ export class HubForumDiscordService {
       forum,
       info,
     });
-    const webhookId = await this.gateway.ensureWebhook(
-      info.id,
-      forum.webhookId,
-    );
-    if (webhookId !== forum.webhookId)
-      await updateForum(this.db, forum.id, { webhookId });
+    await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
     return this.status(guildId);
   }
@@ -149,6 +144,19 @@ export class HubForumDiscordService {
     if (this.gateway.guildId() === null) return;
     await this.gateway.deleteForum(row.forum.channelId);
     await deleteForumRow(this.db, row.forum.id);
+  }
+
+  /** R9: one webhook per forum; store its id (OQ-9: never the token). */
+  private async ensureWebhook(
+    forum: { id: number; webhookId: string | null },
+    channelId: string,
+  ): Promise<void> {
+    const webhookId = await this.gateway.ensureWebhook(
+      channelId,
+      forum.webhookId,
+    );
+    if (webhookId !== forum.webhookId)
+      await updateForum(this.db, forum.id, { webhookId });
   }
 
   private async insert(

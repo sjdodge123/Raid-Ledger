@@ -75,7 +75,9 @@ describe('ROK-2208 hub forum Discord helpers', () => {
     ]);
     expect(plan.create).toEqual(['Alpha 2']);
   });
+});
 
+describe('ROK-2208 hub forum Discord tag names + bind body', () => {
   it('truncates tag names to 20 chars', () => {
     expect(tagNameFor('  A very long hub name indeed ')).toHaveLength(20);
   });

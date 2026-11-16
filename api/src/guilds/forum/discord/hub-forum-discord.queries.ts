@@ -1,4 +1,4 @@
-import { and, count, eq, isNotNull } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { findLfgBoardBindingChannelId } from '../../../discord-bot/lfg-board/lfg-board-channel.db-helpers';
