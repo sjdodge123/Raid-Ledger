@@ -132,9 +132,9 @@ async function addonImport(who: Who, members: AddonGuildMember[], step = 0) {
   expect(res.body.status).not.toBe('stale');
 }
 
-async function seedGuild() {
+async function seedGuild(members = ledgerLinkRoster()) {
   const who = await importer();
-  await addonImport(who, ledgerLinkRoster());
+  await addonImport(who, members);
   const [guild] = nonEmpty(
     await testApp.db
       .update(schema.guilds)
@@ -342,5 +342,74 @@ describe('ROK-2225 review — each source measures against its own last snapshot
       '0/0',
     ]);
     expect((await editorFlags()).length).toBe(first.length);
+  });
+});
+
+/** Codex P2: 20 members both sources pair (Ana is the importer). */
+const BIG = [
+  'Ana Forever',
+  ...['Bea', 'Cal', 'Dax', 'Eve', 'Fin', 'Gil', 'Hal', 'Ivy', 'Jon', 'Kai']
+    .concat(['Lux', 'Max', 'Ned', 'Oto', 'Pim', 'Quin', 'Ray', 'Sol', 'Tam'])
+    .map((n) => `${n} Pair`),
+];
+const bigLedgerLink = (names = BIG) =>
+  names.map((name) =>
+    buildMember(
+      name === 'Ana Forever' ? 0xabcdef0 : 0x200 + BIG.indexOf(name),
+      {
+        name,
+      },
+    ),
+  );
+const bigBlizzard = (names = BIG) =>
+  names.map((n) => apiMember(n.split(' ')[0] ?? n, 800 + BIG.indexOf(n)));
+/** BIG without its last `n` members (never Ana, the importer). */
+const bigWithout = (n: number) => BIG.slice(0, BIG.length - n);
+
+describe('ROK-2225 Codex P2 — the 24h window sums only the measuring source', () => {
+  it('3 paired leavers seen by the sync, then the import, raise no flag', async () => {
+    const { who, guildId } = await seedGuild(bigLedgerLink());
+    await syncAt(guildId, bigBlizzard(), 60);
+    await addonImport(who, bigLedgerLink(), 2);
+    await syncAt(guildId, bigBlizzard(bigWithout(3)), 180);
+    await addonImport(who, bigLedgerLink(bigWithout(3)), 4);
+    expect((await churn()).slice(-2)).toEqual(['3/0', '3/0']);
+    expect(await flags()).toEqual([]);
+  });
+
+  it('3 paired leavers seen by the import, then the sync, raise no flag', async () => {
+    const { who, guildId } = await seedGuild(bigLedgerLink());
+    await syncAt(guildId, bigBlizzard(), 60);
+    await addonImport(who, bigLedgerLink(), 2);
+    await addonImport(who, bigLedgerLink(bigWithout(3)), 4);
+    await syncAt(guildId, bigBlizzard(bigWithout(3)), 300);
+    expect((await churn()).slice(-2)).toEqual(['3/0', '3/0']);
+    expect(await flags()).toEqual([]);
+  });
+
+  it('imports dripping 3 + 3 removals inside the window still flag', async () => {
+    const { who, guildId } = await seedGuild(bigLedgerLink());
+    await syncAt(guildId, bigBlizzard(), 60);
+    await addonImport(who, bigLedgerLink(), 2);
+    await addonImport(who, bigLedgerLink(bigWithout(3)), 4);
+    expect(await flags()).toEqual([]);
+    await addonImport(who, bigLedgerLink(bigWithout(6)), 6);
+    expect((await churn()).slice(-2)).toEqual(['3/0', '3/0']);
+    const got = await flags();
+    expect(got.length).toBeGreaterThan(0);
+    expect(got[0]?.payload).toMatchObject({ guildId, removed: 6, live: 20 });
+  });
+
+  it('syncs dripping 3 + 3 removals inside the window still flag', async () => {
+    const { who, guildId } = await seedGuild(bigLedgerLink());
+    await syncAt(guildId, bigBlizzard(), 60);
+    await addonImport(who, bigLedgerLink(), 2);
+    await syncAt(guildId, bigBlizzard(bigWithout(3)), 180);
+    expect(await flags()).toEqual([]);
+    await syncAt(guildId, bigBlizzard(bigWithout(6)), 300);
+    expect((await churn()).slice(-2)).toEqual(['3/0', '3/0']);
+    const got = await flags();
+    expect(got.length).toBeGreaterThan(0);
+    expect(got[0]?.payload).toMatchObject({ guildId, removed: 6, live: 20 });
   });
 });

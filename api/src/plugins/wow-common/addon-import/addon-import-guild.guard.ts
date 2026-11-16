@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { AnyAddonGuildExport } from './addon-import.pages';
 import * as schema from '../../../drizzle/schema';
 import { exportClock } from './addon-import.clock';
@@ -215,14 +215,30 @@ const windowSum = (key: keyof RosterDelta) =>
   sql<number>`coalesce(sum((${activityLog.metadata}->>${key})::int), 0)::int`;
 
 /**
- * Members this guild's non-staff imports removed and added inside the
- * window, read from the AC6 audit rows (`metadata.removed` / `.added`; staff
- * imports and the guild-creating import record 0, older rows sum as 0).
- * Uses the DB clock — `created_at` is stamped by the DB, not the export clock.
+ * ROK-2225 Codex P2 — the audit rows written by `actor`'s source: the
+ * Blizzard sync's (`metadata.source`), or every user import's (no `source`
+ * key; summed across ALL importers, so the review r1/r2 drip guard holds).
+ * Each source measures against its own baseline, so a departure both
+ * sources observe is audited twice; summing both would double-count it.
+ */
+function sameSourceAudits(actor: RosterActor): SQL {
+  const source = sql`${activityLog.metadata}->>'source'`;
+  return actor.kind === 'system'
+    ? sql`${source} = ${actor.source}`
+    : sql`${source} is null`;
+}
+
+/**
+ * Members this guild's non-staff snapshots from `actor`'s source removed and
+ * added inside the window, read from the AC6 audit rows (`metadata.removed` /
+ * `.added`; staff imports and the guild-creating import record 0, older rows
+ * sum as 0). Uses the DB clock — `created_at` is stamped by the DB, not the
+ * export clock.
  */
 export async function recentChanges(
   tx: AddonImportTx,
   guildId: number,
+  actor: RosterActor,
 ): Promise<RosterDelta> {
   const [row] = await tx
     .select({ removed: windowSum('removed'), added: windowSum('added') })
@@ -232,6 +248,7 @@ export async function recentChanges(
         eq(activityLog.entityType, ROSTER_AUDIT_ENTITY),
         eq(activityLog.entityId, guildId),
         eq(activityLog.action, ROSTER_AUDIT_ACTION),
+        sameSourceAudits(actor),
         sql`${activityLog.createdAt} >= now() - ${WINDOW}`,
       ),
     );
@@ -297,7 +314,8 @@ async function measureRosterChange(
   const delta = { removed: gone.length, added: m.added };
   const dropsEditor = gone.some((r) => r.grantId !== null);
   const live = m.counted.length;
-  const v = windowVerdict(live, await recentChanges(tx, guildId), delta);
+  const prior = await recentChanges(tx, guildId, input.actor);
+  const v = windowVerdict(live, prior, delta);
   const moved = delta.removed + delta.added > 0;
   const flag = moved ? wholesaleFlag(guildId, v, dropsEditor) : null;
   if (flag) {
