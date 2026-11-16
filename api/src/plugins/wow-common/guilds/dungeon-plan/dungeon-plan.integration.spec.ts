@@ -7,7 +7,11 @@
  * readiness endpoint, level fit against the catalogue range (read from the
  * catalogue, never hard-coded — R2), and no outbound network.
  */
-import { DungeonPlanSchema, type DungeonPlanDto } from '@raid-ledger/contract';
+import {
+  AddonCharSnapshotDataSchema,
+  DungeonPlanSchema,
+  type DungeonPlanDto,
+} from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import { signTestAccessToken } from '../../../../common/testing/sign-test-access-token';
 import { getTestApp, type TestApp } from '../../../../common/testing/test-app';
@@ -215,12 +219,16 @@ async function seedAllianceRoster(): Promise<void> {
     characterId: chars.below,
     section: 'char',
     schema: 2,
-    data: {
+    // A contract-valid `char` payload (the facts sources read gear/lockouts).
+    data: AddonCharSnapshotDataSchema.parse({
+      gear: [],
+      talents: { nodes: [] },
+      lockouts: [],
       quests: {
         completed: [Q.neutralNull],
         inProgress: [{ questId: Q.neutralEmpty }],
       },
-    } as typeof schema.characterAddonSnapshots.$inferInsert.data,
+    }),
     capturedAt: SNAP,
     payloadSha256: 'e'.repeat(64),
   });
