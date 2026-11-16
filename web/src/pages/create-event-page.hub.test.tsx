@@ -6,7 +6,7 @@ import { CreateEventPage } from './create-event-page';
 
 const registry = vi.hoisted(() => ({ games: [] as Array<{ id: number; name: string }> }));
 
-vi.mock('../hooks/use-auth', () => ({ useAuth: () => ({ isAuthenticated: true, isLoading: false }) }));
+vi.mock('../hooks/use-auth', () => ({ useAuth: () => ({ isAuthenticated: true, isLoading: false }), useViewerCacheScope: () => 1 }));
 vi.mock('../hooks/use-game-registry', () => ({ useGameRegistry: () => ({ games: registry.games, isLoading: false }) }));
 vi.mock('../hooks/use-events', () => ({ useEvent: () => ({ data: undefined, isLoading: false, isError: false }) }));
 vi.mock('../components/events/create-event-form', () => ({
