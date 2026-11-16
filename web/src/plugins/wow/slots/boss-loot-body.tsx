@@ -16,6 +16,8 @@ export interface BossLootBodyProps {
     equippedBySlot: Map<string, EquipmentItemDto>;
     characterClass?: string | null | undefined;
     hasCharacter: boolean;
+    /** Sentence shown when the boss has no loot rows (by variant — `lootEmptyMessage`). */
+    emptyMessage: string;
 }
 
 function LootFilterToggle({ filterUsable, onToggle }: { filterUsable: boolean; onToggle: () => void }) {
@@ -31,12 +33,12 @@ function LootFilterToggle({ filterUsable, onToggle }: { filterUsable: boolean; o
 /** Loot table rendered under an expanded boss row */
 export function BossLootBody({
     loot, isLoading, wowheadVariant,
-    equippedBySlot, characterClass, hasCharacter,
+    equippedBySlot, characterClass, hasCharacter, emptyMessage,
 }: BossLootBodyProps) {
     const [filterUsable, setFilterUsable] = useState(false);
 
     if (isLoading) return <div className="boss-loot-body"><div className="boss-loot-body__loading">Loading loot&hellip;</div></div>;
-    if (!loot || loot.length === 0) return <div className="boss-loot-body"><div className="boss-loot-body__empty">No loot data available</div></div>;
+    if (!loot || loot.length === 0) return <div className="boss-loot-body"><div className="boss-loot-body__empty">{emptyMessage}</div></div>;
 
     const hasClassRestrictions = loot.some((item) => item.classRestrictions && item.classRestrictions.length > 0);
     const displayLoot = filterUsable ? loot.filter((item) => isUsableByClass(item, characterClass)) : loot;

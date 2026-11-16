@@ -12,6 +12,7 @@ import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { slugToContentVariant } from '../lib/wow-variant-config';
 import { getWowheadNpcSearchUrl } from '../lib/wowhead-urls';
 import { BossLootBody } from './boss-loot-body';
+import { lootEmptyMessage } from './boss-loot-constants';
 import './boss-loot-panel.css';
 import './quest-prep-panel.css';
 
@@ -163,7 +164,7 @@ function BossRow({
                 <BossLootBody
                     loot={loot} isLoading={lootLoading} wowheadVariant={wowheadVariant}
                     equippedBySlot={equippedBySlot} characterClass={characterClass}
-                    hasCharacter={hasCharacter}
+                    hasCharacter={hasCharacter} emptyMessage={lootEmptyMessage(variant)}
                 />
             )}
         </div>
