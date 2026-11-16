@@ -39,7 +39,8 @@ function BackLink(): JSX.Element {
     );
 }
 
-function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): JSX.Element | null {
+/** "Show more replies" while the thread has another page (shared with the event-page panel, ROK-2226). */
+export function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): JSX.Element | null {
     if (!query.hasNextPage) return null;
     return (
         <div className="flex justify-center">

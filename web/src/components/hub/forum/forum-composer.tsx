@@ -7,6 +7,7 @@
  * caller only offers it when the server's `can.edit` says so).
  */
 import { useState, type JSX } from 'react';
+import type { UseMutationResult } from '@tanstack/react-query';
 import type { HubForumReply, HubForumThread } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { DiscardChangesConfirm } from '../../ui/discard-changes-confirm';
@@ -14,7 +15,7 @@ import { useArrangeLeaveGuard } from '../arrange/use-arrange-leave-guard';
 import { bodyError, serverBodyError } from '../posts/hub-post.helpers';
 import { ForumBodyField, ForumTitleField } from './forum-fields';
 import { forumTitleError } from './forum-thread.helpers';
-import { useCreateForumReply, useCreateForumThread } from './use-hub-forum';
+import { useCreateForumReply, useCreateForumThread, type ReplyVars } from './use-hub-forum';
 
 function submitError(local: string | null, err: Error | null, fallback: string): string | undefined {
     return local ?? serverBodyError(err) ?? (err ? fallback : undefined);
@@ -51,16 +52,28 @@ export function ForumThreadComposer({ guildId, onCancel, onPosted }: ThreadCompo
 export interface ReplyComposerProps { guildId: number; threadId: number; onPosted?: ((reply: HubForumReply) => void) | undefined }
 
 /** The reply box under a live thread; clears after a successful reply and hands the reply to `onPosted`. */
-export function ForumReplyComposer({ guildId, threadId, onPosted }: ReplyComposerProps): JSX.Element {
-    const [body, setBody] = useState('');
+export function ForumReplyComposer({ guildId, ...rest }: ReplyComposerProps): JSX.Element {
     const create = useCreateForumReply(guildId);
+    return <ForumReplyComposerView {...rest} create={create} />;
+}
+
+export type ReplyComposerViewProps = Omit<ReplyComposerProps, 'guildId'> & {
+    create: UseMutationResult<HubForumReply, Error, ReplyVars>;
+    /** Server failure copy (the event routes' 403/409/429); falls back to the generic line. */
+    failureCopy?: ((error: Error) => string | undefined) | undefined;
+};
+
+/** The reply box over whichever create mutation the caller hands it (hub or event routes, ROK-2226). */
+export function ForumReplyComposerView({ threadId, onPosted, create, failureCopy }: ReplyComposerViewProps): JSX.Element {
+    const [body, setBody] = useState('');
     const localErr = bodyError(body);
     const posted = (reply: HubForumReply): void => { setBody(''); onPosted?.(reply); };
     const submit = (): void => create.mutate({ threadId, body: body.trim() }, { onSuccess: posted });
+    const serverCopy = create.error === null ? undefined : failureCopy?.(create.error);
     return (
         <div className="flex flex-col gap-2" data-testid="forum-reply-composer">
             <ForumBodyField label="Reply" hideLabel value={body} onChange={setBody} testId="forum-reply-input"
-                error={submitError(localErr, create.error, 'Couldn’t post the reply. Try again.')} />
+                error={localErr ?? serverCopy ?? submitError(null, create.error, 'Couldn’t post the reply. Try again.')} />
             <div className="flex justify-end">
                 <Button onClick={submit} loading={create.isPending} disabled={body.trim() === '' || localErr !== null}
                     data-testid="forum-reply-submit">Reply</Button>
