@@ -1247,7 +1247,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -1271,7 +1271,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -2083,7 +2083,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -3663,7 +3663,7 @@
       "Orc"
     ],
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "none",
     "rewardXp": null,
     "rewardGold": null
@@ -4307,7 +4307,7 @@
       "Orc"
     ],
     "startsInsideDungeon": false,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "none",
     "rewardXp": null,
     "rewardGold": null
@@ -4443,7 +4443,7 @@
       "Human"
     ],
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null
@@ -9778,7 +9778,7 @@
     "classRestriction": null,
     "raceRestriction": null,
     "startsInsideDungeon": true,
-    "sharable": true,
+    "sharable": false,
     "rewardType": "choice",
     "rewardXp": null,
     "rewardGold": null

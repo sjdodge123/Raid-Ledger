@@ -9,9 +9,13 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { instanceName } from './instance-catalogue/instance-catalogue';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
+import { ESCORT_QUESTS, ESCORT_QUEST_IDS } from './data/dungeon-quest-escorts';
 
 interface Row {
   questId: number;
+  name: string;
+  objectives: string | null;
+  sharable: boolean;
   dungeonInstanceId: number | null;
   questLevel: number | null;
   questGiverZone: string | null;
@@ -271,5 +275,30 @@ describe('reviewed inside pickups (ROK-2223)', () => {
       allowlisted: INSIDE_DUNGEON_QUEST_IDS.has(questId),
       flagged: must(questId).startsInsideDungeon,
     }).toEqual({ questId, allowlisted: true, flagged: true });
+  });
+});
+
+/** Objectives that open with an escort/defend verb (generalised guard). */
+const ESCORT_OBJECTIVE = /^\s*(Escort|Defend|Protect)\b/;
+
+describe('escort quests (ROK-2223)', () => {
+  it('every listed escort names a bundled quest', () => {
+    const mismatched = ESCORT_QUESTS.filter(
+      (entry) => byId.get(entry.questId)?.name !== entry.name,
+    ).map((entry) => entry.questId);
+    expect(mismatched).toEqual([]);
+  });
+
+  it('no escort quest is shareable', () => {
+    const shareable = [...ESCORT_QUEST_IDS].filter((id) => must(id).sharable);
+    expect(shareable).toEqual([]);
+  });
+
+  it('every quest whose objectives open with Escort/Defend/Protect is listed', () => {
+    const unlisted = allRows
+      .filter((r) => ESCORT_OBJECTIVE.test(r.objectives ?? ''))
+      .filter((r) => !ESCORT_QUEST_IDS.has(r.questId))
+      .map((r) => r.questId);
+    expect(unlisted).toEqual([]);
   });
 });
