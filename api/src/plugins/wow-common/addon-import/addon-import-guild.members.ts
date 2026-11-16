@@ -39,6 +39,7 @@ export function memberValues(
     publicNote: m.note ?? null,
     source: 'addon_import',
     lastSeenAt: seenAt,
+    ledgerlinkSeenAt: seenAt,
     // ROK-1916 D2/D3: presence verbatim; the read path normalises.
     onlineAtExport: m.online,
     lastOnlineDays: m.lastOnlineDays ?? null,
@@ -58,6 +59,8 @@ const ADDON_OWNED_MEMBER_COLUMNS = [
   'public_note',
   'source',
   'last_seen_at',
+  // ROK-2225: the import's own last-seen; the Blizzard sync never sets it.
+  'ledgerlink_seen_at',
   'captured_by_user_id',
   'updated_at',
   // ROK-1916 D2: overwrite with excluded.* (NULL included) — clears stale days.

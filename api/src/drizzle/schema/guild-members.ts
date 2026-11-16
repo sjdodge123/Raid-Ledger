@@ -41,6 +41,12 @@ export const guildMembers = pgTable(
     source: varchar('source', { length: 20 }).notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     /**
+     * ROK-2225: the instant of the last LedgerLink import that listed this
+     * row. Only imports stamp it (the Blizzard sync never does), so the
+     * import's churn baseline is its own previous snapshot. NULL = never.
+     */
+    ledgerlinkSeenAt: timestamp('ledgerlink_seen_at', { withTimezone: true }),
+    /**
      * ROK-1916 D1/D3: the export's wire presence, stored verbatim. NULL =
      * never reported (rows before ROK-1916, Blizzard rows) — no default.
      */
