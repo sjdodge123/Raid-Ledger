@@ -22,3 +22,21 @@ export function isUsableByClass(item: BossLootDto, characterClass?: string | nul
         (c) => c.toLowerCase() === characterClass.toLowerCase(),
     );
 }
+
+/** Empty loot copy for every variant except Forever (unchanged). */
+/** Shown when the loot request itself failed — never the variant's empty copy (ROK-2209 review). */
+export const LOOT_LOAD_ERROR_MESSAGE = "Couldn't load loot.";
+
+export const NO_LOOT_MESSAGE = 'No loot data available';
+
+/**
+ * ROK-2209: a Forever boss with no Forever loot rows. Forever never falls back
+ * to Classic loot, so an empty list means the drops are not captured yet.
+ * Copy pending operator confirmation — change it here only.
+ */
+export const FOREVER_LOOT_NOT_CAPTURED_MESSAGE = "Forever loot for this boss isn't captured yet.";
+
+/** Copy for an expanded boss whose loot list is empty, by content variant. */
+export function lootEmptyMessage(variant: string): string {
+    return variant === 'wow_forever' ? FOREVER_LOOT_NOT_CAPTURED_MESSAGE : NO_LOOT_MESSAGE;
+}

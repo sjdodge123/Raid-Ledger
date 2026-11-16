@@ -9,6 +9,7 @@
 
 import bossEncounterData from './boss-encounter-data.json';
 import bossLootData from './boss-loot-data.json';
+import { getInstance } from '../instance-catalogue/instance-catalogue';
 import { LOOT_PENDING_CLASSIC_BOSSES } from './loot-pending-bosses';
 
 // ---------------------------------------------------------------------------
@@ -660,5 +661,39 @@ describe('boss-loot-data.json — same-name bosses carry an instanceId (ROK-2193
     for (const id of [249, 749, 272, 757]) {
       expect(shared.some((l) => l.instanceId === id)).toBe(true);
     }
+  });
+});
+
+/**
+ * ROK-2209: a Forever loot read is decided by the instance catalogue's
+ * `lootExpansion`, so every Forever row must name the instance its boss sits
+ * on — and that instance must be a Forever catalogue row serving Forever loot.
+ */
+describe('boss-loot-data.json — Forever rows carry their instanceId (ROK-2209)', () => {
+  const onInstance = (l: LootEntry): boolean =>
+    bosses.some(
+      (b) =>
+        b.name === l.bossName &&
+        b.instanceId === l.instanceId &&
+        (b.expansion === 'forever' || b.expansion === 'classic'),
+    );
+
+  it('every Forever row has a numeric instanceId', () => {
+    const bad = foreverLoot.filter((l) => !Number.isInteger(l.instanceId));
+    expect(bad.map(describeRow)).toEqual([]);
+  });
+
+  it("every Forever row's instanceId holds a boss of that name", () => {
+    const bad = foreverLoot.filter((l) => !onInstance(l));
+    expect(bad.map((l) => `${describeRow(l)} @${l.instanceId}`)).toEqual([]);
+  });
+
+  it('every Forever row sits on a Forever catalogue instance serving Forever loot', () => {
+    const bad = foreverLoot.filter(
+      (l) =>
+        l.instanceId === undefined ||
+        getInstance(l.instanceId, 'wow_forever')?.lootExpansion !== 'forever',
+    );
+    expect(bad.map((l) => `${describeRow(l)} @${l.instanceId}`)).toEqual([]);
   });
 });

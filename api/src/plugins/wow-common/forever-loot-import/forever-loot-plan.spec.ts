@@ -63,3 +63,44 @@ describe('planCapture — shared Wowhead zones (ROK-2210)', () => {
     );
   });
 });
+
+describe('planCapture — rows carry the listed boss instanceId (ROK-2209)', () => {
+  const idsOf = (c: Capture, bosses: BossRow[] = BOSSES) =>
+    planCapture(c, bosses).rows.map((r) => [r.bossName, r.instanceId]);
+
+  it('writes each wing boss its own instance (Dire Maul East 1276, West 230)', () => {
+    const c = capture('Dire Maul', 2557, [
+      drop(18317, 'Hydrospawn'),
+      drop(18301, 'Tendris Warpwood'),
+    ]);
+    expect(idsOf(c)).toEqual([
+      ['Hydrospawn', 1276],
+      ['Tendris Warpwood', 230],
+    ]);
+  });
+
+  it('writes the Stratholme Service Entrance boss 1292 and Main Gate 236', () => {
+    const c = capture('Stratholme', 2017, [
+      drop(13349, 'Baron Rivendare'),
+      drop(13401, 'Timmy the Cruel'),
+    ]);
+    expect(idsOf(c)).toEqual([
+      ['Baron Rivendare', 1292],
+      ['Timmy the Cruel', 236],
+    ]);
+  });
+
+  it('refuses a boss name listed on two instances of the zone', () => {
+    const twin: BossRow = { ...must(BOSSES, 'Hydrospawn'), instanceId: 230 };
+    const c = capture('Dire Maul', 2557, [drop(18317, 'Hydrospawn')]);
+    expect(() => planCapture(c, [...BOSSES, twin])).toThrow(
+      'Hydrospawn is not listed on exactly one instance of the zone',
+    );
+  });
+});
+
+function must(rows: BossRow[], name: string): BossRow {
+  const row = rows.find((b) => b.name === name && b.expansion === 'classic');
+  if (!row) throw new Error(`fixture boss ${name} missing`);
+  return row;
+}

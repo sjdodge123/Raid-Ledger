@@ -68,7 +68,7 @@ describe('ItemCompareRow guard (ROK-2186)', () => {
 
     it('boss loot and a quest reward render the same row with the same stat chips', () => {
         const loot = render(<BossLootBody loot={[LOOT_LEGS]} isLoading={false} wowheadVariant="classic_era"
-            equippedBySlot={EQUIP} characterClass="Mage" hasCharacter />);
+            equippedBySlot={EQUIP} characterClass="Mage" hasCharacter emptyMessage="No loot data available" />);
         const lootRow = rowOf(loot.container);
         const quest = render(<QuestCard quest={questWith([REWARD_LEGS])} questCoverage={undefined} currentUserId={1}
             eventId={1} wowheadVariant="classic_era" isExpanded pendingQuestId={null} equippedBySlot={EQUIP}
