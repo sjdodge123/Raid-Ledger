@@ -23,6 +23,7 @@ import { guildContributionsHandlers } from './guild-contributions-handlers';
 import { bg3Handlers } from './bg3-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
 import { hubMediaChannelHandlers } from './hub-media-channel-handlers';
+import { hubForumDiscordHandlers } from './hub-forum-discord-handlers';
 import { channelLifecycleHandlers } from './channel-lifecycle-handlers';
 import { hubNotificationMuteHandlers } from './hub-notification-mute-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
@@ -47,6 +48,7 @@ export const handlers = [
     ...guildContributionsHandlers,
     ...bg3Handlers, ...guildDiscordHandlers,
     ...hubMediaChannelHandlers,
+    ...hubForumDiscordHandlers,
     ...channelLifecycleHandlers,
     // Per-group notification mute (ROK-1832) — echo writes, no muted groups.
     ...hubNotificationMuteHandlers,
