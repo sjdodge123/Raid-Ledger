@@ -10,6 +10,7 @@ import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
 import { completeStandalonePoll, createEvent, inviteCharacters, lockInSchedulingPoll, updateEvent } from '../../lib/api-client';
 import { withHttpStatus } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
+import { must } from '../../test/must';
 import { invalidateHubPolls } from '../hub/events/hub-polls-api';
 import { FALLBACK_TOAST } from './use-bench-pick';
 import { INVITES_FAILED_TOAST, LOCK_IN_LOST_TOAST, inviteSkipNote, useCreateEventMutation, type CreateEventMutationOptions } from './use-create-event-mutation';
@@ -134,7 +135,7 @@ describe('useCreateEventMutation — plan invites (ROK-2215 W8/W9)', () => {
         expect(inviteCharacters).toHaveBeenCalledWith(77, IDS);
         expect(mockNavigate).toHaveBeenCalledWith('/events/77');
         // The toast fires in the invite promise's .then; settle it before the negative check.
-        await vi.mocked(inviteCharacters).mock.results[0]?.value;
+        await must(vi.mocked(inviteCharacters).mock.results[0], 'invite result').value;
         expect(toast.warning).not.toHaveBeenCalled();
         expect(inviteSkipNote(NONE)).toBeNull();
     });
