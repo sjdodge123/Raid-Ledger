@@ -80,6 +80,8 @@ const core = {
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
     { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
+    // ROK-2208 — the hub Forum ↔ Discord forum channel sync.
+    { id: 'hub-forum.discord-sync', kind: 'ingest-source', label: 'Syncs the hub Forum with a Discord forum channel' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
     { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
     ...ggCoreCards,

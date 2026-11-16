@@ -66,6 +66,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
 import { HubMediaModule } from './hub-media/hub-media.module';
 import { HubCrestModule } from './guilds/crest/hub-crest.module';
 import { HubMediaChannelModule } from './discord-bot/hub-media-channel/hub-media-channel.module';
+import { HubForumDiscordModule } from './guilds/forum/discord/hub-forum-discord.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
 import { CompanionModule } from './companion/companion.module';
@@ -141,6 +142,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     HubCrestModule,
     CompanionModule,
     HubMediaChannelModule,
+    HubForumDiscordModule,
   ],
   controllers: [AppController],
   providers: [

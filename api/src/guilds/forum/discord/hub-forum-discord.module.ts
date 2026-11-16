@@ -1,0 +1,26 @@
+import { Module, type OnModuleInit } from '@nestjs/common';
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
+import { DiscordBotModule } from '../../../discord-bot/discord-bot.module';
+import { DrizzleModule } from '../../../drizzle/drizzle.module';
+import { registerHubIngestSource } from '../../../hub-media/hub-media-ingest-sources';
+import { GuildsCoreModule } from '../../guilds-core.module';
+import { HubForumDiscordController } from './hub-forum-discord.controller';
+import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
+import { HubForumDiscordService } from './hub-forum-discord.service';
+
+/**
+ * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
+ * the outbound/inbound/reconcile lanes add their providers here.
+ */
+@Module({
+  imports: [DrizzleModule, DiscordBotModule, GuildsCoreModule],
+  controllers: [HubForumDiscordController],
+  providers: [HubForumDiscordGateway, HubForumDiscordService],
+  exports: [HubForumDiscordGateway],
+})
+export class HubForumDiscordModule implements OnModuleInit {
+  /** CLAUDE.md plugin ownership: the sync is a Core ingest source. */
+  onModuleInit(): void {
+    registerHubIngestSource(CORE_PLUGIN_ID, 'hub-forum.discord-sync');
+  }
+}
