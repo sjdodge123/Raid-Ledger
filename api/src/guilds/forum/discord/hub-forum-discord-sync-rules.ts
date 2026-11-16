@@ -17,6 +17,18 @@ export const RETRY_MAX_ATTEMPTS = 5;
 /** A never-attempted `pending` row may still be mid-send in the listener. */
 export const RETRY_GRACE_MS = 2 * 60_000;
 
+type RetryOps = Record<'created' | 'updated' | 'deleted', ForumOp>;
+const THREAD_OPS: RetryOps = {
+  created: 'thread.created',
+  updated: 'thread.updated',
+  deleted: 'thread.deleted',
+};
+const REPLY_OPS: RetryOps = {
+  created: 'reply.created',
+  updated: 'reply.updated',
+  deleted: 'reply.deleted',
+};
+
 /** The sweep's cadence; backoff steps are multiples of it. */
 const SWEEP_MS = 5 * 60_000;
 
@@ -52,10 +64,10 @@ export function retryOp(
   rowDeleted: boolean,
 ): ForumOp | null {
   if (link.discordDeletedAt !== null) return null;
-  const kind = link.kind === 'thread' ? 'thread' : 'reply';
-  if (rowDeleted) return `${kind}.deleted`;
-  if (link.discordMessageId.startsWith(UNSENT_PREFIX)) return `${kind}.created`;
-  return `${kind}.updated`;
+  const ops = link.kind === 'thread' ? THREAD_OPS : REPLY_OPS;
+  if (rowDeleted) return ops.deleted;
+  if (link.discordMessageId.startsWith(UNSENT_PREFIX)) return ops.created;
+  return ops.updated;
 }
 
 /**
