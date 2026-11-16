@@ -42,6 +42,39 @@ export interface EventDiscussionCardProps {
     signup?: DiscussionSignup | undefined;
 }
 
+/** "Discussion" title (+ Closed pill once locked) and the reply count. */
+function DiscussionHeading({ d }: { d: EventDiscussionReady }): JSX.Element {
+    return (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2
+                id="event-discussion-title"
+                className="flex items-center gap-2 text-lg font-semibold text-foreground"
+            >
+                <ChatBubbleLeftRightIcon
+                    className="h-5 w-5 shrink-0"
+                    aria-hidden="true"
+                />
+                Discussion
+                {d.lock !== null && (
+                    <Pill>
+                        <LockClosedIcon
+                            className="h-3 w-3"
+                            aria-hidden="true"
+                        />
+                        Closed
+                    </Pill>
+                )}
+            </h2>
+            <span
+                className="text-xs text-muted"
+                data-testid="event-discussion-count"
+            >
+                {replyCountLabel(d.replyCount)}
+            </span>
+        </div>
+    );
+}
+
 function DiscussionFrame({
     eventId,
     d,
@@ -57,33 +90,7 @@ function DiscussionFrame({
             data-testid="event-discussion-card"
             aria-labelledby="event-discussion-title"
         >
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <h2
-                    id="event-discussion-title"
-                    className="flex items-center gap-2 text-lg font-semibold text-foreground"
-                >
-                    <ChatBubbleLeftRightIcon
-                        className="h-5 w-5 shrink-0"
-                        aria-hidden="true"
-                    />
-                    Discussion
-                    {d.lock !== null && (
-                        <Pill>
-                            <LockClosedIcon
-                                className="h-3 w-3"
-                                aria-hidden="true"
-                            />
-                            Closed
-                        </Pill>
-                    )}
-                </h2>
-                <span
-                    className="text-xs text-muted"
-                    data-testid="event-discussion-count"
-                >
-                    {replyCountLabel(d.replyCount)}
-                </span>
-            </div>
+            <DiscussionHeading d={d} />
             {d.can.read && <DiscussionReplies replies={d.latestReplies} />}
             {d.can.read && (
                 <DiscussionFoot eventId={eventId} d={d} signup={signup} />
