@@ -1,11 +1,13 @@
 /**
  * ROK-2226 L2 — the event discussion lifecycle against a real database
- * (spec §5, §13 AC1–AC11). Lifecycle emits are driven through the real
- * EventEmitter2 (and EventsService for retitle / cancel / delete); the
+ * (spec §5, §13 AC1–AC11). AC1/AC2 create through EventsService.create;
+ * other emits go through the real EventEmitter2 (and EventsService for
+ * retitle / cancel / delete); the
  * reconciler is also called directly for the race (AC9) and lazy (AC10)
  * cases. Every test builds its own hub and events.
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CreateEventSchema } from '@raid-ledger/contract';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { waitFor } from '../../../common/testing/integration-helpers';
@@ -93,6 +95,22 @@ async function liveThread(eventId: number) {
   return row;
 }
 
+/** A hub-tagged create DTO two days out; `untilInMs` adds a weekly recurrence. */
+function createDto(guildId: number, title: string, untilInMs?: number) {
+  const start = Math.floor((Date.now() + 48 * HOUR) / 1000) * 1000;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  return CreateEventSchema.parse({
+    title,
+    startTime: iso(start),
+    endTime: iso(start + 2 * HOUR),
+    gameId: testApp.seed.game.id,
+    guildId,
+    ...(untilInMs === undefined
+      ? {}
+      : { recurrence: { frequency: 'weekly', until: iso(start + untilInMs) } }),
+  });
+}
+
 /** Emit a lifecycle event and wait until `check` holds. */
 async function emitAndWait(
   name: string,
@@ -159,12 +177,14 @@ describe('planSync (§5.2 table)', () => {
 });
 
 describe('event discussion lifecycle: create + edit (integration)', () => {
-  it('AC1: CREATED for a hub-tagged event inserts one live thread by the creator', async () => {
+  it('AC1: EventsService.create on a hub-tagged event inserts one live thread by the creator', async () => {
     const hub = await newHub();
-    const { id, end } = await newEvent({ guildId: hub, title: 'Onyxia' });
-    await emitAndWait(APP_EVENT_EVENTS.CREATED, id, async () => {
+    const dto = createDto(hub, 'Onyxia');
+    const created = await testApp.app.get(EventsService).create(adminId(), dto);
+    const id = created.id;
+    await waitFor(async () => {
       expect(await threadRows(id)).toHaveLength(1);
-    });
+    }, 5000);
     const t = await liveThread(id);
     expect(t).toMatchObject({
       guildId: hub,
@@ -175,19 +195,16 @@ describe('event discussion lifecycle: create + edit (integration)', () => {
       editedAt: null,
       eventDetachedAt: null,
     });
-    expect(t?.writeClosesAt?.getTime()).toBe(end.getTime() + WRITE_GRACE_MS);
+    const end = new Date(dto.endTime).getTime();
+    expect(t?.writeClosesAt?.getTime()).toBe(end + WRITE_GRACE_MS);
   });
 
-  it('AC2: one thread per recurring instance (CREATED per instance)', async () => {
+  it('AC2: a weekly series created via EventsService.create gets one thread per instance', async () => {
     const hub = await newHub();
-    const ids: number[] = [];
-    for (let i = 0; i < 4; i += 1) {
-      ids.push(
-        (await newEvent({ guildId: hub, endInMs: (26 + i * 168) * HOUR })).id,
-      );
-    }
-    for (const id of ids)
-      emitter().emit(APP_EVENT_EVENTS.CREATED, { eventId: id });
+    const dto = createDto(hub, 'Weekly raid', 3 * 7 * 24 * HOUR + HOUR);
+    const created = await testApp.app.get(EventsService).create(adminId(), dto);
+    const ids = created.allEventIds ?? [];
+    expect(ids).toHaveLength(4);
     await waitFor(async () => {
       const rows = await testApp.db
         .select({ eventId: threads.eventId })
