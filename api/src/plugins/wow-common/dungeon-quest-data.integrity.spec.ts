@@ -9,9 +9,13 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { instanceName } from './instance-catalogue/instance-catalogue';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
+import { ESCORT_QUESTS, ESCORT_QUEST_IDS } from './data/dungeon-quest-escorts';
 
 interface Row {
   questId: number;
+  name: string;
+  objectives: string | null;
+  sharable: boolean;
   dungeonInstanceId: number | null;
   questLevel: number | null;
   questGiverZone: string | null;
@@ -218,5 +222,120 @@ describe('bundled dungeon quest factions (ROK-2220)', () => {
       })
       .map((r) => `${r.questId} ${r.questGiverZone} ${sideOf(r)}`);
     expect(wrong).toEqual([]);
+  });
+});
+
+/**
+ * ROK-2223 second pass: rows changed one by one where an offline cross-check
+ * disagreed AND an independent signal agreed (Blizzard quest text naming a
+ * faction town or leader, or the giver/hand-in named in our own row).
+ */
+const REVIEWED_SIDES: ReadonlyArray<readonly [number, Side]> = [
+  // Alliance halves of faction-split pairs: the Horde copies are 7478-7480
+  // (librams) and 7487 (Attunement to the Core), so these stay Alliance-only.
+  [7483, 'alliance'],
+  [7484, 'alliance'],
+  [7485, 'alliance'],
+  [7848, 'alliance'],
+  // Horde: Sepulcher/"the Dark Lady", Stonard, Orgrimmar, Kargath, Forsaken.
+  [1014, 'horde'],
+  [1098, 'horde'],
+  [1445, 'horde'],
+  [2283, 'horde'],
+  [2284, 'horde'],
+  [2318, 'horde'],
+  [2338, 'horde'],
+  [2841, 'horde'],
+  [2842, 'horde'],
+  [2843, 'horde'],
+  [4082, 'horde'],
+  [4122, 'horde'],
+  [4133, 'horde'],
+  [4134, 'horde'],
+  [4903, 'horde'],
+  [4983, 'horde'],
+  [7068, 'horde'],
+  // Alliance: hand-in to Master Mechanic Castpipe in Ironforge.
+  [2930, 'alliance'],
+];
+
+describe('reviewed dungeon quest rows (ROK-2223)', () => {
+  it.each(REVIEWED_SIDES)('quest %i is %s', (questId, side) => {
+    expect({ questId, side: sideOf(must(questId)) }).toEqual({ questId, side });
+  });
+});
+
+/** ROK-2223: givers the cross-check and Blizzard quest text place inside. */
+const REVIEWED_INSIDE: readonly number[] = [2201, 2318, 5160, 7483, 7484, 7485];
+
+describe('reviewed inside pickups (ROK-2223)', () => {
+  it.each(REVIEWED_INSIDE)('quest %i is picked up inside', (questId) => {
+    expect({
+      questId,
+      allowlisted: INSIDE_DUNGEON_QUEST_IDS.has(questId),
+      flagged: must(questId).startsInsideDungeon,
+    }).toEqual({ questId, allowlisted: true, flagged: true });
+  });
+});
+
+/** Objectives that open with an escort/defend verb (generalised guard). */
+const ESCORT_OBJECTIVE = /^\s*(Escort|Defend|Protect)\b/;
+
+describe('escort quests (ROK-2223)', () => {
+  it('every listed escort names a bundled quest', () => {
+    const mismatched = ESCORT_QUESTS.filter(
+      (entry) => byId.get(entry.questId)?.name !== entry.name,
+    ).map((entry) => entry.questId);
+    expect(mismatched).toEqual([]);
+  });
+
+  it('no escort quest is shareable', () => {
+    const shareable = [...ESCORT_QUEST_IDS].filter((id) => must(id).sharable);
+    expect(shareable).toEqual([]);
+  });
+
+  it('every quest whose objectives open with Escort/Defend/Protect is listed', () => {
+    const unlisted = allRows
+      .filter((r) => ESCORT_OBJECTIVE.test(r.objectives ?? ''))
+      .filter((r) => !ESCORT_QUEST_IDS.has(r.questId))
+      .map((r) => r.questId);
+    expect(unlisted).toEqual([]);
+  });
+});
+
+describe('reviewed prerequisites (ROK-2223)', () => {
+  it("5125 Aurius' Reckoning follows 5122 The Medallion of Faith", () => {
+    expect({
+      prevOf5125: Number(must(5125).prevQuestId),
+      nextOf5122: Number(must(5122).nextQuestId),
+    }).toEqual({ prevOf5125: 5122, nextOf5122: 5125 });
+  });
+
+  it('each Dire Maul libram follows its own side of Elven Legends', () => {
+    const prereqs = [7483, 7484, 7485, 7478, 7479, 7480].map((id) =>
+      Number(must(id).prevQuestId),
+    );
+    expect(prereqs).toEqual([7482, 7482, 7482, 7481, 7481, 7481]);
+  });
+});
+
+/**
+ * A shared chain start may be neutral while its next steps split by faction
+ * (2278 The Platinum Discs -> 2279 Alliance / 2280 Horde). Any other neutral
+ * row with a same-name, same-dungeon faction copy shows twice for that side.
+ */
+const SHARED_NEUTRAL_CHAIN_STARTS: readonly number[] = [2278];
+
+describe('faction-split quest pairs (ROK-2223)', () => {
+  it('no neutral quest shares its name and dungeon with a faction copy', () => {
+    const key = (r: Row) => `${r.name}|${r.dungeonInstanceId}`;
+    const restricted = new Set(
+      allRows.filter((r) => sideOf(r) !== 'neutral').map(key),
+    );
+    const doubled = allRows
+      .filter((r) => sideOf(r) === 'neutral' && restricted.has(key(r)))
+      .filter((r) => !SHARED_NEUTRAL_CHAIN_STARTS.includes(r.questId))
+      .map((r) => `${r.questId} ${r.name}`);
+    expect(doubled).toEqual([]);
   });
 });
