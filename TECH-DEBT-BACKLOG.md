@@ -4391,3 +4391,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 ### 2026-11-15 — fix/overnight-td10-2026-11-15 (resolutions)
 - **resolved** the `voice-activity.test.ts:1084-1101` (`rok943ClassifyAllStatuses`) entry dated 2026-11-12/13 ("attended: expected 4, got 0"): `injectVoiceSessionForTest` (`api/src/admin/demo-test-voice.helpers.ts`) now upserts on `(event_id, discord_user_id)` and clears `classification`, so a cron-written 0-second `no_show` row no longer swallows the injected session. Regression: `demo-test-voice.helpers.integration.spec.ts`.
+
+### 2026-11-15 — feat/rok-1908-forever-quest-areas (surfaced during the ROK-1908 review)
+
+- **low** `api/src/plugins/wow-common/dungeon-quests.overlay.ts:68` — imported-only (overlay-only) quests, including those of the Forever-new dungeons, are labelled `expansion: 'classic'` (`OVERLAY_ONLY_EXPANSION`). Harmless today because the read path scopes overlay-only quests by instance id, but anything that later filters them by expansion alone would mis-file them (`classic_era` also includes `'classic'`). Suggested: derive the label from the instance's catalogue `expansion` (as `instanceLevelBand` already reads the catalogue row).

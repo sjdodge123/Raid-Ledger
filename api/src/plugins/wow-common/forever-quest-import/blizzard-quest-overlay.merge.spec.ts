@@ -204,6 +204,12 @@ describe('reputation rewards (ROK-2161)', () => {
   });
 });
 
+/**
+ * Characterization lock of the ROK-1908 ruling (curated Forever rows keep
+ * their own level, giver, chain and sharable fields). It passes on main by
+ * design — no merge code changed — and guards the ruling against regression;
+ * it does not prove new behaviour.
+ */
 describe('mergeBlizzardOverlay — curated Forever rows (ROK-1908)', () => {
   /** The bundled City of Dalaran row (quest 92456) as the JSON seeds it. */
   const dalaran = curated({
