@@ -285,7 +285,12 @@ export async function discordSignupTxBody(
     };
   }
   const inserted = defined(rows[0], 'inserted Discord signup row');
-  const autoBench = await signupH.checkAutoBench(tx, event, eventId);
+  const autoBench = await signupH.checkDiscordSignupAutoBench(
+    tx,
+    event,
+    eventId,
+    dto,
+  );
   if (autoBench) {
     await assignBenchFallback(
       deps,

@@ -86,7 +86,7 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
     jest.clearAllMocks();
     mockDiscordH.insertDiscordSignupRow.mockResolvedValue([insertedSignup]);
     mockDiscordH.allocateDiscordSlot.mockResolvedValue(undefined);
-    mockSignupH.checkAutoBench.mockResolvedValue(false);
+    mockSignupH.checkDiscordSignupAutoBench.mockResolvedValue(false);
     mockRosterQH.findNextPosition.mockResolvedValue(1);
     mockRosterQH.getAssignedSlotRole.mockResolvedValue(null);
   });
@@ -97,12 +97,18 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
 
     await discordSignupTxBody(deps, tx, mockEvent, 1, mockDto);
 
-    expect(mockSignupH.checkAutoBench).toHaveBeenCalledWith(tx, mockEvent, 1);
+    // ROK-2203: the shared full-roster rule gets the Discord dto's roles.
+    expect(mockSignupH.checkDiscordSignupAutoBench).toHaveBeenCalledWith(
+      tx,
+      mockEvent,
+      1,
+      mockDto,
+    );
     expect(mockDiscordH.allocateDiscordSlot).toHaveBeenCalled();
   });
 
   it('assigns bench fallback when roster is full', async () => {
-    mockSignupH.checkAutoBench.mockResolvedValue(true);
+    mockSignupH.checkDiscordSignupAutoBench.mockResolvedValue(true);
     const deps = createMockDeps();
     const tx = createMockTx();
 
@@ -128,8 +134,8 @@ describe('discordSignupTxBody — bench fallback (ROK-626)', () => {
     const result = await discordSignupTxBody(deps, tx, mockEvent, 1, mockDto);
 
     expect(result).toEqual({ signup: existingSignup, assignedSlot: null });
-    // checkAutoBench should NOT have been called for duplicates
-    expect(mockSignupH.checkAutoBench).not.toHaveBeenCalled();
+    // the auto-bench rule should NOT have been called for duplicates
+    expect(mockSignupH.checkDiscordSignupAutoBench).not.toHaveBeenCalled();
   });
 
   it('logs anonymous user info after signup', async () => {

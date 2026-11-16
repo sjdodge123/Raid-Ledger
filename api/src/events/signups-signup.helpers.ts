@@ -6,14 +6,20 @@
 import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
-import type { CreateSignupDto } from '@raid-ledger/contract';
+import type {
+  CreateSignupDto,
+  CreateDiscordSignupDto,
+} from '@raid-ledger/contract';
 import type {
   Tx,
   EventRow,
   SignupRow,
   SignupTxParams,
 } from './signups.service.types';
-import { hasDisplaceableTentative } from './signups-tentative-capacity.helpers';
+import {
+  hasDisplaceableTentative,
+  type IncomingSignupRoles,
+} from './signups-tentative-capacity.helpers';
 
 /** Shared MMO slot defaults used across capacity and roster-query helpers. */
 export const MMO_SLOT_DEFAULTS = {
@@ -42,6 +48,12 @@ export function computeSlotCapacity(
   return null;
 }
 
+/**
+ * Pure capacity check (no tentative displacement): a bench request is never
+ * auto-benched, otherwise "full" per `isEventAtCapacity`. Signup paths that
+ * run allocation use `resolveAutoBench` instead; the PUG-invite anonymous
+ * path still uses this because it places the PUG directly (no displacement).
+ */
 export async function checkAutoBench(
   tx: Tx,
   eventRow: EventRow,
@@ -85,23 +97,48 @@ export async function isEventAtCapacity(
 }
 
 /**
- * Auto-bench decision for the web/API signup flow (ROK-1729): a full roster
- * benches the newcomer UNLESS it may bump a tentative occupant from a role it
- * prefers — then allocation runs and ROK-459 displacement makes room.
- * Callers without a dto (anonymous Discord, PUG invite) use checkAutoBench.
+ * THE auto-bench rule for every signup path (ROK-1729, ROK-2203): a full
+ * roster benches the newcomer UNLESS it may bump a tentative occupant from a
+ * role it prefers — then allocation runs and ROK-459 displacement makes room.
+ * A bench request is never auto-benched (it is placed on the bench directly).
  */
+export async function resolveAutoBench(
+  tx: Tx,
+  eventRow: Pick<EventRow, 'slotConfig' | 'maxAttendees'>,
+  eventId: number,
+  req: IncomingSignupRoles,
+): Promise<boolean> {
+  if (req.slotRole === 'bench') return false;
+  if (!(await isEventAtCapacity(tx, eventRow, eventId))) return false;
+  return !(await hasDisplaceableTentative(tx, eventRow, eventId, req));
+}
+
+/** Auto-bench decision for the web/API signup flow (shared rule above). */
 export async function checkSignupAutoBench(
   p: Pick<SignupTxParams, 'tx' | 'eventRow' | 'eventId' | 'userId' | 'dto'>,
 ): Promise<boolean> {
-  const full = await checkAutoBench(p.tx, p.eventRow, p.eventId, p.dto);
-  if (!full || !p.dto) return full;
-  return !(await hasDisplaceableTentative(
-    p.tx,
-    p.eventRow,
-    p.eventId,
-    p.dto,
-    p.userId,
-  ));
+  return resolveAutoBench(p.tx, p.eventRow, p.eventId, {
+    slotRole: p.dto?.slotRole,
+    preferredRoles: p.dto?.preferredRoles,
+    userId: p.userId,
+  });
+}
+
+/**
+ * Auto-bench decision for an anonymous Discord signup (ROK-2203) — the same
+ * rule as the web path; a tentative newcomer never bumps a tentative peer.
+ */
+export async function checkDiscordSignupAutoBench(
+  tx: Tx,
+  eventRow: Pick<EventRow, 'slotConfig' | 'maxAttendees'>,
+  eventId: number,
+  dto: CreateDiscordSignupDto,
+): Promise<boolean> {
+  return resolveAutoBench(tx, eventRow, eventId, {
+    slotRole: dto.role,
+    preferredRoles: dto.preferredRoles,
+    tentative: dto.status === 'tentative',
+  });
 }
 
 /**
