@@ -1,0 +1,431 @@
+/**
+ * ROK-2208 L2b — the hub forum's Discord binding API against a real database
+ * (§5.1, §6, §12, AC1–AC3): the permission matrix (one `canManageDiscord`
+ * gate to bind, Officers read the status), the ack, create vs existing,
+ * sharing a forum (each hub its own tag, Require tags on at the 2nd hub), the
+ * 20-tag budget, and unbind keeping the forum unless asked AND unshared.
+ * Discord is the in-memory fake behind `HubForumDiscordGateway`.
+ */
+import type {
+  HubForumDiscordChannelOptions,
+  HubForumDiscordStatus,
+} from '@raid-ledger/contract';
+import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../../../common/testing/narrow';
+import { signTestAccessToken } from '../../../common/testing/sign-test-access-token';
+import * as schema from '../../../drizzle/schema';
+import {
+  bootPostsApp,
+  newHub,
+  type PostsCtx,
+  type Who,
+} from '../../posts/hub-posts.test-fixtures';
+import {
+  snowflake,
+  stubForumGateway,
+  type FakeDiscord,
+} from './hub-forum-discord.test-fixtures';
+
+let ctx: PostsCtx;
+let adminToken: string;
+let adminId: number;
+let fake: FakeDiscord;
+
+/** A value the test needs; a missing one fails loudly with its label. */
+function need<T>(value: T | null | undefined, label: string): T {
+  if (value === null || value === undefined) throw new Error(`no ${label}`);
+  return value;
+}
+
+beforeAll(async () => {
+  ctx = await bootPostsApp('hfdbind');
+  const [u] = nonEmpty(
+    await ctx.testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:hfdbind-admin@forum.test',
+        username: 'hfdbind-admin',
+        role: 'admin',
+      })
+      .returning(),
+    'admin',
+  );
+  adminId = u.id;
+  adminToken = await signTestAccessToken(ctx.testApp, {
+    sub: u.id,
+    username: u.username,
+    role: 'admin',
+  });
+});
+
+beforeEach(() => {
+  fake = stubForumGateway(ctx.testApp);
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+type Actor = Who | 'admin';
+type Method = 'get' | 'put' | 'delete';
+const route = (g: number) => `/guilds/${g}/forum-discord`;
+
+function as(who: Actor, method: Method, path: string, body?: object) {
+  const token = who === 'admin' ? adminToken : ctx.tokens[who];
+  const req = ctx.testApp.request[method](path).set(
+    'Authorization',
+    `Bearer ${token}`,
+  );
+  return body === undefined ? req : req.send(body);
+}
+
+const create = (g: number, who: Actor = 'admin') =>
+  as(who, 'put', route(g), { mode: 'create', ack: true });
+const join = (g: number, channelId: string, who: Actor = 'admin') =>
+  as(who, 'put', route(g), { mode: 'existing', channelId, ack: true });
+
+async function statusOf(g: number, who: Actor = 'admin') {
+  const res = await as(who, 'get', route(g));
+  expect(res.status).toBe(200);
+  return res.body as HubForumDiscordStatus;
+}
+
+async function bindingRow(g: number) {
+  const [row] = await ctx.testApp.db
+    .select()
+    .from(schema.hubForumDiscordBindings)
+    .where(eq(schema.hubForumDiscordBindings.guildId, g));
+  return row ?? null;
+}
+
+async function forumRow(channelId: string) {
+  const [row] = await ctx.testApp.db
+    .select()
+    .from(schema.hubForumDiscordForums)
+    .where(eq(schema.hubForumDiscordForums.channelId, channelId));
+  return row ?? null;
+}
+
+async function hubNameOf(g: number): Promise<string> {
+  const [row] = nonEmpty(
+    await ctx.testApp.db
+      .select({ name: schema.guilds.name })
+      .from(schema.guilds)
+      .where(eq(schema.guilds.id, g)),
+    'hub',
+  );
+  return row.name;
+}
+
+/** Bind a fresh hub to a new bot-made forum; returns hub + channel ids. */
+async function boundHub(): Promise<{ g: number; channelId: string }> {
+  const g = await newHub(ctx);
+  const res = await create(g);
+  expect(res.status).toBe(200);
+  const body = res.body as HubForumDiscordStatus;
+  return { g, channelId: need(body.binding, 'binding').channelId };
+}
+
+/** An RL thread of hub `g` already synced to Discord thread `discordId`. */
+async function syncedThread(g: number, discordId: string): Promise<void> {
+  const [t] = nonEmpty(
+    await ctx.testApp.db
+      .insert(schema.hubForumThreads)
+      .values({
+        guildId: g,
+        authorId: ctx.userIds.plain,
+        title: 'Synced',
+        body: 'hi',
+      })
+      .returning({ id: schema.hubForumThreads.id }),
+    'thread',
+  );
+  await ctx.testApp.db.insert(schema.hubForumDiscordLinks).values({
+    guildId: g,
+    threadId: t.id,
+    kind: 'thread',
+    discordThreadId: discordId,
+    discordMessageId: snowflake(),
+    origin: 'raidledger',
+    syncState: 'synced',
+  });
+}
+
+/** `outsider` becomes the WoW hub's GM (rank 0) — a non-community leader. */
+async function makeGm(g: number): Promise<void> {
+  const guid = `Player-1-hfdbind-gm-${g}`;
+  const name = `Gm${g}`;
+  await ctx.testApp.db.insert(schema.characters).values({
+    userId: ctx.userIds.outsider,
+    gameId: ctx.testApp.seed.game.id,
+    name,
+    addonGuid: guid,
+    role: 'dps',
+    isMain: false,
+  });
+  await ctx.testApp.db.insert(schema.guildMembers).values({
+    guildId: g,
+    guid,
+    characterName: name,
+    rankIndex: 0,
+    rankName: 'Guild Master',
+    source: 'addon_import',
+    // The posts fixtures' roster snapshot: rows seen at it are the live roster.
+    lastSeenAt: new Date('2026-10-12T20:00:00.000Z'),
+  });
+}
+
+describe('ROK-2208 binding — permission matrix (§6)', () => {
+  it('an Officer reads the status but cannot bind, list or unbind', async () => {
+    const { g, channelId } = await boundHub();
+    const officer = await statusOf(g, 'officerA');
+    expect(officer.binding?.channelId).toBe(channelId);
+    const other = await newHub(ctx);
+    expect((await create(other, 'officerA')).status).toBe(403);
+    expect(
+      (await as('officerA', 'get', `${route(other)}/channels`)).status,
+    ).toBe(403);
+    expect((await as('officerA', 'delete', route(g))).status).toBe(403);
+    expect(fake.spies.createForum).toHaveBeenCalledTimes(1);
+    expect(await bindingRow(g)).not.toBeNull();
+  });
+
+  it('a plain member and an outsider cannot read the status', async () => {
+    const { g } = await boundHub();
+    expect((await as('plain', 'get', route(g))).status).toBe(403);
+    expect((await as('outsider', 'get', route(g))).status).toBe(403);
+  });
+
+  it("a WoW hub's GM (not a community hub) may read but not bind (OQ-7)", async () => {
+    const g = await newHub(ctx);
+    await makeGm(g);
+    expect((await as('outsider', 'get', route(g))).status).toBe(200);
+    expect((await create(g, 'outsider')).status).toBe(403);
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2208 binding — PUT (AC1, AC2)', () => {
+  it('AC1: no ack (missing or false) is 400 and creates no channel', async () => {
+    const g = await newHub(ctx);
+    for (const body of [{ mode: 'create' }, { mode: 'create', ack: false }]) {
+      const res = await as('admin', 'put', route(g), body);
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_ACK_REQUIRED' });
+    }
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+    expect(await bindingRow(g)).toBeNull();
+  });
+
+  it('AC2: create makes a managed forum, one webhook and an acked binding', async () => {
+    const before = Date.now();
+    const { g, channelId } = await boundHub();
+    const s = await statusOf(g);
+    expect(s.binding).toMatchObject({
+      channelId,
+      channelName: 'hub-forums',
+      managed: true,
+      shared: false,
+      sharedWith: 0,
+      tagName: null,
+      health: 'ok',
+      missingPermissions: [],
+    });
+    const forum = need(await forumRow(channelId), 'forum');
+    expect(forum).toMatchObject({ managed: true, requireTagSet: false });
+    expect(forum.webhookId).toBe(`9${channelId.slice(1)}`);
+    expect(fake.spies.ensureWebhook).toHaveBeenCalledWith(channelId, null);
+    const row = need(await bindingRow(g), 'binding');
+    expect(row).toMatchObject({
+      forumId: forum.id,
+      tagId: null,
+      ackBy: adminId,
+    });
+    expect(row.boundAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    expect(fake.spies.requireTags).not.toHaveBeenCalled();
+  });
+
+  it('existing binds an unmanaged forum and reuses a live webhook', async () => {
+    const g = await newHub(ctx);
+    const f = fake.put({ name: 'guild-chat' });
+    const res = await join(g, f.id);
+    expect(res.status).toBe(200);
+    expect((res.body as HubForumDiscordStatus).binding).toMatchObject({
+      channelId: f.id,
+      channelName: 'guild-chat',
+      managed: false,
+    });
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+    expect((await forumRow(f.id))?.managed).toBe(false);
+  });
+
+  it('a second PUT on a bound hub is 409 ALREADY_BOUND', async () => {
+    const { g } = await boundHub();
+    const res = await join(g, fake.put().id);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_ALREADY_BOUND' });
+  });
+});
+
+describe('ROK-2208 binding — PUT refusals (§12)', () => {
+  it("a hub's media channel is 409 CHANNEL_IN_USE", async () => {
+    const g = await newHub(ctx);
+    const f = fake.put();
+    await ctx.testApp.db
+      .insert(schema.guildProfiles)
+      .values({ guildId: await newHub(ctx), mediaChannelId: f.id });
+    const res = await join(g, f.id);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_CHANNEL_IN_USE' });
+    expect(await bindingRow(g)).toBeNull();
+  });
+
+  it('a channel that is not a forum is 422 NOT_A_FORUM', async () => {
+    const res = await join(await newHub(ctx), snowflake());
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_NOT_A_FORUM' });
+  });
+
+  it('missing permissions are 422 with the list, for existing and create', async () => {
+    const f = fake.put({ missing: ['Manage Webhooks'] });
+    const existing = await join(await newHub(ctx), f.id);
+    expect(existing.status).toBe(422);
+    expect(existing.body).toMatchObject({
+      code: 'FORUM_DISCORD_MISSING_PERMS',
+      missing: ['Manage Webhooks'],
+    });
+    fake.state.missingToCreate = ['Manage Channels'];
+    const created = await create(await newHub(ctx));
+    expect(created.status).toBe(422);
+    expect(created.body).toMatchObject({ missing: ['Manage Channels'] });
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+  });
+
+  it('the bot offline is 503 on PUT and bot-offline health on GET', async () => {
+    const { g } = await boundHub();
+    fake.state.online = false;
+    const res = await create(await newHub(ctx));
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ code: 'DISCORD_BOT_OFFLINE' });
+    expect((await statusOf(g)).binding?.health).toBe('bot-offline');
+  });
+});
+
+describe('ROK-2208 binding — sharing a forum (AC3, D6)', () => {
+  it('the 2nd hub gets its own tag, the 1st hub its tag on its posts, Require tags on', async () => {
+    const { g: a, channelId } = await boundHub();
+    const postId = snowflake();
+    await syncedThread(a, postId);
+    const b = await newHub(ctx);
+    const res = await join(b, channelId);
+    expect(res.status).toBe(200);
+    const tags = need(fake.forums.get(channelId), 'forum').tags;
+    const tagOf = (name: string) => tags.find((t) => t.name === name)?.id;
+    const [nameA, nameB] = [await hubNameOf(a), await hubNameOf(b)];
+    const rowA = need(await bindingRow(a), 'binding A');
+    const rowB = need(await bindingRow(b), 'binding B');
+    expect(rowA.tagId).toBe(tagOf(nameA));
+    expect(rowB.tagId).toBe(tagOf(nameB));
+    expect(rowA.tagId).not.toBeNull();
+    expect(rowA.tagId).not.toBe(rowB.tagId);
+    expect(fake.spies.applyTag).toHaveBeenCalledWith(
+      channelId,
+      [postId],
+      rowA.tagId,
+    );
+    expect(fake.spies.requireTags).toHaveBeenCalledWith(channelId);
+    expect((await forumRow(channelId))?.requireTagSet).toBe(true);
+    expect((res.body as HubForumDiscordStatus).binding).toMatchObject({
+      shared: true,
+      sharedWith: 1,
+      tagName: nameB,
+    });
+    expect((await statusOf(a)).binding?.tagName).toBe(nameA);
+  });
+});
+
+describe('ROK-2208 binding — the picker and the tag budget', () => {
+  it('the picker lists a shared forum with its free tag slots', async () => {
+    const { channelId } = await boundHub();
+    const res = await as(
+      'admin',
+      'get',
+      `${route(await newHub(ctx))}/channels`,
+    );
+    expect(res.status).toBe(200);
+    const opts = (res.body as HubForumDiscordChannelOptions).channels;
+    expect(opts.find((c) => c.id === channelId)).toMatchObject({
+      sharedWith: 1,
+      tagsFree: 19,
+    });
+  });
+
+  it('a forum with 19 tags and one hub offers 0 free slots and refuses a 2nd hub', async () => {
+    const own = Array.from({ length: 19 }, (_, i) => ({
+      id: snowflake(),
+      name: `mod ${String(i)}`,
+    }));
+    const f = fake.put({ tags: own });
+    const a = await newHub(ctx);
+    expect((await join(a, f.id)).status).toBe(200);
+    const b = await newHub(ctx);
+    const list = await as('admin', 'get', `${route(b)}/channels`);
+    const opt = (list.body as HubForumDiscordChannelOptions).channels.find(
+      (c) => c.id === f.id,
+    );
+    expect(opt?.tagsFree).toBe(0);
+    const res = await join(b, f.id);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_TAG_LIMIT' });
+    expect(await bindingRow(b)).toBeNull();
+    expect(fake.spies.addTags).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2208 binding — DELETE (D9, OQ-8)', () => {
+  it('without deleteForum the forum stays on Discord and in the table', async () => {
+    const { g, channelId } = await boundHub();
+    expect((await as('admin', 'delete', route(g))).status).toBe(204);
+    expect(await bindingRow(g)).toBeNull();
+    expect(fake.spies.deleteForum).not.toHaveBeenCalled();
+    expect(await forumRow(channelId)).not.toBeNull();
+    expect((await statusOf(g)).binding).toBeNull();
+  });
+
+  it('deleteForum removes a bot-made forum nobody else shares', async () => {
+    const { g, channelId } = await boundHub();
+    const res = await as('admin', 'delete', `${route(g)}?deleteForum=true`);
+    expect(res.status).toBe(204);
+    expect(fake.spies.deleteForum).toHaveBeenCalledWith(channelId);
+    expect(await forumRow(channelId)).toBeNull();
+  });
+});
+
+describe('ROK-2208 binding — DELETE of a shared or unmanaged forum', () => {
+  it('deleteForum keeps a shared forum, and the leaving hub keeps its tag on Discord', async () => {
+    const { g: a, channelId } = await boundHub();
+    const b = await newHub(ctx);
+    expect((await join(b, channelId)).status).toBe(200);
+    const tagB = need(await bindingRow(b), 'binding B').tagId;
+    expect(tagB).not.toBeNull();
+    const res = await as('admin', 'delete', `${route(b)}?deleteForum=true`);
+    expect(res.status).toBe(204);
+    expect(fake.spies.deleteForum).not.toHaveBeenCalled();
+    expect(await forumRow(channelId)).not.toBeNull();
+    const tags = fake.forums.get(channelId)?.tags.map((t) => t.id) ?? [];
+    expect(tags).toContain(tagB);
+    expect((await statusOf(a)).binding).toMatchObject({
+      shared: false,
+      tagName: await hubNameOf(a),
+    });
+  });
+
+  it('deleteForum never deletes a forum the bot did not make', async () => {
+    const g = await newHub(ctx);
+    const f = fake.put();
+    expect((await join(g, f.id)).status).toBe(200);
+    await as('admin', 'delete', `${route(g)}?deleteForum=true`);
+    expect(fake.spies.deleteForum).not.toHaveBeenCalled();
+    expect(fake.forums.has(f.id)).toBe(true);
+  });
+});
