@@ -166,6 +166,24 @@ describe('ROK-2225 0303 backfill — first post-deploy import', () => {
       expect(await measure(guildId, importOf(listed))).toBe('0/0');
     },
   );
+
+  it('(iii) latest snapshot an import listing no import-only rows: members it dropped stay out', async () => {
+    const I2 = at(240);
+    const listed = paired(6, I2);
+    const left = Array.from({ length: 5 }, (_, i) => ({
+      name: `Left${i}`,
+      guid: `GL${i}`,
+      bid: 800 + i,
+      seen: S1,
+    }));
+    const guildId = await seedGuild({ synced: S1, snapshot: I2 }, [
+      ...listed,
+      ...left,
+      ...importOnly(1, at(0)),
+    ]);
+    await runBackfill();
+    expect(await measure(guildId, importOf(listed))).toBe('0/0');
+  });
 });
 
 describe('ROK-2225 0303 backfill — first post-deploy sync', () => {
