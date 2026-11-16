@@ -299,4 +299,30 @@ describe('ROK-2208 outbound RL → Discord', () => {
     expect(out.spies.createPost).not.toHaveBeenCalled();
     expect(await linkRows(threadId)).toEqual([]);
   });
+  it('review MAJOR-2: a re-bound hub never drives its old forum (reply, edit, delete)', async () => {
+    const g = await newHub(ctx);
+    await bind(g, { mode: 'create' });
+    const threadId = await newThread(g);
+    await synced();
+    // A re-bind stamps a fresh bound_at: this post lives in the OLD forum.
+    const b = schema.hubForumDiscordBindings;
+    await ctx.testApp.db
+      .update(b)
+      .set({ boundAt: new Date(Date.now() + 3_600_000) })
+      .where(eq(b.guildId, g));
+    const res = await as(
+      'officerA',
+      'post',
+      `/guilds/${g}/forum/${threadId}/replies`,
+      { body: 'Into the old forum?' },
+    );
+    expect(res.status).toBe(201);
+    await synced(2);
+    for (const op of ['thread.updated', 'thread.deleted'] as const) {
+      await out.service.apply({ guildId: g, op, threadId, actorId: 0 });
+    }
+    expect(out.spies.createReply).not.toHaveBeenCalled();
+    expect(out.spies.editMessage).not.toHaveBeenCalled();
+    expect(out.spies.deleteThread).not.toHaveBeenCalled();
+  });
 });

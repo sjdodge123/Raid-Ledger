@@ -290,6 +290,30 @@ describe('ROK-2208 inbound Discord → RL', () => {
   });
 });
 
+describe('review MAJOR-2: inbound follows the CURRENT binding', () => {
+  it('shared forum: after hub A unbinds, a reply in an A post is skipped', async () => {
+    const { g, channelId } = await boundHub();
+    const { thread } = await importPost(channelId);
+    const b = schema.hubForumDiscordBindings;
+    const [aBinding] = nonEmpty(
+      await ctx.testApp.db.select().from(b).where(eq(b.guildId, g)),
+      'A binding',
+    );
+    const other = await newHub(ctx);
+    await ctx.testApp.db.insert(b).values({
+      guildId: other,
+      forumId: aBinding.forumId,
+      ackAt: new Date(),
+      boundAt: new Date(),
+    });
+    await ctx.testApp.db.delete(b).where(eq(b.guildId, g));
+    ctx.testApp.app.get(HubForumDiscordRouteResolver).invalidate();
+    const reply = msg(thread);
+    expect(await ingest.onCreate(reply, thread, noBot)).toBe('skipped');
+    expect(await replyRow(reply.id)).toBeNull();
+  });
+});
+
 describe('ROK-2208 pin sync (R5)', () => {
   it('Discord → RL: pinning pins; unpinning the newest unpins; archiving keeps the pin', async () => {
     const { channelId } = await boundHub();
