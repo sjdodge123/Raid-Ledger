@@ -144,7 +144,7 @@ describe('planSync (§5.2 table)', () => {
       'noop',
     ],
     ['deleted, no thread', null, null, 'noop'],
-  ] as const)('%s → %s', (_l, event, thread, want) => {
+  ] as const)('%s', (_l, event, thread, want) => {
     expect(planSync(event, thread)).toBe(want);
   });
 
@@ -158,7 +158,7 @@ describe('planSync (§5.2 table)', () => {
   });
 });
 
-describe('event discussion lifecycle (integration)', () => {
+describe('event discussion lifecycle: create + edit (integration)', () => {
   it('AC1: CREATED for a hub-tagged event inserts one live thread by the creator', async () => {
     const hub = await newHub();
     const { id, end } = await newEvent({ guildId: hub, title: 'Onyxia' });
@@ -245,7 +245,9 @@ describe('event discussion lifecycle (integration)', () => {
       (await liveThread(id))?.writeClosesAt?.getTime() ?? 0,
     ).toBeGreaterThan(Date.now());
   });
+});
 
+describe('event discussion lifecycle: detach (integration)', () => {
   it('AC6: untag detaches the thread and leaves it in hub A', async () => {
     const hub = await newHub();
     const { id } = await newEvent({ guildId: hub });
@@ -303,7 +305,9 @@ describe('event discussion lifecycle (integration)', () => {
     expect(await syncEventDiscussion(testApp.db, id)).toBe('noop');
     expect(await threadRows(id)).toHaveLength(1);
   });
+});
 
+describe('event discussion lifecycle: race, lazy, cancel (integration)', () => {
   it('AC9: two racing syncs produce one thread', async () => {
     const hub = await newHub();
     const { id } = await newEvent({ guildId: hub });
