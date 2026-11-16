@@ -14,7 +14,8 @@ interface EventCreateContentBrowserProps {
     onInstancesChange: (instances: WowInstanceDetailDto[]) => void;
 }
 
-function buildBasicInstanceDetail(instance: WowInstanceDto, contentType: 'dungeon' | 'raid'): WowInstanceDetailDto {
+/** A list row as a selected-instance detail — what a manual tick produces (ROK-2215 reuses it for the plan prefill). */
+export function buildBasicInstanceDetail(instance: WowInstanceDto, contentType: 'dungeon' | 'raid'): WowInstanceDetailDto {
     return {
         id: instance.id, name: instance.name, shortName: instance.shortName,
         expansion: instance.expansion, minimumLevel: instance.minimumLevel ?? null,

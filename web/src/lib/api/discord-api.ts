@@ -7,7 +7,9 @@ import type {
     EventInviteLinkResponseDto,
     ShareEventResponseDto,
     PugRole,
+    InviteCharactersResultDto,
 } from '@raid-ledger/contract';
+import { InviteCharactersResultSchema } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 import { encodePathSegment } from './path-segment';
 
@@ -72,6 +74,17 @@ export async function inviteMember(
         method: 'POST',
         body: JSON.stringify({ discordId }),
     });
+}
+
+/** ROK-2215: invite the owners of up to five characters to an event (creator or staff). */
+export async function inviteCharacters(
+    eventId: number,
+    characterIds: string[],
+): Promise<InviteCharactersResultDto> {
+    return fetchApi(`/events/${eventId}/invite-characters`, {
+        method: 'POST',
+        body: JSON.stringify({ characterIds }),
+    }, InviteCharactersResultSchema);
 }
 
 // -- Discord Member Search (ROK-292) --
