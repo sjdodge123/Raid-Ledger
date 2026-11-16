@@ -1,7 +1,9 @@
 import type { StringSelectMenuInteraction } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { showRoleSelect } from './signup-signup.handlers';
+import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
+import { showRoleSelect } from '../utils/signup-dropdown-builders';
+import { buildCharacterBackId } from '../utils/character-back-id';
 import { findLinkedUser, safeEditReply } from './signup-interaction.helpers';
 import { replyNoLinkedAccount } from './signup-select-role.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
@@ -117,15 +119,21 @@ async function showRoleSelectForCharacter(
     role: character.roleOverride ?? character.role ?? null,
   };
   const embed = await buildReplyEmbed(eventId, deps);
-  await showRoleSelect(
-    interaction,
+  await showRoleSelect(interaction, {
+    customIdPrefix: SIGNUP_BUTTON_IDS.ROLE_SELECT,
     eventId,
-    deps,
+    emojiService: deps.emojiService,
     characterId,
-    charInfo,
-    signupStatus,
+    characterInfo: charInfo,
+    customIdSuffix: signupStatus,
     embed,
-  );
+    // ROK-2228: Back re-renders the char_select list this pick came from.
+    backCustomId: buildCharacterBackId({
+      charSelectPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+      eventId,
+      suffix: signupStatus,
+    }),
+  });
 }
 
 /** Non-MMO character signup: sign up and confirm immediately. */
