@@ -26,6 +26,8 @@ vi.mock('../plugins/wow/hooks/use-wow-instances', () => ({
     useWowInstances: (variant?: string, type?: string) => (variant && type === 'dungeon'
         ? { data: stub.instancesLoading ? undefined : { data: [DUNGEON] }, isLoading: stub.instancesLoading }
         : { data: undefined, isLoading: false }),
+    // The plan's DUNGEON row carries a minimum level, so no detail fetch is made.
+    useWowInstanceDetail: () => ({ data: undefined, isLoading: false }),
 }));
 vi.mock('../plugins/wow/hub-widgets/use-roster-insights', () => ({
     useRosterInsights: (guildId: number) => ({
