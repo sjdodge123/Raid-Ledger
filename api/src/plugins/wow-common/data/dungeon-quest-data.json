@@ -145,7 +145,12 @@
     "rewardsJson": null,
     "objectives": "Kill Bazzalan and Jergosh the Invoker before returning to Thrall in Orgrimmar.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -166,7 +171,12 @@
     "rewardsJson": null,
     "objectives": "Enter Ragefire Chasm and slay Taragaman the Hungerer, then bring his heart back to Neeru Fireblade in Orgrimmar.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -955,7 +965,12 @@
     ],
     "objectives": "Motley Garmason wants Kam Deepfury's head brought to him at Dun Modr.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -1135,7 +1150,12 @@
     "rewardsJson": null,
     "objectives": "Speak with Master Mechanic Castpipe in Ironforge.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -1185,8 +1205,13 @@
     ],
     "objectives": "Find and return Treshala's Pendant to Treshala Fallowbrook in Darnassus.",
     "classRestriction": null,
-    "raceRestriction": null,
-    "startsInsideDungeon": false,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
+    "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "choice",
     "rewardXp": null,
@@ -1255,7 +1280,12 @@
     "rewardsJson": null,
     "objectives": "Bring 12 Essential Artificials to Klockmort Spannerspan in Ironforge.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -1276,7 +1306,12 @@
     "rewardsJson": null,
     "objectives": "Speak with Klockmort Spannerspan in Ironforge.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -1619,6 +1654,32 @@
     "rewardGold": null
   },
   {
+    "questId": 1100,
+    "dungeonInstanceId": null,
+    "name": "Lonebrow's Journal",
+    "questLevel": null,
+    "requiredLevel": null,
+    "expansion": "classic",
+    "questGiverNpc": null,
+    "questGiverZone": "Thousand Needles",
+    "prevQuestId": null,
+    "nextQuestId": "1101",
+    "rewardsJson": null,
+    "objectives": "Bring Lonebrow's Journal to Falfindel Waywarder in Thalanaar.",
+    "classRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
+    "startsInsideDungeon": false,
+    "sharable": true,
+    "rewardType": "none",
+    "rewardXp": null,
+    "rewardGold": null
+  },
+  {
     "questId": 1101,
     "dungeonInstanceId": 234,
     "name": "The Crone of the Kraul",
@@ -1666,7 +1727,12 @@
     ],
     "objectives": "Bring Razorflank's Heart to Auld Stonespire in Thunder Bluff.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "choice",
@@ -4056,7 +4122,12 @@
     "rewardsJson": null,
     "objectives": "Speak with Talo Thornhoof at Camp Mojache in Feralas.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -4663,7 +4734,12 @@
     "rewardsJson": null,
     "objectives": "Travel to Blackrock Spire and find out what happened to Bijou.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Troll",
+      "Tauren",
+      "Undead",
+      "Orc"
+    ],
     "startsInsideDungeon": false,
     "sharable": true,
     "rewardType": "none",
@@ -4760,7 +4836,12 @@
     "rewardsJson": null,
     "objectives": "Travel to the Burning Steppes and give Bijou's Information to Marshal Maxwell.",
     "classRestriction": null,
-    "raceRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
     "startsInsideDungeon": true,
     "sharable": true,
     "rewardType": "none",

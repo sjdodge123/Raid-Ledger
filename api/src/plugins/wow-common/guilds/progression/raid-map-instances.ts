@@ -8,7 +8,17 @@
  * `journalId` null = no boss rows for the raid (Zul'Gurub) → total "?".
  * Forever raid map ids (Barrow Deeps, Hyjal Summit) are not known yet, so
  * their pulls show as "Instance <mapId>" until added here (Q-B12 v1).
+ *
+ * ROK-2218: Classic 5-man dungeons resolve through the instance catalogue
+ * (`instance-map-ids.data.ts`); `instanceForMap` / `instanceNameForJournal`
+ * are the raid-or-dungeon lookups the Progression grouping uses.
  */
+import {
+  dungeonByInstanceMapId,
+  instanceName,
+  isMappedDungeonId,
+  parentIdOf,
+} from '../../instance-catalogue/instance-catalogue';
 
 /** One raid instance a pull map id resolves to. */
 export interface RaidMapInstance {
@@ -38,4 +48,30 @@ export function raidNameForJournal(journalId: number): string | null {
     if (raid.journalId === journalId) return raid.name;
   }
   return null;
+}
+
+/** ROK-2218: the raid, else the Classic dungeon, for a pull's map id. */
+export function instanceForMap(mapId: number): RaidMapInstance | null {
+  const raid = raidForMap(mapId);
+  if (raid) return raid;
+  const dungeon = dungeonByInstanceMapId(mapId);
+  return dungeon
+    ? { name: instanceName(dungeon.id), journalId: dungeon.id }
+    : null;
+}
+
+/** ROK-2218: the section name of a raid or mapped-dungeon Journal id, or null. */
+export function instanceNameForJournal(journalId: number): string | null {
+  const raid = raidNameForJournal(journalId);
+  if (raid !== null) return raid;
+  return isMappedDungeonId(journalId) ? instanceName(journalId) : null;
+}
+
+/**
+ * ROK-2218: the section a boss row counts toward — a dungeon wing's rows
+ * count toward its mapped parent (Dire Maul 1276/1277 → 230), else itself.
+ */
+export function sectionJournalId(journalId: number): number {
+  const parent = parentIdOf(journalId);
+  return parent !== null && isMappedDungeonId(parent) ? parent : journalId;
 }
