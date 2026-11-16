@@ -7,7 +7,7 @@
  * unsent row carries a placeholder id `rl:<t|r>:<rl id>` (no schema change),
  * replaced by the real snowflake on success. `isUnsent` tells them apart.
  */
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -43,6 +43,40 @@ export async function claimLink(
     .onConflictDoNothing()
     .returning();
   return link ?? null;
+}
+
+/** Claim an RL thread's post (placeholder ids until it is sent). */
+export function claimThreadLink(
+  db: ForumDiscordDb,
+  guildId: number,
+  threadId: number,
+): Promise<ForumLink | null> {
+  const placeholder = unsentId('thread', threadId);
+  return claimLink(db, {
+    guildId,
+    kind: 'thread',
+    threadId,
+    replyId: null,
+    discordThreadId: placeholder,
+    discordMessageId: placeholder,
+  });
+}
+
+/** Claim an RL reply's message inside its (maybe still unsent) post. */
+export function claimReplyLink(
+  db: ForumDiscordDb,
+  row: {
+    guildId: number;
+    threadId: number;
+    replyId: number;
+    discordThreadId: string;
+  },
+): Promise<ForumLink | null> {
+  return claimLink(db, {
+    ...row,
+    kind: 'reply',
+    discordMessageId: unsentId('reply', row.replyId),
+  });
 }
 
 /** The link of an RL thread (its forum post), if any. */
@@ -84,6 +118,7 @@ export async function markSent(
       discordThreadId: ids.threadId,
       discordMessageId: ids.messageId,
       syncState: 'synced',
+      attempts: 0,
       lastError: null,
       syncedAt: now,
     })
@@ -98,7 +133,7 @@ export async function markSynced(
 ): Promise<void> {
   await db
     .update(links)
-    .set({ syncState: 'synced', lastError: null, syncedAt: now })
+    .set({ syncState: 'synced', attempts: 0, lastError: null, syncedAt: now })
     .where(eq(links.id, linkId));
 }
 
@@ -110,7 +145,12 @@ export async function markDeleted(
 ): Promise<void> {
   await db
     .update(links)
-    .set({ syncState: 'synced', lastError: null, discordDeletedAt: now })
+    .set({
+      syncState: 'synced',
+      attempts: 0,
+      lastError: null,
+      discordDeletedAt: now,
+    })
     .where(eq(links.id, linkId));
 }
 
@@ -128,4 +168,77 @@ export async function markFailed(
       lastError: error.slice(0, 500),
     })
     .where(eq(links.id, linkId));
+}
+
+/**
+ * §5.6 sweep queue: RL-origin rows still pending/failed under the attempts
+ * cap, posts before replies (a reply needs its post's real id).
+ */
+export async function retryableLinks(
+  db: ForumDiscordDb,
+  maxAttempts: number,
+  limit = 100,
+): Promise<ForumLink[]> {
+  return db
+    .select()
+    .from(links)
+    .where(
+      and(
+        eq(links.origin, 'raidledger'),
+        inArray(links.syncState, ['pending', 'failed']),
+        lt(links.attempts, maxAttempts),
+      ),
+    )
+    .orderBy(desc(links.kind), asc(links.id))
+    .limit(limit);
+}
+
+/** The RL thread/reply behind a link was deleted on RL (or is gone). */
+export async function rlRowDeleted(
+  db: ForumDiscordDb,
+  link: Pick<ForumLink, 'threadId' | 'replyId'>,
+): Promise<boolean> {
+  const t = schema.hubForumThreads;
+  const r = schema.hubForumReplies;
+  const [row] =
+    link.replyId === null
+      ? await db
+          .select({ deletedAt: t.deletedAt })
+          .from(t)
+          .where(eq(t.id, link.threadId))
+      : await db
+          .select({ deletedAt: r.deletedAt })
+          .from(r)
+          .where(eq(r.id, link.replyId));
+  return !row || row.deletedAt !== null;
+}
+
+/** Every message id linked inside one Discord post (placeholders included). */
+export async function linkedMessageIds(
+  db: ForumDiscordDb,
+  discordThreadId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: links.discordMessageId })
+    .from(links)
+    .where(eq(links.discordThreadId, discordThreadId));
+  return rows.map((r) => r.id);
+}
+
+/** A post was finally sent: its waiting replies move to the real post id. */
+export async function rehomeReplies(
+  db: ForumDiscordDb,
+  threadId: number,
+  discordThreadId: string,
+): Promise<void> {
+  await db
+    .update(links)
+    .set({ discordThreadId })
+    .where(
+      and(
+        eq(links.threadId, threadId),
+        eq(links.kind, 'reply'),
+        eq(links.discordThreadId, unsentId('thread', threadId)),
+      ),
+    );
 }

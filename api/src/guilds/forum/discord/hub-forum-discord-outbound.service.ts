@@ -4,7 +4,7 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
 import { toPerson, type HubPostPersonRow } from '../../posts/hub-posts.helpers';
-import type { HubForumChange } from '../hub-forum.emit';
+import type { ForumOp, HubForumChange } from '../hub-forum.emit';
 import { findReply, findThread } from '../hub-forum.queries';
 import {
   absoluteAvatarUrl,
@@ -31,6 +31,8 @@ interface Job {
   change: HubForumChange;
   bound: BindingWithForum;
   target: OutboundTarget;
+  /** S6 retry: the already-claimed link to re-drive (no new claim). */
+  link?: links.ForumLink;
 }
 
 /** Rows the inbound lane wrote carry a Discord author: never echo them out. */
@@ -60,20 +62,42 @@ export class HubForumDiscordOutboundService {
 
   /** Route one change; pins are the S5 lane's (§5.5). */
   async apply(change: HubForumChange): Promise<void> {
+    const job = await this.jobFor(change);
+    if (job) await this.dispatch(job);
+  }
+
+  /**
+   * §5.6 retry: re-drive one pending/failed RL-origin link with the op the
+   * sweep chose (`retryOp`). A placeholder link is re-sent, never edited.
+   */
+  async retry(link: links.ForumLink, op: ForumOp): Promise<void> {
+    const { guildId, threadId, replyId } = link;
+    const change: HubForumChange = { guildId, op, threadId, actorId: 0 };
+    if (replyId !== null) change.replyId = replyId;
+    const job = await this.jobFor(change);
+    if (job) await this.dispatch({ ...job, link });
+  }
+
+  /** No binding (or no webhook yet) ⇒ null: nothing to send. */
+  private async jobFor(change: HubForumChange): Promise<Job | null> {
     const bound = await findBinding(this.db, change.guildId);
     const webhookId = bound?.forum.webhookId;
-    if (!bound || !webhookId) return;
-    const job = {
+    if (!bound || !webhookId) return null;
+    return {
       change,
       bound,
       target: { channelId: bound.forum.channelId, webhookId },
     };
-    if (change.op === 'thread.created') return this.createThread(job);
-    if (change.op === 'reply.created') return this.createReply(job);
-    if (change.op === 'thread.updated') return this.editThread(job);
-    if (change.op === 'reply.updated') return this.editReply(job);
-    if (change.op === 'thread.deleted') return this.deleteThread(job);
-    if (change.op === 'reply.deleted') return this.deleteReply(job);
+  }
+
+  private async dispatch(job: Job): Promise<void> {
+    const { op } = job.change;
+    if (op === 'thread.created') return this.createThread(job);
+    if (op === 'reply.created') return this.createReply(job);
+    if (op === 'thread.updated') return this.editThread(job);
+    if (op === 'reply.updated') return this.editReply(job);
+    if (op === 'thread.deleted') return this.deleteThread(job);
+    if (op === 'reply.deleted') return this.deleteReply(job);
   }
 
   private async createThread(job: Job): Promise<void> {
@@ -81,14 +105,8 @@ export class HubForumDiscordOutboundService {
     const record = await findThread(this.db, guildId, threadId);
     if (!record || fromDiscord(record.thread)) return;
     if (record.thread.createdAt < job.bound.binding.boundAt) return; // R8
-    const link = await links.claimLink(this.db, {
-      guildId,
-      kind: 'thread',
-      threadId,
-      replyId: null,
-      discordThreadId: links.unsentId('thread', threadId),
-      discordMessageId: links.unsentId('thread', threadId),
-    });
+    const link =
+      job.link ?? (await links.claimThreadLink(this.db, guildId, threadId));
     if (!link) return;
     const { title, body } = record.thread;
     const [author, url] = await this.voice(record.author, {
@@ -104,6 +122,7 @@ export class HubForumDiscordOutboundService {
       };
       const sent = await this.gateway.createPost(job.target, post, author);
       await links.markSent(this.db, link.id, sent, this.now());
+      await links.rehomeReplies(this.db, threadId, sent.threadId);
     });
   }
 
@@ -114,14 +133,14 @@ export class HubForumDiscordOutboundService {
     if (!parent || parent.discordDeletedAt) return; // OQ-5: unlinked thread
     const record = await findReply(this.db, { guildId, threadId, replyId });
     if (!record || fromDiscord(record.reply)) return;
-    const link = await links.claimLink(this.db, {
-      guildId,
-      kind: 'reply',
-      threadId,
-      replyId,
-      discordThreadId: parent.discordThreadId,
-      discordMessageId: links.unsentId('reply', replyId),
-    });
+    const link =
+      job.link ??
+      (await links.claimReplyLink(this.db, {
+        guildId,
+        threadId,
+        replyId,
+        discordThreadId: parent.discordThreadId,
+      }));
     if (!link || links.isUnsent(parent)) return; // S6 sends it after the post
     const ref = { guildId, threadId, replyId };
     const [author, url] = await this.voice(record.author, ref);

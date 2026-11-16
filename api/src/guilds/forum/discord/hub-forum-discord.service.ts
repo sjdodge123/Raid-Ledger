@@ -28,6 +28,7 @@ import {
   upsertForum,
   type ForumDiscordDb,
 } from './hub-forum-discord.queries';
+import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { shareForumTags } from './hub-forum-discord.share';
 
 const alreadyBound = () =>
@@ -55,6 +56,7 @@ export class HubForumDiscordService {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
+    private readonly routes: HubForumDiscordRouteResolver,
   ) {}
 
   /** `GET` — the hub's binding (null while unlinked) and its health. */
@@ -131,6 +133,7 @@ export class HubForumDiscordService {
     });
     await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
+    this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
     return this.status(guildId);
   }
 
@@ -139,6 +142,7 @@ export class HubForumDiscordService {
     const row = await findBinding(this.db, guildId);
     if (!row) return;
     await deleteBinding(this.db, guildId);
+    this.routes.invalidate(); // D9: an unbound hub stops syncing now
     if (!deleteForum || !row.forum.managed) return;
     if ((await listForumBindings(this.db, row.forum.id)).length > 0) return;
     if (this.gateway.guildId() === null) return;
