@@ -1624,6 +1624,32 @@
     "rewardGold": null
   },
   {
+    "questId": 1100,
+    "dungeonInstanceId": null,
+    "name": "Lonebrow's Journal",
+    "questLevel": null,
+    "requiredLevel": null,
+    "expansion": "classic",
+    "questGiverNpc": null,
+    "questGiverZone": "Thousand Needles",
+    "prevQuestId": null,
+    "nextQuestId": "1101",
+    "rewardsJson": null,
+    "objectives": "Bring Lonebrow's Journal to Falfindel Waywarder in Thalanaar.",
+    "classRestriction": null,
+    "raceRestriction": [
+      "Gnome",
+      "Night Elf",
+      "Dwarf",
+      "Human"
+    ],
+    "startsInsideDungeon": false,
+    "sharable": true,
+    "rewardType": "none",
+    "rewardXp": null,
+    "rewardGold": null
+  },
+  {
     "questId": 1101,
     "dungeonInstanceId": 234,
     "name": "The Crone of the Kraul",
