@@ -68,34 +68,24 @@ describe('Discord forum section — who sees what (§6)', () => {
     it('gives a non-community Leader (not staff) no form', async () => {
         serve({ binding: null }, [forumDiscordChannel()]);
         renderSheet(page('game_server', LEADER));
-        expect(await screen.findByTestId('hub-forum-discord-off')).toBeInTheDocument();
+        expect(await screen.findByTestId('hub-forum-discord-off')).toHaveTextContent('Ask server staff to turn it on.');
         expect(screen.queryByTestId('hub-forum-discord-form')).not.toBeInTheDocument();
     });
 });
 
 describe('Discord forum section — turning it on', () => {
-    it('preselects the shared #hub-forums and sends the ack only once ticked', async () => {
+    it('joins the shared #hub-forums once the box is ticked (Q10 c)', async () => {
         const calls = serve({ binding: null }, [forumDiscordChannel()]);
         renderSheet(page('game_community', LEADER));
         const turnOn = await screen.findByTestId('hub-forum-discord-turn-on');
-        expect(screen.getByTestId<HTMLSelectElement>('hub-forum-discord-channel').value).toBe('223456789012345678');
+        expect(screen.getByRole('radio', { name: /Shared server forum/ })).toBeChecked();
         expect(turnOn).toBeDisabled();
         await userEvent.click(screen.getByTestId('hub-forum-discord-ack'));
         await userEvent.click(turnOn);
-        await waitFor(() => expect(calls.puts).toEqual([{ mode: 'existing', channelId: '223456789012345678', ack: true }]));
-    });
-    it('preselects Create when #hub-forums is full, and disables the full option', async () => {
-        const calls = serve({ binding: null }, [forumDiscordChannel({ tagsFree: 0, sharedWith: 20 })]);
-        renderSheet(page('game_server', { ...LEADER, isStaff: true }));
-        await userEvent.click(await screen.findByTestId('hub-forum-discord-ack'));
-        expect(screen.getByRole('radio', { name: 'Create a new forum' })).toBeChecked();
-        await userEvent.click(screen.getByTestId('hub-forum-discord-turn-on'));
-        await waitFor(() => expect(calls.puts).toEqual([{ mode: 'create', ack: true }]));
-        await userEvent.click(screen.getByRole('radio', { name: 'Use an existing forum' }));
-        expect(screen.getByRole('option', { name: /full \(20 of 20 tags\)/ })).toBeDisabled();
+        await waitFor(() => expect(calls.puts).toEqual([{ mode: 'create', target: 'shared', ack: true }]));
     });
     it('shows the server’s refusal inline', async () => {
-        serve({ binding: null }, [forumDiscordChannel()], () => HttpResponse.json({ message: 'The Discord bot is offline.' }, { status: 503 }));
+        serve({ binding: null }, [forumDiscordChannel()], () => HttpResponse.json({ message: 'The Discord bot is offline.' }, { status: 500 }));
         renderSheet(page('game_community', LEADER));
         await userEvent.click(await screen.findByTestId('hub-forum-discord-ack'));
         await userEvent.click(screen.getByTestId('hub-forum-discord-turn-on'));
@@ -123,6 +113,6 @@ describe('Discord forum section — bound', () => {
     it('lists missing bot permissions in a banner', async () => {
         serve({ binding: forumDiscordBinding({ health: 'missing-perms', missingPermissions: ['ManageWebhooks', 'ManageThreads'] }) });
         renderSheet(page('game_community', LEADER));
-        expect(await screen.findByTestId('hub-forum-discord-health')).toHaveTextContent('ManageWebhooks, ManageThreads');
+        expect(await screen.findByTestId('hub-forum-discord-health')).toHaveTextContent('Manage Webhooks, Manage Threads');
     });
 });

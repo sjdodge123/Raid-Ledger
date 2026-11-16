@@ -95,7 +95,7 @@ function LeaderSections({ ctx, module: mod, onChangeChannel }: BodyProps): JSX.E
             <HubNameSection ctx={ctx} />
             <DiscordSection guildId={ctx.page.guild.id} welcomeHub={isWelcomeHub(ctx.page.guild)} onChangeChannel={onChangeChannel} />
             {ctx.page.guild.kind === 'game_server' && <HubMediaChannelSection guildId={ctx.page.guild.id} />}
-            <HubForumDiscordSection guildId={ctx.page.guild.id} canManage={canBindForumDiscord(ctx.page)} />
+            <HubForumDiscordSection guildId={ctx.page.guild.id} canManage={canBindForumDiscord(ctx.page)} viewerIsLeader />
             {!isCommunity && <>
             <SettingsSection title="Page editors" blurb={`Who can edit this ${hubCopy(ctx.page.guild.kind).noun}’s page.`} testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
