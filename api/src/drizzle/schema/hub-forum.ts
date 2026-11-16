@@ -13,6 +13,20 @@ import { guilds } from './guilds';
 import { users } from './users';
 
 /**
+ * ROK-2208: the Discord author of a row synced in from a Discord forum. Set on
+ * every Discord-origin row; while `author_id` is null the row is a guest post
+ * ("via Discord"). Linking that Discord account later claims the row
+ * (`author_id` filled, these kept). `author_discord_avatar` is the avatar hash.
+ */
+function discordGuestColumns() {
+  return {
+    authorDiscordId: varchar('author_discord_id', { length: 32 }),
+    authorDiscordName: varchar('author_discord_name', { length: 100 }),
+    authorDiscordAvatar: varchar('author_discord_avatar', { length: 64 }),
+  };
+}
+
+/**
  * ROK-1175: a hub's forum threads (Core plugin, every hub kind). Bodies are
  * markdown source in the hub-post subset. Soft delete keeps the row: the API
  * blanks title/body in responses, never in the DB. `reply_count` and
@@ -44,6 +58,7 @@ export const hubForumThreads = pgTable(
       onDelete: 'set null',
     }),
     deletedAs: varchar('deleted_as', { length: 16 }),
+    ...discordGuestColumns(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -82,6 +97,10 @@ export const hubForumThreads = pgTable(
     index('idx_hub_forum_threads_author_id').on(table.authorId),
     index('idx_hub_forum_threads_pinned_by').on(table.pinnedBy),
     index('idx_hub_forum_threads_deleted_by').on(table.deletedBy),
+    // ROK-2208: claim-on-link looks guest rows up by Discord id.
+    index('idx_hub_forum_threads_author_discord_id')
+      .on(table.authorDiscordId)
+      .where(sql`${table.authorDiscordId} IS NOT NULL`),
   ],
 );
 
@@ -109,6 +128,7 @@ export const hubForumReplies = pgTable(
       onDelete: 'set null',
     }),
     deletedAs: varchar('deleted_as', { length: 16 }),
+    ...discordGuestColumns(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -139,6 +159,10 @@ export const hubForumReplies = pgTable(
     index('idx_hub_forum_replies_guild_id').on(table.guildId),
     index('idx_hub_forum_replies_author_id').on(table.authorId),
     index('idx_hub_forum_replies_deleted_by').on(table.deletedBy),
+    // ROK-2208: claim-on-link looks guest rows up by Discord id.
+    index('idx_hub_forum_replies_author_discord_id')
+      .on(table.authorDiscordId)
+      .where(sql`${table.authorDiscordId} IS NOT NULL`),
   ],
 );
 

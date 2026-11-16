@@ -35,6 +35,23 @@ export const HubForumCanSchema = z
   .strict();
 export type HubForumCan = z.infer<typeof HubForumCanSchema>;
 
+/** ROK-2208: where a row was written; absent on rows that never synced. */
+export const HubForumSourceSchema = z.enum(['raidledger', 'discord']);
+export type HubForumSource = z.infer<typeof HubForumSourceSchema>;
+
+/** ROK-2208: a Discord author with no linked RL account ("via Discord"). */
+export const HubForumDiscordAuthorSchema = z
+  .object({ name: z.string().max(100), avatarUrl: z.string().url().nullable() })
+  .strict();
+export type HubForumDiscordAuthor = z.infer<typeof HubForumDiscordAuthorSchema>;
+
+/** ROK-2208: optional sync fields shared by threads and replies. */
+const discordSyncFields = {
+  source: HubForumSourceSchema.optional(),
+  /** Set while `author` is null and the row came from Discord. */
+  discordAuthor: HubForumDiscordAuthorSchema.nullable().optional(),
+};
+
 /** A thread row in the list and the widget. */
 export const HubForumThreadSummarySchema = z
   .object({
@@ -51,6 +68,7 @@ export const HubForumThreadSummarySchema = z
     replyCount: z.number().int().nonnegative(),
     pinnedAt: isoDate.nullable(),
     deleted: HubForumDeletedSchema,
+    ...discordSyncFields,
   })
   .strict();
 export type HubForumThreadSummary = z.infer<typeof HubForumThreadSummarySchema>;
@@ -97,6 +115,7 @@ export const HubForumReplySchema = z
     editedAt: isoDate.nullable(),
     deleted: HubForumDeletedSchema,
     can: HubForumCanSchema,
+    ...discordSyncFields,
   })
   .strict();
 export type HubForumReply = z.infer<typeof HubForumReplySchema>;

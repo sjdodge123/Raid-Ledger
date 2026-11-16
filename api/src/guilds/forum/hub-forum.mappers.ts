@@ -4,7 +4,9 @@
  */
 import type {
   HubForumCan,
+  HubForumDiscordAuthor,
   HubForumReply,
+  HubForumSource,
   HubForumThread,
   HubForumThreadSummary,
   HubPostPerson,
@@ -38,6 +40,33 @@ function forumPerson(row: HubPostPersonRow | null): HubPostPerson | null {
   return row ? toPerson(row) : null;
 }
 
+/** ROK-2208: the optional sync fields; absent on rows that never synced. */
+interface ForumSyncFields {
+  source?: HubForumSource;
+  discordAuthor?: HubForumDiscordAuthor | null;
+}
+
+type DiscordGuestColumns = Pick<
+  HubForumThreadSelect,
+  'authorDiscordId' | 'authorDiscordName' | 'authorDiscordAvatar'
+>;
+
+/** Discord-origin rows say so; an unclaimed one carries its Discord author. */
+function forumSync(
+  row: DiscordGuestColumns,
+  author: HubPostPersonRow | null,
+): ForumSyncFields {
+  const { authorDiscordId: id, authorDiscordName: name } = row;
+  if (id === null) return {};
+  if (author !== null || name === null)
+    return { source: 'discord', discordAuthor: null };
+  const hash = row.authorDiscordAvatar;
+  const avatarUrl = hash
+    ? `https://cdn.discordapp.com/avatars/${id}/${hash}.png?size=64`
+    : null;
+  return { source: 'discord', discordAuthor: { name, avatarUrl } };
+}
+
 function iso(at: Date | null): string | null {
   return at ? at.toISOString() : null;
 }
@@ -59,6 +88,7 @@ export function toThreadSummary(
     replyCount: thread.replyCount,
     pinnedAt: iso(thread.pinnedAt),
     deleted,
+    ...forumSync(thread, record.author),
   };
 }
 
@@ -77,6 +107,7 @@ export function toForumReply(
     editedAt: iso(reply.editedAt),
     deleted: live ? null : forumDeleted(reply.deletedAs),
     can,
+    ...forumSync(reply, record.author),
   };
 }
 
