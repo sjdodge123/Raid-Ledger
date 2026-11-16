@@ -171,17 +171,20 @@ export async function markFailed(
 }
 
 /**
- * §5.6 sweep queue: RL-origin rows still pending/failed under the attempts
- * cap, posts before replies (a reply needs its post's real id).
+ * §5.6 sweep queue: RL-origin rows of still-BOUND hubs, pending/failed under
+ * the attempts cap, posts before replies (a reply needs its post's real id).
+ * Unbound hubs drop out so their rows never crowd the queue (D9).
  */
 export async function retryableLinks(
   db: ForumDiscordDb,
   maxAttempts: number,
   limit = 100,
 ): Promise<ForumLink[]> {
-  return db
-    .select()
+  const bound = schema.hubForumDiscordBindings;
+  const rows = await db
+    .select({ link: links })
     .from(links)
+    .innerJoin(bound, eq(bound.guildId, links.guildId))
     .where(
       and(
         eq(links.origin, 'raidledger'),
@@ -191,6 +194,7 @@ export async function retryableLinks(
     )
     .orderBy(desc(links.kind), asc(links.id))
     .limit(limit);
+  return rows.map((r) => r.link);
 }
 
 /** The RL thread/reply behind a link was deleted on RL (or is gone). */
