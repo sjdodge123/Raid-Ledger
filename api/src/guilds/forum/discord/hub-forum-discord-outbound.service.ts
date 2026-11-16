@@ -35,6 +35,9 @@ interface Job {
   link?: links.ForumLink;
 }
 
+/** What one `retry` did: sent something, or why it could not. */
+export type RetryOutcome = 'dispatched' | 'unbound' | 'stale';
+
 /** Rows the inbound lane wrote carry a Discord author: never echo them out. */
 const fromDiscord = (row: { authorDiscordId: string | null }): boolean =>
   row.authorDiscordId !== null;
@@ -63,26 +66,37 @@ export class HubForumDiscordOutboundService {
   /** Route one change; pins are the S5 lane's (§5.5). */
   async apply(change: HubForumChange): Promise<void> {
     const job = await this.jobFor(change);
-    if (job) await this.dispatch(job);
+    if (typeof job === 'object') await this.dispatch(job);
   }
 
   /**
    * §5.6 retry: re-drive one pending/failed RL-origin link with the op the
    * sweep chose (`retryOp`). A placeholder link is re-sent, never edited.
+   * `stale`/`unbound` = nothing was attempted (the sweep decides, MAJOR-3).
    */
-  async retry(link: links.ForumLink, op: ForumOp): Promise<void> {
+  async retry(link: links.ForumLink, op: ForumOp): Promise<RetryOutcome> {
     const { guildId, threadId, replyId } = link;
     const change: HubForumChange = { guildId, op, threadId, actorId: 0 };
     if (replyId !== null) change.replyId = replyId;
     const job = await this.jobFor(change);
-    if (job) await this.dispatch({ ...job, link });
+    if (typeof job !== 'object') return job;
+    await this.dispatch({ ...job, link });
+    return 'dispatched';
   }
 
-  /** No binding (or no webhook yet) ⇒ null: nothing to send. */
-  private async jobFor(change: HubForumChange): Promise<Job | null> {
+  /**
+   * `unbound`: no binding (or no webhook yet). `stale` (review MAJOR-2): the
+   * RL thread predates the CURRENT binding, so its post (if any) lives in a
+   * forum the hub no longer binds — never drive it.
+   */
+  private async jobFor(
+    change: HubForumChange,
+  ): Promise<Job | 'unbound' | 'stale'> {
     const bound = await findBinding(this.db, change.guildId);
     const webhookId = bound?.forum.webhookId;
-    if (!bound || !webhookId) return null;
+    if (!bound || !webhookId) return 'unbound';
+    const born = await links.threadCreatedAt(this.db, change.threadId);
+    if (!born || born < bound.binding.boundAt) return 'stale';
     return {
       change,
       bound,

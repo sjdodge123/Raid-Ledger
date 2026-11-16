@@ -78,7 +78,11 @@ export class HubForumDiscordInboundIngest {
     const route = await this.routeOf(thread.parentId);
     if (!route || (await this.isEcho(m, route, ctx))) return 'skipped';
     const post = await inbound.findPostLink(this.db, thread.id);
-    if (post) return this.importReply(post, m, now);
+    if (post) {
+      // Review MAJOR-2: only while the post's hub still binds this forum.
+      const bound = route.bindings.some((b) => b.guildId === post.guildId);
+      return bound ? this.importReply(post, m, now) : 'skipped';
+    }
     const hub = pickHub(route.bindings, thread.appliedTags);
     if (!hub || predatesBinding(thread.id, hub.boundAt)) return 'skipped';
     if (m.id === thread.id)

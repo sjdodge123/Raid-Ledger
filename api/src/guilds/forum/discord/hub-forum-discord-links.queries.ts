@@ -197,6 +197,19 @@ export async function retryableLinks(
   return rows.map((r) => r.link);
 }
 
+/** When the RL thread was created; null once it is gone (review MAJOR-2). */
+export async function threadCreatedAt(
+  db: ForumDiscordDb,
+  threadId: number,
+): Promise<Date | null> {
+  const t = schema.hubForumThreads;
+  const [row] = await db
+    .select({ createdAt: t.createdAt })
+    .from(t)
+    .where(eq(t.id, threadId));
+  return row?.createdAt ?? null;
+}
+
 /** The RL thread/reply behind a link was deleted on RL (or is gone). */
 export async function rlRowDeleted(
   db: ForumDiscordDb,
