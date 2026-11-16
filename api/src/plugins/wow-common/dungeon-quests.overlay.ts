@@ -25,6 +25,7 @@ import {
 import { requirementFields } from './forever-quest-import/blizzard-quest.requirements';
 import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import type { DungeonQuestDto } from './dungeon-quests.types';
+import { instanceLevelBand } from './dungeon-quests.level-band';
 
 /** What the overlay reads: the DB and the kill-switch setting. */
 export interface QuestOverlayDeps {
@@ -92,8 +93,13 @@ export function isOverlayOnlyType(typeId: number | null): boolean {
  * `rewardType` follows the curated rows: any reward item → `'choice'`
  * (the bundled JSON uses `'choice'` for single-item quests too; the card only
  * says "Choose one reward" when there is more than one), none → `'none'`.
+ * It has no level, so it carries its dungeon's catalogue band for `variant`
+ * (ROK-1908).
  */
-export function overlayOnlyDto(row: OverlayQuestRow): DungeonQuestDto {
+export function overlayOnlyDto(
+  row: OverlayQuestRow,
+  variant?: string,
+): DungeonQuestDto {
   const itemIds = row.rewardItems.map((item) => item.id);
   const req = requirementFields(row.requirementsRaw, row.questId);
   return {
@@ -117,6 +123,7 @@ export function overlayOnlyDto(row: OverlayQuestRow): DungeonQuestDto {
     rewardGold: row.rewardMoneyCopper,
     rewardType: itemIds.length > 0 ? 'choice' : 'none',
     ...reputationRewardFields(row.reputations),
+    levelBand: instanceLevelBand(row.dungeonInstanceId, variant),
   };
 }
 
@@ -140,21 +147,24 @@ async function listOverlayOnly(
   db: QuestOverlayDeps['db'],
   instanceIds: readonly number[],
   known: ReadonlySet<number>,
+  variant?: string,
 ): Promise<DungeonQuestDto[]> {
   if (instanceIds.length === 0) return [];
   const where = inArray(t.dungeonInstanceId, [...instanceIds]);
-  return toOverlayOnlyDtos(await selectOverlayRows(db, where), known);
+  const rows = await selectOverlayRows(db, where);
+  return toOverlayOnlyDtos(rows, known, variant);
 }
 
 /** Rows not in `known` whose type is a dungeon type (m5), as quest DTOs. */
 function toOverlayOnlyDtos(
   rows: readonly OverlayQuestRow[],
   known: ReadonlySet<number>,
+  variant?: string,
 ): DungeonQuestDto[] {
   return rows
     .filter((row) => !known.has(row.questId) && isOverlayOnlyType(row.typeId))
     .sort((a, b) => a.questId - b.questId)
-    .map(overlayOnlyDto);
+    .map((row) => overlayOnlyDto(row, variant));
 }
 
 /**
@@ -224,6 +234,7 @@ async function resolveOverlayPrereqs(
     const dtos = rows.map((row) => ({
       ...overlayOnlyDto(row),
       dungeonInstanceId: null,
+      levelBand: null,
     }));
     found.push(...dtos);
     frontier = unseenPrereqs(dtos, seen);
@@ -241,6 +252,14 @@ export async function applyQuestOverlay(
   return mergeQuests(deps.db, quests);
 }
 
+/** Which dungeons a quest list covers, and for which game variant. */
+export interface InstanceOverlayScope {
+  instanceIds: readonly number[];
+  expansions: readonly string[];
+  /** The guild's game variant — picks the catalogue level band (ROK-1908). */
+  variant?: string;
+}
+
 /**
  * A dungeon's quest list: merged curated rows, then overlay-only quests
  * (R4), which only a variant that includes classic content shows.
@@ -248,13 +267,14 @@ export async function applyQuestOverlay(
 export async function applyInstanceOverlay(
   deps: QuestOverlayDeps,
   quests: DungeonQuestDto[],
-  scope: { instanceIds: readonly number[]; expansions: readonly string[] },
+  scope: InstanceOverlayScope,
 ): Promise<DungeonQuestDto[]> {
   if (!(await isForeverQuestImportEnabled(deps.settings))) return quests;
   const merged = await mergeQuests(deps.db, quests);
   if (!scope.expansions.includes(OVERLAY_ONLY_EXPANSION)) return merged;
   const known = new Set(quests.map((q) => q.questId));
-  const extras = await listOverlayOnly(deps.db, scope.instanceIds, known);
+  const { instanceIds, variant } = scope;
+  const extras = await listOverlayOnly(deps.db, instanceIds, known, variant);
   return [...merged, ...extras];
 }
 

@@ -30,6 +30,15 @@ export const DungeonQuestDtoSchema = z.object({
     reputationRewards: z
         .array(z.object({ factionName: z.string(), amount: z.number().int() }))
         .optional(),
+    /**
+     * ROK-1908: the dungeon's catalogue level band (min–max, variant-aware).
+     * Set only on an imported quest with no level of its own (questLevel null);
+     * absent on curated quests, which keep their own levels.
+     */
+    levelBand: z
+        .object({ min: z.number().int(), max: z.number().int() })
+        .nullable()
+        .optional(),
 });
 
 export type DungeonQuestDto = z.infer<typeof DungeonQuestDtoSchema>;

@@ -12,6 +12,7 @@ import {
   type QuestOverlayDeps,
 } from './dungeon-quests.overlay';
 import type { DungeonQuestDto } from './dungeon-quests.types';
+import { foreverNewRows } from './instance-catalogue/instance-catalogue';
 
 jest.mock('./forever-quest-import/blizzard-quest.repo', () => ({
   listBlizzardOverlay: jest.fn(),
@@ -263,5 +264,25 @@ describe('overlay-only quests (m5 type gate, m6 reward type, L6 requirements)', 
       { factionName: 'Ironforge', amount: 150 },
     ]);
     expect(withoutRep && 'reputationRewards' in withoutRep).toBe(false);
+  });
+});
+
+describe('overlay-only level band (ROK-1908 ruling: new dungeons show the level band)', () => {
+  it('gives an imported-only quest of a Forever-new dungeon the catalogue band; a curated row gets none', async () => {
+    const [row] = foreverNewRows();
+    if (!row) throw new Error('the catalogue has no Forever-new row');
+    listOverlay.mockResolvedValue(new Map());
+    const d = deps(null, [overlay(90001, row.id)]);
+    const out = await applyInstanceOverlay(d.value, [curated(378)], {
+      instanceIds: [row.id],
+      expansions: ['classic'],
+      variant: 'wow_forever',
+    });
+    expect(out.map((q) => q.questId)).toEqual([378, 90001]);
+    expect(out[1]).toMatchObject({
+      questLevel: null,
+      levelBand: { min: row.minimumLevel, max: row.maximumLevel },
+    });
+    expect(out[0]).not.toHaveProperty('levelBand');
   });
 });
