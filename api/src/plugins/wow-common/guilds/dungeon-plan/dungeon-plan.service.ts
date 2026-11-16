@@ -57,7 +57,7 @@ const EMPTY_CHARACTER_DATA: PlanCharacterData = {
 /**
  * ROK-2214 — `GET plugins/wow/guilds/:id/dungeon-plan`: one Forever dungeon's
  * level range, the requested claimed roster characters' levels, and the event
- * readiness matrix (`buildQuestReadiness`, reused unchanged) on the dungeon's
+ * readiness matrix (`buildQuestReadiness`, with the plan side as its side override) on the dungeon's
  * quests filtered to the guild's side. Stateless; every read is DB-only.
  */
 @Injectable()

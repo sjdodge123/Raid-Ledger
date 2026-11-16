@@ -2,7 +2,7 @@
  * ROK-2214 — pure steps of the dungeon plan read (no DB): the hub check, the
  * level fit, the side the quest list is filtered to, that filter, and which
  * requested characters are kept. The service composes them around the event
- * readiness builder (`buildQuestReadiness`), which it reuses unchanged.
+ * readiness builder (`buildQuestReadiness`), passing the plan side as its override.
  */
 import type { DungeonLevelFit } from '@raid-ledger/contract';
 import type { ForeverEventProgress } from '../../event-forever-progress.helpers';
