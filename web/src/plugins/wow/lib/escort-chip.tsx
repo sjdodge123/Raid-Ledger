@@ -7,7 +7,7 @@
 import type { JSX } from 'react';
 import { StatusChip } from '../../../components/ui/status-chip';
 
-const ESCORT_TITLE = 'Escort quest — the NPC must survive; the group cannot share it once started';
+const ESCORT_TITLE = 'Escort quest — the NPC must survive the escort; it cannot be shared';
 
 /** Renders the chip only when the quest is flagged `isEscort`. */
 export function EscortChip({ isEscort, className }: { isEscort: boolean | undefined; className?: string }): JSX.Element | null {

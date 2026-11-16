@@ -10,6 +10,7 @@ import type {
 import { escortFields } from './data/dungeon-quest-escorts';
 import { toDto } from './dungeon-quests.helpers';
 import { overlayOnlyDto } from './dungeon-quests.overlay';
+import { mergeBlizzardOverlay } from './forever-quest-import/blizzard-quest-overlay.merge';
 
 /** Willix the Importer (Razorfen Kraul) — an escort. */
 const WILLIX = 1144;
@@ -89,5 +90,12 @@ describe('overlayOnlyDto escort flag (ROK-2224)', () => {
 
   it('leaves isEscort off a non-escort overlay quest', () => {
     expect(overlayOnlyDto(overlayRow(PLAIN))).not.toHaveProperty('isEscort');
+  });
+});
+
+describe('mergeBlizzardOverlay escort flag (ROK-2224)', () => {
+  it('keeps isEscort when the Blizzard overlay is merged onto a curated escort', () => {
+    const merged = mergeBlizzardOverlay(toDto(curatedRow(WILLIX)), overlayRow(WILLIX));
+    expect(merged.isEscort).toBe(true);
   });
 });
