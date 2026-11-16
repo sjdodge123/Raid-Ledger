@@ -28,7 +28,7 @@ import { resolveEventThread } from './forum-thread.context';
 
 jest.mock('../hub-forum.queries', () => ({ findThread: jest.fn() }));
 jest.mock('../../guild-core.queries', () => ({
-  findGuildKind: jest.fn(async () => 'valheim'),
+  findGuildKind: jest.fn(() => Promise.resolve('valheim')),
 }));
 jest.mock('./event-discussion.sync', () => ({
   syncEventDiscussion: jest.fn(),
