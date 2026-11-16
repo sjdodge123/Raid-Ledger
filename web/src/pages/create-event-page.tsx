@@ -4,6 +4,10 @@ import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useEvent } from '../hooks/use-events';
 import { CreateEventForm } from '../components/events/create-event-form';
+import { usePluginStore, isSlugActive } from '../stores/plugin-store';
+import { useInstancePrefill } from '../plugins/wow/hooks/use-instance-prefill';
+import { useCharacterNames } from '../plugins/wow/hooks/use-character-names';
+import { parsePositiveIntList, parseUuidList } from './create-event-prefill';
 
 /**
  * Page for creating a new event.
@@ -39,11 +43,13 @@ export function CreateEventPage() {
     const copyFromEventId = searchParams.get('copyFromEventId') ? parseInt(searchParams.get('copyFromEventId')!, 10) : null;
     const { data: copyFromEvent, isLoading: copyLoading, isError: copyFailed } = useEvent(copyFromEventId ?? 0);
 
+    const plan = usePlanPrefill(searchParams, initialGame?.slug ?? null, initialGuildId);
+
     const hasGameParam = !!searchParams.get('gameId');
     // The form seeds its state once, in a useState initializer — render it only
     // after the prefill source resolves, or it opens blank and never refills.
     // A failed fetch falls through to a blank form rather than blocking create.
-    if (isLoading || (hasGameParam && registryLoading) || (copyFromEventId && copyLoading && !copyFailed)) return <PageSpinner />;
+    if (isLoading || (hasGameParam && registryLoading) || (copyFromEventId && copyLoading && !copyFailed) || plan.isLoading) return <PageSpinner />;
     if (!isAuthenticated) return <Navigate to="/events" replace />;
 
     return (
@@ -59,7 +65,8 @@ export function CreateEventPage() {
                     </p>
                 </div>
                 <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} schedulingLineupId={schedulingLineupId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} initialGuildId={initialGuildId} />
+                    <CreateEventForm initialGame={initialGame} initialStartTime={initialStartTime} schedulingMatchId={schedulingMatchId} schedulingLineupId={schedulingLineupId} followupForEventId={followupForEventId} copyFromEvent={copyFromEvent ?? null} initialGuildId={initialGuildId}
+                        initialInstances={plan.initialInstances} inviteCharacterIds={plan.inviteCharacterIds} inviteNames={plan.inviteNames} />
                 </div>
             </div>
         </div>
@@ -76,6 +83,29 @@ function initialGuildFor(params: URLSearchParams, gameResolved: boolean): number
     const guildId = parsePositiveInt(params.get('guildId'));
     if (params.get('gameId') && !gameResolved && !params.get('matchId')) return null;
     return guildId;
+}
+
+interface PlanPrefill {
+    initialInstances: Record<string, unknown>[];
+    inviteCharacterIds: string[];
+    inviteNames: { names: string[]; unresolved: number };
+    isLoading: boolean;
+}
+
+/**
+ * ROK-2215 — a dungeon-plan link (`contentInstanceIds`, `inviteCharacterIds`).
+ * L8: with the Blizzard plugin off both params are ignored. L3: the page waits
+ * for the dungeon list (the form seeds once); a failed list fetch just drops it.
+ */
+function usePlanPrefill(params: URLSearchParams, gameSlug: string | null, guildId: number | null): PlanPrefill {
+    const blizzardActive = usePluginStore((st) => isSlugActive(st.activeSlugs, 'blizzard'));
+    const rawInstances = blizzardActive ? params.get('contentInstanceIds') : null;
+    const rawInvites = blizzardActive ? params.get('inviteCharacterIds') : null;
+    const instanceIds = useMemo(() => parsePositiveIntList(rawInstances), [rawInstances]);
+    const inviteCharacterIds = useMemo(() => parseUuidList(rawInvites), [rawInvites]);
+    const prefill = useInstancePrefill(gameSlug, instanceIds);
+    const inviteNames = useCharacterNames(guildId, inviteCharacterIds);
+    return { initialInstances: prefill.instances, inviteCharacterIds, inviteNames, isLoading: prefill.isLoading };
 }
 
 /** A positive integer query param, else null. */

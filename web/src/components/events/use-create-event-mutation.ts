@@ -6,8 +6,8 @@
  */
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
-import type { CreateEventDto, EventResponseDto, LockInSchedulingPollDto, SeriesScope, UpdateEventDto } from '@raid-ledger/contract';
-import { createEvent, lockInSchedulingPoll, updateEvent, updateSeries } from '../../lib/api-client';
+import type { CreateEventDto, EventResponseDto, InviteCharactersResultDto, LockInSchedulingPollDto, SeriesScope, UpdateEventDto } from '@raid-ledger/contract';
+import { createEvent, inviteCharacters, lockInSchedulingPoll, updateEvent, updateSeries } from '../../lib/api-client';
 import { isConflictError } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
 import { invalidateHubPolls } from '../hub/events/hub-polls-api';
@@ -15,6 +15,9 @@ import { FALLBACK_TOAST, refreshLockedInEvent } from './use-bench-pick';
 
 /** ROK-2032 Q3: shown to the organizer who lost a concurrent lock-in. */
 export const LOCK_IN_LOST_TOAST = 'Someone else locked in this poll first. No event was created.';
+
+/** ROK-2215 (L5): the plan's invites failed after the event itself was created. */
+export const INVITES_FAILED_TOAST = 'Event created, but the invites could not be sent';
 
 export interface CreateEventMutationOptions {
     isEditMode: boolean;
@@ -27,6 +30,8 @@ export interface CreateEventMutationOptions {
     /** The winning slot; without one the poll just closes (no signups, no bench). */
     schedulingStartTime?: string | null | undefined;
     benchUserIds?: number[] | undefined;
+    /** ROK-2215: plan characters whose owners are invited once the event exists (plain create only). */
+    inviteCharacterIds?: string[] | undefined;
 }
 
 interface SubmitResult {
@@ -58,6 +63,31 @@ async function runSubmit(o: CreateEventMutationOptions, dto: FormDto): Promise<S
     return { event: await createEvent(dto as CreateEventDto), benchPickFallback: false };
 }
 
+/** Names (or a count) for one skip reason. */
+function skipNames(result: InviteCharactersResultDto, reason: InviteCharactersResultDto['skipped'][number]['reason']): string {
+    const rows = result.skipped.filter((r) => r.reason === reason);
+    const names = rows.flatMap((r) => (r.characterName ? [r.characterName] : []));
+    const unnamed = rows.length - names.length;
+    return [...names, ...(unnamed > 0 ? [`${unnamed} character${unnamed === 1 ? '' : 's'}`] : [])].join(', ');
+}
+
+/** ROK-2215 ruling 5: the post-create note naming who was not invited, or null when nobody was skipped. */
+export function inviteSkipNote(result: InviteCharactersResultDto): string | null {
+    const parts = [
+        ['Not invited (no linked Discord)', skipNames(result, 'no_discord')],
+        ['Already signed up', skipNames(result, 'already_signed_up')],
+        ['Not found', skipNames(result, 'not_found')],
+    ].filter(([, names]) => names).map(([label, names]) => `${label}: ${names}`);
+    return parts.length > 0 ? parts.join('. ') : null;
+}
+
+/** Fire-and-forget (L5): never delays navigation; the event stays whatever happens. */
+function sendInvites(eventId: number, ids: string[]): void {
+    void inviteCharacters(eventId, ids)
+        .then((result) => { const note = inviteSkipNote(result); if (note) toast.warning(note); })
+        .catch(() => { toast.error(INVITES_FAILED_TOAST); });
+}
+
 function successCopy(o: CreateEventMutationOptions): string {
     if (!o.isEditMode) return 'Event created successfully!';
     return o.seriesScope && o.seriesScope !== 'this' ? 'Series updated!' : 'Event updated!';
@@ -80,6 +110,8 @@ export function useCreateEventMutation(o: CreateEventMutationOptions): UseMutati
                 refreshLockedInEvent(queryClient, event?.id);
                 if (benchPickFallback) toast.warning(FALLBACK_TOAST);
             }
+            const ids = o.inviteCharacterIds ?? [];
+            if (!o.isEditMode && !isLockIn && event?.id && ids.length > 0) sendInvites(event.id, ids);
             navigate(`/events/${event?.id ?? o.editEventId}`);
         },
         onError: (error: Error) => {

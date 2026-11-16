@@ -18,6 +18,7 @@ import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import { SchedulingOverflowNotice } from './scheduling-overflow-notice';
 import { InheritedHubLine } from './inherited-hub-line';
+import { InvitePreviewLine } from './invite-preview-line';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
 import { ERROR_FIELD_MAP } from './create-event-form.types';
 import { getInitialState, validateForm, buildSlotConfig, computeRecurrenceCount, buildSubmitDto } from './create-event-form.utils';
@@ -102,6 +103,7 @@ function useCreateEventFormState(
     initialGame?: EventFormProps['initialGame'], initialStartTime?: string | null,
     schedulingMatchId?: number | null, copyFromEvent?: EventResponseDto | null,
     initialGuildId: number | null = null, schedulingLineupId?: number | null,
+    initialInstances?: Record<string, unknown>[], inviteCharacterIds: string[] = [],
 ) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzAbbr = getTimezoneAbbr(resolved);
@@ -109,6 +111,8 @@ function useCreateEventFormState(
         const state = getInitialState(editEvent, resolved, initialStartTime, copyFromEvent);
         // ROK-1893 P3: a hub poll's lock-in preselects its hub.
         if (!editEvent && initialGuildId !== null) state.guildId = initialGuildId;
+        // ROK-2215: a plan link's dungeon.
+        if (!editEvent && initialInstances?.length) state.selectedInstances = initialInstances;
         if (!editEvent && initialGame) {
             state.game = initialGame as FormState['game'];
             // A copy source already carries the previous event's own slot count
@@ -121,11 +125,13 @@ function useCreateEventFormState(
         return state;
     });
     const [errors, setErrors] = useState<FormErrors>({});
+    // ROK-2215: plan invites ride a plain create only; "Don't invite" empties them.
+    const [inviteIds, setInviteIds] = useState<string[]>(() => (!editEvent && !schedulingMatchId ? inviteCharacterIds : []));
     const registryGameId = useRegistryGameId(form.game);
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(form.game?.id ?? undefined);
     // ROK-2025: on a lock-in the organizer picks who goes to the bench.
     const bench = useLockBenchPick(!editEvent && schedulingLineupId && schedulingMatchId && initialStartTime ? { lineupId: schedulingLineupId, matchId: schedulingMatchId, startTime: initialStartTime } : null, form);
-    const mutation = useCreateEventMutation({ isEditMode: !!editEvent, editEventId: editEvent?.id, seriesScope, schedulingMatchId, schedulingLineupId, schedulingStartTime: initialStartTime, benchUserIds: bench.benchUserIds });
+    const mutation = useCreateEventMutation({ isEditMode: !!editEvent, editEventId: editEvent?.id, seriesScope, schedulingMatchId, schedulingLineupId, schedulingStartTime: initialStartTime, benchUserIds: bench.benchUserIds, inviteCharacterIds: inviteIds });
     const tpl = useTemplateActions(form);
     const endTimePreview = useEndTimePreview(form.startDate, form.startTime, form.durationMinutes, resolved);
     const recurrenceCount = useMemo(() => computeRecurrenceCount(form.recurrenceFrequency, form.startDate, form.recurrenceUntil), [form.recurrenceFrequency, form.startDate, form.recurrenceUntil]);
@@ -135,13 +141,13 @@ function useCreateEventFormState(
         if (field in errors) setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
 
-    return { form, setForm, errors, setErrors, bench, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr };
+    return { form, setForm, errors, setErrors, bench, registryGameId, interestCount, interestLoading, mutation, tpl, endTimePreview, recurrenceCount, updateField, resolved, tzAbbr, inviteIds, setInviteIds };
 }
 
-export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent, initialGuildId }: EventFormProps = {}) {
+export function CreateEventForm({ event: editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, schedulingLineupId, followupForEventId, copyFromEvent, initialGuildId, initialInstances, inviteCharacterIds, inviteNames }: EventFormProps = {}) {
     const isEditMode = !!editEvent;
     const navigate = useNavigate();
-    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null, schedulingLineupId);
+    const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent, initialGuildId ?? null, schedulingLineupId, initialInstances, inviteCharacterIds);
     // ROK-1893 P3: the hub of the poll being locked in (its guildId deep-link param).
     const pollHubId = schedulingMatchId != null ? initialGuildId ?? null : null;
 
@@ -161,6 +167,9 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
             <SaveTemplateBar show={s.tpl.showSaveTemplate} name={s.tpl.saveTemplateName} isPending={s.tpl.createTemplateMutation.isPending}
                 onNameChange={s.tpl.setSaveTemplateName} onSave={s.tpl.saveTemplate}
                 onClose={() => { s.tpl.setShowSaveTemplate(false); s.tpl.setSaveTemplateName(''); }} />
+            {s.inviteIds.length > 0 && (
+                <InvitePreviewLine names={inviteNames?.names ?? []} unresolved={inviteNames?.unresolved ?? s.inviteIds.length} onRemove={() => s.setInviteIds([])} />
+            )}
             <FormFooter isEditMode={isEditMode} isPending={s.mutation.isPending}
                 onShowSaveTemplate={() => s.tpl.setShowSaveTemplate(true)} onCancel={() => navigate('/events')} />
         </form>
