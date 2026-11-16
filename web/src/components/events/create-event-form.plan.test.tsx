@@ -10,11 +10,16 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { CreateEventForm } from './create-event-form';
+import { useCreateEventMutation } from './use-create-event-mutation';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
 vi.mock('react-router-dom', async () => ({ ...(await vi.importActual('react-router-dom')), useNavigate: () => vi.fn() }));
 vi.mock('../../lib/api-client', () => ({ createEvent: vi.fn(), updateEvent: vi.fn(), inviteCharacters: vi.fn() }));
+vi.mock('./use-create-event-mutation', async (orig) => {
+    const actual = await orig<typeof import('./use-create-event-mutation')>();
+    return { ...actual, useCreateEventMutation: vi.fn(actual.useCreateEventMutation) };
+});
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock('../../stores/timezone-store', () => ({
     useTimezoneStore: vi.fn((sel: (s: { resolved: string }) => unknown) => sel({ resolved: 'America/New_York' })),
@@ -74,8 +79,11 @@ describe('CreateEventForm — "Will invite" line (ROK-2215 W7)', () => {
     it('lists the resolved names above the footer, and "Don\'t invite" clears it', () => {
         renderForm({ initialGame: GAME, inviteCharacterIds: IDS, inviteNames: { names: ['Aelin', 'Brann'], unresolved: 0 } });
         expect(screen.getByTestId('invite-preview-line')).toHaveTextContent('Will invite: Aelin, Brann');
+        expect(vi.mocked(useCreateEventMutation).mock.lastCall?.[0].inviteCharacterIds).toEqual(IDS);
         fireEvent.click(screen.getByRole('button', { name: "Don't invite" }));
         expect(screen.queryByTestId('invite-preview-line')).not.toBeInTheDocument();
+        // The submit mutation must lose the ids too, not just the line.
+        expect(vi.mocked(useCreateEventMutation).mock.lastCall?.[0].inviteCharacterIds).toEqual([]);
     });
 
     it('falls back to a count when no names resolved', () => {
