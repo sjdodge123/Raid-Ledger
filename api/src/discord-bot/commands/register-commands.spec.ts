@@ -426,3 +426,111 @@ describe('RegisterCommandsService — production path is untouched', () => {
     expect(bodiesPutTo(mockRestPut, '/guild-route')).toEqual([]);
   });
 });
+
+/** An Error carrying a REST status, as discord.js's DiscordAPIError does. */
+function restError(status: number): Error {
+  return Object.assign(new Error(`${status}: REST failure`), { status });
+}
+
+describe('RegisterCommandsService — retry lifecycle (ROK-2204 r1)', () => {
+  let service: RegisterCommandsService;
+  let mockRestPut: jest.Mock;
+  let errorSpy: jest.SpyInstance;
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(async () => {
+    jest.useFakeTimers();
+    mockRestPut = jest.fn().mockResolvedValue({});
+    const module: TestingModule = await buildModule(mockRestPut);
+    service = module.get(RegisterCommandsService);
+    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+    jest.clearAllMocks();
+  });
+
+  function registerAttempts(): number {
+    return putCalls(mockRestPut).filter(([r]) => r === '/global-route').length;
+  }
+
+  it('a newer CONNECTED cancels the older pending retry loop', async () => {
+    mockRestPut.mockRejectedValueOnce(new Error('ConnectTimeoutError'));
+    const first = service.registerCommands();
+    await jest.advanceTimersByTimeAsync(0);
+    const second = service.registerCommands();
+    await jest.advanceTimersByTimeAsync(60_000);
+    await Promise.all([first, second]);
+    expect(registerAttempts()).toBe(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('a disconnect cancels the pending retry', async () => {
+    mockRestPut.mockRejectedValue(new Error('ConnectTimeoutError'));
+    const done = service.registerCommands();
+    await jest.advanceTimersByTimeAsync(0);
+    service.onDisconnected();
+    expect(jest.getTimerCount()).toBe(0);
+    await jest.advanceTimersByTimeAsync(60_000);
+    await done;
+    expect(registerAttempts()).toBe(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('app shutdown cancels the pending retry and frees the timer', async () => {
+    mockRestPut.mockRejectedValue(new Error('ConnectTimeoutError'));
+    const done = service.registerCommands();
+    await jest.advanceTimersByTimeAsync(0);
+    service.onApplicationShutdown();
+    expect(jest.getTimerCount()).toBe(0);
+    await done;
+    expect(registerAttempts()).toBe(1);
+  });
+
+  it.each([400, 401, 403, 404])(
+    'a permanent %i is not retried and errors once',
+    async (status) => {
+      mockRestPut.mockRejectedValue(restError(status));
+      await service.registerCommands();
+      expect(registerAttempts()).toBe(1);
+      expect(jest.getTimerCount()).toBe(0);
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([429, 500, 503])('a transient %i is retried', async (status) => {
+    mockRestPut.mockRejectedValueOnce(restError(status));
+    const done = service.registerCommands();
+    await jest.advanceTimersByTimeAsync(2000);
+    await done;
+    expect(registerAttempts()).toBe(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('the CONNECTED handler returns at once; the retry chain runs detached', async () => {
+    mockRestPut.mockRejectedValue(new Error('ConnectTimeoutError'));
+    expect(service.onConnected()).toBeUndefined();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(registerAttempts()).toBe(1);
+    await jest.advanceTimersByTimeAsync(6000);
+    expect(registerAttempts()).toBe(3);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fleet: the identity-mismatch error logs once across retries', async () => {
+    process.env[FLEET_ID_ENV] = 'declared-999';
+    process.env[FLEET_NAME_ENV] = 'Raid Ledger Slot 2';
+    mockRestPut.mockRejectedValue(new Error('ConnectTimeoutError'));
+    const done = service.registerCommands();
+    await jest.advanceTimersByTimeAsync(6000);
+    await done;
+    const mismatch = errorSpy.mock.calls.filter((args: unknown[]) =>
+      String(args[0]).includes('declared-999'),
+    );
+    expect(mismatch).toHaveLength(1);
+  });
+});

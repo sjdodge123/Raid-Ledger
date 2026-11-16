@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   REST,
@@ -27,17 +27,16 @@ import {
   noGuildMessage,
   staleGlobalMessage,
 } from './register-commands.fleet';
+import {
+  REGISTER_MAX_ATTEMPTS,
+  isPermanentRegisterError,
+  registerRetryDelayMs,
+} from './register-commands.retry';
 
-/** Registration attempts per CONNECTED event before giving up (ROK-2204). */
-export const REGISTER_MAX_ATTEMPTS = 3;
-
-/** First retry delay; doubles per attempt (2s, then 4s) (ROK-2204). */
-export const REGISTER_RETRY_BASE_MS = 2000;
-
-/** Resolve after `ms` — a timer, so fake timers drive it in specs. */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+export {
+  REGISTER_MAX_ATTEMPTS,
+  REGISTER_RETRY_BASE_MS,
+} from './register-commands.retry';
 
 /**
  * Describes a slash command handler that can be registered with Discord.
@@ -52,8 +51,13 @@ export interface SlashCommandHandler {
  * Provides a framework for other stories (ROK-348) to register commands.
  */
 @Injectable()
-export class RegisterCommandsService {
+export class RegisterCommandsService implements OnApplicationShutdown {
   private readonly logger = new Logger(RegisterCommandsService.name);
+  /** Bumped by every connect / disconnect / shutdown; stale loops stop. */
+  private registerGen = 0;
+  /** The pending backoff timer, so a cancel can clear and wake it. */
+  private retryTimer: { handle: NodeJS.Timeout; wake: () => void } | null =
+    null;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -91,10 +95,34 @@ export class RegisterCommandsService {
   }
 
   /**
-   * Register all slash commands when the bot connects.
+   * CONNECTED handler: registration runs detached (ROK-2204) so a failing
+   * retry chain never delays `connect()`. Never rejects.
    */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
+  onConnected(): void {
+    this.registerCommands().catch((error: unknown) =>
+      this.logger.error('Slash-command registration crashed:', error),
+    );
+  }
+
+  /** A disconnect cancels any pending registration retry (ROK-2204). */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onDisconnected(): void {
+    this.cancelRetries();
+  }
+
+  /** Shutdown cancels any pending retry and frees its timer (ROK-2204). */
+  onApplicationShutdown(): void {
+    this.cancelRetries();
+  }
+
+  /**
+   * Register all slash commands. Supersedes any earlier, still-retrying run
+   * so an old token never keeps PUTting after a reconnect (ROK-2204).
+   */
   async registerCommands(): Promise<void> {
+    this.cancelRetries();
+    const gen = this.registerGen;
     const config = await this.settingsService.getDiscordBotConfig();
     if (!config) {
       this.logger.warn('No bot config found, skipping command registration');
@@ -105,38 +133,66 @@ export class RegisterCommandsService {
       this.logger.warn('No client ID, skipping command registration');
       return;
     }
+    if (isFleetSlotBot()) this.warnOnFleetIdentityMismatch(clientId);
     const commands = this.getCommandHandlers().map((h) => h.getDefinition());
-    await this.withRetry(() => {
-      const rest = new REST({ version: '10' }).setToken(config.token);
-      return this.registerOnce(rest, clientId, commands);
-    });
+    const rest = new REST({ version: '10' }).setToken(config.token);
+    await this.withRetry(gen, () =>
+      this.registerOnce(rest, clientId, commands),
+    );
   }
 
   /**
    * Run `attempt` up to REGISTER_MAX_ATTEMPTS times with exponential backoff
    * (ROK-2204): a transient `ConnectTimeoutError` on boot used to leave the
-   * commands unregistered until the next restart. Never throws.
+   * commands unregistered until the next restart. A permanent 4xx is not
+   * retried; a superseded run (`gen` stale) stops silently. Never throws.
    */
-  private async withRetry(attempt: () => Promise<void>): Promise<void> {
+  private async withRetry(
+    gen: number,
+    attempt: () => Promise<void>,
+  ): Promise<void> {
     for (let n = 1; n <= REGISTER_MAX_ATTEMPTS; n++) {
       try {
         await attempt();
         return;
       } catch (error) {
-        if (n === REGISTER_MAX_ATTEMPTS) {
+        if (gen !== this.registerGen) return;
+        if (n === REGISTER_MAX_ATTEMPTS || isPermanentRegisterError(error)) {
           this.logger.error(
-            `Failed to register slash commands after ${n} attempts:`,
+            `Failed to register slash commands after ${n} attempt(s):`,
             error,
           );
           return;
         }
-        const waitMs = REGISTER_RETRY_BASE_MS * 2 ** (n - 1);
+        const waitMs = registerRetryDelayMs(n);
         this.logger.warn(
           `Slash-command registration attempt ${n}/${REGISTER_MAX_ATTEMPTS} failed (${String(error)}); retrying in ${waitMs}ms`,
         );
-        await delay(waitMs);
+        await this.waitForRetry(waitMs);
+        if (gen !== this.registerGen) return;
       }
     }
+  }
+
+  /** Backoff timer a cancel can clear and resolve early. */
+  private waitForRetry(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const handle = setTimeout(() => {
+        this.retryTimer = null;
+        resolve();
+      }, ms);
+      this.retryTimer = { handle, wake: resolve };
+    });
+  }
+
+  /** Invalidate every running loop and wake + clear its pending timer. */
+  private cancelRetries(): void {
+    this.registerGen++;
+    const timer = this.retryTimer;
+    this.retryTimer = null;
+    if (!timer) return;
+    clearTimeout(timer.handle);
+    timer.wake();
   }
 
   /** One registration attempt: guild-scoped for fleet slots, else global. */
@@ -171,10 +227,6 @@ export class RegisterCommandsService {
     clientId: string,
     commands: RESTPostAPIChatInputApplicationCommandsJSONBody[],
   ): Promise<void> {
-    const declared = declaredFleetClientId();
-    if (declared && declared !== clientId) {
-      this.logger.error(identityMismatchMessage(declared, clientId));
-    }
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
       this.logger.error(noGuildMessage(clientId));
@@ -187,6 +239,17 @@ export class RegisterCommandsService {
     const names = commands.map((c) => c.name);
     this.logger.log(guildScopeMessage(clientId, guildId, names));
     await this.clearOwnGlobalCommands(rest, clientId);
+  }
+
+  /**
+   * Logged once per registration run, outside the retried attempt (ROK-2204):
+   * an env-injected client id that disagrees with the logged-in app.
+   */
+  private warnOnFleetIdentityMismatch(clientId: string): void {
+    const declared = declaredFleetClientId();
+    if (declared && declared !== clientId) {
+      this.logger.error(identityMismatchMessage(declared, clientId));
+    }
   }
 
   /**
