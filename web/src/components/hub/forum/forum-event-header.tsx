@@ -14,7 +14,10 @@ import { FOCUS_RING } from '../../ui/form-classes';
 import { Pill } from '../hub-bits';
 import { eventShortDate, eventTimeRange, lockLine } from './forum-event-format';
 
-/** The row badges of an event thread: "Event · <date>" and, once locked, "Closed". */
+/**
+ * The row badges of an event thread: "Event · <date>" and, once locked,
+ * "Closed" — which still shows after the event was deleted (event null).
+ */
 export function ForumEventPills({
     event,
     lock,
@@ -22,13 +25,15 @@ export function ForumEventPills({
     event: HubForumThreadEvent | null | undefined;
     lock: HubForumLock | null | undefined;
 }): JSX.Element | null {
-    if (event == null) return null;
+    if (event == null && lock == null) return null;
     return (
         <>
-            <Pill>
-                <CalendarIcon className="h-3 w-3" aria-hidden="true" />
-                Event · {eventShortDate(event.startTime)}
-            </Pill>
+            {event != null && (
+                <Pill>
+                    <CalendarIcon className="h-3 w-3" aria-hidden="true" />
+                    Event · {eventShortDate(event.startTime)}
+                </Pill>
+            )}
             {lock != null && (
                 <Pill>
                     <LockClosedIcon className="h-3 w-3" aria-hidden="true" />

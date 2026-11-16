@@ -7,13 +7,14 @@
  * the view pages through to it and scrolls there (D9, `use-page-to-reply.ts`).
  */
 import type { JSX } from 'react';
+import type { HubForumThread } from '@raid-ledger/contract';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Pill } from '../hub-bits';
 import { ForumReplyComposer } from './forum-composer';
 import { ForumReplyItem, ForumThreadRoot } from './forum-thread-items';
-import { ForumEventHeader, ForumEventPills } from './forum-event-header';
+import { ForumEventHeader, ForumEventPills, ForumLockBar } from './forum-event-header';
 import { forumThreadHref } from './forum-link';
 import { replyCountLabel } from './forum-thread.helpers';
 import { useForumThread } from './use-hub-forum';
@@ -51,6 +52,12 @@ export function MoreReplies({ query }: { query: ReturnType<typeof useForumThread
     );
 }
 
+/** The event facts box, or — once the event was deleted (event null) — the lock line alone (ROK-2226). */
+function ThreadEventBlock({ thread }: { thread: HubForumThread }): JSX.Element | null {
+    if (thread.event != null) return <ForumEventHeader event={thread.event} lock={thread.lock} />;
+    return thread.lock != null ? <ForumLockBar lock={thread.lock} /> : null;
+}
+
 function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<ForumThreadViewProps, 'threadId'> & { query: ReturnType<typeof useForumThread> }): JSX.Element {
     const navigate = useNavigate();
     if (query.isPending) return <div className="h-32 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" aria-label="Loading thread" />;
@@ -65,7 +72,7 @@ function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<Fo
                 {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
                 <ForumEventPills event={thread.event} lock={thread.lock} />
             </div>
-            {thread.event != null && <ForumEventHeader event={thread.event} lock={thread.lock} />}
+            <ThreadEventBlock thread={thread} />
             <ForumThreadRoot guildId={guildId} thread={thread} startEditing={startEditing === true} />
             <p className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>
             <ul className="flex flex-col gap-2">

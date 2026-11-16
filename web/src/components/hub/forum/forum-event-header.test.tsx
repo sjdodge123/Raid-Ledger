@@ -96,6 +96,17 @@ describe('ForumEventPills (ROK-2226 Q3)', () => {
         rerender(<ForumEventPills event={EVENT} lock={buildForumLock()} />);
         expect(screen.getByText('Closed')).toBeInTheDocument();
     });
+
+    it('still shows Closed once the event was deleted (event null, lock set)', () => {
+        renderWithProviders(
+            <ForumEventPills
+                event={null}
+                lock={buildForumLock({ reason: 'event-deleted' })}
+            />,
+        );
+        expect(screen.getByText('Closed')).toBeInTheDocument();
+        expect(screen.queryByText(/^Event ·/)).toBeNull();
+    });
 });
 
 describe('ForumThreadView on an event thread (ROK-2226 §7.1)', () => {
@@ -148,6 +159,28 @@ describe('ForumThreadView on an event thread (ROK-2226 §7.1)', () => {
         expect(await screen.findByTestId('forum-lock-bar')).toHaveTextContent(
             'Closed 24 h after the event ended',
         );
+        expect(screen.queryByTestId('forum-reply-composer')).toBeNull();
+    });
+});
+
+describe('ForumThreadView after the event was deleted (ROK-2226)', () => {
+    it('a thread whose event was deleted keeps its lock line and Closed badge', async () => {
+        const orphan = buildForumThreadDetail({
+            event: null,
+            lock: buildForumLock({ reason: 'event-deleted' }),
+            canReply: false,
+        });
+        server.use(http.get(THREAD, () => HttpResponse.json(orphan)));
+        renderWithProviders(
+            <HubForumTab guildId={7} canWrite kind="wow_guild" />,
+            { initialEntries: ['/hubs/7?thread=5#forum'] },
+        );
+        expect(
+            await screen.findByTestId('forum-lock-bar'),
+            'the reason for the missing composer is still shown',
+        ).toHaveTextContent('This event was deleted');
+        expect(screen.getByText('Closed')).toBeInTheDocument();
+        expect(screen.queryByTestId('forum-event-header')).toBeNull();
         expect(screen.queryByTestId('forum-reply-composer')).toBeNull();
     });
 });
