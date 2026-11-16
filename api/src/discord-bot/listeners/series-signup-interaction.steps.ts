@@ -12,6 +12,7 @@ import {
   showCharacterSelect,
   showRoleSelect,
 } from '../utils/signup-dropdown-builders';
+import { buildCharacterBackId } from '../utils/character-back-id';
 import {
   buildSeriesCustomId,
   formatJoinSummary,
@@ -99,6 +100,11 @@ async function showRoleStep(
     characterId: picks.characterId ?? undefined,
     emojiService: deps.emojiService,
     embed,
+    // ROK-2228: Back re-renders the series_char list this pick came from.
+    backCustomId: buildCharacterBackId({
+      charSelectPrefix: SERIES_BUTTON_IDS.CHARACTER,
+      eventId: event.id,
+    }),
   });
 }
 
