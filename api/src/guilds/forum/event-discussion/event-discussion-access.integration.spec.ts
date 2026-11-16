@@ -318,9 +318,10 @@ describe('ROK-2226 §6.1 — hidden or archived hub (Codex P1)', () => {
   it('an archived hub: read 404, post 404, card none (staff still read)', async () => {
     const s = await newScene(ctx);
     await reply(s, 'pug', 'before archive');
+    // Only community hubs archive (`guilds_status_kind_check`), so the scene's hub becomes one.
     await ctx.posts.testApp.db
       .update(schema.guilds)
-      .set({ status: 'archived' })
+      .set({ kind: 'game_community', status: 'archived' })
       .where(eq(schema.guilds.id, s.guildId));
     await expectClosed(s);
   });
