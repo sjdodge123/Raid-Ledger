@@ -12,7 +12,7 @@ import type { WowInstanceDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
-import { buildBasicInstanceDetail } from '../slots/event-create-content-browser';
+import { buildBasicInstanceDetail } from '../lib/instance-detail';
 import { useInstancePrefill } from './use-instance-prefill';
 
 const INSTANCES_URL = 'http://localhost:3000/blizzard/instances';

@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import type { WowInstanceDetailDto } from '@raid-ledger/contract';
 import { useWowInstances } from './use-wow-instances';
 import { getWowVariant } from '../utils';
-import { buildBasicInstanceDetail } from '../slots/event-create-content-browser';
+import { buildBasicInstanceDetail } from '../lib/instance-detail';
 
 export interface InstancePrefill {
     instances: WowInstanceDetailDto[];

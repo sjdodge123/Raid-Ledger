@@ -6,21 +6,13 @@ import { SearchInput } from '../../../components/ui/search-input';
 import { useWowInstances } from '../hooks/use-wow-instances';
 import { fetchWowInstanceDetail } from '../api-client';
 import { useSystemStatus } from '../../../hooks/use-system-status';
+import { buildBasicInstanceDetail } from '../lib/instance-detail';
 
 interface EventCreateContentBrowserProps {
     wowVariant: string;
     contentType: 'dungeon' | 'raid';
     selectedInstances: WowInstanceDetailDto[];
     onInstancesChange: (instances: WowInstanceDetailDto[]) => void;
-}
-
-/** A list row as a selected-instance detail — what a manual tick produces (ROK-2215 reuses it for the plan prefill). */
-export function buildBasicInstanceDetail(instance: WowInstanceDto, contentType: 'dungeon' | 'raid'): WowInstanceDetailDto {
-    return {
-        id: instance.id, name: instance.name, shortName: instance.shortName,
-        expansion: instance.expansion, minimumLevel: instance.minimumLevel ?? null,
-        maximumLevel: instance.maximumLevel, maxPlayers: null, category: contentType,
-    };
 }
 
 async function toggleInstance(

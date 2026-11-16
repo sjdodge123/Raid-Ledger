@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { EventResponseDto } from '@raid-ledger/contract';
 import { CreateEventForm } from './create-event-form';
 
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -64,7 +65,7 @@ describe('CreateEventForm — plan dungeon prefill (ROK-2215 W5)', () => {
 
     it('ignores the plan dungeon in edit mode', () => {
         const event = { id: 1, title: 'Old', startTime: '2026-08-20T20:00:00.000Z', endTime: '2026-08-20T23:00:00.000Z', game: GAME, contentInstances: [] };
-        renderForm({ event: event as unknown as NonNullable<Parameters<typeof CreateEventForm>[0]>['event'], initialInstances: [WC] });
+        renderForm({ event: event as unknown as EventResponseDto, initialInstances: [WC] });
         expect(screen.queryByText('Wailing Caverns')).not.toBeInTheDocument();
     });
 });
