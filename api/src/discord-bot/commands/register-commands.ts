@@ -124,6 +124,8 @@ export class RegisterCommandsService implements OnApplicationShutdown {
     this.cancelRetries();
     const gen = this.registerGen;
     const config = await this.settingsService.getDiscordBotConfig();
+    // A disconnect/shutdown during the settings read supersedes this run.
+    if (gen !== this.registerGen) return;
     if (!config) {
       this.logger.warn('No bot config found, skipping command registration');
       return;

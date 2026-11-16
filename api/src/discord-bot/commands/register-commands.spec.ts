@@ -206,6 +206,20 @@ describe('RegisterCommandsService — skip conditions', () => {
     expect(mockRestPut).not.toHaveBeenCalled();
   });
 
+  it('sends no PUT when a disconnect lands during the settings read', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    (settingsService.getDiscordBotConfig as jest.Mock).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const done = service.registerCommands();
+    service.onDisconnected();
+    release({ token: 'test-token' });
+    await done;
+    expect(mockRestPut).not.toHaveBeenCalled();
+  });
+
   it('should handle REST API errors gracefully', async () => {
     jest.useFakeTimers();
     try {
