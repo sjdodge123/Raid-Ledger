@@ -50,6 +50,20 @@ describe('useInstancePrefill (W4)', () => {
         expect(result.current.instances).toEqual([]);
     });
 
+    it('fetches the instance detail when the list row has no minimum level (as a manual pick does)', async () => {
+        const RETAIL: WowInstanceDto = { id: 63, name: 'Deadmines', shortName: 'DM', expansion: 'Classic' };
+        server.use(
+            http.get(INSTANCES_URL, () => HttpResponse.json({ data: [RETAIL] })),
+            http.get('http://localhost:3000/blizzard/instance/63', () => HttpResponse.json({
+                id: 63, name: 'Deadmines', shortName: null, expansion: 'Classic', minimumLevel: 10, maximumLevel: 20, maxPlayers: 5, category: 'dungeon',
+            })),
+        );
+        const { result } = run('world-of-warcraft', [63]);
+        await waitFor(() => expect(result.current.instances[0]?.minimumLevel).toBe(10));
+        expect(result.current.instances[0]?.shortName).toBe('DM');
+        expect(result.current.isLoading).toBe(false);
+    });
+
     it('stays idle for a non-WoW game or no ids', () => {
         expect(run('valheim', [90000004]).result.current).toEqual({ instances: [], isLoading: false });
         expect(run(WOW_FOREVER_GAME_SLUG, []).result.current).toEqual({ instances: [], isLoading: false });
