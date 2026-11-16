@@ -224,21 +224,27 @@ describe('EventDiscussionCard — reader Sign up (mockup, ROK-2226 L4b)', () => 
         const onSignup = vi.fn();
         serve(READER);
         renderCard({ signup: { onSignup, pending: false } });
-        await userEvent.click(await screen.findByTestId('event-discussion-signup'));
+        await userEvent.click(
+            await screen.findByTestId('event-discussion-signup'),
+        );
         expect(onSignup).toHaveBeenCalledTimes(1);
     });
 
     it('offers no Sign up button when the page passes no signup action', async () => {
         serve(READER);
         renderCard();
-        expect(await screen.findByTestId('event-discussion-signup-note')).toBeInTheDocument();
+        expect(
+            await screen.findByTestId('event-discussion-signup-note'),
+        ).toBeInTheDocument();
         expect(screen.queryByTestId('event-discussion-signup')).toBeNull();
     });
 
     it('offers no Sign up button to a viewer who can already reply', async () => {
         serve(buildEventDiscussion());
         renderCard({ signup: { onSignup: vi.fn(), pending: false } });
-        expect(await screen.findByTestId('event-discussion-cta')).toHaveTextContent('Join the discussion');
+        expect(
+            await screen.findByTestId('event-discussion-cta'),
+        ).toHaveTextContent('Join the discussion');
         expect(screen.queryByTestId('event-discussion-signup')).toBeNull();
     });
 });
