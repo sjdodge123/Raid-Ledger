@@ -45,6 +45,8 @@ export interface RouteBinding {
 
 /** A bound forum channel and the hubs bound to it. */
 export interface ForumRoute {
+  /** `hub_forum_discord_forums.id` (OQ-4 notice rows key on it). */
+  forumId: number;
   channelId: string;
   webhookId: string | null;
   bindings: RouteBinding[];
@@ -130,6 +132,7 @@ async function loadRoute(
   const b = schema.hubForumDiscordBindings;
   const rows = await db
     .select({
+      forumId: f.id,
       webhookId: f.webhookId,
       guildId: b.guildId,
       tagId: b.tagId,
@@ -145,5 +148,10 @@ async function loadRoute(
     tagId,
     boundAt,
   }));
-  return { channelId, webhookId: first.webhookId, bindings };
+  return {
+    forumId: first.forumId,
+    channelId,
+    webhookId: first.webhookId,
+    bindings,
+  };
 }

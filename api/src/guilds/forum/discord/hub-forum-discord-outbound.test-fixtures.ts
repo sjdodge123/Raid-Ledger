@@ -26,6 +26,7 @@ export function stubOutbound(testApp: TestApp) {
     renameThread: jest.spyOn(gw, 'renameThread').mockResolvedValue('ok'),
     deleteThread: jest.spyOn(gw, 'deleteThread').mockResolvedValue('ok'),
     deleteMessage: jest.spyOn(gw, 'deleteMessage').mockResolvedValue('ok'),
+    postNotice: jest.spyOn(gw, 'postNotice').mockResolvedValue(undefined),
   };
   const apply = jest.spyOn(service, 'apply');
   return { spies, apply, service };

@@ -10,6 +10,10 @@ import { HUB_FORUM_TITLE_MAX } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { ForumLink } from './hub-forum-discord-links.queries';
 import * as inbound from './hub-forum-discord-inbound.writes';
+import {
+  HubForumDiscordNotices,
+  needsTagNotice,
+} from './hub-forum-discord-notice';
 import { HubForumDiscordPinSync } from './hub-forum-discord-pins';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import {
@@ -66,6 +70,7 @@ export class HubForumDiscordInboundIngest {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly routes: HubForumDiscordRouteResolver,
     private readonly pins: HubForumDiscordPinSync,
+    private readonly notices: HubForumDiscordNotices,
   ) {}
 
   /** A new message in a forum post (starter or reply). */
@@ -84,7 +89,8 @@ export class HubForumDiscordInboundIngest {
       return bound ? this.importReply(post, m, now) : 'skipped';
     }
     const hub = pickHub(route.bindings, thread.appliedTags);
-    if (!hub || predatesBinding(thread.id, hub.boundAt)) return 'skipped';
+    if (!hub) return this.tagNotice(route, thread);
+    if (predatesBinding(thread.id, hub.boundAt)) return 'skipped';
     if (m.id === thread.id)
       return this.importThread(hub.guildId, thread, m, now);
     const starter = ctx.fetchStarter ? await ctx.fetchStarter() : null;
@@ -171,6 +177,17 @@ export class HubForumDiscordInboundIngest {
     const own = { botUserId: ctx.botUserId, webhookId: route.webhookId };
     if (isEcho(m, own)) return true;
     return (await inbound.findLinkByMessage(this.db, m.id)) !== null;
+  }
+
+  /** OQ-4: a shared-forum post no single hub tag routes gets one reply. */
+  private async tagNotice(
+    route: ForumRoute,
+    thread: InboundThread,
+  ): Promise<InboundResult> {
+    if (needsTagNotice(route.bindings, thread)) {
+      await this.notices.notify(route.forumId, thread.id);
+    }
+    return 'skipped';
   }
 
   /** Unbinding stops the sync (D9): the hub must still bind the forum. */

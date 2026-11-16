@@ -140,6 +140,12 @@ export class HubForumDiscordOutboundGateway {
     });
   }
 
+  /** OQ-4: a plain bot message inside a post (never pings anyone). */
+  async postNotice(discordThreadId: string, content: string): Promise<void> {
+    const thread = await this.thread(discordThreadId);
+    await thread.send({ content, allowedMentions: NO_MENTIONS });
+  }
+
   /** Delete one message (bot, Manage Messages — §5.3 covers both origins). */
   async deleteMessage(ref: DiscordMessageRef): Promise<DiscordWriteResult> {
     return orGone(async () => {

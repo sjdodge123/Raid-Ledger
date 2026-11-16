@@ -13,6 +13,7 @@ import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.ser
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
 import { HubForumDiscordInboundListener } from './hub-forum-discord-inbound.listener';
+import { HubForumDiscordNotices } from './hub-forum-discord-notice';
 import {
   HubForumDiscordPinGateway,
   HubForumDiscordPinSync,
@@ -38,6 +39,7 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordRouteResolver,
     HubForumDiscordPinGateway,
     HubForumDiscordPinSync,
+    HubForumDiscordNotices,
     HubForumDiscordInboundIngest,
     HubForumDiscordInboundListener,
     HubForumDiscordReconcileGateway,
