@@ -17,6 +17,8 @@ import {
   HubForumDiscordPinGateway,
   HubForumDiscordPinSync,
 } from './hub-forum-discord-pins';
+import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.discord';
+import { HubForumDiscordReconcileService } from './hub-forum-discord-reconcile';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 
@@ -38,11 +40,14 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordPinSync,
     HubForumDiscordInboundIngest,
     HubForumDiscordInboundListener,
+    HubForumDiscordReconcileGateway,
+    HubForumDiscordReconcileService,
   ],
   exports: [
     HubForumDiscordGateway,
     HubForumDiscordOutboundService,
     HubForumDiscordInboundIngest,
+    HubForumDiscordReconcileService,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {

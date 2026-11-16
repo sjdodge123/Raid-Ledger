@@ -8,6 +8,7 @@ import { GgCardModule } from './gg/gg-card.module';
 import { GgMascotModule } from './gg/mascot/gg-mascot.module';
 import { GgModule } from './gg/gg.module';
 import { GgDeliveryModule } from './gg/gg-delivery.module';
+import { HubForumDiscordRetryModule } from './forum-discord/hub-forum-discord-retry.module';
 
 /**
  * ROK-1969 D2 — registers the Core manifest and installs its row on boot
@@ -22,6 +23,7 @@ import { GgDeliveryModule } from './gg/gg-delivery.module';
     GgModule,
     GgMascotModule,
     GgDeliveryModule,
+    HubForumDiscordRetryModule,
   ],
 })
 export class CorePluginModule implements OnModuleInit {

@@ -24,6 +24,12 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Delivers GG <year> on the configured December day: computes every snapshot, posts the announcement once, then sends up to 25 player notifications every 5 minutes',
     category: 'Notifications',
   },
+  // ROK-2208 §5.6: Core's hub Forum → Discord outbound retry sweep.
+  HubForumDiscordSync_retrySweep: {
+    description:
+      'Retries hub Forum posts and replies that did not reach the linked Discord forum (up to 5 attempts, backing off), every 5 minutes',
+    category: 'Data Sync',
+  },
   // ROK-1957 D-9: the BG3 plugin's nightly save-history thinning.
   Bg3HistoryRetentionCron_prune: {
     description:
