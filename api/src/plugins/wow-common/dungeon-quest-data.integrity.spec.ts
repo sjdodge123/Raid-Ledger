@@ -260,3 +260,16 @@ describe('reviewed dungeon quest rows (ROK-2223)', () => {
     expect({ questId, side: sideOf(must(questId)) }).toEqual({ questId, side });
   });
 });
+
+/** ROK-2223: givers the cross-check and Blizzard quest text place inside. */
+const REVIEWED_INSIDE: readonly number[] = [2201, 2318, 5160, 7483, 7484, 7485];
+
+describe('reviewed inside pickups (ROK-2223)', () => {
+  it.each(REVIEWED_INSIDE)('quest %i is picked up inside', (questId) => {
+    expect({
+      questId,
+      allowlisted: INSIDE_DUNGEON_QUEST_IDS.has(questId),
+      flagged: must(questId).startsInsideDungeon,
+    }).toEqual({ questId, allowlisted: true, flagged: true });
+  });
+});
