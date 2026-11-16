@@ -38,6 +38,8 @@ export const WowRosterClassSchema = z
             name: z.string().max(64),
             characterId: characterId.nullable(),
             level: level.nullable(),
+            /** ROK-2214 — `guild_members.id` of a `wow_guild` roster row; keys an unclaimed member. Optional (old payloads have none). */
+            memberId: z.number().int().positive().optional(),
           })
           .strict(),
       )
