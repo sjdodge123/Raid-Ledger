@@ -13,6 +13,7 @@ import { FOCUS_RING } from '../../ui/form-classes';
 import { Pill } from '../hub-bits';
 import { ForumReplyComposer } from './forum-composer';
 import { ForumReplyItem, ForumThreadRoot } from './forum-thread-items';
+import { ForumEventHeader, ForumEventPills } from './forum-event-header';
 import { forumThreadHref } from './forum-link';
 import { replyCountLabel } from './forum-thread.helpers';
 import { useForumThread } from './use-hub-forum';
@@ -55,19 +56,22 @@ function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<Fo
     const thread = query.data?.pages[0];
     if (thread === undefined) return <p role="alert" className="text-sm text-danger">Couldn’t load this thread. It may have been removed.</p>;
     const replies = query.data?.pages.flatMap((p) => p.replies) ?? [];
+    const canReply = thread.canReply ?? canWrite;
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
                 <h3 data-testid="forum-thread-heading" className="text-lg font-semibold text-foreground">{thread.deleted === null ? thread.title : 'Removed thread'}</h3>
                 {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
+                <ForumEventPills event={thread.event} lock={thread.lock} />
             </div>
+            {thread.event != null && <ForumEventHeader event={thread.event} lock={thread.lock} />}
             <ForumThreadRoot guildId={guildId} thread={thread} startEditing={startEditing === true} />
             <p className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>
             <ul className="flex flex-col gap-2">
                 {replies.map((r) => <ForumReplyItem key={r.id} guildId={guildId} threadId={thread.id} reply={r} highlighted={r.id === replyId} />)}
             </ul>
             <MoreReplies query={query} />
-            {canWrite && thread.deleted === null && <ForumReplyComposer guildId={guildId} threadId={thread.id}
+            {canReply && thread.deleted === null && <ForumReplyComposer guildId={guildId} threadId={thread.id}
                 onPosted={(reply) => { void navigate(forumThreadHref(thread.id, reply.id), { replace: true }); }} />}
         </div>
     );

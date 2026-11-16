@@ -17,6 +17,7 @@ import { useVoiceRoster } from '../hooks/use-voice-roster';
 import { EventDetailSkeleton } from './event-detail/EventDetailSkeleton';
 import { EventDetailRoster } from './event-detail/EventDetailRoster';
 import { EventReportLinkCard } from './event-detail/EventReportLinkCard';
+import { EventDiscussionCard } from './event-detail/EventDiscussionCard';
 import { alphabetical } from './event-detail/event-detail-helpers';
 import {
     ConfirmModalSection,
@@ -217,6 +218,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} roster={page.roster} />
             <EventDetailRoster roster={page.roster} event={page.event} />
+            <EventDiscussionCard event={page.event} enabled={page.isAuthenticated} />
             <ActivityTimeline entityType="event" entityId={page.eventId} />
             <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id, guildId: page.event.guildId, rosterCharacters: page.roster?.signups.filter((s) => s.status !== 'departed').map((s) => s.character) }} />
         </>
