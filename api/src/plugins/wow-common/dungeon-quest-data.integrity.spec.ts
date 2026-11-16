@@ -302,3 +302,17 @@ describe('escort quests (ROK-2223)', () => {
     expect(unlisted).toEqual([]);
   });
 });
+
+describe('reviewed prerequisites (ROK-2223)', () => {
+  it("5125 Aurius' Reckoning follows 5122 The Medallion of Faith", () => {
+    expect({
+      prevOf5125: Number(must(5125).prevQuestId),
+      nextOf5122: Number(must(5122).nextQuestId),
+    }).toEqual({ prevOf5125: 5122, nextOf5122: 5125 });
+  });
+
+  it('the Dire Maul librams need no Alliance-only Elven Legends step', () => {
+    const prereqs = [7483, 7484, 7485].map((id) => must(id).prevQuestId);
+    expect(prereqs).toEqual([null, null, null]);
+  });
+});

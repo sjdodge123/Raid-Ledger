@@ -5260,7 +5260,7 @@
     "questGiverNpc": "Aurius",
     "questGiverZone": null,
     "prevQuestId": null,
-    "nextQuestId": null,
+    "nextQuestId": "5125",
     "rewardsJson": null,
     "objectives": "",
     "classRestriction": null,
@@ -5280,7 +5280,7 @@
     "expansion": "classic",
     "questGiverNpc": "Aurius",
     "questGiverZone": null,
-    "prevQuestId": null,
+    "prevQuestId": "5122",
     "nextQuestId": null,
     "rewardsJson": [
       17044,
