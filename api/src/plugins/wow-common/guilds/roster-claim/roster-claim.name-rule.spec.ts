@@ -12,15 +12,18 @@ import {
   isClaimableRosterIdentity,
 } from './roster-claim.name-rule';
 
+/** name, guid, claimable */
+const CASES: ReadonlyArray<[string, string | null, boolean]> = [
+  ['Rok', null, false],
+  ['  Rok  ', null, false],
+  ['Rok Androot', null, true],
+  [' Rok Androot ', null, true],
+  ['Rok', 'Player-4395-0A1B2C3D', true],
+  ['Rok Androot', 'Player-4395-0A1B2C3D', true],
+];
+
 describe('isClaimableRosterIdentity (ROK-2222)', () => {
-  it.each([
-    ['Rok', null, false],
-    ['  Rok  ', null, false],
-    ['Rok Androot', null, true],
-    [' Rok Androot ', null, true],
-    ['Rok', 'Player-4395-0A1B2C3D', true],
-    ['Rok Androot', 'Player-4395-0A1B2C3D', true],
-  ])('%j with guid %j → %s', (name, guid, expected) => {
+  it.each(CASES)('%j with guid %j → %s', (name, guid, expected) => {
     expect(isClaimableRosterIdentity({ name, guid })).toBe(expected);
   });
 
