@@ -109,9 +109,11 @@ describe('ROK-2208 hub forum Discord tag names + bind body', () => {
   });
 });
 
-describe('ROK-2208 Q10(c) forumChannelName — the hub\'s own forum', () => {
+describe("ROK-2208 Q10(c) forumChannelName — the hub's own forum", () => {
   it('slugs the hub name the way Discord shows a channel', () => {
-    expect(forumChannelName('Hearthbound Raiders!')).toBe('hearthbound-raiders');
+    expect(forumChannelName('Hearthbound Raiders!')).toBe(
+      'hearthbound-raiders',
+    );
     expect(forumChannelName('  Ölfen  Clan ')).toBe('ölfen-clan');
   });
 

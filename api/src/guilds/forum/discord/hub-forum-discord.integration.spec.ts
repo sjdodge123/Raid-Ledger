@@ -8,6 +8,7 @@
  */
 import type {
   HubForumDiscordChannelOptions,
+  HubForumDiscordPreflight,
   HubForumDiscordStatus,
 } from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
@@ -25,6 +26,7 @@ import {
   stubForumGateway,
   type FakeDiscord,
 } from './hub-forum-discord.test-fixtures';
+import { forumChannelName } from './hub-forum-discord.helpers';
 
 let ctx: PostsCtx;
 let adminToken: string;
@@ -206,6 +208,9 @@ describe('ROK-2208 binding — permission matrix (§6)', () => {
     expect(
       (await as('officerA', 'get', `${route(other)}/channels`)).status,
     ).toBe(403);
+    expect(
+      (await as('officerA', 'get', `${route(other)}/preflight`)).status,
+    ).toBe(403);
     expect((await as('officerA', 'delete', route(g))).status).toBe(403);
     expect(fake.spies.createForum).toHaveBeenCalledTimes(1);
     expect(await bindingRow(g)).not.toBeNull();
@@ -255,7 +260,7 @@ describe('ROK-2208 binding — PUT (AC1, AC2)', () => {
     const s = await statusOf(g);
     expect(s.binding).toMatchObject({
       channelId,
-      channelName: 'hub-forums',
+      channelName: forumChannelName(await hubNameOf(g)),
       managed: true,
       shared: false,
       sharedWith: 0,
@@ -459,5 +464,176 @@ describe('ROK-2208 binding — DELETE of a shared or unmanaged forum', () => {
     await as('admin', 'delete', `${route(g)}?deleteForum=true`);
     expect(fake.spies.deleteForum).not.toHaveBeenCalled();
     expect(fake.forums.has(f.id)).toBe(true);
+  });
+});
+
+const shareIn = (g: number, who: Actor = 'admin') =>
+  as(who, 'put', route(g), { mode: 'create', target: 'shared', ack: true });
+
+async function preflightOf(g: number): Promise<HubForumDiscordPreflight> {
+  const res = await as('admin', 'get', `${route(g)}/preflight`);
+  expect(res.status).toBe(200);
+  return res.body as HubForumDiscordPreflight;
+}
+
+const modTags = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: snowflake(),
+    name: `m${String(i)}`,
+  }));
+
+describe("ROK-2208 Q10(c) create — the hub's own forum", () => {
+  it('create without a target makes a forum named after the hub, never #hub-forums', async () => {
+    const { g, channelId } = await boundHub();
+    const name = forumChannelName(await hubNameOf(g));
+    expect(name).not.toBe('hub-forums');
+    expect(fake.spies.createForum).toHaveBeenCalledWith(name);
+    expect((await forumRow(channelId))?.managed).toBe(true);
+  });
+
+  it('create takes a name from the request and refuses the shared name', async () => {
+    const g = await newHub(ctx);
+    const body = { mode: 'create', name: 'Hub Forums', ack: true };
+    const reserved = await as('admin', 'put', route(g), body);
+    expect(reserved.status).toBe(400);
+    expect(reserved.body).toMatchObject({
+      code: 'FORUM_DISCORD_NAME_RESERVED',
+    });
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+    const ok = await as('admin', 'put', route(g), { ...body, name: 'Our Den' });
+    expect(ok.status).toBe(200);
+    expect(fake.spies.createForum).toHaveBeenCalledWith('our-den');
+  });
+});
+
+describe('ROK-2208 Q10(c) create shared — one #hub-forums, reused', () => {
+  it('the 1st hub creates #hub-forums, the 2nd joins it with a tag', async () => {
+    const a = await newHub(ctx);
+    expect((await shareIn(a)).status).toBe(200);
+    expect(fake.spies.createForum).toHaveBeenCalledWith('hub-forums');
+    const b = await newHub(ctx);
+    const res = await shareIn(b);
+    expect(res.status).toBe(200);
+    expect(fake.spies.createForum).toHaveBeenCalledTimes(1);
+    const first = need((await statusOf(a)).binding, 'a binding');
+    expect((res.body as HubForumDiscordStatus).binding).toMatchObject({
+      channelId: first.channelId,
+      shared: true,
+      sharedWith: 1,
+    });
+    expect(need(await bindingRow(b), 'b row').tagId).not.toBeNull();
+  });
+
+  it('an existing #hub-forums on Discord is reused, never a second one', async () => {
+    const f = fake.put({ name: 'hub-forums' });
+    const g = await newHub(ctx);
+    const res = await shareIn(g);
+    expect(res.status).toBe(200);
+    expect((res.body as HubForumDiscordStatus).binding?.channelId).toBe(f.id);
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+  });
+
+  it('a full #hub-forums is 409 TAG_LIMIT for the 2nd hub, and no new forum', async () => {
+    fake.put({ name: 'hub-forums', tags: modTags(19) });
+    expect((await shareIn(await newHub(ctx))).status).toBe(200);
+    const b = await newHub(ctx);
+    expect((await preflightOf(b)).shared?.tagsFree).toBe(0);
+    const res = await shareIn(b);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_TAG_LIMIT' });
+    expect(fake.spies.createForum).not.toHaveBeenCalled();
+    expect(await bindingRow(b)).toBeNull();
+  });
+});
+
+describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () => {
+  it('offline is 200 botOnline:false, never a 503', async () => {
+    fake.state.online = false;
+    const g = await newHub(ctx);
+    expect(await preflightOf(g)).toEqual({
+      botOnline: false,
+      missingToCreate: [],
+      suggestedName: forumChannelName(await hubNameOf(g)),
+      shared: null,
+    });
+  });
+
+  it('no #hub-forums yet: the shared option needs the create permissions', async () => {
+    fake.state.missingToCreate = ['Manage Channels'];
+    const p = await preflightOf(await newHub(ctx));
+    expect(p).toMatchObject({
+      botOnline: true,
+      missingToCreate: ['Manage Channels'],
+    });
+    expect(p.shared).toEqual({
+      channelId: null,
+      name: 'hub-forums',
+      sharedWith: 0,
+      tagsUsed: 0,
+      tagsFree: 20,
+      tagName: null,
+      missingPermissions: ['Manage Channels'],
+    });
+  });
+
+  it('a #hub-forums with one hub reports its tags, the tag to come and missing perms', async () => {
+    const f = fake.put({ name: 'hub-forums', tags: modTags(3) });
+    expect((await shareIn(await newHub(ctx))).status).toBe(200);
+    const g = await newHub(ctx);
+    const forum = need(fake.forums.get(f.id), 'forum');
+    forum.missing = ['Manage Webhooks'];
+    expect((await preflightOf(g)).shared).toEqual({
+      channelId: f.id,
+      name: 'hub-forums',
+      sharedWith: 1,
+      tagsUsed: 3,
+      tagsFree: 15,
+      tagName: (await hubNameOf(g)).trim().slice(0, 20).trim(),
+      missingPermissions: ['Manage Webhooks'],
+    });
+  });
+
+  it('each picker option carries the permissions the bot lacks there', async () => {
+    const f = fake.put({ name: 'raid-talk', missing: ['Manage Threads'] });
+    const res = await as(
+      'admin',
+      'get',
+      `${route(await newHub(ctx))}/channels`,
+    );
+    const opt = (res.body as HubForumDiscordChannelOptions).channels.find(
+      (c) => c.id === f.id,
+    );
+    expect(opt?.missingPermissions).toEqual(['Manage Threads']);
+  });
+});
+
+describe('ROK-2208 private forums (review api MAJOR-4)', () => {
+  it('binding a forum @everyone cannot view is 409 CHANNEL_PRIVATE', async () => {
+    const f = fake.put({ name: 'staff-forum', isPublic: false });
+    const g = await newHub(ctx);
+    const res = await join(g, f.id);
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      code: 'FORUM_DISCORD_CHANNEL_PRIVATE',
+      message:
+        'This forum is private in Discord. Raid Ledger only syncs forums everyone in the server can see.',
+    });
+    expect(await bindingRow(g)).toBeNull();
+    expect(await forumRow(f.id)).toBeNull();
+  });
+
+  it('the picker never lists a private forum', async () => {
+    const hidden = fake.put({ name: 'staff-forum', isPublic: false });
+    const shown = fake.put({ name: 'open-forum' });
+    const res = await as(
+      'admin',
+      'get',
+      `${route(await newHub(ctx))}/channels`,
+    );
+    const ids = (res.body as HubForumDiscordChannelOptions).channels.map(
+      (c) => c.id,
+    );
+    expect(ids).toContain(shown.id);
+    expect(ids).not.toContain(hidden.id);
   });
 });
