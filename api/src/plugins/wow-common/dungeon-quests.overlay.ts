@@ -16,6 +16,7 @@ import {
 } from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
+import { escortFields } from './data/dungeon-quest-escorts';
 import { MAX_CHAIN_DEPTH } from './dungeon-quests.helpers';
 import { listBlizzardOverlay } from './forever-quest-import/blizzard-quest.repo';
 import {
@@ -124,6 +125,7 @@ export function overlayOnlyDto(
     rewardType: itemIds.length > 0 ? 'choice' : 'none',
     ...reputationRewardFields(row.reputations),
     levelBand: instanceLevelBand(row.dungeonInstanceId, variant),
+    ...escortFields(row.questId),
   };
 }
 

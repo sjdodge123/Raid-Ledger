@@ -34,3 +34,16 @@ export const ESCORT_QUESTS: readonly EscortQuest[] = [
 export const ESCORT_QUEST_IDS: ReadonlySet<number> = new Set(
   ESCORT_QUESTS.map((entry) => entry.questId),
 );
+
+/** The escort flag as spread into a quest DTO: absent unless the quest is an escort. */
+export interface EscortFields {
+  isEscort?: boolean;
+}
+
+/**
+ * ROK-2224: `{ isEscort: true }` for a quest in {@link ESCORT_QUEST_IDS},
+ * `{}` otherwise — spread into a quest DTO so non-escorts carry no key.
+ */
+export function escortFields(questId: number): EscortFields {
+  return ESCORT_QUEST_IDS.has(questId) ? { isEscort: true } : {};
+}
