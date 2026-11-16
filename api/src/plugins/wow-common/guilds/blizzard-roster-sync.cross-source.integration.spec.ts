@@ -7,7 +7,7 @@
  * `blizzard-roster-sync.integration.spec.ts`. Fleet-only.
  */
 import * as bcrypt from 'bcrypt';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { AddonGuildMember } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
@@ -177,11 +177,40 @@ async function churn(): Promise<string[]> {
     .from(schema.activityLog)
     .where(eq(schema.activityLog.action, ROSTER_AUDIT_ACTION))
     .orderBy(asc(schema.activityLog.id));
-  return rows.slice(1).map((r) => {
-    const m = r.meta as { removed?: number; added?: number } | null;
-    return `${m?.removed ?? '?'}/${m?.added ?? '?'}`;
-  });
+  return rows
+    .slice(1)
+    .map((r) => `${count(r.meta, 'removed')}/${count(r.meta, 'added')}`);
 }
+
+/** One audit count, or '?' when the metadata lacks it. */
+function count(meta: unknown, key: 'removed' | 'added'): string {
+  if (typeof meta !== 'object' || meta === null) return '?';
+  const v: unknown = Reflect.get(meta, key);
+  return typeof v === 'number' ? String(v) : '?';
+}
+
+/** A member-kind editor grant on the LedgerLink row named `name`. */
+async function grantEditor(guildId: number, name: string): Promise<void> {
+  const m = schema.guildMembers;
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ id: m.id })
+      .from(m)
+      .where(and(eq(m.guildId, guildId), eq(m.characterName, name))),
+    `member ${name}`,
+  );
+  await testApp.db
+    .insert(schema.guildEditors)
+    .values({ guildId, kind: 'member', guildMemberId: row.id });
+}
+
+const dropsEditor = (p: unknown): boolean =>
+  typeof p === 'object' &&
+  p !== null &&
+  'dropsEditor' in p &&
+  p.dropsEditor === true;
+const editorFlags = async () =>
+  (await flags()).filter((f) => dropsEditor(f.payload));
 
 const flags = () =>
   testApp.db
@@ -235,5 +264,52 @@ describe('ROK-2225 — Blizzard ↔ LedgerLink roster churn', () => {
     await addonImport(who, ledgerLinkRoster(PAIRED.slice(0, 2)), 2);
     expect((await churn()).at(-1)).toBe('6/0');
     expect((await flags()).length).toBeGreaterThan(0);
+  });
+});
+
+describe('ROK-2225 review — each source measures against its own last snapshot', () => {
+  it('(a) GUID-only members who left count as removed once, not on every import', async () => {
+    const { who, guildId } = await seedGuild();
+    await syncAt(guildId, blizzardRoster(), 60);
+    await addonImport(who, ledgerLinkRoster(PAIRED), 2);
+    await syncAt(guildId, blizzardRoster(), 180);
+    await addonImport(who, ledgerLinkRoster(PAIRED), 4);
+    await syncAt(guildId, blizzardRoster(), 300);
+    await addonImport(who, ledgerLinkRoster(PAIRED), 6);
+    expect(await churn()).toEqual(['0/2', '2/0', '0/0', '0/0', '0/0', '0/0']);
+  });
+
+  it('(b) a paired editor LedgerLink dropped but Blizzard still lists counts and flags once', async () => {
+    const { who, guildId } = await seedGuild();
+    await grantEditor(guildId, 'Rok Androl');
+    const withoutRok = ALL_LL.filter((n) => n !== 'Rok Androl');
+    await syncAt(guildId, blizzardRoster(), 60);
+    await addonImport(who, ledgerLinkRoster(withoutRok), 2);
+    const first = await editorFlags();
+    expect(first.length).toBeGreaterThan(0);
+    await syncAt(guildId, blizzardRoster(), 180);
+    await addonImport(who, ledgerLinkRoster(withoutRok), 4);
+    await syncAt(guildId, blizzardRoster(), 300);
+    await addonImport(who, ledgerLinkRoster(withoutRok), 6);
+    expect(await churn()).toEqual(['0/2', '1/0', '0/0', '0/0', '0/0', '0/0']);
+    expect((await editorFlags()).length).toBe(first.length);
+  });
+
+  it('(c) a Blizzard sync that drops an editor flags dropsEditor', async () => {
+    const { who, guildId } = await seedGuild();
+    await grantEditor(guildId, 'Rok Androl');
+    await syncAt(guildId, blizzardRoster(), 60);
+    await addonImport(who, ledgerLinkRoster(), 2);
+    expect(await editorFlags()).toEqual([]);
+    const withoutRok = PAIRED.filter((n) => n !== 'Rok Androl');
+    await syncAt(guildId, blizzardRoster(withoutRok), 180);
+    expect((await churn()).at(-1)).toBe('1/0');
+    const got = await editorFlags();
+    expect(got.length).toBeGreaterThan(0);
+    expect(got[0]?.payload).toMatchObject({
+      guildId,
+      removed: 1,
+      dropsEditor: true,
+    });
   });
 });

@@ -13,7 +13,6 @@ import {
   adoptionKey,
   isAdoptableGuid,
   matchGuidlessRows,
-  storedGuids,
 } from './addon-import-guild.adopt';
 import {
   fromUnix,
@@ -292,9 +291,8 @@ async function measureRosterChange(
   countRemovals: boolean,
 ): Promise<RosterCheck> {
   const { guildId } = input;
-  const liveRows = await loadBaseline(tx, guildId, input.presence.by);
-  const stored = await storedGuids(tx, guildId);
-  const m = rosterMovement(liveRows, input.presence, stored);
+  const base = await loadBaseline(tx, guildId, input.presence.by);
+  const m = rosterMovement(base.rows, input.presence, base.storedGuids);
   const gone = countRemovals ? m.gone : [];
   const delta = { removed: gone.length, added: m.added };
   const dropsEditor = gone.some((r) => r.grantId !== null);

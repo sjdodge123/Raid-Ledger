@@ -7,10 +7,14 @@ import type { AddonImportTx } from './addon-import-apply.types';
  * sync and LedgerLink imports both replace the guild's latest snapshot, so
  * "live" alone is the OTHER source's view half the time: each counted the
  * other's unpaired rows as removed, then as added again, every alternation.
- * A source's baseline is the live roster PLUS the rows its own previous
- * snapshot held that the other source has since demoted. No per-source
- * column is needed: `guilds.blizzard_roster_synced_at` dates the last sync,
- * and a GUID row without a Blizzard id is only ever stamped by an import.
+ * Each source measures against its own previous snapshot instead:
+ * - Blizzard: live rows plus the rows it can see that its last sync stamped
+ *   (`last_seen_at >= guilds.blizzard_roster_synced_at`).
+ * - LedgerLink: the GUID rows its last import listed — those whose
+ *   `ledgerlink_seen_at` (stamped only by imports) equals the newest one —
+ *   plus live GUID-less rows, which it may adopt but never removes. A paired
+ *   row the Blizzard sync keeps live after LedgerLink dropped it is not
+ *   re-counted, and a departed member counts as removed once.
  */
 
 const { guilds, guildMembers, guildEditors } = schema;
@@ -29,6 +33,8 @@ export interface LiveRosterRow {
 export interface StoredRosterRow extends LiveRosterRow {
   live: boolean;
   lastSeenAt: Date | null;
+  /** Stamped only by LedgerLink imports (ROK-2225). */
+  ledgerlinkSeenAt: Date | null;
 }
 
 /** The guild's snapshot clocks. */
@@ -44,36 +50,27 @@ export const blizzardCanSee = (r: LiveRosterRow): boolean =>
 /** LedgerLink can see a row only by its GUID. */
 export const ledgerLinkCanSee = (r: LiveRosterRow): boolean => r.guid !== null;
 
-const seenSince = (r: StoredRosterRow, t: Date): boolean =>
-  r.lastSeenAt !== null && r.lastSeenAt.getTime() >= t.getTime();
-
-/** GUID rows Blizzard cannot pair: only an import ever stamps them. */
-const importOnly = (r: StoredRosterRow): boolean =>
-  r.guid !== null && r.blizzardId === null;
+const seenSince = (seen: Date | null, t: Date): boolean =>
+  seen !== null && seen.getTime() >= t.getTime();
 
 /**
- * When the latest snapshot is a Blizzard sync, the instant of the import
- * before it: the newest import-only row older than the sync. Null when the
- * latest snapshot is an import's own (live already is its view).
+ * The instant of the guild's latest LedgerLink import: the newest
+ * `ledgerlink_seen_at` (every row an import lists gets the same stamp).
+ * Null when no import ever listed a member.
  */
 export function previousImportAt(
   rows: readonly StoredRosterRow[],
-  clock: RosterClock,
 ): Date | null {
-  const synced = clock.blizzardSyncedAt;
-  const latest = clock.lastSnapshotAt;
-  if (synced === null || latest === null || latest > synced) return null;
-  const times = rows
-    .filter(importOnly)
-    .flatMap((r) => (r.lastSeenAt === null ? [] : [r.lastSeenAt.getTime()]))
-    .filter((ms) => ms < synced.getTime());
+  const times = rows.flatMap((r) =>
+    r.ledgerlinkSeenAt === null ? [] : [r.ledgerlinkSeenAt.getTime()],
+  );
   return times.length === 0 ? null : new Date(Math.max(...times));
 }
 
 /**
- * Pure. The rows a source's previous snapshot held: every live row, plus
- * (by id) the rows the previous Blizzard sync stamped, or (by GUID) the
- * import-only rows the previous import listed.
+ * Pure. The rows a source's previous snapshot held. By id: every live row
+ * plus the rows the previous Blizzard sync stamped. By GUID: the GUID rows
+ * the previous import listed, plus live GUID-less rows (adoption only).
  */
 export function sourceBaseline(
   rows: readonly StoredRosterRow[],
@@ -83,12 +80,14 @@ export function sourceBaseline(
   if (by === 'id') {
     const t = clock.blizzardSyncedAt;
     return rows.filter(
-      (r) => r.live || (t !== null && blizzardCanSee(r) && seenSince(r, t)),
+      (r) =>
+        r.live ||
+        (t !== null && blizzardCanSee(r) && seenSince(r.lastSeenAt, t)),
     );
   }
-  const t = previousImportAt(rows, clock);
-  return rows.filter(
-    (r) => r.live || (t !== null && importOnly(r) && seenSince(r, t)),
+  const t = previousImportAt(rows);
+  return rows.filter((r) =>
+    r.guid === null ? r.live : t !== null && seenSince(r.ledgerlinkSeenAt, t),
   );
 }
 
@@ -107,6 +106,7 @@ async function storedRoster(tx: AddonImportTx, guildId: number) {
       name: guildMembers.characterName,
       grantId: guildEditors.id,
       lastSeenAt: guildMembers.lastSeenAt,
+      ledgerlinkSeenAt: guildMembers.ledgerlinkSeenAt,
       lastSnapshotAt: guilds.lastSnapshotAt,
       blizzardSyncedAt: guilds.blizzardRosterSyncedAt,
     })
@@ -116,27 +116,37 @@ async function storedRoster(tx: AddonImportTx, guildId: number) {
     .where(eq(guildMembers.guildId, guildId));
 }
 
+/** A source's baseline plus every GUID the guild stores (live or not). */
+export interface SourceBaseline {
+  rows: LiveRosterRow[];
+  storedGuids: Set<string>;
+}
+
+const toLive = ({ id, guid, blizzardId, name, grantId }: LiveRosterRow) => ({
+  id,
+  guid,
+  blizzardId,
+  name,
+  grantId,
+});
+
 /** The baseline a source's snapshot of this guild is measured against. */
 export async function loadBaseline(
   tx: AddonImportTx,
   guildId: number,
   by: 'id' | 'guid',
-): Promise<LiveRosterRow[]> {
+): Promise<SourceBaseline> {
   const rows = await storedRoster(tx, guildId);
+  const storedGuids = new Set(rows.flatMap((r) => r.guid ?? []));
   const first = rows[0];
-  if (first === undefined) return [];
+  if (first === undefined) return { rows: [], storedGuids };
   const clock = {
     lastSnapshotAt: first.lastSnapshotAt,
     blizzardSyncedAt: first.blizzardSyncedAt,
   };
   const stored = rows.map((r) => ({ ...r, live: isLive(r.lastSeenAt, clock) }));
-  return sourceBaseline(stored, by, clock).map(
-    ({ id, guid, blizzardId, name, grantId }) => ({
-      id,
-      guid,
-      blizzardId,
-      name,
-      grantId,
-    }),
-  );
+  return {
+    rows: sourceBaseline(stored, by, clock).map(toLive),
+    storedGuids,
+  };
 }

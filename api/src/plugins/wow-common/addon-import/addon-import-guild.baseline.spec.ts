@@ -24,6 +24,7 @@ const row = (
   grantId: null,
   live: false,
   lastSeenAt: null,
+  ledgerlinkSeenAt: null,
   ...over,
 });
 
@@ -52,20 +53,18 @@ describe('who can see a row', () => {
 });
 
 describe('previousImportAt', () => {
-  it('is the newest import-only row older than the latest sync', () => {
+  it('is the newest ledgerlink_seen_at, whatever the sync stamped since', () => {
     const rows = [
-      row(1, { lastSeenAt: at(0) }),
-      row(2, { lastSeenAt: at(-60) }),
+      row(1, { ledgerlinkSeenAt: at(0) }),
+      row(2, { ledgerlinkSeenAt: at(-60) }),
       row(3, { blizzardId: 9, lastSeenAt: at(10), live: true }),
     ];
-    expect(previousImportAt(rows, afterSync)).toEqual(at(0));
+    expect(previousImportAt(rows)).toEqual(at(0));
   });
 
-  it('is null when the latest snapshot is an import, or there was never a sync', () => {
-    const rows = [row(1, { lastSeenAt: at(0) })];
-    expect(previousImportAt(rows, afterImport)).toBeNull();
-    const never = { lastSnapshotAt: at(0), blizzardSyncedAt: null };
-    expect(previousImportAt(rows, never)).toBeNull();
+  it('is null when no import ever listed a member', () => {
+    const rows = [row(1, { guid: null, blizzardId: 9, lastSeenAt: at(10) })];
+    expect(previousImportAt(rows)).toBeNull();
   });
 });
 
@@ -80,21 +79,45 @@ describe('sourceBaseline', () => {
     expect(ids(sourceBaseline(rows, 'id', afterImport))).toEqual([1, 2, 3]);
   });
 
-  it('by GUID after a sync: live rows plus the import-only rows the last import listed', () => {
+  it('by GUID after a sync: the rows the last import listed plus live GUID-less rows', () => {
     const rows = [
-      row(1, { blizzardId: 9, live: true, lastSeenAt: at(10) }),
+      row(1, {
+        blizzardId: 9,
+        live: true,
+        lastSeenAt: at(10),
+        ledgerlinkSeenAt: at(0),
+      }),
       row(2, { guid: null, blizzardId: 8, live: true, lastSeenAt: at(10) }),
-      row(3, { lastSeenAt: at(0) }),
-      row(4, { lastSeenAt: at(-60) }),
+      row(3, { lastSeenAt: at(0), ledgerlinkSeenAt: at(0) }),
+      row(4, { lastSeenAt: at(-60), ledgerlinkSeenAt: at(-60) }),
+      row(5, { guid: null, blizzardId: 7, lastSeenAt: at(-60) }),
     ];
     expect(ids(sourceBaseline(rows, 'guid', afterSync))).toEqual([1, 2, 3]);
   });
 
-  it('by GUID after an import: just the live rows', () => {
+  it('by GUID: a paired row the sync keeps live but the last import dropped is out', () => {
     const rows = [
-      row(1, { live: true, lastSeenAt: at(20) }),
-      row(2, { lastSeenAt: at(0) }),
+      row(1, { live: true, lastSeenAt: at(20), ledgerlinkSeenAt: at(20) }),
+      row(2, {
+        blizzardId: 9,
+        live: true,
+        lastSeenAt: at(20),
+        ledgerlinkSeenAt: at(0),
+      }),
     ];
     expect(ids(sourceBaseline(rows, 'guid', afterImport))).toEqual([1]);
+  });
+
+  it('by GUID: a member gone before the last import stays out, even when that import listed no import-only rows', () => {
+    const rows = [
+      row(1, {
+        blizzardId: 9,
+        live: true,
+        lastSeenAt: at(10),
+        ledgerlinkSeenAt: at(0),
+      }),
+      row(2, { lastSeenAt: at(-60), ledgerlinkSeenAt: at(-60) }),
+    ];
+    expect(ids(sourceBaseline(rows, 'guid', afterSync))).toEqual([1]);
   });
 });
