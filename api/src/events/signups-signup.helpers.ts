@@ -51,8 +51,10 @@ export function computeSlotCapacity(
 /**
  * Pure capacity check (no tentative displacement): a bench request is never
  * auto-benched, otherwise "full" per `isEventAtCapacity`. Signup paths that
- * run allocation use `resolveAutoBench` instead; the PUG-invite anonymous
- * path still uses this because it places the PUG directly (no displacement).
+ * run allocation use `resolveAutoBench` instead. NO signup path calls this
+ * any more (ROK-2203: anonymous PUG invites now go through `signupDiscord`);
+ * it remains as the capacity-only premise pinned by the ROK-626/ROK-2054
+ * specs. Never wire a new signup path to it — it skips displacement.
  */
 export async function checkAutoBench(
   tx: Tx,
