@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { HubForumLockSchema, HubForumReplySchema } from './hub-forum.schema.js';
+import { z } from "zod";
+import { HubForumLockSchema, HubForumReplySchema } from "./hub-forum.schema.js";
 
 /**
  * Event discussion (ROK-2226) — `GET /events/:id/discussion`, the event-page
@@ -21,28 +21,44 @@ export const EventDiscussionCanSchema = z
   .strict();
 export type EventDiscussionCan = z.infer<typeof EventDiscussionCanSchema>;
 
-export const EventDiscussionNoneSchema = z.object({ state: z.literal('none') }).strict();
+export const EventDiscussionNoneSchema = z
+  .object({ state: z.literal("none") })
+  .strict();
 export type EventDiscussionNone = z.infer<typeof EventDiscussionNoneSchema>;
 
 export const EventDiscussionReadySchema = z
   .object({
-    state: z.literal('ready'),
+    state: z.literal("ready"),
     guildId: id,
     threadId: id,
     /** Live replies only. */
     replyCount: z.number().int().nonnegative(),
-    latestReplies: z.array(HubForumReplySchema).max(EVENT_DISCUSSION_LATEST_MAX),
+    latestReplies: z
+      .array(HubForumReplySchema)
+      .max(EVENT_DISCUSSION_LATEST_MAX),
     lock: HubForumLockSchema.nullable(),
     can: EventDiscussionCanSchema,
+    /**
+     * The viewer is a member of the thread's hub (spec §7 / AC13): the card
+     * links members to the hub thread and everyone else to the event-page
+     * panel. Optional and additive — absent means "not a member".
+     */
+    member: z.boolean().optional(),
   })
   .strict();
 export type EventDiscussionReady = z.infer<typeof EventDiscussionReadySchema>;
 
 /** `GET /events/:id/discussion`. A non-reader is never sent reply text. */
 export const EventDiscussionSchema = z
-  .discriminatedUnion('state', [EventDiscussionNoneSchema, EventDiscussionReadySchema])
-  .refine((v) => v.state === 'none' || v.can.read || v.latestReplies.length === 0, {
-    message: 'latestReplies must be empty when the viewer cannot read',
-    path: ['latestReplies'],
-  });
+  .discriminatedUnion("state", [
+    EventDiscussionNoneSchema,
+    EventDiscussionReadySchema,
+  ])
+  .refine(
+    (v) => v.state === "none" || v.can.read || v.latestReplies.length === 0,
+    {
+      message: "latestReplies must be empty when the viewer cannot read",
+      path: ["latestReplies"],
+    },
+  );
 export type EventDiscussion = z.infer<typeof EventDiscussionSchema>;

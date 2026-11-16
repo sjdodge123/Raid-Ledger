@@ -58,7 +58,11 @@ export class EventDiscussionService {
     const record = live && (await findThread(this.db, live.guildId, live.id));
     if (!live || !record) return { state: 'none' };
     const deps = { db: this.db, access: this.access, now };
-    const { who, lock } = await resolveEventThread(deps, actor, record);
+    const { who, lock, isMember } = await resolveEventThread(
+      deps,
+      actor,
+      record,
+    );
     const open = record.thread.deletedAt === null && lock === null;
     return {
       state: 'ready',
@@ -68,6 +72,7 @@ export class EventDiscussionService {
       latestReplies: who.canRead ? await this.latest(who, record, lock) : [],
       lock,
       can: { read: who.canRead, reply: open && who.canReply },
+      member: isMember,
     };
   }
 

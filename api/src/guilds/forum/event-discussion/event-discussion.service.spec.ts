@@ -150,7 +150,9 @@ describe('ROK-2226 EventDiscussionService.summary', () => {
 
   it('ready: a signed-up reader gets the newest replies and can reply', async () => {
     const w = who({ isMember: true, isSignedUp: true });
-    jest.mocked(resolveEventThread).mockResolvedValue({ who: w, lock: null });
+    jest
+      .mocked(resolveEventThread)
+      .mockResolvedValue({ who: w, lock: null, isMember: true });
     const out = await build().summary(viewer, 5);
     expect(out).toMatchObject({
       state: 'ready',
@@ -159,6 +161,7 @@ describe('ROK-2226 EventDiscussionService.summary', () => {
       replyCount: 4,
       lock: null,
       can: { read: true, reply: true },
+      member: true,
     });
     const ids = out.state === 'ready' ? out.latestReplies.map((r) => r.id) : [];
     expect(ids).toEqual([31, 32]);
@@ -166,7 +169,9 @@ describe('ROK-2226 EventDiscussionService.summary', () => {
 
   it('header-only: a non-reader sees count and header but no replies (ruling 16)', async () => {
     const w = who({ isMember: false, isSignedUp: false });
-    jest.mocked(resolveEventThread).mockResolvedValue({ who: w, lock: null });
+    jest
+      .mocked(resolveEventThread)
+      .mockResolvedValue({ who: w, lock: null, isMember: false });
     const out = await build().summary(viewer, 5);
     expect(out).toMatchObject({
       state: 'ready',
@@ -180,9 +185,23 @@ describe('ROK-2226 EventDiscussionService.summary', () => {
   it('a locked thread reports the lock and refuses reply even to a signup', async () => {
     const lock = { at: NOW.toISOString(), reason: 'event-ended' as const };
     const w = who({ isMember: true, isSignedUp: true });
-    jest.mocked(resolveEventThread).mockResolvedValue({ who: w, lock });
+    jest
+      .mocked(resolveEventThread)
+      .mockResolvedValue({ who: w, lock, isMember: true });
     const out = await build().summary(viewer, 5);
     expect(out).toMatchObject({ lock, can: { read: true, reply: false } });
+  });
+
+  it('a signed-up non-member gets member: false (the card links the panel, §7)', async () => {
+    const w = who({ isMember: false, isSignedUp: true });
+    jest
+      .mocked(resolveEventThread)
+      .mockResolvedValue({ who: w, lock: null, isMember: false });
+    const out = await build().summary(viewer, 5);
+    expect(out).toMatchObject({
+      can: { read: true, reply: true },
+      member: false,
+    });
   });
 });
 

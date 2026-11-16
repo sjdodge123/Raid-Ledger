@@ -120,6 +120,22 @@ describe('ROK-2226 §6 — signed-up non-member (PUG, ruling 11)', () => {
   });
 });
 
+describe('ROK-2226 §7 / AC13 — the card summary reports hub membership', () => {
+  it('a signed-up member gets member: true, a signed-up non-member member: false', async () => {
+    const s = await newScene(ctx);
+    const mine = await as(ctx, 'signed', 'get', ev(s));
+    expect(mine.status).toBe(200);
+    expect(mine.body).toMatchObject({ state: 'ready', member: true });
+    const pug = await as(ctx, 'pug', 'get', ev(s));
+    expect(pug.status).toBe(200);
+    expect(pug.body).toMatchObject({
+      state: 'ready',
+      can: { read: true, reply: true },
+      member: false,
+    });
+  });
+});
+
 describe('ROK-2226 §6 — was signed up, now declined', () => {
   it('a member keeps reading and deleting own, but cannot reply or edit', async () => {
     const s = await newScene(ctx);

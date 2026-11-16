@@ -20,6 +20,7 @@ import {
   eventThreadActor,
   eventThreadLock,
   type EventThreadActor,
+  type EventThreadFacts,
 } from './event-discussion.access';
 import { isEventSignup } from './event-discussion.queries';
 
@@ -41,11 +42,11 @@ export interface ForumThreadDeps {
 }
 
 /** §6 facts for an event thread; signup/creator only count while attached. */
-async function eventActor(
+async function eventFacts(
   deps: ForumThreadDeps,
   actor: GuildActor,
   record: HubForumThreadRecord,
-): Promise<EventThreadActor> {
+): Promise<EventThreadFacts> {
   const { thread } = record;
   const isMember = await deps.access.canView(actor, thread.guildId);
   const canModerate =
@@ -54,12 +55,7 @@ async function eventActor(
   const isSignedUp =
     event !== null && (await isEventSignup(deps.db, event.id, actor.id));
   const isCreator = event !== null && event.creatorId === actor.id;
-  return eventThreadActor(actor.id, {
-    isMember,
-    canModerate,
-    isSignedUp,
-    isCreator,
-  });
+  return { isMember, canModerate, isSignedUp, isCreator };
 }
 
 /**
@@ -88,13 +84,23 @@ export async function forumThreadContext(
   return { record, who, canReply: who.canReply, lock };
 }
 
+/** What `resolveEventThread` reports about one viewer of one event thread. */
+export interface ResolvedEventThread {
+  who: EventThreadActor;
+  lock: HubForumLock | null;
+  /** Hub member (`access.canView`) — the card's hub-thread vs panel link. */
+  isMember: boolean;
+}
+
 /** An event thread's viewer rights + read-only state, never throwing (the card). */
 export async function resolveEventThread(
   deps: ForumThreadDeps,
   actor: GuildActor,
   record: HubForumThreadRecord,
-): Promise<{ who: EventThreadActor; lock: HubForumLock | null }> {
-  const who = await eventActor(deps, actor, record);
+): Promise<ResolvedEventThread> {
+  const facts = await eventFacts(deps, actor, record);
+  const who = eventThreadActor(actor.id, facts);
   const exists = (record.event ?? null) !== null;
-  return { who, lock: eventThreadLock(record.thread, exists, deps.now) };
+  const lock = eventThreadLock(record.thread, exists, deps.now);
+  return { who, lock, isMember: facts.isMember };
 }
