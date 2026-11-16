@@ -4,11 +4,10 @@
  * is needed and where it goes; never a secret value. A `check` id is what the
  * api reports met/unmet for on `PluginInfo.setupStatus`.
  */
-import type { PluginSetup } from "./plugin-setup.schema.js";
+import type { PluginSetup } from './plugin-setup.schema.js';
 
-const VALHEIM_MOD_REPO =
-  "https://github.com/Raid-Ledger-Plugins/rl-valheim-link";
-const VALHEIM_MOD_CFG = "BepInEx/config/RaidLedger.ValheimLink.cfg";
+const VALHEIM_MOD_REPO = 'https://github.com/Raid-Ledger-Plugins/rl-valheim-link';
+const VALHEIM_MOD_CFG = 'BepInEx/config/RaidLedger.ValheimLink.cfg';
 
 /**
  * ROK-1953 D7 — Core works without either; the shared Steam cards
@@ -17,32 +16,27 @@ const VALHEIM_MOD_CFG = "BepInEx/config/RaidLedger.ValheimLink.cfg";
 export const CORE_SETUP = {
   requirements: [
     {
-      id: "steam-api-key",
-      kind: "admin_setting",
-      title: "Steam Web API key",
+      id: 'steam-api-key',
+      kind: 'admin_setting',
+      title: 'Steam Web API key',
       instructions:
-        "1. Get a key at https://steamcommunity.com/dev/apikey.\n2. Enter it in Admin → Integrations → Steam. The Achievement race and Playtime cards on game hubs use it.",
+        '1. Get a key at https://steamcommunity.com/dev/apikey.\n2. Enter it in Admin → Integrations → Steam. The Achievement race and Playtime cards on game hubs use it.',
       required: false,
-      links: [
-        {
-          label: "Steam Web API key page",
-          url: "https://steamcommunity.com/dev/apikey",
-        },
-      ],
-      check: "core.steam_api_key",
+      links: [{ label: 'Steam Web API key page', url: 'https://steamcommunity.com/dev/apikey' }],
+      check: 'core.steam_api_key',
     },
     {
-      id: "player-steam-link",
-      kind: "steam_link",
-      title: "Players link Steam",
+      id: 'player-steam-link',
+      kind: 'steam_link',
+      title: 'Players link Steam',
       instructions:
         "Each player links Steam on their Raid Ledger profile and sets Game Details to Public in Steam's privacy settings. Unlinked players are left off the Achievement race and Playtime cards.",
       required: false,
     },
     {
-      id: "discord-forum-sync",
-      kind: "discord_channel",
-      title: "Discord forum for the hub Forum",
+      id: 'discord-forum-sync',
+      kind: 'discord_channel',
+      title: 'Discord forum for the hub Forum',
       instructions:
         "1. In Discord, give the Raid Ledger bot Manage Channels, Manage Webhooks, Manage Threads, Manage Messages, Create Public Threads, Send Messages in Threads, Send Messages, View Channels and Read Message History in the forum (or server-wide so it can create one).\n2. In the hub's Settings → Discord forum, create the shared #hub-forums forum or pick an existing forum, and confirm that everyone who can see that channel can read and post in the hub forum.",
       required: false,
@@ -53,55 +47,56 @@ export const CORE_SETUP = {
 export const VALHEIM_SETUP = {
   requirements: [
     {
-      id: "pelican-server",
-      kind: "pelican_egg",
-      title: "A Valheim server on Pelican, mapped to Valheim",
+      id: 'pelican-server',
+      kind: 'pelican_egg',
+      title: 'A Valheim server on Pelican, mapped to Valheim',
       instructions:
-        "1. Run the server on your Pelican panel from a Valheim egg that loads BepInEx.\n2. Install and connect the Pelican plugin.\n3. In Admin → Integrations → Pelican Panel, map the server to the game Valheim and bind it to a game-server hub.",
+        '1. Run the server on your Pelican panel from a Valheim egg that loads BepInEx.\n2. Install and connect the Pelican plugin.\n3. In Admin → Integrations → Pelican Panel, map the server to the game Valheim and bind it to a game-server hub.',
       required: true,
-      appliesTo: ["game_server"],
-      check: "valheim.server_bound",
-      pelican: { eggHint: "A Valheim egg with BepInEx (mods) enabled" },
+      appliesTo: ['game_server'],
+      check: 'valheim.server_bound',
+      pelican: { eggHint: 'A Valheim egg with BepInEx (mods) enabled' },
     },
     {
-      id: "link-mod",
-      kind: "server_mod",
-      title: "Install the RL Valheim Link mod",
+      id: 'link-mod',
+      kind: 'server_mod',
+      title: 'Install the RL Valheim Link mod',
       instructions:
-        "1. Download the latest RL Valheim Link release.\n2. Put it in the game server's `BepInEx/plugins/` folder.\n3. Restart the server. Characters, the map and the item catalogue start uploading once the token below is set.",
+        '1. Download the latest RL Valheim Link release.\n2. Put it in the game server\'s `BepInEx/plugins/` folder.\n3. Restart the server. Characters, the map and the item catalogue start uploading once the token below is set.',
       required: true,
-      appliesTo: ["game_server"],
-      links: [{ label: "RL Valheim Link", url: VALHEIM_MOD_REPO }],
-      check: "valheim.mod_heartbeat",
-      pelican: { files: ["BepInEx/plugins/"] },
+      appliesTo: ['game_server'],
+      links: [{ label: 'RL Valheim Link', url: VALHEIM_MOD_REPO }],
+      check: 'valheim.mod_heartbeat',
+      pelican: { files: ['BepInEx/plugins/'] },
     },
     {
-      id: "link-token",
-      kind: "server_secret",
-      title: "The server's mod token",
-      instructions: `1. In Admin → Integrations → Pelican Panel, choose Generate token on the Valheim server's row. The token is shown once.\n2. Copy the config block it shows (BaseUrl, ServerId, ServerToken) into \`${VALHEIM_MOD_CFG}\` under \`[RaidLedger]\`, then restart the server.\n3. Rotate the token if it leaks; the mod picks up the new one within 10 minutes.`,
+      id: 'link-token',
+      kind: 'server_secret',
+      title: 'The server\'s mod token',
+      instructions:
+        `1. In Admin → Integrations → Pelican Panel, choose Generate token on the Valheim server's row. The token is shown once.\n2. Copy the config block it shows (BaseUrl, ServerId, ServerToken) into \`${VALHEIM_MOD_CFG}\` under \`[RaidLedger]\`, then restart the server.\n3. Rotate the token if it leaks; the mod picks up the new one within 10 minutes.`,
       required: true,
-      appliesTo: ["game_server"],
-      check: "valheim.link_token_active",
+      appliesTo: ['game_server'],
+      check: 'valheim.link_token_active',
       pelican: { files: [VALHEIM_MOD_CFG] },
     },
     {
-      id: "item-catalogue-admin",
-      kind: "other",
-      title: "A server admin joins after each game update",
+      id: 'item-catalogue-admin',
+      kind: 'other',
+      title: 'A server admin joins after each game update',
       instructions:
-        "1. Add a player's SteamID64 to the game server's `adminlist.txt` (`Steam_7656…`).\n2. After every Valheim update, have that player join once so the mod exports item names and icons.",
+        '1. Add a player\'s SteamID64 to the game server\'s `adminlist.txt` (`Steam_7656…`).\n2. After every Valheim update, have that player join once so the mod exports item names and icons.',
       required: false,
-      appliesTo: ["game_server"],
+      appliesTo: ['game_server'],
     },
     {
-      id: "player-steam-link",
-      kind: "steam_link",
-      title: "Players link Steam",
+      id: 'player-steam-link',
+      kind: 'steam_link',
+      title: 'Players link Steam',
       instructions:
-        "Each player links Steam on their Raid Ledger profile so their Valheim characters are matched to them. Unlinked characters are suggested for claiming instead.",
+        'Each player links Steam on their Raid Ledger profile so their Valheim characters are matched to them. Unlinked characters are suggested for claiming instead.',
       required: false,
-      appliesTo: ["game_server"],
+      appliesTo: ['game_server'],
     },
   ],
 } satisfies PluginSetup;
@@ -109,23 +104,23 @@ export const VALHEIM_SETUP = {
 export const PELICAN_SETUP = {
   requirements: [
     {
-      id: "panel-connection",
-      kind: "admin_setting",
-      title: "Connect your Pelican panel",
+      id: 'panel-connection',
+      kind: 'admin_setting',
+      title: 'Connect your Pelican panel',
       instructions:
-        "1. In the Pelican panel, create a client API key (Account → API Keys — a client key, not an application key) on a user that can see your game servers, and set its Allowed IPs to the address of the Raid Ledger server.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then choose Test Connection. The key is write-only and never shown again.",
+        '1. In the Pelican panel, create a client API key (Account → API Keys — a client key, not an application key) on a user that can see your game servers, and set its Allowed IPs to the address of the Raid Ledger server.\n2. In Admin → Integrations → Pelican Panel, enter the panel URL and the key, then choose Test Connection. The key is write-only and never shown again.',
       required: true,
-      check: "pelican.panel_configured",
+      check: 'pelican.panel_configured',
     },
     {
-      id: "server-hub",
-      kind: "admin_setting",
-      title: "Bind a server to a hub",
+      id: 'server-hub',
+      kind: 'admin_setting',
+      title: 'Bind a server to a hub',
       instructions:
-        "After the first sync, open Admin → Integrations → Pelican Panel and bind each server to a game-server hub. Unbound servers stay off every hub.",
+        'After the first sync, open Admin → Integrations → Pelican Panel and bind each server to a game-server hub. Unbound servers stay off every hub.',
       required: true,
-      appliesTo: ["game_server"],
-      check: "pelican.server_bound",
+      appliesTo: ['game_server'],
+      check: 'pelican.server_bound',
     },
   ],
 } satisfies PluginSetup;
@@ -133,59 +128,48 @@ export const PELICAN_SETUP = {
 export const BLIZZARD_SETUP = {
   requirements: [
     {
-      id: "battle-net-api",
-      kind: "admin_setting",
-      title: "Battle.net API client",
+      id: 'battle-net-api',
+      kind: 'admin_setting',
+      title: 'Battle.net API client',
       instructions:
-        "1. Create a client at the Blizzard developer portal.\n2. Enter its client ID and secret in Admin → Integrations → Blizzard API. Character sync and raid data refresh use it.",
+        '1. Create a client at the Blizzard developer portal.\n2. Enter its client ID and secret in Admin → Integrations → Blizzard API. Character sync and raid data refresh use it.',
       required: true,
-      links: [
-        {
-          label: "Blizzard developer portal",
-          url: "https://develop.battle.net/access/clients",
-        },
-      ],
-      check: "blizzard.api_credentials",
+      links: [{ label: 'Blizzard developer portal', url: 'https://develop.battle.net/access/clients' }],
+      check: 'blizzard.api_credentials',
     },
     {
-      id: "ledgerlink-addon",
-      kind: "companion_app",
-      title: "LedgerLink addon (players)",
+      id: 'ledgerlink-addon',
+      kind: 'companion_app',
+      title: 'LedgerLink addon (players)',
       instructions:
-        "1. Install LedgerLink from CurseForge or GitHub.\n2. In game, open LedgerLink and copy your guild export.\n3. Paste it under Guilds → Import guild. Roster, ranks and raid schedule come with it. Each player’s character export adds gear, quests and lockouts; a raider’s raid export adds boss kills and wipes.",
+        '1. Install LedgerLink from CurseForge or GitHub.\n2. In game, open LedgerLink and copy your guild export.\n3. Paste it under Guilds → Import guild. Roster, ranks and raid schedule come with it. Each player’s character export adds gear, quests and lockouts; a raider’s raid export adds boss kills and wipes.',
       required: false,
-      appliesTo: ["wow_guild"],
+      appliesTo: ['wow_guild'],
       links: [
-        {
-          label: "LedgerLink on CurseForge",
-          url: "https://www.curseforge.com/wow/addons/ledger-link",
-        },
-        {
-          label: "LedgerLink on GitHub",
-          url: "https://github.com/sjdodge123/ledger-link",
-        },
+        { label: 'LedgerLink on CurseForge', url: 'https://www.curseforge.com/wow/addons/ledger-link' },
+        { label: 'LedgerLink on GitHub', url: 'https://github.com/sjdodge123/ledger-link' },
       ],
     },
     {
       // ROK-1964: optional auto-upload; paste keeps working without it.
-      id: "ledgerlink-companion",
-      kind: "companion_app",
-      title: "Raid Ledger Companion (optional auto-upload)",
+      id: 'ledgerlink-companion',
+      kind: 'companion_app',
+      title: 'Raid Ledger Companion (optional auto-upload)',
       instructions:
-        "1. Install the Raid Ledger Companion on the PC you play WoW on and link it to your account.\n2. Turn on LedgerLink in the Companion and point it at your World of Warcraft folder.\n3. LedgerLink saves an export when you log out; the Companion uploads it and Raid Ledger applies it. Pasting still works.",
+        '1. Install the Raid Ledger Companion on the PC you play WoW on and link it to your account.\n2. Turn on LedgerLink in the Companion and point it at your World of Warcraft folder.\n3. LedgerLink saves an export when you log out; the Companion uploads it and Raid Ledger applies it. Pasting still works.',
       required: false,
-      appliesTo: ["wow_guild"],
-      rlCompanion: { collector: "wow-ledgerlink" },
+      appliesTo: ['wow_guild'],
+      rlCompanion: { collector: 'wow-ledgerlink' },
     },
     {
       // ROK-2148: feeds the Guild contributions card; link pending (spec U5).
-      id: "mailworthy-addon",
-      kind: "companion_app",
-      title: "Mailworthy addon (players, optional)",
+      id: 'mailworthy-addon',
+      kind: 'companion_app',
+      title: 'Mailworthy addon (players, optional)',
       instructions:
-        "1. Install Mailworthy.\n2. An officer (guild master or the rank below) publishes the guild template in Mailworthy.\n3. Players export with LedgerLink as usual — LedgerLink adds the Mailworthy summary. The Guild contributions card fills in from those exports.",
+        '1. Install Mailworthy.\n2. An officer (guild master or the rank below) publishes the guild template in Mailworthy.\n3. Players export with LedgerLink as usual — LedgerLink adds the Mailworthy summary. The Guild contributions card fills in from those exports.',
       required: false,
-      appliesTo: ["wow_guild"],
+      appliesTo: ['wow_guild'],
     },
   ],
 } satisfies PluginSetup;
@@ -198,42 +182,42 @@ export const BLIZZARD_SETUP = {
 export const BG3_SETUP = {
   requirements: [
     {
-      id: "upload-saves",
-      kind: "companion_app",
-      title: "Players upload their BG3 saves",
+      id: 'upload-saves',
+      kind: 'companion_app',
+      title: 'Players upload their BG3 saves',
       instructions:
-        "Each player installs the Raid Ledger Companion on the PC they play on, or drags a save file onto the hub. Saves upload as they are made.",
+        'Each player installs the Raid Ledger Companion on the PC they play on, or drags a save file onto the hub. Saves upload as they are made.',
       required: true,
-      appliesTo: ["game_community"],
-      rlCompanion: { collector: "bg3-save" },
+      appliesTo: ['game_community'],
+      rlCompanion: { collector: 'bg3-save' },
     },
     {
-      id: "bind-campaign",
-      kind: "other",
-      title: "Bind a campaign to the hub",
+      id: 'bind-campaign',
+      kind: 'other',
+      title: 'Bind a campaign to the hub',
       instructions:
         "1. A member creates a campaign on the Baldur's Gate 3 hub.\n2. Each player binds their saves to it, or sets it as their default campaign. Saves that are not bound stay private to their uploader.",
       required: true,
-      appliesTo: ["game_community"],
+      appliesTo: ['game_community'],
     },
     {
-      id: "gallery-saves",
-      kind: "other",
-      title: "Save pictures in the hub Gallery",
+      id: 'gallery-saves',
+      kind: 'other',
+      title: 'Save pictures in the hub Gallery',
       instructions:
         "Nothing to install. About 4 hours after a play session ends, the picture of its last save appears in the hub Gallery under Saves. While the hub's spoiler setting hides location and screenshots, save pictures stay hidden for everyone.",
       required: false,
-      appliesTo: ["game_community"],
+      appliesTo: ['game_community'],
     },
     {
-      id: "companion-screenshots",
-      kind: "companion_app",
-      title: "Screenshots from the Companion",
+      id: 'companion-screenshots',
+      kind: 'companion_app',
+      title: 'Screenshots from the Companion',
       instructions:
         "1. In the Raid Ledger Companion, turn on \"BG3 screenshots\".\n2. Pick the Baldur's Gate 3 hub they go to. The first screenshot waits for you to confirm it; after that, new screenshots you take with Steam's screenshot key appear in that hub's Gallery under Screenshots. While the hub's spoiler setting hides location and screenshots, they stay hidden for everyone.",
       required: false,
-      appliesTo: ["game_community"],
-      rlCompanion: { collector: "bg3-screenshot" },
+      appliesTo: ['game_community'],
+      rlCompanion: { collector: 'bg3-screenshot' },
     },
   ],
 } satisfies PluginSetup;
