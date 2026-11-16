@@ -25,12 +25,24 @@ export const HUB_FORUM_DISCORD_BODY_MAX = 2000;
 export const HubForumDiscordModeSchema = z.enum(["create", "existing"]);
 export type HubForumDiscordMode = z.infer<typeof HubForumDiscordModeSchema>;
 
+/**
+ * What `create` makes (Q10 option c): `own` (the default) = a new forum for
+ * this hub alone; `shared` = join the bot's shared `#hub-forums`, created the
+ * first time a hub picks it and reused after (never a second one).
+ */
+export const HubForumDiscordTargetSchema = z.enum(["own", "shared"]);
+export type HubForumDiscordTarget = z.infer<typeof HubForumDiscordTargetSchema>;
+
 /** `PUT /guilds/:id/forum-discord` — bind (or rebind) the hub's forum. */
 export const PutHubForumDiscordSchema = z
   .object({
     mode: HubForumDiscordModeSchema,
     /** Required for `existing`; ignored for `create`. */
     channelId: snowflake.optional(),
+    /** `create` only; omitted = `own`. */
+    target: HubForumDiscordTargetSchema.optional(),
+    /** `create` + `own` only: the channel name; default = the hub's name. */
+    name: z.string().trim().min(1).max(100).optional(),
     /** The visibility acknowledgement; anything but `true` is a 400. */
     ack: z.literal(true),
   })
@@ -88,6 +100,8 @@ export const HubForumDiscordChannelOptionSchema = z
     sharedWith: z.number().int().nonnegative(),
     /** Tags the channel can still take (0 = full, option disabled). */
     tagsFree: z.number().int().nonnegative(),
+    /** Discord permission names the bot lacks in this channel. */
+    missingPermissions: z.array(z.string()).optional(),
   })
   .strict();
 export type HubForumDiscordChannelOption = z.infer<
@@ -100,4 +114,45 @@ export const HubForumDiscordChannelOptionsSchema = z
   .strict();
 export type HubForumDiscordChannelOptions = z.infer<
   typeof HubForumDiscordChannelOptionsSchema
+>;
+
+/** The shared `#hub-forums` as the form's "Shared server forum" option. */
+export const HubForumDiscordSharedOptionSchema = z
+  .object({
+    /** null = it does not exist yet; the bot creates it on bind. */
+    channelId: z.string().nullable(),
+    name: z.string(),
+    /** Hubs already bound to it. */
+    sharedWith: z.number().int().nonnegative(),
+    /** Tags on the forum now ("3 of 20 tags used"), moderators' included. */
+    tagsUsed: z.number().int().nonnegative(),
+    /** 0 = full: the option is disabled and the hub's own forum preselected. */
+    tagsFree: z.number().int().nonnegative(),
+    /** The tag this hub would get; null while it would be the only hub. */
+    tagName: z.string().nullable(),
+    /** Permissions the bot lacks to create (or tag) the shared forum. */
+    missingPermissions: z.array(z.string()),
+  })
+  .strict();
+export type HubForumDiscordSharedOption = z.infer<
+  typeof HubForumDiscordSharedOptionSchema
+>;
+
+/**
+ * `GET /guilds/:id/forum-discord/preflight` — what the unbound form shows
+ * before "Turn on sync": never a 503, `botOnline: false` instead.
+ */
+export const HubForumDiscordPreflightSchema = z
+  .object({
+    botOnline: z.boolean(),
+    /** Server-wide permissions the bot lacks to create a forum. */
+    missingToCreate: z.array(z.string()),
+    /** Default name of the hub's own new forum (from the hub name). */
+    suggestedName: z.string(),
+    /** null while the bot is offline. */
+    shared: HubForumDiscordSharedOptionSchema.nullable(),
+  })
+  .strict();
+export type HubForumDiscordPreflight = z.infer<
+  typeof HubForumDiscordPreflightSchema
 >;

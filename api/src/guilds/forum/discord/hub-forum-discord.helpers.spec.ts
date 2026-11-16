@@ -1,6 +1,7 @@
 import { HttpException } from '@nestjs/common';
 import { PermissionFlagsBits } from 'discord.js';
 import {
+  forumChannelName,
   missingForumPermissions,
   parseBindBody,
   planSharedTags,
@@ -104,6 +105,25 @@ describe('ROK-2208 hub forum Discord tag names + bind body', () => {
     expect(parseBindBody({ mode: 'create', ack: true })).toEqual({
       mode: 'create',
       ack: true,
+    });
+  });
+});
+
+describe('ROK-2208 Q10(c) forumChannelName — the hub\'s own forum', () => {
+  it('slugs the hub name the way Discord shows a channel', () => {
+    expect(forumChannelName('Hearthbound Raiders!')).toBe('hearthbound-raiders');
+    expect(forumChannelName('  Ölfen  Clan ')).toBe('ölfen-clan');
+  });
+
+  it('caps the name at 100 characters and falls back when nothing is left', () => {
+    expect(forumChannelName('a'.repeat(140))).toHaveLength(100);
+    expect(forumChannelName('!!!')).toBe('hub-forum');
+  });
+
+  it('refuses the shared #hub-forums name with a coded 400', () => {
+    expect(codeOf(() => forumChannelName('Hub Forums'))).toMatchObject({
+      statusCode: 400,
+      code: 'FORUM_DISCORD_NAME_RESERVED',
     });
   });
 });
