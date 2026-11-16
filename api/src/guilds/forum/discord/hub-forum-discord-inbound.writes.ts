@@ -12,6 +12,7 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const { hubForumThreads: threads, hubForumReplies: replies } = schema;
 const links = schema.hubForumDiscordLinks;
+type Tx = Parameters<Parameters<ForumDiscordDb['transaction']>[0]>[0];
 
 /** Who wrote a Discord-origin row: a linked RL user, or a guest. */
 export interface DiscordAuthor {
@@ -110,6 +111,23 @@ export async function insertDiscordThread(
   });
 }
 
+/** Count one more reply on a LIVE thread; false when it is gone. */
+async function bumpLiveThread(
+  tx: Tx,
+  threadId: number,
+  now: Date,
+): Promise<boolean> {
+  const bumped = await tx
+    .update(threads)
+    .set({
+      replyCount: sql`${threads.replyCount} + 1`,
+      lastActivityAt: sql`GREATEST(${threads.lastActivityAt}, ${now.toISOString()}::timestamptz)`,
+    })
+    .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
+    .returning({ id: threads.id });
+  return bumped.length > 0;
+}
+
 /** Import a Discord message as a reply; null when the thread is not live. */
 export async function insertDiscordReply(
   db: ForumDiscordDb,
@@ -119,15 +137,7 @@ export async function insertDiscordReply(
 ): Promise<number | null> {
   const { now, guildId, threadId, body } = row;
   return db.transaction(async (tx) => {
-    const bumped = await tx
-      .update(threads)
-      .set({
-        replyCount: sql`${threads.replyCount} + 1`,
-        lastActivityAt: sql`GREATEST(${threads.lastActivityAt}, ${now.toISOString()}::timestamptz)`,
-      })
-      .where(and(eq(threads.id, threadId), isNull(threads.deletedAt)))
-      .returning({ id: threads.id });
-    if (bumped.length === 0) return null;
+    if (!(await bumpLiveThread(tx, threadId, now))) return null;
     const [r] = await tx
       .insert(replies)
       .values({
@@ -172,6 +182,33 @@ export async function editFromDiscord(
     .where(and(eq(threads.id, link.threadId), isNull(threads.deletedAt)));
 }
 
+/** The soft-delete stamp of a Discord-side removal (no RL actor). */
+interface Gone {
+  deletedAt: Date;
+  deletedBy: null;
+  deletedAs: 'author' | 'moderator';
+  updatedAt: Date;
+}
+
+/** Soft-delete a live reply and drop it from its thread's count. */
+async function removeReply(
+  tx: Tx,
+  link: ForumLink,
+  replyId: number,
+  gone: Gone,
+): Promise<void> {
+  const done = await tx
+    .update(replies)
+    .set(gone)
+    .where(and(eq(replies.id, replyId), isNull(replies.deletedAt)))
+    .returning({ id: replies.id });
+  if (done.length === 0) return;
+  await tx
+    .update(threads)
+    .set({ replyCount: sql`greatest(${threads.replyCount} - 1, 0)` })
+    .where(eq(threads.id, link.threadId));
+}
+
 /**
  * §5.3: a Discord-side delete soft-deletes the RL row (`deleted_by` null)
  * and records the Discord side as gone. Already-deleted rows are untouched.
@@ -182,7 +219,7 @@ export async function removeFromDiscord(
   as: 'author' | 'moderator',
   now: Date,
 ): Promise<void> {
-  const gone = {
+  const gone: Gone = {
     deletedAt: now,
     deletedBy: null,
     deletedAs: as,
@@ -193,22 +230,13 @@ export async function removeFromDiscord(
       .update(links)
       .set({ discordDeletedAt: now })
       .where(eq(links.id, link.id));
-    if (link.replyId === null) {
-      await tx
-        .update(threads)
-        .set({ ...gone, pinnedAt: null, pinnedBy: null })
-        .where(and(eq(threads.id, link.threadId), isNull(threads.deletedAt)));
+    if (link.replyId !== null) {
+      await removeReply(tx, link, link.replyId, gone);
       return;
     }
-    const done = await tx
-      .update(replies)
-      .set(gone)
-      .where(and(eq(replies.id, link.replyId), isNull(replies.deletedAt)))
-      .returning({ id: replies.id });
-    if (done.length === 0) return;
     await tx
       .update(threads)
-      .set({ replyCount: sql`greatest(${threads.replyCount} - 1, 0)` })
-      .where(eq(threads.id, link.threadId));
+      .set({ ...gone, pinnedAt: null, pinnedBy: null })
+      .where(and(eq(threads.id, link.threadId), isNull(threads.deletedAt)));
   });
 }

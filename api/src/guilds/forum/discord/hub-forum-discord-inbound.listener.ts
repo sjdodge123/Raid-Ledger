@@ -28,6 +28,7 @@ import { HubForumDiscordPinSync } from './hub-forum-discord-pins';
 import type { InboundMessage, InboundThread } from './hub-forum-discord-route';
 
 type AnyMessage = Message | PartialMessage;
+type GatewayBinding = ReturnType<typeof gatewayBinding>;
 
 /** A discord.js message as plain inbound data. */
 export function toInboundMessage(m: Message): InboundMessage {
@@ -87,6 +88,14 @@ export class HubForumDiscordInboundListener {
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   handleBotConnected(): void {
     this.binding.attachToClient(this.clientService.getClient(), [
+      ...this.messageBindings(),
+      ...this.threadBindings(),
+    ]);
+  }
+
+  /** MessageCreate/Update/Delete/BulkDelete → the ingest. */
+  private messageBindings(): GatewayBinding[] {
+    return [
       gatewayBinding(Events.MessageCreate, (m: Message) => {
         this.run('messageCreate', this.onCreate(m));
       }),
@@ -105,6 +114,12 @@ export class HubForumDiscordInboundListener {
           this.run('messageBulkDelete', this.onBulkDelete(ms));
         },
       ),
+    ];
+  }
+
+  /** ThreadUpdate (rename, pin flag) and ThreadDelete → the ingest. */
+  private threadBindings(): GatewayBinding[] {
+    return [
       gatewayBinding(
         Events.ThreadUpdate,
         (before: AnyThreadChannel, after: AnyThreadChannel) => {
@@ -125,7 +140,7 @@ export class HubForumDiscordInboundListener {
           work.then(() => undefined),
         );
       }),
-    ]);
+    ];
   }
 
   /** Drop the handlers so a reconnect rebinds to the new client. */
