@@ -27,13 +27,7 @@ const HOUR = 3_600_000;
 
 /** The §6 actors beyond the hub-post four. */
 export type Extra =
-  | 'admin'
-  | 'signed'
-  | 'bench'
-  | 'tentative'
-  | 'pug'
-  | 'declined'
-  | 'creator';
+  'admin' | 'signed' | 'bench' | 'tentative' | 'pug' | 'declined' | 'creator';
 export type Actor = Who | Extra;
 interface Made {
   id: number;

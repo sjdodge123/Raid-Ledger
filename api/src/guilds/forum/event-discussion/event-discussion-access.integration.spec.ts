@@ -291,10 +291,16 @@ describe('ROK-2226 §13 AC12 — D7: empty event threads stay out of the list', 
       empties.push(await addEventThread(ctx, s.guildId));
     }
     await reply(s, 'signed', 'the only reply');
-    const normal = await as(ctx, 'plain', 'post', `/guilds/${s.guildId}/forum`, {
-      title: 'Loot rules',
-      body: 'Thoughts?',
-    });
+    const normal = await as(
+      ctx,
+      'plain',
+      'post',
+      `/guilds/${s.guildId}/forum`,
+      {
+        title: 'Loot rules',
+        body: 'Thoughts?',
+      },
+    );
     expect(normal.status).toBe(201);
     const normalId = (normal.body as HubForumThread).id;
     const want = [s.threadId, normalId].sort((a, b) => a - b);
@@ -305,7 +311,12 @@ describe('ROK-2226 §13 AC12 — D7: empty event threads stay out of the list', 
       event: { id: s.eventId },
       lock: null,
     });
-    const latest = await as(ctx, 'plain', 'get', `/guilds/${s.guildId}/forum/latest`);
+    const latest = await as(
+      ctx,
+      'plain',
+      'get',
+      `/guilds/${s.guildId}/forum/latest`,
+    );
     const body = latest.body as HubForumLatest;
     expect(body.threads.map((t) => t.id).sort((a, b) => a - b)).toEqual(want);
     expect(body.total).toBe(2);
