@@ -207,3 +207,30 @@ describe('buildQuestReadiness prereqsMet without a chain position (ROK-1911)', (
     expect(stateOf(body, 1, 200)?.prereqsMet).toBeNull();
   });
 });
+
+describe('buildQuestReadiness escorts (ROK-2224)', () => {
+  const body = buildQuestReadiness({
+    quests: selectEventQuests([quest(1144, 491), quest(1101, 491)], [491]),
+    signups: [signup(1, C1)],
+    snapshots: new Map(),
+    manual: [],
+  });
+  const column = (questId: number) =>
+    body.quests.find((q) => q.questId === questId);
+
+  it('flags the escort column (Willix the Importer) with isEscort: true', () => {
+    expect(column(1144)).toEqual({
+      questId: 1144,
+      title: 'Q1144',
+      instanceId: 491,
+      isEscort: true,
+    });
+    expect(EventQuestReadinessSchema.parse(body).quests).toContainEqual(
+      expect.objectContaining({ questId: 1144, isEscort: true }),
+    );
+  });
+
+  it('leaves the key off a non-escort column', () => {
+    expect(column(1101)).toEqual({ questId: 1101, title: 'Q1101', instanceId: 491 });
+  });
+});
