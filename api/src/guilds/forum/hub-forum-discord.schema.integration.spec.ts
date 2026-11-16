@@ -183,7 +183,6 @@ describe('message links', () => {
       },
     });
   });
-
 });
 
 describe('hub delete', () => {

@@ -28,8 +28,10 @@ function discordGuestColumns() {
 }
 
 /** ROK-2208: claim-on-link looks guest rows up by Discord id. */
-function discordIdIndex(name: string, column: AnyPgColumn) {
-  return index(name).on(column).where(sql`${column} IS NOT NULL`);
+function discordIdIndex(table: 'threads' | 'replies', column: AnyPgColumn) {
+  return index(`idx_hub_forum_${table}_author_discord_id`)
+    .on(column)
+    .where(sql`${column} IS NOT NULL`);
 }
 
 /**
@@ -103,10 +105,7 @@ export const hubForumThreads = pgTable(
     index('idx_hub_forum_threads_author_id').on(table.authorId),
     index('idx_hub_forum_threads_pinned_by').on(table.pinnedBy),
     index('idx_hub_forum_threads_deleted_by').on(table.deletedBy),
-    discordIdIndex(
-      'idx_hub_forum_threads_author_discord_id',
-      table.authorDiscordId,
-    ),
+    discordIdIndex('threads', table.authorDiscordId),
   ],
 );
 
@@ -165,10 +164,7 @@ export const hubForumReplies = pgTable(
     index('idx_hub_forum_replies_guild_id').on(table.guildId),
     index('idx_hub_forum_replies_author_id').on(table.authorId),
     index('idx_hub_forum_replies_deleted_by').on(table.deletedBy),
-    discordIdIndex(
-      'idx_hub_forum_replies_author_discord_id',
-      table.authorDiscordId,
-    ),
+    discordIdIndex('replies', table.authorDiscordId),
   ],
 );
 
