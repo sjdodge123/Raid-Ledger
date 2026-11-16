@@ -2,8 +2,9 @@
  * ROK-2208 Q10 (option c, RULED) — the pieces of the unbound form: the
  * preflight Ready / Missing line, the "where posts go" choice (shared
  * `#hub-forums` vs this hub's own channel), and the own-channel controls
- * (segmented Create / Use existing, the name input or the forum `Select`
- * with a Ready / Missing chip for the picked forum). Tokens only.
+ * (segmented Create / Use existing, the name input or the forum `Select`).
+ * The picked forum's Ready / Missing shows once, on the form's preflight
+ * line (mockup), not again under the `Select`. Tokens only.
  */
 import type { JSX } from 'react';
 import { HUB_FORUM_DISCORD_TAG_LIMIT } from '@raid-ledger/contract';
@@ -64,17 +65,13 @@ const MODES: readonly RadioOption<HubForumDiscordMode>[] = [
 interface ChannelPickProps { channelId: string; channels: readonly HubForumDiscordChannelOption[]; onPick: (id: string) => void }
 
 function ChannelPick({ channelId, channels, onPick }: ChannelPickProps): JSX.Element {
-    const picked = channels.find((c) => c.id === channelId);
     const hint = channels.length === 0 ? 'The bot can’t see any public forum channels yet.' : 'Only forums everyone in the server can see are listed.';
     return (
-        <>
-            <Field label="Discord forum" hint={hint}>
-                <Select value={channelId} placeholder="Choose a forum" data-testid="hub-forum-discord-channel" onChange={(e) => onPick(e.target.value)}>
-                    {channels.map((c) => <option key={c.id} value={c.id} disabled={c.tagsFree === 0}>{forumChannelLabel(c)}</option>)}
-                </Select>
-            </Field>
-            {picked && <ReadyLine missing={picked.missingPermissions ?? []} ready="The bot can post, reply and use webhooks in this forum." testId="hub-forum-discord-option-status" />}
-        </>
+        <Field label="Discord forum" hint={hint}>
+            <Select value={channelId} placeholder="Choose a forum" data-testid="hub-forum-discord-channel" onChange={(e) => onPick(e.target.value)}>
+                {channels.map((c) => <option key={c.id} value={c.id} disabled={c.tagsFree === 0}>{forumChannelLabel(c)}</option>)}
+            </Select>
+        </Field>
     );
 }
 

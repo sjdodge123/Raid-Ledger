@@ -5,8 +5,10 @@
  * tag slot; disabled with the reason once full) vs this hub's own channel
  * (segmented Create / Use existing), the visibility acknowledgement naming
  * the chosen channel (R1), and "Turn on sync", disabled until ticked and
- * nothing is missing. Bind errors render in plain words; a reserved own
- * name shows on the name field.
+ * nothing is missing. Any change of target, mode, forum or name clears the
+ * tick, so it always covers the channel shown. "Use an existing forum"
+ * starts with no forum picked. Bind errors render in plain words; a
+ * reserved own name shows on the name field.
  */
 import { useState, type JSX } from 'react';
 import { Button } from '../../ui/button';
@@ -27,10 +29,6 @@ function PreflightLine({ preflight, missing }: { preflight: HubForumDiscordPrefl
     return <ReadyLine missing={missing} ready="The bot can create and manage forum posts, threads and webhooks here." testId="hub-forum-discord-preflight" />;
 }
 
-function firstOpenChannel(channels: readonly HubForumDiscordChannelOption[]): string {
-    return channels.find((c) => c.tagsFree > 0)?.id ?? '';
-}
-
 export interface HubForumDiscordBindFormProps {
     guildId: number;
     preflight: HubForumDiscordPreflight;
@@ -44,8 +42,8 @@ export function HubForumDiscordBindForm({ guildId, preflight, channels }: HubFor
     const [ack, setAck] = useState(false);
     const bind = useBindHubForumDiscord(guildId);
     const update = (next: Partial<ForumDiscordChoice>): void => {
-        const merged = { ...choice, ...next };
-        setChoice(merged.mode === 'existing' && merged.channelId === '' ? { ...merged, channelId: firstOpenChannel(channels) } : merged);
+        setChoice({ ...choice, ...next });
+        setAck(false);
         bind.reset();
     };
     const missing = missingFor(choice, preflight, channels);

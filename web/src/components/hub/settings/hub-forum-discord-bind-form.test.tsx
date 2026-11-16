@@ -1,7 +1,8 @@
 /**
  * ROK-2208 Q10 (option c, RULED) — the unbound "Discord forum" form:
  * shared `#hub-forums` vs the hub's own channel, the preflight Ready /
- * Missing line, the per-forum permission chip, the bot-offline state and
+ * Missing line (once, for the picked forum too), the acknowledgement
+ * reset on every change of channel, the bot-offline state and
  * every bind error code the api answers with.
  */
 import { describe, it, expect } from 'vitest';
@@ -81,8 +82,48 @@ describe('Discord forum form — shared vs own (Q10 c)', () => {
     });
 });
 
+describe('Discord forum form — the acknowledgement follows the channel', () => {
+    it('clears the tick when the admin switches target, mode or forum', async () => {
+        serve(forumDiscordPreflight(), [
+            forumDiscordChannel({ id: OWN_ID, name: 'raids', sharedWith: 0, missingPermissions: [] }),
+            forumDiscordChannel({ id: '423456789012345678', name: 'ok-forum', sharedWith: 0, missingPermissions: [] }),
+        ]);
+        renderForm();
+        const ack = await screen.findByTestId('hub-forum-discord-ack');
+        const turnOn = screen.getByTestId('hub-forum-discord-turn-on');
+        await userEvent.click(ack);
+        expect(turnOn).toBeEnabled();
+        await pickOwn();
+        expect(ack).not.toBeChecked();
+        expect(turnOn).toBeDisabled();
+        await userEvent.click(ack);
+        await userEvent.click(screen.getByRole('radio', { name: 'Use an existing forum' }));
+        expect(ack).not.toBeChecked();
+        const select = await screen.findByTestId('hub-forum-discord-channel');
+        await userEvent.selectOptions(select, OWN_ID);
+        await userEvent.click(ack);
+        expect(turnOn).toBeEnabled();
+        await userEvent.selectOptions(select, '423456789012345678');
+        expect(ack).not.toBeChecked();
+        expect(turnOn).toBeDisabled();
+    });
+    it('starts "Use an existing forum" with no forum picked and Turn on disabled', async () => {
+        const calls = serve(forumDiscordPreflight(), [forumDiscordChannel({ id: OWN_ID, name: 'raids', sharedWith: 0, missingPermissions: [] })]);
+        renderForm();
+        await pickOwn();
+        await userEvent.click(screen.getByRole('radio', { name: 'Use an existing forum' }));
+        const select = await screen.findByTestId<HTMLSelectElement>('hub-forum-discord-channel');
+        expect(select.value).toBe('');
+        await userEvent.click(screen.getByTestId('hub-forum-discord-ack'));
+        expect(screen.getByTestId('hub-forum-discord-turn-on')).toBeDisabled();
+        await userEvent.selectOptions(select, OWN_ID);
+        await tickAndTurnOn();
+        await waitFor(() => expect(calls.puts).toEqual([{ mode: 'existing', channelId: OWN_ID, ack: true }]));
+    });
+});
+
 describe('Discord forum form — permissions and the bot', () => {
-    it('shows Ready / Missing per existing forum and blocks a forum missing permissions', async () => {
+    it('shows the picked forum\'s Missing once, on the preflight line, and blocks it', async () => {
         serve(forumDiscordPreflight(), [
             forumDiscordChannel({ id: OWN_ID, name: 'raids', sharedWith: 0, missingPermissions: ['Manage Webhooks'] }),
             forumDiscordChannel({ id: '423456789012345678', name: 'ok-forum', sharedWith: 0, missingPermissions: [] }),
@@ -92,12 +133,15 @@ describe('Discord forum form — permissions and the bot', () => {
         await userEvent.click(screen.getByRole('radio', { name: 'Use an existing forum' }));
         const select = await screen.findByTestId('hub-forum-discord-channel');
         await userEvent.selectOptions(select, OWN_ID);
-        expect(screen.getByTestId('hub-forum-discord-option-status')).toHaveTextContent('Missing');
-        expect(screen.getByTestId('hub-forum-discord-option-status')).toHaveTextContent('Manage Webhooks');
+        expect(screen.getByTestId('hub-forum-discord-preflight')).toHaveTextContent(/Missing.*Manage Webhooks/);
+        expect(screen.getAllByText('Missing')).toHaveLength(1);
+        expect(screen.getAllByText(/The bot is missing Manage Webhooks/)).toHaveLength(1);
+        expect(screen.queryByTestId('hub-forum-discord-option-status')).not.toBeInTheDocument();
         await userEvent.click(screen.getByTestId('hub-forum-discord-ack'));
         expect(screen.getByTestId('hub-forum-discord-turn-on')).toBeDisabled();
         await userEvent.selectOptions(select, '423456789012345678');
-        expect(screen.getByTestId('hub-forum-discord-option-status')).toHaveTextContent('Ready');
+        expect(screen.getByTestId('hub-forum-discord-preflight')).toHaveTextContent('Ready');
+        await userEvent.click(screen.getByTestId('hub-forum-discord-ack'));
         expect(screen.getByTestId('hub-forum-discord-turn-on')).toBeEnabled();
     });
     it('shows a Missing preflight line and blocks creating while the bot lacks a permission', async () => {
