@@ -37,6 +37,7 @@ export interface RawSeedFlags {
   withArmorySnapshots?: unknown;
   withRecruitment?: unknown;
   withActivity?: unknown;
+  withDungeonPlan?: unknown;
   asCaller?: unknown;
   memberCount?: unknown;
 }
@@ -107,5 +108,6 @@ function parseBaseFlags(
       'withArmorySnapshots',
     ),
     withRecruitment: boolFlag(raw.withRecruitment, 'withRecruitment'),
+    withDungeonPlan: boolFlag(raw.withDungeonPlan, 'withDungeonPlan'),
   };
 }

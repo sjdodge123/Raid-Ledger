@@ -106,16 +106,16 @@ describe('planCompletions', () => {
   });
 });
 
-describe('seedDungeonPlanHalf', () => {
-  let mock: MockDb;
-  const ctx = { guildId: 7, now: NOW };
-  const input = { withDungeonPlan: true, gameSlug: FOREVER };
-  const catalogue = [NO_HORDE, MIXED];
+const ctx = { guildId: 7, now: NOW };
+const input = { withDungeonPlan: true, gameSlug: FOREVER };
+const catalogue = [NO_HORDE, MIXED];
+let mock: MockDb;
 
-  beforeEach(() => {
-    mock = createDrizzleMock();
-  });
+beforeEach(() => {
+  mock = createDrizzleMock();
+});
 
+describe('seedDungeonPlanHalf guards', () => {
   it('does nothing without the flag', async () => {
     const off = { ...input, withDungeonPlan: false };
     await expect(
@@ -128,7 +128,14 @@ describe('seedDungeonPlanHalf', () => {
   it('rejects a non-Forever guild (the planner is Forever-only)', async () => {
     const classic = { ...input, gameSlug: 'world-of-warcraft-classic' };
     await expect(
-      seedDungeonPlanHalf(asDb(mock), classic, ctx, ROSTER, catalogue, identity),
+      seedDungeonPlanHalf(
+        asDb(mock),
+        classic,
+        ctx,
+        ROSTER,
+        catalogue,
+        identity,
+      ),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -138,7 +145,9 @@ describe('seedDungeonPlanHalf', () => {
       seedDungeonPlanHalf(asDb(mock), input, ctx, ROSTER, catalogue, identity),
     ).rejects.toThrow(NotFoundException);
   });
+});
 
+describe('seedDungeonPlanHalf writes', () => {
   it('writes the Alliance faction and the Armory quests, and reports the plan', async () => {
     mock.where.mockResolvedValueOnce(QUESTS);
     const { dungeonPlan } = await seedDungeonPlanHalf(
@@ -167,9 +176,21 @@ describe('seedDungeonPlanHalf', () => {
       hiddenQuestId: 202,
       shownQuestIds: [201, 203, 204],
       characters: {
-        gm: { characterId: 'c-gm', memberId: 11, completedQuestIds: [201, 203] },
-        officer: { characterId: 'c-officer', memberId: 12, completedQuestIds: [201] },
-        member: { characterId: 'c-member', memberId: 14, completedQuestIds: [] },
+        gm: {
+          characterId: 'c-gm',
+          memberId: 11,
+          completedQuestIds: [201, 203],
+        },
+        officer: {
+          characterId: 'c-officer',
+          memberId: 12,
+          completedQuestIds: [201],
+        },
+        member: {
+          characterId: 'c-member',
+          memberId: 14,
+          completedQuestIds: [],
+        },
       },
       unlinkedMemberIds: [13, 15],
       planPath: '/hubs/7?d=20&c=c-gm,c-officer,m13#dungeon-planner',

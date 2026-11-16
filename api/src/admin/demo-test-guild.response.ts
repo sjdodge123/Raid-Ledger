@@ -19,6 +19,7 @@ import type { SeededArmorySnapshots } from './demo-test-guild-armory.helpers';
 import type { SeededGuildPulls } from './demo-test-guild-pulls.helpers';
 import type { SeededInstalledAddons } from './demo-test-guild-installed-addons.helpers';
 import type { SeededGuildActivity } from './demo-test-guild-activity.helpers';
+import type { SeededDungeonPlan } from './demo-test-guild-dungeon-plan.helpers';
 
 export interface RosterCtx {
   guildId: number;
@@ -73,6 +74,8 @@ export interface SeedGuildResponse {
   fillerMemberIds: number[];
   /** Present only when the body sent `withActivity: true` (ROK-1789 B9). */
   activity?: SeededGuildActivity;
+  /** Present only when the body sent `withDungeonPlan: true` (ROK-2216). */
+  dungeonPlan?: SeededDungeonPlan;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
@@ -88,6 +91,7 @@ export type SeedGuildExtras = Pick<
   | 'armorySnapshots'
   | 'recruitment'
   | 'activity'
+  | 'dungeonPlan'
 >;
 
 export interface SeededRoster {

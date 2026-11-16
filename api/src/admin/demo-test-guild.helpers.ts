@@ -65,6 +65,8 @@ export interface SeedGuildInput extends SeedGuildSummaryOverrides {
   withRecruitment: boolean;
   /** ROK-1789 B9: backdated joins, milestones, events + first kills (implies withPulls/withDings). */
   withActivity: boolean;
+  /** ROK-2216: guild faction Alliance + Armory quests for one Forever dungeon (Dungeon planner). */
+  withDungeonPlan: boolean;
   /** ROK-1789 B9 (Q-B16): the JWT caller owns the rank-0 character + a member editor grant. */
   asCaller: boolean;
   /** ROK-1789 B9: roster rows incl. filler (5..60). */
