@@ -29,8 +29,9 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic_anniversary: ['classic', 'tbc'],
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
-  // ROK-1719: vanilla content plus Forever's own; ROK-2170: a boss's forever
-  // loot rows replace its classic ones (see preferForeverLoot in boss-loot.query.ts).
+  // ROK-1719: vanilla bosses plus Forever's own. ROK-2209: loot does NOT use
+  // this set — the catalogue's lootExpansion decides (boss-loot-expansions.ts),
+  // so a Forever loot read never returns classic rows.
   wow_forever: ['classic', 'forever'],
 };
 
@@ -129,7 +130,9 @@ export class BossEncountersService {
     bossId: number,
     variant: string,
   ): Promise<BossLootDto[]> {
-    return loadBossLoot(this.db, bossId, this.getExpansionsForVariant(variant));
+    return loadBossLoot(this.db, bossId, variant, (v) =>
+      this.getExpansionsForVariant(v),
+    );
   }
 
   /**

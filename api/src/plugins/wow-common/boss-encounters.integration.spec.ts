@@ -203,11 +203,23 @@ async function testLootClassicAnniversaryIncludesTbc() {
   expect(itemNames).toContain('TBC Ring');
 }
 
-/** ROK-2170: Forever's own loot replaces the classic table, per boss. */
+/** GET a boss's loot under `variant` and return the item names. */
+async function lootNames(bossId: number, variant: string): Promise<string[]> {
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/bosses/${bossId}/loot?variant=${variant}`,
+  );
+  expect(res.status).toBe(200);
+  return (res.body as Array<{ itemName: string }>).map((l) => l.itemName);
+}
+
+/**
+ * ROK-2170: Forever's own loot replaces the classic table, per boss.
+ * ROK-2209: on a Forever catalogue instance (63 = Deadmines).
+ */
 async function testForeverLootReplacesClassic() {
   const boss = await insertBoss(testApp, {
-    instanceId: 203,
-    name: 'Bazil Thredd',
+    instanceId: 63,
+    name: 'Edwin VanCleef',
     order: 1,
     expansion: 'classic',
   });
@@ -225,15 +237,33 @@ async function testForeverLootReplacesClassic() {
     quality: 'Rare',
     expansion: 'forever',
   });
-  const names = async (variant: string): Promise<string[]> => {
-    const res = await testApp.request.get(
-      `/plugins/wow-classic/bosses/${boss.id}/loot?variant=${variant}`,
-    );
-    expect(res.status).toBe(200);
-    return (res.body as Array<{ itemName: string }>).map((l) => l.itemName);
-  };
-  expect(await names('wow_forever')).toEqual(['Forever Cloak']);
-  expect(await names('classic_era')).toEqual(['Classic Cloak']);
+  expect(await lootNames(boss.id, 'wow_forever')).toEqual(['Forever Cloak']);
+  expect(await lootNames(boss.id, 'classic_era')).toEqual(['Classic Cloak']);
+}
+
+/**
+ * ROK-2209 regression: a boss with only Classic loot (240 = Wailing Caverns,
+ * no Forever loot captured) reads as [] for a Forever guild — never the
+ * Classic table — while a Classic Era guild still sees it.
+ */
+async function testForeverNeverFallsBackToClassic() {
+  const boss = await insertBoss(testApp, {
+    instanceId: 240,
+    name: 'Lord Cobrahn',
+    order: 1,
+    expansion: 'classic',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 7101,
+    itemName: 'Classic Serpent Gloves',
+    quality: 'Rare',
+    expansion: 'classic',
+  });
+  expect(await lootNames(boss.id, 'wow_forever')).toEqual([]);
+  expect(await lootNames(boss.id, 'classic_era')).toEqual([
+    'Classic Serpent Gloves',
+  ]);
 }
 
 describe('Boss Encounters (integration)', () => {
@@ -281,6 +311,9 @@ describe('Boss Encounters (integration)', () => {
 
     it('returns only forever loot under wow_forever, only classic under classic_era (ROK-2170)', () =>
       testForeverLootReplacesClassic());
+
+    it('returns [] under wow_forever for a boss with only classic loot — never the classic table (ROK-2209)', () =>
+      testForeverNeverFallsBackToClassic());
 
     it('should return empty array for boss with no loot', async () => {
       const boss = await insertBoss(testApp, {
