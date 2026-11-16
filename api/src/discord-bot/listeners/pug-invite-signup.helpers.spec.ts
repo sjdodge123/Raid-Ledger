@@ -1,5 +1,6 @@
 /**
- * Unit tests for ROK-626: PUG signup bench fallback.
+ * Unit tests for PUG-invite signups: linked PUGs use the web path, anonymous
+ * PUGs use signupDiscord so both share the ROK-2203 auto-bench/displacement rule.
  */
 import { createPugSignup } from './pug-invite-signup.helpers';
 import type { PugInviteDeps } from './pug-invite.helpers';
@@ -31,6 +32,9 @@ function createMockDeps(): PugInviteDeps {
     },
     signupsService: {
       signup: jest.fn().mockResolvedValue({ id: 100, assignedSlot: null }),
+      signupDiscord: jest
+        .fn()
+        .mockResolvedValue({ id: 100, assignedSlot: 'bench' }),
     },
     charactersService: {},
     pugsService: {},
@@ -48,73 +52,75 @@ const mockSlot = {
   status: 'accepted',
 };
 
+/** findLinkedUser returns no user → anonymous path. */
+function mockNoLinkedUser(deps: PugInviteDeps): void {
+  (deps.db.select as jest.Mock).mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockResolvedValue([]),
+      }),
+    }),
+  });
+}
+
 describe('PUG signup — anonymous path', () => {
-  it('should create signup and assign roster for anonymous PUG', async () => {
+  it('routes an unlinked PUG through signupDiscord (shared displacement rule, ROK-2203)', async () => {
     const deps = createMockDeps();
-    // findLinkedUser returns no user → anonymous path
-    (deps.db.select as jest.Mock)
-      .mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([]),
-          }),
-        }),
-      })
-      // resolveEffectiveRole: fetch event
-      .mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([{ id: 1, maxAttendees: 25 }]),
-          }),
-        }),
-      })
-      // checkAutoBench: count roster assignments (not full)
-      .mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          innerJoin: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([{ count: 0 }]),
-          }),
-        }),
-      })
-      // assignAnonymousRoster: find positions
-      .mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue([]),
-        }),
-      });
-    // Second insert call: roster assignment
-    (deps.db.insert as jest.Mock)
-      .mockReturnValueOnce({
-        values: jest.fn().mockReturnValue({
-          onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([
-              {
-                id: 100,
-                eventId: 1,
-                userId: null,
-                discordUserId: 'discord-pug-1',
-                discordUsername: 'PugPlayer',
-              },
-            ]),
-          }),
-        }),
-      })
-      .mockReturnValueOnce({
-        values: jest.fn().mockResolvedValue(undefined),
-      });
+    mockNoLinkedUser(deps);
     await createPugSignup(
       deps,
-      mockSlot as Parameters<typeof createPugSignup>[1],
+      { ...mockSlot, discordAvatarHash: 'abc' } as Parameters<
+        typeof createPugSignup
+      >[1],
       'dps',
     );
-    expect(deps.db.insert).toHaveBeenCalledTimes(2);
+    expect(deps.signupsService.signupDiscord).toHaveBeenCalledWith(1, {
+      discordUserId: 'discord-pug-1',
+      discordUsername: 'PugPlayer',
+      discordAvatarHash: 'abc',
+      role: 'dps',
+    });
+    // No hand-rolled signup/roster insert that would skip displacement.
+    expect(deps.db.insert).not.toHaveBeenCalled();
     expect(deps.logger.log).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /^Created anonymous signup 100 for PUG PugPlayer on event 1 \(\w+\)$/,
-      ),
+      'Created anonymous signup 100 for PUG PugPlayer on event 1 (bench)',
     );
   });
 
+  it('forwards a generic "player" role unchanged', async () => {
+    const deps = createMockDeps();
+    mockNoLinkedUser(deps);
+    await createPugSignup(
+      deps,
+      { ...mockSlot, role: 'player' } as Parameters<typeof createPugSignup>[1],
+      'player',
+    );
+    expect(deps.signupsService.signupDiscord).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ role: 'player' }),
+    );
+  });
+
+  it('logs a warning instead of throwing when signupDiscord fails', async () => {
+    const deps = createMockDeps();
+    mockNoLinkedUser(deps);
+    (deps.signupsService.signupDiscord as jest.Mock).mockRejectedValueOnce(
+      new Error('Event has ended'),
+    );
+    await expect(
+      createPugSignup(
+        deps,
+        mockSlot as Parameters<typeof createPugSignup>[1],
+        'dps',
+      ),
+    ).resolves.toBeUndefined();
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      'Failed to create anonymous signup for PUG PugPlayer: Event has ended',
+    );
+  });
+});
+
+describe('PUG signup — linked path', () => {
   it('should delegate to signupsService.signup for linked PUG', async () => {
     const deps = createMockDeps();
     // findLinkedUser returns a user
