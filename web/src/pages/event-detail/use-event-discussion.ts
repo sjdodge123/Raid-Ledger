@@ -11,10 +11,9 @@ import {
 import { fetchApi } from '../../lib/api-client';
 import { useViewerCacheScope } from '../../hooks/use-auth';
 
-/** Invalidation prefix for one event's discussion summary. */
-export function eventDiscussionKey(eventId: number): readonly unknown[] {
-    return ['events', eventId, 'discussion'] as const;
-}
+import { eventDiscussionKey } from '../../hooks/event-discussion-key';
+
+export { eventDiscussionKey };
 
 /** The card summary: `none`, or the thread ids, reply count, ≤3 newest replies, lock and `can`. */
 export function fetchEventDiscussion(
