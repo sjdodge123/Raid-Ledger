@@ -231,12 +231,12 @@ describe('bundled dungeon quest factions (ROK-2220)', () => {
  * faction town or leader, or the giver/hand-in named in our own row).
  */
 const REVIEWED_SIDES: ReadonlyArray<readonly [number, Side]> = [
-  // Neutral givers: Lorekeeper Lydros inside Dire Maul, Lothos Riftwaker in
-  // Blackrock Mountain. Restricting them hid real quests from Horde rosters.
-  [7483, 'neutral'],
-  [7484, 'neutral'],
-  [7485, 'neutral'],
-  [7848, 'neutral'],
+  // Alliance halves of faction-split pairs: the Horde copies are 7478-7480
+  // (librams) and 7487 (Attunement to the Core), so these stay Alliance-only.
+  [7483, 'alliance'],
+  [7484, 'alliance'],
+  [7485, 'alliance'],
+  [7848, 'alliance'],
   // Horde: Sepulcher/"the Dark Lady", Stonard, Orgrimmar, Kargath, Forsaken.
   [1014, 'horde'],
   [1098, 'horde'],
@@ -311,8 +311,31 @@ describe('reviewed prerequisites (ROK-2223)', () => {
     }).toEqual({ prevOf5125: 5122, nextOf5122: 5125 });
   });
 
-  it('the Dire Maul librams need no Alliance-only Elven Legends step', () => {
-    const prereqs = [7483, 7484, 7485].map((id) => must(id).prevQuestId);
-    expect(prereqs).toEqual([null, null, null]);
+  it('each Dire Maul libram follows its own side of Elven Legends', () => {
+    const prereqs = [7483, 7484, 7485, 7478, 7479, 7480].map((id) =>
+      Number(must(id).prevQuestId),
+    );
+    expect(prereqs).toEqual([7482, 7482, 7482, 7481, 7481, 7481]);
+  });
+});
+
+/**
+ * A shared chain start may be neutral while its next steps split by faction
+ * (2278 The Platinum Discs -> 2279 Alliance / 2280 Horde). Any other neutral
+ * row with a same-name, same-dungeon faction copy shows twice for that side.
+ */
+const SHARED_NEUTRAL_CHAIN_STARTS: readonly number[] = [2278];
+
+describe('faction-split quest pairs (ROK-2223)', () => {
+  it('no neutral quest shares its name and dungeon with a faction copy', () => {
+    const key = (r: Row) => `${r.name}|${r.dungeonInstanceId}`;
+    const restricted = new Set(
+      allRows.filter((r) => sideOf(r) !== 'neutral').map(key),
+    );
+    const doubled = allRows
+      .filter((r) => sideOf(r) === 'neutral' && restricted.has(key(r)))
+      .filter((r) => !SHARED_NEUTRAL_CHAIN_STARTS.includes(r.questId))
+      .map((r) => `${r.questId} ${r.name}`);
+    expect(doubled).toEqual([]);
   });
 });
