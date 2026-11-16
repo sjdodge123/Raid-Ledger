@@ -200,9 +200,6 @@ export const CommunityHubWireframesPage = lazyWithRetry(() =>
 export const HubPostsWireframesPage = lazyWithRetry(() =>
     import('./dev/hub-posts-wireframes/HubPostsWireframesPage').then((m) => ({ default: m.HubPostsWireframesPage })),
 );
-export const DungeonPlannerWireframePage = lazyWithRetry(() =>
-    import('./dev/dungeon-planner/DungeonPlannerWireframePage').then((m) => ({ default: m.DungeonPlannerWireframePage })),
-);
 /** ROK-1661 bare viewport probe; `Layout.tsx` renders it with no shell. */
 export const ViewportProbePage = lazyWithRetry(() =>
     import('./dev/ViewportProbePage').then((m) => ({ default: m.ViewportProbePage })),
