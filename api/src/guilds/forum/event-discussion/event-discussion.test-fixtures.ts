@@ -139,7 +139,8 @@ async function newEvent(ctx: DiscussionCtx, guildId: number): Promise<number> {
   return e.id;
 }
 
-async function signUp(
+/** Insert a signup for `who` (no roster slot). */
+export async function signUp(
   ctx: DiscussionCtx,
   eventId: number,
   who: Actor,
@@ -178,6 +179,18 @@ export async function newScene(ctx: DiscussionCtx): Promise<Scene> {
   const live = await findLiveEventThread(ctx.posts.testApp.db, eventId);
   if (!live) throw new Error('scene: no live event thread');
   return { guildId, eventId, threadId: live.id };
+}
+
+/** Another tagged event in `guildId` with its (empty) live thread; returns the thread id. */
+export async function addEventThread(
+  ctx: DiscussionCtx,
+  guildId: number,
+): Promise<number> {
+  const eventId = await newEvent(ctx, guildId);
+  await syncEventDiscussion(ctx.posts.testApp.db, eventId, new Date());
+  const live = await findLiveEventThread(ctx.posts.testApp.db, eventId);
+  if (!live) throw new Error('addEventThread: no live event thread');
+  return live.id;
 }
 
 /** Move a signup to `status` (e.g. `declined`). */
