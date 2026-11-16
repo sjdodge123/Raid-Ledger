@@ -11,6 +11,7 @@ import type { EnrichedQuestReward } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { wowClassicBossLoot } from '../../drizzle/schema';
 import type { DungeonQuestDto } from './dungeon-quests.types';
+import { escortFields } from './data/dungeon-quest-escorts';
 import {
   attachItemTooltips,
   mergeItemMetaFallback,
@@ -59,6 +60,7 @@ export function toDto(
     rewardXp: row.rewardXp,
     rewardGold: row.rewardGold,
     rewardType: row.rewardType,
+    ...escortFields(row.questId),
   };
 }
 

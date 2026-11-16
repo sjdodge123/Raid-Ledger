@@ -78,7 +78,7 @@ describe('WowCronRegistrar — getCronJobs', () => {
     const jobs = registrar.getCronJobs();
     expect(jobs).toHaveLength(7);
     expect(jobs[0]?.name).toBe('character-auto-sync');
-    expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
+    expect(jobs[0]?.cronExpression).toBe('0 10 * * * *');
     expect(typeof at(jobs, 0).handler).toBe('function');
     expect(jobs[1]?.name).toBe('boss-data-refresh');
     expect(jobs[1]?.cronExpression).toBe('0 0 4 * * 0');

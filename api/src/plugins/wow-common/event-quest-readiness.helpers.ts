@@ -9,6 +9,7 @@ import type {
 } from '@raid-ledger/contract';
 import { walkChainInMemory } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
+import { escortFields } from './data/dungeon-quest-escorts';
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
 import type { EffectiveQuests } from './forever-quest-source.helpers';
 import {
@@ -203,6 +204,7 @@ export function buildQuestReadiness(
       questId: q.questId,
       title: q.name.slice(0, 200),
       instanceId: q.dungeonInstanceId ?? 0,
+      ...escortFields(q.questId),
     })),
     signups: input.signups
       .slice(0, MAX_READINESS_SIGNUPS)

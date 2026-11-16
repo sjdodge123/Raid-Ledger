@@ -63,10 +63,12 @@ let guildId: number;
 let linkedCharId: string;
 const memberIds = {} as Record<Who, number>;
 const names: Record<Who, string> = {
-  unclaimed: 'Mfunclaimed',
-  linked: 'Mflinked',
-  plain: 'Mfplain',
-  mismatch: 'Mfmismatch',
+  // Two-part Forever names: ROK-2222 hides a GUID-less first-name-only row
+  // from the claim pick list.
+  unclaimed: 'Mf Unclaimed',
+  linked: 'Mf Linked',
+  plain: 'Mf Plain',
+  mismatch: 'Mf Mismatch',
 };
 
 async function ensureGame(): Promise<number> {
