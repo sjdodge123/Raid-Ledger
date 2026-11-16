@@ -11,7 +11,8 @@ import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
 import { Pill } from '../hub-bits';
 import { forumThreadHref } from './forum-link';
 import { ForumRowActions } from './forum-row-actions';
-import { forumAuthorName, forumDeletedLabel, forumRowMeta, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
+import { forumByline } from './forum-byline';
+import { forumDeletedLabel, forumRowMeta, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
 
 export interface ForumThreadRowProps { guildId: number; thread: HubForumThreadSummary; viewer: ForumViewer }
 
@@ -31,16 +32,18 @@ export function ForumThreadRow({ guildId, thread, viewer }: ForumThreadRowProps)
     const open = (): void => { void navigate(forumThreadHref(thread.id)); };
     if (thread.deleted !== null) return <RemovedRow thread={thread} open={open} />;
     const pinned = thread.pinnedAt !== null;
+    const byline = forumByline(thread);
     const frame = pinned ? 'border-success/40' : 'border-edge hover:border-edge-strong';
     return (
         <li data-testid="forum-thread-row"
             className={`relative grid cursor-pointer grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border bg-surface px-4 py-3 transition-colors ${frame}`}>
             <StretchedAction label={`Open thread: ${thread.title}`} onClick={open} />
-            <AvatarWithFallback username={forumAuthorName(thread.author)} avatarUrl={thread.author?.avatarUrl ?? null} sizeClassName="h-9 w-9" alt="" />
+            <AvatarWithFallback username={byline.name} avatarUrl={byline.avatarUrl} sizeClassName="h-9 w-9" alt="" />
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                     <span data-testid="forum-thread-title" className="max-w-full truncate font-semibold text-foreground">{thread.title}</span>
                     {pinned && <Pill tone="success">Pinned</Pill>}
+                    {byline.viaDiscord && <Pill title="Posted from Discord">via Discord</Pill>}
                 </div>
                 <p className="mt-0.5 truncate text-sm text-secondary">{thread.preview}</p>
                 <p className="mt-1 text-xs text-muted">{forumRowMeta(thread)}</p>

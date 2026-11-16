@@ -4,6 +4,7 @@ import {
     type HubForumCan, type HubForumDeleted, type HubForumThreadSummary, type HubPostPerson,
 } from '@raid-ledger/contract';
 import { syncedAgo } from '../../../lib/synced-ago';
+import { forumByline } from './forum-byline';
 
 /** A deleted user's threads keep a null author (AC12). */
 export function forumAuthorName(author: HubPostPerson | null): string {
@@ -22,7 +23,7 @@ export function replyCountLabel(count: number): string {
 
 /** "Grimtusk · 2 h ago" — author and time since the thread's last activity. */
 export function forumRowMeta(thread: HubForumThreadSummary, now: number = Date.now()): string {
-    return `${forumAuthorName(thread.author)} · ${syncedAgo(thread.lastActivityAt, now)}`;
+    return `${forumByline(thread).name} · ${syncedAgo(thread.lastActivityAt, now)}`;
 }
 
 /** "2 h ago" for a message or row timestamp. */
