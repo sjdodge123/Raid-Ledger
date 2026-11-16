@@ -38,12 +38,22 @@ fresh() { [ -f "$1" ] && [ -n "$(find "$1" -mmin -1440 2>/dev/null)" ]; }
 # PASS while the runner was synced to an old commit (2026-11-15) wrote one
 # anyway; the MCP server now refuses to, and this check fails closed on every
 # sentinel written before the field existed (empty body, `{}`, or false).
-verified() { grep -Eq '"gate_verified"[[:space:]]*:[[:space:]]*true' "$1" 2>/dev/null; }
+# Review m4: only a LEADING top-level key counts (the writer always puts it
+# first), so a nested or later `true` behind a false never unlocks the push.
+verified() {
+  head -n1 "$1" 2>/dev/null |
+    grep -Eq '^\{[[:space:]]*"gate_verified"[[:space:]]*:[[:space:]]*true[[:space:]]*[,}]'
+}
+has_key() { grep -q '"gate_verified"' "$1" 2>/dev/null; }
 
 S="$DIR/.playwright-verified-$H"
 if fresh "$S"; then
   verified "$S" && allow surface
-  deny "The sentinel for web surface $H ($S) does not record gate_verified: true - it predates ROK-2205 or came from a run that was not verified (e.g. a stale runner sync). Re-run the gate (rl_validate_ci) and read the terminal result with rl_task_status log_tail_bytes:3000 on a run that reports gate_verified: true; the MCP server then rewrites the sentinel."
+  # Review M2: a body with no gate_verified key came from an rl-fleet MCP server
+  # older than ROK-2205. That server rewrites the same refused file on every
+  # re-run, so the fix is a restart, not another gate.
+  has_key "$S" || deny "The sentinel for web surface $H ($S) does not record gate_verified: true (ROK-2205). It was written by an rl-fleet MCP server older than ROK-2205 (or by a bare touch). That server runs from the checkout your Claude session started in (usually the main checkout): pull main there and restart the Claude session, THEN re-run the gate (rl_validate_ci) and read the terminal result with rl_task_status log_tail_bytes:3000. Re-running without the restart writes the same refused file. A local /push PASS writes {\"gate_verified\":true} instead."
+  deny "The sentinel for web surface $H ($S) does not record gate_verified: true (ROK-2205) - the run was not verified (e.g. a stale runner sync). Run rl_force_resync, re-run the gate (rl_validate_ci) and read the terminal result with rl_task_status log_tail_bytes:3000 on a run that reports gate_verified: true. If every re-run is refused the same way, pull main in the checkout your Claude session started in and restart the Claude session first."
 fi
 
 deny "Smoke tests not verified for web surface $H (checked in $(pwd)). Run the gate on the fleet (rl_validate_ci --scoped / --static / --only-e2e - the MCP server writes the sentinel on a gate_verified PASS; read it with rl_task_status log_tail_bytes:3000), or locally via /push, which after a local PASS writes "'{"gate_verified":true}'" to "'/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)'"."

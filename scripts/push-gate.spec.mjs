@@ -119,6 +119,45 @@ for (const [label, body] of [
   });
 }
 
+// ROK-2205 review M2: a body an OLDER MCP server wrote (it has task_id but no
+// gate_verified key) is rewritten the same way by that server on every re-run,
+// so the deny must name the real fix — update the checkout and restart the
+// session — or agents loop on fleet gates.
+test('denies a sentinel from a pre-ROK-2205 MCP server, naming the restart fix', () => {
+  withRepo(true, (dir, sentinels) => {
+    const oldBody = '{"sha":"8fd1f515","surface":"x","tier":"static","task_id":"ab12cd34ef56"}\n';
+    writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), oldBody);
+    const verdict = run(dir, sentinels);
+    assert.ok(denied(verdict), 'an old-server sentinel must not unlock the push');
+    const reason = verdict.hookSpecificOutput.permissionDecisionReason;
+    assert.match(reason, /ROK-2205/);
+    assert.match(reason, /restart the Claude session/);
+    assert.match(reason, /pull main/);
+  });
+});
+
+// Review m4: only a TOP-LEVEL leading `"gate_verified": true` counts.
+for (const [label, body] of [
+  ['a nested true behind a top-level false', '{"gate_verified":false,"prev":{"gate_verified":true}}\n'],
+  ['a true that is not a JSON true', '{"gate_verified":trueX}\n'],
+]) {
+  test(`denies a fresh sentinel with ${label}`, () => {
+    withRepo(true, (dir, sentinels) => {
+      writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), body);
+      assert.ok(denied(run(dir, sentinels)), `a sentinel with ${label} must not unlock the push`);
+    });
+  });
+}
+
+// Review n2: a hand-written /push body with spaces is still a verified body.
+test('allows a gate_verified body written with spaces', () => {
+  withRepo(true, (dir, sentinels) => {
+    const body = '{ "gate_verified" : true, "tier": "local-playwright" }\n';
+    writeFileSync(join(sentinels, `.playwright-verified-${surfaceHash(dir)}`), body);
+    assert.equal(run(dir, sentinels).matched, 'surface');
+  });
+});
+
 test('denies when no sentinel exists, naming the surface hash', () => {
   withRepo(true, (dir, sentinels) => {
     const verdict = run(dir, sentinels);
