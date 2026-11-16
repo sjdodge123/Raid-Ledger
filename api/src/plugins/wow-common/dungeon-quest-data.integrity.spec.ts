@@ -220,3 +220,43 @@ describe('bundled dungeon quest factions (ROK-2220)', () => {
     expect(wrong).toEqual([]);
   });
 });
+
+/**
+ * ROK-2223 second pass: rows changed one by one where an offline cross-check
+ * disagreed AND an independent signal agreed (Blizzard quest text naming a
+ * faction town or leader, or the giver/hand-in named in our own row).
+ */
+const REVIEWED_SIDES: ReadonlyArray<readonly [number, Side]> = [
+  // Neutral givers: Lorekeeper Lydros inside Dire Maul, Lothos Riftwaker in
+  // Blackrock Mountain. Restricting them hid real quests from Horde rosters.
+  [7483, 'neutral'],
+  [7484, 'neutral'],
+  [7485, 'neutral'],
+  [7848, 'neutral'],
+  // Horde: Sepulcher/"the Dark Lady", Stonard, Orgrimmar, Kargath, Forsaken.
+  [1014, 'horde'],
+  [1098, 'horde'],
+  [1445, 'horde'],
+  [2283, 'horde'],
+  [2284, 'horde'],
+  [2318, 'horde'],
+  [2338, 'horde'],
+  [2841, 'horde'],
+  [2842, 'horde'],
+  [2843, 'horde'],
+  [4082, 'horde'],
+  [4122, 'horde'],
+  [4133, 'horde'],
+  [4134, 'horde'],
+  [4903, 'horde'],
+  [4983, 'horde'],
+  [7068, 'horde'],
+  // Alliance: hand-in to Master Mechanic Castpipe in Ironforge.
+  [2930, 'alliance'],
+];
+
+describe('reviewed dungeon quest rows (ROK-2223)', () => {
+  it.each(REVIEWED_SIDES)('quest %i is %s', (questId, side) => {
+    expect({ questId, side: sideOf(must(questId)) }).toEqual({ questId, side });
+  });
+});
