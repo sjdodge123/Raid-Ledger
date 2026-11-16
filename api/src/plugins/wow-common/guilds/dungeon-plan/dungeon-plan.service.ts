@@ -21,6 +21,7 @@ import {
 } from '../../event-quest-readiness.helpers';
 import { WowFactsService } from '../../facts/wow-facts.service';
 import { loadForeverQuestSources } from '../../forever-quest-source.query';
+import type { FactionSide } from '../../quest-faction.helpers';
 import { InstanceCatalogueService } from '../../instance-catalogue/instance-catalogue.service';
 import type { CatalogueInstance } from '../../instance-catalogue/instance-catalogue.types';
 import {
@@ -79,27 +80,25 @@ export class DungeonPlanService {
     guildId: number,
     query: DungeonPlanQuery,
   ): Promise<DungeonPlanDto> {
-    const hub = await this.requireHub(guildId);
+    // Hub check and roster read together; a 404 hub rejects before any
+    // roster data is used or returned.
+    const [hub, rows] = await Promise.all([
+      this.requireHub(guildId),
+      loadGuildRows(this.db, guildId),
+    ]);
     const instance = this.requireInstance(query.instanceId);
-    const rows = await loadGuildRows(this.db, guildId);
     const { kept, dropped } = pickRosterCharacters(rows, query.characterIds);
     const [questSet, data] = await Promise.all([
       loadEventQuestSet(this.questDeps, [{ id: instance.id }]),
       this.loadCharacterData(kept),
     ]);
     const { side, sideSource } = resolvePlanSide(hub.faction, data.signups);
-    const filtered = filterQuestSetBySide(questSet, side);
-    const readiness = buildQuestReadiness({
-      quests: filtered.questSet,
-      signups: data.signups,
-      snapshots: data.snapshots,
-      manual: [],
-    });
+    const { readiness, hidden } = planReadiness(questSet, side, data);
     return {
       instance: toInstanceDto(instance),
       side,
       sideSource,
-      hiddenOtherFaction: filtered.hidden,
+      hiddenOtherFaction: hidden,
       characters: toCharacters(data.signups, data.levels, instance),
       droppedCharacterIds: dropped,
       readiness,
@@ -157,6 +156,29 @@ export class DungeonPlanService {
     }
     return levels;
   }
+}
+
+/**
+ * L7 + readiness: the side-filtered quests and the matrix built on them. R3:
+ * the builder filters by the plan's resolved side, never re-derives one from
+ * the picked characters (a Horde alt must not hide an Alliance guild's quests).
+ */
+function planReadiness(
+  questSet: Awaited<ReturnType<typeof loadEventQuestSet>>,
+  side: FactionSide | null,
+  data: PlanCharacterData,
+): { readiness: DungeonPlanDto['readiness']; hidden: number } {
+  const filtered = filterQuestSetBySide(questSet, side);
+  const readiness = buildQuestReadiness(
+    {
+      quests: filtered.questSet,
+      signups: data.signups,
+      snapshots: data.snapshots,
+      manual: [],
+    },
+    { side },
+  );
+  return { readiness, hidden: filtered.hidden };
 }
 
 function toInstanceDto(row: CatalogueInstance): DungeonPlanDto['instance'] {

@@ -178,3 +178,31 @@ describe('buildQuestReadiness faction filter (ROK-2211)', () => {
     expect(columnIds(build([signup(1, null, null)]))).toEqual(all);
   });
 });
+
+describe('buildQuestReadiness side override (ROK-2214 R3)', () => {
+  it('a caller-resolved side overrides the roster side (ROK-2214 R3)', () => {
+    const orcOnly = [signup(1, 'Orc', null, C1)];
+    const body = buildQuestReadiness(
+      { quests: SET, signups: orcOnly, snapshots: new Map(), manual: [] },
+      { side: 'alliance' },
+    );
+    expect(columnIds(body)).toContain(600);
+    expect(columnIds(body)).not.toContain(500);
+    // Absent → the roster's shared side (Horde) as before.
+    expect(columnIds(build(orcOnly))).not.toContain(600);
+  });
+
+  it('a null override disables the side filter for a one-sided roster', () => {
+    const all = KNOWN.map((q) => q.questId).sort((a, b) => a - b);
+    const body = buildQuestReadiness(
+      {
+        quests: SET,
+        signups: [signup(1, 'Orc', null)],
+        snapshots: new Map(),
+        manual: [],
+      },
+      { side: null },
+    );
+    expect(columnIds(body)).toEqual(all);
+  });
+});
