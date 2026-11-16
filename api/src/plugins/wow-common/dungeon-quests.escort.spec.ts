@@ -95,7 +95,10 @@ describe('overlayOnlyDto escort flag (ROK-2224)', () => {
 
 describe('mergeBlizzardOverlay escort flag (ROK-2224)', () => {
   it('keeps isEscort when the Blizzard overlay is merged onto a curated escort', () => {
-    const merged = mergeBlizzardOverlay(toDto(curatedRow(WILLIX)), overlayRow(WILLIX));
+    const merged = mergeBlizzardOverlay(
+      toDto(curatedRow(WILLIX)),
+      overlayRow(WILLIX),
+    );
     expect(merged.isEscort).toBe(true);
   });
 });
