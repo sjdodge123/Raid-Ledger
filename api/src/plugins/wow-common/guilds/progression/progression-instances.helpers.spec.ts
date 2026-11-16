@@ -292,3 +292,67 @@ describe('groupIntoInstances — page totals and ordering', () => {
     expect(out.lastPullAt).toBe(iso(5060));
   });
 });
+
+/** ROK-2218: Gnomeregan (Journal 231) — five classic rows; SoD rows ignored. */
+const GNOMER_ROWS: ProgressionBossRow[] = [
+  row(231, 'Grubbis', 1),
+  row(231, 'Viscous Fallout', 2),
+  row(231, 'Electrocutioner 6000', 3),
+  row(231, 'Crowd Pummeler 9-60', 4),
+  row(231, 'Mekgineer Thermaplugg', 5),
+  row(231, 'Grubbis (SoD)', 2, 'sod'),
+];
+
+describe('groupIntoInstances — Classic dungeons (ROK-2218)', () => {
+  it('map 90 pulls are a "Gnomeregan" section (j:231) with its boss total', () => {
+    const out = groupIntoInstances(
+      [
+        pull(2925, 'Grubbis', 0, true, { instanceId: 90 }),
+        pull(2932, 'Mekgineer Thermaplugg', 600, false, { instanceId: 90 }),
+      ],
+      [...MC_ROWS, ...GNOMER_ROWS],
+    );
+    expect(out.instances.map((i) => i.key)).toEqual(['j:231']);
+    const gnomer = only(out.instances, 'j:231');
+    expect(gnomer.name).toBe('Gnomeregan');
+    expect(gnomer.bossTotal).toBe(5);
+    expect(gnomer.bossesDown).toBe(1);
+    expect(gnomer.bosses.map((b) => [b.name, b.order])).toEqual([
+      ['Grubbis', 1],
+      ['Mekgineer Thermaplugg', 5],
+    ]);
+  });
+
+  it('a dungeon pull with no map id is placed by boss name', () => {
+    const out = groupIntoInstances(
+      [pull(2932, 'Mekgineer Thermaplugg', 0, true, { instanceId: null })],
+      [...MC_ROWS, ...GNOMER_ROWS],
+    );
+    expect(out.instances.map((i) => i.key)).toEqual(['j:231']);
+    const gnomer = only(out.instances, 'j:231');
+    expect(gnomer.name).toBe('Gnomeregan');
+    expect(gnomer.bossTotal).toBe(5);
+  });
+
+  it('a multi-wing dungeon uses its whole-dungeon name and counts wing boss rows', () => {
+    const out = groupIntoInstances(
+      [pull(345, 'Alzzin the Wildshaper', 0, true, { instanceId: 429 })],
+      [row(230, 'Pusillin', 1), row(1276, 'Alzzin the Wildshaper', 4)],
+    );
+    const dm = only(out.instances, 'j:230');
+    expect(dm.name).toBe('Dire Maul');
+    expect(dm.bossTotal).toBe(2);
+    expect(dm.bossesDown).toBe(1);
+    expect(dm.bosses[0]?.order).toBe(4);
+  });
+
+  it('an unknown map (3065, Forever-only) stays "Instance 3065" with a null total', () => {
+    const out = groupIntoInstances(
+      [pull(9100, 'Forever Boss', 0, true, { instanceId: 3065 })],
+      [...MC_ROWS, ...GNOMER_ROWS],
+    );
+    const inst = only(out.instances, 'm:3065');
+    expect(inst.name).toBe('Instance 3065');
+    expect(inst.bossTotal).toBeNull();
+  });
+});

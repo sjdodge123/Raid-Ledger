@@ -6,6 +6,7 @@
 import type { WowGameVariant } from '@raid-ledger/contract';
 import type { WowInstance, WowInstanceDetail } from '../blizzard.constants';
 import { CATALOGUE_ROWS } from './instance-catalogue.data';
+import { DUNGEON_MAP_TO_JOURNAL } from './instance-map-ids.data';
 import type {
   CatalogueCategory,
   CatalogueInstance,
@@ -104,6 +105,24 @@ export function byWowheadZoneId(
 ): CatalogueInstance | null {
   const hits = allByWowheadZoneId(zoneId, v);
   return hits.find((r) => r.parentId === null) ?? hits[0] ?? null;
+}
+
+/** ROK-2218: journal ids some in-game dungeon map id resolves to. */
+const MAPPED_DUNGEON_IDS: ReadonlySet<number> = new Set(
+  DUNGEON_MAP_TO_JOURNAL.values(),
+);
+
+/** ROK-2218: the top-level dungeon row an in-game map id stands for, or null. */
+export function dungeonByInstanceMapId(
+  mapId: number,
+): CatalogueInstance | null {
+  const id = DUNGEON_MAP_TO_JOURNAL.get(mapId);
+  return id === undefined ? null : getAnyVariant(id);
+}
+
+/** ROK-2218: true when a journal id is a dungeon a map id resolves to. */
+export function isMappedDungeonId(id: number): boolean {
+  return MAPPED_DUNGEON_IDS.has(id);
 }
 
 /** Every Forever row carrying a Forever quest-area id (wings included). */
