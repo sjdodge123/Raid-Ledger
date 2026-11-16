@@ -42,6 +42,16 @@ export interface EventDiscussionCardProps {
     signup?: DiscussionSignup | undefined;
 }
 
+/** The "Closed" pill a locked thread's heading carries. */
+function ClosedPill(): JSX.Element {
+    return (
+        <Pill>
+            <LockClosedIcon className="h-3 w-3" aria-hidden="true" />
+            Closed
+        </Pill>
+    );
+}
+
 /** "Discussion" title (+ Closed pill once locked) and the reply count. */
 function DiscussionHeading({ d }: { d: EventDiscussionReady }): JSX.Element {
     return (
@@ -55,15 +65,7 @@ function DiscussionHeading({ d }: { d: EventDiscussionReady }): JSX.Element {
                     aria-hidden="true"
                 />
                 Discussion
-                {d.lock !== null && (
-                    <Pill>
-                        <LockClosedIcon
-                            className="h-3 w-3"
-                            aria-hidden="true"
-                        />
-                        Closed
-                    </Pill>
-                )}
+                {d.lock !== null && <ClosedPill />}
             </h2>
             <span
                 className="text-xs text-muted"
