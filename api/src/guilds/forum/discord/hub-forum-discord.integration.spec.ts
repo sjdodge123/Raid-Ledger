@@ -587,7 +587,7 @@ describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () =
       name: 'hub-forums',
       sharedWith: 1,
       tagsUsed: 3,
-      tagsFree: 15,
+      tagsFree: 16,
       tagName: (await hubNameOf(g)).trim().slice(0, 20).trim(),
       missingPermissions: ['Manage Webhooks'],
     });

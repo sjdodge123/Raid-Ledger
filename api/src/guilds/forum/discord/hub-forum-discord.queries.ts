@@ -116,6 +116,20 @@ export async function bindingCountsByChannel(
   return new Map(rows.map((r) => [r.channelId, r.n]));
 }
 
+/** Channel ids of the forums the bot made in this Discord guild. */
+export async function managedChannelIds(
+  db: ForumDiscordDb,
+  discordGuildId: string,
+): Promise<Set<string>> {
+  const rows = await db
+    .select({ channelId: forums.channelId })
+    .from(forums)
+    .where(
+      and(eq(forums.discordGuildId, discordGuildId), eq(forums.managed, true)),
+    );
+  return new Set(rows.map((r) => r.channelId));
+}
+
 /** The hub's display name (forum tag name). */
 export async function hubName(
   db: ForumDiscordDb,
