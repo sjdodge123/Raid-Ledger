@@ -16,7 +16,10 @@ import {
   buildRoleSelectContent,
   capitalizeRole,
 } from './pug-invite.helpers';
-import { createPugSignup } from './pug-invite-signup.helpers';
+import {
+  createPugSignup,
+  replyPugSignupFailed,
+} from './pug-invite-signup.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 import { defined } from '../../common/defined.helpers';
 
@@ -174,8 +177,10 @@ async function acceptWithCharacter(
   character: CharFields,
 ): Promise<void> {
   const effectiveRole = character.roleOverride ?? character.role ?? 'dps';
+  // Signup first: a rejected one must leave the invite retryable (ROK-2203).
+  const failure = await createPugSignup(deps, slot, effectiveRole);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   await updateSlotAccepted(deps, pugSlotId, effectiveRole, character);
-  await createPugSignup(deps, slot, effectiveRole);
   await replyCharAccepted(interaction, deps, slot, character.name);
 }
 
@@ -234,8 +239,10 @@ async function doPugRoleSelect(
   const charInfo = characterName
     ? await resolveCharClassSpec(deps, interaction.user.id, slot, characterName)
     : null;
+  // Signup first: a rejected one must leave the invite retryable (ROK-2203).
+  const failure = await createPugSignup(deps, slot, selectedRole);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   await updateSlotWithRole(deps, pugSlotId, selectedRole, charInfo);
-  await createPugSignup(deps, slot, selectedRole);
   await replyRoleAccepted(interaction, deps, slot, selectedRole, characterName);
 }
 

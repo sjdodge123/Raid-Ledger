@@ -267,7 +267,10 @@ export async function cancelByDiscordUserFlow(
   });
 }
 
-/** Normal (non-bench) slot allocation for anonymous Discord signups. */
+/**
+ * Normal (non-bench) slot allocation for anonymous Discord signups.
+ * @returns true when MMO auto-allocation ran (it may leave no assignment).
+ */
 export async function allocateDiscordSlot(
   tx: Tx,
   event: EventRow,
@@ -280,7 +283,7 @@ export async function allocateDiscordSlot(
     s: number,
     c: Record<string, unknown> | null,
   ) => Promise<void>,
-): Promise<void> {
+): Promise<boolean> {
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
   const isMMO = slotConfig?.type === 'mmo';
   const hasPrefs = dto.preferredRoles && dto.preferredRoles.length > 0;
@@ -295,18 +298,19 @@ export async function allocateDiscordSlot(
       autoAllocate,
       slotConfig,
     );
-  } else {
-    await allocateGenericDiscordSlot(
-      tx,
-      event,
-      eventId,
-      inserted.id,
-      dto,
-      isMMO,
-      hasPrefs,
-      hasSingleRole,
-      (t, ev, eId) => resolveGenericSlotRole(t, ev, eId),
-      (t, eId, role) => findNextPosition(t, eId, role),
-    );
+    return true;
   }
+  await allocateGenericDiscordSlot(
+    tx,
+    event,
+    eventId,
+    inserted.id,
+    dto,
+    isMMO,
+    hasPrefs,
+    hasSingleRole,
+    (t, ev, eId) => resolveGenericSlotRole(t, ev, eId),
+    (t, eId, role) => findNextPosition(t, eId, role),
+  );
+  return false;
 }

@@ -17,7 +17,10 @@ import {
   buildCharacterOptions,
 } from './pug-invite.helpers';
 import { showPugRoleSelect } from './pug-invite-pug-select.handlers';
-import { createPugSignup } from './pug-invite-signup.helpers';
+import {
+  createPugSignup,
+  replyPugSignupFailed,
+} from './pug-invite-signup.helpers';
 import { errorStack } from '../../common/error-format.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
@@ -220,11 +223,14 @@ async function finalizePugAccept(
   slot: PugSlot,
   eventTitle: string,
 ): Promise<void> {
+  // Persist `accepted` only once the signup exists: a rejected signup must
+  // leave the invite retryable (ROK-2203).
+  const failure = await createPugSignup(deps, slot, slot.role);
+  if (failure) return replyPugSignupFailed(interaction, failure);
   await deps.db
     .update(schema.pugSlots)
     .set({ status: 'accepted', updatedAt: new Date() })
     .where(eq(schema.pugSlots.id, slot.id));
-  await createPugSignup(deps, slot, slot.role);
   const embed = buildAcceptedEmbed(
     `You accepted the invite for **${eventTitle}**! See you there!`,
   );
