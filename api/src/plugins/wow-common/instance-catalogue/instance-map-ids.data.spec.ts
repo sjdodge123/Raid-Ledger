@@ -51,7 +51,12 @@ describe('DUNGEON_MAP_TO_JOURNAL', () => {
 });
 
 describe('FOREVER_DUNGEON_MAP_TO_SEED (ROK-2219)', () => {
-  type BossRow = { instanceId: number; name: string; order: number; expansion: string };
+  type BossRow = {
+    instanceId: number;
+    name: string;
+    order: number;
+    expansion: string;
+  };
   const bosses: readonly BossRow[] = bossData;
   const foreverBosses = (seedId: number): BossRow[] =>
     bosses.filter((b) => b.instanceId === seedId && b.expansion === 'forever');
@@ -81,8 +86,11 @@ describe('FOREVER_DUNGEON_MAP_TO_SEED (ROK-2219)', () => {
 
   it('map 3065 is The Hall of Thanes with its four bosses in encounter order', () => {
     expect(dungeonByInstanceMapId(3065)?.name).toBe('The Hall of Thanes');
-    expect(foreverBosses(FOREVER_SEED_ID_BASE + 1).map((b) => b.name)).toEqual(
-      ['Faldrim Anvilmar', 'Infurnus', 'Plunder', 'Durgen Dirgehammer'],
-    );
+    expect(foreverBosses(FOREVER_SEED_ID_BASE + 1).map((b) => b.name)).toEqual([
+      'Faldrim Anvilmar',
+      'Infurnus',
+      'Plunder',
+      'Durgen Dirgehammer',
+    ]);
   });
 });

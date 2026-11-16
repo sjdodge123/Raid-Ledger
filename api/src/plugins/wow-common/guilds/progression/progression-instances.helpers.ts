@@ -6,7 +6,7 @@
  *
  * Placement of one boss (all its pulls together, so a boss never splits):
  * (1) its pull map id via `RAID_MAP_INSTANCES`, else the catalogue's Classic
- * dungeon map ids (ROK-2218); (2) else its name against the boss rows of a
+ * and Forever-new dungeon map ids (ROK-2218/2219); (2) else its name against the boss rows of a
  * known raid or mapped dungeon (wing rows count toward their parent);
  * (3) else `m:<mapId>` "Instance <mapId>"
  * (Q-B12 v1); (4) else `other` "Other bosses". Totals use `forever` boss
