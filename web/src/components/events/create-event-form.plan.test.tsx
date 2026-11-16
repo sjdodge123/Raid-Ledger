@@ -34,7 +34,7 @@ vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: vi.fn(() => ({ games: [{ id: 5, name: 'WoW Forever', slug: 'wow-forever' }] })),
     useEventTypes: vi.fn(() => ({ data: { data: [
         { id: 7, name: 'Raid', slug: 'raid', defaultPlayerCap: 10 },
-        { id: 8, name: 'Dungeon', slug: 'dungeon', defaultPlayerCap: 5 },
+        { id: 8, name: 'Dungeon', slug: 'dungeon', defaultPlayerCap: 5, requiresComposition: true, defaultDurationMinutes: 90 },
     ] } })),
 }));
 vi.mock('../../hooks/use-want-to-play', () => ({ useWantToPlay: vi.fn(() => ({ count: 0, isLoading: false })) }));
@@ -66,6 +66,12 @@ describe('CreateEventForm — plan dungeon prefill (ROK-2215 W5)', () => {
         expect(screen.getByTestId('content-browser')).toHaveTextContent('Wailing Caverns');
         expect(screen.getByTestId('content-browser')).toHaveAttribute('data-type', 'dungeon');
         expect(screen.getByRole('combobox', { name: 'Event Type' })).toHaveValue('8');
+    });
+
+    it('applies the Dungeon type defaults (5-player composition) like a manual type pick', () => {
+        renderForm({ initialGame: GAME, initialInstances: [WC] });
+        expect(screen.getByLabelText('Max Attendees')).toHaveValue(5);
+        expect(screen.getByText('Tank')).toBeInTheDocument();
     });
 
     it('ignores the plan dungeon in edit mode', () => {

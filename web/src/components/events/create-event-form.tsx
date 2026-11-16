@@ -155,7 +155,8 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
         <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null, pollHubId, () => guardBenchPick(s.bench)); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
-                registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} pollHubId={pollHubId} />
+                registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} pollHubId={pollHubId}
+                planPrefill={!isEditMode && !copyFromEvent && (initialInstances?.length ?? 0) > 0} />
             <div className="border-t border-edge-subtle" />
             <WhenSection form={s.form} errors={s.errors} isEditMode={isEditMode} tzAbbr={s.tzAbbr}
                 endTimePreview={s.endTimePreview} recurrenceCount={s.recurrenceCount} updateField={s.updateField} setErrors={s.setErrors} />
@@ -186,7 +187,7 @@ function HubFieldSlot({ gameId, guildId, setForm, dropUnlisted }: {
     return <PluginSlot name="event-create:hub-field" context={{ gameId, guildId, onGuildChange, dropUnlisted }} />;
 }
 
-function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading, pollHubId }: {
+function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading, pollHubId, planPrefill }: {
     form: FormState; setForm: React.Dispatch<React.SetStateAction<FormState>>;
     registryGameId: number | null | undefined;
     errors: FormErrors; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
@@ -194,8 +195,11 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
     interestCount: number; interestLoading: boolean;
     /** ROK-1893 P3: the hub a poll lock-in inherits (null = none). */
     pollHubId: number | null;
+    /** ROK-2215: a fresh plan-prefilled dungeon — its auto-picked type applies the type's defaults. */
+    planPrefill: boolean;
 }) {
     const onEventTypeIdChange = useCallback((id: number | null) => setForm((prev) => ({ ...prev, eventTypeId: id })), [setForm]);
+    const onEventTypeDefaults = useCallback((defaults: Partial<SlotState>) => setForm((prev) => ({ ...prev, ...defaults })), [setForm]);
 
     return (
         <FormSection title="Game & Content">
@@ -217,7 +221,7 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
                 onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => { const next = { ...prev }; delete next.title; return next; }); }}
                 onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}
                 onSelectedInstancesChange={(instances) => setForm((prev) => ({ ...prev, selectedInstances: instances }))}
-                onEventTypeDefaults={(defaults: Partial<SlotState>) => setForm((prev) => ({ ...prev, ...defaults }))}
+                onEventTypeDefaults={onEventTypeDefaults} autoMatchAppliesDefaults={planPrefill}
                 interestCount={interestCount} interestLoading={interestLoading}
                 slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
             />
