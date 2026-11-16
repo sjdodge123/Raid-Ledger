@@ -5,19 +5,11 @@
  * "missing" (ROK-2214 R6).
  */
 import type { JSX } from 'react';
-import type { EnrichedDungeonQuestDto, EventQuestReadinessDto } from '@raid-ledger/contract';
+import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 import { StatusChip } from '../../../../components/ui/status-chip';
 import { cellTitle, QUEST_STATE_META } from '../../hub-widgets/dungeon-quests.helpers';
 import { getWowheadQuestUrl } from '../../lib/wowhead-urls';
-
-/** One claimed character's readiness row from the plan API. */
-export type PlanSignup = EventQuestReadinessDto['signups'][number];
-type Cell = PlanSignup['perQuest'][number];
-
-/** The character's cell for a quest; undefined = the character can't take it. */
-export function stateOf(s: PlanSignup, questId: number): Cell | undefined {
-    return s.perQuest.find((p) => p.questId === questId);
-}
+import { stateOf, type PlanSignup } from './planner-display';
 
 function CharacterChip({ s, quest }: { s: PlanSignup; quest: EnrichedDungeonQuestDto }): JSX.Element {
     const cell = stateOf(s, quest.questId);

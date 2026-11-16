@@ -6,7 +6,8 @@
  * ≥1024px (§4.18), stacked below with the Create-event set in a sticky bar.
  */
 import { useMemo, type JSX } from 'react';
-import type { DungeonPlanDto } from '@raid-ledger/contract';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { DungeonPlanDto, EnrichedDungeonQuestDto, WowInstanceDto } from '@raid-ledger/contract';
 import type { HubCtx } from '../../../hub-module';
 import { useMediaQuery } from '../../../../hooks/use-media-query';
 import { useRosterInsights } from '../../hub-widgets/use-roster-insights';
@@ -40,6 +41,32 @@ function planMarks(plan: DungeonPlanDto | undefined): { below: Set<string>; drop
     return { below: new Set(below), dropped: new Set((plan?.droppedCharacterIds ?? []).map((id) => id.toLowerCase())) };
 }
 
+interface ColumnsProps {
+    s: PlannerState;
+    instances: WowInstanceDto[];
+    plan: UseQueryResult<DungeonPlanDto, Error>;
+    marks: { below: Set<string>; dropped: Set<string> };
+    desktop: boolean;
+    enriched: EnrichedDungeonQuestDto[] | undefined;
+}
+
+/** Controls + levels on the left, quest prep on the right at ≥1024px; stacked below. */
+function PlannerColumns({ s, instances, plan, marks, desktop, enriched }: ColumnsProps): JSX.Element {
+    return (
+        <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-6 lg:space-y-0">
+            <div className="space-y-4">
+                <DungeonSection instances={instances} selected={instances.find((i) => i.id === s.instanceId)}
+                    onSelect={s.setInstanceId} desktop={desktop} />
+                <GroupChips s={s} belowRange={marks.below} dropped={marks.dropped} />
+                {plan.data && <div className="border-t border-edge-subtle pt-3"><LevelsList plan={plan.data} /></div>}
+            </div>
+            <div className="border-t border-edge-subtle pt-3 lg:border-t-0 lg:pt-0">
+                <QuestSection instanceId={s.instanceId} plan={plan} enriched={enriched} />
+            </div>
+        </div>
+    );
+}
+
 /** The tab body (default export: `dungeonPlannerTab` lazy-loads it). */
 export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.Element {
     const desktop = useMediaQuery('(min-width: 1024px)');
@@ -61,17 +88,8 @@ export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.E
                     </div>
                     <div className="flex flex-wrap items-start gap-2"><CopyLinkButton url={share} />{desktop && actions}</div>
                 </div>
-                <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:gap-6 lg:space-y-0">
-                    <div className="space-y-4">
-                        <DungeonSection instances={instances} selected={instances.find((i) => i.id === s.instanceId)}
-                            onSelect={s.setInstanceId} desktop={desktop} />
-                        <GroupChips s={s} belowRange={marks.below} dropped={marks.dropped} />
-                        {plan.data && <div className="border-t border-edge-subtle pt-3"><LevelsList plan={plan.data} /></div>}
-                    </div>
-                    <div className="border-t border-edge-subtle pt-3 lg:border-t-0 lg:pt-0">
-                        <QuestSection instanceId={s.instanceId} plan={plan} enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} />
-                    </div>
-                </div>
+                <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
+                    enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} />
             </div>
             {!desktop && <div className="sticky bottom-0 -mx-4 -mb-4 border-t border-edge bg-surface p-3">{actions}</div>}
         </div>

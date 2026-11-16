@@ -5,7 +5,8 @@
  */
 import type { JSX } from 'react';
 import type { DungeonPlanDto, EnrichedDungeonQuestDto, WowInstanceDto } from '@raid-ledger/contract';
-import { DungeonPicker, UnverifiedHint, WowheadLink, instanceRange } from './planner-controls';
+import { DungeonPicker, UnverifiedHint, WowheadLink } from './planner-controls';
+import { instanceRange } from './planner-display';
 import { QuestBreakdown } from './planner-breakdown';
 import { hiddenFactionNote } from './planner-faction';
 

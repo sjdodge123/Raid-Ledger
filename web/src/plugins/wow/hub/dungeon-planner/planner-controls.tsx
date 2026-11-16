@@ -11,12 +11,7 @@ import { Button } from '../../../../components/ui/button';
 import { buttonClass } from '../../../../components/ui/button-classes';
 import { Select } from '../../../../components/ui/select';
 import { getWowheadZoneUrl } from '../../lib/wowhead-urls';
-import { levelRange } from '../../utils/level-fit';
-
-/** "Lv15-21" for a catalogue row; '' when it has no minimum level. */
-export function instanceRange(inst: Pick<WowInstanceDto, 'minimumLevel' | 'maximumLevel'>): string {
-    return typeof inst.minimumLevel === 'number' ? levelRange(inst.minimumLevel, inst.maximumLevel) : '';
-}
+import { instanceRange } from './planner-display';
 
 /** "levels unverified" — only for rows whose range is not from the game itself (ruling 10). */
 export function UnverifiedHint({ instance }: { instance: WowInstanceDto }): JSX.Element | null {

@@ -9,7 +9,8 @@ import type { DungeonLevelFit, DungeonPlanDto, EnrichedDungeonQuestDto } from '@
 import { StatusChip, type StatusChipTone } from '../../../../components/ui/status-chip';
 import { groupByType, splitByLocation } from '../../slots/quest-prep-groups';
 import { levelFitCopy } from '../../utils/level-fit';
-import { QuestRow, stateOf, type PlanSignup } from './planner-quest-row';
+import { stateOf, type PlanSignup } from './planner-display';
+import { QuestRow } from './planner-quest-row';
 
 const FIT_TONE: Readonly<Record<DungeonLevelFit, StatusChipTone>> = { in: 'success', below: 'warning', above: 'neutral', unknown: 'neutral' };
 
