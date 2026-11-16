@@ -25,6 +25,7 @@ function row(
   characterName: string,
   userId: number,
   discordId: string | null,
+  deactivatedAt: Date | null = null,
 ): CharacterOwnerRow {
   return {
     characterId,
@@ -32,6 +33,7 @@ function row(
     userId,
     username: `user${userId}`,
     discordId,
+    deactivatedAt,
   };
 }
 
@@ -75,6 +77,17 @@ describe('planCharacterInvites', () => {
     ]);
   });
 
+  it('skips a deactivated owner as deactivated even with a real Discord id', () => {
+    const rows = [
+      row(C_B, 'Brann', 3, '100000000000000003', new Date('2026-01-01')),
+    ];
+    const plan = planCharacterInvites(rows, [C_B], CREATOR_ID);
+    expect(plan.targets).toEqual([]);
+    expect(plan.skipped).toEqual([
+      { characterId: C_B, characterName: 'Brann', reason: 'deactivated' },
+    ]);
+  });
+
   it('reports an unknown id as not_found with a null name', () => {
     const plan = planCharacterInvites(ROWS, [C_MISSING], CREATOR_ID);
     expect(plan.skipped).toEqual([
@@ -92,6 +105,7 @@ describe('planCharacterInvites', () => {
         userId: 3,
         username: 'user3',
         discordId: '100000000000000003',
+        deactivatedAt: null,
       },
       {
         characterId: C_A1,
@@ -99,6 +113,7 @@ describe('planCharacterInvites', () => {
         userId: 2,
         username: 'user2',
         discordId: '100000000000000002',
+        deactivatedAt: null,
       },
     ]);
     expect(plan.skipped.map((s) => s.characterId)).toEqual([
@@ -123,7 +138,9 @@ describe('assertCanInviteCharacters', () => {
 
   it('refuses anyone else with 403', () => {
     expect(() => assertCanInviteCharacters(event, 99, false)).toThrow(
-      new ForbiddenException('Only the event creator can invite characters'),
+      new ForbiddenException(
+        'Only the event creator or an operator/admin can invite characters',
+      ),
     );
   });
 });
@@ -141,7 +158,9 @@ describe('inviteCharactersAsCaller', () => {
     await expect(
       inviteCharactersAsCaller(deps, 7, { id: 99, isAdmin: false }, [C_B]),
     ).rejects.toThrow(
-      new ForbiddenException('Only the event creator can invite characters'),
+      new ForbiddenException(
+        'Only the event creator or an operator/admin can invite characters',
+      ),
     );
     expect(deps.findOne).toHaveBeenCalledWith(7);
     expect(select).not.toHaveBeenCalled();

@@ -75,6 +75,7 @@ function skipNames(result: InviteCharactersResultDto, reason: InviteCharactersRe
 export function inviteSkipNote(result: InviteCharactersResultDto): string | null {
     const parts = [
         ['Not invited (no linked Discord)', skipNames(result, 'no_discord')],
+        ['Not invited (account deactivated)', skipNames(result, 'deactivated')],
         ['Already signed up', skipNames(result, 'already_signed_up')],
         ['Not found', skipNames(result, 'not_found')],
     ].filter(([, names]) => names).map(([label, names]) => `${label}: ${names}`);

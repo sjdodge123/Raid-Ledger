@@ -15,6 +15,7 @@ export const InviteCharactersSkipReasonSchema = z.enum([
   'no_discord',
   'already_signed_up',
   'not_found',
+  'deactivated',
 ]);
 export type InviteCharactersSkipReason = z.infer<
   typeof InviteCharactersSkipReasonSchema

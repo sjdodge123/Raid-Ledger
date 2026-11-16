@@ -1,8 +1,9 @@
 /**
  * ROK-2215: invite the owners of up to five planned characters to an event.
  * The organiser's own character and a second character of the same owner are
- * dropped silently; owners without a linked Discord id or already signed up
- * are reported as skips (never a 4xx for a skip).
+ * dropped silently; owners without a linked Discord id, deactivated owners
+ * (left the guild — never DM'd) or already signed up are reported as skips
+ * (never a 4xx for a skip).
  */
 import { ForbiddenException } from '@nestjs/common';
 import type { Logger } from '@nestjs/common';
@@ -29,6 +30,7 @@ export interface CharacterOwnerRow {
   userId: number;
   username: string;
   discordId: string | null;
+  deactivatedAt: Date | null;
 }
 
 /** An owner who will be invited (their Discord id is a real link). */
@@ -64,21 +66,24 @@ export async function loadCharacterOwners(
       userId: schema.users.id,
       username: schema.users.username,
       discordId: schema.users.discordId,
+      deactivatedAt: schema.users.deactivatedAt,
     })
     .from(schema.characters)
     .innerJoin(schema.users, eq(schema.users.id, schema.characters.userId))
     .where(inArray(schema.characters.id, ids));
 }
 
-/** Classifies one known character: a target or a no_discord skip. */
+/** Classifies one known character: a target, or a deactivated / no_discord skip. */
 function classifyRow(
   row: CharacterOwnerRow,
 ): CharacterInviteTarget | SkippedEntry {
-  const { discordId } = row;
+  const { characterId, characterName, discordId } = row;
+  if (row.deactivatedAt !== null) {
+    return { characterId, characterName, reason: 'deactivated' };
+  }
   if (discordId !== null && isLinkedDiscordId(discordId)) {
     return { ...row, discordId };
   }
-  const { characterId, characterName } = row;
   return { characterId, characterName, reason: 'no_discord' };
 }
 
@@ -121,7 +126,7 @@ export function assertCanInviteCharacters(
 ): void {
   if (event.creator.id !== callerId && !isAdmin) {
     throw new ForbiddenException(
-      'Only the event creator can invite characters',
+      'Only the event creator or an operator/admin can invite characters',
     );
   }
 }

@@ -12,7 +12,7 @@ import { withHttpStatus } from '../../lib/api/api-error';
 import { toast } from '../../lib/toast';
 import { invalidateHubPolls } from '../hub/events/hub-polls-api';
 import { FALLBACK_TOAST } from './use-bench-pick';
-import { INVITES_FAILED_TOAST, LOCK_IN_LOST_TOAST, useCreateEventMutation, type CreateEventMutationOptions } from './use-create-event-mutation';
+import { INVITES_FAILED_TOAST, LOCK_IN_LOST_TOAST, inviteSkipNote, useCreateEventMutation, type CreateEventMutationOptions } from './use-create-event-mutation';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate }));
@@ -133,7 +133,10 @@ describe('useCreateEventMutation — plan invites (ROK-2215 W8/W9)', () => {
         expect(inviteCharacters).toHaveBeenCalledTimes(1);
         expect(inviteCharacters).toHaveBeenCalledWith(77, IDS);
         expect(mockNavigate).toHaveBeenCalledWith('/events/77');
+        // The toast fires in the invite promise's .then; settle it before the negative check.
+        await vi.mocked(inviteCharacters).mock.results[0]?.value;
         expect(toast.warning).not.toHaveBeenCalled();
+        expect(inviteSkipNote(NONE)).toBeNull();
     });
 
     it('W8: a rejected invite call toasts an error and keeps the event', async () => {
@@ -163,5 +166,13 @@ describe('useCreateEventMutation — plan invites (ROK-2215 W8/W9)', () => {
         });
         await submit({ inviteCharacterIds: IDS });
         await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Not invited (no linked Discord): Brann. Already signed up: Corra'));
+    });
+
+    it('W9: a deactivated owner is named in the skip note', () => {
+        const note = inviteSkipNote({
+            invited: [],
+            skipped: [{ characterId: ID1, characterName: 'Dagny', reason: 'deactivated' }],
+        });
+        expect(note).toBe('Not invited (account deactivated): Dagny');
     });
 });

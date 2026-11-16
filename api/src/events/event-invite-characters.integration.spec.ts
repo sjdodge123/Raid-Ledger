@@ -266,9 +266,40 @@ async function testOperatorNonCreatorAllowed() {
   expect(await inviteNotificationCount(u1.userId)).toBe(1);
 }
 
-async function testAdminInvitesCreatorsCharacter() {
+/** The creator is auto-signed-up on create, so their own character is a skip. */
+async function testAdminSeesCreatorAlreadySignedUp() {
   const { creator, eventId } = await setupCreatorAndTwoOwners();
   const creatorChar = await createCharacter(creator.userId, 'Cedric');
+  const res = await invite(adminToken, eventId, {
+    characterIds: [creatorChar],
+  });
+  expect(res.status).toBe(201);
+  expect(res.body).toEqual({
+    invited: [],
+    skipped: [
+      {
+        characterId: creatorChar,
+        characterName: 'Cedric',
+        reason: 'already_signed_up',
+      },
+    ],
+  });
+  expect(await inviteNotificationCount(creator.userId)).toBe(0);
+  expect(inviteEmitCount()).toBe(0);
+}
+
+/** Once the creator's auto-signup is gone, an admin can invite them. */
+async function testAdminInvitesCreatorNotSignedUp() {
+  const { creator, eventId } = await setupCreatorAndTwoOwners();
+  const creatorChar = await createCharacter(creator.userId, 'Cedric');
+  await testApp.db
+    .delete(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, creator.userId),
+      ),
+    );
   const res = await invite(adminToken, eventId, {
     characterIds: [creatorChar],
   });
@@ -284,6 +315,37 @@ async function testAdminInvitesCreatorsCharacter() {
     skipped: [],
   });
   expect(await inviteNotificationCount(creator.userId)).toBe(1);
+}
+
+// ─── Deactivated owner (left the guild) ─────────────────────────────────────
+
+async function testSkipsDeactivatedOwner() {
+  const { creator, u1, u2, eventId, charA, charB } =
+    await setupCreatorAndTwoOwners();
+  await testApp.db
+    .update(schema.users)
+    .set({ deactivatedAt: new Date() })
+    .where(eq(schema.users.id, u1.userId));
+  const res = await invite(creator.token, eventId, {
+    characterIds: [charA, charB],
+  });
+  expect(res.status).toBe(201);
+  expect(res.body).toEqual({
+    invited: [
+      { characterId: charB, characterName: 'Brann', username: 'owner_u2' },
+    ],
+    skipped: [
+      { characterId: charA, characterName: 'Aria', reason: 'deactivated' },
+    ],
+  });
+  // Mutation proof: without the deactivatedAt check U1 gets 1 here + a DM emit.
+  expect(await inviteNotificationCount(u1.userId)).toBe(0);
+  expect(await inviteNotificationCount(u2.userId)).toBe(1);
+  expect(emitSpy).not.toHaveBeenCalledWith(
+    MEMBER_INVITE_EVENTS.CREATED,
+    expect.objectContaining({ targetDiscordId: 'discord-u1' }),
+  );
+  expect(inviteEmitCount()).toBe(1);
 }
 
 // ─── I6: body validation, unknown ids, unknown event ────────────────────────
@@ -348,8 +410,12 @@ describe('POST /events/:id/invite-characters (ROK-2215)', () => {
     testNonCreatorMemberForbidden());
   it('I5: an operator who did not create the event may invite', () =>
     testOperatorNonCreatorAllowed());
-  it("I5: an admin may invite the creator's own character", () =>
-    testAdminInvitesCreatorsCharacter());
+  it("I5: an admin inviting the auto-signed-up creator's character gets already_signed_up", () =>
+    testAdminSeesCreatorAlreadySignedUp());
+  it("I5: an admin may invite the creator's own character once not signed up", () =>
+    testAdminInvitesCreatorNotSignedUp());
+  it('a deactivated owner is skipped deactivated — no notification, no DM emit', () =>
+    testSkipsDeactivatedOwner());
   it.each(BAD_BODIES)('I6: rejects %s with 400', (_label, body) =>
     testRejectsBadBody(body),
   );
