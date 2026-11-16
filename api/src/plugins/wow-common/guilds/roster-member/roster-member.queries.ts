@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../../drizzle/schema';
 import { characterLink, inLatestSnapshot } from '../guild-membership.helpers';
 import { ownerIsActive } from '../guild-roster.helpers';
+import { hasClaimableRosterIdentity } from '../roster-claim/roster-claim.name-rule';
 import {
   isClaimableGuild,
   isRowUnclaimed,
@@ -38,6 +39,8 @@ export interface RosterMemberRow {
   claimedCharacterId: string | null;
   /** `isRowUnclaimed` — any owner, active or not. */
   unclaimed: boolean;
+  /** ROK-2222: a GUID or a two-part Forever name (claimable identity). */
+  identityClaimable: boolean;
   snapshot: RosterMemberSnapshot | null;
 }
 
@@ -91,6 +94,7 @@ const memberColumns = {
   updatedAt: m.updatedAt,
   claimedCharacterId: characters.id,
   unclaimed: sql<boolean>`coalesce(${isRowUnclaimed() ?? sql`false`}, false)`,
+  identityClaimable: sql<boolean>`coalesce(${hasClaimableRosterIdentity()}, false)`,
   snapshotMemberId: a.guildMemberId,
 };
 

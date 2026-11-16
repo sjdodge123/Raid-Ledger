@@ -9,6 +9,7 @@ import {
   snapshotArmoryColumns,
   type ArmoryFieldsRow,
 } from '../roster-armory-fields';
+import { hasClaimableRosterIdentity } from './roster-claim.name-rule';
 
 /**
  * ROK-2128 — the roster-claim reads. "Claimed" is DERIVED (D2), never a
@@ -98,6 +99,7 @@ export interface CandidateFilter {
  * The unclaimed candidates of every claimable guild of the game (or of the
  * one `guildId`), sorted by guild name then character name. Reads one row
  * past the cap so the caller can tell a truncated list from an exact fit.
+ * ROK-2222: first-name-only GUID-less rows are never offered.
  */
 export async function loadCandidates(
   db: Db,
@@ -122,7 +124,14 @@ export async function loadCandidates(
     .from(guildMembers)
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .leftJoin(guildMemberArmory, memberSnapshotJoin())
-    .where(and(isClaimableGuild(gameId, guildId), isRowUnclaimed(), byName))
+    .where(
+      and(
+        isClaimableGuild(gameId, guildId),
+        isRowUnclaimed(),
+        hasClaimableRosterIdentity(),
+        byName,
+      ),
+    )
     .orderBy(asc(guilds.name), asc(guilds.id), asc(guildMembers.characterName))
     .limit(MAX_ROSTER_CLAIM_CANDIDATES + 1);
 }

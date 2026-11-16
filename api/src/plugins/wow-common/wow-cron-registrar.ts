@@ -38,7 +38,10 @@ export class WowCronRegistrar implements CronRegistrar {
     return [
       {
         name: 'character-auto-sync',
-        cronExpression: '0 0 3,15 * * *',
+        // ROK-2222: hourly at :10 (was 03:00/15:00 UTC), clear of the :20/:40/:50
+        // roster jobs. Sequential with a 500 ms gap, ~4–6 Blizzard calls a
+        // character: far under the 36k/h, 100/s client limit.
+        cronExpression: '0 10 * * * *',
         handler: () => this.handleAutoSync(),
       },
       {
