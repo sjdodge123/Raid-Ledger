@@ -10,7 +10,10 @@ import { and, desc, eq, isNotNull, isNull, not, like } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
-import { UNSENT_PREFIX, type ForumLink } from './hub-forum-discord-links.queries';
+import {
+  UNSENT_PREFIX,
+  type ForumLink,
+} from './hub-forum-discord-links.queries';
 import { isGone } from './hub-forum-discord-outbound.discord';
 import { findBinding, type ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -86,7 +89,10 @@ export class HubForumDiscordPinSync {
   /** Discord → RL for a linked post whose PINNED flag changed. */
   async pullPost(link: ForumLink, change: PinChange, now: Date): Promise<void> {
     if (change.wasPinned === change.isPinned) return;
-    const target = and(eq(threads.id, link.threadId), isNull(threads.deletedAt));
+    const target = and(
+      eq(threads.id, link.threadId),
+      isNull(threads.deletedAt),
+    );
     if (change.isPinned) {
       await this.db
         .update(threads)

@@ -11,6 +11,13 @@ import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.dis
 import { HubForumDiscordOutboundListener } from './hub-forum-discord-outbound.listener';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
+import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
+import { HubForumDiscordInboundListener } from './hub-forum-discord-inbound.listener';
+import {
+  HubForumDiscordPinGateway,
+  HubForumDiscordPinSync,
+} from './hub-forum-discord-pins';
+import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 
 /**
@@ -26,8 +33,17 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordOutboundGateway,
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
+    HubForumDiscordRouteResolver,
+    HubForumDiscordPinGateway,
+    HubForumDiscordPinSync,
+    HubForumDiscordInboundIngest,
+    HubForumDiscordInboundListener,
   ],
-  exports: [HubForumDiscordGateway, HubForumDiscordOutboundService],
+  exports: [
+    HubForumDiscordGateway,
+    HubForumDiscordOutboundService,
+    HubForumDiscordInboundIngest,
+  ],
 })
 export class HubForumDiscordModule implements OnModuleInit {
   /** CLAUDE.md plugin ownership: the sync is a Core ingest source. */

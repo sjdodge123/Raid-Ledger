@@ -98,10 +98,15 @@ export class HubForumDiscordRouteResolver {
     { at: number; route: ForumRoute | null }
   >();
 
-  constructor(@Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb) {}
+  constructor(
+    @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
+  ) {}
 
   /** The forum's route, or null when no hub binds the channel. */
-  async resolve(channelId: string, now = Date.now()): Promise<ForumRoute | null> {
+  async resolve(
+    channelId: string,
+    now = Date.now(),
+  ): Promise<ForumRoute | null> {
     const hit = this.cache.get(channelId);
     if (hit && now - hit.at < HubForumDiscordRouteResolver.TTL_MS) {
       return hit.route;

@@ -95,7 +95,13 @@ export async function insertDiscordThread(
   return db.transaction(async (tx) => {
     const [t] = await tx
       .insert(threads)
-      .values({ ...rest, ...author, createdAt: now, updatedAt: now, lastActivityAt: now })
+      .values({
+        ...rest,
+        ...author,
+        createdAt: now,
+        updatedAt: now,
+        lastActivityAt: now,
+      })
       .returning({ id: threads.id });
     if (!t) throw new Error('hub_forum_threads insert returned no row');
     const link = { guildId: row.guildId, threadId: t.id, replyId: null };
@@ -124,10 +130,19 @@ export async function insertDiscordReply(
     if (bumped.length === 0) return null;
     const [r] = await tx
       .insert(replies)
-      .values({ guildId, threadId, body, ...author, createdAt: now, updatedAt: now })
+      .values({
+        guildId,
+        threadId,
+        body,
+        ...author,
+        createdAt: now,
+        updatedAt: now,
+      })
       .returning({ id: replies.id });
     if (!r) throw new Error('hub_forum_replies insert returned no row');
-    await tx.insert(links).values(discordLink({ guildId, threadId, replyId: r.id }, ids, now));
+    await tx
+      .insert(links)
+      .values(discordLink({ guildId, threadId, replyId: r.id }, ids, now));
     return r.id;
   });
 }
@@ -167,9 +182,17 @@ export async function removeFromDiscord(
   as: 'author' | 'moderator',
   now: Date,
 ): Promise<void> {
-  const gone = { deletedAt: now, deletedBy: null, deletedAs: as, updatedAt: now };
+  const gone = {
+    deletedAt: now,
+    deletedBy: null,
+    deletedAs: as,
+    updatedAt: now,
+  };
   await db.transaction(async (tx) => {
-    await tx.update(links).set({ discordDeletedAt: now }).where(eq(links.id, link.id));
+    await tx
+      .update(links)
+      .set({ discordDeletedAt: now })
+      .where(eq(links.id, link.id));
     if (link.replyId === null) {
       await tx
         .update(threads)
