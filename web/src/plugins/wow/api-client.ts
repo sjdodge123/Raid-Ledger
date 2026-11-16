@@ -26,6 +26,7 @@ import type {
     PutGuildIngameText,
     IngameTextFieldKey,
     GuildContributionsDto,
+    DungeonPlanDto,
 } from '@raid-ledger/contract';
 import {
     GuildIngameTextSchema,
@@ -37,6 +38,7 @@ import {
     EventQuestPrereqsResponseSchema,
     ForeverProbeResultSchema,
     WowForeverRealmRulesetsSchema,
+    DungeonPlanSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
@@ -243,6 +245,17 @@ export async function updateForeverRealmRulesets(dto: WowForeverRealmRulesetsDto
 /** ROK-2148 — Mailworthy guild contributions (members + staff; 403 otherwise). */
 export async function fetchGuildContributions(guildId: number): Promise<GuildContributionsDto> {
     return fetchApi(`/plugins/wow/guilds/${guildId}/contributions`, {}, GuildContributionsDtoSchema);
+}
+
+/**
+ * ROK-2216 — the Forever guild Dungeon planner read (ROK-2214): quest readiness
+ * for up to five claimed characters in one dungeon. `characterIds` is sent as
+ * one comma-separated value and left off when empty.
+ */
+export async function fetchDungeonPlan(guildId: number, instanceId: number, characterIds: string[]): Promise<DungeonPlanDto> {
+    const params = new URLSearchParams({ instanceId: String(instanceId) });
+    if (characterIds.length > 0) params.set('characterIds', characterIds.join(','));
+    return fetchApi(`/plugins/wow/guilds/${guildId}/dungeon-plan?${params}`, {}, DungeonPlanSchema);
 }
 
 const guildIngameTextPath = (guildId: number): string => `/plugins/wow/guilds/${guildId}/ingame-text`;

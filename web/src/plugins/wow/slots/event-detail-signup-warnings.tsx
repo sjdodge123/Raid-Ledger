@@ -1,9 +1,5 @@
 import type { WowInstanceDetailDto } from '@raid-ledger/contract';
-
-interface LevelWarning {
-    type: 'under' | 'over';
-    label: string;
-}
+import { getLevelWarning } from '../utils/level-fit';
 
 interface EventDetailSignupWarningsProps {
     characterLevel: number | null | undefined;
@@ -36,27 +32,4 @@ export function EventDetailSignupWarnings({
             {warning.label}
         </span>
     );
-}
-
-function getLevelWarning(
-    characterLevel: number | null | undefined,
-    contentInstances: WowInstanceDetailDto[],
-    gameSlug: string | null | undefined,
-): LevelWarning | null {
-    if (characterLevel == null) return null;
-
-    const minimumLevels = contentInstances
-        .map((i) => i.minimumLevel)
-        .filter((l): l is number => l != null);
-    const lowestMinLevel = minimumLevels.length > 0 ? Math.min(...minimumLevels) : null;
-
-    if (lowestMinLevel == null) return null;
-
-    if (characterLevel < lowestMinLevel) {
-        return { type: 'under', label: `Below min level (${lowestMinLevel})` };
-    }
-    if (gameSlug === 'world-of-warcraft-classic' && characterLevel > lowestMinLevel + 20) {
-        return { type: 'over', label: 'Over-leveled for this content' };
-    }
-    return null;
 }

@@ -151,6 +151,8 @@ const blizzard = {
   ],
   tabs: [
     { id: 'raids', label: 'Raids' },
+    // ROK-2216 — the Forever guild Dungeon planner (a `registerHubGameTab` game tab).
+    { id: 'dungeon-planner', label: 'Dungeon planner' },
     // ROK-1790 — the guild crafters directory (a `registerHubGameTab` game tab).
     { id: 'crafters', label: 'Crafters' },
     // ROK-1789 Part B — the Forever Progression tab (see-all of Raid progress).

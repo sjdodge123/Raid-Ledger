@@ -45,6 +45,7 @@ import { attunementsWidget } from './hub-widgets/attunements.register';
 import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
 import { wowHubClaimProvider } from './hub/wow-hub-claim-provider';
 import { craftersTab } from './hub/crafters/crafters-tab.register';
+import { dungeonPlannerTab } from './hub/dungeon-planner/dungeon-planner-tab.register';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -80,6 +81,8 @@ registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);
 // ROK-1790 (ruling 2026-11-12 Q1) — the Crafters directory is its own tab on Forever guild hubs.
 blizzard.registerHubGameTab([WOW_FOREVER_GAME_SLUG], craftersTab);
+// ROK-2216 — the Dungeon planner tab on Forever guild hubs (order 12; `visible` excludes community hubs).
+blizzard.registerHubGameTab([WOW_FOREVER_GAME_SLUG], dungeonPlannerTab);
 blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
 registerReadyCheckWidget(blizzard);

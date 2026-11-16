@@ -7,6 +7,7 @@ import { useWowInstances } from '../hooks/use-wow-instances';
 import { fetchWowInstanceDetail } from '../api-client';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { buildBasicInstanceDetail } from '../lib/instance-detail';
+import { levelRange } from '../utils/level-fit';
 
 interface EventCreateContentBrowserProps {
     wowVariant: string;
@@ -35,11 +36,6 @@ async function toggleInstance(
     } catch {
         onInstancesChange([...selectedInstances, { ...buildBasicInstanceDetail(instance, contentType), minimumLevel: null }]);
     } finally { setLoadingId(null); }
-}
-
-/** "Lv15-21", or "Lv15+" when there is no ceiling. */
-function levelRange(min: number, max?: number | null): string {
-    return `Lv${min}${max ? `-${max}` : '+'}`;
 }
 
 /** Selected-instance chips: the shared `RemovableChip` (design-system §4.3); the Remove target sits flush right. */

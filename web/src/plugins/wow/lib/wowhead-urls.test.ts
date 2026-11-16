@@ -10,6 +10,7 @@ import {
     getWowheadTalentCalcEmbedUrl,
     getWowheadItemUrlForExpansion,
     getWowheadDataSuffixForExpansion,
+    getWowheadZoneUrl,
 } from './wowhead-urls';
 
 describe('wowhead-urls', () => {
@@ -173,5 +174,14 @@ describe('wowhead urls — non-Forever pin (ROK-1726 AC6)', () => {
     ])('expansion %s keeps its existing Wowhead output', (expansion, url, suffix) => {
         expect(getWowheadItemUrlForExpansion(1, expansion)).toBe(url);
         expect(getWowheadDataSuffixForExpansion(expansion)).toBe(suffix);
+    });
+});
+
+describe('getWowheadZoneUrl (ROK-2216)', () => {
+    it('links a Forever dungeon zone on Wowhead /forever', () => {
+        expect(getWowheadZoneUrl(1581, 'wow_forever')).toBe('https://www.wowhead.com/forever/zone=1581');
+    });
+    it('uses the variant domain like the other links', () => {
+        expect(getWowheadZoneUrl(1581, 'classic_era')).toBe('https://www.wowhead.com/classic/zone=1581');
     });
 });
