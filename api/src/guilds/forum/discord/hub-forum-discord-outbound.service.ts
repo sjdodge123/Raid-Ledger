@@ -123,23 +123,34 @@ export class HubForumDiscordOutboundService {
       discordMessageId: links.unsentId('reply', replyId),
     });
     if (!link || links.isUnsent(parent)) return; // S6 sends it after the post
-    const [author, url] = await this.voice(record.author, {
-      guildId,
-      threadId,
-      replyId,
+    const ref = { guildId, threadId, replyId };
+    const [author, url] = await this.voice(record.author, ref);
+    await this.sendReply(job.target, link, parent.discordThreadId, {
+      body: record.reply.body,
+      url,
+      author,
     });
+  }
+
+  /** Post a claimed reply link into its Discord thread; failures mark it. */
+  private async sendReply(
+    target: OutboundTarget,
+    link: links.ForumLink,
+    discordThreadId: string,
+    msg: { body: string; url: string; author: OutboundAuthor },
+  ): Promise<void> {
     await this.attempt(link, async () => {
-      const content = truncateForDiscord(record.reply.body, url);
-      const id = await this.gateway.createReply(
-        job.target,
-        parent.discordThreadId,
+      const content = truncateForDiscord(msg.body, msg.url);
+      const messageId = await this.gateway.createReply(
+        target,
+        discordThreadId,
         content,
-        author,
+        msg.author,
       );
       await links.markSent(
         this.db,
         link.id,
-        { threadId: parent.discordThreadId, messageId: id },
+        { threadId: discordThreadId, messageId },
         this.now(),
       );
     });

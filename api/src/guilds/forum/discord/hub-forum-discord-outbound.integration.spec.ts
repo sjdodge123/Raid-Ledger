@@ -260,6 +260,18 @@ describe('ROK-2208 outbound RL → Discord', () => {
     const g = await newHub(ctx);
     const threadId = await newThread(g);
     await synced();
+    // The listener swallows a throw, so assert the apply itself returned
+    // cleanly: a broken binding guard would reject on the null binding.
+    const [listened] = nonEmpty(out.apply.mock.results, 'apply result');
+    await expect(listened.value).resolves.toBeUndefined();
+    await expect(
+      out.service.apply({
+        guildId: g,
+        op: 'thread.created',
+        threadId,
+        actorId: 0,
+      }),
+    ).resolves.toBeUndefined();
     expect(out.spies.createPost).not.toHaveBeenCalled();
     expect(await linkRows(threadId)).toEqual([]);
   });
