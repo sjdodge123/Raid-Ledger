@@ -311,7 +311,7 @@ describe('ROK-2208 pin sync (R5)', () => {
     const { thread: b, rlThread } = await importPost(channelId);
     pinGw.pinnedPost.mockResolvedValue(a.id);
     const res = await ctx.testApp.request
-      .post(`/guilds/${g}/forum/${rlThread.id}/pin`)
+      .put(`/guilds/${g}/forum/${rlThread.id}/pin`)
       .set('Authorization', `Bearer ${ctx.tokens.officerA}`);
     expect(res.status).toBe(204);
     await waitFor(async () => {
