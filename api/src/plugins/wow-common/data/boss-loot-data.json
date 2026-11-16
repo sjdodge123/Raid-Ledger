@@ -76172,6 +76172,7 @@
   {
     "bossName": "Rhahk'Zor",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 872,
     "itemName": "Rockslicer",
     "slot": "Two-Hand",
@@ -76185,6 +76186,7 @@
   {
     "bossName": "Gilnid",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 1156,
     "itemName": "Lavishly Jeweled Ring",
     "slot": "Finger",
@@ -76198,6 +76200,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 1937,
     "itemName": "Buzz Saw",
     "slot": "One-Hand",
@@ -76211,6 +76214,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 2169,
     "itemName": "Buzzer Blade",
     "slot": "Main Hand",
@@ -76224,6 +76228,7 @@
   {
     "bossName": "Rhahk'Zor",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5187,
     "itemName": "Rhahk'Zor's Hammer",
     "slot": "Two-Hand",
@@ -76237,6 +76242,7 @@
   {
     "bossName": "Edwin VanCleef",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5191,
     "itemName": "Cruel Barb",
     "slot": "One-Hand",
@@ -76250,6 +76256,7 @@
   {
     "bossName": "Mr. Smite",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5192,
     "itemName": "Thief's Blade",
     "slot": "One-Hand",
@@ -76263,6 +76270,7 @@
   {
     "bossName": "Edwin VanCleef",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5193,
     "itemName": "Cape of the Brotherhood",
     "slot": "Back",
@@ -76276,6 +76284,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5194,
     "itemName": "Taskmaster Axe",
     "slot": "Two-Hand",
@@ -76289,6 +76298,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5195,
     "itemName": "Gold-flecked Gloves",
     "slot": "Hands",
@@ -76302,6 +76312,7 @@
   {
     "bossName": "Mr. Smite",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5196,
     "itemName": "Smite's Reaver",
     "slot": "One-Hand",
@@ -76315,6 +76326,7 @@
   {
     "bossName": "Cookie",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5197,
     "itemName": "Cookie's Tenderizer",
     "slot": "One-Hand",
@@ -76328,6 +76340,7 @@
   {
     "bossName": "Cookie",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5198,
     "itemName": "Cookie's Stirring Rod",
     "slot": "Ranged",
@@ -76341,6 +76354,7 @@
   {
     "bossName": "Gilnid",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5199,
     "itemName": "Smelting Pants",
     "slot": "Legs",
@@ -76354,6 +76368,7 @@
   {
     "bossName": "Captain Greenskin",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5200,
     "itemName": "Impaling Harpoon",
     "slot": "Two-Hand",
@@ -76367,6 +76382,7 @@
   {
     "bossName": "Captain Greenskin",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5201,
     "itemName": "Emberstone Staff",
     "slot": "Two-Hand",
@@ -76380,6 +76396,7 @@
   {
     "bossName": "Edwin VanCleef",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 5202,
     "itemName": "Corsair's Overshirt",
     "slot": "Chest",
@@ -76393,6 +76410,7 @@
   {
     "bossName": "Mr. Smite",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 7230,
     "itemName": "Smite's Mighty Hammer",
     "slot": "Two-Hand",
@@ -76406,6 +76424,7 @@
   {
     "bossName": "Edwin VanCleef",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 10399,
     "itemName": "Blackened Defias Armor",
     "slot": "Chest",
@@ -76419,6 +76438,7 @@
   {
     "bossName": "Captain Greenskin",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 10403,
     "itemName": "Blackened Defias Belt",
     "slot": "Waist",
@@ -76432,6 +76452,7 @@
   {
     "bossName": "Gilnid",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273086,
     "itemName": "Blueprint: Anvil",
     "slot": null,
@@ -76445,6 +76466,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273092,
     "itemName": "Blueprint: Repair Bot",
     "slot": null,
@@ -76458,6 +76480,7 @@
   {
     "bossName": "Cookie",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273102,
     "itemName": "Blueprint: Cookie's Feast",
     "slot": null,
@@ -76471,6 +76494,7 @@
   {
     "bossName": "Rhahk'Zor",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273289,
     "itemName": "Ogre Loincloth",
     "slot": "Legs",
@@ -76484,6 +76508,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273293,
     "itemName": "Bandsaw Wristbands",
     "slot": "Wrist",
@@ -76497,6 +76522,7 @@
   {
     "bossName": "Gilnid",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273297,
     "itemName": "Goblin Hammer",
     "slot": "Main Hand",
@@ -76510,6 +76536,7 @@
   {
     "bossName": "Cookie",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 273298,
     "itemName": "Lookie's Spyglass",
     "slot": "Trinket",
@@ -76523,6 +76550,7 @@
   {
     "bossName": "Mr. Smite",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 284715,
     "itemName": "First Mate Band",
     "slot": "Finger",
@@ -76536,6 +76564,7 @@
   {
     "bossName": "Sneed's Shredder",
     "expansion": "forever",
+    "instanceId": 63,
     "itemId": 285292,
     "itemName": "Dull Sawblade",
     "slot": "Ranged",
@@ -76549,6 +76578,7 @@
   {
     "bossName": "Razorclaw the Butcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 1292,
     "itemName": "Butcher's Cleaver",
     "slot": "One-Hand",
@@ -76562,6 +76592,7 @@
   {
     "bossName": "Commander Springvale",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 3191,
     "itemName": "Arced War Axe",
     "slot": "Two-Hand",
@@ -76575,6 +76606,7 @@
   {
     "bossName": "Fenrus the Devourer",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 3230,
     "itemName": "Black Wolf Bracers",
     "slot": "Wrist",
@@ -76588,6 +76620,7 @@
   {
     "bossName": "Wolf Master Nandos",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 3748,
     "itemName": "Feline Mantle",
     "slot": "Shoulder",
@@ -76601,6 +76634,7 @@
   {
     "bossName": "Rethilgore",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 5254,
     "itemName": "Rugged Spaulders",
     "slot": "Shoulder",
@@ -76614,6 +76648,7 @@
   {
     "bossName": "Archmage Arugal",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6220,
     "itemName": "Meteor Shard",
     "slot": "One-Hand",
@@ -76627,6 +76662,7 @@
   {
     "bossName": "Razorclaw the Butcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6226,
     "itemName": "Bloody Apron",
     "slot": "Chest",
@@ -76640,6 +76676,7 @@
   {
     "bossName": "Wolf Master Nandos",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6314,
     "itemName": "Wolfmaster Cape",
     "slot": "Back",
@@ -76653,6 +76690,7 @@
   {
     "bossName": "Odo the Blindwatcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6318,
     "itemName": "Odo's Ley Staff",
     "slot": "Two-Hand",
@@ -76666,6 +76704,7 @@
   {
     "bossName": "Odo the Blindwatcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6319,
     "itemName": "Girdle of the Blindwatcher",
     "slot": "Waist",
@@ -76679,6 +76718,7 @@
   {
     "bossName": "Commander Springvale",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6320,
     "itemName": "Commander's Crest",
     "slot": "Shield",
@@ -76692,6 +76732,7 @@
   {
     "bossName": "Baron Silverlaine",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6321,
     "itemName": "Silverlaine's Family Seal",
     "slot": "Finger",
@@ -76705,6 +76746,7 @@
   {
     "bossName": "Baron Silverlaine",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6323,
     "itemName": "Baron's Scepter",
     "slot": "Main Hand",
@@ -76718,6 +76760,7 @@
   {
     "bossName": "Archmage Arugal",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6324,
     "itemName": "Robes of Arugal",
     "slot": "Chest",
@@ -76731,6 +76774,7 @@
   {
     "bossName": "Fenrus the Devourer",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6340,
     "itemName": "Fenrus' Hide",
     "slot": "Back",
@@ -76744,6 +76788,7 @@
   {
     "bossName": "Archmage Arugal",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6392,
     "itemName": "Belt of Arugal",
     "slot": "Waist",
@@ -76757,6 +76802,7 @@
   {
     "bossName": "Razorclaw the Butcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 6633,
     "itemName": "Butcher's Slicer",
     "slot": "One-Hand",
@@ -76770,6 +76816,7 @@
   {
     "bossName": "Razorclaw the Butcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273096,
     "itemName": "Blueprint: Tanning Rack",
     "slot": null,
@@ -76783,6 +76830,7 @@
   {
     "bossName": "Commander Springvale",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273105,
     "itemName": "Blueprint: Toxin Study",
     "slot": null,
@@ -76796,6 +76844,7 @@
   {
     "bossName": "Rethilgore",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273456,
     "itemName": "Cell Keeper's Claws",
     "slot": "Main Hand",
@@ -76809,6 +76858,7 @@
   {
     "bossName": "Rethilgore",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273457,
     "itemName": "Sorcerer Collar",
     "slot": "Neck",
@@ -76822,6 +76872,7 @@
   {
     "bossName": "Baron Silverlaine",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273637,
     "itemName": "Blade of Silverlaine",
     "slot": "Main Hand",
@@ -76835,6 +76886,7 @@
   {
     "bossName": "Commander Springvale",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273643,
     "itemName": "Worgenbane Talisman",
     "slot": "Trinket",
@@ -76848,6 +76900,7 @@
   {
     "bossName": "Odo the Blindwatcher",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273645,
     "itemName": "Blindwatcher's Sight",
     "slot": "Head",
@@ -76861,6 +76914,7 @@
   {
     "bossName": "Fenrus the Devourer",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273646,
     "itemName": "Half-Eaten Boots",
     "slot": "Feet",
@@ -76874,6 +76928,7 @@
   {
     "bossName": "Wolf Master Nandos",
     "expansion": "forever",
+    "instanceId": 64,
     "itemId": 273647,
     "itemName": "Worgpelt Leggings",
     "slot": "Legs",
@@ -76887,6 +76942,7 @@
   {
     "bossName": "Taragaman the Hungerer",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 14145,
     "itemName": "Cursed Felblade",
     "slot": "Main Hand",
@@ -76900,6 +76956,7 @@
   {
     "bossName": "Jergosh the Invoker",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 14147,
     "itemName": "Cavedweller Bracers",
     "slot": "Wrist",
@@ -76913,6 +76970,7 @@
   {
     "bossName": "Taragaman the Hungerer",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 14148,
     "itemName": "Crystalline Cuffs",
     "slot": "Wrist",
@@ -76926,6 +76984,7 @@
   {
     "bossName": "Taragaman the Hungerer",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 14149,
     "itemName": "Subterranean Cape",
     "slot": "Back",
@@ -76939,6 +76998,7 @@
   {
     "bossName": "Jergosh the Invoker",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 14150,
     "itemName": "Robe of Evocation",
     "slot": "Chest",
@@ -76952,6 +77012,7 @@
   {
     "bossName": "Jergosh the Invoker",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 14151,
     "itemName": "Chanting Blade",
     "slot": "One-Hand",
@@ -76965,6 +77026,7 @@
   {
     "bossName": "Oggleflint",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 272996,
     "itemName": "Trogg Scepter",
     "slot": "Main Hand",
@@ -76978,6 +77040,7 @@
   {
     "bossName": "Oggleflint",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 272998,
     "itemName": "Bone Knuckles",
     "slot": "Main Hand",
@@ -76991,6 +77054,7 @@
   {
     "bossName": "Oggleflint",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 272999,
     "itemName": "Barbaric Crossbow",
     "slot": "Ranged",
@@ -77004,6 +77068,7 @@
   {
     "bossName": "Bazzalan",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 273003,
     "itemName": "Searing Dagger",
     "slot": "Main Hand",
@@ -77017,6 +77082,7 @@
   {
     "bossName": "Bazzalan",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 273005,
     "itemName": "Satyrskin Cloak",
     "slot": "Back",
@@ -77030,6 +77096,7 @@
   {
     "bossName": "Bazzalan",
     "expansion": "forever",
+    "instanceId": 226,
     "itemId": 273007,
     "itemName": "Chasm Walkers",
     "slot": "Feet",
@@ -77043,6 +77110,7 @@
   {
     "bossName": "Kam Deepfury",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 2280,
     "itemName": "Kam's Walking Stick",
     "slot": "Two-Hand",
@@ -77056,6 +77124,7 @@
   {
     "bossName": "Targorr the Dread",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273804,
     "itemName": "Executioner Mantle",
     "slot": "Shoulder",
@@ -77069,6 +77138,7 @@
   {
     "bossName": "Targorr the Dread",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273805,
     "itemName": "Blackrock Harness",
     "slot": "Chest",
@@ -77082,6 +77152,7 @@
   {
     "bossName": "Targorr the Dread",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273806,
     "itemName": "Dark Horde Band",
     "slot": "Finger",
@@ -77095,6 +77166,7 @@
   {
     "bossName": "Kam Deepfury",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273807,
     "itemName": "Demolition Girdle",
     "slot": "Waist",
@@ -77108,6 +77180,7 @@
   {
     "bossName": "Kam Deepfury",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273808,
     "itemName": "Bridgebreaker Bindings",
     "slot": "Wrist",
@@ -77121,6 +77194,7 @@
   {
     "bossName": "Hamhock",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273809,
     "itemName": "Hamhock's Cleaver",
     "slot": "Main Hand",
@@ -77134,6 +77208,7 @@
   {
     "bossName": "Hamhock",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273810,
     "itemName": "Ogre Grips",
     "slot": "Hands",
@@ -77147,6 +77222,7 @@
   {
     "bossName": "Hamhock",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273811,
     "itemName": "Repurposed Rack",
     "slot": "Shield",
@@ -77160,6 +77236,7 @@
   {
     "bossName": "Dextren Ward",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273817,
     "itemName": "Graverobber's Shovel",
     "slot": "Two-Hand",
@@ -77173,6 +77250,7 @@
   {
     "bossName": "Dextren Ward",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273819,
     "itemName": "Boneslicer",
     "slot": "Two-Hand",
@@ -77186,6 +77264,7 @@
   {
     "bossName": "Dextren Ward",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273820,
     "itemName": "Nightskulker Ring",
     "slot": "Finger",
@@ -77199,6 +77278,7 @@
   {
     "bossName": "Bazil Thredd",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273824,
     "itemName": "Defias Jailbreakers",
     "slot": "Hands",
@@ -77212,6 +77292,7 @@
   {
     "bossName": "Bazil Thredd",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273825,
     "itemName": "Red Wool Cloak",
     "slot": "Back",
@@ -77225,6 +77306,7 @@
   {
     "bossName": "Bazil Thredd",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273827,
     "itemName": "Debt Collector",
     "slot": "Main Hand",
@@ -77238,6 +77320,7 @@
   {
     "bossName": "Bazil Thredd",
     "expansion": "forever",
+    "instanceId": 238,
     "itemId": 273829,
     "itemName": "Concealed Hand Crossbow",
     "slot": "Ranged",
@@ -77251,6 +77334,7 @@
   {
     "bossName": "Lady Sarevess",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 888,
     "itemName": "Naga Battle Gloves",
     "slot": "Hands",
@@ -77264,6 +77348,7 @@
   {
     "bossName": "Twilight Lord Kelris",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 1155,
     "itemName": "Rod of the Sleepwalker",
     "slot": "Two-Hand",
@@ -77277,6 +77362,7 @@
   {
     "bossName": "Lady Sarevess",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 3078,
     "itemName": "Naga Heartpiercer",
     "slot": "Ranged",
@@ -77290,6 +77376,7 @@
   {
     "bossName": "Old Serra'kis",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6901,
     "itemName": "Glowing Thresher Cape",
     "slot": "Back",
@@ -77303,6 +77390,7 @@
   {
     "bossName": "Old Serra'kis",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6902,
     "itemName": "Bands of Serra'kis",
     "slot": "Wrist",
@@ -77316,6 +77404,7 @@
   {
     "bossName": "Twilight Lord Kelris",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6903,
     "itemName": "Gaze Dreamer Pants",
     "slot": "Legs",
@@ -77329,6 +77418,7 @@
   {
     "bossName": "Old Serra'kis",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6904,
     "itemName": "Bite of Serra'kis",
     "slot": "One-Hand",
@@ -77342,6 +77432,7 @@
   {
     "bossName": "Gelihast",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6905,
     "itemName": "Reef Axe",
     "slot": "Two-Hand",
@@ -77355,6 +77446,7 @@
   {
     "bossName": "Gelihast",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6906,
     "itemName": "Algae Fists",
     "slot": "Hands",
@@ -77368,6 +77460,7 @@
   {
     "bossName": "Ghamoo-Ra",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6907,
     "itemName": "Tortoise Armor",
     "slot": "Chest",
@@ -77381,6 +77474,7 @@
   {
     "bossName": "Ghamoo-Ra",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6908,
     "itemName": "Ghamoo-ra's Bind",
     "slot": "Waist",
@@ -77394,6 +77488,7 @@
   {
     "bossName": "Aku'mai",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6909,
     "itemName": "Strike of the Hydra",
     "slot": "Two-Hand",
@@ -77407,6 +77502,7 @@
   {
     "bossName": "Aku'mai",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6910,
     "itemName": "Leech Pants",
     "slot": "Legs",
@@ -77420,6 +77516,7 @@
   {
     "bossName": "Aku'mai",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 6911,
     "itemName": "Moss Cinch",
     "slot": "Waist",
@@ -77433,6 +77530,7 @@
   {
     "bossName": "Lady Sarevess",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 11121,
     "itemName": "Darkwater Talwar",
     "slot": "Main Hand",
@@ -77446,6 +77544,7 @@
   {
     "bossName": "Baron Aquanis",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 16782,
     "itemName": "Strange Water Globe",
     "slot": null,
@@ -77459,6 +77558,7 @@
   {
     "bossName": "Gelihast",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273141,
     "itemName": "Blueprint: Fishing Rack",
     "slot": null,
@@ -77472,6 +77572,7 @@
   {
     "bossName": "Ghamoo-Ra",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273839,
     "itemName": "Spiked Shell Band",
     "slot": "Finger",
@@ -77485,6 +77586,7 @@
   {
     "bossName": "Gelihast",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273840,
     "itemName": "Cursed Murloc Eye",
     "slot": "Trinket",
@@ -77498,6 +77600,7 @@
   {
     "bossName": "Lorgus Jett",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273841,
     "itemName": "Twilight Maul",
     "slot": "Two-Hand",
@@ -77511,6 +77614,7 @@
   {
     "bossName": "Lorgus Jett",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273842,
     "itemName": "Treacherous Treads",
     "slot": "Feet",
@@ -77524,6 +77628,7 @@
   {
     "bossName": "Lorgus Jett",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273843,
     "itemName": "Fallenroot Longbow",
     "slot": "Ranged",
@@ -77537,6 +77642,7 @@
   {
     "bossName": "Twilight Lord Kelris",
     "expansion": "forever",
+    "instanceId": 227,
     "itemId": 273846,
     "itemName": "Twilight Lord Girdle",
     "slot": "Waist",
@@ -77550,6 +77656,7 @@
   {
     "bossName": "Death Speaker Jargba",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 2816,
     "itemName": "Death Speaker Scepter",
     "slot": "Main Hand",
@@ -77563,6 +77670,7 @@
   {
     "bossName": "Aggem Thorncurse",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6681,
     "itemName": "Thornspike",
     "slot": "One-Hand",
@@ -77576,6 +77684,7 @@
   {
     "bossName": "Death Speaker Jargba",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6682,
     "itemName": "Death Speaker Robes",
     "slot": "Chest",
@@ -77589,6 +77698,7 @@
   {
     "bossName": "Death Speaker Jargba",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6685,
     "itemName": "Death Speaker Mantle",
     "slot": "Shoulder",
@@ -77602,6 +77712,7 @@
   {
     "bossName": "Overlord Ramtusk",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6686,
     "itemName": "Tusken Helm",
     "slot": "Head",
@@ -77615,6 +77726,7 @@
   {
     "bossName": "Overlord Ramtusk",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6687,
     "itemName": "Corpsemaker",
     "slot": "Two-Hand",
@@ -77628,6 +77740,7 @@
   {
     "bossName": "Agathelos the Raging",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6690,
     "itemName": "Ferine Leggings",
     "slot": "Legs",
@@ -77641,6 +77754,7 @@
   {
     "bossName": "Agathelos the Raging",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6691,
     "itemName": "Swinetusk Shank",
     "slot": "Main Hand",
@@ -77654,6 +77768,7 @@
   {
     "bossName": "Charlga Razorflank",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6692,
     "itemName": "Pronged Reaver",
     "slot": "One-Hand",
@@ -77667,6 +77782,7 @@
   {
     "bossName": "Charlga Razorflank",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6693,
     "itemName": "Agamaggan's Clutch",
     "slot": "Finger",
@@ -77680,6 +77796,7 @@
   {
     "bossName": "Charlga Razorflank",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 6694,
     "itemName": "Heart of Agamaggan",
     "slot": "Shield",
@@ -77693,6 +77810,7 @@
   {
     "bossName": "Aggem Thorncurse",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 274158,
     "itemName": "Death Prophet Spine",
     "slot": "Two-Hand",
@@ -77706,6 +77824,7 @@
   {
     "bossName": "Aggem Thorncurse",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 274159,
     "itemName": "Thorncursed Grips",
     "slot": "Hands",
@@ -77719,6 +77838,7 @@
   {
     "bossName": "Agathelos the Raging",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 274160,
     "itemName": "Quilrager Throwing Axe",
     "slot": "Ranged",
@@ -77732,6 +77852,7 @@
   {
     "bossName": "Overlord Ramtusk",
     "expansion": "forever",
+    "instanceId": 234,
     "itemId": 274161,
     "itemName": "Quillord Mail Leggings",
     "slot": "Legs",
@@ -77745,6 +77866,7 @@
   {
     "bossName": "Plaguemaw the Rotting",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10760,
     "itemName": "Swine Fists",
     "slot": "Hands",
@@ -77758,6 +77880,7 @@
   {
     "bossName": "Amnennar the Coldbringer",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10761,
     "itemName": "Coldrage Dagger",
     "slot": "One-Hand",
@@ -77771,6 +77894,7 @@
   {
     "bossName": "Amnennar the Coldbringer",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10762,
     "itemName": "Robes of the Lich",
     "slot": "Chest",
@@ -77784,6 +77908,7 @@
   {
     "bossName": "Amnennar the Coldbringer",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10763,
     "itemName": "Icemetal Barbute",
     "slot": "Head",
@@ -77797,6 +77922,7 @@
   {
     "bossName": "Amnennar the Coldbringer",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10764,
     "itemName": "Deathchill Armor",
     "slot": "Chest",
@@ -77810,6 +77936,7 @@
   {
     "bossName": "Amnennar the Coldbringer",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10765,
     "itemName": "Bonefingers",
     "slot": "Hands",
@@ -77823,6 +77950,7 @@
   {
     "bossName": "Plaguemaw the Rotting",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10766,
     "itemName": "Plaguerot Sprig",
     "slot": "Ranged",
@@ -77836,6 +77964,7 @@
   {
     "bossName": "Mordresh Fire Eye",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10769,
     "itemName": "Glowing Eye of Mordresh",
     "slot": "Neck",
@@ -77849,6 +77978,7 @@
   {
     "bossName": "Mordresh Fire Eye",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10770,
     "itemName": "Mordresh's Lifeless Skull",
     "slot": "Held In Off-hand",
@@ -77862,6 +77992,7 @@
   {
     "bossName": "Mordresh Fire Eye",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10771,
     "itemName": "Deathmage Sash",
     "slot": "Waist",
@@ -77875,6 +78006,7 @@
   {
     "bossName": "Glutton",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10772,
     "itemName": "Glutton's Cleaver",
     "slot": "One-Hand",
@@ -77888,6 +78020,7 @@
   {
     "bossName": "Glutton",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10774,
     "itemName": "Fleshhide Shoulders",
     "slot": "Shoulder",
@@ -77901,6 +78034,7 @@
   {
     "bossName": "Tuten'kash",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10775,
     "itemName": "Carapace of Tuten'kash",
     "slot": "Chest",
@@ -77914,6 +78048,7 @@
   {
     "bossName": "Tuten'kash",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10776,
     "itemName": "Silky Spider Cape",
     "slot": "Back",
@@ -77927,6 +78062,7 @@
   {
     "bossName": "Tuten'kash",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 10777,
     "itemName": "Arachnid Gloves",
     "slot": "Hands",
@@ -77940,6 +78076,7 @@
   {
     "bossName": "Plaguemaw the Rotting",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 274380,
     "itemName": "Decaying Flesh Bands",
     "slot": "Wrist",
@@ -77953,6 +78090,7 @@
   {
     "bossName": "Amnennar the Coldbringer",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 274381,
     "itemName": "Coldbringer Spine",
     "slot": "Two-Hand",
@@ -77966,6 +78104,7 @@
   {
     "bossName": "Glutton",
     "expansion": "forever",
+    "instanceId": 233,
     "itemId": 274385,
     "itemName": "Abomination Chain",
     "slot": "Neck",
@@ -77979,6 +78118,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10454,
     "itemName": "Essence of Eranikus",
     "slot": null,
@@ -77992,6 +78132,7 @@
   {
     "bossName": "Atal'alarion",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10798,
     "itemName": "Atal'alarion's Tusk Ring",
     "slot": "Waist",
@@ -78005,6 +78146,7 @@
   {
     "bossName": "Atal'alarion",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10799,
     "itemName": "Headspike",
     "slot": "Two-Hand",
@@ -78018,6 +78160,7 @@
   {
     "bossName": "Atal'alarion",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10800,
     "itemName": "Darkwater Bracers",
     "slot": "Wrist",
@@ -78031,6 +78174,7 @@
   {
     "bossName": "Spawn of Hakkar",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10801,
     "itemName": "Slitherscale Boots",
     "slot": "Feet",
@@ -78044,6 +78188,7 @@
   {
     "bossName": "Spawn of Hakkar",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10802,
     "itemName": "Wingveil Cloak",
     "slot": "Back",
@@ -78057,6 +78202,7 @@
   {
     "bossName": "Ogom the Wretched",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10803,
     "itemName": "Blade of the Wretched",
     "slot": "Main Hand",
@@ -78070,6 +78216,7 @@
   {
     "bossName": "Ogom the Wretched",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10804,
     "itemName": "Fist of the Damned",
     "slot": "One-Hand",
@@ -78083,6 +78230,7 @@
   {
     "bossName": "Ogom the Wretched",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10805,
     "itemName": "Eater of the Dead",
     "slot": "Main Hand",
@@ -78096,6 +78244,7 @@
   {
     "bossName": "Jammal'an the Prophet",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10806,
     "itemName": "Vestments of the Atal'ai Prophet",
     "slot": "Chest",
@@ -78109,6 +78258,7 @@
   {
     "bossName": "Jammal'an the Prophet",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10807,
     "itemName": "Kilt of the Atal'ai Prophet",
     "slot": "Legs",
@@ -78122,6 +78272,7 @@
   {
     "bossName": "Jammal'an the Prophet",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10808,
     "itemName": "Gloves of the Atal'ai Prophet",
     "slot": "Hands",
@@ -78135,6 +78286,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10828,
     "itemName": "Dire Nail",
     "slot": "Main Hand",
@@ -78148,6 +78300,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10829,
     "itemName": "Dragon's Eye",
     "slot": "Neck",
@@ -78161,6 +78314,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10833,
     "itemName": "Horns of Eranikus",
     "slot": "Head",
@@ -78174,6 +78328,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10835,
     "itemName": "Crest of Supremacy",
     "slot": "Shield",
@@ -78187,6 +78342,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10836,
     "itemName": "Rod of Corrosion",
     "slot": "Ranged",
@@ -78200,6 +78356,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10837,
     "itemName": "Tooth of Eranikus",
     "slot": "Main Hand",
@@ -78213,6 +78370,7 @@
   {
     "bossName": "Shade of Eranikus",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10847,
     "itemName": "Dragon's Call",
     "slot": "One-Hand",
@@ -78226,6 +78384,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13398,
     "itemName": "Boots of the Shrieker",
     "slot": "Feet",
@@ -78239,6 +78398,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13938,
     "itemName": "Bonecreeper Stylus",
     "slot": "Ranged",
@@ -78252,6 +78412,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13944,
     "itemName": "Tombstone Breastplate",
     "slot": "Chest",
@@ -78265,6 +78426,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13951,
     "itemName": "Vigorsteel Vambraces",
     "slot": "Wrist",
@@ -78278,6 +78440,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13952,
     "itemName": "Iceblade Hacker",
     "slot": "Main Hand",
@@ -78291,6 +78454,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13953,
     "itemName": "Silent Fang",
     "slot": "Main Hand",
@@ -78304,6 +78468,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13955,
     "itemName": "Stoneform Shoulders",
     "slot": "Shoulder",
@@ -78317,6 +78482,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13956,
     "itemName": "Clutch of Andros",
     "slot": "Waist",
@@ -78330,6 +78496,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13957,
     "itemName": "Gargoyle Slashers",
     "slot": "Hands",
@@ -78343,6 +78510,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13960,
     "itemName": "Heart of the Fiend",
     "slot": "Neck",
@@ -78356,6 +78524,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13964,
     "itemName": "Witchblade",
     "slot": "Main Hand",
@@ -78369,6 +78538,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13967,
     "itemName": "Windreaver Greaves",
     "slot": "Feet",
@@ -78382,6 +78552,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13969,
     "itemName": "Loomguard Armbraces",
     "slot": "Wrist",
@@ -78395,6 +78566,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 13983,
     "itemName": "Gravestone War Axe",
     "slot": "Two-Hand",
@@ -78408,6 +78580,7 @@
   {
     "bossName": "Kirtonos the Herald",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14024,
     "itemName": "Frightalon",
     "slot": "One-Hand",
@@ -78421,6 +78594,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14340,
     "itemName": "Freezing Lich Robes",
     "slot": "Chest",
@@ -78434,6 +78608,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14487,
     "itemName": "Bonechill Hammer",
     "slot": "One-Hand",
@@ -78447,6 +78622,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14502,
     "itemName": "Frostbite Girdle",
     "slot": "Waist",
@@ -78460,6 +78636,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14503,
     "itemName": "Death's Clutch",
     "slot": "Shoulder",
@@ -78473,6 +78650,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14514,
     "itemName": "Pattern: Robe of the Void",
     "slot": null,
@@ -78486,6 +78664,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14522,
     "itemName": "Maelstrom Leggings",
     "slot": "Legs",
@@ -78499,6 +78678,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14525,
     "itemName": "Boneclenched Gauntlets",
     "slot": "Hands",
@@ -78512,6 +78692,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14528,
     "itemName": "Rattlecage Buckler",
     "slot": "Shield",
@@ -78525,6 +78706,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14531,
     "itemName": "Frightskull Shaft",
     "slot": "Two-Hand",
@@ -78538,6 +78720,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14537,
     "itemName": "Corpselight Greaves",
     "slot": "Feet",
@@ -78551,6 +78734,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14538,
     "itemName": "Deadwalker Mantle",
     "slot": "Shoulder",
@@ -78564,6 +78748,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14539,
     "itemName": "Bone Ring Helm",
     "slot": "Head",
@@ -78577,6 +78762,7 @@
   {
     "bossName": "Jandice Barov",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14541,
     "itemName": "Barovian Family Sword",
     "slot": "Two-Hand",
@@ -78590,6 +78776,7 @@
   {
     "bossName": "Jandice Barov",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14545,
     "itemName": "Ghostloom Leggings",
     "slot": "Legs",
@@ -78603,6 +78790,7 @@
   {
     "bossName": "Jandice Barov",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 14548,
     "itemName": "Royal Cap Spaulders",
     "slot": "Shoulder",
@@ -78616,6 +78804,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18686,
     "itemName": "Bone Golem Shoulders",
     "slot": "Shoulder",
@@ -78629,6 +78818,7 @@
   {
     "bossName": "Jandice Barov",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18689,
     "itemName": "Phantasmal Cloak",
     "slot": "Back",
@@ -78642,6 +78832,7 @@
   {
     "bossName": "Jandice Barov",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18690,
     "itemName": "Wraithplate Leggings",
     "slot": "Legs",
@@ -78655,6 +78846,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18693,
     "itemName": "Shivery Handwraps",
     "slot": "Hands",
@@ -78668,6 +78860,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18694,
     "itemName": "Shadowy Mail Greaves",
     "slot": "Feet",
@@ -78681,6 +78874,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18695,
     "itemName": "Spellbound Tome",
     "slot": "Held In Off-hand",
@@ -78694,6 +78888,7 @@
   {
     "bossName": "Ras Frostwhisper",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18696,
     "itemName": "Intricately Runed Shield",
     "slot": "Shield",
@@ -78707,6 +78902,7 @@
   {
     "bossName": "Rattlegore",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 18782,
     "itemName": "Top Half of Advanced Armorsmithing: Volume II",
     "slot": null,
@@ -78720,6 +78916,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 19276,
     "itemName": "Ace of Portals",
     "slot": null,
@@ -78733,6 +78930,7 @@
   {
     "bossName": "Jandice Barov",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 22394,
     "itemName": "Staff of Metanoia",
     "slot": "Two-Hand",
@@ -78746,6 +78944,7 @@
   {
     "bossName": "Darkmaster Gandling",
     "expansion": "forever",
+    "instanceId": 246,
     "itemId": 22433,
     "itemName": "Don Mauricio's Band of Domination",
     "slot": "Finger",
@@ -78759,6 +78958,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12335,
     "itemName": "Gemstone of Smolderthorn",
     "slot": null,
@@ -78772,6 +78972,7 @@
   {
     "bossName": "Highlord Omokk",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12336,
     "itemName": "Gemstone of Spirestone",
     "slot": null,
@@ -78785,6 +78986,7 @@
   {
     "bossName": "Overlord Wyrmthalak",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12337,
     "itemName": "Gemstone of Bloodaxe",
     "slot": null,
@@ -78798,6 +79000,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12582,
     "itemName": "Keris of Zul'Serak",
     "slot": "One-Hand",
@@ -78811,6 +79014,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12583,
     "itemName": "Blackhand Doomsaw",
     "slot": "Two-Hand",
@@ -78824,6 +79028,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12587,
     "itemName": "Eye of Rend",
     "slot": "Head",
@@ -78837,6 +79042,7 @@
   {
     "bossName": "General Drakkisath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12602,
     "itemName": "Draconian Deflector",
     "slot": "Shield",
@@ -78850,6 +79056,7 @@
   {
     "bossName": "Solakar Flamewreath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12603,
     "itemName": "Nightbrace Tunic",
     "slot": "Chest",
@@ -78863,6 +79070,7 @@
   {
     "bossName": "Solakar Flamewreath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12606,
     "itemName": "Crystallized Girdle",
     "slot": "Waist",
@@ -78876,6 +79084,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12626,
     "itemName": "Funeral Cuffs",
     "slot": "Wrist",
@@ -78889,6 +79098,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12651,
     "itemName": "Blackcrow",
     "slot": "Ranged",
@@ -78902,6 +79112,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12653,
     "itemName": "Riphook",
     "slot": "Ranged",
@@ -78915,6 +79126,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12654,
     "itemName": "Doomshot",
     "slot": null,
@@ -78928,6 +79140,7 @@
   {
     "bossName": "Quartermaster Zigris",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12835,
     "itemName": "Plans: Annihilator",
     "slot": null,
@@ -78941,6 +79154,7 @@
   {
     "bossName": "Pyroguard Emberseer",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12905,
     "itemName": "Wildfire Cape",
     "slot": "Back",
@@ -78954,6 +79168,7 @@
   {
     "bossName": "Pyroguard Emberseer",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12926,
     "itemName": "Flaming Band",
     "slot": "Finger",
@@ -78967,6 +79182,7 @@
   {
     "bossName": "Pyroguard Emberseer",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12927,
     "itemName": "Truestrike Shoulders",
     "slot": "Shoulder",
@@ -78980,6 +79196,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12939,
     "itemName": "Dal'Rend's Tribal Guardian",
     "slot": "Off Hand",
@@ -78993,6 +79210,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12940,
     "itemName": "Dal'Rend's Sacred Charge",
     "slot": "Main Hand",
@@ -79006,6 +79224,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12964,
     "itemName": "Tristam Legguards",
     "slot": "Legs",
@@ -79019,6 +79238,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12965,
     "itemName": "Spiritshroud Leggings",
     "slot": "Legs",
@@ -79032,6 +79252,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12966,
     "itemName": "Blackmist Armguards",
     "slot": "Wrist",
@@ -79045,6 +79266,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12967,
     "itemName": "Bloodmoon Cloak",
     "slot": "Back",
@@ -79058,6 +79280,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12968,
     "itemName": "Frostweaver Cape",
     "slot": "Back",
@@ -79071,6 +79294,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12969,
     "itemName": "Seeping Willow",
     "slot": "Two-Hand",
@@ -79084,6 +79308,7 @@
   {
     "bossName": "General Drakkisath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13142,
     "itemName": "Brigam Girdle",
     "slot": "Waist",
@@ -79097,6 +79322,7 @@
   {
     "bossName": "Overlord Wyrmthalak",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13161,
     "itemName": "Trindlehaven Staff",
     "slot": "Two-Hand",
@@ -79110,6 +79336,7 @@
   {
     "bossName": "Overlord Wyrmthalak",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13162,
     "itemName": "Reiver Claws",
     "slot": "Hands",
@@ -79123,6 +79350,7 @@
   {
     "bossName": "Overlord Wyrmthalak",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13163,
     "itemName": "Relentless Scythe",
     "slot": "Two-Hand",
@@ -79136,6 +79364,7 @@
   {
     "bossName": "Overlord Wyrmthalak",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13164,
     "itemName": "Heart of the Scale",
     "slot": "Trinket",
@@ -79149,6 +79378,7 @@
   {
     "bossName": "Highlord Omokk",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13166,
     "itemName": "Slamshot Shoulders",
     "slot": "Shoulder",
@@ -79162,6 +79392,7 @@
   {
     "bossName": "Highlord Omokk",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13167,
     "itemName": "Fist of Omokk",
     "slot": "Two-Hand",
@@ -79175,6 +79406,7 @@
   {
     "bossName": "Highlord Omokk",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13168,
     "itemName": "Plate of the Shaman King",
     "slot": "Chest",
@@ -79188,6 +79420,7 @@
   {
     "bossName": "Highlord Omokk",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13169,
     "itemName": "Tressermane Leggings",
     "slot": "Legs",
@@ -79201,6 +79434,7 @@
   {
     "bossName": "Highlord Omokk",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13170,
     "itemName": "Skyshroud Leggings",
     "slot": "Legs",
@@ -79214,6 +79448,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13173,
     "itemName": "Flightblade Throwing Axe",
     "slot": "Ranged",
@@ -79227,6 +79462,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13177,
     "itemName": "Talisman of Evasion",
     "slot": "Neck",
@@ -79240,6 +79476,7 @@
   {
     "bossName": "Urok Doomhowl",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13178,
     "itemName": "Rosewine Circle",
     "slot": "Finger",
@@ -79253,6 +79490,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13179,
     "itemName": "Brazecore Armguards",
     "slot": "Wrist",
@@ -79266,6 +79504,7 @@
   {
     "bossName": "Mother Smolderweb",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13183,
     "itemName": "Venomspitter",
     "slot": "One-Hand",
@@ -79279,6 +79518,7 @@
   {
     "bossName": "Gizrul the Slavener",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13205,
     "itemName": "Rhombeard Protector",
     "slot": "Shield",
@@ -79292,6 +79532,7 @@
   {
     "bossName": "Gizrul the Slavener",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13206,
     "itemName": "Wolfshear Leggings",
     "slot": "Legs",
@@ -79305,6 +79546,7 @@
   {
     "bossName": "Gizrul the Slavener",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13208,
     "itemName": "Bleak Howler Armguards",
     "slot": "Wrist",
@@ -79318,6 +79560,7 @@
   {
     "bossName": "Halycon",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13210,
     "itemName": "Pads of the Dread Wolf",
     "slot": "Feet",
@@ -79331,6 +79574,7 @@
   {
     "bossName": "Halycon",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13211,
     "itemName": "Slashclaw Bracers",
     "slot": "Wrist",
@@ -79344,6 +79588,7 @@
   {
     "bossName": "Halycon",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13212,
     "itemName": "Halycon's Spiked Collar",
     "slot": "Neck",
@@ -79357,6 +79602,7 @@
   {
     "bossName": "Mother Smolderweb",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13213,
     "itemName": "Smolderweb's Eye",
     "slot": "Trinket",
@@ -79370,6 +79616,7 @@
   {
     "bossName": "Mother Smolderweb",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13244,
     "itemName": "Gilded Gauntlets",
     "slot": "Hands",
@@ -79383,6 +79630,7 @@
   {
     "bossName": "Quartermaster Zigris",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13252,
     "itemName": "Cloudrunner Girdle",
     "slot": "Waist",
@@ -79396,6 +79644,7 @@
   {
     "bossName": "Quartermaster Zigris",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13253,
     "itemName": "Hands of Power",
     "slot": "Hands",
@@ -79409,6 +79658,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13255,
     "itemName": "Trueaim Gauntlets",
     "slot": "Hands",
@@ -79422,6 +79672,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13257,
     "itemName": "Demonic Runed Spaulders",
     "slot": "Shoulder",
@@ -79435,6 +79686,7 @@
   {
     "bossName": "Urok Doomhowl",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13258,
     "itemName": "Slaghide Gauntlets",
     "slot": "Hands",
@@ -79448,6 +79700,7 @@
   {
     "bossName": "Urok Doomhowl",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 13259,
     "itemName": "Ribsteel Footguards",
     "slot": "Feet",
@@ -79461,6 +79714,7 @@
   {
     "bossName": "General Drakkisath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 15730,
     "itemName": "Pattern: Red Dragonscale Breastplate",
     "slot": null,
@@ -79474,6 +79728,7 @@
   {
     "bossName": "Pyroguard Emberseer",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 16672,
     "itemName": "Gauntlets of Elements",
     "slot": "Hands",
@@ -79487,6 +79742,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 16676,
     "itemName": "Beaststalker's Gloves",
     "slot": "Hands",
@@ -79500,6 +79756,7 @@
   {
     "bossName": "Shadow Hunter Vosh'gajin",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 16712,
     "itemName": "Shadowcraft Gloves",
     "slot": "Hands",
@@ -79513,6 +79770,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 18102,
     "itemName": "Dragonrider Boots",
     "slot": "Feet",
@@ -79526,6 +79784,7 @@
   {
     "bossName": "Solakar Flamewreath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 18657,
     "itemName": "Schematic: Hyper-Radiant Flame Reflector",
     "slot": null,
@@ -79539,6 +79798,7 @@
   {
     "bossName": "Urok Doomhowl",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 18784,
     "itemName": "Top Half of Advanced Armorsmithing: Volume III",
     "slot": null,
@@ -79552,6 +79812,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 19227,
     "itemName": "Ace of Beasts",
     "slot": null,
@@ -79565,6 +79826,7 @@
   {
     "bossName": "War Master Voone",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22231,
     "itemName": "Kayser's Boots of Precision",
     "slot": "Feet",
@@ -79578,6 +79840,7 @@
   {
     "bossName": "Urok Doomhowl",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22232,
     "itemName": "Marksman's Girdle",
     "slot": "Waist",
@@ -79591,6 +79854,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22247,
     "itemName": "Faith Healer's Boots",
     "slot": "Feet",
@@ -79604,6 +79868,7 @@
   {
     "bossName": "General Drakkisath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22253,
     "itemName": "Tome of the Lost",
     "slot": "Held In Off-hand",
@@ -79617,6 +79882,7 @@
   {
     "bossName": "General Drakkisath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22268,
     "itemName": "Draconic Infused Emblem",
     "slot": "Trinket",
@@ -79630,6 +79896,7 @@
   {
     "bossName": "General Drakkisath",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22269,
     "itemName": "Shadow Prowler's Cloak",
     "slot": "Back",
@@ -79643,6 +79910,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22311,
     "itemName": "Ironweave Boots",
     "slot": "Feet",
@@ -79656,6 +79924,7 @@
   {
     "bossName": "Halycon",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22313,
     "itemName": "Ironweave Bracers",
     "slot": "Wrist",
@@ -79669,6 +79938,7 @@
   {
     "bossName": "Overlord Wyrmthalak",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22321,
     "itemName": "Heart of Wyrmthalak",
     "slot": "Trinket",
@@ -79682,6 +79952,7 @@
   {
     "bossName": "Pyroguard Emberseer",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 23320,
     "itemName": "Tablet of Flame Shock VI",
     "slot": null,
@@ -79695,6 +79966,7 @@
   {
     "bossName": "The Beast",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 24101,
     "itemName": "Book of Ferocious Bite V",
     "slot": null,
@@ -79708,6 +79980,7 @@
   {
     "bossName": "Avatar of Hakkar",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10838,
     "itemName": "Might of Hakkar",
     "slot": "Main Hand",
@@ -79721,6 +79994,7 @@
   {
     "bossName": "Avatar of Hakkar",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10844,
     "itemName": "Spire of Hakkar",
     "slot": "Two-Hand",
@@ -79734,6 +80008,7 @@
   {
     "bossName": "Avatar of Hakkar",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 10845,
     "itemName": "Warrior's Embrace",
     "slot": "Chest",
@@ -79747,6 +80022,7 @@
   {
     "bossName": "Avatar of Hakkar",
     "expansion": "forever",
+    "instanceId": 237,
     "itemId": 12462,
     "itemName": "Embrace of the Wind Serpent",
     "slot": "Chest",
@@ -79760,6 +80036,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12952,
     "itemName": "Gyth's Skull",
     "slot": "Head",
@@ -79773,6 +80050,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 12953,
     "itemName": "Dragoneye Coif",
     "slot": "Head",
@@ -79786,6 +80064,7 @@
   {
     "bossName": "Warchief Rend Blackhand",
     "expansion": "forever",
+    "instanceId": 229,
     "itemId": 22225,
     "itemName": "Dragonskin Cowl",
     "slot": "Head",
