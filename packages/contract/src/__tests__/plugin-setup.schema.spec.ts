@@ -88,8 +88,8 @@ describe('PluginSetupRequirementSchema (§3.5)', () => {
 });
 
 describe('declared setup (§3.5)', () => {
-  it('Core needs only the two optional Steam requirements (ROK-1953 D7)', () => {
-    expect(setupIds('core')).toEqual(['steam-api-key', 'player-steam-link']);
+  it('Core needs only optional requirements: the two Steam ones (ROK-1953 D7) and the Discord forum (ROK-2208)', () => {
+    expect(setupIds('core')).toEqual(['steam-api-key', 'player-steam-link', 'discord-forum-sync']);
     expect(HUB_PLUGIN_MANIFESTS.core.setup.requirements.every((r) => !r.required)).toBe(true);
   });
 
