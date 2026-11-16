@@ -10,6 +10,7 @@ import {
   index,
   uniqueIndex,
   check,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { guilds } from './guilds';
@@ -68,6 +69,33 @@ export const hubForumDiscordBindings = pgTable(
   ],
 );
 
+/** The link table's value checks (kept apart to keep the table short). */
+function linkChecks(table: {
+  kind: AnyPgColumn;
+  replyId: AnyPgColumn;
+  origin: AnyPgColumn;
+  syncState: AnyPgColumn;
+}) {
+  return [
+    check(
+      'hub_forum_discord_links_kind',
+      sql`${table.kind} IN ('thread', 'reply')`,
+    ),
+    check(
+      'hub_forum_discord_links_kind_reply',
+      sql`(${table.kind} = 'reply') = (${table.replyId} IS NOT NULL)`,
+    ),
+    check(
+      'hub_forum_discord_links_origin',
+      sql`${table.origin} IN ('raidledger', 'discord')`,
+    ),
+    check(
+      'hub_forum_discord_links_sync_state',
+      sql`${table.syncState} IN ('pending', 'synced', 'failed')`,
+    ),
+  ];
+}
+
 /**
  * ROK-2208: one RL thread/reply ↔ one Discord message. A thread's link points
  * at the forum post's starter message; a reply's at its own message.
@@ -102,22 +130,7 @@ export const hubForumDiscordLinks = pgTable(
       .notNull(),
   },
   (table) => [
-    check(
-      'hub_forum_discord_links_kind',
-      sql`${table.kind} IN ('thread', 'reply')`,
-    ),
-    check(
-      'hub_forum_discord_links_kind_reply',
-      sql`(${table.kind} = 'reply') = (${table.replyId} IS NOT NULL)`,
-    ),
-    check(
-      'hub_forum_discord_links_origin',
-      sql`${table.origin} IN ('raidledger', 'discord')`,
-    ),
-    check(
-      'hub_forum_discord_links_sync_state',
-      sql`${table.syncState} IN ('pending', 'synced', 'failed')`,
-    ),
+    ...linkChecks(table),
     uniqueIndex('uq_hub_forum_discord_links_thread')
       .on(table.threadId)
       .where(sql`${table.kind} = 'thread'`),
@@ -142,5 +155,7 @@ export type HubForumDiscordBindingSelect =
   typeof hubForumDiscordBindings.$inferSelect;
 export type HubForumDiscordBindingInsert =
   typeof hubForumDiscordBindings.$inferInsert;
-export type HubForumDiscordLinkSelect = typeof hubForumDiscordLinks.$inferSelect;
-export type HubForumDiscordLinkInsert = typeof hubForumDiscordLinks.$inferInsert;
+export type HubForumDiscordLinkSelect =
+  typeof hubForumDiscordLinks.$inferSelect;
+export type HubForumDiscordLinkInsert =
+  typeof hubForumDiscordLinks.$inferInsert;

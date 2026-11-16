@@ -7,6 +7,7 @@ import {
   timestamp,
   index,
   check,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { guilds } from './guilds';
@@ -24,6 +25,11 @@ function discordGuestColumns() {
     authorDiscordName: varchar('author_discord_name', { length: 100 }),
     authorDiscordAvatar: varchar('author_discord_avatar', { length: 64 }),
   };
+}
+
+/** ROK-2208: claim-on-link looks guest rows up by Discord id. */
+function discordIdIndex(name: string, column: AnyPgColumn) {
+  return index(name).on(column).where(sql`${column} IS NOT NULL`);
 }
 
 /**
@@ -97,10 +103,10 @@ export const hubForumThreads = pgTable(
     index('idx_hub_forum_threads_author_id').on(table.authorId),
     index('idx_hub_forum_threads_pinned_by').on(table.pinnedBy),
     index('idx_hub_forum_threads_deleted_by').on(table.deletedBy),
-    // ROK-2208: claim-on-link looks guest rows up by Discord id.
-    index('idx_hub_forum_threads_author_discord_id')
-      .on(table.authorDiscordId)
-      .where(sql`${table.authorDiscordId} IS NOT NULL`),
+    discordIdIndex(
+      'idx_hub_forum_threads_author_discord_id',
+      table.authorDiscordId,
+    ),
   ],
 );
 
@@ -159,10 +165,10 @@ export const hubForumReplies = pgTable(
     index('idx_hub_forum_replies_guild_id').on(table.guildId),
     index('idx_hub_forum_replies_author_id').on(table.authorId),
     index('idx_hub_forum_replies_deleted_by').on(table.deletedBy),
-    // ROK-2208: claim-on-link looks guest rows up by Discord id.
-    index('idx_hub_forum_replies_author_discord_id')
-      .on(table.authorDiscordId)
-      .where(sql`${table.authorDiscordId} IS NOT NULL`),
+    discordIdIndex(
+      'idx_hub_forum_replies_author_discord_id',
+      table.authorDiscordId,
+    ),
   ],
 );
 

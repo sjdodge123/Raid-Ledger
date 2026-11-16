@@ -154,9 +154,11 @@ describe('message links', () => {
   it('refuses an unknown origin and sync state', async () => {
     const hub = await newHub(ctx);
     const threadId = await guestThread(hub, snowflake());
-    await expect(link(hub, threadId, { origin: 'slack' })).rejects.toMatchObject(
-      { cause: { constraint_name: 'hub_forum_discord_links_origin' } },
-    );
+    await expect(
+      link(hub, threadId, { origin: 'slack' }),
+    ).rejects.toMatchObject({
+      cause: { constraint_name: 'hub_forum_discord_links_origin' },
+    });
     await expect(
       link(hub, threadId, { syncState: 'lost' }),
     ).rejects.toMatchObject({
@@ -182,6 +184,9 @@ describe('message links', () => {
     });
   });
 
+});
+
+describe('hub delete', () => {
   it('cascades a hub delete to its binding and links', async () => {
     const hub = await newHub(ctx);
     await bind(hub, await newForum(), null);
@@ -208,23 +213,23 @@ describe('message links', () => {
   });
 });
 
+async function getThread(hub: number, id: number): Promise<HubForumThread> {
+  const res = await call(ctx, 'get', `/guilds/${hub}/forum/${id}`, 'plain');
+  expect(res.status).toBe(200);
+  return res.body as HubForumThread;
+}
+
+async function login(discordId: string): Promise<void> {
+  const payload: DiscordLoginPayload = {
+    userId: ctx.userIds.plain,
+    discordId,
+  };
+  await ctx.testApp.app
+    .get(EventEmitter2)
+    .emitAsync(AUTH_EVENTS.DISCORD_LOGIN, payload);
+}
+
 describe('claim-on-link (AC9)', () => {
-  async function getThread(hub: number, id: number): Promise<HubForumThread> {
-    const res = await call(ctx, 'get', `/guilds/${hub}/forum/${id}`, 'plain');
-    expect(res.status).toBe(200);
-    return res.body as HubForumThread;
-  }
-
-  async function login(discordId: string): Promise<void> {
-    const payload: DiscordLoginPayload = {
-      userId: ctx.userIds.plain,
-      discordId,
-    };
-    await ctx.testApp.app
-      .get(EventEmitter2)
-      .emitAsync(AUTH_EVENTS.DISCORD_LOGIN, payload);
-  }
-
   it('shows a guest row as "via Discord" until the account links', async () => {
     const [hub, discordId] = [await newHub(ctx), snowflake()];
     const threadId = await guestThread(hub, discordId);
@@ -241,8 +246,8 @@ describe('claim-on-link (AC9)', () => {
     await login(discordId);
 
     const after = await getThread(hub, threadId);
-    expect(after.author?.id).toBe(ctx.userIds.plain);
-    expect(after.replies[0]?.author?.id).toBe(ctx.userIds.plain);
+    expect(after.author?.userId).toBe(ctx.userIds.plain);
+    expect(after.replies[0]?.author?.userId).toBe(ctx.userIds.plain);
     expect(after.source).toBe('discord');
     expect(after.discordAuthor).toBeNull();
   });
