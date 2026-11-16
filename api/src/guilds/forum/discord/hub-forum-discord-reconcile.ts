@@ -26,10 +26,14 @@ import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.d
 import { snowflakeTime, type InboundThread } from './hub-forum-discord-route';
 import {
   MAX_BACKFILL_MESSAGES,
+  RETRY_ABANDONED,
+  RETRY_GRACE_MS,
   RETRY_MAX_ATTEMPTS,
+  RETRY_STEP_MS,
   isRetryDue,
   replayAfter,
   retryOp,
+  retryStalled,
 } from './hub-forum-discord-sync-rules';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -123,7 +127,11 @@ export class HubForumDiscordReconcileService {
     this.sweeping = true;
     try {
       const now = this.now();
-      const queue = await links.retryableLinks(this.db, RETRY_MAX_ATTEMPTS);
+      const queue = await links.retryableLinks(this.db, now, {
+        maxAttempts: RETRY_MAX_ATTEMPTS,
+        graceMs: RETRY_GRACE_MS,
+        stepMs: RETRY_STEP_MS,
+      });
       const due = queue.filter((link) => isRetryDue(link, now));
       for (const link of due) await this.retryOne(link);
       return due.length;
@@ -140,9 +148,24 @@ export class HubForumDiscordReconcileService {
         await links.markSynced(this.db, link.id, this.now());
         return;
       }
-      await this.outbound.retry(link, op);
+      const outcome = await this.outbound.retry(link, op);
+      if (outcome === 'unbound') return;
+      if (outcome === 'stale' || (await this.stalled(link))) {
+        const cap = RETRY_MAX_ATTEMPTS;
+        await links.markAbandoned(this.db, link.id, RETRY_ABANDONED, cap);
+      }
     } catch (err) {
       this.logger.warn(`Forum retry link ${link.id}: ${describe(err)}`);
     }
+  }
+
+  /** Review MAJOR-3: the retry left the row untouched and nothing will send it. */
+  private async stalled(link: links.ForumLink): Promise<boolean> {
+    const after = await links.findLinkById(this.db, link.id);
+    const post =
+      link.kind === 'reply'
+        ? await links.findThreadLink(this.db, link.threadId)
+        : null;
+    return retryStalled(link, after, post);
   }
 }

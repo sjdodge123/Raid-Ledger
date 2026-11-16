@@ -170,17 +170,31 @@ export async function markFailed(
     .where(eq(links.id, linkId));
 }
 
+/** The sweep's limits (`sync-rules` owns the numbers). */
+export interface RetryPolicy {
+  maxAttempts: number;
+  graceMs: number;
+  stepMs: number;
+}
+
 /**
  * §5.6 sweep queue: RL-origin rows of still-BOUND hubs, pending/failed under
  * the attempts cap, posts before replies (a reply needs its post's real id).
- * Unbound hubs drop out so their rows never crowd the queue (D9).
+ * Unbound hubs drop out so their rows never crowd the queue (D9). Review
+ * MAJOR-3: the backoff (`isRetryDue`) is applied HERE, before the LIMIT, so
+ * not-yet-due rows can never starve a due one.
  */
 export async function retryableLinks(
   db: ForumDiscordDb,
-  maxAttempts: number,
+  now: Date,
+  policy: RetryPolicy,
   limit = 100,
 ): Promise<ForumLink[]> {
   const bound = schema.hubForumDiscordBindings;
+  const delayMs = sql`CASE WHEN ${links.attempts} <= 0 THEN ${policy.graceMs}::float8
+    ELSE ${policy.stepMs}::float8 * (power(2, ${links.attempts}) - 1) END`;
+  const due = sql`coalesce(${links.syncedAt}, ${links.createdAt}) <=
+    ${now.toISOString()}::timestamptz - (${delayMs}) * interval '1 millisecond'`;
   const rows = await db
     .select({ link: links })
     .from(links)
@@ -189,12 +203,39 @@ export async function retryableLinks(
       and(
         eq(links.origin, 'raidledger'),
         inArray(links.syncState, ['pending', 'failed']),
-        lt(links.attempts, maxAttempts),
+        lt(links.attempts, policy.maxAttempts),
+        due,
       ),
     )
     .orderBy(desc(links.kind), asc(links.id))
     .limit(limit);
   return rows.map((r) => r.link);
+}
+
+/** One link by id (the sweep re-reads it after a retry). */
+export async function findLinkById(
+  db: ForumDiscordDb,
+  linkId: number,
+): Promise<ForumLink | null> {
+  const [link] = await db.select().from(links).where(eq(links.id, linkId));
+  return link ?? null;
+}
+
+/** Review MAJOR-3: close a row nothing can ever send out of the queue. */
+export async function markAbandoned(
+  db: ForumDiscordDb,
+  linkId: number,
+  reason: string,
+  maxAttempts: number,
+): Promise<void> {
+  await db
+    .update(links)
+    .set({
+      syncState: 'failed',
+      attempts: sql`greatest(${links.attempts}, ${maxAttempts}::int)`,
+      lastError: reason.slice(0, 500),
+    })
+    .where(eq(links.id, linkId));
 }
 
 /** When the RL thread was created; null once it is gone (review MAJOR-2). */

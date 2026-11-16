@@ -30,7 +30,11 @@ const REPLY_OPS: RetryOps = {
 };
 
 /** The sweep's cadence; backoff steps are multiples of it. */
-const SWEEP_MS = 5 * 60_000;
+export const RETRY_STEP_MS = 5 * 60_000;
+
+/** `last_error` of a row the sweep closed out (review MAJOR-3). */
+export const RETRY_ABANDONED =
+  'Nothing left to send: the post is gone or the hub re-bound its forum.';
 
 /**
  * Delay before the next attempt: the grace for a fresh row, then 5, 15, 35,
@@ -38,7 +42,7 @@ const SWEEP_MS = 5 * 60_000;
  */
 export function retryDelayMs(attempts: number): number {
   if (attempts <= 0) return RETRY_GRACE_MS;
-  return SWEEP_MS * (2 ** attempts - 1);
+  return RETRY_STEP_MS * (2 ** attempts - 1);
 }
 
 /**
@@ -86,4 +90,47 @@ export function replayAfter(
     if (newest === null || n > newest) newest = n;
   }
   return (newest ?? BigInt(threadId) - 1n).toString();
+}
+
+type RetryState = Pick<
+  ForumLink,
+  'syncState' | 'attempts' | 'discordDeletedAt'
+>;
+type ParentState = Pick<
+  ForumLink,
+  'discordMessageId' | 'attempts' | 'discordDeletedAt'
+>;
+
+/** A placeholder reply whose placeholder post may still be sent. */
+function waitsOnLivePost(
+  row: Pick<ForumLink, 'kind' | 'discordMessageId'>,
+  post: ParentState | null,
+): boolean {
+  return (
+    row.kind === 'reply' &&
+    row.discordMessageId.startsWith(UNSENT_PREFIX) &&
+    post !== null &&
+    post.discordMessageId.startsWith(UNSENT_PREFIX) &&
+    post.discordDeletedAt === null &&
+    post.attempts < RETRY_MAX_ATTEMPTS
+  );
+}
+
+/**
+ * Review MAJOR-3: `retry()` ran but left the row exactly as it was (no send,
+ * no failure, no delete) — nothing will ever send it, so the sweep closes it
+ * out instead of re-selecting it forever. A reply still waiting on a post
+ * the sweep may yet send is the one exception.
+ */
+export function retryStalled(
+  before: RetryState & Pick<ForumLink, 'kind' | 'discordMessageId'>,
+  after: RetryState | null,
+  post: ParentState | null,
+): boolean {
+  if (after === null) return false;
+  const same =
+    after.syncState === before.syncState &&
+    after.attempts === before.attempts &&
+    (after.discordDeletedAt === null) === (before.discordDeletedAt === null);
+  return same && !waitsOnLivePost(before, post);
 }
