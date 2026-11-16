@@ -180,6 +180,22 @@ async function signUpAll(
     );
 }
 
+/** The open thread's replies: admin, member, PUG — 30/20/10 min ago. */
+async function insertOpenReplies(
+  db: Db,
+  a: DiscussionSeedActors,
+  threadId: number,
+  now: Date,
+): Promise<number[]> {
+  const authors = [a.adminId, a.memberId, a.pugId];
+  const rows = OPEN_REPLY_BODIES.map((body, i) => ({
+    authorId: authors[i] ?? a.adminId,
+    body,
+    at: new Date(now.getTime() - (30 - 10 * i) * MINUTE_MS),
+  }));
+  return insertSeedReplies(db, rowActors(a), threadId, rows);
+}
+
 /** The open event: 3 replies (admin, member, PUG); member + PUG signed up. */
 async function seedOpenEvent(
   db: Db,
@@ -201,17 +217,7 @@ async function seedOpenEvent(
     now,
   );
   await signUpAll(db, ids.eventId, [a.memberId, a.pugId]);
-  const authors = [a.adminId, a.memberId, a.pugId];
-  const replyIds = await insertSeedReplies(
-    db,
-    rowActors(a),
-    ids.threadId,
-    OPEN_REPLY_BODIES.map((body, i) => ({
-      authorId: authors[i] ?? a.adminId,
-      body,
-      at: new Date(now.getTime() - (30 - 10 * i) * MINUTE_MS),
-    })),
-  );
+  const replyIds = await insertOpenReplies(db, a, ids.threadId, now);
   return { ...ids, replyIds };
 }
 
