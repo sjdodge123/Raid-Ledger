@@ -20,6 +20,7 @@ import type {
   HubForumThread,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../../auth/types';
+import { EventDiscussionReplyThrottleGuard } from './event-discussion-throttle.guard';
 import { EventDiscussionService } from './event-discussion.service';
 
 const NO_STORE = 'private, no-store';
@@ -56,6 +57,7 @@ export class EventDiscussionController {
   }
 
   @Post('replies')
+  @UseGuards(EventDiscussionReplyThrottleGuard)
   createReply(
     @Request() req: AuthenticatedRequest,
     @Id() id: number,

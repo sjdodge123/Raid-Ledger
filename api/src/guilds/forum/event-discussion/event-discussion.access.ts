@@ -93,13 +93,17 @@ export function assertNotEventThread(thread: { eventId: number | null }): void {
   }
 }
 
-/** Reply gate: 403 without a writable signup, then 409 once read-only. */
+/**
+ * Reply gate: 409 once read-only (§12 — ended OR detached, for everyone; a
+ * detached thread no longer counts anyone's signup, so the lock must win or a
+ * signed-up member would read "sign up"), else 403 without a writable signup.
+ */
 export function assertCanReply(
   canReply: boolean,
   lock: HubForumLock | null,
 ): void {
-  if (!canReply) throw new ForbiddenException(FORUM_NOT_SIGNED_UP);
   if (lock !== null) throw new ConflictException(FORUM_THREAD_READ_ONLY);
+  if (!canReply) throw new ForbiddenException(FORUM_NOT_SIGNED_UP);
 }
 
 /**

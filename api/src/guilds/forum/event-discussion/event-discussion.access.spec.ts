@@ -133,11 +133,14 @@ describe('event thread refusals (§12)', () => {
     expect(() => assertNotEventThread({ eventId: null })).not.toThrow();
   });
 
-  it('reply: 403 not signed up, then 409 read-only', () => {
+  it('reply: 409 read-only first (for everyone), then 403 not signed up', () => {
     expect(() => assertCanReply(false, null)).toThrow(
       new ForbiddenException(FORUM_NOT_SIGNED_UP),
     );
     expect(() => assertCanReply(true, lock)).toThrow(
+      new ConflictException(FORUM_THREAD_READ_ONLY),
+    );
+    expect(() => assertCanReply(false, lock)).toThrow(
       new ConflictException(FORUM_THREAD_READ_ONLY),
     );
     expect(() => assertCanReply(true, null)).not.toThrow();
