@@ -17,16 +17,8 @@ import type { QuestPrepTodo } from './quest-prep-todo';
 import { QuestPrepAsOfLine } from './quest-prep-asof-line';
 import { hasFactionQuest, type QuestSide } from '../utils/quest-faction';
 import { filterUsableQuests, flattenQuestMap, useAllUsableQuests, useQuestSide, type RosterCharacter } from './quest-prep-filter';
+import { groupByType, splitByLocation } from './quest-prep-groups';
 import './quest-prep-panel.css';
-
-/** Sub-group quests by practical pickup type */
-function groupByType(list: EnrichedDungeonQuestDto[]) {
-    return {
-        sharable: list.filter((q) => q.sharable && !q.prevQuestId),
-        chain: list.filter((q) => !!q.prevQuestId),
-        solo: list.filter((q) => !q.sharable && !q.prevQuestId),
-    };
-}
 
 /** Props passed via PluginSlot context from event-detail-page */
 interface QuestPrepPanelProps {
@@ -242,10 +234,11 @@ interface SharedQuestProps {
  * ones only acquired inside the instance (ROK-2142 — hidden when none).
  */
 function QuestLocationGroups({ quests, ...rest }: { quests: EnrichedDungeonQuestDto[] } & SharedQuestProps) {
+    const { before, inside } = splitByLocation(quests);
     return (
         <>
-            <QuestGroup title="Get before you go in" icon="&#x1F5FA;&#xFE0F;" quests={quests.filter((q) => !q.startsInsideDungeon)} {...rest} />
-            <QuestGroup title="Picked up inside" hint="Get these during the run" icon="&#x1F3F0;" quests={quests.filter((q) => q.startsInsideDungeon)} {...rest} />
+            <QuestGroup title="Get before you go in" icon="&#x1F5FA;&#xFE0F;" quests={before} {...rest} />
+            <QuestGroup title="Picked up inside" hint="Get these during the run" icon="&#x1F3F0;" quests={inside} {...rest} />
         </>
     );
 }

@@ -34,6 +34,12 @@ export function getWowheadItemUrl(itemId: number, variant?: string | null): stri
     return `https://${urlBase}/item=${itemId}`;
 }
 
+/** Build a full Wowhead zone URL (ROK-2216: a dungeon's page, from the catalogue's `wowheadZoneId`). */
+export function getWowheadZoneUrl(zoneId: number, variant?: string | null): string {
+    const { urlBase } = getWowheadDomain(variant);
+    return `https://${urlBase}/zone=${zoneId}`;
+}
+
 /** Build the data-wowhead tooltip attribute suffix (e.g. "domain=classic&dataEnv=1"). */
 export function getWowheadDataSuffix(variant?: string | null): string {
     const { tooltipDomain } = getWowheadDomain(variant);
