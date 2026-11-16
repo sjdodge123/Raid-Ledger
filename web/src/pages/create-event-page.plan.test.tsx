@@ -66,10 +66,16 @@ describe('CreateEventPage — dungeon-plan link (ROK-2215)', () => {
 
     it('W6: with the Blizzard plugin off, the plan params do nothing', () => {
         usePluginStore.setState({ activeSlugs: new Set(['core']), initialized: true });
-        stub.instancesLoading = true;
         renderWithProviders(<CreateEventPage />, { initialEntries: [PLAN] });
         const form = screen.getByTestId('form');
-        expect(form).toHaveAttribute('data-instances', '');
-        expect(form).toHaveAttribute('data-invites', '0');
+        expect(form, 'no dungeon pre-fill').toHaveAttribute('data-instances', '');
+        expect(form, 'no invites').toHaveAttribute('data-invites', '0');
+    });
+
+    it('W6: with the Blizzard plugin off, the page never waits for a dungeon list', () => {
+        usePluginStore.setState({ activeSlugs: new Set(['core']), initialized: true });
+        stub.instancesLoading = true;
+        renderWithProviders(<CreateEventPage />, { initialEntries: [PLAN] });
+        expect(screen.getByTestId('form')).toBeInTheDocument();
     });
 });
