@@ -53,7 +53,11 @@ export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
   return [...new Map(members.map((m) => [m.guid, m])).values()];
 }
 
-/** Columns the export always owns: `SET col = excluded.col`. */
+/**
+ * Columns the export always owns: `SET col = excluded.col`. ROK-2225:
+ * `blizzard_seen_at` is deliberately absent (and `memberValues` never sets
+ * it) — only the Blizzard sync stamps it; an import must leave it alone.
+ */
 const ADDON_OWNED_MEMBER_COLUMNS = [
   'character_name',
   'public_note',

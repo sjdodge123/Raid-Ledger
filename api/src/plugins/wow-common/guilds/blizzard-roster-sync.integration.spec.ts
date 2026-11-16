@@ -256,6 +256,7 @@ async function seedJunk(guildId: number): Promise<Date> {
       level: 59,
       source: 'blizzard',
       lastSeenAt: t,
+      blizzardSeenAt: t,
     })),
   );
   await testApp.db
