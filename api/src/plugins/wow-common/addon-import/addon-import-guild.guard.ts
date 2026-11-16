@@ -2,9 +2,13 @@ import { Logger } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { AnyAddonGuildExport } from './addon-import.pages';
 import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot } from '../guilds/guild-membership.helpers';
 import { exportClock } from './addon-import.clock';
 import { lockGuildName } from './addon-import.locks';
+import {
+  blizzardCanSee,
+  loadBaseline,
+  type LiveRosterRow,
+} from './addon-import-guild.baseline';
 import {
   adoptionKey,
   isAdoptableGuid,
@@ -29,7 +33,8 @@ import {
  * (`addon-import-guild.flag.ts`); every non-staff replace is audited.
  */
 
-const { guilds, guildMembers, guildEditors, users, activityLog } = schema;
+const { users, activityLog } = schema;
+export type { LiveRosterRow };
 const logger = new Logger('AddonImportGuildGuard');
 
 /** A snapshot dropping at least this many live members… */
@@ -116,32 +121,6 @@ export async function lockGuildImport(
   await lockGuildName(ctx.tx, ctx.gameId, ctx.region, nameKey);
 }
 
-/** A live roster row: its id, GUID (null for Blizzard-only rows), name and any member grant. */
-export interface LiveRosterRow {
-  id: number;
-  guid: string | null;
-  name: string;
-  grantId: number | null;
-}
-
-/** Live roster rows, each flagged when it holds a member-kind grant. */
-async function liveRoster(
-  tx: AddonImportTx,
-  guildId: number,
-): Promise<LiveRosterRow[]> {
-  return tx
-    .select({
-      id: guildMembers.id,
-      guid: guildMembers.guid,
-      name: guildMembers.characterName,
-      grantId: guildEditors.id,
-    })
-    .from(guildMembers)
-    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .leftJoin(guildEditors, eq(guildEditors.guildMemberId, guildMembers.id))
-    .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()));
-}
-
 /**
  * Which live rows a snapshot keeps: by GUID (addon; `names` maps each GUID
  * to its {@link adoptionKey} so GUID-less Blizzard rows can be matched) or
@@ -171,8 +150,10 @@ export interface RosterMovement {
 }
 
 /**
- * Pure. By id, every live row counts and a member matched to a not-live row
- * counts as added. By GUID, see {@link movementByGuid}.
+ * Pure. `live` is the source's baseline (`addon-import-guild.baseline.ts`).
+ * By id, a member matched to no baseline row counts as added, and only rows
+ * Blizzard can see count as removed (ROK-2225: a LedgerLink-only row is not
+ * "lost" by a source that never saw it). By GUID, see {@link movementByGuid}.
  * @param stored - Every GUID the guild stores (live or not); only GUIDs
  *   outside it may adopt a GUID-less row. Defaults to the live GUIDs.
  */
@@ -183,15 +164,16 @@ export function rosterMovement(
 ): RosterMovement {
   if (presence.by === 'guid') return movementByGuid(live, presence, stored);
   const kept = live.filter((r) => presence.ids.has(r.id)).length;
-  const gone = live.filter((r) => !presence.ids.has(r.id));
+  const gone = live.filter((r) => !presence.ids.has(r.id) && blizzardCanSee(r));
   return { counted: live, gone, added: presence.members - kept };
 }
 
 /**
  * By GUID. Without `names`, GUID-less rows are not counted. With them
  * (ROK-1928 review MAJOR), a live GUID-less row that a new GUID's name will
- * adopt is kept (not re-counted as added — the sync already audited it), and
- * one the snapshot drops counts as removed.
+ * adopt is kept (not re-counted as added — the sync already audited it).
+ * ROK-2225: a GUID-less row it does not adopt is never removed — LedgerLink
+ * cannot see it (operator ruling 2026-11-16).
  */
 function movementByGuid(
   live: LiveRosterRow[],
@@ -217,7 +199,7 @@ function movementByGuid(
     freshKeys,
   );
   const added = fresh.length - m.kept.length;
-  return { counted: live, gone: [...gone, ...m.gone], added };
+  return { counted: live, gone, added };
 }
 
 export const ROSTER_AUDIT_ENTITY = 'guild';
@@ -310,7 +292,7 @@ async function measureRosterChange(
   countRemovals: boolean,
 ): Promise<RosterCheck> {
   const { guildId } = input;
-  const liveRows = await liveRoster(tx, guildId);
+  const liveRows = await loadBaseline(tx, guildId, input.presence.by);
   const stored = await storedGuids(tx, guildId);
   const m = rosterMovement(liveRows, input.presence, stored);
   const gone = countRemovals ? m.gone : [];

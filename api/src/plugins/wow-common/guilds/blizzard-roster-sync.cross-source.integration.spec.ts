@@ -52,9 +52,10 @@ const ALL_LL = [...PAIRED, ...LL_ONLY];
 /** Ana is the importer (FIXTURE_GUID); every other GUID is stable per name. */
 const ledgerLinkRoster = (names = ALL_LL) =>
   names.map((name) =>
-    buildMember(name === 'Ana Forever' ? 0xabcdef0 : 0x100 + ALL_LL.indexOf(name), {
-      name,
-    }),
+    buildMember(
+      name === 'Ana Forever' ? 0xabcdef0 : 0x100 + ALL_LL.indexOf(name),
+      { name },
+    ),
   );
 const apiMember = (name: string, blizzardId: number): ForeverGuildMember => ({
   name,
@@ -64,7 +65,9 @@ const apiMember = (name: string, blizzardId: number): ForeverGuildMember => ({
   blizzardId,
 });
 const blizzardRoster = (paired = PAIRED, extra = BLIZZ_ONLY) => [
-  ...paired.map((n) => apiMember(n.split(' ')[0] ?? n, 900 + PAIRED.indexOf(n))),
+  ...paired.map((n) =>
+    apiMember(n.split(' ')[0] ?? n, 900 + PAIRED.indexOf(n)),
+  ),
   ...extra.map((n, i) => apiMember(n, 990 + i)),
 ];
 
@@ -143,7 +146,11 @@ async function seedGuild() {
 }
 
 /** Run one sync, then move its instant T back to seed + `secs` (exports are pinned). */
-async function syncAt(guildId: number, roster: ForeverGuildMember[], secs: number) {
+async function syncAt(
+  guildId: number,
+  roster: ForeverGuildMember[],
+  secs: number,
+) {
   fetchSpy.mockResolvedValue({ members: roster });
   const svc = testApp.app.get(BlizzardRosterSyncService);
   expect((await svc.syncForeverGuildRoster(guildId)).status).toBe('ok');
@@ -152,7 +159,8 @@ async function syncAt(guildId: number, roster: ForeverGuildMember[], secs: numbe
     .from(schema.guilds)
     .where(eq(schema.guilds.id, guildId));
   const t = g?.t;
-  if (t === null || t === undefined) throw new Error('sync stamped no snapshot');
+  if (t === null || t === undefined)
+    throw new Error('sync stamped no snapshot');
   const to = new Date((FIXTURE_EXPORTED_AT + secs) * 1000);
   const m = schema.guildMembers;
   await testApp.db.update(m).set({ lastSeenAt: to }).where(eq(m.lastSeenAt, t));
