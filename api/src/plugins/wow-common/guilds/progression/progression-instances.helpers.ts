@@ -5,8 +5,10 @@
  * each boss row's `firstKillAt` is the Q-B18 first kill.
  *
  * Placement of one boss (all its pulls together, so a boss never splits):
- * (1) its pull map id via `RAID_MAP_INSTANCES`; (2) else its name against
- * the boss rows of a known raid; (3) else `m:<mapId>` "Instance <mapId>"
+ * (1) its pull map id via `RAID_MAP_INSTANCES`, else the catalogue's Classic
+ * dungeon map ids (ROK-2218); (2) else its name against the boss rows of a
+ * known raid or mapped dungeon (wing rows count toward their parent);
+ * (3) else `m:<mapId>` "Instance <mapId>"
  * (Q-B12 v1); (4) else `other` "Other bosses". Totals use `forever` boss
  * rows when the raid has any, else `classic` (Q-B11); null ⇒ "N/?".
  */
@@ -22,7 +24,11 @@ import {
   toBoss,
   type RaidPull,
 } from '../roster-insights/roster-insights.raid-progress';
-import { raidForMap, raidNameForJournal } from './raid-map-instances';
+import {
+  instanceForMap,
+  instanceNameForJournal,
+  sectionJournalId,
+} from './raid-map-instances';
 
 /** The `wow_classic_bosses` columns the grouping reads (`instanceId` = Journal id). */
 export interface ProgressionBossRow {
@@ -69,14 +75,15 @@ function buildBossIndex(rows: readonly ProgressionBossRow[]): BossIndex {
   );
   for (const r of sorted) {
     const norm = normBossName(r.name);
-    index.totals.set(r.instanceId, (index.totals.get(r.instanceId) ?? 0) + 1);
+    const journal = sectionJournalId(r.instanceId);
+    index.totals.set(journal, (index.totals.get(journal) ?? 0) + 1);
     if (
       !index.journalByName.has(norm) &&
-      raidNameForJournal(r.instanceId) !== null
+      instanceNameForJournal(journal) !== null
     ) {
-      index.journalByName.set(norm, r.instanceId);
+      index.journalByName.set(norm, journal);
     }
-    index.orderOf.set(`${r.instanceId}:${norm}`, r.order);
+    index.orderOf.set(`${journal}:${norm}`, r.order);
   }
   return index;
 }
@@ -124,7 +131,7 @@ function placeBoss(
   name: string,
   index: BossIndex,
 ): Placement {
-  const raid = mapId === null ? null : raidForMap(mapId);
+  const raid = mapId === null ? null : instanceForMap(mapId);
   if (raid) {
     return raid.journalId === null
       ? { key: `m:${mapId}`, name: raid.name, journalId: null }
@@ -135,7 +142,7 @@ function placeBoss(
         };
   }
   const byName = index.journalByName.get(normBossName(name));
-  const raidName = byName === undefined ? null : raidNameForJournal(byName);
+  const raidName = byName === undefined ? null : instanceNameForJournal(byName);
   if (byName !== undefined && raidName !== null) {
     return { key: `j:${byName}`, name: raidName, journalId: byName };
   }
