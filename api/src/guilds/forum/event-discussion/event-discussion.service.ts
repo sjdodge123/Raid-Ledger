@@ -20,6 +20,7 @@ import {
   type GuildActor,
 } from '../../guild-access.service';
 import { findGuildKind } from '../../guild-core.queries';
+import { assertNotHidden, isHiddenFrom } from '../../hub-hidden.helpers';
 import { HubKindRegistry } from '../../hub-kind.registry';
 import { canFor } from '../hub-forum.helpers';
 import { toForumReply, type HubForumThreadRecord } from '../hub-forum.mappers';
@@ -60,8 +61,7 @@ export class EventDiscussionService {
     const live = await findLiveEventThread(this.db, eventId);
     const record = live && (await findThread(this.db, live.guildId, live.id));
     if (!live || !record) return { state: 'none' };
-    // Inactive owning plugin ⇒ the hub's behaviours do not run (CLAUDE.md).
-    if (!(await this.hubKinds.forGuild(live.guildId))) return { state: 'none' };
+    if (!(await this.hubOpenTo(actor, live.guildId))) return { state: 'none' };
     const deps = { db: this.db, access: this.access, now };
     const { who, lock, isMember } = await resolveEventThread(
       deps,
@@ -87,7 +87,7 @@ export class EventDiscussionService {
     eventId: number,
     query: unknown,
   ): Promise<HubForumThread> {
-    const live = await this.requireLive(eventId);
+    const live = await this.requireLive(actor, eventId);
     return this.forum.forEventScope().get(actor, live.guildId, live.id, query);
   }
 
@@ -97,7 +97,7 @@ export class EventDiscussionService {
     eventId: number,
     input: unknown,
   ): Promise<HubForumReply> {
-    const live = await this.requireLive(eventId);
+    const live = await this.requireLive(actor, eventId);
     return this.forum
       .forEventScope()
       .createReply(actor, live.guildId, live.id, input);
@@ -110,7 +110,7 @@ export class EventDiscussionService {
     replyId: number,
     input: unknown,
   ): Promise<HubForumReply> {
-    const live = await this.requireLive(eventId);
+    const live = await this.requireLive(actor, eventId);
     const { guildId, id } = live;
     return this.forum
       .forEventScope()
@@ -123,7 +123,7 @@ export class EventDiscussionService {
     eventId: number,
     replyId: number,
   ): Promise<void> {
-    const live = await this.requireLive(eventId);
+    const live = await this.requireLive(actor, eventId);
     await this.forum
       .forEventScope()
       .deleteReply(actor, live.guildId, live.id, replyId);
@@ -145,13 +145,38 @@ export class EventDiscussionService {
     return rows.map((r) => toForumReply(r, canFor(who, r.reply, opts)));
   }
 
-  /** The event's live thread: 404 (missing event / no thread), 403 (plugin off). */
-  private async requireLive(eventId: number): Promise<LiveEventThread> {
+  /**
+   * The card's quiet version of {@link requireHub}: false (no card) while the
+   * owning plugin is inactive (CLAUDE.md) or the hub is hidden/archived to a
+   * non-staff viewer (ROK-1831 L-5, `isHiddenFrom` behind `assertNotHidden`).
+   */
+  private async hubOpenTo(
+    actor: GuildActor,
+    guildId: number,
+  ): Promise<boolean> {
+    if (!(await this.hubKinds.forGuild(guildId))) return false;
+    return !(await isHiddenFrom(this.db, actor, guildId));
+  }
+
+  /** The event's live thread: 404 (no thread / hidden hub), 403 (plugin off). */
+  private async requireLive(
+    actor: GuildActor,
+    eventId: number,
+  ): Promise<LiveEventThread> {
     const live = await findLiveEventThread(this.db, eventId);
     if (!live) throw new NotFoundException(DISCUSSION_NOT_FOUND);
-    // HubKindActiveGuard's 403 while the hub's owning plugin is inactive.
-    const kind = await findGuildKind(this.db, live.guildId);
-    if (kind !== null) this.hubKinds.require(kind);
+    await this.requireHub(actor, live.guildId);
     return live;
+  }
+
+  /**
+   * The hub guards `HubForumController` runs, in its order: HubKindActiveGuard
+   * (403 while the owning plugin is inactive), then HubVisibleGuard's
+   * `assertNotHidden` (404 to non-staff while hidden or archived).
+   */
+  private async requireHub(actor: GuildActor, guildId: number): Promise<void> {
+    const kind = await findGuildKind(this.db, guildId);
+    if (kind !== null) this.hubKinds.require(kind);
+    await assertNotHidden(this.db, actor, guildId);
   }
 }

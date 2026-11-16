@@ -13,6 +13,9 @@ import type {
   HubForumThread,
   HubForumThreadList,
 } from '@raid-ledger/contract';
+import { eq } from 'drizzle-orm';
+import * as schema from '../../../drizzle/schema';
+import { HUB_NOT_FOUND, setHubHidden } from '../../hub-hidden.helpers';
 import { HUB_POST_CREATE_LIMIT } from '../../posts/hub-post-throttle.guard';
 import { FORUM_NOT_MEMBER } from '../hub-forum.access';
 import {
@@ -249,6 +252,36 @@ describe('ROK-2226 §6 — hub visitor, not signed up', () => {
     expect(outcome(await replyAs(s, 'outsider'))).toEqual(
       deny(403, FORUM_NOT_MEMBER),
     );
+  });
+});
+
+describe('ROK-2226 §6.1 — hidden or archived hub (Codex P1)', () => {
+  /** A signed-up non-member is refused like HubVisibleGuard; staff still read. */
+  async function expectClosed(s: Scene): Promise<void> {
+    const read = await as(ctx, 'pug', 'get', `${ev(s)}/thread`);
+    expect(outcome(read)).toEqual(deny(404, HUB_NOT_FOUND));
+    expect(outcome(await replyAs(s, 'pug'))).toEqual(deny(404, HUB_NOT_FOUND));
+    const card = await as(ctx, 'pug', 'get', ev(s));
+    expect(card.status).toBe(200);
+    expect(card.body as EventDiscussion).toEqual({ state: 'none' });
+    expect((await as(ctx, 'admin', 'get', `${ev(s)}/thread`)).status).toBe(200);
+  }
+
+  it('a hidden hub: read 404, post 404, card none (staff still read)', async () => {
+    const s = await newScene(ctx);
+    await reply(s, 'pug', 'before hide');
+    await setHubHidden(ctx.posts.testApp.db, s.guildId, true);
+    await expectClosed(s);
+  });
+
+  it('an archived hub: read 404, post 404, card none (staff still read)', async () => {
+    const s = await newScene(ctx);
+    await reply(s, 'pug', 'before archive');
+    await ctx.posts.testApp.db
+      .update(schema.guilds)
+      .set({ status: 'archived' })
+      .where(eq(schema.guilds.id, s.guildId));
+    await expectClosed(s);
   });
 });
 

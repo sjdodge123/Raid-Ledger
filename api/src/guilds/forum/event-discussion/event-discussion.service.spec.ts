@@ -3,6 +3,11 @@
  * ready / header-only) and the event-scoped delegation to HubForumService.
  */
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  HUB_NOT_FOUND,
+  assertNotHidden,
+  isHiddenFrom,
+} from '../../hub-hidden.helpers';
 import type {
   HubForumReplySelect,
   HubForumThreadSelect,
@@ -29,6 +34,11 @@ import { resolveEventThread } from './forum-thread.context';
 jest.mock('../hub-forum.queries', () => ({ findThread: jest.fn() }));
 jest.mock('../../guild-core.queries', () => ({
   findGuildKind: jest.fn(() => Promise.resolve('valheim')),
+}));
+jest.mock('../../hub-hidden.helpers', () => ({
+  HUB_NOT_FOUND: 'Guild not found',
+  assertNotHidden: jest.fn(() => Promise.resolve()),
+  isHiddenFrom: jest.fn(() => Promise.resolve(false)),
 }));
 jest.mock('./event-discussion.sync', () => ({
   syncEventDiscussion: jest.fn(),
@@ -145,6 +155,8 @@ beforeEach(() => {
   jest.mocked(newestLiveReplies).mockResolvedValue([reply(31), reply(32)]);
   hubKinds.forGuild.mockResolvedValue({});
   hubKinds.require.mockReturnValue({});
+  jest.mocked(isHiddenFrom).mockResolvedValue(false);
+  jest.mocked(assertNotHidden).mockResolvedValue(undefined);
 });
 afterEach(() => jest.clearAllMocks());
 
@@ -268,6 +280,37 @@ describe('ROK-2226 EventDiscussionService — inactive owning plugin', () => {
     );
     await expect(svc.deleteReply(viewer, 5, 31)).rejects.toBe(PLUGIN_OFF);
     expect(hubKinds.require).toHaveBeenCalledWith('valheim');
+    expect(forum.forEventScope).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2226 EventDiscussionService — hidden or archived hub (Codex P1)', () => {
+  const HIDDEN = new NotFoundException(HUB_NOT_FOUND);
+  function hubHidden(): void {
+    jest.mocked(isHiddenFrom).mockResolvedValue(true);
+    jest.mocked(assertNotHidden).mockRejectedValue(HIDDEN);
+  }
+
+  it('summary reports none (no card) for a non-staff viewer', async () => {
+    hubHidden();
+    await expect(build().summary(viewer, 5)).resolves.toEqual({
+      state: 'none',
+    });
+    expect(isHiddenFrom).toHaveBeenCalledWith({}, viewer, 7);
+    expect(resolveEventThread).not.toHaveBeenCalled();
+  });
+
+  it('thread read and reply post 404 (HubVisibleGuard) before delegating', async () => {
+    hubHidden();
+    const svc = build();
+    await expect(svc.thread(viewer, 5, {})).rejects.toBe(HIDDEN);
+    await expect(svc.createReply(viewer, 5, { body: 'x' })).rejects.toBe(
+      HIDDEN,
+    );
+    await expect(svc.updateReply(viewer, 5, 31, { body: 'x' })).rejects.toBe(
+      HIDDEN,
+    );
+    expect(assertNotHidden).toHaveBeenCalledWith({}, viewer, 7);
     expect(forum.forEventScope).not.toHaveBeenCalled();
   });
 });
