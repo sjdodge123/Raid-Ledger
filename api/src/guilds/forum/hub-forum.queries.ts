@@ -164,7 +164,11 @@ export async function listThreads(
 }
 
 function threadProbe(row: HubForumThreadRecord & { cursorAt: string }) {
-  const record = { thread: row.thread, author: row.author, event: row.event };
+  const record = {
+    thread: row.thread,
+    author: row.author,
+    event: row.event ?? null,
+  };
   return { record, id: row.thread.id, cursorAt: row.cursorAt };
 }
 
