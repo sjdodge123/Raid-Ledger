@@ -8,27 +8,20 @@
  * cycle (WowItemMetaService already depends on BossEncountersService).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { and, eq, getTableColumns, inArray } from 'drizzle-orm';
+import { eq, getTableColumns } from 'drizzle-orm';
 import type { BossLootDto, ItemTooltip } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
-import { wowClassicBossLoot, wowItemMeta } from '../../drizzle/schema';
+import {
+  wowClassicBosses,
+  wowClassicBossLoot,
+  wowItemMeta,
+} from '../../drizzle/schema';
+import { lootExpansionsFor } from './boss-loot-expansions';
 
 /** A stored loot row plus the joined cache tooltip (null/absent = none). */
 export type BossLootRow = typeof wowClassicBossLoot.$inferSelect & {
   tooltip?: ItemTooltip | null;
 };
-
-/**
- * ROK-2170: when a boss has its own Forever loot rows, they replace the
- * Classic table (per boss). Without any, the rows pass through unchanged —
- * variants whose expansion set lacks 'forever' never load such rows.
- */
-export function preferForeverLoot<T extends { expansion: string }>(
-  rows: T[],
-): T[] {
-  const forever = rows.filter((r) => r.expansion === 'forever');
-  return forever.length > 0 ? forever : rows;
-}
 
 /** Maps a loot row to its DTO; `tooltip` is the stored parse, else null. */
 export function toLootDto(row: BossLootRow): BossLootDto {
@@ -49,25 +42,40 @@ export function toLootDto(row: BossLootRow): BossLootDto {
   };
 }
 
-/** Loot for one boss within `expansions`, each row with its cached tooltip. */
+/** A loot row as the read selects it: plus its boss's instance (ROK-2209). */
+type BossLootReadRow = BossLootRow & { instanceId: number };
+
+/**
+ * Loot for one boss under `variant`, each row with its cached tooltip.
+ * ROK-2209: the boss's instance decides the loot expansion
+ * (`lootExpansionsFor`), so a Forever read never returns Classic rows — a
+ * boss without Forever rows reads as `[]`. `fallbackExpansions` is the
+ * variant's expansion set for variants the catalogue does not serve.
+ */
 export async function loadBossLoot(
   db: PostgresJsDatabase<typeof schema>,
   bossId: number,
-  expansions: string[],
+  variant: string,
+  fallbackExpansions: (variant: string) => string[],
 ): Promise<BossLootDto[]> {
-  const rows: BossLootRow[] = await db
+  const rows: BossLootReadRow[] = await db
     .select({
       ...getTableColumns(wowClassicBossLoot),
       tooltip: wowItemMeta.tooltip,
+      instanceId: wowClassicBosses.instanceId,
     })
     .from(wowClassicBossLoot)
-    .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, wowClassicBossLoot.itemId))
-    .where(
-      and(
-        eq(wowClassicBossLoot.bossId, bossId),
-        inArray(wowClassicBossLoot.expansion, expansions),
-      ),
+    .innerJoin(
+      wowClassicBosses,
+      eq(wowClassicBosses.id, wowClassicBossLoot.bossId),
     )
+    .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, wowClassicBossLoot.itemId))
+    .where(eq(wowClassicBossLoot.bossId, bossId))
     .orderBy(wowClassicBossLoot.quality);
-  return preferForeverLoot(rows).map(toLootDto);
+  const first = rows[0];
+  if (!first) return [];
+  const allowed = new Set(
+    lootExpansionsFor(variant, first.instanceId, fallbackExpansions),
+  );
+  return rows.filter((r) => allowed.has(r.expansion)).map(toLootDto);
 }
