@@ -13,7 +13,7 @@ import {
   CORE_PLUGIN_ID,
   PluginHubManifestSchema,
   type PluginHubManifest,
-} from "./plugin-hub-manifest.schema.js";
+} from './plugin-hub-manifest.schema.js';
 import {
   BG3_GALLERY_SOURCE_ID,
   BG3_GALLERY_SYNC_JOB_NAME,
@@ -21,366 +21,157 @@ import {
   BG3_INGEST_SOURCE_ID,
   BG3_PLUGIN_ID,
   BG3_RETENTION_JOB_NAME,
-} from "./bg3-hub.schema.js";
+} from './bg3-hub.schema.js';
 import {
   BG3_SETUP,
   BLIZZARD_SETUP,
   CORE_SETUP,
   PELICAN_SETUP,
   VALHEIM_SETUP,
-} from "./plugin-setup-requirements.js";
-import { BG3_SCREENSHOT_CONTRACT_ID } from "./companion-bg3-screenshot.schema.js";
-import { GG_CORE_CARD_IDS, type GgCoreCardId } from "./gg-cards.schema.js";
+} from './plugin-setup-requirements.js';
+import { BG3_SCREENSHOT_CONTRACT_ID } from './companion-bg3-screenshot.schema.js';
+import { GG_CORE_CARD_IDS, type GgCoreCardId } from './gg-cards.schema.js';
 
 /** ROK-2187 — install-sheet label of each core "GG <year>" card. */
 const GG_CORE_CARD_LABELS: Readonly<Record<GgCoreCardId, string>> = {
-  intro: "GG <year>: the opening card",
-  events: "GG <year>: events signed up, attended and planned",
-  "on-time": "GG <year>: how often you showed up on time",
-  rhythm: "GG <year>: your busiest month and favourite time slot",
-  hours: "GG <year>: hours played",
-  "top-games": "GG <year>: your top games, and the top game each month",
-  "new-games": "GG <year>: new games you tried",
-  voice: "GG <year>: time in event voice channels",
-  people: "GG <year>: who you played with most (only you see names)",
-  hubs: "GG <year>: hubs joined, posts and pictures",
-  superlative: "GG <year>: your superlative",
-  summary: "GG <year>: the summary card you can share",
+  intro: 'GG <year>: the opening card',
+  events: 'GG <year>: events signed up, attended and planned',
+  'on-time': 'GG <year>: how often you showed up on time',
+  rhythm: 'GG <year>: your busiest month and favourite time slot',
+  hours: 'GG <year>: hours played',
+  'top-games': 'GG <year>: your top games, and the top game each month',
+  'new-games': 'GG <year>: new games you tried',
+  voice: 'GG <year>: time in event voice channels',
+  people: 'GG <year>: who you played with most (only you see names)',
+  hubs: 'GG <year>: hubs joined, posts and pictures',
+  superlative: 'GG <year>: your superlative',
+  summary: 'GG <year>: the summary card you can share',
 };
 
 const ggCoreCards = GG_CORE_CARD_IDS.map((id) => ({
   id,
-  kind: "gg-card" as const,
+  kind: 'gg-card' as const,
   label: GG_CORE_CARD_LABELS[id],
 }));
 
 const core = {
   widgets: [
-    {
-      id: "gm-post",
-      title: "Leader post",
-      description: "The latest leader post.",
-      layoutKey: "bare",
-    },
-    {
-      id: "discord",
-      title: "Discord channel",
-      description: "Recent messages from a linked Discord channel.",
-      layoutKey: "bare",
-    },
-    {
-      id: "schedule",
-      title: "Schedule",
-      description: "Repeating sessions.",
-      layoutKey: "bare",
-    },
-    {
-      id: "events",
-      title: "Events",
-      description: "Upcoming and recent events.",
-      layoutKey: "bare",
-    },
-    {
-      id: "attendance",
-      title: "Attendance leaderboard",
-      description: "Who shows up most.",
-      layoutKey: "bare",
-    },
-    {
-      id: "gallery",
-      title: "Gallery",
-      description: "Pictures from this hub — Discord posts and member uploads.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "session-note",
-      title: "Before next session",
-      description: "A shared note and checklist for the next session.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "steam-achievements",
-      title: "Achievement race",
-      description:
-        "Steam achievements per member and the rarest unlocks. Hidden ones stay hidden until you earn them.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "steam-playtime",
-      title: "Playtime",
-      description: "Lifetime Steam hours per member.",
-      layoutKey: "plugin",
-    },
+    { id: 'gm-post', title: 'Leader post', description: 'The latest leader post.', layoutKey: 'bare' },
+    { id: 'discord', title: 'Discord channel', description: 'Recent messages from a linked Discord channel.', layoutKey: 'bare' },
+    { id: 'schedule', title: 'Schedule', description: 'Repeating sessions.', layoutKey: 'bare' },
+    { id: 'events', title: 'Events', description: 'Upcoming and recent events.', layoutKey: 'bare' },
+    { id: 'attendance', title: 'Attendance leaderboard', description: 'Who shows up most.', layoutKey: 'bare' },
+    { id: 'gallery', title: 'Gallery', description: 'Pictures from this hub — Discord posts and member uploads.', layoutKey: 'plugin' },
+    { id: 'session-note', title: 'Before next session', description: 'A shared note and checklist for the next session.', layoutKey: 'plugin' },
+    { id: 'steam-achievements', title: 'Achievement race', description: 'Steam achievements per member and the rarest unlocks. Hidden ones stay hidden until you earn them.', layoutKey: 'plugin' },
+    { id: 'steam-playtime', title: 'Playtime', description: 'Lifetime Steam hours per member.', layoutKey: 'plugin' },
     // ROK-1175 — member forum: the newest-activity threads on the Overview.
-    {
-      id: "forum-latest",
-      title: "Latest threads",
-      description: "The newest forum threads.",
-      layoutKey: "plugin",
-    },
+    { id: 'forum-latest', title: 'Latest threads', description: 'The newest forum threads.', layoutKey: 'plugin' },
   ],
   tabs: [
-    { id: "overview", label: "Overview" },
-    { id: "members", label: "Members" },
-    { id: "events", label: "Events" },
-    { id: "resources", label: "Resources" },
-    { id: "posts", label: "Posts" },
-    { id: "forum", label: "Forum" },
+    { id: 'overview', label: 'Overview' },
+    { id: 'members', label: 'Members' },
+    { id: 'events', label: 'Events' },
+    { id: 'resources', label: 'Resources' },
+    { id: 'posts', label: 'Posts' },
+    { id: 'forum', label: 'Forum' },
   ],
   behaviours: [
-    {
-      id: "game_community",
-      kind: "hub-kind",
-      label: "Community hubs for any game",
-    },
-    {
-      id: "event-guild-tagger",
-      kind: "event-tagger",
-      label: "Tags events with the hub they belong to",
-    },
-    {
-      id: "event-discussion",
-      kind: "event-tagger",
-      label: "Opens a forum thread for each hub-tagged event",
-    },
-    {
-      id: "hub-media.upload",
-      kind: "ingest-source",
-      label: "Members upload pictures to the hub Gallery",
-    },
-    {
-      id: "SteamAppStatsProcessor_scheduledRefresh",
-      kind: "scheduled-job",
-      label: "Refreshes Steam achievements for game hubs every night",
-    },
-    {
-      id: "GgDeliveryCron_tick",
-      kind: "scheduled-job",
-      label: "Delivers GG <year>: the announcement, then paced player DMs",
-    },
+    { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
+    { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
+    { id: 'event-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged event' },
+    { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
+    { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
+    { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
     ...ggCoreCards,
   ],
   setup: CORE_SETUP,
 } satisfies PluginHubManifest;
 
 const valheim = {
-  widgets: [{ id: "deaths", title: "Deaths", layoutKey: "plugin" }],
+  widgets: [
+    { id: 'deaths', title: 'Deaths', layoutKey: 'plugin' },
+  ],
   tabs: [
-    { id: "characters", label: "Characters" },
-    { id: "map", label: "Map" },
-    { id: "materials", label: "Materials" },
-    { id: "planner", label: "Planner" },
+    { id: 'characters', label: 'Characters' },
+    { id: 'map', label: 'Map' },
+    { id: 'materials', label: 'Materials' },
+    { id: 'planner', label: 'Planner' },
   ],
   behaviours: [
-    {
-      id: "valheim",
-      kind: "log-parser",
-      label: "Reads joins, leaves and deaths from the server log",
-    },
-    {
-      id: "valheim",
-      kind: "scheduled-job",
-      label: "Imports characters and the map from the server",
-    },
-    {
-      id: "ValheimClaimSuggestCron_scan",
-      kind: "scheduled-job",
-      label: "Suggests character claims to players",
-    },
-    {
-      id: "valheim-death",
-      kind: "media-subject",
-      label: "Shows one player's death pictures in the Gallery",
-    },
-    {
-      id: "valheim",
-      kind: "claim-provider",
-      label: "Lets players claim their Valheim character on the hub",
-    },
-    {
-      id: "valheim-year",
-      kind: "gg-card",
-      label: "GG <year>: deaths and skills gained on your Valheim characters",
-    },
+    { id: 'valheim', kind: 'log-parser', label: 'Reads joins, leaves and deaths from the server log' },
+    { id: 'valheim', kind: 'scheduled-job', label: 'Imports characters and the map from the server' },
+    { id: 'ValheimClaimSuggestCron_scan', kind: 'scheduled-job', label: 'Suggests character claims to players' },
+    { id: 'valheim-death', kind: 'media-subject', label: "Shows one player's death pictures in the Gallery" },
+    { id: 'valheim', kind: 'claim-provider', label: 'Lets players claim their Valheim character on the hub' },
+    { id: 'valheim-year', kind: 'gg-card', label: 'GG <year>: deaths and skills gained on your Valheim characters' },
   ],
-  gameSlugs: ["valheim"],
+  gameSlugs: ['valheim'],
   setup: VALHEIM_SETUP,
 } satisfies PluginHubManifest;
 
 const pelican = {
   widgets: [
-    { id: "server-hours", title: "Server hours", layoutKey: "module" },
-    { id: "recent-arrivals", title: "Recent arrivals", layoutKey: "module" },
+    { id: 'server-hours', title: 'Server hours', layoutKey: 'module' },
+    { id: 'recent-arrivals', title: 'Recent arrivals', layoutKey: 'module' },
   ],
-  tabs: [{ id: "quick-play", label: "Quick Play" }],
+  tabs: [{ id: 'quick-play', label: 'Quick Play' }],
   behaviours: [
-    { id: "game_server", kind: "hub-kind", label: "Game-server hubs" },
-    {
-      id: "pelican",
-      kind: "scheduled-job",
-      label: "Syncs servers and polls their status",
-    },
+    { id: 'game_server', kind: 'hub-kind', label: 'Game-server hubs' },
+    { id: 'pelican', kind: 'scheduled-job', label: 'Syncs servers and polls their status' },
   ],
   setup: PELICAN_SETUP,
 } satisfies PluginHubManifest;
 
 const blizzard = {
   widgets: [
-    { id: "role-composition", title: "Role composition", layoutKey: "module" },
-    { id: "members-summary", title: "Members summary", layoutKey: "module" },
+    { id: 'role-composition', title: 'Role composition', layoutKey: 'module' },
+    { id: 'members-summary', title: 'Members summary', layoutKey: 'module' },
     // WoW: Forever guild hub widgets (ROK-1905). Ids are saved layout keys
     // (`plugin:blizzard:<id>`) — never rename them.
-    {
-      id: "forever-class-breakdown",
-      title: "Class breakdown",
-      description: "How many members play each class.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-level-progression",
-      title: "Level progression",
-      description: "Where the roster’s levels sit and who is at cap.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-roles",
-      title: "Role breakdown",
-      description: "Tanks, healers and DPS ready for dungeons and raids.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-dungeon-quests",
-      title: "Dungeon quests",
-      description: "Who has the quests for upcoming dungeon runs.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-recent-dings",
-      title: "Recent dings",
-      description: "Who levelled up in the last 30 days.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-professions",
-      title: "Guild professions",
-      description: "Who has each profession and their best skill.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-whos-saved",
-      title: "Who's saved",
-      description: "Who is saved to which instance, and when it resets.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-last-seen",
-      title: "Last seen",
-      description:
-        "Who was online at the last roster export, and who has been away longest.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-gear-readiness",
-      title: "Gear readiness",
-      description:
-        "Average item level of level-60 mains, and who is missing enchants.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-raid-progress",
-      title: "Raid progress",
-      description: "First kills, kills and wipes per raid boss.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-ready-check",
-      title: "Ready for next run",
-      description:
-        "Whether everyone signed up for the next raid or dungeon meets its level, quests, lockout and item level.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "forever-guild-text",
-      title: "Guild message",
-      description:
-        "The guild Message of the Day and Guild Information, ready to paste in game.",
-      layoutKey: "plugin",
-    },
+    { id: 'forever-class-breakdown', title: 'Class breakdown', description: 'How many members play each class.', layoutKey: 'plugin' },
+    { id: 'forever-level-progression', title: 'Level progression', description: 'Where the roster’s levels sit and who is at cap.', layoutKey: 'plugin' },
+    { id: 'forever-roles', title: 'Role breakdown', description: 'Tanks, healers and DPS ready for dungeons and raids.', layoutKey: 'plugin' },
+    { id: 'forever-dungeon-quests', title: 'Dungeon quests', description: 'Who has the quests for upcoming dungeon runs.', layoutKey: 'plugin' },
+    { id: 'forever-recent-dings', title: 'Recent dings', description: 'Who levelled up in the last 30 days.', layoutKey: 'plugin' },
+    { id: 'forever-professions', title: 'Guild professions', description: 'Who has each profession and their best skill.', layoutKey: 'plugin' },
+    { id: 'forever-whos-saved', title: "Who's saved", description: 'Who is saved to which instance, and when it resets.', layoutKey: 'plugin' },
+    { id: 'forever-last-seen', title: 'Last seen', description: 'Who was online at the last roster export, and who has been away longest.', layoutKey: 'plugin' },
+    { id: 'forever-gear-readiness', title: 'Gear readiness', description: 'Average item level of level-60 mains, and who is missing enchants.', layoutKey: 'plugin' },
+    { id: 'forever-raid-progress', title: 'Raid progress', description: 'First kills, kills and wipes per raid boss.', layoutKey: 'plugin' },
+    { id: 'forever-ready-check', title: 'Ready for next run', description: 'Whether everyone signed up for the next raid or dungeon meets its level, quests, lockout and item level.', layoutKey: 'plugin' },
+    { id: 'forever-guild-text', title: 'Guild message', description: 'The guild Message of the Day and Guild Information, ready to paste in game.', layoutKey: 'plugin' },
     // ROK-2148 — Mailworthy guild contributions (masters, top givers, users).
-    {
-      id: "forever-guild-contributions",
-      title: "Guild contributions",
-      description:
-        "Profession masters, top givers of guild-rule mail, and who runs Mailworthy.",
-      layoutKey: "plugin",
-    },
+    { id: 'forever-guild-contributions', title: 'Guild contributions', description: 'Profession masters, top givers of guild-rule mail, and who runs Mailworthy.', layoutKey: 'plugin' },
     // ROK-1927 — the members-only Attunements card (order 90).
-    {
-      id: "forever-attunements",
-      title: "Attunements",
-      description:
-        "Who is attuned to each raid, and who is still working through the chain.",
-      layoutKey: "plugin",
-    },
+    { id: 'forever-attunements', title: 'Attunements', description: 'Who is attuned to each raid, and who is still working through the chain.', layoutKey: 'plugin' },
     // ROK-2151 — the staff non-member claim banner (chrome-less, order 5).
-    {
-      id: "forever-claim-banner",
-      title: "Claim your character",
-      description:
-        "Asks staff who are not guild members to claim their character.",
-      layoutKey: "plugin",
-    },
+    { id: 'forever-claim-banner', title: 'Claim your character', description: 'Asks staff who are not guild members to claim their character.', layoutKey: 'plugin' },
     // ROK-1789 — the Forever guild Recruitment card (order 14).
-    {
-      id: "forever-recruitment",
-      title: "Recruitment",
-      description:
-        "Whether the guild is recruiting, which classes and roles it wants, and where to apply.",
-      layoutKey: "plugin",
-    },
+    { id: 'forever-recruitment', title: 'Recruitment', description: 'Whether the guild is recruiting, which classes and roles it wants, and where to apply.', layoutKey: 'plugin' },
   ],
   tabs: [
-    { id: "raids", label: "Raids" },
+    { id: 'raids', label: 'Raids' },
     // ROK-2216 — the Forever guild Dungeon planner (a `registerHubGameTab` game tab).
-    { id: "dungeon-planner", label: "Dungeon planner" },
+    { id: 'dungeon-planner', label: 'Dungeon planner' },
     // ROK-1790 — the guild crafters directory (a `registerHubGameTab` game tab).
-    { id: "crafters", label: "Crafters" },
+    { id: 'crafters', label: 'Crafters' },
     // ROK-1789 Part B — the Forever Progression tab (see-all of Raid progress).
-    { id: "progression", label: "Progression" },
-    { id: "loot", label: "Loot", planned: true },
+    { id: 'progression', label: 'Progression' },
+    { id: 'loot', label: 'Loot', planned: true },
   ],
   behaviours: [
-    {
-      id: "wow_guild",
-      kind: "hub-kind",
-      label: "World of Warcraft guild hubs",
-    },
-    {
-      id: "blizzard",
-      kind: "scheduled-job",
-      label: "Character sync and raid data refresh",
-    },
+    { id: 'wow_guild', kind: 'hub-kind', label: 'World of Warcraft guild hubs' },
+    { id: 'blizzard', kind: 'scheduled-job', label: 'Character sync and raid data refresh' },
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
-    {
-      id: "wow-ledgerlink",
-      kind: "ingest-source",
-      label: "Reads LedgerLink exports the Companion uploads",
-    },
-    {
-      id: "blizzard",
-      kind: "claim-provider",
-      label: "Lets players claim their character from the guild roster",
-    },
+    { id: 'wow-ledgerlink', kind: 'ingest-source', label: 'Reads LedgerLink exports the Companion uploads' },
+    { id: 'blizzard', kind: 'claim-provider', label: 'Lets players claim their character from the guild roster' },
     // ROK-2187 — produced from `api/src/plugins/wow-common/gg/` (this plugin's folder).
-    {
-      id: "wow-levels",
-      kind: "gg-card",
-      label: "GG <year>: levels your WoW characters dinged",
-    },
+    { id: 'wow-levels', kind: 'gg-card', label: 'GG <year>: levels your WoW characters dinged' },
   ],
   // Hub-widget game scope only (web guard W4) — the api manifest's own
   // `gameSlugs` (every WoW variant) is separate and unchanged.
-  gameSlugs: ["world-of-warcraft-forever"],
+  gameSlugs: ['world-of-warcraft-forever'],
   setup: BLIZZARD_SETUP,
 } satisfies PluginHubManifest;
 
@@ -390,71 +181,20 @@ const blizzard = {
  */
 export const BG3_HUB_MANIFEST = {
   widgets: [
-    {
-      id: "where-we-are",
-      title: "Where we are",
-      description:
-        "The party's latest save: area, screenshot and when it was saved.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "party",
-      title: "Party",
-      description:
-        "Who plays which character, their levels and the roles the party covers.",
-      layoutKey: "plugin",
-    },
-    {
-      id: "session-history",
-      title: "Session history",
-      description:
-        "Recent play sessions: when, how long, levels gained and areas visited.",
-      layoutKey: "plugin",
-    },
+    { id: 'where-we-are', title: 'Where we are', description: "The party's latest save: area, screenshot and when it was saved.", layoutKey: 'plugin' },
+    { id: 'party', title: 'Party', description: 'Who plays which character, their levels and the roles the party covers.', layoutKey: 'plugin' },
+    { id: 'session-history', title: 'Session history', description: 'Recent play sessions: when, how long, levels gained and areas visited.', layoutKey: 'plugin' },
   ],
-  tabs: [{ id: "campaign", label: "Campaign" }],
+  tabs: [{ id: 'campaign', label: 'Campaign' }],
   behaviours: [
-    {
-      id: BG3_INGEST_SOURCE_ID,
-      kind: "ingest-source",
-      label: "Reads Baldur's Gate 3 saves players upload",
-    },
-    {
-      id: BG3_RETENTION_JOB_NAME,
-      kind: "scheduled-job",
-      label: "Thins old save history to one save per session",
-    },
-    {
-      id: BG3_GALLERY_SOURCE_ID,
-      kind: "ingest-source",
-      label: "Copies one save picture per play session into the hub Gallery",
-    },
-    {
-      id: BG3_GALLERY_SYNC_JOB_NAME,
-      kind: "scheduled-job",
-      label: "Adds new save pictures to the Gallery every 15 minutes",
-    },
-    {
-      id: "bg3-save",
-      kind: "media-gate",
-      label: "Hides save pictures while the hub hides spoilers",
-    },
-    {
-      id: BG3_SCREENSHOT_CONTRACT_ID,
-      kind: "ingest-source",
-      label:
-        "Adds the BG3 screenshots players send from the Companion to the hub Gallery",
-    },
-    {
-      id: BG3_SCREENSHOT_CONTRACT_ID,
-      kind: "media-gate",
-      label: "Hides Companion screenshots while the hub hides spoilers",
-    },
-    {
-      id: "bg3",
-      kind: "claim-provider",
-      label: "Lets players claim their party character",
-    },
+    { id: BG3_INGEST_SOURCE_ID, kind: 'ingest-source', label: "Reads Baldur's Gate 3 saves players upload" },
+    { id: BG3_RETENTION_JOB_NAME, kind: 'scheduled-job', label: 'Thins old save history to one save per session' },
+    { id: BG3_GALLERY_SOURCE_ID, kind: 'ingest-source', label: 'Copies one save picture per play session into the hub Gallery' },
+    { id: BG3_GALLERY_SYNC_JOB_NAME, kind: 'scheduled-job', label: 'Adds new save pictures to the Gallery every 15 minutes' },
+    { id: 'bg3-save', kind: 'media-gate', label: 'Hides save pictures while the hub hides spoilers' },
+    { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'ingest-source', label: 'Adds the BG3 screenshots players send from the Companion to the hub Gallery' },
+    { id: BG3_SCREENSHOT_CONTRACT_ID, kind: 'media-gate', label: 'Hides Companion screenshots while the hub hides spoilers' },
+    { id: 'bg3', kind: 'claim-provider', label: 'Lets players claim their party character' },
   ],
   gameSlugs: [...BG3_GAME_SLUGS],
   setup: BG3_SETUP,
@@ -492,17 +232,11 @@ export function hubManifestProblems(
   return Object.entries(manifests).flatMap(([slug, manifest]) => {
     const parsed = PluginHubManifestSchema.safeParse(manifest);
     const issues = (parsed.error?.issues ?? []).map(
-      (i) => `${slug}: ${i.path.join(".")} ${i.message}`,
+      (i) => `${slug}: ${i.path.join('.')} ${i.message}`,
     );
-    const bare =
-      slug === CORE_PLUGIN_ID
-        ? []
-        : manifest.widgets
-            .filter((w) => w.layoutKey === "bare")
-            .map(
-              (w) =>
-                `${slug}: widget "${w.id}" uses layoutKey "bare" (core only)`,
-            );
+    const bare = slug === CORE_PLUGIN_ID ? [] : manifest.widgets
+      .filter((w) => w.layoutKey === 'bare')
+      .map((w) => `${slug}: widget "${w.id}" uses layoutKey "bare" (core only)`);
     return [...issues, ...bare];
   });
 }
