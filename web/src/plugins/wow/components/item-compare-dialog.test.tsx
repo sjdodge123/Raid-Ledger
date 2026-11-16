@@ -193,7 +193,7 @@ describe('Boss & Loot row opens the compare popup (ruling A)', () => {
     beforeEach(() => { media.phone = false; });
 
     function renderRow() {
-        render(<BossLootBody loot={[LOOT]} isLoading={false} wowheadVariant="classic_era" equippedBySlot={EQUIP_MAP} hasCharacter />);
+        render(<BossLootBody loot={[LOOT]} isLoading={false} wowheadVariant="classic_era" equippedBySlot={EQUIP_MAP} hasCharacter emptyMessage="No loot data available" />);
     }
 
     it.each([['the loot card', 'Netherwind Pants'], ['the equipped card', 'Old Leggings']])('tapping %s opens the same dialog', async (_l, name) => {

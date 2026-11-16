@@ -10,6 +10,7 @@ let mockSeeder: { seed: jest.Mock; drop: jest.Mock };
 let mockDb: { select: jest.Mock };
 let mockOrderBy: jest.Mock;
 let mockLeftJoin: jest.Mock;
+let mockInnerJoin: jest.Mock;
 let mockRedis: {
   get: jest.Mock;
   setex: jest.Mock;
@@ -23,13 +24,19 @@ async function setupEach() {
     drop: jest.fn().mockResolvedValue(undefined),
   };
 
-  // Fluent Drizzle mock: db.select().from()[.leftJoin()].where().orderBy()
+  // Fluent Drizzle mock:
+  // db.select().from()[.innerJoin()][.leftJoin()].where().orderBy()
   mockOrderBy = jest.fn().mockResolvedValue([]);
   const mockWhere = jest.fn().mockReturnValue({ orderBy: mockOrderBy });
   mockLeftJoin = jest.fn().mockReturnValue({ where: mockWhere });
-  const mockFrom = jest
+  mockInnerJoin = jest
     .fn()
     .mockReturnValue({ where: mockWhere, leftJoin: mockLeftJoin });
+  const mockFrom = jest.fn().mockReturnValue({
+    where: mockWhere,
+    leftJoin: mockLeftJoin,
+    innerJoin: mockInnerJoin,
+  });
 
   mockDb = {
     select: jest.fn().mockReturnValue({ from: mockFrom }),
@@ -117,11 +124,15 @@ describe('BossEncountersService — variant and queries', () => {
   });
 });
 
-/** A stored loot row as the DB returns it (ROK-2170). */
-function lootRow(id: number, expansion: string) {
+/**
+ * A stored loot row as the read returns it (ROK-2170), with its boss's
+ * instance (ROK-2209; 63 = Deadmines, a Forever catalogue dungeon).
+ */
+function lootRow(id: number, expansion: string, instanceId = 63) {
   return {
     id,
     bossId: 7,
+    instanceId,
     itemId: 1000 + id,
     itemName: `Item ${id}`,
     slot: null,
@@ -147,22 +158,50 @@ describe('BossEncountersService — Forever loot read rule (ROK-2170)', () => {
     expect(result.map((l) => [l.id, l.expansion])).toEqual([[2, 'forever']]);
   });
 
-  it('falls back to the classic rows under wow_forever when no forever row exists', async () => {
+  // ROK-2209 (operator ruling 2026-11-15): this case used to assert a
+  // fallback to the classic rows. Forever guilds must never see Classic loot,
+  // so a boss without forever rows now reads as an empty list.
+  it('returns [] under wow_forever when the boss has only classic rows', async () => {
     mockOrderBy.mockResolvedValue([
       lootRow(1, 'classic'),
       lootRow(3, 'classic'),
     ]);
     const result = await service.getLootForBoss(7, 'wow_forever');
-    expect(result.map((l) => l.id)).toEqual([1, 3]);
+    expect(result).toEqual([]);
+  });
+
+  it('returns [] under wow_forever for an instance the catalogue does not know', async () => {
+    mockOrderBy.mockResolvedValue([lootRow(1, 'classic', 999999)]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result).toEqual([]);
+  });
+
+  it('reads the boss instance by joining the boss row', async () => {
+    await service.getLootForBoss(7, 'wow_forever');
+    expect(mockInnerJoin).toHaveBeenCalledTimes(1);
   });
 
   it('never returns forever rows under classic_era', async () => {
-    mockOrderBy.mockResolvedValue([lootRow(1, 'classic')]);
+    mockOrderBy.mockResolvedValue([
+      lootRow(1, 'classic'),
+      lootRow(2, 'forever'),
+    ]);
     const result = await service.getLootForBoss(7, 'classic_era');
-    expect(result.map((l) => l.expansion)).toEqual(['classic']);
+    expect(result.map((l) => [l.id, l.expansion])).toEqual([[1, 'classic']]);
     expect(service.getExpansionsForVariant('classic_era')).not.toContain(
       'forever',
     );
+  });
+
+  it('keeps a journal variant to its expansion set (classic_anniversary)', async () => {
+    mockOrderBy.mockResolvedValue([
+      lootRow(1, 'classic'),
+      lootRow(2, 'tbc'),
+      lootRow(3, 'forever'),
+      lootRow(4, 'wotlk'),
+    ]);
+    const result = await service.getLootForBoss(7, 'classic_anniversary');
+    expect(result.map((l) => l.id)).toEqual([1, 2]);
   });
 });
 
