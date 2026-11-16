@@ -15,7 +15,7 @@ import type {
 import { FORUM_NOT_MEMBER, resolveForumActor } from '../hub-forum.access';
 import type { HubForumActor } from '../hub-forum.helpers';
 import type { HubForumThreadRecord } from '../hub-forum.mappers';
-import { findThread, type Db } from '../hub-forum.queries';
+import { findReply, findThread, type Db } from '../hub-forum.queries';
 import {
   eventThreadActor,
   eventThreadLock,
@@ -67,7 +67,7 @@ async function eventFacts(
 export async function forumThreadContext(
   deps: ForumThreadDeps,
   actor: GuildActor,
-  target: { guildId: number; threadId: number; eventScoped?: boolean },
+  target: ForumThreadTarget,
 ): Promise<ForumThreadContext> {
   const member = target.eventScoped
     ? null
@@ -80,8 +80,33 @@ export async function forumThreadContext(
     return { record, who, canReply: true, lock: null };
   }
   const { who, lock } = await resolveEventThread(deps, actor, record);
-  if (!who.canRead) throw new ForbiddenException(FORUM_NOT_MEMBER);
-  return { record, who, canReply: who.canReply, lock };
+  if (who.canRead) return { record, who, canReply: who.canReply, lock };
+  if (!(await isOwnReply(deps.db, target, actor.id))) {
+    throw new ForbiddenException(FORUM_NOT_MEMBER);
+  }
+  // §6 "delete own: yes" for everyone — a withdrawn PUG removes what they wrote.
+  return { record, who: { ...who, canWrite: true }, canReply: false, lock };
+}
+
+/** Which thread, and (delete only) the reply the caller wants removed. */
+export interface ForumThreadTarget {
+  guildId: number;
+  threadId: number;
+  eventScoped?: boolean;
+  /** Set by reply delete: lets the reply's author through the read gate. */
+  deleteReplyId?: number;
+}
+
+async function isOwnReply(
+  db: Db,
+  target: ForumThreadTarget,
+  userId: number,
+): Promise<boolean> {
+  const replyId = target.deleteReplyId;
+  if (replyId === undefined) return false;
+  const { guildId, threadId } = target;
+  const row = await findReply(db, { guildId, threadId, replyId });
+  return row?.reply.authorId === userId;
 }
 
 /** What `resolveEventThread` reports about one viewer of one event thread. */

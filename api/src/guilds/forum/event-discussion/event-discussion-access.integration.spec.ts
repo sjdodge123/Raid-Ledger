@@ -167,6 +167,23 @@ describe('ROK-2226 §6 — was signed up, now declined', () => {
   });
 });
 
+describe('ROK-2226 §6 — delete own, for everyone (review MINOR-2)', () => {
+  it("a withdrawn non-member deletes their own reply (204) but nobody else's (403)", async () => {
+    const s = await newScene(ctx);
+    const own = await reply(s, 'pug', 'mine');
+    const theirs = await reply(s, 'signed', 'member text');
+    await setSignupStatus(ctx, s.eventId, 'pug', 'declined');
+    expect(outcome(await deleteAs(s, 'pug', theirs.id))).toEqual(
+      deny(403, FORUM_NOT_MEMBER),
+    );
+    expect(outcome(await editAs(s, 'pug', own.id))).toEqual(
+      deny(403, FORUM_NOT_MEMBER),
+    );
+    expect((await deleteAs(s, 'pug', own.id)).status).toBe(204);
+    expect(await liveBodies(s)).toEqual(['member text']);
+  });
+});
+
 describe('ROK-2226 §6 — hub Leader (canEdit) and staff (ruling 12)', () => {
   it.each<Actor>(['officerA', 'admin'])(
     '%s, not signed up: reads, cannot reply or edit others, removes others (204)',

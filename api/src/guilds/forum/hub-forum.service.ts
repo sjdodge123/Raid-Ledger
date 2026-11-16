@@ -263,7 +263,7 @@ export class HubForumService {
     threadId: number,
     replyId: number,
   ): Promise<void> {
-    const { who } = await this.thread(actor, guildId, threadId);
+    const { who } = await this.thread(actor, guildId, threadId, replyId);
     const target = { guildId, threadId, replyId };
     const { reply } = await this.requireReply(target);
     const removal = removalFor(who, reply, this.now());
@@ -271,15 +271,17 @@ export class HubForumService {
     if (!row) throw new NotFoundException('Reply not found');
   }
 
-  /** The thread + viewer rights (ROK-2226 §6 for event threads). */
+  /** Thread + viewer rights (§6 for event threads; `deleteReplyId` = delete own). */
   private thread(
     actor: GuildActor,
     guildId: number,
     threadId: number,
+    deleteReplyId?: number,
   ): Promise<Ctx> {
     const deps = { db: this.db, access: this.access, now: this.now() };
-    const eventScoped = this.eventScoped;
-    return forumThreadContext(deps, actor, { guildId, threadId, eventScoped });
+    const target = { guildId, threadId, eventScoped: this.eventScoped };
+    const del = deleteReplyId === undefined ? {} : { deleteReplyId };
+    return forumThreadContext(deps, actor, { ...target, ...del });
   }
 
   /**
