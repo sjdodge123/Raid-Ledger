@@ -3,11 +3,13 @@
  * (a dungeon-plan link): the page waits for the dungeon list, hands the form the
  * resolved dungeon and the roster names, and does nothing with the Blizzard plugin off.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { act, screen } from '@testing-library/react';
 import { renderWithProviders } from '../test/render-helpers';
 import { usePluginStore } from '../stores/plugin-store';
 import { CreateEventPage } from './create-event-page';
+import { registerPlugin } from '../plugins/plugin-registry';
+import { useWowEventPlanPrefill } from '../plugins/wow/hooks/use-event-plan-prefill';
 
 const A = '00000000-0000-4000-8000-00000000000a';
 const B = '00000000-0000-4000-8000-00000000000b';
@@ -42,6 +44,9 @@ vi.mock('../components/events/create-event-form', () => ({
 }));
 
 const PLAN = `/events/new?gameId=3&guildId=7&contentInstanceIds=90000004&inviteCharacterIds=${A},${B},${C}`;
+
+// The WoW plugin's plan provider, as `plugins/wow/register.ts` registers it.
+beforeAll(() => registerPlugin('blizzard', { icon: '/b.jpg', color: 'blue', label: 'WoW' }).registerEventPlanPrefill(useWowEventPlanPrefill));
 
 beforeEach(() => {
     stub.instancesLoading = false;

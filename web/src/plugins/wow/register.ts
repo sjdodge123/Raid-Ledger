@@ -26,6 +26,7 @@ import { PlayersGuildCard } from './slots/players-guild-card';
 import { foreverIdentityProvider } from './forever-identity-provider';
 import { wowHubModule } from './hub/register-hub';
 import { supportsEventReportLinks } from './lib/report-links';
+import { useWowEventPlanPrefill } from './hooks/use-event-plan-prefill';
 import { registerClassLevelWidgets } from './hub-widgets/class-level.register';
 import { registerRolesWidget } from './hub-widgets/roles.register';
 import { professionsWidget } from './hub-widgets/professions.register';
@@ -73,6 +74,8 @@ blizzard.registerSlot('players:header-cards', PlayersGuildCard);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
 blizzard.registerHubModule(wowHubModule);
 blizzard.registerEventReportLinks(supportsEventReportLinks);
+// ROK-2215 — a dungeon-plan link pre-fills the Create Event form through this provider.
+blizzard.registerEventPlanPrefill(useWowEventPlanPrefill);
 registerClassLevelWidgets(blizzard);
 registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);

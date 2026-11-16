@@ -4,10 +4,8 @@ import { useAuth } from '../hooks/use-auth';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useEvent } from '../hooks/use-events';
 import { CreateEventForm } from '../components/events/create-event-form';
-import { usePluginStore, isSlugActive } from '../stores/plugin-store';
 import { usePluginsHydrated } from '../hooks/use-plugins';
-import { useInstancePrefill } from '../plugins/wow/hooks/use-instance-prefill';
-import { useCharacterNames } from '../plugins/wow/hooks/use-character-names';
+import { useEventPlanPrefill, type EventPlanPrefill } from '../plugins/event-plan-prefill';
 import { parsePositiveIntList, parseUuidList } from './create-event-prefill';
 
 /**
@@ -86,31 +84,24 @@ function initialGuildFor(params: URLSearchParams, gameResolved: boolean): number
     return guildId;
 }
 
-interface PlanPrefill {
-    initialInstances: Record<string, unknown>[];
-    inviteCharacterIds: string[];
-    inviteNames: { names: string[]; unresolved: number };
-    isLoading: boolean;
-}
-
 /**
- * ROK-2215 — a dungeon-plan link (`contentInstanceIds`, `inviteCharacterIds`).
- * L8: with the Blizzard plugin off both params are ignored. L3: the page waits
- * for the dungeon list (the form seeds once); a failed list fetch just drops it.
+ * ROK-2215 — a dungeon-plan link (`contentInstanceIds`, `inviteCharacterIds`),
+ * resolved by whichever active plugin provides plan pre-fill (the WoW plugin);
+ * with none active both params are ignored (L8). L3: the page waits for the
+ * provider (the form seeds once); a failed fetch just drops the pre-fill.
  * On a cold load the plugin store starts as core-only, so a plan link also
- * waits for plugin hydration — otherwise Blizzard reads as off and the plan is lost.
+ * waits for plugin hydration — otherwise the provider reads as off and the plan is lost.
  */
-function usePlanPrefill(params: URLSearchParams, gameSlug: string | null, guildId: number | null): PlanPrefill {
-    const blizzardActive = usePluginStore((st) => isSlugActive(st.activeSlugs, 'blizzard'));
-    const rawInstances = blizzardActive ? params.get('contentInstanceIds') : null;
-    const rawInvites = blizzardActive ? params.get('inviteCharacterIds') : null;
+function usePlanPrefill(params: URLSearchParams, gameSlug: string | null, guildId: number | null): EventPlanPrefill {
+    const rawInstances = params.get('contentInstanceIds');
+    const rawInvites = params.get('inviteCharacterIds');
     const instanceIds = useMemo(() => parsePositiveIntList(rawInstances), [rawInstances]);
     const inviteCharacterIds = useMemo(() => parseUuidList(rawInvites), [rawInvites]);
-    const prefill = useInstancePrefill(gameSlug, instanceIds);
-    const inviteNames = useCharacterNames(guildId, inviteCharacterIds);
+    const request = useMemo(() => ({ gameSlug, guildId, instanceIds, inviteCharacterIds }), [gameSlug, guildId, instanceIds, inviteCharacterIds]);
+    const plan = useEventPlanPrefill(request);
     const hydrated = usePluginsHydrated();
     const hasPlan = params.has('contentInstanceIds') || params.has('inviteCharacterIds');
-    return { initialInstances: prefill.instances, inviteCharacterIds, inviteNames, isLoading: (hasPlan && !hydrated) || prefill.isLoading };
+    return { ...plan, isLoading: (hasPlan && !hydrated) || plan.isLoading };
 }
 
 /** A positive integer query param, else null. */
