@@ -61,7 +61,8 @@ export class RosterMemberService {
     }
     return toRosterMemberCharacter(row, {
       includeRoster: audience === 'member',
-      canClaim: claimable && unclaimed,
+      // ROK-2222: a first-name-only Blizzard row would 400 on claim.
+      canClaim: claimable && unclaimed && row.identityClaimable,
     });
   }
 }

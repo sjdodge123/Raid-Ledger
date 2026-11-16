@@ -14,6 +14,7 @@ import * as schema from '../../../../drizzle/schema';
 import { PluginRegistryService } from '../../../plugin-host/plugin-registry.service';
 import { findLinkedMemberRows } from '../guild-membership.helpers';
 import { claimWithin, readMember, ROSTER_ROW_CHANGED } from './roster-claim.tx';
+import { FIRST_NAME_ONLY } from './roster-claim.name-rule';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const SNAPSHOT = new Date('2026-11-01T00:00:00Z');
@@ -440,5 +441,71 @@ describe('roster claim: locked re-check of the read (ROK-2128 review 1)', () => 
     await expect(run).rejects.toThrow(ROSTER_ROW_CHANGED);
     expect(await charactersNamed('Stale Read')).toEqual([]);
     expect(await charactersNamed('Fresh Name')).toEqual([]);
+  });
+});
+
+describe('roster claim: first-name-only Blizzard rows (ROK-2222)', () => {
+  // Blizzard's Forever roster API returns first names only. With several
+  // "Rok …" characters the sync cannot pair the row, so a GUID-less "Rok"
+  // carrying Rok Androot's Blizzard id stays on the roster. Claiming it made
+  // an unrefreshable "Rok" character holding Androot's id (autolink conflict).
+  const listed = async (token: string): Promise<string[]> => {
+    const res = await testApp.request
+      .get(
+        `/plugins/wow/roster-claim/candidates?gameId=${foreverId}&guildId=${guildId}`,
+      )
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const guilds = res.body.guilds as Array<{
+      candidates: Array<{ name: string }>;
+    }>;
+    return guilds.flatMap((g) => g.candidates.map((c) => c.name));
+  };
+  let player: { id: number; token: string };
+
+  beforeAll(async () => {
+    player = await makeUser('l2rok');
+    await testApp.db.insert(schema.characters).values({
+      userId: player.id,
+      gameId: foreverId,
+      name: 'Rok Androot',
+      region: 'us',
+    });
+    await insertMember(guildId, {
+      characterName: 'Rok',
+      blizzardCharacterId: 9777,
+      source: 'blizzard',
+      class: 'Druid',
+      level: 7,
+    });
+    await insertMember(guildId, {
+      characterName: 'Moss Warden',
+      blizzardCharacterId: 9778,
+      source: 'blizzard',
+    });
+    await insertMember(guildId, { characterName: 'Solo', guid: 'G-L2-SOLO' });
+  });
+
+  it('the candidate list leaves out the GUID-less one-word row', async () => {
+    const names = await listed(player.token);
+    expect(names).not.toContain('Rok');
+    // Control: a GUID-less Blizzard row with a two-part name stays listed.
+    expect(names).toContain('Moss Warden');
+  });
+
+  it('a one-word row carrying a LedgerLink GUID is still listed', async () => {
+    expect(await listed(player.token)).toContain('Solo');
+  });
+
+  it('a direct claim of the one-word row is 400 and creates nothing', async () => {
+    const res = await claim(memberId('Rok'), player.token);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(FIRST_NAME_ONLY);
+    expect(await charactersNamed('Rok')).toEqual([]);
+    const [androot] = nonEmpty(
+      await charactersNamed('Rok Androot'),
+      'Rok Androot',
+    );
+    expect(androot.externalId).toBeNull();
   });
 });

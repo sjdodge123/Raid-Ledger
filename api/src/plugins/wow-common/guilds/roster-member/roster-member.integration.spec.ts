@@ -32,7 +32,14 @@ let foreverId: number;
 let claimedCharacterId: string;
 type HubKey = 'main' | 'other' | 'hidden' | 'retail';
 type MemberKey =
-  'verified' | 'mismatch' | 'claimed' | 'stale' | 'other' | 'hidden' | 'retail';
+  | 'verified'
+  | 'mismatch'
+  | 'claimed'
+  | 'stale'
+  | 'other'
+  | 'hidden'
+  | 'retail'
+  | 'firstOnly';
 type TokenKey = 'member' | 'outsider' | 'admin';
 const hubs: Partial<Record<HubKey, number>> = {};
 const members: Partial<Record<MemberKey, number>> = {};
@@ -192,6 +199,13 @@ async function seedMainMembers(): Promise<void> {
     characterName: 'Claimed Crag',
     guid: 'G-RM-CLAIMED',
   });
+  // ROK-2222: a first-name-only Blizzard row (no GUID).
+  members.firstOnly = await insertMember(main, {
+    characterName: 'Rok',
+    blizzardCharacterId: 5005,
+    level: 7,
+    class: 'Druid',
+  });
   members.stale = await insertMember(main, {
     characterName: 'Stale Steppe',
     lastSeenAt: STALE,
@@ -333,6 +347,15 @@ describe('roster member — claim preview audience (non-member)', () => {
     expect(Object.keys(res.body)).not.toContain('rank');
     expect(Object.keys(res.body)).not.toContain('lastSeen');
     expectStrictPayload(res.body);
+  });
+
+  it('a first-name-only Blizzard row is not offered for claim (ROK-2222)', async () => {
+    const res = await get(hub('main'), member('firstOnly'), token('outsider'));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      rosterMemberId: member('firstOnly'),
+      canClaim: false,
+    });
   });
 
   it('a claimed member → 403 (no redirect id leaks)', async () => {

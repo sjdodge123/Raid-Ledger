@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { WowForeverSelectableRuleset } from '@raid-ledger/contract';
 import * as schema from '../../../../drizzle/schema';
@@ -15,6 +19,10 @@ import { checkRegionClaim } from '../../wow-forever-identity.helpers';
 import { inLatestSnapshot } from '../guild-membership.helpers';
 import { logCharacterClaimAudit } from './roster-claim.audit';
 import { isClaimableGuild, isRowUnclaimed } from './roster-claim.queries';
+import {
+  FIRST_NAME_ONLY,
+  isClaimableRosterIdentity,
+} from './roster-claim.name-rule';
 
 /**
  * ROK-2128 (D3–D5) — the one-click roster claim transaction. Order: read the
@@ -138,7 +146,10 @@ function insertValues(m: ClaimMember, args: ClaimArgs, isMain: boolean) {
   };
 }
 
-/** Run the whole claim inside `tx`; returns the inserted character. */
+/**
+ * Run the whole claim inside `tx`; returns the inserted character. 400 for a
+ * first-name-only GUID-less row (ROK-2222), never a one-word character.
+ */
 export async function claimWithin(
   tx: AddonImportTx,
   m: ClaimMember,
@@ -146,6 +157,10 @@ export async function claimWithin(
 ): Promise<CharacterRow> {
   await lockClaim(tx, m);
   await recheckUnderLock(tx, m);
+  // ROK-2222: after the visibility 404s; the re-check pinned name + GUID.
+  if (!isClaimableRosterIdentity(m)) {
+    throw new BadRequestException(FIRST_NAME_ONLY);
+  }
   const { userId } = args;
   await checkRegionClaim(tx, {
     gameId: m.gameId,
