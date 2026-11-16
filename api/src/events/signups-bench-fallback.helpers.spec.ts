@@ -3,7 +3,11 @@
  * Tests checkAutoBench for MMO events with slotConfig,
  * and bench fallback in Discord/web/PUG signup flows.
  */
-import { checkAutoBench, checkSignupAutoBench } from './signups-signup.helpers';
+import {
+  checkAutoBench,
+  checkSignupAutoBench,
+  checkDiscordSignupAutoBench,
+} from './signups-signup.helpers';
 import {
   displaceableRoles,
   hasDisplaceableTentative,
@@ -128,13 +132,10 @@ describe('displaceableRoles (ROK-1729)', () => {
 describe('hasDisplaceableTentative (ROK-1729)', () => {
   it('is false for a non-MMO event without querying', async () => {
     const { tx, select } = seqTx([[{ id: 1 }]]);
-    const r = await hasDisplaceableTentative(
-      tx,
-      GENERIC,
-      1,
-      { slotRole: 'player' },
-      7,
-    );
+    const r = await hasDisplaceableTentative(tx, GENERIC, 1, {
+      slotRole: 'player',
+      userId: 7,
+    });
     expect({ r, queries: select.mock.calls.length }).toEqual({
       r: false,
       queries: 0,
@@ -143,14 +144,13 @@ describe('hasDisplaceableTentative (ROK-1729)', () => {
 
   it('is false for a bench request or no tank/healer/dps preference', async () => {
     const { tx, select } = seqTx([[{ id: 1 }], [{ id: 1 }]]);
-    const bench = await hasDisplaceableTentative(
-      tx,
-      FULL_MMO,
-      1,
-      { slotRole: 'bench' },
-      7,
-    );
-    const noRoles = await hasDisplaceableTentative(tx, FULL_MMO, 1, {}, 7);
+    const bench = await hasDisplaceableTentative(tx, FULL_MMO, 1, {
+      slotRole: 'bench',
+      userId: 7,
+    });
+    const noRoles = await hasDisplaceableTentative(tx, FULL_MMO, 1, {
+      userId: 7,
+    });
     expect({ bench, noRoles, queries: select.mock.calls.length }).toEqual({
       bench: false,
       noRoles: false,
@@ -160,13 +160,10 @@ describe('hasDisplaceableTentative (ROK-1729)', () => {
 
   it('is false when the incoming user is already tentative on the event', async () => {
     const { tx, select } = seqTx([[{ id: 3 }], [{ id: 9 }]]);
-    const r = await hasDisplaceableTentative(
-      tx,
-      FULL_MMO,
-      1,
-      { preferredRoles: ['dps'] },
-      7,
-    );
+    const r = await hasDisplaceableTentative(tx, FULL_MMO, 1, {
+      preferredRoles: ['dps'],
+      userId: 7,
+    });
     expect({ r, queries: select.mock.calls.length }).toEqual({
       r: false,
       queries: 1,
@@ -175,25 +172,19 @@ describe('hasDisplaceableTentative (ROK-1729)', () => {
 
   it('is true when a tentative player holds a preferred role', async () => {
     const { tx } = seqTx([[], [{ id: 9 }]]);
-    const r = await hasDisplaceableTentative(
-      tx,
-      FULL_MMO,
-      1,
-      { preferredRoles: ['tank', 'dps'] },
-      7,
-    );
+    const r = await hasDisplaceableTentative(tx, FULL_MMO, 1, {
+      preferredRoles: ['tank', 'dps'],
+      userId: 7,
+    });
     expect(r).toBe(true);
   });
 
   it('is false when no tentative player holds a preferred role', async () => {
     const { tx } = seqTx([[], []]);
-    const r = await hasDisplaceableTentative(
-      tx,
-      FULL_MMO,
-      1,
-      { preferredRoles: ['dps'] },
-      7,
-    );
+    const r = await hasDisplaceableTentative(tx, FULL_MMO, 1, {
+      preferredRoles: ['dps'],
+      userId: 7,
+    });
     expect(r).toBe(false);
   });
 });
@@ -273,5 +264,44 @@ describe('isRosterFull (ROK-1729)', () => {
       ),
       unbounded: isRosterFull(ctx(null, five)),
     }).toEqual({ full: true, benchIgnored: false, unbounded: false });
+  });
+});
+
+describe('checkDiscordSignupAutoBench (ROK-2203)', () => {
+  const discord = { discordUserId: '1', discordUsername: 'anon' };
+
+  it('does NOT bench an anonymous newcomer when a tentative holds its role', async () => {
+    // count → tentative occupant (no user-tentative lookup: anonymous).
+    const { tx, select } = seqTx([[{ count: 5 }], [{ id: 9 }]]);
+    const autoBench = await checkDiscordSignupAutoBench(tx, FULL_MMO, 1, {
+      ...discord,
+      role: 'dps',
+    });
+    expect({ autoBench, queries: select.mock.calls.length }).toEqual({
+      autoBench: false,
+      queries: 2,
+    });
+  });
+
+  it('benches on a full roster with no displaceable tentative', async () => {
+    const { tx } = seqTx([[{ count: 5 }], []]);
+    const autoBench = await checkDiscordSignupAutoBench(tx, FULL_MMO, 1, {
+      ...discord,
+      preferredRoles: ['tank', 'dps'],
+    });
+    expect(autoBench).toBe(true);
+  });
+
+  it('benches a tentative anonymous newcomer without looking for a victim', async () => {
+    const { tx, select } = seqTx([[{ count: 5 }], [{ id: 9 }]]);
+    const autoBench = await checkDiscordSignupAutoBench(tx, FULL_MMO, 1, {
+      ...discord,
+      role: 'dps',
+      status: 'tentative',
+    });
+    expect({ autoBench, queries: select.mock.calls.length }).toEqual({
+      autoBench: true,
+      queries: 1,
+    });
   });
 });

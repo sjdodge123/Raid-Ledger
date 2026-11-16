@@ -1,25 +1,59 @@
+import { HttpException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { PugInviteDeps } from './pug-invite.helpers';
-import { checkAutoBench } from '../../events/signups-signup.helpers';
+import type { CreateDiscordSignupDto } from '@raid-ledger/contract';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
+type DiscordRole = NonNullable<CreateDiscordSignupDto['role']>;
+const DISCORD_ROLES: readonly DiscordRole[] = [
+  'tank',
+  'healer',
+  'dps',
+  'flex',
+  'player',
+];
 
-/** Create an event signup + roster for an accepted PUG. */
+/** The Discord-button path's copy for a failed signup (signup-interaction.listener). */
+const SIGNUP_FAILED_REPLY = 'Something went wrong. Please try again.';
+
+/**
+ * Create an event signup + roster for an accepted PUG.
+ * @returns null when the signup was created (or there is no Discord id), else
+ * the reply to show instead of "Accepted!" — the 409 reason (e.g. signups
+ * closed) or the generic failure copy, as the Discord signup button replies.
+ */
 export async function createPugSignup(
   deps: PugInviteDeps,
   slot: PugSlot,
   role: string,
-): Promise<void> {
+): Promise<string | null> {
   const discordUserId = slot.discordUserId;
-  if (!discordUserId) return;
+  if (!discordUserId) return null;
   const linkedUser = await findLinkedUser(deps, discordUserId);
   if (linkedUser) {
-    await createLinkedPugSignup(deps, slot, linkedUser, role);
-    return;
+    return createLinkedPugSignup(deps, slot, linkedUser, role);
   }
-  await createAnonymousPugSignup(deps, slot, discordUserId, role);
+  return createAnonymousPugSignup(deps, slot, discordUserId, role);
+}
+
+/** Reply copy for a signup that threw: the 409 reason, else generic copy. */
+function signupFailureReply(err: unknown): string {
+  if (err instanceof HttpException && err.getStatus() === 409) {
+    return err.message;
+  }
+  return SIGNUP_FAILED_REPLY;
+}
+
+/** Replace the accept reply with why no signup was created. */
+export async function replyPugSignupFailed(
+  interaction: {
+    editReply(options: { content: string; components: [] }): Promise<unknown>;
+  },
+  reply: string,
+): Promise<void> {
+  await interaction.editReply({ content: reply, components: [] });
 }
 
 async function findLinkedUser(
@@ -40,7 +74,7 @@ async function createLinkedPugSignup(
   slot: PugSlot,
   linkedUser: { id: number },
   role: string,
-): Promise<void> {
+): Promise<string | null> {
   await deleteOrphanedAnonymousSignup(deps, slot);
   try {
     const result = await deps.signupsService.signup(
@@ -51,10 +85,12 @@ async function createLinkedPugSignup(
     deps.logger.log(
       `Created signup ${result.id} for PUG ${slot.discordUsername} (linked user ${linkedUser.id}) on event ${slot.eventId}`,
     );
+    return null;
   } catch (err) {
     deps.logger.warn(
       `Failed to create signup for PUG ${slot.discordUsername}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
+    return signupFailureReply(err);
   }
 }
 
@@ -73,88 +109,41 @@ async function deleteOrphanedAnonymousSignup(
     );
 }
 
-/** Create anonymous signup for unlinked PUG. */
+/**
+ * Create the signup for an unlinked PUG through `signupDiscord` — the same
+ * transaction as an anonymous Discord signup, so the one auto-bench rule
+ * (`resolveAutoBench`) and ROK-459 tentative displacement apply (ROK-2203).
+ */
 async function createAnonymousPugSignup(
   deps: PugInviteDeps,
   slot: PugSlot,
   discordUserId: string,
   role: string,
-): Promise<void> {
+): Promise<string | null> {
   try {
-    const [signup] = await insertAnonymousSignup(deps, slot, discordUserId);
-    if (signup) {
-      const effectiveRole = await resolveEffectiveRole(deps, slot, role);
-      await assignAnonymousRoster(deps, slot.eventId, signup.id, effectiveRole);
-      deps.logger.log(
-        `Created anonymous signup ${signup.id} for PUG ${slot.discordUsername} on event ${slot.eventId} (${effectiveRole})`,
-      );
-    }
+    const result = await deps.signupsService.signupDiscord(slot.eventId, {
+      discordUserId,
+      discordUsername: slot.discordUsername ?? discordUserId,
+      discordAvatarHash: slot.discordAvatarHash,
+      ...toDiscordRole(role),
+    });
+    deps.logger.log(
+      `Created anonymous signup ${result.id} for PUG ${slot.discordUsername} on event ${slot.eventId} (${result.assignedSlot ?? 'unassigned'})`,
+    );
+    return null;
   } catch (err) {
     deps.logger.warn(
       `Failed to create anonymous signup for PUG ${slot.discordUsername}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
+    return signupFailureReply(err);
   }
 }
 
-/** ROK-626: Check if roster is full and return 'bench' if so. */
-async function resolveEffectiveRole(
-  deps: PugInviteDeps,
-  slot: PugSlot,
-  role: string,
-): Promise<string> {
-  const [event] = await deps.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, slot.eventId))
-    .limit(1);
-  if (!event) return role;
-  const isFull = await checkAutoBench(deps.db, event, slot.eventId);
-  return isFull ? 'bench' : role;
+/** Map a PUG slot role onto the Discord signup DTO's role (omit unknowns). */
+function toDiscordRole(role: string): Pick<CreateDiscordSignupDto, 'role'> {
+  return isDiscordRole(role) ? { role } : {};
 }
 
-/** Insert the anonymous signup row. */
-async function insertAnonymousSignup(
-  deps: PugInviteDeps,
-  slot: PugSlot,
-  discordUserId: string,
-): Promise<(typeof schema.eventSignups.$inferSelect)[]> {
-  return deps.db
-    .insert(schema.eventSignups)
-    .values({
-      eventId: slot.eventId,
-      discordUserId,
-      discordUsername: slot.discordUsername,
-      discordAvatarHash: slot.discordAvatarHash,
-      confirmationStatus: 'pending',
-      status: 'signed_up',
-    })
-    .onConflictDoNothing()
-    .returning();
-}
-
-/** Assign roster position for an anonymous PUG signup. */
-async function assignAnonymousRoster(
-  deps: PugInviteDeps,
-  eventId: number,
-  signupId: number,
-  role: string,
-): Promise<void> {
-  const positionsInRole = await deps.db
-    .select({ position: schema.rosterAssignments.position })
-    .from(schema.rosterAssignments)
-    .where(
-      and(
-        eq(schema.rosterAssignments.eventId, eventId),
-        eq(schema.rosterAssignments.role, role),
-      ),
-    );
-  const nextPosition =
-    positionsInRole.reduce((max, r) => Math.max(max, r.position), 0) + 1;
-  await deps.db.insert(schema.rosterAssignments).values({
-    eventId,
-    signupId,
-    role,
-    position: nextPosition,
-    isOverride: 0,
-  });
+function isDiscordRole(role: string): role is DiscordRole {
+  return (DISCORD_ROLES as readonly string[]).includes(role);
 }
