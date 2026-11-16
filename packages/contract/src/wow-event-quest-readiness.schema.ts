@@ -23,6 +23,8 @@ export const EventQuestReadinessSchema = z
             questId: z.number().int().positive(),
             title: z.string().max(200),
             instanceId: z.number().int(),
+            /** ROK-2224: true on an escort quest; key absent otherwise. */
+            isEscort: z.boolean().optional(),
           })
           .strict(),
       )

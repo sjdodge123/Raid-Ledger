@@ -231,6 +231,10 @@ describe('buildQuestReadiness escorts (ROK-2224)', () => {
   });
 
   it('leaves the key off a non-escort column', () => {
-    expect(column(1101)).toEqual({ questId: 1101, title: 'Q1101', instanceId: 491 });
+    expect(column(1101)).toEqual({
+      questId: 1101,
+      title: 'Q1101',
+      instanceId: 491,
+    });
   });
 });

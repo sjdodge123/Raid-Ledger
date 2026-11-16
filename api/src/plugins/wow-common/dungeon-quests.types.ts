@@ -31,6 +31,8 @@ export interface DungeonQuestDto {
    * with no level of its own; absent on curated quests.
    */
   levelBand?: QuestLevelBand | null;
+  /** ROK-2224: true on an escort quest (ESCORT_QUEST_IDS); key absent otherwise. */
+  isEscort?: boolean;
 }
 
 /** A dungeon's catalogue level span (ROK-1908). */
