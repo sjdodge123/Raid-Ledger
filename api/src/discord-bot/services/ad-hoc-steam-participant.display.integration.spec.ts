@@ -8,6 +8,7 @@
  * is written (the web builds one only from a Discord id, which a Steam row
  * lacks), and the character name is kept in `character_name` for every row.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -67,7 +68,7 @@ async function steamRow(eventId: number) {
 }
 
 const member = (displayName: string, userId: number | null) => ({
-  steamId: STEAM_A,
+  ...steamPlayer(STEAM_A),
   displayName,
   userId,
 });
@@ -107,7 +108,7 @@ describe('Steam row display identity — linked players (ROK-1821 F4)', () => {
     const eventId = await insertEvent();
     const userId = await insertLinkedUser('RokRL');
     await service.addServerParticipant(eventId, member('rok', userId));
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
     await service.addServerParticipant(eventId, member('rok-alt', userId));
 
     expect((await steamRow(eventId)).discordUsername).toBe('RokRL');
@@ -118,7 +119,7 @@ describe('Steam row display identity — linked players (ROK-1821 F4)', () => {
     const userId = await insertLinkedUser('RokRL');
     await service.addServerParticipant(eventId, member('rok', userId));
     await renameSteamOnlyRow(testApp.db, eventId, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: 'rok-renamed',
     });
 
@@ -147,12 +148,12 @@ describe('Steam row display identity — unlinked players (ROK-1821 F4)', () => 
     expect((await steamRow(eventId)).discordUsername).toBe('Ragnhild');
 
     await renameSteamOnlyRow(testApp.db, eventId, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: 'Bjorn',
     });
     expect((await steamRow(eventId)).discordUsername).toBe('Bjorn');
 
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
     await service.addServerParticipant(eventId, member('Sigrid', null));
     const row = await steamRow(eventId);
     expect([row.discordUsername, row.discordAvatarHash]).toEqual([
@@ -164,7 +165,7 @@ describe('Steam row display identity — unlinked players (ROK-1821 F4)', () => 
   it('an unlinked row that rejoins without a name does not get its previous character name back', async () => {
     const eventId = await insertEvent();
     await service.addServerParticipant(eventId, member('Ragnhild', null));
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
     await service.addServerParticipant(eventId, member(STEAM_A, null));
 
     const row = await steamRow(eventId);
@@ -174,7 +175,7 @@ describe('Steam row display identity — unlinked players (ROK-1821 F4)', () => 
   it("a nameless rejoin that folds the closed Steam row into the user's voice row does not bring its old character name back", async () => {
     const eventId = await insertEvent();
     await service.addServerParticipant(eventId, member('Ragnhild', null));
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
     const userId = await insertLinkedUser('RokRL');
     await service.addParticipant(eventId, {
       discordUserId: 'rok1822-r3-voice',

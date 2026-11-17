@@ -12,6 +12,7 @@
  *
  * Regression: ROK-1851
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { Logger } from '@nestjs/common';
 import { ActivityType, Collection, type GuildMember } from 'discord.js';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
@@ -187,8 +188,14 @@ const liveValheimQuickPlays = async () =>
 async function serverBornQuickPlay(): Promise<number> {
   const sink = testApp.app.get<ServerPresenceSink>(SERVER_PRESENCE_SINK);
   const src = { pelicanServerId: SERVER_ID, gameId: valheim };
-  await sink.playerJoined(src, { steamId: STEAM_A, displayName: 'Ragna' });
-  await sink.playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
+  await sink.playerJoined(src, {
+    ...steamPlayer(STEAM_A),
+    displayName: 'Ragna',
+  });
+  await sink.playerJoined(src, {
+    ...steamPlayer(STEAM_B),
+    displayName: 'Bjorn',
+  });
   const [event] = nonEmpty(await liveValheimQuickPlays(), 'server event');
   expect(event.bindingId).toBe(monitorId);
   return event.id;
@@ -297,8 +304,8 @@ describe('ROK-1851/1888 — cross-channel reuse and the shared end path', () => 
     await everyoneLeavesVoice();
     const sink = testApp.app.get<ServerPresenceSink>(SERVER_PRESENCE_SINK);
     const src = { pelicanServerId: SERVER_ID, gameId: valheim };
-    await sink.playerLeft(src, STEAM_A);
-    await sink.playerLeft(src, STEAM_B);
+    await sink.playerLeft(src, steamPlayer(STEAM_A));
+    await sink.playerLeft(src, steamPlayer(STEAM_B));
     expect(queue.enqueue).toHaveBeenCalledWith(serverEvent, expect.any(Number));
 
     await adHoc.finalizeEvent(serverEvent);

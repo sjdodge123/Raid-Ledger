@@ -3,6 +3,7 @@
  * against a real database: spawn threshold, one Quick Play per game, the
  * voice+server one-participant rule, suppression, grace and rehydrate.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -45,7 +46,7 @@ const player = (
   steamId: string,
   displayName = `Viking-${steamId.slice(-3)}`,
 ) => ({
-  steamId,
+  ...steamPlayer(steamId),
   displayName,
 });
 
@@ -226,7 +227,7 @@ describe('AdHocServerPresenceService — one participant per person', () => {
         userId: admin.id,
       }),
       participants.addServerParticipant(eventId, {
-        steamId: STEAM_C,
+        ...steamPlayer(STEAM_C),
         displayName: 'Racer',
         userId: admin.id,
       }),
@@ -241,10 +242,10 @@ describe('AdHocServerPresenceService — leave, grace and rehydrate', () => {
   it('starts the grace period once every server player has left', async () => {
     const src = source();
     const eventId = await spawnWithTwo(src);
-    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, steamPlayer(STEAM_A));
     expect(enqueue).not.toHaveBeenCalled();
 
-    await sink.playerLeft(src, STEAM_B);
+    await sink.playerLeft(src, steamPlayer(STEAM_B));
     expect(enqueue).toHaveBeenCalledWith(eventId, 5 * 60 * 1000);
     const [event] = nonEmpty(await adHocEvents(), 'event');
     expect(event.adHocStatus).toBe('grace_period');
@@ -263,7 +264,7 @@ describe('AdHocServerPresenceService — leave, grace and rehydrate', () => {
   it('openPresence returns only the server players still open', async () => {
     const src = source();
     await spawnWithTwo(src);
-    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, steamPlayer(STEAM_A));
 
     expect(await sink.openPresence(src)).toEqual([
       { steamId: STEAM_B, displayName: player(STEAM_B).displayName },
@@ -289,11 +290,11 @@ describe('AdHocServerPresenceService — a linked player in voice AND on the ser
     await sink.playerJoined(src, player(STEAM_C));
 
     await participants.markLeave(eventId, 'rok1800-b1-voice');
-    await sink.playerLeft(src, STEAM_A);
-    await sink.playerLeft(src, STEAM_B);
+    await sink.playerLeft(src, steamPlayer(STEAM_A));
+    await sink.playerLeft(src, steamPlayer(STEAM_B));
     expect(enqueue).not.toHaveBeenCalled();
 
-    await sink.playerLeft(src, STEAM_C);
+    await sink.playerLeft(src, steamPlayer(STEAM_C));
     expect(enqueue).toHaveBeenCalledWith(eventId, 5 * 60 * 1000);
   });
 });
@@ -352,8 +353,8 @@ describe('AdHocServerPresenceService — held players across a session restart (
     await sink.playerCount(src, 2);
     const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
 
-    await sink.playerLeft(src, STEAM_A);
-    await sink.playerLeft(src, STEAM_B);
+    await sink.playerLeft(src, steamPlayer(STEAM_A));
+    await sink.playerLeft(src, steamPlayer(STEAM_B));
     const open = (await rowsOf(event.id)).filter((r) => r.leftAt === null);
     expect(open).toEqual([]);
     expect(enqueue).toHaveBeenCalledWith(event.id, 5 * 60 * 1000);
@@ -386,11 +387,13 @@ describe('AdHocServerPresenceService — tracker reader resolved through DI (Cod
   let service: AdHocServerPresenceService;
   const strict = { strict: false };
   const tracked = (src: ServerPresenceSource, steamId: string) =>
-    jest
-      .spyOn(reader, 'playersForGame')
-      .mockReturnValue([
-        { ...src, steamId, name: 'Tracked' } satisfies ServerRosterPlayer,
-      ]);
+    jest.spyOn(reader, 'playersForGame').mockReturnValue([
+      {
+        ...src,
+        ...steamPlayer(steamId),
+        name: 'Tracked',
+      } satisfies ServerRosterPlayer,
+    ]);
 
   beforeAll(() => {
     reader = testApp.app.get<ServerPresenceReader>(

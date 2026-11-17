@@ -5,6 +5,7 @@
  * character on THIS server claimed by any Raid Ledger user. Both go to a
  * member and a visitor alike; the visitor still gets no rows.
  */
+import { steamPlayer } from '../presence/presence-events';
 import { eq } from 'drizzle-orm';
 import { ValheimCharacterMessageSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
@@ -145,7 +146,7 @@ function online(game: number, pairs: [number, string][]): void {
   const roster: ServerRosterPlayer[] = pairs.map(([pelicanServerId, id]) => ({
     pelicanServerId,
     gameId: game,
-    steamId: id,
+    ...steamPlayer(id),
     name: `n_${id}`,
   }));
   const supervisor = testApp.app.get(PelicanPresenceSupervisor, {

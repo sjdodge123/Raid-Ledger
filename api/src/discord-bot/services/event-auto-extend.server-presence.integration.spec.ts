@@ -3,6 +3,7 @@
  * alive by its game-server players: auto-extend counts open on-server rows,
  * so the reaper does not end the session while people are still playing.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -64,7 +65,7 @@ describe('auto-extend counts game-server presence (Codex r2 P1)', () => {
     const event = await insertEndingEvent();
     for (const steamId of ['76561198000000401', '76561198000000402'])
       await participants.addServerParticipant(event.id, {
-        steamId,
+        ...steamPlayer(steamId),
         displayName: `Viking-${steamId.slice(-3)}`,
         userId: null,
         pelicanServerId: 9800,
