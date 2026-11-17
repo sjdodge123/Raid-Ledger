@@ -70,7 +70,10 @@ async function warmWonClaims(
 
 /** `(k1, k2, …)` body for a `dedup_key IN (…)` filter. */
 function inList(keys: readonly string[]): SQL {
-  return sql.join(keys.map((k) => sql`${k}`), sql`, `);
+  return sql.join(
+    keys.map((k) => sql`${k}`),
+    sql`, `,
+  );
 }
 
 /** The keys among `keys` with a non-expired DB row — ONE query. */
