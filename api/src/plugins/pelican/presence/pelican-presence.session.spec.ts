@@ -12,6 +12,7 @@ import {
   fakeLogger,
   fakeParser,
   fakeSink,
+  fakeStatefulParser,
   fakeWings,
   line,
   okCredentials,
@@ -544,5 +545,91 @@ describe('ROK-1831 Codex r3: replayed history is marked rehydrated', () => {
     h.wings.lines(arrive('A', 'Alice', T(1)));
     await h.settle();
     expect(h.onChanged.mock.calls).toEqual([[MARKED]]);
+  });
+});
+
+type Harness = ReturnType<typeof harness>;
+const stateful = () => harness([], okCredentials, [], fakeStatefulParser());
+/** ROK-2233: Alice and Bob arrive with their ids announced; Alice leaves. */
+async function seed(h: Harness): Promise<void> {
+  await h.connect();
+  await h.live([
+    'uuid Alice A',
+    'uuid Bob B',
+    ...arrive('A', 'Alice', T(1)),
+    ...arrive('B', 'Bob', T(2)),
+    'left Alice',
+  ]);
+}
+
+describe('ROK-2233 stateful parser sessions', () => {
+  it('resolves a line through what an earlier line told the session', async () => {
+    const h = stateful();
+    await seed(h);
+    expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  });
+
+  it.each<[string, (h: Harness) => Promise<void>]>([
+    [
+      'the socket re-authenticates',
+      async (h) => {
+        h.wings.frame('auth success');
+        await h.settle();
+      },
+    ],
+    [
+      'the server reports ready',
+      (h) => h.live([line({ kind: 'server-ready', loggedAt: T(3) })]),
+    ],
+    [
+      'a server-stopping line arrives',
+      (h) => h.live([line({ kind: 'server-stopping', loggedAt: T(3) })]),
+    ],
+    [
+      'Pelican reports the server offline',
+      async (h) => {
+        h.wings.frame('status', 'offline');
+        await h.session.idle();
+      },
+    ],
+  ])('forgets that state when %s', async (_label, trigger) => {
+    const h = stateful();
+    await seed(h);
+    const before = [...h.sink.playerLeft.mock.calls];
+    await trigger(h);
+    // A ready line itself empties the tracker; only `left Bob` is under test.
+    h.sink.playerLeft.mockClear();
+    await h.live([...arrive('B', 'Bob', T(5)), 'left Bob']);
+    expect([before, h.sink.playerLeft.mock.calls]).toEqual([[[SRC, 'A']], []]);
+  });
+});
+
+describe('ROK-2233 parser session scope', () => {
+  it('rebuilds it from the log replay that follows a re-auth', async () => {
+    const h = stateful();
+    await seed(h);
+    h.wings.frame('auth success');
+    h.wings.lines(['uuid Bob B']);
+    await h.settle();
+    await h.live(['left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, 'A'],
+      [SRC, 'B'],
+    ]);
+  });
+
+  it('keeps one session per server: two consoles never share state', async () => {
+    const parser = fakeStatefulParser();
+    const one = harness([], okCredentials, [], parser);
+    const two = harness([], okCredentials, [], parser);
+    await one.connect();
+    await two.connect();
+    await one.live(['uuid Alice A']);
+    await one.live([...arrive('A', 'Alice', T(1)), 'left Alice']);
+    await two.live([...arrive('A', 'Alice', T(1)), 'left Alice']);
+    expect([
+      one.sink.playerLeft.mock.calls,
+      two.sink.playerLeft.mock.calls,
+    ]).toEqual([[[SRC, 'A']], []]);
   });
 });

@@ -20,10 +20,14 @@ import {
   PelicanPresenceSupervisor,
   PRESENCE_SOCKET_FACTORY,
 } from './pelican-presence.supervisor';
+import type { GameLogParser } from '../../plugin-host/extension-points';
 import {
+  arrive,
   fakeParser,
   fakeSink,
+  fakeStatefulParser,
   fakeWings,
+  must,
   okCredentials,
 } from './pelican-presence.spec-fakes';
 import type { ServerPresencePlayer } from './server-presence.sink';
@@ -51,6 +55,7 @@ interface Opts {
   panelUrl?: string | null;
   open?: ServerPresencePlayer[];
   noSink?: boolean;
+  parser?: GameLogParser;
 }
 
 function harness(opts: Opts = {}) {
@@ -58,7 +63,7 @@ function harness(opts: Opts = {}) {
   const registry = {
     isActive: jest.fn(() => opts.active ?? true),
     getAdapter: jest.fn((_point: string, slug: string) =>
-      slug === 'valheim' ? fakeParser : undefined,
+      slug === 'valheim' ? (opts.parser ?? fakeParser) : undefined,
     ),
   };
   const factory = {
@@ -359,4 +364,21 @@ it("retries a stopping session's failed serverEmptied on a later pass (Codex r4)
   // the stopped-server cleanup runs it again and the rows really close.
   expect(h.sink.serverEmptied).toHaveBeenCalledTimes(2);
   expect(await h.sink.openPresence()).toEqual([]);
+});
+
+it('gives each tracked server its own parser session (ROK-2233)', async () => {
+  const h = harness({ rows: [row(1), row(2)], parser: fakeStatefulParser() });
+  await h.reconcile();
+  const console = (i: number, lines: string[]) => {
+    const socket = must(h.wings.sockets[i], `socket ${i}`).handlers;
+    for (const l of lines)
+      socket.onMessage(JSON.stringify({ event: 'console output', args: [l] }));
+  };
+  const alice = arrive('A', 'Alice', '2026-10-15T10:00:01');
+  console(0, ['uuid Alice A', ...alice, 'left Alice']);
+  console(1, [...alice, 'left Alice']);
+  await jest.advanceTimersByTimeAsync(0);
+  expect(h.sink.playerLeft.mock.calls).toEqual([
+    [{ pelicanServerId: 1, gameId: 42 }, 'A'],
+  ]);
 });
