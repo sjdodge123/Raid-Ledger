@@ -24,7 +24,7 @@
 # indexes (image + attestation manifest): they are read with the index media
 # types in the Accept header, aged from their image child, and deleted by the
 # index digest (ROK-2180). A kept index's CHILD digests join the protection
-# set (an explicit DELETE of one breaks the index). --delete-untagged can
+# set, as do a digest-pinned index's (an explicit DELETE of one breaks it). --delete-untagged can
 # delete a surviving index's children (distribution#3178), so garbage-collect
 # drops it while any kept tag — or a doomed one not confirmed deleted — is an
 # index or manifest list, or its media type cannot be read.
@@ -334,7 +334,7 @@ registry_gc::sweep() {
 # fails (expired, or a build got admitted) it stops: skipped_lock_lost.
 # rc 1 = aborted ({"error":…}); rc 3 = the collector may still run.
 registry_gc::_sweep_held() {
-    local now="$1" refs prot inv doomed kept scan kd src=0 irc=0
+    local now="$1" refs prot inv doomed kept pins scan kd src=0 irc=0
     if ! refs=$(registry_gc::protected_refs); then
         echo "registry_gc: docker ps, docker images or $RL_ENVS_FILE unreadable — sweep aborted" >&2
         echo '{"error":"protected_tags_unreadable"}'; return 1
@@ -348,11 +348,13 @@ registry_gc::_sweep_held() {
     fi
     doomed=$(registry_gc::select_doomed "$inv" "$prot")
     kept=$(registry_gc::_kept "$inv" "$doomed")
-    scan=$(registry_gc::_kept_scan "$kept" registry_gc::_renew) || src=$?
+    pins=$(registry_gc::_pins_of <<<"$refs")
+    # Kept tags' digests + their children, and pinned indexes' children (r2).
+    scan=$(registry_gc::_protect_scan "$kept" "$pins" registry_gc::_renew) || src=$?
     if (( src == 3 )); then registry_gc::_record "$now" "$inv" '[]' skipped_lock_lost; return 0; fi
     if (( src != 0 )); then echo '{"error":"protected_digest_unreadable"}'; return 1; fi
     kd=$(sed -n 's/^D //p' <<<"$scan")
-    registry_gc::_delete_and_collect "$now" "$inv" "$doomed" "$kd" "$(registry_gc::_pins_of <<<"$refs")" \
+    registry_gc::_delete_and_collect "$now" "$inv" "$doomed" "$kd" "$pins" \
         "$(sed -n 's/^I //p' <<<"$scan" | tr '\n' ' ')"
 }
 
@@ -401,7 +403,12 @@ registry_gc::delete_env_tag() {
         || ! avoid=$(registry_gc::avoid_digests "$(grep -vxF "$tag" <<<"$all" || true)" "$refs"); then
         echo "registry: a kept digest is unreadable — keeping ${RL_REGISTRY_REPO}:$tag" >&2; return 0
     fi
-    registry_gc::delete_tag "$tag" "$avoid" || return 0
+    local drc=0; registry_gc::delete_tag "$tag" "$avoid" || drc=$?
+    case "$drc" in
+        1) return 0 ;;
+        2) echo "registry: ${RL_REGISTRY_REPO}:$tag kept: not confirmed deleted (digest unreadable, or an index/list DELETE failed)" >&2; return 0 ;;
+        3) echo "registry: ${RL_REGISTRY_REPO}:$tag kept: DELETE failed" >&2; return 0 ;;
+    esac
     if [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]]; then
         echo "registry: would delete ${RL_REGISTRY_REPO}:$tag (RL_REGISTRY_GC_DRY_RUN=1)" >&2
     else

@@ -9,8 +9,11 @@
 #     young, unknown age — everything in the registry that is not doomed),
 #     and the child digests of each kept index / manifest list (ROK-2180);
 #   - every `@sha256:` pin of this repo in a container ref, an env row's
-#     `.image`, or a local image's RepoDigests.
-# Any kept tag whose digest cannot be read makes the whole set unreadable.
+#     `.image`, or a local image's RepoDigests, and the child digests of each
+#     pin that is an index / manifest list (ROK-2180 r2: a doomed tag spared
+#     only by its pin, or an untagged pinned index, has live children too).
+# Any kept tag or pin whose manifest cannot be read makes the whole set
+# unreadable. Children are always read BY DIGEST, never by a tag that can move.
 
 # rl-allinone image refs (stdin, one per line, any registry prefix or none:
 # `rl-allinone:x`, `127.0.0.1:5000/rl-allinone:x`, `registry.rl.lan:5000/
@@ -51,9 +54,10 @@ registry_gc::protected_tags() {
     registry_gc::_tags_of <<<"$refs" | sort -u | jq -Rnc '[inputs]'
 }
 
-# Child manifest digests of index/list <$1> (tag), one per line; empty for a
-# plain manifest. Returns 1 when the manifest GET or its JSON fails. Read by
-# tag (as the HEAD was): no build pushes while the sweep holds its entry.
+# Child manifest digests of index/list <$1> (a DIGEST — a tag can move between
+# the HEAD and this GET, e.g. under env-destroy, which holds no admission
+# entry), one per line; empty for a plain manifest. Returns 1 when the
+# manifest GET or its JSON fails.
 registry_gc::_children() {
     local m
     m=$(registry_gc::_manifest "$1") || return 1
@@ -78,20 +82,63 @@ registry_gc::_kept_scan() {
         echo "D $d"
         registry_gc::_is_index_type "${h#*|}" || continue
         echo "I $tag"
-        if ! kids=$(registry_gc::_children "$tag"); then
+        if ! kids=$(registry_gc::_children "$d"); then
             echo "registry_gc: children of kept index ${RL_REGISTRY_REPO}:$tag unreadable" >&2; return 1
         fi
         sed '/^$/d; s/^/D /' <<<"$kids"
     done
 }
 
+# Manifest body of pinned digest <$1>, via the HTTP status (no curl -f): the
+# JSON on 200; nothing on 404 — that manifest is gone, so nothing of it is
+# left to protect (a stale local RepoDigest must not wedge every sweep).
+# rc 1 on a transport error or any other status (fail closed).
+registry_gc::_pin_manifest() {
+    local out
+    out=$(curl -sS --max-time 10 -H "$_REGISTRY_ACCEPT" -w '\n%{http_code}' \
+        "$(registry_gc::_api)/manifests/$1" 2>/dev/null) || return 1
+    case "${out##*$'\n'}" in
+        200) printf '%s\n' "${out%$'\n'*}" ;;
+        404) echo "registry_gc: pinned ${RL_REGISTRY_REPO}@$1 is not in the registry" >&2 ;;
+        *) return 1 ;;
+    esac
+}
+
+# `D <child>` for each child of every pin (<$1>, newline list of digests) that
+# is an index/list, its manifest read BY DIGEST. Calls <$2> (renew callback,
+# optional) before each pin. rc 1 = a pin's manifest is unreadable (fail
+# closed); 3 = callback failed.
+registry_gc::_pin_scan() {
+    local pin m kids
+    for pin in $1; do
+        if [[ -n "${2:-}" ]] && ! "$2"; then return 3; fi
+        if ! m=$(registry_gc::_pin_manifest "$pin"); then
+            echo "registry_gc: manifest of pinned ${RL_REGISTRY_REPO}@$pin unreadable" >&2; return 1
+        fi
+        [[ -z "$m" ]] && continue
+        if ! kids=$(jq -r '.manifests[]?.digest // empty' <<<"$m" 2>/dev/null); then
+            echo "registry_gc: manifest of pinned ${RL_REGISTRY_REPO}@$pin is not JSON" >&2; return 1
+        fi
+        sed '/^$/d; s/^/D /' <<<"$kids"
+    done
+}
+
+# _kept_scan of the kept tags <$1> + _pin_scan of the pins <$2> (digests),
+# same output and rc contract; <$3> = renew callback (optional).
+registry_gc::_protect_scan() {
+    registry_gc::_kept_scan "$1" "${3:-}" || return $?
+    registry_gc::_pin_scan "$2" "${3:-}"
+}
+
 # Digests no DELETE may touch, one per line: each kept tag's digest and, for
 # a kept index/list, its children's (<$1>, newline list of registry tags —
-# see _kept_scan) plus the pins in <$2> (protected_refs output). Returns 1
-# when any of those is unreadable — fail closed.
+# see _kept_scan), the pins in <$2> (protected_refs output) and, for a pinned
+# index/list, its children's. Returns 1 when any of those is unreadable —
+# fail closed.
 registry_gc::avoid_digests() {
-    local scan
-    scan=$(registry_gc::_kept_scan "$1") || return 1
+    local scan pins
+    pins=$(registry_gc::_pins_of <<<"$2")
+    scan=$(registry_gc::_protect_scan "$1" "$pins") || return 1
     sed -n 's/^D //p' <<<"$scan"
-    registry_gc::_pins_of <<<"$2"
+    printf '%s\n' "$pins" | sed '/^$/d'
 }
