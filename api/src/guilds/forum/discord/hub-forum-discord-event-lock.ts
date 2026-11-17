@@ -11,7 +11,17 @@
  * `thread.updated` to pick up the current dated title (review MINOR-1).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, isNotNull, isNull, like, not, or, sql } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  gte,
+  isNotNull,
+  isNull,
+  like,
+  not,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -22,6 +32,7 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const links = schema.hubForumDiscordLinks;
 const threads = schema.hubForumThreads;
+const bindings = schema.hubForumDiscordBindings;
 const REASON = 'Raid Ledger event discussion is read-only';
 /** Posts per tick; the rest wait 5 minutes. */
 const BATCH = 50;
@@ -60,7 +71,11 @@ export class HubForumDiscordEventLockGateway {
   }
 }
 
-/** Linked, sent, undeleted event-thread posts whose lock state must flip. */
+/**
+ * Linked, sent, undeleted event-thread posts whose lock state must flip —
+ * only in the hub's CURRENT binding (D9: an unbound or re-bound hub's old
+ * posts are left alone, review MINOR-5).
+ */
 export async function dueLockChanges(
   db: ForumDiscordDb,
   now: Date,
@@ -77,9 +92,11 @@ export async function dueLockChanges(
     })
     .from(links)
     .innerJoin(threads, eq(threads.id, links.threadId))
+    .innerJoin(bindings, eq(bindings.guildId, links.guildId))
     .where(
       and(
         eq(links.kind, 'thread'),
+        gte(links.createdAt, bindings.boundAt),
         isNotNull(threads.eventId),
         isNull(links.discordDeletedAt),
         not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),

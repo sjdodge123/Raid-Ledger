@@ -252,6 +252,18 @@ describe('AC18 — read-only lock sweep (R12)', () => {
     expect(await lockedAt(threadId)).toBeNull();
   });
 
+  it('review MINOR-5: after an unbind the old post is never locked (D9)', async () => {
+    const { post, eventId, guildId } = await linkedScene();
+    const { sweep, callsFor } = lockSpies();
+    const res = await ctx.posts.testApp.request
+      .delete(`/guilds/${guildId}/forum-discord`)
+      .set('Authorization', `Bearer ${ctx.tokens.admin}`);
+    expect(res.status).toBe(204);
+    await endEvent(ctx, eventId);
+    await sweep.sweep(new Date());
+    expect(callsFor(post.id)).toEqual([]);
+  });
+
   it('locks a detached (untagged) event thread', async () => {
     const { post, eventId } = await linkedScene();
     const { sweep, callsFor } = lockSpies();

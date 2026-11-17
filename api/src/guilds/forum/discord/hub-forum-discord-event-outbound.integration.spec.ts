@@ -180,7 +180,7 @@ describe('ROK-2208 §5.7 event threads → Discord', () => {
     const res = await ctx.posts.testApp.request
       .delete(`/guilds/${s.guildId}/forum-discord`)
       .set('Authorization', `Bearer ${ctx.tokens.admin}`);
-    expect(res.status).toBeLessThan(300);
+    expect(res.status).toBe(204);
     await reschedule(s, 'Unbound raid');
     expect(out.spies.renameThread).not.toHaveBeenCalled();
     expect(out.spies.editMessage).not.toHaveBeenCalled();
