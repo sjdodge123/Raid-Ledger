@@ -4,7 +4,7 @@
  * the group's claimed players (unclaimed rows have no user, F2).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useQuery } from '@tanstack/react-query';
 import type { JSX } from 'react';
@@ -56,7 +56,8 @@ describe('Suggested groups widget — Poll (W4)', () => {
         const sfk = await screen.findByRole('article', { name: 'Shadowfang Keep group' });
         await user.click(within(sfk).getByRole('button', { name: 'Poll Shadowfang Keep group' }));
         expect(await screen.findByTestId('create-poll-hub-line')).toHaveTextContent('Tagged to Ironforge Irregulars');
-        expect(await screen.findByText('3 members selected'), 'the 3 claimed players are picked, the 2 unclaimed rows are not').toBeInTheDocument();
+        await waitFor(() => expect(screen.getByTestId('member-picker'), 'the 3 claimed players are picked, the 2 unclaimed rows are not')
+            .toHaveTextContent('3 members selected'));
         await user.click(screen.getByRole('button', { name: /create poll/i }));
         expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ gameId: 3, hubId: 7, memberUserIds: [1, 2, 3] });
     });
