@@ -104,6 +104,9 @@ export async function mergeSteamIntoUserRow(
       .update(t)
       .set({
         steamId: member.steamId,
+        // ROK-2232: a Steam row's platform key mirrors its SteamID.
+        playerId: member.steamId,
+        idKind: 'steam',
         pelicanServerId: member.pelicanServerId ?? null,
         ...mergedCharacterName(member, steam),
         ...(carried > 0
@@ -129,7 +132,7 @@ function mergedCharacterName(
 ): { characterName?: string | null; characterOwnerId?: string | null } {
   const { steamId, displayName } = member;
   if (displayName !== undefined) {
-    const characterName = characterNameOf({ steamId, displayName });
+    const characterName = characterNameOf({ playerId: steamId, displayName });
     const owner = characterName === null ? null : member.characterOwnerId;
     return { characterName, characterOwnerId: owner ?? null };
   }

@@ -9,6 +9,7 @@
  *
  * Regression: ROK-1801
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ActivityType, Collection, type GuildMember } from 'discord.js';
@@ -147,7 +148,7 @@ async function linkVoiceAToSteamA(): Promise<void> {
 const serverPlayer = (steamId: string): ServerRosterPlayer => ({
   pelicanServerId: serverSeq,
   gameId: valheim,
-  steamId,
+  ...steamPlayer(steamId),
   name: `Viking-${steamId.slice(-2)}`,
 });
 
@@ -228,14 +229,20 @@ describe('server path — voice members count toward minPlayers (Q9)', () => {
   it('1 on the server + 1 different person in voice meets minPlayers 2', async () => {
     seatInVoice(VOICE_A);
     const src = { pelicanServerId: ++serverSeq, gameId: valheim };
-    await sink().playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
+    await sink().playerJoined(src, {
+      ...steamPlayer(STEAM_B),
+      displayName: 'Bjorn',
+    });
     expect(await valheimQuickPlays()).toBe(1);
   });
 
   it('1 on the server + 1 presence-null person in voice takes the delayed spawn, as in the reverse order (Codex r3 P2)', async () => {
     await joinVoice(VOICE_A, null);
     const src = { pelicanServerId: ++serverSeq, gameId: valheim };
-    await sink().playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
+    await sink().playerJoined(src, {
+      ...steamPlayer(STEAM_B),
+      displayName: 'Bjorn',
+    });
     expect(await valheimQuickPlays()).toBe(0);
     onServer = [serverPlayer(STEAM_B)];
     await testApp.app
@@ -252,7 +259,10 @@ describe('server path — voice members count toward minPlayers (Q9)', () => {
     await linkVoiceAToSteamA();
     seatInVoice(VOICE_A);
     const src = { pelicanServerId: ++serverSeq, gameId: valheim };
-    await sink().playerJoined(src, { steamId: STEAM_A, displayName: 'Ragna' });
+    await sink().playerJoined(src, {
+      ...steamPlayer(STEAM_A),
+      displayName: 'Ragna',
+    });
     expect(await valheimQuickPlays()).toBe(0);
   });
 });

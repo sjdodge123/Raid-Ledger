@@ -28,9 +28,9 @@ export interface SteamRowDisplay {
 
 /** The fields of a server player that decide how their row is shown. */
 export interface SteamDisplayInput {
-  /** SteamID64. */
-  steamId: string;
-  /** In-game character name, else the SteamID64. */
+  /** The platform player id (ROK-2232: any id kind, not only a SteamID64). */
+  playerId: string;
+  /** In-game character name, else the `playerId`. */
   displayName: string;
   /** The linked RL user, else null. */
   userId: number | null;
@@ -44,13 +44,13 @@ export { STORED_NAME_MAX_LENGTH, clampStoredName };
 
 /**
  * A player's character name (clamped to the column), or null while they are
- * only a SteamID64.
+ * only their platform id (ROK-2232: any kind, not just a SteamID64).
  */
 export function characterNameOf(player: {
-  steamId: string;
+  playerId: string;
   displayName: string;
 }): string | null {
-  return player.displayName === player.steamId
+  return player.displayName === player.playerId
     ? null
     : clampStoredName(player.displayName);
 }

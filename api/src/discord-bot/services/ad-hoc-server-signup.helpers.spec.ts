@@ -2,6 +2,7 @@
  * ROK-1802 item 3 — a linked game-server player is signed up to the Quick
  * Play (at spawn and on attach); an unlinked one is not.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { autoSignupParticipant } from './ad-hoc-event.signup-helpers';
@@ -86,8 +87,8 @@ describe('spawnOrFindServerQuickPlay — signups at spawn', () => {
       bindingId: null,
       creatorId: 42,
       players: [
-        { steamId: 's-linked', displayName: 'Linked' },
-        { steamId: 's-unlinked', displayName: 'Stranger' },
+        { ...steamPlayer('s-linked'), displayName: 'Linked' },
+        { ...steamPlayer('s-unlinked'), displayName: 'Stranger' },
       ],
       ids: [{ userId: 42, discordId: 'd-42', displayName: 'Roknua' }, null],
     });

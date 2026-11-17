@@ -7,18 +7,21 @@
 export type ParticipantIdentity = {
   discordUserId: string | null;
   discordUsername: string;
-  steamId: string | null;
+  /** ROK-2232: the platform id (SteamID64, Minecraft UUID or XUID). */
+  playerId: string | null;
 };
 
 /**
  * ROK-1801 Q4: ROK-1800 stores an unnamed, unlinked server player with its
  * SteamID64 as `discordUsername`. Such a row must never render by name.
+ * ROK-2232: keyed on the platform id, so an unnamed Minecraft UUID / XUID row
+ * is anonymous too (`player_id` equals `steam_id` on a Steam row).
  */
 export function isAnonymousServerRow(row: ParticipantIdentity): boolean {
   return (
     row.discordUserId === null &&
-    row.steamId !== null &&
-    row.discordUsername === row.steamId
+    row.playerId !== null &&
+    row.discordUsername === row.playerId
   );
 }
 
@@ -33,7 +36,8 @@ export const UNLINKED_SERVER_SUFFIX = ' \u00B7 on server';
 export type LinkIdentity = {
   userId: number | null;
   discordUserId: string | null;
-  steamId: string | null;
+  /** ROK-2232: set on every game-server row, whatever its id kind. */
+  playerId: string | null;
 };
 
 /**
@@ -42,10 +46,11 @@ export type LinkIdentity = {
  * ` · on server` and leaves it out of "N signed up" / "N playing". It still
  * counts toward `minPlayers` (ruling 1) — the lobby threshold never reads
  * this. A Steam row with `userId` set is a separate, real person and counts.
+ * ROK-2232: any platform id (Steam, Minecraft UUID, XUID) qualifies.
  */
 export function isUnlinkedServerRow(row: LinkIdentity): boolean {
   return (
-    row.discordUserId === null && row.userId === null && row.steamId !== null
+    row.discordUserId === null && row.userId === null && row.playerId !== null
   );
 }
 

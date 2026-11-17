@@ -8,6 +8,14 @@ import { z } from 'zod';
 export const AdHocStatusEnum = z.enum(['live', 'grace_period', 'ended']);
 export type AdHocStatus = z.infer<typeof AdHocStatusEnum>;
 
+/**
+ * Which platform namespace a game-server player id belongs to (ROK-2232):
+ * a SteamID64 (Valheim), a Minecraft Java player UUID, or an Xbox XUID
+ * (Minecraft Bedrock). Ids of different kinds never compare equal.
+ */
+export const PlayerIdKindEnum = z.enum(['steam', 'minecraft-uuid', 'xuid']);
+export type PlayerIdKind = z.infer<typeof PlayerIdKindEnum>;
+
 /** Single participant in an ad-hoc event roster */
 export const AdHocParticipantSchema = z.object({
     id: z.string().uuid(),
@@ -17,6 +25,14 @@ export const AdHocParticipantSchema = z.object({
     discordUserId: z.string().nullable(),
     /** SteamID64 of a game-server participant (ROK-1800). */
     steamId: z.string().nullable().optional(),
+    /**
+     * Platform id of a game-server participant, namespaced by `idKind`
+     * (ROK-2232). Set together with `idKind`; a Steam player's equals
+     * `steamId`. Absent for a Discord-only row and on legacy payloads.
+     */
+    playerId: z.string().optional(),
+    /** Namespace of `playerId` (ROK-2232). Set together with `playerId`. */
+    idKind: PlayerIdKindEnum.optional(),
     /** Where the participant was first seen (ROK-1800). */
     source: z.enum(['discord', 'steam']).optional(),
     /** Currently in the event's voice channel (ROK-1821). Absent on legacy payloads. */

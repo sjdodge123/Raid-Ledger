@@ -1,4 +1,8 @@
-import type { GamePresenceEvent } from './presence-events';
+import {
+  presenceKey,
+  type GamePresenceEvent,
+  type PlayerRef,
+} from './presence-events';
 
 /**
  * ROK-1802 Codex r4 — players the sink still HOLDS for a server when a new
@@ -14,19 +18,20 @@ import type { GamePresenceEvent } from './presence-events';
  * uncovered holds.
  */
 export class UntrackedHeldPlayers {
-  /** Hold order, oldest first. */
-  private ids: string[] = [];
+  /** Hold order, oldest first (keyed by `idKind:playerId`, ROK-2232). */
+  private ids: PlayerRef[] = [];
 
   /** A fresh session: the sink's holds, minus players it already enrolled. */
-  reset(held: string[], enrolled: string[]): void {
-    const skip = new Set(enrolled);
-    this.ids = held.filter((id) => !skip.has(id));
+  reset(held: PlayerRef[], enrolled: PlayerRef[]): void {
+    const skip = new Set(enrolled.map(presenceKey));
+    this.ids = held.filter((ref) => !skip.has(presenceKey(ref)));
   }
 
   /** The tracker now owns this player (a `joined` change), or they are gone. */
-  forget(steamId: string): boolean {
+  forget(player: PlayerRef): boolean {
+    const key = presenceKey(player);
     const before = this.ids.length;
-    this.ids = this.ids.filter((id) => id !== steamId);
+    this.ids = this.ids.filter((ref) => presenceKey(ref) !== key);
     return this.ids.length < before;
   }
 
@@ -35,7 +40,7 @@ export class UntrackedHeldPlayers {
    * (handshakes it could promote come first). Returns the held players with
    * no room left — they have gone — oldest first.
    */
-  fit(count: number, tracked: number): string[] {
+  fit(count: number, tracked: number): PlayerRef[] {
     const room = Math.max(0, count - tracked);
     const gone = this.ids.slice(0, Math.max(0, this.ids.length - room));
     this.ids = this.ids.slice(gone.length);
@@ -48,9 +53,11 @@ export class UntrackedHeldPlayers {
    * them — must still reach the sink, or their row never closes. Returns
    * the held players `event` shows gone (`tracked` = the tracker's count).
    */
-  departures(event: GamePresenceEvent, tracked: number): string[] {
-    if (event.kind === 'leave')
-      return this.forget(event.steamId) ? [event.steamId] : [];
+  departures(event: GamePresenceEvent, tracked: number): PlayerRef[] {
+    if (event.kind === 'leave') {
+      const ref = { playerId: event.playerId, idKind: event.idKind };
+      return this.forget(ref) ? [ref] : [];
+    }
     if (event.kind === 'heartbeat') return this.fit(event.count, tracked);
     return [];
   }

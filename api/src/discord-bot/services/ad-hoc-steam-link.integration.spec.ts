@@ -10,6 +10,7 @@
  * Driven through the app's real EventEmitter2 (`emitAsync` awaits every
  * listener), spying on the real singleton `NotificationService.create`.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type Redis from 'ioredis';
 import { and, eq } from 'drizzle-orm';
@@ -85,7 +86,7 @@ const joinVoice = (
 
 const joinServerUnlinked = (eventId: number) =>
   rows.addServerParticipant(eventId, {
-    steamId: STEAM,
+    ...steamPlayer(STEAM),
     displayName: 'Loanati',
     userId: null,
     pelicanServerId: 7,

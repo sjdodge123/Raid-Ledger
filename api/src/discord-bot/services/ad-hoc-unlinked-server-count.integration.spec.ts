@@ -11,6 +11,7 @@
  * - Ruling 1: the unlinked row still holds the session out of grace
  *   (`getOpenRowCount`) while leaving the "N playing" count (`getActiveCount`).
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -134,7 +135,7 @@ describe('ROK-1888 AC5 — voice member + unlinked server row counts once', () =
     const eventId = await insertEvent();
     await insertVoiceMember(eventId);
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_UNLINKED,
+      ...steamPlayer(STEAM_UNLINKED),
       displayName: 'Loanati',
       userId: null,
     });
@@ -184,12 +185,12 @@ describe('ROK-1888 AC6 — linked server rows count, anonymous rows do not', () 
     await insertVoiceMember(eventId);
     const otherId = await insertOtherRlUser();
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_LINKED,
+      ...steamPlayer(STEAM_LINKED),
       displayName: 'brakk-char',
       userId: otherId,
     });
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_ANON,
+      ...steamPlayer(STEAM_ANON),
       displayName: STEAM_ANON,
       userId: null,
     });
@@ -220,7 +221,7 @@ describe('ROK-1888 Codex r1 P2 — the initial spawn card reads stored flags', (
   it('a server-born spawn card suffixes the unlinked player and counts nobody', async () => {
     const eventId = await insertEvent();
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_UNLINKED,
+      ...steamPlayer(STEAM_UNLINKED),
       displayName: 'Loanati',
       userId: null,
     });

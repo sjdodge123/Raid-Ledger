@@ -7,6 +7,7 @@
  * serialisation each leave read both flags true and cleared only its own,
  * leaving the row open with both flags false and no PARTICIPANT_LEFT.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -77,7 +78,7 @@ describe('concurrent voice + server leave (Codex r2 P2)', () => {
       userId,
     });
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: 'Ragnhild',
       userId,
       pelicanServerId: 9700,
@@ -101,7 +102,7 @@ describe('concurrent voice + server leave (Codex r2 P2)', () => {
     await isHeld;
     const leaves = Promise.all([
       service.markLeave(eventId, DISCORD_A),
-      service.markServerLeave(eventId, STEAM_A),
+      service.markServerLeave(eventId, steamPlayer(STEAM_A)),
     ]);
     await untilLockWaiters(2);
     release();

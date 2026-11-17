@@ -1,4 +1,9 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  steamIdOf,
+  storedPlayerRef,
+  type PlayerRef,
+} from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, isNull, sql, type SQL } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -209,20 +214,21 @@ export class AdHocParticipantService {
   /** ROK-1800: close a Steam-only row when the player leaves the server. */
   async markServerLeave(
     eventId: number,
-    steamId: string,
+    player: PlayerRef,
     pelicanServerId?: number,
   ): Promise<boolean> {
     const closed = await markSteamLeave(
       this.db,
       eventId,
-      steamId,
+      player,
       pelicanServerId,
     );
     if (closed) {
+      const steamId = steamIdOf(player);
       this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_LEFT, {
         eventId,
         discordUserId: null,
-        steamId,
+        ...(steamId !== null ? { steamId } : {}),
       } satisfies AdHocParticipantLeftPayload);
     }
     return closed;
@@ -237,22 +243,27 @@ export class AdHocParticipantService {
       .from(schema.adHocParticipants)
       .where(eq(schema.adHocParticipants.eventId, eventId));
 
-    return rows.map((r) => ({
-      id: r.id,
-      eventId: r.eventId,
-      userId: r.userId,
-      discordUserId: r.discordUserId,
-      steamId: r.steamId,
-      source: toParticipantSource(r.source),
-      inVoice: r.inVoice,
-      onServer: r.onServer,
-      discordUsername: r.discordUsername,
-      discordAvatarHash: r.discordAvatarHash,
-      joinedAt: r.joinedAt.toISOString(),
-      leftAt: r.leftAt?.toISOString() ?? null,
-      totalDurationSeconds: r.totalDurationSeconds,
-      sessionCount: r.sessionCount,
-    }));
+    return rows.map((r) => {
+      // ROK-2232: the platform id + kind; absent on a Discord-only row.
+      const ref = storedPlayerRef(r.playerId, r.idKind);
+      return {
+        id: r.id,
+        eventId: r.eventId,
+        userId: r.userId,
+        discordUserId: r.discordUserId,
+        steamId: r.steamId,
+        ...(ref ? { playerId: ref.playerId, idKind: ref.idKind } : {}),
+        source: toParticipantSource(r.source),
+        inVoice: r.inVoice,
+        onServer: r.onServer,
+        discordUsername: r.discordUsername,
+        discordAvatarHash: r.discordAvatarHash,
+        joinedAt: r.joinedAt.toISOString(),
+        leftAt: r.leftAt?.toISOString() ?? null,
+        totalDurationSeconds: r.totalDurationSeconds,
+        sessionCount: r.sessionCount,
+      };
+    });
   }
 
   /**

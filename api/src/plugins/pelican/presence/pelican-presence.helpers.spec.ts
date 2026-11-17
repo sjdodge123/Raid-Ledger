@@ -3,7 +3,12 @@ import {
   netPresenceChanges,
   ReplayWatermark,
   toPresentPlayers,
+  toSinkPlayer,
 } from './pelican-presence.helpers';
+import { steamPlayer, type PlayerRef } from './presence-events';
+import { rosterOf } from './server-presence.reader';
+
+const xuid = (playerId: string): PlayerRef => ({ playerId, idKind: 'xuid' });
 
 describe('ReplayWatermark', () => {
   it('admits newer events and rejects older ones', () => {
@@ -32,31 +37,33 @@ describe('ReplayWatermark', () => {
 describe('netPresenceChanges', () => {
   it('reports only the net joins, leaves and renames', () => {
     const before = [
-      { steamId: 'A', name: 'Alice' },
-      { steamId: 'B', name: null },
-      { steamId: 'C', name: 'Cy' },
+      { ...steamPlayer('A'), name: 'Alice' },
+      { ...steamPlayer('B'), name: null },
+      { ...steamPlayer('C'), name: 'Cy' },
     ];
     const after = [
-      { steamId: 'A', name: 'Alice' },
-      { steamId: 'B', name: 'Bob' },
-      { steamId: 'D', name: null },
+      { ...steamPlayer('A'), name: 'Alice' },
+      { ...steamPlayer('B'), name: 'Bob' },
+      { ...steamPlayer('D'), name: null },
     ];
     expect(netPresenceChanges(before, after)).toEqual([
-      { kind: 'left', steamId: 'C', name: 'Cy' },
-      { kind: 'renamed', steamId: 'B', name: 'Bob' },
-      { kind: 'joined', steamId: 'D', name: null },
+      { kind: 'left', ...steamPlayer('C'), name: 'Cy' },
+      { kind: 'renamed', ...steamPlayer('B'), name: 'Bob' },
+      { kind: 'joined', ...steamPlayer('D'), name: null },
     ]);
   });
 
   it('maps a SteamID-only display label back to an unnamed player', () => {
     expect(
       toPresentPlayers([
-        { steamId: 'A', displayName: 'A' },
-        { steamId: 'B', displayName: 'Bob' },
+        { ...steamPlayer('A'), displayName: 'A' },
+        { ...steamPlayer('B'), displayName: 'Bob' },
+        { ...xuid('C'), displayName: 'C' },
       ]),
     ).toEqual([
-      { steamId: 'A', name: null },
-      { steamId: 'B', name: 'Bob' },
+      { ...steamPlayer('A'), name: null },
+      { ...steamPlayer('B'), name: 'Bob' },
+      { ...xuid('C'), name: null },
     ]);
   });
 });
@@ -64,22 +71,69 @@ describe('netPresenceChanges', () => {
 describe('netOwnerChanges (ROK-1822 r4)', () => {
   it('lists only same-named players whose owner alone changed', () => {
     const before = [
-      { steamId: 'A', name: 'Alice', owner: '1' },
-      { steamId: 'B', name: 'Bob', owner: '2' },
-      { steamId: 'C', name: 'Cat' },
-      { steamId: 'D', name: null },
+      { ...steamPlayer('A'), name: 'Alice', owner: '1' },
+      { ...steamPlayer('B'), name: 'Bob', owner: '2' },
+      { ...steamPlayer('C'), name: 'Cat' },
+      { ...steamPlayer('D'), name: null },
     ];
     const after = [
-      { steamId: 'A', name: 'Alice' },
-      { steamId: 'B', name: 'Bob', owner: '2' },
-      { steamId: 'C', name: 'Cat', owner: '3' },
-      { steamId: 'D', name: null },
-      { steamId: 'E', name: 'Eve', owner: '5' },
+      { ...steamPlayer('A'), name: 'Alice' },
+      { ...steamPlayer('B'), name: 'Bob', owner: '2' },
+      { ...steamPlayer('C'), name: 'Cat', owner: '3' },
+      { ...steamPlayer('D'), name: null },
+      { ...steamPlayer('E'), name: 'Eve', owner: '5' },
     ];
-    const changes = [{ kind: 'joined' as const, steamId: 'E', name: 'Eve' }];
+    const changes = [
+      { kind: 'joined' as const, ...steamPlayer('E'), name: 'Eve' },
+    ];
     expect(netOwnerChanges(before, after, changes)).toEqual([
-      { steamId: 'A', name: 'Alice' },
-      { steamId: 'C', name: 'Cat', owner: '3' },
+      { ...steamPlayer('A'), name: 'Alice' },
+      { ...steamPlayer('C'), name: 'Cat', owner: '3' },
+    ]);
+  });
+});
+
+describe('non-Steam players at the sink/reader boundary (ROK-2232)', () => {
+  it('nets a SteamID and an XUID with the same digits as two players', () => {
+    expect(
+      netPresenceChanges(
+        [{ ...steamPlayer('1'), name: 'Bjorn' }],
+        [{ ...xuid('1'), name: 'Freya' }],
+      ),
+    ).toEqual([
+      { kind: 'left', ...steamPlayer('1'), name: 'Bjorn' },
+      { kind: 'joined', ...xuid('1'), name: 'Freya' },
+    ]);
+  });
+
+  // ROK-2232 lane 2: these replaced lane 1's "XUID is skipped" tests — a
+  // non-Steam player now reaches the sink and the roster under its own kind.
+  it('hands an XUID to the sink under its own kind, never as a SteamID', () => {
+    const sinkPlayer = toSinkPlayer({ ...xuid('1'), name: 'Freya' }, '9');
+    expect(sinkPlayer).toEqual({
+      playerId: '1',
+      idKind: 'xuid',
+      displayName: 'Freya',
+      characterOwnerId: '9',
+    });
+    expect(sinkPlayer).not.toHaveProperty('steamId');
+    expect(toSinkPlayer({ ...steamPlayer('1'), name: null }, '9')).toEqual({
+      playerId: '1',
+      idKind: 'steam',
+      displayName: '1',
+    });
+  });
+
+  it('lists an XUID player on the roster under its own kind', () => {
+    const source = { pelicanServerId: 7, gameId: 42 };
+    expect(
+      rosterOf(source, [
+        { ...xuid('1'), name: 'Freya' },
+        { ...steamPlayer('2'), name: 'Bjorn' },
+      ]),
+    ).toEqual([
+      { ...source, playerId: '1', idKind: 'xuid', name: 'Freya' },
+      { ...source, playerId: '2', idKind: 'steam', name: 'Bjorn' },
     ]);
   });
 });

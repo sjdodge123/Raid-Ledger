@@ -16,6 +16,10 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
+  steamIdOf,
+  type PlayerRef,
+} from '../../plugins/pelican/presence/presence-events';
+import {
   findSteamlessUserRow,
   lockRow,
   mergeSteamIntoUserRow,
@@ -34,12 +38,13 @@ const t = schema.adHocParticipants;
 
 export type AdHocParticipantRow = typeof schema.adHocParticipants.$inferSelect;
 
-/** A player seen on a game server (ROK-1800). */
-export interface ServerPresenceMemberInfo {
-  /** SteamID64. */
-  steamId: string;
+/**
+ * A player seen on a game server (ROK-1800), under their platform id of any
+ * kind (ROK-2232). Only a Steam player can resolve to an RL user today.
+ */
+export interface ServerPresenceMemberInfo extends PlayerRef {
   /**
-   * In-game character name when known, else the SteamID64. Shown for
+   * In-game character name when known, else the `playerId`. Shown for
    * UNLINKED players only — a linked row shows the RL user (ROK-1821).
    */
   displayName: string;
@@ -81,16 +86,22 @@ export async function findParticipantForUser(
   return rows[0] ?? null;
 }
 
-/** The row already carrying this SteamID on the event, if any. */
-export async function findParticipantBySteamId(
+/** The row already carrying this platform player on the event, if any. */
+export async function findParticipantByPlayer(
   db: Db,
   eventId: number,
-  steamId: string,
+  player: PlayerRef,
 ): Promise<AdHocParticipantRow | null> {
   const rows = await db
     .select()
     .from(t)
-    .where(and(eq(t.eventId, eventId), eq(t.steamId, steamId)))
+    .where(
+      and(
+        eq(t.eventId, eventId),
+        eq(t.idKind, player.idKind),
+        eq(t.playerId, player.playerId),
+      ),
+    )
     .limit(1);
   return rows[0] ?? null;
 }
@@ -115,13 +126,16 @@ export async function upsertSteamParticipant(
   eventId: number,
   member: ServerPresenceMemberInfo,
 ): Promise<SteamUpsertOutcome> {
-  if (member.userId !== null) {
+  const steamId = steamIdOf(member);
+  // ROK-2232: only a Steam player resolves to an RL user, so only one merges.
+  if (member.userId !== null && steamId !== null) {
     const userRow = await findSteamlessUserRow(db, eventId, member.userId);
-    const bySteam = await findParticipantBySteamId(db, eventId, member.steamId);
+    const bySteam = await findParticipantByPlayer(db, eventId, member);
     // A Steam row that already carries a Discord id is someone's merged row.
     const steamOnly = bySteam?.discordUserId === null ? bySteam.id : null;
     if (userRow && (!bySteam || steamOnly)) {
-      if (await mergeSteamIntoUserRow(db, userRow.id, steamOnly, member))
+      const merge = { ...member, steamId };
+      if (await mergeSteamIntoUserRow(db, userRow.id, steamOnly, merge))
         return 'merged';
     }
   }
@@ -144,7 +158,17 @@ const steamConflictSet = (now: Date) => ({
   sessionCount: sql`${t.sessionCount} + 1`,
 });
 
-/** Insert the Steam row, or refresh it on `(event_id, steam_id)` conflict. */
+/** ROK-2232: the row's platform key; `steam_id` mirrors a Steam player only. */
+const playerIdCols = (m: PlayerRef) => ({
+  steamId: steamIdOf(m),
+  playerId: m.playerId,
+  idKind: m.idKind,
+});
+
+/**
+ * Insert the server row, or refresh it on `(event_id, id_kind, player_id)`
+ * conflict (ROK-2232). `steam_id` is written for a Steam player only.
+ */
 async function insertOrRejoinSteamRow(
   db: Db,
   eventId: number,
@@ -158,7 +182,7 @@ async function insertOrRejoinSteamRow(
       eventId,
       userId: member.userId,
       discordUserId: null,
-      steamId: member.steamId,
+      ...playerIdCols(member),
       source: 'steam',
       ...display,
       joinedAt: now,
@@ -168,8 +192,8 @@ async function insertOrRejoinSteamRow(
       pelicanServerId: member.pelicanServerId ?? null,
     })
     .onConflictDoUpdate({
-      target: [t.eventId, t.steamId],
-      targetWhere: sql`${t.steamId} IS NOT NULL`,
+      target: [t.eventId, t.idKind, t.playerId],
+      targetWhere: sql`${t.playerId} IS NOT NULL`,
       set: steamConflictSet(now),
     })
     .returning({ sessionCount: t.sessionCount });
@@ -321,11 +345,11 @@ export async function markVoiceLeave(
 export async function markSteamLeave(
   db: Db,
   eventId: number,
-  steamId: string,
+  player: PlayerRef,
   pelicanServerId?: number,
 ): Promise<boolean> {
   const closed = await db.transaction(async (tx) => {
-    const found = await findParticipantBySteamId(tx, eventId, steamId);
+    const found = await findParticipantByPlayer(tx, eventId, player);
     const row = found && (await lockRow(tx, found.id));
     if (row && !row.onServer) return null;
     if (

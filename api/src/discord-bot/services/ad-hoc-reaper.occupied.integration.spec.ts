@@ -11,6 +11,7 @@
  *  - auto-extend picks up a live, occupied Quick Play whose end slipped out
  *    of the window and moves its end past now.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -57,7 +58,7 @@ async function insertOverdueQuickPlay(
 /** Put a Steam-only player on the event's game server (open row). */
 async function joinServer(eventId: number, steamId: string): Promise<void> {
   await participants.addServerParticipant(eventId, {
-    steamId,
+    ...steamPlayer(steamId),
     displayName: `Viking-${steamId.slice(-3)}`,
     userId: null,
     pelicanServerId: SERVER_ID,
@@ -113,7 +114,11 @@ describe('reaper vs an occupied live Quick Play (ROK-2052)', () => {
   it('still reaps an overdue live Quick Play whose rows are all closed', async () => {
     const id = await insertOverdueQuickPlay();
     await joinServer(id, '76561198000002052');
-    await participants.markServerLeave(id, '76561198000002052', SERVER_ID);
+    await participants.markServerLeave(
+      id,
+      steamPlayer('76561198000002052'),
+      SERVER_ID,
+    );
 
     expect(await orphanIds()).toContain(id);
     await testApp.app.get(AdHocReaperService).reapOrphanedEvents();
@@ -216,7 +221,7 @@ describe('auto-extend recovers a slipped live Quick Play (ROK-2052)', () => {
     const id = await insertOverdueQuickPlay();
     for (const steamId of ['76561198000002060', '76561198000002061']) {
       await joinServer(id, steamId);
-      await participants.markServerLeave(id, steamId, SERVER_ID);
+      await participants.markServerLeave(id, steamPlayer(steamId), SERVER_ID);
     }
 
     expect(await extendTick(id)).toBeNull();
