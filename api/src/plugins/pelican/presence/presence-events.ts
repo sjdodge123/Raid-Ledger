@@ -8,6 +8,8 @@
  * `yyyy-MM-ddTHH:mm:ss` string (container-local time). It is only for
  * ordering and deduping replayed lines; live lines use receive time.
  */
+import { PlayerIdKindEnum, type PlayerIdKind } from '@raid-ledger/contract';
+
 interface PresenceEventBase {
   loggedAt?: string;
 }
@@ -18,7 +20,7 @@ interface PresenceEventBase {
  * Xbox XUID. Ids from different kinds never compare equal, even when their
  * digits match — see {@link presenceKey}.
  */
-export type PlayerIdKind = 'steam' | 'minecraft-uuid' | 'xuid';
+export type { PlayerIdKind };
 
 /** A player's platform id and the namespace it lives in (ROK-2232). */
 export interface PlayerRef {
@@ -46,7 +48,7 @@ export function steamIdOf(ref: PlayerRef): string | null {
   return ref.idKind === 'steam' ? ref.playerId : null;
 }
 
-const ID_KINDS: readonly PlayerIdKind[] = ['steam', 'minecraft-uuid', 'xuid'];
+const ID_KINDS: readonly PlayerIdKind[] = PlayerIdKindEnum.options;
 
 /**
  * A stored `(player_id, id_kind)` pair as a ref (ROK-2232); null when either

@@ -68,8 +68,8 @@ async function findVoiceRow(db: Db, eventId: number, userId: number) {
 
 /**
  * Fold the steam row into the voice row. The steam row is deleted FIRST:
- * the `(event_id, steam_id)` unique index forbids two rows holding the
- * SteamID, and the identity CHECK forbids clearing it on a Discord-less row.
+ * the `(event_id, steam_id)` and `(event_id, id_kind, player_id)` unique
+ * indexes (ROK-2232) forbid two rows holding the player, and the identity CHECK forbids clearing it on a Discord-less row.
  * Two ordered statements, neither of which can violate (no catch-and-retry
  * inside a transaction — CLAUDE.md). The delete's RETURNING gates the fold,
  * so a replayed link finds nothing and changes nothing.
