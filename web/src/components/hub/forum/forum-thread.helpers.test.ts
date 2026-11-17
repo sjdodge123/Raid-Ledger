@@ -27,6 +27,11 @@ describe('forum thread helpers', () => {
         expect(forumRowMeta(buildForumThread(), NOW)).toBe('Grimtusk · 2 h ago');
     });
 
+    it('meta line of an event thread (live or event-deleted) = "Event thread · <age>" (ROK-2229)', () => {
+        expect(forumRowMeta(buildForumThread({ event: buildForumThreadEvent(), lock: null }), NOW)).toBe('Event thread · 2 h ago');
+        expect(forumRowMeta(buildForumThread({ event: null, lock: buildForumLock({ reason: 'event-deleted' }) }), NOW)).toBe('Event thread · 2 h ago');
+    });
+
     it('row rights: an event thread (live or event-deleted) never offers Edit/Delete, keeps Pin (ROK-2226 §5.5)', () => {
         const fresh = { createdAt: new Date(NOW - 60_000).toISOString() };
         const author = { userId: 1, canWrite: true, canModerate: true };
