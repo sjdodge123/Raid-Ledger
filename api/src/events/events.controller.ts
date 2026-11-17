@@ -20,6 +20,7 @@ import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { EventsService } from './events.service';
+import { InviteMemberThrottleGuard } from './invite-member-throttle.guard';
 import { EventGuildTagService } from './event-guild-tag.service';
 import { SignupsService } from './signups.service';
 import { ShareService } from './share.service';
@@ -248,8 +249,9 @@ export class EventsController {
     return { message: 'Event deleted successfully' };
   }
 
+  /** ROK-2217: managers or signed-up members; 10/min per user. */
   @Post(':id/invite-member')
-  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard, InviteMemberThrottleGuard)
   async inviteMember(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,

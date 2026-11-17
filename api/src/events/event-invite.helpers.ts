@@ -1,7 +1,11 @@
 /**
  * Helpers for member invitation to events.
  */
-import { NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Logger } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -11,6 +15,8 @@ import type { NotificationService } from '../notifications/notification.service'
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { MEMBER_INVITE_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { MemberInviteCreatedPayload } from '../discord-bot/discord-bot.constants';
+import { isEventSignup } from '../guilds/forum/event-discussion/event-discussion.queries';
+import { canManageEvent } from './pugs-visibility.helpers';
 
 export type UserBasic = { id: number; username: string };
 
@@ -75,6 +81,26 @@ export async function getInviterUsername(
     .where(eq(schema.users.id, inviterId))
     .limit(1);
   return inviter?.username ?? 'Someone';
+}
+
+/** The 403 a caller gets when they may not invite members (ROK-2217). */
+export const INVITE_MEMBER_FORBIDDEN_MESSAGE =
+  'Only the event organiser, staff, or members signed up to this event can invite members';
+
+/**
+ * ROK-2217: managers (creator or operator/admin) may always invite members;
+ * anyone else only while they hold a signed-up or tentative signup on the
+ * event (the ROK-2226 writable-signup rule — declined/departed don't count).
+ */
+export async function assertCanInviteMembers(
+  db: PostgresJsDatabase<typeof schema>,
+  event: { id: number; creator: { id: number } },
+  inviterId: number,
+  isAdmin: boolean,
+): Promise<void> {
+  if (canManageEvent(event.creator.id, inviterId, isAdmin)) return;
+  if (await isEventSignup(db, event.id, inviterId)) return;
+  throw new ForbiddenException(INVITE_MEMBER_FORBIDDEN_MESSAGE);
 }
 
 /** Full invite flow: find user, check signup, send invite. */
@@ -169,9 +195,11 @@ export async function inviteMemberToEvent(
   },
   event: EventResponseDto,
   eventId: number,
-  inviterId: number,
+  inviter: { id: number; isAdmin: boolean },
   discordId: string,
 ): Promise<{ message: string }> {
+  await assertCanInviteMembers(deps.db, event, inviter.id, inviter.isAdmin);
+  const inviterId = inviter.id;
   const result = await inviteMemberFlow(
     deps.db,
     deps.notificationService,

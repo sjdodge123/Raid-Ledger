@@ -272,7 +272,10 @@ export class EventsService {
     );
   }
 
-  /** Invites a registered member to an event via Discord ID. */
+  /**
+   * Invites a registered member to an event via Discord ID. ROK-2217: managers,
+   * or members signed up to the event (403 otherwise).
+   */
   async inviteMember(
     eventId: number,
     inviterId: number,
@@ -289,7 +292,7 @@ export class EventsService {
       },
       event,
       eventId,
-      inviterId,
+      { id: inviterId, isAdmin },
       discordId,
     );
   }
