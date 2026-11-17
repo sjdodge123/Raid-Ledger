@@ -2,7 +2,8 @@
  * ROK-2208 §5.7 items 1, 2, 5 — `EventPostOutbound` with its reads mocked:
  * a lazy post is created (dated title, absolute root link) only for a
  * writable event thread, never for a read-only one or a plain thread; a
- * retitle renames sent posts through the rename budget only.
+ * retitle never renames directly — it re-drives each live post through the
+ * owner's binding-checked `thread.updated` path (review MAJOR-1).
  */
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import type { ForumLink } from './hub-forum-discord-links.queries';
@@ -70,24 +71,23 @@ function setup() {
     createPost: jest
       .fn()
       .mockResolvedValue({ threadId: 'p1', messageId: 'p1' }),
-    renameThread: jest
-      .fn<EventPostDeps['gateway']['renameThread']>()
-      .mockResolvedValue('ok'),
   };
-  const renames = { trySpend: jest.fn().mockReturnValue(true) };
+  const redrive = jest
+    .fn<Promise<unknown>, [ForumLink]>()
+    .mockResolvedValue('dispatched');
   const attempt = jest.fn(async (_l: ForumLink, run: () => Promise<void>) =>
     run(),
   );
   const deps: EventPostDeps = {
     db: {} as ForumDiscordDb,
     gateway,
-    renames,
     now: () => NOW,
     attempt,
+    redrive,
     clientUrl: () => Promise.resolve('https://rl.example'),
     timeZone: () => Promise.resolve('UTC'),
   };
-  return { svc: new EventPostOutbound(deps), gateway, renames, attempt };
+  return { svc: new EventPostOutbound(deps), gateway, redrive, attempt };
 }
 
 const mocked = {
@@ -158,27 +158,21 @@ describe('EventPostOutbound.ensurePost (item 1, lazy post)', () => {
 });
 
 describe('EventPostOutbound.retitle (item 2)', () => {
-  it('renames each sent post to the dated title through the rename budget', async () => {
-    const { svc, gateway, renames } = setup();
-    mocked.heading.mockResolvedValue({ title: 'Onyxia', start: START });
-    mocked.posts.mockResolvedValue([
-      linkRow({ discordThreadId: 'p1', discordMessageId: 'p1' }),
-      linkRow({ id: 12 }),
-    ]);
+  it('re-drives every live post through the owner and never renames directly', async () => {
+    const { svc, redrive } = setup();
+    const sent = linkRow({ discordThreadId: 'p1', discordMessageId: 'p1' });
+    const other = linkRow({ id: 12, threadId: 4 });
+    mocked.posts.mockResolvedValue([sent, other]);
     await svc.retitle(9);
-    expect(gateway.renameThread).toHaveBeenCalledTimes(1);
-    const [id, name, spend] = gateway.renameThread.mock.calls[0] ?? [];
-    expect([id, name]).toEqual(['p1', 'Onyxia — Sat 22 Nov']);
-    expect(typeof spend === 'function' && spend()).toBe(true);
-    expect(renames.trySpend).toHaveBeenCalledWith('p1');
+    expect(mocked.posts).toHaveBeenCalledWith({}, 9);
+    expect(redrive.mock.calls).toEqual([[sent], [other]]);
   });
 
-  it('does nothing once the event is gone', async () => {
-    const { svc, gateway } = setup();
-    mocked.heading.mockResolvedValue(null);
+  it('does nothing when the event has no live post', async () => {
+    const { svc, redrive } = setup();
+    mocked.posts.mockResolvedValue([]);
     await svc.retitle(9);
-    expect(mocked.posts).not.toHaveBeenCalled();
-    expect(gateway.renameThread).not.toHaveBeenCalled();
+    expect(redrive).not.toHaveBeenCalled();
   });
 });
 

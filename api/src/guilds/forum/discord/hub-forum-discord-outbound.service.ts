@@ -69,15 +69,15 @@ export class HubForumDiscordOutboundService {
     this.events = new EventPostOutbound({
       db,
       gateway,
-      renames: this.renames,
       now: () => this.now(),
       attempt: (link, run) => this.attempt(link, run),
+      redrive: (link) => this.retry(link, 'thread.updated'),
       clientUrl: () => getClientUrl(settings),
       timeZone: () => settings.getDefaultTimezone(),
     });
   }
 
-  /** §5.7 item 2: an event changed — rename its post to the dated title. */
+  /** §5.7 item 2: an event changed — re-drive its posts (binding-checked). */
   retitleEvent(eventId: number): Promise<void> {
     return this.events.retitle(eventId);
   }
@@ -222,7 +222,8 @@ export class HubForumDiscordOutboundService {
   private async editThread(job: Job): Promise<void> {
     const { guildId, threadId } = job.change;
     const link = await links.findThreadLink(this.db, threadId);
-    if (!link || !this.editable(link)) return;
+    // A locked (archived) event post rejects edits (50083); reopen re-drives.
+    if (!link || !this.editable(link) || link.discordLockedAt) return;
     const record = await findThread(this.db, guildId, threadId);
     if (!record) return;
     const url = await this.url({ guildId, threadId });

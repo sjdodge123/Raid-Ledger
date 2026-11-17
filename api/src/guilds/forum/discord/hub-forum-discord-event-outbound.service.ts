@@ -6,10 +6,10 @@
  * 1. Lazy post: an event thread gets its Discord post only when its first
  *    live RL reply goes out — titled "<event> — <short date>", body = the
  *    2226 root text. Nothing is posted at schedule time.
- * 2. Retitle: an event update renames the post through the rename budget.
+ * 2. Retitle: an event update re-drives each live post as `thread.updated`
+ *    through the owner (binding + stale checks, rename budget, D9 / MAJOR-1).
  * 5. A read-only (closed or detached) event thread never posts.
  */
-import type { ThreadRenameBudget } from '../../../discord-bot/lfg-board/lfg-board-thread.helpers';
 import {
   discordThreadName,
   forumThreadUrl,
@@ -38,15 +38,19 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 /** What the owning outbound service lends. */
 export interface EventPostDeps {
   db: ForumDiscordDb;
-  gateway: Pick<HubForumDiscordOutboundGateway, 'createPost' | 'renameThread'>;
+  gateway: Pick<HubForumDiscordOutboundGateway, 'createPost'>;
   /** The trusted client URL (`getClientUrl`). */
   clientUrl: () => Promise<string>;
   /** The community default timezone (`DEFAULT_TIMEZONE`), null when unset. */
   timeZone: () => Promise<string | null>;
-  renames: Pick<ThreadRenameBudget, 'trySpend'>;
   now: () => Date;
   /** Run a Discord write; a throw marks the link failed (S6 retries it). */
   attempt: (link: links.ForumLink, run: () => Promise<void>) => Promise<void>;
+  /**
+   * Re-drive one post as `thread.updated` through the owner's binding-checked
+   * job path (unbound / stale ⇒ nothing; locked ⇒ skipped until reopened).
+   */
+  redrive: (link: links.ForumLink) => Promise<unknown>;
 }
 
 /** Where a post goes: the bound forum and the hub's shared tag, if any. */
@@ -124,20 +128,14 @@ export class EventPostOutbound {
     await this.send(to, link, src);
   }
 
-  /** Item 2 — rename the event's live, sent posts to the current dated title. */
+  /**
+   * Item 2 — re-drive the event's live posts so each picks up the current
+   * dated title and starter text. Never renames directly: an unbound or
+   * re-bound hub's old post is left alone (D9, review MAJOR-1).
+   */
   async retitle(eventId: number): Promise<void> {
-    const name = await this.title(eventId);
-    if (name === null) return;
     const posts = await liveEventPostLinks(this.deps.db, eventId);
-    for (const link of posts) {
-      if (link.discordDeletedAt || links.isUnsent(link)) continue;
-      const id = link.discordThreadId;
-      await this.deps.attempt(link, async () => {
-        await this.deps.gateway.renameThread(id, name, () =>
-          this.deps.renames.trySpend(id),
-        );
-      });
-    }
+    for (const link of posts) await this.deps.redrive(link);
   }
 
   private async send(

@@ -7,6 +7,7 @@ import {
   HubForumDiscordEventLockSweep,
   type LockChange,
 } from './hub-forum-discord-event-lock';
+import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const NOW = new Date('2026-11-16T12:00:00Z');
@@ -60,37 +61,55 @@ function setup(rounds: LockChange[][], connected = true) {
   const client = {
     isConnected: () => connected,
   } as unknown as DiscordBotClientService;
+  const outbound = { apply: jest.fn().mockResolvedValue(undefined) };
   const sweep = new HubForumDiscordEventLockSweep(
     db,
     gateway as unknown as HubForumDiscordEventLockGateway,
     client,
+    outbound as unknown as HubForumDiscordOutboundService,
   );
   const due = jest.spyOn(sweep, 'due');
   for (const r of rounds) due.mockResolvedValueOnce(r);
   due.mockResolvedValue([]);
-  return { sweep, gateway, sets };
+  return { sweep, gateway, sets, outbound };
 }
 
 const row = (readOnly: boolean): LockChange => ({
   linkId: 1,
+  guildId: 7,
+  threadId: 3,
   discordThreadId: '9',
   readOnly,
 });
 
 describe('HubForumDiscordEventLockSweep.sweep', () => {
   it('locks + archives once and records the lock', async () => {
-    const { sweep, gateway, sets } = setup([[row(true)]]);
+    const { sweep, gateway, sets, outbound } = setup([[row(true)]]);
     expect(await sweep.sweep(NOW)).toBe(1);
     expect(await sweep.sweep(NOW)).toBe(0);
     expect(gateway.setReadOnly).toHaveBeenCalledTimes(1);
     expect(gateway.setReadOnly).toHaveBeenCalledWith('9', true);
     expect(sets).toEqual([{ discordLockedAt: NOW }]);
+    expect(outbound.apply).not.toHaveBeenCalled();
   });
 
-  it('unlocks a rescheduled post and clears the record', async () => {
-    const { sweep, gateway, sets } = setup([[row(false)]]);
+  it('unlocks a rescheduled post, clears the record, then re-drives its title (MINOR-1)', async () => {
+    const { sweep, gateway, sets, outbound } = setup([[row(false)]]);
     expect(await sweep.sweep(NOW)).toBe(1);
     expect(gateway.setReadOnly).toHaveBeenCalledWith('9', false);
+    expect(sets).toEqual([{ discordLockedAt: null }]);
+    expect(outbound.apply).toHaveBeenCalledWith({
+      guildId: 7,
+      threadId: 3,
+      op: 'thread.updated',
+      actorId: 0,
+    });
+  });
+
+  it('a failed re-drive still counts the reopen (the lock state is recorded)', async () => {
+    const { sweep, outbound, sets } = setup([[row(false)]]);
+    outbound.apply.mockRejectedValueOnce(new Error('db down'));
+    expect(await sweep.sweep(NOW)).toBe(1);
     expect(sets).toEqual([{ discordLockedAt: null }]);
   });
 

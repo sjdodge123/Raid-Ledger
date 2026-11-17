@@ -6,7 +6,9 @@
  * again, not detached) unarchives THEN unlocks. `discord_locked_at` on the
  * link row records the state, so the 5-minute Core sweep
  * (`HubForumDiscordSync_eventLockSweep`) is idempotent. Archiving unpins on
- * Discord — fine, R5 keeps the RL pin.
+ * Discord — fine, R5 keeps the RL pin. While locked, `editThread` skips the
+ * post (an archived thread rejects edits, 50083), so a reopen re-drives it as
+ * `thread.updated` to pick up the current dated title (review MINOR-1).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq, isNotNull, isNull, like, not, or, sql } from 'drizzle-orm';
@@ -15,6 +17,7 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
 import { isGone } from './hub-forum-discord-outbound.discord';
+import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const links = schema.hubForumDiscordLinks;
@@ -26,6 +29,8 @@ const BATCH = 50;
 /** One post whose Discord lock state disagrees with its RL thread. */
 export interface LockChange {
   linkId: number;
+  guildId: number;
+  threadId: number;
   discordThreadId: string;
   readOnly: boolean;
 }
@@ -65,6 +70,8 @@ export async function dueLockChanges(
   return db
     .select({
       linkId: links.id,
+      guildId: links.guildId,
+      threadId: links.threadId,
       discordThreadId: links.discordThreadId,
       readOnly,
     })
@@ -95,6 +102,7 @@ export class HubForumDiscordEventLockSweep {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordEventLockGateway,
     private readonly client: DiscordBotClientService,
+    private readonly outbound: HubForumDiscordOutboundService,
   ) {}
 
   /** Flip every due post; returns how many changed. Offline bot → 0. */
@@ -120,11 +128,31 @@ export class HubForumDiscordEventLockSweep {
         .update(links)
         .set({ discordLockedAt: row.readOnly ? now : null })
         .where(eq(links.id, row.linkId));
-      return true;
     } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Event post ${row.discordThreadId} lock: ${why}`);
+      this.warn(row, err);
       return false;
     }
+    if (!row.readOnly) await this.refresh(row);
+    return true;
+  }
+
+  /** Reopened: push the title/starter skipped while locked (binding-checked). */
+  private async refresh(row: LockChange): Promise<void> {
+    const { guildId, threadId } = row;
+    try {
+      await this.outbound.apply({
+        guildId,
+        threadId,
+        op: 'thread.updated',
+        actorId: 0,
+      });
+    } catch (err) {
+      this.warn(row, err);
+    }
+  }
+
+  private warn(row: LockChange, err: unknown): void {
+    const why = err instanceof Error ? err.message : String(err);
+    this.logger.warn(`Event post ${row.discordThreadId} lock: ${why}`);
   }
 }
