@@ -9,16 +9,21 @@ import {
 
 const STEAM = '76561198000000001';
 
+const XUID = '2535411111111111';
+
+/** A Steam row mirrors its SteamID into `playerId` (ROK-2232). */
 function row(over: {
   userId?: number | null;
   discordUserId?: string | null;
   steamId?: string | null;
+  playerId?: string | null;
   discordUsername?: string;
 }) {
   return {
     userId: null,
     discordUserId: null,
     steamId: null,
+    playerId: over.steamId ?? null,
     discordUsername: 'Loanati',
     ...over,
   };
@@ -40,10 +45,30 @@ describe('isUnlinkedServerRow (ROK-1888)', () => {
     ).toBe(false);
   });
 
+  it('matches an XUID row with no RL user, no Discord account and no SteamID (ROK-2232)', () => {
+    expect(isUnlinkedServerRow(row({ playerId: XUID }))).toBe(true);
+  });
+
+  it('does not match an XUID row linked to an RL user (ROK-2232)', () => {
+    expect(isUnlinkedServerRow(row({ playerId: XUID, userId: 7 }))).toBe(false);
+  });
+
   it('covers every anonymous (SteamID-named) row', () => {
     const anon = row({ steamId: STEAM, discordUsername: STEAM });
     expect(isAnonymousServerRow(anon)).toBe(true);
     expect(isUnlinkedServerRow(anon)).toBe(true);
+  });
+});
+
+describe('isAnonymousServerRow (ROK-1801 Q4, ROK-2232)', () => {
+  it('matches an unnamed XUID row, whose stored name is its XUID', () => {
+    const anon = row({ playerId: XUID, discordUsername: XUID });
+    expect(isAnonymousServerRow(anon)).toBe(true);
+    expect(isUnlinkedServerRow(anon)).toBe(true);
+  });
+
+  it('does not match a named XUID row', () => {
+    expect(isAnonymousServerRow(row({ playerId: XUID }))).toBe(false);
   });
 });
 
