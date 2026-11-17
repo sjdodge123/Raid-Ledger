@@ -1,6 +1,7 @@
 /**
  * ROK-1801 layer B — roster identity + dedupe (pure half of the service).
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { buildServerRoster } from './server-presence-roster.helpers';
 
 const V = 10;
@@ -12,6 +13,7 @@ const player = (
 ) => ({
   pelicanServerId,
   gameId,
+  ...steamPlayer(steamId),
   steamId,
   name,
 });

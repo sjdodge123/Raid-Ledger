@@ -211,10 +211,8 @@ export class PelicanPresenceSession {
     this.forward(changes);
     this.forwardOwners(before, changes);
     const tracked = this.tracker.snapshot().length;
-    for (const ref of this.held.departures(event, tracked)) {
-      const player = { playerId: ref.playerId, idKind: ref.idKind };
-      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, player));
-    }
+    for (const ref of this.held.departures(event, tracked))
+      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, ref));
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));

@@ -8,6 +8,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { steamPlayer } from '../plugins/pelican/presence/presence-events';
 import * as presenceHelpers from '../discord-bot/services/ad-hoc-server-presence.helpers';
 import {
   DEMO_PELICAN_SERVER_ID,
@@ -66,7 +67,7 @@ describe('DemoTestQuickPlayServerController.serverJoin', () => {
     expect(liveSpy).toHaveBeenCalledWith({}, 4);
     expect(presence.playerJoined).toHaveBeenCalledWith(
       { pelicanServerId: DEMO_PELICAN_SERVER_ID, gameId: 4 },
-      { steamId: STEAM, displayName: 'Loanati' },
+      { ...steamPlayer(STEAM), displayName: 'Loanati' },
     );
   });
 

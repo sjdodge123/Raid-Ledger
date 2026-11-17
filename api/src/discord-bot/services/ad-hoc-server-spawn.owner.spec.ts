@@ -59,7 +59,12 @@ describe('spawnOrFindServerQuickPlay — character owner (ROK-1822 r4)', () => {
       [
         db,
         55,
-        { ...steamPlayer('S2'), displayName: 'S2', userId: null, pelicanServerId: 7 },
+        {
+          ...steamPlayer('S2'),
+          displayName: 'S2',
+          userId: null,
+          pelicanServerId: 7,
+        },
       ],
     ]);
   });

@@ -70,9 +70,9 @@ describe('resolvePlayerIdentity (ROK-2232)', () => {
     const { mock, db } = mockDb();
     const user = { userId: 9, discordId: 'd-9', displayName: 'Roknua' };
     mock.limit.mockResolvedValue([user]);
-    await expect(resolvePlayerIdentity(db, steamPlayer(DIGITS))).resolves.toEqual(
-      user,
-    );
+    await expect(
+      resolvePlayerIdentity(db, steamPlayer(DIGITS)),
+    ).resolves.toEqual(user);
     expect(mock.select).toHaveBeenCalledTimes(1);
   });
 

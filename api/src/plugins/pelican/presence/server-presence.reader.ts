@@ -84,7 +84,9 @@ export type SteamRosterPlayer = ServerRosterPlayer & { steamId: string };
  * `users.steam_id` (hub membership, the live roster panel). Other id kinds
  * are left out, never passed off as a SteamID.
  */
-export function steamRoster(players: ServerRosterPlayer[]): SteamRosterPlayer[] {
+export function steamRoster(
+  players: ServerRosterPlayer[],
+): SteamRosterPlayer[] {
   return players.flatMap((p) => {
     const steamId = steamIdOf(p);
     return steamId === null ? [] : [{ ...p, steamId }];

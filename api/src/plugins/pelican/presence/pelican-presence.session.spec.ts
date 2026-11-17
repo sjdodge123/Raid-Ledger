@@ -366,9 +366,11 @@ describe('players the sink held before this session (ROK-1802 Codex r4)', () => 
   });
 
   it('a zero-count heartbeat reports every tracked and held player gone', async () => {
-    const h = harness([{ ...steamPlayer('B'), displayName: 'Bob' }], okCredentials, [
-      A,
-    ]);
+    const h = harness(
+      [{ ...steamPlayer('B'), displayName: 'Bob' }],
+      okCredentials,
+      [A],
+    );
     await h.connect();
     await h.live([beat(2, 1)]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left());
@@ -422,7 +424,11 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
     h.logger.log.mock.calls.map(([m]) => m);
   const thorvald = [
     SRC,
-    { ...steamPlayer(STEAM), displayName: 'Thorvald', characterOwnerId: '123456789' },
+    {
+      ...steamPlayer(STEAM),
+      displayName: 'Thorvald',
+      characterOwnerId: '123456789',
+    },
   ];
 
   it('missing test 4: a live join between two re-auth replays applies at once; the next replay adds 0 events', async () => {
@@ -470,7 +476,11 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
 });
 
 describe('character owner persistence (ROK-1822 r4)', () => {
-  const ALICE = { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '111' };
+  const ALICE = {
+    ...steamPlayer('A'),
+    displayName: 'Alice',
+    characterOwnerId: '111',
+  };
   const aliceAs = (ownerId: string, loggedAt: string) =>
     line({
       kind: 'character',
@@ -488,7 +498,10 @@ describe('character owner persistence (ROK-1822 r4)', () => {
     await h.live([aliceAs('222', T(2))]);
     expect(h.sink.playerRenamed.mock.calls).toEqual([
       [SRC, { ...steamPlayer('A'), displayName: 'Alice' }],
-      [SRC, { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '222' }],
+      [
+        SRC,
+        { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '222' },
+      ],
     ]);
     expect(h.sink.playerJoined).not.toHaveBeenCalled();
     expect(h.sink.playerLeft).not.toHaveBeenCalled();
@@ -503,7 +516,10 @@ describe('character owner persistence (ROK-1822 r4)', () => {
       aliceAs('222', T(2)),
     ]);
     expect(h.sink.playerRenamed.mock.calls).toEqual([
-      [SRC, { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '222' }],
+      [
+        SRC,
+        { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '222' },
+      ],
     ]);
     expect(h.sink.playerJoined).not.toHaveBeenCalled();
   });
@@ -518,7 +534,10 @@ describe('character owner persistence (ROK-1822 r4)', () => {
       aliceAs('999', T(3)),
     ]);
     expect(h.sink.playerJoined.mock.calls).toEqual([
-      [SRC, { ...steamPlayer('B'), displayName: 'Alice', characterOwnerId: '999' }],
+      [
+        SRC,
+        { ...steamPlayer('B'), displayName: 'Alice', characterOwnerId: '999' },
+      ],
     ]);
     expect(h.sink.playerLeft).not.toHaveBeenCalled();
   });
@@ -620,7 +639,10 @@ describe('ROK-2233 stateful parser sessions', () => {
     // A ready line itself empties the tracker; only `left Bob` is under test.
     h.sink.playerLeft.mockClear();
     await h.live([...arrive('B', 'Bob', T(5)), 'left Bob']);
-    expect([before, h.sink.playerLeft.mock.calls]).toEqual([[[SRC, steamPlayer('A')]], []]);
+    expect([before, h.sink.playerLeft.mock.calls]).toEqual([
+      [[SRC, steamPlayer('A')]],
+      [],
+    ]);
   });
 });
 

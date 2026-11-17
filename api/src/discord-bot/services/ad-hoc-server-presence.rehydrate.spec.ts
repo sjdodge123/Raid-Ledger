@@ -80,7 +80,9 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
     const open = await listOpenServerPresence(dbWith([LINKED_ROW]), 1, 1);
     const tracker = new ServerPresenceTracker();
     tracker.hydrate(toPresentPlayers(open));
-    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(LINKED), name: null }]);
+    expect(tracker.snapshot()).toEqual([
+      { ...steamPlayer(LINKED), name: null },
+    ]);
     const changes = tracker.apply(
       { kind: 'character', name: 'Ragnar', ownerId: '123', zdoidZero: false },
       new Date(),
@@ -119,6 +121,8 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
       new Date(),
     );
     expect(changes).toEqual([]);
-    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(LINKED), name: 'Ragnar' }]);
+    expect(tracker.snapshot()).toEqual([
+      { ...steamPlayer(LINKED), name: 'Ragnar' },
+    ]);
   });
 });

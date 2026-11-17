@@ -49,7 +49,11 @@ jest.mock('./ad-hoc-server-presence.effects', () => ({
 const SOURCE: ServerPresenceSource = { gameId: 10, pelicanServerId: 1 };
 const ROK = '76561198000000001';
 const LIVE = { id: 278, channelBindingId: 'b1', adHocStatus: 'live' };
-const ON_SERVER: ServerRosterPlayer = { ...SOURCE, ...steamPlayer(ROK), name: 'rok' };
+const ON_SERVER: ServerRosterPlayer = {
+  ...SOURCE,
+  ...steamPlayer(ROK),
+  name: 'rok',
+};
 /** A voice join: `addParticipant` always names the Discord member. */
 const VOICE_JOIN = { eventId: 278, userId: 5, discordUserId: 'discord-5' };
 /** A server-row join: `addServerParticipant` / a server-born spawn — no Discord id. */
@@ -131,7 +135,9 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   });
 
   it('a player whose row is already open on that server is not attached again', async () => {
-    jest.mocked(listOpenGameServerPlayerKeys).mockResolvedValue([presenceKey(steamPlayer(ROK))]);
+    jest
+      .mocked(listOpenGameServerPlayerKeys)
+      .mockResolvedValue([presenceKey(steamPlayer(ROK))]);
     const svc = serviceWith([ON_SERVER]);
     await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).not.toHaveBeenCalled();
@@ -139,7 +145,9 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
 
   it('a player open in ANOTHER live Quick Play of the game is not copied into this one', async () => {
     // The game-wide read spans every live event of game 10, not only `LIVE`.
-    jest.mocked(listOpenGameServerPlayerKeys).mockResolvedValue([presenceKey(steamPlayer(ROK))]);
+    jest
+      .mocked(listOpenGameServerPlayerKeys)
+      .mockResolvedValue([presenceKey(steamPlayer(ROK))]);
     const svc = serviceWith([ON_SERVER]);
     await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).not.toHaveBeenCalled();
@@ -150,7 +158,9 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   });
 
   it('a player who moved servers keeps their row: open on server 1, tracked on server 2 (Codex r2 P2)', async () => {
-    jest.mocked(listOpenGameServerPlayerKeys).mockResolvedValue([presenceKey(steamPlayer(ROK))]);
+    jest
+      .mocked(listOpenGameServerPlayerKeys)
+      .mockResolvedValue([presenceKey(steamPlayer(ROK))]);
     const moved = { ...ON_SERVER, pelicanServerId: 2 };
     const svc = serviceWith([moved]);
     await svc.onParticipantJoined(VOICE_JOIN);
