@@ -46,6 +46,7 @@ import { QuestProgressReadService } from './quest-progress-read.service';
 import { EventQuestReadinessController } from './event-quest-readiness.controller';
 import { EventQuestReadinessService } from './event-quest-readiness.service';
 import { DungeonPlanService } from './guilds/dungeon-plan/dungeon-plan.service';
+import { SuggestedGroupsModule } from './guilds/suggested-groups/suggested-groups.module';
 import { EventRaidReadinessController } from './event-raid-readiness.controller';
 import { EventRaidReadinessService } from './event-raid-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
@@ -91,6 +92,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     NotificationModule,
     // ROK-1910/1920: roster fact sources + WowFactsService.
     WowFactsModule,
+    SuggestedGroupsModule,
   ],
   controllers: [
     BlizzardController,
