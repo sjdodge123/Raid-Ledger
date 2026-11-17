@@ -12,10 +12,10 @@
  * thread: inbound top-level posts are always imported as plain threads.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EmbedBuilder } from 'discord.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import Redis from 'ioredis';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import { createDmEmbed } from '../../../discord-bot/embeds/embed-chrome.helpers';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
@@ -165,7 +165,7 @@ export class HubForumDiscordEventGate {
       const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
       if (claimed !== 'OK') return;
       const url = `${await getClientUrl(this.settings)}/events/${facts.eventId}`;
-      const embed = new EmbedBuilder()
+      const embed = createDmEmbed({ state: 'needs_you' })
         .setTitle(facts.eventTitle)
         .setDescription(eventNoticeText(facts.eventTitle, url))
         .setURL(url);
