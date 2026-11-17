@@ -9,6 +9,7 @@ import * as os from 'os';
 import { scrubSecrets } from './sentry-scrub.helpers';
 import { scrubPii } from './sentry-pii.helpers';
 import { isExpectedRetry } from './sentry-expected-retry.helpers';
+import { isIntentionalUnavailable } from './sentry-intentional-unavailable.helpers';
 import {
   API_ENV_FILE,
   isProductionRuntime,
@@ -92,17 +93,11 @@ if (!telemetryDisabled && isProduction) {
       if (exceptionType === 'InternalOAuthError') {
         return null;
       }
-      // Don't report intentional 503s emitted by community-insights panels
-      // before the daily snapshot cron has run (ROK-1143). The endpoints are
-      // doing the right thing operationally — the dashboard renders an empty
-      // state — but the 503 status used to spam Sentry → GitHub on every
-      // pre-cron page-view.
-      if (
-        typeof exceptionValue === 'string' &&
-        exceptionValue.includes('no_snapshot_yet')
-      ) {
-        return null;
-      }
+      // Don't report intentional 503s (ROK-1143 community-insights before the
+      // first snapshot; ROK-2250 no Blizzard API keys). ROK-2249: matched on
+      // the original exception's response body — Nest's event value is just
+      // "Http Exception", so the old value-string match never fired.
+      if (isIntentionalUnavailable(hint?.originalException)) return null;
       // ROK-1307: drop user-fixable Steam-sync 4xx noise. Manual
       // `POST /auth/steam/sync` and `/auth/steam/sync-wishlist` raise
       // BadRequestException for unlinked Steam or private profile.

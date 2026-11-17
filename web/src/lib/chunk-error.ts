@@ -38,6 +38,21 @@ export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
 export const CHUNK_RELOAD_WINDOW_MS = 2 * 60_000;
 
 /**
+ * ROK-2251: how long after this page claimed a reload other stale widgets wait
+ * quietly for it. A reload normally unloads the page well inside this; if it
+ * has not, it was cancelled (e.g. the hub's Leave-site prompt), and a later
+ * stale widget falls back to its error cell + report instead of a skeleton
+ * that never resolves. (The sessionStorage guard still blocks a second reload.)
+ */
+export const CHUNK_RELOAD_AWAIT_MS = 5_000;
+
+/**
+ * Epoch ms at which THIS page claimed a reload, or null. In memory on purpose:
+ * a real reload wipes it, so after the reload a failure in the window is `none`.
+ */
+let reloadClaimedAt: number | null = null;
+
+/**
  * Reload-once guard. Returns true — and stamps the attempt — only when no
  * auto-reload happened within the window, so a failure that survives the
  * reload cannot loop. Nothing clears the stamp; it simply ages out.
@@ -47,6 +62,7 @@ export function claimChunkReload(now: number = Date.now()): boolean {
         const age = now - Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
         if (age >= 0 && age < CHUNK_RELOAD_WINDOW_MS) return false;
         sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
+        reloadClaimedAt = now; // a route-level claim also quiets widgets failing alongside it
         return true;
     } catch {
         // Storage unavailable: no guard is possible, so never auto-reload.
@@ -68,4 +84,68 @@ export function reloadOnChunkError<T>(load: Promise<T>): Promise<T> {
         }
         throw error;
     });
+}
+
+/**
+ * ROK-2251: a dynamic-import / chunk-load failure only. Unlike
+ * `isChunkLoadError` it does NOT match the bare "Failed to fetch" a network
+ * `fetch()` throws — a widget render error carrying that is a real fault that
+ * must reach Sentry, not a reason to reload. (Routes keep the broad matcher.)
+ */
+export function isDynamicImportError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    const msg = error.message.toLowerCase();
+    return CHUNK_ERROR_PATTERNS.some((pattern) => pattern !== 'failed to fetch' && msg.includes(pattern));
+}
+
+/**
+ * How a boundary should treat one error:
+ *   - `reload`: this error claimed the reload-once guard — reload the page.
+ *   - `awaiting-reload`: another error claimed a reload in THIS page within the
+ *     last `CHUNK_RELOAD_AWAIT_MS` (several stale widgets failing together) —
+ *     stay quiet, report nothing.
+ *   - `none`: show the error cell and report it.
+ */
+export type ChunkReloadDecision = 'reload' | 'awaiting-reload' | 'none';
+
+/** Test seam: simulate a fresh page lifetime (what a real reload does). */
+export function resetChunkReloadPageState(): void {
+    reloadClaimedAt = null;
+}
+
+function isAwaitingReload(now: number): boolean {
+    if (reloadClaimedAt === null) return false;
+    const age = now - reloadClaimedAt;
+    return age >= 0 && age < CHUNK_RELOAD_AWAIT_MS;
+}
+
+function decideChunkReload(error: unknown, now: number = Date.now()): ChunkReloadDecision {
+    if (!isDynamicImportError(error)) return 'none';
+    if (isAwaitingReload(now)) return 'awaiting-reload';
+    return claimChunkReload(now) ? 'reload' : 'none';
+}
+
+/**
+ * ROK-2251: decided once per error object. Every caller that asks about the
+ * same error gets the same answer — React may invoke an error boundary's
+ * `getDerivedStateFromError` twice (StrictMode) and runs the root
+ * `onCaughtError` hook before `componentDidCatch`, so the boundary and the
+ * Sentry hook must agree without claiming the guard twice.
+ */
+const reloadDecisions = new WeakMap<object, ChunkReloadDecision>();
+
+export function claimChunkReloadFor(error: unknown): ChunkReloadDecision {
+    if (typeof error !== 'object' || error === null) return 'none';
+    const known = reloadDecisions.get(error);
+    if (known !== undefined) return known;
+    const decision = decideChunkReload(error);
+    reloadDecisions.set(error, decision);
+    return decision;
+}
+
+/** Whether a reload is handling `error` (read-only; never claims). Sentry skips these. */
+export function isReloadingChunkError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false;
+    const decision = reloadDecisions.get(error);
+    return decision === 'reload' || decision === 'awaiting-reload';
 }

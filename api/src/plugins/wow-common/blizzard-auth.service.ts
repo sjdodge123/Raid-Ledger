@@ -3,6 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTINGS_EVENTS } from '../../settings/settings.types';
 import { TOKEN_EXPIRY_BUFFER } from './blizzard.constants';
+import { BlizzardNotConfiguredError } from './blizzard-not-configured.error';
 
 @Injectable()
 export class BlizzardAuthService {
@@ -35,7 +36,7 @@ export class BlizzardAuthService {
 
   private async fetchNewToken(region: string): Promise<string> {
     const config = await this.settingsService.getBlizzardConfig();
-    if (!config) throw new Error('Blizzard API credentials not configured');
+    if (!config) throw new BlizzardNotConfiguredError();
     const response = await fetch(`https://${region}.battle.net/oauth/token`, {
       method: 'POST',
       headers: {
