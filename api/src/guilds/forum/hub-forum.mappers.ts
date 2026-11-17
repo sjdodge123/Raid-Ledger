@@ -73,7 +73,7 @@ type DiscordGuestColumns = Pick<
 >;
 
 /** Discord-origin rows say so; an unclaimed one carries its Discord author. */
-function forumSync(
+export function forumSync(
   row: DiscordGuestColumns,
   author: HubPostPersonRow | null,
 ): ForumSyncFields {

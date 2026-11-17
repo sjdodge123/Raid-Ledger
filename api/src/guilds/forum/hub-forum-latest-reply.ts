@@ -12,6 +12,7 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { toPerson } from '../posts/hub-posts.helpers';
 import { forumPreview } from './hub-forum.helpers';
+import { forumSync } from './hub-forum.mappers';
 import { author, authorColumns, type Db } from './hub-forum.queries';
 
 const replies = schema.hubForumReplies;
@@ -27,6 +28,9 @@ export async function latestReplyPreviews(
     .selectDistinctOn([replies.threadId], {
       threadId: replies.threadId,
       body: replies.body,
+      authorDiscordId: replies.authorDiscordId,
+      authorDiscordName: replies.authorDiscordName,
+      authorDiscordAvatar: replies.authorDiscordAvatar,
       author: authorColumns,
     })
     .from(replies)
@@ -35,7 +39,13 @@ export async function latestReplyPreviews(
     .orderBy(replies.threadId, desc(replies.createdAt), desc(replies.id));
   for (const row of rows) {
     const person = row.author ? toPerson(row.author) : null;
-    out.set(row.threadId, { author: person, preview: forumPreview(row.body) });
+    // ROK-2208: a Discord guest reply carries its Discord name for the row.
+    const { discordAuthor } = forumSync(row, row.author);
+    out.set(row.threadId, {
+      author: person,
+      ...(discordAuthor ? { discordAuthor } : {}),
+      preview: forumPreview(row.body),
+    });
   }
   return out;
 }

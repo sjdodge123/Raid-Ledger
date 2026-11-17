@@ -89,7 +89,12 @@ export type HubForumLock = z.infer<typeof HubForumLockSchema>;
 
 /** ROK-2229: the newest live reply of an event thread, as a list-row preview. */
 export const HubForumLatestReplySchema = z
-  .object({ author: HubPostPersonSchema.nullable(), preview: z.string() })
+  .object({
+    author: HubPostPersonSchema.nullable(),
+    /** ROK-2208: set while `author` is null and the reply came from a Discord guest. */
+    discordAuthor: HubForumDiscordAuthorSchema.nullable().optional(),
+    preview: z.string(),
+  })
   .strict();
 export type HubForumLatestReply = z.infer<typeof HubForumLatestReplySchema>;
 
