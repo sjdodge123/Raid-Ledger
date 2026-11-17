@@ -62,7 +62,10 @@ export interface EventNoticeCopy {
 /** Who `sendEventNotices` writes through and claims against. */
 export interface EventNoticeDeps {
   notifications: Pick<NotificationService, 'createMany'>;
-  dedup: Pick<NotificationDedupService, 'checkAndMarkSent' | 'releaseKeys'>;
+  dedup: Pick<
+    NotificationDedupService,
+    'checkAndMarkSentMany' | 'releaseKeys'
+  >;
 }
 
 type Outcome = PromiseSettledResult<boolean>;
@@ -72,8 +75,9 @@ const SENT: Outcome = { status: 'fulfilled', value: true };
 
 /**
  * D4/D5: plan one notice per user (group muting is already applied to
- * `group.groupIds`), claim each per-user key, then write every claimed notice
- * in ONE `createMany` (ROK-2252 — was one INSERT per recipient). Returns one
+ * `group.groupIds`), claim every per-user key in one call, then write each
+ * claimed notice in ONE `createMany` (ROK-2252 — was one INSERT per
+ * recipient). Returns one
  * settled outcome per planned notice: `true` = created, `false` = already
  * claimed elsewhere or skipped by preferences (claim given back), rejected =
  * the claim or the batch write failed (claim given back).
@@ -101,25 +105,29 @@ export async function sendEventNotices(
   });
 }
 
-/** Claim every planned notice's per-(user, event) key; `true` = this call won it. */
+/**
+ * Claim every planned notice's per-(user, event) key in ONE dedup call
+ * (ROK-2252 — was a Redis GET + DB SELECT + INSERT per recipient); `true` =
+ * this call won it. A failed claim call rejects every notice, none claimed.
+ */
 async function claimEventNotices(
   dedup: EventNoticeDeps['dedup'],
   eventId: number,
   plan: readonly EventNotice[],
 ): Promise<Array<{ notice: EventNotice; claim: Outcome }>> {
-  const claims = await Promise.allSettled(
-    plan.map(
-      async (notice) =>
-        !(await dedup.checkAndMarkSent(
-          eventNoticeKey(eventId, notice.userId),
-          EVENT_NOTICE_TTL_SECONDS,
-        )),
-    ),
-  );
-  return plan.flatMap((notice, i) => {
-    const claim = claims[i];
-    return claim ? [{ notice, claim }] : [];
-  });
+  let won: Set<string>;
+  try {
+    won = await dedup.checkAndMarkSentMany(
+      plan.map((notice) => eventNoticeKey(eventId, notice.userId)),
+      EVENT_NOTICE_TTL_SECONDS,
+    );
+  } catch (err: unknown) {
+    return plan.map((notice) => ({ notice, claim: rejected(err) }));
+  }
+  return plan.map((notice) => ({
+    notice,
+    claim: won.has(eventNoticeKey(eventId, notice.userId)) ? SENT : NOT_SENT,
+  }));
 }
 
 /**

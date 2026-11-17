@@ -139,10 +139,7 @@ describe('NotificationDedupService.checkAndMarkSentMany (ROK-2252)', () => {
       dbHits: ['k:2'],
       inserted: ['k:3'],
     });
-    const won = await s.service.checkAndMarkSentMany(
-      ['k:1', 'k:2', 'k:3'],
-      60,
-    );
+    const won = await s.service.checkAndMarkSentMany(['k:1', 'k:2', 'k:3'], 60);
     expect(won).toEqual(new Set(['k:3']));
     expect(s.execute).toHaveBeenCalledTimes(3);
     expect(s.pipeline.set.mock.calls).toEqual([

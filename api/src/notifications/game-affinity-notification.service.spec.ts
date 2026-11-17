@@ -23,6 +23,7 @@ import {
   runFollowupFanout,
   type FollowupFanoutDeps,
 } from './post-event-followup-fanout.helpers';
+import { EVENT_NOTICE_TTL_SECONDS } from './event-notice-plan.helpers';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import type {
@@ -89,6 +90,12 @@ function build(
       const had = claimed.has(k);
       claimed.add(k);
       return Promise.resolve(had);
+    }),
+    // ROK-2252: event notices claim every key in one call.
+    checkAndMarkSentMany: jest.fn((keys: readonly string[]) => {
+      const won = new Set(keys.filter((k) => !claimed.has(k)));
+      won.forEach((k) => claimed.add(k));
+      return Promise.resolve(won);
     }),
     releaseKeys,
   } as unknown as NotificationDedupService;
@@ -458,6 +465,32 @@ describe('sendEventNotices — one batched write (ROK-2252)', () => {
       'event-notice:1:user:2',
     ]);
     expect([...h.claimed]).toEqual(['event-notice:1:user:3']);
+  });
+
+  it('N recipients claim their keys in ONE dedup call, never per key', async () => {
+    const h = build([]);
+    await sendEventNotices(h.deps, copy, [1, 2, 3], null);
+    const claimMany = jest.mocked(h.deps.dedup.checkAndMarkSentMany);
+    expect(claimMany).toHaveBeenCalledTimes(1);
+    expect(claimMany).toHaveBeenCalledWith(
+      [
+        'event-notice:1:user:1',
+        'event-notice:1:user:2',
+        'event-notice:1:user:3',
+      ],
+      EVENT_NOTICE_TTL_SECONDS,
+    );
+  });
+
+  it('a failed claim call rejects every notice and writes nothing', async () => {
+    const h = build([]);
+    jest
+      .mocked(h.deps.dedup.checkAndMarkSentMany)
+      .mockRejectedValueOnce(new Error('db down'));
+    const results = await sendEventNotices(h.deps, copy, [1, 2], null);
+    expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+    expect(h.createMany).not.toHaveBeenCalled();
+    expect(h.releaseKeys).not.toHaveBeenCalled();
   });
 
   it('nobody left to notice: no createMany at all', async () => {

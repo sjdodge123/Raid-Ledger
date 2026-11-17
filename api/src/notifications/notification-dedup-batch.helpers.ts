@@ -7,7 +7,7 @@
  * expired rows, one INSERT and at most two Redis pipelines.
  */
 import type { Logger } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
@@ -42,15 +42,32 @@ export async function claimDedupKeys(
   const fresh = misses.filter((k) => !dbHits.has(k));
   if (fresh.length === 0) return new Set();
   const claimed = await insertClaims(stores.db, fresh, ttlSeconds);
-  // The PG row IS the claim; Redis is only a cache (ROK-2100 Codex P2), so a
-  // failed warm must not turn won claims into a throw.
-  await warmKeys(stores.redis, [...claimed], ttlSeconds).catch(
-    (err: unknown) =>
-      stores.logger.warn(
-        `dedup cache warm failed for ${claimed.size} keys: ${err instanceof Error ? err.message : 'unknown error'}`,
-      ),
-  );
+  await warmWonClaims(stores, claimed, ttlSeconds);
   return claimed;
+}
+
+/**
+ * Warm Redis for won claims. The PG row IS the claim; Redis is only a cache
+ * (ROK-2100 Codex P2), so a failed warm must not turn won claims into a throw.
+ */
+async function warmWonClaims(
+  stores: DedupBatchStores,
+  claimed: ReadonlySet<string>,
+  ttlSeconds: number | null,
+): Promise<void> {
+  try {
+    await warmKeys(stores.redis, [...claimed], ttlSeconds);
+  } catch (err: unknown) {
+    const reason = err instanceof Error ? err.message : 'unknown error';
+    stores.logger.warn(
+      `dedup cache warm failed for ${claimed.size} keys: ${reason}`,
+    );
+  }
+}
+
+/** `(k1, k2, …)` body for a `dedup_key IN (…)` filter. */
+function inList(keys: readonly string[]): SQL {
+  return sql.join(keys.map((k) => sql`${k}`), sql`, `);
 }
 
 /** The keys among `keys` with a non-expired DB row — ONE query. */
@@ -60,10 +77,7 @@ async function findValidDbKeys(
 ): Promise<Set<string>> {
   const rows = await db.execute<{ dedup_key: string }>(sql`
     SELECT dedup_key FROM notification_dedup
-    WHERE dedup_key IN (${sql.join(
-      keys.map((k) => sql`${k}`),
-      sql`, `,
-    )})
+    WHERE dedup_key IN (${inList(keys)})
       AND (expires_at IS NULL OR expires_at > NOW())
   `);
   return new Set(Array.from(rows, (r) => r.dedup_key));
@@ -80,13 +94,9 @@ async function insertClaims(
   keys: readonly string[],
   ttlSeconds: number | null,
 ): Promise<Set<string>> {
-  const inList = sql.join(
-    keys.map((k) => sql`${k}`),
-    sql`, `,
-  );
   await db.execute(sql`
     DELETE FROM notification_dedup
-    WHERE dedup_key IN (${inList})
+    WHERE dedup_key IN (${inList(keys)})
       AND expires_at IS NOT NULL
       AND expires_at < NOW()
   `);
