@@ -7,9 +7,24 @@ on:
   pull_request:
     branches:
       - main
+  # ROK-2206: manual runs, used to measure the integration suite at N jest
+  # workers per shard. GitHub offers this only for the workflow on the default
+  # branch, so dispatch from main (Actions -> CI -> Run workflow).
+  workflow_dispatch:
+    inputs:
+      integration_workers:
+        description: >-
+          Jest workers per integration shard (ROK-2206). Empty = the
+          RL_INTEGRATION_WORKERS repo variable, else 1 (today's single
+          in-band worker). 2 = two workers, each on its own cloned DB.
+        required: false
+        default: ''
+        type: string
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A dispatch gets its own group so measurement runs neither queue behind
+  # nor cancel the pending push-to-main run; push/PR groups are unchanged.
+  group: ci-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && format('-dispatch-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # ROK-1838: error reporting is on by default; nothing CI boots may spend the
@@ -148,8 +163,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     needs: detect-changes
+    # workflow_dispatch: the integration shards need lint (ROK-2206).
     if: >-
       github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
       needs.detect-changes.outputs.code == 'true'
     # 2026-10-22 CI speed-up: the shell/node:test script suites (and the GHCR
     # login + RL_PGVECTOR_IMAGE they need) moved to the parallel
@@ -739,6 +756,7 @@ jobs:
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
       needs.detect-changes.outputs.api == 'true'
     strategy:
       fail-fast: false
@@ -749,8 +767,9 @@ jobs:
         # repeat exercises 12 distinct file-orderings; a leak that only appears
         # in a third of orderings still fails the matrix.
         #
-        # Fast-lane (2026-06-25): the 3× repeat now runs ONLY on push-to-main (the
-        # post-merge order-flake sweep) and workflow_dispatch. PRs run each shard
+        # Fast-lane (2026-06-25): the 3× repeat runs on every non-PR event:
+        # push-to-main (the post-merge order-flake sweep) and, since ROK-2206
+        # added the trigger, workflow_dispatch. PRs run each shard
         # ONCE — 3 jobs, not 9. `randomize: true` still gives every PR a random
         # ordering, and an order-flake regression is caught same-day on the main
         # run, so coverage is preserved while a backend PR drops from 9
@@ -794,6 +813,13 @@ jobs:
       JWT_SECRET: ci-test-secret
       CLIENT_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
+      # ROK-2206: jest workers per shard. Off (1) unless the dispatch input or
+      # the RL_INTEGRATION_WORKERS repo variable says otherwise. >= 2 runs
+      # `test:integration:workers`, each worker on its own DB cloned from a
+      # migrated raid_ledger_test_tpl; per-worker heap RL_INTEGRATION_HEAP_MB.
+      # Rollback: set the repo variable to 1 (no PR needed).
+      RL_INTEGRATION_WORKERS: ${{ inputs.integration_workers || vars.RL_INTEGRATION_WORKERS || '1' }}
+      RL_INTEGRATION_HEAP_MB: 3072
       # Testcontainer specs (backup.helpers.*) pull this instead of Docker Hub.
       RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
       # Testcontainers' Ryuk reaper sidecar (testcontainers/ryuk) is another
@@ -905,8 +931,23 @@ jobs:
           done
           docker exec "$PG_CONTAINER" psql -U user -d raid_ledger_test -tAc "SHOW max_connections;"
 
+      - name: Record runner size
+        # ROK-2206: the worker-count measurement needs the real vCPU/RAM.
+        # Both measurement arms are dispatches; push/PR runs skip it.
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "nproc=$(nproc) RL_INTEGRATION_WORKERS=${RL_INTEGRATION_WORKERS}"
+          free -m
+
       - name: Run integration tests (shard ${{ matrix.shard }}, run ${{ matrix.run }})
-        run: npm run test:integration -w api -- --shard=${{ matrix.shard }} --randomize
+        # ROK-2206: the else branch is the pre-flag command, unchanged. A
+        # non-integer RL_INTEGRATION_WORKERS fails `-gt` and takes the else.
+        run: |
+          if [ "${RL_INTEGRATION_WORKERS:-1}" -gt 1 ] 2>/dev/null; then
+            npm run test:integration:workers -w api -- --shard=${{ matrix.shard }} --randomize
+          else
+            npm run test:integration -w api -- --shard=${{ matrix.shard }} --randomize
+          fi
 
   integration-tests:
     runs-on: ubuntu-latest

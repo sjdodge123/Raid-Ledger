@@ -14,6 +14,8 @@ const e = (questId: number, name: string): EscortQuest => ({ questId, name });
 
 /** Every escort quest in the bundled dungeon quest data. */
 export const ESCORT_QUESTS: readonly EscortQuest[] = [
+  // ROK-2221 text: "you watch my back and I'll take you to the Defias hideout".
+  e(155, 'The Defias Brotherhood'),
   // Objectives: "Escort Willix the Importer out of Razorfen Kraul."
   e(1144, 'Willix the Importer'),
   // Objectives: "Escort Kernobee to the Clockwerk Run exit"; text "Lead me to the exit".
@@ -34,3 +36,16 @@ export const ESCORT_QUESTS: readonly EscortQuest[] = [
 export const ESCORT_QUEST_IDS: ReadonlySet<number> = new Set(
   ESCORT_QUESTS.map((entry) => entry.questId),
 );
+
+/** The escort flag as spread into a quest DTO: absent unless the quest is an escort. */
+export interface EscortFields {
+  isEscort?: boolean;
+}
+
+/**
+ * ROK-2224: `{ isEscort: true }` for a quest in {@link ESCORT_QUEST_IDS},
+ * `{}` otherwise — spread into a quest DTO so non-escorts carry no key.
+ */
+export function escortFields(questId: number): EscortFields {
+  return ESCORT_QUEST_IDS.has(questId) ? { isEscort: true } : {};
+}

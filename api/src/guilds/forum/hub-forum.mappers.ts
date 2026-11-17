@@ -4,6 +4,8 @@
  */
 import type {
   HubForumCan,
+  HubForumLock,
+  HubForumThreadEvent,
   HubForumReply,
   HubForumThread,
   HubForumThreadSummary,
@@ -15,11 +17,30 @@ import type {
 } from '../../drizzle/schema/hub-forum';
 import { toPerson, type HubPostPersonRow } from '../posts/hub-posts.helpers';
 import { forumDeleted, forumPreview } from './hub-forum.helpers';
+import { eventThreadLock } from './event-discussion/event-discussion.access';
+import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 
-/** One thread with its author's `users` columns (null once wiped). */
+/** ROK-2226: the `events` columns an event thread is joined to. */
+export interface HubForumEventRow {
+  id: number;
+  title: string;
+  duration: [Date, Date];
+  cancelledAt: Date | null;
+  creatorId: number;
+  /** ROK-2229: the legacy capacity column (null = uncapped). */
+  maxAttendees?: number | null;
+  /** ROK-2229: the slot roster; when set it decides capacity. */
+  slotConfig?: unknown;
+}
+
+/**
+ * One thread with its author's `users` columns (null once wiped) and, for an
+ * event thread, its event (null once the event row is gone).
+ */
 export interface HubForumThreadRecord {
   thread: HubForumThreadSelect;
   author: HubPostPersonRow | null;
+  event?: HubForumEventRow | null;
 }
 
 /** One reply with its author's `users` columns (null once wiped). */
@@ -42,9 +63,64 @@ function iso(at: Date | null): string | null {
   return at ? at.toISOString() : null;
 }
 
+function toThreadEvent(row: HubForumEventRow): HubForumThreadEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    startTime: row.duration[0].toISOString(),
+    endTime: row.duration[1].toISOString(),
+    cancelled: row.cancelledAt !== null,
+    ...threadEventCapacity(row),
+  };
+}
+
+/**
+ * ROK-2229: the header's "/ M" is the capacity signups are allocated against
+ * (`resolveEventCapacity`: slot roster first, then maxAttendees); the event
+ * page's discussion header mirrors the same rule on the web
+ * (`web/src/lib/event-capacity.ts`). Omitted when the row carries neither
+ * column. 0 stays 0: `isEventAtCapacity` treats it as always full, so it must
+ * not read as uncapped.
+ */
+function threadEventCapacity(
+  row: HubForumEventRow,
+): Pick<HubForumThreadEvent, 'maxAttendees'> {
+  if (row.maxAttendees === undefined && row.slotConfig === undefined) {
+    return {};
+  }
+  const capacity = resolveEventCapacity({
+    slotConfig: row.slotConfig ?? null,
+    maxAttendees: row.maxAttendees ?? null,
+  });
+  return { maxAttendees: capacity };
+}
+
+/** ROK-2226: `event` + `lock`, present on event threads only. */
+function eventFields(
+  record: HubForumThreadRecord,
+  now: Date,
+): { event?: HubForumThreadEvent | null; lock?: HubForumLock | null } {
+  if (record.thread.eventId === null) return {};
+  const event = record.event ?? null;
+  return {
+    event: event ? toThreadEvent(event) : null,
+    lock: eventThreadLock(record.thread, event !== null, now),
+  };
+}
+
+/** ROK-2229: folds the signup count into an event thread's `event`. */
+function withSignupCount(
+  summary: HubForumThreadSummary,
+  signupCount: number | undefined,
+): HubForumThreadSummary {
+  if (signupCount === undefined || summary.event == null) return summary;
+  return { ...summary, event: { ...summary.event, signupCount } };
+}
+
 /** List/widget row: title and preview blank once deleted. */
 export function toThreadSummary(
   record: HubForumThreadRecord,
+  now: Date = new Date(),
 ): HubForumThreadSummary {
   const { thread } = record;
   const deleted = thread.deletedAt ? forumDeleted(thread.deletedAs) : null;
@@ -59,6 +135,7 @@ export function toThreadSummary(
     replyCount: thread.replyCount,
     pinnedAt: iso(thread.pinnedAt),
     deleted,
+    ...eventFields(record, now),
   };
 }
 
@@ -84,11 +161,18 @@ export function toForumReply(
 export function toForumThread(
   record: HubForumThreadRecord,
   can: HubForumCan,
-  view: HubForumRepliesView,
+  view: HubForumRepliesView & {
+    now?: Date;
+    canReply?: boolean;
+    /** ROK-2229: the event's active signup count (event threads only). */
+    signupCount?: number;
+  },
 ): HubForumThread {
   const live = record.thread.deletedAt === null;
+  const summary = toThreadSummary(record, view.now ?? new Date());
   return {
-    ...toThreadSummary(record),
+    ...withSignupCount(summary, view.signupCount),
+    ...(view.canReply === undefined ? {} : { canReply: view.canReply }),
     body: live ? record.thread.body : '',
     editedAt: iso(record.thread.editedAt),
     can,

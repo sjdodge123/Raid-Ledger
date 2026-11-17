@@ -1,7 +1,7 @@
 /** ROK-1175 — the thread row's pure copy helpers. */
 import { describe, it, expect } from 'vitest';
-import { buildForumThread } from '../../../test/factories/hub-forum';
-import { forumAuthorName, forumDeletedLabel, forumRowMeta, replyCountLabel } from './forum-thread.helpers';
+import { buildForumLock, buildForumThread, buildForumThreadEvent } from '../../../test/factories/hub-forum';
+import { forumAuthorName, forumDeletedLabel, forumRowCan, forumRowMeta, forumRowPreview, replyCountLabel } from './forum-thread.helpers';
 
 const NOW = Date.parse('2026-11-14T12:00:00.000Z');
 
@@ -25,5 +25,29 @@ describe('forum thread helpers', () => {
 
     it('meta line = author · time since last activity', () => {
         expect(forumRowMeta(buildForumThread(), NOW)).toBe('Grimtusk · 2 h ago');
+    });
+
+    it('row preview: the newest reply of an event thread, else the root preview (ROK-2229)', () => {
+        const latestReply = { author: { userId: 9, displayName: 'Mirelle', avatarUrl: null }, preview: 'Count me in.' };
+        expect(forumRowPreview(buildForumThread({ preview: 'root', latestReply }))).toBe('Mirelle: Count me in.');
+        expect(forumRowPreview(buildForumThread({ preview: 'root', latestReply: { ...latestReply, author: null } }))).toBe('Former member: Count me in.');
+        expect(forumRowPreview(buildForumThread({ preview: 'root', latestReply: null }))).toBe('root');
+        expect(forumRowPreview(buildForumThread({ preview: 'root' }))).toBe('root');
+    });
+
+    it('meta line of an event thread (live or event-deleted) = "Event thread · <age>" (ROK-2229)', () => {
+        expect(forumRowMeta(buildForumThread({ event: buildForumThreadEvent(), lock: null }), NOW)).toBe('Event thread · 2 h ago');
+        expect(forumRowMeta(buildForumThread({ event: null, lock: buildForumLock({ reason: 'event-deleted' }) }), NOW)).toBe('Event thread · 2 h ago');
+    });
+
+    it('row rights: an event thread (live or event-deleted) never offers Edit/Delete, keeps Pin (ROK-2226 §5.5)', () => {
+        const fresh = { createdAt: new Date(NOW - 60_000).toISOString() };
+        const author = { userId: 1, canWrite: true, canModerate: true };
+        expect(forumRowCan(buildForumThread(fresh), author, NOW), 'a normal thread is unchanged')
+            .toEqual({ edit: true, delete: true, pin: true });
+        expect(forumRowCan(buildForumThread({ ...fresh, event: buildForumThreadEvent() }), author, NOW))
+            .toEqual({ edit: false, delete: false, pin: true });
+        const orphan = buildForumThread({ ...fresh, event: null, lock: buildForumLock({ reason: 'event-deleted' }) });
+        expect(forumRowCan(orphan, author, NOW)).toEqual({ edit: false, delete: false, pin: true });
     });
 });

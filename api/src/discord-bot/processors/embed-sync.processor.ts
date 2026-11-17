@@ -13,7 +13,6 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from '../services/discord-embed.factory';
-import { embedComponents } from '../services/discord-embed.factory';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -33,6 +32,8 @@ import {
   reconcileBumpMessage,
   type BumpSyncInput,
 } from './embed-sync-bump.helpers';
+import { editTrackedEmbed } from './embed-sync-edit.helpers';
+import { markEmbedSyncRetry } from './embed-sync-retry.helpers';
 
 /**
  * How long after an event is created a missing tracking row still counts as
@@ -78,7 +79,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       `Processing embed sync for event ${eventId} (reason: ${reason})`,
     );
 
-    const guildId = this.requireConnection();
+    const guildId = this.requireConnection(job);
     if (!guildId) return;
 
     const records = await findTrackedMessages(this.db, eventId, guildId);
@@ -114,7 +115,7 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     const newState = computeEmbedState(event, eventData);
     const context = await this.buildContext(event);
 
-    await this.syncAllMessages(active, eventData, newState, context, eventId);
+    await this.syncAllMessages(active, eventData, newState, context, job);
     this.logAndTriggerSideEffects(
       active,
       newState,
@@ -219,11 +220,14 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     );
   }
 
-  /** Validate bot connection, return guildId or null. */
-  private requireConnection(): string | null {
+  /**
+   * Validate bot connection, return guildId or null. A disconnected bot throws
+   * for a BullMQ retry, hidden from Sentry until the final attempt (ROK-2253).
+   */
+  private requireConnection(job: Job<EmbedSyncJobData>): string | null {
     if (!this.clientService.isConnected()) {
       this.logger.warn('Discord bot not connected, failing job for retry');
-      throw new Error('Discord bot not connected');
+      throw markEmbedSyncRetry(new Error('Discord bot not connected'), job);
     }
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
@@ -253,48 +257,64 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     eventData: EmbedEventData,
     newState: EmbedState,
     context: EmbedContext,
-    eventId: number,
+    job: Job<EmbedSyncJobData>,
   ): Promise<void> {
+    const { eventId } = job.data;
     const built = this.embedFactory.buildEventUpdate(
       eventData,
       context,
       newState,
     );
     const bump = { newState, eventData, context };
+    let retryable: Error | null = null;
     for (const record of records) {
-      await this.syncSingleMessage(record, built, eventId, bump);
+      const failure = await this.syncSingleMessage(
+        record,
+        built,
+        eventId,
+        bump,
+      );
+      retryable ??= failure;
+    }
+    // ROK-2227: a transient edit failure must fail the job so BullMQ's
+    // `attempts: 3` + backoff re-runs it; swallowing it left the embed stale.
+    // The scheduled-event refresh does not depend on the channel edit, so it
+    // still runs first — otherwise a persistent failure leaves the SE's signup
+    // count stale. It only overwrites the SE description / completes the SE,
+    // so repeating it on each retry is safe (the success path runs it too).
+    // ROK-2253: Sentry skips it until the final attempt.
+    if (retryable) {
+      this.triggerSideEffects(newState, eventId, eventData);
+      throw markEmbedSyncRetry(retryable, job);
     }
   }
 
   /**
    * Edit a single Discord message, persist state, then bring the record's
    * recruitment bump in line — delete on FULL, re-count otherwise (ROK-1812).
+   *
+   * @returns The error to retry on when the edit failed transiently, else null.
+   *   A failed edit never persists state or touches the bump (ROK-2227).
    */
   private async syncSingleMessage(
     record: typeof schema.discordEventMessages.$inferSelect,
     built: ReturnType<DiscordEmbedFactory['buildEventUpdate']>,
     eventId: number,
     bump: Omit<BumpSyncInput, 'record'>,
-  ): Promise<void> {
+  ): Promise<Error | null> {
+    const deps = { clientService: this.clientService, logger: this.logger };
+    const edit = await editTrackedEmbed(deps, record, built, eventId);
+    if (edit !== 'edited') return edit === 'gone' ? null : edit;
     try {
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        built.embed,
-        embedComponents(built),
-        built.content,
-      );
       await this.persistState(record.id, bump.newState);
-      await reconcileBumpMessage(
-        { db: this.db, clientService: this.clientService, logger: this.logger },
-        { ...bump, record },
-      );
+      await reconcileBumpMessage({ ...deps, db: this.db }, { ...bump, record });
     } catch (err) {
       this.logger.warn(
-        `Failed to sync embed in channel ${record.channelId} ` +
+        `Failed to finish embed sync in channel ${record.channelId} ` +
           `for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
       );
     }
+    return null;
   }
 
   /** Log state transitions and trigger side effects ONCE for all messages. */

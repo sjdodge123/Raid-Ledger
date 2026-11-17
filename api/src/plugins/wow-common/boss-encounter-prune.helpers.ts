@@ -11,9 +11,9 @@
  * existing classic boss row, so its boss's expansion is not filtered. No other
  * expansion (tbc, sod, ...) is ever a candidate.
  *
- * The boss prune stays classic-only: no `forever` boss rows exist (Forever
- * loot reuses the classic boss rows), and a floor on zero bundled rows would
- * be meaningless.
+ * The boss prune stays classic-only. Forever loot reuses the classic boss
+ * rows; the only `forever` boss rows (ROK-2219) are the Forever-new dungeon
+ * bosses on seed ids 90000001-9, which carry no loot and are never pruned.
  *
  * Floor guard: each step is skipped (with a warning) when the bundled JSON
  * carries fewer rows of its expansion than an absolute minimum — a truncated

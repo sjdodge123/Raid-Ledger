@@ -80,7 +80,12 @@ describe('latestThreadsQuery SQL', () => {
     const { sql, params } = latestThreadsQuery(db, 7, 3).toSQL();
     const where = sql.slice(sql.indexOf(' where '), sql.indexOf(' order by '));
     expect(where).toContain(`${T}."deleted_at" is null`);
-    expect(where).not.toContain(`"reply_count" > `);
+    // ROK-2226 D7: the only reply-count test is the empty-event-thread hide;
+    // a removed thread is never filtered by its reply count (Codex P2).
+    expect(where).toContain(
+      `(${T}."event_id" is null or ${T}."reply_count" > $`,
+    );
+    expect(where.split(`"reply_count" > `)).toHaveLength(2);
     expect(sql.indexOf('limit')).toBeGreaterThan(sql.indexOf(' where '));
     expect(params).toEqual(expect.arrayContaining([7, 3]));
   });

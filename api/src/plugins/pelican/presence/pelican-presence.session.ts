@@ -13,11 +13,12 @@ import {
   PRESENCE_STOPPED_STATES,
   PRESENCE_UNREACHABLE_EMPTY_MS,
   ReplayWatermark,
-  safeParse,
+  sinkPlayerRef,
   toPresentPlayers,
   toSinkPlayer,
 } from './pelican-presence.helpers';
 import { PresenceDeathRecorder } from './pelican-presence.deaths';
+import { PresenceLineParser } from './pelican-presence.line-parser';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
 import type { GamePresenceEvent } from './presence-events';
 import {
@@ -78,6 +79,8 @@ export class PelicanPresenceSession {
   private readonly watermark = new ReplayWatermark();
   private readonly stats = new LiveLineStats();
   private readonly deaths: PresenceDeathRecorder;
+  /** ROK-2233: this server's parser session (stateless parsers pass through). */
+  private readonly lines: PresenceLineParser;
   private readonly now: () => number;
   private socket: PelicanConsoleSocket | null = null;
   private replay: Buffered[] | null = null;
@@ -98,6 +101,7 @@ export class PelicanPresenceSession {
 
   constructor(private readonly opts: PresenceSessionOptions) {
     this.now = opts.now ?? Date.now;
+    this.lines = new PresenceLineParser(opts);
     this.deaths = new PresenceDeathRecorder({
       source: opts.source,
       sink: opts.deathSink,
@@ -131,7 +135,7 @@ export class PelicanPresenceSession {
       onLine: (line) => this.onLine(line),
       onStatus: (state) => this.onStatus(state),
       onUnreachable: (since) => this.onUnreachable(since),
-      onReachable: () => this.onReachable(),
+      onReachable: (reach) => this.onReachable(reach.refresh),
       ...(o.socketFactory ? { socketFactory: o.socketFactory } : {}),
       now: this.now,
     });
@@ -168,8 +172,7 @@ export class PelicanPresenceSession {
       const held = await sink.heldPresence(source);
       if (this.stopped) return;
       this.tracker.hydrate(toPresentPlayers(open));
-      const ids = (ps: { steamId: string }[]) => ps.map((p) => p.steamId);
-      this.held.reset(ids(held), ids(open));
+      this.held.reset(held.map(sinkPlayerRef), open.map(sinkPlayerRef));
       if (open.length > 0) this.notify(true);
     } catch (err) {
       this.opts.logger.error(
@@ -180,7 +183,7 @@ export class PelicanPresenceSession {
 
   private onLine(line: string): void {
     const mode = this.replay ? 'replay' : 'live';
-    const event = safeParse(this.opts, line);
+    const event = this.lines.parse(line);
     const admitted = event !== null && this.watermark.admit(event.loggedAt);
     if (mode === 'live') this.stats.record(event !== null, admitted);
     if (!event || !admitted) return;
@@ -208,14 +211,14 @@ export class PelicanPresenceSession {
     this.forward(changes);
     this.forwardOwners(before, changes);
     const tracked = this.tracker.snapshot().length;
-    for (const steamId of this.held.departures(event, tracked))
-      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
+    for (const ref of this.held.departures(event, tracked))
+      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, ref));
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
   }
 
-  private onReachable(): void {
+  private onReachable(refresh: boolean): void {
     this.emptiedOutage = null;
     if (!this.cold) {
       this.opts.logger.log(
@@ -225,6 +228,9 @@ export class PelicanPresenceSession {
     // A re-auth inside the settle window: the buffered events already
     // advanced the watermark, so apply them now rather than drop them.
     this.flushReplay();
+    // ROK-2233: a token refresh keeps the parser's state (its replay may no
+    // longer hold the line that built it); a new connection starts afresh.
+    if (!refresh) this.lines.reset();
     this.watermark.beginPass();
     this.replay = [];
     this.armSettle();
@@ -278,6 +284,7 @@ export class PelicanPresenceSession {
   private onStatus(state: string): void {
     if (!PRESENCE_STOPPED_STATES.has(state)) return;
     this.flushReplay();
+    this.lines.reset();
     this.emptyAll(`status ${state}`);
   }
 
@@ -317,16 +324,16 @@ export class PelicanPresenceSession {
   /** `rehydrated`: the changes came from replayed history (Codex r3). */
   private forward(changes: PresenceChange[], rehydrated = false): void {
     for (const change of changes) {
-      const owner = this.tracker.ownerOf(change.steamId);
+      const owner = this.tracker.ownerOf(change);
+      if (change.kind === 'joined') this.held.forget(change); // tracker owns them
       const player = toSinkPlayer(change, owner);
       if (change.kind === 'joined') {
-        this.held.forget(change.steamId); // the tracker owns them now
         this.enqueue('playerJoined', (s, src) => s.playerJoined(src, player));
       } else if (change.kind === 'renamed') {
         this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
       } else {
         this.enqueue('playerLeft', (s, src) =>
-          s.playerLeft(src, player.steamId),
+          s.playerLeft(src, sinkPlayerRef(player)),
         );
       }
     }

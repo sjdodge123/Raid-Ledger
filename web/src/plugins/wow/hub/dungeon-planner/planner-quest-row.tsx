@@ -9,6 +9,7 @@ import type { EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 import { StatusChip } from '../../../../components/ui/status-chip';
 import { cellTitle, QUEST_STATE_META } from '../../hub-widgets/dungeon-quests.helpers';
 import { getWowheadQuestUrl } from '../../lib/wowhead-urls';
+import { EscortChip } from '../../lib/escort-chip';
 import { stateOf, type PlanSignup } from './planner-display';
 
 function CharacterChip({ s, quest }: { s: PlanSignup; quest: EnrichedDungeonQuestDto }): JSX.Element {
@@ -48,8 +49,11 @@ export function QuestRow({ quest, signups }: { quest: EnrichedDungeonQuestDto; s
     return (
         <li className="rounded-md border border-edge-subtle bg-panel px-3 py-2" data-testid={`planner-quest-${quest.questId}`}>
             <div className="flex flex-col gap-1.5">
-                <a href={getWowheadQuestUrl(quest.questId, 'wow_forever')} target="_blank" rel="noopener noreferrer"
-                    className="text-sm font-medium text-foreground hover:underline">{quest.name} ↗</a>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <a href={getWowheadQuestUrl(quest.questId, 'wow_forever')} target="_blank" rel="noopener noreferrer"
+                        className="text-sm font-medium text-foreground hover:underline">{quest.name} ↗</a>
+                    <EscortChip isEscort={quest.isEscort} />
+                </div>
                 {signups.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                         {signups.map((s) => <CharacterChip key={s.characterId ?? s.name} s={s} quest={quest} />)}

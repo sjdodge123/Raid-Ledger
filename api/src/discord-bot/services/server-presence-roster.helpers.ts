@@ -5,7 +5,7 @@
  * `users` rows into one per-game roster, deduped per person. The DB reads
  * live in `ServerPresenceRosterService`; everything decidable lives here.
  */
-import type { ServerRosterPlayer } from '../../plugins/pelican/presence/server-presence.reader';
+import type { SteamRosterPlayer } from '../../plugins/pelican/presence/server-presence.reader';
 
 /** One person on a game's server(s). Never carries a SteamID as a name. */
 export interface ServerRosterEntry {
@@ -53,7 +53,7 @@ export function emptyServerRoster(): ServerRoster {
 }
 
 function toEntry(
-  player: ServerRosterPlayer,
+  player: SteamRosterPlayer,
   user: LinkedSteamUser | undefined,
 ): ServerRosterEntry {
   if (user)
@@ -86,7 +86,7 @@ function addOnce(bucket: ServerRosterEntry[], entry: ServerRosterEntry): void {
  * with no `games` row are dropped — a group needs a name to render.
  */
 export function buildServerRoster(
-  players: ServerRosterPlayer[],
+  players: SteamRosterPlayer[],
   users: LinkedSteamUser[],
   games: RosterGameRow[],
 ): ServerRoster {

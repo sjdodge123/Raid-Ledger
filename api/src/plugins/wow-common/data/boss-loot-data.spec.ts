@@ -11,6 +11,7 @@ import bossEncounterData from './boss-encounter-data.json';
 import bossLootData from './boss-loot-data.json';
 import { getInstance } from '../instance-catalogue/instance-catalogue';
 import { LOOT_PENDING_CLASSIC_BOSSES } from './loot-pending-bosses';
+import { FOREVER_DUNGEON_MAP_TO_SEED } from '../instance-catalogue/instance-map-ids.data';
 
 // ---------------------------------------------------------------------------
 // Type helpers
@@ -306,6 +307,11 @@ function testScarletMonasteryLoot() {
 // Completeness — every seeded boss must have loot
 // ---------------------------------------------------------------------------
 
+/** ROK-2219: seed ids of the Forever-only dungeons (no loot source yet). */
+const FOREVER_ONLY_SEED_IDS: ReadonlySet<number> = new Set(
+  FOREVER_DUNGEON_MAP_TO_SEED.values(),
+);
+
 describe('boss-loot-data.json — completeness against boss-encounter-data.json', () => {
   const lootIndex = new Set(loot.map(bossKeyForLoot));
 
@@ -317,6 +323,17 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
             !(
               b.expansion === 'classic' &&
               LOOT_PENDING_CLASSIC_BOSSES.has(b.name)
+            ),
+        )
+        // ROK-2219: the Forever-only dungeon bosses are seeded for the hub
+        // Progression tab (names + totals). No allowed source carries their
+        // loot (the Forever API has no boss loot; Wowhead scraping is out),
+        // so they are exempt until one does. Only those nine seed instances.
+        .filter(
+          (b) =>
+            !(
+              b.expansion === 'forever' &&
+              FOREVER_ONLY_SEED_IDS.has(b.instanceId)
             ),
         )
         .map((b) => `${b.name}::${b.expansion}`);

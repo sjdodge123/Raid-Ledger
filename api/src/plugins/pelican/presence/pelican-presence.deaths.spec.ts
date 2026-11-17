@@ -10,7 +10,7 @@ import {
   line,
   okCredentials,
 } from './pelican-presence.spec-fakes';
-import type { GamePresenceEvent } from './presence-events';
+import { steamPlayer, type GamePresenceEvent } from './presence-events';
 import type { ServerDeathSink } from './server-death.sink';
 import { ServerPresenceTracker } from './server-presence.tracker';
 
@@ -22,7 +22,7 @@ const AT = new Date('2026-10-15T10:05:00Z');
 const ev = {
   join: (steamId: string, loggedAt?: string): GamePresenceEvent => ({
     kind: 'join',
-    steamId,
+    ...steamPlayer(steamId),
     ...(loggedAt ? { loggedAt } : {}),
   }),
   char: (

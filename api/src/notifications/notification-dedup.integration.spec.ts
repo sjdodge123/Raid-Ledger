@@ -301,4 +301,88 @@ describe('Notification Dedup (integration)', () => {
       expect(await dedupService.checkAndMarkSent(welcomeKey, null)).toBe(true);
     });
   });
+
+  // =================================================================
+  // ROK-2252: batch claim — a fixed number of queries for N keys
+  // =================================================================
+
+  describe('checkAndMarkSentMany()', () => {
+    const ttl = 7 * 24 * 60 * 60;
+    const keys = [1, 2, 3, 4, 5].map((n) => `event-notice:900:user:${n}`);
+
+    it('claims N keys once in three queries; a second run claims none', async () => {
+      const execute = jest.spyOn(testApp.db, 'execute');
+
+      const first = await dedupService.checkAndMarkSentMany(
+        [...keys, at(keys, 0)],
+        ttl,
+      );
+      expect([...first].sort()).toEqual([...keys].sort());
+      // SELECT valid rows + DELETE expired + one INSERT, whatever N is.
+      expect(execute).toHaveBeenCalledTimes(3);
+      const rows = await testApp.db.execute<{ dedup_key: string }>(sql`
+        SELECT dedup_key FROM notification_dedup
+        WHERE dedup_key LIKE 'event-notice:900:%'
+      `);
+      expect(rows.length).toBe(keys.length);
+
+      const again = await dedupService.checkAndMarkSentMany(keys, ttl);
+      expect(again).toEqual(new Set());
+      execute.mockRestore();
+    });
+
+    it('after a Redis flush the DB still guards every key and re-warms Redis', async () => {
+      await dedupService.checkAndMarkSentMany(keys, ttl);
+      const cached = await redis.keys('*');
+      if (cached.length > 0) await redis.del(...cached);
+
+      const afterFlush = await dedupService.checkAndMarkSentMany(keys, ttl);
+
+      expect(afterFlush).toEqual(new Set());
+      expect(await redis.get(at(keys, 0))).not.toBeNull();
+      expect(await dedupService.checkAndMarkSent(at(keys, 4), ttl)).toBe(true);
+    });
+
+    it('takes over an expired row and refreshes its expiry', async () => {
+      const key = 'event-notice:901:user:1';
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      await testApp.db.execute(sql`
+        INSERT INTO notification_dedup (dedup_key, expires_at, created_at)
+        VALUES (${key}, ${hourAgo}, ${hourAgo})
+      `);
+
+      const won = await dedupService.checkAndMarkSentMany([key], ttl);
+
+      expect(won).toEqual(new Set([key]));
+      const rows = await testApp.db.execute<{ refreshed: boolean }>(sql`
+        SELECT expires_at > NOW() + INTERVAL '1 day' AS refreshed
+        FROM notification_dedup WHERE dedup_key = ${key}
+      `);
+      expect(rows.map((r) => r.refreshed)).toEqual([true]);
+    });
+
+    it('a mixed batch claims only the fresh key and re-warms the DB-only one', async () => {
+      const inRedis = 'event-notice:902:user:1';
+      const inDb = 'event-notice:902:user:2';
+      const fresh = 'event-notice:902:user:3';
+      await redis.set(inRedis, '1', 'EX', ttl);
+      await dedupService.checkAndMarkSentMany([inDb], ttl);
+      await redis.del(inDb);
+
+      const won = await dedupService.checkAndMarkSentMany(
+        [fresh, inDb, inRedis],
+        ttl,
+      );
+
+      expect(won).toEqual(new Set([fresh]));
+      expect(await redis.get(inDb)).not.toBeNull();
+      expect(await redis.get(fresh)).not.toBeNull();
+      // The Redis-only key short-circuits: no DB row is written for it.
+      const rows = await testApp.db.execute<{ dedup_key: string }>(sql`
+        SELECT dedup_key FROM notification_dedup
+        WHERE dedup_key LIKE 'event-notice:902:%' ORDER BY dedup_key
+      `);
+      expect(rows.map((r) => r.dedup_key)).toEqual([inDb, fresh]);
+    });
+  });
 });

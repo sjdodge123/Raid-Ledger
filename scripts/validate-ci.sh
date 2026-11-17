@@ -52,6 +52,11 @@
 #   ./scripts/validate-ci.sh --fleet --integration-parallel=2  # Run integration
 #                                        # shards 2 at a time (ROK-1793; opt-in,
 #                                        # = INTEGRATION_PARALLEL=2; default 1).
+#   ./scripts/validate-ci.sh --fleet --integration-workers=2  # Run each
+#                                        # integration shard with 2 jest workers,
+#                                        # each on its own cloned DB (ROK-2206;
+#                                        # opt-in, = RL_INTEGRATION_WORKERS=2;
+#                                        # default 1; overrides --integration-parallel).
 #   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
 #                                        # (e.g. pg_dump). Use in CI to ensure
 #                                        # backup integration tests never silently
@@ -1364,16 +1369,36 @@ run_integration_tests() {
 # redis_url ("" = inherit). The `cd api` keeps the jest config's relative paths
 # right (ROK-1331 Probe 1 attempt 6, TS5103); JEST_SHARD_ID/JEST_TOTAL_SHARDS
 # label the perf reporter's events (ROK-1331 M11).
+# ROK-2206: with RL_INTEGRATION_WORKERS >= 2 the shard runs that many jest
+# workers (each on its own cloned DB — jest.integration.config.js), so it drops
+# --runInBand and gives each worker RL_INTEGRATION_HEAP_MB (default 2048).
+# RL_INTEGRATION_WORKERS is passed inline: it is never exported script-wide,
+# so only this jest process (not the unit run) sees it.
 _integration_shard_jest() {
-  local i="$1" n="$2" heap="$3" redis_url="${4:-}"
+  local i="$1" n="$2" heap="$3" redis_url="${4:-}" band="--runInBand"
+  if _integration_workers_on; then
+    band=""
+    heap="${RL_INTEGRATION_HEAP_MB:-2048}"
+  fi
   (
     cd api || exit 1
     if [ -n "$redis_url" ]; then export REDIS_URL="$redis_url"; fi
     NODE_OPTIONS="--max-old-space-size=${heap}" \
       JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${n}" \
+      RL_INTEGRATION_WORKERS="${RL_INTEGRATION_WORKERS:-1}" \
       npx jest --config ./jest.integration.config.js \
-               --runInBand --verbose --logHeapUsage --shard="${i}/${n}"
+               ${band:+"$band"} --verbose --logHeapUsage --shard="${i}/${n}"
   )
+}
+
+# ROK-2206: true when RL_INTEGRATION_WORKERS is an integer >= 2 (opt-in; the
+# fleet default stays 1). Mirrors the jest config's own parse.
+_integration_workers_on() {
+  local w="${RL_INTEGRATION_WORKERS:-1}"
+  case "$w" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  [ "$w" -gt 1 ]
 }
 
 # ROK-1793 S1(ii): how many shards run at once. INTEGRATION_PARALLEL defaults
@@ -1395,6 +1420,10 @@ _integration_parallelism() {
   fi
   if [ "$p" -gt 1 ] && [ "${CI:-}" = "true" ] && [ -n "${DATABASE_URL:-}" ]; then
     echo "INTEGRATION_PARALLEL ignored: CI=true + DATABASE_URL means every shard shares one DB — running shards serially" >&2
+    p=1
+  fi
+  if [ "$p" -gt 1 ] && _integration_workers_on; then
+    echo "INTEGRATION_PARALLEL ignored: RL_INTEGRATION_WORKERS=${RL_INTEGRATION_WORKERS} already runs workers in parallel (2 shards x workers x heap > the runner's 6 GB) — running shards serially" >&2
     p=1
   fi
   if [ "$p" -gt "$shards" ]; then p="$shards"; fi
@@ -2842,9 +2871,18 @@ main() {
       # ROK-1793: the fleet runner gets only RL_SLOT/RL_TARGET from the laptop
       # env, so INTEGRATION_PARALLEL rides in as a flag (rl_validate_ci args).
       --integration-parallel=*) export INTEGRATION_PARALLEL="${1#--integration-parallel=}"; shift ;;
+      # ROK-2206: same reason — the runner does not inherit RL_INTEGRATION_WORKERS.
+      # A plain shell var (never exported): only _integration_shard_jest hands
+      # it to jest, so the api UNIT run never sees it (Codex P2).
+      --integration-workers=*) RL_INTEGRATION_WORKERS="${1#--integration-workers=}"; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done
+
+  # ROK-2206 (Codex P2): an RL_INTEGRATION_WORKERS inherited from the caller's
+  # env is un-exported too, so the unit jest process cannot pick it up
+  # (integration-global-setup.spec.ts fixtures would try real DB work).
+  if [ -n "${RL_INTEGRATION_WORKERS+x}" ]; then export -n RL_INTEGRATION_WORKERS; fi
 
   if $no_coverage; then
     unit_step_label="Unit tests (no coverage)"

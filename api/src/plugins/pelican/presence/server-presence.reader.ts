@@ -1,3 +1,4 @@
+import { steamIdOf, type PlayerRef } from './presence-events';
 import type { ServerPresenceSource } from './server-presence.sink';
 import type { PresentPlayer } from './server-presence.tracker';
 
@@ -30,10 +31,12 @@ export type ServerPresenceChangedPayload = ServerPresenceSource & {
   rehydrated?: true;
 };
 
-/** One player on one tracked server. */
-export interface ServerRosterPlayer extends ServerPresenceSource {
-  /** SteamID64 — match against `users.steam_id`; never render it. */
-  steamId: string;
+/**
+ * One player on one tracked server, under their platform id of any kind
+ * (ROK-2232) — never render the id. Steam-only consumers narrow with
+ * {@link steamRoster}.
+ */
+export interface ServerRosterPlayer extends ServerPresenceSource, PlayerRef {
   /** In-game character name; null until a character line names them. */
   name: string | null;
   /**
@@ -57,14 +60,35 @@ export function rosterOf(
   players: PresentPlayer[],
 ): ServerRosterPlayer[] {
   const { pelicanServerId, gameId } = source;
-  return players.map(({ steamId, name, owner }) => ({
-    pelicanServerId,
-    gameId,
-    steamId,
-    name,
-    // The owner only means something next to its name (ROK-1822 r3).
-    ...(name !== null && owner !== undefined
-      ? { characterOwnerId: owner }
-      : {}),
-  }));
+  return players.map((p) => {
+    const { playerId, idKind, name, owner } = p;
+    return {
+      pelicanServerId,
+      gameId,
+      playerId,
+      idKind,
+      name,
+      // The owner only means something next to its name (ROK-1822 r3).
+      ...(name !== null && owner !== undefined
+        ? { characterOwnerId: owner }
+        : {}),
+    };
+  });
+}
+
+/** A Steam player on a tracked server, with the SteamID64 to match on. */
+export type SteamRosterPlayer = ServerRosterPlayer & { steamId: string };
+
+/**
+ * The Steam players of a roster (ROK-2232): for consumers that match on
+ * `users.steam_id` (hub membership, the live roster panel). Other id kinds
+ * are left out, never passed off as a SteamID.
+ */
+export function steamRoster(
+  players: ServerRosterPlayer[],
+): SteamRosterPlayer[] {
+  return players.flatMap((p) => {
+    const steamId = steamIdOf(p);
+    return steamId === null ? [] : [{ ...p, steamId }];
+  });
 }

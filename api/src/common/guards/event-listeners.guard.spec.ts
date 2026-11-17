@@ -30,6 +30,10 @@ const KNOWN_SAFE: string[] = [
   // discord-sync.listener.ts: handlers only enqueue BullMQ jobs.
   // Failures are retried by BullMQ automatically.
   'discord-sync.listener.ts',
+  // hub-registration-scan.listeners.ts: a test-only source scanner, not a
+  // listener. It names `@OnEvent(` in its doc comment and problem message
+  // because it checks other files for it, and it registers no handlers.
+  'hub-registration-scan.listeners.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */

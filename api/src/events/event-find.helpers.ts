@@ -1,10 +1,11 @@
 /**
  * Helpers for event lookup queries (findOne, findByIds).
  */
-import { eq, sql, and, ne, inArray } from 'drizzle-orm';
+import { eq, sql, and, inArray, notInArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { NotFoundException } from '@nestjs/common';
+import { INACTIVE_SIGNUP_STATUSES } from './signup-status.constants';
 
 /**
  * ROK-1893 P4: the five hub columns an event row carries — enough to map a
@@ -27,6 +28,11 @@ export const eventHubColumns = {
 /** Join condition: the event's tagged hub (`events.guild_id`). */
 export const eventHubJoinOn = eq(schema.events.guildId, schema.guilds.id);
 
+/** A signup that still holds a place (bench included). */
+const activeSignup = notInArray(schema.eventSignups.status, [
+  ...INACTIVE_SIGNUP_STATUSES,
+]);
+
 /** Row shape returned by event queries with joined data. */
 export type EventRow = {
   events: typeof schema.events.$inferSelect;
@@ -48,7 +54,7 @@ export async function findOneEvent(
       games: schema.games,
       guilds: eventHubColumns,
       signupCount: sql<number>`coalesce((
-        SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id} AND status != 'roached_out' AND status != 'departed' AND status != 'declined'
+        SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id} AND ${activeSignup}
       ), 0)`,
     })
     .from(schema.events)
@@ -75,14 +81,7 @@ function buildSignupCountSubquery(
       count: sql<number>`count(*)`.as('signup_count'),
     })
     .from(schema.eventSignups)
-    .where(
-      and(
-        inArray(schema.eventSignups.eventId, ids),
-        ne(schema.eventSignups.status, 'roached_out'),
-        ne(schema.eventSignups.status, 'departed'),
-        ne(schema.eventSignups.status, 'declined'),
-      ),
-    )
+    .where(and(inArray(schema.eventSignups.eventId, ids), activeSignup))
     .groupBy(schema.eventSignups.eventId)
     .as('signup_counts');
 }

@@ -51,10 +51,15 @@ const SOURCE: RoomSource = {
 };
 
 function row(over: Record<string, unknown>) {
+  // A Steam row mirrors its SteamID into player_id (ROK-2232, migration 0305).
+  const steam = over['steamId'];
+  const mirrored = typeof steam === 'string' ? steam : null;
   return {
     discordUserId: null,
     discordUsername: 'x',
     steamId: null,
+    playerId: mirrored,
+    idKind: mirrored === null ? null : 'steam',
     leftAt: null,
     onServer: false,
     ...over,
@@ -190,6 +195,23 @@ describe('eventedRoster — SteamID-named rows (review MAJOR 2, Q4)', () => {
     const roster = await eventedRoster(db, 77, { memberIds: [] }, SOURCE);
     expect(roster.participants).toEqual([]);
     expect(roster.anonymousOnServer).toBe(0);
+  });
+
+  it('counts an unnamed XUID row as +N on server, never its XUID (ROK-2232)', async () => {
+    const xuid = '2535411111111111';
+    const db = dbReturning([
+      row({
+        playerId: xuid,
+        idKind: 'xuid',
+        discordUsername: xuid,
+        onServer: true,
+      }),
+      row({ discordUserId: 'u1', discordUsername: 'Ana' }),
+    ]);
+    const roster = await eventedRoster(db, 77, { memberIds: ['u1'] }, SOURCE);
+    const names = roster.participants.map((p) => p.discordUsername);
+    expect(names).toEqual(['Ana']);
+    expect(roster.anonymousOnServer).toBe(1);
   });
 });
 

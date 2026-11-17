@@ -16,6 +16,7 @@ import {
 } from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
+import { escortFields } from './data/dungeon-quest-escorts';
 import { MAX_CHAIN_DEPTH } from './dungeon-quests.helpers';
 import { listBlizzardOverlay } from './forever-quest-import/blizzard-quest.repo';
 import {
@@ -25,7 +26,10 @@ import {
 import { requirementFields } from './forever-quest-import/blizzard-quest.requirements';
 import { isForeverQuestImportEnabled } from './forever-quest-import/forever-quest-import-switch';
 import type { DungeonQuestDto } from './dungeon-quests.types';
-import { instanceLevelBand } from './dungeon-quests.level-band';
+import {
+  instanceLevelBand,
+  withLevelBandFallback,
+} from './dungeon-quests.level-band';
 
 /** What the overlay reads: the DB and the kill-switch setting. */
 export interface QuestOverlayDeps {
@@ -124,6 +128,7 @@ export function overlayOnlyDto(
     rewardType: itemIds.length > 0 ? 'choice' : 'none',
     ...reputationRewardFields(row.reputations),
     levelBand: instanceLevelBand(row.dungeonInstanceId, variant),
+    ...escortFields(row.questId),
   };
 }
 
@@ -262,7 +267,8 @@ export interface InstanceOverlayScope {
 
 /**
  * A dungeon's quest list: merged curated rows, then overlay-only quests
- * (R4), which only a variant that includes classic content shows.
+ * (R4), which only a variant that includes classic content shows. A curated
+ * row with no level keeps its dungeon's band (ROK-2221).
  */
 export async function applyInstanceOverlay(
   deps: QuestOverlayDeps,
@@ -270,10 +276,12 @@ export async function applyInstanceOverlay(
   scope: InstanceOverlayScope,
 ): Promise<DungeonQuestDto[]> {
   if (!(await isForeverQuestImportEnabled(deps.settings))) return quests;
-  const merged = await mergeQuests(deps.db, quests);
+  const { instanceIds, variant } = scope;
+  const merged = (await mergeQuests(deps.db, quests)).map((q) =>
+    withLevelBandFallback(q, variant),
+  );
   if (!scope.expansions.includes(OVERLAY_ONLY_EXPANSION)) return merged;
   const known = new Set(quests.map((q) => q.questId));
-  const { instanceIds, variant } = scope;
   const extras = await listOverlayOnly(deps.db, instanceIds, known, variant);
   return [...merged, ...extras];
 }
@@ -327,7 +335,9 @@ export async function applyKnownQuestOverlay(
   const known = new Set(quests.map((q) => q.questId));
   const mapped = rows.filter((row) => row.dungeonInstanceId !== null);
   const withCards = [
-    ...quests.map((q) => mergeBlizzardOverlay(q, byId.get(q.questId))),
+    ...quests.map((q) =>
+      withLevelBandFallback(mergeBlizzardOverlay(q, byId.get(q.questId))),
+    ),
     ...toOverlayOnlyDtos(mapped, known),
   ];
   const prereqs = await resolveOverlayPrereqs(deps.db, withCards, byId);

@@ -4,7 +4,7 @@ import type {
   WingsSocketFactory,
   WingsSocketHandlers,
 } from '../pelican-console-socket.helpers';
-import type { GamePresenceEvent } from './presence-events';
+import { steamPlayer, type GamePresenceEvent } from './presence-events';
 import type { ServerPresencePlayer } from './server-presence.sink';
 
 /** Spec-only fakes for the presence supervisor/session (ROK-1800 L5). */
@@ -40,7 +40,7 @@ export function arrive(
   loggedAt: string,
 ): string[] {
   return [
-    line({ kind: 'join', steamId, loggedAt }),
+    line({ kind: 'join', ...steamPlayer(steamId), loggedAt }),
     line({ kind: 'character', name, zdoidZero: false, loggedAt }),
   ];
 }
@@ -100,3 +100,29 @@ export const okCredentials: ConsoleCredentialsSource = () =>
     ok: true,
     data: { token: 'tok', socket: 'wss://node.test/api/servers/x/ws' },
   });
+
+/**
+ * ROK-2233: a stateful parser shaped like Java Minecraft's. A session
+ * remembers `uuid <name> <id>` and resolves `left <name>` through it to a
+ * leave (null for a name it never heard). The stateless `parse` has no memory,
+ * so with the session wiring removed every `left` line is noise.
+ */
+export function fakeStatefulParser(): GameLogParser {
+  return {
+    pluginSlug: 'valheim',
+    parse: (raw) => fakeParser.parse(raw),
+    createSession() {
+      const ids = new Map<string, string>();
+      return {
+        parse(raw: string): GamePresenceEvent | null {
+          const [verb, name = '', id] = raw.split(' ');
+          if (verb === 'uuid' && id) ids.set(name, id);
+          if (verb === 'uuid') return null;
+          if (verb !== 'left') return fakeParser.parse(raw);
+          const steamId = ids.get(name);
+          return steamId ? { kind: 'leave', ...steamPlayer(steamId) } : null;
+        },
+      };
+    },
+  };
+}

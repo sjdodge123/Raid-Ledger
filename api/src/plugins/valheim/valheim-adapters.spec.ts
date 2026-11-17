@@ -23,7 +23,11 @@ describe('Valheim plugin registration', () => {
     expect(VALHEIM_LOG_PARSER.pluginSlug).toBe('valheim');
     expect(
       VALHEIM_LOG_PARSER.parse('Got handshake from client 76561190000000001'),
-    ).toEqual({ kind: 'join', steamId: '76561190000000001' });
+    ).toEqual({
+      kind: 'join',
+      playerId: '76561190000000001',
+      idKind: 'steam',
+    });
   });
 
   it('declares the valheim game slug and an install-time pelican dependency', () => {

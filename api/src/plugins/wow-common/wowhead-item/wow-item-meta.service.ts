@@ -44,6 +44,8 @@ function uniqueIds(ids: readonly number[]): number[] {
 export class WowItemMetaService {
   private readonly logger = new Logger(WowItemMetaService.name);
   private readonly inFlight = new Set<number>();
+  /** Every un-settled `enqueue` / `retryDue` run, for {@link idle}. */
+  private readonly pending = new Set<Promise<unknown>>();
   /** ROK-1760: one log line per item per failure outcome. */
   private readonly outcomes = new ResolverOutcomeLog();
   private readonly deps: WowheadResolverDeps;
@@ -86,7 +88,37 @@ export class WowItemMetaService {
    * past the view floor (ROK-1760, `isMetaDue`).
    * @returns how many rows were written.
    */
-  async enqueue(ids: readonly number[]): Promise<number> {
+  enqueue(ids: readonly number[]): Promise<number> {
+    return this.track(this.runEnqueue(ids));
+  }
+
+  /** Cron: re-probe rows whose `next_retry_at` has passed, oldest first. */
+  retryDue(): Promise<number> {
+    return this.track(this.runRetryDue());
+  }
+
+  /**
+   * Settles once every `enqueue` / `retryDue` started so far (including any
+   * they start) has finished. Callers fire-and-forget those, so integration
+   * teardown awaits this before it truncates: a leaked run must not hold an
+   * id in `inFlight` or write a row into the next test.
+   */
+  async idle(): Promise<void> {
+    while (this.pending.size > 0) {
+      await Promise.allSettled([...this.pending]);
+    }
+  }
+
+  private track<T>(work: Promise<T>): Promise<T> {
+    this.pending.add(work);
+    const settle = () => {
+      this.pending.delete(work);
+    };
+    work.then(settle, settle);
+    return work;
+  }
+
+  private async runEnqueue(ids: readonly number[]): Promise<number> {
     if (!(await this.isEnabled())) return 0;
     const meta = await this.getMeta(ids);
     const now = this.deps.now().getTime();
@@ -94,8 +126,7 @@ export class WowItemMetaService {
     return this.resolveAll(due, meta);
   }
 
-  /** Cron: re-probe rows whose `next_retry_at` has passed, oldest first. */
-  async retryDue(): Promise<number> {
+  private async runRetryDue(): Promise<number> {
     if (!(await this.isEnabled())) return 0;
     const rows = await this.db
       .select()

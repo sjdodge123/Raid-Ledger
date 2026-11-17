@@ -28,6 +28,7 @@ import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { withEventHubLink } from '../channel-lifecycle/embed-event-context.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import { routeSignupBack } from './signup-back.handlers';
 import {
   cleanupCooldowns,
   getCooldown,
@@ -121,6 +122,7 @@ export class SignupInteractionListener {
   private async handleButtonInteraction(
     interaction: ButtonInteraction,
   ): Promise<void> {
+    if (routeSignupBack(interaction, this.getDeps())) return;
     const parsed = parseButtonCustomId(interaction.customId);
     if (!parsed) return;
     try {

@@ -3,14 +3,15 @@
  * player by their Raid Ledger name, never the in-game character name; an
  * unlinked player keeps the character name.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { spawnRoster } from './ad-hoc-server-spawn.helpers';
 
 describe('spawnRoster (ROK-1821)', () => {
   it('a linked player shows their RL name, an unlinked one the character name', () => {
     const roster = spawnRoster(
       [
-        { steamId: '76561198000000001', displayName: 'Bjorn' },
-        { steamId: '76561198000000002', displayName: 'Sigrid' },
+        { ...steamPlayer('76561198000000001'), displayName: 'Bjorn' },
+        { ...steamPlayer('76561198000000002'), displayName: 'Sigrid' },
       ],
       [{ userId: 42, discordId: 'd-42', displayName: 'Roknua' }, null],
     );

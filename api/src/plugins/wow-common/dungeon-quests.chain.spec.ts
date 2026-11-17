@@ -5,6 +5,7 @@
 import {
   prerequisiteChainOf,
   walkChainInMemory,
+  walkChainWithExternalRoot,
 } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 
@@ -66,5 +67,64 @@ describe('prerequisiteChainOf', () => {
     const next = quest(11, { prevQuestId: 10 });
     const chain = prerequisiteChainOf(q, lookupOf(first, q, next));
     expect(chain?.map((c) => c.questId)).toEqual([9, 10, 11]);
+  });
+});
+
+// ROK-2221: a prerequisite EXTERNAL_PREREQS names (8926 -> 8977 Return to
+// Deliana, AQ war effort) becomes a named first step instead of a dead end.
+describe('walkChainWithExternalRoot — named outside prerequisite', () => {
+  const dependent = quest(8926, { dungeonInstanceId: null, prevQuestId: 8977 });
+
+  it('prepends the named prerequisite when it is not in the lookup', () => {
+    const chain = walkChainWithExternalRoot(dependent, new Map());
+    expect(chain.map((q) => [q.questId, q.name])).toEqual([
+      [8977, 'Return to Deliana'],
+      [8926, 'Quest 8926'],
+    ]);
+    expect(chain[0]).toMatchObject({
+      dungeonInstanceId: null,
+      nextQuestId: 8926,
+    });
+  });
+
+  it('gives prerequisiteChainOf a chain instead of null', () => {
+    const chain = prerequisiteChainOf(dependent, new Map());
+    expect(chain?.map((q) => q.questId)).toEqual([8977, 8926]);
+  });
+
+  it('prepends it to the root of a longer chain too', () => {
+    const child = quest(500, { prevQuestId: 8926 });
+    const lookup = new Map([[8926, dependent]]);
+    expect(
+      walkChainWithExternalRoot(child, lookup).map((q) => q.questId),
+    ).toEqual([8977, 8926, 500]);
+  });
+
+  it('uses the real row when the prerequisite is in the lookup', () => {
+    const real = quest(8977, { name: 'Real 8977' });
+    const chain = walkChainWithExternalRoot(dependent, new Map([[8977, real]]));
+    expect(chain.map((q) => q.name)).toEqual(['Real 8977', 'Quest 8926']);
+  });
+
+  it('ignores the entry once prevQuestId names a different quest', () => {
+    const moved = quest(8926, { prevQuestId: 1234 });
+    expect(
+      walkChainWithExternalRoot(moved, new Map()).map((q) => q.questId),
+    ).toEqual([8926]);
+  });
+
+  it('treats a cached lookup miss (key set, no row) as missing', () => {
+    // DungeonQuestsService.expandFrontier caches unresolved ids as undefined.
+    const lookup = new Map<number, DungeonQuestDto | undefined>([
+      [8977, undefined],
+    ]) as Map<number, DungeonQuestDto>;
+    expect(
+      walkChainWithExternalRoot(dependent, lookup).map((q) => q.questId),
+    ).toEqual([8977, 8926]);
+  });
+
+  it('leaves an unlisted dangling prerequisite alone', () => {
+    const other = quest(42, { prevQuestId: 41 });
+    expect(prerequisiteChainOf(other, new Map())).toBeNull();
   });
 });

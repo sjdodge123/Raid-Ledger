@@ -32,11 +32,10 @@ function markedLines(): Array<{ status: unknown; table: unknown }> {
 }
 
 beforeAll(async () => {
-  await getTestApp();
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('getTestApp left no DATABASE_URL');
+  // ROK-2206: the app's own DB (the worker clone in per-worker mode).
+  const { connectionString } = await getTestApp();
   process.env.DEBUG = 'true';
-  client = withQueryPerfLogging(postgres(url, { max: 1 }));
+  client = withQueryPerfLogging(postgres(connectionString, { max: 1 }));
 });
 
 beforeEach(() => {

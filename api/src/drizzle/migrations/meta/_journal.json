@@ -2115,6 +2115,27 @@
       "when": 1794764647751,
       "tag": "0302_addon_import_audit_envelope_version",
       "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1794850344300,
+      "tag": "0303_guild_members_ledgerlink_seen_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 304,
+      "version": "7",
+      "when": 1794860145238,
+      "tag": "0304_hub_forum_event_threads",
+      "breakpoints": true
+    },
+    {
+      "idx": 305,
+      "version": "7",
+      "when": 1794893900126,
+      "tag": "0305_ad_hoc_participants_player_id",
+      "breakpoints": true
     }
   ]
 }

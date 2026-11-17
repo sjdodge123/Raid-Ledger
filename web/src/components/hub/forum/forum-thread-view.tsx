@@ -7,14 +7,17 @@
  * the view pages through to it and scrolls there (D9, `use-page-to-reply.ts`).
  */
 import type { JSX } from 'react';
+import type { HubForumThread } from '@raid-ledger/contract';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Pill } from '../hub-bits';
 import { ForumReplyComposer } from './forum-composer';
 import { ForumReplyItem, ForumThreadRoot } from './forum-thread-items';
+import { ForumEventHeader, ForumEventPills, ForumLockBar } from './forum-event-header';
 import { forumThreadHref } from './forum-link';
-import { replyCountLabel } from './forum-thread.helpers';
+import { forumThreadTitle } from './forum-event-format';
+import { isEventThread, replyCountLabel } from './forum-thread.helpers';
 import { useForumThread } from './use-hub-forum';
 import { usePageToReply } from './use-page-to-reply';
 
@@ -38,7 +41,8 @@ function BackLink(): JSX.Element {
     );
 }
 
-function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): JSX.Element | null {
+/** "Show more replies" while the thread has another page (shared with the event-page panel, ROK-2226). */
+export function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): JSX.Element | null {
     if (!query.hasNextPage) return null;
     return (
         <div className="flex justify-center">
@@ -49,25 +53,38 @@ function MoreReplies({ query }: { query: ReturnType<typeof useForumThread> }): J
     );
 }
 
+/** The event facts box, or — once the event was deleted (event null) — the lock line alone (ROK-2226). */
+function ThreadEventBlock({ thread }: { thread: HubForumThread }): JSX.Element | null {
+    if (thread.event != null) return <ForumEventHeader event={thread.event} lock={thread.lock} />;
+    return thread.lock != null ? <ForumLockBar lock={thread.lock} /> : null;
+}
+
 function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<ForumThreadViewProps, 'threadId'> & { query: ReturnType<typeof useForumThread> }): JSX.Element {
     const navigate = useNavigate();
     if (query.isPending) return <div className="h-32 animate-pulse rounded-lg border border-edge bg-panel" aria-busy="true" aria-label="Loading thread" />;
     const thread = query.data?.pages[0];
     if (thread === undefined) return <p role="alert" className="text-sm text-danger">Couldn’t load this thread. It may have been removed.</p>;
     const replies = query.data?.pages.flatMap((p) => p.replies) ?? [];
+    const canReply = thread.canReply ?? canWrite;
+    // ROK-2229: an event thread states its reply count above the opening post (the mockup's order).
+    const countFirst = isEventThread(thread);
+    const count = <p data-testid="forum-reply-count" className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>;
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-                <h3 data-testid="forum-thread-heading" className="text-lg font-semibold text-foreground">{thread.deleted === null ? thread.title : 'Removed thread'}</h3>
+                <h3 data-testid="forum-thread-heading" className="text-lg font-semibold text-foreground">{thread.deleted === null ? forumThreadTitle(thread) : 'Removed thread'}</h3>
                 {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
+                <ForumEventPills event={thread.event} lock={thread.lock} withDate={false} />
             </div>
+            <ThreadEventBlock thread={thread} />
+            {countFirst && count}
             <ForumThreadRoot guildId={guildId} thread={thread} startEditing={startEditing === true} />
-            <p className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>
+            {!countFirst && count}
             <ul className="flex flex-col gap-2">
                 {replies.map((r) => <ForumReplyItem key={r.id} guildId={guildId} threadId={thread.id} reply={r} highlighted={r.id === replyId} />)}
             </ul>
             <MoreReplies query={query} />
-            {canWrite && thread.deleted === null && <ForumReplyComposer guildId={guildId} threadId={thread.id}
+            {canReply && thread.deleted === null && <ForumReplyComposer guildId={guildId} threadId={thread.id}
                 onPosted={(reply) => { void navigate(forumThreadHref(thread.id, reply.id), { replace: true }); }} />}
         </div>
     );

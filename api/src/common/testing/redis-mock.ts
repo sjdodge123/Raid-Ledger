@@ -150,6 +150,28 @@ function mockRedisEval(
   };
 }
 
+/**
+ * Redis mock pipeline (ROK-2252): queues SETs and runs them on `exec`,
+ * resolving ioredis's `[error, result][]` shape.
+ */
+function mockRedisPipeline(set: ReturnType<typeof mockRedisSet>) {
+  return () => {
+    const queued: Array<() => Promise<string | null>> = [];
+    const pipeline = {
+      set: (key: string, value: string, ...args: (string | number)[]) => {
+        queued.push(() => set(key, value, ...args));
+        return pipeline;
+      },
+      exec: async (): Promise<Array<[Error | null, unknown]>> => {
+        const out: Array<[Error | null, unknown]> = [];
+        for (const run of queued) out.push([null, await run()]);
+        return out;
+      },
+    };
+    return pipeline;
+  };
+}
+
 export interface RedisMockHandle {
   client: ReturnType<typeof buildRedisMockClient>;
   store: Map<string, string>;
@@ -173,6 +195,9 @@ function buildRedisMockClient(
 ) {
   return {
     get: (key: string) => Promise.resolve(store.get(key) ?? null),
+    mget: (...keys: string[]) =>
+      Promise.resolve(keys.map((k) => store.get(k) ?? null)),
+    pipeline: mockRedisPipeline(mockRedisSet(store, expiries)),
     getdel: mockRedisGetdel(store, expiries),
     lpush: (key: string, ...values: string[]) => {
       const list = readList(store, key);

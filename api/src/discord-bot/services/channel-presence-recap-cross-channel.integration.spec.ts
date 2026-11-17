@@ -144,6 +144,8 @@ describe('ROK-1888 OQ3 — the recap covers a session fed from two channels', ()
       discordUsername: name,
       userId: null,
       steamId,
+      playerId: steamId,
+      idKind: 'steam',
       onServer: true,
       inVoice: false,
     });

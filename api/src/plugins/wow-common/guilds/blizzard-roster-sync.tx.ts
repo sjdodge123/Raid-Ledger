@@ -127,12 +127,17 @@ function insertValues(guildId: number, m: ForeverGuildMember, now: Date) {
     rankName: null,
     source: 'blizzard',
     lastSeenAt: now,
+    blizzardSeenAt: now,
     capturedByUserId: null,
     updatedAt: now,
   };
 }
 
-/** Steps 6–7 — UPDATE matched rows (allowed columns only), INSERT the rest. */
+/**
+ * Steps 6–7 — UPDATE matched rows (allowed columns only), INSERT the rest.
+ * ROK-2225: every listed row gets `blizzard_seen_at = T`, the sync's own
+ * last-seen (imports never write it) — its next churn baseline.
+ */
 async function writeMembers(
   tx: AddonImportTx,
   guildId: number,
@@ -146,7 +151,7 @@ async function writeMembers(
     if (row === undefined) continue;
     await tx
       .update(guildMembers)
-      .set(rosterUpdatePatch(row, member, now))
+      .set({ ...rosterUpdatePatch(row, member, now), blizzardSeenAt: now })
       .where(eq(guildMembers.id, existingId));
   }
   if (match.unmatched.length === 0) return;

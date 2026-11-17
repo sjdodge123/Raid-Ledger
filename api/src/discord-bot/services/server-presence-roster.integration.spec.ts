@@ -5,6 +5,7 @@
  * maps server SteamIDs to linked users (id, Discord id, username), unlinked
  * SteamIDs stay anonymous-capable, and the games-row join names the group.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -64,7 +65,7 @@ describe('ServerPresenceRosterService.snapshot (real DB)', () => {
     ) => ({
       pelicanServerId,
       gameId,
-      steamId,
+      ...steamPlayer(steamId),
       name,
     });
     const service = new ServerPresenceRosterService(
@@ -112,7 +113,7 @@ describe('ServerPresenceRosterService.snapshot (real DB)', () => {
         {
           pelicanServerId: 1,
           gameId: 987_654,
-          steamId: STEAM_UNLINKED,
+          ...steamPlayer(STEAM_UNLINKED),
           name: 'X',
         },
       ]),
@@ -142,7 +143,7 @@ describe('ServerPresenceRosterService.snapshot (real DB)', () => {
         {
           pelicanServerId: 1,
           gameId,
-          steamId: STEAM_LINKED,
+          ...steamPlayer(STEAM_LINKED),
           name: 'PariahChar',
         },
       ]),

@@ -42,9 +42,16 @@ type ParticipantRow = {
   discordUserId: string | null;
   discordUsername: string;
   steamId: string | null;
+  /** ROK-2232: the platform id and its namespace (any server row). */
+  playerId: string | null;
+  idKind: string | null;
   leftAt: Date | null;
   onServer: boolean;
 };
+
+/** ROK-2232: one key per player across kinds (`idKind:playerId`). */
+const rowKey = (r: ParticipantRow) => `${r.idKind ?? 'steam'}:${r.playerId}`;
+const entryKey = (steamId: string) => `steam:${steamId}`;
 
 /** A row's server marker: ` 🖥` while in voice, ` 🖥 on server` otherwise. */
 function rowSuffix(
@@ -94,6 +101,8 @@ function readParticipantRows(
       discordUserId: t.discordUserId,
       discordUsername: t.discordUsername,
       steamId: t.steamId,
+      playerId: t.playerId,
+      idKind: t.idKind,
       leftAt: t.leftAt,
       onServer: t.onServer,
     })
@@ -103,7 +112,8 @@ function readParticipantRows(
 
 /**
  * Q4 `+N on server`: unnamed live server players no named row covers, plus
- * anonymous (SteamID-named) rows still on the server — never a SteamID.
+ * anonymous (id-named) rows still on the server — never a raw platform id.
+ * ROK-2232: stored rows key on `idKind:playerId`; live entries are Steam.
  */
 function anonymousCount(
   named: ParticipantRow[],
@@ -113,17 +123,17 @@ function anonymousCount(
   const serverOnly = group.serverOnly ?? [];
   const namedSteam = new Set(named.map((r) => r.steamId));
   const liveNamed = new Set(
-    serverOnly.filter((e) => e.name !== null).map((e) => e.steamId),
+    serverOnly.filter((e) => e.name !== null).map((e) => entryKey(e.steamId)),
   );
   const ids = new Set(
     serverOnly
       .filter((e) => e.name === null && !namedSteam.has(e.steamId))
-      .map((e) => e.steamId),
+      .map((e) => entryKey(e.steamId)),
   );
   for (const r of anonymous) {
     const live = r.onServer && r.leftAt === null;
-    if (r.steamId !== null && live && !liveNamed.has(r.steamId)) {
-      ids.add(r.steamId);
+    if (r.playerId !== null && live && !liveNamed.has(rowKey(r))) {
+      ids.add(rowKey(r));
     }
   }
   return ids.size;

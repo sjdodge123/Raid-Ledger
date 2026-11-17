@@ -6,6 +6,7 @@
  */
 import { useState, type JSX } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { UseMutationResult } from '@tanstack/react-query';
 import type { HubForumReply, HubForumThread } from '@raid-ledger/contract';
 import { ForumActionMenu } from './forum-action-menu';
 import { forumMenuItems } from './forum-menu-items';
@@ -13,8 +14,10 @@ import { ForumMessageEditor } from './forum-composer';
 import { ForumDeleteConfirm } from './forum-delete-confirm';
 import { ForumMessage } from './forum-message';
 import { forumThreadHref } from './forum-link';
+import { ForumRootMessage } from './forum-event-root';
 import {
     useDeleteForumReply, useDeleteForumThread, useSetForumThreadPin, useUpdateForumReply, useUpdateForumThread,
+    type ReplyDeleteVars, type ReplyEditVars,
 } from './use-hub-forum';
 
 type Mode = 'read' | 'edit' | 'delete';
@@ -50,7 +53,7 @@ export function ForumThreadRoot({ guildId, thread, startEditing = false }: Forum
     ) : undefined;
     return (
         <>
-            <ForumMessage message={thread} testId="forum-thread-root" editor={editor}
+            <ForumRootMessage thread={thread} testId="forum-thread-root" editor={editor}
                 menu={<ForumActionMenu label="Thread actions" items={items} testId="forum-thread-actions" />} />
             <ForumDeleteConfirm what="thread" isOpen={mode === 'delete'} pending={remove.isPending} failed={remove.isError}
                 onClose={() => setMode('read')} onConfirm={() => remove.mutate(thread.id, { onSuccess: () => setMode('read') })} />
@@ -60,11 +63,24 @@ export function ForumThreadRoot({ guildId, thread, startEditing = false }: Forum
 
 export interface ForumReplyItemProps { guildId: number; threadId: number; reply: HubForumReply; highlighted: boolean }
 
+/** The two reply writes a reply row runs; the hub routes by default, the event routes on the event page (ROK-2226). */
+export interface ForumReplyWrites {
+    update: UseMutationResult<HubForumReply, Error, ReplyEditVars>;
+    remove: UseMutationResult<void, Error, ReplyDeleteVars>;
+}
+
 /** One reply + its menu (edit for the author inside 24 h, delete for author/officer). */
-export function ForumReplyItem({ guildId, threadId, reply, highlighted }: ForumReplyItemProps): JSX.Element {
-    const [mode, setMode] = useState<Mode>('read');
+export function ForumReplyItem({ guildId, ...rest }: ForumReplyItemProps): JSX.Element {
     const update = useUpdateForumReply(guildId);
     const remove = useDeleteForumReply(guildId);
+    return <ForumReplyItemView {...rest} update={update} remove={remove} />;
+}
+
+export type ForumReplyItemViewProps = Omit<ForumReplyItemProps, 'guildId'> & ForumReplyWrites;
+
+/** The reply row over whichever `ForumReplyWrites` the caller hands it. */
+export function ForumReplyItemView({ threadId, reply, highlighted, update, remove }: ForumReplyItemViewProps): JSX.Element {
+    const [mode, setMode] = useState<Mode>('read');
     const items = forumMenuItems(reply.can, { onEdit: () => setMode('edit'), onDelete: () => setMode('delete') });
     const ids = { threadId, replyId: reply.id };
     const editor = mode === 'edit' ? (

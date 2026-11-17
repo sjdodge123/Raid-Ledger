@@ -12,11 +12,13 @@ import {
   fakeLogger,
   fakeParser,
   fakeSink,
+  fakeStatefulParser,
   fakeWings,
   line,
   okCredentials,
   SECRET,
 } from './pelican-presence.spec-fakes';
+import { steamPlayer } from './presence-events';
 import type { ServerPresencePlayer } from './server-presence.sink';
 
 const SRC = { pelicanServerId: 7, gameId: 42 };
@@ -70,7 +72,7 @@ it('forwards live joins, renames and leaves to the sink', async () => {
   await h.connect();
   await h.live(arrive('A', 'Alice', T(1)));
   await h.live([
-    line({ kind: 'join', steamId: 'B', loggedAt: T(2) }),
+    line({ kind: 'join', ...steamPlayer('B'), loggedAt: T(2) }),
     line({ kind: 'heartbeat', count: 2, loggedAt: T(3) }),
     line({
       kind: 'character',
@@ -78,16 +80,16 @@ it('forwards live joins, renames and leaves to the sink', async () => {
       zdoidZero: false,
       loggedAt: T(4),
     }),
-    line({ kind: 'leave', steamId: 'A', loggedAt: T(5) }),
+    line({ kind: 'leave', ...steamPlayer('A'), loggedAt: T(5) }),
   ]);
   expect(h.sink.playerJoined.mock.calls).toEqual([
-    [SRC, { steamId: 'A', displayName: 'Alice' }],
-    [SRC, { steamId: 'B', displayName: 'B' }],
+    [SRC, { ...steamPlayer('A'), displayName: 'Alice' }],
+    [SRC, { ...steamPlayer('B'), displayName: 'B' }],
   ]);
   expect(h.sink.playerRenamed.mock.calls).toEqual([
-    [SRC, { steamId: 'B', displayName: 'Bob' }],
+    [SRC, { ...steamPlayer('B'), displayName: 'Bob' }],
   ]);
-  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, steamPlayer('A')]]);
   // ROK-1802: a live heartbeat's count reaches the sink too.
   expect(h.sink.playerCount.mock.calls).toEqual([[SRC, 2]]);
 });
@@ -111,7 +113,7 @@ it('a stop with nobody tracked still empties the server once, clearing holds the
 });
 
 it('a Wings offline status push empties the server', async () => {
-  const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+  const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }]);
   await h.connect();
   h.wings.frame('status', 'offline');
   await h.session.idle();
@@ -119,11 +121,11 @@ it('a Wings offline status push empties the server', async () => {
 });
 
 it('rehydrates before the replay so already-present players re-emit nothing', async () => {
-  const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+  const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }]);
   await h.connect([
     ...arrive('A', 'Alice', T(1)),
     ...arrive('B', 'Bob', T(2)),
-    line({ kind: 'leave', steamId: 'B', loggedAt: T(3) }),
+    line({ kind: 'leave', ...steamPlayer('B'), loggedAt: T(3) }),
   ]);
   expect(h.sink.openPresence).toHaveBeenCalledWith(SRC);
   expect(h.sink.playerJoined).not.toHaveBeenCalled();
@@ -147,7 +149,7 @@ it('a reconnect replay of already-processed lines emits nothing new', async () =
 it('empties once when unreachable past 15 min, and not before', async () => {
   const down: ConsoleCredentialsSource = () =>
     Promise.reject(new Error('down'));
-  const h = harness([{ steamId: 'A', displayName: 'Alice' }], down);
+  const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }], down);
   await h.session.start();
   await jest.advanceTimersByTimeAsync(PRESENCE_UNREACHABLE_EMPTY_MS - 61_000);
   await h.session.idle();
@@ -180,7 +182,7 @@ it('re-enrols players still present after a timeout-driven empty (Codex r2)', as
   await h.settle();
   expect(h.sink.playerJoined).toHaveBeenCalledTimes(2);
   expect(h.sink.playerJoined).toHaveBeenLastCalledWith(SRC, {
-    steamId: 'A',
+    ...steamPlayer('A'),
     displayName: 'Alice',
   });
 });
@@ -190,11 +192,11 @@ it('one failing sink call is logged and does not stop the next', async () => {
   h.sink.playerJoined.mockRejectedValueOnce(new TypeError('db down'));
   await h.connect();
   await h.live(arrive('A', 'Alice', T(1)));
-  await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(2) })]);
+  await h.live([line({ kind: 'leave', ...steamPlayer('A'), loggedAt: T(2) })]);
   expect(h.logger.error).toHaveBeenCalledWith(
     'Presence sink playerJoined failed for server 7: TypeError',
   );
-  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, steamPlayer('A')]]);
 });
 
 it('never hands a raw console line to any logger', async () => {
@@ -217,8 +219,8 @@ it('never hands a raw console line to any logger', async () => {
 
 it('a cold-start replay never removes a rehydrated player (FB1 #1)', async () => {
   const h = harness([
-    { steamId: 'A', displayName: 'Alice' },
-    { steamId: 'B', displayName: 'Bob' },
+    { ...steamPlayer('A'), displayName: 'Alice' },
+    { ...steamPlayer('B'), displayName: 'Bob' },
   ]);
   await h.connect([
     line({ kind: 'heartbeat', count: 1, loggedAt: T(1) }),
@@ -227,11 +229,11 @@ it('a cold-start replay never removes a rehydrated player (FB1 #1)', async () =>
   ]);
   expect(h.sink.playerLeft.mock.calls).toEqual([]);
   expect(h.sink.playerJoined.mock.calls).toEqual([
-    [SRC, { steamId: 'C', displayName: 'Cara' }],
+    [SRC, { ...steamPlayer('C'), displayName: 'Cara' }],
   ]);
   // A live heartbeat that disagrees still evicts the never-seen player.
   await h.live([line({ kind: 'heartbeat', count: 2, loggedAt: T(4) })]);
-  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, steamPlayer('A')]]);
   // ROK-1802: only the live count is forwarded — replay history is not.
   expect(h.sink.playerCount.mock.calls).toEqual([[SRC, 2]]);
 });
@@ -245,21 +247,21 @@ it('a re-auth inside the settle window keeps the buffered replay (FB1 #2)', asyn
   h.wings.lines(arrive('A', 'Alice', T(1)));
   await h.settle();
   expect(h.sink.playerJoined.mock.calls).toEqual([
-    [SRC, { steamId: 'A', displayName: 'Alice' }],
+    [SRC, { ...steamPlayer('A'), displayName: 'Alice' }],
   ]);
   expect(h.sink.playerLeft.mock.calls).toEqual([]);
 });
 
 it('ROK-1801: players() lists who is on the server now, tagged with its source', async () => {
-  const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+  const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }]);
   await h.connect();
   await h.live([
-    line({ kind: 'join', steamId: 'B', loggedAt: T(2) }),
+    line({ kind: 'join', ...steamPlayer('B'), loggedAt: T(2) }),
     line({ kind: 'heartbeat', count: 2, loggedAt: T(3) }),
   ]);
   expect(h.session.players()).toEqual([
-    { pelicanServerId: 7, gameId: 42, steamId: 'A', name: 'Alice' },
-    { pelicanServerId: 7, gameId: 42, steamId: 'B', name: null },
+    { pelicanServerId: 7, gameId: 42, ...steamPlayer('A'), name: 'Alice' },
+    { pelicanServerId: 7, gameId: 42, ...steamPlayer('B'), name: null },
   ]);
 });
 
@@ -292,7 +294,7 @@ it('ROK-1801: signals nothing for a reconnect replay that changes nothing', asyn
 });
 
 it('ROK-1801: signals after a rehydrate that restored players, and after an empty', async () => {
-  const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+  const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }]);
   await h.connect();
   // ROK-1831 Codex r2: the boot roster is marked, so a listener can tell it
   // from an arrival.
@@ -305,7 +307,7 @@ it('ROK-1801: signals after a rehydrate that restored players, and after an empt
 });
 
 it('ROK-1801: a stop without emptying still signals (its roster is no longer read)', async () => {
-  const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+  const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }]);
   await h.connect();
   h.onChanged.mockClear();
   await h.session.stop(false);
@@ -339,32 +341,36 @@ it('a stop during rehydrate cancels the pending start — no socket opens (Codex
   );
   const starting = h.session.start();
   await h.session.stop(false);
-  release([{ steamId: 'A', displayName: 'Alice' }]);
+  release([{ ...steamPlayer('A'), displayName: 'Alice' }]);
   await starting;
   await jest.advanceTimersByTimeAsync(0);
   expect(h.wings.sockets).toHaveLength(0);
 });
 
 describe('players the sink held before this session (ROK-1802 Codex r4)', () => {
-  const A = { steamId: 'A', displayName: 'Alice' };
-  const C = { steamId: 'C', displayName: 'C' };
+  const A = { ...steamPlayer('A'), displayName: 'Alice' };
+  const C = { ...steamPlayer('C'), displayName: 'C' };
   const beat = (count: number, s: number) =>
     line({ kind: 'heartbeat', count, loggedAt: T(s) });
-  const left = (...ids: string[]) => ids.map((id) => [SRC, id]);
+  const left = (...ids: string[]) => ids.map((id) => [SRC, steamPlayer(id)]);
 
   it('a held player a heartbeat covered reports their disconnect line', async () => {
     const h = harness([], okCredentials, [A]);
     await h.connect();
     await h.live([beat(1, 1)]); // covers A: the sink may enrol them
-    await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(2) })]);
+    await h.live([
+      line({ kind: 'leave', ...steamPlayer('A'), loggedAt: T(2) }),
+    ]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
     expect(h.sink.heldPresence).toHaveBeenCalledWith(SRC);
   });
 
   it('a zero-count heartbeat reports every tracked and held player gone', async () => {
-    const h = harness([{ steamId: 'B', displayName: 'Bob' }], okCredentials, [
-      A,
-    ]);
+    const h = harness(
+      [{ ...steamPlayer('B'), displayName: 'Bob' }],
+      okCredentials,
+      [A],
+    );
     await h.connect();
     await h.live([beat(2, 1)]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left());
@@ -385,7 +391,9 @@ describe('players the sink held before this session (ROK-1802 Codex r4)', () => 
     await h.connect();
     await h.live(arrive('A', 'Alice', T(1)));
     expect(h.sink.playerJoined.mock.calls).toEqual([[SRC, A]]);
-    await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(2) })]);
+    await h.live([
+      line({ kind: 'leave', ...steamPlayer('A'), loggedAt: T(2) }),
+    ]);
     await h.live([beat(0, 3)]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
   });
@@ -393,7 +401,9 @@ describe('players the sink held before this session (ROK-1802 Codex r4)', () => 
   it('an already-enrolled player is never also reported as held', async () => {
     const h = harness([A], okCredentials, [A]);
     await h.connect();
-    await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([
+      line({ kind: 'leave', ...steamPlayer('A'), loggedAt: T(1) }),
+    ]);
     await h.live([beat(0, 2)]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
   });
@@ -414,7 +424,11 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
     h.logger.log.mock.calls.map(([m]) => m);
   const thorvald = [
     SRC,
-    { steamId: STEAM, displayName: 'Thorvald', characterOwnerId: '123456789' },
+    {
+      ...steamPlayer(STEAM),
+      displayName: 'Thorvald',
+      characterOwnerId: '123456789',
+    },
   ];
 
   it('missing test 4: a live join between two re-auth replays applies at once; the next replay adds 0 events', async () => {
@@ -451,7 +465,7 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
   });
 
   it('logs why it emptied the server (F6), with counts only', async () => {
-    const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+    const h = harness([{ ...steamPlayer('A'), displayName: 'Alice' }]);
     await h.connect();
     h.wings.frame('status', 'offline');
     await h.session.idle();
@@ -462,7 +476,11 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
 });
 
 describe('character owner persistence (ROK-1822 r4)', () => {
-  const ALICE = { steamId: 'A', displayName: 'Alice', characterOwnerId: '111' };
+  const ALICE = {
+    ...steamPlayer('A'),
+    displayName: 'Alice',
+    characterOwnerId: '111',
+  };
   const aliceAs = (ownerId: string, loggedAt: string) =>
     line({
       kind: 'character',
@@ -476,11 +494,14 @@ describe('character owner persistence (ROK-1822 r4)', () => {
     const h = harness([ALICE]);
     await h.connect();
     const notified = h.onChanged.mock.calls.length;
-    await h.live([line({ kind: 'join', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([line({ kind: 'join', ...steamPlayer('A'), loggedAt: T(1) })]);
     await h.live([aliceAs('222', T(2))]);
     expect(h.sink.playerRenamed.mock.calls).toEqual([
-      [SRC, { steamId: 'A', displayName: 'Alice' }],
-      [SRC, { steamId: 'A', displayName: 'Alice', characterOwnerId: '222' }],
+      [SRC, { ...steamPlayer('A'), displayName: 'Alice' }],
+      [
+        SRC,
+        { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '222' },
+      ],
     ]);
     expect(h.sink.playerJoined).not.toHaveBeenCalled();
     expect(h.sink.playerLeft).not.toHaveBeenCalled();
@@ -491,24 +512,32 @@ describe('character owner persistence (ROK-1822 r4)', () => {
   it('a cold replay persists its net owner change', async () => {
     const h = harness([ALICE]);
     await h.connect([
-      line({ kind: 'join', steamId: 'A', loggedAt: T(1) }),
+      line({ kind: 'join', ...steamPlayer('A'), loggedAt: T(1) }),
       aliceAs('222', T(2)),
     ]);
     expect(h.sink.playerRenamed.mock.calls).toEqual([
-      [SRC, { steamId: 'A', displayName: 'Alice', characterOwnerId: '222' }],
+      [
+        SRC,
+        { ...steamPlayer('A'), displayName: 'Alice', characterOwnerId: '222' },
+      ],
     ]);
     expect(h.sink.playerJoined).not.toHaveBeenCalled();
   });
 
   it('a cold-replay restore keeps the owner, so a same-named stranger still joins', async () => {
     const h = harness([ALICE]);
-    await h.connect([line({ kind: 'leave', steamId: 'A', loggedAt: T(1) })]);
+    await h.connect([
+      line({ kind: 'leave', ...steamPlayer('A'), loggedAt: T(1) }),
+    ]);
     await h.live([
-      line({ kind: 'join', steamId: 'B', loggedAt: T(2) }),
+      line({ kind: 'join', ...steamPlayer('B'), loggedAt: T(2) }),
       aliceAs('999', T(3)),
     ]);
     expect(h.sink.playerJoined.mock.calls).toEqual([
-      [SRC, { steamId: 'B', displayName: 'Alice', characterOwnerId: '999' }],
+      [
+        SRC,
+        { ...steamPlayer('B'), displayName: 'Alice', characterOwnerId: '999' },
+      ],
     ]);
     expect(h.sink.playerLeft).not.toHaveBeenCalled();
   });
@@ -544,5 +573,154 @@ describe('ROK-1831 Codex r3: replayed history is marked rehydrated', () => {
     h.wings.lines(arrive('A', 'Alice', T(1)));
     await h.settle();
     expect(h.onChanged.mock.calls).toEqual([[MARKED]]);
+  });
+});
+
+type Harness = ReturnType<typeof harness>;
+const stateful = () => harness([], okCredentials, [], fakeStatefulParser());
+/** ROK-2233: ~6-min token refresh — `auth success` again on the same socket. */
+async function refreshToken(h: Harness, replay: string[] = []): Promise<void> {
+  h.wings.frame('auth success');
+  h.wings.lines(replay);
+  await h.settle();
+}
+/** ROK-2233: the socket drops; the backoff timer opens a NEW connection. */
+async function reconnect(h: Harness, replay: string[] = []): Promise<void> {
+  const first = h.wings.sockets[0];
+  if (!first) throw new Error('no socket to drop');
+  first.handlers.onClose();
+  await jest.advanceTimersByTimeAsync(2_000);
+  expect(h.wings.sockets).toHaveLength(2);
+  h.wings.authenticate();
+  h.wings.lines(replay);
+  await h.settle();
+}
+/** ROK-2233: Alice and Bob arrive with their ids announced; Alice leaves. */
+async function seed(h: Harness): Promise<void> {
+  await h.connect();
+  await h.live([
+    'uuid Alice A',
+    'uuid Bob B',
+    ...arrive('A', 'Alice', T(1)),
+    ...arrive('B', 'Bob', T(2)),
+    'left Alice',
+  ]);
+}
+
+describe('ROK-2233 stateful parser sessions', () => {
+  it('resolves a line through what an earlier line told the session', async () => {
+    const h = stateful();
+    await seed(h);
+    expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, steamPlayer('A')]]);
+  });
+
+  it.each<[string, (h: Harness) => Promise<void>]>([
+    ['the socket reconnects after a drop', (h) => reconnect(h)],
+    [
+      'the server reports ready',
+      (h) => h.live([line({ kind: 'server-ready', loggedAt: T(3) })]),
+    ],
+    [
+      'a server-stopping line arrives',
+      (h) => h.live([line({ kind: 'server-stopping', loggedAt: T(3) })]),
+    ],
+    [
+      'Pelican reports the server offline',
+      async (h) => {
+        h.wings.frame('status', 'offline');
+        await h.session.idle();
+      },
+    ],
+  ])('forgets that state when %s', async (_label, trigger) => {
+    const h = stateful();
+    await seed(h);
+    const before = [...h.sink.playerLeft.mock.calls];
+    await trigger(h);
+    // A ready line itself empties the tracker; only `left Bob` is under test.
+    h.sink.playerLeft.mockClear();
+    await h.live([...arrive('B', 'Bob', T(5)), 'left Bob']);
+    expect([before, h.sink.playerLeft.mock.calls]).toEqual([
+      [[SRC, steamPlayer('A')]],
+      [],
+    ]);
+  });
+});
+
+describe('ROK-2233 parser session scope', () => {
+  it('keeps that state across a token refresh on the same socket', async () => {
+    const h = stateful();
+    await seed(h);
+    await refreshToken(h);
+    await h.live([...arrive('B', 'Bob', T(5)), 'left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, steamPlayer('A')],
+      [SRC, steamPlayer('B')],
+    ]);
+  });
+
+  it('a refresh whose 150-line replay lost the id line still resolves the leave', async () => {
+    const h = stateful();
+    await seed(h);
+    const chatter = Array.from({ length: 150 }, (_, i) => `chat ${i}`);
+    await refreshToken(h, chatter);
+    await h.live(['left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, steamPlayer('A')],
+      [SRC, steamPlayer('B')],
+    ]);
+  });
+
+  it('rebuilds it from the log replay that follows a reconnect', async () => {
+    const h = stateful();
+    await seed(h);
+    await reconnect(h, ['uuid Bob B']);
+    await h.live(['left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, steamPlayer('A')],
+      [SRC, steamPlayer('B')],
+    ]);
+  });
+
+  it('keeps one session per server: two consoles never share state', async () => {
+    const parser = fakeStatefulParser();
+    const one = harness([], okCredentials, [], parser);
+    const two = harness([], okCredentials, [], parser);
+    await one.connect();
+    await two.connect();
+    await one.live(['uuid Alice A']);
+    await one.live([...arrive('A', 'Alice', T(1)), 'left Alice']);
+    await two.live([...arrive('A', 'Alice', T(1)), 'left Alice']);
+    expect([
+      one.sink.playerLeft.mock.calls,
+      two.sink.playerLeft.mock.calls,
+    ]).toEqual([[[SRC, steamPlayer('A')]], []]);
+  });
+});
+
+describe('ROK-2233 a parser whose createSession throws', () => {
+  it('warns once when createSession throws, then parses statelessly', async () => {
+    const parser: GameLogParser = {
+      ...fakeParser,
+      createSession: () => {
+        throw new Error('no session');
+      },
+    };
+    const h = harness([], okCredentials, [], parser);
+    await h.connect();
+    await reconnect(h);
+    h.wings.frame('status', 'offline');
+    await h.session.idle();
+    await h.live(arrive('A', 'Alice', T(1)));
+    const failed = h.logger.warn.mock.calls.filter(([m]) =>
+      String(m).startsWith('Presence parser session failed'),
+    );
+    expect([failed, h.sink.playerJoined.mock.calls.length]).toEqual([
+      [
+        [
+          'Presence parser session failed for server 7: Error; parsing statelessly',
+        ],
+      ],
+      1,
+    ]);
   });
 });

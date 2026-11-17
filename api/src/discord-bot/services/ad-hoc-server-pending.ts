@@ -11,7 +11,14 @@
  * heartbeat (a bare player COUNT) covers the unconfirmed ones once it is high
  * enough, dropping the oldest unconfirmed first until it is. Only confirmed or
  * covered holds count toward a spawn or are enrolled.
+ *
+ * ROK-2232 — holds are keyed by `presenceKey` (`idKind:playerId`), so an XUID
+ * and a SteamID64 with the same digits are two players.
  */
+import {
+  presenceKey,
+  type PlayerRef,
+} from '../../plugins/pelican/presence/presence-events';
 import type {
   ServerPresencePlayer,
   ServerPresenceSource,
@@ -48,7 +55,7 @@ export class PendingServerPlayers {
     };
     // Codex r2: a remapped server's holds route to its CURRENT game.
     entry.source = source;
-    entry.players.set(player.steamId, { player, state: 'confirmed' });
+    entry.players.set(presenceKey(player), { player, state: 'confirmed' });
     this.held.set(source.pelicanServerId, entry);
     return this.players(source.pelicanServerId).length;
   }
@@ -69,12 +76,14 @@ export class PendingServerPlayers {
 
   /** A held player's new character name (never enrols a stranger). */
   rename(pelicanServerId: number, player: ServerPresencePlayer): void {
-    const held = this.held.get(pelicanServerId)?.players.get(player.steamId);
+    const held = this.held
+      .get(pelicanServerId)
+      ?.players.get(presenceKey(player));
     if (held) held.player = player;
   }
 
-  remove(pelicanServerId: number, steamId: string): void {
-    this.held.get(pelicanServerId)?.players.delete(steamId);
+  remove(pelicanServerId: number, player: PlayerRef): void {
+    this.held.get(pelicanServerId)?.players.delete(presenceKey(player));
     this.prune(pelicanServerId);
   }
 
@@ -119,10 +128,10 @@ export class PendingServerPlayers {
     const entry = this.held.get(pelicanServerId);
     if (!entry) return [];
     const out: ServerPresencePlayer[] = [];
-    for (const [steamId, h] of entry.players) {
+    for (const [key, h] of entry.players) {
       if (!eligible(h)) continue;
       out.push(h.player);
-      entry.players.delete(steamId);
+      entry.players.delete(key);
     }
     this.prune(pelicanServerId);
     return out;

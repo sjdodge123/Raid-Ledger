@@ -5,6 +5,7 @@
  * unique indexes (and that ON CONFLICT infers them via `targetWhere`), and the
  * operator ruling that a linked user in voice AND on the server is ONE row.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -73,12 +74,18 @@ afterEach(async () => {
 describe('AdHocParticipantService — Steam participants (real DB)', () => {
   it('inserts a Steam-only row, then re-opens the same row on rejoin', async () => {
     const eventId = await insertEvent();
-    const member = { steamId: STEAM_A, displayName: 'Ragnhild', userId: null };
+    const member = {
+      ...steamPlayer(STEAM_A),
+      displayName: 'Ragnhild',
+      userId: null,
+    };
 
     expect(await service.addServerParticipant(eventId, member)).toBe(
       'inserted',
     );
-    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(true);
+    expect(await service.markServerLeave(eventId, steamPlayer(STEAM_A))).toBe(
+      true,
+    );
     expect(await service.addServerParticipant(eventId, member)).toBe(
       'rejoined',
     );
@@ -87,7 +94,7 @@ describe('AdHocParticipantService — Steam participants (real DB)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       discordUserId: null,
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       source: 'steam',
       discordUsername: 'Ragnhild',
       leftAt: null,
@@ -96,7 +103,7 @@ describe('AdHocParticipantService — Steam participants (real DB)', () => {
     const [dto] = await service.getRoster(eventId);
     expect(dto).toMatchObject({
       discordUserId: null,
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       source: 'steam',
     });
   });
@@ -104,12 +111,12 @@ describe('AdHocParticipantService — Steam participants (real DB)', () => {
   it('partial uniques: many null-discord rows coexist, a duplicate steam_id does not', async () => {
     const eventId = await insertEvent();
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: STEAM_A,
       userId: null,
     });
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_B,
+      ...steamPlayer(STEAM_B),
       displayName: STEAM_B,
       userId: null,
     });
@@ -159,7 +166,7 @@ describe('AdHocParticipantService — one participant per linked user (real DB)'
     const eventId = await insertEvent();
     await service.addParticipant(eventId, voiceMember(true));
     const outcome = await service.addServerParticipant(eventId, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: 'Ragnhild',
       userId: userId(),
     });
@@ -174,13 +181,15 @@ describe('AdHocParticipantService — one participant per linked user (real DB)'
       ]),
     ).toEqual([[DISCORD_A, STEAM_A, userId(), 'VoiceName']]);
     // A server leave must not close the row while the player is in voice.
-    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(false);
+    expect(await service.markServerLeave(eventId, steamPlayer(STEAM_A))).toBe(
+      false,
+    );
   });
 
   it('server first, then the same user in voice → ONE row carrying both ids', async () => {
     const eventId = await insertEvent();
     await service.addServerParticipant(eventId, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: 'Ragnhild',
       userId: userId(),
     });
@@ -215,7 +224,7 @@ async function onlyRow(eventId: number) {
 }
 
 const linkedServer = () => ({
-  steamId: STEAM_A,
+  ...steamPlayer(STEAM_A),
   displayName: 'Ragnhild',
   userId: userId(),
 });
@@ -240,7 +249,9 @@ describe('AdHocParticipantService — per-source presence on a shared row (B1)',
     await service.addServerParticipant(eventId, linkedServer());
     await service.addParticipant(eventId, voiceMember(true));
 
-    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(false);
+    expect(await service.markServerLeave(eventId, steamPlayer(STEAM_A))).toBe(
+      false,
+    );
     expect(await onlyRow(eventId)).toMatchObject({ leftAt: null });
     expect(await hasOpenServerPlayers(testApp.db, eventId)).toBe(false);
 
@@ -254,7 +265,9 @@ describe('AdHocParticipantService — per-source presence on a shared row (B1)',
     await service.addServerParticipant(eventId, linkedServer());
     await service.markLeave(eventId, DISCORD_A);
 
-    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(true);
+    expect(await service.markServerLeave(eventId, steamPlayer(STEAM_A))).toBe(
+      true,
+    );
     expect((await onlyRow(eventId)).leftAt).toBeInstanceOf(Date);
   });
 });
@@ -262,12 +275,16 @@ describe('AdHocParticipantService — per-source presence on a shared row (B1)',
 describe('AdHocParticipantService — a re-opened row restarts its session (m10)', () => {
   it('a Steam rejoin does not re-add the earlier span', async () => {
     const eventId = await insertEvent();
-    const member = { steamId: STEAM_A, displayName: 'Ragnhild', userId: null };
+    const member = {
+      ...steamPlayer(STEAM_A),
+      displayName: 'Ragnhild',
+      userId: null,
+    };
     await service.addServerParticipant(eventId, member);
     await backdate(eventId, 100);
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
     await service.addServerParticipant(eventId, member);
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
 
     expect((await onlyRow(eventId)).totalDurationSeconds).toBeLessThan(150);
   });
@@ -292,7 +309,9 @@ describe('AdHocParticipantService — a re-opened row restarts its session (m10)
       'merged',
     );
 
-    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(true);
+    expect(await service.markServerLeave(eventId, steamPlayer(STEAM_A))).toBe(
+      true,
+    );
     expect((await onlyRow(eventId)).totalDurationSeconds).toBeLessThan(150);
   });
 });
