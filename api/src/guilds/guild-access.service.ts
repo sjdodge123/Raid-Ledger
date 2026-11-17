@@ -79,6 +79,22 @@ export class GuildAccessService {
     return hub === undefined ? false : hub.isMember(userId, guildId);
   }
 
+  /**
+   * ROK-2212: which of `userIds` are members, as the hub kind defines it — one
+   * kind lookup + one member-set read (`memberUserIds`, the set form of
+   * `isMember`) instead of a query pair per user. Unknown kind ⇒ none.
+   */
+  async areMembers(
+    userIds: readonly number[],
+    guildId: number,
+  ): Promise<Set<number>> {
+    if (userIds.length === 0) return new Set();
+    const hub = await this.hubKinds.forGuild(guildId);
+    if (hub === undefined) return new Set();
+    const members = new Set(await hub.memberUserIds(guildId));
+    return new Set(userIds.filter((id) => members.has(id)));
+  }
+
   /** Members (read-only) + admin/operator. Non-members cannot view. */
   async canView(actor: GuildActor, guildId: number): Promise<boolean> {
     if (isStaff(actor)) return true;

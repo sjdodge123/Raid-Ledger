@@ -46,6 +46,7 @@ import { runDelayEvent } from './event-delay.helpers';
 import {
   runCreateEvent,
   emitEventLifecycle,
+  hubMemberCheckFrom,
 } from './event-create-flow.helpers';
 import {
   findExistingEvent,
@@ -356,6 +357,7 @@ export class EventsService {
       // ROK-1371: post-create follow-up fan-out (NotificationService already injected).
       notificationService: this.notificationService,
       noticeDedup: this.notificationDedup,
+      isHubMember: hubMemberCheckFrom(this.moduleRef),
     };
   }
 }

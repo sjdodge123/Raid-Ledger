@@ -67,6 +67,7 @@ import {
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 import { errorStack } from '../../common/error-format.helpers';
+import { GuildAccessService } from '../../guilds/guild-access.service';
 
 @Injectable()
 export class SchedulingService {
@@ -81,6 +82,7 @@ export class SchedulingService {
     private readonly pollEmbed: SchedulingPollEmbedService,
     private readonly notifications: NotificationService,
     private readonly unanimous: SchedulingUnanimousService,
+    private readonly guildAccess: GuildAccessService,
     @Optional() private readonly nudge?: GameActivityNudge,
   ) {}
 
@@ -114,6 +116,7 @@ export class SchedulingService {
       { pollMatch, lineup, members, slots, voterCount },
       userId,
       callerRole,
+      (ids, h) => this.guildAccess.areMembers(ids, h),
     );
   }
 

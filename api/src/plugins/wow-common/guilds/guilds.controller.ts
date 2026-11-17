@@ -19,6 +19,7 @@ import {
   DeleteGuildEditorParamsSchema,
   DungeonPlanQuerySchema,
   GuildListQuerySchema,
+  SuggestedGroupsQuerySchema,
   type CharacterGuild,
   type DungeonPlanDto,
   type GuildEditor,
@@ -26,6 +27,7 @@ import {
   type GuildPage,
   type GuildRaidsDto,
   type MyGuilds,
+  type SuggestedGroupsDto,
   type WowRecentDingsDto,
   type WowGuildJoinGateDto,
   type WowRosterInsightsDto,
@@ -44,6 +46,7 @@ import { RosterInsightsService } from './roster-insights/roster-insights.service
 import { RecentDingsService } from './recent-dings/recent-dings.service';
 import { JoinGateService } from './join-gate/join-gate.service';
 import { DungeonPlanService } from './dungeon-plan/dungeon-plan.service';
+import { SuggestedGroupsService } from './suggested-groups/suggested-groups.service';
 
 const jwt = AuthGuard('jwt');
 
@@ -66,6 +69,7 @@ export class GuildsController {
     private readonly dingsSvc: RecentDingsService,
     private readonly joinGate: JoinGateService,
     private readonly dungeonPlans: DungeonPlanService,
+    private readonly suggested: SuggestedGroupsService,
   ) {}
 
   @Get()
@@ -160,6 +164,24 @@ export class GuildsController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.dungeonPlans.plan(id, parsed.data);
+  }
+
+  /**
+   * ROK-2212 — Suggested groups: groups of 5 per listed Forever dungeon.
+   * Anyone who can view the hub; a visitor gets `userId: null` on every member.
+   */
+  @Get(':id/suggested-groups')
+  @UseGuards(jwt, HubVisibleGuard)
+  suggestedGroups(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: unknown,
+  ): Promise<SuggestedGroupsDto> {
+    const parsed = SuggestedGroupsQuerySchema.safeParse(query);
+    if (!parsed.success) {
+      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    }
+    return this.suggested.suggestedGroups(req.user, id, parsed.data);
   }
 
   /** ROK-1919 — Forever "Recent dings" (last 30 days). Anyone who can view the hub. */

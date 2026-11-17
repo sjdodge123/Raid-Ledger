@@ -184,6 +184,7 @@ describe('hub polls — reads', () => {
     expect(page.body.hub).toEqual({
       id: hub.id,
       name: hub.name,
+      kind: 'game_community',
       memberCount: 1,
       viewerIsMember: false,
     });

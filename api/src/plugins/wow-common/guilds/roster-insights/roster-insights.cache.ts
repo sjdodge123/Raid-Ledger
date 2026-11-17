@@ -43,6 +43,8 @@ export class RosterInsightsCache implements OnModuleDestroy {
     isCached: (key) => this.isLive(key),
   });
   private recompute: InsightsRecompute | null = null;
+  /** Other per-guild caches dropped with this one (ROK-2212 suggested groups). */
+  private readonly guildListeners: ((guildId: number) => void)[] = [];
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -55,6 +57,14 @@ export class RosterInsightsCache implements OnModuleDestroy {
    */
   registerRecompute(fn: InsightsRecompute): void {
     this.recompute = fn;
+  }
+
+  /**
+   * Call `fn` on every `invalidateGuild` (import, claim, sync, pull scope), so
+   * a cache keyed by guild drops with this one without its own hook per caller.
+   */
+  onGuildInvalidated(fn: (guildId: number) => void): void {
+    this.guildListeners.push(fn);
   }
 
   /** Stop warming; wait for running computes before the pool closes. */
@@ -90,7 +100,7 @@ export class RosterInsightsCache implements OnModuleDestroy {
   /**
    * Drop every cached entry of one guild (all audiences), supersede its
    * in-flight computes, then queue a warm of each of its keys read within
-   * the TTL (never awaited).
+   * the TTL (never awaited), and tell the `onGuildInvalidated` listeners.
    */
   invalidateGuild(guildId: number): void {
     const prefix = `${INSIGHTS_KEY_PREFIX}${guildId}:`;
@@ -98,6 +108,7 @@ export class RosterInsightsCache implements OnModuleDestroy {
       if (key.startsWith(prefix)) this.cache.delete(key);
     this.flights.bumpPrefix(prefix);
     for (const key of this.recentlyRead(prefix)) this.scheduleWarm(key);
+    for (const fn of this.guildListeners) fn(guildId);
   }
 
   /** Keys under `prefix` read within the TTL; older read stamps are pruned. */

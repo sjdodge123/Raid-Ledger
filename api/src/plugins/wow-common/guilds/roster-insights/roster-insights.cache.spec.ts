@@ -83,6 +83,21 @@ function dbReturning(rows: { id: number }[]) {
   return db as unknown as PostgresJsDatabase<typeof schema>;
 }
 
+describe('onGuildInvalidated (ROK-2212 L10)', () => {
+  it('tells every listener each guild a pull scope drops, once per guild', async () => {
+    const cache = new RosterInsightsCache(dbReturning([{ id: 7 }, { id: 9 }]));
+    const seen: number[] = [];
+    cache.onGuildInvalidated((id) => seen.push(id));
+    cache.invalidateGuild(3);
+    await cache.invalidateForPullScope({
+      gameId: 1,
+      region: 'eu',
+      guildKey: 'g',
+    });
+    expect(seen).toEqual([3, 7, 9]);
+  });
+});
+
 describe('invalidateForPullScope (ROK-1917 final P2)', () => {
   it("drops every wow_guild hub of the pull's scope, and only those", async () => {
     const cache = new RosterInsightsCache(dbReturning([{ id: 7 }, { id: 9 }]));

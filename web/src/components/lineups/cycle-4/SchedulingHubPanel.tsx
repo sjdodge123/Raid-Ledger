@@ -5,16 +5,23 @@
  * signed-in viewer who isn't a member — a Join hub card that uses the hub's
  * own join mutation and then refetches this poll. Renders nothing on an
  * untagged poll (or one whose hub is hidden — the API sends `hub: null`).
+ * ROK-2212: only a community hub can be joined from here — a WoW guild hub is
+ * joined by claiming a roster character, so its non-members get the shared
+ * "Claim your character to join" link straight into the hub's claim flow
+ * (absent `kind` = an older server = community; any other kind gets no card).
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
+import { buttonClass } from '../../ui/button-classes';
 import { StatusChip } from '../../ui/status-chip';
 import { useAuth } from '../../../hooks/use-auth';
 import { schedulePollKey } from '../../../hooks/use-scheduling';
 import { useCommunityJoin } from '../../hub/community/community-hub-api';
+import { hubCopy } from '../../hub/hub-copy';
+import { claimRosterHref } from '../../layout/hub-nav/my-hubs-queries';
 import { uniqueVoters, type Voter } from './scheduling-hub.helpers';
 
 type PollHub = NonNullable<SchedulePollPageResponseDto['hub']>;
@@ -44,6 +51,29 @@ function JoinHubCard({ hub, voted, onJoined }: { hub: PollHub; voted: boolean; o
     );
 }
 
+function GuildHubCard({ hub, voted }: { hub: PollHub; voted: boolean }): JSX.Element {
+    const lead = voted ? 'You voted. ' : '';
+    const claim = hubCopy('wow_guild').joinAction;
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-edge bg-surface p-3" data-testid="scheduling-hub-guild">
+            <p className="text-sm text-secondary">{lead}Claim your character in {hub.name} to join.</p>
+            {claim && (
+                <Link to={claimRosterHref(hub.id)} aria-label={`${claim.label}: ${hub.name}`} className={buttonClass({ variant: 'secondary', size: 'sm' })}>
+                    {claim.label}
+                </Link>
+            )}
+        </div>
+    );
+}
+
+/** The non-member card by hub kind: community → Join hub, WoW guild → claim to join, anything else → none. */
+function NonMemberCard({ hub, voted, onJoined }: { hub: PollHub; voted: boolean; onJoined: () => void }): JSX.Element | null {
+    const kind = hub.kind ?? 'game_community';
+    if (kind === 'game_community') return <JoinHubCard hub={hub} voted={voted} onJoined={onJoined} />;
+    if (kind === 'wow_guild') return <GuildHubCard hub={hub} voted={voted} />;
+    return null;
+}
+
 export function SchedulingHubPanel({ poll, lineupId, matchId }: {
     poll: SchedulePollPageResponseDto; lineupId: number; matchId: number;
 }): JSX.Element | null {
@@ -60,7 +90,7 @@ export function SchedulingHubPanel({ poll, lineupId, matchId }: {
                 Hub: <Link to={`/hubs/${hub.id}`} className="text-foreground underline hover:no-underline">{hub.name}</Link>
             </p>
             <VoterChips voters={voters} />
-            {user && !hub.viewerIsMember && <JoinHubCard hub={hub} voted={voted} onJoined={refetch} />}
+            {user && !hub.viewerIsMember && <NonMemberCard hub={hub} voted={voted} onJoined={refetch} />}
         </div>
     );
 }

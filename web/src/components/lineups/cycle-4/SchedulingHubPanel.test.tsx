@@ -69,4 +69,27 @@ describe('SchedulingHubPanel (ROK-1893 P3)', () => {
         renderWithProviders(<SchedulingHubPanel poll={buildPoll(HUB)} lineupId={40} matchId={41} />);
         expect(screen.queryByRole('button', { name: 'Join hub' }), 'signed-out viewers cannot join').toBeNull();
     });
+    it('ROK-2212: an outsider on a guild-hub poll gets the claim-to-join link, never Join hub', () => {
+        const guild = { ...HUB, name: 'Ashen Vanguard', kind: 'wow_guild' as const };
+        renderWithProviders(<SchedulingHubPanel poll={buildPoll(guild)} lineupId={40} matchId={41} />);
+        expect(screen.queryByRole('button', { name: 'Join hub' }), 'a guild hub cannot be joined from the poll').toBeNull();
+        expect(screen.queryByTestId('scheduling-hub-join'), 'no community join card on a guild hub').toBeNull();
+        const card = screen.getByTestId('scheduling-hub-guild');
+        expect(card).toHaveTextContent('You voted. Claim your character in Ashen Vanguard to join.');
+        const claim = within(card).getByRole('link', { name: 'Claim your character to join: Ashen Vanguard' });
+        expect(claim, 'opens the hub claim flow directly').toHaveAttribute('href', '/hubs/7?claim=roster');
+    });
+
+    it('ROK-2212: a hub of any other kind gets no join or claim card', () => {
+        renderWithProviders(<SchedulingHubPanel poll={buildPoll({ ...HUB, kind: 'game_server' })} lineupId={40} matchId={41} />);
+        expect(screen.getByTestId('scheduling-hub-panel')).toBeInTheDocument();
+        expect(screen.queryByTestId('scheduling-hub-join'), 'only a community hub is joined here').toBeNull();
+        expect(screen.queryByTestId('scheduling-hub-guild'), 'only a WoW guild hub is claimed into').toBeNull();
+    });
+
+    it('ROK-2212: a community hub (explicit kind) still offers Join hub', () => {
+        renderWithProviders(<SchedulingHubPanel poll={buildPoll({ ...HUB, kind: 'game_community' })} lineupId={40} matchId={41} />);
+        expect(screen.getByRole('button', { name: 'Join hub' })).toBeInTheDocument();
+        expect(screen.queryByTestId('scheduling-hub-guild')).toBeNull();
+    });
 });
