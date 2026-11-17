@@ -26,6 +26,7 @@ import {
   preflight,
   suggestedForumName,
 } from './hub-forum-discord.picker';
+import { KeyedSerializer } from './hub-forum-discord.bind-lock';
 import {
   deleteBinding,
   deleteForumRow,
@@ -63,6 +64,8 @@ function healthOf(
  */
 @Injectable()
 export class HubForumDiscordService {
+  private readonly binds = new KeyedSerializer();
+
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
@@ -111,6 +114,19 @@ export class HubForumDiscordService {
     const input = parseBindBody(body);
     if (await findBinding(this.db, guildId)) throw alreadyBound();
     const discordGuildId = this.requireOnline();
+    return this.binds.run(discordGuildId, () =>
+      this.bindLocked(actor, guildId, input, discordGuildId),
+    );
+  }
+
+  /** Codex P2: one bind per Discord guild at a time; rechecks inside. */
+  private async bindLocked(
+    actor: GuildActor,
+    guildId: number,
+    input: PutHubForumDiscordInput,
+    discordGuildId: string,
+  ): Promise<HubForumDiscordStatus> {
+    if (await findBinding(this.db, guildId)) throw alreadyBound();
     const { info, managed } = await this.target(discordGuildId, guildId, input);
     const forum = await upsertForum(this.db, {
       discordGuildId,

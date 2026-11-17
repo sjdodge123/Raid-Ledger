@@ -524,6 +524,17 @@ describe('ROK-2208 Q10(c) create shared — one #hub-forums, reused', () => {
     expect(need(await bindingRow(b), 'b row').tagId).not.toBeNull();
   });
 
+  it('Codex P2: two hubs sharing at once make ONE #hub-forums and both join it', async () => {
+    const a = await newHub(ctx);
+    const b = await newHub(ctx);
+    const [ra, rb] = await Promise.all([shareIn(a), shareIn(b)]);
+    expect([ra.status, rb.status]).toEqual([200, 200]);
+    expect(fake.spies.createForum).toHaveBeenCalledTimes(1);
+    const first = need((await statusOf(a)).binding, 'a binding');
+    const second = need((await statusOf(b)).binding, 'b binding');
+    expect(second.channelId).toBe(first.channelId);
+  });
+
   it('an existing #hub-forums on Discord is reused, never a second one', async () => {
     const f = fake.put({ name: 'hub-forums' });
     const g = await newHub(ctx);
