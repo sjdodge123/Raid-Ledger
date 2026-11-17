@@ -273,7 +273,14 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     }
     // ROK-2227: a transient edit failure must fail the job so BullMQ's
     // `attempts: 3` + backoff re-runs it; swallowing it left the embed stale.
-    if (retryable) throw retryable;
+    // The scheduled-event refresh does not depend on the channel edit, so it
+    // still runs first — otherwise a persistent failure leaves the SE's signup
+    // count stale. It only overwrites the SE description / completes the SE,
+    // so repeating it on each retry is safe (the success path runs it too).
+    if (retryable) {
+      this.triggerSideEffects(newState, eventId, eventData);
+      throw retryable;
+    }
   }
 
   /**

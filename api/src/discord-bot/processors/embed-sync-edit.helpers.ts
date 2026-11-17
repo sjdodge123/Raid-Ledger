@@ -19,19 +19,25 @@ import {
 import { UNKNOWN_MESSAGE } from '../discord-bot-client.messages.helpers';
 import {
   MISSING_ACCESS,
+  MISSING_PERMISSIONS,
   UNKNOWN_CHANNEL,
 } from '../channel-lifecycle/channel-lifecycle.errors';
 
-/** Discord codes no retry can fix: 10008, 10003, 50001. */
+/**
+ * Discord codes no retry can fix: 10008, 10003, 50001, 50013. A permission
+ * the bot lacks (50013) is not granted by waiting out a backoff.
+ */
 const PERMANENT_EDIT_CODES: ReadonlySet<number | string> = new Set([
   UNKNOWN_MESSAGE,
   UNKNOWN_CHANNEL,
   MISSING_ACCESS,
+  MISSING_PERMISSIONS,
 ]);
 
 /**
  * True when an embed edit failed because the message or channel is gone or
- * unreachable (Unknown Message, Unknown Channel, Missing Access).
+ * unreachable (Unknown Message, Unknown Channel, Missing Access, Missing
+ * Permissions).
  *
  * The check is `instanceof DiscordAPIError`, not a duck-typed `code` read, the
  * same as `isUnknownMessage`; a test fakes the error with

@@ -5,7 +5,9 @@
  * fires when `process()` rejects. The processor used to catch, log and swallow
  * every `editEmbed` failure, so a 5xx or rate limit completed the job and left
  * the embed stale. A message/channel that is gone or unreachable (10008 /
- * 10003 / 50001) can never succeed, so it is still logged and dropped.
+ * 10003 / 50001), or a permission the bot lacks (50013), can never succeed,
+ * so it is still logged and dropped. Either way the Discord scheduled event
+ * is still refreshed, so its signup count does not go stale.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -79,6 +81,7 @@ const JOB = {
 let processor: EmbedSyncProcessor;
 let editEmbed: jest.Mock;
 let update: jest.Mock;
+let updateDescription: jest.Mock;
 
 /** db.select().from().where().limit() resolves to the event row. */
 function selectChain(): Record<string, jest.Mock> {
@@ -131,7 +134,7 @@ function providers(db: Record<string, jest.Mock>) {
     {
       provide: ScheduledEventService,
       useValue: {
-        updateDescription: jest.fn().mockResolvedValue(undefined),
+        updateDescription,
         completeScheduledEvent: jest.fn().mockResolvedValue(undefined),
       },
     },
@@ -141,6 +144,7 @@ function providers(db: Record<string, jest.Mock>) {
 
 beforeEach(async () => {
   editEmbed = jest.fn().mockResolvedValue({ id: 'msg-1' });
+  updateDescription = jest.fn().mockResolvedValue(undefined);
   update = jest.fn().mockReturnValue(updateChain());
   const db = { select: jest.fn().mockReturnValue(selectChain()), update };
   (findTrackedMessages as jest.Mock).mockResolvedValue([trackedRow(1)]);
@@ -186,6 +190,14 @@ describe('EmbedSyncProcessor — transient edit failure (ROK-2227 AC2)', () => {
     expect(editEmbed).toHaveBeenCalledTimes(2);
     expect(update).toHaveBeenCalledTimes(1);
   });
+
+  it('still refreshes the scheduled event before rejecting', async () => {
+    const transient = new Error('503 Service Unavailable');
+    editEmbed.mockRejectedValue(transient);
+
+    await expect(processor.process(JOB)).rejects.toBe(transient);
+    expect(updateDescription).toHaveBeenCalledWith(316, { id: 316 });
+  });
 });
 
 describe('EmbedSyncProcessor — permanent edit failure (ROK-2227 AC2)', () => {
@@ -193,11 +205,13 @@ describe('EmbedSyncProcessor — permanent edit failure (ROK-2227 AC2)', () => {
     [10008, 'Unknown Message'],
     [10003, 'Unknown Channel'],
     [50001, 'Missing Access'],
+    [50013, 'Missing Permissions'],
   ])('does not retry on %d %s', async (code) => {
     editEmbed.mockRejectedValue(discordError(code));
 
     await expect(processor.process(JOB)).resolves.toBeUndefined();
     expect(update).not.toHaveBeenCalled();
+    expect(updateDescription).toHaveBeenCalledWith(316, { id: 316 });
   });
 });
 
