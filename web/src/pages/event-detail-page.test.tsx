@@ -43,6 +43,7 @@ vi.mock('../hooks/use-auth', () => ({
     }),
     isOperatorOrAdmin: () => true,
     getAuthToken: () => 'test-token',
+    useViewerCacheScope: (): number | 'anon' => 1,
 }));
 
 vi.mock('../hooks/use-game-registry', () => ({

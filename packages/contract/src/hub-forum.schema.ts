@@ -35,6 +35,25 @@ export const HubForumCanSchema = z
   .strict();
 export type HubForumCan = z.infer<typeof HubForumCanSchema>;
 
+// ── ROK-2226: event discussion threads ─────────────────────────────────────
+
+/** Why an event thread no longer takes replies or edits. */
+export const HUB_FORUM_LOCK_REASONS = ['event-ended', 'event-detached', 'event-deleted'] as const;
+export const HubForumLockReasonSchema = z.enum(HUB_FORUM_LOCK_REASONS);
+export type HubForumLockReason = z.infer<typeof HubForumLockReasonSchema>;
+
+/** The event an event thread discusses (title/date render from here). */
+export const HubForumThreadEventSchema = z
+  .object({ id, title: z.string(), startTime: isoDate, endTime: isoDate, cancelled: z.boolean() })
+  .strict();
+export type HubForumThreadEvent = z.infer<typeof HubForumThreadEventSchema>;
+
+/** Set once an event thread is read-only; null while it is writable. */
+export const HubForumLockSchema = z.object({ at: isoDate, reason: HubForumLockReasonSchema }).strict();
+export type HubForumLock = z.infer<typeof HubForumLockSchema>;
+
+// ── end ROK-2226 block ─────────────────────────────────────────────────────
+
 /** A thread row in the list and the widget. */
 export const HubForumThreadSummarySchema = z
   .object({
@@ -51,6 +70,10 @@ export const HubForumThreadSummarySchema = z
     replyCount: z.number().int().nonnegative(),
     pinnedAt: isoDate.nullable(),
     deleted: HubForumDeletedSchema,
+    /** ROK-2226: the discussed event; null/absent for a normal thread. */
+    event: HubForumThreadEventSchema.nullable().optional(),
+    /** ROK-2226: read-only state of an event thread; null/absent otherwise. */
+    lock: HubForumLockSchema.nullable().optional(),
   })
   .strict();
 export type HubForumThreadSummary = z.infer<typeof HubForumThreadSummarySchema>;
@@ -109,6 +132,8 @@ export const HubForumThreadSchema = HubForumThreadSummarySchema.extend({
   can: HubForumCanSchema,
   replies: z.array(HubForumReplySchema),
   nextReplyCursor: z.string().nullable(),
+  /** ROK-2226: may the viewer reply (event threads: signed up + not locked). */
+  canReply: z.boolean().optional(),
 }).strict();
 export type HubForumThread = z.infer<typeof HubForumThreadSchema>;
 
