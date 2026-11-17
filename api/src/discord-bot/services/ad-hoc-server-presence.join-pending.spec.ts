@@ -3,6 +3,7 @@
  * guard runs FIRST (ROK-1800), then the spawn gate sums held server players
  * and voice people (`held + voice < min`, ROK-1801 Q9).
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type {
@@ -15,7 +16,7 @@ import { checkSuppression } from './ad-hoc-spawn-clearance';
 import {
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
-  listOpenGameServerSteamIds,
+  listOpenGameServerPlayerKeys,
   listOpenServerPresence,
   listServerEnrolledEvents,
 } from './ad-hoc-server-presence.helpers';
@@ -30,7 +31,7 @@ jest.mock('./ad-hoc-server-presence.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.helpers'),
   findGameVoiceBinding: jest.fn(),
   findLiveGameAdHocEvent: jest.fn(),
-  listOpenGameServerSteamIds: jest.fn(),
+  listOpenGameServerPlayerKeys: jest.fn(),
   listServerEnrolledEvents: jest.fn(),
   listOpenServerPresence: jest.fn(),
 }));
@@ -52,16 +53,16 @@ jest.mock('./ad-hoc-server-spawn.helpers', () => ({
 
 const SOURCE: ServerPresenceSource = { gameId: 10, pelicanServerId: 1 };
 const PLAYER = {
-  steamId: '76561198000000001',
+  ...steamPlayer('76561198000000001'),
   displayName: null,
 } as unknown as ServerPresencePlayer;
 const CLEARANCE = { matches: () => true, consume: () => true };
 const OTHER = {
-  steamId: '76561198000000002',
+  ...steamPlayer('76561198000000002'),
   displayName: 'Freya',
 } satisfies ServerPresencePlayer;
 const THIRD = {
-  steamId: '76561198000000003',
+  ...steamPlayer('76561198000000003'),
   displayName: 'Sigrid',
 } satisfies ServerPresencePlayer;
 
@@ -98,7 +99,7 @@ beforeEach(() => {
   });
   jest.mocked(buildServerSpawnInput).mockResolvedValue(null);
   jest.mocked(listServerEnrolledEvents).mockResolvedValue([]);
-  jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([]);
+  jest.mocked(listOpenGameServerPlayerKeys).mockResolvedValue([]);
 });
 
 afterEach(() => jest.resetAllMocks());
@@ -183,11 +184,11 @@ describe('AdHocServerPresenceService — held players across a session restart (
       );
   });
 
-  /** The steamIds of the players handed to each spawn attempt. */
+  /** The player ids of the players handed to each spawn attempt. */
   const spawned = () =>
     jest
       .mocked(buildServerSpawnInput)
-      .mock.calls.map(([, , , players]) => players.map((p) => p.steamId));
+      .mock.calls.map(([, , , players]) => players.map((p) => p.playerId));
 
   it('a held player whose join fell outside the replay counts once a heartbeat covers the count', async () => {
     const { svc } = serviceWith(0);
@@ -196,7 +197,7 @@ describe('AdHocServerPresenceService — held players across a session restart (
     await svc.playerJoined(SOURCE, OTHER);
     expect(spawned()).toEqual([]); // unconfirmed: no count vouches yet
     await svc.playerCount(SOURCE, 2);
-    expect(spawned()).toEqual([[PLAYER.steamId, OTHER.steamId]]);
+    expect(spawned()).toEqual([[PLAYER.playerId, OTHER.playerId]]);
   });
 
   it('a held player who left while the plugin was stopped is never enrolled (the count excludes them)', async () => {
@@ -209,7 +210,7 @@ describe('AdHocServerPresenceService — held players across a session restart (
     // A later heartbeat cannot bring the dropped hold back.
     await svc.playerCount(SOURCE, 5);
     await svc.playerJoined(SOURCE, THIRD);
-    expect(spawned()).toEqual([[OTHER.steamId, THIRD.steamId]]);
+    expect(spawned()).toEqual([[OTHER.playerId, THIRD.playerId]]);
   });
 
   it('a replay that re-reports the held player re-confirms them without a heartbeat', async () => {
@@ -218,14 +219,14 @@ describe('AdHocServerPresenceService — held players across a session restart (
     await svc.openPresence(SOURCE);
     await svc.playerJoined(SOURCE, PLAYER);
     await svc.playerJoined(SOURCE, OTHER);
-    expect(spawned()).toEqual([[PLAYER.steamId, OTHER.steamId]]);
+    expect(spawned()).toEqual([[PLAYER.playerId, OTHER.playerId]]);
   });
 
   it('a hold that survives (no session restart) still reaches the threshold', async () => {
     const { svc } = serviceWith(0);
     await svc.playerJoined(SOURCE, PLAYER);
     await svc.playerJoined(SOURCE, OTHER);
-    expect(spawned()).toEqual([[PLAYER.steamId, OTHER.steamId]]);
+    expect(spawned()).toEqual([[PLAYER.playerId, OTHER.playerId]]);
   });
 });
 
@@ -261,8 +262,8 @@ describe('AdHocServerPresenceService — a heartbeat after a spawn (ROK-1802 Cod
     await svc.playerCount(SOURCE, 2);
     const attached = jest
       .mocked(attachServerPlayer)
-      .mock.calls.map(([, , , pl]) => pl.steamId);
-    expect(attached).toEqual([OTHER.steamId, THIRD.steamId]);
+      .mock.calls.map(([, , , pl]) => pl.playerId);
+    expect(attached).toEqual([OTHER.playerId, THIRD.playerId]);
   });
 
   it("a reconnected, enrolled player's own hold never takes the heartbeat's cover slot (Codex r3)", async () => {
@@ -281,7 +282,7 @@ describe('AdHocServerPresenceService — a heartbeat after a spawn (ROK-1802 Cod
     await svc.playerCount(SOURCE, 2);
     const attached = jest
       .mocked(attachServerPlayer)
-      .mock.calls.map(([, , , pl]) => pl.steamId);
-    expect(attached).toEqual([OTHER.steamId, PLAYER.steamId]);
+      .mock.calls.map(([, , , pl]) => pl.playerId);
+    expect(attached).toEqual([OTHER.playerId, PLAYER.playerId]);
   });
 });
