@@ -76,6 +76,7 @@ export class HubForumDiscordInboundListener {
   );
   /** Hub behaviour — read by the ownership guard's listener scan. */
   readonly hubBehaviour = 'hub-forum.discord-sync';
+  readonly hubBehaviourKind = 'ingest-source';
   readonly ownerPluginId = CORE_PLUGIN_ID;
 
   constructor(

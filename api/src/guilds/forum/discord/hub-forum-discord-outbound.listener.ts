@@ -14,6 +14,7 @@ export class HubForumDiscordOutboundListener {
   private readonly logger = new Logger(HubForumDiscordOutboundListener.name);
   /** Hub behaviour — read by the ownership guard's listener scan. */
   readonly hubBehaviour = 'hub-forum.discord-sync';
+  readonly hubBehaviourKind = 'ingest-source';
   readonly ownerPluginId = CORE_PLUGIN_ID;
 
   constructor(private readonly outbound: HubForumDiscordOutboundService) {}
