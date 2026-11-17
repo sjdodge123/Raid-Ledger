@@ -24,18 +24,6 @@ export function isAdoptableGuid(
   return !stored.has(guid);
 }
 
-/** Every GUID a guild stores (live or not). */
-export async function storedGuids(
-  tx: AddonApplyContext['tx'],
-  guildId: number,
-): Promise<Set<string>> {
-  const rows = await tx
-    .select({ guid: guildMembers.guid })
-    .from(guildMembers)
-    .where(eq(guildMembers.guildId, guildId));
-  return new Set(rows.flatMap((r) => (r.guid === null ? [] : [r.guid])));
-}
-
 /** The stored columns adoption reads. */
 export interface AdoptableRow {
   id: number;

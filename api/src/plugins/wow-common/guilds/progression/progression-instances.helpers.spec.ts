@@ -5,6 +5,7 @@
  * difficulty flag, the `other` bucket, and the near-duplicate collapse.
  */
 import type { WowProgressionInstanceDto } from '@raid-ledger/contract';
+import bossData from '../../data/boss-encounter-data.json';
 import {
   groupIntoInstances,
   type ProgressionBossRow,
@@ -303,6 +304,11 @@ const GNOMER_ROWS: ProgressionBossRow[] = [
   row(231, 'Grubbis (SoD)', 2, 'sod'),
 ];
 
+/** ROK-2219: the bundled `forever` rows of The Hall of Thanes (seed 90000001). */
+const HOT_ROWS: ProgressionBossRow[] = bossData.filter(
+  (b) => b.instanceId === 90_000_001 && b.expansion === 'forever',
+);
+
 describe('groupIntoInstances — Classic dungeons (ROK-2218)', () => {
   it('map 90 pulls are a "Gnomeregan" section (j:231) with its boss total', () => {
     const out = groupIntoInstances(
@@ -346,13 +352,46 @@ describe('groupIntoInstances — Classic dungeons (ROK-2218)', () => {
     expect(dm.bosses[0]?.order).toBe(4);
   });
 
-  it('an unknown map (3065, Forever-only) stays "Instance 3065" with a null total', () => {
+  it('an unknown map (99999) stays "Instance 99999" with a null total', () => {
     const out = groupIntoInstances(
-      [pull(9100, 'Forever Boss', 0, true, { instanceId: 3065 })],
-      [...MC_ROWS, ...GNOMER_ROWS],
+      [pull(9100, 'Mystery Boss', 0, true, { instanceId: 99999 })],
+      [...MC_ROWS, ...GNOMER_ROWS, ...HOT_ROWS],
     );
-    const inst = only(out.instances, 'm:3065');
-    expect(inst.name).toBe('Instance 3065');
+    const inst = only(out.instances, 'm:99999');
+    expect(inst.name).toBe('Instance 99999');
     expect(inst.bossTotal).toBeNull();
+  });
+});
+
+describe('groupIntoInstances — Forever-only dungeons (ROK-2219)', () => {
+  it('map 3065 pulls are "The Hall of Thanes" with the bundled forever total of 4', () => {
+    const out = groupIntoInstances(
+      [
+        pull(3493, 'Faldrim Anvilmar', 0, true, { instanceId: 3065 }),
+        pull(3494, 'Plunder', 600, true, { instanceId: 3065 }),
+        pull(3496, 'Durgen Dirgehammer', 1200, false, { instanceId: 3065 }),
+      ],
+      [...MC_ROWS, ...GNOMER_ROWS, ...HOT_ROWS],
+    );
+    expect(out.instances.map((i) => i.key)).toEqual(['j:90000001']);
+    const hot = only(out.instances, 'j:90000001');
+    expect(hot.name).toBe('The Hall of Thanes');
+    expect(hot.bossTotal).toBe(4);
+    expect(hot.bossesDown).toBe(2);
+    expect(hot.bosses.map((b) => [b.name, b.order])).toEqual([
+      ['Faldrim Anvilmar', 1],
+      ['Plunder', 3],
+      ['Durgen Dirgehammer', 4],
+    ]);
+  });
+
+  it('a Hall of Thanes pull with no map id is placed by boss name', () => {
+    const out = groupIntoInstances(
+      [pull(3495, 'Infurnus', 0, true, { instanceId: null })],
+      [...MC_ROWS, ...HOT_ROWS],
+    );
+    const hot = only(out.instances, 'j:90000001');
+    expect(hot.name).toBe('The Hall of Thanes');
+    expect(hot.bossTotal).toBe(4);
   });
 });

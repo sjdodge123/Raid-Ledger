@@ -39,6 +39,11 @@ export const DungeonQuestDtoSchema = z.object({
         .object({ min: z.number().int(), max: z.number().int() })
         .nullable()
         .optional(),
+    /**
+     * ROK-2224: true on an escort / NPC-defend quest (the reviewed
+     * ESCORT_QUEST_IDS list); key absent otherwise.
+     */
+    isEscort: z.boolean().optional(),
 });
 
 export type DungeonQuestDto = z.infer<typeof DungeonQuestDtoSchema>;

@@ -16,6 +16,7 @@ import * as schema from '../../drizzle/schema';
 import { clearAuthUserCache } from '../../auth/auth-user-cache';
 import { ALL_QUEUE_NAMES } from '../../queue/queue-registry';
 import { SettingsService } from '../../settings/settings.service';
+import { WowItemMetaService } from '../../plugins/wow-common/wowhead-item/wow-item-meta.service';
 import { _resetKeyCache } from '../../settings/encryption.util';
 import { _resetCooldowns } from '../../discord-bot/listeners/signup-interaction.helpers';
 import { _resetRecentlyProcessed } from '../../discord-bot/listeners/event-link.dedup';
@@ -113,6 +114,7 @@ export async function truncateAllTables(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<SeededData> {
   const truncateStart = phaseMark();
+  await drainItemMetaResolver();
   // ONE statement (ROK-2196): a DO block discovers every public table except
   // Drizzle bookkeeping and cron_jobs/cron_job_executions (seeded at boot,
   // needed by live cron handlers) and DELETEs it with FK triggers off. A lone
@@ -247,6 +249,28 @@ function resetModuleSingletons(): void {
   _resetCooldowns();
   _resetRecentlyProcessed();
   _resetInFlightRefreshes();
+}
+
+/**
+ * Wait for every fire-and-forget Wowhead item-meta run (e.g. the addon
+ * import's post-commit gear enqueue) to settle BEFORE the delete, so a run
+ * leaked by test A neither writes a row after the truncate nor holds an id
+ * in the singleton's `inFlight` set while test B enqueues it. No-op until
+ * the NestJS app has been booted.
+ */
+async function drainItemMetaResolver(): Promise<void> {
+  const instance = (process as unknown as Record<string, TestApp | null>)[
+    INSTANCE_KEY
+  ];
+  const app = instance?.app;
+  if (!app) return;
+  let itemMeta: WowItemMetaService | undefined;
+  try {
+    itemMeta = app.get(WowItemMetaService, { strict: false });
+  } catch {
+    return; // Service not registered in this app.
+  }
+  await itemMeta?.idle();
 }
 
 /**

@@ -3624,5 +3624,411 @@
     "order": 8,
     "expansion": "cata",
     "sodModified": false
+  },
+  {
+    "instanceId": 90000001,
+    "name": "Faldrim Anvilmar",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000001,
+    "name": "Infurnus",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000001,
+    "name": "Plunder",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000001,
+    "name": "Durgen Dirgehammer",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "Witherfang",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "The Abandoned",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "The Butcher",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "Lordaeron Captain",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "Viktor the Vile",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "Bjork",
+    "order": 6,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000002,
+    "name": "Rath'mael",
+    "order": 7,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000003,
+    "name": "Saltspine",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000003,
+    "name": "Shadetooth",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000003,
+    "name": "Highland Horror",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000003,
+    "name": "Relic Guardian",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Arcane Anomaly",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Fel Ancient",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Mana Devourer",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Mana Elemental",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Unstable Sentinel",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Lyn the Ignored",
+    "order": 6,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Atrexis the Grave Knight",
+    "order": 7,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Mana Wraith",
+    "order": 8,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000004,
+    "name": "Shade of the Archmage",
+    "order": 9,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000005,
+    "name": "Zul'Alai",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000005,
+    "name": "Var'Taka",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000005,
+    "name": "Captain Dreadrise",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000005,
+    "name": "Deathless Guardians",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000005,
+    "name": "Primeval Elemental",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000005,
+    "name": "Min'loth the Serpent",
+    "order": 6,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000006,
+    "name": "Slavecrusher Grox",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000006,
+    "name": "Twilight Commander Zarmok",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000006,
+    "name": "Handler Ashka",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000006,
+    "name": "Nar'gurk",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000006,
+    "name": "Overseer Mugg",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000007,
+    "name": "Overseer Wrex",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000007,
+    "name": "Tidemistress Ca'zass",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000007,
+    "name": "Katerina the Cleaner",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000007,
+    "name": "The Questioner",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000007,
+    "name": "Blazeroar",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Withermaw",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Impaan the Imprisoner",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Elder Shaman Bloodmane",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Bonesnout the Unbroken",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Varrox Bleakhoof",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Blackmaw Behemoth",
+    "order": 6,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000008,
+    "name": "Unbound Spirit",
+    "order": 7,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Titanosaur",
+    "order": 1,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Ravasaur Hunters",
+    "order": 2,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Thunderhoof",
+    "order": 3,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Venomridge",
+    "order": 4,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Direhorn Matriarch",
+    "order": 5,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Cinder",
+    "order": 6,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "King Op",
+    "order": 7,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Snowtalon",
+    "order": 8,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Bolt",
+    "order": 9,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Vitrix",
+    "order": 10,
+    "expansion": "forever",
+    "sodModified": false
+  },
+  {
+    "instanceId": 90000009,
+    "name": "Nanaya",
+    "order": 11,
+    "expansion": "forever",
+    "sodModified": false
   }
 ]

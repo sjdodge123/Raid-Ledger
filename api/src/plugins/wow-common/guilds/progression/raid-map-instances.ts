@@ -9,9 +9,10 @@
  * Forever raid map ids (Barrow Deeps, Hyjal Summit) are not known yet, so
  * their pulls show as "Instance <mapId>" until added here (Q-B12 v1).
  *
- * ROK-2218: Classic 5-man dungeons resolve through the instance catalogue
- * (`instance-map-ids.data.ts`); `instanceForMap` / `instanceNameForJournal`
- * are the raid-or-dungeon lookups the Progression grouping uses.
+ * ROK-2218/2219: Classic and Forever-new 5-man dungeons resolve through the
+ * instance catalogue (`instance-map-ids.data.ts`); `instanceForMap` /
+ * `instanceNameForJournal` are the raid-or-dungeon lookups the Progression
+ * grouping uses.
  */
 import {
   dungeonByInstanceMapId,
