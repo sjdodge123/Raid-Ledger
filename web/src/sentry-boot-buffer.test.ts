@@ -123,13 +123,17 @@ describe('stale chunks a widget boundary is reloading for (ROK-2251)', () => {
         sessionStorage.clear();
         app.initSentry(true);
         const stale = new TypeError('Failed to fetch dynamically imported module: /assets/w.js');
+        const sibling = new TypeError('Failed to fetch dynamically imported module: /assets/w2.js');
         const crash = new Error('widget crash');
-        expect(claimChunkReloadFor(stale)).toBe(true);
+        expect(claimChunkReloadFor(stale)).toBe('reload');
+        expect(claimChunkReloadFor(sibling), 'a sibling stale widget waits for the same reload').toBe('awaiting-reload');
 
         app.captureReactError(stale, {});
+        app.captureReactError(sibling, {});
         app.captureReactError(crash, {});
 
         expect(reactHandler, 'a reloading stale chunk must not reach Sentry').not.toHaveBeenCalledWith(stale, {});
+        expect(reactHandler, 'a sibling awaiting the reload must not reach Sentry').not.toHaveBeenCalledWith(sibling, {});
         expect(reactHandler, 'a non-chunk error must still reach Sentry').toHaveBeenCalledWith(crash, {});
     });
 });
