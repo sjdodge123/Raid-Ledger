@@ -24,6 +24,8 @@ export interface ForumInfo {
   canManage: boolean;
   /** @everyone can view it (MAJOR-4: private forums are never bound). */
   isPublic: boolean;
+  /** Discord's Require tags flag is on (a post needs a tag). */
+  requireTag: boolean;
 }
 
 const REASON = 'Raid Ledger hub forum sync';
@@ -208,6 +210,7 @@ function toInfo(guild: Guild, forum: ForumChannel): ForumInfo {
     tags: forum.availableTags.map((t) => ({ id: t.id, name: t.name })),
     missing: missingForumPermissions((f) => perms?.has(f) ?? false, false),
     canManage: perms?.has(MANAGE_CHANNELS.flag) ?? false,
+    requireTag: forum.flags.has(ChannelFlags.RequireTag),
     isPublic: forum
       .permissionsFor(guild.roles.everyone)
       .has(PermissionFlagsBits.ViewChannel),

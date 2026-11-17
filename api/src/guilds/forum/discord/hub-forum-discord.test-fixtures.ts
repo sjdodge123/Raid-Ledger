@@ -30,6 +30,7 @@ export function fakeForum(over: Partial<ForumInfo> = {}): ForumInfo {
     missing: [],
     canManage: true,
     isPublic: true,
+    requireTag: false,
     ...over,
   };
 }
