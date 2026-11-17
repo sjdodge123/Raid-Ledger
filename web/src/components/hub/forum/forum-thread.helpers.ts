@@ -27,10 +27,13 @@ export function forumRowMeta(thread: HubForumThreadSummary, now: number = Date.n
     return `${who} · ${syncedAgo(thread.lastActivityAt, now)}`;
 }
 
-/** A list row's preview: an event thread's newest reply ("Mirelle: Count me in…", ROK-2229), else the root's. */
+/**
+ * A list row's preview: an event thread's newest reply ("Mirelle: Count me in…", ROK-2229), else the root's.
+ * A Discord guest reply names its Discord author (ROK-2208), the same rule as the byline.
+ */
 export function forumRowPreview(thread: HubForumThreadSummary): string {
     const latest = thread.latestReply;
-    return latest == null ? thread.preview : `${forumAuthorName(latest.author)}: ${latest.preview}`;
+    return latest == null ? thread.preview : `${forumByline(latest).name}: ${latest.preview}`;
 }
 
 /** "2 h ago" for a message or row timestamp. */
