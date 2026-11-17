@@ -33,12 +33,12 @@ describe('clampStoredName', () => {
 
 describe('characterNameOf — varchar(255) cap', () => {
   it('caps a 300-char character name at 255', () => {
-    const name = characterNameOf({ steamId: STEAM_ID, displayName: LONG_NAME });
+    const name = characterNameOf({ playerId: STEAM_ID, displayName: LONG_NAME });
     expect(name).toBe('x'.repeat(255));
   });
 
   it('is still null while the player is only a SteamID64', () => {
-    expect(characterNameOf({ steamId: STEAM_ID, displayName: STEAM_ID })).toBe(
+    expect(characterNameOf({ playerId: STEAM_ID, displayName: STEAM_ID })).toBe(
       null,
     );
   });

@@ -8,6 +8,7 @@
  * so a pending handshake cannot take that player's next character line. The
  * nameless fallback below is for rows written before the column existed.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
@@ -26,7 +27,7 @@ function dbWith(rows: object[]): PostgresJsDatabase<typeof schema> {
 }
 
 const LINKED_ROW = {
-  steamId: LINKED,
+  ...steamPlayer(LINKED),
   displayName: 'Roknua',
   characterName: null,
   userId: 7,
@@ -35,14 +36,14 @@ const LINKED_ROW = {
 const ROWS = [
   LINKED_ROW,
   {
-    steamId: UNLINKED,
+    ...steamPlayer(UNLINKED),
     displayName: 'Freya',
     characterName: null,
     userId: null,
     discordUserId: null,
   },
   {
-    steamId: MERGED,
+    ...steamPlayer(MERGED),
     displayName: 'sjd',
     characterName: null,
     userId: 8,
@@ -54,9 +55,24 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
   it('a legacy linked or merged row (no character_name) rehydrates as its SteamID; an unlinked row keeps its character name', async () => {
     const open = await listOpenServerPresence(dbWith(ROWS), 1, 1);
     expect(open).toEqual([
-      { steamId: LINKED, displayName: LINKED },
-      { steamId: UNLINKED, displayName: 'Freya' },
-      { steamId: MERGED, displayName: MERGED },
+      { ...steamPlayer(LINKED), displayName: LINKED },
+      { ...steamPlayer(UNLINKED), displayName: 'Freya' },
+      { ...steamPlayer(MERGED), displayName: MERGED },
+    ]);
+  });
+
+  it('an anonymous XUID row rehydrates under its own kind, shown by name (ROK-2232)', async () => {
+    const xuidRow = {
+      playerId: '2535400000000001',
+      idKind: 'xuid',
+      displayName: 'Astrid',
+      characterName: 'Astrid',
+      userId: null,
+      discordUserId: null,
+    };
+    const open = await listOpenServerPresence(dbWith([xuidRow]), 1, 1);
+    expect(open).toEqual([
+      { playerId: '2535400000000001', idKind: 'xuid', displayName: 'Astrid' },
     ]);
   });
 
@@ -64,13 +80,13 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
     const open = await listOpenServerPresence(dbWith([LINKED_ROW]), 1, 1);
     const tracker = new ServerPresenceTracker();
     tracker.hydrate(toPresentPlayers(open));
-    expect(tracker.snapshot()).toEqual([{ steamId: LINKED, name: null }]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(LINKED), name: null }]);
     const changes = tracker.apply(
       { kind: 'character', name: 'Ragnar', ownerId: '123', zdoidZero: false },
       new Date(),
     );
     expect(changes).toEqual([
-      { kind: 'renamed', steamId: LINKED, name: 'Ragnar' },
+      { kind: 'renamed', ...steamPlayer(LINKED), name: 'Ragnar' },
     ]);
   });
 
@@ -78,7 +94,7 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
     const rows = [
       { ...LINKED_ROW, characterName: 'Ragnar' },
       {
-        steamId: MERGED,
+        ...steamPlayer(MERGED),
         displayName: 'sjd',
         characterName: 'Sif',
         userId: 8,
@@ -87,8 +103,8 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
     ];
     const open = await listOpenServerPresence(dbWith(rows), 1, 1);
     expect(open).toEqual([
-      { steamId: LINKED, displayName: 'Ragnar' },
-      { steamId: MERGED, displayName: 'Sif' },
+      { ...steamPlayer(LINKED), displayName: 'Ragnar' },
+      { ...steamPlayer(MERGED), displayName: 'Sif' },
     ]);
   });
 
@@ -97,12 +113,12 @@ describe('listOpenServerPresence — rehydrate names (ROK-1821 Codex r3)', () =>
     const open = await listOpenServerPresence(dbWith(named), 1, 1);
     const tracker = new ServerPresenceTracker();
     tracker.hydrate(toPresentPlayers(open));
-    tracker.apply({ kind: 'join', steamId: UNLINKED }, new Date());
+    tracker.apply({ kind: 'join', ...steamPlayer(UNLINKED) }, new Date());
     const changes = tracker.apply(
       { kind: 'character', name: 'Ragnar', ownerId: '123', zdoidZero: false },
       new Date(),
     );
     expect(changes).toEqual([]);
-    expect(tracker.snapshot()).toEqual([{ steamId: LINKED, name: 'Ragnar' }]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(LINKED), name: 'Ragnar' }]);
   });
 });

@@ -2,6 +2,7 @@
  * ROK-1822 r4 — a server-born spawn enrols each player with the owner id of
  * the character line that named them, so a restart rehydrates it.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { spawnOrFindServerQuickPlay } from './ad-hoc-server-spawn.helpers';
@@ -37,8 +38,8 @@ describe('spawnOrFindServerQuickPlay — character owner (ROK-1822 r4)', () => {
       bindingId: null,
       creatorId: 1,
       players: [
-        { steamId: 'S1', displayName: 'Bjorn', characterOwnerId: '222' },
-        { steamId: 'S2', displayName: 'S2' },
+        { ...steamPlayer('S1'), displayName: 'Bjorn', characterOwnerId: '222' },
+        { ...steamPlayer('S2'), displayName: 'S2' },
       ],
       ids: [{ userId: 9, discordId: 'd-9', displayName: 'Roknua' }, null],
     });
@@ -48,7 +49,7 @@ describe('spawnOrFindServerQuickPlay — character owner (ROK-1822 r4)', () => {
         db,
         55,
         {
-          steamId: 'S1',
+          ...steamPlayer('S1'),
           displayName: 'Bjorn',
           userId: 9,
           pelicanServerId: 7,
@@ -58,7 +59,7 @@ describe('spawnOrFindServerQuickPlay — character owner (ROK-1822 r4)', () => {
       [
         db,
         55,
-        { steamId: 'S2', displayName: 'S2', userId: null, pelicanServerId: 7 },
+        { ...steamPlayer('S2'), displayName: 'S2', userId: null, pelicanServerId: 7 },
       ],
     ]);
   });
