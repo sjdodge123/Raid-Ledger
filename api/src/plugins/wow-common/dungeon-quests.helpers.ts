@@ -12,6 +12,7 @@ import * as schema from '../../drizzle/schema';
 import { wowClassicBossLoot } from '../../drizzle/schema';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import { escortFields } from './data/dungeon-quest-escorts';
+import { externalPrereqStep } from './data/dungeon-quest-external-prereqs';
 import {
   attachItemTooltips,
   mergeItemMetaFallback,
@@ -111,15 +112,34 @@ export function walkChainInMemory(
 }
 
 /**
+ * ROK-2221: {@link walkChainInMemory}, plus — when the backward walk stopped
+ * at a `prevQuestId` missing from the lookup that `EXTERNAL_PREREQS`
+ * names — that outside prerequisite as a named first step.
+ */
+export function walkChainWithExternalRoot(
+  quest: DungeonQuestDto,
+  questLookup: Map<number, DungeonQuestDto>,
+): DungeonQuestDto[] {
+  const chain = walkChainInMemory(quest, questLookup);
+  const head = chain[0];
+  if (!head || head.prevQuestId === null) return chain;
+  if (questLookup.has(head.prevQuestId)) return chain;
+  const step = externalPrereqStep(head);
+  if (!step || chain.some((q) => q.questId === step.questId)) return chain;
+  return [step, ...chain];
+}
+
+/**
  * ROK-2143: a quest's prerequisite chain, or null when the backward walk
  * found no other quest before it (no `prevQuestId`, or one that is not in
- * our data) — so a quest never shows up as its own prerequisite.
+ * our data nor a named outside prerequisite, ROK-2221) — so a quest never
+ * shows up as its own prerequisite.
  */
 export function prerequisiteChainOf(
   quest: DungeonQuestDto,
   questLookup: Map<number, DungeonQuestDto>,
 ): DungeonQuestDto[] | null {
-  const chain = walkChainInMemory(quest, questLookup);
+  const chain = walkChainWithExternalRoot(quest, questLookup);
   return chain[0]?.questId === quest.questId ? null : chain;
 }
 

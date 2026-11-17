@@ -7,7 +7,7 @@ import type {
   EventQuestReadinessDto,
   QuestReadinessState,
 } from '@raid-ledger/contract';
-import { walkChainInMemory } from './dungeon-quests.helpers';
+import { walkChainWithExternalRoot } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import { escortFields } from './data/dungeon-quest-escorts';
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
@@ -130,7 +130,7 @@ function prereqsMet(
   lookup: Map<number, DungeonQuestDto>,
   doneFn: QuestDoneFn,
 ): boolean | null {
-  const chain = walkChainInMemory(quest, lookup);
+  const chain = walkChainWithExternalRoot(quest, lookup);
   const idx = chain.findIndex((q) => q.questId === quest.questId);
   // A quest missing from its own chain has an unknowable pre-req set.
   if (idx < 0) return null;
