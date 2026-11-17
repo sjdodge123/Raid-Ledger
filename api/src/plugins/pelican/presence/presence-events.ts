@@ -37,16 +37,10 @@ export function steamPlayer(steamId: string): PlayerRef {
 }
 
 /**
- * The SteamID64 of a player, or null for any other kind — the ONE place the
- * presence pipeline turns a platform id into the sink's / reader's
- * `steamId` (persisted as `ad_hoc_participants.steam_id`). A non-Steam id
- * must never be treated as a Steam (or Discord) id, so it maps to null and
- * the callers skip that player at the sink/reader boundary.
- *
- * ROK-2232 lane 2: wire non-Steam kinds here — once `ad_hoc_participants`
- * carries `player_id` + `id_kind`, the sink/reader types gain them and the
- * callers of this function (`toSinkPlayer`, `sinkPlayerRef`, `rosterOf`,
- * the death recorder) pass the ref through instead of dropping it.
+ * The SteamID64 of a player, or null for any other kind. The sink and the
+ * reader carry the full `PlayerRef` (ROK-2232); only Steam-only consumers —
+ * `users.steam_id` matching, hub membership, the Valheim death recorder —
+ * use this, and a non-Steam id is never treated as a Steam (or Discord) id.
  */
 export function steamIdOf(ref: PlayerRef): string | null {
   return ref.idKind === 'steam' ? ref.playerId : null;

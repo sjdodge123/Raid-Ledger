@@ -60,7 +60,7 @@ export class PresenceDeathRecorder {
 /**
  * The SteamID of the present player a death line names, else null — a
  * non-Steam player's id is never passed off as a SteamID (ROK-2232 lane 2:
- * the death sink is still keyed by `steamId`).
+ * the death sink stays Steam-only: its one consumer is Valheim).
  */
 function steamIdOfCharacter(
   tracker: ServerPresenceTracker,

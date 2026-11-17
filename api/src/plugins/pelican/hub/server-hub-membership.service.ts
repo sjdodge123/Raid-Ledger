@@ -9,7 +9,8 @@ import { PelicanPresenceSupervisor } from '../presence/pelican-presence.supervis
 import {
   SERVER_PRESENCE_EVENTS,
   type ServerPresenceChangedPayload,
-  type ServerRosterPlayer,
+  steamRoster,
+  type SteamRosterPlayer,
 } from '../presence/server-presence.reader';
 import {
   findServerHub,
@@ -166,8 +167,9 @@ export class ServerHubMembershipService {
     }
   }
 
-  private players(): ServerRosterPlayer[] {
-    return this.presence?.playersOnGames() ?? [];
+  /** Hub membership matches `users.steam_id`: Steam players only (ROK-2232). */
+  private players(): SteamRosterPlayer[] {
+    return steamRoster(this.presence?.playersOnGames() ?? []);
   }
 
   private async refreshAllCounts(at: Date): Promise<void> {

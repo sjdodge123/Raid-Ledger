@@ -20,7 +20,7 @@ import {
 import { PresenceDeathRecorder } from './pelican-presence.deaths';
 import { PresenceLineParser } from './pelican-presence.line-parser';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
-import { steamIdOf, type GamePresenceEvent } from './presence-events';
+import type { GamePresenceEvent } from './presence-events';
 import {
   rosterOf,
   type ServerPresenceChangedPayload,
@@ -212,9 +212,8 @@ export class PelicanPresenceSession {
     this.forwardOwners(before, changes);
     const tracked = this.tracker.snapshot().length;
     for (const ref of this.held.departures(event, tracked)) {
-      const steamId = steamIdOf(ref); // ROK-2232 lane 2: non-Steam holds
-      if (steamId === null) continue;
-      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
+      const player = { playerId: ref.playerId, idKind: ref.idKind };
+      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, player));
     }
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
@@ -329,16 +328,14 @@ export class PelicanPresenceSession {
     for (const change of changes) {
       const owner = this.tracker.ownerOf(change);
       if (change.kind === 'joined') this.held.forget(change); // tracker owns them
-      // ROK-2232 lane 2: a non-Steam player has no sink row yet — skipped.
       const player = toSinkPlayer(change, owner);
-      if (player === null) continue;
       if (change.kind === 'joined') {
         this.enqueue('playerJoined', (s, src) => s.playerJoined(src, player));
       } else if (change.kind === 'renamed') {
         this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
       } else {
         this.enqueue('playerLeft', (s, src) =>
-          s.playerLeft(src, player.steamId),
+          s.playerLeft(src, sinkPlayerRef(player)),
         );
       }
     }
@@ -357,7 +354,6 @@ export class PelicanPresenceSession {
     const after = this.tracker.snapshotWithOwners();
     for (const p of netOwnerChanges(before, after, changes)) {
       const player = toSinkPlayer(p, p.owner ?? null);
-      if (player === null) continue; // ROK-2232 lane 2: non-Steam players
       this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
     }
   }

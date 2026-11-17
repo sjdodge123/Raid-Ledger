@@ -1,8 +1,6 @@
 import type { GameLogParserSession } from '../../plugin-host/extension-points';
 import {
   presenceKey,
-  steamIdOf,
-  steamPlayer,
   type GamePresenceEvent,
   type PlayerRef,
 } from './presence-events';
@@ -75,29 +73,26 @@ export function netOwnerChanges(
 }
 
 /**
- * A tracker player as the sink sees them; the owner rides only with a name.
- * Null for a non-Steam player: the sink is still keyed by `steam_id`, so it
- * is skipped rather than stored under the wrong namespace (ROK-2232 lane 2:
- * see {@link steamIdOf}).
+ * A tracker player as the sink sees them, under their platform id of any
+ * kind (ROK-2232); the owner rides only with a name.
  */
 export function toSinkPlayer(
   player: PresentPlayer,
   owner: string | null,
-): ServerPresencePlayer | null {
-  const steamId = steamIdOf(player);
-  if (steamId === null) return null;
-  const base = { steamId, displayName: player.name ?? steamId };
+): ServerPresencePlayer {
+  const { playerId, idKind } = player;
+  const base = { playerId, idKind, displayName: player.name ?? playerId };
   return owner === null || player.name === null
     ? base
     : { ...base, characterOwnerId: owner };
 }
 
-/** Rehydrated roster → tracker players (a SteamID-only label means "unnamed"). */
+/** Rehydrated roster → tracker players (a bare-player-id label means "unnamed"). */
 export function toPresentPlayers(
   players: ServerPresencePlayer[],
 ): PresentPlayer[] {
   return players.map((p) => {
-    const name = p.displayName === p.steamId ? null : p.displayName;
+    const name = p.displayName === p.playerId ? null : p.displayName;
     const base = { ...sinkPlayerRef(p), name };
     // ROK-1822 r3: the owner only means something next to its name.
     return name !== null && p.characterOwnerId
@@ -106,13 +101,9 @@ export function toPresentPlayers(
   });
 }
 
-/**
- * The platform id of a player the sink returned. The sink persists only a
- * SteamID today (ROK-2232 lane 2: read the stored `id_kind`/`player_id`
- * once `ServerPresencePlayer` carries them).
- */
+/** The platform id of a player the sink returned (stored `id_kind`/`player_id`). */
 export function sinkPlayerRef(player: ServerPresencePlayer): PlayerRef {
-  return steamPlayer(player.steamId);
+  return { playerId: player.playerId, idKind: player.idKind };
 }
 
 /**

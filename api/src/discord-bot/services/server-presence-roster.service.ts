@@ -15,7 +15,8 @@ import * as schema from '../../drizzle/schema';
 import {
   SERVER_PRESENCE_READER,
   type ServerPresenceReader,
-  type ServerRosterPlayer,
+  steamRoster,
+  type SteamRosterPlayer,
 } from '../../plugins/pelican/presence/server-presence.reader';
 import {
   buildServerRoster,
@@ -38,7 +39,8 @@ export class ServerPresenceRosterService implements ServerRosterSource {
 
   /** The current per-game roster; empty when nothing is tracked. */
   async snapshot(): Promise<ServerRoster> {
-    const players = this.reader?.playersOnGames() ?? [];
+    // ROK-2232: the panel matches `users.steam_id` — Steam players only.
+    const players = steamRoster(this.reader?.playersOnGames() ?? []);
     if (players.length === 0) return emptyServerRoster();
     try {
       return await this.resolve(players);
@@ -49,7 +51,7 @@ export class ServerPresenceRosterService implements ServerRosterSource {
     }
   }
 
-  private async resolve(players: ServerRosterPlayer[]): Promise<ServerRoster> {
+  private async resolve(players: SteamRosterPlayer[]): Promise<ServerRoster> {
     const steamIds = [...new Set(players.map((p) => p.steamId))];
     const gameIds = [...new Set(players.map((p) => p.gameId))];
     const u = schema.users;
