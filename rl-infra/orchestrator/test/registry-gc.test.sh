@@ -42,6 +42,9 @@
 #        --delete-untagged guard; a failed plain DELETE does not
 #   R-ie (ROK-2180) empty Content-Type = index; unknown-age index kept; dry run
 #   R-if (ROK-2180) Docker manifest-list tags behave like OCI indexes
+#   R-ig (ROK-2180 r2) a digest-pinned index no kept tag carries protects its
+#        children (sweep and env-destroy); an unreadable pin fails closed
+#   R-ih (ROK-2180 r2) env-destroy logs a tag it could not confirm deleted
 
 set -uo pipefail
 CURRENT_TEST_FILE="registry-gc.test.sh"
@@ -69,11 +72,14 @@ V2_TYPE="application/vnd.docker.distribution.manifest.v2+json"
 # $LIST_TAGS = Docker manifest list, $NOCT_TAGS = no Content-Type header at all,
 # anything else (children included) = Docker v2 manifest. A HEAD/GET of a typed
 # manifest 404s (curl -f → 22) unless the Accept lists THAT type (MINOR-3).
-_stub_is_index() { [[ " ${INDEX_TAGS:-} ${LIST_TAGS:-} " == *" $1 "* ]]; }
+# A digest `sha256:<tag>` (the stub's default HEAD digest) is served exactly
+# like <tag>, so a GET by digest of an index returns the index (ROK-2180 r2).
+_stub_is_index() { [[ " ${INDEX_TAGS:-} ${LIST_TAGS:-} " == *" ${1#sha256:} "* ]]; }
 _stub_ct() {
-    if [[ " ${NOCT_TAGS:-} " == *" $1 "* ]]; then echo ""
-    elif [[ " ${INDEX_TAGS:-} " == *" $1 "* ]]; then echo "$IDX_TYPE"
-    elif [[ " ${LIST_TAGS:-} " == *" $1 "* ]]; then echo "$LIST_TYPE"
+    local t="${1#sha256:}"
+    if [[ " ${NOCT_TAGS:-} " == *" $t "* ]]; then echo ""
+    elif [[ " ${INDEX_TAGS:-} " == *" $t "* ]]; then echo "$IDX_TYPE"
+    elif [[ " ${LIST_TAGS:-} " == *" $t "* ]]; then echo "$LIST_TYPE"
     else echo "$V2_TYPE"; fi
 }
 # $ATT_ONLY_TAGS = an index whose only child is the attestation manifest.
@@ -82,7 +88,8 @@ _stub_manifest_get() {
     case "$tag" in
         sha256:img-*) jq -nc --arg t "${tag#sha256:img-}" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}' ;;
         sha256:att-*) jq -nc --arg t "${tag#sha256:}" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}' ;;
-        *) if _stub_is_index "$tag"; then
+        *) tag="${tag#sha256:}"
+           if _stub_is_index "$tag"; then
                jq -nc --arg t "$tag" --arg mt "$(_stub_ct "$tag")" \
                    --argjson ao "$([[ " ${ATT_ONLY_TAGS:-} " == *" $tag "* ]] && echo true || echo false)" \
                    '{schemaVersion:2, mediaType:$mt, manifests:([
@@ -92,7 +99,9 @@ _stub_manifest_get() {
            else jq -nc --arg t "$tag" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}'; fi ;;
     esac
 }
-# $GET_FAIL (tags/digests) = manifest GET fails; $DELETE_FAIL (digests) = DELETE fails.
+# $GET_FAIL (tags/digests) = manifest GET fails (HTTP 500); $GET_MISSING = it
+# 404s (MANIFEST_UNKNOWN); $DELETE_FAIL (digests) = DELETE fails. A GET with
+# `-w %{http_code}` (no -f) gets rc 0 and the status on a last line, as curl does.
 curl() {
     local args="$*" url="${*: -1}"
     echo "curl $args" >> "$CALL_LOG"
@@ -110,8 +119,13 @@ curl() {
                 [[ -n "$ct" ]] && printf 'Content-Type: %s\r\n' "$ct"
                 printf 'Docker-Content-Digest: sha256:%s\r\n\r\n' "${d:-$tag}"
             else
-                [[ " ${GET_FAIL:-} " == *" $tag "* ]] && return 22
-                _stub_manifest_get "$tag"
+                local w=""; [[ "$args" == *"%{http_code}"* ]] && w=1
+                if [[ " ${GET_MISSING:-} " == *" $tag "* ]]; then
+                    [[ -n "$w" ]] || return 22; printf '{"errors":[{"code":"MANIFEST_UNKNOWN"}]}\n404'; return 0
+                fi
+                if [[ " ${GET_FAIL:-} " == *" $tag "* ]]; then [[ -n "$w" ]] || return 22; printf '{}\n500'; return 0; fi
+                _stub_manifest_get "$tag"; [[ -n "$w" ]] && printf '\n200'
+                return 0
             fi ;;
         */blobs/cfg-*)
             local tag="${url##*/cfg-}" h
@@ -154,7 +168,7 @@ _setup_gc() {
     PS_IMAGES=""; DIGESTS=""; DOCKER_PS_FAIL=""; RL_REGISTRY_GC_DRY_RUN=0
     LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""; CLEANUP_TIMEOUT_RC=""
     TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""; PGREP_RC=""; INDEX_TAGS=""
-    LIST_TAGS=""; NOCT_TAGS=""; ATT_ONLY_TAGS=""; GET_FAIL=""; DELETE_FAIL=""
+    LIST_TAGS=""; NOCT_TAGS=""; ATT_ONLY_TAGS=""; GET_FAIL=""; DELETE_FAIL=""; GET_MISSING=""
     # shellcheck disable=SC1090
     source "$LIB"
 }
@@ -548,12 +562,14 @@ test_kept_index_children_protected() {
     local out rc; out=$(registry_gc::sweep force 2>/dev/null); rc=$?
     assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "0 none" "sweep runs"
     assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "sweep never DELETEs the kept index's child sha256:img-latest"
+    assert_contains "$(grep -v -e ' -I ' -e 'DELETE' "$CALL_LOG")" "manifests/sha256:latest" \
+        "a kept index's children are read by its DIGEST, not its tag (r2: tag-moves race)"
     : > "$CALL_LOG"; jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
     TAGS="s1 latest"; DIGESTS="s1=img-latest"
     registry_gc::delete_env_tag s1 >/dev/null 2>&1
     assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "env-destroy never DELETEs the kept index's child"
     : > "$CALL_LOG"; echo '[]' > "$RL_ENVS_FILE"
-    TAGS="latest a b old"; AGES="a=1 b=2 old=200"; DIGESTS=""; GET_FAIL="latest"
+    TAGS="latest a b old"; AGES="a=1 b=2 old=200"; DIGESTS=""; GET_FAIL="sha256:latest"
     out=$(registry_gc::sweep force 2>/dev/null); rc=$?
     assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "1 protected_digest_unreadable" "a kept index whose children cannot be read aborts"
     assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "and deletes nothing"
@@ -617,6 +633,45 @@ test_manifest_list_tags() {
     test_teardown
 }
 
+test_pinned_index_children_protected() {
+    CURRENT_TEST_NAME="R-ig: a digest-pinned index no kept tag carries protects its children; unreadable pin aborts"
+    _setup_gc
+    TAGS="a b pidx stale"; AGES="a=1 b=2 pidx=200 stale=300"; INDEX_TAGS="pidx"; DIGESTS="stale=img-pidx"
+    PS_IMAGES="rl-allinone@sha256:pidx rl-allinone@sha256:gone"; GET_MISSING="sha256:gone"
+    local out err rc; out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "0 none" "sweep runs (a pin absent from the registry, 404, does not wedge it)"
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" \
+        "sweep never DELETEs stale (= sha256:img-pidx, a child of the pinned, doomed-by-tag index pidx)"
+    : > "$CALL_LOG"; GET_FAIL="sha256:pidx"
+    out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "1 protected_digest_unreadable" "an unreadable pinned manifest aborts the sweep"
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "and deletes nothing"
+    _setup_gc
+    jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
+    TAGS="s1"; INDEX_TAGS="pidx"; DIGESTS="s1=img-pidx"; PS_IMAGES="rl-allinone@sha256:pidx"
+    registry_gc::delete_env_tag s1 >/dev/null 2>&1
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "env-destroy never DELETEs a child of an untagged pinned index"
+    : > "$CALL_LOG"; GET_FAIL="sha256:pidx"
+    err=$(registry_gc::delete_env_tag s1 2>&1 >/dev/null)
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "env-destroy keeps its tag when a pinned manifest is unreadable"
+    assert_contains "$err" "keeping rl-allinone:s1" "and says so"
+    test_teardown
+}
+
+test_env_destroy_logs_unconfirmed() {
+    CURRENT_TEST_NAME="R-ih: env-destroy logs a tag whose DELETE is unconfirmed or failed"
+    _setup_gc
+    jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
+    TAGS="s1"; DELETE_FAIL="sha256:s1"
+    local err; err=$(registry_gc::delete_env_tag s1 2>&1 >/dev/null)
+    assert_contains "$err" "rl-allinone:s1 kept: DELETE failed" "a failed plain DELETE (rc 3) is logged with the tag"
+    INDEX_TAGS="s1"; err=$(registry_gc::delete_env_tag s1 2>&1 >/dev/null)
+    assert_contains "$err" "rl-allinone:s1 kept: not confirmed deleted" "a failed index DELETE (rc 2) is logged with the tag"
+    DELETE_FAIL=""; INDEX_TAGS=""; HEAD_FAIL="s1"; err=$(registry_gc::delete_env_tag s1 2>&1 >/dev/null)
+    assert_contains "$err" "rl-allinone:s1 kept: not confirmed deleted" "an unreadable digest (rc 2) is logged with the tag"
+    test_teardown
+}
+
 run_test "r-a-selection" test_selection
 run_test "r-b-delete-tag" test_delete_tag
 run_test "r-c-sweep" test_sweep_deletes_and_collects
@@ -646,4 +701,6 @@ run_test "r-ic-index-children" test_kept_index_children_protected
 run_test "r-id-unconfirmed-index" test_unconfirmed_index_delete_keeps_guard
 run_test "r-ie-index-fail-closed" test_index_fail_closed_branches
 run_test "r-if-manifest-list" test_manifest_list_tags
+run_test "r-ig-pinned-index" test_pinned_index_children_protected
+run_test "r-ih-destroy-logs" test_env_destroy_logs_unconfirmed
 print_test_summary
