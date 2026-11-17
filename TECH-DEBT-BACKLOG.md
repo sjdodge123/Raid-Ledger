@@ -4408,3 +4408,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 ### 2026-11-17 — fix/batch-2249-2251 (surfaced during ROK-2250 caller audit)
 - **low** `api/src/plugins/wow-common/` (`WowCronRegistrar` hourly character auto-sync) — with no Blizzard API keys configured, the hourly auto-sync still logs one warning per character ("Blizzard API not configured") instead of skipping once. Not a Sentry event after ROK-2250 (the typed `BlizzardNotConfiguredError` is dropped), just log noise on keyless instances. Suggested: check `isBlizzardConfigured()` once at the top of the auto-sync job and skip with a single debug line.
+
+### 2026-11-17 — feat/rok-2234-minecraft-plugin-skeleton (surfaced during overnight S1 impl)
+
+- **[nit]** `web/src/App.tsx:3-5,22` — a raw `npx prettier --check src/App.tsx` run from `web/` fails on `origin/main` 2a5b05d97 (it wants 4-space continuation indents and a wrapped `magic-link-redeem` import), while `npm run lint -w web` (eslint `prettier/prettier`) passes the same file. Pre-existing: reproduced on main's blob with no branch change; the lane only added one import line. The two disagree because the bare CLI resolves a different prettier config than the eslint plugin, so agents running prettier by hand get a false red. Suggested: point the web eslint prettier rule and the CLI at one config (or add a `web/.prettierrc` matching eslint's options) and document "lint, don't run bare prettier" in TESTING.md.
