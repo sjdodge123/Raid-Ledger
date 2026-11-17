@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # ROK-2018 — the registry GC's protection set, sourced by _registry_gc.sh
-# (which defines RL_REGISTRY_REPO and registry_gc::digest). No side effects.
+# (which defines RL_REGISTRY_REPO, registry_gc::head, registry_gc::_manifest
+# and registry_gc::_is_index_type). No side effects.
 #
 # A manifest DELETE is by digest and drops EVERY tag sharing that digest, so
 # "what must survive" is a set of DIGESTS, built fail-closed (Codex P1/P2):
 #   - the digest of every tag the run keeps (protected, keep-N survivor, too
-#     young, unknown age — everything in the registry that is not doomed);
+#     young, unknown age — everything in the registry that is not doomed),
+#     and the child digests of each kept index / manifest list (ROK-2180);
 #   - every `@sha256:` pin of this repo in a container ref, an env row's
 #     `.image`, or a local image's RepoDigests.
 # Any kept tag whose digest cannot be read makes the whole set unreadable.
@@ -49,17 +51,47 @@ registry_gc::protected_tags() {
     registry_gc::_tags_of <<<"$refs" | sort -u | jq -Rnc '[inputs]'
 }
 
-# Digests no DELETE may touch, one per line: the digest of each kept tag
-# (<$1>, newline list of registry tags) plus the pins in <$2> (protected_refs
-# output). Returns 1 when a kept tag's digest is unreadable — fail closed.
-registry_gc::avoid_digests() {
-    local tag d
+# Child manifest digests of index/list <$1> (tag), one per line; empty for a
+# plain manifest. Returns 1 when the manifest GET or its JSON fails. Read by
+# tag (as the HEAD was): no build pushes while the sweep holds its entry.
+registry_gc::_children() {
+    local m
+    m=$(registry_gc::_manifest "$1") || return 1
+    jq -r '.manifests[]?.digest // empty' <<<"$m" 2>/dev/null
+}
+
+# One HEAD per kept tag (<$1>, newline list): `D <digest>` for the tag AND,
+# when it is an index/list or of unreadable type, `D <child>` for each of its
+# children plus `I <tag>`. A DELETE of a child digest (an old standalone tag
+# that equals it) drops the child's revision link and GC then sweeps its
+# layers even without --delete-untagged, breaking the kept index (ROK-2180
+# Codex P1). Calls <$2> (renew callback, optional) before each tag.
+# rc 1 = a digest or a child list is unreadable (fail closed); 3 = callback failed.
+registry_gc::_kept_scan() {
+    local tag h d kids
     for tag in $1; do
-        d=$(registry_gc::digest "$tag")
+        if [[ -n "${2:-}" ]] && ! "$2"; then return 3; fi
+        h=$(registry_gc::head "$tag"); d="${h%%|*}"
         if [[ -z "$d" ]]; then
             echo "registry_gc: digest of kept tag ${RL_REGISTRY_REPO}:$tag unreadable" >&2; return 1
         fi
-        echo "$d"
+        echo "D $d"
+        registry_gc::_is_index_type "${h#*|}" || continue
+        echo "I $tag"
+        if ! kids=$(registry_gc::_children "$tag"); then
+            echo "registry_gc: children of kept index ${RL_REGISTRY_REPO}:$tag unreadable" >&2; return 1
+        fi
+        sed '/^$/d; s/^/D /' <<<"$kids"
     done
+}
+
+# Digests no DELETE may touch, one per line: each kept tag's digest and, for
+# a kept index/list, its children's (<$1>, newline list of registry tags —
+# see _kept_scan) plus the pins in <$2> (protected_refs output). Returns 1
+# when any of those is unreadable — fail closed.
+registry_gc::avoid_digests() {
+    local scan
+    scan=$(registry_gc::_kept_scan "$1") || return 1
+    sed -n 's/^D //p' <<<"$scan"
     registry_gc::_pins_of <<<"$2"
 }
