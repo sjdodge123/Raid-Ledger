@@ -47,7 +47,7 @@ function setup(over: Partial<PelicanConsoleSocketOptions> = {}) {
   const onLine = jest.fn<void, [string]>();
   const onStatus = jest.fn<void, [string]>();
   const onUnreachable = jest.fn<void, [number]>();
-  const onReachable = jest.fn<void, []>();
+  const onReachable = jest.fn<void, [{ refresh: boolean }]>();
   const conn = new PelicanConsoleSocket({
     serverIdentifier: 'abc123',
     panelUrl: PANEL,
@@ -389,6 +389,10 @@ describe('PelicanConsoleSocket frame normalisation + re-auth log (ROK-1821)', ()
     expect(messages).toContain(
       'Wings console re-auth: 1 live frames since last auth (2 lines this connection); requested log replay',
     );
-    expect(t.onReachable).toHaveBeenCalledTimes(2);
+    // ROK-2233: the session keeps parser state across a refresh only.
+    expect(t.onReachable.mock.calls).toEqual([
+      [{ refresh: false }],
+      [{ refresh: true }],
+    ]);
   });
 });

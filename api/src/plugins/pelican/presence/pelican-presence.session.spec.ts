@@ -12,6 +12,7 @@ import {
   fakeLogger,
   fakeParser,
   fakeSink,
+  fakeStatefulParser,
   fakeWings,
   line,
   okCredentials,
@@ -544,5 +545,151 @@ describe('ROK-1831 Codex r3: replayed history is marked rehydrated', () => {
     h.wings.lines(arrive('A', 'Alice', T(1)));
     await h.settle();
     expect(h.onChanged.mock.calls).toEqual([[MARKED]]);
+  });
+});
+
+type Harness = ReturnType<typeof harness>;
+const stateful = () => harness([], okCredentials, [], fakeStatefulParser());
+/** ROK-2233: ~6-min token refresh — `auth success` again on the same socket. */
+async function refreshToken(h: Harness, replay: string[] = []): Promise<void> {
+  h.wings.frame('auth success');
+  h.wings.lines(replay);
+  await h.settle();
+}
+/** ROK-2233: the socket drops; the backoff timer opens a NEW connection. */
+async function reconnect(h: Harness, replay: string[] = []): Promise<void> {
+  const first = h.wings.sockets[0];
+  if (!first) throw new Error('no socket to drop');
+  first.handlers.onClose();
+  await jest.advanceTimersByTimeAsync(2_000);
+  expect(h.wings.sockets).toHaveLength(2);
+  h.wings.authenticate();
+  h.wings.lines(replay);
+  await h.settle();
+}
+/** ROK-2233: Alice and Bob arrive with their ids announced; Alice leaves. */
+async function seed(h: Harness): Promise<void> {
+  await h.connect();
+  await h.live([
+    'uuid Alice A',
+    'uuid Bob B',
+    ...arrive('A', 'Alice', T(1)),
+    ...arrive('B', 'Bob', T(2)),
+    'left Alice',
+  ]);
+}
+
+describe('ROK-2233 stateful parser sessions', () => {
+  it('resolves a line through what an earlier line told the session', async () => {
+    const h = stateful();
+    await seed(h);
+    expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  });
+
+  it.each<[string, (h: Harness) => Promise<void>]>([
+    ['the socket reconnects after a drop', (h) => reconnect(h)],
+    [
+      'the server reports ready',
+      (h) => h.live([line({ kind: 'server-ready', loggedAt: T(3) })]),
+    ],
+    [
+      'a server-stopping line arrives',
+      (h) => h.live([line({ kind: 'server-stopping', loggedAt: T(3) })]),
+    ],
+    [
+      'Pelican reports the server offline',
+      async (h) => {
+        h.wings.frame('status', 'offline');
+        await h.session.idle();
+      },
+    ],
+  ])('forgets that state when %s', async (_label, trigger) => {
+    const h = stateful();
+    await seed(h);
+    const before = [...h.sink.playerLeft.mock.calls];
+    await trigger(h);
+    // A ready line itself empties the tracker; only `left Bob` is under test.
+    h.sink.playerLeft.mockClear();
+    await h.live([...arrive('B', 'Bob', T(5)), 'left Bob']);
+    expect([before, h.sink.playerLeft.mock.calls]).toEqual([[[SRC, 'A']], []]);
+  });
+});
+
+describe('ROK-2233 parser session scope', () => {
+  it('keeps that state across a token refresh on the same socket', async () => {
+    const h = stateful();
+    await seed(h);
+    await refreshToken(h);
+    await h.live([...arrive('B', 'Bob', T(5)), 'left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, 'A'],
+      [SRC, 'B'],
+    ]);
+  });
+
+  it('a refresh whose 150-line replay lost the id line still resolves the leave', async () => {
+    const h = stateful();
+    await seed(h);
+    const chatter = Array.from({ length: 150 }, (_, i) => `chat ${i}`);
+    await refreshToken(h, chatter);
+    await h.live(['left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, 'A'],
+      [SRC, 'B'],
+    ]);
+  });
+
+  it('rebuilds it from the log replay that follows a reconnect', async () => {
+    const h = stateful();
+    await seed(h);
+    await reconnect(h, ['uuid Bob B']);
+    await h.live(['left Bob']);
+    expect(h.sink.playerLeft.mock.calls).toEqual([
+      [SRC, 'A'],
+      [SRC, 'B'],
+    ]);
+  });
+
+  it('keeps one session per server: two consoles never share state', async () => {
+    const parser = fakeStatefulParser();
+    const one = harness([], okCredentials, [], parser);
+    const two = harness([], okCredentials, [], parser);
+    await one.connect();
+    await two.connect();
+    await one.live(['uuid Alice A']);
+    await one.live([...arrive('A', 'Alice', T(1)), 'left Alice']);
+    await two.live([...arrive('A', 'Alice', T(1)), 'left Alice']);
+    expect([
+      one.sink.playerLeft.mock.calls,
+      two.sink.playerLeft.mock.calls,
+    ]).toEqual([[[SRC, 'A']], []]);
+  });
+});
+
+describe('ROK-2233 a parser whose createSession throws', () => {
+  it('warns once when createSession throws, then parses statelessly', async () => {
+    const parser: GameLogParser = {
+      ...fakeParser,
+      createSession: () => {
+        throw new Error('no session');
+      },
+    };
+    const h = harness([], okCredentials, [], parser);
+    await h.connect();
+    await reconnect(h);
+    h.wings.frame('status', 'offline');
+    await h.session.idle();
+    await h.live(arrive('A', 'Alice', T(1)));
+    const failed = h.logger.warn.mock.calls.filter(([m]) =>
+      String(m).startsWith('Presence parser session failed'),
+    );
+    expect([failed, h.sink.playerJoined.mock.calls.length]).toEqual([
+      [
+        [
+          'Presence parser session failed for server 7: Error; parsing statelessly',
+        ],
+      ],
+      1,
+    ]);
   });
 });
