@@ -10,10 +10,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { ensureMinecraftBedrockGame } from './minecraft-bedrock-game';
-import {
-  MINECRAFT_BEDROCK_GAME_NAME,
-  MINECRAFT_BEDROCK_GAME_SLUG,
-} from './minecraft.constants';
+import { MINECRAFT_BEDROCK_GAME_SLUG } from './minecraft.constants';
 
 let testApp: TestApp;
 
