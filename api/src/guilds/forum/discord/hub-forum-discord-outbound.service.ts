@@ -13,6 +13,8 @@ import {
   truncateForDiscord,
   webhookUsername,
 } from './hub-forum-discord-content';
+import { EventPostOutbound } from './hub-forum-discord-event-outbound.service';
+import { syncBornAt } from './hub-forum-discord-event-outbound.queries';
 import * as links from './hub-forum-discord-links.queries';
 import {
   HubForumDiscordOutboundGateway,
@@ -56,12 +58,29 @@ export class HubForumDiscordOutboundService {
   private readonly renames = new ThreadRenameBudget();
   /** Clock seam for specs. */
   now: () => Date = () => new Date();
+  /** §5.7 event threads: lazy post + retitle. */
+  private readonly events: EventPostOutbound;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordOutboundGateway,
     private readonly settings: SettingsService,
-  ) {}
+  ) {
+    this.events = new EventPostOutbound({
+      db,
+      gateway,
+      renames: this.renames,
+      now: () => this.now(),
+      attempt: (link, run) => this.attempt(link, run),
+      clientUrl: () => getClientUrl(settings),
+      timeZone: () => settings.getDefaultTimezone(),
+    });
+  }
+
+  /** §5.7 item 2: an event changed — rename its post to the dated title. */
+  retitleEvent(eventId: number): Promise<void> {
+    return this.events.retitle(eventId);
+  }
 
   /** Route one change; pins are the S5 lane's (§5.5). */
   async apply(change: HubForumChange): Promise<void> {
@@ -95,7 +114,7 @@ export class HubForumDiscordOutboundService {
     const bound = await findBinding(this.db, change.guildId);
     const webhookId = bound?.forum.webhookId;
     if (!bound || !webhookId) return 'unbound';
-    const born = await links.threadCreatedAt(this.db, change.threadId);
+    const born = await syncBornAt(this.db, change.threadId, this.now());
     if (!born || born < bound.binding.boundAt) return 'stale';
     return {
       change,
@@ -118,6 +137,13 @@ export class HubForumDiscordOutboundService {
     const { guildId, threadId } = job.change;
     const record = await findThread(this.db, guildId, threadId);
     if (!record || fromDiscord(record.thread)) return;
+    const tagId = job.bound.binding.tagId;
+    if (record.thread.eventId !== null) {
+      // §5.7 item 1: never posted on creation; S6 re-sends a claimed post.
+      if (job.link)
+        await this.events.resend({ target: job.target, tagId }, job.link);
+      return;
+    }
     if (record.thread.createdAt < job.bound.binding.boundAt) return; // R8
     const link =
       job.link ?? (await links.claimThreadLink(this.db, guildId, threadId));
@@ -127,7 +153,6 @@ export class HubForumDiscordOutboundService {
       guildId,
       threadId,
     });
-    const tagId = job.bound.binding.tagId;
     await this.attempt(link, async () => {
       const post = {
         title: discordThreadName(title),
@@ -143,10 +168,15 @@ export class HubForumDiscordOutboundService {
   private async createReply(job: Job): Promise<void> {
     const { guildId, threadId, replyId } = job.change;
     if (replyId === undefined) return;
-    const parent = await links.findThreadLink(this.db, threadId);
-    if (!parent || parent.discordDeletedAt) return; // OQ-5: unlinked thread
     const record = await findReply(this.db, { guildId, threadId, replyId });
     if (!record || fromDiscord(record.reply)) return;
+    const parent =
+      (await links.findThreadLink(this.db, threadId)) ??
+      (await this.events.ensurePost(
+        { target: job.target, tagId: job.bound.binding.tagId },
+        { guildId, threadId },
+      ));
+    if (!parent || parent.discordDeletedAt) return; // OQ-5: unlinked thread
     const link =
       job.link ??
       (await links.claimReplyLink(this.db, {
@@ -200,13 +230,9 @@ export class HubForumDiscordOutboundService {
       threadId: link.discordThreadId,
       messageId: link.discordMessageId,
     };
-    const name = discordThreadName(record.thread.title);
+    const { name, content } = await this.events.postView(record.thread, url);
     await this.attempt(link, async () => {
-      const edited = await this.gateway.editMessage(
-        job.target,
-        ref,
-        truncateForDiscord(record.thread.body, url),
-      );
+      const edited = await this.gateway.editMessage(job.target, ref, content);
       if (edited === 'ok') {
         await this.gateway.renameThread(ref.threadId, name, () =>
           this.renames.trySpend(ref.threadId),
