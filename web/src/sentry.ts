@@ -23,6 +23,7 @@ import './lib/companion-link-code-capture';
 import * as Sentry from '@sentry/react';
 import { buildSentryOptions, replaySampleRates } from './lib/sentry-options';
 import { shouldInitTelemetry } from './lib/telemetry-gate';
+import { isReloadingChunkError } from './lib/chunk-error';
 import {
     bufferCapture,
     closeBootBuffer,
@@ -88,6 +89,9 @@ export function captureReactError(
     error: unknown,
     { componentStack }: { componentStack?: string | undefined },
 ): void {
+    // ROK-2251: a stale chunk a boundary is already reloading the page for is
+    // handled, not a fault — reporting it would page on every deploy.
+    if (isReloadingChunkError(error)) return;
     const stack = componentStack === undefined ? {} : { componentStack };
     if (bufferCapture({ error, source: 'react-root', ...stack })) return;
     if (initialised) Sentry.reactErrorHandler()(error, stack);

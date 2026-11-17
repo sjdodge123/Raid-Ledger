@@ -2,6 +2,7 @@
  * Tests for Sentry instrumentation configuration (ROK-366).
  * Verifies that pg_catalog spans are filtered out to suppress false-positive N+1 noise.
  */
+import { ConflictException, HttpException } from '@nestjs/common';
 import { at, defined } from '../common/testing/narrow';
 
 async function loadInstrument(
@@ -171,7 +172,19 @@ function describeSentryInstrumentTs() {
         tags?: Record<string, unknown>;
         extra?: Record<string, unknown>;
       };
-      type BeforeSend = (event: SentryEvent) => SentryEvent | null;
+      type BeforeSend = (
+        event: SentryEvent,
+        hint?: { originalException?: unknown },
+      ) => SentryEvent | null;
+
+      /** The event Sentry builds for a Nest HttpException: value = message. */
+      function httpEvent(exception: HttpException): SentryEvent {
+        return {
+          exception: {
+            values: [{ type: 'HttpException', value: exception.message }],
+          },
+        };
+      }
 
       function getBeforeSend(): BeforeSend {
         const config = initConfig(sentryInitMock);
@@ -192,16 +205,14 @@ function describeSentryInstrumentTs() {
         expect(result).toBeNull();
       });
 
-      it('drops intentional no_snapshot_yet 503s (ROK-1143)', () => {
-        const result = getBeforeSend()({
-          exception: {
-            values: [
-              {
-                type: 'HttpException',
-                value: "{ error: 'no_snapshot_yet' }",
-              },
-            ],
-          },
+      it('drops a real no_snapshot_yet 503 HttpException (ROK-1143/ROK-2249)', () => {
+        // Exactly what community-insights' assertSnapshot throws. Nest's
+        // message is the generic "Http Exception", so the code is only in
+        // the response body — the event value never carries it.
+        const exception = new HttpException({ error: 'no_snapshot_yet' }, 503);
+        expect(exception.message).not.toContain('no_snapshot_yet');
+        const result = getBeforeSend()(httpEvent(exception), {
+          originalException: exception,
         });
         expect(result).toBeNull();
       });
@@ -468,33 +479,31 @@ function describeSentryInstrumentTs() {
         });
 
         it('does NOT confuse no_snapshot_yet 503s with the concurrent-status drop (cross-clause guard)', () => {
-          // Both clauses target HttpException; their value substrings are
-          // disjoint. This guards against a future refactor that loosens
-          // one regex into the other's territory.
-          const noSnapshot = getBeforeSend()({
-            exception: {
-              values: [
-                {
-                  type: 'HttpException',
-                  value: "{ error: 'no_snapshot_yet' }",
-                },
-              ],
-            },
-          });
-          const concurrent = getBeforeSend()({
-            exception: {
-              values: [
-                {
-                  type: 'HttpException',
-                  value: 'status changed concurrently',
-                },
-              ],
-            },
-          });
-          // Both drop, but via different clauses — assert both null without
-          // either regex matching the other's substring.
-          expect(noSnapshot).toBeNull();
-          expect(concurrent).toBeNull();
+          // Both target HttpException but drop via different clauses: the
+          // 503 by its response body (needs the original exception), the 409
+          // by its value. Each must drop on its own evidence only.
+          const noSnapshot = new HttpException(
+            { error: 'no_snapshot_yet' },
+            503,
+          );
+          const concurrent = new ConflictException(
+            "Lineup abc-123 status changed concurrently; expected 'pending'",
+          );
+          const beforeSend = getBeforeSend();
+          expect(
+            beforeSend(httpEvent(noSnapshot), {
+              originalException: noSnapshot,
+            }),
+          ).toBeNull();
+          expect(
+            beforeSend(httpEvent(concurrent), {
+              originalException: concurrent,
+            }),
+          ).toBeNull();
+          // Without the original exception the 503's event value is just
+          // "Http Exception" — the value-based 409 regex must not catch it.
+          const bare = httpEvent(noSnapshot);
+          expect(beforeSend(bare)).toBe(bare);
         });
       });
 
