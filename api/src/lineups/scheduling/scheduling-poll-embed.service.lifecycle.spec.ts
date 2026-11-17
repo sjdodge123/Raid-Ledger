@@ -17,6 +17,7 @@ import { Test } from '@nestjs/testing';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingUnanimousService } from './scheduling-unanimous.service';
 import { SchedulingService } from './scheduling.service';
+import { GuildAccessService } from '../../guilds/guild-access.service';
 import { StandalonePollLockInService } from '../standalone-poll/standalone-poll-lock-in.service';
 import { StandalonePollService } from '../standalone-poll/standalone-poll.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -290,6 +291,7 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
           provide: SchedulingUnanimousService,
           useValue: { checkMatch: jest.fn().mockResolvedValue(0) },
         },
+        { provide: GuildAccessService, useValue: { isMember: jest.fn() } },
       ],
     }).compile();
     service = module.get(SchedulingService);

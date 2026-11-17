@@ -23,6 +23,7 @@ import {
 } from './event-create.helpers';
 import { buildLifecyclePayload } from './event-response.helpers';
 import { warnWithStack } from '../common/error-format.helpers';
+import type { HubMemberCheck } from '../lineups/standalone-poll/standalone-poll-hub.helpers';
 import { defined } from '../common/defined.helpers';
 
 interface CreateFlowDeps {
@@ -35,6 +36,8 @@ interface CreateFlowDeps {
   notificationService: Pick<NotificationService, 'createMany'>;
   /** ROK-1832 (Codex r10): releases the fan-out's per-user notice claims. */
   noticeDedup: FollowupNoticeDedup;
+  /** ROK-2212: hub membership by kind (`GuildAccessService.isMember`). */
+  isHubMember: HubMemberCheck;
 }
 
 /**
@@ -166,7 +169,12 @@ export async function runCreateEvent(
   creatorId: number,
   rawDto: CreateEventDto,
 ): Promise<EventResponseDto & { allEventIds?: number[] }> {
-  const dto = await inheritPollHub(deps.db, rawDto, creatorId);
+  const dto = await inheritPollHub(
+    deps.db,
+    rawDto,
+    creatorId,
+    deps.isHubMember,
+  );
   const startTime = new Date(dto.startTime);
   const endTime = new Date(dto.endTime);
   const durationMs = endTime.getTime() - startTime.getTime();

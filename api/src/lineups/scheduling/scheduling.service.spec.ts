@@ -10,6 +10,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { SchedulingService } from './scheduling.service';
+import { GuildAccessService } from '../../guilds/guild-access.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
@@ -146,6 +147,7 @@ describe('SchedulingService', () => {
         },
         // ROK-1632 AC3: the post-commit "everyone's in" hook.
         { provide: SchedulingUnanimousService, useValue: mockUnanimous },
+        { provide: GuildAccessService, useValue: { isMember: jest.fn() } },
         { provide: GameActivityNudge, useValue: mockNudge },
       ],
     }).compile();

@@ -55,6 +55,7 @@ describe('assembleSchedulePollResponse (TDB:1443)', () => {
       inputs,
       5,
       'member',
+      jest.fn(),
     );
     await Promise.resolve();
     const startedBeforeVotes = (findSlotConflicts as jest.Mock).mock.calls
@@ -75,6 +76,7 @@ describe('assembleSchedulePollResponse (TDB:1443)', () => {
       inputs,
       null,
       null,
+      jest.fn(),
     );
 
     expect(findSlotConflicts).not.toHaveBeenCalled();

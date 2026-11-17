@@ -10,8 +10,8 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { and, eq, inArray, isNull, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildKind } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import { findMembership } from '../../guilds/community/community-membership.queries';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -22,6 +22,8 @@ export interface PollHub {
   gameId: number;
   /** `guilds.member_count` (live members, kept current by the hub writes). */
   memberCount: number;
+  /** ROK-2212: membership is the kind's call (`HubMemberCheck`). */
+  kind: GuildKind;
 }
 
 const g = schema.guilds;
@@ -31,6 +33,7 @@ const pollHubColumns = {
   name: g.name,
   gameId: g.gameId,
   memberCount: g.memberCount,
+  kind: g.kind,
 };
 
 /** ROK-2212: the hub kinds a poll may be tagged to. */
@@ -68,26 +71,18 @@ export async function findVisiblePollHub(
   return row ?? null;
 }
 
-/** True when the user is a live (not left, not banned) member of the hub. */
-export async function isLiveHubMember(
-  db: Db,
-  guildId: number,
-  userId: number,
-): Promise<boolean> {
-  const row = await findMembership(db, guildId, userId);
-  return row !== null && row.leftAt === null && row.bannedAt === null;
-}
-
 /**
- * True when the user is a live member of the hub or staff (operator/admin) —
- * the P1 membership rule (`leftAt`/`bannedAt` null) with the staff bypass.
+ * True when the user is a member of the hub by its kind (`isMember`, the
+ * same check the poll tag uses) or staff (operator/admin). ROK-2212: a guild
+ * hub's members are its live linked roster, not `hub_community_members`.
  */
-export async function isLiveHubMemberOrStaff(
+export async function isHubMemberOrStaff(
   db: Db,
   guildId: number,
   userId: number,
+  isMember: HubMemberCheck,
 ): Promise<boolean> {
-  if (await isLiveHubMember(db, guildId, userId)) return true;
+  if (await isMember(userId, guildId)) return true;
   const [user] = await db
     .select({ role: schema.users.role })
     .from(schema.users)

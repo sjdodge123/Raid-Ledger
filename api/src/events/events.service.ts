@@ -62,6 +62,7 @@ import {
 } from './event-find.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { SettingsService } from '../settings/settings.service';
+import { GuildAccessService } from '../guilds/guild-access.service';
 
 @Injectable()
 export class EventsService {
@@ -356,6 +357,12 @@ export class EventsService {
       // ROK-1371: post-create follow-up fan-out (NotificationService already injected).
       notificationService: this.notificationService,
       noticeDedup: this.notificationDedup,
+      // ROK-2212: resolved lazily (as `embedVoiceDepsFrom`) — GuildsCoreModule
+      // is app-wide and only a hub-tagged poll lock-in needs it.
+      isHubMember: (userId: number, hubId: number) =>
+        this.moduleRef
+          .get(GuildAccessService, { strict: false })
+          .isMember(userId, hubId),
     };
   }
 }

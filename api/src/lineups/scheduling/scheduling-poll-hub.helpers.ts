@@ -1,14 +1,21 @@
 /**
  * ROK-1893 P3 — the poll page's hub projection: `hub` for the header + "Join
  * hub" button, and `isHubMember` on every voter chip. A hidden / archived hub
- * (or an untagged poll) yields `hub: null` and no flags.
+ * (or an untagged poll) yields `hub: null` and no flags. ROK-2212: membership
+ * is the hub kind's — a community hub reads `hub_community_members` in one
+ * query; any other kind (a `wow_guild` hub's live linked roster) asks the
+ * kind-aware `isMember` per voter, the same check the poll tag uses.
  */
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { liveMemberPredicate } from '../../guilds/community/community-membership.queries';
-import { findVisiblePollHub } from '../standalone-poll/standalone-poll-hub.helpers';
+import {
+  findVisiblePollHub,
+  type HubMemberCheck,
+  type PollHub,
+} from '../standalone-poll/standalone-poll-hub.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -28,11 +35,20 @@ export interface PollHubView {
 
 const NO_HUB: PollHubView = { hub: null, memberIds: null };
 
+/** The distinct voters on `slotIds` (a subquery). */
+function votersOn(db: Db, slotIds: readonly number[]) {
+  const v = schema.communityLineupScheduleVotes;
+  return db
+    .selectDistinct({ userId: v.userId })
+    .from(v)
+    .where(inArray(v.slotId, [...slotIds]));
+}
+
 /**
- * The live hub members among this poll's voters (on `slotIds`) and the
- * viewer — never the hub's whole roster.
+ * The live community-hub members among this poll's voters (on `slotIds`)
+ * and the viewer — never the hub's whole roster.
  */
-async function loadVoterMemberIds(
+async function loadCommunityVoterMemberIds(
   db: Db,
   guildId: number,
   slotIds: readonly number[],
@@ -40,11 +56,6 @@ async function loadVoterMemberIds(
 ): Promise<Set<number>> {
   if (slotIds.length === 0 && viewerId === null) return new Set();
   const m = schema.hubCommunityMembers;
-  const v = schema.communityLineupScheduleVotes;
-  const voters = db
-    .selectDistinct({ userId: v.userId })
-    .from(v)
-    .where(inArray(v.slotId, [...slotIds]));
   const rows = await db
     .select({ userId: m.userId })
     .from(m)
@@ -53,12 +64,45 @@ async function loadVoterMemberIds(
         eq(m.guildId, guildId),
         liveMemberPredicate(),
         or(
-          slotIds.length > 0 ? inArray(m.userId, voters) : undefined,
+          slotIds.length > 0
+            ? inArray(m.userId, votersOn(db, slotIds))
+            : undefined,
           viewerId === null ? undefined : eq(m.userId, viewerId),
         ),
       ),
     );
   return new Set(rows.map((r) => r.userId));
+}
+
+/** ROK-2212: the voters + viewer the kind-aware `isMember` says are members. */
+async function loadCheckedVoterMemberIds(
+  db: Db,
+  guildId: number,
+  slotIds: readonly number[],
+  viewerId: number | null,
+  isMember: HubMemberCheck,
+): Promise<Set<number>> {
+  const voters = slotIds.length > 0 ? await votersOn(db, slotIds) : [];
+  const ids = new Set(voters.map((r) => r.userId));
+  if (viewerId !== null) ids.add(viewerId);
+  const checked = await Promise.all(
+    [...ids].map(async (id) => ((await isMember(id, guildId)) ? id : null)),
+  );
+  return new Set(checked.filter((id): id is number => id !== null));
+}
+
+/** The hub's members among the voters + viewer, by the hub's kind. */
+function loadVoterMemberIds(
+  db: Db,
+  hub: PollHub,
+  slotIds: readonly number[],
+  viewerId: number | null,
+  isMember: HubMemberCheck,
+): Promise<Set<number>> {
+  if (hub.kind === 'game_community') {
+    return loadCommunityVoterMemberIds(db, hub.id, slotIds, viewerId);
+  }
+  return loadCheckedVoterMemberIds(db, hub.id, slotIds, viewerId, isMember);
 }
 
 /** Load the hub view for a poll tagged to `guildId` (null = untagged). */
@@ -67,11 +111,18 @@ export async function loadPollHubView(
   guildId: number | null,
   viewerId: number | null,
   slotIds: readonly number[],
+  isMember: HubMemberCheck,
 ): Promise<PollHubView> {
   if (guildId === null) return NO_HUB;
   const hub = await findVisiblePollHub(db, guildId);
   if (!hub) return NO_HUB;
-  const memberIds = await loadVoterMemberIds(db, guildId, slotIds, viewerId);
+  const memberIds = await loadVoterMemberIds(
+    db,
+    hub,
+    slotIds,
+    viewerId,
+    isMember,
+  );
   return {
     hub: {
       id: hub.id,

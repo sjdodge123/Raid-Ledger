@@ -32,6 +32,7 @@ import {
   stampHubMembers,
 } from './scheduling-poll-hub.helpers';
 import { shareFieldsForViewer } from '../standalone-poll/standalone-poll-share.helpers';
+import type { HubMemberCheck } from '../standalone-poll/standalone-poll-hub.helpers';
 import { lockInRecoverableField } from './scheduling-lockin-recovery.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -76,6 +77,7 @@ export async function loadSchedulePollInputs<
  * @param inputs - The rows `loadSchedulePollInputs` returned.
  * @param userId - The authenticated viewer, or null when anonymous.
  * @param callerRole - The viewer's role, for the role-aware `canVote`.
+ * @param isHubMember - ROK-2212: hub membership by kind, for voter flags.
  * @returns The full poll page response, terminal-state fields included.
  */
 export async function assembleSchedulePollResponse(
@@ -100,6 +102,7 @@ export async function assembleSchedulePollResponse(
   },
   userId: number | null,
   callerRole: string | null,
+  isHubMember: HubMemberCheck,
 ): Promise<SchedulePollPageResponseDto> {
   const { pollMatch, lineup, members, slots, voterCount } = inputs;
   // TDB:1443: the viewer's conflict lookup is independent of the votes ->
@@ -113,6 +116,7 @@ export async function assembleSchedulePollResponse(
       lineup?.guildId ?? null,
       userId,
       slots.map((s) => s.id),
+      isHubMember,
     ),
   ]);
   const base = buildPollResponse(

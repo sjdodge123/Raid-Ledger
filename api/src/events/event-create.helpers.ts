@@ -9,26 +9,32 @@ import { generateRecurringDates } from './recurrence.util';
 import { defined } from '../common/defined.helpers';
 import {
   findMatchPollHub,
-  isLiveHubMemberOrStaff,
+  isHubMemberOrStaff,
+  type HubMemberCheck,
 } from '../lineups/standalone-poll/standalone-poll-hub.helpers';
 
 /**
  * ROK-1893 P3 (D16): an event created from a hub poll's match inherits the
  * poll's hub as its guild tag — only when the client sent none, the hub is
  * still visible, the event is for the hub's game, and the event's creator is
- * still a live (not left, not banned) member of the hub or staff.
+ * still a member of the hub or staff. ROK-2212: membership is the hub kind's
+ * (`isMember` — a guild hub's live linked roster, a community hub's live
+ * `hub_community_members` row), the same check the poll tag uses.
  */
 export async function inheritPollHub(
   db: PostgresJsDatabase<typeof schema>,
   dto: CreateEventDto,
   creatorId: number,
+  isMember: HubMemberCheck,
 ): Promise<CreateEventDto> {
   if (dto.guildId !== undefined || dto.schedulingMatchId === undefined) {
     return dto;
   }
   const hub = await findMatchPollHub(db, dto.schedulingMatchId);
   if (!hub || hub.gameId !== dto.gameId) return dto;
-  if (!(await isLiveHubMemberOrStaff(db, hub.id, creatorId))) return dto;
+  if (!(await isHubMemberOrStaff(db, hub.id, creatorId, isMember))) {
+    return dto;
+  }
   return { ...dto, guildId: hub.id };
 }
 
