@@ -9,9 +9,10 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router-dom';
 import type { JSX } from 'react';
+import type { HubForumThreadSummary } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { buildForumThread } from '../../../test/factories/hub-forum';
+import { buildForumLock, buildForumThread, buildForumThreadEvent } from '../../../test/factories/hub-forum';
 import { toast } from '../../../lib/toast';
 import { HubForumTab } from './forum-tab';
 import { FORUM_PIN_FAILED } from './use-hub-forum';
@@ -33,9 +34,9 @@ function Where(): JSX.Element {
 }
 
 /** One live thread by user 1, created just now (inside the 24 h edit window). */
-function renderList(viewerId: number, canModerate: boolean) {
+function renderList(viewerId: number, canModerate: boolean, extra: Partial<HubForumThreadSummary> = {}) {
     auth.userId = viewerId;
-    const thread = buildForumThread({ id: 5, title: 'Raid comp', createdAt: new Date().toISOString() });
+    const thread = buildForumThread({ id: 5, title: 'Raid comp', createdAt: new Date().toISOString(), ...extra });
     server.use(http.get(FORUM, () => HttpResponse.json({ pinned: [], threads: [thread], nextCursor: null })));
     return renderWithProviders(<><HubForumTab guildId={7} canWrite canModerate={canModerate} kind="wow_guild" /><Where /></>,
         { initialEntries: ['/hubs/7#forum'] });
@@ -115,5 +116,18 @@ describe('Forum list row actions (ROK-1175)', () => {
         await menuLabels();
         await userEvent.click(screen.getByRole('menuitem', { name: 'Pin' }));
         await vi.waitFor(() => expect(toast.error, 'a 409 says how to fix it, not "try again"').toHaveBeenCalledWith(cap));
+    });
+});
+
+describe('Forum list row actions on event threads (ROK-2226)', () => {
+    it('offers no Edit or Delete on an event thread — the lifecycle owns its root (ROK-2226 §5.5)', async () => {
+        renderList(99, true, { event: buildForumThreadEvent() });
+        expect(await menuLabels(), 'a moderator keeps only Pin on an event thread').toEqual(['Pin']);
+    });
+
+    it('shows the author of an event thread no menu, even after its event was deleted', async () => {
+        renderList(1, false, { event: null, lock: buildForumLock({ reason: 'event-deleted' }) });
+        expect(await screen.findByTestId('forum-thread-row')).toBeInTheDocument();
+        expect(screen.queryByTestId('forum-row-actions'), 'no Edit/Delete the API would 403').toBeNull();
     });
 });

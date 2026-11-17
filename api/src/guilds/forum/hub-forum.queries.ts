@@ -27,7 +27,12 @@ import type {
 
 export type Db = PostgresJsDatabase<typeof schema>;
 
-const { hubForumThreads: threads, hubForumReplies: replies, users } = schema;
+const {
+  hubForumThreads: threads,
+  hubForumReplies: replies,
+  users,
+  events,
+} = schema;
 const author = alias(users, 'hub_forum_author');
 const authorColumns = {
   userId: author.id,
@@ -36,6 +41,15 @@ const authorColumns = {
   avatar: author.avatar,
   customAvatarUrl: author.customAvatarUrl,
   discordId: author.discordId,
+};
+
+/** ROK-2226: the discussed event (null for normal threads or a deleted event). */
+const eventColumns = {
+  id: events.id,
+  title: events.title,
+  duration: events.duration,
+  cancelledAt: events.cancelledAt,
+  creatorId: events.creatorId,
 };
 
 /** UTC ISO text with microseconds — the exact cursor value. */
@@ -48,6 +62,9 @@ export const listedThread = or(
   isNull(threads.deletedAt),
   gt(threads.replyCount, 0),
 );
+
+/** ROK-2226 D7: an event thread stays off the list/widget until its first reply. */
+const eventThreadShown = or(isNull(threads.eventId), gt(threads.replyCount, 0));
 
 /** One page; `next` is null on the last page. */
 export interface ForumPage<R> {
@@ -72,14 +89,16 @@ function selectThreads(db: Db, where: SQL | undefined) {
     .select({
       thread: threads,
       author: authorColumns,
+      event: eventColumns,
       cursorAt: usText(threads.lastActivityAt),
     })
     .from(threads)
     .leftJoin(author, eq(author.id, threads.authorId))
+    .leftJoin(events, eq(events.id, threads.eventId))
     .where(where);
 }
 
-function selectReplies(db: Db, where: SQL | undefined) {
+export function selectReplies(db: Db, where: SQL | undefined) {
   return db
     .select({
       reply: replies,
@@ -105,6 +124,7 @@ export function listThreadsQuery(
     eq(threads.guildId, guildId),
     isNull(threads.pinnedAt),
     listedThread,
+    eventThreadShown,
     after,
   );
   return selectThreads(db, where)
@@ -144,7 +164,11 @@ export async function listThreads(
 }
 
 function threadProbe(row: HubForumThreadRecord & { cursorAt: string }) {
-  const record = { thread: row.thread, author: row.author };
+  const record = {
+    thread: row.thread,
+    author: row.author,
+    event: row.event ?? null,
+  };
   return { record, id: row.thread.id, cursorAt: row.cursorAt };
 }
 
@@ -161,7 +185,11 @@ export async function findThread(
 
 /** Widget rows: live threads only (the card never shows a placeholder). */
 const liveThreadOf = (guildId: number) =>
-  and(eq(threads.guildId, guildId), isNull(threads.deletedAt));
+  and(
+    eq(threads.guildId, guildId),
+    isNull(threads.deletedAt),
+    eventThreadShown,
+  );
 
 /** Widget probe: removed threads are excluded BEFORE the limit (SQL tests). */
 export function latestThreadsQuery(db: Db, guildId: number, limit: number) {

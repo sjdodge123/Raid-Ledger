@@ -24,6 +24,7 @@ import { TabRowDemo } from './tab-row-demo';
 import { RowCapDemo } from './row-cap-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
 import { ForumBylineDemo } from './forum-byline-demo';
+import { EventDiscussionDemo } from './event-discussion-demo';
 import { CharacterHeaderDemo } from './character-header-demo';
 
 const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
@@ -194,6 +195,7 @@ export function PrimitivesSection(): JSX.Element {
                 <RowCapDemo />
                 <HubRowBitsDemo />
                 <ForumBylineDemo />
+                <EventDiscussionDemo />
                 <CharacterHeaderDemo />
             </StateGrid>
         </Section>

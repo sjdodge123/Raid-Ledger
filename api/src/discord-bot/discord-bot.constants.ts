@@ -315,6 +315,11 @@ export const SIGNUP_BUTTON_IDS = {
   JOIN_SIGNUP: 'join_signup',
   /** "Quick Sign Up" (anonymous — Path B) */
   QUICK_SIGNUP: 'quick_signup',
+  /**
+   * Back button under a role menu that followed a character pick (ROK-2228).
+   * Format: `char_back:<charSelectPrefix>:<eventId>[:<suffix>]`.
+   */
+  BACK_TO_CHARACTER: 'char_back',
 } as const;
 
 /** A gateway close 4014 / "disallowed intents" connect failure. */

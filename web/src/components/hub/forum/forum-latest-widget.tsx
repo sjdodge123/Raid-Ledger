@@ -10,6 +10,7 @@ import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { QuietEmpty } from '../card-bits';
 import { Pill } from '../hub-bits';
+import { ForumEventPills } from './forum-event-header';
 import { forumThreadHref } from './forum-link';
 import { forumAgo, replyCountLabel } from './forum-thread.helpers';
 import { useLatestThreads } from './use-hub-forum';
@@ -40,6 +41,7 @@ function LatestRow({ thread }: { thread: HubForumThreadSummary }): JSX.Element {
                 <span className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium text-foreground">{thread.title}</span>
                     {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
+                    <ForumEventPills event={thread.event} lock={thread.lock} />
                 </span>
                 <span className="block text-xs text-muted">{replyCountLabel(thread.replyCount)} · {forumAgo(thread.lastActivityAt)}</span>
             </a>

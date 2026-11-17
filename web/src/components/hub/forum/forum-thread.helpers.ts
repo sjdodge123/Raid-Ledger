@@ -41,13 +41,24 @@ export function forumTitleError(title: string): string | null {
 export interface ForumViewer { userId: number | null; canWrite: boolean; canModerate: boolean }
 
 /**
+ * An event thread (ROK-2226): it names its event, or carries a lock — only
+ * event threads lock, so an `event-deleted` thread (event null) still counts.
+ */
+export function isEventThread(thread: Pick<HubForumThreadSummary, 'event' | 'lock'>): boolean {
+    return thread.event != null || thread.lock != null;
+}
+
+/**
  * A list row's "⋯" rights. Summaries carry no `can`, so this mirrors the api's
  * `canFor` (`hub-forum.helpers.ts`): edit = live + own + inside 24 h; delete =
- * live + (own or moderator); pin = live + moderator. The server still decides.
+ * live + (own or moderator); pin = live + moderator. An event thread's root is
+ * lifecycle-owned (§5.5, `hub-forum.service.ts` view): no edit or delete, pin
+ * unchanged. The server still decides.
  */
 export function forumRowCan(thread: HubForumThreadSummary, viewer: ForumViewer, now: number = Date.now()): HubForumCan {
     const live = thread.deleted === null;
+    const editable = live && !isEventThread(thread);
     const own = viewer.canWrite && viewer.userId !== null && thread.author?.userId === viewer.userId;
     const fresh = now - Date.parse(thread.createdAt) < HUB_FORUM_EDIT_WINDOW_MS;
-    return { edit: live && own && fresh, delete: live && (own || viewer.canModerate), pin: live && viewer.canModerate };
+    return { edit: editable && own && fresh, delete: editable && (own || viewer.canModerate), pin: live && viewer.canModerate };
 }

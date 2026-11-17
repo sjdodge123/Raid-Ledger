@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import type { EventQuestReadinessDto } from '@raid-ledger/contract';
 import { StatusChip } from '../../../components/ui/status-chip';
 import { getWowheadQuestUrl } from '../lib/wowhead-urls';
+import { EscortChip } from '../lib/escort-chip';
 import { cellTitle, QUEST_STATE_META } from './dungeon-quests.helpers';
 
 type Quest = EventQuestReadinessDto['quests'][number];
@@ -25,8 +26,11 @@ const FOREVER_VARIANT = 'wow_forever';
 
 function QuestLink({ quest }: { quest: Quest }): JSX.Element {
     return (
-        <a href={getWowheadQuestUrl(quest.questId, FOREVER_VARIANT)} target="_blank" rel="noopener noreferrer"
-            className="text-foreground hover:underline">{quest.title}</a>
+        <span className="inline-flex flex-wrap items-center gap-1">
+            <a href={getWowheadQuestUrl(quest.questId, FOREVER_VARIANT)} target="_blank" rel="noopener noreferrer"
+                className="text-foreground hover:underline">{quest.title}</a>
+            <EscortChip isEscort={quest.isEscort} />
+        </span>
     );
 }
 

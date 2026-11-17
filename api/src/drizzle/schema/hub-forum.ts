@@ -8,6 +8,7 @@ import {
   index,
   check,
   type AnyPgColumn,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { guilds } from './guilds';
@@ -73,6 +74,11 @@ export const hubForumThreads = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
+    // ROK-2226: event discussion threads. No FK on event_id (spec D1): a
+    // series delete emits DELETED after the event rows are gone.
+    eventId: integer('event_id'),
+    eventDetachedAt: timestamp('event_detached_at', { withTimezone: true }),
+    writeClosesAt: timestamp('write_closes_at', { withTimezone: true }),
   },
   (table) => [
     check(
@@ -106,6 +112,23 @@ export const hubForumThreads = pgTable(
     index('idx_hub_forum_threads_pinned_by').on(table.pinnedBy),
     index('idx_hub_forum_threads_deleted_by').on(table.deletedBy),
     discordIdIndex('threads', table.authorDiscordId),
+    // ROK-2226: event discussion threads — one live thread per event.
+    check(
+      'hub_forum_threads_event_detached',
+      sql`${table.eventDetachedAt} IS NULL OR ${table.eventId} IS NOT NULL`,
+    ),
+    check(
+      'hub_forum_threads_write_closes',
+      sql`${table.writeClosesAt} IS NULL OR ${table.eventId} IS NOT NULL`,
+    ),
+    uniqueIndex('uq_hub_forum_threads_event_live')
+      .on(table.eventId)
+      .where(
+        sql`${table.eventId} IS NOT NULL AND ${table.eventDetachedAt} IS NULL`,
+      ),
+    index('idx_hub_forum_threads_event_id')
+      .on(table.eventId)
+      .where(sql`${table.eventId} IS NOT NULL`),
   ],
 );
 

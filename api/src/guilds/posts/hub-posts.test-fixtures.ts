@@ -81,7 +81,7 @@ export async function bootPostsApp(tag: string): Promise<PostsCtx> {
 }
 
 /** A character on the hub's live roster ⇒ a member; returns the member id. */
-async function link(ctx: PostsCtx, guildId: number, userId: number) {
+export async function link(ctx: PostsCtx, guildId: number, userId: number) {
   const guid = `Player-1-hubposts-${guildId}-${userId}`;
   const name = `Hp${guildId}x${userId}`;
   await ctx.testApp.db.insert(schema.characters).values({

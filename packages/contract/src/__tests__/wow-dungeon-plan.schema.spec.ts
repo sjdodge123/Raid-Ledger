@@ -115,3 +115,25 @@ describe('WowRosterClassSchema.members[].memberId (ROK-2214 Q1)', () => {
     expect(WowRosterClassSchema.safeParse(cls({ name: 'Aelin', characterId: null, level: 30, memberId: 0 })).success).toBe(false);
   });
 });
+
+describe('readiness quests[].isEscort (ROK-2224)', () => {
+  const withQuest = (q: Record<string, unknown>) => ({
+    ...plan,
+    readiness: { ...plan.readiness, quests: [q] },
+  });
+  const base = { questId: 1144, title: 'Willix the Importer', instanceId: 491 };
+
+  it('keeps isEscort: true on an escort quest', () => {
+    const r = DungeonPlanSchema.safeParse(withQuest({ ...base, isEscort: true }));
+    expect(r.success).toBe(true);
+    expect(r.data?.readiness.quests[0]?.isEscort).toBe(true);
+  });
+
+  it('still accepts a quest without the flag (additive)', () => {
+    expect(DungeonPlanSchema.safeParse(withQuest(base)).success).toBe(true);
+  });
+
+  it('rejects a non-boolean isEscort', () => {
+    expect(DungeonPlanSchema.safeParse(withQuest({ ...base, isEscort: 'yes' })).success).toBe(false);
+  });
+});

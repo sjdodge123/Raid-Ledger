@@ -5,6 +5,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
@@ -105,9 +106,11 @@ function createMockDb() {
 
 let service: SignupsService;
 let mockDb: ReturnType<typeof createMockDb>;
+let emitSpy: jest.Mock;
 
 async function setupEach() {
   mockDb = createMockDb();
+  emitSpy = jest.fn();
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       SignupsService,
@@ -146,7 +149,7 @@ async function setupEach() {
           updateRoster: jest.fn(),
         },
       },
-      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+      { provide: EventEmitter2, useValue: { emit: emitSpy } },
       {
         provide: ActivityLogService,
         useValue: {
@@ -175,6 +178,37 @@ async function testAnonymousSignup() {
   expect(result.isAnonymous).toBe(true);
   expect(result.discordUserId).toBe('discord-anon-456');
   expect(mockDb.insert).toHaveBeenCalled();
+}
+
+/**
+ * ROK-2227 AC3: an unlinked PUG's accept goes through signupDiscord, so its
+ * roster write must announce itself — the embed sync listens for
+ * SIGNUP_EVENTS.CREATED. The emit must follow the committed transaction.
+ */
+async function testAnonymousSignupEmitsAfterCommit() {
+  mockDb.select
+    .mockReturnValueOnce(makeSelectChain([]))
+    .mockReturnValueOnce(makeSelectChain([mockEvent]))
+    .mockReturnValueOnce(makeSelectChain([]));
+  let emittedInsideTx: boolean | null = null;
+  mockDb.transaction.mockImplementationOnce(
+    async (cb: (tx: typeof mockDb) => Promise<unknown>) => {
+      const result = await cb(mockDb);
+      emittedInsideTx = emitSpy.mock.calls.length > 0;
+      return result;
+    },
+  );
+  await service.signupDiscord(1, {
+    discordUserId: 'discord-anon-456',
+    discordUsername: 'AnonUser',
+  });
+  expect(emittedInsideTx).toBe(false);
+  expect(emitSpy).toHaveBeenCalledTimes(1);
+  expect(emitSpy).toHaveBeenCalledWith(SIGNUP_EVENTS.CREATED, {
+    eventId: 1,
+    signupId: mockAnonymousSignup.id,
+    action: 'discord_signup_created',
+  });
 }
 
 async function testLinkedUserDelegates() {
@@ -454,6 +488,8 @@ beforeEach(() => setupEach());
 
 describe('SignupsService — signupDiscord', () => {
   it('should create anonymous signup', () => testAnonymousSignup());
+  it('emits signup.created after the anonymous signup commits (ROK-2227)', () =>
+    testAnonymousSignupEmitsAfterCommit());
   it('should delegate to signup for linked user', () =>
     testLinkedUserDelegates());
   it('should throw NotFoundException when event missing', () =>

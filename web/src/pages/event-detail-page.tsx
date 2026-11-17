@@ -17,6 +17,7 @@ import { useVoiceRoster } from '../hooks/use-voice-roster';
 import { EventDetailSkeleton } from './event-detail/EventDetailSkeleton';
 import { EventDetailRoster } from './event-detail/EventDetailRoster';
 import { EventReportLinkCard } from './event-detail/EventReportLinkCard';
+import { EventDiscussionSectionLazy } from './event-detail/event-discussion-lazy';
 import { alphabetical } from './event-detail/event-detail-helpers';
 import {
     ConfirmModalSection,
@@ -124,49 +125,60 @@ type EventDetailDerived = ReturnType<typeof useEventDetailDerived>;
 type EventDetailHandlers = ReturnType<typeof useEventDetailHandlers>;
 type ModalState = ReturnType<typeof useModalState>;
 
-function EventDetailModals({ event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, seriesAction, setSeriesAction, roster, searchParams, setSearchParams }: {
+type EventDetailModalsProps = ModalState & {
     event: EventResponseDto; eventId: number; derived: EventDetailDerived; handlers: EventDetailHandlers;
-    showCancelModal: boolean; setShowCancelModal: (v: boolean) => void; showRescheduleModal: boolean; setShowRescheduleModal: (v: boolean) => void;
-    showInviteModal: boolean; setShowInviteModal: (v: boolean) => void;
-    seriesAction: 'edit' | 'delete' | 'cancel' | null; setSeriesAction: (v: 'edit' | 'delete' | 'cancel' | null) => void;
     roster: ViewerEventRosterDto | undefined;
-    searchParams: URLSearchParams; setSearchParams: ReturnType<typeof useSearchParams>[1];
-}) {
-    const deepLinkAction = searchParams.get('action');
-    const deepLinkReason = searchParams.get('reason');
-    const canDeepLink = derived.canManageRoster;
-    const clearDeepLink = () => {
-        if (!deepLinkAction) return;
+};
+
+/** `?action=cancel|reschedule&reason=…` deep link: the action, the reason, and a clear that drops both params. */
+function useModalDeepLink(searchParams: URLSearchParams, setSearchParams: ModalState['setSearchParams']): { action: string | null; reason: string | undefined; clear: () => void } {
+    const action = searchParams.get('action');
+    const clear = (): void => {
+        if (!action) return;
         const next = new URLSearchParams(searchParams);
         next.delete('action');
         next.delete('reason');
         setSearchParams(next, { replace: true });
     };
+    return { action, reason: searchParams.get('reason') ?? undefined, clear };
+}
+
+/** The series scope picker; "cancel this occurrence" hands off to the single-event cancel modal. */
+function SeriesModal({ eventId, handlers, seriesAction, setSeriesAction, setShowCancelModal }: Pick<EventDetailModalsProps, 'eventId' | 'handlers' | 'seriesAction' | 'setSeriesAction' | 'setShowCancelModal'>): JSX.Element {
+    return (
+        <SeriesScopeModalSection show={seriesAction !== null} action={seriesAction ?? 'edit'} eventId={eventId}
+            onClose={() => setSeriesAction(null)} isPending={handlers.isSeriesPending}
+            onSeriesConfirm={(action, scope) => {
+                if (action === 'cancel' && scope === 'this') {
+                    setSeriesAction(null);
+                    setShowCancelModal(true);
+                    return;
+                }
+                handlers.handleSeriesConfirm(action, scope);
+            }} />
+    );
+}
+
+function EventDetailModals(props: EventDetailModalsProps): JSX.Element {
+    const { event, eventId, derived, handlers, showCancelModal, setShowCancelModal, showRescheduleModal, setShowRescheduleModal, showInviteModal, setShowInviteModal, roster } = props;
+    const deepLink = useModalDeepLink(props.searchParams, props.setSearchParams);
+    const canDeepLink = derived.canManageRoster;
     return (
         <>
             <ConfirmModalSection show={handlers.showConfirmModal} onClose={handlers.closeConfirmModal} onConfirm={handlers.handleSelectionConfirm} onSkip={handlers.handleSelectionSkip}
                 isConfirming={handlers.signup.isPending} gameId={derived.gameRegistryEntry?.id ?? event.game?.id ?? undefined} gameName={event.game?.name ?? undefined}
                 hasRoles={derived.gameRegistryEntry?.hasRoles ?? true} gameSlug={event.game?.slug ?? undefined} preSelectedRole={handlers.preSelectedRole} eventId={eventId} />
-            <CancelModalSection show={showCancelModal || (canDeepLink && deepLinkAction === 'cancel')} eventId={eventId} eventTitle={event.title} signupCount={event.signupCount} gameId={event.game?.id} initialReason={deepLinkReason ?? undefined}
-                onClose={() => { setShowCancelModal(false); clearDeepLink(); }} />
-            <RescheduleModalSection show={showRescheduleModal || (canDeepLink && deepLinkAction === 'reschedule')} eventId={eventId} currentStartTime={event.startTime} currentEndTime={event.endTime}
+            <CancelModalSection show={showCancelModal || (canDeepLink && deepLink.action === 'cancel')} eventId={eventId} eventTitle={event.title} signupCount={event.signupCount} gameId={event.game?.id} initialReason={deepLink.reason}
+                onClose={() => { setShowCancelModal(false); deepLink.clear(); }} />
+            <RescheduleModalSection show={showRescheduleModal || (canDeepLink && deepLink.action === 'reschedule')} eventId={eventId} currentStartTime={event.startTime} currentEndTime={event.endTime}
                 eventTitle={event.title} gameId={event.game?.id} gameSlug={event.game?.slug} gameName={event.game?.name} coverUrl={event.game?.coverUrl} description={event.description}
-                creatorUsername={event.creator?.username} signupCount={event.signupCount} initialReason={deepLinkReason ?? undefined}
-                onClose={() => { setShowRescheduleModal(false); clearDeepLink(); }} />
+                creatorUsername={event.creator?.username} signupCount={event.signupCount} initialReason={deepLink.reason}
+                onClose={() => { setShowRescheduleModal(false); deepLink.clear(); }} />
             <DeleteEventConfirmModal isOpen={handlers.deleteConfirmOpen} eventTitle={event.title} onClose={handlers.closeDeleteConfirm}
                 onConfirm={() => { void handlers.handleDelete(); }} isPending={handlers.isDeletePending} />
             <RemoveConfirmModal removeConfirm={handlers.removeConfirm} onClose={() => handlers.setRemoveConfirm(null)} onConfirm={handlers.handleConfirmRemoveFromEvent} isPending={handlers.adminRemoveUser.isPending} />
             <InviteModalSection show={showInviteModal} onClose={() => setShowInviteModal(false)} eventId={eventId} pugs={handlers.pugs} roster={roster} isMMOGame={derived.isMMOGame} />
-            <SeriesScopeModalSection show={seriesAction !== null} action={seriesAction ?? 'edit'} eventId={eventId}
-                onClose={() => setSeriesAction(null)} isPending={handlers.isSeriesPending}
-                onSeriesConfirm={(action, scope) => {
-                    if (action === 'cancel' && scope === 'this') {
-                        setSeriesAction(null);
-                        setShowCancelModal(true);
-                        return;
-                    }
-                    handlers.handleSeriesConfirm(action, scope);
-                }} />
+            <SeriesModal {...props} />
         </>
     );
 }
@@ -217,6 +229,8 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} roster={page.roster} />
             <EventDetailRoster roster={page.roster} event={page.event} />
+            <EventDiscussionSectionLazy event={page.event} enabled={page.isAuthenticated}
+                signup={derived.canJoinSlot && !derived.isSignedUp && !derived.isEnded ? { onSignup: handlers.handleSignup, pending: handlers.signup.isPending } : undefined} />
             <ActivityTimeline entityType="event" entityId={page.eventId} />
             <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id, guildId: page.event.guildId, rosterCharacters: page.roster?.signups.filter((s) => s.status !== 'departed').map((s) => s.character) }} />
         </>

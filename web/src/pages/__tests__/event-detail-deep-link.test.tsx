@@ -36,6 +36,7 @@ vi.mock('../../hooks/use-auth', () => ({
     }),
     isOperatorOrAdmin: () => false,
     getAuthToken: () => 'mock-token',
+    useViewerCacheScope: (): number | 'anon' => mockUser?.id ?? 'anon',
 }));
 
 vi.mock('../../hooks/use-signups', () => ({

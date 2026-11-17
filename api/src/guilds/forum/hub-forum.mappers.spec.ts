@@ -54,6 +54,9 @@ function thread(
     authorDiscordAvatar: null,
     createdAt: AT,
     updatedAt: AT,
+    eventId: null,
+    eventDetachedAt: null,
+    writeClosesAt: null,
     ...over,
   };
 }
@@ -92,6 +95,21 @@ describe('toThreadSummary', () => {
       pinnedAt: null,
       deleted: null,
     });
+  });
+
+  // Codex P2 (ROK-2226): list rows carry no `can`, so the web's `forumRowCan`
+  // tells a lifecycle-owned event thread apart by the PRESENCE of `event` —
+  // set (object or null) on every event thread, absent on a normal one.
+  it('marks every event thread by an `event` key, even once the event is deleted', () => {
+    const normal = toThreadSummary({ thread: thread(), author: person });
+    expect('event' in normal).toBe(false);
+    const orphan = toThreadSummary(
+      { thread: thread({ eventId: 77 }), author: person, event: null },
+      LATER,
+    );
+    expect('event' in orphan).toBe(true);
+    expect(orphan.event).toBeNull();
+    expect(orphan.lock).toMatchObject({ reason: 'event-deleted' });
   });
 
   it('blanks title + preview of a deleted thread and says who removed it', () => {

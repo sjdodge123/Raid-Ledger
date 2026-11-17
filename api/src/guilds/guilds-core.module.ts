@@ -32,6 +32,9 @@ import { HubPostsService } from './posts/hub-posts.service';
 import { HubForumController } from './forum/hub-forum.controller';
 import { HubForumService } from './forum/hub-forum.service';
 import { HubForumGuestClaimListener } from './forum/hub-forum-guest-claim.listener';
+import { EventDiscussionListener } from './forum/event-discussion/event-discussion.listener';
+import { EventDiscussionController } from './forum/event-discussion/event-discussion.controller';
+import { EventDiscussionService } from './forum/event-discussion/event-discussion.service';
 import { HubSessionNoteController } from './session-note/hub-session-note.controller';
 import { HubSessionNoteService } from './session-note/hub-session-note.service';
 import { CommunityHubKindAdapter } from './community/community-hub-kind.adapter';
@@ -69,6 +72,7 @@ import {
     GuildDiscordController,
     HubPostsController,
     HubForumController,
+    EventDiscussionController,
     HubSessionNoteController,
     HubClaimController,
   ],
@@ -93,6 +97,8 @@ import {
     HubPostsService,
     HubForumService,
     HubForumGuestClaimListener,
+    EventDiscussionListener,
+    EventDiscussionService,
     HubSessionNoteService,
     CommunityHubKindAdapter,
     HubClaimRegistry,
