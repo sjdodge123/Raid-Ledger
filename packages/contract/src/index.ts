@@ -291,6 +291,8 @@ export * from './companion-dev-bridge-json-schema.js';
 export * from './bg3-hub.schema.js';
 // BG3 display labels for raw save ids — shared by web + api (ROK-1958 D-7, moved ROK-2153 S6).
 export * from './bg3-labels.js';
+// Minecraft plugin identity + edition helper (ROK-2234).
+export * from './minecraft-hub.constants.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';

@@ -52,6 +52,7 @@ import './plugins/ai/register';
 import './plugins/pelican/register';
 import './plugins/valheim/register';
 import './plugins/bg3/register';
+import './plugins/minecraft/register';
 import './App.css';
 
 /** Scroll to top on PUSH navigations */

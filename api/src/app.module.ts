@@ -32,6 +32,7 @@ import { PelicanModule } from './plugins/pelican';
 import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
 import { ValheimModule } from './plugins/valheim';
 import { Bg3Module } from './plugins/bg3';
+import { MinecraftModule } from './plugins/minecraft';
 import { RateLimitModule } from './throttler/throttler.module';
 import { QueueModule } from './queue/queue.module';
 import { RelayModule } from './relay/relay.module';
@@ -123,6 +124,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     ServerPresenceReaderModule,
     ValheimModule,
     Bg3Module,
+    MinecraftModule,
     SchedulingModule,
     LineupsModule,
     StandalonePollModule,

@@ -28,7 +28,9 @@ import {
   CORE_SETUP,
   PELICAN_SETUP,
   VALHEIM_SETUP,
+  MINECRAFT_SETUP,
 } from './plugin-setup-requirements.js';
+import { MINECRAFT_GAME_SLUGS, MINECRAFT_PLUGIN_ID } from './minecraft-hub.constants.js';
 import { BG3_SCREENSHOT_CONTRACT_ID } from './companion-bg3-screenshot.schema.js';
 import { GG_CORE_CARD_IDS, type GgCoreCardId } from './gg-cards.schema.js';
 
@@ -112,6 +114,15 @@ const valheim = {
   ],
   gameSlugs: ['valheim'],
   setup: VALHEIM_SETUP,
+} satisfies PluginHubManifest;
+
+/** ROK-2234 — Minecraft, Java + Bedrock (PLAN-minecraft-hub). No widgets yet. */
+const minecraft = {
+  widgets: [],
+  tabs: [],
+  behaviours: [],
+  gameSlugs: [...MINECRAFT_GAME_SLUGS],
+  setup: MINECRAFT_SETUP,
 } satisfies PluginHubManifest;
 
 const pelican = {
@@ -211,6 +222,7 @@ export const HUB_PLUGIN_MANIFESTS = {
   pelican,
   blizzard,
   [BG3_PLUGIN_ID]: BG3_HUB_MANIFEST,
+  [MINECRAFT_PLUGIN_ID]: minecraft,
 } as const satisfies Readonly<Record<string, PluginHubManifest>>;
 
 /** A plugin slug that has a hub declaration. */

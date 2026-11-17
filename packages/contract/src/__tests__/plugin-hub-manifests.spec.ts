@@ -29,11 +29,12 @@ const tabIds = (slug: string): string[] =>
   must(hubManifestFor(slug), slug).tabs.map((t) => t.id);
 
 describe('HUB_PLUGIN_MANIFESTS (C1)', () => {
-  it('declares core, valheim, pelican, blizzard and bg3', () => {
+  it('declares core, valheim, pelican, blizzard, bg3 and minecraft', () => {
     expect(Object.keys(HUB_PLUGIN_MANIFESTS).sort()).toEqual([
       'bg3',
       'blizzard',
       'core',
+      'minecraft',
       'pelican',
       'valheim',
     ]);

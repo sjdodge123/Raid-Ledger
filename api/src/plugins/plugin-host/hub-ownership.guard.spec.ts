@@ -44,6 +44,7 @@ import { CORE_MANIFEST } from '../core/core.manifest';
 import { VALHEIM_MANIFEST } from '../valheim/valheim.manifest';
 import { PELICAN_MANIFEST } from '../pelican/pelican.manifest';
 import { BG3_MANIFEST } from '../bg3/bg3.manifest';
+import { MINECRAFT_MANIFEST } from '../minecraft/minecraft.manifest';
 import { PluginRegistryService } from './plugin-registry.service';
 
 const SRC = path.resolve(__dirname, '../..');
@@ -263,6 +264,7 @@ describe('ROK-1969 A2 — every live owner is a real plugin manifest', () => {
     PELICAN_MANIFEST.id,
     WOW_COMMON_MANIFEST.id,
     BG3_MANIFEST.id,
+    MINECRAFT_MANIFEST.id,
   ];
 
   it('every HUB_PLUGIN_MANIFESTS key is an api manifest id', () => {
