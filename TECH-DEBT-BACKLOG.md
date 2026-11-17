@@ -4405,3 +4405,6 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-17 — fix/batch-2252-2253 (surfaced during ROK-2252 review)
 
 - **low** `api/src/notifications/hub-notification.service.ts:151-163` — `notifyLateTag` still claims a dedup key and creates one notification per hub member (same N+1 shape Sentry flagged for event notices, RAID-LEDGER-ALERTS-45). Pre-existing, outside ROK-2252's event-notice path. Suggested: route it through `checkAndMarkSentMany` + `createMany` like `sendEventNotices` (ROK-2252).
+
+### 2026-11-17 — fix/batch-2249-2251 (surfaced during ROK-2250 caller audit)
+- **low** `api/src/plugins/wow-common/` (`WowCronRegistrar` hourly character auto-sync) — with no Blizzard API keys configured, the hourly auto-sync still logs one warning per character ("Blizzard API not configured") instead of skipping once. Not a Sentry event after ROK-2250 (the typed `BlizzardNotConfiguredError` is dropped), just log noise on keyless instances. Suggested: check `isBlizzardConfigured()` once at the top of the auto-sync job and skip with a single debug line.
