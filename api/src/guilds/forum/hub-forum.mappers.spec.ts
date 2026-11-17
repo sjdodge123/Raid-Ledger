@@ -230,6 +230,22 @@ describe('toForumThread', () => {
     expect(parsed.event?.maxAttendees).toBeNull();
   });
 
+  // m1 (ROK-2229 review): allocation treats 0 as always full, so the header
+  // must show "/ 0", never uncapped.
+  it('keeps a zero capacity as 0 rather than uncapped', () => {
+    const roster = HubForumThreadSchema.parse(
+      eventThreadWith({
+        maxAttendees: 40,
+        slotConfig: { type: 'generic', player: 0 },
+      }),
+    );
+    expect(roster.event?.maxAttendees).toBe(0);
+    const legacy = HubForumThreadSchema.parse(
+      eventThreadWith({ maxAttendees: 0, slotConfig: null }),
+    );
+    expect(legacy.event?.maxAttendees).toBe(0);
+  });
+
   it('leaves a normal thread without an event when a count is passed', () => {
     const out = toForumThread({ thread: thread(), author: person }, CAN, {
       replies: [],

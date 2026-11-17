@@ -43,6 +43,10 @@ describe('signupLabel', () => {
         expect(signupLabel({ ...EVENT, signupCount: 18, maxAttendees: 40 })).toBe('18 / 40 signed up');
     });
 
+    it('reads a zero capacity as full ("N / 0"), not uncapped', () => {
+        expect(signupLabel({ ...EVENT, signupCount: 2, maxAttendees: 0 })).toBe('2 / 0 signed up');
+    });
+
     it('reads "N signed up" when the event is uncapped or the cap is absent', () => {
         expect(signupLabel({ ...EVENT, signupCount: 18, maxAttendees: null })).toBe('18 signed up');
         expect(signupLabel({ ...EVENT, signupCount: 0 })).toBe('0 signed up');

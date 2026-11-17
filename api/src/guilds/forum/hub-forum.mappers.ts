@@ -76,9 +76,11 @@ function toThreadEvent(row: HubForumEventRow): HubForumThreadEvent {
 
 /**
  * ROK-2229: the header's "/ M" is the capacity signups are allocated against
- * (`resolveEventCapacity`: slot roster first, then maxAttendees), so it
- * matches the event page. Omitted when the row carries neither column; a
- * non-positive capacity reads as uncapped.
+ * (`resolveEventCapacity`: slot roster first, then maxAttendees); the event
+ * page's discussion header mirrors the same rule on the web
+ * (`web/src/lib/event-capacity.ts`). Omitted when the row carries neither
+ * column. 0 stays 0: `isEventAtCapacity` treats it as always full, so it must
+ * not read as uncapped.
  */
 function threadEventCapacity(
   row: HubForumEventRow,
@@ -90,7 +92,7 @@ function threadEventCapacity(
     slotConfig: row.slotConfig ?? null,
     maxAttendees: row.maxAttendees ?? null,
   });
-  return { maxAttendees: capacity !== null && capacity > 0 ? capacity : null };
+  return { maxAttendees: capacity };
 }
 
 /** ROK-2226: `event` + `lock`, present on event threads only. */

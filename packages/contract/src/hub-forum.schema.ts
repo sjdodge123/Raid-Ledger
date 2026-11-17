@@ -59,8 +59,8 @@ export const HubForumThreadEventSchema = z
     cancelled: z.boolean(),
     /** ROK-2229: active signups (bench included); the thread view only, may be omitted. */
     signupCount: z.number().int().nonnegative().optional(),
-    /** ROK-2229: the event's capacity (null = uncapped); may be omitted. */
-    maxAttendees: z.number().int().positive().nullable().optional(),
+    /** ROK-2229: allocation capacity (null = uncapped, 0 = always full); may be omitted. */
+    maxAttendees: z.number().int().nonnegative().nullable().optional(),
   })
   .strict();
 export type HubForumThreadEvent = z.infer<typeof HubForumThreadEventSchema>;
