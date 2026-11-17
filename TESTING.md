@@ -235,6 +235,10 @@ Integration tests run against a real PostgreSQL database using [Testcontainers](
 
 **Requires:** Docker running locally. Testcontainers auto-starts and auto-stops a PostgreSQL container.
 
+### Worker count (ROK-2206)
+
+The api integration suite runs one jest worker per shard by default (`--runInBand`). `RL_INTEGRATION_WORKERS=2` (with `npm run test:integration:workers -w api`) runs two, each on its own DB cloned from a freshly migrated `<base>_tpl`, so files on different workers never share rows. A spec must therefore reach the DB through the test app (`getTestApp()` / its `db`), never through `process.env.DATABASE_URL` directly — that is the base DB, not the worker's clone. Knobs, the fleet flag and rollback: `docs/runbooks/local-ci-gate.md`.
+
 ### When to write integration tests
 
 - CRUD flows where data must persist correctly (settings, events, channel bindings)
