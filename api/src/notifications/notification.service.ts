@@ -191,24 +191,34 @@ export class NotificationService {
     this.logger.log(`User ${userId} marked all notifications as read`);
   }
 
-  /** Get notification preferences for a user, creating defaults if needed. */
+  /**
+   * Get notification preferences for a user, creating defaults if needed.
+   * The lazy create is race-safe (ROK-2217): two concurrent first reads both
+   * insert; `onConflictDoNothing` makes the loser's insert a no-op instead of
+   * a 23505, and it re-reads the row the winner created.
+   */
   async getPreferences(userId: number): Promise<NotificationPreferencesDto> {
-    const [prefs] = await this.db
+    const prefs = await this.selectPreferencesRow(userId);
+    if (prefs) return mapPreferencesToDto(prefs);
+    const [created] = await this.db
+      .insert(schema.userNotificationPreferences)
+      .values({ userId })
+      .onConflictDoNothing()
+      .returning();
+    if (created) return mapPreferencesToDto(created);
+    const raced = await this.selectPreferencesRow(userId);
+    return mapPreferencesToDto(
+      defined(raced, 'notification preferences after insert conflict'),
+    );
+  }
+
+  private async selectPreferencesRow(userId: number) {
+    const [row] = await this.db
       .select()
       .from(schema.userNotificationPreferences)
       .where(eq(schema.userNotificationPreferences.userId, userId))
       .limit(1);
-    if (!prefs) {
-      const [created] = await this.db
-        .insert(schema.userNotificationPreferences)
-        .values({ userId })
-        .returning();
-      this.logger.debug(`Created default preferences for user ${userId}`);
-      return mapPreferencesToDto(
-        defined(created, 'inserted notification preferences'),
-      );
-    }
-    return mapPreferencesToDto(prefs);
+    return row;
   }
 
   /** Update notification preferences with deep merge (ROK-180 AC-1). */
