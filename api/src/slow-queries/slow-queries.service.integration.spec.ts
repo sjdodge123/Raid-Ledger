@@ -21,6 +21,11 @@
 import { sql } from 'drizzle-orm';
 import * as fs from 'node:fs';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import {
+  PG_STAT_STATEMENTS_LOCK_KEY,
+  acquireCrossWorkerLock,
+  type CrossWorkerLock,
+} from '../common/testing/cross-worker-lock';
 import { SlowQueriesService } from './slow-queries.service';
 
 type ExtensionRow = {
@@ -53,9 +58,16 @@ function describeSlowQueriesService() {
   let testApp: TestApp;
   let slowQueries: SlowQueriesService;
   let extensionAvailable = false;
+  let lock: CrossWorkerLock | undefined;
 
   beforeAll(async () => {
     testApp = await getTestApp();
+    // ROK-2206: the resets below are server-wide; hold the file against the
+    // other pg_stat_statements spec on another worker (no-op at 1 worker).
+    lock = await acquireCrossWorkerLock(
+      testApp.connectionString,
+      PG_STAT_STATEMENTS_LOCK_KEY,
+    );
     extensionAvailable = await isPgStatStatementsAvailable(testApp);
     slowQueries = testApp.app.get(SlowQueriesService);
     if (extensionAvailable) {
@@ -65,6 +77,10 @@ function describeSlowQueriesService() {
         // file may not exist yet — fine
       }
     }
+  });
+
+  afterAll(async () => {
+    await lock?.release();
   });
 
   it('captures seeded query ids in the appended digest', async () => {

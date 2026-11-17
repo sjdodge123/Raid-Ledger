@@ -72,7 +72,10 @@ any_fail=0
 for i in $(seq 1 "$N"); do
   start=$(date +%s)
   log="$LOG_DIR/run-${i}.log"
-  npx jest --config jest.integration.config.js --runInBand \
+  # ROK-2200: SPEC_LOOP_JEST_ARGS overrides --runInBand (e.g. a multi-file
+  # carrier set at RL_INTEGRATION_WORKERS=2 needs real workers).
+  # shellcheck disable=SC2086
+  npx jest --config jest.integration.config.js ${SPEC_LOOP_JEST_ARGS:---runInBand} \
     --testPathPatterns="$SPEC_PATTERN" > "$log" 2>&1
   ec=$?
   end=$(date +%s)

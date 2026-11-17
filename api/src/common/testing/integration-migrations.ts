@@ -36,10 +36,9 @@ export function markTestDbMigrated(connectionString: string): void {
 
 /** True only when the globalSetup migrated this exact DB in this run. */
 export function isTestDbMigrated(connectionString: string): boolean {
-  return (
-    connectionString !== '' &&
-    process.env[MIGRATED_TEST_DB_URL_ENV] === connectionString
-  );
+  // Space-separated: ROK-2200 per-worker mode records the base + clones.
+  const migrated = (process.env[MIGRATED_TEST_DB_URL_ENV] ?? '').split(' ');
+  return connectionString !== '' && migrated.includes(connectionString);
 }
 
 /**
