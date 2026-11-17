@@ -4,6 +4,7 @@ import type { GuildAccessService } from '../guild-access.service';
 import {
   FORUM_ALREADY_DELETED,
   FORUM_CANNOT_DELETE,
+  FORUM_DISCORD_ORIGIN,
   FORUM_EDIT_WINDOW_CLOSED,
   FORUM_NOT_AUTHOR,
   FORUM_NOT_MEMBER,
@@ -17,11 +18,13 @@ const NOW = new Date('2026-11-14T12:00:00.000Z');
 const HOUR = 3_600_000;
 const fresh = {
   authorId: 3,
+  authorDiscordId: null as string | null,
   createdAt: new Date(NOW.getTime() - HOUR),
   deletedAt: null,
 };
 const stale = { ...fresh, createdAt: new Date(NOW.getTime() - 25 * HOUR) };
 const gone = { ...fresh, deletedAt: NOW };
+const fromDiscord = { ...fresh, authorDiscordId: '123456789012345678' };
 const author = { userId: 3, canWrite: true, canModerate: false };
 const member = { userId: 4, canWrite: true, canModerate: false };
 const officer = { userId: 5, canWrite: true, canModerate: true };
@@ -97,6 +100,12 @@ describe('ROK-1175 assertCanEdit (Q5)', () => {
     ['author, deleted', author, gone, FORUM_ALREADY_DELETED],
     ['another member', member, fresh, FORUM_NOT_AUTHOR],
     ['an officer', officer, fresh, FORUM_NOT_AUTHOR],
+    [
+      'ROK-2208 author of a Discord-origin row',
+      author,
+      fromDiscord,
+      FORUM_DISCORD_ORIGIN,
+    ],
   ])('%s → %s', (_l, who, row, expected) => {
     expect(refusal(() => assertCanEdit(who, row, NOW))).toBe(expected);
   });
@@ -108,6 +117,12 @@ describe('ROK-1175 removalFor (Q8)', () => {
     ['author past the edit window', author, stale, 'author'],
     ['officer on another member', officer, fresh, 'moderator'],
     ['officer on their own', authorOfficer, fresh, 'author'],
+    [
+      'ROK-2208 officer on their own Discord-origin row',
+      authorOfficer,
+      fromDiscord,
+      'moderator',
+    ],
   ] as const)('%s → deleted as %s', (_l, who, row, as) => {
     expect(removalFor(who, row, NOW)).toEqual({ by: who.userId, as, now: NOW });
   });
@@ -118,6 +133,12 @@ describe('ROK-1175 removalFor (Q8)', () => {
     );
     expect(refusal(() => removalFor(officer, gone, NOW))).toBe(
       FORUM_ALREADY_DELETED,
+    );
+  });
+
+  it('ROK-2208 R3: 403s the RL author of a Discord-origin row', () => {
+    expect(refusal(() => removalFor(author, fromDiscord, NOW))).toBe(
+      FORUM_CANNOT_DELETE,
     );
   });
 });

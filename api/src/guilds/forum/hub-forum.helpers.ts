@@ -31,6 +31,8 @@ export interface HubForumActor {
 /** The row fields `canFor` needs (thread or reply). */
 export interface HubForumOwnedRow {
   authorId: number | null;
+  /** Set on Discord-origin rows (ROK-2208 R3: Discord is the authority). */
+  authorDiscordId: string | null;
   createdAt: Date;
   deletedAt: Date | null;
 }
@@ -76,6 +78,8 @@ export function withinEditWindow(createdAt: Date, now: Date): boolean {
  * window, not `readOnly` (ROK-2226 locked event thread); delete = live and
  * (own + member, or moderator), never blocked by `readOnly`; pin = live
  * thread (`pinnable`) and moderator. Moderators never edit another's text.
+ * ROK-2208 R3/§6: a Discord-origin row is never editable on RL and only a
+ * moderator may remove it, even when its author is a linked RL member.
  */
 export function canFor(
   actor: HubForumActor,
@@ -83,7 +87,10 @@ export function canFor(
   opts: { now: Date; pinnable: boolean; readOnly?: boolean },
 ): HubForumCan {
   const live = row.deletedAt === null;
-  const own = actor.canWrite && row.authorId === actor.userId;
+  const own =
+    actor.canWrite &&
+    row.authorId === actor.userId &&
+    row.authorDiscordId === null;
   const window = withinEditWindow(row.createdAt, opts.now);
   return {
     edit: live && own && window && opts.readOnly !== true,

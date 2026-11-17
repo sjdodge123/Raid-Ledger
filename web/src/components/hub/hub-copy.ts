@@ -175,6 +175,12 @@ export function privateAckLabel(kind: GuildKind | undefined): string {
     return `Every member who can open this ${hubCopy(kind).noun} page will see this channel’s messages.`;
 }
 
+/** ROK-2208 R1 — the Discord forum sync acknowledgement, naming the chosen forum. */
+export function forumDiscordAckLabel(channelName: string): string {
+    const where = channelName ? `#${channelName}` : 'this Discord forum';
+    return `Everyone who can see ${where} on Discord can read and post in this hub’s Forum.`;
+}
+
 /** The hub page's load-failure notice, naming the hub kind ("this guild/server/hub"). */
 export function loadFailedLabel(kind: GuildKind | undefined): string {
     return `We couldn't load this ${hubCopy(kind).noun}. Try again in a moment.`;

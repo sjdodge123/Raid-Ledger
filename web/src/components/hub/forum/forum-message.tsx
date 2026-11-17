@@ -8,10 +8,12 @@ import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'rea
 import type { HubForumReply } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
-import { forumAgo, forumAuthorName, forumDeletedLabel } from './forum-thread.helpers';
+import { Pill } from '../hub-bits';
+import { forumByline } from './forum-byline';
+import { forumAgo, forumDeletedLabel } from './forum-thread.helpers';
 
 /** The fields a root and a reply share. */
-export type ForumMessageData = Pick<HubForumReply, 'author' | 'body' | 'createdAt' | 'editedAt' | 'deleted'>;
+export type ForumMessageData = Pick<HubForumReply, 'author' | 'body' | 'createdAt' | 'editedAt' | 'deleted' | 'source' | 'discordAuthor'>;
 
 export interface ForumMessageProps {
     message: ForumMessageData;
@@ -30,12 +32,13 @@ export interface ForumMessageProps {
 }
 
 function Byline({ message }: { message: ForumMessageData }): JSX.Element {
-    const name = forumAuthorName(message.author);
+    const { name, avatarUrl, viaDiscord } = forumByline(message);
     return (
         <div className="flex min-w-0 items-center gap-2">
-            <AvatarWithFallback username={name} avatarUrl={message.author?.avatarUrl ?? null} sizeClassName="h-8 w-8" alt="" />
+            <AvatarWithFallback username={name} avatarUrl={avatarUrl} sizeClassName="h-8 w-8" alt="" />
             <p className="min-w-0 text-sm">
                 <span className="font-semibold text-foreground">{name}</span>
+                {viaDiscord && <> <Pill title="Posted from Discord">via Discord</Pill></>}
                 <span className="block text-xs text-dim">
                     {forumAgo(message.createdAt)}
                     {message.editedAt !== null && <span data-testid="forum-edited"> · Edited</span>}

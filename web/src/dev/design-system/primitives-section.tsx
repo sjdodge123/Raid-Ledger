@@ -23,6 +23,7 @@ import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { TabRowDemo } from './tab-row-demo';
 import { RowCapDemo } from './row-cap-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
+import { ForumBylineDemo } from './forum-byline-demo';
 import { EventDiscussionDemo } from './event-discussion-demo';
 import { CharacterHeaderDemo } from './character-header-demo';
 
@@ -193,6 +194,7 @@ export function PrimitivesSection(): JSX.Element {
                 <TabRowDemo />
                 <RowCapDemo />
                 <HubRowBitsDemo />
+                <ForumBylineDemo />
                 <EventDiscussionDemo />
                 <CharacterHeaderDemo />
             </StateGrid>

@@ -32,7 +32,13 @@ const leftHub: HubForumActor = {
 };
 
 function row(over: Partial<HubForumOwnedRow> = {}): HubForumOwnedRow {
-  return { authorId: 5, createdAt: CREATED, deletedAt: null, ...over };
+  return {
+    authorId: 5,
+    authorDiscordId: null,
+    createdAt: CREATED,
+    deletedAt: null,
+    ...over,
+  };
 }
 
 describe('forum cursor', () => {
@@ -128,6 +134,25 @@ describe('canFor', () => {
       edit: false,
       delete: false,
       pin: false,
+    });
+  });
+
+  it('ROK-2208 R3: a Discord-origin row is never editable or author-deletable on RL', () => {
+    const fromDiscord = row({ authorDiscordId: '123456789012345678' });
+    expect(canFor(author, fromDiscord, thread)).toEqual({
+      edit: false,
+      delete: false,
+      pin: false,
+    });
+  });
+
+  it('ROK-2208 R3: a moderator may still remove (not edit) a Discord-origin row', () => {
+    const fromDiscord = row({ authorDiscordId: '123456789012345678' });
+    const ownOfficer: HubForumActor = { ...officer, userId: 5 };
+    expect(canFor(ownOfficer, fromDiscord, thread)).toEqual({
+      edit: false,
+      delete: true,
+      pin: true,
     });
   });
 

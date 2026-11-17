@@ -14,7 +14,8 @@ import { ForumEventPills } from './forum-event-header';
 import { forumThreadTitle } from './forum-event-format';
 import { forumThreadHref } from './forum-link';
 import { ForumRowActions } from './forum-row-actions';
-import { forumAuthorName, forumDeletedLabel, forumRowMeta, forumRowPreview, isEventThread, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
+import { forumByline, type ForumByline } from './forum-byline';
+import { forumDeletedLabel, forumRowMeta, forumRowPreview, isEventThread, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
 
 export interface ForumThreadRowProps { guildId: number; thread: HubForumThreadSummary; viewer: ForumViewer }
 
@@ -28,8 +29,8 @@ function RemovedRow({ thread, open }: { thread: HubForumThreadSummary; open: () 
     );
 }
 
-/** The row's avatar: the author, or — on an event thread — a calendar mark (ROK-2229). */
-function RowAvatar({ thread }: { thread: HubForumThreadSummary }): JSX.Element {
+/** The row's avatar: the author (or Discord guest, ROK-2208), or — on an event thread — a calendar mark (ROK-2229). */
+function RowAvatar({ thread, byline }: { thread: HubForumThreadSummary; byline: ForumByline }): JSX.Element {
     if (isEventThread(thread)) {
         return (
             <span data-testid="forum-thread-event-avatar" className="flex h-9 w-9 items-center justify-center rounded-full bg-overlay text-muted">
@@ -37,7 +38,7 @@ function RowAvatar({ thread }: { thread: HubForumThreadSummary }): JSX.Element {
             </span>
         );
     }
-    return <AvatarWithFallback username={forumAuthorName(thread.author)} avatarUrl={thread.author?.avatarUrl ?? null} sizeClassName="h-9 w-9" alt="" />;
+    return <AvatarWithFallback username={byline.name} avatarUrl={byline.avatarUrl} sizeClassName="h-9 w-9" alt="" />;
 }
 
 /** A Forum list row (see file docstring). */
@@ -46,17 +47,19 @@ export function ForumThreadRow({ guildId, thread, viewer }: ForumThreadRowProps)
     const open = (): void => { void navigate(forumThreadHref(thread.id)); };
     if (thread.deleted !== null) return <RemovedRow thread={thread} open={open} />;
     const pinned = thread.pinnedAt !== null;
+    const byline = forumByline(thread);
     const frame = pinned ? 'border-success/40' : 'border-edge hover:border-edge-strong';
     const title = forumThreadTitle(thread);
     return (
         <li data-testid="forum-thread-row"
             className={`relative grid cursor-pointer grid-cols-[2.25rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border bg-surface px-4 py-3 transition-colors ${frame}`}>
             <StretchedAction label={`Open thread: ${title}`} onClick={open} />
-            <RowAvatar thread={thread} />
+            <RowAvatar thread={thread} byline={byline} />
             <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                     <span data-testid="forum-thread-title" className="max-w-full truncate font-semibold text-foreground">{title}</span>
                     {pinned && <Pill tone="success">Pinned</Pill>}
+                    {byline.viaDiscord && <Pill title="Posted from Discord">via Discord</Pill>}
                     <ForumEventPills event={thread.event} lock={thread.lock} />
                 </div>
                 <p className="mt-0.5 truncate text-sm text-secondary">{forumRowPreview(thread)}</p>

@@ -31,6 +31,7 @@ import { HubPostsController } from './posts/hub-posts.controller';
 import { HubPostsService } from './posts/hub-posts.service';
 import { HubForumController } from './forum/hub-forum.controller';
 import { HubForumService } from './forum/hub-forum.service';
+import { HubForumGuestClaimListener } from './forum/hub-forum-guest-claim.listener';
 import { EventDiscussionListener } from './forum/event-discussion/event-discussion.listener';
 import { EventDiscussionController } from './forum/event-discussion/event-discussion.controller';
 import { EventDiscussionService } from './forum/event-discussion/event-discussion.service';
@@ -95,6 +96,7 @@ import {
     HubPostRelayService,
     HubPostsService,
     HubForumService,
+    HubForumGuestClaimListener,
     EventDiscussionListener,
     EventDiscussionService,
     HubSessionNoteService,

@@ -33,6 +33,14 @@ export const CORE_SETUP = {
         "Each player links Steam on their Raid Ledger profile and sets Game Details to Public in Steam's privacy settings. Unlinked players are left off the Achievement race and Playtime cards.",
       required: false,
     },
+    {
+      id: 'discord-forum-sync',
+      kind: 'discord_channel',
+      title: 'Discord forum for the hub Forum',
+      instructions:
+        "1. In Discord, give the Raid Ledger bot Manage Channels, Manage Webhooks, Manage Threads, Manage Messages, Create Public Threads, Send Messages in Threads, Send Messages, View Channels and Read Message History in the forum (or server-wide so it can create one).\n2. In the hub's Settings → Discord forum, create the shared #hub-forums forum or pick an existing forum, and confirm that everyone who can see that channel can read and post in the hub forum.",
+      required: false,
+    },
   ],
 } satisfies PluginSetup;
 

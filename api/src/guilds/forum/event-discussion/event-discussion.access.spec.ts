@@ -124,7 +124,12 @@ describe('eventThreadLock (§5.4)', () => {
 
 describe('event thread refusals (§12)', () => {
   const lock = { at: NOW.toISOString(), reason: 'event-ended' as const };
-  const own = { authorId: 9, createdAt: BEFORE, deletedAt: null };
+  const own = {
+    authorId: 9,
+    authorDiscordId: null,
+    createdAt: BEFORE,
+    deletedAt: null,
+  };
 
   it('PATCH/DELETE of an event thread is 403 managed; a normal thread passes', () => {
     expect(() => assertNotEventThread({ eventId: 4 })).toThrow(
@@ -171,7 +176,12 @@ describe('event thread refusals (§12)', () => {
 
 describe('canFor readOnly', () => {
   const who = { userId: 9, canWrite: true, canModerate: false };
-  const row = { authorId: 9, createdAt: BEFORE, deletedAt: null };
+  const row = {
+    authorId: 9,
+    authorDiscordId: null,
+    createdAt: BEFORE,
+    deletedAt: null,
+  };
 
   it('blocks edit but never delete-own', () => {
     expect(

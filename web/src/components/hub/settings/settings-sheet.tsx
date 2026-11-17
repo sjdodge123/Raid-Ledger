@@ -25,6 +25,8 @@ import { SettingsSection } from './settings-rows';
 import { HideHubRow } from './hide-hub-row';
 import { HubWelcomeRepost } from './hub-welcome-repost';
 import { HubMediaChannelSection } from './hub-media-channel-row';
+import { HubForumDiscordSection } from './hub-forum-discord-section';
+import { canBindForumDiscord } from './hub-forum-discord.helpers';
 import { isWelcomeHub } from './hub-welcome.helpers';
 import { hubCopy } from '../hub-copy';
 import { useSettingsSectionFocus } from './use-settings-section-focus';
@@ -93,6 +95,7 @@ function LeaderSections({ ctx, module: mod, onChangeChannel }: BodyProps): JSX.E
             <HubNameSection ctx={ctx} />
             <DiscordSection guildId={ctx.page.guild.id} welcomeHub={isWelcomeHub(ctx.page.guild)} onChangeChannel={onChangeChannel} />
             {ctx.page.guild.kind === 'game_server' && <HubMediaChannelSection guildId={ctx.page.guild.id} />}
+            <HubForumDiscordSection guildId={ctx.page.guild.id} canManage={canBindForumDiscord(ctx.page)} viewerIsLeader />
             {!isCommunity && <>
             <SettingsSection title="Page editors" blurb={`Who can edit this ${hubCopy(ctx.page.guild.kind).noun}’s page.`} testId="guild-settings-editors">
                 <HubEditorsSection ctx={ctx} module={mod} />
@@ -110,6 +113,7 @@ function SheetBody({ ctx, module: mod, onChangeChannel, bodyRef }: BodyProps & {
     return (
         <div ref={bodyRef} className="flex flex-col gap-5" data-testid="guild-settings-sheet">
             {ctx.page.viewer.canManageEditors && <LeaderSections ctx={ctx} module={mod} onChangeChannel={onChangeChannel} />}
+            {!ctx.page.viewer.canManageEditors && ctx.page.viewer.canEdit && <HubForumDiscordSection guildId={ctx.page.guild.id} canManage={false} />}
             {Extra && <Extra {...ctx} />}
         </div>
     );

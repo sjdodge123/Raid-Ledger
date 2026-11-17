@@ -87,6 +87,7 @@ describe('Core setup (§3.2, D7)', () => {
     expect(CORE_SETUP.requirements.map((r) => [r.id, r.kind, r.required])).toEqual([
       ['steam-api-key', 'admin_setting', false],
       ['player-steam-link', 'steam_link', false],
+      ['discord-forum-sync', 'discord_channel', false],
     ]);
     expect(hubManifestProblems(HUB_PLUGIN_MANIFESTS)).toEqual([]);
   });

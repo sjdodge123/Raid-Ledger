@@ -2136,6 +2136,13 @@
       "when": 1794893900126,
       "tag": "0305_ad_hoc_participants_player_id",
       "breakpoints": true
+    },
+    {
+      "idx": 306,
+      "version": "7",
+      "when": 1794918012006,
+      "tag": "0306_hub_forum_discord_sync",
+      "breakpoints": true
     }
   ]
 }

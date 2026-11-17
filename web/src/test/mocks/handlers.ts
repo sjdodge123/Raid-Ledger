@@ -22,8 +22,7 @@ import { guildProgressionHandlers } from './guild-progression-handlers';
 import { guildContributionsHandlers } from './guild-contributions-handlers';
 import { bg3Handlers } from './bg3-handlers';
 import { guildDiscordHandlers } from './guild-discord-handlers';
-import { hubMediaChannelHandlers } from './hub-media-channel-handlers';
-import { channelLifecycleHandlers } from './channel-lifecycle-handlers';
+import { hubDiscordHandlers } from './hub-discord-handlers';
 import { hubNotificationMuteHandlers } from './hub-notification-mute-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 import { eventDiscussionHandlers } from './event-discussion-handlers';
@@ -45,9 +44,8 @@ export const handlers = [
     ...hubPostsHandlers, ...hubSessionNoteHandlers,
     // Guild message (ROK-2136) + Recruitment (ROK-1789) — nothing set, cards hidden; Progression (Part B) — empty.
     ...guildIngameTextHandlers, ...guildRecruitmentHandlers, ...guildProgressionHandlers,
-    ...guildContributionsHandlers,
-    ...bg3Handlers, ...guildDiscordHandlers,
-    ...hubMediaChannelHandlers, ...channelLifecycleHandlers, ...eventDiscussionHandlers,
+    ...guildContributionsHandlers, ...bg3Handlers, ...guildDiscordHandlers,
+    ...hubDiscordHandlers, ...eventDiscussionHandlers,
     // Per-group notification mute (ROK-1832) — echo writes, no muted groups.
     ...hubNotificationMuteHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes

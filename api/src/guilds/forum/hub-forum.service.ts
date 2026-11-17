@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   CreateHubForumReplySchema,
   CreateHubForumThreadSchema,
@@ -58,6 +59,7 @@ import {
   type Db,
 } from './hub-forum.queries';
 import * as writes from './hub-forum.writes';
+import { emitForumChange, type ForumOp, type ForumRef } from './hub-forum.emit';
 
 /** Q8: replying to a removed (or vanished) thread. */
 export const FORUM_THREAD_CLOSED = 'This thread was removed';
@@ -76,7 +78,8 @@ function encoded(next: HubForumCursor | null): string | null {
  * ROK-1175 — the hub forum at `guilds/:id/forum`, every hub kind (Core).
  * Reads and writes need `canView` (403 before 404); edits and deletes run
  * `canFor` here because the L2 writes check neither the window nor the
- * author. No notification, no Discord relay, no hub activity (Q7, Q9).
+ * author. No notification, no hub activity (Q7, Q9). Every write emits
+ * `hub-forum.changed` (ROK-2208 D2) for the Discord forum sync.
  */
 @Injectable()
 export class HubForumService {
@@ -89,6 +92,7 @@ export class HubForumService {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly access: GuildAccessService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /** Pinned (page 1 only) + one page of the activity feed. */
@@ -149,6 +153,7 @@ export class HubForumService {
       body: clean,
       now: this.now(),
     });
+    this.emit('thread.created', actor, { guildId, threadId: row.id });
     return this.view(await this.thread(actor, guildId, row.id), null);
   }
 
@@ -172,6 +177,7 @@ export class HubForumService {
     };
     const row = await writes.updateThread(this.db, { guildId, threadId }, edit);
     if (!row) throw new NotFoundException('Thread not found');
+    this.emit('thread.updated', actor, { guildId, threadId });
     return this.view(await this.thread(actor, guildId, threadId), null);
   }
 
@@ -187,6 +193,7 @@ export class HubForumService {
     const target = { guildId, threadId };
     const row = await writes.softDeleteThread(this.db, target, removal);
     if (!row) throw new NotFoundException('Thread not found');
+    this.emit('thread.deleted', actor, { guildId, threadId });
   }
 
   /**
@@ -201,16 +208,13 @@ export class HubForumService {
   ): Promise<void> {
     await assertForumMember(this.access, actor, guildId);
     const target = { guildId, threadId };
+    const pin = { by: actor.id, now: this.now() };
     const row = pinned
-      ? await writes.pinThread(
-          this.db,
-          target,
-          { by: actor.id, now: this.now() },
-          HUB_FORUM_PAGE_MAX,
-        )
+      ? await writes.pinThread(this.db, target, pin, HUB_FORUM_PAGE_MAX)
       : await writes.setThreadPin(this.db, target, null);
     if (row === 'full') throw new ConflictException(FORUM_PIN_LIMIT);
     if (!row) throw new NotFoundException('Thread not found');
+    this.emit(pinned ? 'thread.pinned' : 'thread.unpinned', actor, target);
   }
 
   /** New reply; 409 when removed (Q8) or read-only, 403 when not signed up. */
@@ -231,6 +235,7 @@ export class HubForumService {
     );
     if (!row) throw new ConflictException(FORUM_THREAD_CLOSED);
     const target = { guildId, threadId, replyId: row.id };
+    this.emit('reply.created', actor, target);
     return this.replyView(ctx, await this.requireReply(target));
   }
 
@@ -247,14 +252,12 @@ export class HubForumService {
     const target = { guildId, threadId, replyId };
     const { reply } = await this.requireReply(target);
     const now = this.now();
-    assertEventEditable(
-      { ...ctx.who, canReply: ctx.canReply },
-      reply,
-      ctx.lock,
-    );
+    const replier = { ...ctx.who, canReply: ctx.canReply };
+    assertEventEditable(replier, reply, ctx.lock);
     assertCanEdit(ctx.who, reply, now);
     const row = await writes.updateReply(this.db, target, { body, now });
     if (!row) throw new NotFoundException('Reply not found');
+    this.emit('reply.updated', actor, target);
     return this.replyView(ctx, await this.requireReply(target));
   }
 
@@ -271,6 +274,12 @@ export class HubForumService {
     const removal = removalFor(who, reply, this.now());
     const row = await writes.softDeleteReply(this.db, target, removal);
     if (!row) throw new NotFoundException('Reply not found');
+    this.emit('reply.deleted', actor, { guildId, threadId, replyId });
+  }
+
+  /** ROK-2208 D2: after the write landed; listeners never throw back here. */
+  private emit(op: ForumOp, actor: GuildActor, at: ForumRef): void {
+    emitForumChange(this.events, op, actor.id, at);
   }
 
   /** Thread + viewer rights (§6 for event threads; `deleteReplyId` = delete own). */
@@ -332,11 +341,9 @@ export class HubForumService {
     return toForumReply(record, canFor(ctx.who, record.reply, opts));
   }
 
-  private async requireReply(target: {
-    guildId: number;
-    threadId: number;
-    replyId: number;
-  }): Promise<HubForumReplyRecord> {
+  private async requireReply(
+    target: Required<ForumRef>,
+  ): Promise<HubForumReplyRecord> {
     const record = await findReply(this.db, target);
     if (!record) throw new NotFoundException('Reply not found');
     return record;

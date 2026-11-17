@@ -408,3 +408,50 @@ describe('ROK-2187 — GG card registrations are scanned (each must go red)', ()
     ]);
   });
 });
+
+describe('ROK-2208 — listener behaviours of other kinds are scanned (each must go red)', () => {
+  const MODULE = 'guilds/forum/discord/hub-forum-discord.module.ts';
+
+  it('recognises the forum-sync listeners as core/ingest-source/hub-forum.discord-sync', () => {
+    const listenersOnly = SOURCES.filter((s) => s.file !== MODULE);
+    const scan = scanHubRegistrations(listenersOnly, CTX);
+    expect(scan.problems).toEqual([]);
+    expect(ownershipDrift(scan.keys, HUB_PLUGIN_MANIFESTS)).toEqual([]);
+  });
+
+  it('fails on a listener behaviour of a declared kind nobody declared', () => {
+    const extra: ScanSource = {
+      file: 'plugins/valheim/x.listener.ts',
+      text: "class X { readonly hubBehaviour = 'valheim.stray'; readonly hubBehaviourKind = 'ingest-source'; readonly ownerPluginId = VALHEIM_PLUGIN_ID; @OnEvent(SOME_EVENT) on() {} }",
+    };
+    const live = scanHubRegistrations([...SOURCES, extra], CTX);
+    expect(live.problems).toEqual([]);
+    expect(ownershipDrift(live.keys, HUB_PLUGIN_MANIFESTS)).toEqual([
+      'valheim/ingest-source/valheim.stray is registered but not declared in HUB_PLUGIN_MANIFESTS',
+    ]);
+  });
+
+  it('reports a kind-less non-lifecycle listener, an unscanned kind, and a kind with no @OnEvent', () => {
+    const owner = 'readonly ownerPluginId = VALHEIM_PLUGIN_ID;';
+    const extra: ScanSource[] = [
+      {
+        file: 'plugins/valheim/a.ts',
+        text: `class A { readonly hubBehaviour = 'a'; ${owner} @OnEvent(SOME_EVENT) on() {} }`,
+      },
+      {
+        file: 'plugins/valheim/b.ts',
+        text: `class B { readonly hubBehaviour = 'b'; readonly hubBehaviourKind = 'bogus'; ${owner} @OnEvent(SOME_EVENT) on() {} }`,
+      },
+      {
+        file: 'plugins/valheim/c.ts',
+        text: `class C { readonly hubBehaviour = 'c'; readonly hubBehaviourKind = 'ingest-source'; ${owner} }`,
+      },
+    ];
+    const live = scanHubRegistrations([...SOURCES, ...extra], CTX);
+    expect(live.problems).toEqual([
+      `plugins/valheim/a.ts: event listener behaviour "'a'" — needs a resolvable ownerPluginId and an @OnEvent(APP_EVENT_EVENTS.*) handler`,
+      `plugins/valheim/b.ts: listener behaviour "'b'" of kind "'bogus'" — needs a resolvable ownerPluginId, a scanned hubBehaviourKind and an @OnEvent handler`,
+      `plugins/valheim/c.ts: listener behaviour "'c'" of kind "'ingest-source'" — needs a resolvable ownerPluginId, a scanned hubBehaviourKind and an @OnEvent handler`,
+    ]);
+  });
+});

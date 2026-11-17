@@ -4,6 +4,7 @@ import {
     type HubForumCan, type HubForumDeleted, type HubForumThreadSummary, type HubPostPerson,
 } from '@raid-ledger/contract';
 import { syncedAgo } from '../../../lib/synced-ago';
+import { forumByline } from './forum-byline';
 
 /** A deleted user's threads keep a null author (AC12). */
 export function forumAuthorName(author: HubPostPerson | null): string {
@@ -22,7 +23,7 @@ export function replyCountLabel(count: number): string {
 
 /** "Grimtusk · 2 h ago" — author and time since the thread's last activity; an event thread reads "Event thread · …" (ROK-2229). */
 export function forumRowMeta(thread: HubForumThreadSummary, now: number = Date.now()): string {
-    const who = isEventThread(thread) ? 'Event thread' : forumAuthorName(thread.author);
+    const who = isEventThread(thread) ? 'Event thread' : forumByline(thread).name;
     return `${who} · ${syncedAgo(thread.lastActivityAt, now)}`;
 }
 
