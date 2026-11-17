@@ -69,6 +69,8 @@ interface Harness {
     [CreateNotificationInput[]]
   >;
   releaseKeys: jest.Mock;
+  /** ROK-2252: event notices claim every key in one call. */
+  claimMany: jest.Mock<Promise<Set<string>>, [readonly string[]]>;
   claimed: Set<string>;
   deps: EventNoticeDeps;
 }
@@ -85,18 +87,18 @@ function build(
     keys.forEach((k) => claimed.delete(k));
     return Promise.resolve();
   });
+  const claimMany = jest.fn((keys: readonly string[]) => {
+    const won = new Set(keys.filter((k) => !claimed.has(k)));
+    won.forEach((k) => claimed.add(k));
+    return Promise.resolve(won);
+  });
   const dedup = {
     checkAndMarkSent: jest.fn((k: string) => {
       const had = claimed.has(k);
       claimed.add(k);
       return Promise.resolve(had);
     }),
-    // ROK-2252: event notices claim every key in one call.
-    checkAndMarkSentMany: jest.fn((keys: readonly string[]) => {
-      const won = new Set(keys.filter((k) => !claimed.has(k)));
-      won.forEach((k) => claimed.add(k));
-      return Promise.resolve(won);
-    }),
+    checkAndMarkSentMany: claimMany,
     releaseKeys,
   } as unknown as NotificationDedupService;
   const notifications = {
@@ -114,7 +116,7 @@ function build(
     hub,
   );
   const deps = { notifications, dedup };
-  return { service, createMany, releaseKeys, claimed, deps };
+  return { service, createMany, releaseKeys, claimMany, claimed, deps };
 }
 
 /** The row `createMany` returns for an input it actually created. */
@@ -470,9 +472,8 @@ describe('sendEventNotices — one batched write (ROK-2252)', () => {
   it('N recipients claim their keys in ONE dedup call, never per key', async () => {
     const h = build([]);
     await sendEventNotices(h.deps, copy, [1, 2, 3], null);
-    const claimMany = jest.mocked(h.deps.dedup.checkAndMarkSentMany);
-    expect(claimMany).toHaveBeenCalledTimes(1);
-    expect(claimMany).toHaveBeenCalledWith(
+    expect(h.claimMany).toHaveBeenCalledTimes(1);
+    expect(h.claimMany).toHaveBeenCalledWith(
       [
         'event-notice:1:user:1',
         'event-notice:1:user:2',
@@ -484,9 +485,7 @@ describe('sendEventNotices — one batched write (ROK-2252)', () => {
 
   it('a failed claim call rejects every notice and writes nothing', async () => {
     const h = build([]);
-    jest
-      .mocked(h.deps.dedup.checkAndMarkSentMany)
-      .mockRejectedValueOnce(new Error('db down'));
+    h.claimMany.mockRejectedValueOnce(new Error('db down'));
     const results = await sendEventNotices(h.deps, copy, [1, 2], null);
     expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
     expect(h.createMany).not.toHaveBeenCalled();
