@@ -116,6 +116,15 @@ describe('HubForumDiscordEventGate.admits', () => {
     await expect(gate.admits({ threadId: 3 }, '222', NOW)).resolves.toBe(false);
   });
 
+  it('review MINOR-2: a Redis outage still refuses, never throws, and sends no DM', async () => {
+    const { gate, sendEmbedDM, redis } = setup(facts());
+    jest
+      .spyOn(redis.client, 'set')
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    await expect(gate.admits({ threadId: 3 }, '222', NOW)).resolves.toBe(false);
+    expect(sendEmbedDM).not.toHaveBeenCalled();
+  });
+
   it('drops a message in a read-only thread without a DM', async () => {
     const { gate, sendEmbedDM } = setup(facts({ writeClosesAt: EARLIER }));
     expect(await gate.admits({ threadId: 3 }, '222', NOW)).toBe(false);

@@ -147,6 +147,49 @@ describe('AC17 — event-thread write gate (R11)', () => {
     expect(dm).not.toHaveBeenCalled();
   });
 
+  it('review MINOR-3: a linked RL member who is not signed up, or declined, is refused + DMed', async () => {
+    const { post } = await linkedScene();
+    const users = schema.users;
+    const plainId = snowflake();
+    const declinedId = snowflake();
+    await ctx.posts.testApp.db
+      .update(users)
+      .set({ discordId: plainId })
+      .where(eq(users.id, ctx.ids.plain));
+    await ctx.posts.testApp.db
+      .update(users)
+      .set({ discordId: declinedId })
+      .where(eq(users.id, ctx.ids.declined));
+    expect(await say(post, plainId)).toEqual({
+      result: 'skipped',
+      reply: null,
+    });
+    expect(await say(post, declinedId)).toEqual({
+      result: 'skipped',
+      reply: null,
+    });
+    expect(dm.mock.calls.map((c) => c[0])).toEqual([plainId, declinedId]);
+  });
+
+  it('review MINOR-3: a read-only (ended) thread drops even a signup, no DM', async () => {
+    const { post, eventId } = await linkedScene();
+    const discordId = snowflake();
+    await ctx.posts.testApp.db
+      .update(schema.users)
+      .set({ discordId })
+      .where(eq(schema.users.id, ctx.ids.signed));
+    await endEvent(ctx, eventId);
+    expect(await say(post, discordId)).toEqual({
+      result: 'skipped',
+      reply: null,
+    });
+    expect(await say(post, snowflake())).toEqual({
+      result: 'skipped',
+      reply: null,
+    });
+    expect(dm).not.toHaveBeenCalled();
+  });
+
   it('an anonymous Discord signup is imported as a guest (OQ-10)', async () => {
     const { post, eventId } = await linkedScene();
     const anon = snowflake();

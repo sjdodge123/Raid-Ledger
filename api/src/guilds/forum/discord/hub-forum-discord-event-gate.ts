@@ -161,9 +161,9 @@ export class HubForumDiscordEventGate {
   ): Promise<void> {
     const key = eventNoticeKey(threadId, discordId);
     const ttl = EVENT_NOTICE_TTL_SECONDS;
-    const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
-    if (claimed !== 'OK') return;
     try {
+      const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
+      if (claimed !== 'OK') return;
       const url = `${await getClientUrl(this.settings)}/events/${facts.eventId}`;
       const embed = new EmbedBuilder()
         .setTitle(facts.eventTitle)
