@@ -210,13 +210,9 @@ export class HubForumService {
   ): Promise<void> {
     await assertForumMember(this.access, actor, guildId);
     const target = { guildId, threadId };
+    const pin = { by: actor.id, now: this.now() };
     const row = pinned
-      ? await writes.pinThread(
-          this.db,
-          target,
-          { by: actor.id, now: this.now() },
-          HUB_FORUM_PAGE_MAX,
-        )
+      ? await writes.pinThread(this.db, target, pin, HUB_FORUM_PAGE_MAX)
       : await writes.setThreadPin(this.db, target, null);
     if (row === 'full') throw new ConflictException(FORUM_PIN_LIMIT);
     if (!row) throw new NotFoundException('Thread not found');
@@ -258,11 +254,8 @@ export class HubForumService {
     const target = { guildId, threadId, replyId };
     const { reply } = await this.requireReply(target);
     const now = this.now();
-    assertEventEditable(
-      { ...ctx.who, canReply: ctx.canReply },
-      reply,
-      ctx.lock,
-    );
+    const replier = { ...ctx.who, canReply: ctx.canReply };
+    assertEventEditable(replier, reply, ctx.lock);
     assertCanEdit(ctx.who, reply, now);
     const row = await writes.updateReply(this.db, target, { body, now });
     if (!row) throw new NotFoundException('Reply not found');
@@ -346,11 +339,9 @@ export class HubForumService {
     return toForumReply(record, canFor(ctx.who, record.reply, opts));
   }
 
-  private async requireReply(target: {
-    guildId: number;
-    threadId: number;
-    replyId: number;
-  }): Promise<HubForumReplyRecord> {
+  private async requireReply(
+    target: Required<ForumRef>,
+  ): Promise<HubForumReplyRecord> {
     const record = await findReply(this.db, target);
     if (!record) throw new NotFoundException('Reply not found');
     return record;
