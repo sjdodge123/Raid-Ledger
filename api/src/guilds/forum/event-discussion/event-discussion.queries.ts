@@ -4,6 +4,7 @@
  */
 import { and, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
+import { INACTIVE_SIGNUP_STATUSES } from '../../../events/signup-status.constants';
 import type { HubForumReplyRecord } from '../hub-forum.mappers';
 import { selectReplies, type Db } from '../hub-forum.queries';
 
@@ -97,13 +98,6 @@ export async function isEventSignup(
     .limit(1);
   return row !== undefined;
 }
-
-/** Signup statuses that no longer hold a place (same set as `event-find.helpers.ts`). */
-const INACTIVE_SIGNUP_STATUSES = [
-  'roached_out',
-  'departed',
-  'declined',
-] as const;
 
 /** ROK-2229: the event's active signups, bench included ("18 / 40 signed up"). */
 export async function countEventSignups(

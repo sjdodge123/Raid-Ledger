@@ -51,6 +51,7 @@ const eventColumns = {
   cancelledAt: events.cancelledAt,
   creatorId: events.creatorId,
   maxAttendees: events.maxAttendees,
+  slotConfig: events.slotConfig,
 };
 
 /** UTC ISO text with microseconds — the exact cursor value. */

@@ -18,6 +18,7 @@ import type {
 import { toPerson, type HubPostPersonRow } from '../posts/hub-posts.helpers';
 import { forumDeleted, forumPreview } from './hub-forum.helpers';
 import { eventThreadLock } from './event-discussion/event-discussion.access';
+import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 
 /** ROK-2226: the `events` columns an event thread is joined to. */
 export interface HubForumEventRow {
@@ -26,8 +27,10 @@ export interface HubForumEventRow {
   duration: [Date, Date];
   cancelledAt: Date | null;
   creatorId: number;
-  /** ROK-2229: the event's capacity (null = uncapped). */
+  /** ROK-2229: the legacy capacity column (null = uncapped). */
   maxAttendees?: number | null;
+  /** ROK-2229: the slot roster; when set it decides capacity. */
+  slotConfig?: unknown;
 }
 
 /**
@@ -67,10 +70,27 @@ function toThreadEvent(row: HubForumEventRow): HubForumThreadEvent {
     startTime: row.duration[0].toISOString(),
     endTime: row.duration[1].toISOString(),
     cancelled: row.cancelledAt !== null,
-    ...(row.maxAttendees === undefined
-      ? {}
-      : { maxAttendees: row.maxAttendees }),
+    ...threadEventCapacity(row),
   };
+}
+
+/**
+ * ROK-2229: the header's "/ M" is the capacity signups are allocated against
+ * (`resolveEventCapacity`: slot roster first, then maxAttendees), so it
+ * matches the event page. Omitted when the row carries neither column; a
+ * non-positive capacity reads as uncapped.
+ */
+function threadEventCapacity(
+  row: HubForumEventRow,
+): Pick<HubForumThreadEvent, 'maxAttendees'> {
+  if (row.maxAttendees === undefined && row.slotConfig === undefined) {
+    return {};
+  }
+  const capacity = resolveEventCapacity({
+    slotConfig: row.slotConfig ?? null,
+    maxAttendees: row.maxAttendees ?? null,
+  });
+  return { maxAttendees: capacity !== null && capacity > 0 ? capacity : null };
 }
 
 /** ROK-2226: `event` + `lock`, present on event threads only. */
