@@ -4412,3 +4412,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-17 — feat/rok-2234-minecraft-plugin-skeleton (surfaced during overnight S1 impl)
 
 - **[nit]** `web/src/App.tsx:3-5,22` — a raw `npx prettier --check src/App.tsx` run from `web/` fails on `origin/main` 2a5b05d97 (it wants 4-space continuation indents and a wrapped `magic-link-redeem` import), while `npm run lint -w web` (eslint `prettier/prettier`) passes the same file. Pre-existing: reproduced on main's blob with no branch change; the lane only added one import line. The two disagree because the bare CLI resolves a different prettier config than the eslint plugin, so agents running prettier by hand get a false red. Suggested: point the web eslint prettier rule and the CLI at one config (or add a `web/.prettierrc` matching eslint's options) and document "lint, don't run bare prettier" in TESTING.md.
+
+### 2026-11-17 — feat/rok-2212-suggested-groups (surfaced during ROK-2212 review)
+
+- **low** `api/src/plugins/wow-common/wow-common.module.ts` — sits at exactly 300 counted lines (the `max-lines` error line) after ROK-2212 added the suggested-groups providers; the next provider added there fails lint. Not pre-existing breakage, a cap warning. Suggested: split the guild sub-feature providers (roster insights, suggested groups, roster claim) into a `WowGuildsModule` imported by `WowCommonModule`.
