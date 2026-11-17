@@ -11,6 +11,7 @@ import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.dis
 import { HubForumDiscordOutboundListener } from './hub-forum-discord-outbound.listener';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
+import { HubForumDiscordEventGate } from './hub-forum-discord-event-gate';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
 import { HubForumDiscordInboundListener } from './hub-forum-discord-inbound.listener';
 import { HubForumDiscordNotices } from './hub-forum-discord-notice';
@@ -40,6 +41,7 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordPinGateway,
     HubForumDiscordPinSync,
     HubForumDiscordNotices,
+    HubForumDiscordEventGate,
     HubForumDiscordInboundIngest,
     HubForumDiscordInboundListener,
     HubForumDiscordReconcileGateway,

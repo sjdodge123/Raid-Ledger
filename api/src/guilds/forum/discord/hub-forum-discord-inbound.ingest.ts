@@ -8,6 +8,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { HUB_FORUM_TITLE_MAX } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import { HubForumDiscordEventGate } from './hub-forum-discord-event-gate';
 import type { ForumLink } from './hub-forum-discord-links.queries';
 import * as inbound from './hub-forum-discord-inbound.writes';
 import {
@@ -71,6 +72,7 @@ export class HubForumDiscordInboundIngest {
     private readonly routes: HubForumDiscordRouteResolver,
     private readonly pins: HubForumDiscordPinSync,
     private readonly notices: HubForumDiscordNotices,
+    private readonly eventGate: HubForumDiscordEventGate,
   ) {}
 
   /** A new message in a forum post (starter or reply). */
@@ -223,6 +225,8 @@ export class HubForumDiscordInboundIngest {
     m: InboundMessage,
     now: Date,
   ): Promise<InboundResult> {
+    // §5.7 R11: an event thread takes signed-up authors only.
+    if (!(await this.eventGate.admits(post, m.authorId, now))) return 'skipped';
     const row = {
       guildId: post.guildId,
       threadId: post.threadId,
