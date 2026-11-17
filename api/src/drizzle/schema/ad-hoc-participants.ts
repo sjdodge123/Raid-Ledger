@@ -103,6 +103,11 @@ export const adHocParticipants = pgTable(
       'ad_hoc_participants_identity_check',
       sql`${table.discordUserId} IS NOT NULL OR ${table.steamId} IS NOT NULL OR ${table.playerId} IS NOT NULL`,
     ),
+    /** ROK-2232: a platform id always carries its kind, and vice versa. */
+    playerKindCheck: check(
+      'ad_hoc_participants_player_kind_check',
+      sql`(${table.playerId} IS NULL) = (${table.idKind} IS NULL)`,
+    ),
     eventIdx: index('idx_ad_hoc_participants_event').on(table.eventId),
     userIdx: index('idx_ad_hoc_participants_user').on(table.userId),
   }),

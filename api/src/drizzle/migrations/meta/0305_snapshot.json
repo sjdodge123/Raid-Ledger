@@ -1,5 +1,5 @@
 {
-  "id": "9b0e3b21-ad2c-4e96-9750-8f61a194c3c9",
+  "id": "96e936fb-245a-459a-86fe-7911271452d6",
   "prevId": "bf5c531d-13e8-493b-9700-bb601bf9f1b3",
   "version": "7",
   "dialect": "postgresql",
@@ -6206,6 +6206,10 @@
         "ad_hoc_participants_identity_check": {
           "name": "ad_hoc_participants_identity_check",
           "value": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL OR \"ad_hoc_participants\".\"steam_id\" IS NOT NULL OR \"ad_hoc_participants\".\"player_id\" IS NOT NULL"
+        },
+        "ad_hoc_participants_player_kind_check": {
+          "name": "ad_hoc_participants_player_kind_check",
+          "value": "(\"ad_hoc_participants\".\"player_id\" IS NULL) = (\"ad_hoc_participants\".\"id_kind\" IS NULL)"
         }
       },
       "isRLSEnabled": false
