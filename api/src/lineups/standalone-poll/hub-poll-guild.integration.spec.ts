@@ -288,13 +288,32 @@ describe('hub polls — wow_guild hub membership on lock-in + poll page (ROK-221
       .set('Authorization', `Bearer ${member.token}`);
     expect(page.status).toBe(200);
     const body = page.body as {
-      hub: { id: number; viewerIsMember: boolean } | null;
+      hub: { id: number; viewerIsMember: boolean; kind?: string } | null;
       slots: { votes: PageVoter[] }[];
     };
-    expect(body.hub).toMatchObject({ id: guild.id, viewerIsMember: true });
+    expect(body.hub).toMatchObject({
+      id: guild.id,
+      viewerIsMember: true,
+      kind: 'wow_guild',
+    });
     const voters = body.slots.flatMap((s) => s.votes);
     const flag = (id: number) => voters.find((v) => v.userId === id);
     expect(flag(member.id)?.isHubMember).toBe(true);
     expect(flag(outsider.id)?.isHubMember).toBe(false);
+  });
+  it('a member whose roster row is unlinked before lock-in gets an untagged event', async () => {
+    const member = await mkUser();
+    const guild = await mkGuild();
+    await linkMember(guild.id, member);
+    const poll = await createPoll(member.token, guild.id);
+    expect(poll.status).toBe(201);
+    const matchId = matchIdOf(poll.body);
+    expect(await lineupGuildId(matchId)).toBe(guild.id);
+    // The member's character no longer GUID-links to the roster row.
+    await testApp.db
+      .update(schema.characters)
+      .set({ addonGuid: null })
+      .where(eq(schema.characters.userId, member.id));
+    expect(await lockInGuildId(member.token, matchId)).toBeNull();
   });
 });
