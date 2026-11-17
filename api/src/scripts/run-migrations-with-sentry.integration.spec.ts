@@ -24,7 +24,8 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
 
   beforeAll(async () => {
     testApp = await getTestApp();
-    client = postgres(process.env.DATABASE_URL!, { max: 1 });
+    // ROK-2206: the app's own DB (the worker clone in per-worker mode).
+    client = postgres(testApp.connectionString, { max: 1 });
   });
 
   afterAll(async () => {
