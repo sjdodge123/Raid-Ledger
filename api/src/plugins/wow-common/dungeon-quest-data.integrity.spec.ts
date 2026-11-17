@@ -91,17 +91,6 @@ describe('bundled classic dungeon quest data (ROK-2143)', () => {
     expect(dangling).toEqual(named);
   });
 
-  it('every OPTIONAL_BREADCRUMBS id is a bundled row with that name and a next step (ROK-2221)', () => {
-    const byId = new Map(rows.map((r) => [r.questId, r]));
-    const found = [...OPTIONAL_BREADCRUMBS].map(([id]) => {
-      const r = byId.get(id);
-      return [id, r?.name ?? null, r?.nextQuestId != null];
-    });
-    expect(found).toEqual(
-      [...OPTIONAL_BREADCRUMBS].map(([id, name]) => [id, name, true]),
-    );
-  });
-
   it('EXTERNAL_PREREQS holds the 25 reviewed prerequisites (ROK-2221)', () => {
     const prereqs = new Set(
       [...EXTERNAL_PREREQS.values()].map((e) => e.prereqId),
@@ -379,5 +368,18 @@ describe('ROK-2221 bundled gap rows', () => {
   it('the Coldbringer split pair is one quest per side', () => {
     expect(sideOf(must(96773))).toBe('alliance');
     expect(sideOf(must(97196))).toBe('horde');
+  });
+});
+
+describe('optional breadcrumbs (ROK-2221)', () => {
+  it('every OPTIONAL_BREADCRUMBS id is a bundled row with that name and a next step (ROK-2221)', () => {
+    const byId = new Map(rows.map((r) => [r.questId, r]));
+    const found = [...OPTIONAL_BREADCRUMBS].map(([id]) => {
+      const r = byId.get(id);
+      return [id, r?.name ?? null, r?.nextQuestId != null];
+    });
+    expect(found).toEqual(
+      [...OPTIONAL_BREADCRUMBS].map(([id, name]) => [id, name, true]),
+    );
   });
 });
