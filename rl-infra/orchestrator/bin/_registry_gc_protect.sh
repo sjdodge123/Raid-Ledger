@@ -98,7 +98,8 @@ registry_gc::_pin_manifest() {
     out=$(curl -sS --max-time 10 -H "$_REGISTRY_ACCEPT" -w '\n%{http_code}' \
         "$(registry_gc::_api)/manifests/$1" 2>/dev/null) || return 1
     case "${out##*$'\n'}" in
-        200) printf '%s\n' "${out%$'\n'*}" ;;
+        # An empty 200 must not read as the 404 "gone" case (fail closed).
+        200) [[ -n "${out%$'\n'*}" ]] || return 1; printf '%s\n' "${out%$'\n'*}" ;;
         404) echo "registry_gc: pinned ${RL_REGISTRY_REPO}@$1 is not in the registry" >&2 ;;
         *) return 1 ;;
     esac

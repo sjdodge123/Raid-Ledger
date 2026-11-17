@@ -43,7 +43,7 @@
 #   R-ie (ROK-2180) empty Content-Type = index; unknown-age index kept; dry run
 #   R-if (ROK-2180) Docker manifest-list tags behave like OCI indexes
 #   R-ig (ROK-2180 r2) a digest-pinned index no kept tag carries protects its
-#        children (sweep and env-destroy); an unreadable pin fails closed
+#        children (sweep and env-destroy); an unreadable or empty pin fails closed
 #   R-ih (ROK-2180 r2) env-destroy logs a tag it could not confirm deleted
 
 set -uo pipefail
@@ -100,7 +100,8 @@ _stub_manifest_get() {
     esac
 }
 # $GET_FAIL (tags/digests) = manifest GET fails (HTTP 500); $GET_MISSING = it
-# 404s (MANIFEST_UNKNOWN); $DELETE_FAIL (digests) = DELETE fails. A GET with
+# 404s (MANIFEST_UNKNOWN); $GET_EMPTY = a 200 with an empty body;
+# $DELETE_FAIL (digests) = DELETE fails. A GET with
 # `-w %{http_code}` (no -f) gets rc 0 and the status on a last line, as curl does.
 curl() {
     local args="$*" url="${*: -1}"
@@ -124,6 +125,7 @@ curl() {
                     [[ -n "$w" ]] || return 22; printf '{"errors":[{"code":"MANIFEST_UNKNOWN"}]}\n404'; return 0
                 fi
                 if [[ " ${GET_FAIL:-} " == *" $tag "* ]]; then [[ -n "$w" ]] || return 22; printf '{}\n500'; return 0; fi
+                if [[ " ${GET_EMPTY:-} " == *" $tag "* ]]; then [[ -n "$w" ]] || return 22; printf '\n200'; return 0; fi
                 _stub_manifest_get "$tag"; [[ -n "$w" ]] && printf '\n200'
                 return 0
             fi ;;
@@ -646,6 +648,13 @@ test_pinned_index_children_protected() {
     out=$(registry_gc::sweep force 2>/dev/null); rc=$?
     assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "1 protected_digest_unreadable" "an unreadable pinned manifest aborts the sweep"
     assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "and deletes nothing"
+    : > "$CALL_LOG"; GET_FAIL=""; GET_EMPTY="sha256:pidx"
+    out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "1 protected_digest_unreadable" "a 200 with an empty pinned manifest aborts (not read as 404)"
+    assert_eq "$(grep -c -- '-X DELETE' "$CALL_LOG")" "0" "and deletes nothing"
+    GET_EMPTY=""
+    err=$(registry_gc::sweep force 2>&1 >/dev/null)
+    assert_contains "$err" "pinned rl-allinone@sha256:gone is not in the registry" "a 404 pin is logged"
     _setup_gc
     jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
     TAGS="s1"; INDEX_TAGS="pidx"; DIGESTS="s1=img-pidx"; PS_IMAGES="rl-allinone@sha256:pidx"
