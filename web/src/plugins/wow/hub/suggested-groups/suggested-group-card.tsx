@@ -46,10 +46,12 @@ const ROW_CLS: Record<SuggestedGroupLayout, string> = {
 };
 
 /** Name + "Unclaimed": the chip wraps under a long name; the name truncates, never collapses to 0px. */
-function NameCell({ member }: { member: SuggestedGroupMemberDto }): JSX.Element {
+function NameCell({ member, layout }: { member: SuggestedGroupMemberDto; layout: SuggestedGroupLayout }): JSX.Element {
     const dot = classDotClass(member.class);
+    // Only the wide grid cell stops growing at lg; the compact widget row must keep flex-1 so the chip wraps (ROK-2212 verify).
+    const growCls = layout === 'wide' ? ' lg:flex-none' : '';
     return (
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 lg:flex-none" data-testid="suggested-group-member-name-cell">
+        <span className={`flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5${growCls}`} data-testid="suggested-group-member-name-cell">
             <span className="flex min-w-0 max-w-full items-center gap-2">
                 {dot !== null && <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}
                 <span className="min-w-0 truncate text-foreground">{member.name}</span>
@@ -66,7 +68,7 @@ function MemberRow({ member, layout }: { member: SuggestedGroupMemberDto; layout
     return (
         <li className={ROW_CLS[layout]} data-testid="suggested-group-member">
             <RoleLabel role={member.role} layout={layout} />
-            <NameCell member={member} />
+            <NameCell member={member} layout={layout} />
             <span className={`ml-auto shrink-0 text-xs tabular-nums text-secondary ${levelCls}`}>{member.level}</span>
         </li>
     );

@@ -58,6 +58,8 @@ describe('SuggestedGroupCard member names (B)', () => {
         expect(cell, 'name + chip share one name cell').not.toBeNull();
         expect(classesOf(cell ?? name), 'the cell wraps the chip below a long name instead of crushing it')
             .toEqual(expect.arrayContaining(['flex-wrap', 'min-w-0', 'flex-1']));
+        expect(classesOf(cell ?? name), 'compact: the cell keeps flex-1 at lg or the chip and level overflow a 2-up widget card')
+            .not.toContain('lg:flex-none');
         expect(within(row ?? card).getByText('Unclaimed').closest('[data-testid="suggested-group-member-name-cell"]')).toBe(cell);
         expect(classesOf(within(row ?? card).getByText('21'))).toContain('shrink-0');
     });
