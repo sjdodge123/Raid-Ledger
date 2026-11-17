@@ -196,7 +196,8 @@ describe('buildQuestReadiness prereqsMet without a chain position (ROK-1911)', (
   afterEach(() => jest.restoreAllMocks());
 
   it('is null (unknown), not true, when the quest is missing from its own chain', () => {
-    jest.spyOn(chainHelpers, 'walkChainInMemory').mockReturnValue([]);
+    // ROK-2221: readiness walks via walkChainWithExternalRoot.
+    jest.spyOn(chainHelpers, 'walkChainWithExternalRoot').mockReturnValue([]);
     const body = buildQuestReadiness({
       quests: SET,
       signups: [signup(1, C1)],

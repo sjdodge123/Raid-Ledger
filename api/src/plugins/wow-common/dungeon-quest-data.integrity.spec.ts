@@ -3,13 +3,14 @@
  * R7: no synthetic XP/money pattern remains (the old generator wrote
  * 45 at lvl 1 / 10×lvl+45 to lvl 28 / 15×lvl XP, and 25/50/100×lvl copper
  * tiered at lvl 20/40). Every `prevQuestId` resolves to a bundled row or is a
- * known gap — the list must shrink, never grow.
+ * reviewed outside prerequisite in `EXTERNAL_PREREQS` (ROK-2221).
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { instanceName } from './instance-catalogue/instance-catalogue';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 import { ESCORT_QUESTS, ESCORT_QUEST_IDS } from './data/dungeon-quest-escorts';
+import { EXTERNAL_PREREQS } from './data/dungeon-quest-external-prereqs';
 
 interface Row {
   questId: number;
@@ -34,18 +35,6 @@ const rows = readRows('dungeon-quest-data.json');
 
 const synthXp = (l: number) => (l === 1 ? 45 : l <= 28 ? 10 * l + 45 : 15 * l);
 const synthGold = (l: number) => (l <= 20 ? 25 : l <= 40 ? 50 : 100) * l;
-
-/** Quests whose prerequisite is not in the bundled data (ROK-2143 audit). */
-const KNOWN_PREREQ_GAPS: readonly number[] = [
-  5728, 214, 1491, 1653, 166, 914, 1275, 378, 391, 721, 1951, 1956, 1139, 2936,
-  2991, 3527, 1445, 1475, 3446, 4143, 8232, 8236, 8253, 8257, 8413, 8418, 8422,
-  8425, 9053, 3528, 4148, 4241, 4024, 4063, 4788, 4341, 5127, 5463, 5466, 5522,
-  5526, 5848, 6163, 7642, 7647, 7737, 8258, 8926, 8927, 8931, 8932, 8933, 8934,
-  8935, 8936, 8937, 8938, 8939, 8940, 8941, 8942, 8943, 8944, 8948, 8966, 8967,
-  8968, 8969, 8989, 8990, 8991, 8992, 8999, 9000, 9001, 9002, 9003, 9004, 9005,
-  9006, 9007, 9008, 9009, 9010, 9011, 9012, 9013, 9014, 9257, 9269, 9270, 9271,
-  1160, 1053,
-];
 
 describe('bundled classic dungeon quest data (ROK-2143)', () => {
   it('carries no synthetic XP value (R7)', () => {
@@ -86,13 +75,27 @@ describe('bundled classic dungeon quest data (ROK-2143)', () => {
     expect(own).toEqual([]);
   });
 
-  it('every prevQuestId resolves to a bundled row or is a listed known gap', () => {
+  // ROK-2221: the old KNOWN_PREREQ_GAPS id list became a reviewed,
+  // categorised map. A dangling prevQuestId must be named there (same
+  // prerequisite id), and every entry must still be a real gap.
+  it('every prevQuestId resolves to a bundled row or an EXTERNAL_PREREQS entry', () => {
     const ids = new Set(rows.map((r) => r.questId));
     const dangling = rows
       .filter((r) => r.prevQuestId !== null && !ids.has(Number(r.prevQuestId)))
-      .map((r) => r.questId)
-      .sort((a, b) => a - b);
-    expect(dangling).toEqual([...KNOWN_PREREQ_GAPS].sort((a, b) => a - b));
+      .map((r) => `${r.questId} -> ${Number(r.prevQuestId)}`)
+      .sort();
+    const named = [...EXTERNAL_PREREQS]
+      .map(([dependent, ext]) => `${dependent} -> ${ext.prereqId}`)
+      .sort();
+    expect(dangling).toEqual(named);
+  });
+
+  it('EXTERNAL_PREREQS holds the 25 reviewed prerequisites (ROK-2221)', () => {
+    const prereqs = new Set(
+      [...EXTERNAL_PREREQS.values()].map((e) => e.prereqId),
+    );
+    expect(prereqs.size).toBe(25);
+    expect(EXTERNAL_PREREQS.size).toBe(56);
   });
 
   it('no quest is its own prerequisite', () => {
@@ -337,5 +340,32 @@ describe('faction-split quest pairs (ROK-2223)', () => {
       .filter((r) => !SHARED_NEUTRAL_CHAIN_STARTS.includes(r.questId))
       .map((r) => `${r.questId} ${r.name}`);
     expect(doubled).toEqual([]);
+  });
+});
+
+describe('ROK-2221 bundled gap rows', () => {
+  it('1490 Nara Wildmane bridges 1489 to 914 in Wailing Caverns', () => {
+    expect(must(914).prevQuestId).toBe('1490');
+    expect(must(1490)).toMatchObject({
+      dungeonInstanceId: 240,
+      prevQuestId: '1489',
+      questGiverZone: 'Thunder Bluff',
+    });
+    expect(sideOf(must(1490))).toBe('horde');
+  });
+
+  it('155 The Defias Brotherhood is an outside step and an escort', () => {
+    expect(must(155)).toMatchObject({
+      dungeonInstanceId: null,
+      sharable: false,
+    });
+    expect(ESCORT_QUEST_IDS.has(155)).toBe(true);
+    expect(must(214).prevQuestId).toBe('155');
+    expect(must(166).prevQuestId).toBe('155');
+  });
+
+  it('the Coldbringer split pair is one quest per side', () => {
+    expect(sideOf(must(96773))).toBe('alliance');
+    expect(sideOf(must(97196))).toBe('horde');
   });
 });
