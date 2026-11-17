@@ -252,6 +252,22 @@ describe('signedUpLabel', () => {
             '3 signed up',
         );
     });
+
+    it('uses the slot roster capacity, matching the hub thread header (ROK-2229)', () => {
+        expect(
+            signedUpLabel({
+                signupCount: 3,
+                maxAttendees: 40,
+                slotConfig: { type: 'generic', player: 5 },
+            }),
+        ).toBe('3 / 5 signed up');
+    });
+
+    it('shows a zero capacity as full, not uncapped (ROK-2229)', () => {
+        expect(signedUpLabel({ signupCount: 2, maxAttendees: 0 })).toBe(
+            '2 / 0 signed up',
+        );
+    });
 });
 
 describe('EventDiscussionSection', () => {
