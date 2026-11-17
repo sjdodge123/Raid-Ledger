@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
+import { claimDedupKeys } from './notification-dedup-batch.helpers';
 
 /**
  * Database-backed notification dedup guard (ROK-978).
@@ -51,6 +52,26 @@ export class NotificationDedupService {
 
     // Not sent yet — attempt atomic insert
     return this.attemptInsert(dedupKey, ttlSeconds);
+  }
+
+  /**
+   * ROK-2252: `checkAndMarkSent` for a batch, in a fixed number of queries
+   * whatever the key count (one MGET, one SELECT, one expired-row DELETE, one
+   * INSERT). Duplicate keys are claimed once; an empty list costs nothing.
+   *
+   * @param dedupKeys - The keys to claim.
+   * @param ttlSeconds - TTL in seconds, or null for permanent dedup.
+   * @returns The keys THIS call newly claimed (caller should send these).
+   */
+  async checkAndMarkSentMany(
+    dedupKeys: readonly string[],
+    ttlSeconds: number | null,
+  ): Promise<Set<string>> {
+    return claimDedupKeys(
+      { db: this.db, redis: this.redis, logger: this.logger },
+      dedupKeys,
+      ttlSeconds,
+    );
   }
 
   /**
