@@ -24,6 +24,17 @@ describe('REQUIRED_PERMISSIONS (ROK-313 AC13)', () => {
     ).toBe(true);
   });
 
+  // ROK-2254: hub forum sync needs both; a fresh install must not need a
+  // manual grant before a hub can bind a Discord forum.
+  it('includes Manage Messages and Manage Webhooks for hub forum sync', () => {
+    const flags = REQUIRED_PERMISSIONS.map((p) => p.flag);
+    expect(flags).toContain(PermissionsBitField.Flags.ManageMessages);
+    expect(flags).toContain(PermissionsBitField.Flags.ManageWebhooks);
+    const bits = botInvitePermissionsBits();
+    expect(bits & PermissionsBitField.Flags.ManageMessages).not.toBe(0n);
+    expect(bits & PermissionsBitField.Flags.ManageWebhooks).not.toBe(0n);
+  });
+
   it('includes the Kick Members permission', () => {
     expect(
       REQUIRED_PERMISSIONS.some(
@@ -64,14 +75,14 @@ describe('botInvitePermissionsBits (ROK-1471 AC11)', () => {
     expect(permissions).not.toBe(base.toString());
   });
 
-  // T18: today's 18 entries. The near-miss value is the same set MINUS
-  // `Pin Messages` (bit 51) — the 17-permission value shipped before the
-  // ROK-1740 join post needed to pin. Asserting both directions catches a
-  // silently dropped flag as well as a silently added one.
-  it('derives the current 18-permission bitfield', () => {
-    expect(REQUIRED_PERMISSIONS).toHaveLength(18);
-    expect(botInvitePermissionsBits().toString()).toBe('2841474396933139');
-    expect(botInvitePermissionsBits().toString()).not.toBe('589674583247891');
+  // T18: today's 20 entries. The near-miss value is the same set MINUS
+  // `Manage Messages` and `Manage Webhooks` — the 18-permission value shipped
+  // before ROK-2254 added them for hub forum sync. Asserting both directions
+  // catches a silently dropped flag as well as a silently added one.
+  it('derives the current 20-permission bitfield', () => {
+    expect(REQUIRED_PERMISSIONS).toHaveLength(20);
+    expect(botInvitePermissionsBits().toString()).toBe('2841474933812243');
+    expect(botInvitePermissionsBits().toString()).not.toBe('2841474396933139');
   });
 
   it('is the OR of every declared flag, order-independent', () => {
@@ -105,7 +116,7 @@ describe('checkBotPermissions (ROK-1471 AC12)', () => {
   it('reports every required permission, including the thread trio', () => {
     const results = checkBotPermissions(guild);
 
-    expect(results).toHaveLength(18);
+    expect(results).toHaveLength(20);
     const names = results.map((r) => r.name);
     expect(names).toContain('Manage Threads');
     expect(names).toContain('Create Public Threads');
@@ -115,7 +126,7 @@ describe('checkBotPermissions (ROK-1471 AC12)', () => {
 
   it('marks everything ungranted when the bot is not in the guild', () => {
     const results = checkBotPermissions(null);
-    expect(results).toHaveLength(18);
+    expect(results).toHaveLength(20);
     expect(results.every((r) => !r.granted)).toBe(true);
   });
 });

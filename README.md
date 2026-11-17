@@ -112,6 +112,7 @@ The page lists the required permissions for you. A few of them are worth calling
 
 - **Manage Threads**, **Create Public Threads** and **Send Messages in Threads** — the LFG board's posts *are* threads (a Discord forum channel contains one thread per post), so the bot cannot create, update or reply to LFG posts without them.
 - **Manage Channels** — the bot creates the forum channel that hosts the LFG board.
+- **Manage Messages** and **Manage Webhooks** — hub forums that sync with a Discord forum channel post replies through a bot-owned webhook and remove synced messages; without them a hub cannot turn on Discord forum sync.
 - **Pin Messages** — the "Join Raid Ledger" post pins itself. Discord no longer folds pinning into Manage Messages, so an install from before this permission was added needs re-authorising.
 
 Discord grants a bot's permission set at install time. Editing the application in the developer portal does not change an existing guild install; re-authorising with this URL updates the install in place without removing the bot or losing its channel bindings.
