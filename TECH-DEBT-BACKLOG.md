@@ -4401,3 +4401,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-16 — fix/rok-2204-presence-launcher-cmd-retry (surfaced during the PR #2184 discord-smoke failure)
 
 - **med** `tools/test-bot/src/smoke/tests/lfm-playing.test.ts:130-152` — `FAIL LFM embed: a spawned now-group renders PLAYING NOW with a live head-count` (90s poll timeout). `pickIdleGame` checks only `activeCount===0 && !playingNow`, not that the previous group's open `lfg_group_messages` row has closed, so the spawned group paints `▸ PLAYING NOW` onto the earlier `lfm-embed-now` message, which the test snapshotted as preexisting and `isNew()` (`:226-268`) filters out. Pre-existing: identical signature (game 4, eventId 110) on main run 43624801546 (2026-11-14) and main runs 37885672416, 37242164380; PR run 43814054601 shows the spawn worked. RCA: `Raid-Ledger--rok-2204/RCA-2184-discord-smoke.md`. Suggested: `pickIdleGame` skips a game whose group-message row is still open (or `awaitProcessing` before the snapshot).
+
+### 2026-11-17 — fix/batch-2252-2253 (surfaced during ROK-2252 review)
+
+- **low** `api/src/notifications/hub-notification.service.ts:151-163` — `notifyLateTag` still claims a dedup key and creates one notification per hub member (same N+1 shape Sentry flagged for event notices, RAID-LEDGER-ALERTS-45). Pre-existing, outside ROK-2252's event-notice path. Suggested: route it through `checkAndMarkSentMany` + `createMany` like `sendEventNotices` (ROK-2252).

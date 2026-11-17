@@ -26,6 +26,11 @@ import { DiscordNotificationService } from './discord-notification.service';
 import { GameAffinityNotificationService } from './game-affinity-notification.service';
 import { HubNotificationService } from './hub-notification.service';
 import { NotificationService } from './notification.service';
+import { NotificationDedupService } from './notification-dedup.service';
+import {
+  EVENT_NOTICE_TTL_SECONDS,
+  eventNoticeKey,
+} from './event-notice-plan.helpers';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -45,6 +50,9 @@ let seq = 0;
 let leaderSpy: jest.SpiedFunction<HubNotificationService['notifyLeaderPost']>;
 let lateTagSpy: jest.SpiedFunction<HubNotificationService['notifyLateTag']>;
 let dispatch: jest.SpiedFunction<DiscordNotificationService['dispatch']>;
+let dispatchMany: jest.SpiedFunction<
+  DiscordNotificationService['dispatchMany']
+>;
 
 /** A WoW hub for the seeded game, with a live roster snapshot. */
 async function insertHub(): Promise<{ id: number; name: string }> {
@@ -214,8 +222,12 @@ async function setTaggedPrefs(
     .updatePreferences(userId, { channelPrefs: { hub_event_tagged: prefs } });
 }
 
+/** DMs routed to a user — single `dispatch` and batched `dispatchMany` (ROK-2252). */
 const dispatchedTo = (userId: number): number =>
-  dispatch.mock.calls.filter(([input]) => input.userId === userId).length;
+  dispatch.mock.calls.filter(([input]) => input.userId === userId).length +
+  dispatchMany.mock.calls
+    .flatMap(([inputs]) => inputs)
+    .filter((input) => input.userId === userId).length;
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -238,6 +250,9 @@ beforeEach(async () => {
   dispatch = jest
     .spyOn(testApp.app.get(DiscordNotificationService), 'dispatch')
     .mockResolvedValue(false);
+  dispatchMany = jest
+    .spyOn(testApp.app.get(DiscordNotificationService), 'dispatchMany')
+    .mockResolvedValue(0);
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -513,5 +528,52 @@ describe('Codex r5 — deferred announce on an install with no connected bot', (
     expect(await tick()).toBe(true);
     expect(post).toHaveBeenCalledTimes(2);
     expect(await rowsFor(fan)).toHaveLength(1);
+  });
+});
+
+describe('ROK-2252 — event notices are written in one batch', () => {
+  it('N recipients → one createMany, one row each; a told user and an in-app-off user get none', async () => {
+    const g = await insertHub();
+    const fanA = await member(g.id, 'batch-a');
+    const fanB = await member(g.id, 'batch-b');
+    const told = await member(g.id, 'batch-told');
+    const gamer = await mkUser('batch-gamer');
+    await heartGame(gamer);
+    const quiet = await mkUser('batch-quiet');
+    await heartGame(quiet);
+    await testApp.app.get(NotificationService).updatePreferences(quiet, {
+      channelPrefs: { subscribed_game: { inApp: false, discord: false } },
+    });
+    const event = await insertEvent(g.id);
+    const dedup = testApp.app.get(NotificationDedupService);
+    const toldKey = eventNoticeKey(event.id, told);
+    await dedup.checkAndMarkSent(toldKey, EVENT_NOTICE_TTL_SECONDS);
+    const notifications = testApp.app.get(NotificationService);
+    const create = jest.spyOn(notifications, 'create');
+    const createMany = jest.spyOn(notifications, 'createMany');
+    const claimOne = jest.spyOn(dedup, 'checkAndMarkSent');
+    const claimMany = jest.spyOn(dedup, 'checkAndMarkSentMany');
+
+    await announce(event);
+
+    expect(create).not.toHaveBeenCalled();
+    expect(createMany).toHaveBeenCalledTimes(1);
+    const [[rows]] = nonEmpty(createMany.mock.calls, 'createMany call');
+    const batched = rows.map((r) => r.userId);
+    expect(batched).toContain(quiet);
+    expect(batched).toEqual(expect.arrayContaining([fanA, fanB, gamer]));
+    expect(batched).not.toContain(told);
+    // The per-user claims are one dedup call too, never one per recipient.
+    expect(claimMany).toHaveBeenCalledTimes(1);
+    const perKey = claimOne.mock.calls.map(([key]) => key);
+    expect(perKey.filter((k) => k.startsWith('event-notice:'))).toEqual([]);
+    expect(await rowsFor(fanA, 'hub_event_tagged')).toHaveLength(1);
+    expect(await rowsFor(fanB, 'hub_event_tagged')).toHaveLength(1);
+    expect(await rowsFor(gamer, 'subscribed_game')).toHaveLength(1);
+    expect(await rowsFor(told)).toHaveLength(0);
+    expect(await rowsFor(quiet)).toHaveLength(0);
+    // The skipped user's claim is given back; the told user's is kept.
+    expect(await dedup.isMarked(eventNoticeKey(event.id, quiet))).toBe(false);
+    expect(await dedup.isMarked(toldKey)).toBe(true);
   });
 });
