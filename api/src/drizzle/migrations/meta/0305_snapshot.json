@@ -1,5 +1,5 @@
 {
-  "id": "930ddbe3-a7d4-47e1-9e03-33f98b4ed291",
+  "id": "96e936fb-245a-459a-86fe-7911271452d6",
   "prevId": "bf5c531d-13e8-493b-9700-bb601bf9f1b3",
   "version": "7",
   "dialect": "postgresql",
@@ -5977,6 +5977,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "player_id": {
+          "name": "player_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_kind": {
+          "name": "id_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "source": {
           "name": "source",
           "type": "varchar(16)",
@@ -6100,6 +6112,34 @@
           "method": "btree",
           "with": {}
         },
+        "ad_hoc_participants_event_player_unique": {
+          "name": "ad_hoc_participants_event_player_unique",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id_kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"ad_hoc_participants\".\"player_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_ad_hoc_participants_event": {
           "name": "idx_ad_hoc_participants_event",
           "columns": [
@@ -6165,7 +6205,11 @@
       "checkConstraints": {
         "ad_hoc_participants_identity_check": {
           "name": "ad_hoc_participants_identity_check",
-          "value": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL OR \"ad_hoc_participants\".\"steam_id\" IS NOT NULL"
+          "value": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL OR \"ad_hoc_participants\".\"steam_id\" IS NOT NULL OR \"ad_hoc_participants\".\"player_id\" IS NOT NULL"
+        },
+        "ad_hoc_participants_player_kind_check": {
+          "name": "ad_hoc_participants_player_kind_check",
+          "value": "(\"ad_hoc_participants\".\"player_id\" IS NULL) = (\"ad_hoc_participants\".\"id_kind\" IS NULL)"
         }
       },
       "isRLSEnabled": false
@@ -14181,24 +14225,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "author_discord_id": {
-          "name": "author_discord_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "author_discord_name": {
-          "name": "author_discord_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "author_discord_avatar": {
-          "name": "author_discord_avatar",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -14283,22 +14309,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_forum_replies_author_discord_id": {
-          "name": "idx_hub_forum_replies_author_discord_id",
-          "columns": [
-            {
-              "expression": "author_discord_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"hub_forum_replies\".\"author_discord_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -14461,24 +14471,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "author_discord_id": {
-          "name": "author_discord_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "author_discord_name": {
-          "name": "author_discord_name",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "author_discord_avatar": {
-          "name": "author_discord_avatar",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -14607,22 +14599,6 @@
           "method": "btree",
           "with": {}
         },
-        "idx_hub_forum_threads_author_discord_id": {
-          "name": "idx_hub_forum_threads_author_discord_id",
-          "columns": [
-            {
-              "expression": "author_discord_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"hub_forum_threads\".\"author_discord_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "uq_hub_forum_threads_event_live": {
           "name": "uq_hub_forum_threads_event_live",
           "columns": [
@@ -14743,514 +14719,6 @@
           "value": "\"hub_forum_threads\".\"write_closes_at\" IS NULL OR \"hub_forum_threads\".\"event_id\" IS NOT NULL"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.hub_forum_discord_bindings": {
-      "name": "hub_forum_discord_bindings",
-      "schema": "",
-      "columns": {
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "forum_id": {
-          "name": "forum_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tag_id": {
-          "name": "tag_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ack_by": {
-          "name": "ack_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ack_at": {
-          "name": "ack_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bound_at": {
-          "name": "bound_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "uq_hub_forum_discord_bindings_forum_tag": {
-          "name": "uq_hub_forum_discord_bindings_forum_tag",
-          "columns": [
-            {
-              "expression": "forum_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "tag_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"hub_forum_discord_bindings\".\"tag_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_forum_discord_bindings_forum_id": {
-          "name": "idx_hub_forum_discord_bindings_forum_id",
-          "columns": [
-            {
-              "expression": "forum_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_forum_discord_bindings_ack_by": {
-          "name": "idx_hub_forum_discord_bindings_ack_by",
-          "columns": [
-            {
-              "expression": "ack_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_forum_discord_bindings_guild_id_guilds_id_fk": {
-          "name": "hub_forum_discord_bindings_guild_id_guilds_id_fk",
-          "tableFrom": "hub_forum_discord_bindings",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_forum_discord_bindings_forum_id_hub_forum_discord_forums_id_fk": {
-          "name": "hub_forum_discord_bindings_forum_id_hub_forum_discord_forums_id_fk",
-          "tableFrom": "hub_forum_discord_bindings",
-          "tableTo": "hub_forum_discord_forums",
-          "columnsFrom": [
-            "forum_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_forum_discord_bindings_ack_by_users_id_fk": {
-          "name": "hub_forum_discord_bindings_ack_by_users_id_fk",
-          "tableFrom": "hub_forum_discord_bindings",
-          "tableTo": "users",
-          "columnsFrom": [
-            "ack_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.hub_forum_discord_forums": {
-      "name": "hub_forum_discord_forums",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "discord_guild_id": {
-          "name": "discord_guild_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "channel_id": {
-          "name": "channel_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "managed": {
-          "name": "managed",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "webhook_id": {
-          "name": "webhook_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "webhook_token_enc": {
-          "name": "webhook_token_enc",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "require_tag_set": {
-          "name": "require_tag_set",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "hub_forum_discord_forums_channel_id_unique": {
-          "name": "hub_forum_discord_forums_channel_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "channel_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.hub_forum_discord_links": {
-      "name": "hub_forum_discord_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "varchar(8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reply_id": {
-          "name": "reply_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "discord_thread_id": {
-          "name": "discord_thread_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "discord_message_id": {
-          "name": "discord_message_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "origin": {
-          "name": "origin",
-          "type": "varchar(12)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sync_state": {
-          "name": "sync_state",
-          "type": "varchar(8)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_at": {
-          "name": "synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "discord_deleted_at": {
-          "name": "discord_deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "discord_locked_at": {
-          "name": "discord_locked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_hub_forum_discord_links_thread": {
-          "name": "uq_hub_forum_discord_links_thread",
-          "columns": [
-            {
-              "expression": "thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"hub_forum_discord_links\".\"kind\" = 'thread'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "uq_hub_forum_discord_links_reply": {
-          "name": "uq_hub_forum_discord_links_reply",
-          "columns": [
-            {
-              "expression": "reply_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_forum_discord_links_retry": {
-          "name": "idx_hub_forum_discord_links_retry",
-          "columns": [
-            {
-              "expression": "sync_state",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"hub_forum_discord_links\".\"origin\" = 'raidledger' AND \"hub_forum_discord_links\".\"sync_state\" <> 'synced'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_forum_discord_links_guild_id": {
-          "name": "idx_hub_forum_discord_links_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_hub_forum_discord_links_discord_thread": {
-          "name": "idx_hub_forum_discord_links_discord_thread",
-          "columns": [
-            {
-              "expression": "discord_thread_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "hub_forum_discord_links_guild_id_guilds_id_fk": {
-          "name": "hub_forum_discord_links_guild_id_guilds_id_fk",
-          "tableFrom": "hub_forum_discord_links",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_forum_discord_links_thread_id_hub_forum_threads_id_fk": {
-          "name": "hub_forum_discord_links_thread_id_hub_forum_threads_id_fk",
-          "tableFrom": "hub_forum_discord_links",
-          "tableTo": "hub_forum_threads",
-          "columnsFrom": [
-            "thread_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "hub_forum_discord_links_reply_id_hub_forum_replies_id_fk": {
-          "name": "hub_forum_discord_links_reply_id_hub_forum_replies_id_fk",
-          "tableFrom": "hub_forum_discord_links",
-          "tableTo": "hub_forum_replies",
-          "columnsFrom": [
-            "reply_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "hub_forum_discord_links_discord_message_id_unique": {
-          "name": "hub_forum_discord_links_discord_message_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "discord_message_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "hub_forum_discord_links_kind": {
-          "name": "hub_forum_discord_links_kind",
-          "value": "\"hub_forum_discord_links\".\"kind\" IN ('thread', 'reply')"
-        },
-        "hub_forum_discord_links_kind_reply": {
-          "name": "hub_forum_discord_links_kind_reply",
-          "value": "(\"hub_forum_discord_links\".\"kind\" = 'reply') = (\"hub_forum_discord_links\".\"reply_id\" IS NOT NULL)"
-        },
-        "hub_forum_discord_links_origin": {
-          "name": "hub_forum_discord_links_origin",
-          "value": "\"hub_forum_discord_links\".\"origin\" IN ('raidledger', 'discord')"
-        },
-        "hub_forum_discord_links_sync_state": {
-          "name": "hub_forum_discord_links_sync_state",
-          "value": "\"hub_forum_discord_links\".\"sync_state\" IN ('pending', 'synced', 'failed')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.hub_forum_discord_notices": {
-      "name": "hub_forum_discord_notices",
-      "schema": "",
-      "columns": {
-        "discord_thread_id": {
-          "name": "discord_thread_id",
-          "type": "varchar(32)",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "forum_id": {
-          "name": "forum_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "hub_forum_discord_notices_forum_id_hub_forum_discord_forums_id_fk": {
-          "name": "hub_forum_discord_notices_forum_id_hub_forum_discord_forums_id_fk",
-          "tableFrom": "hub_forum_discord_notices",
-          "tableTo": "hub_forum_discord_forums",
-          "columnsFrom": [
-            "forum_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.hub_session_note_items": {
