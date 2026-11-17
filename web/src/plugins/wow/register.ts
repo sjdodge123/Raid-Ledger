@@ -32,6 +32,7 @@ import { registerRolesWidget } from './hub-widgets/roles.register';
 import { professionsWidget } from './hub-widgets/professions.register';
 import { whosSavedWidget } from './hub-widgets/whos-saved.register';
 import { registerDungeonQuestsWidget } from './hub-widgets/dungeon-quests.register';
+import { suggestedGroupsWidget } from './hub-widgets/suggested-groups.register';
 import { recentDingsWidget } from './hub-widgets/recent-dings.register';
 import { lastSeenWidget } from './hub-widgets/last-seen.register';
 import { gearReadinessWidget } from './hub-widgets/gear-readiness.register';
@@ -85,6 +86,8 @@ blizzard.registerHubGameTab([WOW_FOREVER_GAME_SLUG], craftersTab);
 blizzard.registerHubGameTab([WOW_FOREVER_GAME_SLUG], dungeonPlannerTab);
 blizzard.registerHubWidget(whosSavedWidget);
 registerDungeonQuestsWidget(blizzard);
+// ROK-2212 — the Forever "Suggested groups" Overview card (order 43; See all → Dungeon planner tab).
+blizzard.registerHubWidget(suggestedGroupsWidget);
 registerReadyCheckWidget(blizzard);
 blizzard.registerHubWidget(recentDingsWidget);
 blizzard.registerHubWidget(lastSeenWidget);

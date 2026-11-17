@@ -25,3 +25,8 @@ export function MembersSeeAll(): JSX.Element {
 export function EventsSeeAll(): JSX.Element {
     return <SeeAll href="#events" testId="forever-see-all-events" />;
 }
+
+/** ROK-2212 — Suggested groups (top 3) → the Dungeon planner tab, whose Suggested groups section lists every lineup. */
+export function SuggestedGroupsSeeAll(): JSX.Element {
+    return <SeeAll href="#dungeon-planner" testId="forever-see-all-suggested-groups" />;
+}

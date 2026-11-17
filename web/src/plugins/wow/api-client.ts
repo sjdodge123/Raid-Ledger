@@ -27,6 +27,7 @@ import type {
     IngameTextFieldKey,
     GuildContributionsDto,
     DungeonPlanDto,
+    SuggestedGroupsDto,
 } from '@raid-ledger/contract';
 import {
     GuildIngameTextSchema,
@@ -39,6 +40,7 @@ import {
     ForeverProbeResultSchema,
     WowForeverRealmRulesetsSchema,
     DungeonPlanSchema,
+    SuggestedGroupsSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
@@ -256,6 +258,17 @@ export async function fetchDungeonPlan(guildId: number, instanceId: number, char
     const params = new URLSearchParams({ instanceId: String(instanceId) });
     if (characterIds.length > 0) params.set('characterIds', characterIds.join(','));
     return fetchApi(`/plugins/wow/guilds/${guildId}/dungeon-plan?${params}`, {}, DungeonPlanSchema);
+}
+
+/**
+ * ROK-2212 — the Forever guild's suggested groups of five: `top` = the best
+ * group of each of the 3 best dungeons (hub widget), `all` = up to 10 per
+ * dungeon (planner-tab section), optionally narrowed to one dungeon.
+ */
+export async function fetchSuggestedGroups(guildId: number, scope: 'top' | 'all' = 'top', instanceId?: number): Promise<SuggestedGroupsDto> {
+    const params = new URLSearchParams({ scope });
+    if (instanceId !== undefined) params.set('instanceId', String(instanceId));
+    return fetchApi(`/plugins/wow/guilds/${guildId}/suggested-groups?${params}`, {}, SuggestedGroupsSchema);
 }
 
 const guildIngameTextPath = (guildId: number): string => `/plugins/wow/guilds/${guildId}/ingame-text`;
