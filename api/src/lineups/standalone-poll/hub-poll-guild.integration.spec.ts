@@ -208,3 +208,93 @@ describe('hub polls — wow_guild hub tag (ROK-2212)', () => {
     );
   });
 });
+
+/** A yes vote on a fresh slot of `matchId` (the poll page's voter chips). */
+async function addYesVote(matchId: number, userId: number): Promise<void> {
+  const [slot] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date(Date.now() + 864e5),
+        suggestedBy: 'user',
+      })
+      .returning(),
+    'slot',
+  );
+  await testApp.db
+    .insert(schema.communityLineupScheduleVotes)
+    .values({ slotId: slot.id, userId, stance: 'yes' });
+}
+
+/** Lock the poll in as `token`; returns the new event's stored guild_id. */
+async function lockInGuildId(
+  token: string,
+  matchId: number,
+): Promise<number | null> {
+  const start = new Date(Date.now() + 3 * 864e5);
+  const res = await testApp.request
+    .post(`/scheduling-polls/${matchId}/lock-in`)
+    .set('Authorization', `Bearer ${token}`)
+    .send({
+      event: {
+        title: 'Guild lock-in',
+        gameId: foreverId,
+        startTime: start.toISOString(),
+        endTime: new Date(start.getTime() + 72e5).toISOString(),
+      },
+    });
+  expect({ status: res.status, body: res.body as unknown }).toMatchObject({
+    status: 200,
+  });
+  const eventId = (res.body as { event: { id: number } }).event.id;
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ guildId: schema.events.guildId })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId)),
+    'event',
+  );
+  return row.guildId;
+}
+
+type PageVoter = { userId: number; isHubMember?: boolean };
+
+describe('hub polls — wow_guild hub membership on lock-in + poll page (ROK-2212)', () => {
+  it('a guild member locking in a guild-hub poll gets an event tagged to the guild hub', async () => {
+    const member = await mkUser();
+    const guild = await mkGuild();
+    await linkMember(guild.id, member);
+    const poll = await createPoll(member.token, guild.id);
+    expect(poll.status).toBe(201);
+    expect(await lockInGuildId(member.token, matchIdOf(poll.body))).toBe(
+      guild.id,
+    );
+  });
+
+  it('flags a guild member voter as a hub member, an outsider voter not', async () => {
+    const member = await mkUser();
+    const outsider = await mkUser();
+    const guild = await mkGuild();
+    await linkMember(guild.id, member);
+    const poll = await createPoll(member.token, guild.id);
+    expect(poll.status).toBe(201);
+    const matchId = matchIdOf(poll.body);
+    const { lineupId } = poll.body as { lineupId: number };
+    await addYesVote(matchId, member.id);
+    await addYesVote(matchId, outsider.id);
+    const page = await testApp.request
+      .get(`/lineups/${lineupId}/schedule/${matchId}`)
+      .set('Authorization', `Bearer ${member.token}`);
+    expect(page.status).toBe(200);
+    const body = page.body as {
+      hub: { id: number; viewerIsMember: boolean } | null;
+      slots: { votes: PageVoter[] }[];
+    };
+    expect(body.hub).toMatchObject({ id: guild.id, viewerIsMember: true });
+    const voters = body.slots.flatMap((s) => s.votes);
+    const flag = (id: number) => voters.find((v) => v.userId === id);
+    expect(flag(member.id)?.isHubMember).toBe(true);
+    expect(flag(outsider.id)?.isHubMember).toBe(false);
+  });
+});
