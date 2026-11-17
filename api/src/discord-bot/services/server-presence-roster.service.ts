@@ -40,6 +40,7 @@ export class ServerPresenceRosterService implements ServerRosterSource {
   /** The current per-game roster; empty when nothing is tracked. */
   async snapshot(): Promise<ServerRoster> {
     // ROK-2232: the panel matches `users.steam_id` — Steam players only.
+    // Non-Steam players (Minecraft UUID/XUID) render in the Minecraft hub stories later.
     const players = steamRoster(this.reader?.playersOnGames() ?? []);
     if (players.length === 0) return emptyServerRoster();
     try {
