@@ -48,6 +48,8 @@ import {
   forumThreadContext,
   type ForumThreadContext as Ctx,
 } from './event-discussion/forum-thread.context';
+import { countEventSignups } from './event-discussion/event-discussion.queries';
+import { withLatestReplies } from './hub-forum-latest-reply';
 import {
   findReply,
   latestThreads,
@@ -100,11 +102,11 @@ export class HubForumService {
     await assertForumMember(this.access, actor, guildId);
     const page = await listThreads(this.db, guildId, limit, after);
     const now = this.now();
-    return {
-      pinned: page.pinned.map((r) => toThreadSummary(r, now)),
-      threads: page.records.map((r) => toThreadSummary(r, now)),
-      nextCursor: encoded(page.next),
-    };
+    const [pinned = [], threads = []] = await withLatestReplies(this.db, [
+      page.pinned.map((r) => toThreadSummary(r, now)),
+      page.records.map((r) => toThreadSummary(r, now)),
+    ]);
+    return { pinned, threads, nextCursor: encoded(page.next) };
   }
 
   /** The Latest threads widget. */
@@ -308,11 +310,15 @@ export class HubForumService {
     const can = managed ? { ...base, edit: false, delete: false } : base;
     const replies = page.records.map((r) => this.replyView(ctx, r, now));
     const live = record.thread.deletedAt === null;
+    const ev = record.event ?? null;
+    const signups =
+      live && ev ? await countEventSignups(this.db, ev.id) : undefined;
     return toForumThread(record, can, {
       replies,
       nextReplyCursor: encoded(page.next),
       now,
       canReply: live && ctx.canReply && ctx.lock === null,
+      ...(signups === undefined ? {} : { signupCount: signups }),
     });
   }
 

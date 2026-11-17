@@ -33,8 +33,8 @@ const {
   users,
   events,
 } = schema;
-const author = alias(users, 'hub_forum_author');
-const authorColumns = {
+export const author = alias(users, 'hub_forum_author');
+export const authorColumns = {
   userId: author.id,
   username: author.username,
   displayName: author.displayName,
@@ -50,6 +50,8 @@ const eventColumns = {
   duration: events.duration,
   cancelledAt: events.cancelledAt,
   creatorId: events.creatorId,
+  maxAttendees: events.maxAttendees,
+  slotConfig: events.slotConfig,
 };
 
 /** UTC ISO text with microseconds — the exact cursor value. */

@@ -1,6 +1,7 @@
 /**
  * ROK-2226 — event discussion bits for /dev/design-system (docs/design-system.md
- * §4.35): the forum event header (open, cancelled, locked) and the row pills.
+ * §4.35): the forum event header (open, cancelled, locked), the row pills and
+ * (ROK-2229) the Raid Ledger byline + client-rendered opening post.
  * The event-page Discussion card itself is data-driven (`useEventDiscussion`);
  * its states are pinned by `EventDiscussionCard.test.tsx`. Tokens only.
  */
@@ -11,6 +12,10 @@ import {
     ForumEventPills,
     ForumLockBar,
 } from '../../components/hub/forum/forum-event-header';
+import {
+    EventRootBody,
+    EventRootByline,
+} from '../../components/hub/forum/forum-event-root';
 import { StateFrame } from './design-system-bits';
 
 const EVENT: HubForumThreadEvent = {
@@ -29,7 +34,7 @@ const LOCK: HubForumLock = {
 export function EventDiscussionDemo(): JSX.Element {
     return (
         <StateFrame
-            label="Event discussion — forum event header + pills"
+            label="Event discussion — forum event header, pills + Raid Ledger root"
             note="forum-event-header.tsx (ROK-2226): above an event thread; the pills sit on Forum list and Latest rows; ForumLockBar is shared with the event-page Discussion card."
         >
             <div
@@ -47,6 +52,10 @@ export function EventDiscussionDemo(): JSX.Element {
                     <ForumEventPills event={EVENT} lock={LOCK} />
                 </span>
                 <ForumLockBar lock={{ ...LOCK, reason: 'event-deleted' }} />
+                <div className="flex flex-col gap-2 rounded-lg border border-edge bg-surface p-3">
+                    <EventRootByline createdAt="2026-11-18T19:00:00.000Z" />
+                    <EventRootBody event={{ ...EVENT, signupCount: 18, maxAttendees: 40 }} />
+                </div>
             </div>
         </StateFrame>
     );
