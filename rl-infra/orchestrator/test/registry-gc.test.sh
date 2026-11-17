@@ -31,6 +31,11 @@
 #   R-r  keep-N survivors and young tags protect a doomed tag sharing a digest
 #   R-s  a 137 (timeout -k) also pkills; the pkill is itself under timeout
 #   R-t  RL_REGISTRY_GC_DRY_RUN defaults to 1; sweep.sh logs the ledger path
+#   R-ia (ROK-2180) an OCI-index tag is read (HEAD/GET only succeed when the
+#        Accept lists the index type), aged from its image child (not the
+#        attestation), deleted by its index digest; plain tags unchanged
+#   R-ib (ROK-2180) a kept index tag is protected, spares a doomed tag sharing
+#        its digest, disables --delete-untagged; env-destroy is no longer blocked
 
 set -uo pipefail
 CURRENT_TEST_FILE="registry-gc.test.sh"
@@ -46,20 +51,40 @@ NOW=1800000000
 command -v flock >/dev/null 2>&1 || flock() { return 0; }
 # curl stub: tags/list → $TAGS; HEAD manifest → digest sha256:<tag>;
 # ($DIGESTS "tag=d" overrides it to sha256:d); GET manifest → config digest
-# cfg-<tag>; GET blob → created from $AGES (tag=hours).
+# cfg-<tag>; GET blob → created from $AGES (tag=hours). A tag in $INDEX_TAGS is
+# a buildx OCI index (ROK-2180): HEAD/GET 404 (curl -f → 22) unless the Accept
+# lists the index type, as registry:2 2.8.x does; its GET lists an attestation
+# child (sha256:att-<tag>, config cfg-att-<tag> → age 0) BEFORE the image child
+# (sha256:img-<tag>, config cfg-<tag>), so aging from the wrong child shows.
+IDX_TYPE="application/vnd.oci.image.index.v1+json"
+_stub_is_index() { [[ " ${INDEX_TAGS:-} " == *" $1 "* ]]; }
+_stub_manifest_get() {
+    local tag="$1"
+    case "$tag" in
+        sha256:img-*) jq -nc --arg t "${tag#sha256:img-}" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}' ;;
+        sha256:att-*) jq -nc --arg t "${tag#sha256:}" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}' ;;
+        *) if _stub_is_index "$tag"; then
+               jq -nc --arg t "$tag" --arg mt "$IDX_TYPE" '{schemaVersion:2, mediaType:$mt, manifests:[
+                   {digest:("sha256:att-" + $t), platform:{os:"unknown", architecture:"unknown"},
+                    annotations:{"vnd.docker.reference.type":"attestation-manifest"}},
+                   {digest:("sha256:img-" + $t), platform:{os:"linux", architecture:"amd64"}}]}'
+           else jq -nc --arg t "$tag" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}'; fi ;;
+    esac
+}
 curl() {
     local args="$*" url="${*: -1}"
     echo "curl $args" >> "$CALL_LOG"
     case "$url" in
         */tags/list) [[ -n "${LIST_FAIL:-}" ]] && return 22; jq -nc --arg t "$TAGS" '{name:"rl-allinone", tags:($t|split(" "))}' ;;
         */manifests/*)
-            local tag="${url##*/}"
-            if [[ "$args" == *DELETE* ]]; then return 0
-            elif [[ "$args" == *-I* ]]; then
+            local tag="${url##*/}" ct="application/vnd.docker.distribution.manifest.v2+json"
+            if [[ "$args" == *DELETE* ]]; then return 0; fi
+            if _stub_is_index "$tag"; then [[ "$args" == *"$IDX_TYPE"* ]] || return 22; ct="$IDX_TYPE"; fi
+            if [[ "$args" == *-I* ]]; then
                 [[ " ${HEAD_FAIL:-} " == *" $tag "* ]] && return 22
                 local d; d=$(tr ' ' '\n' <<<"${DIGESTS:-}" | sed -n "s/^${tag}=//p")
-                printf 'HTTP/1.1 200 OK\r\nDocker-Content-Digest: sha256:%s\r\n\r\n' "${d:-$tag}"
-            else jq -nc --arg t "$tag" '{schemaVersion:2, config:{digest:("cfg-" + $t)}}'; fi ;;
+                printf 'HTTP/1.1 200 OK\r\nContent-Type: %s\r\nDocker-Content-Digest: sha256:%s\r\n\r\n' "$ct" "${d:-$tag}"
+            else _stub_manifest_get "$tag"; fi ;;
         */blobs/cfg-*)
             local tag="${url##*/cfg-}" h
             h=$(tr ' ' '\n' <<<"$AGES" | sed -n "s/^${tag}=//p")
@@ -100,7 +125,7 @@ _setup_gc() {
     echo '[]' > "$RL_ENVS_FILE"; echo '{"heavy_running":[]}' > "$RL_ADMISSION_FILE"
     PS_IMAGES=""; DIGESTS=""; DOCKER_PS_FAIL=""; RL_REGISTRY_GC_DRY_RUN=0
     LOCAL_IMAGES=""; DOCKER_IMAGES_FAIL=""; TIMEOUT_RC=""; CLEANUP_TIMEOUT_RC=""
-    TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""; PGREP_RC=""
+    TAGS=""; AGES=""; HEAD_FAIL=""; LIST_FAIL=""; LOCAL_DIGESTS=""; PGREP_RC=""; INDEX_TAGS=""
     # shellcheck disable=SC1090
     source "$LIB"
 }
@@ -448,6 +473,45 @@ test_minor_fail_closed() {
     test_teardown
 }
 
+test_index_tag_read_aged_deleted() {
+    CURRENT_TEST_NAME="R-ia: an OCI-index tag is read, aged from its image child, deleted by its index digest"
+    _setup_gc
+    TAGS="a b idxold"; AGES="a=1 b=2 idxold=200"; INDEX_TAGS="idxold"
+    assert_eq "$(registry_gc::digest idxold)" "sha256:idxold" "the index HEAD answers with the index digest"
+    assert_eq "$(registry_gc::created_epoch idxold)" "$(( NOW - 200 * 3600 ))" \
+        "the index is aged from its image child's config, not the attestation's"
+    local out rc; out=$(registry_gc::sweep force 2>/dev/null); rc=$?
+    assert_eq "$rc $(jq -r '.error // "none"' <<<"$out")" "0 none" "an index tag does not abort the sweep"
+    assert_eq "$(jq -r '.deleted | join(",")' <<<"$out")" "idxold" "the old index is doomed; plain a, b kept"
+    assert_contains "$(grep -- '-X DELETE' "$CALL_LOG")" "manifests/sha256:idxold" "deleted by its index digest"
+    assert_eq "$(grep -c -- '-X DELETE.*sha256:\(img\|att\)-' "$CALL_LOG")" "0" "never by a child digest"
+    assert_eq "$(grep -c '^docker exec .*--delete-untagged' "$CALL_LOG")" "1" \
+        "no kept index → plain-manifest path unchanged (--delete-untagged)"
+    test_teardown
+}
+
+test_kept_index_protected_no_untagged() {
+    CURRENT_TEST_NAME="R-ib: a kept index is protected and garbage-collect drops --delete-untagged"
+    _setup_gc
+    TAGS="latest a b idxkeep old twin"; AGES="a=1 b=2 idxkeep=300 old=200 twin=250"
+    INDEX_TAGS="latest idxkeep"; PS_IMAGES="rl-allinone:idxkeep"; DIGESTS="twin=idxkeep"
+    local out err rc
+    err=$(registry_gc::sweep force 2>&1 >/dev/null); rc=$?
+    out=$(jq -c . "$RL_REGISTRY_GC_STATE_FILE" 2>/dev/null || echo '{}')
+    assert_eq "$rc" "0" "kept index tags (latest included) no longer abort the sweep"
+    assert_eq "$(jq -r '.deleted // [] | join(",")' <<<"$out")" "old" "idxkeep kept; twin shares its index digest"
+    assert_contains "$(grep 'garbage-collect' "$CALL_LOG")" "registry garbage-collect /etc/docker/registry/config.yml" \
+        "collect still runs"
+    assert_eq "$(grep -c -- '--delete-untagged' "$CALL_LOG")" "0" "a kept index disables --delete-untagged (distribution#3178)"
+    assert_contains "$err" "idxkeep" "the log names the kept index"
+    : > "$CALL_LOG"
+    jq -nc '[{slug:"s1", image:"rl-allinone:s1"}]' > "$RL_ENVS_FILE"
+    TAGS="s1 latest"; PS_IMAGES=""; DIGESTS=""
+    registry_gc::delete_env_tag s1 >/dev/null 2>&1
+    assert_contains "$(grep -- '-X DELETE' "$CALL_LOG")" "manifests/sha256:s1" "env-destroy is no longer blocked by an index latest"
+    test_teardown
+}
+
 run_test "r-a-selection" test_selection
 run_test "r-b-delete-tag" test_delete_tag
 run_test "r-c-sweep" test_sweep_deletes_and_collects
@@ -471,4 +535,6 @@ run_test "r-t-dry-run-default" test_dry_run_default
 run_test "r-u-untagged-pin" test_untagged_pin_keeps_untagged
 run_test "r-v-cleanup-keeps-lock" test_cleanup_failure_keeps_lock
 run_test "r-w-minor-fail-closed" test_minor_fail_closed
+run_test "r-ia-index-tag" test_index_tag_read_aged_deleted
+run_test "r-ib-kept-index" test_kept_index_protected_no_untagged
 print_test_summary
