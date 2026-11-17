@@ -59,6 +59,16 @@ export const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
   // ROK-1740: the join post pins itself. Discord split pinning out of Manage
   // Messages (enforced 2026-02-23), so it must be requested on its own.
   { label: 'Pin Messages', flag: PermissionsBitField.Flags.PinMessages },
+  // ROK-2254: hub forum ⇄ Discord forum sync (ROK-2208) removes Discord
+  // messages from synced posts and posts replies through a bot-owned webhook.
+  {
+    label: 'Manage Messages',
+    flag: PermissionsBitField.Flags.ManageMessages,
+  },
+  {
+    label: 'Manage Webhooks',
+    flag: PermissionsBitField.Flags.ManageWebhooks,
+  },
 ];
 
 /**
