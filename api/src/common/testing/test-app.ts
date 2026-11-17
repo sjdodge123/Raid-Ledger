@@ -82,6 +82,13 @@ export interface TestApp {
   seed: SeededData;
   /** Only set when running locally via Testcontainers; null in CI. */
   container: StartedPostgreSqlContainer | null;
+  /**
+   * URL of the DB this app is connected to — the worker's clone when
+   * RL_INTEGRATION_WORKERS >= 2 (ROK-2206), else the shared/CI/container DB.
+   * Specs opening their own client use this, never the inherited
+   * `DATABASE_URL`, which in per-worker mode names the unmigrated base.
+   */
+  connectionString: string;
   /** Handle to the in-memory Redis mock. Exposed so truncateAllTables can
    * clear cross-suite state (e.g. lineup-* dedup keys) without call-site changes. */
   redisMock: RedisMockHandle;
@@ -361,6 +368,7 @@ export async function getTestApp(): Promise<TestApp> {
     db,
     seed,
     container,
+    connectionString,
     redisMock,
     _appClient: appClient,
   };

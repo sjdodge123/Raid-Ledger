@@ -127,9 +127,8 @@ function describeReset() {
     testApp = await getTestApp();
     extensionAvailable = await isPgStatStatementsAvailable(testApp);
     if (!extensionAvailable) return;
-    const baseConnUri =
-      testApp.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
-    if (!baseConnUri) return;
+    // ROK-2206: the app's own DB (the worker clone in per-worker mode).
+    const baseConnUri = testApp.connectionString;
     await provisionRaidLedgerRole(testApp);
     raidLedgerClient = postgres(buildRaidLedgerConnectionString(baseConnUri), {
       max: 2,
