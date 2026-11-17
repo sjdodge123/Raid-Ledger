@@ -113,6 +113,16 @@ describe('walkChainWithExternalRoot — named outside prerequisite', () => {
     ).toEqual([8926]);
   });
 
+  it('treats a cached lookup miss (key set, no row) as missing', () => {
+    // DungeonQuestsService.expandFrontier caches unresolved ids as undefined.
+    const lookup = new Map<number, DungeonQuestDto | undefined>([
+      [8977, undefined],
+    ]) as Map<number, DungeonQuestDto>;
+    expect(
+      walkChainWithExternalRoot(dependent, lookup).map((q) => q.questId),
+    ).toEqual([8977, 8926]);
+  });
+
   it('leaves an unlisted dangling prerequisite alone', () => {
     const other = quest(42, { prevQuestId: 41 });
     expect(prerequisiteChainOf(other, new Map())).toBeNull();

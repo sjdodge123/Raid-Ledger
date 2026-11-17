@@ -209,6 +209,37 @@ describe('buildQuestReadiness prereqsMet without a chain position (ROK-1911)', (
   });
 });
 
+describe('buildQuestReadiness external prerequisite root (ROK-2221)', () => {
+  // Scholomance: 4735 (not bundled) -> 5522 (outside) -> 5531 -> 4771.
+  const set = selectEventQuests(
+    [
+      quest(5522, null, { prevQuestId: 4735, nextQuestId: 5531 }),
+      quest(5531, 246, { prevQuestId: 5522, nextQuestId: 4771 }),
+      quest(4771, 246, { prevQuestId: 5531 }),
+    ],
+    [246],
+  );
+  const run = (completed: number[]) =>
+    buildQuestReadiness({
+      quests: set,
+      signups: [signup(1, C1)],
+      snapshots: new Map([[C1, snap(completed, [])]]),
+      manual: [],
+    });
+
+  it('counts the outside root 4735 in the known ids', () => {
+    expect(set.knownIds.has(4735)).toBe(true);
+  });
+
+  it("Dawn's Gambit (4771) prereqs met once 4735, 5522 and 5531 are done", () => {
+    expect(stateOf(run([4735, 5522, 5531]), 1, 4771)?.prereqsMet).toBe(true);
+  });
+
+  it('prereqs not met while the outside root 4735 is not done', () => {
+    expect(stateOf(run([5522, 5531]), 1, 4771)?.prereqsMet).toBe(false);
+  });
+});
+
 describe('buildQuestReadiness escorts (ROK-2224)', () => {
   const body = buildQuestReadiness({
     quests: selectEventQuests([quest(1144, 491), quest(1101, 491)], [491]),

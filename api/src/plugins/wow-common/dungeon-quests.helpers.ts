@@ -123,7 +123,8 @@ export function walkChainWithExternalRoot(
   const chain = walkChainInMemory(quest, questLookup);
   const head = chain[0];
   if (!head || head.prevQuestId === null) return chain;
-  if (questLookup.has(head.prevQuestId)) return chain;
+  // A cached miss (`expandFrontier` stores the key with no row) is still missing.
+  if (questLookup.get(head.prevQuestId)) return chain;
   const step = externalPrereqStep(head);
   if (!step || chain.some((q) => q.questId === step.questId)) return chain;
   return [step, ...chain];
