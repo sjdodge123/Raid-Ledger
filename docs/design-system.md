@@ -2254,4 +2254,7 @@ author avatar, author byline, stored title and root preview:
   text-foreground`) over "Created when the event was scheduled · <age>" (`text-xs text-dim`). Its body is built on the
   client ("Discussion for **<title>**, Sat 22 Nov 19:00. Signed-up players (bench included) can post here.") so the date
   reads in the viewer's timezone. Shared by the hub thread view and the event-page panel (`ForumRootMessage`). The event
-  header adds "N / M signed up" (`signupLabel`; M = the slot roster capacity, else maxAttendees; "N signed up" uncapped).
+  header adds "N / M signed up" (`signupLabel`; "N signed up" uncapped). M is the capacity signups are allocated against —
+  the slot roster first, else maxAttendees; a 0 cap reads "N / 0" (always full), never uncapped. The api resolves it for
+  the hub thread (`resolveEventCapacity`); the event-page panel header (`signedUpLabel`) mirrors the same rule in
+  `web/src/lib/event-capacity.ts`, so both headers of one discussion agree.

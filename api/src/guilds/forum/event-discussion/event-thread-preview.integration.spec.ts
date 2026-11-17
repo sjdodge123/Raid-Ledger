@@ -2,8 +2,10 @@
  * ROK-2229 — the event-thread list preview and header numbers against a real
  * database: a moderator- or author-removed reply is never a thread's
  * `latestReply` (the newest live reply is), a thread whose replies are all
- * removed previews nothing, and the header's signup count and capacity match
- * the event page. Each test builds its own hub + event + thread (`newScene`).
+ * removed previews nothing, the header's signup count matches the event
+ * page's, and its capacity is the allocation capacity (`resolveEventCapacity`,
+ * which the event page mirrors in `web/src/lib/event-capacity.ts`). Each test
+ * builds its own hub + event + thread (`newScene`).
  */
 import type {
   HubForumThread,
