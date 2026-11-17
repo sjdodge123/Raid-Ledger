@@ -551,6 +551,8 @@ describe('ROK-2252 — event notices are written in one batch', () => {
     const notifications = testApp.app.get(NotificationService);
     const create = jest.spyOn(notifications, 'create');
     const createMany = jest.spyOn(notifications, 'createMany');
+    const claimOne = jest.spyOn(dedup, 'checkAndMarkSent');
+    const claimMany = jest.spyOn(dedup, 'checkAndMarkSentMany');
 
     await announce(event);
 
@@ -561,6 +563,10 @@ describe('ROK-2252 — event notices are written in one batch', () => {
     expect(batched).toContain(quiet);
     expect(batched).toEqual(expect.arrayContaining([fanA, fanB, gamer]));
     expect(batched).not.toContain(told);
+    // The per-user claims are one dedup call too, never one per recipient.
+    expect(claimMany).toHaveBeenCalledTimes(1);
+    const perKey = claimOne.mock.calls.map(([key]) => key);
+    expect(perKey.filter((k) => k.startsWith('event-notice:'))).toEqual([]);
     expect(await rowsFor(fanA, 'hub_event_tagged')).toHaveLength(1);
     expect(await rowsFor(fanB, 'hub_event_tagged')).toHaveLength(1);
     expect(await rowsFor(gamer, 'subscribed_game')).toHaveLength(1);

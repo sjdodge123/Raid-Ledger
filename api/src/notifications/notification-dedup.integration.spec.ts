@@ -301,4 +301,46 @@ describe('Notification Dedup (integration)', () => {
       expect(await dedupService.checkAndMarkSent(welcomeKey, null)).toBe(true);
     });
   });
+
+  // =================================================================
+  // ROK-2252: batch claim — a fixed number of queries for N keys
+  // =================================================================
+
+  describe('checkAndMarkSentMany()', () => {
+    const ttl = 7 * 24 * 60 * 60;
+    const keys = [1, 2, 3, 4, 5].map((n) => `event-notice:900:user:${n}`);
+
+    it('claims N keys once in three queries; a second run claims none', async () => {
+      const execute = jest.spyOn(testApp.db, 'execute');
+
+      const first = await dedupService.checkAndMarkSentMany(
+        [...keys, at(keys, 0)],
+        ttl,
+      );
+      expect([...first].sort()).toEqual([...keys].sort());
+      // SELECT valid rows + DELETE expired + one INSERT, whatever N is.
+      expect(execute).toHaveBeenCalledTimes(3);
+      const rows = await testApp.db.execute<{ dedup_key: string }>(sql`
+        SELECT dedup_key FROM notification_dedup
+        WHERE dedup_key LIKE 'event-notice:900:%'
+      `);
+      expect(rows.length).toBe(keys.length);
+
+      const again = await dedupService.checkAndMarkSentMany(keys, ttl);
+      expect(again).toEqual(new Set());
+      execute.mockRestore();
+    });
+
+    it('after a Redis flush the DB still guards every key and re-warms Redis', async () => {
+      await dedupService.checkAndMarkSentMany(keys, ttl);
+      const cached = await redis.keys('*');
+      if (cached.length > 0) await redis.del(...cached);
+
+      const afterFlush = await dedupService.checkAndMarkSentMany(keys, ttl);
+
+      expect(afterFlush).toEqual(new Set());
+      expect(await redis.get(at(keys, 0))).not.toBeNull();
+      expect(await dedupService.checkAndMarkSent(at(keys, 4), ttl)).toBe(true);
+    });
+  });
 });
