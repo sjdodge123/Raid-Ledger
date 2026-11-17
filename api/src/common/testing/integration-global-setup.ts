@@ -43,9 +43,12 @@ import {
 
 /** globalSetup and globalTeardown share the outer realm's globalThis. */
 export const CONTAINER_KEY = '__rl_integration_pg_container';
+/** ROK-2206: base URL + worker count, so teardown can drop `_tpl`/`_wN`. */
+export const WORKER_DBS_KEY = '__rl_integration_worker_dbs';
 
 export type GlobalWithContainer = typeof globalThis & {
   [CONTAINER_KEY]?: StartedPostgreSqlContainer;
+  [WORKER_DBS_KEY]?: { baseUrl: string; workers: number };
 };
 
 export default async function integrationGlobalSetup(): Promise<void> {
@@ -76,8 +79,10 @@ export default async function integrationGlobalSetup(): Promise<void> {
  * itself is never dropped, migrated or truncated here.
  */
 async function prepareWorkerDbs(baseUrl: string): Promise<void> {
+  const workers = requestedWorkers();
+  (globalThis as GlobalWithContainer)[WORKER_DBS_KEY] = { baseUrl, workers };
   await prepareTemplateDb(baseUrl);
-  const urls = await cloneWorkerDbs(baseUrl, requestedWorkers());
+  const urls = await cloneWorkerDbs(baseUrl, workers);
   process.env[WORKER_DB_URLS_ENV] = urls.join(' ');
   markTestDbMigrated(urls.join(' '));
 }

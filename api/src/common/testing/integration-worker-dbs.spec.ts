@@ -8,6 +8,7 @@ import {
   requestedWorkers,
   templateDbName,
   withDatabase,
+  workerDbNames,
   workerDbUrl,
 } from './integration-worker-dbs';
 
@@ -49,6 +50,14 @@ describe('URL helpers', () => {
   it('names the template <base>_tpl', () => {
     expect(databaseName(BASE)).toBe('raid_ledger_test');
     expect(templateDbName(BASE)).toBe('raid_ledger_test_tpl');
+  });
+
+  it('lists the template and every clone for teardown, never the base', () => {
+    expect(workerDbNames(BASE, 2)).toEqual([
+      'raid_ledger_test_tpl',
+      'raid_ledger_test_w1',
+      'raid_ledger_test_w2',
+    ]);
   });
 });
 

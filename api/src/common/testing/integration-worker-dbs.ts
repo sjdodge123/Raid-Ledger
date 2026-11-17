@@ -99,6 +99,29 @@ export async function cloneWorkerDbs(
   return urls;
 }
 
+/** The DBs per-worker mode creates: `<base>_tpl`, then `<base>_w1.._wN`. */
+export function workerDbNames(baseUrl: string, workers: number): string[] {
+  const baseName = databaseName(baseUrl);
+  const names = [templateDbName(baseUrl)];
+  for (let i = 1; i <= workers; i++) names.push(`${baseName}_w${i}`);
+  return names;
+}
+
+/**
+ * Drop everything `prepareTemplateDb` + `cloneWorkerDbs` created (jest
+ * globalTeardown). Never touches the base DB itself.
+ */
+export async function dropWorkerDbs(
+  baseUrl: string,
+  workers: number,
+): Promise<void> {
+  await withAdmin(baseUrl, async (admin) => {
+    for (const name of workerDbNames(baseUrl, workers)) {
+      await admin.unsafe(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    }
+  });
+}
+
 /** This worker's DB URL, or undefined when per-worker mode is off. */
 export function workerDbUrl(): string | undefined {
   const list = (process.env[WORKER_DB_URLS_ENV] ?? '').split(' ');
