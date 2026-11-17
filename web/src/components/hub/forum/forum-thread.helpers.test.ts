@@ -35,6 +35,13 @@ describe('forum thread helpers', () => {
         expect(forumRowPreview(buildForumThread({ preview: 'root' }))).toBe('root');
     });
 
+    it('row preview: a Discord guest reply reads "<Discord name>: …"; a deleted RL user stays "Former member" (ROK-2208)', () => {
+        const guest = { author: null, discordAuthor: { name: 'Thornwick', avatarUrl: null }, preview: 'On my way.' };
+        expect(forumRowPreview(buildForumThread({ latestReply: guest }))).toBe('Thornwick: On my way.');
+        const deleted = { author: null, discordAuthor: null, preview: 'On my way.' };
+        expect(forumRowPreview(buildForumThread({ latestReply: deleted }))).toBe('Former member: On my way.');
+    });
+
     it('meta line of an event thread (live or event-deleted) = "Event thread · <age>" (ROK-2229)', () => {
         expect(forumRowMeta(buildForumThread({ event: buildForumThreadEvent(), lock: null }), NOW)).toBe('Event thread · 2 h ago');
         expect(forumRowMeta(buildForumThread({ event: null, lock: buildForumLock({ reason: 'event-deleted' }) }), NOW)).toBe('Event thread · 2 h ago');
