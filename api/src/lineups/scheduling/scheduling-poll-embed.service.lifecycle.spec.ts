@@ -359,6 +359,7 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
       pollEmbed as never,
       events as never,
       lockIn,
+      { isMember: jest.fn() } as never,
     );
 
     await expect(
