@@ -28,6 +28,8 @@ export interface PlannerState {
     /** Add a roster row by its `RosterPick.key`; a no-op past five, for a duplicate or an unknown key. */
     add: (key: string) => void;
     remove: (key: string) => void;
+    /** ROK-2212: replace the whole plan (a suggested group's dungeon + up to five tokens). */
+    load: (instanceId: number, tokens: PlanToken[]) => void;
 }
 
 /** The plan in the URL and a writer that keeps the hash and replaces history. */
@@ -73,5 +75,6 @@ export function usePlannerState(roster: Pick<WowRosterInsightsDto, 'classes'> | 
         setInstanceId: (id) => write({ ...plan, instanceId: id, tokens }),
         add,
         remove: (key) => write({ ...plan, tokens: picks.filter((p) => p.key !== key).map((p) => p.token) }),
+        load: (instanceId, next) => write({ instanceId, tokens: next.slice(0, MAX_DUNGEON_PLAN_CHARACTERS) }),
     };
 }
