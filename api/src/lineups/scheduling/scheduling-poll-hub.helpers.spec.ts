@@ -11,7 +11,10 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
-import { loadPollHubView } from './scheduling-poll-hub.helpers';
+import {
+  loadPollHubView,
+  type HubMembersAmong,
+} from './scheduling-poll-hub.helpers';
 import {
   findVisiblePollHub,
   type PollHub,
@@ -32,10 +35,11 @@ const guildHub: PollHub = {
 let mockDb: MockDb;
 const db = (): PostgresJsDatabase<typeof schema> =>
   mockDb as unknown as PostgresJsDatabase<typeof schema>;
-const rosterOf = (ids: number[]) =>
-  jest.fn((userIds: readonly number[], _hubId: number) =>
-    Promise.resolve(new Set(userIds.filter((id) => ids.includes(id)))),
-  );
+const rosterOf = (ids: number[]) => {
+  const among: HubMembersAmong = (userIds) =>
+    Promise.resolve(new Set(userIds.filter((id) => ids.includes(id))));
+  return jest.fn(among);
+};
 
 describe('loadPollHubView — member flags by hub kind (ROK-2212)', () => {
   beforeEach(() => {

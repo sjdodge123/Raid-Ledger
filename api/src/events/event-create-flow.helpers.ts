@@ -3,6 +3,7 @@
  * Extracted from EventsService for file-size compliance (ROK-429).
  */
 import type { Logger } from '@nestjs/common';
+import type { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import type { CreateEventDto, EventResponseDto } from '@raid-ledger/contract';
@@ -24,6 +25,7 @@ import {
 import { buildLifecyclePayload } from './event-response.helpers';
 import { warnWithStack } from '../common/error-format.helpers';
 import type { HubMemberCheck } from '../lineups/standalone-poll/standalone-poll-hub.helpers';
+import { GuildAccessService } from '../guilds/guild-access.service';
 import { defined } from '../common/defined.helpers';
 
 interface CreateFlowDeps {
@@ -38,6 +40,18 @@ interface CreateFlowDeps {
   noticeDedup: FollowupNoticeDedup;
   /** ROK-2212: hub membership by kind (`GuildAccessService.isMember`). */
   isHubMember: HubMemberCheck;
+}
+
+/**
+ * ROK-2212: hub membership by kind, resolved lazily (as `embedVoiceDepsFrom`)
+ * — GuildsCoreModule is app-wide and only a hub-tagged poll lock-in needs it,
+ * so EventsModule takes no import edge on it.
+ */
+export function hubMemberCheckFrom(moduleRef: ModuleRef): HubMemberCheck {
+  return (userId, hubId) =>
+    moduleRef
+      .get(GuildAccessService, { strict: false })
+      .isMember(userId, hubId);
 }
 
 /**
