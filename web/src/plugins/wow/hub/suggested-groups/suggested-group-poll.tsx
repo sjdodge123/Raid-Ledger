@@ -3,11 +3,12 @@
  * modal locked to the hub's game, tagged to the guild hub (F1 ruling
  * 2026-11-17: a poll may carry a `wow_guild` hub tag) and pre-filled with the
  * group's players — only the claimed ones, an unclaimed row has no user (F2).
- * Lazy like the hub Events tab's poll modal.
+ * Lazy like the hub Events tab's poll modal. ROK-2256: the claimed members'
+ * character names label the picker's Selected chips.
  */
 import { lazy, Suspense, type JSX } from 'react';
 import type { GuildPage, SuggestedGroupDto } from '@raid-ledger/contract';
-import { pollMemberUserIds } from './suggested-groups-links';
+import { pollMemberNames, pollMemberUserIds } from './suggested-groups-links';
 
 const CreatePollModal = lazy(() => import('../../../../components/scheduling/create-poll-modal').then((m) => ({ default: m.CreatePollModal })));
 
@@ -22,7 +23,8 @@ export function SuggestedGroupPollModal({ group, page, onClose }: Props): JSX.El
     return (
         <Suspense fallback={null}>
             <CreatePollModal isOpen onClose={onClose} initialGameId={page.guild.gameId} hubId={page.guild.id}
-                hubName={page.guild.name} initialMemberUserIds={pollMemberUserIds(group)} />
+                hubName={page.guild.name} initialMemberUserIds={pollMemberUserIds(group)}
+                initialMembers={pollMemberNames(group)} />
         </Suspense>
     );
 }

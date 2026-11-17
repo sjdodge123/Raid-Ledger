@@ -51,3 +51,27 @@ describe('CreatePollModal — initialMemberUserIds (W10)', () => {
         expect(screen.queryByText(/Discard/)).toBeNull();
     });
 });
+
+describe('CreatePollModal — selected members off the first page (ROK-2256)', () => {
+    it('names every seeded member in a removable chip, even one not on page 1', async () => {
+        renderWithProviders(<CreatePollModal isOpen onClose={vi.fn()} initialGameId={5} hubId={7} hubName="Hub"
+            initialMemberUserIds={[1, 9, 42]} initialMembers={[{ id: 9, username: 'Zed' }]} />);
+        expect(await screen.findByText('3 members selected')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Zed' }), 'off-page member named from the caller').toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: 'Remove Ann' }), 'named from the loaded page-1 row').toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Member #42' }), 'unknown id gets the neutral fallback').toBeInTheDocument();
+    });
+
+    it('Remove on an off-page chip drops that member from the count and the request', async () => {
+        const user = userEvent.setup();
+        mutateAsync.mockResolvedValue({ id: 1, lineupId: 2, visibility: 'public', shareToken: null });
+        renderWithProviders(<CreatePollModal isOpen onClose={vi.fn()} initialGameId={5} hubId={7} hubName="Hub"
+            initialMemberUserIds={[1, 9]} initialMembers={[{ id: 9, username: 'Zed' }]} />);
+        await screen.findByText('2 members selected');
+        await user.click(screen.getByRole('button', { name: 'Remove Zed' }));
+        expect(screen.getByText('1 member selected')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Remove Zed' })).toBeNull();
+        await user.click(screen.getByRole('button', { name: 'Create Poll' }));
+        expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ memberUserIds: [1] }));
+    });
+});

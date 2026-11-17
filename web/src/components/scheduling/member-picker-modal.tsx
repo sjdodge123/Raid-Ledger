@@ -1,21 +1,25 @@
 /**
  * Member multi-select picker for standalone scheduling polls (ROK-977).
  * Displays community members with checkboxes for selection.
+ *
+ * ROK-2256: the list is page 1 (or a search), so every selected member is
+ * also shown by name as a removable chip above it — see `SelectedMembers`.
  */
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getPlayers } from '../../lib/api-client';
 import { SearchInput } from '../ui/search-input';
-
-interface MemberOption {
-  id: number;
-  username: string;
-}
+import { SelectedMembers } from './member-picker-selected';
+import { useMemberNames, type MemberOption } from './member-picker-names';
 
 interface MemberPickerProps {
   selectedIds: number[];
   onChange: (ids: number[]) => void;
+  /** ROK-2256: names for selected members the caller already knows (they may not be on page 1). */
+  knownMembers?: readonly MemberOption[];
 }
+
+const NO_MEMBERS: MemberOption[] = [];
 
 /** Fetch community members for the picker. */
 function useCommunityMembers(search: string) {
@@ -46,13 +50,38 @@ function MemberCheckbox({ member, checked, onToggle }: {
   );
 }
 
+/** The page-1 (or search) rows with their checkboxes. */
+function MemberList({ members, isLoading, selectedIds, onToggle }: {
+  members: MemberOption[]; isLoading: boolean; selectedIds: number[]; onToggle: (id: number) => void;
+}) {
+  return (
+    <div className="max-h-32 overflow-y-auto border border-edge rounded-lg">
+      {isLoading && (
+        <div className="px-3 py-2 text-sm text-muted">Loading...</div>
+      )}
+      {!isLoading && members.length === 0 && (
+        <div className="px-3 py-2 text-sm text-muted">No members found</div>
+      )}
+      {members.map((member) => (
+        <MemberCheckbox
+          key={member.id}
+          member={member}
+          checked={selectedIds.includes(member.id)}
+          onToggle={() => onToggle(member.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * Multi-select member picker with search.
  * Fetches community members and allows checkbox selection.
  */
-export function MemberPicker({ selectedIds, onChange }: MemberPickerProps) {
+export function MemberPicker({ selectedIds, onChange, knownMembers }: MemberPickerProps) {
   const [search, setSearch] = useState('');
-  const { data: members = [], isLoading } = useCommunityMembers(search);
+  const { data: members = NO_MEMBERS, isLoading } = useCommunityMembers(search);
+  const names = useMemberNames(knownMembers, members);
 
   const toggleMember = (id: number) => {
     const next = selectedIds.includes(id)
@@ -76,6 +105,7 @@ export function MemberPicker({ selectedIds, onChange }: MemberPickerProps) {
       <label className="block text-sm font-medium text-secondary mb-2">
         Members (optional)
       </label>
+      <SelectedMembers ids={selectedIds} names={names} onRemove={toggleMember} />
       <div className="mb-2">
         <SearchInput
           value={search}
@@ -84,22 +114,7 @@ export function MemberPicker({ selectedIds, onChange }: MemberPickerProps) {
           label="Search members"
         />
       </div>
-      <div className="max-h-32 overflow-y-auto border border-edge rounded-lg">
-        {isLoading && (
-          <div className="px-3 py-2 text-sm text-muted">Loading...</div>
-        )}
-        {!isLoading && filtered.length === 0 && (
-          <div className="px-3 py-2 text-sm text-muted">No members found</div>
-        )}
-        {filtered.map((member) => (
-          <MemberCheckbox
-            key={member.id}
-            member={member}
-            checked={selectedIds.includes(member.id)}
-            onToggle={() => toggleMember(member.id)}
-          />
-        ))}
-      </div>
+      <MemberList members={filtered} isLoading={isLoading} selectedIds={selectedIds} onToggle={toggleMember} />
       {selectedIds.length > 0 && (
         <p className="mt-1 text-xs text-muted">
           {selectedIds.length} member{selectedIds.length !== 1 ? 's' : ''} selected

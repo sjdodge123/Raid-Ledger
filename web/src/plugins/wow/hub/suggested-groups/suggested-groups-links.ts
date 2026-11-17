@@ -59,6 +59,15 @@ export function pollMemberUserIds(group: SuggestedGroupDto): number[] {
     return [...new Set(ids)];
 }
 
+/** ROK-2256: a name per poll member — the first claimed character's name for each owner. */
+export function pollMemberNames(group: SuggestedGroupDto): { id: number; username: string }[] {
+    const names = new Map<number, string>();
+    for (const m of group.members) {
+        if (m.userId !== null && !names.has(m.userId)) names.set(m.userId, m.name);
+    }
+    return [...names].map(([id, username]) => ({ id, username }));
+}
+
 /** Highest and lowest member level. */
 export function memberLevelRange(group: SuggestedGroupDto): { low: number; high: number } {
     const levels = group.members.map((m) => m.level);

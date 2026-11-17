@@ -1,7 +1,7 @@
 /** ROK-2212 — suggested-group links (W2 / W3 / W4 helpers): one format, the planner's own. */
 import { describe, it, expect } from 'vitest';
 import { claimed, group, SG_UUID_DPS, SG_UUID_HEAL, SG_UUID_TANK, unclaimed } from './suggested-groups.fixtures';
-import { inviteNote, plannerHref, pollMemberUserIds, scheduleHref } from './suggested-groups-links';
+import { inviteNote, plannerHref, pollMemberNames, pollMemberUserIds, scheduleHref } from './suggested-groups-links';
 
 const PAGE = { guild: { id: 7, gameId: 3 } } as const;
 
@@ -40,5 +40,14 @@ describe('pollMemberUserIds (W4)', () => {
             members: [claimed(SG_UUID_TANK, 'T', 'tank', 20, 9), claimed(SG_UUID_HEAL, 'H', 'healer', 20, 9), unclaimed(3, 'C', 'dps', 20), unclaimed(4, 'D', 'dps', 20), unclaimed(5, 'E', 'dps', 20)],
         });
         expect(pollMemberUserIds(g)).toEqual([9]);
+    });
+});
+
+describe('pollMemberNames (ROK-2256)', () => {
+    it('names each owner once, by their first claimed character; unclaimed rows are skipped', () => {
+        const g = group(101, 'SFK', {
+            members: [claimed(SG_UUID_TANK, 'Tanky', 'tank', 20, 9), claimed(SG_UUID_HEAL, 'Healy', 'healer', 20, 9), claimed(SG_UUID_DPS, 'Stabby', 'dps', 20, 4), unclaimed(4, 'D', 'dps', 20), unclaimed(5, 'E', 'dps', 20)],
+        });
+        expect(pollMemberNames(g)).toEqual([{ id: 9, username: 'Tanky' }, { id: 4, username: 'Stabby' }]);
     });
 });

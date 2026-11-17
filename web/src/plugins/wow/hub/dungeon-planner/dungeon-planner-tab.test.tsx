@@ -148,6 +148,16 @@ describe('DungeonPlannerTab — Create event, quest errors, Copy link and the ph
         expect(bar.className).toContain('md:bottom-0');
     });
 
+    it('stops the phone Create-event bar where the planner ends, above Suggested groups', async () => {
+        media.desktop = false;
+        renderTab();
+        const bar = await screen.findByTestId('planner-mobile-actions');
+        const groups = await screen.findByTestId('suggested-groups-section');
+        expect(bar.className).toContain('z-10');
+        expect(bar.parentElement?.contains(groups), 'groups sit outside the bar\'s sticky containing block').toBe(false);
+        expect(bar.compareDocumentPosition(groups) & Node.DOCUMENT_POSITION_FOLLOWING, 'groups follow the bar').toBeTruthy();
+    });
+
     it('ROK-2212: Open in planner on a suggested group loads its dungeon and picks in place', async () => {
         const g = group(INSTANCE.id, INSTANCE.name, { members: [
             claimed(UUID_A, 'Tanky', 'tank', 20, 1), claimed(UUID_B, 'Blinky', 'healer', 12, 2),

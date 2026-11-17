@@ -7,7 +7,7 @@
  * ROK-2212: the "Suggested groups" section below; Open in planner loads a
  * group into the plan (the URL) and scrolls back up to it.
  */
-import { useMemo, useRef, type JSX, type RefObject } from 'react';
+import { useMemo, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { DungeonPlanDto, EnrichedDungeonQuestDto, SuggestedGroupDto, WowInstanceDto } from '@raid-ledger/contract';
 import type { HubCtx } from '../../../hub-module';
@@ -83,6 +83,14 @@ function useOpenGroup(s: PlannerState): { root: RefObject<HTMLDivElement | null>
     return { root, openGroup };
 }
 
+/** Phone Create-event bar, docked above the bottom tab bar while the planner is on screen. */
+function PlannerMobileBar({ children }: { children: ReactNode }): JSX.Element {
+    return (
+        <div data-testid="planner-mobile-actions"
+            className="sticky bottom-[var(--bottom-nav-clearance)] z-10 -mx-4 border-y border-edge bg-surface p-3 md:bottom-0">{children}</div>
+    );
+}
+
 /** The tab body (default export: `dungeonPlannerTab` lazy-loads it). */
 export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.Element {
     const desktop = useMediaQuery('(min-width: 1024px)');
@@ -97,22 +105,22 @@ export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.E
     const actions = <CreateEventButtons links={links} />;
     return (
         <div ref={root} className="scroll-mt-4 rounded-lg border border-edge bg-surface p-4" data-testid="dungeon-planner">
-            <div className={`space-y-4 ${desktop ? '' : 'pb-6'}`}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
-                        <FactionPill plan={plan.data} />
+            {/* The phone bar's containing block: it sticks only while the planner itself is on screen. */}
+            <div>
+                <div className={`space-y-4 ${desktop ? '' : 'pb-6'}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-lg font-semibold text-foreground">Dungeon planner</h2>
+                            <FactionPill plan={plan.data} />
+                        </div>
+                        <div className="flex flex-wrap items-start gap-2"><CopyLinkButton url={share} />{desktop && actions}</div>
                     </div>
-                    <div className="flex flex-wrap items-start gap-2"><CopyLinkButton url={share} />{desktop && actions}</div>
+                    <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
+                        enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} enrichedError={enriched.isError} />
                 </div>
-                <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
-                    enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} enrichedError={enriched.isError} />
-                <SuggestedGroupsSection page={page} onOpenInPlanner={openGroup} />
+                {!desktop && <PlannerMobileBar>{actions}</PlannerMobileBar>}
             </div>
-            {!desktop && (
-                <div data-testid="planner-mobile-actions"
-                    className="sticky bottom-[var(--bottom-nav-clearance)] -mx-4 -mb-4 border-t border-edge bg-surface p-3 md:bottom-0">{actions}</div>
-            )}
+            <div className="mt-4"><SuggestedGroupsSection page={page} onOpenInPlanner={openGroup} /></div>
         </div>
     );
 }
