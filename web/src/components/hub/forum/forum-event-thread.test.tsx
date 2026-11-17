@@ -4,7 +4,7 @@
  * the event header, the reply count ABOVE the opening post, and a Raid Ledger
  * opening post rendered client-side. A normal thread keeps its old layout.
  */
-import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { HubForumThread } from '@raid-ledger/contract';
@@ -13,33 +13,24 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import { buildForumReply, buildForumThread, buildForumThreadDetail, buildForumThreadEvent } from '../../../test/factories/hub-forum';
 import { HubForumTab } from './forum-tab';
 import { ForumThreadRow } from './forum-thread-row';
+import { SPLIT_DAY_END, SPLIT_DAY_START, VIEWER_ZONE, pinViewerZone, shortDateIn, timeIn } from '../../../test/tz-helpers';
 
 const THREAD = 'http://localhost:3000/guilds/7/forum/5';
 /**
- * m1 (ROK-2229 review): pin a non-UTC viewer zone and an instant that falls on
- * different calendar days in New York and UTC, and build the expectations
- * with an explicit `timeZone` — so a UTC/server-zone regression fails.
+ * m1/B1 (ROK-2229 review): a non-UTC viewer zone and an instant on different
+ * calendar days there and in UTC; expectations use an explicit `timeZone`.
  */
-const ZONE = 'America/New_York';
-const START = '2026-11-22T23:30:00.000Z';
-const shortDateIn = (iso: string, timeZone: string): string =>
-    new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone });
-const timeIn = (iso: string, timeZone: string): string =>
-    new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone });
-
-beforeAll(() => {
-    vi.stubEnv('TZ', ZONE);
-});
-
-afterAll(() => {
-    vi.unstubAllEnvs();
-});
+const ZONE = VIEWER_ZONE;
+const START = SPLIT_DAY_START;
+pinViewerZone();
 
 it('uses an instant whose New York and UTC dates differ', () => {
-    expect(shortDateIn(START, ZONE)).not.toBe(shortDateIn(START, 'UTC'));
+    // Sun 22 Nov 21:30 in New York (EST, UTC-5); Mon 23 Nov 02:30 in UTC.
+    expect(shortDateIn(START, ZONE)).toContain('22');
+    expect(shortDateIn(START, 'UTC')).toContain('23');
 });
 
-const EVENT = buildForumThreadEvent({ startTime: START, endTime: '2026-11-23T02:30:00.000Z', signupCount: 18, maxAttendees: 40 });
+const EVENT = buildForumThreadEvent({ startTime: START, endTime: SPLIT_DAY_END, signupCount: 18, maxAttendees: 40 });
 
 function renderThread(thread: HubForumThread): void {
     server.use(http.get(THREAD, () => HttpResponse.json(thread)));
