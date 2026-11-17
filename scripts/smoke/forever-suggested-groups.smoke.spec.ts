@@ -94,8 +94,11 @@ async function openSectionFromWidget(page: Page, s: Seeded): Promise<void> {
     await section(page).getByLabel('Show groups for').selectOption(String(sg.instanceId));
     const shown = section(page).getByTestId('suggested-group-card');
     await expect(shown.first(), `the section lists a ${sg.instanceName} group`).toBeVisible();
-    const labels = await shown.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
-    expect(labels.filter((l) => !isGroupOf(l, sg.instanceName)), 'the filter keeps only the seeded dungeon').toEqual([]);
+    await expect.poll(
+        async () => (await shown.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? '')))
+            .filter((l) => !isGroupOf(l, sg.instanceName)),
+        { message: 'the filter keeps only the seeded dungeon' },
+    ).toEqual([]);
 }
 
 test.describe('Suggested groups on WoW: Forever guild hubs (ROK-2212)', () => {
