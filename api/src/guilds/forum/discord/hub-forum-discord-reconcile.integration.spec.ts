@@ -167,7 +167,12 @@ async function linkById(id: number) {
 async function queuedThread(
   g: number,
   title: string,
-  link: { syncState: string; attempts: number; sentId?: string },
+  link: {
+    syncState: string;
+    attempts: number;
+    sentId?: string;
+    origin?: string;
+  },
 ) {
   const db = ctx.testApp.db;
   const [t] = nonEmpty(
@@ -187,7 +192,7 @@ async function queuedThread(
         threadId: t.id,
         discordThreadId: discordId,
         discordMessageId: discordId,
-        origin: 'raidledger',
+        origin: link.origin ?? 'raidledger',
         syncState: link.syncState,
         attempts: link.attempts,
         createdAt: new Date(Date.now() - 10 * HOUR),
@@ -216,6 +221,42 @@ describe('ROK-2208 §5.6 outbound retry sweep — bot offline (Codex P1)', () =>
       syncState: 'failed',
       attempts: 4,
     });
+  });
+});
+
+describe('ROK-2208 §5.6 retry sweep — Discord-origin moderation deletes (Codex P2)', () => {
+  it('re-drives a failed delete of an imported post an RL moderator removed', async () => {
+    const { g } = await boundHub();
+    const sentId = '1200000000000000001';
+    const q = await queuedThread(g, 'rc-modded', {
+      syncState: 'failed',
+      attempts: 1,
+      sentId,
+      origin: 'discord',
+    });
+    await ctx.testApp.db
+      .update(schema.hubForumThreads)
+      .set({ deletedAt: new Date(), deletedAs: 'moderator' })
+      .where(eq(schema.hubForumThreads.id, q.thread.id));
+    await sync.retrySweep();
+    expect(out.spies.deleteThread).toHaveBeenCalledWith(sentId);
+    const after = await linkById(q.link.id);
+    expect(after?.discordDeletedAt).not.toBeNull();
+  });
+
+  it('never echoes a failed Discord-origin row whose RL row still exists', async () => {
+    const { g } = await boundHub();
+    const q = await queuedThread(g, 'rc-inbound', {
+      syncState: 'failed',
+      attempts: 1,
+      sentId: '1200000000000000002',
+      origin: 'discord',
+    });
+    await sync.retrySweep();
+    expect(sentTitles()).not.toContain('rc-inbound');
+    expect(out.spies.editMessage).not.toHaveBeenCalled();
+    expect(out.spies.renameThread).not.toHaveBeenCalled();
+    expect(await linkById(q.link.id)).toMatchObject({ syncState: 'synced' });
   });
 });
 

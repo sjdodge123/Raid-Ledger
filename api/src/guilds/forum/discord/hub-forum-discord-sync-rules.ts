@@ -61,15 +61,22 @@ export function isRetryDue(
 /**
  * What re-drives a pending/failed RL-origin link: a placeholder id
  * (`rl:t:<id>`/`rl:r:<id>`) was never sent → create; a sent row whose RL row
- * is deleted → delete; else → edit. Null once Discord's side is gone.
+ * is deleted → delete; else → edit. Null once Discord's side is gone, and
+ * for a Discord-origin row whose RL row still exists.
  */
 export function retryOp(
-  link: Pick<ForumLink, 'kind' | 'discordMessageId' | 'discordDeletedAt'>,
+  link: Pick<
+    ForumLink,
+    'kind' | 'origin' | 'discordMessageId' | 'discordDeletedAt'
+  >,
   rowDeleted: boolean,
 ): ForumOp | null {
   if (link.discordDeletedAt !== null) return null;
   const ops = link.kind === 'thread' ? THREAD_OPS : REPLY_OPS;
   if (rowDeleted) return ops.deleted;
+  // A Discord-origin row is only ever retried to finish an RL moderation
+  // delete (Codex P2) — never echoed back to Discord as a create or edit.
+  if (link.origin !== 'raidledger') return null;
   if (link.discordMessageId.startsWith(UNSENT_PREFIX)) return ops.created;
   return ops.updated;
 }

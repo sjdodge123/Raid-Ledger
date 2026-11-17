@@ -7,7 +7,7 @@
  * unsent row carries a placeholder id `rl:<t|r>:<rl id>` (no schema change),
  * replaced by the real snowflake on success. `isUnsent` tells them apart.
  */
-import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -177,9 +177,20 @@ export interface RetryPolicy {
   stepMs: number;
 }
 
+/** RL-origin pending/failed rows, or a failed Discord-origin one (Codex P2). */
+const retryableState = () =>
+  or(
+    and(
+      eq(links.origin, 'raidledger'),
+      inArray(links.syncState, ['pending', 'failed']),
+    ),
+    and(eq(links.origin, 'discord'), eq(links.syncState, 'failed')),
+  );
+
 /**
  * §5.6 sweep queue: RL-origin rows of still-BOUND hubs, pending/failed under
- * the attempts cap, posts before replies (a reply needs its post's real id).
+ * the attempts cap, plus FAILED Discord-origin rows (Codex P2: only an RL
+ * moderation delete ever fails one; `retryOp` never echoes them otherwise), posts before replies (a reply needs its post's real id).
  * Unbound hubs drop out so their rows never crowd the queue (D9). Review
  * MAJOR-3: the backoff (`isRetryDue`) is applied HERE, before the LIMIT, so
  * not-yet-due rows can never starve a due one.
@@ -199,14 +210,7 @@ export async function retryableLinks(
     .select({ link: links })
     .from(links)
     .innerJoin(bound, eq(bound.guildId, links.guildId))
-    .where(
-      and(
-        eq(links.origin, 'raidledger'),
-        inArray(links.syncState, ['pending', 'failed']),
-        lt(links.attempts, policy.maxAttempts),
-        due,
-      ),
-    )
+    .where(and(retryableState(), lt(links.attempts, policy.maxAttempts), due))
     .orderBy(desc(links.kind), asc(links.id))
     .limit(limit);
   return rows.map((r) => r.link);

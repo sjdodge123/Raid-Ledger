@@ -86,6 +86,7 @@ describe('retryDelayMs / isRetryDue (backoff by attempts)', () => {
 describe('retryOp (what the sweep re-drives)', () => {
   const sent = {
     kind: 'reply',
+    origin: 'raidledger',
     discordMessageId: '100000000000000000',
     discordDeletedAt: null,
   };
@@ -109,6 +110,15 @@ describe('retryOp (what the sweep re-drives)', () => {
 
   it('nothing to do once the Discord side is gone', () => {
     expect(retryOp({ ...sent, discordDeletedAt: now }, false)).toBeNull();
+  });
+
+  it('Codex P2: a Discord-origin row is retried only to finish an RL moderation delete', () => {
+    const inbound = { ...sent, origin: 'discord' };
+    expect(retryOp(inbound, true)).toBe('reply.deleted');
+    expect(retryOp({ ...inbound, kind: 'thread' }, true)).toBe(
+      'thread.deleted',
+    );
+    expect(retryOp(inbound, false)).toBeNull();
   });
 });
 
