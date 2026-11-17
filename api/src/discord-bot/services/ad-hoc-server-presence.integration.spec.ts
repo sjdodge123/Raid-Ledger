@@ -267,7 +267,11 @@ describe('AdHocServerPresenceService — leave, grace and rehydrate', () => {
     await sink.playerLeft(src, steamPlayer(STEAM_A));
 
     expect(await sink.openPresence(src)).toEqual([
-      { steamId: STEAM_B, displayName: player(STEAM_B).displayName },
+      {
+        playerId: STEAM_B,
+        idKind: 'steam',
+        displayName: 'Viking-' + STEAM_B.slice(-3),
+      },
     ]);
   });
 });
