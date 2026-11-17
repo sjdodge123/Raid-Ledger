@@ -10,6 +10,7 @@ import {
   index,
   uniqueIndex,
   check,
+  foreignKey,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -48,9 +49,7 @@ export const hubForumDiscordBindings = pgTable(
     guildId: integer('guild_id')
       .primaryKey()
       .references(() => guilds.id, { onDelete: 'cascade' }),
-    forumId: integer('forum_id')
-      .notNull()
-      .references(() => hubForumDiscordForums.id, { onDelete: 'cascade' }),
+    forumId: integer('forum_id').notNull(),
     /** The hub's forum tag; null while the forum serves one hub only. */
     tagId: varchar('tag_id', { length: 32 }),
     ackBy: integer('ack_by').references(() => users.id, {
@@ -66,6 +65,12 @@ export const hubForumDiscordBindings = pgTable(
       .where(sql`${table.tagId} IS NOT NULL`),
     index('idx_hub_forum_discord_bindings_forum_id').on(table.forumId),
     index('idx_hub_forum_discord_bindings_ack_by').on(table.ackBy),
+    // ROK-1387: drizzle's default name is 66 chars; Postgres truncates at 63.
+    foreignKey({
+      columns: [table.forumId],
+      foreignColumns: [hubForumDiscordForums.id],
+      name: 'hub_forum_discord_bindings_forum_id_fk',
+    }).onDelete('cascade'),
   ],
 );
 
@@ -141,6 +146,8 @@ export const hubForumDiscordLinks = pgTable(
         sql`${table.origin} = 'raidledger' AND ${table.syncState} <> 'synced'`,
       ),
     index('idx_hub_forum_discord_links_guild_id').on(table.guildId),
+    // ROK-1157: the partial unique index above cannot serve the FK's RI scan.
+    index('idx_hub_forum_discord_links_thread_id').on(table.threadId),
     index('idx_hub_forum_discord_links_discord_thread').on(
       table.discordThreadId,
     ),
@@ -153,13 +160,25 @@ export const hubForumDiscordLinks = pgTable(
  * the bot sends only when its `INSERT … ON CONFLICT DO NOTHING` returns a
  * row, so restarts, reconcile and races never double-post.
  */
-export const hubForumDiscordNotices = pgTable('hub_forum_discord_notices', {
-  discordThreadId: varchar('discord_thread_id', { length: 32 }).primaryKey(),
-  forumId: integer('forum_id')
-    .notNull()
-    .references(() => hubForumDiscordForums.id, { onDelete: 'cascade' }),
-  sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const hubForumDiscordNotices = pgTable(
+  'hub_forum_discord_notices',
+  {
+    discordThreadId: varchar('discord_thread_id', { length: 32 }).primaryKey(),
+    forumId: integer('forum_id').notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index('idx_hub_forum_discord_notices_forum_id').on(table.forumId),
+    // ROK-1387: drizzle's default name is 65 chars; Postgres truncates at 63.
+    foreignKey({
+      columns: [table.forumId],
+      foreignColumns: [hubForumDiscordForums.id],
+      name: 'hub_forum_discord_notices_forum_id_fk',
+    }).onDelete('cascade'),
+  ],
+);
 
 export type HubForumDiscordForumSelect =
   typeof hubForumDiscordForums.$inferSelect;
