@@ -209,6 +209,43 @@ describe('SuggestedGroupsService', () => {
     expect(resolveFacts).toHaveBeenCalledTimes(2);
   });
 
+  it('an invalidation while a compute is in flight: the next read recomputes', async () => {
+    canView.mockResolvedValue(true);
+    const svc = await makeService();
+    const seeded = must(
+      jest.mocked(loadGuildRows).getMockImplementation(),
+      'seeded loadGuildRows',
+    );
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    jest.mocked(loadGuildRows).mockImplementationOnce(async (...args) => {
+      await gate;
+      return seeded(...args);
+    });
+    const first = svc.suggestedGroups(actor, 1, { scope: 'top' });
+    svc.invalidate(1); // the import lands while the pre-import read runs
+    release();
+    await first;
+    await svc.suggestedGroups(actor, 1, { scope: 'top' });
+    expect(loadGuildRows).toHaveBeenCalledTimes(2);
+  });
+
+  it('init names the missing RosterInsightsCache provider', async () => {
+    const mod = await Test.createTestingModule({
+      providers: [
+        SuggestedGroupsService,
+        InstanceCatalogueService,
+        { provide: DrizzleAsyncProvider, useValue: {} },
+        { provide: SettingsService, useValue: {} },
+        { provide: WowFactsService, useValue: { resolveFacts } },
+        { provide: GuildAccessService, useValue: { canView } },
+      ],
+    }).compile();
+    expect(() => mod.get(SuggestedGroupsService).onModuleInit()).toThrow(
+      /needs the RosterInsightsCache provider/,
+    );
+  });
+
   it('serves the second read from the per-guild cache', async () => {
     canView.mockResolvedValue(true);
     const svc = await makeService();
