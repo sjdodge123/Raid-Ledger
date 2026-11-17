@@ -88,6 +88,8 @@ async function foldIntoVoiceRow(
     .update(p)
     .set({
       steamId: steam.steamId,
+      playerId: steam.playerId,
+      idKind: steam.idKind,
       onServer: sql`${p.onServer} OR ${steam.onServer}`,
       pelicanServerId: steam.pelicanServerId,
       characterName: steam.characterName,

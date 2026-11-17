@@ -11,6 +11,12 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
 import {
+  presenceKey,
+  steamIdOf,
+  storedPlayerRef,
+  type PlayerRef,
+} from '../../plugins/pelican/presence/presence-events';
+import {
   characterNameOf,
   clampStoredName,
 } from './ad-hoc-steam-display.helpers';
@@ -53,7 +59,7 @@ const liveGameWhere = (gameId: number) =>
 export async function findServerEnrolledEvent(
   db: Db,
   gameId: number,
-  steamId: string,
+  player: PlayerRef,
   pelicanServerId: number,
 ): Promise<LiveGameEvent | null> {
   const rows = await db
@@ -63,7 +69,8 @@ export async function findServerEnrolledEvent(
     .where(
       and(
         liveGameWhere(gameId),
-        eq(p.steamId, steamId),
+        eq(p.idKind, player.idKind),
+        eq(p.playerId, player.playerId),
         // Codex r3: a player who moved servers is no longer this server's.
         eq(p.pelicanServerId, pelicanServerId),
         eq(p.onServer, true),
@@ -159,14 +166,33 @@ export async function resolveSteamIdentity(
   return rows[0] ?? null;
 }
 
-/** SteamIDs of every row still on THIS server — merged voice rows included. */
-export async function listOnServerSteamIds(
+/**
+ * ROK-2232: a player's linked RL user — Steam only (`users.steam_id`); any
+ * other id kind stays anonymous until a claim exists.
+ */
+export function resolvePlayerIdentity(
+  db: Db,
+  player: PlayerRef,
+): Promise<SteamIdentity | null> {
+  const steamId = steamIdOf(player);
+  return steamId === null
+    ? Promise.resolve(null)
+    : resolveSteamIdentity(db, steamId);
+}
+
+const refOf = (r: { playerId: string | null; idKind: string | null }) => {
+  const ref = storedPlayerRef(r.playerId, r.idKind);
+  return ref === null ? [] : [ref];
+};
+
+/** Players of every row still on THIS server — merged voice rows included. */
+export async function listOnServerPlayers(
   db: Db,
   eventId: number,
   pelicanServerId: number,
-): Promise<string[]> {
+): Promise<PlayerRef[]> {
   const rows = await db
-    .select({ steamId: p.steamId })
+    .select({ playerId: p.playerId, idKind: p.idKind })
     .from(p)
     .where(
       and(
@@ -176,7 +202,7 @@ export async function listOnServerSteamIds(
         isNull(p.leftAt),
       ),
     );
-  return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
+  return rows.flatMap(refOf);
 }
 
 /**
@@ -246,7 +272,8 @@ export async function listOpenServerPresence(
 ): Promise<ServerPresencePlayer[]> {
   const rows = await db
     .select({
-      steamId: p.steamId,
+      playerId: p.playerId,
+      idKind: p.idKind,
       displayName: p.discordUsername,
       characterName: p.characterName,
       characterOwnerId: p.characterOwnerId,
@@ -267,7 +294,8 @@ export async function listOpenServerPresence(
 
 /** The columns {@link listOpenServerPresence} reads. */
 interface OpenPresenceRow {
-  steamId: string | null;
+  playerId: string | null;
+  idKind: string | null;
   displayName: string;
   characterName: string | null;
   characterOwnerId: string | null;
@@ -277,19 +305,21 @@ interface OpenPresenceRow {
 
 /** One open row as a rehydrate player; the owner id comes with its name (ROK-1822 r3). */
 function toOpenPresencePlayer(r: OpenPresenceRow): ServerPresencePlayer[] {
-  if (!r.steamId) return [];
+  const ref = storedPlayerRef(r.playerId, r.idKind);
+  if (ref === null) return [];
   const unlinked = r.userId === null && r.discordUserId === null;
-  const legacy = unlinked ? r.displayName : r.steamId;
-  const base = { steamId: r.steamId, displayName: r.characterName ?? legacy };
+  const legacy = unlinked ? r.displayName : ref.playerId;
+  const base = { ...ref, displayName: r.characterName ?? legacy };
   const owner = r.characterName === null ? null : r.characterOwnerId;
   return [owner ? { ...base, characterOwnerId: owner } : base];
 }
 
 /**
- * Codex r2 P2: SteamIDs with an open on-server row in ANY live event of the
- * game, on ANY server — a player who moved servers keeps their enrolment.
+ * Codex r2 P2: `presenceKey`s (ROK-2232) with an open on-server row in ANY
+ * live event of the game, on ANY server — a player who moved servers keeps
+ * their enrolment.
  */
-export async function listOpenGameServerSteamIds(
+export async function listOpenGameServerPlayerKeys(
   db: Db,
   gameId: number,
   pelicanServerId?: number,
@@ -299,7 +329,7 @@ export async function listOpenGameServerSteamIds(
       ? undefined
       : eq(p.pelicanServerId, pelicanServerId);
   const rows = await db
-    .selectDistinct({ steamId: p.steamId })
+    .selectDistinct({ playerId: p.playerId, idKind: p.idKind })
     .from(p)
     .innerJoin(e, eq(p.eventId, e.id))
     .where(
@@ -310,7 +340,7 @@ export async function listOpenGameServerSteamIds(
         onThatServer,
       ),
     );
-  return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
+  return rows.flatMap(refOf).map(presenceKey);
 }
 
 /**
@@ -339,5 +369,11 @@ export async function renameSteamOnlyRow(
       ...character,
       discordUsername: sql`CASE WHEN ${unlinked} THEN ${clampStoredName(player.displayName)} ELSE ${p.discordUsername} END`,
     })
-    .where(and(eq(p.eventId, eventId), eq(p.steamId, player.steamId)));
+    .where(
+      and(
+        eq(p.eventId, eventId),
+        eq(p.idKind, player.idKind),
+        eq(p.playerId, player.playerId),
+      ),
+    );
 }

@@ -30,6 +30,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { steamIdOf } from '../../plugins/pelican/presence/presence-events';
 import type { ServerPresenceSource } from '../../plugins/pelican/presence/server-presence.sink';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { countsTowardThreshold } from '../listeners/voice-threshold-count.helpers';
@@ -117,7 +118,10 @@ export class ServerPathVoiceTally {
   ): Promise<ServerPathVoiceCount> {
     const channelIds = await monitorChannelIds(this.db, source.gameId);
     if (channelIds.length === 0) return NO_VOICE;
-    const held = pending.players(source.pelicanServerId).map((p) => p.steamId);
+    // ROK-2232: only a Steam hold can be a linked voice member.
+    const held = pending
+      .players(source.pelicanServerId)
+      .flatMap((p) => steamIdOf(p) ?? []);
     const exclude = await linkedDiscordIds(this.db, held);
     const roster = await this.roster();
     const counted = new Map<string, boolean>(); // id -> confirmed

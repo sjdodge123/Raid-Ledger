@@ -1,4 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  steamIdOf,
+  type PlayerRef,
+} from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, isNull, sql, type SQL } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -209,20 +213,21 @@ export class AdHocParticipantService {
   /** ROK-1800: close a Steam-only row when the player leaves the server. */
   async markServerLeave(
     eventId: number,
-    steamId: string,
+    player: PlayerRef,
     pelicanServerId?: number,
   ): Promise<boolean> {
     const closed = await markSteamLeave(
       this.db,
       eventId,
-      steamId,
+      player,
       pelicanServerId,
     );
     if (closed) {
+      const steamId = steamIdOf(player);
       this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_LEFT, {
         eventId,
         discordUserId: null,
-        steamId,
+        ...(steamId !== null ? { steamId } : {}),
       } satisfies AdHocParticipantLeftPayload);
     }
     return closed;

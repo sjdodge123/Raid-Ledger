@@ -46,9 +46,24 @@ export function steamIdOf(ref: PlayerRef): string | null {
   return ref.idKind === 'steam' ? ref.playerId : null;
 }
 
+const ID_KINDS: readonly PlayerIdKind[] = ['steam', 'minecraft-uuid', 'xuid'];
+
+/**
+ * A stored `(player_id, id_kind)` pair as a ref (ROK-2232); null when either
+ * is missing or the kind is unknown — such a row is never guessed at.
+ */
+export function storedPlayerRef(
+  playerId: string | null,
+  idKind: string | null,
+): PlayerRef | null {
+  const kind = ID_KINDS.find((k) => k === idKind);
+  return playerId === null || kind === undefined
+    ? null
+    : { playerId, idKind: kind };
+}
+
 /** A peer finished the handshake (pending until a character line names it). */
-export interface PresenceJoinEvent extends PresenceEventBase,
-    PlayerRef {
+export interface PresenceJoinEvent extends PresenceEventBase, PlayerRef {
   kind: 'join';
 }
 
@@ -66,14 +81,12 @@ export interface PresenceCharacterEvent extends PresenceEventBase {
 }
 
 /** The peer failed auth (wrong password) — it never became a player. */
-export interface PresenceAuthFailedEvent extends PresenceEventBase,
-    PlayerRef {
+export interface PresenceAuthFailedEvent extends PresenceEventBase, PlayerRef {
   kind: 'auth-failed';
 }
 
 /** The peer's socket closed. */
-export interface PresenceLeaveEvent extends PresenceEventBase,
-    PlayerRef {
+export interface PresenceLeaveEvent extends PresenceEventBase, PlayerRef {
   kind: 'leave';
 }
 
