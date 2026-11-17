@@ -27,6 +27,11 @@ import { ConfigService } from '@nestjs/config';
 import postgres from 'postgres';
 import * as fs from 'node:fs';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import {
+  PG_STAT_STATEMENTS_LOCK_KEY,
+  acquireCrossWorkerLock,
+  type CrossWorkerLock,
+} from '../common/testing/cross-worker-lock';
 import * as schema from '../drizzle/schema';
 import { SlowQueriesService } from './slow-queries.service';
 
@@ -122,14 +127,20 @@ function describeReset() {
   let extensionAvailable = false;
   let raidLedgerClient: ReturnType<typeof postgres> | null = null;
   let raidLedgerDb: PostgresJsDatabase<typeof schema> | null = null;
+  let lock: CrossWorkerLock | undefined;
 
   beforeAll(async () => {
     testApp = await getTestApp();
+    // ROK-2206: reset + CREATE ROLE are server-wide; hold the file against
+    // the other pg_stat_statements spec on another worker (no-op at 1 worker).
+    lock = await acquireCrossWorkerLock(
+      testApp.connectionString,
+      PG_STAT_STATEMENTS_LOCK_KEY,
+    );
     extensionAvailable = await isPgStatStatementsAvailable(testApp);
     if (!extensionAvailable) return;
-    const baseConnUri =
-      testApp.container?.getConnectionUri() ?? process.env.DATABASE_URL ?? '';
-    if (!baseConnUri) return;
+    // ROK-2206: the app's own DB (the worker clone in per-worker mode).
+    const baseConnUri = testApp.connectionString;
     await provisionRaidLedgerRole(testApp);
     raidLedgerClient = postgres(buildRaidLedgerConnectionString(baseConnUri), {
       max: 2,
@@ -138,8 +149,13 @@ function describeReset() {
   });
 
   afterAll(async () => {
-    if (raidLedgerClient) await raidLedgerClient.end({ timeout: 5 });
-    if (extensionAvailable) await dropRaidLedgerRole(testApp);
+    try {
+      if (raidLedgerClient) await raidLedgerClient.end({ timeout: 5 });
+      if (extensionAvailable) await dropRaidLedgerRole(testApp);
+    } finally {
+      // Always free the cross-worker lock, even if cleanup throws.
+      await lock?.release();
+    }
   });
 
   it('grants raid_ledger EXECUTE on pg_stat_statements_reset()', async () => {

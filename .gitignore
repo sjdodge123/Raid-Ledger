@@ -100,6 +100,7 @@ scripts/*
 # whole directory, so a new script or spec here is INVISIBLE to `git add -A`
 # until it is un-ignored — this one shipped untracked for four commits.
 !scripts/validate-ci-e2e-scope.spec.mjs
+!scripts/integration-workers.spec.mjs
 !scripts/restore-drill.constants.mjs
 # ROK-1154: web bundle-size budget gate (checker, budgets, node:test spec).
 !scripts/check-bundle-size.mjs
