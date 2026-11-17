@@ -304,6 +304,9 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // forum thread or reply outlives its author ("Former member").
   schema.hubForumThreads,
   schema.hubForumReplies,
+  // ROK-2208: `ack_by` is SET NULL attribution; a hub's Discord forum binding
+  // belongs to the hub, not to the leader who acknowledged it.
+  schema.hubForumDiscordBindings,
   schema.guildRecommendedAddons,
   // ROK-1870: `guilds.proposed_by` / `reviewed_by` are SET NULL provenance; a
   // community hub belongs to its members, not to whoever proposed/approved it.
