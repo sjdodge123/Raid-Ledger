@@ -121,9 +121,12 @@ export class HubForumDiscordReconcileService {
   /**
    * §5.6 outbound retry: RL-origin links still pending/failed under the
    * attempts cap, once their backoff is due. Returns how many it re-drove.
+   * While the bot is offline it does nothing: every write would fail and
+   * burn an attempt, stranding the row past the cap (Codex P1). The
+   * CONNECTED handler sweeps again on reconnect.
    */
   async retrySweep(): Promise<number> {
-    if (this.sweeping) return 0;
+    if (this.sweeping || !this.gateway.isOnline()) return 0;
     this.sweeping = true;
     try {
       const now = this.now();

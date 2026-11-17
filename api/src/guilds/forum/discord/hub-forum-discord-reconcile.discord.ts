@@ -23,6 +23,11 @@ const bySnowflake = (a: Message, b: Message): number =>
 export class HubForumDiscordReconcileGateway {
   constructor(private readonly clientService: DiscordBotClientService) {}
 
+  /** Review P1: the retry sweep waits while the bot is offline. */
+  isOnline(): boolean {
+    return this.clientService.isConnected();
+  }
+
   /** The bot's own user id (echo guard D5). */
   botUserId(): string | null {
     return this.clientService.getClient()?.user?.id ?? null;

@@ -76,6 +76,7 @@ beforeEach(() => {
   discord = { threads: [], messages: [] };
   const gw = ctx.testApp.app.get(HubForumDiscordReconcileGateway);
   jest.spyOn(gw, 'botUserId').mockReturnValue(null);
+  jest.spyOn(gw, 'isOnline').mockReturnValue(true);
   jest
     .spyOn(gw, 'activeThreads')
     .mockImplementation((channelId: string) =>
@@ -199,6 +200,24 @@ async function queuedThread(
 
 const sentTitles = (): string[] =>
   out.spies.createPost.mock.calls.map((c) => c[1].title);
+
+describe('ROK-2208 §5.6 outbound retry sweep — bot offline (Codex P1)', () => {
+  it('bot offline: the sweep sends nothing and consumes no attempt', async () => {
+    const { g } = await boundHub();
+    const q = await queuedThread(g, 'rc-offline', {
+      syncState: 'failed',
+      attempts: 4,
+    });
+    const gw = ctx.testApp.app.get(HubForumDiscordReconcileGateway);
+    jest.spyOn(gw, 'isOnline').mockReturnValue(false);
+    expect(await sync.retrySweep()).toBe(0);
+    expect(sentTitles()).not.toContain('rc-offline');
+    expect(await linkById(q.link.id)).toMatchObject({
+      syncState: 'failed',
+      attempts: 4,
+    });
+  });
+});
 
 describe('ROK-2208 §5.6 outbound retry sweep', () => {
   it('re-sends pending and failed links under 5 attempts, never one at 5', async () => {
