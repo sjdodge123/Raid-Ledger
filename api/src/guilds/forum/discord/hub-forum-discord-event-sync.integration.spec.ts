@@ -13,6 +13,7 @@ import {
   endEvent,
   newScene,
   resetThrottles,
+  setSignupStatus,
   untagEvent,
   type DiscussionCtx,
   type Scene,
@@ -148,7 +149,9 @@ describe('AC17 — event-thread write gate (R11)', () => {
   });
 
   it('review MINOR-3: a linked RL member who is not signed up, or declined, is refused + DMed', async () => {
-    const { post } = await linkedScene();
+    const { post, eventId } = await linkedScene();
+    // newScene seeds `declined` as signed_up (fixture contract).
+    await setSignupStatus(ctx, eventId, 'declined', 'declined');
     const users = schema.users;
     const plainId = snowflake();
     const declinedId = snowflake();
