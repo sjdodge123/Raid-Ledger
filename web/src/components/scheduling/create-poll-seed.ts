@@ -6,9 +6,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** Same ids, same order. */
+/** Same set of ids, in any order — unticking then re-ticking a seeded member is not a change. */
 export function sameIds(a: readonly number[], b: readonly number[]): boolean {
-    return a.length === b.length && a.every((id, i) => id === b[i]);
+    const set = new Set(a);
+    return set.size === new Set(b).size && b.every((id) => set.has(id));
 }
 
 /** Calls `seed(ids)` once each time the modal opens with a non-empty `ids`; later prop changes never re-seed. */
