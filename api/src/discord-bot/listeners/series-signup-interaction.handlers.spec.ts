@@ -223,7 +223,11 @@ describe('handleSeriesCharacterPick', () => {
       pick,
       makeDeps(),
     );
-    expect(customIds(i)).toEqual([`series_role:42:${CHAR}`]);
+    // ROK-2228: a Back button under the role menu returns to series_char.
+    expect(customIds(i)).toEqual([
+      `series_role:42:${CHAR}`,
+      'char_back:series_char:42',
+    ]);
   });
 });
 

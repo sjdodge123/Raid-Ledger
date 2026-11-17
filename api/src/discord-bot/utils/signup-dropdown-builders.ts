@@ -6,6 +6,8 @@
 
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   type ComponentEmojiResolvable,
   type ButtonInteraction,
@@ -41,6 +43,11 @@ export interface RoleSelectOptions {
   characterVerb?: string | undefined;
   /** Optional event embed to show alongside the dropdown */
   embed?: EmbedBuilder | undefined;
+  /**
+   * customId of a Back button that re-renders the character list this role
+   * step followed (ROK-2228). Rendered only when `characterId` is set too.
+   */
+  backCustomId?: string | undefined;
 }
 
 /** Build character dropdown option entries from character data. */
@@ -142,9 +149,25 @@ export async function showRoleSelect(
   const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     selectMenu,
   );
+  const backRow = buildBackRow(opts);
   await interaction.editReply({
     content: buildRoleSelectContent(opts),
-    components: [row],
+    components: backRow ? [row, backRow] : [row],
     embeds: opts.embed ? [opts.embed] : [],
   });
+}
+
+/**
+ * The Back button row under the role menu (ROK-2228): only when the role
+ * step followed a character pick, i.e. a characterId and a Back target.
+ */
+function buildBackRow(
+  opts: RoleSelectOptions,
+): ActionRowBuilder<ButtonBuilder> | null {
+  if (!opts.characterId || !opts.backCustomId) return null;
+  const back = new ButtonBuilder()
+    .setCustomId(opts.backCustomId)
+    .setLabel('Back')
+    .setStyle(ButtonStyle.Secondary);
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(back);
 }

@@ -29,6 +29,7 @@ import {
   type SeriesInteraction,
   type SeriesInteractionDeps,
 } from './series-signup-interaction.handlers';
+import { routeSeriesBack } from './series-signup-back.handlers';
 import {
   handleSeriesLeave,
   handleSeriesSkip,
@@ -90,6 +91,7 @@ export class SeriesSignupInteractionListener {
    * is acknowledged and dropped, so it never overwrites the first's reply.
    */
   async handleInteraction(interaction: SeriesInteraction): Promise<void> {
+    if (routeSeriesBack(interaction, this.deps)) return;
     const parsed = parseSeriesCustomId(interaction.customId);
     if (!parsed) return;
     if (!(await this.defer(interaction, parsed))) return;

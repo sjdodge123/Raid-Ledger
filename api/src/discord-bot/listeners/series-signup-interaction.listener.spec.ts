@@ -6,6 +6,7 @@ import {
   handleSeriesConfirm,
 } from './series-signup-interaction.handlers';
 import { handleSeriesSkip } from './series-signup-decline.handlers';
+import * as seriesBack from './series-signup-back.handlers';
 
 jest.mock('./series-signup-interaction.handlers', () => ({
   handleJoinSeries: jest.fn(),
@@ -72,6 +73,17 @@ describe('SeriesSignupInteractionListener', () => {
     await makeListener().handleInteraction(i as never);
     expect(i.deferReply).not.toHaveBeenCalled();
     expect(i.deferUpdate).not.toHaveBeenCalled();
+  });
+
+  it('hands a char_back:series_char click to the series Back handler (ROK-2228)', async () => {
+    const route = jest
+      .spyOn(seriesBack, 'routeSeriesBack')
+      .mockReturnValue(true);
+    const i = button('char_back:series_char:42');
+    await makeListener().handleInteraction(i as never);
+    expect(route).toHaveBeenCalledWith(i, expect.any(Object));
+    expect(i.deferReply).not.toHaveBeenCalled();
+    route.mockRestore();
   });
 
   it('opens an ephemeral reply for the embed Join Series button', async () => {
