@@ -41,7 +41,10 @@ export const POLL_HUB_KINDS = ['game_community', 'wow_guild'] as const;
  * a community hub's live `hub_community_members` row, a guild hub's live
  * linked roster row. Injected so this core helper never imports a plugin.
  */
-export type HubMemberCheck = (userId: number, hubId: number) => Promise<boolean>;
+export type HubMemberCheck = (
+  userId: number,
+  hubId: number,
+) => Promise<boolean>;
 
 /** The "visible poll hub" predicate on `guilds`. */
 export function visibleCommunityHubWhere(): SQL | undefined {

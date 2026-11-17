@@ -30,7 +30,7 @@ import { HubPollsController } from './hub-polls.controller';
     NotificationModule,
     SettingsModule,
     // ROK-2212: GuildAccessService — hub membership by the hub's kind.
-    GuildsCoreModule,
+    forwardRef(() => GuildsCoreModule),
     SchedulingModule,
     EventsModule,
     CronJobModule,
