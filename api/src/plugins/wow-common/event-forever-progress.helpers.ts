@@ -8,7 +8,7 @@ import type {
   QuestProgressDto,
   QuestProgressSource,
 } from '@raid-ledger/contract';
-import { walkChainInMemory } from './dungeon-quests.helpers';
+import { walkChainWithExternalRoot } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import type { EffectiveQuests } from './forever-quest-source.helpers';
 import { resolveQuestInstanceIds } from './forever-instance-aliases';
@@ -87,7 +87,9 @@ export function selectEventQuests(
   );
   const knownIds = new Set<number>();
   for (const q of eventQuests) {
-    for (const step of walkChainInMemory(q, lookup)) knownIds.add(step.questId);
+    // ROK-2221: include a named outside root so its completion reaches readiness.
+    for (const step of walkChainWithExternalRoot(q, lookup))
+      knownIds.add(step.questId);
   }
   return { eventQuests, lookup, knownIds };
 }

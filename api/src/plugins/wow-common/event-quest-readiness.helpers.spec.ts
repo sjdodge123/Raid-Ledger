@@ -196,7 +196,8 @@ describe('buildQuestReadiness prereqsMet without a chain position (ROK-1911)', (
   afterEach(() => jest.restoreAllMocks());
 
   it('is null (unknown), not true, when the quest is missing from its own chain', () => {
-    jest.spyOn(chainHelpers, 'walkChainInMemory').mockReturnValue([]);
+    // ROK-2221: readiness walks via walkChainWithExternalRoot.
+    jest.spyOn(chainHelpers, 'walkChainWithExternalRoot').mockReturnValue([]);
     const body = buildQuestReadiness({
       quests: SET,
       signups: [signup(1, C1)],
@@ -205,6 +206,65 @@ describe('buildQuestReadiness prereqsMet without a chain position (ROK-1911)', (
     });
     expect(stateOf(body, 1, 300)?.prereqsMet).toBeNull();
     expect(stateOf(body, 1, 200)?.prereqsMet).toBeNull();
+  });
+});
+
+describe('buildQuestReadiness external prerequisite root (ROK-2221)', () => {
+  // Scholomance: 4735 (not bundled) -> 5522 (outside) -> 5531 -> 4771.
+  const set = selectEventQuests(
+    [
+      quest(5522, null, { prevQuestId: 4735, nextQuestId: 5531 }),
+      quest(5531, 246, { prevQuestId: 5522, nextQuestId: 4771 }),
+      quest(4771, 246, { prevQuestId: 5531 }),
+    ],
+    [246],
+  );
+  const run = (completed: number[]) =>
+    buildQuestReadiness({
+      quests: set,
+      signups: [signup(1, C1)],
+      snapshots: new Map([[C1, snap(completed, [])]]),
+      manual: [],
+    });
+
+  it('counts the outside root 4735 in the known ids', () => {
+    expect(set.knownIds.has(4735)).toBe(true);
+  });
+
+  it("Dawn's Gambit (4771) prereqs met once 4735, 5522 and 5531 are done", () => {
+    expect(stateOf(run([4735, 5522, 5531]), 1, 4771)?.prereqsMet).toBe(true);
+  });
+
+  it('prereqs not met while the outside root 4735 is not done', () => {
+    expect(stateOf(run([5522, 5531]), 1, 4771)?.prereqsMet).toBe(false);
+  });
+});
+
+describe('buildQuestReadiness optional breadcrumbs (ROK-2221)', () => {
+  // Wailing Caverns: 1489 -> 1490 (breadcrumbs) -> 914; 913 -> 915 is required.
+  const set = selectEventQuests(
+    [
+      quest(1489, 240, { nextQuestId: 1490 }),
+      quest(1490, 240, { prevQuestId: 1489, nextQuestId: 914 }),
+      quest(914, 240, { prevQuestId: 1490 }),
+      quest(913, 240, { nextQuestId: 915 }),
+      quest(915, 240, { prevQuestId: 913 }),
+    ],
+    [240],
+  );
+  const body = buildQuestReadiness({
+    quests: set,
+    signups: [signup(1, C1, { charRace: 'Orc' })],
+    snapshots: new Map([[C1, snap([], [])]]),
+    manual: [],
+  });
+
+  it('leaves prereqsMet true when only optional breadcrumbs are not done', () => {
+    expect(stateOf(body, 1, 914)?.prereqsMet).toBe(true);
+  });
+
+  it('still gates on a required step that is not done', () => {
+    expect(stateOf(body, 1, 915)?.prereqsMet).toBe(false);
   });
 });
 
