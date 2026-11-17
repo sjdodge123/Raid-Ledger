@@ -6,7 +6,7 @@
  * (ROK-1915), `withPulls` (ROK-1917), `withInstalledAddons` (ROK-2147),
  * `withArmorySnapshots` (ROK-2149), `withRecruitment` (ROK-1789) and
  * `withActivity` (ROK-1789 B9 — runs after the pulls half, whose wipe it relies on)
- * and `withDungeonPlan` (ROK-2216).
+ * `withDungeonPlan` (ROK-2216) and `withSuggestedGroup` (ROK-2212).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
@@ -35,6 +35,7 @@ import { seedGuildDings } from './demo-test-guild-dings.helpers';
 import { seedGuildPresence } from './demo-test-guild-presence.helpers';
 import { seedGuildActivity } from './demo-test-guild-activity.helpers';
 import { seedDungeonPlanHalf } from './demo-test-guild-dungeon-plan.helpers';
+import { seedSuggestedGroupHalf } from './demo-test-guild-suggested-groups.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Users = Record<SeedGuildRole, SeedGuildUser>;
@@ -78,6 +79,7 @@ export async function seedOptionalHalves(
     ...(await seedArmoryHalf(db, input, unlinked, ctx.now)),
     ...(await seedRecruitmentHalf(db, input, ctx.guildId, gm, ctx.now)),
     ...(await seedDungeonPlanHalf(db, input, ctx, roster)),
+    ...(await seedSuggestedGroupHalf(db, input, ctx)),
   };
 }
 
