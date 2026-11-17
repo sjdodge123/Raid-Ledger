@@ -18,12 +18,21 @@ export const SPLIT_DAY_END = '2026-11-23T05:30:00.000Z';
 
 /** "Sun, Nov 22" — the short date of `iso` in `timeZone`. */
 export function shortDateIn(iso: string, timeZone: string): string {
-    return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone });
+    return new Date(iso).toLocaleDateString(undefined, {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        timeZone,
+    });
 }
 
 /** "09:30 PM" — the start time of `iso` in `timeZone`. */
 export function timeIn(iso: string, timeZone: string): string {
-    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone });
+    return new Date(iso).toLocaleTimeString(undefined, {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone,
+    });
 }
 
 /**
