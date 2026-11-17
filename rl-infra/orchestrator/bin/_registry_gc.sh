@@ -20,8 +20,12 @@
 # build's admit) for its WHOLE run — tag deletes and garbage-collect. While it
 # is held no image build (the only pushers) is admitted; it is taken only when
 # no build runs or waits, and it expires on a timer so a killed sweeper cannot
-# wedge builds (ROK-2018, see _admission.sh). Single-arch v2 manifests only —
-# --delete-untagged is unsafe for multi-arch indexes (distribution#3178).
+# wedge builds (ROK-2018, see _admission.sh). Old buildx tags are OCI image
+# indexes (image + attestation manifest): they are read with the index media
+# types in the Accept header, aged from their image child, and deleted by the
+# index digest (ROK-2180). --delete-untagged can delete a KEPT index's
+# children (distribution#3178), so garbage-collect drops it while any kept tag
+# is an index or manifest list, or its media type cannot be read.
 #
 # Env knobs:
 #   RL_REGISTRY_URL               http://127.0.0.1:5000  (sweeper: rl-registry:5000)
@@ -55,7 +59,10 @@ _REGISTRY_GC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 # shellcheck source=SCRIPTDIR/_registry_gc_protect.sh
 source "$_REGISTRY_GC_LIB_DIR/_registry_gc_protect.sh"
 
-_REGISTRY_ACCEPT="Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json"
+# The index/list types are required (ROK-2180): registry:2 (2.8.x) answers a
+# tag pushed as an OCI index with 404 MANIFEST_UNKNOWN unless they are listed.
+_REGISTRY_INDEX_TYPES="application/vnd.oci.image.index.v1+json application/vnd.docker.distribution.manifest.list.v2+json"
+_REGISTRY_ACCEPT="Accept: application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json"
 
 registry_gc::_now() { echo "${RL_REGISTRY_GC_NOW:-$(date +%s)}"; }
 
@@ -69,17 +76,52 @@ registry_gc::list_tags() {
     jq -r '.tags[]? // empty' <<<"$body" 2>/dev/null
 }
 
-# Manifest digest of <tag> (Docker-Content-Digest header), empty if unknown.
-registry_gc::digest() {
+# Value of response header <$2> (lowercase, with colon) from a manifest HEAD
+# of <$1> (tag or digest), empty if unknown. For an index tag this is the
+# INDEX's digest/type — the one a DELETE must use.
+registry_gc::_head_field() {
     curl -fsS --max-time 10 -I -H "$_REGISTRY_ACCEPT" "$(registry_gc::_api)/manifests/$1" 2>/dev/null \
-        | tr -d '\r' | awk 'tolower($1) == "docker-content-digest:" {print $2}' | tail -1
+        | tr -d '\r' | awk -v h="$2" 'tolower($1) == h {print $2}' | tail -1
+}
+
+# Manifest digest of <tag> (Docker-Content-Digest header), empty if unknown.
+registry_gc::digest() { registry_gc::_head_field "$1" "docker-content-digest:"; }
+
+# Manifest media type of <tag> (Content-Type, parameters stripped), empty if unknown.
+registry_gc::media_type() { registry_gc::_head_field "$1" "content-type:" | sed 's/;.*//'; }
+
+# Of <tags> (newline list), those whose manifest is an OCI index or a Docker
+# manifest list — or whose media type cannot be read (fail closed: treated as
+# one), one per line.
+registry_gc::index_tags() {
+    local tag mt
+    for tag in $1; do
+        mt=$(registry_gc::media_type "$tag")
+        if [[ -z "$mt" || " $_REGISTRY_INDEX_TYPES " == *" $mt "* ]]; then echo "$tag"; fi
+    done
+}
+
+# Manifest body of <$1> (tag or digest); non-zero when unreadable.
+registry_gc::_manifest() {
+    curl -fsS --max-time 10 -H "$_REGISTRY_ACCEPT" "$(registry_gc::_api)/manifests/$1" 2>/dev/null
+}
+
+# Image child of an index/list body (stdin): the first entry that is not an
+# attestation manifest nor platform unknown/unknown. Empty for a plain manifest.
+registry_gc::_image_child() {
+    jq -r '[.manifests[]? | select((.annotations["vnd.docker.reference.type"] // "") != "attestation-manifest"
+            and (((.platform.os // "") == "unknown" and (.platform.architecture // "") == "unknown") | not))][0].digest // empty' \
+        2>/dev/null
 }
 
 # Build time of <tag> as epoch seconds (image config `.created`), or "null".
+# An index/list tag is aged from its image child (registry_gc::_image_child).
 registry_gc::created_epoch() {
-    local cfg
-    cfg=$(curl -fsS --max-time 10 -H "$_REGISTRY_ACCEPT" "$(registry_gc::_api)/manifests/$1" 2>/dev/null \
-        | jq -r '.config.digest // empty' 2>/dev/null)
+    local m child cfg
+    m=$(registry_gc::_manifest "$1") || { echo null; return 0; }
+    child=$(registry_gc::_image_child <<<"$m")
+    if [[ -n "$child" ]]; then m=$(registry_gc::_manifest "$child") || { echo null; return 0; }; fi
+    cfg=$(jq -r '.config.digest // empty' <<<"$m" 2>/dev/null)
     [[ -z "$cfg" ]] && { echo null; return 0; }
     curl -fsS --max-time 10 "$(registry_gc::_api)/blobs/${cfg}" 2>/dev/null \
         | jq -r '(.created // "") | sub("\\.[0-9]+"; "") | try fromdateiso8601 catch "null"' 2>/dev/null \
@@ -153,19 +195,27 @@ registry_gc::_load_admission() {
 # RL_REGISTRY_GC_TIMEOUT_SECONDS (coreutils `timeout`, present in the
 # sweeper's debian image). `--delete-untagged` is dropped (and the reason
 # logged) when <$1>, the `@sha256:` pins no kept tag carries, is non-empty:
-# it would delete those pinned manifests (AC-1(d)). A timeout kills the
+# it would delete those pinned manifests (AC-1(d)); or when <$2>, the kept
+# index/list tags, is non-empty: it can delete a kept index's children
+# (distribution#3178, ROK-2180). A timeout kills the
 # `docker exec` client only, so on 124 (TERM) or 137 (the -k KILL escalation)
 # the in-container process is killed too (_kill_collector). Echoes
 # ran|timed_out|failed|dry_run, or timed_out_cleanup_failed with rc 2 when the
 # collector may still be running — the caller must then KEEP the registry_gc
 # entry (until it expires) so no build pushes into its sweep phase.
 registry_gc::collect() {
-    [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] && { echo dry_run; return 0; }
     local rc=0 untagged=--delete-untagged
     if [[ -n "${1:-}" ]]; then
         untagged=""
         echo "registry_gc: pinned digest(s) carried by no kept tag ($1) — garbage-collect without --delete-untagged" >&2
     fi
+    if [[ -n "${2:-}" ]]; then
+        untagged=""
+        echo "registry_gc: kept tag(s) are OCI indexes / manifest lists or of unreadable type ($2) — garbage-collect without --delete-untagged (distribution#3178)" >&2
+    fi
+    # Dry run: the reasons above are still logged, so a reviewed dry run shows
+    # whether the live garbage-collect would keep --delete-untagged.
+    [[ "$RL_REGISTRY_GC_DRY_RUN" == "1" ]] && { echo dry_run; return 0; }
     # shellcheck disable=SC2086  # $untagged is one flag or nothing
     timeout -k 10 "$RL_REGISTRY_GC_TIMEOUT_SECONDS" docker exec "$RL_REGISTRY_CONTAINER" \
         registry garbage-collect $untagged /etc/docker/registry/config.yml >/dev/null 2>&1 || rc=$?
@@ -279,7 +329,7 @@ registry_gc::sweep() {
 # fails (expired, or a build got admitted) it stops: skipped_lock_lost.
 # rc 1 = aborted ({"error":…}); rc 3 = the collector may still run.
 registry_gc::_sweep_held() {
-    local now="$1" refs prot inv doomed kd irc=0
+    local now="$1" refs prot inv doomed kept kd irc=0
     if ! refs=$(registry_gc::protected_refs); then
         echo "registry_gc: docker ps, docker images or $RL_ENVS_FILE unreadable — sweep aborted" >&2
         echo '{"error":"protected_tags_unreadable"}'; return 1
@@ -292,16 +342,19 @@ registry_gc::_sweep_held() {
         echo '{"error":"tags_unreadable"}'; return 1
     fi
     doomed=$(registry_gc::select_doomed "$inv" "$prot")
-    if ! kd=$(registry_gc::avoid_digests "$(registry_gc::_kept "$inv" "$doomed")" ""); then
+    kept=$(registry_gc::_kept "$inv" "$doomed")
+    if ! kd=$(registry_gc::avoid_digests "$kept" ""); then
         echo '{"error":"protected_digest_unreadable"}'; return 1
     fi
-    registry_gc::_delete_and_collect "$now" "$inv" "$doomed" "$kd" "$(registry_gc::_pins_of <<<"$refs")"
+    registry_gc::_delete_and_collect "$now" "$inv" "$doomed" "$kd" "$(registry_gc::_pins_of <<<"$refs")" \
+        "$(registry_gc::index_tags "$kept" | tr '\n' ' ')"
 }
 
 # Delete <doomed> sparing <kept digests> + <pins>, then garbage-collect
-# (without --delete-untagged when a pin is carried by no kept tag).
+# (without --delete-untagged when a pin is carried by no kept tag, or <$6>,
+# the kept index/list tags, is non-empty).
 registry_gc::_delete_and_collect() {
-    local now="$1" inv="$2" doomed="$3" kd="$4" pins="$5" tag deleted='[]' gc grc=0 orphans
+    local now="$1" inv="$2" doomed="$3" kd="$4" pins="$5" idx="${6:-}" tag deleted='[]' gc grc=0 orphans
     for tag in $doomed; do
         registry_gc::_renew || { registry_gc::_record "$now" "$inv" "$deleted" skipped_lock_lost; return 0; }
         registry_gc::delete_tag "$tag" "$(printf '%s\n%s' "$kd" "$pins")" \
@@ -309,7 +362,7 @@ registry_gc::_delete_and_collect() {
     done
     registry_gc::_renew || { registry_gc::_record "$now" "$inv" "$deleted" skipped_lock_lost; return 0; }
     orphans=$(sed '/^$/d' <<<"$pins" | grep -vxF -f <(printf '%s\n' "$kd") | sort -u | tr '\n' ' ')
-    gc=$(registry_gc::collect "${orphans% }") || grc=$?
+    gc=$(registry_gc::collect "${orphans% }" "${idx% }") || grc=$?
     registry_gc::_record "$now" "$inv" "$deleted" "$gc"
     # The collector may still be running: re-arm the entry so builds stay out
     # until its TTL instead of the original expiry (review R2-1).
