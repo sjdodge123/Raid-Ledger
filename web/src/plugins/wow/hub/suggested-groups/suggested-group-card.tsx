@@ -17,28 +17,57 @@ const ROLE_LABEL: Record<SuggestedGroupMemberDto['role'], { full: string; short:
     dps: { full: 'DPS', short: 'D' },
 };
 
-/** Role as text: "Tank" from 1024px, "T" (+ sr-only "Tank") below. */
-function RoleLabel({ role }: { role: SuggestedGroupMemberDto['role'] }): JSX.Element {
+/** `compact`: the narrow hub-widget tile, a list at every width. `wide`: the planner section — a 5-column grid ≥1024px. */
+export type SuggestedGroupLayout = 'compact' | 'wide';
+
+// Never `sr-only lg:not-sr-only`: index.css's unlayered .sr-only beats Tailwind's layered variant (ROK-2212 verify).
+const ROLE_CLS: Record<SuggestedGroupLayout, { short: string; sr: string }> = {
+    compact: { short: 'w-6 shrink-0 text-xs text-muted', sr: 'sr-only' },
+    wide: { short: 'w-6 shrink-0 text-xs text-muted lg:hidden', sr: 'sr-only lg:hidden' },
+};
+
+/** Role as text: "T" (+ sr-only "Tank") in a list row; "TANK" above the name in a wide grid cell. */
+function RoleLabel({ role, layout }: { role: SuggestedGroupMemberDto['role']; layout: SuggestedGroupLayout }): JSX.Element {
     const label = ROLE_LABEL[role];
     return (
-        <span className="w-6 shrink-0 text-xs text-muted lg:w-12">
-            <span aria-hidden="true" className="lg:hidden">{label.short}</span>
-            <span className="sr-only lg:not-sr-only">{label.full}</span>
+        <>
+            <span aria-hidden="true" className={ROLE_CLS[layout].short}>{label.short}</span>
+            <span className={ROLE_CLS[layout].sr}>{label.full}</span>
+            {layout === 'wide' && (
+                <span className="hidden text-[10px] font-semibold uppercase tracking-wide text-dim lg:block">{label.full}</span>
+            )}
+        </>
+    );
+}
+
+const ROW_CLS: Record<SuggestedGroupLayout, string> = {
+    compact: 'flex min-h-7 min-w-0 items-center gap-2 text-sm',
+    wide: 'flex min-h-7 min-w-0 items-center gap-2 text-sm lg:flex-col lg:items-stretch lg:gap-1 lg:rounded-md lg:border lg:border-edge-subtle lg:bg-surface lg:px-2 lg:py-1.5',
+};
+
+/** Name + "Unclaimed": the chip wraps under a long name; the name truncates, never collapses to 0px. */
+function NameCell({ member }: { member: SuggestedGroupMemberDto }): JSX.Element {
+    const dot = classDotClass(member.class);
+    return (
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 lg:flex-none" data-testid="suggested-group-member-name-cell">
+            <span className="flex min-w-0 max-w-full items-center gap-2">
+                {dot !== null && <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}
+                <span className="min-w-0 truncate text-foreground">{member.name}</span>
+            </span>
+            {member.characterId === null && (
+                <StatusChip tone="neutral" title="Not claimed by a Raid Ledger user yet">Unclaimed</StatusChip>
+            )}
         </span>
     );
 }
 
-function MemberRow({ member }: { member: SuggestedGroupMemberDto }): JSX.Element {
-    const dot = classDotClass(member.class);
+function MemberRow({ member, layout }: { member: SuggestedGroupMemberDto; layout: SuggestedGroupLayout }): JSX.Element {
+    const levelCls = layout === 'wide' ? 'lg:ml-0' : '';
     return (
-        <li className="flex min-h-7 items-center gap-2 text-sm" data-testid="suggested-group-member">
-            <RoleLabel role={member.role} />
-            {dot !== null && <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />}
-            <span className="min-w-0 truncate text-foreground">{member.name}</span>
-            {member.characterId === null && (
-                <StatusChip tone="neutral" title="Not claimed by a Raid Ledger user yet">Unclaimed</StatusChip>
-            )}
-            <span className="ml-auto shrink-0 text-xs tabular-nums text-secondary">{member.level}</span>
+        <li className={ROW_CLS[layout]} data-testid="suggested-group-member">
+            <RoleLabel role={member.role} layout={layout} />
+            <NameCell member={member} />
+            <span className={`ml-auto shrink-0 text-xs tabular-nums text-secondary ${levelCls}`}>{member.level}</span>
         </li>
     );
 }
@@ -50,14 +79,17 @@ function summary(group: SuggestedGroupDto): string {
     return `${levels} · ${group.sharedQuests} shared quest${group.sharedQuests === 1 ? '' : 's'}`;
 }
 
-export type SuggestedGroupCardProps = SuggestedGroupActionProps;
+export interface SuggestedGroupCardProps extends SuggestedGroupActionProps {
+    /** Default `compact` (hub widget); the planner section passes `wide`. */
+    layout?: SuggestedGroupLayout | undefined;
+}
 
 /** The card. `canAct` false hides Schedule + Poll; Poll also needs `onPoll`. */
 export function SuggestedGroupCard(props: SuggestedGroupCardProps): JSX.Element {
-    const { group, ordinal } = props;
+    const { group, ordinal, layout = 'compact', ...actions } = props;
     const { instance } = group;
     return (
-        <article className="flex flex-col gap-2 rounded-lg border border-edge bg-panel p-3"
+        <article className="flex min-w-0 flex-col gap-2 rounded-lg border border-edge bg-panel p-3"
             aria-label={groupLabel(group, ordinal)} data-testid="suggested-group-card">
             <header className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">{instance.name}</h3>
@@ -66,10 +98,10 @@ export function SuggestedGroupCard(props: SuggestedGroupCardProps): JSX.Element 
                 </StatusChip>
             </header>
             <p className="text-xs text-muted">{summary(group)}</p>
-            <ul className="flex flex-col gap-1">
-                {group.members.map((m) => <MemberRow key={m.key} member={m} />)}
+            <ul className={layout === 'wide' ? 'flex flex-col gap-1 lg:grid lg:grid-cols-5 lg:gap-1.5' : 'flex flex-col gap-1'}>
+                {group.members.map((m) => <MemberRow key={m.key} member={m} layout={layout} />)}
             </ul>
-            <SuggestedGroupActions {...props} />
+            <SuggestedGroupActions group={group} ordinal={ordinal} {...actions} />
         </article>
     );
 }

@@ -4,6 +4,7 @@
  * a dungeon filter (`Select`), §4.5 empty, §4.6 skeleton. "Open in planner"
  * loads the group into the planner above in place; Poll opens the hub-tagged
  * scheduling poll. Schedule + Poll only for viewers who can act (ruling 6).
+ * One group per row, members in a 5-column grid ≥1024px (mockup; `wide`).
  */
 import { useState, type JSX } from 'react';
 import type { GuildPage, SuggestedGroupDto } from '@raid-ledger/contract';
@@ -74,9 +75,9 @@ export function SuggestedGroupsSection({ page, onOpenInPlanner }: SectionProps):
             </div>
             <SectionState isError={query.isError} loaded={query.data !== undefined} empty={shown.length === 0} />
             {shown.length > 0 && (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-busy={query.isFetching}>
+                <div className="flex flex-col gap-3" aria-busy={query.isFetching}>
                     {shown.map((g) => (
-                        <SuggestedGroupCard key={groupKey(g)} group={g} page={page} canAct={canAct} ordinal={ordinals.get(groupKey(g))}
+                        <SuggestedGroupCard key={groupKey(g)} layout="wide" group={g} page={page} canAct={canAct} ordinal={ordinals.get(groupKey(g))}
                             onPoll={poll.onPoll} onOpenInPlanner={onOpenInPlanner} />
                     ))}
                 </div>

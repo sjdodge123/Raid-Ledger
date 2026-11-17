@@ -2,7 +2,8 @@
  * ROK-2212 — a suggested group's actions: Schedule (ROK-2215 Create Event
  * pre-fill, claimed members invited, "Invites N of 5"), Poll (the caller's
  * `onPoll` opens the scheduling poll) and Open in planner (ROK-2216 link).
- * Schedule + Poll only when `canAct` (spec L9). Full-width stack below 1024px.
+ * Schedule (primary) + Poll only when `canAct` (spec L9). Full-width stack below
+ * 1024px; from 1024px one line with Open in planner right-aligned (mockup).
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -25,6 +26,9 @@ export interface SuggestedGroupActionProps {
 }
 
 const ACTION_CLS = 'w-full lg:w-auto';
+/** Mockup: "Open in planner →" sits right-aligned on the actions line from 1024px. */
+const PLANNER_CLS = 'w-full lg:ml-auto lg:w-auto';
+const PLANNER_TEXT = <>Open in planner <span aria-hidden="true">→</span></>;
 
 function ScheduleAction({ group, page, ordinal }: Pick<SuggestedGroupActionProps, 'group' | 'page' | 'ordinal'>): JSX.Element {
     const note = inviteNote(inviteCharacterIds(group).length);
@@ -33,7 +37,7 @@ function ScheduleAction({ group, page, ordinal }: Pick<SuggestedGroupActionProps
     return (
         <span className="flex w-full flex-col gap-1 lg:w-auto">
             <Link to={scheduleHref(group, page)} aria-label={label} data-testid="suggested-group-schedule"
-                className={buttonClass({ variant: 'secondary', size: 'sm', className: ACTION_CLS })}>
+                className={buttonClass({ variant: 'primary', size: 'sm', className: ACTION_CLS })}>
                 Schedule
             </Link>
             {note !== null && <span className="text-xs text-muted" data-testid="suggested-group-invites">{note}</span>}
@@ -46,16 +50,16 @@ function PlannerAction({ group, page, onOpenInPlanner, ordinal }: SuggestedGroup
     const label = `Open in planner: ${groupLabel(group, ordinal)}`;
     if (onOpenInPlanner !== undefined) {
         return (
-            <Button variant="ghost" size="sm" className={ACTION_CLS} aria-label={label} onClick={() => onOpenInPlanner(group)}>
-                Open in planner
+            <Button variant="ghost" size="sm" className={PLANNER_CLS} aria-label={label} onClick={() => onOpenInPlanner(group)}>
+                {PLANNER_TEXT}
             </Button>
         );
     }
     // Plain <a>: the hub's tab follows hashchange, which a router <Link> never fires (card-bits.tsx).
     return (
         <a href={plannerHref(group, page.guild.id)} aria-label={label} data-testid="suggested-group-planner"
-            className={buttonClass({ variant: 'ghost', size: 'sm', className: ACTION_CLS })}>
-            Open in planner
+            className={buttonClass({ variant: 'ghost', size: 'sm', className: PLANNER_CLS })}>
+            {PLANNER_TEXT}
         </a>
     );
 }
