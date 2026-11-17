@@ -22,13 +22,16 @@ export interface PresenceLineParserOptions {
 
 /**
  * ROK-2233: one server's view of its game's log parser. A parser with
- * `createSession` gets a session of its own, replaced by `reset()` (socket
- * re-auth, stopped status) and after a ready/stopping event, so state never
- * crosses servers or a gap in the console stream. A stateless parser passes
- * through unchanged. Like `safeParse`, a raw line never reaches a log.
+ * `createSession` gets a session of its own, replaced by `reset()` (a new
+ * socket connection, a stopped status) and after a ready/stopping event, so
+ * state never crosses servers or a gap in the console stream. A token refresh
+ * on the same socket keeps it. A stateless parser passes through unchanged.
+ * Like `safeParse`, a raw line never reaches a log.
  */
 export class PresenceLineParser {
   private current: GameLogParserSession;
+  /** A failing `createSession` is reported once, not on every reset. */
+  private warned = false;
 
   constructor(private readonly opts: PresenceLineParserOptions) {
     this.current = this.open();
@@ -53,6 +56,8 @@ export class PresenceLineParser {
     try {
       return parser.createSession();
     } catch (err) {
+      if (this.warned) return parser;
+      this.warned = true;
       logger.warn(
         `Presence parser session failed for server ${source.pelicanServerId}: ${errName(err)}; parsing statelessly`,
       );

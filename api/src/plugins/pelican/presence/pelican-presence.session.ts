@@ -134,7 +134,7 @@ export class PelicanPresenceSession {
       onLine: (line) => this.onLine(line),
       onStatus: (state) => this.onStatus(state),
       onUnreachable: (since) => this.onUnreachable(since),
-      onReachable: () => this.onReachable(),
+      onReachable: (reach) => this.onReachable(reach.refresh),
       ...(o.socketFactory ? { socketFactory: o.socketFactory } : {}),
       now: this.now,
     });
@@ -218,7 +218,7 @@ export class PelicanPresenceSession {
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
   }
 
-  private onReachable(): void {
+  private onReachable(refresh: boolean): void {
     this.emptiedOutage = null;
     if (!this.cold) {
       this.opts.logger.log(
@@ -228,7 +228,9 @@ export class PelicanPresenceSession {
     // A re-auth inside the settle window: the buffered events already
     // advanced the watermark, so apply them now rather than drop them.
     this.flushReplay();
-    this.lines.reset(); // ROK-2233: the replay rebuilds the parser's state
+    // ROK-2233: a token refresh keeps the parser's state (its replay may no
+    // longer hold the line that built it); a new connection starts afresh.
+    if (!refresh) this.lines.reset();
     this.watermark.beginPass();
     this.replay = [];
     this.armSettle();

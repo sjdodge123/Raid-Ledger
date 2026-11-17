@@ -272,10 +272,12 @@ export interface GameLogParser {
  * read with an earlier one (Java Minecraft's `left the game` names a player
  * whose UUID came on an earlier `UUID of player … is …` line; Enshrouded's
  * ROK-1986 will use it too). The host opens one session per server console
- * and swaps in a fresh one on every socket (re)auth — the log replay that
- * follows rebuilds it — on a stopped status, and after a `server-ready` or
- * `server-stopping` event. Same rule as `parse`: keep derived fields only,
- * never a raw line.
+ * and swaps in a fresh one on every NEW socket connection (start or reconnect
+ * after a drop — the log replay that follows rebuilds it), on a stopped
+ * status, and after a `server-ready` or `server-stopping` event. The ~6-min
+ * token refresh on the same socket keeps the session: its replay holds only
+ * the last ~150 lines, so it may no longer contain what built the state. Same
+ * rule as `parse`: keep derived fields only, never a raw line.
  */
 export interface GameLogParserSession {
   parse(line: string): GamePresenceEvent | null;
