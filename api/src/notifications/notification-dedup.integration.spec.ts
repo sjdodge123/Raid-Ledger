@@ -342,5 +342,47 @@ describe('Notification Dedup (integration)', () => {
       expect(await redis.get(at(keys, 0))).not.toBeNull();
       expect(await dedupService.checkAndMarkSent(at(keys, 4), ttl)).toBe(true);
     });
+
+    it('takes over an expired row and refreshes its expiry', async () => {
+      const key = 'event-notice:901:user:1';
+      const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      await testApp.db.execute(sql`
+        INSERT INTO notification_dedup (dedup_key, expires_at, created_at)
+        VALUES (${key}, ${hourAgo}, ${hourAgo})
+      `);
+
+      const won = await dedupService.checkAndMarkSentMany([key], ttl);
+
+      expect(won).toEqual(new Set([key]));
+      const rows = await testApp.db.execute<{ refreshed: boolean }>(sql`
+        SELECT expires_at > NOW() + INTERVAL '1 day' AS refreshed
+        FROM notification_dedup WHERE dedup_key = ${key}
+      `);
+      expect(rows.map((r) => r.refreshed)).toEqual([true]);
+    });
+
+    it('a mixed batch claims only the fresh key and re-warms the DB-only one', async () => {
+      const inRedis = 'event-notice:902:user:1';
+      const inDb = 'event-notice:902:user:2';
+      const fresh = 'event-notice:902:user:3';
+      await redis.set(inRedis, '1', 'EX', ttl);
+      await dedupService.checkAndMarkSentMany([inDb], ttl);
+      await redis.del(inDb);
+
+      const won = await dedupService.checkAndMarkSentMany(
+        [fresh, inDb, inRedis],
+        ttl,
+      );
+
+      expect(won).toEqual(new Set([fresh]));
+      expect(await redis.get(inDb)).not.toBeNull();
+      expect(await redis.get(fresh)).not.toBeNull();
+      // The Redis-only key short-circuits: no DB row is written for it.
+      const rows = await testApp.db.execute<{ dedup_key: string }>(sql`
+        SELECT dedup_key FROM notification_dedup
+        WHERE dedup_key LIKE 'event-notice:902:%' ORDER BY dedup_key
+      `);
+      expect(rows.map((r) => r.dedup_key)).toEqual([inDb, fresh]);
+    });
   });
 });
