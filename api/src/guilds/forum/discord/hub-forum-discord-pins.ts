@@ -67,8 +67,8 @@ export interface PinChange {
 /** RL ↔ Discord pin reconciliation for bound hubs. */
 @Injectable()
 export class HubForumDiscordPinSync {
-  /** Our own pending pin flips (`postId:pin|unpin` → expiry ms). */
-  private readonly echoes = new Map<string, number>();
+  /** Our own pending pin flips, awaiting their gateway echo. */
+  private readonly echoes = new PinEchoes();
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
@@ -122,28 +122,56 @@ export class HubForumDiscordPinSync {
    * pin). Forgotten on failure; expires after ECHO_TTL_MS.
    */
   private async flip(postId: string, pinned: boolean): Promise<void> {
-    const key = echoKey(postId, pinned);
-    this.echoes.set(key, Date.now() + ECHO_TTL_MS);
+    this.echoes.record(postId, pinned);
     try {
       await this.gateway.setPinned(postId, pinned);
     } catch (err) {
-      this.echoes.delete(key);
+      this.echoes.forget(postId, pinned);
       throw err;
     }
   }
 
   /** Consume a pending echo of our own pin change for this post. */
   private isOwnEcho(postId: string, pinned: boolean): boolean {
-    const key = echoKey(postId, pinned);
-    const until = this.echoes.get(key);
-    if (until === undefined) return false;
-    this.echoes.delete(key);
-    return until >= Date.now();
+    return this.echoes.consume(postId, pinned);
   }
 }
 
 const echoKey = (postId: string, pinned: boolean) =>
   `${postId}:${pinned ? 'pin' : 'unpin'}`;
+
+/**
+ * Pending echoes (`postId:pin|unpin` → expiry ms). Review M2: a flip whose
+ * echo never arrives (no-op pin, unlinked post, dropped gateway event) is
+ * pruned once expired, so the map stays bounded by flips in the last TTL.
+ */
+export class PinEchoes {
+  private readonly until = new Map<string, number>();
+
+  constructor(private readonly ttlMs = ECHO_TTL_MS) {}
+
+  get size(): number {
+    return this.until.size;
+  }
+
+  record(postId: string, pinned: boolean, now = Date.now()): void {
+    for (const [key, at] of this.until) if (at < now) this.until.delete(key);
+    this.until.set(echoKey(postId, pinned), now + this.ttlMs);
+  }
+
+  forget(postId: string, pinned: boolean): void {
+    this.until.delete(echoKey(postId, pinned));
+  }
+
+  /** True (and forgotten) when this flip is our own, still in its window. */
+  consume(postId: string, pinned: boolean, now = Date.now()): boolean {
+    const key = echoKey(postId, pinned);
+    const at = this.until.get(key);
+    if (at === undefined) return false;
+    this.until.delete(key);
+    return at >= now;
+  }
+}
 
 /** The Discord post id of the hub's newest live pinned linked thread in its current forum. */
 async function newestPinnedPost(
