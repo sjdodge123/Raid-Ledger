@@ -1372,6 +1372,8 @@ run_integration_tests() {
 # ROK-2206: with RL_INTEGRATION_WORKERS >= 2 the shard runs that many jest
 # workers (each on its own cloned DB — jest.integration.config.js), so it drops
 # --runInBand and gives each worker RL_INTEGRATION_HEAP_MB (default 2048).
+# RL_INTEGRATION_WORKERS is passed inline: it is never exported script-wide,
+# so only this jest process (not the unit run) sees it.
 _integration_shard_jest() {
   local i="$1" n="$2" heap="$3" redis_url="${4:-}" band="--runInBand"
   if _integration_workers_on; then
@@ -1383,6 +1385,7 @@ _integration_shard_jest() {
     if [ -n "$redis_url" ]; then export REDIS_URL="$redis_url"; fi
     NODE_OPTIONS="--max-old-space-size=${heap}" \
       JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${n}" \
+      RL_INTEGRATION_WORKERS="${RL_INTEGRATION_WORKERS:-1}" \
       npx jest --config ./jest.integration.config.js \
                ${band:+"$band"} --verbose --logHeapUsage --shard="${i}/${n}"
   )
@@ -2869,10 +2872,17 @@ main() {
       # env, so INTEGRATION_PARALLEL rides in as a flag (rl_validate_ci args).
       --integration-parallel=*) export INTEGRATION_PARALLEL="${1#--integration-parallel=}"; shift ;;
       # ROK-2206: same reason — the runner does not inherit RL_INTEGRATION_WORKERS.
-      --integration-workers=*) export RL_INTEGRATION_WORKERS="${1#--integration-workers=}"; shift ;;
+      # A plain shell var (never exported): only _integration_shard_jest hands
+      # it to jest, so the api UNIT run never sees it (Codex P2).
+      --integration-workers=*) RL_INTEGRATION_WORKERS="${1#--integration-workers=}"; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done
+
+  # ROK-2206 (Codex P2): an RL_INTEGRATION_WORKERS inherited from the caller's
+  # env is un-exported too, so the unit jest process cannot pick it up
+  # (integration-global-setup.spec.ts fixtures would try real DB work).
+  if [ -n "${RL_INTEGRATION_WORKERS+x}" ]; then export -n RL_INTEGRATION_WORKERS; fi
 
   if $no_coverage; then
     unit_step_label="Unit tests (no coverage)"

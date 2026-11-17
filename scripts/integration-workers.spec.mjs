@@ -139,10 +139,27 @@ test('validate-ci: INTEGRATION_PARALLEL=2 with the flag on runs shards serially'
   assert.equal(off.stdout.trim(), '2');
 });
 
-test('validate-ci: --integration-workers=N exports RL_INTEGRATION_WORKERS', () => {
+test('validate-ci: --integration-workers=N sets RL_INTEGRATION_WORKERS without exporting it', () => {
+  const src = read('scripts/validate-ci.sh');
   assert.ok(
-    read('scripts/validate-ci.sh').includes(
-      '--integration-workers=*) export RL_INTEGRATION_WORKERS="${1#--integration-workers=}"; shift ;;',
-    ),
+    src.includes('--integration-workers=*) RL_INTEGRATION_WORKERS="${1#--integration-workers=}"; shift ;;'),
   );
+  assert.doesNotMatch(src, /export RL_INTEGRATION_WORKERS/);
+  // An inherited value is un-exported after arg parsing too.
+  assert.ok(src.includes('export -n RL_INTEGRATION_WORKERS'));
+});
+
+test('validate-ci: a non-exported flag reaches only the integration jest env (Codex P2)', () => {
+  // Stub npx/jest report what their child env really carries (printenv), the
+  // way a unit `npx jest` run would see it.
+  const body = [
+    'RL_INTEGRATION_WORKERS=2',
+    'npx() { echo "INTEG=$(printenv RL_INTEGRATION_WORKERS || echo unset)"; }',
+    '_integration_shard_jest 1 4 4096 ""',
+    'echo "UNIT=$(printenv RL_INTEGRATION_WORKERS || echo unset)"',
+  ].join('\n');
+  const r = runBash(body, {});
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /INTEG=2/);
+  assert.match(r.stdout, /UNIT=unset/);
 });

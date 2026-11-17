@@ -149,9 +149,13 @@ function describeReset() {
   });
 
   afterAll(async () => {
-    if (raidLedgerClient) await raidLedgerClient.end({ timeout: 5 });
-    if (extensionAvailable) await dropRaidLedgerRole(testApp);
-    await lock?.release();
+    try {
+      if (raidLedgerClient) await raidLedgerClient.end({ timeout: 5 });
+      if (extensionAvailable) await dropRaidLedgerRole(testApp);
+    } finally {
+      // Always free the cross-worker lock, even if cleanup throws.
+      await lock?.release();
+    }
   });
 
   it('grants raid_ledger EXECUTE on pg_stat_statements_reset()', async () => {
