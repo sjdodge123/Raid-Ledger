@@ -6,7 +6,7 @@
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { ChannelFlags, ChannelType, type Guild } from 'discord.js';
-import { and, desc, eq, isNotNull, isNull, not, like } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, isNull, not, like } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -19,7 +19,10 @@ import { findBinding, type ForumDiscordDb } from './hub-forum-discord.queries';
 
 const threads = schema.hubForumThreads;
 const links = schema.hubForumDiscordLinks;
+const bindings = schema.hubForumDiscordBindings;
 const REASON = 'Raid Ledger hub forum pin sync';
+/** How long a sync pin flip waits for its gateway echo. */
+const ECHO_TTL_MS = 60_000;
 
 /** The forum's pin, behind plain ids (spied on by the integration spec). */
 @Injectable()
@@ -64,6 +67,9 @@ export interface PinChange {
 /** RL ↔ Discord pin reconciliation for bound hubs. */
 @Injectable()
 export class HubForumDiscordPinSync {
+  /** Our own pending pin flips (`postId:pin|unpin` → expiry ms). */
+  private readonly echoes = new Map<string, number>();
+
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordPinGateway,
@@ -78,17 +84,18 @@ export class HubForumDiscordPinSync {
     if (current === want) return;
     if (want === null) {
       if (current !== null && (await ownsPost(this.db, guildId, current))) {
-        await this.gateway.setPinned(current, false);
+        await this.flip(current, false);
       }
       return;
     }
-    if (current !== null) await this.gateway.setPinned(current, false);
-    await this.gateway.setPinned(want, true);
+    if (current !== null) await this.flip(current, false);
+    await this.flip(want, true);
   }
 
   /** Discord → RL for a linked post whose PINNED flag changed. */
   async pullPost(link: ForumLink, change: PinChange, now: Date): Promise<void> {
     if (change.wasPinned === change.isPinned) return;
+    if (this.isOwnEcho(link.discordThreadId, change.isPinned)) return;
     const target = and(
       eq(threads.id, link.threadId),
       isNull(threads.deletedAt),
@@ -108,9 +115,37 @@ export class HubForumDiscordPinSync {
       .set({ pinnedAt: null, pinnedBy: null })
       .where(target);
   }
+
+  /**
+   * Pin/unpin on Discord and remember it: the ThreadUpdate it echoes back is
+   * ours, not a user's (codex P2 — a hub losing the shared pin keeps its RL
+   * pin). Forgotten on failure; expires after ECHO_TTL_MS.
+   */
+  private async flip(postId: string, pinned: boolean): Promise<void> {
+    const key = echoKey(postId, pinned);
+    this.echoes.set(key, Date.now() + ECHO_TTL_MS);
+    try {
+      await this.gateway.setPinned(postId, pinned);
+    } catch (err) {
+      this.echoes.delete(key);
+      throw err;
+    }
+  }
+
+  /** Consume a pending echo of our own pin change for this post. */
+  private isOwnEcho(postId: string, pinned: boolean): boolean {
+    const key = echoKey(postId, pinned);
+    const until = this.echoes.get(key);
+    if (until === undefined) return false;
+    this.echoes.delete(key);
+    return until >= Date.now();
+  }
 }
 
-/** The Discord post id of the hub's newest live pinned linked thread. */
+const echoKey = (postId: string, pinned: boolean) =>
+  `${postId}:${pinned ? 'pin' : 'unpin'}`;
+
+/** The Discord post id of the hub's newest live pinned linked thread in its current forum. */
 async function newestPinnedPost(
   db: ForumDiscordDb,
   guildId: number,
@@ -122,9 +157,13 @@ async function newestPinnedPost(
       links,
       and(eq(links.threadId, threads.id), eq(links.kind, 'thread')),
     )
+    // Codex P2: only posts synced under the CURRENT binding (D9) — a hub
+    // that re-bound keeps its old forum's links, which must never be picked.
+    .innerJoin(bindings, eq(bindings.guildId, threads.guildId))
     .where(
       and(
         eq(threads.guildId, guildId),
+        gte(links.createdAt, bindings.boundAt),
         isNotNull(threads.pinnedAt),
         isNull(threads.deletedAt),
         not(like(links.discordMessageId, `${UNSENT_PREFIX}%`)),
