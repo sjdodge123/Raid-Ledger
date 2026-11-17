@@ -12,10 +12,50 @@ interface PresenceEventBase {
   loggedAt?: string;
 }
 
+/**
+ * Which platform namespace a player id belongs to (ROK-2232). Valheim's
+ * handshake carries a SteamID64; Minecraft Java a player UUID, Bedrock an
+ * Xbox XUID. Ids from different kinds never compare equal, even when their
+ * digits match — see {@link presenceKey}.
+ */
+export type PlayerIdKind = 'steam' | 'minecraft-uuid' | 'xuid';
+
+/** A player's platform id and the namespace it lives in (ROK-2232). */
+export interface PlayerRef {
+  playerId: string;
+  idKind: PlayerIdKind;
+}
+
+/** The one map key for a player: `idKind:playerId`, so kinds never collide. */
+export function presenceKey(ref: PlayerRef): string {
+  return `${ref.idKind}:${ref.playerId}`;
+}
+
+/** A Steam player (Valheim's handshake / the persisted `steam_id` column). */
+export function steamPlayer(steamId: string): PlayerRef {
+  return { playerId: steamId, idKind: 'steam' };
+}
+
+/**
+ * The SteamID64 of a player, or null for any other kind — the ONE place the
+ * presence pipeline turns a platform id into the sink's / reader's
+ * `steamId` (persisted as `ad_hoc_participants.steam_id`). A non-Steam id
+ * must never be treated as a Steam (or Discord) id, so it maps to null and
+ * the callers skip that player at the sink/reader boundary.
+ *
+ * ROK-2232 lane 2: wire non-Steam kinds here — once `ad_hoc_participants`
+ * carries `player_id` + `id_kind`, the sink/reader types gain them and the
+ * callers of this function (`toSinkPlayer`, `sinkPlayerRef`, `rosterOf`,
+ * the death recorder) pass the ref through instead of dropping it.
+ */
+export function steamIdOf(ref: PlayerRef): string | null {
+  return ref.idKind === 'steam' ? ref.playerId : null;
+}
+
 /** A peer finished the handshake (pending until a character line names it). */
-export interface PresenceJoinEvent extends PresenceEventBase {
+export interface PresenceJoinEvent extends PresenceEventBase,
+    PlayerRef {
   kind: 'join';
-  steamId: string;
 }
 
 /** A character object was created; `zdoidZero` (`0:0`) means it died. */
@@ -32,15 +72,15 @@ export interface PresenceCharacterEvent extends PresenceEventBase {
 }
 
 /** The peer failed auth (wrong password) — it never became a player. */
-export interface PresenceAuthFailedEvent extends PresenceEventBase {
+export interface PresenceAuthFailedEvent extends PresenceEventBase,
+    PlayerRef {
   kind: 'auth-failed';
-  steamId: string;
 }
 
 /** The peer's socket closed. */
-export interface PresenceLeaveEvent extends PresenceEventBase {
+export interface PresenceLeaveEvent extends PresenceEventBase,
+    PlayerRef {
   kind: 'leave';
-  steamId: string;
 }
 
 /** The server's periodic peer count (Valheim: `Connections N ZDOS:` only). */

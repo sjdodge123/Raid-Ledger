@@ -1,3 +1,4 @@
+import { steamIdOf } from './presence-events';
 import type { ServerPresenceSource } from './server-presence.sink';
 import type { PresentPlayer } from './server-presence.tracker';
 
@@ -57,14 +58,23 @@ export function rosterOf(
   players: PresentPlayer[],
 ): ServerRosterPlayer[] {
   const { pelicanServerId, gameId } = source;
-  return players.map(({ steamId, name, owner }) => ({
-    pelicanServerId,
-    gameId,
-    steamId,
-    name,
-    // The owner only means something next to its name (ROK-1822 r3).
-    ...(name !== null && owner !== undefined
-      ? { characterOwnerId: owner }
-      : {}),
-  }));
+  return players.flatMap((p) => {
+    // ROK-2232 lane 2: a non-Steam player has no `steamId` to expose yet;
+    // skipped rather than passed off as a SteamID.
+    const steamId = steamIdOf(p);
+    if (steamId === null) return [];
+    const { name, owner } = p;
+    return [
+      {
+        pelicanServerId,
+        gameId,
+        steamId,
+        name,
+        // The owner only means something next to its name (ROK-1822 r3).
+        ...(name !== null && owner !== undefined
+          ? { characterOwnerId: owner }
+          : {}),
+      },
+    ];
+  });
 }

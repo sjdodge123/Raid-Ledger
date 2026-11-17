@@ -1,4 +1,4 @@
-import type { GamePresenceEvent } from './presence-events';
+import { steamIdOf, type GamePresenceEvent } from './presence-events';
 import type { ServerDeathSink } from './server-death.sink';
 import type { ServerPresenceSource } from './server-presence.sink';
 import type { ServerPresenceTracker } from './server-presence.tracker';
@@ -49,10 +49,23 @@ export class PresenceDeathRecorder {
     }
     const death = {
       characterName: event.name,
-      steamId: tracker.steamIdOfCharacter(event.name),
+      steamId: steamIdOfCharacter(tracker, event.name),
       loggedAt,
       at,
     };
     enqueue('playerDied', () => sink.playerDied(source, death));
   }
+}
+
+/**
+ * The SteamID of the present player a death line names, else null — a
+ * non-Steam player's id is never passed off as a SteamID (ROK-2232 lane 2:
+ * the death sink is still keyed by `steamId`).
+ */
+function steamIdOfCharacter(
+  tracker: ServerPresenceTracker,
+  name: string,
+): string | null {
+  const ref = tracker.playerOfCharacter(name);
+  return ref === null ? null : steamIdOf(ref);
 }

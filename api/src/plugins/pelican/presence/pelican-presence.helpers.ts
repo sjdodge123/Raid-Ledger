@@ -1,5 +1,11 @@
 import type { GameLogParserSession } from '../../plugin-host/extension-points';
-import type { GamePresenceEvent } from './presence-events';
+import {
+  presenceKey,
+  steamIdOf,
+  steamPlayer,
+  type GamePresenceEvent,
+  type PlayerRef,
+} from './presence-events';
 import type { PresenceChange, PresentPlayer } from './server-presence.tracker';
 import type { ServerPresencePlayer } from './server-presence.sink';
 
@@ -24,19 +30,28 @@ export function netPresenceChanges(
   before: PresentPlayer[],
   after: PresentPlayer[],
 ): PresenceChange[] {
-  const prior = new Map(before.map((p) => [p.steamId, p.name]));
-  const next = new Map(after.map((p) => [p.steamId, p.name]));
+  const prior = new Map(before.map((p) => [presenceKey(p), p]));
+  const next = new Map(after.map((p) => [presenceKey(p), p]));
   const changes: PresenceChange[] = [];
-  for (const [steamId, name] of prior) {
-    if (!next.has(steamId)) changes.push({ kind: 'left', steamId, name });
+  for (const [key, p] of prior) {
+    if (!next.has(key)) changes.push(change('left', p, p.name));
   }
-  for (const [steamId, name] of next) {
-    if (!prior.has(steamId)) changes.push({ kind: 'joined', steamId, name });
-    else if (name !== null && prior.get(steamId) !== name) {
-      changes.push({ kind: 'renamed', steamId, name });
+  for (const [key, p] of next) {
+    const was = prior.get(key);
+    if (!was) changes.push(change('joined', p, p.name));
+    else if (p.name !== null && was.name !== p.name) {
+      changes.push(change('renamed', p, p.name));
     }
   }
   return changes;
+}
+
+function change(
+  kind: PresenceChange['kind'],
+  ref: PlayerRef,
+  name: string | null,
+): PresenceChange {
+  return { kind, playerId: ref.playerId, idKind: ref.idKind, name };
 }
 
 /**
@@ -50,24 +65,28 @@ export function netOwnerChanges(
   after: PresentPlayer[],
   changes: PresenceChange[],
 ): PresentPlayer[] {
-  const moved = new Set(changes.map((c) => c.steamId));
-  const prior = new Map(before.map((p) => [p.steamId, p]));
+  const moved = new Set(changes.map((c) => presenceKey(c)));
+  const prior = new Map(before.map((p) => [presenceKey(p), p]));
   return after.filter((p) => {
-    const was = prior.get(p.steamId);
+    const was = prior.get(presenceKey(p));
     if (!was || p.name === null || was.name !== p.name) return false;
-    return !moved.has(p.steamId) && was.owner !== p.owner;
+    return !moved.has(presenceKey(p)) && was.owner !== p.owner;
   });
 }
 
-/** A tracker player as the sink sees them; the owner rides only with a name. */
+/**
+ * A tracker player as the sink sees them; the owner rides only with a name.
+ * Null for a non-Steam player: the sink is still keyed by `steam_id`, so it
+ * is skipped rather than stored under the wrong namespace (ROK-2232 lane 2:
+ * see {@link steamIdOf}).
+ */
 export function toSinkPlayer(
   player: PresentPlayer,
   owner: string | null,
-): ServerPresencePlayer {
-  const base = {
-    steamId: player.steamId,
-    displayName: player.name ?? player.steamId,
-  };
+): ServerPresencePlayer | null {
+  const steamId = steamIdOf(player);
+  if (steamId === null) return null;
+  const base = { steamId, displayName: player.name ?? steamId };
   return owner === null || player.name === null
     ? base
     : { ...base, characterOwnerId: owner };
@@ -79,12 +98,21 @@ export function toPresentPlayers(
 ): PresentPlayer[] {
   return players.map((p) => {
     const name = p.displayName === p.steamId ? null : p.displayName;
-    const base = { steamId: p.steamId, name };
+    const base = { ...sinkPlayerRef(p), name };
     // ROK-1822 r3: the owner only means something next to its name.
     return name !== null && p.characterOwnerId
       ? { ...base, owner: p.characterOwnerId }
       : base;
   });
+}
+
+/**
+ * The platform id of a player the sink returned. The sink persists only a
+ * SteamID today (ROK-2232 lane 2: read the stored `id_kind`/`player_id`
+ * once `ServerPresencePlayer` carries them).
+ */
+export function sinkPlayerRef(player: ServerPresencePlayer): PlayerRef {
+  return steamPlayer(player.steamId);
 }
 
 /**

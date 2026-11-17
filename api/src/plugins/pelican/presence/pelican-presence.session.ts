@@ -13,13 +13,14 @@ import {
   PRESENCE_STOPPED_STATES,
   PRESENCE_UNREACHABLE_EMPTY_MS,
   ReplayWatermark,
+  sinkPlayerRef,
   toPresentPlayers,
   toSinkPlayer,
 } from './pelican-presence.helpers';
 import { PresenceDeathRecorder } from './pelican-presence.deaths';
 import { PresenceLineParser } from './pelican-presence.line-parser';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
-import type { GamePresenceEvent } from './presence-events';
+import { steamIdOf, type GamePresenceEvent } from './presence-events';
 import {
   rosterOf,
   type ServerPresenceChangedPayload,
@@ -171,8 +172,7 @@ export class PelicanPresenceSession {
       const held = await sink.heldPresence(source);
       if (this.stopped) return;
       this.tracker.hydrate(toPresentPlayers(open));
-      const ids = (ps: { steamId: string }[]) => ps.map((p) => p.steamId);
-      this.held.reset(ids(held), ids(open));
+      this.held.reset(held.map(sinkPlayerRef), open.map(sinkPlayerRef));
       if (open.length > 0) this.notify(true);
     } catch (err) {
       this.opts.logger.error(
@@ -211,8 +211,11 @@ export class PelicanPresenceSession {
     this.forward(changes);
     this.forwardOwners(before, changes);
     const tracked = this.tracker.snapshot().length;
-    for (const steamId of this.held.departures(event, tracked))
+    for (const ref of this.held.departures(event, tracked)) {
+      const steamId = steamIdOf(ref); // ROK-2232 lane 2: non-Steam holds
+      if (steamId === null) continue;
       this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
+    }
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
@@ -324,10 +327,12 @@ export class PelicanPresenceSession {
   /** `rehydrated`: the changes came from replayed history (Codex r3). */
   private forward(changes: PresenceChange[], rehydrated = false): void {
     for (const change of changes) {
-      const owner = this.tracker.ownerOf(change.steamId);
+      const owner = this.tracker.ownerOf(change);
+      if (change.kind === 'joined') this.held.forget(change); // tracker owns them
+      // ROK-2232 lane 2: a non-Steam player has no sink row yet — skipped.
       const player = toSinkPlayer(change, owner);
+      if (player === null) continue;
       if (change.kind === 'joined') {
-        this.held.forget(change.steamId); // the tracker owns them now
         this.enqueue('playerJoined', (s, src) => s.playerJoined(src, player));
       } else if (change.kind === 'renamed') {
         this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
@@ -352,6 +357,7 @@ export class PelicanPresenceSession {
     const after = this.tracker.snapshotWithOwners();
     for (const p of netOwnerChanges(before, after, changes)) {
       const player = toSinkPlayer(p, p.owner ?? null);
+      if (player === null) continue; // ROK-2232 lane 2: non-Steam players
       this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
     }
   }
