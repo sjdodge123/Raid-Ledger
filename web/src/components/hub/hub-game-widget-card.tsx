@@ -30,7 +30,8 @@ interface BoundaryState {
  * Keeps one widget's render error inside its own cell. ROK-2251: a stale
  * deploy chunk (the widget's lazy body 404s — dynamic-import wording only, not
  * a network "Failed to fetch") reloads the page once instead; other stale
- * widgets failing in the same page lifetime wait quietly for that reload. The
+ * widgets failing within a few seconds of it wait quietly for that reload (a
+ * cancelled reload stops quieting later ones — `CHUNK_RELOAD_AWAIT_MS`). The
  * shared reload-once guard means a failure after the reload, in the window, or
  * any other error, still shows the cell's fallback. The decision is made in
  * `getDerivedStateFromError` (memoised per error) so the root `onCaughtError`

@@ -7,7 +7,7 @@ import { lazy, Suspense, type JSX } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { WidgetBoundary } from './hub-game-widget-card';
-import { isReloadingChunkError, resetChunkReloadPageState } from '../../lib/chunk-error';
+import { CHUNK_RELOAD_AWAIT_MS, isReloadingChunkError, resetChunkReloadPageState } from '../../lib/chunk-error';
 
 const STALE = 'Failed to fetch dynamically imported module: /assets/dungeon-quests-old.js';
 
@@ -79,6 +79,21 @@ describe('WidgetBoundary — stale deploy chunk (ROK-2251)', () => {
         expect(screen.getAllByTestId('hub-widget-loading')).toHaveLength(2);
         expect(isReloadingChunkError(first), 'the claiming widget must not reach Sentry').toBe(true);
         expect(isReloadingChunkError(second), 'a widget awaiting the reload must not reach Sentry').toBe(true);
+    });
+
+    it('a cancelled reload (Leave-site prompt) stops holding later stale widgets in a skeleton', () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            renderWidget(<Throws error={new TypeError(STALE)} />); // claims; reload() is "cancelled", the page stays
+            vi.setSystemTime(Date.now() + CHUNK_RELOAD_AWAIT_MS);
+            const later = new TypeError('Failed to fetch dynamically imported module: /assets/raid-progress-old.js');
+            renderWidget(<Throws error={later} />);
+            expect(reload, 'the session guard still blocks a second reload').toHaveBeenCalledTimes(1);
+            expect(screen.getByText('widget error cell'), 'a stale widget after a cancelled reload must show its error cell').toBeInTheDocument();
+            expect(isReloadingChunkError(later), 'a stale widget after a cancelled reload must reach Sentry').toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('a network "Failed to fetch" render error shows the error cell, reports, and never reloads', () => {

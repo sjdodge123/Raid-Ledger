@@ -38,6 +38,21 @@ export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
 export const CHUNK_RELOAD_WINDOW_MS = 2 * 60_000;
 
 /**
+ * ROK-2251: how long after this page claimed a reload other stale widgets wait
+ * quietly for it. A reload normally unloads the page well inside this; if it
+ * has not, it was cancelled (e.g. the hub's Leave-site prompt), and a later
+ * stale widget falls back to its error cell + report instead of a skeleton
+ * that never resolves. (The sessionStorage guard still blocks a second reload.)
+ */
+export const CHUNK_RELOAD_AWAIT_MS = 5_000;
+
+/**
+ * Epoch ms at which THIS page claimed a reload, or null. In memory on purpose:
+ * a real reload wipes it, so after the reload a failure in the window is `none`.
+ */
+let reloadClaimedAt: number | null = null;
+
+/**
  * Reload-once guard. Returns true — and stamps the attempt — only when no
  * auto-reload happened within the window, so a failure that survives the
  * reload cannot loop. Nothing clears the stamp; it simply ages out.
@@ -47,6 +62,7 @@ export function claimChunkReload(now: number = Date.now()): boolean {
         const age = now - Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
         if (age >= 0 && age < CHUNK_RELOAD_WINDOW_MS) return false;
         sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
+        reloadClaimedAt = now; // a route-level claim also quiets widgets failing alongside it
         return true;
     } catch {
         // Storage unavailable: no guard is possible, so never auto-reload.
@@ -85,29 +101,28 @@ export function isDynamicImportError(error: unknown): boolean {
 /**
  * How a boundary should treat one error:
  *   - `reload`: this error claimed the reload-once guard — reload the page.
- *   - `awaiting-reload`: another error already claimed a reload in THIS page
- *     lifetime (several stale widgets failing together) — stay quiet, report nothing.
+ *   - `awaiting-reload`: another error claimed a reload in THIS page within the
+ *     last `CHUNK_RELOAD_AWAIT_MS` (several stale widgets failing together) —
+ *     stay quiet, report nothing.
  *   - `none`: show the error cell and report it.
  */
 export type ChunkReloadDecision = 'reload' | 'awaiting-reload' | 'none';
 
-/**
- * Set when this page claimed a reload. In memory on purpose: the reload wipes
- * it, so after the reload a failure in the window falls through to `none`.
- */
-let reloadClaimedThisPage = false;
-
 /** Test seam: simulate a fresh page lifetime (what a real reload does). */
 export function resetChunkReloadPageState(): void {
-    reloadClaimedThisPage = false;
+    reloadClaimedAt = null;
 }
 
-function decideChunkReload(error: unknown): ChunkReloadDecision {
+function isAwaitingReload(now: number): boolean {
+    if (reloadClaimedAt === null) return false;
+    const age = now - reloadClaimedAt;
+    return age >= 0 && age < CHUNK_RELOAD_AWAIT_MS;
+}
+
+function decideChunkReload(error: unknown, now: number = Date.now()): ChunkReloadDecision {
     if (!isDynamicImportError(error)) return 'none';
-    if (reloadClaimedThisPage) return 'awaiting-reload';
-    if (!claimChunkReload()) return 'none';
-    reloadClaimedThisPage = true;
-    return 'reload';
+    if (isAwaitingReload(now)) return 'awaiting-reload';
+    return claimChunkReload(now) ? 'reload' : 'none';
 }
 
 /**
