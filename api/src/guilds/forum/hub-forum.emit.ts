@@ -1,3 +1,5 @@
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+
 /**
  * ROK-2208 D2 — the event `HubForumService` emits after each successful HTTP
  * write. Inbound Discord writes call `hub-forum.writes` directly and never
@@ -30,3 +32,14 @@ export interface HubForumChange {
 
 /** Where the change happened. */
 export type ForumRef = Pick<HubForumChange, 'guildId' | 'threadId' | 'replyId'>;
+
+/** Emit {@link HUB_FORUM_CHANGED} for one successful HTTP write. */
+export function emitForumChange(
+  events: EventEmitter2,
+  op: ForumOp,
+  actorId: number,
+  at: ForumRef,
+): void {
+  const change: HubForumChange = { ...at, op, actorId };
+  events.emit(HUB_FORUM_CHANGED, change);
+}

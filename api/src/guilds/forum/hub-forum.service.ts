@@ -59,11 +59,7 @@ import {
   type Db,
 } from './hub-forum.queries';
 import * as writes from './hub-forum.writes';
-import {
-  HUB_FORUM_CHANGED,
-  type ForumOp,
-  type ForumRef,
-} from './hub-forum.emit';
+import { emitForumChange, type ForumOp, type ForumRef } from './hub-forum.emit';
 
 /** Q8: replying to a removed (or vanished) thread. */
 export const FORUM_THREAD_CLOSED = 'This thread was removed';
@@ -283,7 +279,7 @@ export class HubForumService {
 
   /** ROK-2208 D2: after the write landed; listeners never throw back here. */
   private emit(op: ForumOp, actor: GuildActor, at: ForumRef): void {
-    this.events.emit(HUB_FORUM_CHANGED, { ...at, op, actorId: actor.id });
+    emitForumChange(this.events, op, actor.id, at);
   }
 
   /** Thread + viewer rights (§6 for event threads; `deleteReplyId` = delete own). */
