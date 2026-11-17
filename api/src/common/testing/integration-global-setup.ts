@@ -17,6 +17,10 @@
  * service DB is migrated ONCE here and its URL recorded, so every spec file
  * skips its own `migrate()` (ROK-2196). The env var reaches the test files:
  * jest runs globalSetup in the parent before the test realms/workers exist.
+ *
+ * ROK-2206 (`RL_INTEGRATION_WORKERS` >= 2, both paths): the base DB is left
+ * alone; a fresh `<base>_tpl` is migrated and cloned once per worker
+ * (`integration-worker-dbs.ts`). Flag off = the paths above, unchanged.
  */
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
@@ -33,6 +37,7 @@ import {
 import {
   WORKER_DB_URLS_ENV,
   cloneWorkerDbs,
+  prepareTemplateDb,
   requestedWorkers,
 } from './integration-worker-dbs';
 
@@ -51,8 +56,9 @@ export default async function integrationGlobalSetup(): Promise<void> {
   delete process.env[WORKER_DB_URLS_ENV];
   const ciDbUrl = process.env.DATABASE_URL;
   if (process.env.CI === 'true' && ciDbUrl) {
+    if (requestedWorkers() > 1) return prepareWorkerDbs(ciDbUrl);
     await runTestMigrations(ciDbUrl);
-    await markMigrated(ciDbUrl);
+    markTestDbMigrated(ciDbUrl);
     return;
   }
   const container = await startTestPostgres();
@@ -60,22 +66,18 @@ export default async function integrationGlobalSetup(): Promise<void> {
   process.env[SHARED_TEST_DB_URL_ENV] = container.getConnectionUri();
   process.env[SHARED_TEST_DB_OWNER_ENV] = SHARED_TEST_DB_OWNER;
   if (requestedWorkers() > 1) {
-    await runTestMigrations(container.getConnectionUri());
-    await markMigrated(container.getConnectionUri());
+    await prepareWorkerDbs(container.getConnectionUri());
   }
 }
 
 /**
- * Record `baseUrl` as migrated; in ROK-2200 per-worker mode also clone it
- * once per worker and record those clones (already migrated via TEMPLATE).
+ * ROK-2206 per-worker mode: recreate + migrate `<base>_tpl`, clone it once
+ * per worker, and record ONLY the template's clones as migrated. The base DB
+ * itself is never dropped, migrated or truncated here.
  */
-async function markMigrated(baseUrl: string): Promise<void> {
-  const workers = requestedWorkers();
-  if (workers < 2) {
-    markTestDbMigrated(baseUrl);
-    return;
-  }
-  const urls = await cloneWorkerDbs(baseUrl, workers);
+async function prepareWorkerDbs(baseUrl: string): Promise<void> {
+  await prepareTemplateDb(baseUrl);
+  const urls = await cloneWorkerDbs(baseUrl, requestedWorkers());
   process.env[WORKER_DB_URLS_ENV] = urls.join(' ');
-  markTestDbMigrated([baseUrl, ...urls].join(' '));
+  markTestDbMigrated(urls.join(' '));
 }
