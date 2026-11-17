@@ -93,6 +93,46 @@ export const VALHEIM_SETUP = {
   ],
 } satisfies PluginSetup;
 
+/**
+ * ROK-2234 — Minecraft (PLAN-minecraft-hub §5 S1). A Pelican server of either
+ * edition, mapped to its game; no server mod, no server secret, and no
+ * companion app yet (S15).
+ */
+export const MINECRAFT_SETUP = {
+  requirements: [
+    {
+      id: 'pelican-server',
+      kind: 'pelican_egg',
+      title: 'A Minecraft server on Pelican, mapped to its edition',
+      instructions:
+        '1. Run the server on your Pelican panel: the Paper or Vanilla Minecraft egg for Java Edition, the Vanilla Bedrock egg for Bedrock Edition.\n2. Install and connect the Pelican plugin.\n3. In Admin → Integrations → Pelican Panel, map a Java server to the game Minecraft and a Bedrock server to Minecraft: Bedrock Edition, then bind it to a game-server hub.',
+      required: true,
+      appliesTo: ['game_server'],
+      pelican: { eggHint: 'Paper or Vanilla Minecraft (Java), or Vanilla Bedrock' },
+    },
+    {
+      id: 'server-port',
+      kind: 'pelican_variable',
+      title: 'The server port',
+      instructions:
+        "Raid Ledger reads the server's port from its primary allocation on Pelican. Keep the game listening on that port (25565 by default for Java, 19132 for Bedrock).",
+      required: true,
+      appliesTo: ['game_server'],
+      pelican: { variable: 'SERVER_PORT' },
+    },
+    {
+      id: 'enable-query',
+      kind: 'pelican_variable',
+      title: 'Turn on the query port (Java, optional)',
+      instructions:
+        "Optional: lets Raid Ledger read the full player list of a Java server (a status ping only returns a sample of names).\n1. In the Java server's `server.properties`, set `enable-query=true` (and `query.port`, if it should differ from the server port).\n2. Restart the server. Bedrock servers answer status pings without it.",
+      required: false,
+      appliesTo: ['game_server'],
+      pelican: { files: ['server.properties'] },
+    },
+  ],
+} satisfies PluginSetup;
+
 export const PELICAN_SETUP = {
   requirements: [
     {
