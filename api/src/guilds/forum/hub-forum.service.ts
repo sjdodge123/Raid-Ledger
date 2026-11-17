@@ -102,7 +102,7 @@ export class HubForumService {
     await assertForumMember(this.access, actor, guildId);
     const page = await listThreads(this.db, guildId, limit, after);
     const now = this.now();
-    const [pinned, threads] = await withLatestReplies(this.db, [
+    const [pinned = [], threads = []] = await withLatestReplies(this.db, [
       page.pinned.map((r) => toThreadSummary(r, now)),
       page.records.map((r) => toThreadSummary(r, now)),
     ]);
