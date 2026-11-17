@@ -4,20 +4,32 @@
  * (or an untagged poll) yields `hub: null` and no flags. ROK-2212: membership
  * is the hub kind's — a community hub reads `hub_community_members` in one
  * query; any other kind (a `wow_guild` hub's live linked roster) asks the
- * kind-aware `isMember` per voter, the same check the poll tag uses.
+ * kind's member set once (`HubMembersAmong`), the same source as the poll
+ * tag's `isMember`.
  */
 import { and, eq, inArray, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { ScheduleSlotWithVotesDto } from '@raid-ledger/contract';
+import type {
+  GuildKind,
+  ScheduleSlotWithVotesDto,
+} from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { liveMemberPredicate } from '../../guilds/community/community-membership.queries';
 import {
   findVisiblePollHub,
-  type HubMemberCheck,
   type PollHub,
 } from '../standalone-poll/standalone-poll-hub.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * ROK-2212: which of `userIds` are members of hub `hubId`, by its kind — one
+ * batched read (`GuildAccessService.areMembers`), never a query per voter.
+ */
+export type HubMembersAmong = (
+  userIds: readonly number[],
+  hubId: number,
+) => Promise<ReadonlySet<number>>;
 
 /** The poll page's `hub` block. */
 export interface PollPageHub {
@@ -25,6 +37,8 @@ export interface PollPageHub {
   name: string;
   memberCount: number;
   viewerIsMember: boolean;
+  /** ROK-2212: only a `game_community` hub offers "Join hub". */
+  kind: GuildKind;
 }
 
 /** The hub block plus the live member ids (voters + viewer only) used to stamp voters. */
@@ -74,21 +88,19 @@ async function loadCommunityVoterMemberIds(
   return new Set(rows.map((r) => r.userId));
 }
 
-/** ROK-2212: the voters + viewer the kind-aware `isMember` says are members. */
+/** ROK-2212: the voters + viewer the hub kind's member set contains. */
 async function loadCheckedVoterMemberIds(
   db: Db,
   guildId: number,
   slotIds: readonly number[],
   viewerId: number | null,
-  isMember: HubMemberCheck,
-): Promise<Set<number>> {
+  membersAmong: HubMembersAmong,
+): Promise<ReadonlySet<number>> {
   const voters = slotIds.length > 0 ? await votersOn(db, slotIds) : [];
   const ids = new Set(voters.map((r) => r.userId));
   if (viewerId !== null) ids.add(viewerId);
-  const checked = await Promise.all(
-    [...ids].map(async (id) => ((await isMember(id, guildId)) ? id : null)),
-  );
-  return new Set(checked.filter((id): id is number => id !== null));
+  if (ids.size === 0) return new Set();
+  return membersAmong([...ids], guildId);
 }
 
 /** The hub's members among the voters + viewer, by the hub's kind. */
@@ -97,12 +109,12 @@ function loadVoterMemberIds(
   hub: PollHub,
   slotIds: readonly number[],
   viewerId: number | null,
-  isMember: HubMemberCheck,
-): Promise<Set<number>> {
+  membersAmong: HubMembersAmong,
+): Promise<ReadonlySet<number>> {
   if (hub.kind === 'game_community') {
     return loadCommunityVoterMemberIds(db, hub.id, slotIds, viewerId);
   }
-  return loadCheckedVoterMemberIds(db, hub.id, slotIds, viewerId, isMember);
+  return loadCheckedVoterMemberIds(db, hub.id, slotIds, viewerId, membersAmong);
 }
 
 /** Load the hub view for a poll tagged to `guildId` (null = untagged). */
@@ -111,7 +123,7 @@ export async function loadPollHubView(
   guildId: number | null,
   viewerId: number | null,
   slotIds: readonly number[],
-  isMember: HubMemberCheck,
+  membersAmong: HubMembersAmong,
 ): Promise<PollHubView> {
   if (guildId === null) return NO_HUB;
   const hub = await findVisiblePollHub(db, guildId);
@@ -121,7 +133,7 @@ export async function loadPollHubView(
     hub,
     slotIds,
     viewerId,
-    isMember,
+    membersAmong,
   );
   return {
     hub: {
@@ -129,6 +141,7 @@ export async function loadPollHubView(
       name: hub.name,
       memberCount: hub.memberCount,
       viewerIsMember: viewerId !== null && memberIds.has(viewerId),
+      kind: hub.kind,
     },
     memberIds,
   };

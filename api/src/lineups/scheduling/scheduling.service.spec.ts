@@ -147,7 +147,10 @@ describe('SchedulingService', () => {
         },
         // ROK-1632 AC3: the post-commit "everyone's in" hook.
         { provide: SchedulingUnanimousService, useValue: mockUnanimous },
-        { provide: GuildAccessService, useValue: { isMember: jest.fn() } },
+        {
+          provide: GuildAccessService,
+          useValue: { isMember: jest.fn(), areMembers: jest.fn() },
+        },
         { provide: GameActivityNudge, useValue: mockNudge },
       ],
     }).compile();

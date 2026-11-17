@@ -1,7 +1,9 @@
 /**
  * ROK-2212: the poll page's hub member flags follow the hub's kind. A
- * `wow_guild` hub's members are its live linked roster (the kind-aware
- * `isMember`), not `hub_community_members`; a community hub is unchanged.
+ * `wow_guild` hub's members are its live linked roster (the kind's member
+ * set, asked ONCE for every voter + the viewer), not `hub_community_members`;
+ * a community hub is unchanged. The hub block carries the kind (only a
+ * community hub offers "Join hub").
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -31,7 +33,9 @@ let mockDb: MockDb;
 const db = (): PostgresJsDatabase<typeof schema> =>
   mockDb as unknown as PostgresJsDatabase<typeof schema>;
 const rosterOf = (ids: number[]) =>
-  jest.fn((userId: number) => Promise.resolve(ids.includes(userId)));
+  jest.fn((userIds: readonly number[], _hubId: number) =>
+    Promise.resolve(new Set(userIds.filter((id) => ids.includes(id)))),
+  );
 
 describe('loadPollHubView — member flags by hub kind (ROK-2212)', () => {
   beforeEach(() => {
@@ -46,7 +50,10 @@ describe('loadPollHubView — member flags by hub kind (ROK-2212)', () => {
     const view = await loadPollHubView(db(), 4, 9, [11, 12], isMember);
     expect([...(view.memberIds ?? [])].sort()).toEqual([1, 9]);
     expect(view.hub?.viewerIsMember).toBe(true);
-    expect(isMember).toHaveBeenCalledWith(2, 4);
+    expect(view.hub?.kind).toBe('wow_guild');
+    // one batched ask for every voter + the viewer, never one per voter
+    expect(isMember).toHaveBeenCalledTimes(1);
+    expect(isMember).toHaveBeenCalledWith([1, 2, 9], 4);
     expect(mockDb.from).not.toHaveBeenCalledWith(schema.hubCommunityMembers);
   });
 
@@ -55,7 +62,7 @@ describe('loadPollHubView — member flags by hub kind (ROK-2212)', () => {
     const view = await loadPollHubView(db(), 4, 3, [], isMember);
     expect(view.memberIds?.size).toBe(0);
     expect(view.hub?.viewerIsMember).toBe(false);
-    expect(isMember).toHaveBeenCalledWith(3, 4);
+    expect(isMember).toHaveBeenCalledWith([3], 4);
     expect(mockDb.selectDistinct).not.toHaveBeenCalled();
   });
 
@@ -70,6 +77,7 @@ describe('loadPollHubView — member flags by hub kind (ROK-2212)', () => {
     const view = await loadPollHubView(db(), 4, 9, [11], isMember);
     expect([...(view.memberIds ?? [])]).toEqual([1]);
     expect(view.hub?.viewerIsMember).toBe(false);
+    expect(view.hub?.kind).toBe('game_community');
     expect(mockDb.from).toHaveBeenCalledWith(schema.hubCommunityMembers);
     expect(isMember).not.toHaveBeenCalled();
   });
@@ -80,6 +88,14 @@ describe('loadPollHubView — member flags by hub kind (ROK-2212)', () => {
       hub: null,
       memberIds: null,
     });
+    expect(isMember).not.toHaveBeenCalled();
+  });
+
+  it('an anonymous viewer of a voteless guild poll asks no one', async () => {
+    const isMember = rosterOf([1]);
+    const view = await loadPollHubView(db(), 4, null, [], isMember);
+    expect(view.memberIds?.size).toBe(0);
+    expect(view.hub?.viewerIsMember).toBe(false);
     expect(isMember).not.toHaveBeenCalled();
   });
 });

@@ -116,7 +116,7 @@ export class SchedulingService {
       { pollMatch, lineup, members, slots, voterCount },
       userId,
       callerRole,
-      (u, h) => this.guildAccess.isMember(u, h),
+      (ids, h) => this.guildAccess.areMembers(ids, h),
     );
   }
 

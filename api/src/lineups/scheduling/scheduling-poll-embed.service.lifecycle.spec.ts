@@ -291,7 +291,10 @@ describe('SchedulingService.createEventFromSlot — re-renders the poll (AC3)', 
           provide: SchedulingUnanimousService,
           useValue: { checkMatch: jest.fn().mockResolvedValue(0) },
         },
-        { provide: GuildAccessService, useValue: { isMember: jest.fn() } },
+        {
+          provide: GuildAccessService,
+          useValue: { isMember: jest.fn(), areMembers: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(SchedulingService);
@@ -361,7 +364,7 @@ describe('StandalonePollService.complete — re-renders the poll (AC3)', () => {
       pollEmbed as never,
       events as never,
       lockIn,
-      { isMember: jest.fn() } as never,
+      { isMember: jest.fn(), areMembers: jest.fn() } as never,
     );
 
     await expect(
