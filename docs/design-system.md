@@ -1804,7 +1804,17 @@ count) that expands its roster names; **Level progression** (`forever-level-prog
 ROK-1921) — the §4.30 CSS histogram + median / highest / at-cap `dl` + top-5 names, "See all" `action`;
 **Roles** (`forever-roles`, order 47, ROK-1922) — dungeon / raid role counts with `ROLE_META` colours;
 **Dungeon quests** (`forever-dungeon-quests`, order 48, span 2, ROK-1924) — a signup × quest `StatusChip`
-matrix at ≥768px and a per-signup list below, next 3 content events, "See all" `action`; **Recent dings**
+matrix at ≥768px and a per-signup list below, next 3 content events, "See all" `action`; **Suggested groups**
+(`forever-suggested-groups`, order 43, span 2, ROK-2212) — the best group of five for each of 3 dungeons as §4.2 inner
+cards (`SuggestedGroupCard`, `web/src/plugins/wow/hub/suggested-groups/`): dungeon name + a neutral `StatusChip` level
+span, a `text-xs text-muted` "Levels x–y · N shared quests" line, 5 member rows (role as text — "Tank" ≥1024px, "T" +
+sr-only below — an `aria-hidden` `--color-class-*` dot, name, `tabular-nums` level, a neutral "Unclaimed" chip), then
+Schedule (`buttonClass` link + `text-xs text-muted` "Invites N of 5"), Poll (the shared `CreatePollModal` locked to the
+hub's game, hub-tagged, members pre-filled via `initialMemberUserIds`) and Open in planner — full-width stacked below
+1024px, Schedule + Poll hidden from visitors; three cards per row from 1280px; §4.6 `h-11` pulse rows, §4.5
+`QuietEmpty` error, `CardFootnote` pool counts, "See all" to `#dungeon-planner`, where a "Suggested groups" section
+under the planner lists every group (≤10 per dungeon) behind a `Select` dungeon filter and Open in planner loads the
+group into the planner in place — no new pattern; **Recent dings**
 (`forever-recent-dings`, order 49, ROK-1919) — a `divide-edge` list of 44px rows (`CharacterLink` name · `text-muted`
 "hit 41" · a `text-xs text-dim` `<time>` in the shared `syncedAgo` wording, `title` "Seen in the roster export at …"
 because the real ding time is unknown), its own `useRecentDings` query, a quiet empty line + re-export hint, every
