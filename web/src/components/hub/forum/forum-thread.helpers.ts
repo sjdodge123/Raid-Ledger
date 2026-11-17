@@ -20,9 +20,10 @@ export function replyCountLabel(count: number): string {
     return count === 1 ? '1 reply' : `${count} replies`;
 }
 
-/** "Grimtusk · 2 h ago" — author and time since the thread's last activity. */
+/** "Grimtusk · 2 h ago" — author and time since the thread's last activity; an event thread reads "Event thread · …" (ROK-2229). */
 export function forumRowMeta(thread: HubForumThreadSummary, now: number = Date.now()): string {
-    return `${forumAuthorName(thread.author)} · ${syncedAgo(thread.lastActivityAt, now)}`;
+    const who = isEventThread(thread) ? 'Event thread' : forumAuthorName(thread.author);
+    return `${who} · ${syncedAgo(thread.lastActivityAt, now)}`;
 }
 
 /** "2 h ago" for a message or row timestamp. */

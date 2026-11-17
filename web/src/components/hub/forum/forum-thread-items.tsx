@@ -14,6 +14,8 @@ import { ForumMessageEditor } from './forum-composer';
 import { ForumDeleteConfirm } from './forum-delete-confirm';
 import { ForumMessage } from './forum-message';
 import { forumThreadHref } from './forum-link';
+import { EventRootBody, EventRootByline } from './forum-event-root';
+import { isEventThread } from './forum-thread.helpers';
 import {
     useDeleteForumReply, useDeleteForumThread, useSetForumThreadPin, useUpdateForumReply, useUpdateForumThread,
     type ReplyDeleteVars, type ReplyEditVars,
@@ -53,6 +55,8 @@ export function ForumThreadRoot({ guildId, thread, startEditing = false }: Forum
     return (
         <>
             <ForumMessage message={thread} testId="forum-thread-root" editor={editor}
+                {...(isEventThread(thread) ? { byline: <EventRootByline createdAt={thread.createdAt} /> } : {})}
+                {...(thread.event != null ? { body: <EventRootBody event={thread.event} /> } : {})}
                 menu={<ForumActionMenu label="Thread actions" items={items} testId="forum-thread-actions" />} />
             <ForumDeleteConfirm what="thread" isOpen={mode === 'delete'} pending={remove.isPending} failed={remove.isError}
                 onClose={() => setMode('read')} onConfirm={() => remove.mutate(thread.id, { onSuccess: () => setMode('read') })} />

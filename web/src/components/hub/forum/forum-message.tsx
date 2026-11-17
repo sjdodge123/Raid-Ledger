@@ -23,6 +23,10 @@ export interface ForumMessageProps {
     /** DOM id for `?reply=<id>` deep links. */
     anchorId?: string | undefined;
     highlighted?: boolean;
+    /** Replaces the author byline (an event thread's root shows Raid Ledger, ROK-2229). */
+    byline?: ReactNode;
+    /** Replaces the stored markdown body (an event thread's root renders client-side, ROK-2229). */
+    body?: ReactNode;
 }
 
 function Byline({ message }: { message: ForumMessageData }): JSX.Element {
@@ -51,7 +55,7 @@ function useScrollOnce(highlighted: boolean): RefObject<HTMLElement | null> {
 }
 
 /** A root or reply (see file docstring). */
-export function ForumMessage({ message, testId, menu, editor, anchorId, highlighted = false }: ForumMessageProps): JSX.Element {
+export function ForumMessage({ message, testId, menu, editor, anchorId, highlighted = false, byline, body }: ForumMessageProps): JSX.Element {
     const ref = useScrollOnce(highlighted);
     if (message.deleted !== null) {
         return (
@@ -65,10 +69,10 @@ export function ForumMessage({ message, testId, menu, editor, anchorId, highligh
         <article ref={ref} id={anchorId} data-testid={testId} aria-current={highlighted ? 'true' : undefined}
             className={`scroll-mt-4 rounded-lg border bg-surface p-4 ${ring}`}>
             <div className="mb-2 flex items-start justify-between gap-2">
-                <Byline message={message} />
+                {byline ?? <Byline message={message} />}
                 {menu}
             </div>
-            {editor ?? <MarkdownBlock text={message.body} className="text-sm text-secondary" testId={`${testId}-body`} />}
+            {editor ?? body ?? <MarkdownBlock text={message.body} className="text-sm text-secondary" testId={`${testId}-body`} />}
         </article>
     );
 }
