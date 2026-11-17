@@ -23,9 +23,11 @@
 # wedge builds (ROK-2018, see _admission.sh). Old buildx tags are OCI image
 # indexes (image + attestation manifest): they are read with the index media
 # types in the Accept header, aged from their image child, and deleted by the
-# index digest (ROK-2180). --delete-untagged can delete a KEPT index's
-# children (distribution#3178), so garbage-collect drops it while any kept tag
-# is an index or manifest list, or its media type cannot be read.
+# index digest (ROK-2180). A kept index's CHILD digests join the protection
+# set (an explicit DELETE of one breaks the index). --delete-untagged can
+# delete a surviving index's children (distribution#3178), so garbage-collect
+# drops it while any kept tag — or a doomed one not confirmed deleted — is an
+# index or manifest list, or its media type cannot be read.
 #
 # Env knobs:
 #   RL_REGISTRY_URL               http://127.0.0.1:5000  (sweeper: rl-registry:5000)
