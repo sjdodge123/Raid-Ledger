@@ -49,6 +49,7 @@ import {
   type ForumThreadContext as Ctx,
 } from './event-discussion/forum-thread.context';
 import { countEventSignups } from './event-discussion/event-discussion.queries';
+import { withLatestReplies } from './hub-forum-latest-reply';
 import {
   findReply,
   latestThreads,
@@ -101,11 +102,11 @@ export class HubForumService {
     await assertForumMember(this.access, actor, guildId);
     const page = await listThreads(this.db, guildId, limit, after);
     const now = this.now();
-    return {
-      pinned: page.pinned.map((r) => toThreadSummary(r, now)),
-      threads: page.records.map((r) => toThreadSummary(r, now)),
-      nextCursor: encoded(page.next),
-    };
+    const [pinned, threads] = await withLatestReplies(this.db, [
+      page.pinned.map((r) => toThreadSummary(r, now)),
+      page.records.map((r) => toThreadSummary(r, now)),
+    ]);
+    return { pinned, threads, nextCursor: encoded(page.next) };
   }
 
   /** The Latest threads widget. */

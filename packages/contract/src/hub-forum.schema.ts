@@ -71,6 +71,12 @@ export const HubForumLockSchema = z
   .strict();
 export type HubForumLock = z.infer<typeof HubForumLockSchema>;
 
+/** ROK-2229: the newest live reply of an event thread, as a list-row preview. */
+export const HubForumLatestReplySchema = z
+  .object({ author: HubPostPersonSchema.nullable(), preview: z.string() })
+  .strict();
+export type HubForumLatestReply = z.infer<typeof HubForumLatestReplySchema>;
+
 // ── end ROK-2226 block ─────────────────────────────────────────────────────
 
 /** A thread row in the list and the widget. */
@@ -93,6 +99,11 @@ export const HubForumThreadSummarySchema = z
     event: HubForumThreadEventSchema.nullable().optional(),
     /** ROK-2226: read-only state of an event thread; null/absent otherwise. */
     lock: HubForumLockSchema.nullable().optional(),
+    /**
+     * ROK-2229: an event thread's newest live reply (author + plain-text
+     * preview) for the list row; null when it has none, absent otherwise.
+     */
+    latestReply: HubForumLatestReplySchema.nullable().optional(),
   })
   .strict();
 export type HubForumThreadSummary = z.infer<typeof HubForumThreadSummarySchema>;
