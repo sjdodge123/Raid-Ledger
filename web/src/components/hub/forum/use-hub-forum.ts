@@ -12,6 +12,7 @@ import type {
     CreateHubForumThreadInput, HubForumLatest, HubForumReply, HubForumThread, HubForumThreadList, UpdateHubForumThreadInput,
 } from '@raid-ledger/contract';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
+import { invalidateAllEventDiscussions } from '../../../hooks/event-discussion-key';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { toast } from '../../../lib/toast';
 import {
@@ -63,7 +64,10 @@ export function useLatestThreads(guildId: number, enabled = true): UseQueryResul
 
 function useRefreshForum(guildId: number): () => Promise<unknown> {
     const queryClient = useQueryClient();
-    return () => queryClient.invalidateQueries({ queryKey: hubForumKey(guildId) });
+    return () => {
+        invalidateAllEventDiscussions(queryClient); // ROK-2226: an event thread's card
+        return queryClient.invalidateQueries({ queryKey: hubForumKey(guildId) });
+    };
 }
 
 /** A mutation whose success refetches the hub's forum cache; `onError` for writes with no inline field to show it. */

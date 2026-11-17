@@ -40,6 +40,7 @@ import { DemoTestWowItemTooltipsController } from './demo-test-wow-item-tooltips
 import { DemoTestAttunementsController } from './demo-test-attunements.controller';
 import { DemoTestHubMemberController } from './demo-test-hub-member.controller';
 import { DemoTestHubForumController } from './demo-test-hub-forum.controller';
+import { DemoTestEventDiscussionController } from './demo-test-event-discussion.controller';
 import { DemoTestChannelLifecycleController } from './demo-test-channel-lifecycle.controller';
 import { DemoTestCommunityHubsController } from './demo-test-community-hubs.controller';
 import { DemoTestBg3Controller } from './demo-test-bg3.controller';
@@ -161,6 +162,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestAttunementsController,
     DemoTestHubMemberController,
     DemoTestHubForumController,
+    DemoTestEventDiscussionController,
     DemoTestChannelLifecycleController,
     DemoTestCommunityHubsController,
     DemoTestBg3Controller,

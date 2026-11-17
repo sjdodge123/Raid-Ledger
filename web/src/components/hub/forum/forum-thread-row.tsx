@@ -9,6 +9,7 @@ import type { HubForumThreadSummary } from '@raid-ledger/contract';
 import { StretchedAction } from '../../ui/stretched-action';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
 import { Pill } from '../hub-bits';
+import { ForumEventPills } from './forum-event-header';
 import { forumThreadHref } from './forum-link';
 import { ForumRowActions } from './forum-row-actions';
 import { forumAuthorName, forumDeletedLabel, forumRowMeta, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
@@ -41,6 +42,7 @@ export function ForumThreadRow({ guildId, thread, viewer }: ForumThreadRowProps)
                 <div className="flex flex-wrap items-center gap-2">
                     <span data-testid="forum-thread-title" className="max-w-full truncate font-semibold text-foreground">{thread.title}</span>
                     {pinned && <Pill tone="success">Pinned</Pill>}
+                    <ForumEventPills event={thread.event} lock={thread.lock} />
                 </div>
                 <p className="mt-0.5 truncate text-sm text-secondary">{thread.preview}</p>
                 <p className="mt-1 text-xs text-muted">{forumRowMeta(thread)}</p>

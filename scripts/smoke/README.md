@@ -56,6 +56,7 @@ still parallel.
 | `dynamic-categories.smoke.spec.ts` | Self-contained | `POST /admin/test/seed-discovery-categories` per-test via `seedSuggestion()` | n/a | Established pattern, predates ROK-1070. |
 | `edit-event-content.smoke.spec.ts` | Self-contained | None | n/a | Edits an existing demo event. |
 | `edit-event.smoke.spec.ts` | Self-contained | None | n/a | Edits an existing demo event. |
+| `event-discussion.smoke.spec.ts` | Self-contained | `seedCommunityHubs(…, 'event-discussion', { dedicatedGame: true })` then `POST /admin/test/hubs/:id/event-discussion/seed` per test | Tag per spec × project × worker (`hubSeedTag`) | ROK-2226: open event (3 replies; member + tag-keyed PUG signed up, member-2 reader) + locked event (ended 27 h ago). A re-seed replaces the hub's fixture events; the tagged community-hubs reset deletes them with the hub. |
 | `event-game-time-modal.smoke.spec.ts` | Self-contained | None | n/a | Modal open/close. |
 | `event-metrics.smoke.spec.ts` | Self-contained | None | n/a | Read-only metrics rendering. |
 | `events.smoke.spec.ts` | Demo-scoped | `reset-to-seed` once | n/a | ROK-1070: ensures clean events list for mobile-search assertion. |

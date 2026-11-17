@@ -75,6 +75,9 @@ function thread(
     deletedAs: null,
     createdAt: NOW,
     updatedAt: NOW,
+    eventId: null,
+    eventDetachedAt: null,
+    writeClosesAt: null,
     ...over,
   };
 }

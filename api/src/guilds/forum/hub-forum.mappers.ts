@@ -4,6 +4,8 @@
  */
 import type {
   HubForumCan,
+  HubForumLock,
+  HubForumThreadEvent,
   HubForumReply,
   HubForumThread,
   HubForumThreadSummary,
@@ -15,11 +17,25 @@ import type {
 } from '../../drizzle/schema/hub-forum';
 import { toPerson, type HubPostPersonRow } from '../posts/hub-posts.helpers';
 import { forumDeleted, forumPreview } from './hub-forum.helpers';
+import { eventThreadLock } from './event-discussion/event-discussion.access';
 
-/** One thread with its author's `users` columns (null once wiped). */
+/** ROK-2226: the `events` columns an event thread is joined to. */
+export interface HubForumEventRow {
+  id: number;
+  title: string;
+  duration: [Date, Date];
+  cancelledAt: Date | null;
+  creatorId: number;
+}
+
+/**
+ * One thread with its author's `users` columns (null once wiped) and, for an
+ * event thread, its event (null once the event row is gone).
+ */
 export interface HubForumThreadRecord {
   thread: HubForumThreadSelect;
   author: HubPostPersonRow | null;
+  event?: HubForumEventRow | null;
 }
 
 /** One reply with its author's `users` columns (null once wiped). */
@@ -42,9 +58,33 @@ function iso(at: Date | null): string | null {
   return at ? at.toISOString() : null;
 }
 
+function toThreadEvent(row: HubForumEventRow): HubForumThreadEvent {
+  return {
+    id: row.id,
+    title: row.title,
+    startTime: row.duration[0].toISOString(),
+    endTime: row.duration[1].toISOString(),
+    cancelled: row.cancelledAt !== null,
+  };
+}
+
+/** ROK-2226: `event` + `lock`, present on event threads only. */
+function eventFields(
+  record: HubForumThreadRecord,
+  now: Date,
+): { event?: HubForumThreadEvent | null; lock?: HubForumLock | null } {
+  if (record.thread.eventId === null) return {};
+  const event = record.event ?? null;
+  return {
+    event: event ? toThreadEvent(event) : null,
+    lock: eventThreadLock(record.thread, event !== null, now),
+  };
+}
+
 /** List/widget row: title and preview blank once deleted. */
 export function toThreadSummary(
   record: HubForumThreadRecord,
+  now: Date = new Date(),
 ): HubForumThreadSummary {
   const { thread } = record;
   const deleted = thread.deletedAt ? forumDeleted(thread.deletedAs) : null;
@@ -59,6 +99,7 @@ export function toThreadSummary(
     replyCount: thread.replyCount,
     pinnedAt: iso(thread.pinnedAt),
     deleted,
+    ...eventFields(record, now),
   };
 }
 
@@ -84,11 +125,12 @@ export function toForumReply(
 export function toForumThread(
   record: HubForumThreadRecord,
   can: HubForumCan,
-  view: HubForumRepliesView,
+  view: HubForumRepliesView & { now?: Date; canReply?: boolean },
 ): HubForumThread {
   const live = record.thread.deletedAt === null;
   return {
-    ...toThreadSummary(record),
+    ...toThreadSummary(record, view.now ?? new Date()),
+    ...(view.canReply === undefined ? {} : { canReply: view.canReply }),
     body: live ? record.thread.body : '',
     editedAt: iso(record.thread.editedAt),
     can,
