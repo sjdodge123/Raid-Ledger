@@ -4,19 +4,42 @@
  * the event header, the reply count ABOVE the opening post, and a Raid Ledger
  * opening post rendered client-side. A normal thread keeps its old layout.
  */
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { HubForumThread } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { buildForumReply, buildForumThread, buildForumThreadDetail, buildForumThreadEvent } from '../../../test/factories/hub-forum';
-import { eventShortDate, eventStartLabel } from './forum-event-format';
 import { HubForumTab } from './forum-tab';
 import { ForumThreadRow } from './forum-thread-row';
 
 const THREAD = 'http://localhost:3000/guilds/7/forum/5';
-const EVENT = buildForumThreadEvent({ signupCount: 18, maxAttendees: 40 });
+/**
+ * m1 (ROK-2229 review): pin a non-UTC viewer zone and an instant that falls on
+ * different calendar days in New York and UTC, and build the expectations
+ * with an explicit `timeZone` — so a UTC/server-zone regression fails.
+ */
+const ZONE = 'America/New_York';
+const START = '2026-11-22T23:30:00.000Z';
+const shortDateIn = (iso: string, timeZone: string): string =>
+    new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone });
+const timeIn = (iso: string, timeZone: string): string =>
+    new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone });
+
+beforeAll(() => {
+    vi.stubEnv('TZ', ZONE);
+});
+
+afterAll(() => {
+    vi.unstubAllEnvs();
+});
+
+it('uses an instant whose New York and UTC dates differ', () => {
+    expect(shortDateIn(START, ZONE)).not.toBe(shortDateIn(START, 'UTC'));
+});
+
+const EVENT = buildForumThreadEvent({ startTime: START, endTime: '2026-11-23T02:30:00.000Z', signupCount: 18, maxAttendees: 40 });
 
 function renderThread(thread: HubForumThread): void {
     server.use(http.get(THREAD, () => HttpResponse.json(thread)));
@@ -39,7 +62,7 @@ describe('event thread view (ROK-2229)', () => {
     it('titles the thread "<title> — <short date>" with a bare Event pill', async () => {
         renderThread(eventThread());
         const heading = await screen.findByTestId('forum-thread-heading');
-        expect(heading).toHaveTextContent(`Molten Core — ${eventShortDate(EVENT.startTime)}`);
+        expect(heading).toHaveTextContent(`Molten Core — ${shortDateIn(START, ZONE)}`);
         expect(screen.getByText('Event')).toBeInTheDocument();
         expect(screen.queryByText(/^Event ·/), 'the heading pill drops the date the title already shows').toBeNull();
     });
@@ -65,7 +88,7 @@ describe('event thread view (ROK-2229)', () => {
         const root = await screen.findByTestId('forum-thread-root');
         expect(within(root).getByTestId('forum-event-root-byline')).toHaveTextContent(/^Raid Ledger\s*Created when the event was scheduled · /);
         expect(within(root).getByTestId('forum-thread-root-body')).toHaveTextContent(
-            `Discussion for Molten Core, ${eventStartLabel(EVENT.startTime)}. Signed-up players (bench included) can post here.`,
+            `Discussion for Molten Core, ${shortDateIn(START, ZONE)} ${timeIn(START, ZONE)}. Signed-up players (bench included) can post here.`,
         );
         expect(within(root).queryByText(/Open the event/)).toBeNull();
         expect(within(root).queryByText('Grimtusk'), 'the creator is not the byline').toBeNull();
@@ -95,7 +118,7 @@ describe('event thread list row (ROK-2229)', () => {
         const thread = buildForumThread({ title: 'Molten Core', event: EVENT, lock: null });
         renderWithProviders(<ul><ForumThreadRow guildId={7} thread={thread} viewer={viewer} /></ul>);
         const row = screen.getByTestId('forum-thread-row');
-        expect(within(row).getByTestId('forum-thread-title')).toHaveTextContent(`Molten Core — ${eventShortDate(EVENT.startTime)}`);
+        expect(within(row).getByTestId('forum-thread-title')).toHaveTextContent(`Molten Core — ${shortDateIn(START, ZONE)}`);
         expect(within(row).getByTestId('forum-thread-event-avatar')).toBeInTheDocument();
         expect(within(row).getByText(/^Event thread · /)).toBeInTheDocument();
         expect(within(row).queryByText(/^Grimtusk ·/)).toBeNull();
