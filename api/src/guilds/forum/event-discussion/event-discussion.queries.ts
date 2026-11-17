@@ -2,7 +2,7 @@
  * ROK-2226 — event discussion reads: the event row the reconciler needs, the
  * event's live thread, and whether a user is signed up to the event.
  */
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { HubForumReplyRecord } from '../hub-forum.mappers';
 import { selectReplies, type Db } from '../hub-forum.queries';
@@ -96,6 +96,31 @@ export async function isEventSignup(
     )
     .limit(1);
   return row !== undefined;
+}
+
+/** Signup statuses that no longer hold a place (same set as `event-find.helpers.ts`). */
+const INACTIVE_SIGNUP_STATUSES = [
+  'roached_out',
+  'departed',
+  'declined',
+] as const;
+
+/** ROK-2229: the event's active signups, bench included ("18 / 40 signed up"). */
+export async function countEventSignups(
+  db: Db,
+  eventId: number,
+): Promise<number> {
+  const s = schema.eventSignups;
+  const rows = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(s)
+    .where(
+      and(
+        eq(s.eventId, eventId),
+        notInArray(s.status, [...INACTIVE_SIGNUP_STATUSES]),
+      ),
+    );
+  return Number(rows[0]?.n ?? 0);
 }
 
 /** The `limit` newest live replies of a thread, oldest first (the event card). */

@@ -159,6 +159,37 @@ describe('toForumThread', () => {
     expect(parsed.nextReplyCursor).toBe('abc');
   });
 
+  // ROK-2229: the thread view's event header shows "N / M signed up".
+  it('folds the signup count and capacity into an event thread', () => {
+    const out = toForumThread(
+      {
+        thread: thread({ eventId: 77 }),
+        author: person,
+        event: {
+          id: 77,
+          title: 'Molten Core',
+          duration: [LATER, LATER],
+          cancelledAt: null,
+          creatorId: 5,
+          maxAttendees: 40,
+        },
+      },
+      CAN,
+      { replies: [], nextReplyCursor: null, signupCount: 18 },
+    );
+    const parsed = HubForumThreadSchema.parse(out);
+    expect(parsed.event).toMatchObject({ signupCount: 18, maxAttendees: 40 });
+  });
+
+  it('leaves a normal thread without an event when a count is passed', () => {
+    const out = toForumThread({ thread: thread(), author: person }, CAN, {
+      replies: [],
+      nextReplyCursor: null,
+      signupCount: 3,
+    });
+    expect('event' in out).toBe(false);
+  });
+
   it('blanks the root body of a deleted thread', () => {
     const gone = thread({
       deletedAt: LATER,

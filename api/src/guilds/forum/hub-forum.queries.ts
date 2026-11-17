@@ -50,6 +50,7 @@ const eventColumns = {
   duration: events.duration,
   cancelledAt: events.cancelledAt,
   creatorId: events.creatorId,
+  maxAttendees: events.maxAttendees,
 };
 
 /** UTC ISO text with microseconds — the exact cursor value. */

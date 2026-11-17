@@ -26,6 +26,8 @@ export interface HubForumEventRow {
   duration: [Date, Date];
   cancelledAt: Date | null;
   creatorId: number;
+  /** ROK-2229: the event's capacity (null = uncapped). */
+  maxAttendees?: number | null;
 }
 
 /**
@@ -65,6 +67,9 @@ function toThreadEvent(row: HubForumEventRow): HubForumThreadEvent {
     startTime: row.duration[0].toISOString(),
     endTime: row.duration[1].toISOString(),
     cancelled: row.cancelledAt !== null,
+    ...(row.maxAttendees === undefined
+      ? {}
+      : { maxAttendees: row.maxAttendees }),
   };
 }
 
@@ -79,6 +84,15 @@ function eventFields(
     event: event ? toThreadEvent(event) : null,
     lock: eventThreadLock(record.thread, event !== null, now),
   };
+}
+
+/** ROK-2229: folds the signup count into an event thread's `event`. */
+function withSignupCount(
+  summary: HubForumThreadSummary,
+  signupCount: number | undefined,
+): HubForumThreadSummary {
+  if (signupCount === undefined || summary.event == null) return summary;
+  return { ...summary, event: { ...summary.event, signupCount } };
 }
 
 /** List/widget row: title and preview blank once deleted. */
@@ -125,11 +139,17 @@ export function toForumReply(
 export function toForumThread(
   record: HubForumThreadRecord,
   can: HubForumCan,
-  view: HubForumRepliesView & { now?: Date; canReply?: boolean },
+  view: HubForumRepliesView & {
+    now?: Date;
+    canReply?: boolean;
+    /** ROK-2229: the event's active signup count (event threads only). */
+    signupCount?: number;
+  },
 ): HubForumThread {
   const live = record.thread.deletedAt === null;
+  const summary = toThreadSummary(record, view.now ?? new Date());
   return {
-    ...toThreadSummary(record, view.now ?? new Date()),
+    ...withSignupCount(summary, view.signupCount),
     ...(view.canReply === undefined ? {} : { canReply: view.canReply }),
     body: live ? record.thread.body : '',
     editedAt: iso(record.thread.editedAt),
