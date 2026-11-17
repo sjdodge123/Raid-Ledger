@@ -26,6 +26,12 @@ export function forumRowMeta(thread: HubForumThreadSummary, now: number = Date.n
     return `${who} · ${syncedAgo(thread.lastActivityAt, now)}`;
 }
 
+/** A list row's preview: an event thread's newest reply ("Mirelle: Count me in…", ROK-2229), else the root's. */
+export function forumRowPreview(thread: HubForumThreadSummary): string {
+    const latest = thread.latestReply;
+    return latest == null ? thread.preview : `${forumAuthorName(latest.author)}: ${latest.preview}`;
+}
+
 /** "2 h ago" for a message or row timestamp. */
 export function forumAgo(iso: string, now: number = Date.now()): string {
     return syncedAgo(iso, now);

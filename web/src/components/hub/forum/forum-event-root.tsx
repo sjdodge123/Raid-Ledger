@@ -6,10 +6,11 @@
  * the stored markdown body (`forum-message.tsx`). Tokens only.
  */
 import type { JSX } from 'react';
-import type { HubForumThreadEvent } from '@raid-ledger/contract';
+import type { HubForumThread, HubForumThreadEvent } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
 import { eventStartLabel } from './forum-event-format';
-import { forumAgo } from './forum-thread.helpers';
+import { ForumMessage, type ForumMessageProps } from './forum-message';
+import { forumAgo, isEventThread } from './forum-thread.helpers';
 
 /** The app's brand mark — the same svg the browser tab shows. */
 const BRAND_MARK_URL = '/favicon.svg';
@@ -35,4 +36,17 @@ export function EventRootBody({ event }: { event: HubForumThreadEvent }): JSX.El
             {' '}Signed-up players (bench included) can post here.
         </p>
     );
+}
+
+export type ForumRootMessageProps = Omit<ForumMessageProps, 'message' | 'byline' | 'body'> & { thread: HubForumThread };
+
+/**
+ * A thread's opening post, shared by the hub thread view and the event-page
+ * panel: an event thread gets the Raid Ledger byline and (while its event
+ * exists) the client-rendered body; any other thread is a plain `ForumMessage`.
+ */
+export function ForumRootMessage({ thread, ...rest }: ForumRootMessageProps): JSX.Element {
+    const byline = isEventThread(thread) ? { byline: <EventRootByline createdAt={thread.createdAt} /> } : {};
+    const body = thread.event != null ? { body: <EventRootBody event={thread.event} /> } : {};
+    return <ForumMessage message={thread} {...rest} {...byline} {...body} />;
 }

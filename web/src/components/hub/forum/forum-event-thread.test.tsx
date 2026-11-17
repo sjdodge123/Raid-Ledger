@@ -101,6 +101,15 @@ describe('event thread list row (ROK-2229)', () => {
         expect(within(row).queryByText(/^Grimtusk ·/)).toBeNull();
     });
 
+    it("previews the newest reply as \"<author>: <text>\" instead of the root", () => {
+        const latestReply = { author: { userId: 9, displayName: 'Mirelle', avatarUrl: null }, preview: 'Count me in.' };
+        const thread = buildForumThread({ title: 'Molten Core', preview: 'Discussion for Molten Core. Open the event', event: EVENT, lock: null, latestReply });
+        renderWithProviders(<ul><ForumThreadRow guildId={7} thread={thread} viewer={viewer} /></ul>);
+        const row = screen.getByTestId('forum-thread-row');
+        expect(within(row).getByText('Mirelle: Count me in.')).toBeInTheDocument();
+        expect(within(row).queryByText(/Open the event/)).toBeNull();
+    });
+
     it('leaves a normal row titled and attributed as before', () => {
         renderWithProviders(<ul><ForumThreadRow guildId={7} thread={buildForumThread({ title: 'Raid comp' })} viewer={viewer} /></ul>);
         const row = screen.getByTestId('forum-thread-row');

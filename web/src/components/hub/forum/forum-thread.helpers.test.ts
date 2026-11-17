@@ -1,7 +1,7 @@
 /** ROK-1175 — the thread row's pure copy helpers. */
 import { describe, it, expect } from 'vitest';
 import { buildForumLock, buildForumThread, buildForumThreadEvent } from '../../../test/factories/hub-forum';
-import { forumAuthorName, forumDeletedLabel, forumRowCan, forumRowMeta, replyCountLabel } from './forum-thread.helpers';
+import { forumAuthorName, forumDeletedLabel, forumRowCan, forumRowMeta, forumRowPreview, replyCountLabel } from './forum-thread.helpers';
 
 const NOW = Date.parse('2026-11-14T12:00:00.000Z');
 
@@ -25,6 +25,14 @@ describe('forum thread helpers', () => {
 
     it('meta line = author · time since last activity', () => {
         expect(forumRowMeta(buildForumThread(), NOW)).toBe('Grimtusk · 2 h ago');
+    });
+
+    it('row preview: the newest reply of an event thread, else the root preview (ROK-2229)', () => {
+        const latestReply = { author: { userId: 9, displayName: 'Mirelle', avatarUrl: null }, preview: 'Count me in.' };
+        expect(forumRowPreview(buildForumThread({ preview: 'root', latestReply }))).toBe('Mirelle: Count me in.');
+        expect(forumRowPreview(buildForumThread({ preview: 'root', latestReply: { ...latestReply, author: null } }))).toBe('Former member: Count me in.');
+        expect(forumRowPreview(buildForumThread({ preview: 'root', latestReply: null }))).toBe('root');
+        expect(forumRowPreview(buildForumThread({ preview: 'root' }))).toBe('root');
     });
 
     it('meta line of an event thread (live or event-deleted) = "Event thread · <age>" (ROK-2229)', () => {

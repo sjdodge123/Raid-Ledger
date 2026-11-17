@@ -63,7 +63,7 @@ describe('withLatestReplies', () => {
       preview: 'Count me in. Also: Garr',
     });
     expect(threads?.[0]?.latestReply).toBeNull();
-    expect(threads?.[1] && 'latestReply' in threads[1]).toBe(false);
+    expect(threads?.map((t) => 'latestReply' in t)).toEqual([true, false]);
   });
 
   it('skips the query when the page has no live event thread', async () => {

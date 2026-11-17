@@ -14,7 +14,7 @@ import { ForumEventPills } from './forum-event-header';
 import { forumThreadTitle } from './forum-event-format';
 import { forumThreadHref } from './forum-link';
 import { ForumRowActions } from './forum-row-actions';
-import { forumAuthorName, forumDeletedLabel, forumRowMeta, isEventThread, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
+import { forumAuthorName, forumDeletedLabel, forumRowMeta, forumRowPreview, isEventThread, replyCountLabel, type ForumViewer } from './forum-thread.helpers';
 
 export interface ForumThreadRowProps { guildId: number; thread: HubForumThreadSummary; viewer: ForumViewer }
 
@@ -59,7 +59,7 @@ export function ForumThreadRow({ guildId, thread, viewer }: ForumThreadRowProps)
                     {pinned && <Pill tone="success">Pinned</Pill>}
                     <ForumEventPills event={thread.event} lock={thread.lock} />
                 </div>
-                <p className="mt-0.5 truncate text-sm text-secondary">{thread.preview}</p>
+                <p className="mt-0.5 truncate text-sm text-secondary">{forumRowPreview(thread)}</p>
                 <p className="mt-1 text-xs text-muted">{forumRowMeta(thread)}</p>
             </div>
             <div className="relative flex items-start gap-1">
