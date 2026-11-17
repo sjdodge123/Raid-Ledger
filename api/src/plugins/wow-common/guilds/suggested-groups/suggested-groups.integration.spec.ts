@@ -144,7 +144,10 @@ async function read(
   expect(res.status).toBe(200);
   const parsed = SuggestedGroupsSchema.safeParse(res.body);
   expect(parsed.success ? null : parsed.error.issues).toBeNull();
-  return res.body as SuggestedGroupsDto;
+  return defined(
+    parsed.success ? parsed.data : undefined,
+    'suggested-groups body parsed',
+  );
 }
 
 const members = (groups: readonly SuggestedGroupDto[]) =>
