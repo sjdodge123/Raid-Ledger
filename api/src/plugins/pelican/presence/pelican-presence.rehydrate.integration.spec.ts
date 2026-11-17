@@ -14,6 +14,7 @@ import * as schema from '../../../drizzle/schema';
 import { AdHocParticipantService } from '../../../discord-bot/services/ad-hoc-participant.service';
 import { SettingsService } from '../../../settings/settings.service';
 import { PelicanPresenceSession } from './pelican-presence.session';
+import { steamPlayer } from './presence-events';
 import {
   fakeLogger,
   fakeParser,
@@ -160,7 +161,11 @@ describe('Presence session rehydrate — linked character names (ROK-1822)', () 
     await socketOpened(wings);
     wings.authenticate();
     wings.lines([
-      line({ kind: 'join', steamId: STEAM_B, loggedAt: '2026-10-17T10:00:01' }),
+      line({
+        kind: 'join',
+        ...steamPlayer(STEAM_B),
+        loggedAt: '2026-10-17T10:00:01',
+      }),
       line({
         kind: 'character',
         name: 'rok',
@@ -197,7 +202,11 @@ describe('Presence session rehydrate — character owner ids (ROK-1822 r3)', () 
     await socketOpened(wings);
     wings.authenticate();
     wings.lines([
-      line({ kind: 'join', steamId: STEAM_B, loggedAt: '2026-10-17T10:00:01' }),
+      line({
+        kind: 'join',
+        ...steamPlayer(STEAM_B),
+        loggedAt: '2026-10-17T10:00:01',
+      }),
       line({
         kind: 'character',
         name: 'rok',
@@ -230,7 +239,7 @@ describe('Presence session rehydrate — character owner ids (ROK-1822 r3)', () 
 /** One player arriving: a join, then the character line that names them. */
 const at = (s: number) => `2026-10-17T10:00:${String(s).padStart(2, '0')}`;
 const arrival = (steamId: string, name: string, ownerId: string, s: number) => [
-  line({ kind: 'join', steamId, loggedAt: at(s) }),
+  line({ kind: 'join', ...steamPlayer(steamId), loggedAt: at(s) }),
   line({
     kind: 'character',
     name,
