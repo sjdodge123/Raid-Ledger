@@ -56,12 +56,14 @@ describe('netPresenceChanges', () => {
   it('maps a SteamID-only display label back to an unnamed player', () => {
     expect(
       toPresentPlayers([
-        { steamId: 'A', displayName: 'A' },
-        { steamId: 'B', displayName: 'Bob' },
+        { ...steamPlayer('A'), displayName: 'A' },
+        { ...steamPlayer('B'), displayName: 'Bob' },
+        { ...xuid('C'), displayName: 'C' },
       ]),
     ).toEqual([
       { ...steamPlayer('A'), name: null },
       { ...steamPlayer('B'), name: 'Bob' },
+      { ...xuid('C'), name: null },
     ]);
   });
 });
@@ -104,22 +106,34 @@ describe('non-Steam players at the sink/reader boundary (ROK-2232)', () => {
     ]);
   });
 
-  it('never hands an XUID to the sink as a SteamID', () => {
-    expect(toSinkPlayer({ ...xuid('1'), name: 'Freya' }, '9')).toBeNull();
-    expect(toSinkPlayer({ ...steamPlayer('1'), name: 'Bjorn' }, '9')).toEqual({
-      steamId: '1',
-      displayName: 'Bjorn',
+  // ROK-2232 lane 2: these replaced lane 1's "XUID is skipped" tests — a
+  // non-Steam player now reaches the sink and the roster under its own kind.
+  it('hands an XUID to the sink under its own kind, never as a SteamID', () => {
+    const sinkPlayer = toSinkPlayer({ ...xuid('1'), name: 'Freya' }, '9');
+    expect(sinkPlayer).toEqual({
+      playerId: '1',
+      idKind: 'xuid',
+      displayName: 'Freya',
       characterOwnerId: '9',
+    });
+    expect(sinkPlayer).not.toHaveProperty('steamId');
+    expect(toSinkPlayer({ ...steamPlayer('1'), name: null }, '9')).toEqual({
+      playerId: '1',
+      idKind: 'steam',
+      displayName: '1',
     });
   });
 
-  it('never lists an XUID player as a SteamID on the roster', () => {
+  it('lists an XUID player on the roster under its own kind', () => {
     const source = { pelicanServerId: 7, gameId: 42 };
     expect(
       rosterOf(source, [
         { ...xuid('1'), name: 'Freya' },
         { ...steamPlayer('2'), name: 'Bjorn' },
       ]),
-    ).toEqual([{ ...source, steamId: '2', name: 'Bjorn' }]);
+    ).toEqual([
+      { ...source, playerId: '1', idKind: 'xuid', name: 'Freya' },
+      { ...source, playerId: '2', idKind: 'steam', name: 'Bjorn' },
+    ]);
   });
 });
