@@ -157,7 +157,7 @@ describe('DungeonPlannerTab — Create event, quest errors, Copy link and the ph
         renderTab(plannerHandlers(), '/hubs/7#dungeon-planner');
         const card = await screen.findByRole('article', { name: `${INSTANCE.name} group` });
         expect(screen.queryByTestId(`planner-chip-${UUID_A}`), 'nothing picked before').toBeNull();
-        fireEvent.click(within(card).getByRole('button', { name: `Open ${INSTANCE.name} group in the planner` }));
+        fireEvent.click(within(card).getByRole('button', { name: `Open in planner: ${INSTANCE.name} group` }));
         for (const key of [UUID_A, UUID_B, 'm12']) expect(await screen.findByTestId(`planner-chip-${key}`), `chip ${key} loaded`).toBeInTheDocument();
         expect(await screen.findByRole('link', { name: 'Create event ▸' }), 'the group\'s dungeon is picked')
             .toHaveAttribute('href', '/events/new?gameId=3&guildId=7&contentInstanceIds=101');

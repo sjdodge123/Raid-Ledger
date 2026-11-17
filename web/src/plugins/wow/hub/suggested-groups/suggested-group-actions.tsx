@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom';
 import type { GuildPage, SuggestedGroupDto } from '@raid-ledger/contract';
 import { Button } from '../../../../components/ui/button';
 import { buttonClass } from '../../../../components/ui/button-classes';
-import { inviteCharacterIds, inviteNote, plannerHref, scheduleHref } from './suggested-groups-links';
+import { groupLabel, inviteCharacterIds, inviteNote, plannerHref, scheduleHref, type GroupOrdinal } from './suggested-groups-links';
 
 export interface SuggestedGroupActionProps {
     group: SuggestedGroupDto;
@@ -20,13 +20,16 @@ export interface SuggestedGroupActionProps {
     onPoll?: ((group: SuggestedGroupDto) => void) | undefined;
     /** Inside the planner tab: load the group in place instead of following the link. */
     onOpenInPlanner?: ((group: SuggestedGroupDto) => void) | undefined;
+    /** Position among the dungeon's shown groups (planner section, >1 group) — keeps accessible names distinct. */
+    ordinal?: GroupOrdinal | undefined;
 }
 
 const ACTION_CLS = 'w-full lg:w-auto';
 
-function ScheduleAction({ group, page }: Pick<SuggestedGroupActionProps, 'group' | 'page'>): JSX.Element {
+function ScheduleAction({ group, page, ordinal }: Pick<SuggestedGroupActionProps, 'group' | 'page' | 'ordinal'>): JSX.Element {
     const note = inviteNote(inviteCharacterIds(group).length);
-    const label = `Schedule ${group.instance.name}${note === null ? '' : `, ${note.toLowerCase()}`}`;
+    const target = ordinal === undefined ? group.instance.name : groupLabel(group, ordinal);
+    const label = `Schedule ${target}${note === null ? '' : `, ${note.toLowerCase()}`}`;
     return (
         <span className="flex w-full flex-col gap-1 lg:w-auto">
             <Link to={scheduleHref(group, page)} aria-label={label} data-testid="suggested-group-schedule"
@@ -38,8 +41,9 @@ function ScheduleAction({ group, page }: Pick<SuggestedGroupActionProps, 'group'
     );
 }
 
-function PlannerAction({ group, page, onOpenInPlanner }: SuggestedGroupActionProps): JSX.Element {
-    const label = `Open ${group.instance.name} group in the planner`;
+function PlannerAction({ group, page, onOpenInPlanner, ordinal }: SuggestedGroupActionProps): JSX.Element {
+    // Label in Name (WCAG 2.5.3): the visible "Open in planner" leads the accessible name.
+    const label = `Open in planner: ${groupLabel(group, ordinal)}`;
     if (onOpenInPlanner !== undefined) {
         return (
             <Button variant="ghost" size="sm" className={ACTION_CLS} aria-label={label} onClick={() => onOpenInPlanner(group)}>
@@ -58,12 +62,12 @@ function PlannerAction({ group, page, onOpenInPlanner }: SuggestedGroupActionPro
 
 /** The actions row. */
 export function SuggestedGroupActions(props: SuggestedGroupActionProps): JSX.Element {
-    const { group, canAct, onPoll } = props;
+    const { group, canAct, onPoll, ordinal } = props;
     return (
         <div className="mt-1 flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-start">
-            {canAct && <ScheduleAction group={group} page={props.page} />}
+            {canAct && <ScheduleAction group={group} page={props.page} ordinal={ordinal} />}
             {canAct && onPoll !== undefined && (
-                <Button variant="secondary" size="sm" className={ACTION_CLS} aria-label={`Poll ${group.instance.name} group`}
+                <Button variant="secondary" size="sm" className={ACTION_CLS} aria-label={`Poll ${groupLabel(group, ordinal)}`}
                     data-testid="suggested-group-poll" onClick={() => onPoll(group)}>
                     Poll
                 </Button>

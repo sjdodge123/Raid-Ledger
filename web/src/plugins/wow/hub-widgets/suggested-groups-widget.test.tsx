@@ -78,7 +78,7 @@ describe('Suggested groups widget', () => {
     it('W3: Open in planner carries the dungeon and all 5 tokens incl. unclaimed', async () => {
         await renderAs('member', SUGGESTED_GROUPS_FIXTURE);
         const sfk = await screen.findByRole('article', { name: 'Shadowfang Keep group' });
-        expect(within(sfk).getByRole('link', { name: 'Open Shadowfang Keep group in the planner' }))
+        expect(within(sfk).getByRole('link', { name: 'Open in planner: Shadowfang Keep group' }))
             .toHaveAttribute('href', `/hubs/7?d=101&c=${SG_UUID_TANK},${SG_UUID_HEAL},${SG_UUID_DPS},m41,m42#dungeon-planner`);
     });
 
@@ -87,7 +87,7 @@ describe('Suggested groups widget', () => {
         const sfk = await screen.findByRole('article', { name: 'Shadowfang Keep group' });
         expect(within(sfk).queryByRole('link', { name: /^Schedule/ })).toBeNull();
         expect(within(sfk).queryByRole('button', { name: /^Poll/ })).toBeNull();
-        expect(within(sfk).getByRole('link', { name: 'Open Shadowfang Keep group in the planner' })).toBeInTheDocument();
+        expect(within(sfk).getByRole('link', { name: 'Open in planner: Shadowfang Keep group' })).toBeInTheDocument();
     });
 
     it('W5b: non-member staff (operator) on a visitor page still get Schedule', async () => {

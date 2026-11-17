@@ -6,7 +6,7 @@
  */
 import type { JSX } from 'react';
 import type { HubWidgetCtx } from '../../hub-game-widgets';
-import { CardFootnote, QuietEmpty } from '../../../components/hub/card-bits';
+import { CardFootnote } from '../../../components/hub/card-bits';
 import { SuggestedGroupCard } from '../hub/suggested-groups/suggested-group-card';
 import { SuggestedGroupPollModal } from '../hub/suggested-groups/suggested-group-poll';
 import { useGroupPoll } from '../hub/suggested-groups/use-group-poll';
@@ -14,21 +14,16 @@ import { useSuggestedGroups } from '../hub/suggested-groups/use-suggested-groups
 import { useForeverEventViewerAllowed } from './dungeon-quests.register';
 import { poolFootnote } from './suggested-groups.helpers';
 
-function LoadingRows(): JSX.Element {
-    return (
-        <div className="flex flex-col gap-2" aria-hidden="true" data-testid="suggested-groups-loading">
-            {[0, 1, 2].map((i) => <div key={i} className="h-11 animate-pulse rounded-md bg-panel" />)}
-        </div>
-    );
-}
-
-/** Up to 3 cards; nothing when there are no groups (the probe hides the card too). */
+/**
+ * Up to 3 cards. The `useVisible` probe (`suggested-groups.register.ts`) keeps the
+ * card unmounted while loading, on error and when empty, so the body renders
+ * nothing in those states rather than a skeleton or an error line nobody sees.
+ */
 export function SuggestedGroupsWidget({ page }: HubWidgetCtx): JSX.Element | null {
     const query = useSuggestedGroups(page.guild.id);
     const canAct = useForeverEventViewerAllowed(page);
     const poll = useGroupPoll(canAct);
-    if (query.isError) return <QuietEmpty>Suggested groups are unavailable right now.</QuietEmpty>;
-    if (query.data === undefined) return <LoadingRows />;
+    if (query.data === undefined) return null;
     const { groups, pool } = query.data;
     if (groups.length === 0) return null;
     return (

@@ -8,7 +8,7 @@ import type { JSX } from 'react';
 import type { SuggestedGroupDto, SuggestedGroupMemberDto } from '@raid-ledger/contract';
 import { StatusChip } from '../../../../components/ui/status-chip';
 import { classDotClass } from '../wow-member-professions';
-import { memberLevelRange } from './suggested-groups-links';
+import { groupLabel, memberLevelRange } from './suggested-groups-links';
 import { SuggestedGroupActions, type SuggestedGroupActionProps } from './suggested-group-actions';
 
 const ROLE_LABEL: Record<SuggestedGroupMemberDto['role'], { full: string; short: string }> = {
@@ -54,11 +54,11 @@ export type SuggestedGroupCardProps = SuggestedGroupActionProps;
 
 /** The card. `canAct` false hides Schedule + Poll; Poll also needs `onPoll`. */
 export function SuggestedGroupCard(props: SuggestedGroupCardProps): JSX.Element {
-    const { group } = props;
+    const { group, ordinal } = props;
     const { instance } = group;
     return (
         <article className="flex flex-col gap-2 rounded-lg border border-edge bg-panel p-3"
-            aria-label={`${instance.name} group`} data-testid="suggested-group-card">
+            aria-label={groupLabel(group, ordinal)} data-testid="suggested-group-card">
             <header className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">{instance.name}</h3>
                 <StatusChip tone="neutral" title={`Dungeon level range ${instance.minimumLevel} to ${instance.maximumLevel}`}>

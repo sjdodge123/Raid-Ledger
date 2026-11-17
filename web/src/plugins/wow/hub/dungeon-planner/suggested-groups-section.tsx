@@ -14,7 +14,7 @@ import { SuggestedGroupCard } from '../suggested-groups/suggested-group-card';
 import { SuggestedGroupPollModal } from '../suggested-groups/suggested-group-poll';
 import { useGroupPoll } from '../suggested-groups/use-group-poll';
 import { useSuggestedGroups } from '../suggested-groups/use-suggested-groups';
-import { dungeonOptions, groupKey, visibleGroups, type DungeonOption } from './suggested-groups-section.helpers';
+import { dungeonOptions, groupKey, groupOrdinals, visibleGroups, type DungeonOption } from './suggested-groups-section.helpers';
 
 const FILTER_ID = 'suggested-groups-dungeon';
 
@@ -65,6 +65,7 @@ export function SuggestedGroupsSection({ page, onOpenInPlanner }: SectionProps):
     const poll = useGroupPoll(canAct);
     const groups = query.data?.groups ?? [];
     const shown = visibleGroups(groups, instanceId);
+    const ordinals = groupOrdinals(shown);
     return (
         <section aria-labelledby="suggested-groups-heading" className="space-y-3 border-t border-edge-subtle pt-4" data-testid="suggested-groups-section">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -75,7 +76,7 @@ export function SuggestedGroupsSection({ page, onOpenInPlanner }: SectionProps):
             {shown.length > 0 && (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-busy={query.isFetching}>
                     {shown.map((g) => (
-                        <SuggestedGroupCard key={groupKey(g)} group={g} page={page} canAct={canAct}
+                        <SuggestedGroupCard key={groupKey(g)} group={g} page={page} canAct={canAct} ordinal={ordinals.get(groupKey(g))}
                             onPoll={poll.onPoll} onOpenInPlanner={onOpenInPlanner} />
                     ))}
                 </div>

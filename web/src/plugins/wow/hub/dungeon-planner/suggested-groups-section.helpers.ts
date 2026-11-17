@@ -4,6 +4,7 @@
  * groups shown, never more than 10 per dungeon (ruling 7; the API caps too).
  */
 import { MAX_SUGGESTED_GROUPS_PER_DUNGEON, type SuggestedGroupDto } from '@raid-ledger/contract';
+import type { GroupOrdinal } from '../suggested-groups/suggested-groups-links';
 
 export interface DungeonOption {
     id: number;
@@ -26,6 +27,24 @@ export function visibleGroups(groups: readonly SuggestedGroupDto[], instanceId: 
         perDungeon.set(g.instance.id, n + 1);
         return n < MAX_SUGGESTED_GROUPS_PER_DUNGEON;
     });
+}
+
+/**
+ * Each shown group's place among its dungeon's shown groups, keyed by `groupKey`;
+ * a dungeon with one group gets none, so its card keeps the plain name.
+ */
+export function groupOrdinals(shown: readonly SuggestedGroupDto[]): Map<string, GroupOrdinal> {
+    const totals = new Map<number, number>();
+    for (const g of shown) totals.set(g.instance.id, (totals.get(g.instance.id) ?? 0) + 1);
+    const seen = new Map<number, number>();
+    const out = new Map<string, GroupOrdinal>();
+    for (const g of shown) {
+        const of = totals.get(g.instance.id) ?? 1;
+        const n = (seen.get(g.instance.id) ?? 0) + 1;
+        seen.set(g.instance.id, n);
+        if (of > 1) out.set(groupKey(g), { n, of });
+    }
+    return out;
 }
 
 /** A stable React key for a group (several per dungeon). */

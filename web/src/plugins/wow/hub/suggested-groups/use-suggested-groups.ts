@@ -14,8 +14,8 @@ const STALE_MS = 5 * 60_000;
 export type SuggestedGroupsScope = 'top' | 'all';
 
 /** Query key: guild, scope, dungeon filter, viewer scope. */
-export function suggestedGroupsKey(guildId: number, scope: SuggestedGroupsScope, instanceId: number | null, viewer: unknown): unknown[] {
-    return ['plugins', 'wow', 'guilds', guildId, 'suggested-groups', scope, instanceId, viewer];
+export function suggestedGroupsKey(guildId: number, scope: SuggestedGroupsScope, instanceId: number | null, viewer: unknown) {
+    return ['plugins', 'wow', 'guilds', guildId, 'suggested-groups', scope, instanceId, viewer] as const;
 }
 
 /** Suggested groups for one Forever guild hub; idle until signed in (the route is jwt-only). */

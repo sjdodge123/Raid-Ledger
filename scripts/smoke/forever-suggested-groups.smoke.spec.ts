@@ -60,6 +60,12 @@ async function withSuggestedGuild(testInfo: TestInfo, body: (s: Seeded) => Promi
     }
 }
 
+/** A card's accessible name: "<dungeon> group", or "<dungeon> group N of M" when the dungeon lists several. */
+function isGroupOf(label: string, instanceName: string): boolean {
+    const name = instanceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${name} group( \\d+ of \\d+)?$`).test(label);
+}
+
 function section(page: Page): Locator {
     return page.getByTestId('suggested-groups-section');
 }
@@ -88,7 +94,8 @@ async function openSectionFromWidget(page: Page, s: Seeded): Promise<void> {
     await section(page).getByLabel('Show groups for').selectOption(String(sg.instanceId));
     const shown = section(page).getByTestId('suggested-group-card');
     await expect(shown.first(), `the section lists a ${sg.instanceName} group`).toBeVisible();
-    await expect(shown.filter({ hasNotText: sg.instanceName }), 'the filter keeps only the seeded dungeon').toHaveCount(0);
+    const labels = await shown.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
+    expect(labels.filter((l) => !isGroupOf(l, sg.instanceName)), 'the filter keeps only the seeded dungeon').toEqual([]);
 }
 
 test.describe('Suggested groups on WoW: Forever guild hubs (ROK-2212)', () => {
@@ -98,7 +105,7 @@ test.describe('Suggested groups on WoW: Forever guild hubs (ROK-2212)', () => {
             await signInOnboardedMember(page, s.users.member.userId);
             await openSectionFromWidget(page, s);
             const { card, row } = await cardWithUnclaimed(page, sg);
-            await card.getByRole('button', { name: `Open ${sg.instanceName} group in the planner` }).click();
+            await card.getByRole('button', { name: /^Open in planner: / }).click();
             await expect.poll(() => new URL(page.url()).searchParams.get('d'), { message: 'the plan carries the dungeon' })
                 .toBe(String(sg.instanceId));
             const planner = page.getByTestId('dungeon-planner');

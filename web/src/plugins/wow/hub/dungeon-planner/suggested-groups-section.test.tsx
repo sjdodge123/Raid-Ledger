@@ -47,9 +47,19 @@ describe('SuggestedGroupsSection', () => {
     it('W9: shows at most 10 groups per dungeon', async () => {
         renderSection(manyIn(101, 'Shadowfang Keep', 12));
         await screen.findAllByTestId('suggested-group-card');
-        const sfk = screen.getAllByRole('article', { name: 'Shadowfang Keep group' });
+        const sfk = screen.getAllByRole('article', { name: /^Shadowfang Keep group \d+ of 10$/ });
         expect(sfk, '12 Shadowfang Keep groups come back, 10 render').toHaveLength(MAX_SUGGESTED_GROUPS_PER_DUNGEON);
         expect(screen.getAllByRole('article', { name: 'Blackfathom Deeps group' })).toHaveLength(1);
+    });
+
+    it('gives same-dungeon cards distinct accessible names (group N of M on the card and every action)', async () => {
+        renderSection(manyIn(101, 'Shadowfang Keep', 3));
+        const second = await screen.findByRole('article', { name: 'Shadowfang Keep group 2 of 3' });
+        expect(within(second).getByRole('button', { name: 'Open in planner: Shadowfang Keep group 2 of 3' })).toBeInTheDocument();
+        expect(within(second).getByRole('button', { name: 'Poll Shadowfang Keep group 2 of 3' })).toBeInTheDocument();
+        expect(within(second).getByRole('link', { name: /^Schedule Shadowfang Keep group 2 of 3/ })).toBeInTheDocument();
+        const names = screen.getAllByRole('button', { name: /^Open in planner:/ }).map((b) => b.getAttribute('aria-label'));
+        expect(new Set(names).size, `every Open in planner name is unique: ${names.join(' | ')}`).toBe(names.length);
     });
 
     it('shows the quiet empty line when no group fits', async () => {
@@ -63,7 +73,7 @@ describe('SuggestedGroupsSection', () => {
         renderSection(SUGGESTED_GROUPS_FIXTURE, onOpen);
         const sfk = await screen.findByRole('article', { name: 'Shadowfang Keep group' });
         expect(within(sfk).queryByTestId('suggested-group-planner')).toBeNull();
-        await userEvent.click(within(sfk).getByRole('button', { name: 'Open Shadowfang Keep group in the planner' }));
+        await userEvent.click(within(sfk).getByRole('button', { name: 'Open in planner: Shadowfang Keep group' }));
         expect(onOpen).toHaveBeenCalledWith(SUGGESTED_GROUPS_FIXTURE.groups[0]);
     });
 });
