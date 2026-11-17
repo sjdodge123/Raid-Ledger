@@ -2235,3 +2235,23 @@ Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/
   the Back-to-Forum idiom), then `ForumLockBar` when locked.
 - **Row pills** (`ForumEventPills`) — neutral `Pill` "Event · Sat 22 Nov" (calendar icon) and "Closed" (lock icon) on Forum list
   and Latest rows. **DON'T** build a separate "via Discord" chip for Discord-synced replies here — reuse the ROK-2208 one.
+
+**ROK-2229 — mockup parity** (same approved mockup). Four patterns, all on event threads only; a normal thread keeps its
+author avatar, author byline, stored title and root preview:
+
+- **Dated title** — `forumThreadTitle()` (`forum-event-format.ts`) displays "<title> — Sat 22 Nov" (viewer TZ) on the Forum
+  list row and the thread-view heading; the stored title is unchanged. The heading's `ForumEventPills` then reads a bare
+  "Event" (`withDate={false}`) so the date is not said twice. The event-page card/panel and the Overview **Latest threads**
+  widget keep the bare title: the mockup does not date them and the event page already shows the date.
+- **System-owned row avatar** — an event-thread row shows a calendar mark (`CalendarIcon` `h-4 w-4` on a `h-9 w-9
+  rounded-full bg-overlay text-muted` circle) where the author avatar goes, and "Event thread · <age>" instead of
+  "<author> · <age>". The row belongs to the event, not to whoever created it. **DON'T** use it for a person.
+- **Latest-reply preview line** — the row's preview is the newest live reply as "<author>: <text>" (`latestReply`, one
+  batched `DISTINCT ON` query per page; removed replies never qualify), falling back to the root preview when the thread
+  has none. It sits in the slot and styling of the normal root preview.
+- **Raid Ledger byline + client-rendered root** (`forum-event-root.tsx`) — the opening post is attributed to the app:
+  `AvatarWithFallback` with the brand mark `/favicon.svg` (initials on failure), "Raid Ledger" (`font-semibold
+  text-foreground`) over "Created when the event was scheduled · <age>" (`text-xs text-dim`). Its body is built on the
+  client ("Discussion for **<title>**, Sat 22 Nov 19:00. Signed-up players (bench included) can post here.") so the date
+  reads in the viewer's timezone. Shared by the hub thread view and the event-page panel (`ForumRootMessage`). The event
+  header adds "N / M signed up" (`signupLabel`; M = the slot roster capacity, else maxAttendees; "N signed up" uncapped).
