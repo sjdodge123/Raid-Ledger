@@ -17,6 +17,7 @@ import {
   loadPlanHub,
   loadPlanSignups,
 } from '../dungeon-plan/dungeon-plan.query';
+import { RosterInsightsCache } from '../roster-insights/roster-insights.cache';
 import { loadGuildRows } from '../roster-insights/roster-insights.refs';
 import { SuggestedGroupsService } from './suggested-groups.service';
 
@@ -46,6 +47,12 @@ const ROSTER: [number, string, number | null, string | null][] = [
 
 const canView = jest.fn();
 const resolveFacts = jest.fn();
+const onGuildInvalidated = jest.fn<void, [(guildId: number) => void]>();
+
+function must<T>(value: T | undefined, label: string): T {
+  if (value === undefined) throw new Error(`missing ${label}`);
+  return value;
+}
 
 function seed(): void {
   jest.mocked(loadPlanHub).mockResolvedValue({
@@ -97,6 +104,7 @@ async function makeService(): Promise<SuggestedGroupsService> {
       { provide: SettingsService, useValue: {} },
       { provide: WowFactsService, useValue: { resolveFacts } },
       { provide: GuildAccessService, useValue: { canView } },
+      { provide: RosterInsightsCache, useValue: { onGuildInvalidated } },
     ],
   }).compile();
   return mod.get(SuggestedGroupsService);
@@ -184,6 +192,21 @@ describe('SuggestedGroupsService', () => {
     expect(ids.length).toBeGreaterThan(0);
     expect(ids.length).toBeLessThanOrEqual(3);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('a roster invalidation of the guild drops the cache: the next read recomputes', async () => {
+    canView.mockResolvedValue(true);
+    const svc = await makeService();
+    svc.onModuleInit();
+    const listener = must(onGuildInvalidated.mock.calls[0]?.[0], 'listener');
+    await svc.suggestedGroups(actor, 1, { scope: 'top' });
+    listener(2);
+    await svc.suggestedGroups(actor, 1, { scope: 'top' });
+    expect(loadGuildRows).toHaveBeenCalledTimes(1);
+    listener(1);
+    await svc.suggestedGroups(actor, 1, { scope: 'top' });
+    expect(loadGuildRows).toHaveBeenCalledTimes(2);
+    expect(resolveFacts).toHaveBeenCalledTimes(2);
   });
 
   it('serves the second read from the per-guild cache', async () => {

@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   SuggestedGroupDto,
@@ -23,6 +30,7 @@ import {
   loadPlanSignups,
   type PlanHubRow,
 } from '../dungeon-plan/dungeon-plan.query';
+import { RosterInsightsCache } from '../roster-insights/roster-insights.cache';
 import { levelOf } from '../roster-insights/roster-insights.levels';
 import {
   joinFacts,
@@ -51,11 +59,11 @@ const MAX_CACHED_GUILDS = 500;
  * ROK-2212 — `GET plugins/wow/guilds/:id/suggested-groups`: groups of 5
  * (1 tank / 1 healer / 3 dps, one character per player) from every known
  * roster character, per listed Forever dungeon whose level range they fit.
- * One computation per guild is cached 5 minutes (L10); scope, dungeon filter
+ * One computation per guild is cached 5 minutes, dropped on roster change (L10); scope, dungeon filter
  * and the visitor mask (L9) are applied per request, after grouping.
  */
 @Injectable()
-export class SuggestedGroupsService {
+export class SuggestedGroupsService implements OnModuleInit {
   private readonly logger = new Logger(SuggestedGroupsService.name);
   private readonly cache = new Map<string, MemoryCacheEntry<ComputedGroups>>();
 
@@ -66,7 +74,23 @@ export class SuggestedGroupsService {
     private readonly catalogue: InstanceCatalogueService,
     private readonly facts: WowFactsService,
     private readonly access: GuildAccessService,
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * L10: a roster import, claim or sync drops this guild's lineups with its
+   * roster insights. The cache lives in the parent module (no import edge back).
+   */
+  onModuleInit(): void {
+    this.moduleRef
+      .get(RosterInsightsCache, { strict: false })
+      .onGuildInvalidated((guildId) => this.invalidate(guildId));
+  }
+
+  /** Drop one guild's cached computation; the next read recomputes. */
+  invalidate(guildId: number): void {
+    this.cache.delete(suggestedGroupsKey(guildId));
+  }
 
   /** The viewer's groups (the hub view guard already ran); 404 off a Forever guild hub. */
   async suggestedGroups(
@@ -99,8 +123,7 @@ export class SuggestedGroupsService {
       rolesOf,
     );
     const perDungeon = this.catalogue
-      .list('wow_forever', 'dungeon')
-      .filter((d) => d.listed)
+      .list('wow_forever', 'dungeon') // listed rows only (`listInstances`)
       .map((d) =>
         buildCandidates(pool.entries, {
           id: d.id,
