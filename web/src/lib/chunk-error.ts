@@ -69,3 +69,26 @@ export function reloadOnChunkError<T>(load: Promise<T>): Promise<T> {
         throw error;
     });
 }
+
+/**
+ * ROK-2251: `claimChunkReload` decided once per error object. Every caller
+ * that asks about the same error gets the same answer — React may invoke an
+ * error boundary's `getDerivedStateFromError` twice (StrictMode) and runs the
+ * root `onCaughtError` hook before `componentDidCatch`, so the boundary and the
+ * Sentry hook must agree without claiming the guard twice.
+ */
+const reloadDecisions = new WeakMap<object, boolean>();
+
+export function claimChunkReloadFor(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false;
+    const known = reloadDecisions.get(error);
+    if (known !== undefined) return known;
+    const claimed = isChunkLoadError(error) && claimChunkReload();
+    reloadDecisions.set(error, claimed);
+    return claimed;
+}
+
+/** Whether `error` already claimed a stale-chunk reload (read-only; never claims). */
+export function isReloadingChunkError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && reloadDecisions.get(error) === true;
+}

@@ -6,6 +6,7 @@
  */
 import { Component, Suspense, type ErrorInfo, type JSX, type ReactNode } from 'react';
 import type { HubGameWidgetRegistration, HubWidgetCtx } from '../../plugins/hub-game-widgets';
+import { claimChunkReloadFor } from '../../lib/chunk-error';
 import { WidgetCard } from './hub-bits';
 
 /** 1 / 2 / 3 columns at ≥1024px; 3 clamps to the two columns ≥768px has; phone is always one. */
@@ -20,19 +21,36 @@ export interface BoundaryProps {
     children: ReactNode;
 }
 
-/** Keeps one widget's render error inside its own cell. */
-export class WidgetBoundary extends Component<BoundaryProps, { failed: boolean }> {
-    state = { failed: false };
+interface BoundaryState {
+    failed: boolean;
+    reloading: boolean;
+}
 
-    static getDerivedStateFromError(): { failed: boolean } {
-        return { failed: true };
+/**
+ * Keeps one widget's render error inside its own cell. ROK-2251: a stale
+ * deploy chunk (the widget's lazy body 404s) reloads the page once instead —
+ * the shared reload-once guard means a second failure in the window, or any
+ * other error, still shows the cell's fallback. The decision is made in
+ * `getDerivedStateFromError` (memoised per error) so the root `onCaughtError`
+ * hook, which runs before `componentDidCatch`, can keep it out of Sentry.
+ */
+export class WidgetBoundary extends Component<BoundaryProps, BoundaryState> {
+    state: BoundaryState = { failed: false, reloading: false };
+
+    static getDerivedStateFromError(error: unknown): BoundaryState {
+        return { failed: true, reloading: claimChunkReloadFor(error) };
     }
 
     componentDidCatch(error: Error, info: ErrorInfo): void {
+        if (this.state.reloading) {
+            window.location.reload();
+            return;
+        }
         console.error('Hub widget failed to render', error, info.componentStack);
     }
 
     render(): ReactNode {
+        if (this.state.reloading) return null;
         return this.state.failed ? this.props.fallback : this.props.children;
     }
 }

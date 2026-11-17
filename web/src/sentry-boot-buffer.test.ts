@@ -115,3 +115,21 @@ describe('startup errors while the telemetry decision is pending (ROK-1779)', ()
         expect(reactHandler).toHaveBeenCalledWith(live, {});
     });
 });
+
+describe('stale chunks a widget boundary is reloading for (ROK-2251)', () => {
+    it('skips a stale chunk a widget boundary is reloading for, but still reports other errors', async () => {
+        const { app } = await freshSentry();
+        const { claimChunkReloadFor } = await import('./lib/chunk-error');
+        sessionStorage.clear();
+        app.initSentry(true);
+        const stale = new TypeError('Failed to fetch dynamically imported module: /assets/w.js');
+        const crash = new Error('widget crash');
+        expect(claimChunkReloadFor(stale)).toBe(true);
+
+        app.captureReactError(stale, {});
+        app.captureReactError(crash, {});
+
+        expect(reactHandler, 'a reloading stale chunk must not reach Sentry').not.toHaveBeenCalledWith(stale, {});
+        expect(reactHandler, 'a non-chunk error must still reach Sentry').toHaveBeenCalledWith(crash, {});
+    });
+});
