@@ -1807,11 +1807,15 @@ ROK-1921) — the §4.30 CSS histogram + median / highest / at-cap `dl` + top-5 
 matrix at ≥768px and a per-signup list below, next 3 content events, "See all" `action`; **Suggested groups**
 (`forever-suggested-groups`, order 43, span 2, ROK-2212) — the best group of five for each of 3 dungeons as §4.2 inner
 cards (`SuggestedGroupCard`, `web/src/plugins/wow/hub/suggested-groups/`): dungeon name + a neutral `StatusChip` level
-span, a `text-xs text-muted` "Levels x–y · N shared quests" line, 5 member rows (role as text — "Tank" ≥1024px, "T" +
-sr-only below — an `aria-hidden` `--color-class-*` dot, name, `tabular-nums` level, a neutral "Unclaimed" chip), then
-Schedule (`buttonClass` link + `text-xs text-muted` "Invites N of 5"), Poll (the shared `CreatePollModal` locked to the
-hub's game, hub-tagged, members pre-filled via `initialMemberUserIds`) and Open in planner — full-width stacked below
-1024px, Schedule + Poll hidden from visitors; three cards per row from 1280px; the card self-hides (`useVisible`)
+span, a `text-xs text-muted` "Levels x–y · N shared quests" line, 5 member rows (role as text — a visible "T"/"H"/"D" +
+sr-only "Tank" in the widget's `compact` list at every width; the planner section's `wide` layout turns the rows into a
+5-column grid of `bg-surface` mini-cells from 1024px with an uppercase `text-dim` "TANK" above the name; never
+`sr-only lg:not-sr-only`, which index.css's unlayered `.sr-only` beats — an `aria-hidden` `--color-class-*` dot, the
+name `truncate` in a `min-w-0 flex-wrap` cell that drops the neutral "Unclaimed" chip under a long name, a `shrink-0`
+`tabular-nums` level), then Schedule (primary `buttonClass` link + `text-xs text-muted` "Invites N of 5"), Poll (the
+shared `CreatePollModal` locked to the hub's game, hub-tagged, members pre-filled via `initialMemberUserIds`) and
+"Open in planner →" (right-aligned from 1024px) — full-width stacked below 1024px, Schedule + Poll hidden from
+visitors; three widget cards per row from 1280px, one group per row in the planner section; the card self-hides (`useVisible`)
 while loading, on error and when empty; `CardFootnote` pool counts, "See all" to `#dungeon-planner`, where a
 "Suggested groups" section under the planner lists every group (≤10 per dungeon) behind a `Select` dungeon filter,
 with §4.6 `h-11` pulse rows, §4.5 `QuietEmpty` error / empty, and Open in planner loads the group into the planner in
