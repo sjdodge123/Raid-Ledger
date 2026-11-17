@@ -30,7 +30,16 @@ export function routeSignupBack(
   const target = parseCharacterBackId(interaction.customId);
   if (target?.charSelectPrefix !== SIGNUP_BUTTON_IDS.CHARACTER_SELECT)
     return false;
-  void handleSignupCharacterBack(interaction, target, deps);
+  // ROK-2228: the route runs detached, so any rejection (a non-expiry
+  // deferUpdate failure, a failed error reply) is logged here instead of
+  // escaping as an unhandled rejection.
+  void handleSignupCharacterBack(interaction, target, deps).catch(
+    (error: unknown) =>
+      deps.logger.error(
+        `Signup character Back failed for event ${target.eventId}:`,
+        error,
+      ),
+  );
   return true;
 }
 

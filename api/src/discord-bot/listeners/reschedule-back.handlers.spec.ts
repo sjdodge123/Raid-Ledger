@@ -69,6 +69,11 @@ function sentRows(i: { editReply: unknown }): SentRow[] {
   return call.components.map((row) => row.toJSON());
 }
 
+/** Let the detached Back handler settle (it runs behind `void`). */
+function flushDetached(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 describe('showRescheduleRoleForCharacter — Back (ROK-2228)', () => {
   it.each([
     [undefined, 'char_back:reschedule_char_select:7'],
@@ -98,6 +103,21 @@ describe('routeRescheduleBack (ROK-2228)', () => {
       );
     },
   );
+
+  it('logs a non-expiry deferUpdate failure instead of rejecting', async () => {
+    const deps = mockDeps();
+    const boom = new Error('500 Internal Server Error');
+    const i = interaction('char_back:reschedule_char_select:7');
+    (i.deferUpdate as jest.Mock).mockRejectedValue(boom);
+
+    expect(routeRescheduleBack(i, deps)).toBe(true);
+    await flushDetached();
+
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      'Reschedule character Back failed for event 7',
+      boom,
+    );
+  });
 });
 
 describe('handleRescheduleCharacterBack (ROK-2228)', () => {

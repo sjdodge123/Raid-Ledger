@@ -75,6 +75,11 @@ function sentCustomIds(i: BackInteraction): Array<string | undefined> {
   );
 }
 
+/** Let the detached Back handler settle (it runs behind `void`). */
+function flushDetached(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockedUser.mockResolvedValue({ id: 5 });
@@ -103,6 +108,36 @@ describe('routeSeriesBack (ROK-2228)', () => {
     const i = backButton('char_back:series_char:42');
     expect(routeSeriesBack(i, makeDeps())).toBe(true);
     expect(i.deferUpdate).toHaveBeenCalled();
+  });
+
+  it('logs a non-expiry deferUpdate failure instead of rejecting', async () => {
+    const deps = makeDeps();
+    const i = backButton('char_back:series_char:42');
+    i.deferUpdate.mockRejectedValue(new Error('500 Internal Server Error'));
+
+    expect(routeSeriesBack(i, deps)).toBe(true);
+    await flushDetached();
+
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      'Failed to defer series Back: 500 Internal Server Error',
+    );
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it('logs a failed error reply instead of rejecting', async () => {
+    const deps = makeDeps();
+    const i = backButton('char_back:series_char:42');
+    mockedEvent.mockRejectedValue(new Error('db down'));
+    const replyFailure = new Error('500 Internal Server Error');
+    i.editReply.mockRejectedValue(replyFailure);
+
+    expect(routeSeriesBack(i, deps)).toBe(true);
+    await flushDetached();
+
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      'Series character Back rejected for event 42',
+      replyFailure,
+    );
   });
 });
 

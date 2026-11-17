@@ -55,6 +55,11 @@ function firstEdit(i: ButtonInteraction): {
   return (i.editReply as jest.Mock).mock.calls[0][0];
 }
 
+/** Let the detached Back handler settle (it runs behind `void`). */
+function flushDetached(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 describe('routeSignupBack (ROK-2228)', () => {
   it.each([
     'signup:10',
@@ -73,6 +78,21 @@ describe('routeSignupBack (ROK-2228)', () => {
 
     expect(routeSignupBack(interaction, deps)).toBe(true);
     expect(interaction.deferUpdate).toHaveBeenCalled();
+  });
+
+  it('logs a non-expiry deferUpdate failure instead of rejecting', async () => {
+    const deps = createMockDeps();
+    const boom = new Error('500 Internal Server Error');
+    const interaction = backInteraction('char_back:char_select:10');
+    (interaction.deferUpdate as jest.Mock).mockRejectedValue(boom);
+
+    expect(routeSignupBack(interaction, deps)).toBe(true);
+    await flushDetached();
+
+    expect(deps.logger.error).toHaveBeenCalledWith(
+      'Signup character Back failed for event 10:',
+      boom,
+    );
   });
 });
 

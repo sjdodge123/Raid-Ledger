@@ -35,7 +35,15 @@ export function routeSeriesBack(
   if (!interaction.isButton()) return false;
   const target = parseCharacterBackId(interaction.customId);
   if (target?.charSelectPrefix !== SERIES_BUTTON_IDS.CHARACTER) return false;
-  void handleSeriesCharacterBack(interaction, target, deps);
+  // ROK-2228: the route runs detached, so any rejection (e.g. a failed error
+  // reply) is logged here instead of escaping as an unhandled rejection.
+  void handleSeriesCharacterBack(interaction, target, deps).catch(
+    (error: unknown) =>
+      deps.logger.error(
+        `Series character Back rejected for event ${target.eventId}`,
+        error,
+      ),
+  );
   return true;
 }
 

@@ -29,7 +29,16 @@ export function routeRescheduleBack(
   const target = parseCharacterBackId(interaction.customId);
   if (target?.charSelectPrefix !== RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT)
     return false;
-  void handleRescheduleCharacterBack(interaction, target, deps);
+  // ROK-2228: the route runs detached, so any rejection (a non-expiry
+  // deferUpdate failure, a failed error reply) is logged here instead of
+  // escaping as an unhandled rejection.
+  void handleRescheduleCharacterBack(interaction, target, deps).catch(
+    (error: unknown) =>
+      deps.logger.error(
+        `Reschedule character Back failed for event ${target.eventId}`,
+        error,
+      ),
+  );
   return true;
 }
 
