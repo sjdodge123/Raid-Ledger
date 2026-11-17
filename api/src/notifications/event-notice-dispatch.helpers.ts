@@ -8,9 +8,11 @@ import type * as schema from '../drizzle/schema';
 import type { NotificationService } from './notification.service';
 import type { NotificationDedupService } from './notification-dedup.service';
 import type { HubNotificationService } from './hub-notification.service';
+import type { CreateNotificationInput } from './notification.types';
 import {
+  EVENT_NOTICE_TTL_SECONDS,
+  eventNoticeKey,
   planEventNotices,
-  sendClaimedEventNotice,
   type EventNotice,
 } from './event-notice-plan.helpers';
 import {
@@ -57,39 +59,125 @@ export interface EventNoticeCopy {
   payload: Record<string, unknown>;
 }
 
+/** Who `sendEventNotices` writes through and claims against. */
+export interface EventNoticeDeps {
+  notifications: Pick<NotificationService, 'createMany'>;
+  dedup: Pick<NotificationDedupService, 'checkAndMarkSent' | 'releaseKeys'>;
+}
+
+type Outcome = PromiseSettledResult<boolean>;
+
+const NOT_SENT: Outcome = { status: 'fulfilled', value: false };
+const SENT: Outcome = { status: 'fulfilled', value: true };
+
 /**
  * D4/D5: plan one notice per user (group muting is already applied to
- * `group.groupIds`), then claim and send each. Settles every send.
+ * `group.groupIds`), claim each per-user key, then write every claimed notice
+ * in ONE `createMany` (ROK-2252 — was one INSERT per recipient). Returns one
+ * settled outcome per planned notice: `true` = created, `false` = already
+ * claimed elsewhere or skipped by preferences (claim given back), rejected =
+ * the claim or the batch write failed (claim given back).
  */
 export async function sendEventNotices(
-  deps: {
-    notifications: Pick<NotificationService, 'create'>;
-    dedup: Pick<NotificationDedupService, 'checkAndMarkSent' | 'releaseKey'>;
-  },
+  deps: EventNoticeDeps,
   copy: EventNoticeCopy,
   affinityIds: readonly number[],
   group: GroupNoticeContext | null,
-): Promise<PromiseSettledResult<boolean>[]> {
+): Promise<Outcome[]> {
   const plan = planEventNotices({
     affinityIds,
     groupIds: group?.groupIds ?? [],
     groupMuted: new Set(),
     groupTypeOff: group?.typeOff ?? new Set(),
   });
-  return Promise.allSettled(
-    plan.map((notice) =>
-      sendClaimedEventNotice(deps.dedup, copy.eventId, notice.userId, () =>
-        deps.notifications.create(buildNotice(notice, copy, group)),
-      ),
+  const claims = await claimEventNotices(deps.dedup, copy.eventId, plan);
+  const won = claims.flatMap(({ notice, claim }) =>
+    claim.status === 'fulfilled' && claim.value ? [notice] : [],
+  );
+  const sent = await createClaimedNotices(deps, copy, group, won);
+  return claims.map(({ notice, claim }) => {
+    if (claim.status === 'rejected' || !claim.value) return claim;
+    return sent.get(notice.userId) ?? NOT_SENT;
+  });
+}
+
+/** Claim every planned notice's per-(user, event) key; `true` = this call won it. */
+async function claimEventNotices(
+  dedup: EventNoticeDeps['dedup'],
+  eventId: number,
+  plan: readonly EventNotice[],
+): Promise<Array<{ notice: EventNotice; claim: Outcome }>> {
+  const claims = await Promise.allSettled(
+    plan.map(
+      async (notice) =>
+        !(await dedup.checkAndMarkSent(
+          eventNoticeKey(eventId, notice.userId),
+          EVENT_NOTICE_TTL_SECONDS,
+        )),
     ),
   );
+  return plan.flatMap((notice, i) => {
+    const claim = claims[i];
+    return claim ? [{ notice, claim }] : [];
+  });
+}
+
+/**
+ * One `createMany` for every claimed notice. A notice `createMany` skipped
+ * (its type's in-app channel is off) or a batch that threw gives its claim
+ * back, exactly as the per-notice path (`sendClaimedEventNotice`) does.
+ */
+async function createClaimedNotices(
+  deps: EventNoticeDeps,
+  copy: EventNoticeCopy,
+  group: GroupNoticeContext | null,
+  won: readonly EventNotice[],
+): Promise<Map<number, Outcome>> {
+  if (won.length === 0) return new Map();
+  let createdIds: Set<number>;
+  try {
+    const rows = await deps.notifications.createMany(
+      won.map((notice) => buildNotice(notice, copy, group)),
+    );
+    createdIds = new Set(rows.map((row) => row.userId));
+  } catch (err: unknown) {
+    await releaseClaims(deps.dedup, copy.eventId, won);
+    return new Map(
+      won.map((n): [number, Outcome] => [n.userId, rejected(err)]),
+    );
+  }
+  const skipped = won.filter((n) => !createdIds.has(n.userId));
+  const release = await releaseClaims(deps.dedup, copy.eventId, skipped);
+  const skippedOutcome = release.status === 'rejected' ? release : NOT_SENT;
+  return new Map(
+    won.map((n): [number, Outcome] => [
+      n.userId,
+      createdIds.has(n.userId) ? SENT : skippedOutcome,
+    ]),
+  );
+}
+
+/** Give back the per-user claims of `notices` in one call. */
+async function releaseClaims(
+  dedup: EventNoticeDeps['dedup'],
+  eventId: number,
+  notices: readonly EventNotice[],
+): Promise<PromiseSettledResult<void>> {
+  if (notices.length === 0) return { status: 'fulfilled', value: undefined };
+  const keys = notices.map((n) => eventNoticeKey(eventId, n.userId));
+  const [result] = await Promise.allSettled([dedup.releaseKeys(keys)]);
+  return result ?? { status: 'fulfilled', value: undefined };
+}
+
+function rejected(reason: unknown): PromiseRejectedResult {
+  return { status: 'rejected', reason };
 }
 
 function buildNotice(
   notice: EventNotice,
   copy: EventNoticeCopy,
   group: GroupNoticeContext | null,
-): Parameters<NotificationService['create']>[0] {
+): CreateNotificationInput {
   if (notice.type === 'hub_event_tagged' && group) {
     return {
       userId: notice.userId,
