@@ -25,8 +25,8 @@ import {
 import { signupLinkedServerPlayer } from './ad-hoc-server-signup.helpers';
 import { spawnRoster } from './ad-hoc-server-spawn.helpers';
 import {
-  listOnServerSteamIds,
-  resolveSteamIdentity,
+  listOnServerPlayers,
+  resolvePlayerIdentity,
   type GameQuickPlayBinding,
   type LiveGameEvent,
   type SteamIdentity,
@@ -97,11 +97,11 @@ export async function closeServerRows(
   live: LiveGameEvent,
   pelicanServerId: number,
 ): Promise<void> {
-  const open = await listOnServerSteamIds(deps.db, live.id, pelicanServerId);
-  for (const steamId of open)
+  const open = await listOnServerPlayers(deps.db, live.id, pelicanServerId);
+  for (const player of open)
     await deps.participantService.markServerLeave(
       live.id,
-      steamId,
+      player,
       pelicanServerId,
     );
   if (open.length > 0) await afterServerLeave(deps, live);
@@ -146,10 +146,11 @@ export async function attachServerPlayer(
   pelicanServerId: number,
   player: ServerPresencePlayer,
 ): Promise<void> {
-  const identity = await resolveSteamIdentity(deps.db, player.steamId);
+  const identity = await resolvePlayerIdentity(deps.db, player);
   const userId = identity?.userId ?? null;
   await deps.participantService.addServerParticipant(live.id, {
-    steamId: player.steamId,
+    playerId: player.playerId,
+    idKind: player.idKind,
     displayName: player.displayName,
     userId,
     pelicanServerId,

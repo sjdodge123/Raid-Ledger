@@ -4,6 +4,7 @@
  * - P2: a late leave from a server the player moved away from is ignored.
  * - P3: a character rename lands on the event the player is enrolled in.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -34,7 +35,7 @@ const source = (): ServerPresenceSource => ({
 });
 
 const player = (steamId: string, displayName: string = steamId) => ({
-  steamId,
+  ...steamPlayer(steamId),
   displayName,
 });
 
@@ -95,7 +96,7 @@ describe('AdHocServerPresenceService — enrollment routing (Codex r3)', () => {
     );
     await sink.playerJoined(newServer, player(STEAM_A));
 
-    await sink.playerLeft(oldServer, STEAM_A);
+    await sink.playerLeft(oldServer, steamPlayer(STEAM_A));
 
     const row = await rowOf(event.id, STEAM_A);
     expect({
@@ -114,7 +115,7 @@ describe('AdHocServerPresenceService — enrollment routing (Codex r3)', () => {
     const enrolled = await insertLiveEvent('Older Quick Play');
     await insertLiveEvent('Newer Quick Play');
     await participants.addServerParticipant(enrolled, {
-      steamId: STEAM_A,
+      ...steamPlayer(STEAM_A),
       displayName: STEAM_A,
       userId: null,
       pelicanServerId: src.pelicanServerId,

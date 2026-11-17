@@ -12,7 +12,8 @@ describe('parseValheimLine — join (handshake)', () => {
       ),
     ).toEqual({
       kind: 'join',
-      steamId: STEAM_A,
+      playerId: STEAM_A,
+      idKind: 'steam',
       loggedAt: '2026-10-14T00:10:50',
     });
   });
@@ -24,7 +25,8 @@ describe('parseValheimLine — join (handshake)', () => {
       ),
     ).toEqual({
       kind: 'join',
-      steamId: STEAM_A,
+      playerId: STEAM_A,
+      idKind: 'steam',
       loggedAt: '2026-10-14T00:10:50',
     });
   });
@@ -32,7 +34,8 @@ describe('parseValheimLine — join (handshake)', () => {
   it('omits loggedAt when the line has no timestamp', () => {
     expect(parseValheimLine(`Got handshake from client ${STEAM_A}`)).toEqual({
       kind: 'join',
-      steamId: STEAM_A,
+      playerId: STEAM_A,
+      idKind: 'steam',
     });
   });
 
@@ -103,7 +106,8 @@ describe('parseValheimLine — auth-failed (wrong password)', () => {
       ),
     ).toEqual({
       kind: 'auth-failed',
-      steamId: STEAM_B,
+      playerId: STEAM_B,
+      idKind: 'steam',
       loggedAt: '2026-10-14T01:47:54',
     });
   });
@@ -115,7 +119,8 @@ describe('parseValheimLine — leave (closing socket)', () => {
       parseValheimLine(`10/14/2026 03:50:28: Closing socket ${STEAM_B}`),
     ).toEqual({
       kind: 'leave',
-      steamId: STEAM_B,
+      playerId: STEAM_B,
+      idKind: 'steam',
       loggedAt: '2026-10-14T03:50:28',
     });
   });

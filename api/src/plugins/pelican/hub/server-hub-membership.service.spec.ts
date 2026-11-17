@@ -6,6 +6,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import type { PelicanPresenceSupervisor } from '../presence/pelican-presence.supervisor';
+import { steamPlayer } from '../presence/presence-events';
 import type { ServerRosterPlayer } from '../presence/server-presence.reader';
 import * as queries from './server-hub-membership.queries';
 import { ServerHubMembershipService } from './server-hub-membership.service';
@@ -18,7 +19,11 @@ const HUB = 9;
 const AT = new Date('2026-10-18T12:00:00Z');
 
 function player(steamId: string, name: string): ServerRosterPlayer {
-  return { pelicanServerId: SERVER, steamId, name } as ServerRosterPlayer;
+  return {
+    pelicanServerId: SERVER,
+    ...steamPlayer(steamId),
+    name,
+  } as ServerRosterPlayer;
 }
 
 /** A service over a fake roster; the db is only handed through to the mocked queries. */
@@ -57,6 +62,18 @@ describe('touchOnline (L-3 still-online touch)', () => {
       { guildId: HUB, userId: 11, characterName: 'Bjorn', at: AT },
       false,
     );
+  });
+
+  it('never looks up a same-digit XUID player as a SteamID (ROK-2232)', async () => {
+    const freya = {
+      pelicanServerId: SERVER,
+      playerId: '12',
+      idKind: 'xuid',
+      name: 'Freya',
+    } as ServerRosterPlayer;
+    const svc = make({ current: [player('11', 'Bjorn'), freya] });
+    expect(await svc.touchOnline(AT)).toBe(1);
+    expect(q.usersBySteamId.mock.calls.flatMap((c) => c[1])).toEqual(['11']);
   });
 });
 

@@ -3,6 +3,7 @@
  * Quick Play per game across the voice and server paths, atomic spawn, the
  * spawn card's roster, pending players, per-server scoping and renames.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
@@ -39,7 +40,7 @@ const player = (
   steamId: string,
   displayName = `Viking-${steamId.slice(-3)}`,
 ) => ({
-  steamId,
+  ...steamPlayer(steamId),
   displayName,
 });
 const adHocEvents = () =>
@@ -258,7 +259,7 @@ describe('Codex r2 — leaves route to the enrolled event', () => {
     const newer = await insertLiveEvent();
     expect(newer).toBeGreaterThan(serverEvent.id);
 
-    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, steamPlayer(STEAM_A));
 
     const row = await openRow(serverEvent.id, STEAM_A);
     expect({ closed: row.leftAt !== null, onServer: row.onServer }).toEqual({

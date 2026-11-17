@@ -20,6 +20,7 @@ import type {
   ServerPresencePlayer,
   ServerPresenceSource,
 } from '../../plugins/pelican/presence/server-presence.sink';
+import { presenceKey } from '../../plugins/pelican/presence/presence-events';
 import type { AdHocParticipantJoinedPayload } from '../discord-bot.constants';
 import { getEventById } from './ad-hoc-event.helpers';
 import type { PendingServerPlayers } from './ad-hoc-server-pending';
@@ -29,7 +30,7 @@ import {
 } from './ad-hoc-server-presence.effects';
 import {
   hasOpenServerPlayers,
-  listOpenGameServerSteamIds,
+  listOpenGameServerPlayerKeys,
   listOpenServerPresence,
   listServerEnrolledEvents,
   type LiveGameEvent,
@@ -70,7 +71,7 @@ export function trackedByServer(
   const out = new Map<number, ServerPresencePlayer[]>();
   for (const pl of reader?.playersForGame(gameId) ?? []) {
     const list = out.get(pl.pelicanServerId) ?? [];
-    if (list.some((x) => x.steamId === pl.steamId)) continue;
+    if (list.some((x) => presenceKey(x) === presenceKey(pl))) continue;
     list.push(toEnrolPlayer(pl));
     out.set(pl.pelicanServerId, list);
   }
@@ -84,7 +85,8 @@ export function trackedByServer(
  * then skips the open row, so this is the only write of their owner.
  */
 function toEnrolPlayer(pl: ServerRosterPlayer): ServerPresencePlayer {
-  const base = { steamId: pl.steamId, displayName: pl.name ?? pl.steamId };
+  const { playerId, idKind } = pl;
+  const base = { playerId, idKind, displayName: pl.name ?? playerId };
   return pl.name !== null && pl.characterOwnerId
     ? { ...base, characterOwnerId: pl.characterOwnerId }
     : base;
@@ -128,12 +130,12 @@ export async function enrolTracked(
   live: LiveGameEvent,
   gameId: number,
 ): Promise<void> {
-  const open = new Set(await listOpenGameServerSteamIds(deps.fx.db, gameId));
+  const open = new Set(await listOpenGameServerPlayerKeys(deps.fx.db, gameId));
   for (const [serverId, players] of trackedByServer(deps.reader, gameId)) {
     for (const pl of players) {
-      deps.pending.remove(serverId, pl.steamId);
-      if (open.has(pl.steamId)) continue;
-      open.add(pl.steamId);
+      deps.pending.remove(serverId, pl);
+      if (open.has(presenceKey(pl))) continue;
+      open.add(presenceKey(pl));
       await attachServerPlayer(deps.fx, live, serverId, pl);
     }
   }
@@ -154,14 +156,14 @@ export async function attachUnenrolled(
   players: ServerPresencePlayer[],
 ): Promise<void> {
   const open = new Set(
-    await listOpenGameServerSteamIds(
+    await listOpenGameServerPlayerKeys(
       fx.db,
       source.gameId,
       source.pelicanServerId,
     ),
   );
   for (const pl of players)
-    if (!open.has(pl.steamId))
+    if (!open.has(presenceKey(pl)))
       await attachServerPlayer(fx, live, source.pelicanServerId, pl);
 }
 

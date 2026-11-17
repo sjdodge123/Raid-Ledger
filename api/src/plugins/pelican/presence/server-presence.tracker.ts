@@ -1,12 +1,13 @@
-import type {
-  GamePresenceEvent,
-  PresenceCharacterEvent,
+import {
+  presenceKey,
+  type GamePresenceEvent,
+  type PlayerRef,
+  type PresenceCharacterEvent,
 } from './presence-events';
 import { clampStoredName } from '../../../common/stored-name.helpers';
 
 /** A player the tracker considers present. `name` is null until a character line names them. */
-export interface PresentPlayer {
-  steamId: string;
+export interface PresentPlayer extends PlayerRef {
   name: string | null;
   /**
    * The owner id of the character that named them (ROK-1822 r3), so a
@@ -21,12 +22,14 @@ export interface PresenceChange extends PresentPlayer {
   kind: 'joined' | 'left' | 'renamed';
 }
 
-/** Display label for a player: the character name, else the SteamID64 (ROK-1798 ruling 3). */
+/** Display label for a player: the character name, else the platform id (ROK-1798 ruling 3). */
 export function presenceDisplayName(player: PresentPlayer): string {
-  return player.name ?? player.steamId;
+  return player.name ?? player.playerId;
 }
 
 interface Entry {
+  /** The player's platform id (ROK-2232); the map key is its {@link presenceKey}. */
+  ref: PlayerRef;
   name: string | null;
   lastSeen: number;
   /** The character's owner id once a line names it (ROK-1802), else null. */
@@ -34,8 +37,9 @@ interface Entry {
 }
 
 /**
- * Game-agnostic per-server presence state, keyed by SteamID64 (ROK-1798 Q1/Q5,
- * ROK-1800). Pure and synchronous — no I/O, no timers.
+ * Game-agnostic per-server presence state, keyed by `idKind:playerId`
+ * (ROK-1798 Q1/Q5, ROK-1800, ROK-2232) — a SteamID and an XUID with the same
+ * digits are two players. Pure and synchronous — no I/O, no timers.
  *
  * - A handshake (`join`) is PENDING: it is not a player until the next
  *   character line pairs to it (FIFO), so a wrong-password attempt
@@ -44,7 +48,7 @@ interface Entry {
  *   that player's respawn, and any `0:0` line is a death — neither leaves nor
  *   pairs. The same name from another owner is a new player (ROK-1802).
  *   The session records deaths itself (ROK-1930), asking
- *   {@link ServerPresenceTracker.steamIdOfCharacter} who died first.
+ *   {@link ServerPresenceTracker.playerOfCharacter} who died first.
  * - A `heartbeat` count is trusted: 0 → everyone leaves; fewer than tracked →
  *   the longest-silent leave; more than tracked → still-pending handshakes are
  *   promoted unnamed (oldest first) and any remaining excess sets
@@ -53,8 +57,8 @@ interface Entry {
  */
 export class ServerPresenceTracker {
   private readonly present = new Map<string, Entry>();
-  /** Handshakes not yet a player, oldest first (value = handshake time). */
-  private readonly pending = new Map<string, number>();
+  /** Handshakes not yet a player, oldest first. */
+  private readonly pending = new Map<string, { ref: PlayerRef; at: number }>();
   /** Present players still waiting for a character name, oldest first. */
   private readonly unnamed: string[] = [];
   private excess = false;
@@ -69,12 +73,12 @@ export class ServerPresenceTracker {
     const now = at.getTime();
     switch (event.kind) {
       case 'join':
-        return this.onJoin(event.steamId, now);
+        return this.onJoin(refOf(event), now);
       case 'character':
         return this.onCharacter(event, now);
       case 'auth-failed':
       case 'leave':
-        return this.onLeave(event.steamId);
+        return this.onLeave(presenceKey(event));
       case 'heartbeat':
         return this.onHeartbeat(event.count, now);
       case 'server-ready':
@@ -85,7 +89,7 @@ export class ServerPresenceTracker {
 
   /** Every present player, in join order. */
   snapshot(): PresentPlayer[] {
-    return [...this.present].map(([steamId, e]) => ({ steamId, name: e.name }));
+    return [...this.present.values()].map((e) => ({ ...e.ref, name: e.name }));
   }
 
   /**
@@ -94,27 +98,27 @@ export class ServerPresenceTracker {
    * change the sink must persist.
    */
   snapshotWithOwners(): PresentPlayer[] {
-    return [...this.present].map(([steamId, e]) =>
+    return [...this.present.values()].map((e) =>
       e.owner === null
-        ? { steamId, name: e.name }
-        : { steamId, name: e.name, owner: e.owner },
+        ? { ...e.ref, name: e.name }
+        : { ...e.ref, name: e.name, owner: e.owner },
     );
   }
 
   /** The owner id of a present player's character, else null (ROK-1822 r3). */
-  ownerOf(steamId: string): string | null {
-    return this.present.get(steamId)?.owner ?? null;
+  ownerOf(player: PlayerRef): string | null {
+    return this.present.get(presenceKey(player))?.owner ?? null;
   }
 
   /**
-   * The SteamID64 of the first present player named `name`, else null
-   * (ROK-1930 D3) — the precedence `findCharacter` uses with no owner, which
-   * is all a death line carries. Read-only: touches no lastSeen.
+   * The first present player named `name`, else null (ROK-1930 D3) — the
+   * precedence `findCharacter` uses with no owner, which is all a death line
+   * carries. Read-only: touches no lastSeen.
    */
-  steamIdOfCharacter(name: string): string | null {
+  playerOfCharacter(name: string): PlayerRef | null {
     const key = clampStoredName(name);
-    for (const [steamId, entry] of this.present)
-      if (entry.name === key) return steamId;
+    for (const entry of this.present.values())
+      if (entry.name === key) return entry.ref;
     return null;
   }
 
@@ -132,8 +136,9 @@ export class ServerPresenceTracker {
    */
   restore(players: PresentPlayer[]): void {
     for (const p of players) {
-      if (this.present.has(p.steamId)) continue;
-      this.pending.delete(p.steamId);
+      const key = presenceKey(p);
+      if (this.present.has(key)) continue;
+      this.pending.delete(key);
       this.addNeverSeen(p);
     }
   }
@@ -142,16 +147,18 @@ export class ServerPresenceTracker {
   private addNeverSeen(p: PresentPlayer): void {
     const owner = p.owner ?? null;
     const name = p.name === null ? null : clampStoredName(p.name);
-    this.present.set(p.steamId, { name, lastSeen: 0, owner });
-    if (p.name === null) this.unnamed.push(p.steamId);
+    const key = presenceKey(p);
+    this.present.set(key, { ref: refOf(p), name, lastSeen: 0, owner });
+    if (p.name === null) this.unnamed.push(key);
   }
 
-  private onJoin(steamId: string, now: number): PresenceChange[] {
-    const entry = this.present.get(steamId);
+  private onJoin(ref: PlayerRef, now: number): PresenceChange[] {
+    const key = presenceKey(ref);
+    const entry = this.present.get(key);
     // A repeat handshake is a new login (its disconnect went unseen), with a
     // new ZDOID owner: unbind the old one so its next character line rebinds.
     if (entry) Object.assign(entry, { lastSeen: now, owner: null });
-    else if (!this.pending.has(steamId)) this.pending.set(steamId, now);
+    else if (!this.pending.has(key)) this.pending.set(key, { ref, at: now });
     return [];
   }
 
@@ -169,11 +176,12 @@ export class ServerPresenceTracker {
     // A death (`0:0`) or a known character's respawn is never a new player.
     if (known || zdoidZero) return [];
     const owner = ownerId ?? null;
-    const pendingId = firstKey(this.pending);
-    if (pendingId !== undefined) {
-      this.pending.delete(pendingId);
-      this.present.set(pendingId, { name, lastSeen: now, owner });
-      return [{ kind: 'joined', steamId: pendingId, name }];
+    const first = firstEntry(this.pending);
+    if (first !== undefined) {
+      const [key, { ref }] = first;
+      this.pending.delete(key);
+      this.present.set(key, { ref, name, lastSeen: now, owner });
+      return [{ kind: 'joined', ...ref, name }];
     }
     return this.nameOldestUnnamed(name, now, owner);
   }
@@ -183,18 +191,18 @@ export class ServerPresenceTracker {
     now: number,
     owner: string | null,
   ): PresenceChange[] {
-    const steamId = this.unnamed.shift();
-    const entry = steamId === undefined ? undefined : this.present.get(steamId);
-    if (steamId === undefined || !entry) return [];
+    const key = this.unnamed.shift();
+    const entry = key === undefined ? undefined : this.present.get(key);
+    if (key === undefined || !entry) return [];
     Object.assign(entry, { name, lastSeen: now, owner });
-    return [{ kind: 'renamed', steamId, name }];
+    return [{ kind: 'renamed', ...entry.ref, name }];
   }
 
-  private onLeave(steamId: string): PresenceChange[] {
-    this.pending.delete(steamId);
-    const entry = this.present.get(steamId);
+  private onLeave(key: string): PresenceChange[] {
+    this.pending.delete(key);
+    const entry = this.present.get(key);
     if (!entry) return [];
-    return [this.remove(steamId, entry)];
+    return [this.remove(key, entry)];
   }
 
   private onHeartbeat(count: number, now: number): PresenceChange[] {
@@ -212,34 +220,34 @@ export class ServerPresenceTracker {
     const silent = [...this.present]
       .sort(([, a], [, b]) => a.lastSeen - b.lastSeen)
       .slice(0, n);
-    return silent.map(([steamId, entry]) => this.remove(steamId, entry));
+    return silent.map(([key, entry]) => this.remove(key, entry));
   }
 
   private promotePending(n: number, now: number): PresenceChange[] {
-    const ids = [...this.pending.keys()].slice(0, n);
-    return ids.map((steamId) => {
-      this.pending.delete(steamId);
-      this.present.set(steamId, { name: null, lastSeen: now, owner: null });
-      this.unnamed.push(steamId);
-      return { kind: 'joined' as const, steamId, name: null };
+    const promoted = [...this.pending].slice(0, n);
+    return promoted.map(([key, { ref }]) => {
+      this.pending.delete(key);
+      this.present.set(key, { ref, name: null, lastSeen: now, owner: null });
+      this.unnamed.push(key);
+      return { kind: 'joined' as const, ...ref, name: null };
     });
   }
 
   private leaveAll(): PresenceChange[] {
-    const changes = [...this.present].map(([steamId, e]) => ({
+    const changes = [...this.present.values()].map((e) => ({
       kind: 'left' as const,
-      steamId,
+      ...e.ref,
       name: e.name,
     }));
     this.reset();
     return changes;
   }
 
-  private remove(steamId: string, entry: Entry): PresenceChange {
-    this.present.delete(steamId);
-    const idx = this.unnamed.indexOf(steamId);
+  private remove(key: string, entry: Entry): PresenceChange {
+    this.present.delete(key);
+    const idx = this.unnamed.indexOf(key);
     if (idx >= 0) this.unnamed.splice(idx, 1);
-    return { kind: 'left', steamId, name: entry.name };
+    return { kind: 'left', ...entry.ref, name: entry.name };
   }
 
   /**
@@ -270,7 +278,12 @@ export class ServerPresenceTracker {
   }
 }
 
-function firstKey(map: Map<string, unknown>): string | undefined {
-  for (const key of map.keys()) return key;
+function firstEntry<V>(map: Map<string, V>): [string, V] | undefined {
+  for (const entry of map) return entry;
   return undefined;
+}
+
+/** Just the id fields — never an event's other properties. */
+function refOf(ref: PlayerRef): PlayerRef {
+  return { playerId: ref.playerId, idKind: ref.idKind };
 }

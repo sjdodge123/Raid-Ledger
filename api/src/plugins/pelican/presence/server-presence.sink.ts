@@ -5,9 +5,12 @@
  * The supervisor owns the socket, the per-game parser and the tracker, and
  * reports each transition here. The implementation (in the ad-hoc event
  * services) owns spawn/join/suppression/grace/finalize, identity matching
- * (SteamID64 → users.steam_id) and the one-participant-per-person rule.
+ * (SteamID64 → users.steam_id; other id kinds stay anonymous — ROK-2232)
+ * and the one-participant-per-person rule.
  * Pelican never imports the Discord bot; the sink is provided by token.
  */
+import type { PlayerRef } from './presence-events';
+
 export const SERVER_PRESENCE_SINK = Symbol('SERVER_PRESENCE_SINK');
 
 /** Which tracked game server a transition came from. */
@@ -18,9 +21,12 @@ export interface ServerPresenceSource {
   gameId: number;
 }
 
-export interface ServerPresencePlayer {
-  steamId: string;
-  /** In-game character name, or the SteamID64 before a character line names them. */
+/**
+ * ROK-2232: a player is keyed by their platform id (`PlayerRef`: SteamID64,
+ * Minecraft UUID or XUID, namespaced by `idKind`), never by a bare SteamID.
+ */
+export interface ServerPresencePlayer extends PlayerRef {
+  /** In-game character name, or the `playerId` before a character line names them. */
   displayName: string;
   /**
    * ROK-1822 r3: the owner id of the character line that named them
@@ -45,7 +51,7 @@ export interface ServerPresenceSink {
     player: ServerPresencePlayer,
   ): Promise<void>;
   /** A player left the server (Quick Play keeps them while they are still in voice). */
-  playerLeft(source: ServerPresenceSource, steamId: string): Promise<void>;
+  playerLeft(source: ServerPresenceSource, player: PlayerRef): Promise<void>;
   /**
    * Everyone left at once: the server stopped, or the panel stayed
    * unreachable past the timeout. Equivalent to `playerLeft` for every

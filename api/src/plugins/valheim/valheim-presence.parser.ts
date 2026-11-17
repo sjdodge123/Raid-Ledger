@@ -1,4 +1,7 @@
-import type { GamePresenceEvent } from '../pelican/presence/presence-events';
+import {
+  steamPlayer,
+  type GamePresenceEvent,
+} from '../pelican/presence/presence-events';
 
 /**
  * Valheim console-line parser (ROK-1798 Q1 "Parser regexes", ROK-1800).
@@ -39,11 +42,11 @@ function matchBody(line: string): EventBody | null {
 
 function matchSteamEvent(line: string): EventBody | null {
   const join = HANDSHAKE.exec(line)?.[1];
-  if (join) return { kind: 'join', steamId: join };
+  if (join) return { kind: 'join', ...steamPlayer(join) };
   const failed = WRONG_PASSWORD.exec(line)?.[1];
-  if (failed) return { kind: 'auth-failed', steamId: failed };
+  if (failed) return { kind: 'auth-failed', ...steamPlayer(failed) };
   const leave = CLOSING_SOCKET.exec(line)?.[1];
-  if (leave) return { kind: 'leave', steamId: leave };
+  if (leave) return { kind: 'leave', ...steamPlayer(leave) };
   return null;
 }
 

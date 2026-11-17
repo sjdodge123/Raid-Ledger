@@ -4,7 +4,7 @@ import type {
   WingsSocketFactory,
   WingsSocketHandlers,
 } from '../pelican-console-socket.helpers';
-import type { GamePresenceEvent } from './presence-events';
+import { steamPlayer, type GamePresenceEvent } from './presence-events';
 import type { ServerPresencePlayer } from './server-presence.sink';
 
 /** Spec-only fakes for the presence supervisor/session (ROK-1800 L5). */
@@ -40,7 +40,7 @@ export function arrive(
   loggedAt: string,
 ): string[] {
   return [
-    line({ kind: 'join', steamId, loggedAt }),
+    line({ kind: 'join', ...steamPlayer(steamId), loggedAt }),
     line({ kind: 'character', name, zdoidZero: false, loggedAt }),
   ];
 }
@@ -120,7 +120,7 @@ export function fakeStatefulParser(): GameLogParser {
           if (verb === 'uuid') return null;
           if (verb !== 'left') return fakeParser.parse(raw);
           const steamId = ids.get(name);
-          return steamId ? { kind: 'leave', steamId } : null;
+          return steamId ? { kind: 'leave', ...steamPlayer(steamId) } : null;
         },
       };
     },

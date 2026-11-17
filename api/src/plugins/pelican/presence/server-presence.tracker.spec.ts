@@ -1,4 +1,8 @@
-import type { GamePresenceEvent } from './presence-events';
+import {
+  steamPlayer,
+  type GamePresenceEvent,
+  type PlayerRef,
+} from './presence-events';
 import {
   ServerPresenceTracker,
   presenceDisplayName,
@@ -11,15 +15,15 @@ const C = '76561190000000003';
 
 const join = (steamId: string): GamePresenceEvent => ({
   kind: 'join',
-  steamId,
+  ...steamPlayer(steamId),
 });
 const leave = (steamId: string): GamePresenceEvent => ({
   kind: 'leave',
-  steamId,
+  ...steamPlayer(steamId),
 });
 const authFailed = (steamId: string): GamePresenceEvent => ({
   kind: 'auth-failed',
-  steamId,
+  ...steamPlayer(steamId),
 });
 const character = (name: string, zdoidZero = false): GamePresenceEvent => ({
   kind: 'character',
@@ -62,9 +66,11 @@ describe('ServerPresenceTracker — join + character pairing', () => {
 
   it('promotes a handshake to joined when its character line arrives', () => {
     expect(run(tracker, [join(A), character('Ragnhild')])).toEqual([
-      { kind: 'joined', steamId: A, name: 'Ragnhild' },
+      { kind: 'joined', ...steamPlayer(A), name: 'Ragnhild' },
     ]);
-    expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'Ragnhild' }]);
+    expect(tracker.snapshot()).toEqual([
+      { ...steamPlayer(A), name: 'Ragnhild' },
+    ]);
   });
 
   it('pairs character lines to handshakes FIFO', () => {
@@ -75,15 +81,15 @@ describe('ServerPresenceTracker — join + character pairing', () => {
       character('Y'),
     ]);
     expect(changes).toEqual([
-      { kind: 'joined', steamId: A, name: 'X' },
-      { kind: 'joined', steamId: B, name: 'Y' },
+      { kind: 'joined', ...steamPlayer(A), name: 'X' },
+      { kind: 'joined', ...steamPlayer(B), name: 'Y' },
     ]);
   });
 
   it('a repeat handshake from a present player changes nothing', () => {
     run(tracker, [join(A), character('X')]);
     expect(run(tracker, [join(A), character('Y')], 10)).toEqual([]);
-    expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'X' }]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(A), name: 'X' }]);
   });
 });
 
@@ -93,26 +99,26 @@ describe('ServerPresenceTracker — death and respawn', () => {
     expect(
       run(tracker, [character('Bjorn', true), character('Bjorn')], 10),
     ).toEqual([]);
-    expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'Bjorn' }]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(A), name: 'Bjorn' }]);
   });
 
   it('a respawn does not consume a newer pending handshake', () => {
     run(tracker, [join(A), character('Bjorn'), join(B)]);
     expect(run(tracker, [character('Bjorn'), character('Freya')], 10)).toEqual([
-      { kind: 'joined', steamId: B, name: 'Freya' },
+      { kind: 'joined', ...steamPlayer(B), name: 'Freya' },
     ]);
   });
 
-  it('steamIdOfCharacter names the paired player, null for an unknown name (ROK-1930)', () => {
+  it('playerOfCharacter names the paired player, null for an unknown name (ROK-1930)', () => {
     run(tracker, [join(A), character('Bjorn'), join(B), character('Freya')]);
-    expect(tracker.steamIdOfCharacter('Bjorn')).toBe(A);
-    expect(tracker.steamIdOfCharacter('Freya')).toBe(B);
-    expect(tracker.steamIdOfCharacter('Ghost')).toBeNull();
+    expect(tracker.playerOfCharacter('Bjorn')).toEqual(steamPlayer(A));
+    expect(tracker.playerOfCharacter('Freya')).toEqual(steamPlayer(B));
+    expect(tracker.playerOfCharacter('Ghost')).toBeNull();
   });
 
-  it('steamIdOfCharacter is null for a still-pending handshake (ROK-1930)', () => {
+  it('playerOfCharacter is null for a still-pending handshake (ROK-1930)', () => {
     run(tracker, [join(A)]);
-    expect(tracker.steamIdOfCharacter('Bjorn')).toBeNull();
+    expect(tracker.playerOfCharacter('Bjorn')).toBeNull();
   });
 
   it('a 0:0 line never pairs to a pending handshake', () => {
@@ -125,11 +131,11 @@ describe('ServerPresenceTracker — duplicate character names (ROK-1802)', () =>
   it('a second player sharing a name is promoted from their own handshake', () => {
     run(tracker, [join(A), characterOf('Bjorn', '111'), join(B)]);
     expect(run(tracker, [characterOf('Bjorn', '222')], 10)).toEqual([
-      { kind: 'joined', steamId: B, name: 'Bjorn' },
+      { kind: 'joined', ...steamPlayer(B), name: 'Bjorn' },
     ]);
     expect(tracker.snapshot()).toEqual([
-      { steamId: A, name: 'Bjorn' },
-      { steamId: B, name: 'Bjorn' },
+      { ...steamPlayer(A), name: 'Bjorn' },
+      { ...steamPlayer(B), name: 'Bjorn' },
     ]);
   });
 
@@ -144,16 +150,16 @@ describe('ServerPresenceTracker — duplicate character names (ROK-1802)', () =>
     const respawns = [characterOf('Bjorn', '222'), characterOf('Bjorn', '111')];
     expect(run(tracker, respawns, 10)).toEqual([]);
     expect(run(tracker, [characterOf('Freya', '333')], 20)).toEqual([
-      { kind: 'joined', steamId: C, name: 'Freya' },
+      { kind: 'joined', ...steamPlayer(C), name: 'Freya' },
     ]);
   });
 
   it('a hydrated player adopts the owner id of their first respawn line', () => {
-    tracker.hydrate([{ steamId: A, name: 'Bjorn' }]);
+    tracker.hydrate([{ ...steamPlayer(A), name: 'Bjorn' }]);
     run(tracker, [join(B)]);
     expect(run(tracker, [characterOf('Bjorn', '111')], 10)).toEqual([]);
     expect(run(tracker, [characterOf('Bjorn', '222')], 20)).toEqual([
-      { kind: 'joined', steamId: B, name: 'Bjorn' },
+      { kind: 'joined', ...steamPlayer(B), name: 'Bjorn' },
     ]);
   });
 });
@@ -167,7 +173,7 @@ describe('ServerPresenceTracker — a repeat handshake rebinds the owner (ROK-18
     expect(run(tracker, [characterOf('Bjorn', '333')], 20)).toEqual([]);
     expect(run(tracker, [characterOf('Bjorn', '333')], 30)).toEqual([]);
     expect(run(tracker, [characterOf('Freya', '444')], 40)).toEqual([
-      { kind: 'joined', steamId: B, name: 'Freya' },
+      { kind: 'joined', ...steamPlayer(B), name: 'Freya' },
     ]);
   });
 });
@@ -181,7 +187,7 @@ describe('ServerPresenceTracker — auth-failed', () => {
   it('retracts only that handshake — the next character pairs to the other', () => {
     expect(
       run(tracker, [join(B), join(A), authFailed(B), character('X')]),
-    ).toEqual([{ kind: 'joined', steamId: A, name: 'X' }]);
+    ).toEqual([{ kind: 'joined', ...steamPlayer(A), name: 'X' }]);
   });
 });
 
@@ -189,7 +195,7 @@ describe('ServerPresenceTracker — leave', () => {
   it('removes a present player and reports their name', () => {
     run(tracker, [join(A), character('X')]);
     expect(run(tracker, [leave(A)], 10)).toEqual([
-      { kind: 'left', steamId: A, name: 'X' },
+      { kind: 'left', ...steamPlayer(A), name: 'X' },
     ]);
     expect(tracker.snapshot()).toEqual([]);
   });
@@ -207,8 +213,8 @@ describe('ServerPresenceTracker — heartbeat reconcile', () => {
   it('N=0 leaves everyone and clears pending handshakes', () => {
     run(tracker, [join(A), character('X'), join(B), character('Y'), join(C)]);
     expect(run(tracker, [heartbeat(0)], 10)).toEqual([
-      { kind: 'left', steamId: A, name: 'X' },
-      { kind: 'left', steamId: B, name: 'Y' },
+      { kind: 'left', ...steamPlayer(A), name: 'X' },
+      { kind: 'left', ...steamPlayer(B), name: 'Y' },
     ]);
     expect(run(tracker, [character('Z')], 20)).toEqual([]);
   });
@@ -225,9 +231,9 @@ describe('ServerPresenceTracker — heartbeat reconcile', () => {
       character('X', true),
     ]);
     expect(run(tracker, [heartbeat(2)], 10)).toEqual([
-      { kind: 'left', steamId: B, name: 'Y' },
+      { kind: 'left', ...steamPlayer(B), name: 'Y' },
     ]);
-    expect(tracker.snapshot().map((p) => p.steamId)).toEqual([A, C]);
+    expect(tracker.snapshot().map((p) => p.playerId)).toEqual([A, C]);
   });
 
   it('N == tracked changes nothing', () => {
@@ -239,11 +245,11 @@ describe('ServerPresenceTracker — heartbeat reconcile', () => {
   it('N > tracked promotes pending handshakes unnamed, later renamed', () => {
     run(tracker, [join(A), character('X'), join(B)]);
     expect(run(tracker, [heartbeat(2)], 10)).toEqual([
-      { kind: 'joined', steamId: B, name: null },
+      { kind: 'joined', ...steamPlayer(B), name: null },
     ]);
     expect(tracker.overCount).toBe(false);
     expect(run(tracker, [character('Y')], 20)).toEqual([
-      { kind: 'renamed', steamId: B, name: 'Y' },
+      { kind: 'renamed', ...steamPlayer(B), name: 'Y' },
     ]);
   });
 
@@ -251,7 +257,7 @@ describe('ServerPresenceTracker — heartbeat reconcile', () => {
     run(tracker, [join(A), character('X')]);
     expect(run(tracker, [heartbeat(3)], 10)).toEqual([]);
     expect(tracker.overCount).toBe(true);
-    expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'X' }]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(A), name: 'X' }]);
     run(tracker, [heartbeat(1)], 20);
     expect(tracker.overCount).toBe(false);
   });
@@ -263,8 +269,8 @@ describe('ServerPresenceTracker — server lifecycle', () => {
     (kind) => {
       run(tracker, [join(A), character('X'), join(B), character('Y')]);
       expect(run(tracker, [{ kind }], 10)).toEqual([
-        { kind: 'left', steamId: A, name: 'X' },
-        { kind: 'left', steamId: B, name: 'Y' },
+        { kind: 'left', ...steamPlayer(A), name: 'X' },
+        { kind: 'left', ...steamPlayer(B), name: 'Y' },
       ]);
       expect(tracker.snapshot()).toEqual([]);
     },
@@ -274,32 +280,32 @@ describe('ServerPresenceTracker — server lifecycle', () => {
 describe('ServerPresenceTracker — hydrate (restart path)', () => {
   it('restores the roster without emitting, then tracks it normally', () => {
     tracker.hydrate([
-      { steamId: A, name: 'X' },
-      { steamId: B, name: null },
+      { ...steamPlayer(A), name: 'X' },
+      { ...steamPlayer(B), name: null },
     ]);
     expect(tracker.snapshot()).toEqual([
-      { steamId: A, name: 'X' },
-      { steamId: B, name: null },
+      { ...steamPlayer(A), name: 'X' },
+      { ...steamPlayer(B), name: null },
     ]);
     expect(run(tracker, [leave(B)], 10)).toEqual([
-      { kind: 'left', steamId: B, name: null },
+      { kind: 'left', ...steamPlayer(B), name: null },
     ]);
   });
 
   it('replaces prior state, and a hydrated name still marks a respawn', () => {
     run(tracker, [join(C), character('Z')]);
-    tracker.hydrate([{ steamId: A, name: 'X' }]);
-    expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'X' }]);
+    tracker.hydrate([{ ...steamPlayer(A), name: 'X' }]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(A), name: 'X' }]);
     expect(run(tracker, [join(B), character('X'), character('Y')], 10)).toEqual(
-      [{ kind: 'joined', steamId: B, name: 'Y' }],
+      [{ kind: 'joined', ...steamPlayer(B), name: 'Y' }],
     );
   });
 
   it('hydrated players are the longest-silent on a short heartbeat', () => {
-    tracker.hydrate([{ steamId: A, name: 'X' }]);
+    tracker.hydrate([{ ...steamPlayer(A), name: 'X' }]);
     run(tracker, [join(B), character('Y')], 10);
     expect(run(tracker, [heartbeat(1)], 20)).toEqual([
-      { kind: 'left', steamId: A, name: 'X' },
+      { kind: 'left', ...steamPlayer(A), name: 'X' },
     ]);
   });
 });
@@ -307,56 +313,61 @@ describe('ServerPresenceTracker — hydrate (restart path)', () => {
 describe('ServerPresenceTracker — unnamed players after a restart (Codex r3)', () => {
   it('a hydrated unnamed player takes the next unpaired character name', () => {
     tracker.hydrate([
-      { steamId: A, name: 'X' },
-      { steamId: B, name: null },
+      { ...steamPlayer(A), name: 'X' },
+      { ...steamPlayer(B), name: null },
     ]);
     expect(run(tracker, [character('Y')], 10)).toEqual([
-      { kind: 'renamed', steamId: B, name: 'Y' },
+      { kind: 'renamed', ...steamPlayer(B), name: 'Y' },
     ]);
   });
 
   it('a restored unnamed player takes the next unpaired character name', () => {
-    tracker.hydrate([{ steamId: B, name: null }]);
+    tracker.hydrate([{ ...steamPlayer(B), name: null }]);
     run(tracker, [heartbeat(0)], 5);
-    tracker.restore([{ steamId: B, name: null }]);
+    tracker.restore([{ ...steamPlayer(B), name: null }]);
     expect(run(tracker, [character('Y')], 10)).toEqual([
-      { kind: 'renamed', steamId: B, name: 'Y' },
+      { kind: 'renamed', ...steamPlayer(B), name: 'Y' },
     ]);
   });
 });
 
 describe('presenceDisplayName', () => {
   it('uses the character name, else the SteamID64 (ruling 3)', () => {
-    expect(presenceDisplayName({ steamId: A, name: 'X' })).toBe('X');
-    expect(presenceDisplayName({ steamId: A, name: null })).toBe(A);
+    expect(presenceDisplayName({ ...steamPlayer(A), name: 'X' })).toBe('X');
+    expect(presenceDisplayName({ ...steamPlayer(A), name: null })).toBe(A);
   });
 });
 
 describe('hydrated owner ids (ROK-1822 r3)', () => {
   it("a stranger's same-named character pairs to their handshake, not to the hydrated player", () => {
     const t = new ServerPresenceTracker();
-    t.hydrate([{ steamId: A, name: 'Bjorn', owner: '111' }]);
+    t.hydrate([{ ...steamPlayer(A), name: 'Bjorn', owner: '111' }]);
     t.apply(join(B), new Date());
     const changes = t.apply(
       { kind: 'character', name: 'Bjorn', zdoidZero: false, ownerId: '222' },
       new Date(),
     );
 
-    expect(changes).toEqual([{ kind: 'joined', steamId: B, name: 'Bjorn' }]);
-    expect([t.ownerOf(A), t.ownerOf(B)]).toEqual(['111', '222']);
+    expect(changes).toEqual([
+      { kind: 'joined', ...steamPlayer(B), name: 'Bjorn' },
+    ]);
+    expect([t.ownerOf(steamPlayer(A)), t.ownerOf(steamPlayer(B))]).toEqual([
+      '111',
+      '222',
+    ]);
   });
 });
 
 describe('owner-carrying snapshot for cold-replay restore (ROK-1822 r4)', () => {
   it('snapshotWithOwners → restore keeps a hydrated owner id', () => {
     const t = new ServerPresenceTracker();
-    t.hydrate([{ steamId: A, name: 'Bjorn', owner: '111' }]);
+    t.hydrate([{ ...steamPlayer(A), name: 'Bjorn', owner: '111' }]);
     const before = t.snapshotWithOwners();
     t.apply(leave(A), new Date(1_000));
     t.restore(before);
-    expect(t.ownerOf(A)).toBe('111');
+    expect(t.ownerOf(steamPlayer(A))).toBe('111');
     // The plain roster snapshot stays name-only.
-    expect(t.snapshot()).toEqual([{ steamId: A, name: 'Bjorn' }]);
+    expect(t.snapshot()).toEqual([{ ...steamPlayer(A), name: 'Bjorn' }]);
   });
 });
 
@@ -365,26 +376,74 @@ describe('over-long character names vs the clamped stored roster (varchar(255))'
   const STORED_NAME = 'L'.repeat(255);
 
   it("a player rehydrated under the clamped name matches their full-length line and does not take another player's handshake", () => {
-    tracker.hydrate([{ steamId: A, name: STORED_NAME, owner: '111' }]);
+    tracker.hydrate([{ ...steamPlayer(A), name: STORED_NAME, owner: '111' }]);
     expect(run(tracker, [join(B), characterOf(LOG_NAME, '111')], 10)).toEqual(
       [],
     );
-    expect(tracker.snapshot()).toEqual([{ steamId: A, name: STORED_NAME }]);
+    expect(tracker.snapshot()).toEqual([
+      { ...steamPlayer(A), name: STORED_NAME },
+    ]);
     // B's handshake is still pending for B's own character line.
     expect(run(tracker, [characterOf('Y', '222')], 20)).toEqual([
-      { kind: 'joined', steamId: B, name: 'Y' },
+      { kind: 'joined', ...steamPlayer(B), name: 'Y' },
     ]);
   });
 
   it('a death line with the full-length name resolves to the rehydrated player', () => {
-    tracker.hydrate([{ steamId: A, name: STORED_NAME }]);
-    expect(tracker.steamIdOfCharacter(LOG_NAME)).toBe(A);
+    tracker.hydrate([{ ...steamPlayer(A), name: STORED_NAME }]);
+    expect(tracker.playerOfCharacter(LOG_NAME)).toEqual(steamPlayer(A));
     expect(run(tracker, [join(B), character(LOG_NAME)], 10)).toEqual([]);
   });
 
   it('a live over-long name is tracked in its clamped form', () => {
     expect(run(tracker, [join(A), characterOf(LOG_NAME, '111')])).toEqual([
-      { kind: 'joined', steamId: A, name: STORED_NAME },
+      { kind: 'joined', ...steamPlayer(A), name: STORED_NAME },
     ]);
+  });
+});
+
+describe('ServerPresenceTracker — platform id kinds (ROK-2232)', () => {
+  const xuid = (playerId: string): PlayerRef => ({ playerId, idKind: 'xuid' });
+  const joinAs = (ref: PlayerRef): GamePresenceEvent => ({
+    kind: 'join',
+    ...ref,
+  });
+  const leaveAs = (ref: PlayerRef): GamePresenceEvent => ({
+    kind: 'leave',
+    ...ref,
+  });
+
+  it('keeps a SteamID and an XUID with the same digits as two players', () => {
+    expect(
+      run(tracker, [
+        join(A),
+        character('Bjorn'),
+        joinAs(xuid(A)),
+        character('Freya'),
+      ]),
+    ).toEqual([
+      { kind: 'joined', ...steamPlayer(A), name: 'Bjorn' },
+      { kind: 'joined', ...xuid(A), name: 'Freya' },
+    ]);
+    expect(run(tracker, [leaveAs(xuid(A))], 10)).toEqual([
+      { kind: 'left', ...xuid(A), name: 'Freya' },
+    ]);
+    expect(tracker.snapshot()).toEqual([{ ...steamPlayer(A), name: 'Bjorn' }]);
+  });
+
+  it('a Steam leave never removes the same-digit XUID player', () => {
+    run(tracker, [joinAs(xuid(A)), character('Freya')]);
+    expect(run(tracker, [leave(A)], 10)).toEqual([]);
+    expect(tracker.snapshot()).toEqual([{ ...xuid(A), name: 'Freya' }]);
+  });
+
+  it('labels an unnamed XUID player by the id, and resolves a death to its ref', () => {
+    tracker.hydrate([{ ...xuid('2535400000000001'), name: null }]);
+    const [player] = tracker.snapshot();
+    expect(player && presenceDisplayName(player)).toBe('2535400000000001');
+    tracker.hydrate([{ ...xuid(A), name: 'Freya', owner: '9' }]);
+    expect(tracker.playerOfCharacter('Freya')).toEqual(xuid(A));
+    expect(tracker.ownerOf(xuid(A))).toBe('9');
+    expect(tracker.ownerOf(steamPlayer(A))).toBeNull();
   });
 });

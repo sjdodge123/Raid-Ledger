@@ -8,6 +8,7 @@ import { PluginRegistryService as RegistryToken } from '../../plugin-host/plugin
 import { PelicanClientFactory as FactoryToken } from '../pelican-client.factory';
 import { PelicanPresenceRepository as RepoToken } from './pelican-presence.repository';
 import { SERVER_PRESENCE_SINK } from './server-presence.sink';
+import { steamPlayer } from './presence-events';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { PelicanClientFactory } from '../pelican-client.factory';
@@ -154,7 +155,7 @@ it('opens nothing and warns once when no presence sink is bound', async () => {
 });
 
 it('stops and empties a server that is no longer running', async () => {
-  const h = harness({ open: [{ steamId: 'A', displayName: 'Alice' }] });
+  const h = harness({ open: [{ ...steamPlayer('A'), displayName: 'Alice' }] });
   await h.reconcile();
   h.state.rows = [row(1, { currentState: 'offline' })];
   await h.reconcile();
@@ -166,7 +167,7 @@ it('stops and empties a server that is no longer running', async () => {
 });
 
 it('shutdown closes sockets without emptying (a restart rehydrates)', async () => {
-  const h = harness({ open: [{ steamId: 'A', displayName: 'Alice' }] });
+  const h = harness({ open: [{ ...steamPlayer('A'), displayName: 'Alice' }] });
   await h.reconcile();
   await h.supervisor.onModuleDestroy();
   expect(h.supervisor.activeServerIds).toEqual([]);
@@ -176,7 +177,7 @@ it('shutdown closes sockets without emptying (a restart rehydrates)', async () =
 it('empties a server that stopped while no session watched it, once (FB1 #3)', async () => {
   const h = harness({
     rows: [row(1, { currentState: 'offline' })],
-    open: [{ steamId: 'A', displayName: 'Alice' }],
+    open: [{ ...steamPlayer('A'), displayName: 'Alice' }],
   });
   await h.reconcile();
   await h.reconcile();
@@ -194,7 +195,7 @@ it('does not empty a stopped server with no persisted presence (FB1 #3)', async 
 });
 
 it('Pelican deactivation stops every session without emptying (FB1 #4)', async () => {
-  const h = harness({ open: [{ steamId: 'A', displayName: 'Alice' }] });
+  const h = harness({ open: [{ ...steamPlayer('A'), displayName: 'Alice' }] });
   const app = await Test.createTestingModule({
     imports: [EventEmitterModule.forRoot()],
     providers: [
@@ -277,8 +278,8 @@ it('a reconnect fetches socket credentials from the CURRENT client (Codex r2)', 
 });
 
 describe('ROK-1801 read port', () => {
-  const ALICE = { steamId: 'A', displayName: 'Alice' };
-  const UNNAMED = { steamId: 'B', displayName: 'B' };
+  const ALICE = { ...steamPlayer('A'), displayName: 'Alice' };
+  const UNNAMED = { ...steamPlayer('B'), displayName: 'B' };
   const changed = (pelicanServerId: number, gameId = 42) => [
     SERVER_PRESENCE_EVENTS.CHANGED,
     { pelicanServerId, gameId },
@@ -291,8 +292,8 @@ describe('ROK-1801 read port', () => {
     });
     await h.reconcile();
     const on = (pelicanServerId: number, gameId = 42) => [
-      { pelicanServerId, gameId, steamId: 'A', name: 'Alice' },
-      { pelicanServerId, gameId, steamId: 'B', name: null },
+      { pelicanServerId, gameId, ...steamPlayer('A'), name: 'Alice' },
+      { pelicanServerId, gameId, ...steamPlayer('B'), name: null },
     ];
     expect(h.supervisor.playersOnGames()).toEqual([
       ...on(1),
@@ -342,7 +343,7 @@ it('retries a failed stopped-server cleanup on the next reconcile (Codex r3)', a
   jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
   const h = harness({
     rows: [row(1, { currentState: 'offline' })],
-    open: [{ steamId: 'A', displayName: 'Alice' }],
+    open: [{ ...steamPlayer('A'), displayName: 'Alice' }],
   });
   h.sink.serverEmptied.mockRejectedValueOnce(new Error('db down'));
   await h.reconcile();
@@ -354,7 +355,7 @@ it('retries a failed stopped-server cleanup on the next reconcile (Codex r3)', a
 
 it("retries a stopping session's failed serverEmptied on a later pass (Codex r4)", async () => {
   jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
-  const h = harness({ open: [{ steamId: 'A', displayName: 'Alice' }] });
+  const h = harness({ open: [{ ...steamPlayer('A'), displayName: 'Alice' }] });
   await h.reconcile();
   h.sink.serverEmptied.mockRejectedValueOnce(new Error('db down'));
   h.state.rows = [row(1, { currentState: 'offline' })];
@@ -379,6 +380,6 @@ it('gives each tracked server its own parser session (ROK-2233)', async () => {
   console(1, [...alice, 'left Alice']);
   await jest.advanceTimersByTimeAsync(0);
   expect(h.sink.playerLeft.mock.calls).toEqual([
-    [{ pelicanServerId: 1, gameId: 42 }, 'A'],
+    [{ pelicanServerId: 1, gameId: 42 }, steamPlayer('A')],
   ]);
 });

@@ -8,6 +8,7 @@ import {
   index,
   check,
   boolean,
+  text,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { events } from './events';
@@ -24,6 +25,9 @@ import { users } from './users';
  * the identity and `discordUsername` holds the display name (character name,
  * else SteamID64). A row needs at least one of the two ids (CHECK below); a
  * linked RL user present in voice AND on the server shares ONE row.
+ *
+ * ROK-2232: any game-server player is keyed by `(id_kind, player_id)`; a
+ * Minecraft / Xbox player has no SteamID and is stored anonymously.
  */
 export const adHocParticipants = pgTable(
   'ad_hoc_participants',
@@ -40,6 +44,14 @@ export const adHocParticipants = pgTable(
     discordUserId: varchar('discord_user_id', { length: 255 }),
     /** SteamID64 of a game-server participant (ROK-1800). */
     steamId: varchar('steam_id', { length: 32 }),
+    /**
+     * ROK-2232: the game-server player's platform id — a SteamID64, Minecraft
+     * Java UUID or XUID — namespaced by `idKind`. `steam_id` mirrors it for a
+     * Steam row only; a non-Steam id is never stored as a SteamID.
+     */
+    playerId: text('player_id'),
+    /** ROK-2232: 'steam' | 'minecraft-uuid' | 'xuid' — set with `playerId`. */
+    idKind: text('id_kind'),
     /** Where the row was first seen: 'discord' (voice) or 'steam' (server). */
     source: varchar('source', { length: 16 }).notNull().default('discord'),
     /**
@@ -83,9 +95,18 @@ export const adHocParticipants = pgTable(
     eventSteamUnique: uniqueIndex('ad_hoc_participants_event_steam_unique')
       .on(table.eventId, table.steamId)
       .where(sql`${table.steamId} IS NOT NULL`),
+    /** ROK-2232: one row per platform player per event, across id kinds. */
+    eventPlayerUnique: uniqueIndex('ad_hoc_participants_event_player_unique')
+      .on(table.eventId, table.idKind, table.playerId)
+      .where(sql`${table.playerId} IS NOT NULL`),
     identityCheck: check(
       'ad_hoc_participants_identity_check',
-      sql`${table.discordUserId} IS NOT NULL OR ${table.steamId} IS NOT NULL`,
+      sql`${table.discordUserId} IS NOT NULL OR ${table.steamId} IS NOT NULL OR ${table.playerId} IS NOT NULL`,
+    ),
+    /** ROK-2232: a platform id always carries its kind, and vice versa. */
+    playerKindCheck: check(
+      'ad_hoc_participants_player_kind_check',
+      sql`(${table.playerId} IS NULL) = (${table.idKind} IS NULL)`,
     ),
     eventIdx: index('idx_ad_hoc_participants_event').on(table.eventId),
     userIdx: index('idx_ad_hoc_participants_user').on(table.userId),

@@ -10,6 +10,10 @@ import type {
   ServerPresenceSink,
   ServerPresenceSource,
 } from '../../plugins/pelican/presence/server-presence.sink';
+import {
+  presenceKey,
+  type PlayerRef,
+} from '../../plugins/pelican/presence/presence-events';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { ServerPathVoiceTally } from './ad-hoc-server-voice-tally.service';
@@ -125,20 +129,20 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   ): Promise<void> {
     return this.serial(source.gameId, async () => {
       this.pending.rename(source.pelicanServerId, player);
-      const live = await this.enrolledEvent(source, player.steamId);
+      const live = await this.enrolledEvent(source, player);
       if (!live) return;
       await renameSteamOnlyRow(this.db, live.id, player);
       await refreshLive(this.fx, live);
     });
   }
 
-  playerLeft(source: ServerPresenceSource, steamId: string): Promise<void> {
+  playerLeft(source: ServerPresenceSource, player: PlayerRef): Promise<void> {
     return this.serial(source.gameId, async () => {
-      this.pending.remove(source.pelicanServerId, steamId);
-      const live = await this.enrolledEvent(source, steamId);
+      this.pending.remove(source.pelicanServerId, player);
+      const live = await this.enrolledEvent(source, player);
       if (!live) return;
       const id = source.pelicanServerId;
-      if (await this.participantService.markServerLeave(live.id, steamId, id))
+      if (await this.participantService.markServerLeave(live.id, player, id))
         await afterServerLeave(this.fx, live);
     });
   }
@@ -190,9 +194,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
         source.gameId,
         source.pelicanServerId,
       );
-      const enrolled = new Set(rows.map((r) => r.steamId));
+      const enrolled = new Map(rows.map((r) => [presenceKey(r), r]));
       // Codex r3: an enrolled player's own hold must not take a cover slot.
-      for (const steamId of enrolled) this.pending.remove(id, steamId);
+      for (const row of enrolled.values()) this.pending.remove(id, row);
       if (!this.pending.reconcile(id, count - enrolled.size)) return;
       if (!(await this.adHocEventService.isEnabled())) return;
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
@@ -260,10 +264,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     };
   }
 
-  /** The live event `steamId` is enrolled in on THIS server (Codex r2/r3). */
-  private enrolledEvent(source: ServerPresenceSource, steamId: string) {
+  /** The live event `player` is enrolled in on THIS server (Codex r2/r3). */
+  private enrolledEvent(source: ServerPresenceSource, player: PlayerRef) {
     const { gameId, pelicanServerId } = source;
-    return findServerEnrolledEvent(this.db, gameId, steamId, pelicanServerId);
+    return findServerEnrolledEvent(this.db, gameId, player, pelicanServerId);
   }
 
   /** Run `fn` after every earlier call for the same game has settled. */
@@ -290,10 +294,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     players: ServerPresencePlayer[],
   ): Promise<void> {
-    const all = new Map(
-      this.pending.take(source.pelicanServerId).map((pl) => [pl.steamId, pl]),
-    );
-    for (const pl of players) all.set(pl.steamId, pl);
+    const held = this.pending.take(source.pelicanServerId);
+    const all = new Map(held.map((pl) => [presenceKey(pl), pl]));
+    for (const pl of players) all.set(presenceKey(pl), pl);
     await attachUnenrolled(this.fx, live, source, [...all.values()]);
     await enrolGame(this.enrol, source.gameId, live, source.pelicanServerId);
   }

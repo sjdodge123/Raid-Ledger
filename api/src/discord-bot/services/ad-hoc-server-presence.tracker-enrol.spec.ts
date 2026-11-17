@@ -5,6 +5,10 @@
  * re-auth, no new lines for >10 min) still gets enrolled, and a player whose
  * row is already open is not attached twice.
  */
+import {
+  presenceKey,
+  steamPlayer,
+} from '../../plugins/pelican/presence/presence-events';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type {
@@ -18,7 +22,7 @@ import { getEventById } from './ad-hoc-event.helpers';
 import {
   findLiveGameAdHocEvent,
   hasOpenServerPlayers,
-  listOpenGameServerSteamIds,
+  listOpenGameServerPlayerKeys,
   listOpenServerPresence,
   listServerEnrolledEvents,
 } from './ad-hoc-server-presence.helpers';
@@ -33,7 +37,7 @@ jest.mock('./ad-hoc-server-presence.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.helpers'),
   findLiveGameAdHocEvent: jest.fn(),
   hasOpenServerPlayers: jest.fn(),
-  listOpenGameServerSteamIds: jest.fn(),
+  listOpenGameServerPlayerKeys: jest.fn(),
   listServerEnrolledEvents: jest.fn(),
   listOpenServerPresence: jest.fn(),
 }));
@@ -45,7 +49,11 @@ jest.mock('./ad-hoc-server-presence.effects', () => ({
 const SOURCE: ServerPresenceSource = { gameId: 10, pelicanServerId: 1 };
 const ROK = '76561198000000001';
 const LIVE = { id: 278, channelBindingId: 'b1', adHocStatus: 'live' };
-const ON_SERVER: ServerRosterPlayer = { ...SOURCE, steamId: ROK, name: 'rok' };
+const ON_SERVER: ServerRosterPlayer = {
+  ...SOURCE,
+  ...steamPlayer(ROK),
+  name: 'rok',
+};
 /** A voice join: `addParticipant` always names the Discord member. */
 const VOICE_JOIN = { eventId: 278, userId: 5, discordUserId: 'discord-5' };
 /** A server-row join: `addServerParticipant` / a server-born spawn — no Discord id. */
@@ -89,7 +97,7 @@ beforeEach(() => {
   jest.mocked(findLiveGameAdHocEvent).mockResolvedValue(LIVE);
   jest.mocked(listOpenServerPresence).mockResolvedValue([]);
   jest.mocked(listServerEnrolledEvents).mockResolvedValue([]);
-  jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([]);
+  jest.mocked(listOpenGameServerPlayerKeys).mockResolvedValue([]);
   jest.mocked(checkSuppression).mockResolvedValue(null);
 });
 
@@ -104,7 +112,7 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
       LIVE,
       1,
       {
-        steamId: ROK,
+        ...steamPlayer(ROK),
         displayName: 'rok',
       },
     );
@@ -119,7 +127,7 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
       LIVE,
       1,
       {
-        steamId: ROK,
+        ...steamPlayer(ROK),
         displayName: 'rok',
         characterOwnerId: 'zdo-owner-1',
       },
@@ -127,7 +135,9 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   });
 
   it('a player whose row is already open on that server is not attached again', async () => {
-    jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
+    jest
+      .mocked(listOpenGameServerPlayerKeys)
+      .mockResolvedValue([presenceKey(steamPlayer(ROK))]);
     const svc = serviceWith([ON_SERVER]);
     await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).not.toHaveBeenCalled();
@@ -135,18 +145,22 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
 
   it('a player open in ANOTHER live Quick Play of the game is not copied into this one', async () => {
     // The game-wide read spans every live event of game 10, not only `LIVE`.
-    jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
+    jest
+      .mocked(listOpenGameServerPlayerKeys)
+      .mockResolvedValue([presenceKey(steamPlayer(ROK))]);
     const svc = serviceWith([ON_SERVER]);
     await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).not.toHaveBeenCalled();
-    expect(listOpenGameServerSteamIds).toHaveBeenCalledWith(
+    expect(listOpenGameServerPlayerKeys).toHaveBeenCalledWith(
       expect.anything(),
       10,
     );
   });
 
   it('a player who moved servers keeps their row: open on server 1, tracked on server 2 (Codex r2 P2)', async () => {
-    jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
+    jest
+      .mocked(listOpenGameServerPlayerKeys)
+      .mockResolvedValue([presenceKey(steamPlayer(ROK))]);
     const moved = { ...ON_SERVER, pelicanServerId: 2 };
     const svc = serviceWith([moved]);
     await svc.onParticipantJoined(VOICE_JOIN);
@@ -164,21 +178,21 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     const B = '76561198000000002';
     const open = new Set<string>();
     jest
-      .mocked(listOpenGameServerSteamIds)
+      .mocked(listOpenGameServerPlayerKeys)
       .mockImplementation(() => Promise.resolve([...open]));
     jest.mocked(attachServerPlayer).mockImplementation((_fx, _live, _s, pl) => {
-      open.add(pl.steamId);
+      open.add(presenceKey(pl));
       return Promise.resolve();
     });
     const svc = serviceWith([
       ON_SERVER,
-      { ...ON_SERVER, steamId: B, name: 'b' },
+      { ...ON_SERVER, ...steamPlayer(B), name: 'b' },
     ]);
-    await svc.playerJoined(SOURCE, { steamId: ROK, displayName: 'rok' });
-    await svc.playerJoined(SOURCE, { steamId: B, displayName: 'b' });
+    await svc.playerJoined(SOURCE, { ...steamPlayer(ROK), displayName: 'rok' });
+    await svc.playerJoined(SOURCE, { ...steamPlayer(B), displayName: 'b' });
     const attachedB = jest
       .mocked(attachServerPlayer)
-      .mock.calls.filter(([, , , pl]) => pl.steamId === B);
+      .mock.calls.filter(([, , , pl]) => pl.playerId === B);
     // B attached once: one session (sessionCount 1), not two.
     expect(attachedB).toHaveLength(1);
   });
@@ -186,24 +200,24 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   it('an explicit join on server 2 moves a player still open on server 1 (Codex r4)', async () => {
     // Open on server 1 only: the game-wide read sees them, server 2's does not.
     jest
-      .mocked(listOpenGameServerSteamIds)
+      .mocked(listOpenGameServerPlayerKeys)
       .mockImplementation((_db, _game, serverId) =>
-        Promise.resolve(serverId === 2 ? [] : [ROK]),
+        Promise.resolve(serverId === 2 ? [] : [presenceKey(steamPlayer(ROK))]),
       );
     const svc = serviceWith([{ ...ON_SERVER, pelicanServerId: 2 }]);
     await svc.playerJoined(
       { ...SOURCE, pelicanServerId: 2 },
-      { steamId: ROK, displayName: 'rok' },
+      { ...steamPlayer(ROK), displayName: 'rok' },
     );
     expect(jest.mocked(attachServerPlayer).mock.calls).toEqual([
-      [expect.anything(), LIVE, 2, { steamId: ROK, displayName: 'rok' }],
+      [expect.anything(), LIVE, 2, { ...steamPlayer(ROK), displayName: 'rok' }],
     ]);
   });
 
   it('a held player left unconfirmed by a re-auth is still enrolled while the tracker reports them', async () => {
     jest.mocked(findLiveGameAdHocEvent).mockResolvedValueOnce(null);
     const svc = serviceWith([ON_SERVER]);
-    await svc.playerJoined(SOURCE, { steamId: ROK, displayName: 'rok' });
+    await svc.playerJoined(SOURCE, { ...steamPlayer(ROK), displayName: 'rok' });
     await svc.openPresence(SOURCE); // re-auth: the hold is now unconfirmed
     await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).toHaveBeenCalledTimes(1);

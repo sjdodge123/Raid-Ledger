@@ -66,7 +66,13 @@ function hasOpenUnlinkedRow(db: Db, eventId: number): SQL {
       .select({ one: sql`1` })
       .from(p)
       .where(
-        and(eq(p.eventId, eventId), isNull(p.leftAt), UNLINKED_SERVER_ROW_SQL),
+        and(
+          eq(p.eventId, eventId),
+          isNull(p.leftAt),
+          UNLINKED_SERVER_ROW_SQL,
+          // ROK-2232: only a Steam row can be fixed by linking Steam.
+          isNotNull(p.steamId),
+        ),
       ),
   );
 }

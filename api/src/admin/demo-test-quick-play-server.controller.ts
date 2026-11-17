@@ -39,6 +39,7 @@ import {
   findLiveGameAdHocEvent,
   resolveSteamIdentity,
 } from '../discord-bot/services/ad-hoc-server-presence.helpers';
+import { steamPlayer } from '../plugins/pelican/presence/presence-events';
 import { DemoModeGuard } from './demo-mode.guard';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -104,7 +105,7 @@ export class DemoTestQuickPlayServerController {
       gameId: parsed.gameId,
     };
     await this.serverPresence.playerJoined(source, {
-      steamId: parsed.steamId,
+      ...steamPlayer(parsed.steamId),
       displayName: parsed.displayName,
     });
     return { eventId: live.id };

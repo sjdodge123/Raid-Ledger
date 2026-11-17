@@ -13,6 +13,7 @@ import {
   PRESENCE_STOPPED_STATES,
   PRESENCE_UNREACHABLE_EMPTY_MS,
   ReplayWatermark,
+  sinkPlayerRef,
   toPresentPlayers,
   toSinkPlayer,
 } from './pelican-presence.helpers';
@@ -171,8 +172,7 @@ export class PelicanPresenceSession {
       const held = await sink.heldPresence(source);
       if (this.stopped) return;
       this.tracker.hydrate(toPresentPlayers(open));
-      const ids = (ps: { steamId: string }[]) => ps.map((p) => p.steamId);
-      this.held.reset(ids(held), ids(open));
+      this.held.reset(held.map(sinkPlayerRef), open.map(sinkPlayerRef));
       if (open.length > 0) this.notify(true);
     } catch (err) {
       this.opts.logger.error(
@@ -211,8 +211,8 @@ export class PelicanPresenceSession {
     this.forward(changes);
     this.forwardOwners(before, changes);
     const tracked = this.tracker.snapshot().length;
-    for (const steamId of this.held.departures(event, tracked))
-      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
+    for (const ref of this.held.departures(event, tracked))
+      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, ref));
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
@@ -324,16 +324,16 @@ export class PelicanPresenceSession {
   /** `rehydrated`: the changes came from replayed history (Codex r3). */
   private forward(changes: PresenceChange[], rehydrated = false): void {
     for (const change of changes) {
-      const owner = this.tracker.ownerOf(change.steamId);
+      const owner = this.tracker.ownerOf(change);
+      if (change.kind === 'joined') this.held.forget(change); // tracker owns them
       const player = toSinkPlayer(change, owner);
       if (change.kind === 'joined') {
-        this.held.forget(change.steamId); // the tracker owns them now
         this.enqueue('playerJoined', (s, src) => s.playerJoined(src, player));
       } else if (change.kind === 'renamed') {
         this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
       } else {
         this.enqueue('playerLeft', (s, src) =>
-          s.playerLeft(src, player.steamId),
+          s.playerLeft(src, sinkPlayerRef(player)),
         );
       }
     }

@@ -13,7 +13,7 @@ import { createAdHocEventRow, findAdminFallback } from './ad-hoc-event.helpers';
 import { withGameSpawnLock } from './ad-hoc-game-spawn-lock';
 import {
   findLiveGameAdHocEvent,
-  resolveSteamIdentity,
+  resolvePlayerIdentity,
   type LiveGameEvent,
   type SteamIdentity,
 } from './ad-hoc-server-presence.helpers';
@@ -42,7 +42,7 @@ export async function buildServerSpawnInput(
   players: ServerPresencePlayer[],
 ): Promise<ServerSpawnInput | null> {
   const ids = await Promise.all(
-    players.map((pl) => resolveSteamIdentity(db, pl.steamId)),
+    players.map((pl) => resolvePlayerIdentity(db, pl)),
   );
   const creatorId =
     ids.find((i) => i !== null)?.userId ?? (await findAdminFallback(db));
@@ -85,7 +85,8 @@ async function enrolOn(
   for (const [i, pl] of input.players.entries()) {
     const userId = input.ids[i]?.userId ?? null;
     const outcome = await upsertSteamParticipant(tx, eventId, {
-      steamId: pl.steamId,
+      playerId: pl.playerId,
+      idKind: pl.idKind,
       displayName: pl.displayName,
       userId,
       pelicanServerId: input.pelicanServerId,

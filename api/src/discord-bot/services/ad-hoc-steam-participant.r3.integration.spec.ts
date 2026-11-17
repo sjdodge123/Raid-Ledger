@@ -9,6 +9,7 @@
  * 2. A Steam row left behind while the player was unlinked is folded into
  *    their voice row once the SteamID resolves to them: one row per person.
  */
+import { steamPlayer } from '../../plugins/pelican/presence/presence-events';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -88,7 +89,7 @@ const voiceMember = (userId: number) => ({
 });
 
 const serverMember = (userId: number | null) => ({
-  steamId: STEAM_A,
+  ...steamPlayer(STEAM_A),
   displayName: 'Ragnhild',
   userId,
   pelicanServerId: 9800,
@@ -157,7 +158,7 @@ describe('a Steam account linked mid-Quick-Play (Codex r3 P2)', () => {
     const eventId = await insertEvent();
     const userId = testApp.seed.adminUser.id;
     await service.addServerParticipant(eventId, serverMember(null));
-    await service.markServerLeave(eventId, STEAM_A);
+    await service.markServerLeave(eventId, steamPlayer(STEAM_A));
     await service.addParticipant(eventId, voiceMember(userId));
 
     await service.addServerParticipant(eventId, serverMember(userId));
