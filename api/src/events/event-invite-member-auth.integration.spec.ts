@@ -3,7 +3,9 @@
  * jwt + NotDeactivatedGuard + InviteMemberThrottleGuard wiring. Managers
  * (creator, operator/admin) always invite; a non-manager only while holding a
  * signed_up/tentative signup; 10 invites/min per user. Unit coverage of the
- * rule lives in invite-member-auth.spec.ts.
+ * rule lives in invite-member-auth.spec.ts. Review round 1: cancelled/ended
+ * events refuse invites (400, managers too) and a repeat invite to the same
+ * member is skipped (201, no second notification/DM).
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -14,6 +16,10 @@ import {
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { INVITE_MEMBER_FORBIDDEN_MESSAGE } from './event-invite.helpers';
+import {
+  INVITE_EVENT_CANCELLED_MESSAGE,
+  INVITE_EVENT_ENDED_MESSAGE,
+} from './event-invite-state.helpers';
 import {
   INVITE_MEMBER_LIMIT,
   InviteMemberThrottleGuard,
@@ -165,6 +171,75 @@ async function testRateLimit() {
   expect(statuses).toEqual(expected);
 }
 
+/** A member promoted to operator, logged in again so the token is fresh. */
+async function operatorLogin(): Promise<string> {
+  const email = 'op2217@test.local';
+  const op = await createMemberAndLogin(testApp, 'op2217', email);
+  await testApp.db
+    .update(schema.users)
+    .set({ role: 'operator' })
+    .where(eq(schema.users.id, op.userId));
+  const res = await testApp.request
+    .post('/auth/local')
+    .send({ email, password: 'TestPassword123!' });
+  expect([200, 201]).toContain(res.status);
+  return res.body.access_token as string;
+}
+
+async function testOperatorInvitesOnOthersEvent() {
+  const creator = await createMemberAndLogin(testApp, 'org3', 'o3@test.local');
+  const eventId = await createFutureEvent(testApp, creator.token);
+  const invitee = await seedInvitee();
+  const res = await inviteAs(await operatorLogin(), eventId, invitee.discordId);
+  expect({
+    status: res.status,
+    invites: await inviteCount(invitee.userId),
+  }).toEqual({ status: 201, invites: 1 });
+}
+
+/** An admin (manager) inviting to an event that `close` has closed. */
+async function testClosedEvent(
+  close: Partial<typeof schema.events.$inferInsert>,
+  message: string,
+) {
+  const eventId = await createFutureEvent(testApp, adminToken);
+  await testApp.db
+    .update(schema.events)
+    .set(close)
+    .where(eq(schema.events.id, eventId));
+  const invitee = await seedInvitee();
+  const res = await inviteAs(adminToken, eventId, invitee.discordId);
+  expect({
+    status: res.status,
+    message: res.body.message,
+    invites: await inviteCount(invitee.userId),
+  }).toEqual({ status: 400, message, invites: 0 });
+}
+
+function endedDuration(): [Date, Date] {
+  const end = new Date(Date.now() - 60 * 60 * 1000);
+  return [new Date(end.getTime() - 3 * 60 * 60 * 1000), end];
+}
+
+async function testRepeatInviteSkipped() {
+  const { eventId, invitee, member } = await sceneWithMember(
+    'repeat',
+    'signed_up',
+  );
+  const first = await inviteAs(member.token, eventId, invitee.discordId);
+  const again = await inviteAs(member.token, eventId, invitee.discordId);
+  const byAdmin = await inviteAs(adminToken, eventId, invitee.discordId);
+  expect({
+    statuses: [first.status, again.status, byAdmin.status],
+    repeatMessage: again.body.message,
+    invites: await inviteCount(invitee.userId),
+  }).toEqual({
+    statuses: [201, 201, 201],
+    repeatMessage: 'invitee_2217 already has an invite to this event',
+    invites: 1,
+  });
+}
+
 describe('ROK-2217 POST /events/:id/invite-member authorisation', () => {
   it('the event creator may invite', () => testCreatorInvites());
   it("an admin may invite on someone else's event", () =>
@@ -177,4 +252,15 @@ describe('ROK-2217 POST /events/:id/invite-member authorisation', () => {
     testRefused('decliner', 'declined'));
   it('the 11th invite in a minute from one user gets 429', () =>
     testRateLimit());
+  it("an operator may invite on someone else's event", () =>
+    testOperatorInvitesOnOthersEvent());
+  it('a cancelled event refuses invites with 400, even for a manager', () =>
+    testClosedEvent(
+      { cancelledAt: new Date() },
+      INVITE_EVENT_CANCELLED_MESSAGE,
+    ));
+  it('an ended event refuses invites with 400, even for a manager', () =>
+    testClosedEvent({ duration: endedDuration() }, INVITE_EVENT_ENDED_MESSAGE));
+  it('a repeat invite to the same member is skipped — no second DM', () =>
+    testRepeatInviteSkipped());
 });

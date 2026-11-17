@@ -2,7 +2,7 @@
  * ROK-2217 — who may send member invites, and how often. Route-level proof
  * (real DB, real guards) lives in event-invite-member-auth.integration.spec.ts.
  */
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { ExecutionContext } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ThrottlerException } from '@nestjs/throttler';
@@ -13,6 +13,11 @@ import {
   assertCanInviteMembers,
   INVITE_MEMBER_FORBIDDEN_MESSAGE,
 } from './event-invite.helpers';
+import {
+  assertEventOpenForInvites,
+  INVITE_EVENT_CANCELLED_MESSAGE,
+  INVITE_EVENT_ENDED_MESSAGE,
+} from './event-invite-state.helpers';
 import { EventsController } from './events.controller';
 import {
   INVITE_MEMBER_LIMIT,
@@ -87,5 +92,35 @@ describe('ROK-2217 InviteMemberThrottleGuard', () => {
     }
     expect(() => guard.canActivate(ctxFor(1))).toThrow(ThrottlerException);
     expect(() => guard.canActivate(ctxFor(2))).not.toThrow();
+  });
+});
+
+describe('ROK-2217 assertEventOpenForInvites', () => {
+  const NOW = new Date('2026-11-17T12:00:00Z');
+  const FUTURE_END = '2026-11-17T15:00:00.000Z';
+
+  function refusal(event: Parameters<typeof assertEventOpenForInvites>[0]) {
+    try {
+      assertEventOpenForInvites(event, NOW);
+    } catch (e: unknown) {
+      return e instanceof BadRequestException ? e.message : e;
+    }
+    return 'allowed';
+  }
+
+  it('allows an open event that has not ended', () => {
+    expect(refusal({ cancelledAt: null, endTime: FUTURE_END })).toBe('allowed');
+  });
+
+  it('refuses a cancelled event with a 400', () => {
+    expect(
+      refusal({ cancelledAt: '2026-11-16T00:00:00.000Z', endTime: FUTURE_END }),
+    ).toBe(INVITE_EVENT_CANCELLED_MESSAGE);
+  });
+
+  it('refuses an event whose end time has passed with a 400', () => {
+    expect(refusal({ endTime: '2026-11-17T11:59:59.000Z' })).toBe(
+      INVITE_EVENT_ENDED_MESSAGE,
+    );
   });
 });

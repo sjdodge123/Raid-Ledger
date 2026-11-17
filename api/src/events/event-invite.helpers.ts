@@ -17,6 +17,11 @@ import { MEMBER_INVITE_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { MemberInviteCreatedPayload } from '../discord-bot/discord-bot.constants';
 import { isEventSignup } from '../guilds/forum/event-discussion/event-discussion.queries';
 import { canManageEvent } from './pugs-visibility.helpers';
+import {
+  assertEventOpenForInvites,
+  hasPendingMemberInvite,
+  MEMBER_INVITE_TITLE,
+} from './event-invite-state.helpers';
 
 export type UserBasic = { id: number; username: string };
 
@@ -85,7 +90,7 @@ export async function getInviterUsername(
 
 /** The 403 a caller gets when they may not invite members (ROK-2217). */
 export const INVITE_MEMBER_FORBIDDEN_MESSAGE =
-  'Only the event organiser, staff, or members signed up to this event can invite members';
+  'Only the event organizer, staff, or members signed up to this event can invite members';
 
 /**
  * ROK-2217: managers (creator or operator/admin) may always invite members;
@@ -115,7 +120,7 @@ export async function inviteMemberFlow(
 ): Promise<{ message: string; targetUser: UserBasic }> {
   const targetUser = await findUserByDiscordId(db, discordId);
   const inviterName = await getInviterUsername(db, inviterId);
-  await inviteUserToEvent(
+  const sent = await inviteUserToEvent(
     db,
     notificationService,
     eventEmitter,
@@ -125,12 +130,17 @@ export async function inviteMemberFlow(
     targetUser,
     discordId,
   );
-  return { message: `Invite sent to ${targetUser.username}`, targetUser };
+  const message = sent
+    ? `Invite sent to ${targetUser.username}`
+    : `${targetUser.username} already has an invite to this event`;
+  return { message, targetUser };
 }
 
 /**
  * User-keyed invite (ROK-2215): refuses a user already signed up (400), then
- * creates the notification and emits the Discord DM event.
+ * creates the notification and emits the Discord DM event. ROK-2217: a user
+ * who already holds an unanswered invite to this event is skipped (no second
+ * DM) and the call resolves `false`; `true` means an invite went out.
  */
 export async function inviteUserToEvent(
   db: PostgresJsDatabase<typeof schema>,
@@ -141,8 +151,9 @@ export async function inviteUserToEvent(
   inviterName: string,
   targetUser: UserBasic,
   discordId: string,
-): Promise<void> {
+): Promise<boolean> {
   await assertNotSignedUp(db, eventId, targetUser);
+  if (await hasPendingMemberInvite(db, eventId, targetUser.id)) return false;
   await emitMemberInvite(
     notificationService,
     eventEmitter,
@@ -152,6 +163,7 @@ export async function inviteUserToEvent(
     inviterName,
     discordId,
   );
+  return true;
 }
 
 /** Creates the invite notification and emits a Discord event if needed. */
@@ -167,7 +179,7 @@ export async function emitMemberInvite(
   const notification = await notificationService.create({
     userId: targetUser.id,
     type: 'new_event',
-    title: 'Event Invitation',
+    title: MEMBER_INVITE_TITLE,
     message: `${inviterName} invited you to "${event.title}"`,
     payload: { eventId, invitedBy: inviterName },
     skipDiscord: true,
@@ -199,6 +211,7 @@ export async function inviteMemberToEvent(
   discordId: string,
 ): Promise<{ message: string }> {
   await assertCanInviteMembers(deps.db, event, inviter.id, inviter.isAdmin);
+  assertEventOpenForInvites(event);
   const inviterId = inviter.id;
   const result = await inviteMemberFlow(
     deps.db,
