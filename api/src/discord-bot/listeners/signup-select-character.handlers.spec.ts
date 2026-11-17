@@ -293,3 +293,49 @@ describe('handleCharacterSelectMenu — embed in reply (ROK-814)', () => {
     expect(editCall.embeds).toContain(MOCK_EMBED);
   });
 });
+
+describe('handleCharacterSelectMenu — Back button (ROK-2228)', () => {
+  it('offers Back to the same char_select list, keeping the tentative suffix', async () => {
+    const deps = createMockDeps();
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: ['mmo-char'],
+      user: { id: 'discord-mmo' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+    const chain = (rows: unknown[]) => ({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue(rows),
+        }),
+      }),
+    });
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce(chain([{ id: 80, discordId: 'discord-mmo' }]))
+      .mockReturnValueOnce(chain([{ id: 50, slotConfig: { type: 'mmo' } }]));
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: 'mmo-char',
+      name: 'MMOChar',
+      role: 'tank' as const,
+      roleOverride: null,
+    });
+
+    await handleCharacterSelectMenu(interaction, 50, deps, 'tentative');
+
+    const editCall = (interaction.editReply as jest.Mock).mock.calls[0][0] as {
+      components: Array<{
+        toJSON(): { components: Array<{ custom_id?: string; label?: string }> };
+      }>;
+    };
+    const rows = editCall.components.map((row) => row.toJSON());
+    expect(rows[0]?.components[0]?.custom_id).toBe(
+      'role_select:50:mmo-char:tentative',
+    );
+    expect(rows[1]?.components).toEqual([
+      expect.objectContaining({
+        label: 'Back',
+        custom_id: 'char_back:char_select:50:tentative',
+      }),
+    ]);
+  });
+});

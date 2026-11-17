@@ -124,7 +124,8 @@ function shouldShowCharSelect(
   return chars.length > 1;
 }
 
-async function resolveCharacters(
+/** Load the user's characters for the event's game (null without a game). */
+export async function resolveCharacters(
   deps: RescheduleDeps,
   event: EventRow,
   linkedUser: { id: number },

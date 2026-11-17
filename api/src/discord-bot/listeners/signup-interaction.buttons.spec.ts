@@ -1,5 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
+import * as signupBack from './signup-back.handlers';
 import {
   type SignupInteractionMocks,
   createSignupInteractionTestModule,
@@ -503,6 +504,19 @@ function declineButtonTests() {
   });
 }
 
+function backRoutingTests() {
+  it('hands a char_back: click to the signup Back handler, not deferReply (ROK-2228)', async () => {
+    const route = jest
+      .spyOn(signupBack, 'routeSignupBack')
+      .mockReturnValue(true);
+    const interaction = makeButtonInteraction('char_back:char_select:42');
+    await mocks.listener.handleButtonInteraction(interaction);
+    expect(route).toHaveBeenCalledWith(interaction, expect.anything());
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+    route.mockRestore();
+  });
+}
+
 describe('SignupInteractionListener — buttons', () => {
   beforeEach(async () => {
     await setupButtonsModule();
@@ -541,5 +555,9 @@ describe('SignupInteractionListener — buttons', () => {
 
   describe('handleButtonInteraction — Decline button', () => {
     declineButtonTests();
+  });
+
+  describe('handleButtonInteraction — Back button', () => {
+    backRoutingTests();
   });
 });

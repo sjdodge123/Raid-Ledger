@@ -47,6 +47,7 @@ import {
   type SelectCtx,
 } from './reschedule-roster.handlers';
 import { errorStack } from '../../common/error-format.helpers';
+import { routeRescheduleBack } from './reschedule-back.handlers';
 
 /**
  * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).
@@ -101,6 +102,7 @@ export class RescheduleResponseListener {
   }
 
   private async handleButtonInteraction(i: ButtonInteraction): Promise<void> {
+    if (routeRescheduleBack(i, this.deps)) return;
     const parts = i.customId.split(':');
     if (parts.length !== 2) return;
     const [action, idStr] = parts;

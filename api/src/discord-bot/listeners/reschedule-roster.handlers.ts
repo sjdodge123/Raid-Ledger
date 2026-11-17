@@ -5,14 +5,16 @@ import type {
 } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { CHARACTER_ROLES } from '@raid-ledger/contract';
-import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
-import { showRoleSelect } from '../utils/signup-dropdown-builders';
 import type {
   EventRow,
   RescheduleDeps,
   ReconfirmOptions,
 } from './reschedule-response.helpers';
-import { logDiscordAck } from './reschedule-response.helpers';
+import {
+  findLinkedUserByDiscordId,
+  logDiscordAck,
+} from './reschedule-response.helpers';
+import { showRescheduleRoleForCharacter } from './reschedule-role-step.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
 import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
@@ -62,7 +64,7 @@ export async function handleCharacterSelect(
   const characterId = defined(ctx.interaction.values[0], 'selected character');
   const sc = event.slotConfig as Record<string, unknown> | null;
   if (sc?.type === 'mmo') {
-    await showMmoRoleForChar(
+    await showRescheduleRoleForCharacter(
       ctx.deps,
       ctx.interaction,
       event,
@@ -108,7 +110,10 @@ export async function handleRoleSelect(
 async function validateSelectCtx(
   ctx: SelectCtx,
 ): Promise<{ linkedUser: { id: number }; event: EventRow } | null> {
-  const linkedUser = await findLinkedUser(ctx.deps, ctx.interaction.user.id);
+  const linkedUser = await findLinkedUserByDiscordId(
+    ctx.deps.db,
+    ctx.interaction.user.id,
+  );
   if (!linkedUser) {
     await ctx.interaction.editReply({
       content: 'Could not find your linked account. Please try again.',
@@ -206,18 +211,6 @@ async function updateUnlinkedSignup(
   return signup.id;
 }
 
-async function findLinkedUser(
-  deps: RescheduleDeps,
-  discordUserId: string,
-): Promise<{ id: number } | null> {
-  const [user] = await deps.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.discordId, discordUserId))
-    .limit(1);
-  return user ?? null;
-}
-
 async function replyEventError(
   interaction: StringSelectMenuInteraction,
   event: EventRow | null,
@@ -225,33 +218,6 @@ async function replyEventError(
   await interaction.editReply({
     content: event ? 'This event has been cancelled.' : 'Event not found.',
     components: [],
-  });
-}
-
-async function showMmoRoleForChar(
-  deps: RescheduleDeps,
-  interaction: StringSelectMenuInteraction,
-  event: EventRow,
-  linkedUser: { id: number },
-  characterId: string,
-  signupStatus: 'tentative' | undefined,
-): Promise<void> {
-  const isTentative = signupStatus === 'tentative';
-  const character = await deps.charactersService.findOne(
-    linkedUser.id,
-    characterId,
-  );
-  await showRoleSelect(interaction, {
-    customIdPrefix: RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
-    eventId: event.id,
-    emojiService: deps.emojiService,
-    characterId,
-    characterInfo: {
-      name: character.name,
-      role: character.roleOverride ?? character.role ?? null,
-    },
-    characterVerb: isTentative ? 'Tentative as' : 'Confirming as',
-    customIdSuffix: isTentative ? 'tentative' : undefined,
   });
 }
 
@@ -292,7 +258,10 @@ async function reconfirmAndReply(
   const rolesLabel = roles
     .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
     .join(', ');
-  const linkedUser = await findLinkedUser(ctx.deps, ctx.interaction.user.id);
+  const linkedUser = await findLinkedUserByDiscordId(
+    ctx.deps.db,
+    ctx.interaction.user.id,
+  );
   const label = isTentative ? 'marked as **tentative**' : 'confirmed';
   const userId = linkedUser?.id;
   await reconfirmSignup(ctx.deps, ctx.interaction, event, userId, opts);
