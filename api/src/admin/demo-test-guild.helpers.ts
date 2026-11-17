@@ -232,6 +232,9 @@ export async function upsertMember(
     rankIndex: entry.rank,
     rankName: entry.rankName,
     lastSeenAt: now,
+    // ROK-2225: rows an import listed carry its stamp, or a guild-export
+    // import would count the whole seeded roster as added.
+    ledgerlinkSeenAt: now,
   };
   const [row] = await db
     .insert(schema.guildMembers)

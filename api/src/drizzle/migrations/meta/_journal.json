@@ -2115,6 +2115,13 @@
       "when": 1794764647751,
       "tag": "0302_addon_import_audit_envelope_version",
       "breakpoints": true
+    },
+    {
+      "idx": 303,
+      "version": "7",
+      "when": 1794850344300,
+      "tag": "0303_guild_members_ledgerlink_seen_at",
+      "breakpoints": true
     }
   ]
 }

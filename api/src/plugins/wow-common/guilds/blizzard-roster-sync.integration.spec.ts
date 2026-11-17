@@ -256,6 +256,7 @@ async function seedJunk(guildId: number): Promise<Date> {
       level: 59,
       source: 'blizzard',
       lastSeenAt: t,
+      blizzardSeenAt: t,
     })),
   );
   await testApp.db
@@ -381,9 +382,16 @@ describe('ROK-1928 — Forever guild roster sync from Blizzard', () => {
     });
   });
 
-  it('(7) a mass drop (≥5 and >25%) posts the staff flag', async () => {
+  it('(7) a mass drop (≥5 and >25%) of rows Blizzard saw posts the staff flag', async () => {
     const { guild } = await seedGuild(addonRoster(8));
-    stubRoster([apiMember('Ana'), apiMember('Member1')]);
+    // ROK-2225: Blizzard only "loses" rows it saw — pair all 8 first.
+    const seen = (await liveNames(guild.id)).map((n, i) => ({
+      ...apiMember(n),
+      blizzardId: 700 + i,
+    }));
+    stubRoster(seen);
+    await sync(guild.id);
+    stubRoster(seen.slice(0, 2));
     await sync(guild.id);
     const flags = await testApp.db
       .select()
