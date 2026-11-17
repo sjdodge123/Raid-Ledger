@@ -42,10 +42,16 @@ export interface InboundCtx {
 }
 
 /** Postgres 23505 (bare or wrapped in `cause` by drizzle). */
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   if ('code' in err && err.code === '23505') return true;
   return 'cause' in err && isUniqueViolation(err.cause);
+}
+
+/** A post import that lost the unique race belongs to the other handler. */
+function lostRace(err: unknown): InboundResult {
+  if (isUniqueViolation(err)) return 'skipped';
+  throw err;
 }
 
 function cut(text: string, max: number): string {
@@ -101,7 +107,7 @@ export class HubForumDiscordInboundIngest {
     if (!hub) return this.tagNotice(route, thread);
     if (predatesBinding(thread.id, hub.boundAt)) return 'skipped';
     if (m.id === thread.id)
-      return this.importThread(hub.guildId, thread, m, now);
+      return this.importThread(hub.guildId, thread, m, now).catch(lostRace);
     const starter = ctx.fetchStarter ? await ctx.fetchStarter() : null;
     if (!starter || this.isOwn(starter, route, ctx)) return 'skipped';
     await this.importStarter(hub.guildId, thread, starter, now);
@@ -196,6 +202,7 @@ export class HubForumDiscordInboundIngest {
    * A reply's missed starter. The starter's own event may be importing it
    * right now (codex P2): a starter that is already linked, or whose insert
    * loses the unique race, is that handler's — the reply still imports.
+   * The starter's own event tolerates the mirror race the same way (M3).
    */
   private async importStarter(
     guildId: number,
@@ -204,11 +211,7 @@ export class HubForumDiscordInboundIngest {
     now: Date,
   ): Promise<void> {
     if (await inbound.findLinkByMessage(this.db, starter.id)) return;
-    try {
-      await this.importThread(guildId, thread, starter, now);
-    } catch (err) {
-      if (!isUniqueViolation(err)) throw err;
-    }
+    await this.importThread(guildId, thread, starter, now).catch(lostRace);
   }
 
   /** OQ-4: a shared-forum post no single hub tag routes gets one reply. */
