@@ -41,6 +41,13 @@ export interface InboundCtx {
   fetchStarter?: () => Promise<InboundMessage | null>;
 }
 
+/** Postgres 23505 (bare or wrapped in `cause` by drizzle). */
+function isUniqueViolation(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  if ('code' in err && err.code === '23505') return true;
+  return 'cause' in err && isUniqueViolation(err.cause);
+}
+
 function cut(text: string, max: number): string {
   const points = Array.from(text);
   return points.length <= max ? text : points.slice(0, max).join('');
@@ -96,8 +103,8 @@ export class HubForumDiscordInboundIngest {
     if (m.id === thread.id)
       return this.importThread(hub.guildId, thread, m, now);
     const starter = ctx.fetchStarter ? await ctx.fetchStarter() : null;
-    if (!starter || (await this.isEcho(starter, route, ctx))) return 'skipped';
-    await this.importThread(hub.guildId, thread, starter, now);
+    if (!starter || this.isOwn(starter, route, ctx)) return 'skipped';
+    await this.importStarter(hub.guildId, thread, starter, now);
     const fresh = await inbound.findPostLink(this.db, thread.id);
     return fresh ? this.importReply(fresh, m, now) : 'skipped';
   }
@@ -176,9 +183,32 @@ export class HubForumDiscordInboundIngest {
     route: ForumRoute,
     ctx: InboundCtx,
   ): Promise<boolean> {
-    const own = { botUserId: ctx.botUserId, webhookId: route.webhookId };
-    if (isEcho(m, own)) return true;
+    if (this.isOwn(m, route, ctx)) return true;
     return (await inbound.findLinkByMessage(this.db, m.id)) !== null;
+  }
+
+  /** Sent by our bot or webhook (an outbound echo, never a user's post). */
+  private isOwn(m: InboundMessage, route: ForumRoute, ctx: InboundCtx) {
+    return isEcho(m, { botUserId: ctx.botUserId, webhookId: route.webhookId });
+  }
+
+  /**
+   * A reply's missed starter. The starter's own event may be importing it
+   * right now (codex P2): a starter that is already linked, or whose insert
+   * loses the unique race, is that handler's — the reply still imports.
+   */
+  private async importStarter(
+    guildId: number,
+    thread: InboundThread,
+    starter: InboundMessage,
+    now: Date,
+  ): Promise<void> {
+    if (await inbound.findLinkByMessage(this.db, starter.id)) return;
+    try {
+      await this.importThread(guildId, thread, starter, now);
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+    }
   }
 
   /** OQ-4: a shared-forum post no single hub tag routes gets one reply. */

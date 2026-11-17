@@ -22,7 +22,10 @@ import {
   stubOutbound,
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
-import { HubForumDiscordPinGateway } from './hub-forum-discord-pins';
+import {
+  HubForumDiscordPinGateway,
+  HubForumDiscordPinSync,
+} from './hub-forum-discord-pins';
 import {
   HubForumDiscordRouteResolver,
   type InboundMessage,
@@ -344,5 +347,63 @@ describe('ROK-2208 pin sync (R5)', () => {
     });
     expect(pinGw.pinnedPost).toHaveBeenCalledWith(channelId);
     expect(pinGw.setPinned).toHaveBeenCalledWith(a.id, false);
+  });
+});
+
+describe('codex P2: pin sync echoes and re-binds', () => {
+  it('codex P2: the hub losing the shared pin keeps its RL pin (our unpin echo)', async () => {
+    const { channelId: aCh } = await boundHub();
+    const { thread: a } = await importPost(aCh);
+    const aPinned = { ...a, pinned: true };
+    await ingest.onThreadUpdate(a, aPinned);
+    const { g: gB, channelId: bCh } = await boundHub();
+    const { thread: b, rlThread } = await importPost(bCh);
+    pinGw.pinnedPost.mockResolvedValue(a.id); // A holds the forum's one pin
+    const res = await ctx.testApp.request
+      .put(`/guilds/${gB}/forum/${rlThread.id}/pin`)
+      .set('Authorization', `Bearer ${ctx.tokens.officerA}`);
+    expect(res.status).toBe(204);
+    await waitFor(async () => {
+      expect(pinGw.setPinned).toHaveBeenCalledWith(b.id, true);
+      return Promise.resolve();
+    });
+    expect(pinGw.setPinned).toHaveBeenCalledWith(a.id, false);
+    await ingest.onThreadUpdate(aPinned, a); // the gateway echo of that unpin
+    expect((await threadRow(a.id)).pinnedAt).not.toBeNull();
+  });
+
+  it('codex P2: RL → Discord ignores pinned posts from a forum the hub no longer binds', async () => {
+    const { g, channelId } = await boundHub();
+    const { thread: old } = await importPost(channelId);
+    await ingest.onThreadUpdate(old, { ...old, pinned: true });
+    const b = schema.hubForumDiscordBindings;
+    await ctx.testApp.db.delete(b).where(eq(b.guildId, g));
+    const res = await ctx.testApp.request
+      .put(`/guilds/${g}/forum-discord`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ mode: 'create', ack: true });
+    expect(res.status).toBe(200);
+    await ctx.testApp.app.get(HubForumDiscordPinSync).pushHub(g);
+    expect(pinGw.setPinned).not.toHaveBeenCalledWith(old.id, true);
+  });
+});
+
+describe('codex P2: a reply racing its own starter import', () => {
+  it('imports the reply when the starter event linked the starter meanwhile', async () => {
+    const { channelId } = await boundHub();
+    const thread = post(channelId);
+    const starter = msg(thread, { id: thread.id });
+    const reply = msg(thread);
+    const fetchStarter = async () => {
+      // The starter's own MessageCreate commits while the reply is mid-flight.
+      expect(await ingest.onCreate(starter, thread, noBot)).toBe('imported');
+      return starter;
+    };
+    const ctxWithStarter = { ...noBot, fetchStarter };
+    expect(await ingest.onCreate(reply, thread, ctxWithStarter)).toBe(
+      'imported',
+    );
+    expect(await replyRow(reply.id)).not.toBeNull();
+    expect((await threadRow(thread.id)).replyCount).toBe(1);
   });
 });
