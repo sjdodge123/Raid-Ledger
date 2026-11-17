@@ -80,14 +80,15 @@ describe('HubForumDiscordEventGate.admits', () => {
     const { gate, sendEmbedDM } = setup(facts());
     expect(await gate.admits({ threadId: 3 }, '222', NOW)).toBe(false);
     expect(sendEmbedDM).toHaveBeenCalledTimes(1);
-    const [to, embed] = sendEmbedDM.mock.calls[0] as [
-      string,
-      { data: { description?: string } },
-    ];
-    expect(to).toBe('222');
-    expect(embed.data.description).toMatch(
-      /^Only players signed up for Molten Core can post in its discussion\. Join Raid Ledger and sign up: \S+\/events\/7$/,
-    );
+    const call = sendEmbedDM.mock.calls[0];
+    expect(call?.[0]).toBe('222');
+    expect(call?.[1]).toMatchObject({
+      data: {
+        description: expect.stringMatching(
+          /^Only players signed up for Molten Core can post in its discussion\. Join Raid Ledger and sign up: \S+\/events\/7$/,
+        ),
+      },
+    });
   });
 
   it('sends no second DM for a second post in the same thread', async () => {

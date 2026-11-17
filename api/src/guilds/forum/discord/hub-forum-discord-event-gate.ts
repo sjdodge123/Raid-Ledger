@@ -14,7 +14,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EmbedBuilder } from 'discord.js';
 import { and, eq, inArray } from 'drizzle-orm';
-import type Redis from 'ioredis';
+import Redis from 'ioredis';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
