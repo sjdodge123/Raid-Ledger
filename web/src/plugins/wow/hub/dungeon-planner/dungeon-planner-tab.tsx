@@ -7,7 +7,7 @@
  * ROK-2212: the "Suggested groups" section below; Open in planner loads a
  * group into the plan (the URL) and scrolls back up to it.
  */
-import { useMemo, useRef, type JSX, type RefObject } from 'react';
+import { useMemo, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { DungeonPlanDto, EnrichedDungeonQuestDto, SuggestedGroupDto, WowInstanceDto } from '@raid-ledger/contract';
 import type { HubCtx } from '../../../hub-module';
@@ -83,6 +83,14 @@ function useOpenGroup(s: PlannerState): { root: RefObject<HTMLDivElement | null>
     return { root, openGroup };
 }
 
+/** Phone Create-event bar, docked above the bottom tab bar while the planner is on screen. */
+function PlannerMobileBar({ children }: { children: ReactNode }): JSX.Element {
+    return (
+        <div data-testid="planner-mobile-actions"
+            className="sticky bottom-[var(--bottom-nav-clearance)] z-10 -mx-4 border-y border-edge bg-surface p-3 md:bottom-0">{children}</div>
+    );
+}
+
 /** The tab body (default export: `dungeonPlannerTab` lazy-loads it). */
 export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.Element {
     const desktop = useMediaQuery('(min-width: 1024px)');
@@ -110,10 +118,7 @@ export default function DungeonPlannerTab({ page }: Pick<HubCtx, 'page'>): JSX.E
                     <PlannerColumns s={s} instances={instances} plan={plan} marks={marks} desktop={desktop}
                         enriched={s.instanceId === null ? undefined : enriched.data?.get(s.instanceId)} enrichedError={enriched.isError} />
                 </div>
-                {!desktop && (
-                    <div data-testid="planner-mobile-actions"
-                        className="sticky bottom-[var(--bottom-nav-clearance)] z-10 -mx-4 border-y border-edge bg-surface p-3 md:bottom-0">{actions}</div>
-                )}
+                {!desktop && <PlannerMobileBar>{actions}</PlannerMobileBar>}
             </div>
             <div className="mt-4"><SuggestedGroupsSection page={page} onOpenInPlanner={openGroup} /></div>
         </div>
