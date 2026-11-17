@@ -281,7 +281,7 @@ export class EventsService {
     inviterId: number,
     isAdmin: boolean,
     discordId: string,
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; alreadyInvited: boolean }> {
     const event = await this.findOne(eventId);
     return inviteMemberToEvent(
       {

@@ -19,9 +19,9 @@ import { isEventSignup } from '../guilds/forum/event-discussion/event-discussion
 import { canManageEvent } from './pugs-visibility.helpers';
 import {
   assertEventOpenForInvites,
-  hasPendingMemberInvite,
   MEMBER_INVITE_TITLE,
 } from './event-invite-state.helpers';
+import { claimMemberInvite } from './event-invite-claim.helpers';
 
 export type UserBasic = { id: number; username: string };
 
@@ -117,7 +117,7 @@ export async function inviteMemberFlow(
   eventId: number,
   inviterId: number,
   discordId: string,
-): Promise<{ message: string; targetUser: UserBasic }> {
+): Promise<{ message: string; targetUser: UserBasic; sent: boolean }> {
   const targetUser = await findUserByDiscordId(db, discordId);
   const inviterName = await getInviterUsername(db, inviterId);
   const sent = await inviteUserToEvent(
@@ -133,14 +133,16 @@ export async function inviteMemberFlow(
   const message = sent
     ? `Invite sent to ${targetUser.username}`
     : `${targetUser.username} already has an invite to this event`;
-  return { message, targetUser };
+  return { message, targetUser, sent };
 }
 
 /**
  * User-keyed invite (ROK-2215): refuses a user already signed up (400), then
  * creates the notification and emits the Discord DM event. ROK-2217: a user
  * who already holds an unanswered invite to this event is skipped (no second
- * DM) and the call resolves `false`; `true` means an invite went out.
+ * DM) and the call resolves `false`; `true` means an invite went out. The
+ * check and the insert are one locked claim (event-invite-claim.helpers.ts),
+ * and the DM is emitted only after that claim has committed.
  */
 export async function inviteUserToEvent(
   db: PostgresJsDatabase<typeof schema>,
@@ -153,17 +155,39 @@ export async function inviteUserToEvent(
   discordId: string,
 ): Promise<boolean> {
   await assertNotSignedUp(db, eventId, targetUser);
-  if (await hasPendingMemberInvite(db, eventId, targetUser.id)) return false;
-  await emitMemberInvite(
-    notificationService,
-    eventEmitter,
-    event,
+  const claim = await claimMemberInvite(db, notificationService, {
     eventId,
-    targetUser,
+    userId: targetUser.id,
     inviterName,
-    discordId,
-  );
+    eventTitle: event.title,
+  });
+  if (!claim.claimed) return false;
+  if (claim.notificationId) {
+    emitInviteCreated(
+      eventEmitter,
+      event,
+      eventId,
+      discordId,
+      claim.notificationId,
+    );
+  }
   return true;
+}
+
+/** Emits the event the Discord bot turns into the invite DM. */
+function emitInviteCreated(
+  eventEmitter: EventEmitter2,
+  event: EventResponseDto,
+  eventId: number,
+  discordId: string,
+  notificationId: string,
+): void {
+  eventEmitter.emit(MEMBER_INVITE_EVENTS.CREATED, {
+    eventId,
+    targetDiscordId: discordId,
+    notificationId,
+    gameId: event.game?.id ?? null,
+  } satisfies MemberInviteCreatedPayload);
 }
 
 /** Creates the invite notification and emits a Discord event if needed. */
@@ -185,12 +209,7 @@ export async function emitMemberInvite(
     skipDiscord: true,
   });
   if (notification) {
-    eventEmitter.emit(MEMBER_INVITE_EVENTS.CREATED, {
-      eventId,
-      targetDiscordId: discordId,
-      notificationId: notification.id,
-      gameId: event.game?.id ?? null,
-    } satisfies MemberInviteCreatedPayload);
+    emitInviteCreated(eventEmitter, event, eventId, discordId, notification.id);
   }
 }
 
@@ -209,7 +228,7 @@ export async function inviteMemberToEvent(
   eventId: number,
   inviter: { id: number; isAdmin: boolean },
   discordId: string,
-): Promise<{ message: string }> {
+): Promise<{ message: string; alreadyInvited: boolean }> {
   await assertCanInviteMembers(deps.db, event, inviter.id, inviter.isAdmin);
   assertEventOpenForInvites(event);
   const inviterId = inviter.id;
@@ -225,5 +244,5 @@ export async function inviteMemberToEvent(
   deps.logger.log(
     `User ${inviterId} invited ${result.targetUser.username} to event ${eventId}`,
   );
-  return { message: result.message };
+  return { message: result.message, alreadyInvited: !result.sent };
 }

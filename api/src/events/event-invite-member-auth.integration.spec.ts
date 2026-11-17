@@ -8,6 +8,8 @@
  * member is skipped (201, no second notification/DM).
  */
 import { and, eq } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { MEMBER_INVITE_EVENTS } from '../discord-bot/discord-bot.constants';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -232,12 +234,44 @@ async function testRepeatInviteSkipped() {
   expect({
     statuses: [first.status, again.status, byAdmin.status],
     repeatMessage: again.body.message,
+    alreadyInvited: [first.body.alreadyInvited, again.body.alreadyInvited],
     invites: await inviteCount(invitee.userId),
   }).toEqual({
     statuses: [201, 201, 201],
     repeatMessage: 'invitee_2217 already has an invite to this event',
+    alreadyInvited: [false, true],
     invites: 1,
   });
+}
+
+/** Codex P2: two simultaneous invites to one member claim it exactly once. */
+async function testConcurrentInvitesClaimOnce() {
+  const eventId = await createFutureEvent(testApp, adminToken);
+  const invitee = await seedInvitee();
+  const emitter = testApp.app.get(EventEmitter2, { strict: false });
+  const emitSpy = jest.spyOn(emitter, 'emit');
+  try {
+    const [a, b] = await Promise.all([
+      inviteAs(adminToken, eventId, invitee.discordId),
+      inviteAs(adminToken, eventId, invitee.discordId),
+    ]);
+    const dms = emitSpy.mock.calls.filter(
+      ([name]) => name === MEMBER_INVITE_EVENTS.CREATED,
+    ).length;
+    expect({
+      statuses: [a.status, b.status],
+      alreadyInvited: [a.body.alreadyInvited, b.body.alreadyInvited].sort(),
+      invites: await inviteCount(invitee.userId),
+      dms,
+    }).toEqual({
+      statuses: [201, 201],
+      alreadyInvited: [false, true],
+      invites: 1,
+      dms: 1,
+    });
+  } finally {
+    emitSpy.mockRestore();
+  }
 }
 
 describe('ROK-2217 POST /events/:id/invite-member authorisation', () => {
@@ -263,4 +297,6 @@ describe('ROK-2217 POST /events/:id/invite-member authorisation', () => {
     testClosedEvent({ duration: endedDuration() }, INVITE_EVENT_ENDED_MESSAGE));
   it('a repeat invite to the same member is skipped — no second DM', () =>
     testRepeatInviteSkipped());
+  it('two concurrent invites to one member send one DM', () =>
+    testConcurrentInvitesClaimOnce());
 });

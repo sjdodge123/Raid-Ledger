@@ -256,7 +256,7 @@ export class EventsController {
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
     @Body() body: { discordId?: string },
-  ): Promise<{ message: string }> {
+  ): Promise<{ message: string; alreadyInvited: boolean }> {
     if (!body.discordId || typeof body.discordId !== 'string') {
       throw new BadRequestException('discordId is required');
     }
