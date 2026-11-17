@@ -1,3 +1,5 @@
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
@@ -169,6 +171,21 @@ describe('NotificationDedupService.checkAndMarkSentMany (ROK-2252)', () => {
     expect(won).toEqual(new Set(['k:1']));
     expect(s.redis.mget).toHaveBeenCalledWith('k:1');
     expect(s.pipeline.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('locks keys in one sorted order whatever order they arrive in (Codex P2)', async () => {
+    const s = buildBatchStores({ inserted: ['k:1', 'k:2', 'k:3'] });
+    await s.service.checkAndMarkSentMany(['k:3', 'k:1', 'k:2'], 60);
+    const dialect = new PgDialect();
+    const keyParams = s.execute.mock.calls.map(([query]) =>
+      dialect
+        .sqlToQuery(query as SQL)
+        .params.filter((p) => typeof p === 'string' && p.startsWith('k:')),
+    );
+    const sorted = ['k:1', 'k:2', 'k:3'];
+    // SELECT, DELETE and INSERT all see the keys sorted.
+    expect(keyParams).toEqual([sorted, sorted, sorted]);
+    expect(s.redis.mget).toHaveBeenCalledWith(...sorted);
   });
 
   it('won claims whose Redis warm fails are still returned (ROK-2100 Codex P2)', async () => {

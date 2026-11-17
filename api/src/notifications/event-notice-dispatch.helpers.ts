@@ -62,10 +62,7 @@ export interface EventNoticeCopy {
 /** Who `sendEventNotices` writes through and claims against. */
 export interface EventNoticeDeps {
   notifications: Pick<NotificationService, 'createMany'>;
-  dedup: Pick<
-    NotificationDedupService,
-    'checkAndMarkSentMany' | 'releaseKeys'
-  >;
+  dedup: Pick<NotificationDedupService, 'checkAndMarkSentMany' | 'releaseKeys'>;
 }
 
 type Outcome = PromiseSettledResult<boolean>;
@@ -134,6 +131,8 @@ async function claimEventNotices(
  * One `createMany` for every claimed notice. A notice `createMany` skipped
  * (its type's in-app channel is off) or a batch that threw gives its claim
  * back, exactly as the per-notice path (`sendClaimedEventNotice`) does.
+ * Outcomes are keyed by userId: valid only while `planEventNotices` plans at
+ * most one notice per user.
  */
 async function createClaimedNotices(
   deps: EventNoticeDeps,

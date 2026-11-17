@@ -63,7 +63,7 @@ export class NotificationDedupService {
    * @param ttlSeconds - TTL in seconds, or null for permanent dedup.
    * @returns The keys THIS call newly claimed (caller should send these).
    */
-  async checkAndMarkSentMany(
+  checkAndMarkSentMany(
     dedupKeys: readonly string[],
     ttlSeconds: number | null,
   ): Promise<Set<string>> {

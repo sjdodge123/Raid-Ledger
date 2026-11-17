@@ -22,7 +22,7 @@ export interface DedupBatchStores {
 /**
  * Claim every key not already sent.
  *
- * @param keys - Dedup keys; duplicates are claimed once.
+ * @param keys - Dedup keys; duplicates are claimed once, in sorted order.
  * @param ttlSeconds - TTL in seconds, or null for a permanent claim.
  * @returns The keys THIS call newly claimed (the caller should send these).
  */
@@ -31,7 +31,10 @@ export async function claimDedupKeys(
   keys: readonly string[],
   ttlSeconds: number | null,
 ): Promise<Set<string>> {
-  const unique = [...new Set(keys)];
+  // Sorted so every concurrent claimer locks rows in the same order: two
+  // multi-row INSERT/DELETEs over overlapping keys in different orders can
+  // deadlock (ROK-2252 Codex P2).
+  const unique = [...new Set(keys)].sort();
   if (unique.length === 0) return new Set();
   const cached = await stores.redis.mget(...unique);
   const misses = unique.filter((_, i) => !cached[i]);
