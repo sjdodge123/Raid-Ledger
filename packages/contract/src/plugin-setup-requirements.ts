@@ -105,7 +105,7 @@ export const MINECRAFT_SETUP = {
       kind: 'pelican_egg',
       title: 'A Minecraft server on Pelican, mapped to its edition',
       instructions:
-        '1. Run the server on your Pelican panel: the Paper or Vanilla Minecraft egg for Java Edition, the Vanilla Bedrock egg for Bedrock Edition.\n2. Install and connect the Pelican plugin.\n3. In Admin → Integrations → Pelican Panel, map the server to Minecraft: Java Edition or Minecraft: Bedrock Edition and bind it to a game-server hub.',
+        '1. Run the server on your Pelican panel: the Paper or Vanilla Minecraft egg for Java Edition, the Vanilla Bedrock egg for Bedrock Edition.\n2. Install and connect the Pelican plugin.\n3. In Admin → Integrations → Pelican Panel, map a Java server to the game Minecraft and a Bedrock server to Minecraft: Bedrock Edition, then bind it to a game-server hub.',
       required: true,
       appliesTo: ['game_server'],
       pelican: { eggHint: 'Paper or Vanilla Minecraft (Java), or Vanilla Bedrock' },
@@ -125,7 +125,7 @@ export const MINECRAFT_SETUP = {
       kind: 'pelican_variable',
       title: 'Turn on the query port (Java, optional)',
       instructions:
-        "1. In the Java server's `server.properties`, set `enable-query=true` (and `query.port`, if it should differ from the server port).\n2. Restart the server. Bedrock servers answer status pings without it.",
+        "Optional: lets Raid Ledger read the full player list of a Java server (a status ping only returns a sample of names).\n1. In the Java server's `server.properties`, set `enable-query=true` (and `query.port`, if it should differ from the server port).\n2. Restart the server. Bedrock servers answer status pings without it.",
       required: false,
       appliesTo: ['game_server'],
       pelican: { files: ['server.properties'] },
