@@ -13,6 +13,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { Job } from 'bullmq';
 import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
+import { isExpectedRetry } from '../../sentry/sentry-expected-retry.helpers';
 
 const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
 const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
@@ -243,6 +244,26 @@ describe('EmbedSyncProcessor — description update: skip conditions', () => {
     );
 
     expect(scheduledEventService.updateDescription).not.toHaveBeenCalled();
+  });
+
+  // ROK-2253: the throw exists only so BullMQ retries; Sentry must not see it
+  // until the final attempt, which still reports.
+  it.each([
+    [0, true],
+    [1, true],
+    [2, false],
+  ])('not connected, attemptsMade=%d of 3: marked %s', async (made, marked) => {
+    clientService.isConnected.mockReturnValue(false);
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+      attemptsMade: made,
+      opts: { attempts: 3 },
+    } as Job<EmbedSyncJobData>;
+
+    const err = await processor.process(job).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect(isExpectedRetry(err)).toBe(marked);
   });
 
   it('does not call updateDescription when no Discord message record exists', async () => {

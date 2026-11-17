@@ -8,6 +8,10 @@ import { GameAffinityNotificationService } from './game-affinity-notification.se
 import type { NotificationService } from './notification.service';
 import type { NotificationDedupService } from './notification-dedup.service';
 import type { HubNotificationService } from './hub-notification.service';
+import {
+  sendEventNotices,
+  type EventNoticeDeps,
+} from './event-notice-dispatch.helpers';
 import { findGameAffinityRecipients } from './game-affinity-recipients.helpers';
 import {
   findEventGuildId,
@@ -19,6 +23,7 @@ import {
   runFollowupFanout,
   type FollowupFanoutDeps,
 } from './post-event-followup-fanout.helpers';
+import { EVENT_NOTICE_TTL_SECONDS } from './event-notice-plan.helpers';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import type {
@@ -58,9 +63,16 @@ const input = {
 
 interface Harness {
   service: GameAffinityNotificationService;
-  create: jest.Mock;
-  releaseKey: jest.Mock;
+  /** ROK-2252: every event notice is written through one `createMany`. */
+  createMany: jest.Mock<
+    Promise<NotificationDto[]>,
+    [CreateNotificationInput[]]
+  >;
+  releaseKeys: jest.Mock;
+  /** ROK-2252: event notices claim every key in one call. */
+  claimMany: jest.Mock<Promise<Set<string>>, [readonly string[]]>;
   claimed: Set<string>;
+  deps: EventNoticeDeps;
 }
 
 function build(
@@ -68,10 +80,17 @@ function build(
   voice: Record<string, unknown> = {},
 ): Harness {
   const claimed = new Set<string>();
-  const create = jest.fn().mockResolvedValue({});
-  const releaseKey = jest.fn((k: string) => {
-    claimed.delete(k);
+  const createMany = jest.fn((rows: CreateNotificationInput[]) =>
+    Promise.resolve(rows.map(asCreated)),
+  );
+  const releaseKeys = jest.fn((keys: readonly string[]) => {
+    keys.forEach((k) => claimed.delete(k));
     return Promise.resolve();
+  });
+  const claimMany = jest.fn((keys: readonly string[]) => {
+    const won = new Set(keys.filter((k) => !claimed.has(k)));
+    won.forEach((k) => claimed.add(k));
+    return Promise.resolve(won);
   });
   const dedup = {
     checkAndMarkSent: jest.fn((k: string) => {
@@ -79,10 +98,11 @@ function build(
       claimed.add(k);
       return Promise.resolve(had);
     }),
-    releaseKey,
+    checkAndMarkSentMany: claimMany,
+    releaseKeys,
   } as unknown as NotificationDedupService;
   const notifications = {
-    create,
+    createMany,
     resolveVoiceForEvent: jest.fn().mockResolvedValue(voice),
   } as unknown as NotificationService;
   const hub = {
@@ -95,7 +115,8 @@ function build(
     dedup,
     hub,
   );
-  return { service, create, releaseKey, claimed };
+  const deps = { notifications, dedup };
+  return { service, createMany, releaseKeys, claimMany, claimed, deps };
 }
 
 /** The row `createMany` returns for an input it actually created. */
@@ -130,11 +151,13 @@ function fanoutDb(held: Set<string>): FollowupFanoutDeps['db'] {
   return { execute } as unknown as FollowupFanoutDeps['db'];
 }
 
-function sentTypes(create: jest.Mock): Array<[number, string]> {
-  return create.mock.calls.map((c: [{ userId: number; type: string }]) => [
-    c[0].userId,
-    c[0].type,
-  ]);
+/** Every row handed to `createMany`, across all of its calls, in order. */
+function sentRows(h: Harness): CreateNotificationInput[] {
+  return h.createMany.mock.calls.flatMap(([rows]) => rows);
+}
+
+function sentTypes(h: Harness): Array<[number, string]> {
+  return sentRows(h).map((r) => [r.userId, r.type]);
 }
 
 describe('GameAffinityNotificationService — merged event-notice plan', () => {
@@ -149,8 +172,8 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     guildOf.mockResolvedValue(null);
     const h = build([]);
     await h.service.notifyGameAffinity(input);
-    expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
-    expect(h.create.mock.calls[0]?.[0]).toMatchObject({
+    expect(sentTypes(h)).toEqual([[10, 'subscribed_game']]);
+    expect(sentRows(h)[0]).toMatchObject({
       message: 'Based on your interest in WoW',
     });
     expect(h.claimed.has('event-notice:1:user:10')).toBe(true);
@@ -161,8 +184,8 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     guildOf.mockResolvedValue(7);
     const h = build([20]);
     await h.service.notifyGameAffinity(input);
-    expect(sentTypes(h.create)).toEqual([[20, 'hub_event_tagged']]);
-    expect(h.create.mock.calls[0]?.[0]).toMatchObject({
+    expect(sentTypes(h)).toEqual([[20, 'hub_event_tagged']]);
+    expect(sentRows(h)[0]).toMatchObject({
       title: 'Molten Core',
       message: 'Tagged to Raiders',
       payload: {
@@ -180,7 +203,7 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     guildOf.mockResolvedValue(7);
     const h = build([30]);
     await h.service.notifyGameAffinity(input);
-    expect(sentTypes(h.create)).toEqual([[30, 'hub_event_tagged']]);
+    expect(sentTypes(h)).toEqual([[30, 'hub_event_tagged']]);
   });
 
   it('a group-muted affinity user (absent from the group set) gets the game copy', async () => {
@@ -188,7 +211,7 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     guildOf.mockResolvedValue(7);
     const h = build([]);
     await h.service.notifyGameAffinity(input);
-    expect(sentTypes(h.create)).toEqual([[40, 'subscribed_game']]);
+    expect(sentTypes(h)).toEqual([[40, 'subscribed_game']]);
   });
 
   it('a user with the group type off gets the game copy', async () => {
@@ -197,7 +220,7 @@ describe('GameAffinityNotificationService — merged event-notice plan', () => {
     typeOff.mockResolvedValue(new Set([50]));
     const h = build([50]);
     await h.service.notifyGameAffinity(input);
-    expect(sentTypes(h.create)).toEqual([[50, 'subscribed_game']]);
+    expect(sentTypes(h)).toEqual([[50, 'subscribed_game']]);
   });
 });
 
@@ -213,16 +236,17 @@ describe('GameAffinityNotificationService — per-user claim (D4)', () => {
     const h = build([]);
     h.claimed.add('event-notice:1:user:60');
     await h.service.notifyGameAffinity(input);
-    expect(h.create).not.toHaveBeenCalled();
+    expect(h.createMany).not.toHaveBeenCalled();
   });
 
   it('gives the per-user claim back when the send throws', async () => {
     affinity.mockResolvedValue([70]);
     guildOf.mockResolvedValue(null);
     const h = build([]);
-    h.create.mockRejectedValue(new Error('boom'));
+    h.createMany.mockRejectedValue(new Error('boom'));
     await h.service.notifyGameAffinity(input);
-    expect(h.releaseKey).toHaveBeenCalledWith('event-notice:1:user:70');
+    expect(h.releaseKeys).toHaveBeenCalledWith(['event-notice:1:user:70']);
+    expect(h.claimed.has('event-notice:1:user:70')).toBe(false);
   });
 });
 
@@ -240,7 +264,7 @@ describe('GameAffinityNotificationService — game-less events (ROK-1832 B2)', (
     const h = build([20, 21]);
     await h.service.notifyGameAffinity(gameless);
     expect(affinity).not.toHaveBeenCalled();
-    expect(sentTypes(h.create)).toEqual([
+    expect(sentTypes(h)).toEqual([
       [20, 'hub_event_tagged'],
       [21, 'hub_event_tagged'],
     ]);
@@ -250,7 +274,7 @@ describe('GameAffinityNotificationService — game-less events (ROK-1832 B2)', (
     guildOf.mockResolvedValue(null);
     const h = build([20]);
     await h.service.notifyGameAffinity(gameless);
-    expect(h.create).not.toHaveBeenCalled();
+    expect(h.createMany).not.toHaveBeenCalled();
     // The late-tag path (D6b) keys on this mark, so a later group tag notifies.
     expect([...h.claimed]).toEqual(['game-alert:event:1']);
   });
@@ -269,7 +293,7 @@ describe('GameAffinityNotificationService — follow-up attendees (ROK-1371)', (
     followups.mockResolvedValue([11, 12]);
     const h = build([]);
     await h.service.notifyGameAffinity({ ...input, followupForEventId: 50 });
-    expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
+    expect(sentTypes(h)).toEqual([[10, 'subscribed_game']]);
     expect([...h.claimed].sort()).toEqual([
       'event-notice:1:user:10',
       'game-alert:event:1',
@@ -318,7 +342,7 @@ describe('GameAffinityNotificationService — durable prior notices (Codex r4)',
       gameName: null,
       excludePriorNoticeHolders: true,
     });
-    expect(sentTypes(h.create)).toEqual([[21, 'hub_event_tagged']]);
+    expect(sentTypes(h)).toEqual([[21, 'hub_event_tagged']]);
     expect(h.claimed.has('event-notice:1:user:20')).toBe(true);
   });
 
@@ -328,7 +352,7 @@ describe('GameAffinityNotificationService — durable prior notices (Codex r4)',
     const h = build([]);
     await h.service.notifyGameAffinity(input);
     expect(priorHolders).not.toHaveBeenCalled();
-    expect(sentTypes(h.create)).toEqual([[10, 'subscribed_game']]);
+    expect(sentTypes(h)).toEqual([[10, 'subscribed_game']]);
   });
 });
 
@@ -356,7 +380,7 @@ describe('GameAffinityNotificationService — group-only scheduler send (Codex r
     expect(h.claimed.has('game-alert:event:1')).toBe(false);
     await h.service.notifyGameAffinity(input);
     // 10 is outside the group: only the full announcement reaches them.
-    expect(sentTypes(h.create)).toEqual([
+    expect(sentTypes(h)).toEqual([
       [20, 'hub_event_tagged'],
       [10, 'subscribed_game'],
     ]);
@@ -366,7 +390,7 @@ describe('GameAffinityNotificationService — group-only scheduler send (Codex r
     const h = build([20]);
     await h.service.notifyGameAffinity(input);
     await h.service.notifyGameAffinity(groupOnly);
-    expect(sentTypes(h.create)).toEqual([
+    expect(sentTypes(h)).toEqual([
       [20, 'hub_event_tagged'],
       [10, 'subscribed_game'],
     ]);
@@ -380,8 +404,98 @@ describe('GameAffinityNotificationService — planned temporary voice channel', 
     guildOf.mockResolvedValue(null);
     const h = build([], { plannedVoiceChannel: planned });
     await h.service.notifyGameAffinity(input);
-    expect(h.create.mock.calls[0]?.[0]).toMatchObject({
+    expect(sentRows(h)[0]).toMatchObject({
       payload: { plannedVoiceChannel: planned },
     });
+  });
+});
+
+describe('sendEventNotices — one batched write (ROK-2252)', () => {
+  const copy = { eventId: 1, title: 'MC', gameName: 'WoW', payload: {} };
+  const sent = { status: 'fulfilled', value: true };
+  const notSent = { status: 'fulfilled', value: false };
+
+  it('N recipients cost ONE createMany carrying N rows, each settled true', async () => {
+    const h = build([]);
+    const results = await sendEventNotices(h.deps, copy, [1, 2, 3], null);
+    expect(h.createMany).toHaveBeenCalledTimes(1);
+    expect(sentTypes(h)).toEqual([
+      [1, 'subscribed_game'],
+      [2, 'subscribed_game'],
+      [3, 'subscribed_game'],
+    ]);
+    expect(results).toEqual([sent, sent, sent]);
+  });
+
+  it('a user already noticed is left out of the batch and keeps their claim', async () => {
+    const h = build([]);
+    h.claimed.add('event-notice:1:user:2');
+    const results = await sendEventNotices(h.deps, copy, [1, 2], null);
+    expect(sentTypes(h)).toEqual([[1, 'subscribed_game']]);
+    expect(results).toEqual([sent, notSent]);
+    expect(h.releaseKeys).not.toHaveBeenCalled();
+    expect(h.claimed.has('event-notice:1:user:2')).toBe(true);
+  });
+
+  it('a row createMany skips (in-app off) settles false and gives its claim back', async () => {
+    const h = build([]);
+    h.createMany.mockImplementation((rows) =>
+      Promise.resolve(rows.filter((r) => r.userId !== 2).map(asCreated)),
+    );
+    const results = await sendEventNotices(h.deps, copy, [1, 2, 3], null);
+    expect(results).toEqual([sent, notSent, sent]);
+    expect(h.releaseKeys).toHaveBeenCalledTimes(1);
+    expect(h.releaseKeys).toHaveBeenCalledWith(['event-notice:1:user:2']);
+    expect([...h.claimed].sort()).toEqual([
+      'event-notice:1:user:1',
+      'event-notice:1:user:3',
+    ]);
+  });
+
+  it('a failed batch rejects every claimed notice and gives all claims back in one call', async () => {
+    const h = build([]);
+    h.claimed.add('event-notice:1:user:3');
+    h.createMany.mockRejectedValue(new Error('boom'));
+    const results = await sendEventNotices(h.deps, copy, [1, 2, 3], null);
+    expect(results.map((r) => r.status)).toEqual([
+      'rejected',
+      'rejected',
+      'fulfilled',
+    ]);
+    expect(h.releaseKeys).toHaveBeenCalledWith([
+      'event-notice:1:user:1',
+      'event-notice:1:user:2',
+    ]);
+    expect([...h.claimed]).toEqual(['event-notice:1:user:3']);
+  });
+
+  it('N recipients claim their keys in ONE dedup call, never per key', async () => {
+    const h = build([]);
+    await sendEventNotices(h.deps, copy, [1, 2, 3], null);
+    expect(h.claimMany).toHaveBeenCalledTimes(1);
+    expect(h.claimMany).toHaveBeenCalledWith(
+      [
+        'event-notice:1:user:1',
+        'event-notice:1:user:2',
+        'event-notice:1:user:3',
+      ],
+      EVENT_NOTICE_TTL_SECONDS,
+    );
+  });
+
+  it('a failed claim call rejects every notice and writes nothing', async () => {
+    const h = build([]);
+    h.claimMany.mockRejectedValueOnce(new Error('db down'));
+    const results = await sendEventNotices(h.deps, copy, [1, 2], null);
+    expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+    expect(h.createMany).not.toHaveBeenCalled();
+    expect(h.releaseKeys).not.toHaveBeenCalled();
+  });
+
+  it('nobody left to notice: no createMany at all', async () => {
+    const h = build([]);
+    h.claimed.add('event-notice:1:user:1');
+    expect(await sendEventNotices(h.deps, copy, [1], null)).toEqual([notSent]);
+    expect(h.createMany).not.toHaveBeenCalled();
   });
 });
