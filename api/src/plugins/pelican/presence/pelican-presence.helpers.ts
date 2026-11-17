@@ -1,4 +1,4 @@
-import type { GameLogParser } from '../../plugin-host/extension-points';
+import type { GameLogParserSession } from '../../plugin-host/extension-points';
 import type { GamePresenceEvent } from './presence-events';
 import type { PresenceChange, PresentPlayer } from './server-presence.tracker';
 import type { ServerPresencePlayer } from './server-presence.sink';
@@ -166,7 +166,7 @@ export function errName(err: unknown): string {
 export function safeParse(
   opts: {
     source: { pelicanServerId: number };
-    parser: GameLogParser;
+    parser: GameLogParserSession;
     logger: { warn(message: string): void };
   },
   line: string,

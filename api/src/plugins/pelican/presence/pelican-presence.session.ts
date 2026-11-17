@@ -13,11 +13,11 @@ import {
   PRESENCE_STOPPED_STATES,
   PRESENCE_UNREACHABLE_EMPTY_MS,
   ReplayWatermark,
-  safeParse,
   toPresentPlayers,
   toSinkPlayer,
 } from './pelican-presence.helpers';
 import { PresenceDeathRecorder } from './pelican-presence.deaths';
+import { PresenceLineParser } from './pelican-presence.line-parser';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
 import type { GamePresenceEvent } from './presence-events';
 import {
@@ -78,6 +78,8 @@ export class PelicanPresenceSession {
   private readonly watermark = new ReplayWatermark();
   private readonly stats = new LiveLineStats();
   private readonly deaths: PresenceDeathRecorder;
+  /** ROK-2233: this server's parser session (stateless parsers pass through). */
+  private readonly lines: PresenceLineParser;
   private readonly now: () => number;
   private socket: PelicanConsoleSocket | null = null;
   private replay: Buffered[] | null = null;
@@ -98,6 +100,7 @@ export class PelicanPresenceSession {
 
   constructor(private readonly opts: PresenceSessionOptions) {
     this.now = opts.now ?? Date.now;
+    this.lines = new PresenceLineParser(opts);
     this.deaths = new PresenceDeathRecorder({
       source: opts.source,
       sink: opts.deathSink,
@@ -131,7 +134,7 @@ export class PelicanPresenceSession {
       onLine: (line) => this.onLine(line),
       onStatus: (state) => this.onStatus(state),
       onUnreachable: (since) => this.onUnreachable(since),
-      onReachable: () => this.onReachable(),
+      onReachable: (reach) => this.onReachable(reach.refresh),
       ...(o.socketFactory ? { socketFactory: o.socketFactory } : {}),
       now: this.now,
     });
@@ -180,7 +183,7 @@ export class PelicanPresenceSession {
 
   private onLine(line: string): void {
     const mode = this.replay ? 'replay' : 'live';
-    const event = safeParse(this.opts, line);
+    const event = this.lines.parse(line);
     const admitted = event !== null && this.watermark.admit(event.loggedAt);
     if (mode === 'live') this.stats.record(event !== null, admitted);
     if (!event || !admitted) return;
@@ -215,7 +218,7 @@ export class PelicanPresenceSession {
     this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
   }
 
-  private onReachable(): void {
+  private onReachable(refresh: boolean): void {
     this.emptiedOutage = null;
     if (!this.cold) {
       this.opts.logger.log(
@@ -225,6 +228,9 @@ export class PelicanPresenceSession {
     // A re-auth inside the settle window: the buffered events already
     // advanced the watermark, so apply them now rather than drop them.
     this.flushReplay();
+    // ROK-2233: a token refresh keeps the parser's state (its replay may no
+    // longer hold the line that built it); a new connection starts afresh.
+    if (!refresh) this.lines.reset();
     this.watermark.beginPass();
     this.replay = [];
     this.armSettle();
@@ -278,6 +284,7 @@ export class PelicanPresenceSession {
   private onStatus(state: string): void {
     if (!PRESENCE_STOPPED_STATES.has(state)) return;
     this.flushReplay();
+    this.lines.reset();
     this.emptyAll(`status ${state}`);
   }
 
