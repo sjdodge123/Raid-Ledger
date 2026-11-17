@@ -8,6 +8,11 @@
  *       and `<base>_tpl` is recreated each run (rows left in it never reach
  *       new clones).
  * AC 4: setup never drops, migrates or truncates the base.
+ *
+ * Runs only under RL_INTEGRATION_WORKERS >= 2: each test migrates a fresh
+ * template (~3 full migrations per file), which is pure cost on a flag-off
+ * shard where the per-worker path is never taken. At 1 worker the block is
+ * skipped with the reason in its title and starts no test app.
  */
 import postgres from 'postgres';
 import { getTestApp } from './test-app';
@@ -16,6 +21,7 @@ import {
   databaseName,
   prepareTemplateDb,
   templateDbName,
+  requestedWorkers,
   withDatabase,
 } from './integration-worker-dbs';
 import { at } from './narrow';
@@ -87,7 +93,7 @@ async function cloneState(
   return states;
 }
 
-beforeAll(async () => {
+async function createScratchBase(): Promise<void> {
   serverUrl = (await getTestApp()).connectionString;
   baseUrl = withDatabase(serverUrl, BASE);
   await dropScratchDbs();
@@ -98,13 +104,19 @@ beforeAll(async () => {
     await sql`CREATE TABLE base_marker (id int PRIMARY KEY)`;
     await sql`INSERT INTO base_marker VALUES (1)`;
   });
-}, 60_000);
+}
 
-afterAll(async () => {
-  if (serverUrl) await dropScratchDbs();
-});
+const perWorker = requestedWorkers() > 1;
+const run = perWorker ? describe : describe.skip;
+const reason = perWorker ? '' : ' [skipped: RL_INTEGRATION_WORKERS < 2]';
 
-describe('ROK-2206 per-worker DB setup (real Postgres)', () => {
+run(`ROK-2206 per-worker DB setup (real Postgres)${reason}`, () => {
+  beforeAll(createScratchBase, 60_000);
+
+  afterAll(async () => {
+    if (serverUrl) await dropScratchDbs();
+  });
+
   it(
     'clones a migrated template that carries nothing from the base, and leaves the base as it was (AC 3, AC 4)',
     async () => {
