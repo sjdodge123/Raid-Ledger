@@ -42,4 +42,25 @@ describe('isIntentionalUnavailable', () => {
       false,
     ]);
   });
+  it('treats a 503 whose getResponse throws as not intentional instead of throwing', () => {
+    const exception = new HttpException({ error: 'no_snapshot_yet' }, 503);
+    Object.defineProperty(exception, 'getResponse', {
+      value: () => {
+        throw new Error('getResponse exploded');
+      },
+    });
+    // beforeSend must not throw, or Sentry loses the real event.
+    expect(() => isIntentionalUnavailable(exception)).not.toThrow();
+    expect(isIntentionalUnavailable(exception)).toBe(false);
+  });
+
+  it('treats a throwing getStatus as not intentional', () => {
+    const exception = {
+      getStatus: (): number => {
+        throw new Error('getStatus exploded');
+      },
+      getResponse: () => ({ error: 'no_snapshot_yet' }),
+    };
+    expect(isIntentionalUnavailable(exception)).toBe(false);
+  });
 });

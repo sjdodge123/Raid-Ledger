@@ -22,12 +22,20 @@ export const INTENTIONAL_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
 
 const SERVICE_UNAVAILABLE = 503;
 
-/** Calls a zero-arg method on `target` when it exists; undefined otherwise. */
+/**
+ * Calls a zero-arg method on `target` when it exists; undefined otherwise.
+ * Never throws: this runs inside Sentry's `beforeSend`, where a throw would
+ * lose the real event — a throwing getter just means "not intentional".
+ */
 function callMethod(target: object, name: string): unknown {
-  const fn: unknown = Reflect.get(target, name);
-  if (typeof fn !== 'function') return undefined;
-  const result: unknown = fn.call(target);
-  return result;
+  try {
+    const fn: unknown = Reflect.get(target, name);
+    if (typeof fn !== 'function') return undefined;
+    const result: unknown = fn.call(target);
+    return result;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
