@@ -81,12 +81,7 @@ function buildSignupCountSubquery(
       count: sql<number>`count(*)`.as('signup_count'),
     })
     .from(schema.eventSignups)
-    .where(
-      and(
-        inArray(schema.eventSignups.eventId, ids),
-        activeSignup,
-      ),
-    )
+    .where(and(inArray(schema.eventSignups.eventId, ids), activeSignup))
     .groupBy(schema.eventSignups.eventId)
     .as('signup_counts');
 }
