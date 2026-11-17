@@ -311,7 +311,8 @@ export class HubForumService {
     const replies = page.records.map((r) => this.replyView(ctx, r, now));
     const live = record.thread.deletedAt === null;
     const ev = record.event ?? null;
-    const signups = ev ? await countEventSignups(this.db, ev.id) : undefined;
+    const signups =
+      live && ev ? await countEventSignups(this.db, ev.id) : undefined;
     return toForumThread(record, can, {
       replies,
       nextReplyCursor: encoded(page.next),
