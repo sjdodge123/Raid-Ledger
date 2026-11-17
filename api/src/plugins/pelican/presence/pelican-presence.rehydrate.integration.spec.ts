@@ -14,7 +14,7 @@ import * as schema from '../../../drizzle/schema';
 import { AdHocParticipantService } from '../../../discord-bot/services/ad-hoc-participant.service';
 import { SettingsService } from '../../../settings/settings.service';
 import { PelicanPresenceSession } from './pelican-presence.session';
-import { steamPlayer } from './presence-events';
+import { steamPlayer, type PlayerRef } from './presence-events';
 import {
   fakeLogger,
   fakeParser,
@@ -36,6 +36,8 @@ const t = schema.adHocParticipants;
 const STEAM_A = '76561198000000221';
 const STEAM_B = '76561198000000222';
 const STEAM_C = '76561198000000223';
+/** ROK-2232: one digit string used as both an XUID and a SteamID64. */
+const SHARED_DIGITS = '76561198000000224';
 
 let testApp: TestApp;
 let sink: ServerPresenceSink;
@@ -81,7 +83,7 @@ async function seedLinkedOnServer(
     'user',
   );
   await testApp.app.get(AdHocParticipantService).addServerParticipant(eventId, {
-    steamId: STEAM_A,
+    ...steamPlayer(STEAM_A),
     displayName: 'rok',
     userId: user.id,
     pelicanServerId: src.pelicanServerId,
@@ -147,7 +149,7 @@ describe('Presence session rehydrate — linked character names (ROK-1822)', () 
     await session.start();
     await session.idle();
 
-    expect(session.players().map((p) => [p.steamId, p.name])).toEqual([
+    expect(session.players().map((p) => [p.playerId, p.name])).toEqual([
       [STEAM_A, 'rok'],
     ]);
     await session.stop(false);
@@ -177,7 +179,7 @@ describe('Presence session rehydrate — linked character names (ROK-1822)', () 
     wings.authenticate();
     await session.idle();
 
-    expect(session.players().map((p) => [p.steamId, p.name])).toEqual([
+    expect(session.players().map((p) => [p.playerId, p.name])).toEqual([
       [STEAM_A, 'rok'],
     ]);
     expect(await steamRows(eventId, STEAM_B)).toEqual([]);
@@ -218,7 +220,7 @@ describe('Presence session rehydrate — character owner ids (ROK-1822 r3)', () 
     wings.authenticate();
     await session.idle();
 
-    expect(session.players().map((p) => [p.steamId, p.name])).toEqual([
+    expect(session.players().map((p) => [p.playerId, p.name])).toEqual([
       [STEAM_A, 'rok'],
       [STEAM_B, 'rok'],
     ]);
@@ -321,7 +323,7 @@ describe('Presence session — a cold replay enrol persists the character owner 
     // Rehydrate reads open rows without an ORDER BY, so compare by SteamID.
     const roster = second.session
       .players()
-      .map((p) => [p.steamId, p.name])
+      .map((p) => [p.playerId, p.name])
       .sort(([a], [b]) => String(a).localeCompare(String(b)));
     expect(roster).toEqual([
       [STEAM_A, 'rok'],
@@ -331,5 +333,68 @@ describe('Presence session — a cold replay enrol persists the character owner 
     expect(await owners(STEAM_C)).toEqual([['bob', 'zdo-owner-c']]);
     expect(await owners(STEAM_B)).toEqual([['bob', 'zdo-owner-b']]);
     await second.session.stop(false);
+  });
+});
+
+describe('Presence session rehydrate — non-Steam participants (ROK-2232)', () => {
+  const xuidPlayer: PlayerRef = { playerId: SHARED_DIGITS, idKind: 'xuid' };
+
+  /** An anonymous server participant on `src`, through the real write path. */
+  const seatAnonymous =
+    (src: ServerPresenceSource, eventId: number) =>
+    async (ref: PlayerRef, displayName: string) =>
+      testApp.app.get(AdHocParticipantService).addServerParticipant(eventId, {
+        ...ref,
+        displayName,
+        userId: null,
+        pelicanServerId: src.pelicanServerId,
+      });
+
+  it('an anonymous XUID participant rehydrates as present after a restart, distinct from a same-digit SteamID', async () => {
+    const src = newSource();
+    const eventId = await seedLiveEvent(src);
+    const seat = seatAnonymous(src, eventId);
+    expect(await seat(xuidPlayer, 'Astrid')).toBe('inserted');
+    expect(await seat(steamPlayer(SHARED_DIGITS), 'Bjorn')).toBe('inserted');
+
+    // The XUID is stored under its own kind and never as a SteamID.
+    const stored = await testApp.db
+      .select({ steamId: t.steamId, playerId: t.playerId, idKind: t.idKind })
+      .from(t)
+      .where(eq(t.eventId, eventId));
+    const byKind = (
+      a: { idKind: string | null },
+      b: { idKind: string | null },
+    ) => String(a.idKind).localeCompare(String(b.idKind));
+    expect(stored.sort(byKind)).toEqual([
+      { steamId: SHARED_DIGITS, playerId: SHARED_DIGITS, idKind: 'steam' },
+      { steamId: null, playerId: SHARED_DIGITS, idKind: 'xuid' },
+    ]);
+
+    // A fresh session with no console lines: everything it holds is rehydrated.
+    const { session } = startSession(src);
+    await session.start();
+    await session.idle();
+    const present = session
+      .players()
+      .map((p) => [p.idKind, p.playerId, p.name])
+      .sort(([a], [b]) => String(a).localeCompare(String(b)));
+    expect(present).toEqual([
+      ['steam', SHARED_DIGITS, 'Bjorn'],
+      ['xuid', SHARED_DIGITS, 'Astrid'],
+    ]);
+    await session.stop(false);
+
+    // The roster DTO carries the platform id + kind (additive contract fields).
+    const roster = await testApp.app
+      .get(AdHocParticipantService)
+      .getRoster(eventId);
+    const dto = roster
+      .map((r) => [r.idKind, r.playerId, r.steamId ?? null, r.discordUserId])
+      .sort(([a], [b]) => String(a).localeCompare(String(b)));
+    expect(dto).toEqual([
+      ['steam', SHARED_DIGITS, SHARED_DIGITS, null],
+      ['xuid', SHARED_DIGITS, null, null],
+    ]);
   });
 });
