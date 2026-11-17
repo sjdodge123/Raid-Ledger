@@ -35,6 +35,8 @@ const PENDING_MIGRATION: readonly string[] = [];
 const ALLOWED: Readonly<Record<string, string>> = {
   'web/src/plugins/wow/hub/dungeon-planner/dungeon-planner-tab.fixtures.ts':
     'test-only MSW fixture (imported only by dungeon-planner *.test.tsx); its Deadmines levels stand in for a catalogue row (ROK-2216)',
+  'web/src/plugins/wow/hub/suggested-groups/suggested-groups.fixtures.ts':
+    'test-only MSW fixture (imported only by suggested-groups / dungeon-planner *.test.ts(x)); its dungeon levels stand in for a catalogue row (ROK-2212)',
 };
 
 function walk(dir: string): string[] {
