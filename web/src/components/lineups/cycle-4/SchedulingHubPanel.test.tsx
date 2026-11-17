@@ -69,4 +69,18 @@ describe('SchedulingHubPanel (ROK-1893 P3)', () => {
         renderWithProviders(<SchedulingHubPanel poll={buildPoll(HUB)} lineupId={40} matchId={41} />);
         expect(screen.queryByRole('button', { name: 'Join hub' }), 'signed-out viewers cannot join').toBeNull();
     });
+    it('ROK-2212: an outsider on a guild-hub poll gets a link to the guild hub page, never Join hub', () => {
+        const guild = { ...HUB, name: 'Ashen Vanguard', kind: 'wow_guild' as const };
+        renderWithProviders(<SchedulingHubPanel poll={buildPoll(guild)} lineupId={40} matchId={41} />);
+        expect(screen.queryByRole('button', { name: 'Join hub' }), 'a guild hub cannot be joined from the poll').toBeNull();
+        expect(screen.queryByTestId('scheduling-hub-join'), 'no community join card on a guild hub').toBeNull();
+        const card = screen.getByTestId('scheduling-hub-guild');
+        expect(within(card).getByRole('link', { name: 'its hub page' })).toHaveAttribute('href', '/hubs/7');
+    });
+
+    it('ROK-2212: a community hub (explicit kind) still offers Join hub', () => {
+        renderWithProviders(<SchedulingHubPanel poll={buildPoll({ ...HUB, kind: 'game_community' })} lineupId={40} matchId={41} />);
+        expect(screen.getByRole('button', { name: 'Join hub' })).toBeInTheDocument();
+        expect(screen.queryByTestId('scheduling-hub-guild')).toBeNull();
+    });
 });

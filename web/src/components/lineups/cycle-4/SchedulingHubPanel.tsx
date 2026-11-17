@@ -5,6 +5,9 @@
  * signed-in viewer who isn't a member — a Join hub card that uses the hub's
  * own join mutation and then refetches this poll. Renders nothing on an
  * untagged poll (or one whose hub is hidden — the API sends `hub: null`).
+ * ROK-2212: only a community hub can be joined from here — a guild hub is
+ * joined by claiming a roster character, so its non-members get a link to the
+ * guild's hub page instead (absent `kind` = an older server = community).
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -44,6 +47,22 @@ function JoinHubCard({ hub, voted, onJoined }: { hub: PollHub; voted: boolean; o
     );
 }
 
+function GuildHubCard({ hub }: { hub: PollHub }): JSX.Element {
+    return (
+        <div className="rounded-lg border border-edge bg-surface p-3" data-testid="scheduling-hub-guild">
+            <p className="text-sm text-secondary">
+                {hub.name} is a guild hub — claim a character on{' '}
+                <Link to={`/hubs/${hub.id}`} className="text-foreground underline hover:no-underline">its hub page</Link> to join.
+            </p>
+        </div>
+    );
+}
+
+function NonMemberCard({ hub, voted, onJoined }: { hub: PollHub; voted: boolean; onJoined: () => void }): JSX.Element {
+    const isCommunity = (hub.kind ?? 'game_community') === 'game_community';
+    return isCommunity ? <JoinHubCard hub={hub} voted={voted} onJoined={onJoined} /> : <GuildHubCard hub={hub} />;
+}
+
 export function SchedulingHubPanel({ poll, lineupId, matchId }: {
     poll: SchedulePollPageResponseDto; lineupId: number; matchId: number;
 }): JSX.Element | null {
@@ -60,7 +79,7 @@ export function SchedulingHubPanel({ poll, lineupId, matchId }: {
                 Hub: <Link to={`/hubs/${hub.id}`} className="text-foreground underline hover:no-underline">{hub.name}</Link>
             </p>
             <VoterChips voters={voters} />
-            {user && !hub.viewerIsMember && <JoinHubCard hub={hub} voted={voted} onJoined={refetch} />}
+            {user && !hub.viewerIsMember && <NonMemberCard hub={hub} voted={voted} onJoined={refetch} />}
         </div>
     );
 }
