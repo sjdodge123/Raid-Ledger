@@ -135,3 +135,39 @@ describe('HubForumDiscordService.bind — per-guild serializer (W1)', () => {
     ]);
   });
 });
+
+describe('HubForumDiscordService.unbind — delete under the bind lock (M1)', () => {
+  it('a bind joining the managed forum mid-unbind keeps it alive', async () => {
+    const store = fakeStore();
+    const { gw, created, gateway } = fakeGateway(store);
+    const svc = makeService(gateway);
+    const madeFirst = svc.bind(actor, 101, SHARED);
+    created.resolve(forumInfo('chan-1'));
+    await madeFirst;
+    const held = deferred<ForumInfo>();
+    gw.fetchForum.mockImplementationOnce(() => held.promise);
+
+    const join = svc.bind(actor, 102, SHARED);
+    await settle(); // hub 102 picked chan-1 and waits on Discord
+    const leave = svc.unbind(101, true);
+    await settle();
+    expect(gw.deleteForum).not.toHaveBeenCalled();
+
+    held.resolve(forumInfo('chan-1'));
+    await Promise.all([join, leave]);
+    expect(gw.deleteForum).not.toHaveBeenCalled();
+    expect(store.binds.map((b) => b.guildId)).toEqual([102]);
+  });
+
+  it('still deletes a managed forum nobody binds any more', async () => {
+    const store = fakeStore();
+    const { gw, created, gateway } = fakeGateway(store);
+    const svc = makeService(gateway);
+    const bound = svc.bind(actor, 101, SHARED);
+    created.resolve(forumInfo('chan-1'));
+    await bound;
+    await svc.unbind(101, true);
+    expect(gw.deleteForum).toHaveBeenCalledWith('chan-1');
+    expect(q.deleteForumRow).toHaveBeenCalledWith(db, 1);
+  });
+});

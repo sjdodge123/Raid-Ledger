@@ -151,10 +151,15 @@ export class HubForumDiscordService {
     await deleteBinding(this.db, guildId);
     this.routes.invalidate(); // D9: an unbound hub stops syncing now
     if (!deleteForum || !row.forum.managed) return;
-    if ((await listForumBindings(this.db, row.forum.id)).length > 0) return;
-    if (this.gateway.guildId() === null) return;
-    await this.gateway.deleteForum(row.forum.channelId);
-    await deleteForumRow(this.db, row.forum.id);
+    // Review M1: under the bind lock, so a bind that just picked this forum
+    // lands (and keeps it) before the "nobody uses it" check runs.
+    const { discordGuildId, id, channelId } = row.forum;
+    await this.binds.run(discordGuildId, async () => {
+      if ((await listForumBindings(this.db, id)).length > 0) return;
+      if (this.gateway.guildId() === null) return;
+      await this.gateway.deleteForum(channelId);
+      await deleteForumRow(this.db, id);
+    });
   }
 
   /** R9: one webhook per forum; store its id (OQ-9: never the token). */
