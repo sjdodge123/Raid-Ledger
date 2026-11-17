@@ -165,9 +165,7 @@ export const hubForumDiscordNotices = pgTable(
   {
     discordThreadId: varchar('discord_thread_id', { length: 32 }).primaryKey(),
     forumId: integer('forum_id').notNull(),
-    sentAt: timestamp('sent_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    sentAt: timestamp('sent_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index('idx_hub_forum_discord_notices_forum_id').on(table.forumId),
