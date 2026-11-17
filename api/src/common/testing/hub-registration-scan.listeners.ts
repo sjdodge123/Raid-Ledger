@@ -43,7 +43,7 @@ function kindedListener(
   src: ScanSource,
   idExpr: string,
   kindExpr: string,
-  resolved: { id?: string; owner?: string },
+  resolved: { id: string | undefined; owner: string | undefined },
 ): Found {
   const kind = scannedKind(kindExpr);
   const { id, owner } = resolved;
