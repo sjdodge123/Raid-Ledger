@@ -26,7 +26,7 @@ export function inviteCharacterIds(group: SuggestedGroupDto): string[] {
 }
 
 /** `/events/new?…&contentInstanceIds=<dungeon>[&inviteCharacterIds=<claimed>]`. */
-export function scheduleHref(group: SuggestedGroupDto, page: Pick<GuildPage, 'guild'>): string {
+export function scheduleHref(group: SuggestedGroupDto, page: { guild: Pick<GuildPage['guild'], 'id' | 'gameId'> }): string {
     return createEventUrl({
         gameId: page.guild.gameId,
         guildId: page.guild.id,
