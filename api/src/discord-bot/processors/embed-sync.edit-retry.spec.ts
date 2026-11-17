@@ -30,6 +30,7 @@ import {
   findTrackedMessages,
 } from './embed-sync.helpers';
 import { resolveGameHubLinkSafe } from '../channel-lifecycle/hub-link.resolver';
+import { isExpectedRetry } from '../../sentry/sentry-expected-retry.helpers';
 
 jest.mock('./embed-sync.helpers', () => ({
   findTrackedMessages: jest.fn(),
@@ -77,6 +78,12 @@ function discordError(code: number): DiscordAPIError {
 const JOB = {
   data: { eventId: 316, reason: 'roster_updated' },
 } as Job<EmbedSyncJobData>;
+
+/** The same job on BullMQ attempt `attemptsMade + 1` of 3. */
+function jobAt(attemptsMade: number): Job<EmbedSyncJobData> {
+  const job = { data: JOB.data, attemptsMade, opts: { attempts: 3 } };
+  return job as Job<EmbedSyncJobData>;
+}
 
 let processor: EmbedSyncProcessor;
 let editEmbed: jest.Mock;
@@ -226,5 +233,32 @@ describe('EmbedSyncProcessor — successful edit', () => {
       undefined,
     );
     expect(update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('EmbedSyncProcessor — retry throws stay out of Sentry (ROK-2253)', () => {
+  it.each([0, 1])('marks a transient failure at attemptsMade=%d', async (n) => {
+    const transient = new Error('503 Service Unavailable');
+    editEmbed.mockRejectedValue(transient);
+
+    await expect(processor.process(jobAt(n))).rejects.toBe(transient);
+    expect(isExpectedRetry(transient)).toBe(true);
+  });
+
+  it('leaves the final attempt unmarked so exhausted retries still report', async () => {
+    const transient = new Error('503 Service Unavailable');
+    editEmbed.mockRejectedValue(transient);
+
+    await expect(processor.process(jobAt(2))).rejects.toBe(transient);
+    expect(isExpectedRetry(transient)).toBe(false);
+  });
+
+  it('still drops a permanent failure without throwing or marking it', async () => {
+    const gone = discordError(10008);
+    editEmbed.mockRejectedValue(gone);
+
+    await expect(processor.process(jobAt(0))).resolves.toBeUndefined();
+    expect(isExpectedRetry(gone)).toBe(false);
+    expect(update).not.toHaveBeenCalled();
   });
 });
