@@ -31,6 +31,9 @@ export interface EligiblePool {
 
 export type DungeonRef = SuggestedGroupDto['instance'];
 
+/** The contract's level cap: a fact above it would fail the web's parse. */
+const MAX_LEVEL = 100;
+
 function cmp(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
@@ -61,7 +64,7 @@ function toEntry(
   const player = playerKey(row);
   if (key === null || player === null) return 'noKey';
   if (roles.length === 0) return 'noRole';
-  if (level === null || level < 1) return 'noLevel';
+  if (level === null || level < 1 || level > MAX_LEVEL) return 'noLevel';
   const member = {
     key,
     characterId: row.characterId,
@@ -99,20 +102,55 @@ export function eligiblePool(
   return { entries: entries.sort(byNameThenKey), counts };
 }
 
+/** One dungeon's dps bucketed by level (ascending), each bucket by name then key. */
+interface DpsByLevel {
+  levels: number[];
+  buckets: PoolEntry[][];
+}
+
+function bucketByLevel(dps: readonly PoolEntry[]): DpsByLevel {
+  const byLevel = new Map<number, PoolEntry[]>();
+  for (const d of [...dps].sort(byNameThenKey)) {
+    const bucket = byLevel.get(d.member.level);
+    if (bucket) bucket.push(d);
+    else byLevel.set(d.member.level, [d]);
+  }
+  const levels = [...byLevel.keys()].sort((a, b) => a - b);
+  return { levels, buckets: levels.map((l) => byLevel.get(l) ?? []) };
+}
+
+/**
+ * The dps in order of level distance from `mean`, nearest first, walking
+ * outward with two pointers; an equal-distance pair of buckets (one each
+ * side of `mean`) is merged by name then key — the order of one full sort.
+ */
+function* byDistance(d: DpsByLevel, mean: number): Generator<PoolEntry> {
+  const dist = (i: number) => {
+    const level = d.levels[i];
+    return level === undefined ? Infinity : Math.abs(level - mean);
+  };
+  let hi = d.levels.findIndex((l) => l > mean);
+  if (hi === -1) hi = d.levels.length;
+  let lo = hi - 1;
+  while (lo >= 0 || hi < d.levels.length) {
+    const below = dist(lo);
+    const above = dist(hi);
+    const take: PoolEntry[] = [];
+    if (below <= above) take.push(...(d.buckets[lo--] ?? []));
+    if (above <= below) take.push(...(d.buckets[hi++] ?? []));
+    yield* below === above ? take.sort(byNameThenKey) : take;
+  }
+}
+
 /** The 3 dps of distinct players (not `taken`) closest in level to `mean`. */
 function pickDps(
-  dps: readonly PoolEntry[],
+  dps: DpsByLevel,
   taken: ReadonlySet<string>,
   mean: number,
 ): PoolEntry[] | null {
-  const ordered = [...dps].sort(
-    (a, b) =>
-      Math.abs(a.member.level - mean) - Math.abs(b.member.level - mean) ||
-      byNameThenKey(a, b),
-  );
   const players = new Set(taken);
   const picked: PoolEntry[] = [];
-  for (const d of ordered) {
+  for (const d of byDistance(dps, mean)) {
     if (players.has(d.player)) continue;
     players.add(d.player);
     picked.push(d);
@@ -179,7 +217,7 @@ export function buildCandidates(
   cap: number = MAX_SUGGESTED_GROUPS_PER_DUNGEON,
 ): SuggestedGroupDto[] {
   const fit = pool.filter((e) => fits(e, instance));
-  const dps = withRole(fit, 'dps');
+  const dps = bucketByLevel(withRole(fit, 'dps'));
   const groups: SuggestedGroupDto[] = [];
   for (const tank of withRole(fit, 'tank')) {
     for (const healer of withRole(fit, 'healer')) {

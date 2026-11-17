@@ -382,3 +382,103 @@ describe('rankGroups / pickTop / cap', () => {
     expect(buildCandidates(poolOf(many), RFK, 4)).toHaveLength(4);
   });
 });
+
+/** The pre-ROK-2212-review pickDps: one full sort of the dps per pair. */
+function naiveCandidates(pool: PoolEntry[], inst: typeof RFK) {
+  const byName = (a: PoolEntry, b: PoolEntry) =>
+    a.member.name < b.member.name
+      ? -1
+      : a.member.name > b.member.name
+        ? 1
+        : a.member.key < b.member.key
+          ? -1
+          : a.member.key > b.member.key
+            ? 1
+            : 0;
+  const fit = pool.filter(
+    (e) =>
+      e.member.level >= inst.minimumLevel &&
+      e.member.level <= inst.maximumLevel,
+  );
+  const role = (r: SuggestedGroupRole) =>
+    fit.filter((e) => e.roles.includes(r));
+  const slot = (e: PoolEntry, r: SuggestedGroupRole) => ({
+    ...e.member,
+    role: r,
+  });
+  const groups: SuggestedGroupDto[] = [];
+  for (const t of role('tank'))
+    for (const h of role('healer')) {
+      if (t.player === h.player) continue;
+      const mean = (t.member.level + h.member.level) / 2;
+      const dist = (e: PoolEntry) => Math.abs(e.member.level - mean);
+      const taken = new Set([t.player, h.player]);
+      const picked: PoolEntry[] = [];
+      for (const d of [...role('dps')].sort(
+        (a, b) => dist(a) - dist(b) || byName(a, b),
+      )) {
+        if (picked.length === 3 || taken.has(d.player)) continue;
+        taken.add(d.player);
+        picked.push(d);
+      }
+      if (picked.length < 3) continue;
+      const members = [
+        slot(t, 'tank'),
+        slot(h, 'healer'),
+        ...picked.sort(byName).map((d) => slot(d, 'dps')),
+      ];
+      const levels = members.map((m) => m.level);
+      groups.push({
+        instance: { ...inst },
+        members,
+        levelSpread: Math.max(...levels) - Math.min(...levels),
+        sharedQuests: null,
+      });
+    }
+  const seen = new Set<string>();
+  return rankGroups(groups).filter((g) => {
+    const k = [...keysOf(g)].sort().join(',');
+    return seen.has(k) ? false : (seen.add(k), true);
+  });
+}
+
+describe('buildCandidates — review fixes', () => {
+  it('many dps: the two-pointer walk picks exactly what a full sort per pair did', () => {
+    let seed = 7;
+    const rand = (n: number) =>
+      (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+    const rows = [
+      ...[1, 2, 3, 4, 5].map((i) => claimed(`T${i}`, 'tank', i, 29 + rand(10))),
+      ...[1, 2, 3, 4, 5].map((i) =>
+        claimed(`H${i}`, 'healer', 10 + i, 29 + rand(10)),
+      ),
+      // dps alts of the tanks/healers, of each other, and unclaimed same-name rows
+      ...Array.from({ length: 60 }, (_, i) =>
+        i % 4 === 0
+          ? row({ name: `D${rand(6)}`, role: 'dps', level: 29 + rand(10) })
+          : claimed(
+              `D${rand(8)}`,
+              'dps',
+              1 + rand(25),
+              29 + rand(10),
+              1 + (i % 9),
+            ),
+      ),
+    ];
+    const pool = poolOf(rows);
+    const naive = naiveCandidates(pool, RFK);
+    expect(naive.length).toBeGreaterThan(10);
+    expect(buildCandidates(pool, RFK, 1000)).toEqual(naive);
+    expect(buildCandidates(pool, RFK)).toEqual(naive.slice(0, 10));
+  });
+
+  it('a level fact above the contract cap of 100 counts as no level', () => {
+    const { entries, counts } = eligiblePool(
+      [claimed('Ok', 'dps', 1, 100), claimed('Bad', 'dps', 2, 101)],
+      levelOf,
+      rolesOf,
+    );
+    expect(entries.map((e) => e.member.name)).toEqual(['Ok']);
+    expect(counts.skippedNoLevel).toBe(1);
+  });
+});
