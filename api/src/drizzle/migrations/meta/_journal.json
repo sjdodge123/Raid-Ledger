@@ -2117,10 +2117,17 @@
       "breakpoints": true
     },
     {
-      "idx": 305,
+      "idx": 303,
+      "version": "7",
+      "when": 1794850344300,
+      "tag": "0303_guild_members_ledgerlink_seen_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 304,
       "version": "7",
       "when": 1794860145238,
-      "tag": "0305_hub_forum_event_threads",
+      "tag": "0304_hub_forum_event_threads",
       "breakpoints": true
     }
   ]
