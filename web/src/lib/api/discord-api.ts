@@ -65,11 +65,14 @@ export async function deletePugSlot(
     });
 }
 
-/** Invite a registered member to an event */
+/**
+ * Invite a registered member to an event. ROK-2217: `alreadyInvited` is true
+ * when the member already held an unanswered invite and no new DM was sent.
+ */
 export async function inviteMember(
     eventId: number,
     discordId: string,
-): Promise<{ message: string }> {
+): Promise<{ message: string; alreadyInvited?: boolean }> {
     return fetchApi(`/events/${eventId}/invite-member`, {
         method: 'POST',
         body: JSON.stringify({ discordId }),

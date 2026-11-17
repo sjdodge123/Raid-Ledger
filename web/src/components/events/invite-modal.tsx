@@ -198,8 +198,10 @@ async function handlePugInvite(
 async function handleMemberInvite(eventId: number, s: ReturnType<typeof useInviteModalState>, discordId: string, username: string) {
     s.setIsSubmitting(true);
     try {
-        await inviteMember(eventId, discordId);
-        toast.success(`Invite sent to "${username}"`, { description: 'They\'ll receive a Discord DM with the invite.' });
+        const result = await inviteMember(eventId, discordId);
+        // ROK-2217: a repeat invite is skipped server-side — no new DM goes out.
+        if (result.alreadyInvited) toast.info(`"${username}" already has an invite`, { description: 'No new DM was sent — they can still answer the invite they have.' });
+        else toast.success(`Invite sent to "${username}"`, { description: 'They\'ll receive a Discord DM with the invite.' });
         s.setSearchQuery(''); s.reloadMembers();
     } catch (err) {
         toast.error('Failed to send invite', { description: err instanceof Error ? err.message : 'Please try again.' });
