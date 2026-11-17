@@ -7,6 +7,7 @@
  * adding a game here both seeds it and locks its curated name.
  */
 import { WOW_FOREVER_NAMESPACE_PREFIX } from '../plugins/wow-common/blizzard.constants';
+import { MINECRAFT_BEDROCK_GAME } from '../plugins/minecraft/minecraft-bedrock-game';
 
 /** Seed data for the game registry, upserted by slug on every boot. */
 export const GAMES_SEED = [
@@ -256,6 +257,8 @@ export const GAMES_SEED = [
     name: "Baldur's Gate 3",
     eventTypes: [],
   },
+  // ROK-2234: Minecraft: Bedrock Edition (no verified IGDB id; Java is IGDB 121).
+  { ...MINECRAFT_BEDROCK_GAME, iconUrl: null, eventTypes: [] },
   {
     slug: 'generic',
     name: 'Generic',
