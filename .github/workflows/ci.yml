@@ -933,6 +933,8 @@ jobs:
 
       - name: Record runner size
         # ROK-2206: the worker-count measurement needs the real vCPU/RAM.
+        # Both measurement arms are dispatches; push/PR runs skip it.
+        if: github.event_name == 'workflow_dispatch'
         run: |
           echo "nproc=$(nproc) RL_INTEGRATION_WORKERS=${RL_INTEGRATION_WORKERS}"
           free -m

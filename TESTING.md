@@ -237,7 +237,7 @@ Integration tests run against a real PostgreSQL database using [Testcontainers](
 
 ### Worker count (ROK-2206)
 
-The api integration suite runs one jest worker per shard by default (`--runInBand`). `RL_INTEGRATION_WORKERS=2` (with `npm run test:integration:workers -w api`) runs two, each on its own DB cloned from a freshly migrated `<base>_tpl`, so files on different workers never share rows. A spec must therefore reach the DB through the test app (`getTestApp()` / its `db`), never through `process.env.DATABASE_URL` directly — that is the base DB, not the worker's clone. Knobs, the fleet flag and rollback: `docs/runbooks/local-ci-gate.md`.
+The api integration suite runs one jest worker per shard by default (`--runInBand`). `RL_INTEGRATION_WORKERS=2` (with `npm run test:integration:workers -w api`) runs two, each on its own DB cloned from a freshly migrated `<base>_tpl`, so files on different workers never share rows. A spec must therefore reach the DB through the test app (`getTestApp()` / its `db`, or `TestApp.connectionString` when it needs a URL of its own), never through `process.env.DATABASE_URL` directly — before `getTestApp()` that is the base DB, and afterwards `getTestApp()` has repointed it at the worker's clone, so its meaning depends on call order. Server-wide state (`pg_stat_statements_reset()`, `CREATE ROLE`) is not isolated by the clones: a spec that touches it holds `acquireCrossWorkerLock` (`api/src/common/testing/cross-worker-lock.ts`) for the whole file. Knobs, the fleet flag and rollback: `docs/runbooks/local-ci-gate.md`.
 
 ### When to write integration tests
 
