@@ -158,6 +158,7 @@ async function seedRoster(guids: string[]): Promise<number> {
       characterName: `Member ${i}`,
       source: 'addon_import',
       lastSeenAt: seenAt,
+      ledgerlinkSeenAt: seenAt,
     })),
   );
   return guild.id;

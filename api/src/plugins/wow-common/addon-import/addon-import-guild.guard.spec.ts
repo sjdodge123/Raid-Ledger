@@ -100,9 +100,11 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
     id: number,
     guid: string | null,
     name = `M${id}`,
+    blizzardId: number | null = null,
   ): LiveRosterRow => ({
     id,
     guid,
+    blizzardId,
     name,
     grantId: null,
   });
@@ -118,7 +120,7 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
     expect(m.added).toBe(1);
   });
 
-  it('by GUID with names: a GUID-less row a new member adopts is kept, not added', () => {
+  it('by GUID with names: a GUID-less row a new member adopts is kept, not added; an unadopted one is never removed (ROK-2225)', () => {
     const rows = [row(1, 'g1'), row(3, null, 'Blizz'), row(4, null, 'Gone')];
     const m = rosterMovement(rows, {
       by: 'guid',
@@ -130,7 +132,7 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
       ]),
     });
     expect(m.counted.map((r) => r.id)).toEqual([1, 3, 4]);
-    expect(m.gone.map((r) => r.id)).toEqual([4]);
+    expect(m.gone).toEqual([]);
     expect(m.added).toBe(1);
   });
 
@@ -145,7 +147,7 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
       ]),
     };
     const m = rosterMovement(rows, presence, new Set(['g1', 'g7']));
-    expect(m.gone.map((r) => r.id)).toEqual([3]);
+    expect(m.gone).toEqual([]);
     expect(m.added).toBe(1);
     const adoptable = (g: string) => isAdoptableGuid(new Set(['g1', 'g7']), g);
     expect(adoptable('g7')).toBe(false);
@@ -158,7 +160,7 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
       guids: new Set(['g8']),
       names: new Map([['g8', 'twin']]),
     });
-    expect(m.gone.map((r) => r.id)).toEqual([4]);
+    expect(m.gone).toEqual([]);
     expect(m.added).toBe(0);
   });
 
@@ -173,13 +175,19 @@ describe('rosterMovement (ROK-1928 — payload-free guard input)', () => {
     expect(withNames).toEqual(rosterMovement(rows, { by: 'guid', guids }));
   });
 
-  it('by id: every live row counts, GUID-less ones included', () => {
-    const m = rosterMovement(live, {
+  it('by id: every baseline row counts; only rows Blizzard can see are removed (ROK-2225)', () => {
+    const rows = [
+      row(1, 'g1', 'M1', 901),
+      row(2, 'g2', 'M2', 902),
+      row(3, null),
+      row(5, 'g5'),
+    ];
+    const m = rosterMovement(rows, {
       by: 'id',
       ids: new Set([1, 3, 7]),
       members: 4,
     });
-    expect(m.counted.map((r) => r.id)).toEqual([1, 2, 3]);
+    expect(m.counted.map((r) => r.id)).toEqual([1, 2, 3, 5]);
     expect(m.gone.map((r) => r.id)).toEqual([2]);
     expect(m.added).toBe(2);
   });

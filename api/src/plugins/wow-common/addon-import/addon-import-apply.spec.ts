@@ -24,6 +24,7 @@ import {
   isStaleGuildSnapshot,
   memberValues,
 } from './addon-import-guild.apply';
+import { memberConflictSet } from './addon-import-guild.members';
 import {
   buildRaidSummary,
   countNewPulls,
@@ -291,6 +292,16 @@ describe('guild rows', () => {
     expect(
       memberValues(without, 9, CTX, at(EXPORTED_AT)).publicNote,
     ).toBeNull();
+  });
+
+  it('ROK-2225: an import never writes blizzard_seen_at (the sync owns it)', () => {
+    const members = fixture<AddonGuildExport>('guild-1-page').data.members;
+    const row = memberValues(at0(members, 1), 9, CTX, at(EXPORTED_AT));
+    expect(Object.keys(row)).not.toContain('blizzardSeenAt');
+    expect(Object.keys(row)).toContain('ledgerlinkSeenAt');
+    expect(Object.keys(memberConflictSet(members))).not.toContain(
+      'blizzardSeenAt',
+    );
   });
 });
 

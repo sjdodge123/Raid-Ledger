@@ -94,6 +94,7 @@ async function seedMember(who: Who): Promise<number> {
         rankName: 'Rank 3',
         source: 'addon_import',
         lastSeenAt: SNAP,
+        ledgerlinkSeenAt: SNAP,
       })
       .returning(),
     'member',

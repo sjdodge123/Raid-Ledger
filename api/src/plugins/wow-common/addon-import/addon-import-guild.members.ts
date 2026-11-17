@@ -39,6 +39,7 @@ export function memberValues(
     publicNote: m.note ?? null,
     source: 'addon_import',
     lastSeenAt: seenAt,
+    ledgerlinkSeenAt: seenAt,
     // ROK-1916 D2/D3: presence verbatim; the read path normalises.
     onlineAtExport: m.online,
     lastOnlineDays: m.lastOnlineDays ?? null,
@@ -52,12 +53,18 @@ export function dedupeMembers(members: AddonGuildMember[]): AddonGuildMember[] {
   return [...new Map(members.map((m) => [m.guid, m])).values()];
 }
 
-/** Columns the export always owns: `SET col = excluded.col`. */
+/**
+ * Columns the export always owns: `SET col = excluded.col`. ROK-2225:
+ * `blizzard_seen_at` is deliberately absent (and `memberValues` never sets
+ * it) — only the Blizzard sync stamps it; an import must leave it alone.
+ */
 const ADDON_OWNED_MEMBER_COLUMNS = [
   'character_name',
   'public_note',
   'source',
   'last_seen_at',
+  // ROK-2225: the import's own last-seen; the Blizzard sync never sets it.
+  'ledgerlink_seen_at',
   'captured_by_user_id',
   'updated_at',
   // ROK-1916 D2: overwrite with excluded.* (NULL included) — clears stale days.

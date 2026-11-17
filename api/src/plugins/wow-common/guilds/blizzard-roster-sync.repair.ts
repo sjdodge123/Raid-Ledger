@@ -54,9 +54,25 @@ async function moveEditorGrants(
 }
 
 /**
+ * ROK-2225 — the junk row's `blizzard_seen_at`, read before it is deleted so
+ * its twin stays in the sync's churn baseline (else the twin counts as added).
+ */
+async function junkSeenAt(
+  tx: AddonImportTx,
+  m: JunkMerge,
+): Promise<Date | null> {
+  const [row] = await tx
+    .select({ seen: guildMembers.blizzardSeenAt })
+    .from(guildMembers)
+    .where(eq(guildMembers.id, m.junkId));
+  return row?.seen ?? null;
+}
+
+/**
  * ROK-2139 — write the planned junk-row merges inside the sync transaction:
  * the junk row's dings and editor grants move to its GUID twin, the junk row
- * is deleted, and the twin takes the Blizzard id. Only GUID-less rows of
+ * is deleted, and the twin takes the Blizzard id (and, ROK-2225, the junk
+ * row's `blizzard_seen_at` when it has one). Only GUID-less rows of
  * this guild are ever deleted, so a replay is a no-op.
  * @param tx - The sync transaction (holds the guild lock).
  * @param guildId - The guild being synced.
@@ -70,6 +86,7 @@ export async function writeJunkMerges(
   for (const m of merges) {
     await moveDings(tx, m);
     await moveEditorGrants(tx, m);
+    const seen = await junkSeenAt(tx, m);
     await tx
       .delete(guildMembers)
       .where(
@@ -81,7 +98,10 @@ export async function writeJunkMerges(
       );
     await tx
       .update(guildMembers)
-      .set({ blizzardCharacterId: m.blizzardCharacterId })
+      .set({
+        blizzardCharacterId: m.blizzardCharacterId,
+        ...(seen === null ? {} : { blizzardSeenAt: seen }),
+      })
       .where(
         and(eq(guildMembers.id, m.targetId), eq(guildMembers.guildId, guildId)),
       );
