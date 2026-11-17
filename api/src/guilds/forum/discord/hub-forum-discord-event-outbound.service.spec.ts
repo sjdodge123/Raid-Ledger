@@ -70,7 +70,9 @@ function setup() {
     createPost: jest
       .fn()
       .mockResolvedValue({ threadId: 'p1', messageId: 'p1' }),
-    renameThread: jest.fn().mockResolvedValue('ok'),
+    renameThread: jest
+      .fn<EventPostDeps['gateway']['renameThread']>()
+      .mockResolvedValue('ok'),
   };
   const renames = { trySpend: jest.fn().mockReturnValue(true) };
   const attempt = jest.fn(async (_l: ForumLink, run: () => Promise<void>) =>
