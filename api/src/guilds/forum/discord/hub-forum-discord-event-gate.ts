@@ -51,7 +51,8 @@ export interface EventGateFacts {
   signedUp: boolean;
 }
 
-/** Facts for a thread with no event (or no row). */ const NO_EVENT = {
+/** Facts for a thread with no event (or no row). */
+const NO_EVENT = {
   eventId: null,
   eventTitle: '',
   writeClosesAt: null,

@@ -30,6 +30,12 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Retries hub Forum posts and replies that did not reach the linked Discord forum (up to 5 attempts, backing off), every 5 minutes',
     category: 'Data Sync',
   },
+  // ROK-2208 §5.7: Core's event-thread Discord lock sweep.
+  HubForumDiscordSync_eventLockSweep: {
+    description:
+      'Locks and archives the Discord post of a hub Forum event thread once it is read-only, and reopens it if the event is rescheduled, every 5 minutes',
+    category: 'Data Sync',
+  },
   // ROK-1957 D-9: the BG3 plugin's nightly save-history thinning.
   Bg3HistoryRetentionCron_prune: {
     description:

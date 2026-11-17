@@ -84,6 +84,7 @@ const core = {
     // ROK-2208 — the hub Forum ↔ Discord forum channel sync.
     { id: 'hub-forum.discord-sync', kind: 'ingest-source', label: 'Syncs the hub Forum with a Discord forum channel' },
     { id: 'HubForumDiscordSync_retrySweep', kind: 'scheduled-job', label: 'Retries hub Forum posts that did not reach Discord every 5 minutes' },
+    { id: 'HubForumDiscordSync_eventLockSweep', kind: 'scheduled-job', label: 'Locks and archives the Discord post of a read-only event thread every 5 minutes' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
     { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
     ...ggCoreCards,

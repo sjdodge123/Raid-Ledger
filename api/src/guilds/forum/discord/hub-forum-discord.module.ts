@@ -12,6 +12,10 @@ import { HubForumDiscordOutboundListener } from './hub-forum-discord-outbound.li
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { HubForumDiscordEventGate } from './hub-forum-discord-event-gate';
+import {
+  HubForumDiscordEventLockGateway,
+  HubForumDiscordEventLockSweep,
+} from './hub-forum-discord-event-lock';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
 import { HubForumDiscordInboundListener } from './hub-forum-discord-inbound.listener';
 import { HubForumDiscordNotices } from './hub-forum-discord-notice';
@@ -46,12 +50,15 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordInboundListener,
     HubForumDiscordReconcileGateway,
     HubForumDiscordReconcileService,
+    HubForumDiscordEventLockGateway,
+    HubForumDiscordEventLockSweep,
   ],
   exports: [
     HubForumDiscordGateway,
     HubForumDiscordOutboundService,
     HubForumDiscordInboundIngest,
     HubForumDiscordReconcileService,
+    HubForumDiscordEventLockSweep,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {
