@@ -11,6 +11,7 @@ import { instanceName } from './instance-catalogue/instance-catalogue';
 import { INSIDE_DUNGEON_QUEST_IDS } from './data/dungeon-quest-inside-allowlist';
 import { ESCORT_QUESTS, ESCORT_QUEST_IDS } from './data/dungeon-quest-escorts';
 import { EXTERNAL_PREREQS } from './data/dungeon-quest-external-prereqs';
+import { OPTIONAL_BREADCRUMBS } from './data/dungeon-quest-breadcrumbs';
 
 interface Row {
   questId: number;
@@ -88,6 +89,17 @@ describe('bundled classic dungeon quest data (ROK-2143)', () => {
       .map(([dependent, ext]) => `${dependent} -> ${ext.prereqId}`)
       .sort();
     expect(dangling).toEqual(named);
+  });
+
+  it('every OPTIONAL_BREADCRUMBS id is a bundled row with that name and a next step (ROK-2221)', () => {
+    const byId = new Map(rows.map((r) => [r.questId, r]));
+    const found = [...OPTIONAL_BREADCRUMBS].map(([id]) => {
+      const r = byId.get(id);
+      return [id, r?.name ?? null, r?.nextQuestId != null];
+    });
+    expect(found).toEqual(
+      [...OPTIONAL_BREADCRUMBS].map(([id, name]) => [id, name, true]),
+    );
   });
 
   it('EXTERNAL_PREREQS holds the 25 reviewed prerequisites (ROK-2221)', () => {

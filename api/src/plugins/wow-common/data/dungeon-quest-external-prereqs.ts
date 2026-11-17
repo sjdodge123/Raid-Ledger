@@ -103,7 +103,9 @@ export const EXTERNAL_PREREQS: ReadonlyMap<number, ExternalPrereq> = new Map([
 /**
  * The named outside step `quest` requires, as a chain step with no dungeon,
  * or null when `quest` has no {@link EXTERNAL_PREREQS} entry (or its
- * `prevQuestId` no longer names that prerequisite).
+ * `prevQuestId` no longer names that prerequisite). A display stub only: it
+ * is never a readiness column, so `expansion` / `sharable` are placeholders,
+ * not data.
  */
 export function externalPrereqStep(
   quest: DungeonQuestDto,

@@ -240,6 +240,34 @@ describe('buildQuestReadiness external prerequisite root (ROK-2221)', () => {
   });
 });
 
+describe('buildQuestReadiness optional breadcrumbs (ROK-2221)', () => {
+  // Wailing Caverns: 1489 -> 1490 (breadcrumbs) -> 914; 913 -> 915 is required.
+  const set = selectEventQuests(
+    [
+      quest(1489, 240, { nextQuestId: 1490 }),
+      quest(1490, 240, { prevQuestId: 1489, nextQuestId: 914 }),
+      quest(914, 240, { prevQuestId: 1490 }),
+      quest(913, 240, { nextQuestId: 915 }),
+      quest(915, 240, { prevQuestId: 913 }),
+    ],
+    [240],
+  );
+  const body = buildQuestReadiness({
+    quests: set,
+    signups: [signup(1, C1, { charRace: 'Orc' })],
+    snapshots: new Map([[C1, snap([], [])]]),
+    manual: [],
+  });
+
+  it('leaves prereqsMet true when only optional breadcrumbs are not done', () => {
+    expect(stateOf(body, 1, 914)?.prereqsMet).toBe(true);
+  });
+
+  it('still gates on a required step that is not done', () => {
+    expect(stateOf(body, 1, 915)?.prereqsMet).toBe(false);
+  });
+});
+
 describe('buildQuestReadiness escorts (ROK-2224)', () => {
   const body = buildQuestReadiness({
     quests: selectEventQuests([quest(1144, 491), quest(1101, 491)], [491]),
