@@ -17,6 +17,7 @@ import {
   toForumReply,
   toForumThread,
   toThreadSummary,
+  type HubForumEventRow,
 } from './hub-forum.mappers';
 
 const AT = new Date('2026-11-14T10:00:00.000Z');
@@ -79,6 +80,28 @@ function reply(over: Partial<HubForumReplySelect> = {}): HubForumReplySelect {
     updatedAt: AT,
     ...over,
   };
+}
+
+/** An event thread view whose event carries the given capacity columns. */
+function eventThreadWith(
+  cap: Pick<HubForumEventRow, 'maxAttendees' | 'slotConfig'>,
+): ReturnType<typeof toForumThread> {
+  return toForumThread(
+    {
+      thread: thread({ eventId: 77 }),
+      author: person,
+      event: {
+        id: 77,
+        title: 'Molten Core',
+        duration: [LATER, LATER],
+        cancelledAt: null,
+        creatorId: 5,
+        ...cap,
+      },
+    },
+    CAN,
+    { replies: [], nextReplyCursor: null, signupCount: 3 },
+  );
 }
 
 describe('toThreadSummary', () => {
@@ -163,6 +186,79 @@ describe('toForumThread', () => {
     expect(parsed).toMatchObject({ body: '**Bring** flasks', can: CAN });
     expect(parsed.replies).toEqual(replies);
     expect(parsed.nextReplyCursor).toBe('abc');
+  });
+
+  // ROK-2229: the thread view's event header shows "N / M signed up".
+  it('folds the signup count and capacity into an event thread', () => {
+    const out = toForumThread(
+      {
+        thread: thread({ eventId: 77 }),
+        author: person,
+        event: {
+          id: 77,
+          title: 'Molten Core',
+          duration: [LATER, LATER],
+          cancelledAt: null,
+          creatorId: 5,
+          maxAttendees: 40,
+        },
+      },
+      CAN,
+      { replies: [], nextReplyCursor: null, signupCount: 18 },
+    );
+    const parsed = HubForumThreadSchema.parse(out);
+    expect(parsed.event).toMatchObject({ signupCount: 18, maxAttendees: 40 });
+  });
+
+  // ROK-2229 (Codex P2): capacity matches the event page and auto-bench —
+  // a slot roster wins over the legacy maxAttendees column.
+  it('uses the slot roster capacity over maxAttendees', () => {
+    const parsed = HubForumThreadSchema.parse(
+      eventThreadWith({
+        maxAttendees: 40,
+        slotConfig: { type: 'generic', player: 5 },
+      }),
+    );
+    expect(parsed.event?.maxAttendees).toBe(5);
+  });
+
+  it('keeps maxAttendees when there is no slot roster', () => {
+    const parsed = HubForumThreadSchema.parse(
+      eventThreadWith({ maxAttendees: 40, slotConfig: null }),
+    );
+    expect(parsed.event?.maxAttendees).toBe(40);
+  });
+
+  it('reports an uncapped event as null capacity', () => {
+    const parsed = HubForumThreadSchema.parse(
+      eventThreadWith({ maxAttendees: null, slotConfig: null }),
+    );
+    expect(parsed.event?.maxAttendees).toBeNull();
+  });
+
+  // m1 (ROK-2229 review): allocation treats 0 as always full, so the header
+  // must show "/ 0", never uncapped.
+  it('keeps a zero capacity as 0 rather than uncapped', () => {
+    const roster = HubForumThreadSchema.parse(
+      eventThreadWith({
+        maxAttendees: 40,
+        slotConfig: { type: 'generic', player: 0 },
+      }),
+    );
+    expect(roster.event?.maxAttendees).toBe(0);
+    const legacy = HubForumThreadSchema.parse(
+      eventThreadWith({ maxAttendees: 0, slotConfig: null }),
+    );
+    expect(legacy.event?.maxAttendees).toBe(0);
+  });
+
+  it('leaves a normal thread without an event when a count is passed', () => {
+    const out = toForumThread({ thread: thread(), author: person }, CAN, {
+      replies: [],
+      nextReplyCursor: null,
+      signupCount: 3,
+    });
+    expect('event' in out).toBe(false);
   });
 
   it('blanks the root body of a deleted thread', () => {

@@ -38,8 +38,12 @@ export interface PelicanConsoleSocketOptions {
    * epoch ms the outage began. The supervisor applies the 15-min rule.
    */
   onUnreachable?: (sinceMs: number) => void;
-  /** Called on every `auth success` (the outage, if any, is over). */
-  onReachable?: () => void;
+  /**
+   * Called on every `auth success` (the outage, if any, is over). `refresh`
+   * is true for the ~6-min token re-auth on the SAME socket, false for the
+   * first auth of a new connection (start or reconnect).
+   */
+  onReachable?: (reach: { refresh: boolean }) => void;
   socketFactory?: WingsSocketFactory;
   /** Jitter source, [0, 1). Injected by specs. */
   random?: () => number;
@@ -161,7 +165,8 @@ export class PelicanConsoleSocket {
     this.attempt = 0;
     this.unreachableSince = null;
     this.send('send logs', [null]);
-    if (this.authed) {
+    const refresh = this.authed;
+    if (refresh) {
       // F3: the ~6-min token refresh, not a reconnect.
       this.logger.log(
         `Wings console re-auth: ${this.frames} live frames since last auth (${this.lines} lines this connection); requested log replay`,
@@ -171,7 +176,7 @@ export class PelicanConsoleSocket {
     }
     this.authed = true;
     this.frames = 0;
-    this.safely('onReachable', () => this.opts.onReachable?.());
+    this.safely('onReachable', () => this.opts.onReachable?.({ refresh }));
   }
 
   private deliverLine(frame: WingsFrame): void {

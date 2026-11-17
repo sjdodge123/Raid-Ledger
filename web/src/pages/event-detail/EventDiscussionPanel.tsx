@@ -16,7 +16,7 @@ import {
     ForumEventPills,
     ForumLockBar,
 } from '../../components/hub/forum/forum-event-header';
-import { ForumMessage } from '../../components/hub/forum/forum-message';
+import { ForumRootMessage } from '../../components/hub/forum/forum-event-root';
 import { ForumReplyComposerView } from '../../components/hub/forum/forum-composer';
 import { ForumReplyItemView } from '../../components/hub/forum/forum-thread-items';
 import { MoreReplies } from '../../components/hub/forum/forum-thread-view';
@@ -168,10 +168,11 @@ function PanelThread({
     return (
         <div className="flex flex-col gap-3">
             <ThreadHead event={event} thread={thread} />
-            <ForumMessage message={thread} testId="forum-thread-root" />
-            <p className="text-xs text-muted">
+            {/* ROK-2229: the reply count sits above the opening post, as in the hub thread view. */}
+            <p data-testid="forum-reply-count" className="text-xs text-muted">
                 {replyCountLabel(thread.replyCount)}
             </p>
+            <ForumRootMessage thread={thread} testId="forum-thread-root" />
             <PanelReplies
                 eventId={event.id}
                 threadId={thread.id}

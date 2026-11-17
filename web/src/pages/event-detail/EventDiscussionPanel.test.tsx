@@ -5,7 +5,7 @@
  * replies, and the thread GET / reply POST failures (403/409/429) show copy.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { EventDiscussion, HubForumThread } from '@raid-ledger/contract';
@@ -252,6 +252,22 @@ describe('signedUpLabel', () => {
             '3 signed up',
         );
     });
+
+    it('uses the slot roster capacity, matching the hub thread header (ROK-2229)', () => {
+        expect(
+            signedUpLabel({
+                signupCount: 3,
+                maxAttendees: 40,
+                slotConfig: { type: 'generic', player: 5 },
+            }),
+        ).toBe('3 / 5 signed up');
+    });
+
+    it('shows a zero capacity as full, not uncapped (ROK-2229)', () => {
+        expect(signedUpLabel({ signupCount: 2, maxAttendees: 0 })).toBe(
+            '2 / 0 signed up',
+        );
+    });
 });
 
 describe('EventDiscussionSection', () => {
@@ -285,5 +301,19 @@ describe('EventDiscussionSection', () => {
         await new Promise((r) => setTimeout(r, 0));
         expect(screen.queryByTestId('event-discussion-panel')).toBeNull();
         expect(threadGets).toBe(0);
+    });
+});
+
+describe('EventDiscussionPanel — opening post (ROK-2229)', () => {
+    it('shows the Raid Ledger opening post, with the reply count above it, like the hub thread view', async () => {
+        serveThread(thread({ body: 'Discussion for Molten Core. Open the event', replyCount: 1 }));
+        renderPanel();
+        const root = await screen.findByTestId('forum-thread-root');
+        expect(within(root).getByTestId('forum-event-root-byline')).toHaveTextContent(/^Raid Ledger\s*Created when the event was scheduled · /);
+        expect(within(root).getByTestId('forum-thread-root-body')).toHaveTextContent(/^Discussion for Molten Core, .+\. Signed-up players \(bench included\) can post here\.$/);
+        expect(within(root).queryByText(/Open the event/)).toBeNull();
+        const count = screen.getByTestId('forum-reply-count');
+        expect(count).toHaveTextContent('1 reply');
+        expect(count.compareDocumentPosition(root) & Node.DOCUMENT_POSITION_FOLLOWING, 'count precedes the root').not.toBe(0);
     });
 });

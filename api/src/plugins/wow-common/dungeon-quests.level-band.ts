@@ -9,7 +9,7 @@ import {
   getInstance,
 } from './instance-catalogue/instance-catalogue';
 import type { CatalogueVariant } from './instance-catalogue/instance-catalogue.types';
-import type { QuestLevelBand } from './dungeon-quests.types';
+import type { DungeonQuestDto, QuestLevelBand } from './dungeon-quests.types';
 
 /**
  * The overlay is the Forever quest import, so a read with no variant (the
@@ -39,4 +39,20 @@ export function instanceLevelBand(
   const v = asCatalogueVariant(variant);
   const row = getInstance(instanceId, v) ?? getAnyVariant(instanceId);
   return row ? { min: row.minimumLevel, max: row.maximumLevel } : null;
+}
+
+/**
+ * ROK-2221: a curated row with no level of its own (questLevel and
+ * requiredLevel both null) keeps the catalogue band its overlay-only card
+ * showed before the row was bundled. A row with a level, or one that already
+ * carries a band, is returned unchanged.
+ */
+export function withLevelBandFallback(
+  quest: DungeonQuestDto,
+  variant: string = OVERLAY_BAND_VARIANT,
+): DungeonQuestDto {
+  if (quest.questLevel !== null || quest.requiredLevel !== null) return quest;
+  if (quest.levelBand !== undefined) return quest;
+  const band = instanceLevelBand(quest.dungeonInstanceId, variant);
+  return band ? { ...quest, levelBand: band } : quest;
 }

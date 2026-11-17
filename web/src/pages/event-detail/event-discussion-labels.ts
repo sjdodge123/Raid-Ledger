@@ -4,12 +4,20 @@
  * (react-refresh/only-export-components).
  */
 import type { EventResponseDto } from '@raid-ledger/contract';
+import { resolveEventCapacity } from '../../lib/event-capacity';
 
-/** "18 / 40 signed up", or "18 signed up" without a cap (mockup thread header). */
+/**
+ * "18 / 40 signed up", or "18 signed up" without a cap (mockup thread header).
+ * The cap is the allocation capacity (slot roster first, ROK-2229), the same
+ * "/ M" the hub thread header shows; a 0 cap reads "N / 0".
+ */
 export function signedUpLabel(
-    event: Pick<EventResponseDto, 'signupCount' | 'maxAttendees'>,
+    event: Pick<
+        EventResponseDto,
+        'signupCount' | 'maxAttendees' | 'slotConfig'
+    >,
 ): string {
-    const cap = event.maxAttendees ?? null;
+    const cap = resolveEventCapacity(event);
     return cap === null
         ? `${event.signupCount} signed up`
         : `${event.signupCount} / ${cap} signed up`;

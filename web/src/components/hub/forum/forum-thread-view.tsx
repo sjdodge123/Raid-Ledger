@@ -16,7 +16,8 @@ import { ForumReplyComposer } from './forum-composer';
 import { ForumReplyItem, ForumThreadRoot } from './forum-thread-items';
 import { ForumEventHeader, ForumEventPills, ForumLockBar } from './forum-event-header';
 import { forumThreadHref } from './forum-link';
-import { replyCountLabel } from './forum-thread.helpers';
+import { forumThreadTitle } from './forum-event-format';
+import { isEventThread, replyCountLabel } from './forum-thread.helpers';
 import { useForumThread } from './use-hub-forum';
 import { usePageToReply } from './use-page-to-reply';
 
@@ -65,16 +66,20 @@ function ThreadBody({ guildId, replyId, canWrite, startEditing, query }: Omit<Fo
     if (thread === undefined) return <p role="alert" className="text-sm text-danger">Couldn’t load this thread. It may have been removed.</p>;
     const replies = query.data?.pages.flatMap((p) => p.replies) ?? [];
     const canReply = thread.canReply ?? canWrite;
+    // ROK-2229: an event thread states its reply count above the opening post (the mockup's order).
+    const countFirst = isEventThread(thread);
+    const count = <p data-testid="forum-reply-count" className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>;
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
-                <h3 data-testid="forum-thread-heading" className="text-lg font-semibold text-foreground">{thread.deleted === null ? thread.title : 'Removed thread'}</h3>
+                <h3 data-testid="forum-thread-heading" className="text-lg font-semibold text-foreground">{thread.deleted === null ? forumThreadTitle(thread) : 'Removed thread'}</h3>
                 {thread.pinnedAt !== null && <Pill tone="success">Pinned</Pill>}
-                <ForumEventPills event={thread.event} lock={thread.lock} />
+                <ForumEventPills event={thread.event} lock={thread.lock} withDate={false} />
             </div>
             <ThreadEventBlock thread={thread} />
+            {countFirst && count}
             <ForumThreadRoot guildId={guildId} thread={thread} startEditing={startEditing === true} />
-            <p className="text-xs text-muted">{replyCountLabel(thread.replyCount)}</p>
+            {!countFirst && count}
             <ul className="flex flex-col gap-2">
                 {replies.map((r) => <ForumReplyItem key={r.id} guildId={guildId} threadId={thread.id} reply={r} highlighted={r.id === replyId} />)}
             </ul>

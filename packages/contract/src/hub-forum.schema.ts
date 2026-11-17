@@ -1,5 +1,8 @@
-import { z } from 'zod';
-import { HubPostBodyInputSchema, HubPostPersonSchema } from './hub-posts.schema.js';
+import { z } from "zod";
+import {
+  HubPostBodyInputSchema,
+  HubPostPersonSchema,
+} from "./hub-posts.schema.js";
 
 /**
  * Hub Forum (ROK-1175) — member threads with flat replies and officer pins,
@@ -26,7 +29,7 @@ export const HUB_FORUM_PREVIEW_MAX = 160;
 export const HUB_FORUM_LATEST_LIMIT = 3;
 
 /** Who removed a row; null while it is live. */
-export const HubForumDeletedSchema = z.enum(['author', 'moderator']).nullable();
+export const HubForumDeletedSchema = z.enum(["author", "moderator"]).nullable();
 export type HubForumDeleted = z.infer<typeof HubForumDeletedSchema>;
 
 /** What the viewer may do to this row; computed server-side. */
@@ -54,19 +57,41 @@ const discordSyncFields = {
 // ── ROK-2226: event discussion threads ─────────────────────────────────────
 
 /** Why an event thread no longer takes replies or edits. */
-export const HUB_FORUM_LOCK_REASONS = ['event-ended', 'event-detached', 'event-deleted'] as const;
+export const HUB_FORUM_LOCK_REASONS = [
+  "event-ended",
+  "event-detached",
+  "event-deleted",
+] as const;
 export const HubForumLockReasonSchema = z.enum(HUB_FORUM_LOCK_REASONS);
 export type HubForumLockReason = z.infer<typeof HubForumLockReasonSchema>;
 
 /** The event an event thread discusses (title/date render from here). */
 export const HubForumThreadEventSchema = z
-  .object({ id, title: z.string(), startTime: isoDate, endTime: isoDate, cancelled: z.boolean() })
+  .object({
+    id,
+    title: z.string(),
+    startTime: isoDate,
+    endTime: isoDate,
+    cancelled: z.boolean(),
+    /** ROK-2229: active signups (bench included); the thread view only, may be omitted. */
+    signupCount: z.number().int().nonnegative().optional(),
+    /** ROK-2229: allocation capacity (null = uncapped, 0 = always full); may be omitted. */
+    maxAttendees: z.number().int().nonnegative().nullable().optional(),
+  })
   .strict();
 export type HubForumThreadEvent = z.infer<typeof HubForumThreadEventSchema>;
 
 /** Set once an event thread is read-only; null while it is writable. */
-export const HubForumLockSchema = z.object({ at: isoDate, reason: HubForumLockReasonSchema }).strict();
+export const HubForumLockSchema = z
+  .object({ at: isoDate, reason: HubForumLockReasonSchema })
+  .strict();
 export type HubForumLock = z.infer<typeof HubForumLockSchema>;
+
+/** ROK-2229: the newest live reply of an event thread, as a list-row preview. */
+export const HubForumLatestReplySchema = z
+  .object({ author: HubPostPersonSchema.nullable(), preview: z.string() })
+  .strict();
+export type HubForumLatestReply = z.infer<typeof HubForumLatestReplySchema>;
 
 // ── end ROK-2226 block ─────────────────────────────────────────────────────
 
@@ -91,6 +116,11 @@ export const HubForumThreadSummarySchema = z
     event: HubForumThreadEventSchema.nullable().optional(),
     /** ROK-2226: read-only state of an event thread; null/absent otherwise. */
     lock: HubForumLockSchema.nullable().optional(),
+    /**
+     * ROK-2229: an event thread's newest live reply (author + plain-text
+     * preview) for the list row; null when it has none, absent otherwise.
+     */
+    latestReply: HubForumLatestReplySchema.nullable().optional(),
   })
   .strict();
 export type HubForumThreadSummary = z.infer<typeof HubForumThreadSummarySchema>;
@@ -156,13 +186,19 @@ export const HubForumThreadSchema = HubForumThreadSummarySchema.extend({
 export type HubForumThread = z.infer<typeof HubForumThreadSchema>;
 
 /** Write-side title: trimmed plain text, 1..120 chars. */
-export const HubForumTitleInputSchema = z.string().trim().min(1).max(HUB_FORUM_TITLE_MAX);
+export const HubForumTitleInputSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(HUB_FORUM_TITLE_MAX);
 
 /** `POST /guilds/:id/forum`. */
 export const CreateHubForumThreadSchema = z
   .object({ title: HubForumTitleInputSchema, body: HubPostBodyInputSchema })
   .strict();
-export type CreateHubForumThreadInput = z.infer<typeof CreateHubForumThreadSchema>;
+export type CreateHubForumThreadInput = z.infer<
+  typeof CreateHubForumThreadSchema
+>;
 
 /** `PATCH /guilds/:id/forum/:threadId` — author only, within the edit window. */
 export const UpdateHubForumThreadSchema = z
@@ -171,16 +207,27 @@ export const UpdateHubForumThreadSchema = z
     body: HubPostBodyInputSchema.optional(),
   })
   .strict()
-  .refine((v) => v.title !== undefined || v.body !== undefined, 'Nothing to change');
-export type UpdateHubForumThreadInput = z.infer<typeof UpdateHubForumThreadSchema>;
+  .refine(
+    (v) => v.title !== undefined || v.body !== undefined,
+    "Nothing to change",
+  );
+export type UpdateHubForumThreadInput = z.infer<
+  typeof UpdateHubForumThreadSchema
+>;
 
 /** `POST /guilds/:id/forum/:threadId/replies`. */
-export const CreateHubForumReplySchema = z.object({ body: HubPostBodyInputSchema }).strict();
-export type CreateHubForumReplyInput = z.infer<typeof CreateHubForumReplySchema>;
+export const CreateHubForumReplySchema = z
+  .object({ body: HubPostBodyInputSchema })
+  .strict();
+export type CreateHubForumReplyInput = z.infer<
+  typeof CreateHubForumReplySchema
+>;
 
 /** `PATCH /guilds/:id/forum/:threadId/replies/:replyId`. */
 export const UpdateHubForumReplySchema = CreateHubForumReplySchema;
-export type UpdateHubForumReplyInput = z.infer<typeof UpdateHubForumReplySchema>;
+export type UpdateHubForumReplyInput = z.infer<
+  typeof UpdateHubForumReplySchema
+>;
 
 /** `GET /guilds/:id/forum/latest` — the Overview widget. */
 export const HubForumLatestSchema = z

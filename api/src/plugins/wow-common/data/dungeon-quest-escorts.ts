@@ -14,6 +14,8 @@ const e = (questId: number, name: string): EscortQuest => ({ questId, name });
 
 /** Every escort quest in the bundled dungeon quest data. */
 export const ESCORT_QUESTS: readonly EscortQuest[] = [
+  // ROK-2221 text: "you watch my back and I'll take you to the Defias hideout".
+  e(155, 'The Defias Brotherhood'),
   // Objectives: "Escort Willix the Importer out of Razorfen Kraul."
   e(1144, 'Willix the Importer'),
   // Objectives: "Escort Kernobee to the Clockwerk Run exit"; text "Lead me to the exit".

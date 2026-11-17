@@ -3,7 +3,7 @@
  * time range, lock reason line). Kept out of `forum-event-header.tsx` so that
  * file exports components only (react-refresh/only-export-components).
  */
-import type { HubForumLock, HubForumLockReason } from '@raid-ledger/contract';
+import type { HubForumLock, HubForumLockReason, HubForumThreadEvent } from '@raid-ledger/contract';
 
 const LOCK_REASON_COPY: Record<HubForumLockReason, string> = {
     'event-ended': 'Closed 24 h after the event ended',
@@ -25,14 +25,35 @@ export function eventShortDate(iso: string): string {
     });
 }
 
+/** "19:00" in the viewer's timezone. */
+function eventTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 /** "19:00–22:00" in the viewer's timezone. */
 export function eventTimeRange(startIso: string, endIso: string): string {
-    const time = (iso: string): string =>
-        new Date(iso).toLocaleTimeString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    return `${time(startIso)}–${time(endIso)}`;
+    return `${eventTime(startIso)}–${eventTime(endIso)}`;
+}
+
+/** "Sat 22 Nov 19:00" in the viewer's timezone (the event root's body, ROK-2229). */
+export function eventStartLabel(iso: string): string {
+    return `${eventShortDate(iso)} ${eventTime(iso)}`;
+}
+
+/**
+ * ROK-2229 — the title a thread displays: an event thread reads
+ * "<title> — <short date>" (viewer timezone); the stored title is unchanged.
+ */
+export function forumThreadTitle(thread: { title: string; event?: HubForumThreadEvent | null | undefined }): string {
+    const { event } = thread;
+    return event == null ? thread.title : `${thread.title} — ${eventShortDate(event.startTime)}`;
+}
+
+/** ROK-2229 — "18 / 40 signed up" ("18 signed up" uncapped); null when the payload has no count. */
+export function signupLabel(event: HubForumThreadEvent): string | null {
+    if (event.signupCount === undefined) return null;
+    const max = event.maxAttendees ?? null;
+    return max === null ? `${event.signupCount} signed up` : `${event.signupCount} / ${max} signed up`;
 }
 
 /** "Read-only since Mon 24 Nov · Closed 24 h after the event ended". */
