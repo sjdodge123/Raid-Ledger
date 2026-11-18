@@ -130,7 +130,7 @@ export async function queryNowPlaying(
  *
  * Every session is rolled up into a `day`, a `week` AND a `month` row, so
  * summing all rows triples the total. `day` rows are exact and never pruned
- * (the daily cron only upserts; nothing deletes rollups), and demo data writes
+ * (the daily cron only upserts; nothing prunes rollups by age), and demo data writes
  * `day`/`week` only, so `day` is the complete series.
  */
 export const ALL_TIME_ROLLUP_PERIOD = 'day';
