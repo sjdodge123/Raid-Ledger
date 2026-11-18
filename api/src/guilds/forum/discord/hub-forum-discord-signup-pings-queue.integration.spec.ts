@@ -81,12 +81,12 @@ async function boundEvent(): Promise<number> {
 /**
  * When the job is due, in epoch ms: BullMQ scores a delayed job
  * `dueAt * 0x1000 + n` in the delayed ZSET, and `changeDelay` re-scores it
- * from "now" while leaving `job.delay` untouched — so the score is the only
+ * from "now" while `job.delay` keeps its value — so the score is the only
  * place a timer reset shows. Null when the job is not in the delayed set.
  */
 async function dueAt(jobId: string): Promise<number | null> {
-  const client = await raw.client;
-  const score = await client.zscore(raw.keys.delayed, jobId);
+  const client = await raw.getBackend().client;
+  const score = await client.zscore(raw.toKey('delayed'), jobId);
   return score === null ? null : Math.floor(Number(score) / 0x1000);
 }
 
