@@ -13,12 +13,13 @@ import {
   HubForumDiscordDecorBackfill,
 } from './hub-forum-discord-decor.backfill';
 import * as decorQueries from './hub-forum-discord-decor.queries';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./hub-forum-discord-decor.queries');
 const q = jest.mocked(decorQueries);
 
-function backfill(setReply: 'OK' | null) {
+function backfill(setReply: 'OK' | null, lock = new HubForumBindLock()) {
   const redis = {
     set: jest.fn(() => Promise.resolve(setReply)),
     del: jest.fn(() => Promise.resolve(1)),
@@ -29,13 +30,14 @@ function backfill(setReply: 'OK' | null) {
     ),
   };
   q.listBoundForums.mockResolvedValue([
-    { id: 1, channelId: 'c1' },
-    { id: 2, channelId: 'c2' },
+    { id: 1, channelId: 'c1', discordGuildId: 'dg' },
+    { id: 2, channelId: 'c2', discordGuildId: 'dg' },
   ]);
   const svc = new HubForumDiscordDecorBackfill(
     {} as ForumDiscordDb,
     redis as unknown as Redis,
     decor as unknown as HubForumDiscordDecor,
+    lock,
   );
   return { svc, redis, decor };
 }
@@ -94,5 +96,24 @@ describe('ROK-2258 forum decor backfill guard', () => {
     t.decor.run.mockResolvedValue('retry');
     t.redis.del.mockRejectedValueOnce(new Error('redis down'));
     await expect(t.svc.run(new Date())).resolves.toBe(0);
+  });
+});
+
+describe('ROK-2258 Codex P2 #2 — backfill decor runs under the bind lock', () => {
+  it('waits for an in-flight bind on the same Discord guild before dressing', async () => {
+    const lock = new HubForumBindLock();
+    let releaseBind: () => void = () => undefined;
+    const bind = lock.run(
+      'dg',
+      () => new Promise<void>((resolve) => (releaseBind = resolve)),
+    );
+    const t = backfill('OK', lock);
+    const running = t.svc.run(new Date('2026-11-18T00:00:00Z'));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(t.decor.run).not.toHaveBeenCalled();
+    releaseBind();
+    await bind;
+    expect(await running).toBe(2);
+    expect(t.decor.run).toHaveBeenCalledTimes(2);
   });
 });

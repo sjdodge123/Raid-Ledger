@@ -8,9 +8,13 @@ const bindings = schema.hubForumDiscordBindings;
 /** ROK-2258 ruling 4 — every forum at least one hub is bound to. */
 export async function listBoundForums(
   db: ForumDiscordDb,
-): Promise<{ id: number; channelId: string }[]> {
+): Promise<{ id: number; channelId: string; discordGuildId: string }[]> {
   return db
-    .selectDistinct({ id: forums.id, channelId: forums.channelId })
+    .selectDistinct({
+      id: forums.id,
+      channelId: forums.channelId,
+      discordGuildId: forums.discordGuildId,
+    })
     .from(forums)
     .innerJoin(bindings, eq(bindings.forumId, forums.id));
 }

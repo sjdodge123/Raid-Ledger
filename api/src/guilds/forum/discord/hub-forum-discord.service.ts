@@ -26,7 +26,7 @@ import {
   preflight,
   suggestedForumName,
 } from './hub-forum-discord.picker';
-import { KeyedSerializer } from './hub-forum-discord.bind-lock';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import {
   deleteBinding,
   deleteForumRow,
@@ -65,13 +65,12 @@ function healthOf(
  */
 @Injectable()
 export class HubForumDiscordService {
-  private readonly binds = new KeyedSerializer();
-
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
     private readonly routes: HubForumDiscordRouteResolver,
     private readonly decor: HubForumDiscordDecor,
+    private readonly binds: HubForumBindLock,
   ) {}
 
   /** `GET` — the hub's binding (null while unlinked) and its health. */

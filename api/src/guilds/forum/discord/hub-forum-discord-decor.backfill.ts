@@ -8,6 +8,7 @@ import { REDIS_CLIENT } from '../../../redis/redis.module';
 import type { DecorOutcome } from './hub-forum-discord-decor';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { listBoundForums } from './hub-forum-discord-decor.queries';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /**
@@ -42,6 +43,7 @@ export class HubForumDiscordDecorBackfill {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly decor: HubForumDiscordDecor,
+    private readonly binds: HubForumBindLock,
   ) {}
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
@@ -77,8 +79,14 @@ export class HubForumDiscordDecorBackfill {
   private async dressAll(): Promise<number> {
     const forums = await listBoundForums(this.db);
     const outcomes: DecorOutcome[] = [];
+    // Codex P2 #2: under the bind lock, so a concurrent bind's tag-list
+    // rewrite never drops this run's tags (or the other way round).
     for (const f of forums)
-      outcomes.push(await this.decor.run(f.id, f.channelId));
+      outcomes.push(
+        await this.binds.run(f.discordGuildId, () =>
+          this.decor.run(f.id, f.channelId),
+        ),
+      );
     const count = (o: DecorOutcome): number =>
       outcomes.filter((x) => x === o).length;
     if (count('retry') > 0)
