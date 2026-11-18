@@ -132,7 +132,9 @@ describe('ClassicActivityAttributionService.attributeUnresolved (ROK-2259)', () 
 
   it('ignores any other unmapped name without reading the database', async () => {
     expect(await service.attributeUnresolved(1, 'Unknown Game')).toBeNull();
-    expect(await service.attributeUnresolved(1, 'World of Warcraft')).toBeNull();
+    expect(
+      await service.attributeUnresolved(1, 'World of Warcraft'),
+    ).toBeNull();
     expect(db.where).not.toHaveBeenCalled();
   });
 
