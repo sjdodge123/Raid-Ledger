@@ -36,25 +36,35 @@ export class HubForumDiscordSignupPingQueue {
   constructor(@InjectQueue(SIGNUP_PING_QUEUE) private readonly queue: Queue) {}
 
   /**
-   * (Re)arm the event's flush. A delayed job gets its timer reset; one that
-   * is already running may have read the signups before this change, so a
-   * trailing job is armed behind it. Never throws into the signup path.
+   * (Re)arm the event's flush. At most one flush is pending per event, and
+   * it runs a full debounce window after the LAST change: a waiting trailing
+   * flush is re-armed first (Codex P2-1), else the primary's timer is reset.
+   * A primary already running may have read the signups before this change,
+   * so a trailing flush is armed behind it. Never throws into the signup
+   * path; resolves false when the flush could not be armed.
    */
-  async schedule(eventId: number): Promise<void> {
+  async schedule(eventId: number): Promise<boolean> {
     try {
-      const primary = signupPingJobId(eventId);
-      const outcome = await this.debounce(primary);
-      if (outcome === 'free') return await this.add(primary, eventId);
-      if (outcome === 'debounced') return;
-      const trail = signupPingJobId(eventId, true);
-      if ((await this.debounce(trail)) === 'free') {
-        await this.add(trail, eventId);
-      }
+      await this.arm(eventId);
+      return true;
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `Signup ping flush for event ${eventId} not armed: ${why}`,
       );
+      return false;
+    }
+  }
+
+  private async arm(eventId: number): Promise<void> {
+    const trail = signupPingJobId(eventId, true);
+    const trailSlot = await this.debounce(trail);
+    if (trailSlot === 'debounced') return;
+    const primary = signupPingJobId(eventId);
+    const outcome = await this.debounce(primary);
+    if (outcome === 'free') return this.add(primary, eventId);
+    if (outcome === 'busy' && trailSlot === 'free') {
+      await this.add(trail, eventId);
     }
   }
 

@@ -83,6 +83,16 @@ describe('ROK-2260 signup-ping debounce', () => {
     );
   });
 
+  it('P2-1: a pending trailing flush is the one re-armed (no second flush that could fire early)', async () => {
+    // The primary already finished (removeOnComplete), its trail still waits.
+    const t = fakeQueue({ 'forum-signup-pings-42-trail': 'delayed' });
+    await t.svc.schedule(42);
+    expect(
+      t.held.get('forum-signup-pings-42-trail')?.changeDelay,
+    ).toHaveBeenCalledWith(SIGNUP_PING_DEBOUNCE_MS);
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
   it('clears a retained finished job so the next change still arms a flush', async () => {
     const t = fakeQueue({ 'forum-signup-pings-42': 'completed' });
     await t.svc.schedule(42);
@@ -93,7 +103,7 @@ describe('ROK-2260 signup-ping debounce', () => {
   it('never throws into the signup path when Redis is down', async () => {
     const t = fakeQueue();
     t.queue.getJob.mockRejectedValueOnce(new Error('ECONNREFUSED'));
-    await expect(t.svc.schedule(42)).resolves.toBeUndefined();
+    await expect(t.svc.schedule(42)).resolves.toBe(false);
   });
 });
 
