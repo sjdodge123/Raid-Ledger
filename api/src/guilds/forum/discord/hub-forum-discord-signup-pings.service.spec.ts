@@ -139,7 +139,9 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
     expect(t.outbound.ensureEventPost).not.toHaveBeenCalled();
     expect(t.gateway.mention).not.toHaveBeenCalled();
   });
+});
 
+describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () => {
   it('a cancel is removed from the post silently and forgotten (a re-signup pings again)', async () => {
     mockedQ.listSignupPingRows.mockResolvedValue([
       row('signed_up', A),

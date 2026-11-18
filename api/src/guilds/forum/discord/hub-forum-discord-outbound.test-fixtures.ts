@@ -27,6 +27,12 @@ export function stubOutbound(testApp: TestApp) {
     deleteThread: jest.spyOn(gw, 'deleteThread').mockResolvedValue('ok'),
     deleteMessage: jest.spyOn(gw, 'deleteMessage').mockResolvedValue('ok'),
     postNotice: jest.spyOn(gw, 'postNotice').mockResolvedValue(undefined),
+    // ROK-2260 signup pings: bot online, mention + silent remove recorded.
+    isOnline: jest.spyOn(gw, 'isOnline').mockReturnValue(true),
+    mention: jest.spyOn(gw, 'mention').mockResolvedValue(undefined),
+    removeThreadMembers: jest
+      .spyOn(gw, 'removeThreadMembers')
+      .mockResolvedValue(undefined),
   };
   const apply = jest.spyOn(service, 'apply');
   return { spies, apply, service };
