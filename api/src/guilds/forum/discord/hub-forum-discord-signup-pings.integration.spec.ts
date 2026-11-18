@@ -10,6 +10,7 @@
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { SettingsService } from '../../../settings/settings.service';
 import {
   as,
   bootDiscussion,
@@ -198,13 +199,18 @@ describe('ROK-2260 DEMO_MODE flush endpoint (companion smoke)', () => {
   const path = (id: number) =>
     `/admin/test/hub-forum-discord/events/${id}/flush-signup-pings`;
 
-  beforeEach(() => {
+  // DemoModeGuard needs BOTH the env flag and the DB setting.
+  const settings = () => ctx.posts.testApp.app.get(SettingsService);
+
+  beforeEach(async () => {
     process.env.DEMO_MODE = 'true';
+    await settings().setDemoMode(true);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (ORIGINAL === undefined) delete process.env.DEMO_MODE;
     else process.env.DEMO_MODE = ORIGINAL;
+    await settings().setDemoMode(false);
   });
 
   it('flushes now and names the post; refuses a non-admin and DEMO_MODE off', async () => {
@@ -218,6 +224,7 @@ describe('ROK-2260 DEMO_MODE flush endpoint (companion smoke)', () => {
     process.env.DEMO_MODE = 'true';
 
     const res = await as(ctx, 'admin', 'post', path(s.eventId));
+    expect(res.status).toBe(201);
     const [link] = nonEmpty(await threadLinks(s.threadId), 'post link');
     expect({ status: res.status, body: res.body as unknown }).toEqual({
       status: 201,
