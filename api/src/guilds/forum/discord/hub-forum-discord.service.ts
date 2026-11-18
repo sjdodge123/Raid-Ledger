@@ -41,6 +41,7 @@ import {
 } from './hub-forum-discord.queries';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { shareForumTags } from './hub-forum-discord.share';
+import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 
 const alreadyBound = () =>
   forumDiscordError(
@@ -70,6 +71,7 @@ export class HubForumDiscordService {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
     private readonly routes: HubForumDiscordRouteResolver,
+    private readonly decor: HubForumDiscordDecor,
   ) {}
 
   /** `GET` — the hub's binding (null while unlinked) and its health. */
@@ -140,6 +142,7 @@ export class HubForumDiscordService {
     });
     await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
+    await this.decor.run(forum.id, info.id); // ROK-2258: tags + 👍, best-effort
     this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
     return this.status(guildId);
   }
