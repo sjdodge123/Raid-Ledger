@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   EVENT_TAG_NAME,
+  eventTagIdOf,
   failureOutcome,
   findTagId,
   planTagCreates,
@@ -81,7 +82,8 @@ export class HubForumDiscordDecor {
       joiningGuildId === undefined
         ? hubs.map((h) => h.guildId)
         : [joiningGuildId];
-    await this.tagEvents(info.id, eventHubs, tags);
+    const owned = hubs.map((h) => h.tagId);
+    await this.tagEvents(info.id, eventHubs, eventTagIdOf(tags, owned));
     await this.gateway.setDefaultReactionIfUnset(info.id);
     if (shouldRequireTags(hubs.length, info.requireTag))
       await this.gateway.requireTags(info.id);
@@ -114,7 +116,10 @@ export class HubForumDiscordDecor {
     return this.gateway.addTags(info.id, plan.create);
   }
 
-  /** Give each untagged hub its tag and put it on the hub's synced posts. */
+  /**
+   * Give each untagged hub its tag: posts first, binding last (Codex P2 #3),
+   * so a failure leaves the hub untagged and the retry tags its posts again.
+   */
   private async tagHubs(
     channelId: string,
     hubs: readonly BoundHub[],
@@ -123,19 +128,18 @@ export class HubForumDiscordDecor {
     for (const hub of hubs.filter((h) => h.tagId === null)) {
       const id = findTagId(tags, tagNameFor(hub.hubName));
       if (id === null) continue;
-      await setBindingTag(this.db, hub.guildId, id);
       const threads = await linkedThreadIds(this.db, hub.guildId);
       await this.gateway.applyTag(channelId, threads, id);
+      await setBindingTag(this.db, hub.guildId, id);
     }
   }
 
-  /** Put the Event tag on the given hubs' synced event posts. */
+  /** Put the Event tag (`id`; null = none usable) on the hubs' event posts. */
   private async tagEvents(
     channelId: string,
     guildIds: readonly number[],
-    tags: readonly ForumTag[],
+    id: string | null,
   ): Promise<void> {
-    const id = findTagId(tags, EVENT_TAG_NAME);
     if (id === null) return;
     const threads = await linkedEventThreadIds(this.db, guildIds);
     await this.gateway.applyTag(channelId, threads, id);

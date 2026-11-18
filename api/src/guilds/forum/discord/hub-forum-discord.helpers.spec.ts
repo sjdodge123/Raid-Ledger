@@ -83,6 +83,11 @@ describe('ROK-2208 hub forum Discord tag names + bind body', () => {
     expect(tagNameFor('  A very long hub name indeed ')).toHaveLength(20);
   });
 
+  it('Codex P2 #1: a hub called "Event" never takes the Event tag name', () => {
+    expect(tagNameFor(' event ')).toBe('event hub');
+    expect(tagNameFor('Events')).toBe('Events');
+  });
+
   it('AC1: a body without ack: true is FORUM_DISCORD_ACK_REQUIRED', () => {
     for (const body of [
       { mode: 'create' },

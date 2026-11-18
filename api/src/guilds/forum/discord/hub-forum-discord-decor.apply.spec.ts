@@ -137,3 +137,63 @@ describe('ROK-2258 bind fan-out — only the joining hub', () => {
     expect(dq.linkedEventThreadIds).toHaveBeenCalledWith({}, [5, 7]);
   });
 });
+
+describe('ROK-2258 Codex P2 #3 — a lone hub tag persists only after its posts are tagged', () => {
+  const ALPHA = { id: 't-alpha', name: 'Alpha' };
+
+  it('leaves the binding untagged when the post lookup fails, so a retry re-tags', async () => {
+    q.listForumBindings.mockResolvedValue([
+      { guildId: 5, tagId: null, hubName: 'Alpha' },
+    ]);
+    q.linkedThreadIds.mockRejectedValueOnce(new Error('db blip'));
+    const t = setup(forumInfo({ tags: [EVENT_TAG, ALPHA] }));
+    expect(await t.decor.run(1, 'c1')).toBe('retry');
+    expect(q.setBindingTag).not.toHaveBeenCalled();
+  });
+
+  it('persists the tag once its posts carry it', async () => {
+    q.listForumBindings.mockResolvedValue([
+      { guildId: 5, tagId: null, hubName: 'Alpha' },
+    ]);
+    q.linkedThreadIds.mockResolvedValue(['p9']);
+    const t = setup(forumInfo({ tags: [EVENT_TAG, ALPHA] }));
+    expect(await t.decor.run(1, 'c1')).toBe('done');
+    expect(t.gw.applyTag).toHaveBeenCalledWith('c1', ['p9'], 't-alpha');
+    expect(q.setBindingTag).toHaveBeenCalledWith({}, 5, 't-alpha');
+  });
+});
+
+describe('ROK-2258 Codex P2 #4/#5 — transient gateway errors retry', () => {
+  it('retries when applyTag surfaces a transient error', async () => {
+    const t = setup(forumInfo());
+    t.gw.applyTag.mockRejectedValueOnce(discordError(0, 429));
+    expect(await t.decor.run(1, 'c1')).toBe('retry');
+  });
+
+  it('retries when the forum lookup fails transiently', async () => {
+    const t = setup(forumInfo());
+    t.gw.fetchForum.mockRejectedValueOnce(new Error('ECONNRESET'));
+    expect(await t.decor.run(1, 'c1')).toBe('retry');
+  });
+});
+
+describe('ROK-2258 Codex P2 #1 — a hub tag is never the Event tag', () => {
+  it('a lone hub named "Event" gets its own tag, not the Event tag', async () => {
+    q.listForumBindings.mockResolvedValue([
+      { guildId: 5, tagId: null, hubName: 'event' },
+    ]);
+    const t = setup(forumInfo());
+    await t.decor.run(1, 'c1');
+    expect(t.gw.addTags).toHaveBeenCalledWith('c1', ['event hub']);
+  });
+
+  it('skips Event tagging when a hub already owns the "Event" tag (pre-2258 data)', async () => {
+    q.listForumBindings.mockResolvedValue([
+      { guildId: 5, tagId: 't-event', hubName: 'Event' },
+      { guildId: 7, tagId: 't7', hubName: 'Beta' },
+    ]);
+    const t = setup(forumInfo());
+    await t.decor.run(1, 'c1');
+    expect(t.gw.applyTag).not.toHaveBeenCalledWith('c1', ['p1'], 't-event');
+  });
+});

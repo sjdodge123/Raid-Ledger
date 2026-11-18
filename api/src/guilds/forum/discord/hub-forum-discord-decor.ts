@@ -83,6 +83,22 @@ export function shouldRequireTags(
   return boundHubs > 1 && !alreadyRequired;
 }
 
+/**
+ * Codex P2 #1 — the forum's Event tag, unless a hub owns a tag by that name
+ * (a pre-ROK-2258 hub called "Event"): sharing one tag would match two hubs
+ * on inbound routing, so event tagging is skipped instead.
+ *
+ * @param tags - The forum's tags.
+ * @param hubTagIds - The bound hubs' tag ids.
+ */
+export function eventTagIdOf(
+  tags: readonly ForumTag[],
+  hubTagIds: readonly (string | null)[],
+): string | null {
+  const id = findTagId(tags, EVENT_TAG_NAME);
+  return id !== null && hubTagIds.includes(id) ? null : id;
+}
+
 /** Discord allows at most 5 tags on one forum post. */
 const POST_TAG_MAX = 5;
 
