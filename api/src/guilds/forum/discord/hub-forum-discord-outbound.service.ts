@@ -37,6 +37,9 @@ interface Job {
   link?: links.ForumLink;
 }
 
+/** An RL forum thread in its hub. */
+type ThreadRef = { guildId: number; threadId: number };
+
 /** What one `retry` did: sent something, or why it could not. */
 export type RetryOutcome = 'dispatched' | 'unbound' | 'stale';
 
@@ -80,6 +83,17 @@ export class HubForumDiscordOutboundService {
   /** §5.7 item 2: an event changed — re-drive its posts (binding-checked). */
   retitleEvent(eventId: number): Promise<void> {
     return this.events.retitle(eventId);
+  }
+
+  /**
+   * ROK-2260 ruling 1: an event thread's post, created on its first signup
+   * (binding + stale checked; null when unbound or read-only).
+   */
+  async ensureEventPost(ref: ThreadRef): Promise<links.ForumLink | null> {
+    const job = await this.jobFor({ ...ref, op: 'thread.created', actorId: 0 });
+    if (typeof job !== 'object') return null;
+    const to = { target: job.target, tagId: job.bound.binding.tagId };
+    return this.events.ensurePost(to, ref);
   }
 
   /** Route one change; pins are the S5 lane's (§5.5). */

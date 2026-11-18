@@ -7,6 +7,7 @@ import {
   type Webhook,
 } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import { applyThreadMembers } from '../../../discord-bot/lfg-board/lfg-board-thread-members.helpers';
 
 /** The bound forum and its one webhook (R9). */
 export interface OutboundTarget {
@@ -144,6 +145,34 @@ export class HubForumDiscordOutboundGateway {
   async postNotice(discordThreadId: string, content: string): Promise<void> {
     const thread = await this.thread(discordThreadId);
     await thread.send({ content, allowedMentions: NO_MENTIONS });
+  }
+
+  /** ROK-2260: the bot is connected to its guild (else a flush waits). */
+  isOnline(): boolean {
+    return this.client.isConnected() && this.client.getGuild() !== null;
+  }
+
+  /**
+   * ROK-2260: a bot message in a post that pings exactly `userIds` — the
+   * mention is what adds each of them to the post (Discord thread rule).
+   */
+  async mention(
+    discordThreadId: string,
+    content: string,
+    userIds: string[],
+  ): Promise<void> {
+    const thread = await this.thread(discordThreadId);
+    await thread.send({ content, allowedMentions: { users: userIds } });
+  }
+
+  /** ROK-2260 ruling 3: silently take users out of a post (ROK-1541 helper). */
+  async removeThreadMembers(
+    discordThreadId: string,
+    userIds: string[],
+    warn: (message: string) => void,
+  ): Promise<void> {
+    const thread = await this.thread(discordThreadId);
+    await applyThreadMembers(thread, 'remove', userIds, warn);
   }
 
   /** Delete one message (bot, Manage Messages — §5.3 covers both origins). */
