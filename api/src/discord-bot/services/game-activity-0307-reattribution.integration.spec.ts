@@ -65,22 +65,32 @@ async function insertUser(tag: string, charGame?: number, variant?: string) {
   return u.id;
 }
 
-/** Closed session; `gameId` null = an unmatched presence row. */
+/**
+ * Closed session; `gameId` null = an unmatched presence row (raw Classic
+ * name), otherwise a voice row (resolved games.name) unless `name` is given.
+ */
 async function session(
   userId: number,
   gameId: number | null,
   iso: string,
   seconds: number,
+  name?: string,
 ): Promise<void> {
   const startedAt = new Date(iso);
   await testApp.db.insert(schema.gameActivitySessions).values({
     userId,
     gameId,
-    discordActivityName: gameId === null ? CLASSIC : 'voice-resolved name',
+    discordActivityName:
+      name ?? (gameId === null ? CLASSIC : 'voice-resolved name'),
     startedAt,
     endedAt: new Date(startedAt.getTime() + seconds * 1000),
     durationSeconds: seconds,
   });
+}
+
+/** "Forever" / "Anniv" by id; any other game (or null) by its raw id. */
+function gameLabel(id: number | null): string {
+  return id === forever ? 'Forever' : id === anniv ? 'Anniv' : String(id);
 }
 
 /** Every Classic-family play of `userId`: "Anniv|Forever|null @day". */
@@ -90,10 +100,8 @@ async function sessionsOf(userId: number): Promise<string[]> {
     .from(schema.gameActivitySessions)
     .where(eq(schema.gameActivitySessions.userId, userId))
     .orderBy(asc(schema.gameActivitySessions.startedAt));
-  const label = (id: number | null): string =>
-    id === forever ? 'Forever' : id === anniv ? 'Anniv' : String(id);
   return rows.map(
-    (r) => `${label(r.gameId)}@${r.startedAt.toISOString().slice(0, 10)}`,
+    (r) => `${gameLabel(r.gameId)}@${r.startedAt.toISOString().slice(0, 10)}`,
   );
 }
 
@@ -106,13 +114,13 @@ async function rollupsOf(userId: number): Promise<string[]> {
   return rows
     .map(
       (r) =>
-        `${r.gameId === forever ? 'Forever' : 'Anniv'} ${r.period} ${r.periodStart} = ${r.totalSeconds}`,
+        `${gameLabel(r.gameId)} ${r.period} ${r.periodStart} = ${r.totalSeconds}`,
     )
     .sort();
 }
 
 async function runMigration(): Promise<void> {
-  expect(statements).toHaveLength(4);
+  expect(statements).toHaveLength(5);
   for (const statement of statements) {
     await testApp.db.execute(sql.raw(statement));
   }
@@ -251,5 +259,91 @@ describe('ROK-2259 0307 — raw activity name', () => {
       'session',
     );
     expect([row.gameId, row.discordActivityName]).toEqual([forever, CLASSIC]);
+  });
+});
+
+describe('ROK-2259 0307 — presence overlapping a voice row (no double credit)', () => {
+  it.each([
+    ['no WoW characters', undefined, 'Forever'],
+    ['Anniversary-only', 'anniv', 'Anniv'],
+  ] as const)(
+    '%s: an ambiguous presence row overlapping a WoW voice row stays uncredited',
+    async (tag, charGame, game) => {
+      const id = await insertUser(`ov-${tag}`, charGame && anniv);
+      // Voice 10:00-12:00 credited to Anniversary (resolved games.name) ...
+      await session(id, anniv, '2026-11-15T10:00:00Z', 2 * H);
+      // ... the same play's unmatched presence row 09:30-12:30 overlaps it,
+      await session(id, null, '2026-11-15T09:30:00Z', 3 * H);
+      // a mapped presence row (raw name, Anniversary) 11:00-11:30 too,
+      await session(id, anniv, '2026-11-15T11:00:00Z', H / 2, CLASSIC);
+      // while a presence row on its own (lower-case name) is credited.
+      const lower = CLASSIC.toLowerCase();
+      await session(id, null, '2026-11-16T10:00:00Z', H, lower);
+      for (let i = 0; i < 2; i++) await runMigration();
+      expect(await sessionsOf(id)).toEqual([
+        'null@2026-11-15',
+        `${game}@2026-11-15`,
+        'null@2026-11-15',
+        `${game}@2026-11-16`,
+      ]);
+      expect(await rollupsOf(id)).toEqual(
+        [
+          `${game} day 2026-11-15 = ${2 * H}`,
+          `${game} day 2026-11-16 = ${H}`,
+          `${game} month 2026-11-01 = ${3 * H}`,
+          `${game} week 2026-11-09 = ${2 * H}`,
+          `${game} week 2026-11-16 = ${H}`,
+        ].sort(),
+      );
+    },
+  );
+});
+
+describe('ROK-2259 0307 — edge cases', () => {
+  it('a ruleset-only Forever character (no variant) counts as Forever', async () => {
+    const id = await insertUser('rs');
+    await testApp.db.insert(schema.characters).values({
+      userId: id,
+      gameId: anniv,
+      name: 'CharRs',
+      gameVariant: null,
+      ruleset: 'pvp',
+    });
+    await session(id, anniv, '2026-11-10T10:00:00Z', H);
+    await runMigration();
+    expect(await sessionsOf(id)).toEqual(['Forever@2026-11-10']);
+  });
+
+  it('without the Forever game row the migration changes nothing', async () => {
+    const id = await insertUser('mg');
+    await seedPlay(id);
+    await testApp.db.delete(schema.games).where(eq(schema.games.id, forever));
+    const before = [await sessionsOf(id), await rollupsOf(id)];
+    await runMigration();
+    expect([await sessionsOf(id), await rollupsOf(id)]).toEqual(before);
+  });
+
+  it('re-sums the week and month buckets that straddle 2026-11-04', async () => {
+    const id = await insertUser('bd', anniv);
+    await session(id, anniv, '2026-11-02T10:00:00Z', 600);
+    await session(id, anniv, '2026-11-05T10:00:00Z', 1200);
+    await testApp.db.insert(schema.gameActivityRollups).values(
+      (['day', 'week', 'month'] as const).map((period) => ({
+        userId: id,
+        gameId: anniv,
+        period,
+        periodStart: period === 'month' ? '2026-11-01' : '2026-11-02',
+        totalSeconds: 600,
+      })),
+    );
+    await runMigration();
+    expect(await rollupsOf(id)).toEqual(
+      [
+        'Anniv day 2026-11-02 = 600',
+        'Anniv day 2026-11-05 = 1200',
+        'Anniv month 2026-11-01 = 1800',
+        'Anniv week 2026-11-02 = 1800',
+      ].sort(),
+    );
   });
 });
