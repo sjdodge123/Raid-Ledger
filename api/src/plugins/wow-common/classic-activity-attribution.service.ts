@@ -17,6 +17,13 @@ import {
   type ClassicFamilyCharacter,
   type ClassicGameIds,
 } from './classic-activity-attribution.helpers';
+import {
+  hasOpenVoiceClassicSession,
+  uncreditOpenRawClassicSessions,
+} from './classic-activity-overlap.helpers';
+
+/** Game rows can be merged/renumbered: re-read the ids at most this often. */
+const IDS_TTL_MS = 10 * 60_000;
 
 /**
  * ROK-2259 — WoW-plugin adapter that re-attributes play time the registry
@@ -27,8 +34,9 @@ import {
 export class ClassicActivityAttributionService
   implements GameActivityAttributionAdapter, OnModuleInit
 {
-  /** Cached once both games are found; retried while either is missing. */
+  /** Cached (TTL) once both games are found; retried while either is missing. */
   private ids: ClassicGameIds | null = null;
+  private idsReadAt = 0;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -46,11 +54,18 @@ export class ClassicActivityAttributionService
     );
   }
 
-  /** The game to credit `userId` for a session resolved to `gameId`. */
-  async attribute(userId: number, gameId: number): Promise<number> {
+  /**
+   * The game to credit `userId` for a session resolved to `gameId`, or `null`
+   * for a raw-name presence row that duplicates an open voice row.
+   */
+  async attribute(
+    userId: number,
+    gameId: number,
+    discordActivityName: string,
+  ): Promise<number | null> {
     const ids = await this.gameIds();
     if (!ids || gameId !== ids.anniversaryId) return gameId;
-    return attributeClassicPlay(gameId, await this.characters(userId), ids);
+    return this.creditClassic(userId, discordActivityName, ids);
   }
 
   /**
@@ -65,6 +80,29 @@ export class ClassicActivityAttributionService
     if (!isAmbiguousClassicName(discordActivityName)) return null;
     const ids = await this.gameIds();
     if (!ids) return null;
+    return this.creditClassic(userId, discordActivityName, ids);
+  }
+
+  /** Drop the cached game ids (tests; after a games merge). */
+  resetCache(): void {
+    this.ids = null;
+  }
+
+  /**
+   * Per-player Classic credit without double counting: a voice row (resolved
+   * name) takes the credit from the user's open raw-name presence row; a
+   * raw-name row opened while a voice row is open stays uncredited.
+   */
+  private async creditClassic(
+    userId: number,
+    discordActivityName: string,
+    ids: ClassicGameIds,
+  ): Promise<number | null> {
+    if (!isAmbiguousClassicName(discordActivityName)) {
+      await uncreditOpenRawClassicSessions(this.db, userId, ids);
+    } else if (await hasOpenVoiceClassicSession(this.db, userId, ids)) {
+      return null;
+    }
     const characters = await this.characters(userId);
     return attributeClassicPlay(ids.anniversaryId, characters, ids);
   }
@@ -81,7 +119,7 @@ export class ClassicActivityAttributionService
   }
 
   private async gameIds(): Promise<ClassicGameIds | null> {
-    if (this.ids) return this.ids;
+    if (this.ids && Date.now() - this.idsReadAt < IDS_TTL_MS) return this.ids;
     const rows = await this.db
       .select({ id: schema.games.id, slug: schema.games.slug })
       .from(schema.games)
@@ -92,6 +130,7 @@ export class ClassicActivityAttributionService
     const anniversaryId = rows.find((r) => r.slug === WOW_ANNIVERSARY_SLUG)?.id;
     if (foreverId === undefined || anniversaryId === undefined) return null;
     this.ids = { foreverId, anniversaryId };
+    this.idsReadAt = Date.now();
     return this.ids;
   }
 }

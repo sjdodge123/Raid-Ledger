@@ -44,7 +44,11 @@ describe('attributeOpenSessions', () => {
     const ev = open(1, 'World of Warcraft Classic');
     await attributeOpenSessions([ev], cache, [toForever], logger);
     expect(ev.attributedGameId).toBe(FOREVER);
-    expect(toForever.attribute).toHaveBeenCalledWith(1, ANNIVERSARY);
+    expect(toForever.attribute).toHaveBeenCalledWith(
+      1,
+      ANNIVERSARY,
+      'World of Warcraft Classic',
+    );
   });
 
   it('does not stamp sessions the adapter passes through or that are unmatched', async () => {
@@ -53,6 +57,17 @@ describe('attributeOpenSessions', () => {
     await attributeOpenSessions([valheim, unknown], cache, [toForever], logger);
     expect(valheim.attributedGameId).toBeUndefined();
     expect(unknown.attributedGameId).toBeUndefined();
+  });
+
+  it('credits no game when an adapter withholds the credit (null)', async () => {
+    const withhold: GameActivityAttributionAdapter = {
+      attribute: () => Promise.resolve(null),
+    };
+    const later = { attribute: jest.fn((_u: number, g: number) => Promise.resolve(g)) };
+    const ev = open(1, 'World of Warcraft Classic');
+    await attributeOpenSessions([ev], cache, [withhold, later], logger);
+    expect(ev.attributedGameId).toBeNull();
+    expect(later.attribute).not.toHaveBeenCalled();
   });
 
   it('keeps the registry game when an adapter throws', async () => {

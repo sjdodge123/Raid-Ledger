@@ -25,8 +25,8 @@ export interface SessionOpenEvent {
   gameId: number | null;
   discordActivityName: string;
   startedAt: Date;
-  /** ROK-2259: per-player game a plugin adapter credited instead. */
-  attributedGameId?: number;
+  /** ROK-2259: per-player game a plugin adapter credited instead (`null` = none). */
+  attributedGameId?: number | null;
 }
 
 export interface SessionCloseEvent {
@@ -109,8 +109,9 @@ async function insertOpenSession(
 ): Promise<void> {
   const resolvedGameId = cache.get(ev.discordActivityName);
   const gameId =
-    ev.attributedGameId ??
-    (resolvedGameId !== undefined ? resolvedGameId : null);
+    ev.attributedGameId !== undefined
+      ? ev.attributedGameId
+      : (resolvedGameId ?? null);
 
   try {
     if (await hasOpenSession(db, ev.userId, ev.discordActivityName)) return;

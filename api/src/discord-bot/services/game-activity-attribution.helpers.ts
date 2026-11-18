@@ -12,8 +12,8 @@ import type { SessionOpenEvent } from './game-activity.helpers';
  * `attributeUnresolved` (Discord's raw Classic name without a mapping row);
  * every other unresolved name stays uncredited.
  *
- * Stamps `attributedGameId` only when an adapter changed the game; an adapter
- * that throws leaves the registry game in place.
+ * Stamps `attributedGameId` only when an adapter changed the game (`null` =
+ * credit no game); an adapter that throws leaves the registry game in place.
  */
 export async function attributeOpenSessions(
   opens: SessionOpenEvent[],
@@ -29,7 +29,7 @@ export async function attributeOpenSessions(
         base === null
           ? await attributeUnresolved(ev, adapters)
           : await attributeResolved(ev, base, adapters);
-      if (gameId !== null && gameId !== base) ev.attributedGameId = gameId;
+      if (gameId !== base) ev.attributedGameId = gameId;
     } catch (err) {
       logger.warn(
         `Game attribution failed for user ${ev.userId} / "${ev.discordActivityName}": ${String(err)}`,
@@ -38,15 +38,24 @@ export async function attributeOpenSessions(
   }
 }
 
-/** Chain every adapter over a session the registry resolved to `base`. */
+/**
+ * Chain every adapter over a session the registry resolved to `base`; an
+ * adapter returning `null` withholds the credit and ends the chain.
+ */
 async function attributeResolved(
   ev: SessionOpenEvent,
   base: number,
   adapters: readonly GameActivityAttributionAdapter[],
-): Promise<number> {
-  let gameId = base;
+): Promise<number | null> {
+  let gameId: number = base;
   for (const adapter of adapters) {
-    gameId = await adapter.attribute(ev.userId, gameId);
+    const next = await adapter.attribute(
+      ev.userId,
+      gameId,
+      ev.discordActivityName,
+    );
+    if (next === null) return null;
+    gameId = next;
   }
   return gameId;
 }
