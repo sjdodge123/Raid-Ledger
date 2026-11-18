@@ -155,6 +155,7 @@ export class EventPostOutbound {
       title: eventPostTitle(src.eventTitle, src.start, zone),
       content: truncateForDiscord(eventPostBody(src.body, clientUrl), url),
       tagIds: to.tagId ? [to.tagId] : [],
+      event: true, // ROK-2258: the gateway adds the forum's Event tag
     };
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);

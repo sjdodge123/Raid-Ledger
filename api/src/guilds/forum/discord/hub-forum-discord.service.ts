@@ -26,7 +26,7 @@ import {
   preflight,
   suggestedForumName,
 } from './hub-forum-discord.picker';
-import { KeyedSerializer } from './hub-forum-discord.bind-lock';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import {
   deleteBinding,
   deleteForumRow,
@@ -41,6 +41,7 @@ import {
 } from './hub-forum-discord.queries';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { shareForumTags } from './hub-forum-discord.share';
+import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 
 const alreadyBound = () =>
   forumDiscordError(
@@ -64,12 +65,12 @@ function healthOf(
  */
 @Injectable()
 export class HubForumDiscordService {
-  private readonly binds = new KeyedSerializer();
-
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
     private readonly routes: HubForumDiscordRouteResolver,
+    private readonly decor: HubForumDiscordDecor,
+    private readonly binds: HubForumBindLock,
   ) {}
 
   /** `GET` — the hub's binding (null while unlinked) and its health. */
@@ -141,6 +142,10 @@ export class HubForumDiscordService {
     await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
     this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
+    // ROK-2258: tags + 👍, best-effort. Awaited under the bind lock (a 2nd
+    // bind must not rewrite the tag list mid-run); bounded to the joining
+    // hub's event posts, and already-tagged posts cost no write.
+    await this.decor.run(forum.id, info.id, guildId);
     return this.status(guildId);
   }
 

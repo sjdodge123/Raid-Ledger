@@ -28,6 +28,9 @@ import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.d
 import { HubForumDiscordReconcileService } from './hub-forum-discord-reconcile';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { HubForumDiscordService } from './hub-forum-discord.service';
+import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
+import { HubForumDiscordDecorBackfill } from './hub-forum-discord-decor.backfill';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
 import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
@@ -52,6 +55,7 @@ import {
   controllers: [HubForumDiscordController, HubForumDiscordDemoTestController],
   providers: [
     HubForumDiscordGateway,
+    HubForumBindLock,
     HubForumDiscordService,
     HubForumDiscordOutboundGateway,
     HubForumDiscordOutboundService,
@@ -72,6 +76,8 @@ import {
     HubForumDiscordSignupPingListener,
     HubForumDiscordSignupPingProcessor,
     HubForumDiscordSignupPingCatchUp,
+    HubForumDiscordDecor,
+    HubForumDiscordDecorBackfill,
   ],
   exports: [
     HubForumDiscordGateway,

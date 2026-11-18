@@ -168,13 +168,16 @@ describe('ROK-2208 outbound RL → Discord', () => {
     expect(link.discordMessageId).toMatch(/^\d+$/);
   });
 
-  it('an unshared forum posts with no tag; edit → edited + renamed', async () => {
+  it("an unshared forum posts with the lone hub's own tag; edit → edited + renamed", async () => {
     const g = await newHub(ctx);
     await bind(g, { mode: 'create' });
+    // ROK-2258 ruling: a hub alone on its forum still gets (and posts with) its tag.
+    const { tagId } = await forumOf(g);
+    expect(tagId).not.toBeNull();
     const threadId = await newThread(g);
     await synced();
     const [[, post]] = nonEmpty(out.spies.createPost.mock.calls, 'createPost');
-    expect(post.tagIds).toEqual([]);
+    expect(post.tagIds).toEqual([tagId]);
     const [link] = nonEmpty(await linkRows(threadId), 'link');
     const edit = { title: 'Raid night moved', body: 'Now Friday' };
     expect(
