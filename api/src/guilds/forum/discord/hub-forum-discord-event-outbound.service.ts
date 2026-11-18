@@ -108,12 +108,14 @@ export class EventPostOutbound {
    * Item 1 — the post link a reply on `threadId` goes into. Null for a plain
    * (unlinked, OQ-5) thread and for a read-only event thread (item 5);
    * otherwise claims the post and sends it (a race loser reuses the winner's).
+   * ROK-2260: `create: false` only reads the existing post (a signup removal).
    */
   async ensurePost(
     to: EventPostTarget,
-    ref: { guildId: number; threadId: number },
+    ref: { guildId: number; threadId: number; create?: boolean },
   ): Promise<links.ForumLink | null> {
     const { db } = this.deps;
+    if (ref.create === false) return links.findThreadLink(db, ref.threadId);
     const src = await findEventPostSource(db, ref.threadId);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return null;
     const claimed = await links.claimThreadLink(db, ref.guildId, ref.threadId);

@@ -90,10 +90,11 @@ export class HubForumDiscordSignupPings {
   ): Promise<links.ForumLink | null> {
     const { guildId, threadId } = ref;
     const create = plan.ping.length > 0;
-    const post = await this.outbound.ensureEventPost(
-      { guildId, threadId },
+    const post = await this.outbound.ensureEventPost({
+      guildId,
+      threadId,
       create,
-    );
+    });
     if (!post || post.discordDeletedAt || post.discordLockedAt) return null;
     return post;
   }

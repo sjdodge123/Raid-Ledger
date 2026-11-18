@@ -106,10 +106,11 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
     ]);
     const t = setup();
     expect(await t.svc.flush(5)).toBe('pinged');
-    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith(
-      { guildId: 7, threadId: 70 },
-      true,
-    );
+    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith({
+      guildId: 7,
+      threadId: 70,
+      create: true,
+    });
     expect(t.gateway.mention).toHaveBeenCalledTimes(1);
     expect(t.gateway.mention).toHaveBeenCalledWith(
       'dthread',
@@ -160,21 +161,11 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
     );
     expect([...t.set]).toEqual([A]);
     // A removal alone reads the post through the gate; it never creates one.
-    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith(
-      { guildId: 7, threadId: 70 },
-      false,
-    );
-  });
-
-  it('keeps a cancel whose removal failed, so the next flush retries it', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
-    const t = setup([B]);
-    t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
-    expect(await t.svc.flush(5)).toBe('pinged');
-    expect([...t.set]).toEqual([B]);
-    expect(await t.svc.flush(5)).toBe('pinged');
-    expect(t.gateway.removeThreadMembers).toHaveBeenCalledTimes(2);
-    expect([...t.set]).toEqual([]);
+    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith({
+      guildId: 7,
+      threadId: 70,
+      create: false,
+    });
   });
 
   it('waits (pings nobody, remembers nobody) while the bot is offline', async () => {
@@ -212,15 +203,27 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
 });
 
 describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () => {
+  it('M1: keeps a cancel whose removal failed, so the next flush retries it', async () => {
+    mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
+    const t = setup([B]);
+    t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect([...t.set]).toEqual([B]);
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.removeThreadMembers).toHaveBeenCalledTimes(2);
+    expect([...t.set]).toEqual([]);
+  });
+
   it('m3: a removal alone goes through the binding/stale gate, never a raw link read', async () => {
     mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
     const t = setup([B]);
     t.outbound.ensureEventPost.mockResolvedValueOnce(null);
     expect(await t.svc.flush(5)).toBe('closed');
-    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith(
-      { guildId: 7, threadId: 70 },
-      false,
-    );
+    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith({
+      guildId: 7,
+      threadId: 70,
+      create: false,
+    });
     expect(t.gateway.removeThreadMembers).not.toHaveBeenCalled();
     expect([...t.set]).toEqual([B]);
   });
