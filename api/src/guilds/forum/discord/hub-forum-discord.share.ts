@@ -45,6 +45,8 @@ export async function shareForumTags(
   }
   const mine = await assignTags(db, gateway, guildId, info.id, plan);
   if (!shared) return mine;
+  if (others.length === 1)
+    await retagLoneHubPosts(db, gateway, info.id, others);
   await gateway.requireTags(info.id);
   if (!forum.requireTagSet)
     await updateForum(db, forum.id, { requireTagSet: true });
@@ -68,6 +70,24 @@ async function assignTags(
     else await tagOtherHub(db, gateway, channelId, need.guildId, id);
   }
   return mine;
+}
+
+/**
+ * ROK-2258 — a hub tagged while alone on the forum may hold untagged posts
+ * (Require tags was off, so Discord users could post bare). As the forum
+ * turns shared, its tag lands on every one of its synced posts.
+ */
+async function retagLoneHubPosts(
+  db: ForumDiscordDb,
+  gateway: HubForumDiscordGateway,
+  channelId: string,
+  hubs: readonly { guildId: number; tagId: string | null }[],
+): Promise<void> {
+  for (const hub of hubs) {
+    if (hub.tagId === null) continue;
+    const posts = await linkedThreadIds(db, hub.guildId);
+    await gateway.applyTag(channelId, posts, hub.tagId);
+  }
 }
 
 /** Tag edits ride on Manage Channels (422 with that one label). */
