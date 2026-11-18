@@ -12,6 +12,10 @@ import {
   MANAGE_CHANNELS,
   missingForumPermissions,
 } from './hub-forum-discord.helpers';
+import {
+  DEFAULT_REACTION_EMOJI,
+  shouldSetDefaultReaction,
+} from './hub-forum-discord-decor';
 
 /** A Discord forum as the binding service sees it (no discord.js objects). */
 export interface ForumInfo {
@@ -146,6 +150,18 @@ export class HubForumDiscordGateway {
     if (forum.flags.has(ChannelFlags.RequireTag)) return;
     const flags = forum.flags.bitfield | ChannelFlags.RequireTag;
     await forum.edit({ flags, reason: REASON });
+  }
+
+  /**
+   * ROK-2258 ruling 1 — set the forum's default reaction to 👍 unless a
+   * moderator already chose one. Returns true when it was set.
+   */
+  async setDefaultReactionIfUnset(channelId: string): Promise<boolean> {
+    const forum = await this.requireForum(channelId);
+    if (!shouldSetDefaultReaction(forum.defaultReactionEmoji)) return false;
+    const emoji = { id: null, name: DEFAULT_REACTION_EMOJI };
+    await forum.setDefaultReactionEmoji(emoji, REASON);
+    return true;
   }
 
   /** Apply a hub's tag to its synced posts (≤5 per post). Best-effort. */
