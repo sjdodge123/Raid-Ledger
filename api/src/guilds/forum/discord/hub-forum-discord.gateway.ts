@@ -164,7 +164,10 @@ export class HubForumDiscordGateway {
     return true;
   }
 
-  /** Apply a hub's tag to its synced posts (≤5 per post). Best-effort. */
+  /**
+   * Apply a tag to synced posts (≤5 per post). Best-effort; a post that
+   * already carries it costs a read but no write (review r1 MAJOR 2a).
+   */
   async applyTag(
     channelId: string,
     threadIds: string[],
@@ -174,8 +177,9 @@ export class HubForumDiscordGateway {
     for (const id of threadIds) {
       try {
         const thread = await forum.threads.fetch(id);
-        const tags = [...new Set([...(thread?.appliedTags ?? []), tagId])];
-        await thread?.setAppliedTags(tags.slice(0, 5), REASON);
+        if (!thread || thread.appliedTags.includes(tagId)) continue;
+        const tags = [...thread.appliedTags, tagId];
+        await thread.setAppliedTags(tags.slice(0, 5), REASON);
       } catch (err) {
         this.logger.warn(`Could not tag forum post ${id}: ${describe(err)}`);
       }
