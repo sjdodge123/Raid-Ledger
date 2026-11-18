@@ -82,15 +82,20 @@ export function shouldRequireTags(
   return boundHubs > 1 && !alreadyRequired;
 }
 
+/** Discord allows at most 5 tags on one forum post. */
+const POST_TAG_MAX = 5;
+
 /**
- * The tags a new forum post carries: the hub's tag, plus the forum's Event
- * tag on an event post (when the forum has one).
+ * ROK-2258 ruling 2 — the tags a new forum post carries: the hub's tag(s),
+ * plus the forum's Event tag on an event post (when the forum has one),
+ * de-duplicated and capped at Discord's 5 per post.
  */
 export function postTagIds(
-  hubTagId: string | null,
+  base: readonly string[],
   isEvent: boolean,
   forumTags: readonly ForumTag[],
 ): string[] {
   const eventTagId = isEvent ? findTagId(forumTags, EVENT_TAG_NAME) : null;
-  return [hubTagId, eventTagId].filter((id): id is string => id !== null);
+  const all = eventTagId === null ? base : [...base, eventTagId];
+  return [...new Set(all)].slice(0, POST_TAG_MAX);
 }

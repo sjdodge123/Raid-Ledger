@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { removePostMembers } from './hub-forum-discord-post-members';
+import { postTagIds, type ForumTag } from './hub-forum-discord-decor';
 
 /** The bound forum and its one webhook (R9). */
 export interface OutboundTarget {
@@ -69,15 +70,17 @@ export class HubForumDiscordOutboundGateway {
   /** A new forum post; returns the post (thread) and starter message ids. */
   async createPost(
     target: OutboundTarget,
-    post: { title: string; content: string; tagIds: string[] },
+    post: { title: string; content: string; tagIds: string[]; event?: boolean },
     author: OutboundAuthor,
   ): Promise<DiscordMessageRef> {
     const hook = await this.webhook(target);
+    const forumTags = this.cachedForumTags(target.channelId);
     const msg = await hook.send({
       ...identity(author),
       threadName: post.title,
       content: post.content,
-      appliedTags: post.tagIds,
+      // ROK-2258: an event post also carries the forum's Event tag.
+      appliedTags: postTagIds(post.tagIds, post.event === true, forumTags),
       allowedMentions: NO_MENTIONS,
     });
     return { threadId: msg.channelId, messageId: msg.id };
@@ -199,6 +202,13 @@ export class HubForumDiscordOutboundGateway {
   }
 
   /** The forum's webhook, token included (OQ-9: re-fetched, never stored). */
+  /** The forum's tags from the cache (`webhook` just fetched it). */
+  private cachedForumTags(channelId: string): ForumTag[] {
+    const ch = this.guild().channels.cache.get(channelId);
+    if (ch?.type !== ChannelType.GuildForum) return [];
+    return ch.availableTags.map((t) => ({ id: t.id, name: t.name }));
+  }
+
   private async webhook(target: OutboundTarget): Promise<Webhook> {
     const ch = await this.guild().channels.fetch(target.channelId);
     if (ch?.type !== ChannelType.GuildForum) {

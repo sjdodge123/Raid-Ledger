@@ -89,15 +89,21 @@ describe('ROK-2258 postTagIds', () => {
   const forumTags = [{ id: 'e', name: 'event' }];
 
   it('adds the Event tag to an event post after the hub tag', () => {
-    expect(postTagIds('h', true, forumTags)).toEqual(['h', 'e']);
+    expect(postTagIds(['h'], true, forumTags)).toEqual(['h', 'e']);
   });
 
   it('leaves a plain post with only the hub tag', () => {
-    expect(postTagIds('h', false, forumTags)).toEqual(['h']);
-    expect(postTagIds(null, false, forumTags)).toEqual([]);
+    expect(postTagIds(['h'], false, forumTags)).toEqual(['h']);
+    expect(postTagIds([], false, forumTags)).toEqual([]);
   });
 
-  it('posts an event untagged-by-event when the forum has no Event tag', () => {
-    expect(postTagIds(null, true, [])).toEqual([]);
+  it('posts an event without the Event tag when the forum has none', () => {
+    expect(postTagIds([], true, [])).toEqual([]);
+  });
+
+  it("never repeats a tag and keeps to Discord's 5 per post", () => {
+    expect(postTagIds(['e'], true, forumTags)).toEqual(['e']);
+    const five = ['a', 'b', 'c', 'd', 'f'];
+    expect(postTagIds(five, true, forumTags)).toEqual(five);
   });
 });
