@@ -125,6 +125,24 @@ describe('ROK-2260 signup-ping listener', () => {
     await l.onDeleted({ eventId: 3, action: 'deleted' });
     expect(queue.schedule.mock.calls).toEqual([[1], [2], [3]]);
   });
+
+  it('never throws into the signup path, even when arming rejects', async () => {
+    const queue = {
+      schedule: jest.fn<Promise<boolean>, [number]>(() =>
+        Promise.reject(new Error('redis down')),
+      ),
+    };
+    const l = new HubForumDiscordSignupPingListener(
+      queue as unknown as HubForumDiscordSignupPingQueue,
+    );
+    const outcome = await l
+      .onCreated({ eventId: 4, action: 'signup_created' })
+      .then(
+        () => 'resolved',
+        (err: unknown) => `rejected: ${String(err)}`,
+      );
+    expect(outcome).toBe('resolved');
+  });
 });
 
 /** The event names a listener method subscribes to (`@OnEvent` metadata). */

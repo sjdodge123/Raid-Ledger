@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import {
@@ -20,6 +20,7 @@ export class HubForumDiscordSignupPingListener {
   readonly hubBehaviour = 'hub-forum.discord-sync';
   readonly hubBehaviourKind = 'ingest-source';
   readonly ownerPluginId = CORE_PLUGIN_ID;
+  private readonly logger = new Logger(HubForumDiscordSignupPingListener.name);
 
   constructor(private readonly queue: HubForumDiscordSignupPingQueue) {}
 
@@ -48,8 +49,14 @@ export class HubForumDiscordSignupPingListener {
     await this.rearm(payload);
   }
 
+  /** Arms the flush; a failure is logged, never thrown into the emitter. */
   private async rearm(payload: { eventId: number }): Promise<void> {
     if (!Number.isInteger(payload?.eventId)) return;
-    await this.queue.schedule(payload.eventId);
+    try {
+      await this.queue.schedule(payload.eventId);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Signup ping re-arm for ${payload.eventId}: ${why}`);
+    }
   }
 }
