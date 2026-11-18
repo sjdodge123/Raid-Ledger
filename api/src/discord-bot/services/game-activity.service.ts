@@ -15,6 +15,12 @@ import * as schema from '../../drizzle/schema';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import { GameRoleReconcileService } from '../game-roles/game-role-reconcile.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import {
+  EXTENSION_POINTS,
+  type GameActivityAttributionAdapter,
+} from '../../plugins/plugin-host/extension-points';
+import { attributeOpenSessions } from './game-activity-attribution.helpers';
 import {
   FLUSH_INTERVAL_MS,
   MAX_SESSION_DURATION_SECONDS,
@@ -59,7 +65,18 @@ export class GameActivityService
     private readonly cronJobService: CronJobService,
     private readonly gameTasteService: GameTasteService,
     @Optional() private readonly gameRoles?: GameRoleReconcileService,
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
+
+  /** ROK-2259: attribution adapters of the currently active plugins. */
+  private attributionAdapters(): GameActivityAttributionAdapter[] {
+    if (!this.pluginRegistry) return [];
+    const adapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<GameActivityAttributionAdapter>(
+        EXTENSION_POINTS.GAME_ACTIVITY_ATTRIBUTION,
+      );
+    return [...adapters.values()];
+  }
 
   /** Fire-and-forget batch enqueue for game-taste recomputes (ROK-1082). */
   private enqueueTasteRecomputes(gameIds: number[]): void {
@@ -167,25 +184,43 @@ export class GameActivityService
     return this.activeSources.get(`${userId}:${discordActivityName}`);
   }
 
+  /** Resolve (into the name cache) every opened activity name not cached yet. */
+  private async resolveUncachedNames(events: BufferedEvent[]): Promise<void> {
+    const unresolved = new Set<string>();
+    for (const ev of events) {
+      if (ev.type === 'open' && !this.gameNameCache.has(ev.discordActivityName))
+        unresolved.add(ev.discordActivityName);
+    }
+    if (unresolved.size === 0) return;
+    await resolveGameNames(this.db, [...unresolved], this.gameNameCache);
+  }
+
+  /**
+   * ROK-2259: apply buffered events one at a time in buffer (chronological)
+   * order; an open is attributed then inserted. A plugin adapter's overlap
+   * check (presence vs voice row of the same play) then sees exactly the rows
+   * open at that moment: rows opened earlier in this flush, minus rows whose
+   * buffered close came first.
+   */
+  private async applyInOrder(events: BufferedEvent[]): Promise<void> {
+    const adapters = this.attributionAdapters();
+    for (const ev of events) {
+      if (ev.type === 'close') {
+        await processCloseEvents(this.db, [ev], this.logger);
+        continue;
+      }
+      const cache = this.gameNameCache;
+      await attributeOpenSessions([ev], cache, adapters, this.logger);
+      await processOpenEvents(this.db, [ev], cache, this.logger);
+    }
+  }
+
   /** Flush buffered events to the database. */
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
 
     const events = this.buffer.splice(0);
-
-    const unresolvedNames = new Set<string>();
-    for (const ev of events) {
-      if (
-        ev.type === 'open' &&
-        !this.gameNameCache.has(ev.discordActivityName)
-      ) {
-        unresolvedNames.add(ev.discordActivityName);
-      }
-    }
-
-    if (unresolvedNames.size > 0) {
-      await resolveGameNames(this.db, [...unresolvedNames], this.gameNameCache);
-    }
+    await this.resolveUncachedNames(events);
 
     const opens = events.filter(
       (e): e is SessionOpenEvent => e.type === 'open',
@@ -194,10 +229,9 @@ export class GameActivityService
       (e): e is SessionCloseEvent => e.type === 'close',
     );
 
-    await processOpenEvents(this.db, opens, this.gameNameCache, this.logger);
+    await this.applyInOrder(events);
     // ROK-1767: near-real-time game-role add (fire-and-forget, never awaited).
     this.gameRoles?.grantForOpens(opens, this.gameNameCache);
-    await processCloseEvents(this.db, closes, this.logger);
 
     if (opens.length > 0 || closes.length > 0) {
       this.logger.debug(

@@ -2143,6 +2143,13 @@
       "when": 1794918012006,
       "tag": "0306_hub_forum_discord_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 307,
+      "version": "7",
+      "when": 1794979568180,
+      "tag": "0307_forever_activity_reattribution",
+      "breakpoints": true
     }
   ]
 }
