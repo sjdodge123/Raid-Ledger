@@ -184,25 +184,23 @@ export class GameActivityService
     return this.activeSources.get(`${userId}:${discordActivityName}`);
   }
 
+  /** Resolve (into the name cache) every opened activity name not cached yet. */
+  private async resolveUncachedNames(events: BufferedEvent[]): Promise<void> {
+    const unresolved = new Set<string>();
+    for (const ev of events) {
+      if (ev.type === 'open' && !this.gameNameCache.has(ev.discordActivityName))
+        unresolved.add(ev.discordActivityName);
+    }
+    if (unresolved.size === 0) return;
+    await resolveGameNames(this.db, [...unresolved], this.gameNameCache);
+  }
+
   /** Flush buffered events to the database. */
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
 
     const events = this.buffer.splice(0);
-
-    const unresolvedNames = new Set<string>();
-    for (const ev of events) {
-      if (
-        ev.type === 'open' &&
-        !this.gameNameCache.has(ev.discordActivityName)
-      ) {
-        unresolvedNames.add(ev.discordActivityName);
-      }
-    }
-
-    if (unresolvedNames.size > 0) {
-      await resolveGameNames(this.db, [...unresolvedNames], this.gameNameCache);
-    }
+    await this.resolveUncachedNames(events);
 
     const opens = events.filter(
       (e): e is SessionOpenEvent => e.type === 'open',

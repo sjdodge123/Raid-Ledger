@@ -269,23 +269,13 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy(): void {
-    if (this.activatedHandler) {
-      this.eventEmitter.removeListener(
-        PLUGIN_EVENTS.ACTIVATED,
-        this.activatedHandler,
-      );
-    }
-    if (this.installedHandler) {
-      this.eventEmitter.removeListener(
-        PLUGIN_EVENTS.INSTALLED,
-        this.installedHandler,
-      );
-    }
-    if (this.uninstalledHandler) {
-      this.eventEmitter.removeListener(
-        PLUGIN_EVENTS.UNINSTALLED,
-        this.uninstalledHandler,
-      );
+    const handlers = [
+      [PLUGIN_EVENTS.ACTIVATED, this.activatedHandler],
+      [PLUGIN_EVENTS.INSTALLED, this.installedHandler],
+      [PLUGIN_EVENTS.UNINSTALLED, this.uninstalledHandler],
+    ] as const;
+    for (const [event, handler] of handlers) {
+      if (handler) this.eventEmitter.removeListener(event, handler);
     }
   }
 
