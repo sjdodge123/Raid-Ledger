@@ -1,10 +1,13 @@
-import type { Queue } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import type Redis from 'ioredis';
 import { SIGNUP_PING_DEBOUNCE_MS } from './hub-forum-discord-signup-pings';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
 import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
 import { HubForumDiscordSignupPingQueue } from './hub-forum-discord-signup-pings.queue';
 import * as q from './hub-forum-discord-signup-pings.queries';
+import { HubForumDiscordSignupPingProcessor } from './hub-forum-discord-signup-pings.processor';
+import type { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
+import type { QueueHealthService } from '../../../queue/queue-health.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
@@ -126,7 +129,7 @@ describe('ROK-2260 one-time deploy catch-up', () => {
       set: jest.fn(() => Promise.resolve(setReply)),
       del: jest.fn(() => Promise.resolve(1)),
     };
-    const queue = { schedule: jest.fn(() => Promise.resolve()) };
+    const queue = { schedule: jest.fn((_id: number) => Promise.resolve(true)) };
     jest.mocked(q.listUpcomingBoundEventIds).mockResolvedValue([5, 6]);
     const svc = new HubForumDiscordSignupPingCatchUp(
       {} as ForumDiscordDb,
@@ -164,9 +167,32 @@ describe('ROK-2260 one-time deploy catch-up', () => {
     );
   });
 
+  it('P2-3: a flush that could not be armed releases the guard so the next boot retries', async () => {
+    const t = catchUp('OK');
+    t.queue.schedule.mockResolvedValueOnce(false);
+    await t.svc.run(new Date());
+    expect(t.queue.schedule.mock.calls).toEqual([[5], [6]]);
+    expect(t.redis.del).toHaveBeenCalledWith(
+      'hub-forum:signup-pings:catch-up:v1',
+    );
+  });
+
   it('m5: a boot that lost the guard never releases it', async () => {
     const t = catchUp(null);
     await t.svc.run(new Date());
     expect(t.redis.del).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2260 signup-ping processor', () => {
+  it('P2-2: a flush with a failed removal throws, so BullMQ retries it', async () => {
+    const pings = { flush: jest.fn(() => Promise.resolve('incomplete')) };
+    const p = new HubForumDiscordSignupPingProcessor(
+      {} as Queue,
+      pings as unknown as HubForumDiscordSignupPings,
+      {} as QueueHealthService,
+    );
+    const job = { data: { eventId: 9 } } as Job<{ eventId: number }>;
+    await expect(p.process(job)).rejects.toThrow('event 9: incomplete');
   });
 });

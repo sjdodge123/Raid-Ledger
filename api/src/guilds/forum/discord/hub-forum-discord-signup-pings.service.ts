@@ -20,11 +20,18 @@ import {
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /**
- * What one flush did. `offline` / `pending` mean "try again" (the processor
- * retries); the rest are final for this flush.
+ * What one flush did. `offline` / `pending` / `incomplete` (a removal
+ * Discord refused — Codex P2-2) mean "try again" (the processor retries);
+ * the rest are final for this flush.
  */
 export type SignupPingOutcome =
-  'unbound' | 'unchanged' | 'offline' | 'closed' | 'pending' | 'pinged';
+  | 'unbound'
+  | 'unchanged'
+  | 'offline'
+  | 'closed'
+  | 'pending'
+  | 'incomplete'
+  | 'pinged';
 
 /** The pinged set outlives the event by a week, then Redis drops it. */
 const SET_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -75,8 +82,8 @@ export class HubForumDiscordSignupPings {
     if (post === null) return 'closed';
     if (links.isUnsent(post)) return 'pending';
     await this.ping(key, post.discordThreadId, plan.ping);
-    await this.remove(key, post.discordThreadId, plan.remove);
-    return 'pinged';
+    const removedAll = await this.remove(key, post.discordThreadId, plan.remove);
+    return removedAll ? 'pinged' : 'incomplete';
   }
 
   /**
@@ -111,13 +118,16 @@ export class HubForumDiscordSignupPings {
     }
   }
 
-  /** Ruling 3: out of the post silently; forgotten so a re-signup pings. */
+  /**
+   * Ruling 3: out of the post silently; forgotten so a re-signup pings.
+   * False when any removal failed (those stay remembered for the retry).
+   */
   private async remove(
     key: string,
     discordThreadId: string,
     userIds: string[],
-  ): Promise<void> {
-    if (userIds.length === 0) return;
+  ): Promise<boolean> {
+    if (userIds.length === 0) return true;
     const out = await this.gateway.removeThreadMembers(
       discordThreadId,
       userIds,
@@ -125,5 +135,7 @@ export class HubForumDiscordSignupPings {
     );
     // Only the ones really out: a failed removal is retried next flush.
     if (out.length > 0) await this.redis.srem(key, ...out);
+    const gone = new Set(out);
+    return userIds.every((id) => gone.has(id));
   }
 }

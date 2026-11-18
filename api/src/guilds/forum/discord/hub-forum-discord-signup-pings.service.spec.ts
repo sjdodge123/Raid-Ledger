@@ -203,11 +203,12 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
 });
 
 describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () => {
-  it('M1: keeps a cancel whose removal failed, so the next flush retries it', async () => {
+  it('M1/P2-2: a failed removal is kept and reported incomplete, so the job retries it', async () => {
     mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
     const t = setup([B]);
     t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
-    expect(await t.svc.flush(5)).toBe('pinged');
+    // Codex P2-2: retryable, so the job is retried with backoff.
+    expect(await t.svc.flush(5)).toBe('incomplete');
     expect([...t.set]).toEqual([B]);
     expect(await t.svc.flush(5)).toBe('pinged');
     expect(t.gateway.removeThreadMembers).toHaveBeenCalledTimes(2);

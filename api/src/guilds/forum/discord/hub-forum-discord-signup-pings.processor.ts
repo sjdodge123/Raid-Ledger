@@ -8,8 +8,8 @@ import {
   type SignupPingJobData,
 } from './hub-forum-discord-signup-pings.queue';
 
-/** Outcomes that mean "nothing was written yet — try again with backoff". */
-const RETRY = new Set(['offline', 'pending']);
+/** Outcomes that mean "not all written yet — try again with backoff". */
+const RETRY = new Set(['offline', 'pending', 'incomplete']);
 
 /** ROK-2260 — runs one event's debounced signup-ping flush. */
 @Processor(SIGNUP_PING_QUEUE)
@@ -32,7 +32,10 @@ export class HubForumDiscordSignupPingProcessor
     this.queueHealth.register(this.queue);
   }
 
-  /** @throws when the bot is offline or the post is still unsent (retried). */
+  /**
+   * @throws when the bot is offline, the post is still unsent, or a removal
+   * failed — BullMQ retries with the queue's bounded backoff.
+   */
   async process(job: Job<SignupPingJobData>): Promise<void> {
     const { eventId } = job.data;
     const outcome = await this.pings.flush(eventId);
