@@ -1,4 +1,5 @@
 import { HUB_FORUM_DISCORD_TAG_LIMIT } from '@raid-ledger/contract';
+import { DiscordAPIError } from 'discord.js';
 
 /** ROK-2258 ruling 2 — the tag every synced event post carries. */
 export const EVENT_TAG_NAME = 'Event';
@@ -98,4 +99,27 @@ export function postTagIds(
   const eventTagId = isEvent ? findTagId(forumTags, EVENT_TAG_NAME) : null;
   const all = eventTagId === null ? base : [...base, eventTagId];
   return [...new Set(all)].slice(0, POST_TAG_MAX);
+}
+
+/**
+ * How a dressing run ended (review r1 MAJOR 1): `done`, `settled` (skipped
+ * for good — no retry fixes it) or `retry` (transient: worth another go).
+ */
+export type DecorOutcome = 'done' | 'settled' | 'retry';
+
+/** Unknown Channel, Missing Access, Missing Permissions: no retry fixes them. */
+const PERMANENT_DISCORD_CODES: ReadonlySet<number> = new Set([
+  10003, 50001, 50013,
+]);
+
+/**
+ * Classify a thrown dressing error: a permanent Discord refusal settles,
+ * everything else (429, 5xx, network, DB) is worth a retry.
+ */
+export function failureOutcome(err: unknown): DecorOutcome {
+  const permanent =
+    err instanceof DiscordAPIError &&
+    typeof err.code === 'number' &&
+    PERMANENT_DISCORD_CODES.has(err.code);
+  return permanent ? 'settled' : 'retry';
 }

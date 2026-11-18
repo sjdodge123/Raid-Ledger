@@ -2,9 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   EVENT_TAG_NAME,
+  failureOutcome,
   findTagId,
   planTagCreates,
   shouldRequireTags,
+  type DecorOutcome,
   type ForumTag,
 } from './hub-forum-discord-decor';
 import { linkedEventThreadIds } from './hub-forum-discord-decor.queries';
@@ -30,7 +32,8 @@ function describe(err: unknown): string {
  * ROK-2258 — dress a bound Discord forum: a tag per hub (even a lone one),
  * an Event tag on event posts, 👍 as the default reaction when unset, and
  * Require tags once more than one hub shares it. Best-effort: never fails
- * a bind; `run` answers false so the deploy backfill can retry.
+ * a bind; `run` answers a {@link DecorOutcome} so the deploy backfill retries
+ * only transient failures.
  */
 @Injectable()
 export class HubForumDiscordDecor {
@@ -41,24 +44,58 @@ export class HubForumDiscordDecor {
     private readonly gateway: HubForumDiscordGateway,
   ) {}
 
-  /** Dress forum `forumId` (Discord channel `channelId`); true when done. */
-  async run(forumId: number, channelId: string): Promise<boolean> {
+  /**
+   * Dress forum `forumId` (Discord channel `channelId`). A bind passes the
+   * `joiningGuildId` so only that hub's event posts are tagged (review r1
+   * MAJOR 2); the backfill omits it and tags every bound hub's.
+   */
+  async run(
+    forumId: number,
+    channelId: string,
+    joiningGuildId?: number,
+  ): Promise<DecorOutcome> {
     try {
       const info = await this.gateway.fetchForum(channelId);
-      if (!info) throw new Error('forum not visible');
-      if (!info.canManage) throw new Error('missing Manage Channels');
-      const hubs = await listForumBindings(this.db, forumId);
-      const tags = await this.ensureTags(info, hubs);
-      await this.tagHubs(channelId, hubs, tags);
-      await this.tagEvents(channelId, hubs, tags);
-      await this.gateway.setDefaultReactionIfUnset(channelId);
-      if (shouldRequireTags(hubs.length, info.requireTag))
-        await this.gateway.requireTags(channelId);
-      return true;
+      if (!info) return this.unreadable(channelId);
+      if (!info.canManage) return this.settle(channelId, 'no Manage Channels');
+      await this.dress(info, forumId, joiningGuildId);
+      return 'done';
     } catch (err) {
-      this.logger.warn(`Forum ${channelId} not dressed: ${describe(err)}`);
-      return false;
+      const outcome = failureOutcome(err);
+      this.logger.warn(
+        `Forum ${channelId} not dressed (${outcome}): ${describe(err)}`,
+      );
+      return outcome;
     }
+  }
+
+  private async dress(
+    info: ForumInfo,
+    forumId: number,
+    joiningGuildId: number | undefined,
+  ): Promise<void> {
+    const hubs = await listForumBindings(this.db, forumId);
+    const tags = await this.ensureTags(info, hubs);
+    await this.tagHubs(info.id, hubs, tags);
+    const eventHubs =
+      joiningGuildId === undefined
+        ? hubs.map((h) => h.guildId)
+        : [joiningGuildId];
+    await this.tagEvents(info.id, eventHubs, tags);
+    await this.gateway.setDefaultReactionIfUnset(info.id);
+    if (shouldRequireTags(hubs.length, info.requireTag))
+      await this.gateway.requireTags(info.id);
+  }
+
+  /** Forum unreadable: offline bot → retry; deleted channel → settled. */
+  private unreadable(channelId: string): DecorOutcome {
+    if (this.gateway.guildId() === null) return 'retry';
+    return this.settle(channelId, 'forum not visible');
+  }
+
+  private settle(channelId: string, why: string): DecorOutcome {
+    this.logger.warn(`Forum ${channelId} not dressed (settled): ${why}`);
+    return 'settled';
   }
 
   /** Create the missing hub + Event tags; log the ones past the cap. */
@@ -92,15 +129,14 @@ export class HubForumDiscordDecor {
     }
   }
 
-  /** Put the Event tag on every synced event post in the forum. */
+  /** Put the Event tag on the given hubs' synced event posts. */
   private async tagEvents(
     channelId: string,
-    hubs: readonly BoundHub[],
+    guildIds: readonly number[],
     tags: readonly ForumTag[],
   ): Promise<void> {
     const id = findTagId(tags, EVENT_TAG_NAME);
     if (id === null) return;
-    const guildIds = hubs.map((h) => h.guildId);
     const threads = await linkedEventThreadIds(this.db, guildIds);
     await this.gateway.applyTag(channelId, threads, id);
   }

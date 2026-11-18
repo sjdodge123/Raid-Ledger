@@ -4,6 +4,7 @@ import type Redis from 'ioredis';
 import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
+import type { DecorOutcome } from './hub-forum-discord-decor';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { listBoundForums } from './hub-forum-discord-decor.queries';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -14,6 +15,9 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
  */
 export const FORUM_DECOR_BACKFILL_KEY = 'hub-forum:discord-decor:backfill:v1';
 
+/** Review r1: the guard expires while running, so a crash mid-run frees it. */
+const RUNNING_TTL_SECONDS = 3600;
+
 function describe(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -21,8 +25,9 @@ function describe(err: unknown): string {
 /**
  * ROK-2258 ruling 4 — once, the first time the bot connects with this
  * feature, dress every already-bound forum (tags, 👍, Require tags). Runs on
- * CONNECTED, not at boot, because every step is a Discord call. A failure
- * gives the guard back so the next connect retries; never throws.
+ * CONNECTED, not at boot, because every step is a Discord call. A transient
+ * failure gives the guard back so the next connect retries; a permanent skip
+ * (no Manage Channels, a deleted channel) settles. Never throws.
  */
 @Injectable()
 export class HubForumDiscordDecorBackfill {
@@ -43,26 +48,41 @@ export class HubForumDiscordDecorBackfill {
   async run(now: Date): Promise<number> {
     let won = false;
     try {
+      const stamp = now.toISOString();
       const reply = await this.redis.set(
         FORUM_DECOR_BACKFILL_KEY,
-        now.toISOString(),
+        stamp,
+        'EX',
+        RUNNING_TTL_SECONDS,
         'NX',
       );
       won = reply === 'OK';
       if (!won) return 0;
-      const forums = await listBoundForums(this.db);
-      let done = 0;
-      for (const f of forums)
-        if (await this.decor.run(f.id, f.channelId)) done++;
-      if (done < forums.length)
-        throw new Error(`${forums.length - done} forum(s) not dressed`);
-      this.logger.log(`Forum decor backfill dressed ${done} forum(s)`);
+      const done = await this.dressAll();
+      await this.redis.set(FORUM_DECOR_BACKFILL_KEY, stamp); // settled: no TTL
       return done;
     } catch (err) {
       this.logger.warn(`Forum decor backfill skipped: ${describe(err)}`);
       if (won) await this.release();
       return 0;
     }
+  }
+
+  /** Dress each forum; throws when any failed transiently (guard released). */
+  private async dressAll(): Promise<number> {
+    const forums = await listBoundForums(this.db);
+    const outcomes: DecorOutcome[] = [];
+    for (const f of forums)
+      outcomes.push(await this.decor.run(f.id, f.channelId));
+    const count = (o: DecorOutcome): number =>
+      outcomes.filter((x) => x === o).length;
+    if (count('retry') > 0)
+      throw new Error(`${count('retry')} forum(s) not dressed`);
+    this.logger.log(
+      `Forum decor backfill dressed ${count('done')} forum(s), ` +
+        `skipped ${count('settled')} for good`,
+    );
+    return count('done');
   }
 
   /** A failed backfill gives the guard back for the next connect. */

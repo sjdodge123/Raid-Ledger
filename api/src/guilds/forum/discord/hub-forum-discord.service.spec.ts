@@ -106,7 +106,7 @@ function makeService(gateway: HubForumDiscordGateway) {
   const routes = { invalidate: jest.fn() };
   const resolver = routes as unknown as HubForumDiscordRouteResolver;
   const decor = {
-    run: jest.fn(() => Promise.resolve(true)),
+    run: jest.fn(() => Promise.resolve('done')),
   } as unknown as HubForumDiscordDecor;
   return new HubForumDiscordService(db, gateway, resolver, decor);
 }

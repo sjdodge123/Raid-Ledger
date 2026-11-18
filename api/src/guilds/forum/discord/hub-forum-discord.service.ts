@@ -142,8 +142,11 @@ export class HubForumDiscordService {
     });
     await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
-    await this.decor.run(forum.id, info.id); // ROK-2258: tags + 👍, best-effort
     this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
+    // ROK-2258: tags + 👍, best-effort. Awaited under the bind lock (a 2nd
+    // bind must not rewrite the tag list mid-run); bounded to the joining
+    // hub's event posts, and already-tagged posts cost no write.
+    await this.decor.run(forum.id, info.id, guildId);
     return this.status(guildId);
   }
 
