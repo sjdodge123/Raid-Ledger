@@ -108,6 +108,12 @@ async function forumRow(channelId: string) {
   return row ?? null;
 }
 
+/** The id of the fake forum's tag called `name` (fails loudly when absent). */
+function forumTagId(channelId: string, name: string): string {
+  const tags = need(fake.forums.get(channelId), 'forum').tags;
+  return need(tags.find((t) => t.name === name)?.id, `tag ${name}`);
+}
+
 async function hubNameOf(g: number): Promise<string> {
   const [row] = nonEmpty(
     await ctx.testApp.db
@@ -254,9 +260,12 @@ describe('ROK-2208 binding — PUT (AC1, AC2)', () => {
     expect(await bindingRow(g)).toBeNull();
   });
 
-  it('AC2: create makes a managed forum, one webhook and an acked binding', async () => {
+  it("AC2: create makes a managed forum, one webhook and an acked binding with the hub's tag", async () => {
     const before = Date.now();
     const { g, channelId } = await boundHub();
+    // ROK-2258 ruling: a lone hub gets its own tag at bind.
+    const tagName = (await hubNameOf(g)).trim().slice(0, 20).trim();
+    const tagId = forumTagId(channelId, tagName);
     const s = await statusOf(g);
     expect(s.binding).toMatchObject({
       channelId,
@@ -264,7 +273,7 @@ describe('ROK-2208 binding — PUT (AC1, AC2)', () => {
       managed: true,
       shared: false,
       sharedWith: 0,
-      tagName: null,
+      tagName,
       health: 'ok',
       missingPermissions: [],
     });
@@ -275,7 +284,7 @@ describe('ROK-2208 binding — PUT (AC1, AC2)', () => {
     const row = need(await bindingRow(g), 'binding');
     expect(row).toMatchObject({
       forumId: forum.id,
-      tagId: null,
+      tagId,
       ackBy: adminId,
     });
     expect(row.boundAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
@@ -382,7 +391,7 @@ describe('ROK-2208 binding — sharing a forum (AC3, D6)', () => {
 });
 
 describe('ROK-2208 binding — the picker and the tag budget', () => {
-  it('the picker lists a shared forum with its free tag slots', async () => {
+  it("the picker lists a shared forum with its free tag slots (the lone hub's tag and Event spent)", async () => {
     const { channelId } = await boundHub();
     const res = await as(
       'admin',
@@ -393,11 +402,11 @@ describe('ROK-2208 binding — the picker and the tag budget', () => {
     const opts = (res.body as HubForumDiscordChannelOptions).channels;
     expect(opts.find((c) => c.id === channelId)).toMatchObject({
       sharedWith: 1,
-      tagsFree: 19,
+      tagsFree: 18, // ROK-2258: 20 − (hub tag + Event tag), nothing left to reserve
     });
   });
 
-  it('a forum with 19 tags and one hub offers 0 free slots and refuses a 2nd hub', async () => {
+  it("a forum with 19 tags: the lone hub's tag fills it, 0 free slots, a 2nd hub refused before any Discord write", async () => {
     const own = Array.from({ length: 19 }, (_, i) => ({
       id: snowflake(),
       name: `mod ${String(i)}`,
@@ -405,6 +414,12 @@ describe('ROK-2208 binding — the picker and the tag budget', () => {
     const f = fake.put({ tags: own });
     const a = await newHub(ctx);
     expect((await join(a, f.id)).status).toBe(200);
+    // ROK-2258: the lone hub's tag takes slot 20; Event (best-effort) is skipped.
+    const tags = need(fake.forums.get(f.id), 'forum').tags;
+    expect(tags).toHaveLength(20);
+    expect(need(await bindingRow(a), 'binding A').tagId).toBe(tags[19]?.id);
+    fake.spies.addTags.mockClear();
+    fake.spies.requireTags.mockClear();
     const b = await newHub(ctx);
     const list = await as('admin', 'get', `${route(b)}/channels`);
     const opt = (list.body as HubForumDiscordChannelOptions).channels.find(
@@ -416,6 +431,7 @@ describe('ROK-2208 binding — the picker and the tag budget', () => {
     expect(res.body).toMatchObject({ code: 'FORUM_DISCORD_TAG_LIMIT' });
     expect(await bindingRow(b)).toBeNull();
     expect(fake.spies.addTags).not.toHaveBeenCalled();
+    expect(fake.spies.requireTags).not.toHaveBeenCalled();
   });
 });
 
@@ -597,8 +613,8 @@ describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () =
       channelId: f.id,
       name: 'hub-forums',
       sharedWith: 1,
-      tagsUsed: 3,
-      tagsFree: 16,
+      tagsUsed: 5, // ROK-2258: 3 moderator tags + the 1st hub's tag + Event
+      tagsFree: 15,
       tagName: (await hubNameOf(g)).trim().slice(0, 20).trim(),
       missingPermissions: ['Manage Webhooks'],
     });

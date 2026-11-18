@@ -41,6 +41,8 @@ const KNOWN_THROW_SAFE: string[] = [
   'calendar-write.processor.ts',
   // CalendarReadProcessor: process() delegates to runCalendarReadSync; failures go through recordReadSyncFailure, which records the terminal state; only retryable ones rethrow for BullMQ backoff, the rest become UnrecoverableError (ROK-1593)
   'calendar-read.processor.ts',
+  // HubForumDiscordSignupPingProcessor: process() delegates to pings.flush and throws on a retryable outcome (offline / pending / incomplete, incl. a failed removal) so BullMQ's bounded backoff retries it; no fire-and-forget side effects (ROK-2260)
+  'hub-forum-discord-signup-pings.processor.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */

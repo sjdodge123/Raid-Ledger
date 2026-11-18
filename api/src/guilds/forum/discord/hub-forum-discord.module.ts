@@ -1,3 +1,4 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module, type OnModuleInit } from '@nestjs/common';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { DiscordBotModule } from '../../../discord-bot/discord-bot.module';
@@ -27,16 +28,34 @@ import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.d
 import { HubForumDiscordReconcileService } from './hub-forum-discord-reconcile';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { HubForumDiscordService } from './hub-forum-discord.service';
+import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
+import { HubForumDiscordDecorBackfill } from './hub-forum-discord-decor.backfill';
+import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
+import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
+import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
+import { HubForumDiscordSignupPingProcessor } from './hub-forum-discord-signup-pings.processor';
+import {
+  HubForumDiscordSignupPingQueue,
+  SIGNUP_PING_QUEUE,
+} from './hub-forum-discord-signup-pings.queue';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
  * the outbound/inbound/reconcile lanes add their providers here.
  */
 @Module({
-  imports: [DrizzleModule, DiscordBotModule, GuildsCoreModule, SettingsModule],
+  imports: [
+    DrizzleModule,
+    DiscordBotModule,
+    GuildsCoreModule,
+    SettingsModule,
+    BullModule.registerQueue({ name: SIGNUP_PING_QUEUE }),
+  ],
   controllers: [HubForumDiscordController, HubForumDiscordDemoTestController],
   providers: [
     HubForumDiscordGateway,
+    HubForumBindLock,
     HubForumDiscordService,
     HubForumDiscordOutboundGateway,
     HubForumDiscordOutboundService,
@@ -52,6 +71,13 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordReconcileService,
     HubForumDiscordEventLockGateway,
     HubForumDiscordEventLockSweep,
+    HubForumDiscordSignupPings,
+    HubForumDiscordSignupPingQueue,
+    HubForumDiscordSignupPingListener,
+    HubForumDiscordSignupPingProcessor,
+    HubForumDiscordSignupPingCatchUp,
+    HubForumDiscordDecor,
+    HubForumDiscordDecorBackfill,
   ],
   exports: [
     HubForumDiscordGateway,
@@ -59,6 +85,7 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
     HubForumDiscordInboundIngest,
     HubForumDiscordReconcileService,
     HubForumDiscordEventLockSweep,
+    HubForumDiscordSignupPings,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {

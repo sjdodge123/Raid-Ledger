@@ -90,6 +90,10 @@ function writeSpies(gw: HubForumDiscordGateway, forums: Forums) {
     }),
     requireTags: jest.spyOn(gw, 'requireTags').mockResolvedValue(undefined),
     applyTag: jest.spyOn(gw, 'applyTag').mockResolvedValue(undefined),
+    // ROK-2258: the fake forum has no default reaction, so 👍 is set.
+    setDefaultReactionIfUnset: jest
+      .spyOn(gw, 'setDefaultReactionIfUnset')
+      .mockResolvedValue(true),
     deleteForum: jest.spyOn(gw, 'deleteForum').mockImplementation((ch) => {
       forums.delete(ch);
       return Promise.resolve();

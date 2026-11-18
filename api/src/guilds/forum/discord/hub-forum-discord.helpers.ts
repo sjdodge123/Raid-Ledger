@@ -6,6 +6,7 @@ import {
   PutHubForumDiscordSchema,
   type PutHubForumDiscordInput,
 } from '@raid-ledger/contract';
+import { EVENT_TAG_NAME } from './hub-forum-discord-decor';
 
 /**
  * ROK-2208 §5.1 step 4 — what the bot needs IN the forum channel to sync it.
@@ -64,7 +65,10 @@ export function missingForumPermissions(
 
 /** A hub's forum tag name: its name, trimmed to Discord's cap. */
 export function tagNameFor(hubName: string): string {
-  return hubName.trim().slice(0, FORUM_TAG_NAME_MAX).trim() || 'Hub';
+  const name = hubName.trim().slice(0, FORUM_TAG_NAME_MAX).trim() || 'Hub';
+  // Codex P2 #1: a hub tag never shares the Event tag (inbound routing).
+  const reserved = name.toLowerCase() === EVENT_TAG_NAME.toLowerCase();
+  return reserved ? `${name} hub` : name;
 }
 
 /** Discord's channel name cap. */

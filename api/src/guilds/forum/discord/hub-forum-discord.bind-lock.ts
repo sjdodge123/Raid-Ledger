@@ -1,3 +1,5 @@
+import { Injectable } from '@nestjs/common';
+
 /**
  * ROK-2208 Codex P2 — runs async tasks one at a time per key, in arrival
  * order. `bind()` keys it on the Discord guild so two hubs choosing the
@@ -22,3 +24,11 @@ export class KeyedSerializer {
     return next;
   }
 }
+
+/**
+ * ROK-2258 Codex P2 #2 — the ONE per-Discord-guild bind lock, shared by the
+ * bind/unbind service and the decor backfill so their `setAvailableTags`
+ * writes never interleave (each rewrites the whole tag list).
+ */
+@Injectable()
+export class HubForumBindLock extends KeyedSerializer {}
