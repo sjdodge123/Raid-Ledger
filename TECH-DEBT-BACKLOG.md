@@ -4416,3 +4416,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-17 — feat/rok-2212-suggested-groups (surfaced during ROK-2212 review)
 
 - **low** `api/src/plugins/wow-common/wow-common.module.ts` — sits at exactly 300 counted lines (the `max-lines` error line) after ROK-2212 added the suggested-groups providers; the next provider added there fails lint. Not pre-existing breakage, a cap warning. Suggested: split the guild sub-feature providers (roster insights, suggested groups, roster claim) into a `WowGuildsModule` imported by `WowCommonModule`.
+
+### 2026-11-18 — fix/rok-2262-all-time-activity (Codex P2, accepted limit)
+
+- **low** `api/src/igdb/igdb-activity.helpers.ts:151-154` — all-time Game Activity now sums `day` rollups only. After a rollup outage longer than 48 h, `aggregateRollups` rebuilds only buckets a recent session touches, so older day buckets can be missing while the month bucket is complete, and all-time reads low for that gap. Suggested: when the rollup job resumes after a gap, rebuild every day bucket since the last successful run, not just the touched ones.
