@@ -1,4 +1,6 @@
 import type { Job, Queue } from 'bullmq';
+import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
+import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import type Redis from 'ioredis';
 import { SIGNUP_PING_DEBOUNCE_MS } from './hub-forum-discord-signup-pings';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
@@ -86,16 +88,6 @@ describe('ROK-2260 signup-ping debounce', () => {
     );
   });
 
-  it('P2-1: a pending trailing flush is the one re-armed (no second flush that could fire early)', async () => {
-    // The primary already finished (removeOnComplete), its trail still waits.
-    const t = fakeQueue({ 'forum-signup-pings-42-trail': 'delayed' });
-    await t.svc.schedule(42);
-    expect(
-      t.held.get('forum-signup-pings-42-trail')?.changeDelay,
-    ).toHaveBeenCalledWith(SIGNUP_PING_DEBOUNCE_MS);
-    expect(t.queue.add).not.toHaveBeenCalled();
-  });
-
   it('clears a retained finished job so the next change still arms a flush', async () => {
     const t = fakeQueue({ 'forum-signup-pings-42': 'completed' });
     await t.svc.schedule(42);
@@ -107,6 +99,18 @@ describe('ROK-2260 signup-ping debounce', () => {
     const t = fakeQueue();
     t.queue.getJob.mockRejectedValueOnce(new Error('ECONNREFUSED'));
     await expect(t.svc.schedule(42)).resolves.toBe(false);
+  });
+});
+
+describe('ROK-2260 signup-ping debounce — Codex P2-1', () => {
+  it('P2-1: a pending trailing flush is the one re-armed (no second flush that could fire early)', async () => {
+    // The primary already finished (removeOnComplete), its trail still waits.
+    const t = fakeQueue({ 'forum-signup-pings-42-trail': 'delayed' });
+    await t.svc.schedule(42);
+    expect(
+      t.held.get('forum-signup-pings-42-trail')?.changeDelay,
+    ).toHaveBeenCalledWith(SIGNUP_PING_DEBOUNCE_MS);
+    expect(t.queue.add).not.toHaveBeenCalled();
   });
 });
 
@@ -123,13 +127,48 @@ describe('ROK-2260 signup-ping listener', () => {
   });
 });
 
+/** The event names a listener method subscribes to (`@OnEvent` metadata). */
+function eventsOf(fn: unknown): unknown[] {
+  if (typeof fn !== 'function') return [];
+  const meta: unknown = Reflect.getMetadata(EVENT_LISTENER_METADATA, fn);
+  if (!Array.isArray(meta)) return [];
+  return meta.map((m: { event?: unknown }) => m.event);
+}
+
+describe('ROK-2260 signup-ping listener — Codex P2-5', () => {
+  it('re-arms the flush on an event edit/reschedule, so the pinged set TTL follows the new end', () => {
+    const proto = HubForumDiscordSignupPingListener.prototype;
+    const handled = Object.getOwnPropertyNames(proto).flatMap((name) =>
+      eventsOf(Reflect.get(proto, name)),
+    );
+    expect(handled).toContain(APP_EVENT_EVENTS.UPDATED);
+  });
+
+  it('the event-updated handler arms that event', async () => {
+    const queue = {
+      schedule: jest.fn<Promise<boolean>, [number]>(() =>
+        Promise.resolve(true),
+      ),
+    };
+    const l = new HubForumDiscordSignupPingListener(
+      queue as unknown as HubForumDiscordSignupPingQueue,
+    );
+    await l.onEventUpdated({ eventId: 11 });
+    expect(queue.schedule.mock.calls).toEqual([[11]]);
+  });
+});
+
 describe('ROK-2260 one-time deploy catch-up', () => {
   function catchUp(setReply: 'OK' | null) {
     const redis = {
       set: jest.fn(() => Promise.resolve(setReply)),
       del: jest.fn(() => Promise.resolve(1)),
     };
-    const queue = { schedule: jest.fn((_id: number) => Promise.resolve(true)) };
+    const queue = {
+      schedule: jest.fn<Promise<boolean>, [number]>(() =>
+        Promise.resolve(true),
+      ),
+    };
     jest.mocked(q.listUpcomingBoundEventIds).mockResolvedValue([5, 6]);
     const svc = new HubForumDiscordSignupPingCatchUp(
       {} as ForumDiscordDb,

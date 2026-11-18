@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import {
+  APP_EVENT_EVENTS,
   SIGNUP_EVENTS,
   type SignupEventPayload,
 } from '../../../discord-bot/discord-bot.constants';
@@ -37,7 +38,17 @@ export class HubForumDiscordSignupPingListener {
     await this.rearm(payload);
   }
 
-  private async rearm(payload: SignupEventPayload): Promise<void> {
+  /**
+   * Codex P2-5: an edit or reschedule changes no signup, but the flush is
+   * what moves the pinged set's expiry to the event's new end. Re-arm it so
+   * a postponed event never outlives its set (and re-pings everyone).
+   */
+  @OnEvent(APP_EVENT_EVENTS.UPDATED, { async: true })
+  async onEventUpdated(payload: { eventId: number }): Promise<void> {
+    await this.rearm(payload);
+  }
+
+  private async rearm(payload: { eventId: number }): Promise<void> {
     if (!Number.isInteger(payload?.eventId)) return;
     await this.queue.schedule(payload.eventId);
   }

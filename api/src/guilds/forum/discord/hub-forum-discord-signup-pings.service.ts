@@ -82,7 +82,11 @@ export class HubForumDiscordSignupPings {
     if (post === null) return 'closed';
     if (links.isUnsent(post)) return 'pending';
     await this.ping(key, post.discordThreadId, plan.ping);
-    const removedAll = await this.remove(key, post.discordThreadId, plan.remove);
+    const removedAll = await this.remove(
+      key,
+      post.discordThreadId,
+      plan.remove,
+    );
     return removedAll ? 'pinged' : 'incomplete';
   }
 

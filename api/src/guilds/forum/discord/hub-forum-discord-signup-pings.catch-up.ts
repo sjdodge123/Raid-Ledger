@@ -51,7 +51,8 @@ export class HubForumDiscordSignupPingCatchUp implements OnApplicationBootstrap 
       if (!won) return 0;
       const ids = await listUpcomingBoundEventIds(this.db, now);
       const armed = await this.armAll(ids);
-      if (armed < ids.length) throw new Error(`${ids.length - armed} not armed`);
+      if (armed < ids.length)
+        throw new Error(`${ids.length - armed} not armed`);
       this.logger.log(`Signup ping catch-up armed for ${armed} event(s)`);
       return armed;
     } catch (err) {
