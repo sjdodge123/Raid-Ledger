@@ -7,14 +7,19 @@
  * (ruling 3); an unbound hub, a detached thread or a closed one does nothing.
  * Discord is the in-memory outbound gateway (spies on the app's singleton).
  */
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import type { Guild } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import {
   as,
   bootDiscussion,
   endEvent,
+  outcome,
   resetThrottles,
   setSignupStatus,
   signUp,
@@ -26,6 +31,7 @@ import {
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
 import { pingedSetKey } from './hub-forum-discord-signup-pings';
+import { SIGNUP_PING_QUEUE } from './hub-forum-discord-signup-pings.queue';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import {
   bareScene,
@@ -159,6 +165,87 @@ describe('ROK-2260 signup pings — cancel and re-signup (ruling 3)', () => {
       [did.signed],
     ]);
     expect(out.spies.createPost).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** One step the fake Discord post saw, in order. */
+type PostStep = ['setArchived', boolean] | ['remove', string];
+
+/**
+ * An auto-archived, unlocked Discord forum post — the discord.js slice the
+ * real `removeThreadMembers` touches — recording each call in order.
+ */
+function archivedPost(id: string): { post: { id: string }; steps: PostStep[] } {
+  const steps: PostStep[] = [];
+  const post = {
+    id,
+    archived: true,
+    locked: false,
+    isThread: () => true,
+    setArchived(archived: boolean): Promise<void> {
+      steps.push(['setArchived', archived]);
+      post.archived = archived;
+      return Promise.resolve();
+    },
+    members: {
+      remove(userId: string): Promise<void> {
+        // Discord refuses Remove Thread Member on an archived post.
+        if (post.archived) return Promise.reject(new Error('archived'));
+        steps.push(['remove', userId]);
+        return Promise.resolve();
+      },
+    },
+  };
+  return { post, steps };
+}
+
+/** Let the REAL gateway removal run against `post` on a fake bot guild. */
+function realRemovalAgainst(post: { id: string }): void {
+  out.spies.removeThreadMembers.mockRestore();
+  const client = ctx.posts.testApp.app.get(DiscordBotClientService);
+  const fetch = (id: string) => Promise.resolve(id === post.id ? post : null);
+  const guild = { channels: { fetch } } as unknown as Guild;
+  jest.spyOn(client, 'isConnected').mockReturnValue(true);
+  jest.spyOn(client, 'getGuild').mockReturnValue(guild);
+}
+
+describe('ROK-2260 signup pings — the real cancel path (review m8)', () => {
+  afterEach(async () => {
+    // The cancel's signup.deleted arms a 2-min flush job; never let it fire.
+    await ctx.posts.testApp.app
+      .get<Queue>(getQueueToken(SIGNUP_PING_QUEUE))
+      .drain(true);
+  });
+
+  it('DELETE /events/:id/signup, then a flush reopens the archived post, removes the player and re-archives', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    await signUp(ctx, s.eventId, 'tentative', 'tentative');
+    await flush(s.eventId);
+    const [link] = nonEmpty(await threadLinks(s.threadId), 'post link');
+
+    const res = await as(
+      ctx,
+      'signed',
+      'delete',
+      `/events/${s.eventId}/signup`,
+    );
+    expect(outcome(res)).toEqual({
+      status: 200,
+      message: 'Signup canceled successfully',
+    });
+
+    const { post, steps } = archivedPost(link.discordThreadId);
+    realRemovalAgainst(post);
+    expect(await flush(s.eventId)).toBe('pinged');
+    expect(steps).toEqual([
+      ['setArchived', false],
+      ['remove', did.signed],
+      ['setArchived', true],
+    ]);
+    expect(out.spies.mention).toHaveBeenCalledTimes(1);
+    expect(await pinged(s.eventId)).toEqual([did.tentative]);
   });
 });
 

@@ -20,7 +20,10 @@ import {
   type DiscussionCtx,
 } from '../event-discussion/event-discussion.test-fixtures';
 import { stubOutbound } from './hub-forum-discord-outbound.test-fixtures';
-import { signupPingJobId } from './hub-forum-discord-signup-pings';
+import {
+  SIGNUP_PING_DEBOUNCE_MS,
+  signupPingJobId,
+} from './hub-forum-discord-signup-pings';
 import {
   HubForumDiscordSignupPingCatchUp,
   SIGNUP_PING_CATCH_UP_KEY,
@@ -75,15 +78,40 @@ async function boundEvent(): Promise<number> {
   return s.eventId;
 }
 
+/**
+ * When the job is due, in epoch ms: BullMQ scores a delayed job
+ * `dueAt * 0x1000 + n` in the delayed ZSET, and `changeDelay` re-scores it
+ * from "now" while leaving `job.delay` untouched — so the score is the only
+ * place a timer reset shows. Null when the job is not in the delayed set.
+ */
+async function dueAt(jobId: string): Promise<number | null> {
+  const client = await raw.client;
+  const score = await client.zscore(raw.keys.delayed, jobId);
+  return score === null ? null : Math.floor(Number(score) / 0x1000);
+}
+
 describe('ROK-2260 signup pings — debounce (ruling 2)', () => {
-  it('two signup changes on one event leave ONE delayed flush job', async () => {
+  it('a second change before the delay elapses pushes the ONE delayed job back (review m7)', async () => {
     const eventId = await boundEvent();
+    const id = signupPingJobId(eventId);
     const queue = app().get(HubForumDiscordSignupPingQueue);
     await queue.schedule(eventId);
+    const first = await dueAt(id);
+    if (first === null) throw new Error('first schedule left no delayed job');
+    // The clock must move before the reset, or "pushed back" is unprovable.
+    await waitFor(() => {
+      expect(Date.now()).toBeGreaterThan(first - SIGNUP_PING_DEBOUNCE_MS);
+      return Promise.resolve();
+    });
     await queue.schedule(eventId);
-    expect(await queuedFor(eventId)).toEqual([signupPingJobId(eventId)]);
-    const job = await raw.getJob(signupPingJobId(eventId));
-    expect(await job?.getState()).toBe('delayed');
+    expect(await queuedFor(eventId)).toEqual([id]);
+    expect(await raw.getJob(id).then((j) => j?.getState())).toBe('delayed');
+    const second = await dueAt(id);
+    expect({
+      pushedBack: second !== null && second > first,
+      first,
+      second,
+    }).toEqual({ pushedBack: true, first, second });
   });
 
   it('a signup.created emit arms the flush through the listener', async () => {
