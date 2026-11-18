@@ -58,7 +58,7 @@ export class HubForumDiscordSignupPings {
   async flush(eventId: number): Promise<SignupPingOutcome> {
     const ref = await findBoundEventThread(this.db, eventId);
     if (!ref) return 'unbound';
-    const key = pingedSetKey(eventId);
+    const key = pingedSetKey(eventId, ref);
     const outcome = await this.flushBound(ref, eventId, key);
     // Every bound flush (review r1 m2): a rescheduled event moves the expiry.
     await this.redis.pexpireat(key, ref.endsAt.getTime() + SET_GRACE_MS);

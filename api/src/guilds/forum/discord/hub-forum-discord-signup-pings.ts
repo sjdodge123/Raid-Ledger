@@ -101,7 +101,17 @@ export function signupPingJobId(eventId: number, trail = false): string {
   return `forum-signup-pings-${eventId}${trail ? '-trail' : ''}`;
 }
 
-/** The Redis set of Discord ids already pinged into the event's post. */
-export function pingedSetKey(eventId: number): string {
-  return `hub-forum:signup-pings:${eventId}`;
+/** The hub thread an event's post belongs to (scopes the pinged set). */
+export interface PingedSetScope {
+  guildId: number;
+  threadId: number;
+}
+
+/**
+ * The Redis set of Discord ids already pinged into the event's post. Scoped
+ * to the hub thread (Codex P2-4): a retag to another hub is a new post, so
+ * its players are pinged again; the old set just expires.
+ */
+export function pingedSetKey(eventId: number, scope: PingedSetScope): string {
+  return `hub-forum:signup-pings:${eventId}:${scope.guildId}:${scope.threadId}`;
 }

@@ -25,6 +25,7 @@ import {
   signUp,
   untagEvent,
   type DiscussionCtx,
+  type Scene,
 } from '../event-discussion/event-discussion.test-fixtures';
 import {
   stubOutbound,
@@ -70,8 +71,8 @@ const mentioned = (): string[][] =>
   out.spies.mention.mock.calls.map((c) => [...c[2]].sort());
 
 /** The event's "already pinged" set, sorted. */
-async function pinged(eventId: number): Promise<string[]> {
-  const key = pingedSetKey(eventId);
+async function pinged(s: Scene): Promise<string[]> {
+  const key = pingedSetKey(s.eventId, s);
   return (await ctx.posts.testApp.redisMock.client.smembers(key)).sort();
 }
 
@@ -98,7 +99,7 @@ describe('ROK-2260 signup pings — first signup and roll-ups', () => {
         [did.signed],
       ],
     ]);
-    expect(await pinged(s.eventId)).toEqual([did.signed]);
+    expect(await pinged(s)).toEqual([did.signed]);
   });
 
   it('later signups get ONE roll-up naming only the new players; nothing new sends nothing', async () => {
@@ -156,7 +157,7 @@ describe('ROK-2260 signup pings — cancel and re-signup (ruling 3)', () => {
       [link.discordThreadId, [did.signed], expect.any(Function)],
     ]);
     expect(out.spies.mention).toHaveBeenCalledTimes(1);
-    expect(await pinged(s.eventId)).toEqual([did.tentative]);
+    expect(await pinged(s)).toEqual([did.tentative]);
 
     await signUp(ctx, s.eventId, 'signed', 'signed_up');
     expect(await flush(s.eventId)).toBe('pinged');
@@ -245,7 +246,7 @@ describe('ROK-2260 signup pings — the real cancel path (review m8)', () => {
       ['setArchived', true],
     ]);
     expect(out.spies.mention).toHaveBeenCalledTimes(1);
-    expect(await pinged(s.eventId)).toEqual([did.tentative]);
+    expect(await pinged(s)).toEqual([did.tentative]);
   });
 });
 
@@ -277,7 +278,7 @@ describe('ROK-2260 signup pings — no-ops', () => {
     expect(await flush(s.eventId)).toBe('closed');
     expect(out.spies.createPost).not.toHaveBeenCalled();
     expect(out.spies.mention).not.toHaveBeenCalled();
-    expect(await pinged(s.eventId)).toEqual([]);
+    expect(await pinged(s)).toEqual([]);
   });
 });
 

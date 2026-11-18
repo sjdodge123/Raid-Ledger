@@ -84,8 +84,15 @@ describe('ROK-2260 signup pings — debounce keying', () => {
     expect(signupPingJobId(42)).not.toBe(signupPingJobId(43));
   });
 
-  it('keys the pinged set per event', () => {
-    expect(pingedSetKey(42)).toBe('hub-forum:signup-pings:42');
-    expect(pingedSetKey(42)).not.toBe(pingedSetKey(43));
+  it('keys the pinged set per event AND per hub thread (Codex P2-4)', () => {
+    const post = { guildId: 7, threadId: 70 };
+    expect(pingedSetKey(42, post)).toBe('hub-forum:signup-pings:42:7:70');
+    expect(pingedSetKey(42, post)).not.toBe(pingedSetKey(43, post));
+    expect(pingedSetKey(42, post)).not.toBe(
+      pingedSetKey(42, { guildId: 8, threadId: 70 }),
+    );
+    expect(pingedSetKey(42, post)).not.toBe(
+      pingedSetKey(42, { guildId: 7, threadId: 71 }),
+    );
   });
 });

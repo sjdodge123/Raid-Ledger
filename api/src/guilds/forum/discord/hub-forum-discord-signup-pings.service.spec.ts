@@ -46,15 +46,22 @@ const row = (status: string, id: string) => ({
 });
 
 function setup(pinged: string[] = [], online = true) {
+  // Key-aware, so a set scoped to another post is a different set (P2-4).
   const set = new Set(pinged);
+  const sets = new Map([[pingedSetKey(5, REF), set]]);
+  const at = (k: string): Set<string> => {
+    const found = sets.get(k) ?? new Set<string>();
+    sets.set(k, found);
+    return found;
+  };
   const redis = {
-    smembers: jest.fn(() => Promise.resolve([...set])),
-    sadd: jest.fn((_k: string, ...ids: string[]) => {
-      ids.forEach((i) => set.add(i));
+    smembers: jest.fn((k: string) => Promise.resolve([...at(k)])),
+    sadd: jest.fn((k: string, ...ids: string[]) => {
+      ids.forEach((i) => at(k).add(i));
       return Promise.resolve(ids.length);
     }),
-    srem: jest.fn((_k: string, ...ids: string[]) => {
-      ids.forEach((i) => set.delete(i));
+    srem: jest.fn((k: string, ...ids: string[]) => {
+      ids.forEach((i) => at(k).delete(i));
       return Promise.resolve(ids.length);
     }),
     pexpireat: jest.fn(() => Promise.resolve(1)),
@@ -118,7 +125,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
       [A, B],
     );
     expect([...t.set]).toEqual([A, B]);
-    expect(t.redis.sadd).toHaveBeenCalledWith(pingedSetKey(5), A, B);
+    expect(t.redis.sadd).toHaveBeenCalledWith(pingedSetKey(5, REF), A, B);
     expect(t.redis.pexpireat).toHaveBeenCalled();
   });
 
@@ -244,8 +251,24 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
     const t = setup([A]);
     expect(await t.svc.flush(5)).toBe('unchanged');
     expect(t.redis.pexpireat).toHaveBeenCalledWith(
-      pingedSetKey(5),
+      pingedSetKey(5, REF),
       REF.endsAt.getTime() + 7 * 24 * 60 * 60 * 1000,
     );
+  });
+});
+
+describe('ROK-2260 HubForumDiscordSignupPings.flush — Codex P2', () => {
+  it('P2-4: after a retag to another hub, players pinged into the old post are pinged into the new one', async () => {
+    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    const t = setup([A]); // already pinged into hub 7's post
+    const moved = { ...REF, guildId: 8, threadId: 80 };
+    mockedQ.findBoundEventThread.mockResolvedValue(moved);
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledWith(
+      'dthread',
+      `${MENTION_PREFIX} <@${A}>`,
+      [A],
+    );
+    expect(t.redis.sadd).toHaveBeenCalledWith(pingedSetKey(5, moved), A);
   });
 });
