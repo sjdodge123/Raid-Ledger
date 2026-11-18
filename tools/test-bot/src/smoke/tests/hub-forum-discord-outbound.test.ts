@@ -149,16 +149,31 @@ async function expectMember(post: ThreadChannel, userId: string, present: boolea
   }
 }
 
+/**
+ * Pre-flush check: `userId` is in no post of the run's (fresh) forum yet, so
+ * the membership seen after the flush can only have come from the @mention.
+ */
+async function expectInNoPost(forum: ForumChannel, userId: string): Promise<void> {
+  const active = await forum.threads.fetchActive();
+  const inPosts: string[] = [];
+  for (const post of active.threads.values()) {
+    const members = await post.members.fetch();
+    if (members.has(userId)) inPosts.push(post.id);
+  }
+  if (inPosts.length > 0) fail(`ROK-2260 ruling 2: ${userId} must not be in any post before the flush`, inPosts);
+}
+
 async function signupPings(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
   const made: Made = { hub: null, forum: null };
   const me = ctx.testBotDiscordId;
   try {
-    const { hub, gameId } = await setup(ctx, runId, made);
+    const { forum, hub, gameId } = await setup(ctx, runId, made);
     await linkDiscord(ctx.api, ctx.dmRecipientUserId, me, "SmokeTestBot");
     const event = await createEvent(ctx.api, "forum-pings", { guildId: hub, gameId });
     made.event = event.id;
     await signupAs(ctx.api, event.id, ctx.dmRecipientUserId);
+    await expectInNoPost(forum, me);
     const post = await flushPings(ctx, event.id);
     await expectMention(post, me);
     await expectMember(post, me, true, "ROK-2260 ruling 2: the mention must add the signed-up player to the post");
