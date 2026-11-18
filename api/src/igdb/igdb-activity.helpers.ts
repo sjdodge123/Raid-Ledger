@@ -126,6 +126,16 @@ export async function queryNowPlaying(
 }
 
 /**
+ * The one rollup granularity all-time totals read (ROK-2262).
+ *
+ * Every session is rolled up into a `day`, a `week` AND a `month` row, so
+ * summing all rows triples the total. `day` rows are exact and never pruned
+ * (the daily cron only upserts; nothing deletes rollups), and demo data writes
+ * `day`/`week` only, so `day` is the complete series.
+ */
+export const ALL_TIME_ROLLUP_PERIOD = 'day';
+
+/**
  * Build activity period filter conditions.
  * @param gameId - Game ID
  * @param period - Activity period (week, month, all)
@@ -138,7 +148,12 @@ export function buildActivityConditions(
   const conditions: ReturnType<typeof eq>[] = [
     eq(schema.gameActivityRollups.gameId, gameId),
   ];
-  if (period === 'all') return conditions;
+  if (period === 'all') {
+    conditions.push(
+      eq(schema.gameActivityRollups.period, ALL_TIME_ROLLUP_PERIOD),
+    );
+    return conditions;
+  }
 
   const periodFilter = period === 'week' ? 'week' : 'month';
   conditions.push(eq(schema.gameActivityRollups.period, periodFilter));

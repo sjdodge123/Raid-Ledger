@@ -3,7 +3,7 @@
  * Extracted from users.service.ts for file size compliance (ROK-711).
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, sql, asc, and, gte, gt, desc, inArray } from 'drizzle-orm';
+import { eq, sql, asc, and, gte, gt, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type {
   ActivityPeriod,
@@ -16,6 +16,10 @@ import {
   querySteamPlaytime,
 } from './users-steam-query.helpers';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
+import {
+  queryActivityAllTime,
+  queryActivityForPeriod,
+} from './users-activity-rollup-query.helpers';
 import { activeUsersFilter } from './users-active.helpers';
 import { USER_LIST_COLUMNS, type UserListResult } from './users-list-columns';
 import { defined } from '../common/defined.helpers';
@@ -247,68 +251,6 @@ export async function fetchHeartedGames(
     .offset(offset);
   const total = Number(defined(countResult, 'user count row').count);
   return { data: rows, total };
-}
-
-/** Activity query select columns. */
-const ACTIVITY_COLUMNS = {
-  gameId: schema.gameActivityRollups.gameId,
-  gameName: schema.games.name,
-  coverUrl: schema.games.coverUrl,
-  totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})::int`,
-} as const;
-
-/** Activity query group-by columns. */
-const ACTIVITY_GROUP_BY = [
-  schema.gameActivityRollups.gameId,
-  schema.games.name,
-  schema.games.coverUrl,
-] as const;
-
-/** Query game activity for a specific period. */
-async function queryActivityForPeriod(
-  db: PostgresJsDatabase<typeof schema>,
-  userId: number,
-  period: 'week' | 'month',
-) {
-  const truncFn = period === 'week' ? 'week' : 'month';
-  return db
-    .select(ACTIVITY_COLUMNS)
-    .from(schema.gameActivityRollups)
-    .innerJoin(
-      schema.games,
-      eq(schema.gameActivityRollups.gameId, schema.games.id),
-    )
-    .where(
-      and(
-        eq(schema.gameActivityRollups.userId, userId),
-        eq(schema.gameActivityRollups.period, period),
-        gte(
-          schema.gameActivityRollups.periodStart,
-          sql`date_trunc(${truncFn}, now())::date`,
-        ),
-      ),
-    )
-    .groupBy(...ACTIVITY_GROUP_BY)
-    .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
-    .limit(20);
-}
-
-/** Query game activity for all time. */
-async function queryActivityAllTime(
-  db: PostgresJsDatabase<typeof schema>,
-  userId: number,
-) {
-  return db
-    .select(ACTIVITY_COLUMNS)
-    .from(schema.gameActivityRollups)
-    .innerJoin(
-      schema.games,
-      eq(schema.gameActivityRollups.gameId, schema.games.id),
-    )
-    .where(eq(schema.gameActivityRollups.userId, userId))
-    .groupBy(...ACTIVITY_GROUP_BY)
-    .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
-    .limit(20);
 }
 
 /** Fetch game activity entries for a user. */
