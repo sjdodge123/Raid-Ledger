@@ -27,7 +27,8 @@ const hasOpenVoice = jest.mocked(hasOpenVoiceClassicSession);
 const uncreditRaw = jest.mocked(uncreditOpenRawClassicSessions);
 
 /** A voice row's name: the resolved games.name, never the raw Classic name. */
-const VOICE = 'World of Warcraft: Burning Crusade Classic - Anniversary Edition';
+const VOICE =
+  'World of Warcraft: Burning Crusade Classic - Anniversary Edition';
 const RAW = 'World of Warcraft Classic';
 
 const FOREVER = 11;

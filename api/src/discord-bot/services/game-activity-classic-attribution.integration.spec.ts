@@ -68,6 +68,17 @@ async function gameOfSession(userId: number): Promise<number | null> {
   return row.gameId;
 }
 
+/** Every session of `userId` as activity name -> credited game id. */
+async function gamesByName(
+  userId: number,
+): Promise<Record<string, number | null>> {
+  const rows = await testApp.db
+    .select()
+    .from(schema.gameActivitySessions)
+    .where(eq(schema.gameActivitySessions.userId, userId));
+  return Object.fromEntries(rows.map((r) => [r.discordActivityName, r.gameId]));
+}
+
 beforeAll(async () => {
   testApp = await getTestApp();
   service = testApp.app.get(GameActivityService);
@@ -81,9 +92,10 @@ beforeEach(async () => {
   await registry.activate('blizzard');
   // The adapter caches the WoW game ids for the process, but each test inserts
   // fresh rows (DELETE-based truncate keeps ids climbing): drop the cache.
-  Object.assign(testApp.app.get(ClassicActivityAttributionService), {
-    ids: null,
-  });
+  testApp.app.get(ClassicActivityAttributionService).resetCache();
+  // The service's name cache outlives a truncate too; another spec in this
+  // worker may have resolved the raw Classic name to a now-deleted game.
+  Object.assign(service, { gameNameCache: new Map<string, number | null>() });
 });
 
 // No afterAll truncate: the shared integration setup closes the pool.
@@ -174,6 +186,69 @@ describe('ROK-2259 live attribution of the unmapped raw Classic name', () => {
     });
 
     for (const [u, n] of pairs) service.bufferStop(u, n, at, 'presence');
+    await service.flush();
+  });
+});
+
+describe('ROK-2259 live — presence + voice of one play are credited once', () => {
+  it('presence first: the voice row takes the credit from the raw presence row', async () => {
+    const run = Date.now();
+    const forever = await insertGame(FOREVER_SLUG, `Forever ov ${run}`);
+    const annivName = `Anniversary ov ${run}`;
+    await insertGame(ANNIV_SLUG, annivName);
+    const nc = await insertUser(`ov1-${run}`);
+    const at = new Date();
+    service.bufferStart(nc, CLASSIC_NAME, at, 'presence');
+    await service.flush();
+    expect(await gamesByName(nc)).toEqual({ [CLASSIC_NAME]: forever });
+
+    service.bufferStart(nc, annivName, at, 'voice');
+    await service.flush();
+    expect(await gamesByName(nc)).toEqual({
+      [CLASSIC_NAME]: null,
+      [annivName]: forever,
+    });
+    service.bufferStop(nc, CLASSIC_NAME, at, 'presence');
+    service.bufferStop(nc, annivName, at, 'voice');
+    await service.flush();
+  });
+
+  it('voice first in the same flush: the raw presence row stays uncredited', async () => {
+    const run = Date.now();
+    await insertGame(FOREVER_SLUG, `Forever ov2 ${run}`);
+    const annivName = `Anniversary ov2 ${run}`;
+    const anniv = await insertGame(ANNIV_SLUG, annivName);
+    const ao = await insertUser(`ov2-${run}`, {
+      gameId: anniv,
+      gameVariant: null,
+    });
+    const at = new Date();
+    service.bufferStart(ao, annivName, at, 'voice');
+    service.bufferStart(ao, CLASSIC_NAME, at, 'presence');
+    await service.flush();
+    expect(await gamesByName(ao)).toEqual({
+      [annivName]: anniv,
+      [CLASSIC_NAME]: null,
+    });
+    service.bufferStop(ao, annivName, at, 'voice');
+    service.bufferStop(ao, CLASSIC_NAME, at, 'presence');
+    await service.flush();
+  });
+});
+
+describe('ROK-2259 live — WoW plugin inactive', () => {
+  it('keeps the registry game (Anniversary) while the owning plugin is inactive', async () => {
+    const run = Date.now();
+    await insertGame(FOREVER_SLUG, `Forever off ${run}`);
+    const annivName = `Anniversary off ${run}`;
+    const anniv = await insertGame(ANNIV_SLUG, annivName);
+    await testApp.app.get(PluginRegistryService).deactivate('blizzard');
+    const nc = await insertUser(`off-${run}`);
+    const at = new Date();
+    service.bufferStart(nc, annivName, at, 'voice');
+    await service.flush();
+    expect(await gameOfSession(nc)).toBe(anniv);
+    service.bufferStop(nc, annivName, at, 'voice');
     await service.flush();
   });
 });

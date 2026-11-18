@@ -203,7 +203,12 @@ export class GameActivityService
   private async openSessions(opens: SessionOpenEvent[]): Promise<void> {
     const adapters = this.attributionAdapters();
     for (const ev of opens) {
-      await attributeOpenSessions([ev], this.gameNameCache, adapters, this.logger);
+      await attributeOpenSessions(
+        [ev],
+        this.gameNameCache,
+        adapters,
+        this.logger,
+      );
       await processOpenEvents(this.db, [ev], this.gameNameCache, this.logger);
     }
   }

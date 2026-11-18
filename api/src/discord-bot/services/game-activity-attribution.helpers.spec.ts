@@ -63,7 +63,9 @@ describe('attributeOpenSessions', () => {
     const withhold: GameActivityAttributionAdapter = {
       attribute: () => Promise.resolve(null),
     };
-    const later = { attribute: jest.fn((_u: number, g: number) => Promise.resolve(g)) };
+    const later = {
+      attribute: jest.fn((_u: number, g: number) => Promise.resolve(g)),
+    };
     const ev = open(1, 'World of Warcraft Classic');
     await attributeOpenSessions([ev], cache, [withhold, later], logger);
     expect(ev.attributedGameId).toBeNull();
