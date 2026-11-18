@@ -44,6 +44,31 @@ function execFileFail(): void {
 beforeEach(() => mockExecFile.mockReset());
 
 describe('resolveSlot', () => {
+  // ROK-2205: the real `rl status --json` shape (claimed + agent_id, no claimed_by).
+  // Matching only claimed_by returned null for every live claim, so the gate's
+  // sync check could never verify and no sentinel could be written.
+  it('matches the live status shape: agent_id + claimed', async () => {
+    execFileOk(JSON.stringify({ slots: [
+      { slot: 1, claimed: true, agent_id: 'other' },
+      { slot: 2, claimed: true, agent_id: 'me' },
+      { slot: 3, claimed: false, agent_id: null },
+    ] }));
+    expect(await resolveSlot('rl-agent', 'rl-infra', 'me', { exact: true })).toBe(2);
+  });
+
+  it('live shape: falls back to a claimed slot, never an unclaimed one', async () => {
+    execFileOk(JSON.stringify({ slots: [
+      { slot: 1, claimed: false, agent_id: null },
+      { slot: 2, claimed: true, agent_id: 'someone' },
+    ] }));
+    expect(await resolveSlot('rl-agent', 'rl-infra', 'nomatch')).toBe(2);
+  });
+
+  it('live shape: null when every slot is free', async () => {
+    execFileOk(JSON.stringify({ slots: [{ slot: 1, claimed: false, agent_id: null }] }));
+    expect(await resolveSlot('rl-agent', 'rl-infra', 'me')).toBeNull();
+  });
+
   it('prefers the slot whose claimed_by matches the agentId', async () => {
     execFileOk(JSON.stringify({ slots: [{ slot: 1, claimed_by: 'other' }, { slot: 4, claimed_by: 'me' }] }));
     expect(await resolveSlot('rl-agent', 'rl-infra', 'me')).toBe(4);

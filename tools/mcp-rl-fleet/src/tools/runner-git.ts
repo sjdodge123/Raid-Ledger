@@ -29,18 +29,24 @@ export function execFileP(
   });
 }
 
+// `rl status --json` (rl-infra/orchestrator/bin/status) emits `claimed` +
+// `agent_id` per slot. `claimed_by` is a legacy alias kept for older mocks.
 interface RlStatusSlot {
   slot: number;
+  claimed?: boolean | null;
+  agent_id?: string | null;
   claimed_by?: string | null;
   branch?: string | null;
 }
+const slotOwner = (s: RlStatusSlot): string | null => s.agent_id ?? s.claimed_by ?? null;
+const slotIsClaimed = (s: RlStatusSlot): boolean => s.claimed === true || !!slotOwner(s);
 interface RlStatusResponse {
   slots?: RlStatusSlot[];
 }
 
 /**
  * Resolve the slot the calling agent holds via `rl status --json` (a pure read).
- * Prefer the slot whose claimed_by matches agentId; else fall back to the first
+ * Prefer the slot whose agent_id (legacy: claimed_by) matches agentId; else fall back to the first
  * claimed slot (covers test mocks + future claimed_by shape changes).
  * `exact: true` (ROK-1793 S2 parallel gate) disables that fallback: the caller
  * must own the slot, or an unclaimed agent would copy someone else's workspace.
@@ -66,10 +72,10 @@ export async function resolveSlot(
     );
     const parsed = JSON.parse(stdout.trim()) as RlStatusResponse;
     const slots = parsed.slots ?? [];
-    const match = slots.find((s) => s.claimed_by === agentId);
+    const match = slots.find((s) => slotOwner(s) === agentId);
     if (match) return match.slot;
     if (opts.exact) return null;
-    const claimed = slots.find((s) => s.claimed_by);
+    const claimed = slots.find(slotIsClaimed);
     return claimed ? claimed.slot : null;
   } catch {
     return null;
