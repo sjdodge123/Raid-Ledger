@@ -15,6 +15,7 @@ import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
 import { ClassicActivityAttributionService } from '../../plugins/wow-common/classic-activity-attribution.service';
+import { GameRoleReconcileService } from '../game-roles/game-role-reconcile.service';
 import { GameActivityService } from './game-activity.service';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
@@ -275,5 +276,39 @@ describe('ROK-2259 live — WoW plugin inactive', () => {
     expect(await gameOfSession(nc)).toBe(anniv);
     service.bufferStop(nc, annivName, at, 'voice');
     await service.flush();
+  });
+});
+
+describe('ROK-2261 live — the game role follows the attributed game', () => {
+  it('a Forever player on an Anniversary-mapped name is granted Forever, never Anniversary', async () => {
+    const run = Date.now();
+    const forever = await insertGame(FOREVER_SLUG, `Forever ${run}`);
+    const anniv = await insertGame(ANNIV_SLUG, `Anniversary ${run}`);
+    const presenceName = `WoW Classic role ${run}`;
+    await testApp.db
+      .insert(schema.discordGameMappings)
+      .values({ discordActivityName: presenceName, gameId: anniv });
+    const fc = await insertUser(`role-fc-${run}`, {
+      gameId: anniv,
+      gameVariant: 'wow_forever',
+    });
+    const grant = jest
+      .spyOn(testApp.app.get(GameRoleReconcileService), 'grantNow')
+      .mockResolvedValue(true);
+    try {
+      const at = new Date();
+      service.bufferStart(fc, presenceName, at, 'presence');
+      await service.flush();
+      // grantForOpens is fire-and-forget: let its grants settle.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(await gameOfSession(fc)).toBe(forever);
+      expect(grant.mock.calls).toEqual([[fc, forever]]);
+
+      service.bufferStop(fc, presenceName, at, 'presence');
+      await service.flush();
+    } finally {
+      grant.mockRestore();
+    }
   });
 });
