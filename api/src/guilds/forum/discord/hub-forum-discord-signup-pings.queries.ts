@@ -20,6 +20,8 @@ export interface PingThreadRef {
   threadId: number;
   /** The event's scheduled end (the pinged set expires after it). */
   endsAt: Date;
+  /** A cancelled event pings nobody new (review r1 m4); removals still run. */
+  cancelled: boolean;
 }
 
 const notEnded = (now: Date) =>
@@ -35,6 +37,7 @@ export async function findBoundEventThread(
       guildId: threads.guildId,
       threadId: threads.id,
       duration: events.duration,
+      cancelledAt: events.cancelledAt,
     })
     .from(threads)
     .innerJoin(events, eq(events.id, threads.eventId))
@@ -46,6 +49,7 @@ export async function findBoundEventThread(
     guildId: row.guildId,
     threadId: row.threadId,
     endsAt: row.duration[1],
+    cancelled: row.cancelledAt !== null,
   };
 }
 

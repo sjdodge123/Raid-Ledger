@@ -87,11 +87,16 @@ export class HubForumDiscordOutboundService {
 
   /**
    * ROK-2260 ruling 1: an event thread's post, created on its first signup
-   * (binding + stale checked; null when unbound or read-only).
+   * (binding + stale checked; null when unbound or read-only). `create`
+   * false only reads an existing post, behind the same gate.
    */
-  async ensureEventPost(ref: ThreadRef): Promise<links.ForumLink | null> {
+  async ensureEventPost(
+    ref: ThreadRef,
+    create = true,
+  ): Promise<links.ForumLink | null> {
     const job = await this.jobFor({ ...ref, op: 'thread.created', actorId: 0 });
     if (typeof job !== 'object') return null;
+    if (!create) return links.findThreadLink(this.db, ref.threadId);
     const to = { target: job.target, tagId: job.bound.binding.tagId };
     return this.events.ensurePost(to, ref);
   }

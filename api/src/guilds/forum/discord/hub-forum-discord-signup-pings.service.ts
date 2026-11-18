@@ -51,12 +51,24 @@ export class HubForumDiscordSignupPings {
   async flush(eventId: number): Promise<SignupPingOutcome> {
     const ref = await findBoundEventThread(this.db, eventId);
     if (!ref) return 'unbound';
-    const rows = await listSignupPingRows(this.db, eventId);
     const key = pingedSetKey(eventId);
+    const outcome = await this.flushBound(ref, eventId, key);
+    // Every bound flush (review r1 m2): a rescheduled event moves the expiry.
+    await this.redis.pexpireat(key, ref.endsAt.getTime() + SET_GRACE_MS);
+    return outcome;
+  }
+
+  private async flushBound(
+    ref: PingThreadRef,
+    eventId: number,
+    key: string,
+  ): Promise<SignupPingOutcome> {
+    const rows = await listSignupPingRows(this.db, eventId);
     const plan = diffPings(
       signupPingDiscordIds(rows),
       await this.redis.smembers(key),
     );
+    if (ref.cancelled) plan.ping = []; // review r1 m4: removals only
     if (plan.ping.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
     const post = await this.postFor(ref, plan);
@@ -64,23 +76,24 @@ export class HubForumDiscordSignupPings {
     if (links.isUnsent(post)) return 'pending';
     await this.ping(key, post.discordThreadId, plan.ping);
     await this.remove(key, post.discordThreadId, plan.remove);
-    await this.redis.pexpireat(key, ref.endsAt.getTime() + SET_GRACE_MS);
     return 'pinged';
   }
 
   /**
    * The post to write in: created by the first ping (ruling 1); a removal
-   * alone never creates one. Null when read-only, unbound, locked or deleted.
+   * alone never creates one. Both go through the binding/stale gate (review
+   * r1 m3). Null when read-only, unbound, stale, locked or deleted.
    */
   private async postFor(
     ref: PingThreadRef,
     plan: SignupPingPlan,
   ): Promise<links.ForumLink | null> {
     const { guildId, threadId } = ref;
-    const post =
-      plan.ping.length > 0
-        ? await this.outbound.ensureEventPost({ guildId, threadId })
-        : await links.findThreadLink(this.db, threadId);
+    const create = plan.ping.length > 0;
+    const post = await this.outbound.ensureEventPost(
+      { guildId, threadId },
+      create,
+    );
     if (!post || post.discordDeletedAt || post.discordLockedAt) return null;
     return post;
   }

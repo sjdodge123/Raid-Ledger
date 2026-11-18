@@ -19,6 +19,7 @@ const REF = {
   guildId: 7,
   threadId: 70,
   endsAt: new Date('2026-12-01T00:00:00Z'),
+  cancelled: false,
 };
 const POST: links.ForumLink = {
   id: 1,
@@ -105,10 +106,10 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
     ]);
     const t = setup();
     expect(await t.svc.flush(5)).toBe('pinged');
-    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith({
-      guildId: 7,
-      threadId: 70,
-    });
+    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith(
+      { guildId: 7, threadId: 70 },
+      true,
+    );
     expect(t.gateway.mention).toHaveBeenCalledTimes(1);
     expect(t.gateway.mention).toHaveBeenCalledWith(
       'dthread',
@@ -158,7 +159,11 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
       expect.any(Function),
     );
     expect([...t.set]).toEqual([A]);
-    expect(t.outbound.ensureEventPost).not.toHaveBeenCalled();
+    // A removal alone reads the post through the gate; it never creates one.
+    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith(
+      { guildId: 7, threadId: 70 },
+      false,
+    );
   });
 
   it('keeps a cancel whose removal failed, so the next flush retries it', async () => {
@@ -203,5 +208,40 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
     });
     expect(await t.svc.flush(5)).toBe('pending');
     expect(t.gateway.mention).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () => {
+  it('m3: a removal alone goes through the binding/stale gate, never a raw link read', async () => {
+    mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
+    const t = setup([B]);
+    t.outbound.ensureEventPost.mockResolvedValueOnce(null);
+    expect(await t.svc.flush(5)).toBe('closed');
+    expect(t.outbound.ensureEventPost).toHaveBeenCalledWith(
+      { guildId: 7, threadId: 70 },
+      false,
+    );
+    expect(t.gateway.removeThreadMembers).not.toHaveBeenCalled();
+    expect([...t.set]).toEqual([B]);
+  });
+
+  it('m4: a cancelled event pings nobody (and creates no post)', async () => {
+    mockedQ.findBoundEventThread.mockResolvedValue({ ...REF, cancelled: true });
+    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    const t = setup();
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.outbound.ensureEventPost).not.toHaveBeenCalled();
+    expect(t.gateway.mention).not.toHaveBeenCalled();
+    expect(t.set.size).toBe(0);
+  });
+
+  it('m2: an unchanged flush still moves the pinged set expiry to the event end + grace', async () => {
+    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    const t = setup([A]);
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.redis.pexpireat).toHaveBeenCalledWith(
+      pingedSetKey(5),
+      REF.endsAt.getTime() + 7 * 24 * 60 * 60 * 1000,
+    );
   });
 });
