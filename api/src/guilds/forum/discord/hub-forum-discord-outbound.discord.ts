@@ -7,7 +7,7 @@ import {
   type Webhook,
 } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
-import { applyThreadMembers } from '../../../discord-bot/lfg-board/lfg-board-thread-members.helpers';
+import { removePostMembers } from './hub-forum-discord-post-members';
 
 /** The bound forum and its one webhook (R9). */
 export interface OutboundTarget {
@@ -165,14 +165,17 @@ export class HubForumDiscordOutboundGateway {
     await thread.send({ content, allowedMentions: { users: userIds } });
   }
 
-  /** ROK-2260 ruling 3: silently take users out of a post (ROK-1541 helper). */
+  /**
+   * ROK-2260 ruling 3: silently take users out of a post (reopening an
+   * auto-archived one first). Returns the ids that are out of it.
+   */
   async removeThreadMembers(
     discordThreadId: string,
     userIds: string[],
     warn: (message: string) => void,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const thread = await this.thread(discordThreadId);
-    await applyThreadMembers(thread, 'remove', userIds, warn);
+    return removePostMembers(thread, userIds, warn);
   }
 
   /** Delete one message (bot, Manage Messages — §5.3 covers both origins). */

@@ -66,7 +66,9 @@ function setup(pinged: string[] = [], online = true) {
   const gateway = {
     isOnline: jest.fn(() => online),
     mention: jest.fn(() => Promise.resolve()),
-    removeThreadMembers: jest.fn(() => Promise.resolve()),
+    removeThreadMembers: jest.fn((_post: string, ids: string[]) =>
+      Promise.resolve(ids),
+    ),
   };
   const svc = new HubForumDiscordSignupPings(
     {} as ForumDiscordDb,
@@ -157,6 +159,17 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
     );
     expect([...t.set]).toEqual([A]);
     expect(t.outbound.ensureEventPost).not.toHaveBeenCalled();
+  });
+
+  it('keeps a cancel whose removal failed, so the next flush retries it', async () => {
+    mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
+    const t = setup([B]);
+    t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect([...t.set]).toEqual([B]);
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.removeThreadMembers).toHaveBeenCalledTimes(2);
+    expect([...t.set]).toEqual([]);
   });
 
   it('waits (pings nobody, remembers nobody) while the bot is offline', async () => {

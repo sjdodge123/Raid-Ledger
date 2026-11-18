@@ -32,7 +32,7 @@ export function stubOutbound(testApp: TestApp) {
     mention: jest.spyOn(gw, 'mention').mockResolvedValue(undefined),
     removeThreadMembers: jest
       .spyOn(gw, 'removeThreadMembers')
-      .mockResolvedValue(undefined),
+      .mockImplementation((_post, ids) => Promise.resolve(ids)),
   };
   const apply = jest.spyOn(service, 'apply');
   return { spies, apply, service };

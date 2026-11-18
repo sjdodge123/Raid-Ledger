@@ -104,9 +104,12 @@ export class HubForumDiscordSignupPings {
     userIds: string[],
   ): Promise<void> {
     if (userIds.length === 0) return;
-    await this.gateway.removeThreadMembers(discordThreadId, userIds, (m) =>
-      this.logger.warn(m),
+    const out = await this.gateway.removeThreadMembers(
+      discordThreadId,
+      userIds,
+      (m) => this.logger.warn(m),
     );
-    await this.redis.srem(key, ...userIds);
+    // Only the ones really out: a failed removal is retried next flush.
+    if (out.length > 0) await this.redis.srem(key, ...out);
   }
 }
