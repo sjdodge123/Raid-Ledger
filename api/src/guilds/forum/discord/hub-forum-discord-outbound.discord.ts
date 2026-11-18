@@ -201,7 +201,6 @@ export class HubForumDiscordOutboundGateway {
     return ch;
   }
 
-  /** The forum's webhook, token included (OQ-9: re-fetched, never stored). */
   /** The forum's tags from the cache (`webhook` just fetched it). */
   private cachedForumTags(channelId: string): ForumTag[] {
     const ch = this.guild().channels.cache.get(channelId);
@@ -209,6 +208,7 @@ export class HubForumDiscordOutboundGateway {
     return ch.availableTags.map((t) => ({ id: t.id, name: t.name }));
   }
 
+  /** The forum's webhook, token included (OQ-9: re-fetched, never stored). */
   private async webhook(target: OutboundTarget): Promise<Webhook> {
     const ch = await this.guild().channels.fetch(target.channelId);
     if (ch?.type !== ChannelType.GuildForum) {

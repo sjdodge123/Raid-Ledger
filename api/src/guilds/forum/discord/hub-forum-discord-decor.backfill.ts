@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import type Redis from 'ioredis';
 import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -32,6 +33,10 @@ function describe(err: unknown): string {
 @Injectable()
 export class HubForumDiscordDecorBackfill {
   private readonly logger = new Logger(HubForumDiscordDecorBackfill.name);
+  /** Hub behaviour — read by the ownership guard's listener scan. */
+  readonly hubBehaviour = 'hub-forum.discord-sync';
+  readonly hubBehaviourKind = 'ingest-source';
+  readonly ownerPluginId = CORE_PLUGIN_ID;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
