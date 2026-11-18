@@ -196,20 +196,22 @@ export class GameActivityService
   }
 
   /**
-   * ROK-2259: attribute then insert one open at a time, so a plugin adapter's
-   * overlap check (presence vs voice row of the same play) sees the rows
-   * opened earlier in this same flush.
+   * ROK-2259: apply buffered events one at a time in buffer (chronological)
+   * order; an open is attributed then inserted. A plugin adapter's overlap
+   * check (presence vs voice row of the same play) then sees exactly the rows
+   * open at that moment: rows opened earlier in this flush, minus rows whose
+   * buffered close came first.
    */
-  private async openSessions(opens: SessionOpenEvent[]): Promise<void> {
+  private async applyInOrder(events: BufferedEvent[]): Promise<void> {
     const adapters = this.attributionAdapters();
-    for (const ev of opens) {
-      await attributeOpenSessions(
-        [ev],
-        this.gameNameCache,
-        adapters,
-        this.logger,
-      );
-      await processOpenEvents(this.db, [ev], this.gameNameCache, this.logger);
+    for (const ev of events) {
+      if (ev.type === 'close') {
+        await processCloseEvents(this.db, [ev], this.logger);
+        continue;
+      }
+      const cache = this.gameNameCache;
+      await attributeOpenSessions([ev], cache, adapters, this.logger);
+      await processOpenEvents(this.db, [ev], cache, this.logger);
     }
   }
 
@@ -227,10 +229,9 @@ export class GameActivityService
       (e): e is SessionCloseEvent => e.type === 'close',
     );
 
-    await this.openSessions(opens);
+    await this.applyInOrder(events);
     // ROK-1767: near-real-time game-role add (fire-and-forget, never awaited).
     this.gameRoles?.grantForOpens(opens, this.gameNameCache);
-    await processCloseEvents(this.db, closes, this.logger);
 
     if (opens.length > 0 || closes.length > 0) {
       this.logger.debug(
