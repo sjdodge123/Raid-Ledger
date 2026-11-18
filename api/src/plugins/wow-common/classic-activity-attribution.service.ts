@@ -56,7 +56,9 @@ export class ClassicActivityAttributionService
 
   /**
    * The game to credit `userId` for a session resolved to `gameId`, or `null`
-   * for a raw-name presence row that duplicates an open voice row.
+   * for a raw-name presence row that duplicates an open voice row. A
+   * non-raw-name row resolved to Forever (e.g. a Forever-bound voice channel)
+   * keeps Forever but takes the credit from the open raw presence row.
    */
   async attribute(
     userId: number,
@@ -64,8 +66,17 @@ export class ClassicActivityAttributionService
     discordActivityName: string,
   ): Promise<number | null> {
     const ids = await this.gameIds();
-    if (!ids || gameId !== ids.anniversaryId) return gameId;
-    return this.creditClassic(userId, discordActivityName, ids);
+    if (!ids) return gameId;
+    if (gameId === ids.anniversaryId) {
+      return this.creditClassic(userId, discordActivityName, ids);
+    }
+    if (
+      gameId === ids.foreverId &&
+      !isAmbiguousClassicName(discordActivityName)
+    ) {
+      await uncreditOpenRawClassicSessions(this.db, userId, ids);
+    }
+    return gameId;
   }
 
   /**

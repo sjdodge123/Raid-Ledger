@@ -187,6 +187,22 @@ describe('ClassicActivityAttributionService — no double credit (ROK-2259)', ()
     expect(uncreditRaw).toHaveBeenCalledWith(db, 1, ids);
     expect(hasOpenVoice).not.toHaveBeenCalled();
   });
+
+  it('a Forever-bound voice row uncredits the open raw presence row and keeps Forever', async () => {
+    db.where.mockResolvedValueOnce(GAME_ROWS);
+    expect(await service.attribute(1, FOREVER, 'World of Warcraft')).toBe(
+      FOREVER,
+    );
+    expect(uncreditRaw).toHaveBeenCalledWith(db, 1, ids);
+    expect(hasOpenVoice).not.toHaveBeenCalled();
+    expect(db.where).toHaveBeenCalledTimes(1);
+  });
+
+  it('a raw Classic row mapped to Forever does not uncredit itself', async () => {
+    db.where.mockResolvedValueOnce(GAME_ROWS);
+    expect(await service.attribute(1, FOREVER, RAW)).toBe(FOREVER);
+    expect(uncreditRaw).not.toHaveBeenCalled();
+  });
 });
 
 describe('ClassicActivityAttributionService — game id cache (ROK-2259)', () => {
