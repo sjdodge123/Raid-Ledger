@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import {
+  as,
   bootDiscussion,
   endEvent,
   resetThrottles,
@@ -189,5 +190,39 @@ describe('ROK-2260 signup pings — no-ops', () => {
     expect(out.spies.createPost).not.toHaveBeenCalled();
     expect(out.spies.mention).not.toHaveBeenCalled();
     expect(await pinged(s.eventId)).toEqual([]);
+  });
+});
+
+describe('ROK-2260 DEMO_MODE flush endpoint (companion smoke)', () => {
+  const ORIGINAL = process.env.DEMO_MODE;
+  const path = (id: number) =>
+    `/admin/test/hub-forum-discord/events/${id}/flush-signup-pings`;
+
+  beforeEach(() => {
+    process.env.DEMO_MODE = 'true';
+  });
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.DEMO_MODE;
+    else process.env.DEMO_MODE = ORIGINAL;
+  });
+
+  it('flushes now and names the post; refuses a non-admin and DEMO_MODE off', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    expect((await as(ctx, 'plain', 'post', path(s.eventId))).status).toBe(403);
+    process.env.DEMO_MODE = 'false';
+    expect((await as(ctx, 'admin', 'post', path(s.eventId))).status).toBe(403);
+    expect(out.spies.mention).not.toHaveBeenCalled();
+    process.env.DEMO_MODE = 'true';
+
+    const res = await as(ctx, 'admin', 'post', path(s.eventId));
+    const [link] = nonEmpty(await threadLinks(s.threadId), 'post link');
+    expect({ status: res.status, body: res.body as unknown }).toEqual({
+      status: 201,
+      body: { outcome: 'pinged', discordThreadId: link.discordThreadId },
+    });
+    expect(mentioned()).toEqual([[did.signed]]);
   });
 });
