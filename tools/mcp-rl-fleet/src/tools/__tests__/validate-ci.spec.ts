@@ -61,7 +61,7 @@ describe('AC1 — rl_validate_ci async-by-default returns task_id within 1s', ()
       const argv = args.join(' ');
       if (argv.includes('rev-parse')) return ''; // git probes
       if (argv.includes('show-current')) return '';
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent', branch: 'rok-1331' }] };
       }
       // task-start returns {ok, task_id, log_path, started_at}
@@ -95,7 +95,7 @@ describe('AC9 — wait:true chains internally to executeWait (sync shape preserv
   it('returns full validate-ci output when wait:true (mocked task-status reports terminal)', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
       }
       if (argv.includes('task-start')) {
@@ -146,7 +146,7 @@ describe('Bug C — validate-ci.ts invokes target via `bash <script>` (not bare 
   it('SSH remote command starts the script with `bash /workspace/scripts/validate-ci.sh`', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
       }
       return { ok: true, task_id: 'bugc0001', started_at: '2026-05-20T12:00:00.000Z' };
@@ -174,7 +174,7 @@ describe('Bug D (Session 4 dogfood) — targetCmd routes through run-on-runner',
   it('SSH argv contains `run-on-runner` before the inner bash invocation', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
       }
       return { ok: true, task_id: 'bugd0001', started_at: '2026-05-20T12:00:00.000Z' };
@@ -197,7 +197,7 @@ describe('Bug D (Session 4 dogfood) — targetCmd routes through run-on-runner',
   it('against_env_slug env vars are wrapped inside the bash -c subshell', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
       }
       return { ok: true, task_id: 'bugd0002', started_at: '2026-05-20T12:00:00.000Z' };
@@ -227,7 +227,7 @@ describe('ROK-1368 — against_env_slug threads the re-seeded ADMIN_PASSWORD', (
   it('exports ADMIN_PASSWORD matching the env-reseed output OUTSIDE bash -c (ROK-1846 c6)', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
       }
       // The re-seed SSH call echoes the password it set.
@@ -261,7 +261,7 @@ describe('ROK-1368 — against_env_slug threads the re-seeded ADMIN_PASSWORD', (
   it('omits ADMIN_PASSWORD on the laptop-local path (no against_env_slug)', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
-      if (argv.includes('rl status')) {
+      if (argv.includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
       }
       return { ok: true, task_id: 'pw000002', started_at: '2026-05-20T12:00:00.000Z' };
@@ -337,7 +337,7 @@ describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', ()
   beforeEach(() => {
     claimant = deriveAgentId();
     execFileAlwaysOk((_cmd: string, args: string[]) => {
-      if (args.join(' ').includes('rl status')) {
+      if (args.join(' ').includes('orchestrator/bin/status')) {
         return { slots: [{ slot: 1, claimed_by: claimant }] };
       }
       return { ok: true, task_id: 'tdb14520', started_at: '2026-10-01T12:00:00.000Z' };
