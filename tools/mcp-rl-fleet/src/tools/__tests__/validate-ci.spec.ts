@@ -56,7 +56,7 @@ beforeEach(() => {
 
 describe('AC1 — rl_validate_ci async-by-default returns task_id within 1s', () => {
   it('with wait:false returns {ok:true, task_id, log_url, started_at} quickly', async () => {
-    // Slot resolution (rl status --json) returns slot 1.
+    // Slot resolution (orchestrator/bin/status) returns slot 1.
     execFileAlwaysOk((_cmd: string, args: string[]) => {
       const argv = args.join(' ');
       if (argv.includes('rev-parse')) return ''; // git probes

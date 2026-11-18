@@ -12,7 +12,7 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-import { resolveSlot } from '../runner-git.js';
+import { resolveSlot, RL_STATUS_CMD } from '../runner-git.js';
 
 function execFileOk(stdout: string): void {
   mockExecFile.mockImplementationOnce(
@@ -92,6 +92,14 @@ describe('resolveSlot', () => {
   it('returns null when nothing is claimed', async () => {
     execFileOk(JSON.stringify({ slots: [{ slot: 1, claimed_by: null }] }));
     expect(await resolveSlot('rl-agent', 'rl-infra', 'me')).toBeNull();
+  });
+
+  it('runs the VM status script that exists (orchestrator/bin/status, not bin/rl)', async () => {
+    execFileOk(JSON.stringify({ slots: [{ slot: 1, claimed: true, agent_id: 'me' }] }));
+    await resolveSlot('rl-agent', 'rl-infra', 'me');
+    const args = mockExecFile.mock.calls[0]?.[1] as string[] | undefined;
+    expect(args?.at(-1)).toBe('/srv/rl-infra/orchestrator/bin/status');
+    expect(RL_STATUS_CMD).toBe('/srv/rl-infra/orchestrator/bin/status');
   });
 
   it('returns null on SSH failure (swallowed)', async () => {

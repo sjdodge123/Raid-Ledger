@@ -29,7 +29,7 @@ export function execFileP(
   });
 }
 
-// `rl status --json` (rl-infra/orchestrator/bin/status) emits `claimed` +
+// orchestrator/bin/status (what `rl status` runs on the VM) emits `claimed` +
 // `agent_id` per slot. `claimed_by` is a legacy alias kept for older mocks.
 interface RlStatusSlot {
   slot: number;
@@ -40,12 +40,16 @@ interface RlStatusSlot {
 }
 const slotOwner = (s: RlStatusSlot): string | null => s.agent_id ?? s.claimed_by ?? null;
 const slotIsClaimed = (s: RlStatusSlot): boolean => s.claimed === true || !!slotOwner(s);
+/** The VM command `rl status` maps to (rl-infra/cli/rl → orchestrator/bin/<cmd>). */
+export const RL_STATUS_CMD = '/srv/rl-infra/orchestrator/bin/status';
 interface RlStatusResponse {
   slots?: RlStatusSlot[];
 }
 
 /**
- * Resolve the slot the calling agent holds via `rl status --json` (a pure read).
+ * Resolve the slot the calling agent holds via the VM's orchestrator/bin/status
+ * (a pure read; JSON by default). There is no orchestrator/bin/rl on the VM —
+ * the old `bin/rl status --json` call failed every time and returned null.
  * Prefer the slot whose agent_id (legacy: claimed_by) matches agentId; else fall back to the first
  * claimed slot (covers test mocks + future claimed_by shape changes).
  * `exact: true` (ROK-1793 S2 parallel gate) disables that fallback: the caller
@@ -66,7 +70,7 @@ export async function resolveSlot(
         '-o',
         'ConnectTimeout=5',
         `${sshUser}@${sshHost}`,
-        `/srv/rl-infra/orchestrator/bin/rl status --json`,
+        RL_STATUS_CMD,
       ],
       { timeout: 15_000, maxBuffer: 1024 * 1024 },
     );
