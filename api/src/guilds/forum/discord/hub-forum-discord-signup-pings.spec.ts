@@ -8,7 +8,8 @@ import {
   signupPingJobId,
 } from './hub-forum-discord-signup-pings';
 
-const snowflake = (n: number): string => String(100000000000000000n + BigInt(n));
+const snowflake = (n: number): string =>
+  String(100000000000000000n + BigInt(n));
 
 describe('ROK-2260 signup pings — eligibility', () => {
   it('pings signed_up and tentative, never declined / roached_out / departed', () => {
