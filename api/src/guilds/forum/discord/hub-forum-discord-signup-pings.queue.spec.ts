@@ -58,6 +58,21 @@ describe('ROK-2260 signup-ping debounce', () => {
     expect(t.queue.add).not.toHaveBeenCalled();
   });
 
+  it('m1: a delayed job promoted mid-reset (changeDelay refused) gets a trailing flush', async () => {
+    const t = fakeQueue({ 'forum-signup-pings-42': 'delayed' });
+    t.held
+      .get('forum-signup-pings-42')
+      ?.changeDelay.mockRejectedValueOnce(
+        new Error('Job is not in the delayed state'),
+      );
+    await t.svc.schedule(42);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: 'forum-signup-pings-42-trail' }),
+    );
+  });
+
   it('a change during a running flush arms a trailing flush', async () => {
     const t = fakeQueue({ 'forum-signup-pings-42': 'active' });
     await t.svc.schedule(42);
@@ -97,7 +112,10 @@ describe('ROK-2260 signup-ping listener', () => {
 
 describe('ROK-2260 one-time deploy catch-up', () => {
   function catchUp(setReply: 'OK' | null) {
-    const redis = { set: jest.fn(() => Promise.resolve(setReply)) };
+    const redis = {
+      set: jest.fn(() => Promise.resolve(setReply)),
+      del: jest.fn(() => Promise.resolve(1)),
+    };
     const queue = { schedule: jest.fn(() => Promise.resolve()) };
     jest.mocked(q.listUpcomingBoundEventIds).mockResolvedValue([5, 6]);
     const svc = new HubForumDiscordSignupPingCatchUp(
@@ -123,5 +141,22 @@ describe('ROK-2260 one-time deploy catch-up', () => {
     const t = catchUp(null);
     expect(await t.svc.run(new Date())).toBe(0);
     expect(t.queue.schedule).not.toHaveBeenCalled();
+  });
+
+  it('m5: a failed catch-up releases the guard so the next boot retries it', async () => {
+    const t = catchUp('OK');
+    jest
+      .mocked(q.listUpcomingBoundEventIds)
+      .mockRejectedValueOnce(new Error('connection terminated'));
+    expect(await t.svc.run(new Date())).toBe(0);
+    expect(t.redis.del).toHaveBeenCalledWith(
+      'hub-forum:signup-pings:catch-up:v1',
+    );
+  });
+
+  it('m5: a boot that lost the guard never releases it', async () => {
+    const t = catchUp(null);
+    await t.svc.run(new Date());
+    expect(t.redis.del).not.toHaveBeenCalled();
   });
 });

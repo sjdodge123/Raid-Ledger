@@ -6,7 +6,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
+import type { Job, Queue } from 'bullmq';
 import {
   SIGNUP_PING_DEBOUNCE_MS,
   signupPingJobId,
@@ -62,16 +62,27 @@ export class HubForumDiscordSignupPingQueue {
     const job = await this.queue.getJob(jobId);
     if (!job) return 'free';
     const state = await job.getState();
-    if (state === 'delayed') {
-      await job.changeDelay(SIGNUP_PING_DEBOUNCE_MS);
-      return 'debounced';
-    }
+    if (state === 'delayed') return this.resetTimer(job);
     if (state === 'completed' || state === 'failed') {
       // ROK-1762: a retained finished job would make `add` a silent no-op.
       await job.remove();
       return 'free';
     }
     return 'busy';
+  }
+
+  /**
+   * Review r1 m1: the job can be promoted between `getState` and
+   * `changeDelay`; it is then running and may have read the signups before
+   * this change, so treat it as busy (a trailing flush gets armed).
+   */
+  private async resetTimer(job: Job): Promise<SlotOutcome> {
+    try {
+      await job.changeDelay(SIGNUP_PING_DEBOUNCE_MS);
+      return 'debounced';
+    } catch {
+      return 'busy';
+    }
   }
 
   private async add(jobId: string, eventId: number): Promise<void> {

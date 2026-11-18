@@ -40,13 +40,15 @@ export class HubForumDiscordSignupPingCatchUp implements OnApplicationBootstrap 
 
   /** Arms the catch-up when this instance wins the guard; returns how many. */
   async run(now: Date): Promise<number> {
+    let won = false;
     try {
-      const won = await this.redis.set(
+      const reply = await this.redis.set(
         SIGNUP_PING_CATCH_UP_KEY,
         now.toISOString(),
         'NX',
       );
-      if (won !== 'OK') return 0;
+      won = reply === 'OK';
+      if (!won) return 0;
       const ids = await listUpcomingBoundEventIds(this.db, now);
       for (const id of ids) await this.queue.schedule(id);
       this.logger.log(`Signup ping catch-up armed for ${ids.length} event(s)`);
@@ -54,7 +56,18 @@ export class HubForumDiscordSignupPingCatchUp implements OnApplicationBootstrap 
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Signup ping catch-up skipped: ${why}`);
+      if (won) await this.release();
       return 0;
+    }
+  }
+
+  /** Review r1 m5: a failed catch-up gives the guard back for the next boot. */
+  private async release(): Promise<void> {
+    try {
+      await this.redis.del(SIGNUP_PING_CATCH_UP_KEY);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Signup ping catch-up guard not released: ${why}`);
     }
   }
 }
