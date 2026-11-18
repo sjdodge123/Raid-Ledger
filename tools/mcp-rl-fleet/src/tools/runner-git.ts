@@ -97,7 +97,9 @@ export async function ensureRunnerGit(
   agentId: string,
   worktreePath: string | undefined,
 ): Promise<void> {
-  const slot = await resolveSlot(sshUser, sshHost, agentId);
+  // ROK-2205 r3 m1: exact — a re-scaffold (rm -rf .git) must only ever touch
+  // the caller's own runner, never the fallback's first claimed slot.
+  const slot = await resolveSlot(sshUser, sshHost, agentId, { exact: true });
   if (slot === null) return;
 
   const container = `rl-runner-${slot}`;

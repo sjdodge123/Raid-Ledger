@@ -12,7 +12,7 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-import { resolveSlot, RL_STATUS_CMD } from '../runner-git.js';
+import { resolveSlot, ensureRunnerGit, RL_STATUS_CMD } from '../runner-git.js';
 
 function execFileOk(stdout: string): void {
   mockExecFile.mockImplementationOnce(
@@ -105,5 +105,27 @@ describe('resolveSlot', () => {
   it('returns null on SSH failure (swallowed)', async () => {
     execFileFail();
     expect(await resolveSlot('rl-agent', 'rl-infra', 'me')).toBeNull();
+  });
+});
+
+describe('ensureRunnerGit', () => {
+  // ROK-2205 r3 m1: with resolveSlot live, the non-exact fallback handed an
+  // unclaimed caller another agent's slot, and the re-scaffold ran there.
+  it('never probes or re-scaffolds another agent\'s runner when the caller holds no claim', async () => {
+    mockExecFile.mockImplementation(
+      (_cmd: string, args: string[], _opts: unknown, cb?: (e: Error | null, o: string, s: string) => void) => {
+        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+        const argv = Array.isArray(args) ? args.join(' ') : '';
+        const out = argv.includes(RL_STATUS_CMD)
+          ? JSON.stringify({ slots: [{ slot: 2, claimed: true, agent_id: 'someone-else' }] })
+          : '';
+        if (callback) callback(null, out, '');
+        return out; // execFileSync shares this mock
+      },
+    );
+    await ensureRunnerGit('rl-agent', 'rl-infra', 'me', undefined);
+    const argvs = mockExecFile.mock.calls.map((c) => (Array.isArray(c[1]) ? (c[1] as string[]).join(' ') : ''));
+    expect(argvs.some((a) => a.includes('rl-runner-2')), JSON.stringify(argvs)).toBe(false);
+    expect(argvs.length, JSON.stringify(argvs)).toBe(1);
   });
 });

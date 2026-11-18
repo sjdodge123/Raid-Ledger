@@ -91,6 +91,27 @@ describe('AC1 — rl_validate_ci async-by-default returns task_id within 1s', ()
   });
 });
 
+describe('ROK-2205 r3 m2 — an unclaimed caller never borrows another agent\'s slot', () => {
+  it('dispatches without --slot (task-start owns no_slot) when only another agent holds a claim', async () => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      const argv = args.join(' ');
+      if (argv.includes('rev-parse')) return '';
+      if (argv.includes('show-current')) return '';
+      if (argv.includes('orchestrator/bin/status')) {
+        return { slots: [{ slot: 1, claimed: true, agent_id: 'someone-else' }] };
+      }
+      return { ok: true, task_id: 'm2m2m2m2', started_at: '2026-11-18T02:00:00.000Z' };
+    });
+    const result = (await validateCi.execute({ args: ['--scoped'], wait: false })) as validateCi.ValidateCiAsyncResult;
+    const startCall = mockExecFile.mock.calls
+      .map((c) => (Array.isArray(c[1]) ? (c[1] as string[]).join(' ') : ''))
+      .find((a) => a.includes('task-start'));
+    expect(startCall).toBeDefined();
+    expect(startCall).not.toMatch(/--slot \d/);
+    expect((result as { slot?: number }).slot).toBeUndefined();
+  });
+});
+
 describe('AC9 — wait:true chains internally to executeWait (sync shape preserved)', () => {
   it('returns full validate-ci output when wait:true (mocked task-status reports terminal)', async () => {
     execFileAlwaysOk((_cmd: string, args: string[]) => {

@@ -177,7 +177,10 @@ export async function execute(
   );
 
   // ROK-1793 S2: a parallel gate copies this slot's tree, so it must be OURS.
-  const slot = await resolveSlot(sshUser, sshHost, agentId, { exact: !!(params.parallel || params.fail_fast) });
+  // ROK-2205 r3 m2: every gate resolves exactly — an unclaimed caller passes no
+  // --slot, so task-start fails it with no_slot at dispatch instead of filing
+  // the task under another agent's slot.
+  const slot = await resolveSlot(sshUser, sshHost, agentId, { exact: true });
 
   // Build the inner command. Bug C: bash <script> instead of bare path.
   const extraArgs = resolveArgs(params).map((a) => shellQuote(a)).join(' ');
