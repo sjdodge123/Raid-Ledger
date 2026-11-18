@@ -32,6 +32,7 @@ import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
+import { ClassicActivityAttributionService } from './classic-activity-attribution.service';
 import { WowForeverIdentityProvider } from './wow-forever-identity.provider';
 import { DungeonQuestsController } from './dungeon-quests.controller';
 import { DungeonQuestsService } from './dungeon-quests.service';
@@ -112,6 +113,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     ...guildHub.CONTROLLERS,
   ],
   providers: [
+    ClassicActivityAttributionService,
     InstanceCatalogueService,
     // ROK-2187: the WoW levels-dinged GG <year> card.
     WowGgCardRegistration,

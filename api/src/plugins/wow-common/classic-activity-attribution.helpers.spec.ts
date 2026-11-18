@@ -61,9 +61,9 @@ describe('attributeClassicPlay', () => {
   });
 
   it('falls back to Forever when the only characters are not Classic-family', () => {
-    expect(attributeClassicPlay(IDS.anniversaryId, [char(RETAIL_ID)], IDS)).toBe(
-      IDS.foreverId,
-    );
+    expect(
+      attributeClassicPlay(IDS.anniversaryId, [char(RETAIL_ID)], IDS),
+    ).toBe(IDS.foreverId);
   });
 
   it('never touches a game that is not the ambiguous Anniversary target', () => {
