@@ -15,6 +15,12 @@ import * as schema from '../../drizzle/schema';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import { GameRoleReconcileService } from '../game-roles/game-role-reconcile.service';
+import { PluginRegistryService } from '../../plugins/plugin-host/plugin-registry.service';
+import {
+  EXTENSION_POINTS,
+  type GameActivityAttributionAdapter,
+} from '../../plugins/plugin-host/extension-points';
+import { attributeOpenSessions } from './game-activity-attribution.helpers';
 import {
   FLUSH_INTERVAL_MS,
   MAX_SESSION_DURATION_SECONDS,
@@ -59,7 +65,18 @@ export class GameActivityService
     private readonly cronJobService: CronJobService,
     private readonly gameTasteService: GameTasteService,
     @Optional() private readonly gameRoles?: GameRoleReconcileService,
+    @Optional() private readonly pluginRegistry?: PluginRegistryService,
   ) {}
+
+  /** ROK-2259: attribution adapters of the currently active plugins. */
+  private attributionAdapters(): GameActivityAttributionAdapter[] {
+    if (!this.pluginRegistry) return [];
+    const adapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<GameActivityAttributionAdapter>(
+        EXTENSION_POINTS.GAME_ACTIVITY_ATTRIBUTION,
+      );
+    return [...adapters.values()];
+  }
 
   /** Fire-and-forget batch enqueue for game-taste recomputes (ROK-1082). */
   private enqueueTasteRecomputes(gameIds: number[]): void {
@@ -194,6 +211,12 @@ export class GameActivityService
       (e): e is SessionCloseEvent => e.type === 'close',
     );
 
+    await attributeOpenSessions(
+      opens,
+      this.gameNameCache,
+      this.attributionAdapters(),
+      this.logger,
+    );
     await processOpenEvents(this.db, opens, this.gameNameCache, this.logger);
     // ROK-1767: near-real-time game-role add (fire-and-forget, never awaited).
     this.gameRoles?.grantForOpens(opens, this.gameNameCache);

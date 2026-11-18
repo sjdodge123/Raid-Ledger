@@ -442,6 +442,15 @@ export interface HubClaimProvider {
   ): Promise<HubClaimResult>;
 }
 
+/**
+ * ROK-2259 — re-attributes a game-activity session the registry resolved to
+ * `gameId` to the game the player actually plays (Discord reports several
+ * clients under one activity name). Returns `gameId` when it does not apply.
+ */
+export interface GameActivityAttributionAdapter {
+  attribute(userId: number, gameId: number): Promise<number>;
+}
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -457,6 +466,7 @@ export const EXTENSION_POINTS = {
   GAME_LOG_PARSER: 'game-log-parser',
   HUB_KIND: 'hub-kind',
   HUB_CLAIM_PROVIDER: 'hub-claim-provider',
+  GAME_ACTIVITY_ATTRIBUTION: 'game-activity-attribution',
 } as const;
 
 /**
