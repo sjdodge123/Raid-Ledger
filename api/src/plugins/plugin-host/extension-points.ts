@@ -449,6 +449,15 @@ export interface HubClaimProvider {
  */
 export interface GameActivityAttributionAdapter {
   attribute(userId: number, gameId: number): Promise<number>;
+  /**
+   * Optional: the game to credit for a session whose raw Discord name resolved
+   * to no game (e.g. "World of Warcraft Classic" without a mapping row), or
+   * `null` when the adapter does not recognise the name.
+   */
+  attributeUnresolved?(
+    userId: number,
+    discordActivityName: string,
+  ): Promise<number | null>;
 }
 
 /** Well-known extension point identifiers */

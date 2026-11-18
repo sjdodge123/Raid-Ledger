@@ -99,3 +99,47 @@ describe('ClassicActivityAttributionService.attribute (ROK-2259)', () => {
     expect(await service.attribute(1, ANNIVERSARY)).toBe(FOREVER);
   });
 });
+
+describe('ClassicActivityAttributionService.attributeUnresolved (ROK-2259)', () => {
+  it('credits Forever for an unmapped Classic name and a Forever character', async () => {
+    db.where
+      .mockResolvedValueOnce(GAME_ROWS)
+      .mockResolvedValueOnce([
+        { gameId: 5, gameVariant: 'wow_forever', ruleset: null },
+      ]);
+    expect(
+      await service.attributeUnresolved(1, 'World of Warcraft Classic'),
+    ).toBe(FOREVER);
+  });
+
+  it('keeps Anniversary for an Anniversary-only player, case-insensitively', async () => {
+    db.where
+      .mockResolvedValueOnce(GAME_ROWS)
+      .mockResolvedValueOnce([
+        { gameId: ANNIVERSARY, gameVariant: null, ruleset: null },
+      ]);
+    expect(
+      await service.attributeUnresolved(1, 'world of warcraft CLASSIC'),
+    ).toBe(ANNIVERSARY);
+  });
+
+  it('credits Forever when the player has no WoW characters', async () => {
+    db.where.mockResolvedValueOnce(GAME_ROWS).mockResolvedValueOnce([]);
+    expect(
+      await service.attributeUnresolved(1, 'World of Warcraft Classic'),
+    ).toBe(FOREVER);
+  });
+
+  it('ignores any other unmapped name without reading the database', async () => {
+    expect(await service.attributeUnresolved(1, 'Unknown Game')).toBeNull();
+    expect(await service.attributeUnresolved(1, 'World of Warcraft')).toBeNull();
+    expect(db.where).not.toHaveBeenCalled();
+  });
+
+  it('leaves the session uncredited while a game row is missing', async () => {
+    db.where.mockResolvedValueOnce([{ id: FOREVER, slug: WOW_FOREVER_SLUG }]);
+    expect(
+      await service.attributeUnresolved(1, 'World of Warcraft Classic'),
+    ).toBeNull();
+  });
+});

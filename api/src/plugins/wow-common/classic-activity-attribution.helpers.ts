@@ -16,6 +16,17 @@ export const WOW_FOREVER_SLUG = 'world-of-warcraft-forever';
 export const WOW_ANNIVERSARY_SLUG =
   'world-of-warcraft-burning-crusade-classic-anniversary-edition';
 
+/** The single raw name Discord reports for every Classic-family client. */
+export const WOW_CLASSIC_ACTIVITY_NAME = 'World of Warcraft Classic';
+
+/** Exact, case-insensitive match on Discord's ambiguous Classic name. */
+export function isAmbiguousClassicName(discordActivityName: string): boolean {
+  return (
+    discordActivityName.toLowerCase() ===
+    WOW_CLASSIC_ACTIVITY_NAME.toLowerCase()
+  );
+}
+
 /** Character variant the Forever importers stamp. */
 const FOREVER_VARIANT = 'wow_forever';
 

@@ -64,4 +64,44 @@ describe('attributeOpenSessions', () => {
     expect(ev.attributedGameId).toBeUndefined();
     expect(logger.warn).toHaveBeenCalled();
   });
+
+  describe('raw "World of Warcraft Classic" resolved to no game', () => {
+    const unmapped = new Map<string, number | null>([
+      ['World of Warcraft Classic', null],
+      ['Unknown Game', null],
+    ]);
+    const byPlayer: GameActivityAttributionAdapter = {
+      attribute: (_u: number, g: number) => Promise.resolve(g),
+      attributeUnresolved: (u: number, name: string) =>
+        Promise.resolve(
+          name.toLowerCase() === 'world of warcraft classic'
+            ? u === 2
+              ? ANNIVERSARY
+              : FOREVER
+            : null,
+        ),
+    };
+
+    it('credits Forever or Anniversary per player through the adapter', async () => {
+      const forever = open(1, 'World of Warcraft Classic');
+      const anniv = open(2, 'World of Warcraft Classic');
+      await attributeOpenSessions([forever, anniv], unmapped, [byPlayer], logger);
+      expect([forever.attributedGameId, anniv.attributedGameId]).toEqual([
+        FOREVER,
+        ANNIVERSARY,
+      ]);
+    });
+
+    it('leaves an unrelated unmapped name uncredited', async () => {
+      const ev = open(1, 'Unknown Game');
+      await attributeOpenSessions([ev], unmapped, [byPlayer], logger);
+      expect(ev.attributedGameId).toBeUndefined();
+    });
+
+    it('stays uncredited when no adapter resolves unmatched names', async () => {
+      const ev = open(1, 'World of Warcraft Classic');
+      await attributeOpenSessions([ev], unmapped, [toForever], logger);
+      expect(ev.attributedGameId).toBeUndefined();
+    });
+  });
 });

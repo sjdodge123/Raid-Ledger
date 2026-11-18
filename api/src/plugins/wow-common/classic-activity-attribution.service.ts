@@ -13,6 +13,8 @@ import {
   WOW_ANNIVERSARY_SLUG,
   WOW_FOREVER_SLUG,
   attributeClassicPlay,
+  isAmbiguousClassicName,
+  type ClassicFamilyCharacter,
   type ClassicGameIds,
 } from './classic-activity-attribution.helpers';
 
@@ -48,7 +50,27 @@ export class ClassicActivityAttributionService
   async attribute(userId: number, gameId: number): Promise<number> {
     const ids = await this.gameIds();
     if (!ids || gameId !== ids.anniversaryId) return gameId;
-    const characters = await this.db
+    return attributeClassicPlay(gameId, await this.characters(userId), ids);
+  }
+
+  /**
+   * Raw "World of Warcraft Classic" that resolved to no game (no mapping row):
+   * same per-player rule, starting from the ambiguous Anniversary target.
+   * `null` for any other name, or while either WoW game row is missing.
+   */
+  async attributeUnresolved(
+    userId: number,
+    discordActivityName: string,
+  ): Promise<number | null> {
+    if (!isAmbiguousClassicName(discordActivityName)) return null;
+    const ids = await this.gameIds();
+    if (!ids) return null;
+    const characters = await this.characters(userId);
+    return attributeClassicPlay(ids.anniversaryId, characters, ids);
+  }
+
+  private characters(userId: number): Promise<ClassicFamilyCharacter[]> {
+    return this.db
       .select({
         gameId: schema.characters.gameId,
         gameVariant: schema.characters.gameVariant,
@@ -56,7 +78,6 @@ export class ClassicActivityAttributionService
       })
       .from(schema.characters)
       .where(eq(schema.characters.userId, userId));
-    return attributeClassicPlay(gameId, characters, ids);
   }
 
   private async gameIds(): Promise<ClassicGameIds | null> {
