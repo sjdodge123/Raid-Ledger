@@ -108,6 +108,12 @@ async function forumRow(channelId: string) {
   return row ?? null;
 }
 
+/** The id of the fake forum's tag called `name` (fails loudly when absent). */
+function forumTagId(channelId: string, name: string): string {
+  const tags = need(fake.forums.get(channelId), 'forum').tags;
+  return need(tags.find((t) => t.name === name)?.id, `tag ${name}`);
+}
+
 async function hubNameOf(g: number): Promise<string> {
   const [row] = nonEmpty(
     await ctx.testApp.db
@@ -259,8 +265,7 @@ describe('ROK-2208 binding — PUT (AC1, AC2)', () => {
     const { g, channelId } = await boundHub();
     // ROK-2258 ruling: a lone hub gets its own tag at bind.
     const tagName = (await hubNameOf(g)).trim().slice(0, 20).trim();
-    const tags = need(fake.forums.get(channelId), 'forum').tags;
-    const tagId = need(tags.find((t) => t.name === tagName)?.id, 'hub tag');
+    const tagId = forumTagId(channelId, tagName);
     const s = await statusOf(g);
     expect(s.binding).toMatchObject({
       channelId,
