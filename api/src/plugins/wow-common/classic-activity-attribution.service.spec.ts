@@ -166,7 +166,8 @@ describe('ClassicActivityAttributionService — no double credit (ROK-2259)', ()
 
   it('leaves a raw Classic presence uncredited while a WoW voice row is open', async () => {
     hasOpenVoice.mockResolvedValue(true);
-    db.where.mockResolvedValueOnce(GAME_ROWS);
+    // Characters queued so a missing dedupe fails on the credit, not a throw.
+    db.where.mockResolvedValueOnce(GAME_ROWS).mockResolvedValueOnce([]);
     expect(await service.attributeUnresolved(1, RAW)).toBeNull();
     expect(hasOpenVoice).toHaveBeenCalledWith(db, 1, ids);
     expect(db.where).toHaveBeenCalledTimes(1);
@@ -174,7 +175,8 @@ describe('ClassicActivityAttributionService — no double credit (ROK-2259)', ()
 
   it('leaves a mapped raw Classic presence uncredited while a WoW voice row is open', async () => {
     hasOpenVoice.mockResolvedValue(true);
-    db.where.mockResolvedValueOnce(GAME_ROWS);
+    // Characters queued so a missing dedupe fails on the credit, not a throw.
+    db.where.mockResolvedValueOnce(GAME_ROWS).mockResolvedValueOnce([]);
     expect(await service.attribute(1, ANNIVERSARY, RAW)).toBeNull();
     expect(uncreditRaw).not.toHaveBeenCalled();
   });
