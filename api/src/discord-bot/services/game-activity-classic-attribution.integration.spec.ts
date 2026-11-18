@@ -236,6 +236,31 @@ describe('ROK-2259 live — presence + voice of one play are credited once', () 
   });
 });
 
+describe('ROK-2259 live — presence first, then a Forever-bound voice channel', () => {
+  it('the Forever voice row takes the credit from the raw presence row', async () => {
+    const run = Date.now();
+    const foreverName = `Forever fv ${run}`;
+    const forever = await insertGame(FOREVER_SLUG, foreverName);
+    await insertGame(ANNIV_SLUG, `Anniversary fv ${run}`);
+    const nc = await insertUser(`fv-${run}`);
+    const at = new Date();
+    service.bufferStart(nc, CLASSIC_NAME, at, 'presence');
+    await service.flush();
+    expect(await gamesByName(nc)).toEqual({ [CLASSIC_NAME]: forever });
+
+    // A fixed-game voice bind buffers the bound game's own name (Forever).
+    service.bufferStart(nc, foreverName, at, 'voice');
+    await service.flush();
+    expect(await gamesByName(nc)).toEqual({
+      [CLASSIC_NAME]: null,
+      [foreverName]: forever,
+    });
+    service.bufferStop(nc, CLASSIC_NAME, at, 'presence');
+    service.bufferStop(nc, foreverName, at, 'voice');
+    await service.flush();
+  });
+});
+
 describe('ROK-2259 live — WoW plugin inactive', () => {
   it('keeps the registry game (Anniversary) while the owning plugin is inactive', async () => {
     const run = Date.now();
