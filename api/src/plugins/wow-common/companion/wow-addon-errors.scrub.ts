@@ -44,11 +44,7 @@ function nameRe(name: string): RegExp {
   );
 }
 
-function replaceCounting(
-  input: Scrubbed,
-  re: RegExp,
-  token: string,
-): Scrubbed {
+function replaceCounting(input: Scrubbed, re: RegExp, token: string): Scrubbed {
   let hits = 0;
   const value = input.value.replace(re, () => {
     hits += 1;
@@ -60,7 +56,9 @@ function replaceCounting(
 /** Rule 5: cut back to `max` UTF-16 units, ending in the truncation marker. */
 export function truncateScrubbed(value: string, max: number): string {
   if (value.length <= max) return value;
-  return value.slice(0, max - SCRUB_TRUNCATED_MARKER.length) + SCRUB_TRUNCATED_MARKER;
+  return (
+    value.slice(0, max - SCRUB_TRUNCATED_MARKER.length) + SCRUB_TRUNCATED_MARKER
+  );
 }
 
 /** Re-scrub one string: WoW path, home path, then the uploader's names. */
@@ -72,8 +70,12 @@ export function scrubText(
   let out: Scrubbed = { value, replaced: 0 };
   out = replaceCounting(out, WOW_PATH_RE, '<wow>\\');
   out = replaceCounting(out, HOME_PATH_RE, '<home>\\');
-  if (names.character) out = replaceCounting(out, nameRe(names.character), '<char>');
-  if (names.realm) out = replaceCounting(out, nameRe(names.realm), '<realm>');
+  if (names.character) {
+    out = replaceCounting(out, nameRe(names.character), '<char>');
+  }
+  if (names.realm) {
+    out = replaceCounting(out, nameRe(names.realm), '<realm>');
+  }
   return { value: truncateScrubbed(out.value, max), replaced: out.replaced };
 }
 

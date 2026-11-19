@@ -37,9 +37,11 @@ const payload = (records: Rec[]): Payload => ({
 const CTX = { userId: 5, deviceId: 9 };
 
 describe('toAddonErrorRow', () => {
-  it('re-scrubs the uploader\'s name, hashes the scrubbed text and counts replacements', () => {
+  it("re-scrubs the uploader's name, hashes the scrubbed text and counts replacements", () => {
     const row = toAddonErrorRow(CTX, payload([rec()]), rec());
-    expect(row.message).toBe('Interface\\AddOns\\Foo\\a.lua:1: <char> broke it');
+    expect(row.message).toBe(
+      'Interface\\AddOns\\Foo\\a.lua:1: <char> broke it',
+    );
     expect(row.stack).toBe('[string "<char>"]:1');
     expect(row.scrubbedCount).toBe(2);
     expect(row.recordHash).toBe(
@@ -73,14 +75,22 @@ describe('toAddonErrorRow', () => {
 describe('collapseByHash', () => {
   it('merges records that collide after the scrub: max count/session/last, min first', () => {
     const p = payload([]);
-    const a = toAddonErrorRow(CTX, p, rec({ message: 'Thrall died', count: 2, session: 9 }));
-    const b = toAddonErrorRow(CTX, p, rec({
-      message: '<char> died',
-      count: 5,
-      session: 4,
-      firstSeenAt: '2026-10-01T00:00:00.000Z',
-      lastSeenAt: '2026-11-03T00:00:00.000Z',
-    }));
+    const a = toAddonErrorRow(
+      CTX,
+      p,
+      rec({ message: 'Thrall died', count: 2, session: 9 }),
+    );
+    const b = toAddonErrorRow(
+      CTX,
+      p,
+      rec({
+        message: '<char> died',
+        count: 5,
+        session: 4,
+        firstSeenAt: '2026-10-01T00:00:00.000Z',
+        lastSeenAt: '2026-11-03T00:00:00.000Z',
+      }),
+    );
     const out = collapseByHash([a, b]);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
@@ -106,7 +116,9 @@ describe('WowAddonErrorsHandler.handle', () => {
       via: 'device',
       receivedAt: new Date(),
     } as unknown as CompanionHandlerContext;
-    const msg = { payload: payload([rec(), rec({ message: 'other' })]) } as WowAddonErrorsMessage;
+    const msg = {
+      payload: payload([rec(), rec({ message: 'other' })]),
+    } as WowAddonErrorsMessage;
     await handler.handle(ctx, msg);
     expect(insert).toHaveBeenCalledTimes(1);
     const firstValues = values.mock.calls[0] as unknown as [unknown[]];
@@ -116,8 +128,13 @@ describe('WowAddonErrorsHandler.handle', () => {
       set: Record<string, unknown>;
     };
     expect(conflictArg.target).toHaveLength(2);
-    expect(Object.keys(conflictArg.set).sort()).toEqual(
-      ['count', 'deviceId', 'firstSeenAt', 'lastSeenAt', 'session', 'updatedAt'],
-    );
+    expect(Object.keys(conflictArg.set).sort()).toEqual([
+      'count',
+      'deviceId',
+      'firstSeenAt',
+      'lastSeenAt',
+      'session',
+      'updatedAt',
+    ]);
   });
 });

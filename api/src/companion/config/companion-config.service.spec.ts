@@ -189,7 +189,9 @@ describe('authenticated', () => {
   });
 
   it('ROK-2099: wow-addon-errors is enabled once the blizzard handler is registered (device only, 120 s)', async () => {
-    const shippedRegistry = new CompanionHandlerRegistry({ isActive: () => true });
+    const shippedRegistry = new CompanionHandlerRegistry({
+      isActive: () => true,
+    });
     shippedRegistry.register('blizzard', new WowAddonErrorsHandler());
     const shipped = new CompanionConfigService(shippedRegistry);
     const entry = (await shipped.build(DEVICE)).contracts?.find(

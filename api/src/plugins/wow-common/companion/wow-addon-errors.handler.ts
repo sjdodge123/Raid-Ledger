@@ -34,16 +34,21 @@ import {
 
 type Payload = WowAddonErrorsMessage['payload'];
 
+/** Rule 3: the uploader's own character + realm, when the collector sent them. */
+function namesOf(payload: Payload): ScrubNames {
+  return {
+    character: payload.characterHint?.name,
+    realm: payload.characterHint?.realm,
+  };
+}
+
 /** One record → its scrubbed, hashed row (pure; exported for the spec). */
 export function toAddonErrorRow(
   ctx: Pick<CompanionHandlerContext, 'userId' | 'deviceId'>,
   payload: Payload,
   rec: WowAddonErrorRecord,
 ): WowAddonErrorRecordInsert {
-  const names: ScrubNames = {
-    character: payload.characterHint?.name,
-    realm: payload.characterHint?.realm,
-  };
+  const names = namesOf(payload);
   const addon = scrubText(rec.addon, WOW_ADDON_ERRORS_ADDON_MAX, names);
   const message = scrubText(rec.message, WOW_ADDON_ERRORS_MESSAGE_MAX, names);
   const stack =
@@ -61,7 +66,11 @@ export function toAddonErrorRow(
     addon: addon.value,
     message: message.value,
     stack: stack?.value ?? null,
-    recordHash: addonErrorRecordHash(addon.value, message.value, stack?.value ?? null),
+    recordHash: addonErrorRecordHash(
+      addon.value,
+      message.value,
+      stack?.value ?? null,
+    ),
     count: rec.count,
     session: rec.session ?? null,
     firstSeenAt: new Date(rec.firstSeenAt),
@@ -105,9 +114,7 @@ export function collapseByHash(
 }
 
 @Injectable()
-export class WowAddonErrorsHandler
-  implements CompanionInTxHandler<WowAddonErrorsMessage>
-{
+export class WowAddonErrorsHandler implements CompanionInTxHandler<WowAddonErrorsMessage> {
   /** A literal: the ownership guard's scan reads it (`WOW_ADDON_ERRORS_CONTRACT_ID`). */
   readonly contract = 'wow-addon-errors';
   readonly versions: readonly number[] = [1];

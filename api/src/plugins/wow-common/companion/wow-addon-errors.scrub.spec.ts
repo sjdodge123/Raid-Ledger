@@ -48,12 +48,13 @@ describe('scrubText — rule 1 (paths)', () => {
   });
 
   it('leaves an already-scrubbed string untouched (replaced 0)', () => {
-    const clean = '<wow>\\Interface\\AddOns\\Foo\\a.lua:12: attempt to index nil';
+    const clean =
+      '<wow>\\Interface\\AddOns\\Foo\\a.lua:12: attempt to index nil';
     expect(scrubText(clean, 1024)).toEqual({ value: clean, replaced: 0 });
   });
 });
 
-describe('scrubText — rule 3 (the uploader\'s names)', () => {
+describe("scrubText — rule 3 (the uploader's names)", () => {
   it('replaces whole-word character and realm names only', () => {
     const out = scrubText('Thrall on Nightslayer; Thrallish stays', 1024, {
       character: 'Thrall',
