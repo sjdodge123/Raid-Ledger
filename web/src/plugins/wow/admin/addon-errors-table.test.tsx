@@ -89,7 +89,7 @@ describe('AddonErrorsTable (ROK-2099)', () => {
         expect(screen.queryByText('Loading addon errors…')).toBeNull();
     });
 
-    it('names the table and scopes its headers; aria-controls only while the row is open', () => {
+    it('names the table and scopes every header (occurrences too); aria-controls only while the row is open', () => {
         renderTable({ expanded: sig('a') });
         const table = screen.getByRole('table', { name: 'Addon errors' });
         expect(within(table).getAllByRole('columnheader').every((th) => th.getAttribute('scope') === 'col')).toBe(true);

@@ -40,7 +40,7 @@ function OccurrenceTable({ occurrences }: { occurrences: readonly AddonErrorOccu
         <div className="max-w-full overflow-x-auto">
             <table className="text-sm" aria-label="Occurrences">
                 <thead>
-                    <tr><th className={TH}>Member</th><th className={TH}>Character</th><th className={TH}>Count</th><th className={TH}>Last seen</th></tr>
+                    <tr><th scope="col" className={TH}>Member</th><th scope="col" className={TH}>Character</th><th scope="col" className={TH}>Count</th><th scope="col" className={TH}>Last seen</th></tr>
                 </thead>
                 <tbody>
                     {occurrences.map((o) => (
