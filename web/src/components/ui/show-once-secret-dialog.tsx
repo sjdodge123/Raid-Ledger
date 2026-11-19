@@ -43,7 +43,7 @@ export interface ShowOnceSecretDialogProps {
     copyLabel?: string;
     /** Discard-guard message. Defaults to `SHOW_ONCE_DEFAULT_DISCARD_MESSAGE`. */
     discardMessage?: string;
-    /** Discard-guard title + labels (Modal only). Defaults to `SHOW_ONCE_DEFAULT_DISCARD_COPY`. */
+    /** Discard-guard title + labels (Modal and BottomSheet). Defaults to `SHOW_ONCE_DEFAULT_DISCARD_COPY`. */
     discardCopy?: DiscardCopy;
     /** Content above the secret field (e.g. a read-only id with its own `CopyButton`). */
     leading?: ReactNode;
@@ -69,7 +69,7 @@ function ShowOnceOverlay({ guard, discardCopy, ...props }: OverlayProps): JSX.El
     if (isDesktop) {
         return <Modal isOpen {...props} closeGuard={guard} discardCopy={discardCopy} maxWidth="max-w-lg" />;
     }
-    return <BottomSheet isOpen {...props} closeGuard={guard} />;
+    return <BottomSheet isOpen {...props} closeGuard={guard} discardCopy={discardCopy} />;
 }
 
 /** See file docstring. */
