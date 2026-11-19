@@ -22,4 +22,14 @@ export interface GameActivityAttributionAdapter {
     userId: number,
     discordActivityName: string,
   ): Promise<number | null>;
+  /**
+   * Optional: runs only once the session row is stored, with the game it was
+   * credited to. Side effects of an open (e.g. taking the credit from an
+   * overlapping row) belong here, so a failed insert leaves them undone.
+   */
+  afterOpen?(
+    userId: number,
+    gameId: number | null,
+    discordActivityName: string,
+  ): Promise<void>;
 }

@@ -56,9 +56,8 @@ export class ClassicActivityAttributionService
 
   /**
    * The game to credit `userId` for a session resolved to `gameId`, or `null`
-   * for a raw-name presence row that duplicates an open voice row. A
-   * non-raw-name row resolved to Forever (e.g. a Forever-bound voice channel)
-   * keeps Forever but takes the credit from the open raw presence row.
+   * for a raw-name presence row that duplicates an open voice row. Taking the
+   * credit from the open raw presence row waits for `afterOpen`.
    */
   async attribute(
     userId: number,
@@ -70,13 +69,24 @@ export class ClassicActivityAttributionService
     if (gameId === ids.anniversaryId) {
       return this.creditClassic(userId, discordActivityName, ids);
     }
-    if (
-      gameId === ids.foreverId &&
-      !isAmbiguousClassicName(discordActivityName)
-    ) {
-      await uncreditOpenRawClassicSessions(this.db, userId, ids);
-    }
     return gameId;
+  }
+
+  /**
+   * A stored non-raw-name (voice) row credited to a Classic-family game takes
+   * the credit from the user's open raw-name presence row. Runs only after a
+   * successful insert, so a failed insert never loses both credits.
+   */
+  async afterOpen(
+    userId: number,
+    gameId: number | null,
+    discordActivityName: string,
+  ): Promise<void> {
+    if (gameId === null || isAmbiguousClassicName(discordActivityName)) return;
+    const ids = await this.gameIds();
+    if (!ids) return;
+    if (gameId !== ids.anniversaryId && gameId !== ids.foreverId) return;
+    await uncreditOpenRawClassicSessions(this.db, userId, ids);
   }
 
   /**
@@ -100,18 +110,18 @@ export class ClassicActivityAttributionService
   }
 
   /**
-   * Per-player Classic credit without double counting: a voice row (resolved
-   * name) takes the credit from the user's open raw-name presence row; a
-   * raw-name row opened while a voice row is open stays uncredited.
+   * Per-player Classic credit without double counting: a raw-name row opened
+   * while a voice row is open stays uncredited (the reverse is `afterOpen`).
    */
   private async creditClassic(
     userId: number,
     discordActivityName: string,
     ids: ClassicGameIds,
   ): Promise<number | null> {
-    if (!isAmbiguousClassicName(discordActivityName)) {
-      await uncreditOpenRawClassicSessions(this.db, userId, ids);
-    } else if (await hasOpenVoiceClassicSession(this.db, userId, ids)) {
+    if (
+      isAmbiguousClassicName(discordActivityName) &&
+      (await hasOpenVoiceClassicSession(this.db, userId, ids))
+    ) {
       return null;
     }
     const characters = await this.characters(userId);

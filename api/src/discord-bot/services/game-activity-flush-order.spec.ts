@@ -21,7 +21,7 @@ jest.mock('./game-activity.helpers', () => ({
   resolveGameNames: jest.fn().mockResolvedValue(undefined),
   processOpenEvents: jest.fn((_db: unknown, opens: SessionOpenEvent[]) => {
     for (const ev of opens) calls.push(`open:${ev.discordActivityName}`);
-    return Promise.resolve();
+    return Promise.resolve(opens);
   }),
   processCloseEvents: jest.fn((_db: unknown, closes: SessionCloseEvent[]) => {
     for (const ev of closes) calls.push(`close:${ev.discordActivityName}`);
@@ -34,6 +34,7 @@ jest.mock('./game-activity-attribution.helpers', () => ({
     for (const ev of opens) calls.push(`attribute:${ev.discordActivityName}`);
     return Promise.resolve();
   }),
+  notifyStoredOpens: jest.fn(() => Promise.resolve()),
 }));
 
 async function createService(): Promise<GameActivityService> {

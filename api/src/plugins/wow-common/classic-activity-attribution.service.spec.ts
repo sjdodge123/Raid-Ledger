@@ -181,26 +181,41 @@ describe('ClassicActivityAttributionService — no double credit (ROK-2259)', ()
     expect(uncreditRaw).not.toHaveBeenCalled();
   });
 
-  it('a voice row uncredits the open raw presence row and keeps the credit', async () => {
+  it('a voice row keeps the credit and leaves the raw row until it is stored', async () => {
     db.where.mockResolvedValueOnce(GAME_ROWS).mockResolvedValueOnce([]);
     expect(await service.attribute(1, ANNIVERSARY, VOICE)).toBe(FOREVER);
-    expect(uncreditRaw).toHaveBeenCalledWith(db, 1, ids);
+    expect(uncreditRaw).not.toHaveBeenCalled();
     expect(hasOpenVoice).not.toHaveBeenCalled();
   });
 
-  it('a Forever-bound voice row uncredits the open raw presence row and keeps Forever', async () => {
+  it('a stored voice row uncredits the open raw presence row', async () => {
+    db.where.mockResolvedValueOnce(GAME_ROWS);
+    await service.afterOpen(1, FOREVER, VOICE);
+    expect(uncreditRaw).toHaveBeenCalledWith(db, 1, ids);
+  });
+
+  it('a stored Forever-bound voice row uncredits the open raw presence row', async () => {
     db.where.mockResolvedValueOnce(GAME_ROWS);
     expect(await service.attribute(1, FOREVER, 'World of Warcraft')).toBe(
       FOREVER,
     );
+    await service.afterOpen(1, FOREVER, 'World of Warcraft');
     expect(uncreditRaw).toHaveBeenCalledWith(db, 1, ids);
     expect(hasOpenVoice).not.toHaveBeenCalled();
     expect(db.where).toHaveBeenCalledTimes(1);
   });
 
-  it('a raw Classic row mapped to Forever does not uncredit itself', async () => {
+  it('a stored raw Classic row mapped to Forever does not uncredit itself', async () => {
     db.where.mockResolvedValueOnce(GAME_ROWS);
     expect(await service.attribute(1, FOREVER, RAW)).toBe(FOREVER);
+    await service.afterOpen(1, FOREVER, RAW);
+    expect(uncreditRaw).not.toHaveBeenCalled();
+  });
+
+  it('a stored row of another or no game uncredits nothing', async () => {
+    db.where.mockResolvedValueOnce(GAME_ROWS);
+    await service.afterOpen(1, 999, VOICE);
+    await service.afterOpen(1, null, VOICE);
     expect(uncreditRaw).not.toHaveBeenCalled();
   });
 });
