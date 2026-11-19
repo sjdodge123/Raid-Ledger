@@ -210,6 +210,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     column: schema.companionDeviceLinks.decidedBy,
   },
   { table: schema.companionDevices, column: schema.companionDevices.userId },
+  // ROK-2263: backup-export tokens the user minted (CASCADE) — bearer
+  // secrets with backup-download power, so a ban+wipe must revoke them.
+  {
+    table: schema.backupExportTokens,
+    column: schema.backupExportTokens.createdBy,
+  },
   // ROK-1956: Companion ingest payloads, blob refs and blob rows (CASCADE) —
   // the user's own uploaded data. Refs carry no FK to blobs; order is free.
   {
