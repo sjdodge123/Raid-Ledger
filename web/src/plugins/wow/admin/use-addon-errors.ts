@@ -26,13 +26,13 @@ export function useAddonErrorDetail(signature: string) {
     });
 }
 
-/** Export download with the format in flight (`null` when idle). */
-export function useAddonErrorsExport(filters: AddonErrorsFiltersDto) {
+/** Export download with the format in flight (`null` when idle); `filters` is read at click time. */
+export function useAddonErrorsExport(filters: () => AddonErrorsFiltersDto) {
     const [busy, setBusy] = useState<AddonErrorsExportFormat | null>(null);
     const run = async (format: AddonErrorsExportFormat): Promise<void> => {
         setBusy(format);
         try {
-            await downloadAddonErrorsExport(filters, format);
+            await downloadAddonErrorsExport(filters(), format);
         } catch {
             toast.error('Could not export addon errors');
         } finally {

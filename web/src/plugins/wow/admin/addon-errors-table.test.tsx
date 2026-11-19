@@ -30,7 +30,7 @@ const GROUPS = [group({}), group({ signature: sig('b'), addon: 'Questie', messag
 
 function renderTable(p: Partial<AddonErrorsTableProps> = {}) {
     const onToggle = vi.fn();
-    render(<AddonErrorsTable groups={GROUPS} isLoading={false} filtered={false} expanded={null} onToggle={onToggle} {...p} />);
+    render(<AddonErrorsTable groups={GROUPS} isLoading={false} isError={false} filtered={false} expanded={null} onToggle={onToggle} {...p} />);
     return onToggle;
 }
 
@@ -81,5 +81,19 @@ describe('AddonErrorsTable (ROK-2099)', () => {
         expect(screen.getByText(EMPTY_TEXT)).toBeInTheDocument();
         renderTable({ groups: [], filtered: true });
         expect(screen.getByText(EMPTY_FILTERED_TEXT)).toBeInTheDocument();
+    });
+
+    it('a failed list shows no empty sentence (the page shows the error instead)', () => {
+        renderTable({ groups: [], isError: true });
+        expect(screen.queryByText(EMPTY_TEXT)).toBeNull();
+        expect(screen.queryByText('Loading addon errors…')).toBeNull();
+    });
+
+    it('names the table and scopes its headers; aria-controls only while the row is open', () => {
+        renderTable({ expanded: sig('a') });
+        const table = screen.getByRole('table', { name: 'Addon errors' });
+        expect(within(table).getAllByRole('columnheader').every((th) => th.getAttribute('scope') === 'col')).toBe(true);
+        expect(screen.getByRole('button', { name: /Border\.lua:113/ })).toHaveAttribute('aria-controls', 'addon-error-aaaaaaaaaaaa');
+        expect(screen.getByRole('button', { name: /LibQuestieDB/ })).not.toHaveAttribute('aria-controls');
     });
 });

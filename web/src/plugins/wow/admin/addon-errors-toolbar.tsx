@@ -61,6 +61,9 @@ function FilterControls({ filters, onFilters, groups }: ControlsProps): JSX.Elem
     );
 }
 
+/** The API caps an export at the newest 10,000 rows (it marks a cut with `X-Export-Truncated`, which a download can't surface). */
+export const EXPORT_CAP_TEXT = 'Exports include up to the 10,000 most recent rows.';
+
 function ExportButtons({ busy, onExport }: { busy: AddonErrorsExportFormat | null; onExport: (f: AddonErrorsExportFormat) => void }): JSX.Element {
     return (
         <div className="flex gap-2">
@@ -82,6 +85,7 @@ export function AddonErrorsToolbar(p: AddonErrorsToolbarProps): JSX.Element {
                 <FilterEntryTrigger activeCount={count} isOpen={isOpen} onOpenChange={setOpen} />
                 <ExportButtons busy={p.exportBusy} onExport={p.onExport} />
             </div>
+            <p className="text-xs text-muted lg:text-right">{EXPORT_CAP_TEXT}</p>
             <FilterEntry activeCount={count} isOpen={isOpen} onOpenChange={setOpen} onClearAll={() => p.onFilters(EMPTY_ADDON_ERROR_FILTERS)}>
                 <FilterControls filters={p.filters} onFilters={p.onFilters} groups={p.groups} />
             </FilterEntry>

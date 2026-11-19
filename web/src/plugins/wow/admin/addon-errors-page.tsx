@@ -4,7 +4,7 @@
  * plugin page on a core lazy route (design-system pattern note ROK-1836); the
  * settings layout limits it to admins, and it redirects while the plugin is off.
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Button } from '../../../components/ui/button';
 import { usePluginStore } from '../../../stores/plugin-store';
@@ -50,6 +50,8 @@ function useAddonErrorsPageState() {
     const apiFilters = useMemo(() => toApiFilters(filters, search), [filters, search]);
     return {
         query, setQuery, filters, page, expanded, apiFilters,
+        /** Export reads the typed search, so a click inside the debounce window still exports what is shown in the box. */
+        exportFilters: () => toApiFilters(filters, query),
         filtered: activeFilterCount(filters) > 0 || search.trim() !== '',
         onSearch: (q: string) => { setSearch(q); reset(); },
         onFilters: (next: AddonErrorsFilterState) => { setFilters(next); reset(); },
@@ -65,10 +67,13 @@ function AddonErrorsBody(): JSX.Element {
     const groups = useAddonErrorGroups(s.apiFilters, s.page);
     // The default view's query (same key, so no extra request while unfiltered) — the stable option source.
     const unfiltered = useAddonErrorGroups(UNFILTERED, 1);
-    const exporter = useAddonErrorsExport(s.apiFilters);
+    const exporter = useAddonErrorsExport(s.exportFilters);
     const data = groups.data;
     const items = data?.items ?? [];
     const options = optionGroups(unfiltered.data?.items ?? [], items);
+    const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+    // Rows pruned (or another admin's change) while on a later page: step back to the last one that exists.
+    useEffect(() => { if (data && !groups.isPlaceholderData && s.page > pages) s.onPage(pages); });
     return (
         <div className="space-y-4">
             <PageHeader />
@@ -76,8 +81,8 @@ function AddonErrorsBody(): JSX.Element {
                 groups={options} exportBusy={exporter.busy} onExport={(f) => void exporter.run(f)} />
             {groups.isError && <p className="text-sm text-danger">Could not load addon errors.</p>}
             {data && data.total > 0 && <p className="text-sm text-muted">{summaryLine(data)}</p>}
-            <AddonErrorsTable groups={items} isLoading={groups.isPending} filtered={s.filtered} expanded={s.expanded} onToggle={s.onToggle} />
-            {data && <Pager page={s.page} pages={Math.ceil(data.total / data.pageSize)} onPage={s.onPage} />}
+            <AddonErrorsTable groups={items} isLoading={groups.isPending} isError={groups.isError} filtered={s.filtered} expanded={s.expanded} onToggle={s.onToggle} />
+            {data && <Pager page={s.page} pages={pages} onPage={s.onPage} />}
         </div>
     );
 }

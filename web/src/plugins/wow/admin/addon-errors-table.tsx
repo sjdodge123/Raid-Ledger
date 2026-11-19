@@ -2,7 +2,8 @@
  * ROK-2099 — the Addon errors list: one row per `(addon, message)` group.
  * The §4.21 table box at 1024px and up, one card per group below (§4.18).
  * Opening a row (or card) reveals its occurrences and sample stack.
- * Loading keeps the frame (§4.6); no groups → the §4.5 empty sentence.
+ * Loading keeps the frame (§4.6); no groups → the §4.5 empty sentence; a
+ * failed list renders nothing (the page shows the error line instead).
  */
 import type { JSX } from 'react';
 import type { AddonErrorGroupDto } from '@raid-ledger/contract';
@@ -16,6 +17,8 @@ import { formatSeen } from './addon-errors-filters';
 export interface AddonErrorsTableProps {
     groups: readonly AddonErrorGroupDto[];
     isLoading: boolean;
+    /** The list request failed — no empty sentence (it would claim there are no errors). */
+    isError: boolean;
     /** Any filter or search set — picks the empty-state sentence. */
     filtered: boolean;
     /** Signature of the open row, or null. */
@@ -43,7 +46,7 @@ function characterLine(g: AddonErrorGroupDto): string {
 
 function MessageToggle({ group, open, onToggle }: { group: AddonErrorGroupDto; open: boolean; onToggle: () => void }): JSX.Element {
     return (
-        <Button variant="bare" className={TOGGLE} aria-expanded={open} aria-controls={detailId(group)} onClick={onToggle}>
+        <Button variant="bare" className={TOGGLE} aria-expanded={open} aria-controls={open ? detailId(group) : undefined} onClick={onToggle}>
             <span className="block min-w-0 break-words [overflow-wrap:anywhere] font-mono text-sm text-foreground">{group.message}</span>
         </Button>
     );
@@ -70,12 +73,12 @@ function GroupRow({ group, open, onToggle }: { group: AddonErrorGroupDto; open: 
     );
 }
 
-function GroupTable({ groups, expanded, onToggle }: Omit<AddonErrorsTableProps, 'isLoading' | 'filtered'>): JSX.Element {
+function GroupTable({ groups, expanded, onToggle }: Omit<AddonErrorsTableProps, 'isLoading' | 'isError' | 'filtered'>): JSX.Element {
     return (
         <div className={BOX}>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" aria-label="Addon errors">
                 <thead className="border-b border-edge bg-surface/50">
-                    <tr><th className={TH}>Addon</th><th className={TH}>Error</th><th className={TH}>Members</th><th className={TH}>Count</th><th className={TH}>First seen</th><th className={TH}>Last seen</th></tr>
+                    <tr><th scope="col" className={TH}>Addon</th><th scope="col" className={TH}>Error</th><th scope="col" className={TH}>Members</th><th scope="col" className={TH}>Count</th><th scope="col" className={TH}>First seen</th><th scope="col" className={TH}>Last seen</th></tr>
                 </thead>
                 <tbody className="divide-y divide-edge">
                     {groups.map((g) => <GroupRow key={g.signature} group={g} open={expanded === g.signature} onToggle={() => onToggle(g.signature)} />)}
@@ -99,9 +102,10 @@ function GroupCard({ group, open, onToggle }: { group: AddonErrorGroupDto; open:
 }
 
 /** Groups as a table (≥1024px) or cards, with loading and empty states. */
-export function AddonErrorsTable({ groups, isLoading, filtered, expanded, onToggle }: AddonErrorsTableProps): JSX.Element {
+export function AddonErrorsTable({ groups, isLoading, isError, filtered, expanded, onToggle }: AddonErrorsTableProps): JSX.Element | null {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     if (groups.length === 0) {
+        if (isError) return null;
         const text = isLoading ? 'Loading addon errors…' : filtered ? EMPTY_FILTERED_TEXT : EMPTY_TEXT;
         return <div className={BOX} aria-busy={isLoading}><div className="py-12 text-center"><p className="text-sm text-muted">{text}</p></div></div>;
     }
