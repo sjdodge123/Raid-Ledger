@@ -67,13 +67,16 @@ export function commonGroundSelect(
 }
 
 /**
- * Read specific games by id, bypassing every pool filter (ROK-1538).
+ * Read specific games by id, bypassing every pool filter except moderation
+ * (ROK-1538).
  *
  * The cohort row must surface a game the group already resolved even when it
  * fails `minOwners`, the genre/search/player filters or the pool LIMIT —
  * "you played this together" is a historical fact, not a recommendation the
- * filters get a vote on. No HAVING, no LIMIT; the caller has already bounded
- * the id list by what cohort memory returned.
+ * filters get a vote on. Moderation still applies: a game an admin hid or
+ * banned is dropped (`hidden = false AND banned = false`). No HAVING, no
+ * LIMIT; the caller has already bounded the id list by what cohort memory
+ * returned.
  */
 export async function queryCommonGroundByGameIds(
   db: PostgresJsDatabase<typeof schema>,

@@ -144,6 +144,10 @@ export class HubSessionNoteService {
   /**
    * Ruling 4a/4d + D5b: keep a still-live existing pin, else pin the next
    * event, else arm the note (no event yet — pinned on a later read).
+   *
+   * A kept pin stays even if its event later gains a `rescheduling_poll_id`
+   * (which the next-event predicate excludes): the note stays with the event it
+   * was pinned to, and re-pinning mid-poll would move it.
    */
   private async resolvePin(
     tx: DbOrTx,
