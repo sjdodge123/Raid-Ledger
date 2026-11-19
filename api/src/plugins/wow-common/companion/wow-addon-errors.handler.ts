@@ -42,6 +42,22 @@ function namesOf(payload: Payload): ScrubNames {
   };
 }
 
+/** The columns every row of one message shares. */
+function batchColumns(
+  ctx: Pick<CompanionHandlerContext, 'userId' | 'deviceId'>,
+  payload: Payload,
+) {
+  return {
+    userId: ctx.userId,
+    deviceId: ctx.deviceId,
+    accountKey: payload.accountKey,
+    characterName: payload.characterHint?.name ?? null,
+    characterRealm: payload.characterHint?.realm ?? null,
+    source: payload.source,
+    sourceVersion: payload.sourceVersion,
+  };
+}
+
 /** One record → its scrubbed, hashed row (pure; exported for the spec). */
 export function toAddonErrorRow(
   ctx: Pick<CompanionHandlerContext, 'userId' | 'deviceId'>,
@@ -56,13 +72,7 @@ export function toAddonErrorRow(
       ? null
       : scrubText(rec.stack, WOW_ADDON_ERRORS_STACK_MAX, names);
   return {
-    userId: ctx.userId,
-    deviceId: ctx.deviceId,
-    accountKey: payload.accountKey,
-    characterName: payload.characterHint?.name ?? null,
-    characterRealm: payload.characterHint?.realm ?? null,
-    source: payload.source,
-    sourceVersion: payload.sourceVersion,
+    ...batchColumns(ctx, payload),
     addon: addon.value,
     message: message.value,
     stack: stack?.value ?? null,
