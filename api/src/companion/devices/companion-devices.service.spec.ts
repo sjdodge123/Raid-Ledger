@@ -8,6 +8,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CompanionDevicesService } from './companion-devices.service';
 import type { CompanionDevicesRepository } from './companion-devices.repository';
 import type { CompanionDeviceRow } from './companion-device-dto.helpers';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { COMPANION_DEVICE_REVOKED_EVENT } from './companion-device-revoked.listener';
 
 const row: CompanionDeviceRow = {
   id: 5,
@@ -32,10 +34,12 @@ function setup() {
     revoke: jest.fn().mockResolvedValue(false),
     findById: jest.fn().mockResolvedValue(row),
   };
+  const events = { emitAsync: jest.fn().mockResolvedValue([]) };
   const service = new CompanionDevicesService(
     repo as unknown as CompanionDevicesRepository,
+    events as unknown as EventEmitter2,
   );
-  return { repo, service };
+  return { repo, events, service };
 }
 
 describe('CompanionDevicesService', () => {
@@ -80,11 +84,21 @@ describe('CompanionDevicesService', () => {
     expect(repo.rename).toHaveBeenCalledWith(2, 5, 'Laptop');
   });
 
-  it('revoke of a foreign or already-revoked device is 404 not_found', async () => {
-    const { service } = setup();
+  it('revoke of a foreign or already-revoked device is 404 not_found and announces nothing', async () => {
+    const { service, events } = setup();
     await expect(service.revoke(9, 5)).rejects.toBeInstanceOf(
       NotFoundException,
     );
+    expect(events.emitAsync).not.toHaveBeenCalled();
+  });
+
+  it('a revoke awaits the device-revoked cleanup event (ROK-2099 D6)', async () => {
+    const { service, repo, events } = setup();
+    repo.revoke.mockResolvedValue(true);
+    await service.revoke(2, 5);
+    expect(events.emitAsync.mock.calls).toEqual([
+      [COMPANION_DEVICE_REVOKED_EVENT, { userId: 2, deviceId: 5 }],
+    ]);
   });
 
   it('self returns only deviceId, name and createdAt', async () => {
