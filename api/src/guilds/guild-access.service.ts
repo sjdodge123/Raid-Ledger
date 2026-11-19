@@ -136,6 +136,34 @@ export class GuildAccessService {
   }
 
   /**
+   * L3884: the ids among `guildIds` (all of `kind`) the actor can edit, with
+   * ONE membership read for the kind instead of a ladder query per hub. Every
+   * editing rung sits above member and each adapter's `memberGroupIds` uses
+   * its ladder's own liveness predicate, so a hub the actor is not a member
+   * of is a visitor's; only the member hubs resolve their ladder.
+   */
+  async editableIdsOfKind(
+    actor: GuildActor,
+    kind: GuildKind,
+    guildIds: readonly number[],
+  ): Promise<Set<number>> {
+    if (isStaff(actor)) return new Set(guildIds);
+    if (guildIds.length === 0) return new Set();
+    const hub = this.hubKinds.require(kind);
+    const member = new Set(await hub.memberGroupIds(actor.id));
+    const candidates = guildIds.filter((id) => member.has(id));
+    const roles = await Promise.all(
+      candidates.map((id) => hub.resolveLadder(actor, id)),
+    );
+    return new Set(
+      candidates.filter((_, i) => {
+        const role = roles[i];
+        return role !== undefined && ladderCanEdit(role);
+      }),
+    );
+  }
+
+  /**
    * ROK-1814 (operator ruling 2026-10-30): the kind's top in-game rank (a
    * WoW GM). Grants ONLY the crest edit right — every other Leader meaning
    * waits on ROK-1794. A kind without ranks, or an inactive one ⇒ false.
