@@ -3,7 +3,7 @@
  * `URL.createObjectURL` throws (Node 24 + jsdom: Node's implementation
  * rejects jsdom's Blob), instead of crashing the consuming component.
  */
-import { Component, type ErrorInfo, type JSX, type ReactNode } from 'react';
+import { Component, type JSX, type ReactNode } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../test/render-helpers';
@@ -19,7 +19,6 @@ class CrashCatcher extends Component<{ children: ReactNode }, { error: string | 
     static getDerivedStateFromError(err: unknown): { error: string } {
         return { error: err instanceof Error ? err.message : String(err) };
     }
-    componentDidCatch(_err: unknown, _info: ErrorInfo): void { /* recorded in state */ }
     render(): ReactNode {
         return this.state.error === null ? this.props.children : <p>crashed: {this.state.error}</p>;
     }
