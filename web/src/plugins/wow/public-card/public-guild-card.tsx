@@ -10,22 +10,7 @@ import { StatusChip } from '../../../components/ui/status-chip';
 import { buttonClass } from '../../../components/ui/button-classes';
 import { crestInitials } from '../../../components/hub/crest/hub-crest.helpers';
 import { RECRUIT_ROLE_LABEL, RECRUIT_STATE_META } from '../hub-widgets/recruitment.helpers';
-
-/** "~140 members", or "Fewer than 10 members" when the server rounded it away (D6). */
-export function memberCountLabel(approx: number | null): string {
-    return approx === null ? 'Fewer than 10 members' : `~${approx} members`;
-}
-
-/** The apply link to render, or null: closed / unset recruitment, no link, or anything but https. */
-export function visibleApplyUrl(card: PublicGuildCard): string | null {
-    const r = card.recruitment;
-    if (r === null || r.state === 'closed' || r.applyUrl === null) return null;
-    try {
-        return new URL(r.applyUrl).protocol === 'https:' ? r.applyUrl : null;
-    } catch {
-        return null;
-    }
-}
+import { memberCountLabel, visibleApplyUrl } from './public-guild-card.helpers';
 
 /** Wanted rows still open to applicants, open before limited (closed rows are not "looking for"). */
 function lookingFor(wanted: readonly PublicGuildWanted[]): PublicGuildWanted[] {

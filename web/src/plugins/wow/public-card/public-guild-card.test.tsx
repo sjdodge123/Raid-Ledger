@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import type { PublicGuildCard } from '@raid-ledger/contract';
 import { createMockPublicGuildCard } from '../../../test/mocks/public-guild-card-handlers';
-import { PublicGuildCardView, memberCountLabel, visibleApplyUrl } from './public-guild-card';
+import { PublicGuildCardView } from './public-guild-card';
+import { memberCountLabel, visibleApplyUrl } from './public-guild-card.helpers';
 
 const renderCard = (card: PublicGuildCard) => render(<PublicGuildCardView card={card} />);
 const withRecruitment = (r: Partial<NonNullable<PublicGuildCard['recruitment']>> | null): PublicGuildCard => {
