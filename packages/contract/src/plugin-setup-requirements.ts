@@ -211,6 +211,15 @@ export const BLIZZARD_SETUP = {
       required: false,
       appliesTo: ['wow_guild'],
     },
+    {
+      // ROK-2099: optional; admins read the uploaded errors, nobody else.
+      id: 'addon-errors-companion',
+      kind: 'companion_app',
+      title: 'Share addon errors (players, optional)',
+      instructions:
+        '1. In the Raid Ledger Companion, turn on "Share addon errors".\n2. The Companion reads BugGrabber errors, removes your folder paths and character names, and uploads them. Only admins can see them; they are deleted 90 days after they were last seen.\n3. Turning it off stops new uploads.',
+      required: false,
+    },
   ],
 } satisfies PluginSetup;
 

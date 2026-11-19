@@ -77,6 +77,7 @@ import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
+import { WowAddonErrorsHandler } from './companion/wow-addon-errors.handler';
 import { InstanceCatalogueService } from './instance-catalogue/instance-catalogue.service';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
@@ -169,6 +170,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     WowLedgerlinkHandler,
     LedgerlinkRulesetNoticeService,
+    // ROK-2099: the `wow-addon-errors` companion contract handler.
+    WowAddonErrorsHandler,
   ],
   exports: [
     InstanceCatalogueService,
@@ -200,6 +203,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly hubKindAdapter: WowHubKindAdapter,
     private readonly companionRegistry: CompanionHandlerRegistry,
     private readonly ledgerlink: WowLedgerlinkHandler,
+    private readonly addonErrors: WowAddonErrorsHandler,
     @Inject(WOW_BOOT_SEED_ENABLED) private readonly bootSeedEnabled: boolean,
   ) {}
 
@@ -208,6 +212,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     // and a failed seed must not leave the contract unhandled. The registry
     // resolves it only while `blizzard` is active.
     this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.ledgerlink);
+    this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.addonErrors);
     await bestEffortInit('WowCommonModule.init', this.logger, async () => {
       this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
       await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);
