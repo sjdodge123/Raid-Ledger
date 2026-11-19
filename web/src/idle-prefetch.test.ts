@@ -2,18 +2,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { prefetchDeferredChunksOnIdle, resetIdlePrefetchForTests } from './idle-prefetch';
 
-const { prefetchEventRoutes, prefetchMoreDrawerContent } = vi.hoisted(() => ({
+const { prefetchEventRoutes, prefetchMoreDrawerContent, getAuthMethod } = vi.hoisted(() => ({
     prefetchEventRoutes: vi.fn(),
     prefetchMoreDrawerContent: vi.fn(),
+    getAuthMethod: vi.fn<() => string | null>(),
 }));
 vi.mock('./lazy-routes', () => ({ prefetchEventRoutes }));
 vi.mock('./components/layout/more-drawer-chunks', () => ({ prefetchMoreDrawerContent }));
+vi.mock('./lib/api/silent-reauth', () => ({ getAuthMethod }));
 
 describe('prefetchDeferredChunksOnIdle', () => {
     beforeEach(() => {
         resetIdlePrefetchForTests();
         prefetchEventRoutes.mockClear();
         prefetchMoreDrawerContent.mockClear();
+        getAuthMethod.mockReset().mockReturnValue('discord');
         vi.useFakeTimers();
     });
     afterEach(() => {
@@ -42,5 +45,21 @@ describe('prefetchDeferredChunksOnIdle', () => {
         vi.runAllTimers();
         expect(prefetchEventRoutes).not.toHaveBeenCalled();
         expect(prefetchMoreDrawerContent).not.toHaveBeenCalled();
+    });
+
+    it('skips everything for a logged-out visitor (no auth-method marker)', () => {
+        getAuthMethod.mockReturnValue(null);
+        prefetchDeferredChunksOnIdle();
+        vi.runAllTimers();
+        expect(prefetchEventRoutes, 'logged-out visitors must not download prefetched chunks').not.toHaveBeenCalled();
+        expect(prefetchMoreDrawerContent).not.toHaveBeenCalled();
+    });
+
+    it('prefetches for a signed-in user (any auth method)', () => {
+        getAuthMethod.mockReturnValue('magic');
+        prefetchDeferredChunksOnIdle();
+        vi.runAllTimers();
+        expect(prefetchEventRoutes).toHaveBeenCalledTimes(1);
+        expect(prefetchMoreDrawerContent).toHaveBeenCalledTimes(1);
     });
 });
