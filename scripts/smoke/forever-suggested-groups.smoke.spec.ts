@@ -80,6 +80,18 @@ async function cardWithUnclaimed(page: Page, sg: SuggestedGroupSeed): Promise<{ 
     throw new Error(`[forever-suggested-groups] the card's unclaimed member is neither ${sg.unclaimed.healer.name} nor ${sg.unclaimed.dps.name}`);
 }
 
+/** Tap Schedule; below 1024px (mobile + tablet projects) it first asks, so check the sheet stays put, then Continue. */
+async function tapSchedule(page: Page, card: Locator): Promise<void> {
+    const before = page.url();
+    await card.getByTestId('suggested-group-schedule').click();
+    if ((page.viewportSize()?.width ?? 1280) >= 1024) return;
+    const confirm = page.getByTestId('suggested-group-confirm');
+    await expect(confirm, 'phones confirm before scheduling').toBeVisible();
+    await expect(confirm, 'the confirm lists the group').toContainText('Invites');
+    expect(page.url(), 'a tap on Schedule does not navigate before Continue').toBe(before);
+    await page.getByTestId('suggested-group-confirm-continue').click();
+}
+
 /** Overview → widget → See all → the planner tab's section, filtered to the seeded dungeon. */
 async function openSectionFromWidget(page: Page, s: Seeded): Promise<void> {
     const sg = s.suggestedGroup;
@@ -124,7 +136,7 @@ test.describe('Suggested groups on WoW: Forever guild hubs (ROK-2212)', () => {
             await signInOnboardedMember(page, s.users.member.userId);
             await openSectionFromWidget(page, s);
             const { card, row } = await cardWithUnclaimed(page, sg);
-            await card.getByTestId('suggested-group-schedule').click();
+            await tapSchedule(page, card);
             await expect(page).toHaveURL(/\/events\/new\?/);
             expect(new URL(page.url()).searchParams.get('contentInstanceIds'), 'Schedule carries the dungeon').toBe(String(sg.instanceId));
             await expect(page.getByRole('button', { name: `Remove ${sg.instanceName}` }), 'the dungeon chip is pre-selected')

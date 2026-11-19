@@ -4,12 +4,17 @@
  * `onPoll` opens the scheduling poll) and Open in planner (ROK-2216 link).
  * Schedule (primary) + Poll only when `canAct` (spec L9). Full-width stack below
  * 1024px; from 1024px one line with Open in planner right-aligned (mockup).
+ * Below `DESKTOP_MQ` Schedule and Poll first open a confirm sheet (operator
+ * 2026-11-19: the stacked full-width buttons are easy to mis-tap on a phone).
  */
-import type { JSX } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, type JSX } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import type { GuildPage, SuggestedGroupDto } from '@raid-ledger/contract';
 import { Button } from '../../../../components/ui/button';
 import { buttonClass } from '../../../../components/ui/button-classes';
+import { useMediaQuery } from '../../../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../../../lib/breakpoints';
+import { SuggestedGroupConfirm, type SuggestedGroupConfirmKind } from './suggested-group-confirm';
 import { groupLabel, inviteCharacterIds, inviteNote, plannerHref, scheduleHref, type GroupOrdinal } from './suggested-groups-links';
 
 export interface SuggestedGroupActionProps {
@@ -30,16 +35,28 @@ const ACTION_CLS = 'w-full lg:w-auto';
 const PLANNER_CLS = 'w-full lg:ml-auto lg:w-auto';
 const PLANNER_TEXT = <>Open in planner <span aria-hidden="true">→</span></>;
 
-function ScheduleAction({ group, page, ordinal }: Pick<SuggestedGroupActionProps, 'group' | 'page' | 'ordinal'>): JSX.Element {
+type ScheduleProps = Pick<SuggestedGroupActionProps, 'group' | 'page' | 'ordinal'> & {
+    /** Phone: Schedule is a button that asks first; omitted = the plain Create Event link. */
+    onAsk?: (() => void) | undefined;
+};
+
+function ScheduleAction({ group, page, ordinal, onAsk }: ScheduleProps): JSX.Element {
     const note = inviteNote(inviteCharacterIds(group).length);
     const target = ordinal === undefined ? group.instance.name : groupLabel(group, ordinal);
     const label = `Schedule ${target}${note === null ? '' : `, ${note.toLowerCase()}`}`;
     return (
         <span className="flex w-full flex-col gap-1 lg:w-auto">
-            <Link to={scheduleHref(group, page)} aria-label={label} data-testid="suggested-group-schedule"
-                className={buttonClass({ variant: 'primary', size: 'sm', className: ACTION_CLS })}>
-                Schedule
-            </Link>
+            {onAsk === undefined ? (
+                <Link to={scheduleHref(group, page)} aria-label={label} data-testid="suggested-group-schedule"
+                    className={buttonClass({ variant: 'primary', size: 'sm', className: ACTION_CLS })}>
+                    Schedule
+                </Link>
+            ) : (
+                <Button variant="primary" size="sm" className={ACTION_CLS} aria-label={label}
+                    data-testid="suggested-group-schedule" onClick={onAsk}>
+                    Schedule
+                </Button>
+            )}
             {note !== null && <span className="text-xs text-muted" data-testid="suggested-group-invites">{note}</span>}
         </span>
     );
@@ -64,19 +81,38 @@ function PlannerAction({ group, page, onOpenInPlanner, ordinal }: SuggestedGroup
     );
 }
 
+/** Phone-only confirm state: which action is waiting on Continue, and what Continue does. */
+function useActionConfirm({ group, page, onPoll }: SuggestedGroupActionProps) {
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
+    const navigate = useNavigate();
+    const [asking, setAsking] = useState<SuggestedGroupConfirmKind | null>(null);
+    const proceed = (): void => {
+        setAsking(null);
+        if (asking === 'schedule') void navigate(scheduleHref(group, page));
+        else if (asking === 'poll') onPoll?.(group);
+    };
+    return { isDesktop, asking, setAsking, proceed };
+}
+
 /** The actions row. */
 export function SuggestedGroupActions(props: SuggestedGroupActionProps): JSX.Element {
     const { group, canAct, onPoll, ordinal } = props;
+    const { isDesktop, asking, setAsking, proceed } = useActionConfirm(props);
+    const poll = (): void => (isDesktop ? onPoll?.(group) : setAsking('poll'));
     return (
         <div className="mt-1 flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-start">
-            {canAct && <ScheduleAction group={group} page={props.page} ordinal={ordinal} />}
+            {canAct && <ScheduleAction group={group} page={props.page} ordinal={ordinal}
+                onAsk={isDesktop ? undefined : () => setAsking('schedule')} />}
             {canAct && onPoll !== undefined && (
                 <Button variant="secondary" size="sm" className={ACTION_CLS} aria-label={`Poll ${groupLabel(group, ordinal)}`}
-                    data-testid="suggested-group-poll" onClick={() => onPoll(group)}>
+                    data-testid="suggested-group-poll" onClick={poll}>
                     Poll
                 </Button>
             )}
             <PlannerAction {...props} />
+            {asking !== null && !isDesktop && (
+                <SuggestedGroupConfirm kind={asking} group={group} onConfirm={proceed} onClose={() => setAsking(null)} />
+            )}
         </div>
     );
 }

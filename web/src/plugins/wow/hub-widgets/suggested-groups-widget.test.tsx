@@ -19,6 +19,9 @@ import { suggestedGroupsWidget } from './suggested-groups.register';
 
 const auth = vi.hoisted(() => ({ role: 'member' as string }));
 
+// Pin a desktop viewport (jsdom matches no width query): below DESKTOP_MQ Schedule/Poll open a confirm first,
+// covered in suggested-group-actions.test.tsx.
+vi.mock('../../../hooks/use-media-query', () => ({ useMediaQuery: (q: string) => q === '(min-width: 1024px)' }));
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
     useAuth: () => ({ user: { id: 1, role: auth.role }, isAuthenticated: true }),
