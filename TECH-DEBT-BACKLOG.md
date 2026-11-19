@@ -3723,7 +3723,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-27 — perf/rok-1901-app-entry-diet (surfaced during ROK-1901)
 
 - **low** `web/src/index.css` — the global `.btn` / `.btn-primary` / `.btn-secondary` rules, moved verbatim from `event-detail-page.css`, still use hex/rgba instead of `--color-*` tokens (wrong in 14 of 15 themes). Pre-existing: moved unchanged so `/join` + `/i/:code` are styled on first paint. Suggested: tokenise in a dedicated restyle story with both colour families checked.
-- ~~**nit** `web/src/idle-prefetch.ts` — warms ~40 KB of idle prefetch for logged-out visitors on public landings. Suggested: skip when `getAuthMethod()` reports no session.~~ **fixed in TD batch 6 (2026-11-19)** — `idle-prefetch.ts` returns early when `getAuthMethod()` is null (logged out).
+- **nit** `web/src/idle-prefetch.ts` — warms ~40 KB of idle prefetch for logged-out visitors on public landings. Suggested: skip when `getAuthMethod()` reports no session. — **Update 2026-11-19 (TD batch 6, not fixed):** an early return on `getAuthMethod() === null` was tried and reverted: `PrefetchAfterFirstRoute` (`App.tsx:76`) calls the prefetch once per page load, so a visitor who signs in client-side (first Discord OAuth landing, first magic-link redeem) would never get the warming (Codex P2). Suggested: gate on the auth store and re-run the prefetch when a user appears (an `App.tsx` effect keyed on the signed-in user).
 - **nit** `web/src/components/hub/community/hub-join-prompt-lazy.tsx` and `community-hub-module-loader.ts` — each keeps its own chunk-reload idiom. Suggested: use `reloadOnChunkError` from `web/src/lib/chunk-error.ts`.
 
 ### 2026-10-27 — feat/rok-1968-next-session-note (surfaced during ROK-1968 review)
