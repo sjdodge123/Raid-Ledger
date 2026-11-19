@@ -69,6 +69,7 @@ export * from './templates.schema.js';
 
 // Blizzard Instance Data
 export * from './blizzard.schema.js';
+export * from './blizzard-bnet-account-probe.schema.js';
 
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
