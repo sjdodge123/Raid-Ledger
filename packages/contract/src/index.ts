@@ -338,6 +338,8 @@ export * from './hub-session-note.schema.js';
 export * from './guild-ingame-text.schema.js';
 // WoW: Forever guild recruitment — switch, per-class rows, apply URL (ROK-1789).
 export * from './guild-recruitment.schema.js';
+// WoW guild opt-in public visitor card (ROK-1813).
+export * from './guild-public-card.schema.js';
 // WoW: Forever guild Progression tab — per-instance bosses + activity feed (ROK-1789 Part B).
 export * from './wow-guild-progression.schema.js';
 export * from './hub-taggable.schema.js';
