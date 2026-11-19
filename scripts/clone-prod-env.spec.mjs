@@ -15,6 +15,11 @@ const BACKUP_TOKEN = `rlbx_${'A'.repeat(20)}-_${'b'.repeat(21)}`;
 const JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXNlY3JldA';
 const GARBAGE = 'not-a-token-SECRETVALUE';
 
+// The minimal env every child gets. scripts/test/validate-ci-fleet-scope-skip
+// runs this spec with a git stub first on PATH that execs $REAL_GIT; dropping
+// REAL_GIT here would make every git call in the lib fail under that harness.
+const BASE_ENV = { PATH: process.env.PATH, ...(process.env.REAL_GIT ? { REAL_GIT: process.env.REAL_GIT } : {}) };
+
 let base;
 before(() => {
   base = mkdtempSync(join(tmpdir(), 'clone-prod-env-'));
@@ -24,7 +29,7 @@ after(() => rmSync(base, { recursive: true, force: true }));
 function run(script, env = {}) {
   const res = spawnSync('bash', ['-c', `set -u; source "${LIB}"; ${script}`], {
     encoding: 'utf8',
-    env: { PATH: process.env.PATH, HOME: env.HOME ?? join(base, 'empty-home'), ...env },
+    env: { ...BASE_ENV, HOME: env.HOME ?? join(base, 'empty-home'), ...env },
   });
   return { code: res.status, out: res.stdout, err: res.stderr };
 }
@@ -202,7 +207,7 @@ describe('clone-prod-to-local.sh refuses early without leaking', () => {
     const res = spawnSync('bash', [SCRIPT, '--yes', '--tree', dir], {
       cwd: dir,
       encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: join(dir, 'home'), RL_ENV_CLONE_FILE: envFile, ...extraEnv },
+      env: { ...BASE_ENV, HOME: join(dir, 'home'), RL_ENV_CLONE_FILE: envFile, ...extraEnv },
     });
     return { code: res.status, out: res.stdout, err: res.stderr };
   }
