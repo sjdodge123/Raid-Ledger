@@ -219,7 +219,6 @@ describe('an admin JWT (regression)', () => {
     expect(res.status).toBe(200);
   });
 
-
   it('still reaches all six backup routes', async () => {
     const statuses: Record<string, number> = {};
     for (const route of [...ALLOWED, ...DESTRUCTIVE]) {

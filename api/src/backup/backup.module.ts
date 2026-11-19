@@ -26,6 +26,6 @@ import { BackupExportTokensService } from './export-token/backup-export-tokens.s
     BackupExportAuthGuard,
     BackupExportSessionJwtGuard,
   ],
-  exports: [BackupService, BackupExportTokensRepository],
+  exports: [BackupService],
 })
 export class BackupModule {}
