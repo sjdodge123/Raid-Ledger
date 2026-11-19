@@ -4,7 +4,7 @@ import { format, differenceInMinutes } from 'date-fns';
 import { useAuth } from '../../hooks/use-auth';
 import { useRoster } from '../../hooks/use-roster';
 import { isMMOSlotConfig } from '../../utils/game-utils';
-import { getGameColors } from '../../constants/game-colors';
+import { cssUrl, getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
 import { EventHubLabel } from './event-hub-label';
@@ -148,7 +148,7 @@ function DayEventBlockContent({ event, d }: { event: CalendarEvent; d: ReturnTyp
 function buildDayEventBgStyle(coverUrl: string | null | undefined, colors: { bg: string; border: string }) {
     return {
         backgroundImage: coverUrl
-            ? `linear-gradient(90deg, ${colors.bg}f5 0%, ${colors.bg}dd 20%, ${colors.bg}aa 40%, ${colors.bg}aa 60%, ${colors.bg}dd 80%, ${colors.bg}f5 100%), url(${coverUrl})`
+            ? `linear-gradient(90deg, ${colors.bg}f5 0%, ${colors.bg}dd 20%, ${colors.bg}aa 40%, ${colors.bg}aa 60%, ${colors.bg}dd 80%, ${colors.bg}f5 100%), ${cssUrl(coverUrl)}`
             : `linear-gradient(90deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
         backgroundSize: 'auto 100%, cover', backgroundPosition: 'center, center', backgroundRepeat: 'no-repeat', borderLeft: `4px solid ${colors.border}`,
     };
