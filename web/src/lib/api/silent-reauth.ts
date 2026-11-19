@@ -41,9 +41,15 @@ export function getAuthMethod(): string | null {
   return safeGetItem(AUTH_METHOD_KEY);
 }
 
-/** Arm the silent-reauth guard with the current timestamp. */
-export function armSilentGuard(): void {
-  safeSessionSetItem(SILENT_GUARD_KEY, String(Date.now()));
+/**
+ * Arm the silent-reauth guard with the current timestamp. Returns false when
+ * the write did not stick (sessionStorage blocked or full): without a guard a
+ * failed `prompt=none` bounce could redirect again on the next mount.
+ */
+export function armSilentGuard(): boolean {
+  const armedAt = String(Date.now());
+  safeSessionSetItem(SILENT_GUARD_KEY, armedAt);
+  return safeSessionGetItem(SILENT_GUARD_KEY) === armedAt;
 }
 
 /** Clear the silent-reauth guard (e.g. after a clean login). */
@@ -82,7 +88,8 @@ export function clearAuthMethod(): void {
 export function attemptSilentReauth(returnTo: string): boolean {
   if (getAuthMethod() !== 'discord') return false;
   if (isSilentGuardFresh()) return false;
-  armSilentGuard();
+  // No guard, no redirect: fall through to the login screen instead of looping.
+  if (!armSilentGuard()) return false;
   const url = `${API_BASE_URL}/auth/discord/silent?returnTo=${encodeURIComponent(
     returnTo,
   )}`;

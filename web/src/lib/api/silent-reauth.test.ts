@@ -87,3 +87,27 @@ describe('silent-reauth when the browser blocks storage (TECH-DEBT L4009)', () =
         expect(attemptSilentReauth('/somewhere')).toBe(false);
     });
 });
+
+describe('silent-reauth when only sessionStorage is blocked (review MINOR / Codex P2)', () => {
+    let original: PropertyDescriptor | undefined;
+    beforeEach(() => {
+        localStorage.clear();
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        original = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+        Object.defineProperty(window, 'sessionStorage', {
+            configurable: true,
+            get: () => {
+                throw new DOMException('The operation is insecure.', 'SecurityError');
+            },
+        });
+    });
+    afterEach(() => {
+        if (original) Object.defineProperty(window, 'sessionStorage', original);
+        localStorage.clear();
+    });
+
+    it('does not redirect when the cooldown guard cannot be stored', () => {
+        expect(armSilentGuard()).toBe(false);
+        expect(attemptSilentReauth('/somewhere')).toBe(false);
+    });
+});
