@@ -26,6 +26,8 @@ import { useClearSessionNote, useSaveSessionNote, useSessionNote } from './use-h
 
 export const DIALOG_TITLE = 'Before next session';
 export const CONFLICT_COPY = 'Someone else changed this note.';
+/** The 409 carried no note: it was cleared (by a member, or auto-cleared after the session). */
+export const CLEARED_CONFLICT_COPY = 'This note was cleared.';
 const LOAD_COPY: DiscardCopy = { title: 'Load their version?', keepLabel: 'Keep editing', discardLabel: 'Load their version' };
 const CLEAR_COPY: DiscardCopy = { title: 'Clear the note for everyone?', keepLabel: 'Cancel', discardLabel: 'Clear' };
 
@@ -106,7 +108,7 @@ function SessionNoteEditor({ guildId, data, onClose }: EditorProps): JSX.Element
             footer={<DialogFooter editor={editor} onCancel={guard.requestClose} onSave={save} onClear={() => setConfirm('clear')} />}>
             {conflict !== null && (
                 <DialogBanner tone="warning" testId="session-note-conflict">
-                    <span>{CONFLICT_COPY}</span>
+                    <span>{conflict.note === null ? CLEARED_CONFLICT_COPY : CONFLICT_COPY}</span>
                     <Button variant="warning-soft" size="sm" data-testid="session-note-load-theirs" onClick={load}>Load their version</Button>
                 </DialogBanner>
             )}
