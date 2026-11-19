@@ -12,8 +12,10 @@
 #                                      sets CLONE_AUTH_MODE + CLONE_AUTH_TOKEN
 #   clone_env_write_auth_header <file> writes the bearer header to a 0600 file
 #   clone_env_assert_local_db_url <url> [label]
-#                                      refuses unless libpq can ONLY reach a
-#                                      local Postgres (every destructive path)
+#                                      refuses unless <url> matches the one
+#                                      loopback-TCP allowlist shape and no PG*
+#                                      env var redirects libpq (every
+#                                      destructive path)
 #   clone_env_reset_admin_password <tree> <db_url>
 #                                      bootstrap-admin reset pinned to <db_url>
 #
@@ -185,52 +187,27 @@ clone_env_restore_fresh() {
     ! grep -qE 'errors ignored on restore|pg_restore: error:' "$err_file"
 }
 
-# ─── The one localhost guard (Codex r2 P1) ────────────────────────────────
-# A regex on the URL's authority is not enough: libpq lets the query string
-# (?host= / ?hostaddr= / ?service= / ?servicefile=, percent-encoded or not)
-# and PGHOST / PGHOSTADDR / PGSERVICE / PGSERVICEFILE override it, so
-# postgresql://u:p@localhost/db?host=prod would DROP SCHEMA on prod. Accepts
-# localhost / 127.0.0.1 / ::1 / a unix-socket directory only. Never prints
-# the URL (it carries a password).
-
-# Is <h> one local host: loopback name/address, or a unix-socket directory?
-clone_env_is_local_host() {
-    case "$1" in
-        localhost|127.0.0.1|::1) return 0 ;;
-        /*) [[ "$1" != *,* ]] ;;
-        *) return 1 ;;
-    esac
-}
-
-# Percent-decodes <s>; fails on a backslash (printf %b would interpret it).
-clone_env_url_decode() {
-    [[ "$1" != *\\* ]] || return 1
-    printf '%b' "${1//%/\\x}"
-}
+# ─── The one localhost guard: an ALLOWLIST (Codex r2 P1, review r3) ──────
+# Three deny-list rounds each found a new libpq bypass (?host=, a second '@'
+# with a host list, a newline that hid a later &host=), so the guard accepts
+# ONE shape and refuses everything else:
+#   postgres[ql]://[userinfo@](localhost|127.0.0.1|[::1])[:port]/<db>[?sslmode=disable|allow|prefer|require]
+# userinfo holds no '@', ',', '/', '?', '#', whitespace or control character
+# (a literal '@' in a password is %40), so libpq, postgres.js and WHATWG URL
+# all split it the same way. No socket form, no other query key: the clone
+# scripts only ever connect over loopback TCP. PGHOST / PGHOSTADDR /
+# PGSERVICE / PGSERVICEFILE can still redirect libpq, so they are checked
+# too. Never prints the URL (it carries a password).
+CLONE_ENV_DB_URL_RE='^(postgres|postgresql)://(([A-Za-z0-9._~%!$&'\''()*+;=:-]*)@)?(localhost|127\.0\.0\.1|\[::1\])(:[0-9]{1,5})?/([A-Za-z0-9_-]+)(\?sslmode=(disable|allow|prefer|require))?$'
 
 # Prints why <url> or the PG* env could reach a non-local host; empty = local.
 clone_env_db_url_problem() {
-    local url="$1" auth host query pair key val
-    local -a pairs=()
-    [[ "$url" =~ ^postgres(ql)?://([^/?#]*)(/[^?#]*)?(\?([^#]*))?$ ]] \
-        || { echo "not a plain postgres:// URL"; return; }
-    auth="${BASH_REMATCH[2]}"; query="${BASH_REMATCH[5]}"
-    host="${auth##*@}"
-    [[ "$host" =~ ^(localhost|127\.0\.0\.1|\[::1\])?(:[0-9]+)?$ ]] \
-        || { echo "its host is not local"; return; }
-    [[ -n "$query" ]] && IFS='&' read -ra pairs <<<"$query"
-    for pair in ${pairs[@]+"${pairs[@]}"}; do
-        key="$(clone_env_url_decode "${pair%%=*}")" || { echo "its query is not decodable"; return; }
-        val="$(clone_env_url_decode "${pair#*=}")" || { echo "its query is not decodable"; return; }
-        case "$key" in
-            host) clone_env_is_local_host "$val" || { echo "its query sets host="; return; } ;;
-            hostaddr) [[ "$val" == 127.0.0.1 || "$val" == ::1 ]] || { echo "its query sets hostaddr="; return; } ;;
-            service|servicefile) echo "its query sets $key="; return ;;
-        esac
-    done
-    [[ -z "${PGHOST:-}" ]] || clone_env_is_local_host "$PGHOST" || { echo "PGHOST is not local"; return; }
-    [[ -z "${PGHOSTADDR:-}" || "$PGHOSTADDR" == 127.0.0.1 || "$PGHOSTADDR" == ::1 ]] \
-        || { echo "PGHOSTADDR is not local"; return; }
+    local LC_ALL=C
+    case "$1" in *[[:cntrl:][:space:]]*) echo "it contains whitespace or a control character"; return ;; esac
+    [[ "$1" =~ $CLONE_ENV_DB_URL_RE ]] \
+        || { echo "it is not postgres[ql]://[user[:pass]@]localhost|127.0.0.1|[::1][:port]/<db>[?sslmode=…]"; return; }
+    case "${PGHOST:-}" in ''|localhost|127.0.0.1|::1) ;; *) echo "PGHOST is not local"; return ;; esac
+    case "${PGHOSTADDR:-}" in ''|127.0.0.1|::1) ;; *) echo "PGHOSTADDR is not local"; return ;; esac
     [[ -z "${PGSERVICE:-}" ]] || { echo "PGSERVICE is set"; return; }
     [[ -z "${PGSERVICEFILE:-}" ]] || { echo "PGSERVICEFILE is set"; return; }
 }
@@ -239,7 +216,7 @@ clone_env_assert_local_db_url() {
     local label="${2:-DATABASE_URL}" why
     why="$(clone_env_db_url_problem "$1")"
     [[ -z "$why" ]] && return 0
-    clone_env_err "$label must point at localhost/127.0.0.1/::1 or a local socket (host redacted): $why."
+    clone_env_err "$label must point at localhost/127.0.0.1/[::1] over TCP (URL redacted): $why."
     return 1
 }
 
