@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * ROK-2099 (S3) — admin read API over the `wow-addon-errors` records the
@@ -29,15 +29,21 @@ export type AddonErrorsFiltersDto = z.infer<typeof AddonErrorsFiltersSchema>;
 export const AddonErrorsListQuerySchema = AddonErrorsFiltersSchema.extend({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
 });
-export type AddonErrorsListQueryDto = z.infer<typeof AddonErrorsListQuerySchema>;
+export type AddonErrorsListQueryDto = z.infer<
+  typeof AddonErrorsListQuerySchema
+>;
 
-export const AddonErrorsExportFormatSchema = z.enum(['json', 'csv']);
-export type AddonErrorsExportFormat = z.infer<typeof AddonErrorsExportFormatSchema>;
+export const AddonErrorsExportFormatSchema = z.enum(["json", "csv"]);
+export type AddonErrorsExportFormat = z.infer<
+  typeof AddonErrorsExportFormatSchema
+>;
 
 export const AddonErrorsExportQuerySchema = AddonErrorsFiltersSchema.extend({
-  format: AddonErrorsExportFormatSchema.default('json'),
+  format: AddonErrorsExportFormatSchema.default("json"),
 });
-export type AddonErrorsExportQueryDto = z.infer<typeof AddonErrorsExportQuerySchema>;
+export type AddonErrorsExportQueryDto = z.infer<
+  typeof AddonErrorsExportQuerySchema
+>;
 
 export const AddonErrorMemberSchema = z.object({
   userId: z.number().int(),
@@ -88,7 +94,9 @@ export const AddonErrorOccurrenceSchema = z.object({
   lastSeenAt: z.string(),
   stack: z.string().nullable(),
 });
-export type AddonErrorOccurrenceDto = z.infer<typeof AddonErrorOccurrenceSchema>;
+export type AddonErrorOccurrenceDto = z.infer<
+  typeof AddonErrorOccurrenceSchema
+>;
 
 export const AddonErrorDetailSchema = z.object({
   signature: z.string().regex(ADDON_ERROR_SIGNATURE_RE),
@@ -116,4 +124,6 @@ export const AddonErrorExportJsonSchema = z.object({
   exportedAt: z.string(),
   rows: z.array(AddonErrorExportRowSchema),
 });
-export type AddonErrorExportJsonDto = z.infer<typeof AddonErrorExportJsonSchema>;
+export type AddonErrorExportJsonDto = z.infer<
+  typeof AddonErrorExportJsonSchema
+>;

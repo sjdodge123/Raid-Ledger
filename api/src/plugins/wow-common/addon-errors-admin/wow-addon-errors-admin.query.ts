@@ -47,7 +47,9 @@ export function toMembers(value: unknown): AddonErrorMemberDto[] {
       userId: Number(m['userId']),
       username: String(m['username'] ?? ''),
     }))
-    .sort((a, b) => a.username.localeCompare(b.username) || a.userId - b.userId);
+    .sort(
+      (a, b) => a.username.localeCompare(b.username) || a.userId - b.userId,
+    );
 }
 
 /** Distinct reporting characters of a group, sorted by name then realm. */
