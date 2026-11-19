@@ -13,6 +13,12 @@ import {
     WOW_LEDGERLINK_CONTRACT_VERSION,
     WowLedgerlinkMessageSchema,
 } from './companion-wow-ledgerlink.schema.js';
+import {
+    COMPANION_WOW_ADDON_ERRORS_MAX_BYTES,
+    WOW_ADDON_ERRORS_CONTRACT_ID,
+    WOW_ADDON_ERRORS_CONTRACT_VERSION,
+    WowAddonErrorsMessageSchema,
+} from './companion-wow-addon-errors.schema.js';
 
 // ============================================================
 // Companion contract registry (ROK-1954, spec D3) — the DATA half both
@@ -64,11 +70,20 @@ const BG3_SCREENSHOT_V1: CompanionContractVersionSpec = {
     status: 'current',
 };
 
-/** The shipped registry: `bg3-save` v1, `bg3-screenshot` v1 and `wow-ledgerlink` v1. */
+/** `wow-addon-errors` v1 (ROK-2099): scrubbed BugGrabber error records; no blobs. */
+const WOW_ADDON_ERRORS_V1: CompanionContractVersionSpec = {
+    schema: WowAddonErrorsMessageSchema,
+    maxBytes: COMPANION_WOW_ADDON_ERRORS_MAX_BYTES,
+    blobSlots: Object.freeze<CompanionBlobSlot[]>([]),
+    status: 'current',
+};
+
+/** The shipped registry: `bg3-save`, `bg3-screenshot`, `wow-ledgerlink` and `wow-addon-errors`, all v1. */
 export const COMPANION_CONTRACTS: CompanionContractTable = Object.freeze({
     [BG3_SAVE_CONTRACT_ID]: Object.freeze({ [BG3_SAVE_CONTRACT_VERSION]: Object.freeze(BG3_SAVE_V1) }),
     [BG3_SCREENSHOT_CONTRACT_ID]: Object.freeze({ [BG3_SCREENSHOT_CONTRACT_VERSION]: Object.freeze(BG3_SCREENSHOT_V1) }),
     [WOW_LEDGERLINK_CONTRACT_ID]: Object.freeze({ [WOW_LEDGERLINK_CONTRACT_VERSION]: Object.freeze(WOW_LEDGERLINK_V1) }),
+    [WOW_ADDON_ERRORS_CONTRACT_ID]: Object.freeze({ [WOW_ADDON_ERRORS_CONTRACT_VERSION]: Object.freeze(WOW_ADDON_ERRORS_V1) }),
 });
 
 /** Result of `lookupCompanionContract`; C3 maps each non-`ok` kind to an ingest error code. */
