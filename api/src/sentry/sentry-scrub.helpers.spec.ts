@@ -423,3 +423,40 @@ describe('ROK-2263 backup-export token', () => {
     );
   });
 });
+
+describe('TD L2808 URL userinfo (DATABASE_URL in a pg_restore error)', () => {
+  it('redacts the password in a connection URL inside a command line', () => {
+    const raw =
+      'Command failed: pg_restore --clean --dbname=postgresql://u:s3cret@db:5432/rl /x.dump';
+    const out = scrubString(raw);
+    expect(out).not.toContain('s3cret');
+    expect(out).toBe(
+      `Command failed: pg_restore --clean --dbname=postgresql://${REDACTED}@db:5432/rl /x.dump`,
+    );
+  });
+
+  it.each([
+    ['redis://:s3cret@cache:6379', `redis://${REDACTED}@cache:6379`],
+    ['https://bob:s3cret@host/p', `https://${REDACTED}@host/p`],
+  ])('redacts the userinfo of %s', (raw, expected) => {
+    expect(scrubString(raw)).toBe(expected);
+  });
+
+  it.each([
+    'https://example.com/users/@handle',
+    'https://example.com/x?mention=a@b.test',
+    'mail fixture@example.test',
+  ])('leaves %s (no userinfo) alone', (raw) => {
+    expect(scrubString(raw)).toBe(raw);
+  });
+
+  it('scrubSecrets redacts it from an exception value', () => {
+    const event = {
+      exception: { values: [{ value: 'x postgres://a:s3cret@h/db' }] },
+    };
+    scrubSecrets(event);
+    expect(event.exception.values[0]?.value).toBe(
+      `x postgres://${REDACTED}@h/db`,
+    );
+  });
+});

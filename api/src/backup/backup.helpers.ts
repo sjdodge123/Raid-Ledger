@@ -9,6 +9,7 @@ import * as path from 'node:path';
 
 import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
 import { defined } from '../common/defined.helpers';
+import { scrubString } from '../sentry/sentry-scrub.helpers';
 
 const execFileAsync = promisify(execFile);
 
@@ -158,6 +159,14 @@ export function isRestoreFatal(error: unknown): boolean {
     message.includes('pg_restore: error:') &&
     !message.includes('errors ignored on restore')
   );
+}
+
+/**
+ * A pg_restore error's message, safe to log or return (TD L2808): execFile
+ * puts the whole command line — `--dbname=<DATABASE_URL>` — in it.
+ */
+export function restoreErrorMessage(error: unknown): string {
+  return scrubString(error instanceof Error ? error.message : String(error));
 }
 
 /**

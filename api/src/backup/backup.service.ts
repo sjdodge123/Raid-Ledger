@@ -18,6 +18,7 @@ import {
   runPgRestoreDirect,
   runPgRestoreDocker,
   isRestoreFatal,
+  restoreErrorMessage,
   runMigrations,
   bootstrapAdmin,
   seedGameData,
@@ -309,14 +310,14 @@ export class BackupService implements OnModuleInit {
       }
     } catch (err) {
       if (isRestoreFatal(err)) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = restoreErrorMessage(err);
         this.logger.error(`pg_restore failed: ${msg}`);
         throw new InternalServerErrorException(
           `Database restore failed: ${msg}`,
         );
       }
       this.logger.warn(
-        `pg_restore completed with warnings: ${err instanceof Error ? err.message : String(err)}`,
+        `pg_restore completed with warnings: ${restoreErrorMessage(err)}`,
       );
     }
   }

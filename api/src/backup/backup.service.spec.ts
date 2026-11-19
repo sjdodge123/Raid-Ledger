@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+import { InternalServerErrorException, Logger } from '@nestjs/common';
 import { BackupService } from './backup.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
@@ -33,6 +33,39 @@ const MIGRATION_DIR = path.join(process.cwd(), 'backups', 'migrations');
 const migrationPath = (name: string) => path.join(MIGRATION_DIR, name);
 const BASE_MS = Date.UTC(2026, 8, 1);
 const minutes = (m: number) => new Date(BASE_MS + m * 60_000);
+
+/** pg_restore fails with execFile's real shape: "Command failed: <cmd> <args>". */
+function failPgRestore(stderr: string): void {
+  const okImpl = (
+    mockChildProcess.execFile as unknown as jest.Mock
+  ).getMockImplementation() as (...args: unknown[]) => void;
+  (mockChildProcess.execFile as unknown as jest.Mock).mockImplementation(
+    (...args: unknown[]) => {
+      if (args[0] !== 'pg_restore') return okImpl(...args);
+      const cmdArgs = args[1] as string[];
+      const callback = args.find((a) => typeof a === 'function') as (
+        err: Error | null,
+      ) => void;
+      callback(
+        new Error(`Command failed: pg_restore ${cmdArgs.join(' ')}\n${stderr}`),
+      );
+    },
+  );
+}
+
+function spyLogger() {
+  return {
+    error: jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined),
+    warn: jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined),
+  };
+}
+
+const logged = (spy: jest.SpyInstance) =>
+  spy.mock.calls.map((c: unknown[]) => String(c[0])).join('\n');
 
 /** `pre_migration_2026-09-DD_020000.dump` for DD = 01..n (name order = age). */
 function snapshotNames(n: number): string[] {
@@ -496,6 +529,45 @@ function describeBackupService() {
       expect(pgRestoreCall![1]).toEqual(
         expect.arrayContaining(['--clean', '--if-exists']),
       );
+    });
+
+    describe('a failed pg_restore never leaks the DATABASE_URL password (TD L2808)', () => {
+      it('redacts the password from the thrown exception and the error log', async () => {
+        (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+        failPgRestore('pg_restore: error: connection to server failed');
+        const spies = spyLogger();
+
+        const err: unknown = await service
+          .restoreFromBackup('daily', 'test.dump')
+          .then(
+            () => undefined,
+            (e: unknown) => e,
+          );
+
+        expect(err).toBeInstanceOf(InternalServerErrorException);
+        const message = err instanceof Error ? err.message : '';
+        expect(message).toContain('Database restore failed');
+        expect(message).toContain('postgresql://[redacted]@localhost:5432');
+        expect(message).not.toContain('user:pass@');
+        expect(logged(spies.error)).toContain('pg_restore failed');
+        expect(logged(spies.error)).not.toContain('user:pass@');
+        spies.error.mockRestore();
+        spies.warn.mockRestore();
+      });
+
+      it('redacts the password from the non-fatal warnings log', async () => {
+        (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+        failPgRestore('pg_restore: warning: errors ignored on restore: 2');
+        const spies = spyLogger();
+
+        await service.restoreFromBackup('daily', 'test.dump');
+
+        expect(logged(spies.warn)).toContain('completed with warnings');
+        expect(logged(spies.warn)).toContain('postgresql://[redacted]@');
+        expect(logged(spies.warn)).not.toContain('user:pass@');
+        spies.error.mockRestore();
+        spies.warn.mockRestore();
+      });
     });
 
     it('logs a post-restore migration failure at error and still completes restore', async () => {
