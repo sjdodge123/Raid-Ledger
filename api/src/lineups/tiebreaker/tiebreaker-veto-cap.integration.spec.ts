@@ -8,14 +8,17 @@
  *
  * The race is forced deterministically: a third connection holds SHARE on
  * the vetoes table, which lets SELECTs through but parks every INSERT. Both
- * callers are released once two backends are parked on a lock:
+ * callers are released once two backends are parked behind the holder:
  *   - old code: both counted 0 and are parked on their INSERT -> 2 rows;
  *   - fixed:    the second is parked on the tiebreaker row lock before it
  *               counts, so it sees the first veto and hits the cap.
  */
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
-import { truncateAllTables } from '../../common/testing/integration-helpers';
+import {
+  truncateAllTables,
+  waitFor,
+} from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { defined, nonEmpty } from '../../common/testing/narrow';
@@ -32,31 +35,48 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
-/** Polls until `n` backends in this database are waiting on a lock. */
-async function lockWaiters(db: Db, n: number): Promise<void> {
-  for (;;) {
-    const [row] = await db.execute<{ n: number }>(
-      sql`SELECT count(*)::int AS n FROM pg_stat_activity
-          WHERE wait_event_type = 'Lock' AND datname = current_database()`,
-    );
-    if ((row?.n ?? 0) >= n) return;
-    await new Promise((r) => setTimeout(r, 25));
-  }
+/**
+ * Sessions parked behind `holderPid`, directly or one hop removed (the fixed
+ * code parks the second caller on the first caller's tiebreaker row lock,
+ * and the first caller is the one parked on the holder). Scoped to the
+ * holder so unrelated lock waiters in the database never count.
+ */
+async function countParkedBehind(db: Db, holderPid: number): Promise<number> {
+  const rows = await db.execute<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM pg_stat_activity a
+    WHERE ${holderPid} = ANY(pg_blocking_pids(a.pid))
+       OR EXISTS (
+         SELECT 1 FROM pg_stat_activity b
+         WHERE ${holderPid} = ANY(pg_blocking_pids(b.pid))
+           AND b.pid = ANY(pg_blocking_pids(a.pid)))`);
+  return Number(rows[0]?.n ?? 0);
+}
+
+interface HeldLock {
+  pid: number;
+  release: () => void;
+  done: Promise<void>;
 }
 
 /** Hold SHARE on the vetoes table (blocks INSERT, not SELECT). */
-async function holdVetoInsertLock(db: Db) {
+async function holdVetoInsertLock(db: Db): Promise<HeldLock> {
   const held = deferred();
   const release = deferred();
+  let pid = 0;
   const done = db.transaction(async (tx) => {
     await tx.execute(
       sql`LOCK TABLE community_lineup_tiebreaker_vetoes IN SHARE MODE`,
     );
+    const [row] = nonEmpty(
+      await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`),
+      'holder pid row',
+    );
+    pid = row.pid;
     held.resolve();
     await release.promise;
   });
   await held.promise;
-  return { release: release.resolve, done };
+  return { pid, release: release.resolve, done };
 }
 
 function outcomeOf(r: PromiseSettledResult<void>): string {
@@ -64,9 +84,80 @@ function outcomeOf(r: PromiseSettledResult<void>): string {
   return r.reason instanceof Error ? r.reason.message : String(r.reason);
 }
 
+let seq = 0;
+
+async function insertGame(db: Db): Promise<number> {
+  seq += 1;
+  const [game] = nonEmpty(
+    await db
+      .insert(schema.games)
+      .values({
+        name: `VetoCap${seq}`,
+        slug: `veto-cap-${seq}-${Date.now()}`,
+      })
+      .returning(),
+    'game',
+  );
+  return game.id;
+}
+
+async function insertMember(db: Db): Promise<number> {
+  seq += 1;
+  const [user] = nonEmpty(
+    await db
+      .insert(schema.users)
+      .values({
+        discordId: `local:veto-cap-${seq}@test.local`,
+        username: `veto-cap-${seq}`,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
+  return user.id;
+}
+
+/** Active veto tiebreaker over two tied games, so the cap is 1. */
+async function insertTiebreaker(
+  db: Db,
+  adminId: number,
+): Promise<TiebreakerRow> {
+  const tiedGameIds = [await insertGame(db), await insertGame(db)];
+  const [lineup] = nonEmpty(
+    await db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'veto cap race',
+        status: 'voting',
+        createdBy: adminId,
+        publicSlug: generatePublicSlug(),
+      })
+      .returning(),
+    'lineup',
+  );
+  const [tb] = nonEmpty(
+    await db
+      .insert(schema.communityLineupTiebreakers)
+      .values({
+        lineupId: lineup.id,
+        mode: 'veto',
+        status: 'active',
+        tiedGameIds,
+        originalVoteCount: 2,
+      })
+      .returning(),
+    'tiebreaker',
+  );
+  return tb;
+}
+
+async function vetoRows(db: Db, tiebreakerId: number) {
+  const V = schema.communityLineupTiebreakerVetoes;
+  return db.select().from(V).where(eq(V.tiebreakerId, tiebreakerId));
+}
+
 function describeVetoCap() {
   let testApp: TestApp;
-  let seq = 0;
 
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -77,93 +168,29 @@ function describeVetoCap() {
     testApp.seed = await truncateAllTables(testApp.db);
   });
 
-  async function insertGame(): Promise<number> {
-    seq += 1;
-    const [game] = nonEmpty(
-      await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `VetoCap${seq}`,
-          slug: `veto-cap-${seq}-${Date.now()}`,
-        })
-        .returning(),
-      'game',
-    );
-    return game.id;
-  }
-
-  async function insertMember(): Promise<number> {
-    seq += 1;
-    const [user] = nonEmpty(
-      await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: `local:veto-cap-${seq}@test.local`,
-          username: `veto-cap-${seq}`,
-          role: 'member',
-        })
-        .returning(),
-      'user',
-    );
-    return user.id;
-  }
-
-  /** Active veto tiebreaker over two tied games, so the cap is 1. */
-  async function insertTiebreaker(): Promise<TiebreakerRow> {
-    const tiedGameIds = [await insertGame(), await insertGame()];
-    const [lineup] = nonEmpty(
-      await testApp.db
-        .insert(schema.communityLineups)
-        .values({
-          title: 'veto cap race',
-          status: 'voting',
-          createdBy: testApp.seed.adminUser.id,
-          publicSlug: generatePublicSlug(),
-        })
-        .returning(),
-      'lineup',
-    );
-    const [tb] = nonEmpty(
-      await testApp.db
-        .insert(schema.communityLineupTiebreakers)
-        .values({
-          lineupId: lineup.id,
-          mode: 'veto',
-          status: 'active',
-          tiedGameIds,
-          originalVoteCount: 2,
-        })
-        .returning(),
-      'tiebreaker',
-    );
-    return tb;
-  }
-
-  async function vetoRows(tiebreakerId: number) {
-    const V = schema.communityLineupTiebreakerVetoes;
-    return testApp.db.select().from(V).where(eq(V.tiebreakerId, tiebreakerId));
-  }
-
   it('two users vetoing at once under a cap of 1: exactly one lands', async () => {
-    const tb = await insertTiebreaker();
+    const db = testApp.db;
+    const tb = await insertTiebreaker(db, testApp.seed.adminUser.id);
     const [gameA, gameB] = tb.tiedGameIds;
-    const userA = await insertMember();
-    const userB = await insertMember();
-    const lock = await holdVetoInsertLock(testApp.db);
+    const userA = await insertMember(db);
+    const userB = await insertMember(db);
+    const lock = await holdVetoInsertLock(db);
     let racing: Promise<PromiseSettledResult<void>[]>;
     try {
       racing = Promise.allSettled([
-        submitVeto(testApp.db, tb, userA, defined(gameA, 'game A')),
-        submitVeto(testApp.db, tb, userB, defined(gameB, 'game B')),
+        submitVeto(db, tb, userA, defined(gameA, 'game A')),
+        submitVeto(db, tb, userB, defined(gameB, 'game B')),
       ]);
-      await lockWaiters(testApp.db, 2);
+      await waitFor(async () => {
+        expect(await countParkedBehind(db, lock.pid)).toBe(2);
+      }, 10_000);
     } finally {
       lock.release();
       await lock.done;
     }
     const results = await racing;
     expect(results.map(outcomeOf).sort()).toEqual(['Veto cap reached', 'ok']);
-    expect(await vetoRows(tb.id)).toHaveLength(1);
+    expect(await vetoRows(db, tb.id)).toHaveLength(1);
   }, 20_000);
 }
 
