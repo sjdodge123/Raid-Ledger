@@ -3,7 +3,8 @@
  * by the `blizzard` plugin. Runs IN the ingest tx: re-scrub every string
  * (D8) → server-side hash (D5) → one upsert on `(user_id, record_hash)`
  * keeping the widest view of each error (GREATEST count / last seen /
- * session, LEAST first seen). A re-upload of unchanged records changes
+ * session / scrub count, LEAST first seen; provenance follows the latest
+ * uploader). A re-upload of unchanged records changes
  * nothing and still acks `accepted` (AC1). No `latestWins`: the upsert is
  * idempotent on its own. Rows stay when the member turns the upload off
  * (ruling 8); retention and revoke cleanup are S2b.
@@ -110,7 +111,9 @@ function mergeRows(
 /**
  * Records distinct on the wire can collide after the scrub (e.g. two
  * character names → `<char>`); one INSERT … ON CONFLICT cannot touch a row
- * twice, so collapse them first.
+ * twice, so collapse them first. The result is ordered by `recordHash` so two
+ * concurrent uploads of one member take their row locks in the same order
+ * (no `[A, B]` vs `[B, A]` deadlock).
  */
 export function collapseByHash(
   rows: readonly WowAddonErrorRecordInsert[],
@@ -120,7 +123,9 @@ export function collapseByHash(
     const held = byHash.get(row.recordHash);
     byHash.set(row.recordHash, held ? mergeRows(held, row) : row);
   }
-  return [...byHash.values()];
+  return [...byHash.values()].sort((a, b) =>
+    a.recordHash < b.recordHash ? -1 : a.recordHash > b.recordHash ? 1 : 0,
+  );
 }
 
 @Injectable()
@@ -149,7 +154,15 @@ export class WowAddonErrorsHandler implements CompanionInTxHandler<WowAddonError
           lastSeenAt: sql`GREATEST(${t.lastSeenAt}, excluded.last_seen_at)`,
           firstSeenAt: sql`LEAST(${t.firstSeenAt}, excluded.first_seen_at)`,
           session: sql`GREATEST(${t.session}, excluded.session)`,
+          scrubbedCount: sql`GREATEST(${t.scrubbedCount}, excluded.scrubbed_count)`,
+          // The row follows its latest uploader whole: provenance moves with
+          // `device_id`, so revoking the old device strands none of its data.
           deviceId: sql`excluded.device_id`,
+          accountKey: sql`excluded.account_key`,
+          characterName: sql`excluded.character_name`,
+          characterRealm: sql`excluded.character_realm`,
+          source: sql`excluded.source`,
+          sourceVersion: sql`excluded.source_version`,
           updatedAt: sql`now()`,
         },
       });

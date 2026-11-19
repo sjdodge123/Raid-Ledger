@@ -338,6 +338,42 @@ describe('cross-user isolation', () => {
   });
 });
 
+describe("one member's second device (Codex P2/P3)", () => {
+  it('the row follows the latest uploader whole and keeps the scrub evidence', async () => {
+    const a = await member('ae-two-devices');
+    const second = await linkDevice(testApp, a.session);
+    const tail = ': attempt to index nil';
+    const first = { name: 'Anabelle', realm: 'Doomhowl' };
+    expectAccepted(
+      await post(a.token, message([rec({ message: `<char>${tail}` })], first)),
+    );
+    const later = { name: 'Brynhild', realm: 'Stitches' };
+    expectAccepted(
+      await post(
+        second.token,
+        message([rec({ message: `Brynhild${tail}` })], later),
+      ),
+    );
+    expect(
+      (await rows()).map((r) => ({
+        deviceId: r.deviceId,
+        characterName: r.characterName,
+        characterRealm: r.characterRealm,
+        message: r.message,
+        scrubbedCount: r.scrubbedCount,
+      })),
+    ).toEqual([
+      {
+        deviceId: second.deviceId,
+        characterName: 'Brynhild',
+        characterRealm: 'Stitches',
+        message: `<char>${tail}`,
+        scrubbedCount: 1,
+      },
+    ]);
+  });
+});
+
 describe('auth and plugin gating', () => {
   it('a session JWT → 404 unknown_contract (device-only handler)', async () => {
     const a = await member('ae-session');

@@ -102,6 +102,20 @@ describe('collapseByHash', () => {
   });
 });
 
+describe('collapseByHash lock order', () => {
+  it('returns rows sorted by recordHash whatever the input order', () => {
+    const p = payload([]);
+    const rows = ['alpha', 'bravo', 'charlie', 'delta'].map((m) =>
+      toAddonErrorRow(CTX, p, rec({ message: m })),
+    );
+    const hashes = rows.map((r) => r.recordHash).sort();
+    expect(collapseByHash(rows).map((r) => r.recordHash)).toEqual(hashes);
+    expect(
+      collapseByHash([...rows].reverse()).map((r) => r.recordHash),
+    ).toEqual(hashes);
+  });
+});
+
 describe('WowAddonErrorsHandler.handle', () => {
   it('one upsert on (user_id, record_hash) with GREATEST/LEAST, device-only source', async () => {
     const onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
@@ -129,11 +143,17 @@ describe('WowAddonErrorsHandler.handle', () => {
     };
     expect(conflictArg.target).toHaveLength(2);
     expect(Object.keys(conflictArg.set).sort()).toEqual([
+      'accountKey',
+      'characterName',
+      'characterRealm',
       'count',
       'deviceId',
       'firstSeenAt',
       'lastSeenAt',
+      'scrubbedCount',
       'session',
+      'source',
+      'sourceVersion',
       'updatedAt',
     ]);
   });
