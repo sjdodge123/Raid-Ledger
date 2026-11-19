@@ -68,8 +68,8 @@ function jsonbArray(column: SQLWrapper): SQL {
 
 /**
  * A reward id's text as an int, or NULL when it is not 1–9 plain digits (a
- * non-numeric or out-of-range id must not abort the cron run). `substring`
- * wraps the set-returning call because Postgres forbids SRFs inside CASE.
+ * non-numeric or out-of-range id must not abort the cron run). A function
+ * call is used instead of CASE, which forbids set-returning calls inside it.
  */
 function intOrNull(text: SQL): SQL<number | null> {
   return sql<number | null>`(substring(${text} from '^[0-9]{1,9}$'))::int`;
