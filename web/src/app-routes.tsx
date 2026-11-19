@@ -87,6 +87,16 @@ function AdminIntegrationRoutes() {
 }
 
 /** Admin → General → GG and its admin-only "Preview my GG" story (ROK-2187). */
+/** Logs, then the `blizzard` plugin's Addon errors page (ROK-2099; it redirects while the plugin is off). */
+function LogsAdminRoutes() {
+  return (
+    <>
+      <Route path="general/logs" element={<LogsPanel />} />
+      <Route path="general/addon-errors" element={<AddonErrorsPage />} />
+    </>
+  );
+}
+
 function GgAdminRoutes() {
   return (
     <>
@@ -106,8 +116,7 @@ function AdminSettingsRoutes() {
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
       {GgAdminRoutes()}
       <Route path="general/backups" element={<BackupsPanel />} />
-      <Route path="general/logs" element={<LogsPanel />} />
-      <Route path="general/addon-errors" element={<AddonErrorsPage />} />
+      {LogsAdminRoutes()}
       <Route path="general/hubs" element={<HubsPanel />} />
       {AdminIntegrationRoutes()}
       <Route path="discord" element={<DiscordOverviewPage />} />

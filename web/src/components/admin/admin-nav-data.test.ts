@@ -333,13 +333,6 @@ describe('buildNavSections — part 1', () => {
         expect(general.children.map((c) => c.to)).toContain('/admin/settings/general/gg');
     });
 
-    it('ROK-2099: plugin General rows (Addon errors) follow Logs; none by default', () => {
-        const item = { to: '/admin/settings/general/addon-errors', label: 'Addon errors' };
-        const labels = (s: ReturnType<typeof buildNavSections>) => s.find((x) => x.id === 'general')?.children.map((c) => c.label);
-        expect(labels(buildNavSections([], [], null, [item]))?.slice(-2)).toEqual(['Logs', 'Addon errors']);
-        expect(labels(buildNavSections([], []))).not.toContain('Addon errors');
-    });
-
     it('ROK-1870: General lists Hubs at /admin/settings/general/hubs, after Demo Data', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
@@ -432,5 +425,14 @@ describe('filterNavForFlavour (ROK-1700)', () => {
         expect(out).toBe(input);
         expect(paths(out)).toContain('/admin/settings/general/data');
         expect(paths(out)).toContain('/admin/settings/integrations/cooptimus');
+    });
+});
+
+describe('buildNavSections — plugin General rows', () => {
+    it('ROK-2099: plugin General rows (Addon errors) follow Logs; none by default', () => {
+        const item = { to: '/admin/settings/general/addon-errors', label: 'Addon errors' };
+        const labels = (s: ReturnType<typeof buildNavSections>) => s.find((x) => x.id === 'general')?.children.map((c) => c.label);
+        expect(labels(buildNavSections([], [], null, [item]))?.slice(-2)).toEqual(['Logs', 'Addon errors']);
+        expect(labels(buildNavSections([], []))).not.toContain('Addon errors');
     });
 });
