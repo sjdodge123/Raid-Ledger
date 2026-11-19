@@ -30,6 +30,10 @@ export async function submitVeto(
   }
 
   await db.transaction(async (tx) => {
+    // TECH-DEBT L2934: serialise vetoes on the tiebreaker row so two different
+    // users cannot both pass the cap count below. NO KEY UPDATE still lets
+    // FK inserts elsewhere (KEY SHARE) through.
+    await lockTiebreakerRow(tx, tiebreaker.id);
     const existing = await findUserVeto(tx, tiebreaker.id, userId);
     if (existing.length > 0) {
       throw new BadRequestException('You have already submitted a veto');
@@ -45,6 +49,18 @@ export async function submitVeto(
       .insert(schema.communityLineupTiebreakerVetoes)
       .values({ tiebreakerId: tiebreaker.id, userId, gameId });
   });
+}
+
+async function lockTiebreakerRow(
+  tx: Pick<Db, 'select'>,
+  tiebreakerId: number,
+): Promise<void> {
+  const T = schema.communityLineupTiebreakers;
+  await tx
+    .select({ id: T.id })
+    .from(T)
+    .where(eq(T.id, tiebreakerId))
+    .for('no key update');
 }
 
 /** Reveal all vetoes (set revealed=true). */

@@ -83,6 +83,20 @@ export function getGameColors(slug: string | undefined): GameColorConfig {
 }
 
 /**
+ * Wrap a value (a cover-art URL) in a quoted CSS `url("…")` token. The value is
+ * double-quoted with backslash, quote and line breaks escaped, so a `)`, `"`,
+ * space or newline in it cannot close the token early or inject another
+ * declaration. A normal URL renders exactly as an unquoted `url(…)` would.
+ */
+export function cssUrl(value: string): string {
+    const escaped = value
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\r\n|\r|\n|\f/g, (br) => (br === '\f' ? '\\c ' : '\\a '));
+    return `url("${escaped}")`;
+}
+
+/**
  * Get game time block styling (shared between GameTimeGrid overlays and CalendarView).
  * Extracts the gradient pattern from WeekEventComponent for reuse.
  */
@@ -93,7 +107,7 @@ export function getGameTimeBlockStyle(
     const colors = getGameColors(slug);
     return {
         backgroundImage: coverUrl
-            ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
+            ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), ${cssUrl(coverUrl)}`
             : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
