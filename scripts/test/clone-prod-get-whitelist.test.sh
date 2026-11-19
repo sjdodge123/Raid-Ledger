@@ -13,7 +13,9 @@
 set -uo pipefail
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$TEST_DIR/../.." && pwd)"
-CLONE_SCRIPT="$REPO_ROOT/scripts/clone-prod-to-local.sh"
+# prod_get_safe lives in the shared env lib since ROK-2263 (sourced by
+# clone-prod-to-local.sh and clone-prod-measure-migration.sh).
+CLONE_SCRIPT="$REPO_ROOT/scripts/lib/clone-prod-env.sh"
 
 PASS=0
 FAIL=0
@@ -29,10 +31,12 @@ fail() {
 }
 
 [[ -f "$CLONE_SCRIPT" ]] || { echo "missing $CLONE_SCRIPT"; exit 1; }
+grep -q '^prod_get_safe()' "$CLONE_SCRIPT" || { echo "prod_get_safe() not found in $CLONE_SCRIPT"; exit 1; }
 
 # Extract only the function under test; stub its dependencies.
 eval "$(sed -n '/^prod_get_safe()/,/^}/p' "$CLONE_SCRIPT")"
 red() { :; }
+clone_env_err() { :; }
 curl() { :; }
 PROD_GET_ALLOWED_PREFIX="/admin/backups"
 PROD_URL="https://example.invalid"

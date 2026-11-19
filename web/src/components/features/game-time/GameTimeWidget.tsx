@@ -8,6 +8,7 @@ import type { GameTimePreviewBlock } from './GameTimeGrid';
 import { MemberAvatarGroup } from '../../lineups/decided/MemberAvatarGroup';
 import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils';
 import { PHONE_MQ } from '../../../lib/breakpoints';
+import { cssUrl } from '../../../constants/game-colors';
 
 interface AttendeePreview {
     id: number;
@@ -134,7 +135,7 @@ function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUserna
 }) {
     return (
         <>
-            {coverUrl && <div className="w-14 h-14 rounded-lg bg-cover bg-center shrink-0 ring-1 ring-white/10" style={{ backgroundImage: `url(${coverUrl})` }} />}
+            {coverUrl && <div className="w-14 h-14 rounded-lg bg-cover bg-center shrink-0 ring-1 ring-white/10" style={{ backgroundImage: cssUrl(coverUrl) }} />}
             <div className="flex-1 min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-success">Highlighted Event</p>
                 <h4 className="text-sm font-semibold text-foreground truncate mt-1">{title}</h4>

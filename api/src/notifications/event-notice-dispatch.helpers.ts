@@ -130,7 +130,8 @@ async function claimEventNotices(
 /**
  * One `createMany` for every claimed notice. A notice `createMany` skipped
  * (its type's in-app channel is off) or a batch that threw gives its claim
- * back, exactly as the per-notice path (`sendClaimedEventNotice`) does.
+ * back, so a later path (a late group tag) or a retry is not suppressed for
+ * the whole TTL.
  * Outcomes are keyed by userId: valid only while `planEventNotices` plans at
  * most one notice per user.
  */

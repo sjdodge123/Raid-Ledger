@@ -53,9 +53,8 @@ export function HubGalleryFooter({ guildId, mode, item, pages, canEdit, onBack }
     return (
         <>
             <Button variant="secondary" onClick={onBack}>Back to all</Button>
-            {item !== undefined && (canEdit || item.canRemove) && (
-                <ModerationButtons guildId={guildId} item={item} canEdit={canEdit} />
-            )}
+            {/* ModerationButtons gates Hide on canEdit and Remove on item.canRemove itself. */}
+            {item !== undefined && <ModerationButtons guildId={guildId} item={item} canEdit={canEdit} />}
         </>
     );
 }

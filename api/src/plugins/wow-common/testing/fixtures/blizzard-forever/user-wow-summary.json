@@ -1,0 +1,93 @@
+{
+  "_links": {
+    "self": {
+      "href": "https://us.api.blizzard.com/profile/user/wow?namespace=profile-forever-us"
+    },
+    "user": {
+      "href": "https://us.api.blizzard.com/profile/user?namespace=profile-forever-us"
+    },
+    "profile": {
+      "href": "https://us.api.blizzard.com/profile/user/wow?namespace=profile-forever-us"
+    }
+  },
+  "id": 900777,
+  "wow_accounts": [
+    {
+      "id": 900801,
+      "characters": [
+        {
+          "character": {
+            "href": "https://us.api.blizzard.com/profile/wow/character/ana-forever?namespace=profile-forever-us"
+          },
+          "protected_character": {
+            "href": "https://us.api.blizzard.com/profile/user/wow/protected-character/900501-900001?namespace=profile-forever-us"
+          },
+          "name": "Ana",
+          "id": 900001,
+          "realm": {
+            "key": {
+              "href": "https://us.api.blizzard.com/data/wow/realm/900501?namespace=dynamic-forever-us"
+            },
+            "name": "Lantern Vale",
+            "id": 900501,
+            "slug": "lantern-vale"
+          },
+          "playable_class": {
+            "key": {
+              "href": "https://us.api.blizzard.com/data/wow/playable-class/8?namespace=static-forever-us"
+            },
+            "name": "Mage",
+            "id": 8
+          },
+          "playable_race": {
+            "key": {
+              "href": "https://us.api.blizzard.com/data/wow/playable-race/1?namespace=static-forever-us"
+            },
+            "name": "Human",
+            "id": 1
+          },
+          "gender": { "type": "FEMALE", "name": "Female" },
+          "faction": { "type": "ALLIANCE", "name": "Alliance" },
+          "level": 24
+        },
+        {
+          "character": {
+            "href": "https://us.api.blizzard.com/profile/wow/character/thornmere/bramblewick?namespace=profile-forever-us"
+          },
+          "name": "Bramblewick",
+          "id": 900002,
+          "realm": {
+            "key": {
+              "href": "https://us.api.blizzard.com/data/wow/realm/900502?namespace=dynamic-forever-us"
+            },
+            "name": "Thornmere",
+            "id": 900502,
+            "slug": "thornmere"
+          },
+          "playable_class": {
+            "key": {
+              "href": "https://us.api.blizzard.com/data/wow/playable-class/1?namespace=static-forever-us"
+            },
+            "name": "Warrior",
+            "id": 1
+          },
+          "level": 12
+        }
+      ]
+    },
+    {
+      "id": 900802,
+      "characters": [
+        {
+          "name": "Quillfeather",
+          "id": 900003,
+          "realm": { "name": "Dawnhollow", "id": 900503, "slug": "dawnhollow" },
+          "level": 5
+        }
+      ]
+    }
+  ],
+  "collections": {
+    "href": "https://us.api.blizzard.com/profile/user/wow/collections?namespace=profile-forever-us"
+  }
+}

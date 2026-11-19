@@ -120,19 +120,31 @@ export class GuildAccessService {
   }
 
   /**
-   * ROK-2071 (Codex P2): `canEdit` for a caller that already read the hub's
-   * row, so it skips the per-hub kind lookup. Same ladder, same answer.
+   * L3884: the ids among `guildIds` (all of `kind`) the actor can edit, with
+   * ONE membership read for the kind instead of a ladder query per hub. Every
+   * editing rung sits above member and each adapter's `memberGroupIds` uses
+   * its ladder's own liveness predicate, so a hub the actor is not a member
+   * of is a visitor's; only the member hubs resolve their ladder.
    */
-  async canEditOfKind(
+  async editableIdsOfKind(
     actor: GuildActor,
-    guildId: number,
     kind: GuildKind,
-  ): Promise<boolean> {
-    if (isStaff(actor)) return true;
-    const role = await this.hubKinds
-      .require(kind)
-      .resolveLadder(actor, guildId);
-    return ladderCanEdit(role);
+    guildIds: readonly number[],
+  ): Promise<Set<number>> {
+    if (isStaff(actor)) return new Set(guildIds);
+    if (guildIds.length === 0) return new Set();
+    const hub = this.hubKinds.require(kind);
+    const member = new Set(await hub.memberGroupIds(actor.id));
+    const candidates = guildIds.filter((id) => member.has(id));
+    const roles = await Promise.all(
+      candidates.map((id) => hub.resolveLadder(actor, id)),
+    );
+    return new Set(
+      candidates.filter((_, i) => {
+        const role = roles[i];
+        return role !== undefined && ladderCanEdit(role);
+      }),
+    );
   }
 
   /**

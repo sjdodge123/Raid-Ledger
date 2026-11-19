@@ -28,6 +28,9 @@ import type {
     GuildContributionsDto,
     DungeonPlanDto,
     SuggestedGroupsDto,
+    BnetProbeRegion,
+    BnetProbeStateDto,
+    BnetProbeStartResponseDto,
 } from '@raid-ledger/contract';
 import {
     GuildIngameTextSchema,
@@ -38,6 +41,8 @@ import {
     ForeverProbeStateSchema,
     EventQuestPrereqsResponseSchema,
     ForeverProbeResultSchema,
+    BnetProbeStateSchema,
+    BnetProbeStartResponseSchema,
     WowForeverRealmRulesetsSchema,
     DungeonPlanSchema,
     SuggestedGroupsSchema,
@@ -230,6 +235,18 @@ export async function runForeverProbe(): Promise<ForeverProbeResultDto> {
 /** Admin: save the probe's extra candidates + optional character path (ROK-1716). */
 export async function updateForeverProbeConfig(dto: ForeverProbeConfigDto): Promise<ForeverProbeStateDto> {
     return fetchApi(`${FOREVER_PROBE_PATH}/config`, { method: 'PUT', body: JSON.stringify(dto) }, ForeverProbeStateSchema);
+}
+
+const BNET_PROBE_PATH = '/admin/plugins/blizzard/bnet-account-probe';
+
+/** Admin (DEMO_MODE): the Battle.net account probe's redirect URI + its latest keys-only result (ROK-2129). */
+export async function getBnetProbeState(): Promise<BnetProbeStateDto> {
+    return fetchApi(BNET_PROBE_PATH, {}, BnetProbeStateSchema);
+}
+
+/** Admin (DEMO_MODE): start the Battle.net account probe; returns the Blizzard authorize URL to navigate to (ROK-2129). */
+export async function startBnetProbe(region: BnetProbeRegion): Promise<BnetProbeStartResponseDto> {
+    return fetchApi(`${BNET_PROBE_PATH}/start`, { method: 'POST', body: JSON.stringify({ region }) }, BnetProbeStartResponseSchema);
 }
 
 const FOREVER_REALM_RULESETS_PATH = '/admin/plugins/blizzard/forever/realm-rulesets';
