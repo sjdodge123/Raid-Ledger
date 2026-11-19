@@ -222,6 +222,19 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
     expect([...t.set]).toEqual([]);
   });
 
+  it('r2-2: the retry after an incomplete removal never pings the same signup twice', async () => {
+    mockedQ.listSignupPingRows.mockResolvedValue([
+      row('signed_up', A),
+      row('declined', B),
+    ]);
+    const t = setup([B]);
+    t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
+    expect(await t.svc.flush(5)).toBe('incomplete');
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(1);
+    expect([...t.set]).toEqual([A]);
+  });
+
   it('m3: a removal alone goes through the binding/stale gate, never a raw link read', async () => {
     mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
     const t = setup([B]);
