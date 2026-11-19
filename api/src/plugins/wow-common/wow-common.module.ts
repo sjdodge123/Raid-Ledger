@@ -18,14 +18,13 @@ import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
 import { ForeverConfigService } from './forever-config.service';
-import { ForeverNamespaceProbeController } from './forever-namespace-probe.controller';
-import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { ForeverQuestImportController } from './forever-quest-import/forever-quest-import.controller';
 import { ForeverQuestImportService } from './forever-quest-import/forever-quest-import.service';
 import {
   FOREVER_QUEST_AUTO_IMPORT_KICKS,
   ForeverQuestAutoImportService,
 } from './forever-quest-import/forever-quest-auto-import.service';
+import * as foreverProbes from './forever-probes.registration';
 import { ForeverRealmRulesetsController } from './forever-realm-rulesets.controller';
 import { ForeverRealmRulesetsService } from './forever-realm-rulesets.service';
 import { ForeverRulesetLookupService } from './forever-ruleset-lookup.service';
@@ -98,7 +97,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
   controllers: [
     BlizzardController,
     ForeverConfigController,
-    ForeverNamespaceProbeController,
+    // ROK-1716 namespace probe + ROK-2129 DEMO_MODE Battle.net account probe.
+    ...foreverProbes.CONTROLLERS,
     ForeverQuestImportController,
     ForeverRealmRulesetsController,
     DungeonQuestsController,
@@ -120,7 +120,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     BlizzardService,
     BlizzardAuthService,
     ForeverConfigService,
-    ForeverNamespaceProbeService,
+    ...foreverProbes.PROVIDERS,
     // ROK-2143: Forever quest import (admin POST); ROK-2162: also automatic
     // when the overlay is empty + weekly (registrar job).
     ForeverQuestImportService,

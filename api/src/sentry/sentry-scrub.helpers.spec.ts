@@ -414,6 +414,41 @@ describe('ROK-2117 parity with the admin-log scrubber (logs-scrub.patterns)', ()
   });
 });
 
+// ROK-2129 (Codex P1): a Blizzard character profile URL carries the realm
+// slug and character name in its PATH; native-fetch spans and breadcrumbs
+// record that URL, so the scrubber must redact the path segments.
+describe('scrubString — Blizzard character profile paths (ROK-2129)', () => {
+  it.each([
+    'https://us.api.blizzard.com/profile/wow/character/elodie-forever?namespace=profile-forever-us&locale=en_US',
+    'GET https://eu.api.blizzard.com/profile/wow/character/secret-realm/elodie',
+    'https://us.api.blizzard.com/profile/wow/character/%C3%A9lodie-forever',
+  ])('redacts the character segments of %s', (url) => {
+    const out = scrubString(url);
+    expect(out).toContain(`/profile/wow/character/${REDACTED}`);
+    expect(out).not.toMatch(/elodie|secret-realm|%C3%A9/i);
+  });
+
+  it('keeps the namespace query and the route for triage', () => {
+    expect(
+      scrubString(
+        'https://us.api.blizzard.com/profile/wow/character/elodie-forever/equipment?namespace=profile-forever-us',
+      ),
+    ).toBe(
+      `https://us.api.blizzard.com/profile/wow/character/${REDACTED}?namespace=profile-forever-us`,
+    );
+  });
+
+  it('redacts a breadcrumb and a span carrying the parity URL', () => {
+    const url =
+      'https://us.api.blizzard.com/profile/wow/character/hero0-forever?namespace=profile-forever-us';
+    const event = {
+      breadcrumbs: [{ category: 'http', data: { url, method: 'GET' } }],
+      spans: [{ description: `GET ${url}`, data: { 'http.url': url } }],
+    };
+    expect(JSON.stringify(scrubSecrets(event))).not.toContain('hero0');
+  });
+});
+
 describe('ROK-2263 backup-export token', () => {
   const token = `rlbx_${'b'.repeat(43)}`;
 
