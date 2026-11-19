@@ -26,7 +26,7 @@ export interface AddonErrorsTableProps {
 const BOX = 'max-w-full overflow-x-auto border border-edge rounded-xl';
 const TH = 'px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-secondary';
 const TD = 'px-4 py-3 align-top';
-const TOGGLE = 'w-full rounded text-left [&>[data-button-label]]:w-full [&>[data-button-label]]:text-left';
+const TOGGLE = 'w-full min-w-0 rounded text-left [&>[data-button-label]]:w-full [&>[data-button-label]]:min-w-0 [&>[data-button-label]]:text-left';
 export const EMPTY_TEXT = 'No addon errors yet. They appear here once a member turns on “Share addon errors” in the Companion.';
 export const EMPTY_FILTERED_TEXT = 'No addon errors match these filters. Clear the filters or the search to see every error.';
 
@@ -44,7 +44,7 @@ function characterLine(g: AddonErrorGroupDto): string {
 function MessageToggle({ group, open, onToggle }: { group: AddonErrorGroupDto; open: boolean; onToggle: () => void }): JSX.Element {
     return (
         <Button variant="bare" className={TOGGLE} aria-expanded={open} aria-controls={detailId(group)} onClick={onToggle}>
-            <span className="block break-words font-mono text-sm text-foreground">{group.message}</span>
+            <span className="block min-w-0 break-words [overflow-wrap:anywhere] font-mono text-sm text-foreground">{group.message}</span>
         </Button>
     );
 }
