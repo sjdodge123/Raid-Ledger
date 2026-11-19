@@ -194,6 +194,15 @@ describe('a dead export token is 401 on the three allowed routes', () => {
     await expectDead(token);
   });
 
+  it('owner banned', async () => {
+    const { token } = await mintToken();
+    await testApp.db
+      .update(schema.users)
+      .set({ bannedAt: new Date() })
+      .where(eq(schema.users.id, testApp.seed.adminUser.id));
+    await expectDead(token);
+  });
+
   it('owner deactivated', async () => {
     const { token } = await mintToken();
     await testApp.db
@@ -205,6 +214,12 @@ describe('a dead export token is 401 on the three allowed routes', () => {
 });
 
 describe('an admin JWT (regression)', () => {
+  it('reaches the non-backup admin route the token is refused on (200)', async () => {
+    const res = await call(['get', '/admin/settings/timezone'], adminJwt);
+    expect(res.status).toBe(200);
+  });
+
+
   it('still reaches all six backup routes', async () => {
     const statuses: Record<string, number> = {};
     for (const route of [...ALLOWED, ...DESTRUCTIVE]) {

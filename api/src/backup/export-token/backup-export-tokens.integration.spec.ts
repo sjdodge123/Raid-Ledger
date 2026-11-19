@@ -20,6 +20,7 @@ import {
 import { signTestAccessToken } from '../../common/testing/sign-test-access-token';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
+import * as adminActionsHelpers from '../../users/users-admin-actions.helpers';
 
 const BASE = '/admin/backup-export-tokens';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -261,6 +262,26 @@ describe('audit', () => {
       { action: 'backup_token_revoke', actorId, targetId: null, metadata },
     ]);
     expect(JSON.stringify(rows)).not.toContain(token);
+  });
+});
+
+describe('audit atomicity', () => {
+  it('a failing audit write rolls the mint back: no token row survives', async () => {
+    const spy = jest
+      .spyOn(adminActionsHelpers, 'insertAdminAction')
+      .mockRejectedValueOnce(new Error('audit insert failed (stub)'));
+    try {
+      const res = await testApp.request
+        .post(BASE)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ label: 'unaudited' });
+      const rows = await testApp.db.select().from(schema.backupExportTokens);
+      expect(rows.map((r) => r.label)).toEqual([]);
+      expect(res.status).toBe(500);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

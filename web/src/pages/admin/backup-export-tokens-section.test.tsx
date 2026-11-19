@@ -39,8 +39,9 @@ afterEach(() => { window.matchMedia = originalMatchMedia; clearAccessToken(); })
 
 function renderSection() {
     const user = userEvent.setup();
-    render(<QueryClientProvider client={createTestQueryClient()}><BackupExportTokensSection /></QueryClientProvider>);
-    return { user };
+    const client = createTestQueryClient();
+    render(<QueryClientProvider client={client}><BackupExportTokensSection /></QueryClientProvider>);
+    return { user, client };
 }
 
 const ROWS = [
@@ -79,7 +80,7 @@ describe('BackupExportTokensSection — mint', () => {
     it('sends the label and expiry, shows the token once, and drops it from the DOM on close', async () => {
         const seen: MintBackupExportTokenRequest[] = [];
         server.use(backupExportTokensListHandler([]), backupExportTokenMintHandler(seen));
-        const { user } = renderSection();
+        const { user, client } = renderSection();
         await screen.findByTestId('backup-export-token-empty');
         await user.click(screen.getByTestId('backup-export-token-new'));
         const form = await screen.findByRole('dialog', { name: 'New clone access token' });
@@ -97,6 +98,9 @@ describe('BackupExportTokensSection — mint', () => {
         await user.click(within(shown).getByRole('button', { name: 'Done' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
         expect(document.body.innerHTML).not.toContain(FAKE_BACKUP_EXPORT_TOKEN);
+        // The plaintext must not outlive component state in React Query's mutation cache.
+        await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map((m) => m.state.data)))
+            .not.toContain(FAKE_BACKUP_EXPORT_TOKEN));
     });
 
     it('explains a 409 cap refusal inside the mint form', async () => {
