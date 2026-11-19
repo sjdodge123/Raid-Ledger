@@ -10,7 +10,7 @@ import {
     PublicGuildCardSchema,
     type PublicGuildCard,
 } from '@raid-ledger/contract';
-import { fetchApi } from '../../../lib/api-client';
+import { API_BASE_URL } from '../../../lib/config';
 import { encodePathSegment } from '../../../lib/api/path-segment';
 
 /** True when `slug` has the public card shape (16 base62 characters). */
@@ -18,8 +18,19 @@ export function isPublicGuildCardSlug(slug: string | undefined): slug is string 
     return PublicGuildCardParamsSchema.safeParse({ slug }).success;
 }
 
-export function fetchPublicGuildCard(slug: string): Promise<PublicGuildCard> {
-    return fetchApi(`/plugins/wow/public-guild-cards/${encodePathSegment(slug)}`, {}, PublicGuildCardSchema);
+/**
+ * Token-less read: no bearer and `credentials: 'omit'`, so the answer is the
+ * same for every viewer. That is what lets the key sit in
+ * `VIEWER_INDEPENDENT_PREFIXES` and survive a cross-tab logout (Codex P2) —
+ * the `getPublicLineup` pattern.
+ */
+export async function fetchPublicGuildCard(slug: string): Promise<PublicGuildCard> {
+    const res = await fetch(`${API_BASE_URL}/plugins/wow/public-guild-cards/${encodePathSegment(slug)}`, {
+        method: 'GET',
+        credentials: 'omit',
+    });
+    if (!res.ok) throw new Error(`Public guild card fetch failed: ${res.status}`);
+    return PublicGuildCardSchema.parse(await res.json());
 }
 
 /** The card for `slug`; disabled for a malformed slug. Revalidates every visit so "off" lands at once. */
