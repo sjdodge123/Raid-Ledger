@@ -346,7 +346,11 @@ export async function findSeriesEventIds(
   return rows.map((r) => r.id);
 }
 
-/** Apply channel and/or game changes to an event (ROK-959 extraction). */
+/**
+ * Apply channel and/or game changes to an event (ROK-959 extraction).
+ * All-or-nothing: the game change (unknown game, guild-tag refusal) runs
+ * first, so a refused game change writes no channel override either.
+ */
 export async function applyEventChanges(
   db: PostgresJsDatabase<typeof schemaType>,
   eventId: number,
@@ -356,20 +360,17 @@ export async function applyEventChanges(
   gameName: string | null,
   interaction: ChatInputCommandInteraction,
 ): Promise<string[] | null> {
+  const game = gameName ? await applyGameChange(db, eventId, gameName) : null;
+  if (game && 'error' in game) {
+    await interaction.editReply(game.error);
+    return null;
+  }
   const changes: string[] = [];
   if (channelOption) {
     const ch = channelOption as { name?: string; id: string };
     await setChannelOverride(db, eventId, channelOption.id);
     changes.push(`Notification channel set to **#${ch.name ?? ch.id}**`);
   }
-  if (gameName) {
-    const result = await applyGameChange(db, eventId, gameName);
-    if (!result) return changes;
-    if ('error' in result) {
-      await interaction.editReply(result.error);
-      return null;
-    }
-    changes.push(result.change);
-  }
+  if (game) changes.push(game.change);
   return changes;
 }
