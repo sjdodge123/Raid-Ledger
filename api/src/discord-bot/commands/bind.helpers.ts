@@ -31,6 +31,7 @@ export {
   autocompleteEvents,
 } from './bind.autocomplete';
 import { toEmbedGame } from '../services/embed-game.helpers';
+import { gameChangeStrandsGuildTag } from '../../events/event-guild-tag.rules';
 
 /**
  * The other slot's current state for a series bind (ROK-1351).
@@ -236,20 +237,49 @@ export async function setChannelOverride(
     .where(eq(schema.events.id, eventId));
 }
 
+/** Refusal when a game change would strand the event's guild tag (L2836). */
+const GUILD_TAG_GAME_LOCKED =
+  'This event is tagged to a guild for its current game — untag it on the web first.';
+
+/** Whether the event's guild tag forbids moving it to `nextGameId`. */
+async function guildTagBlocksGameChange(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+  nextGameId: number | null,
+): Promise<boolean> {
+  const [tag] = await db
+    .select({ guildId: schema.events.guildId, gameId: schema.events.gameId })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return !!tag && gameChangeStrandsGuildTag(tag, nextGameId);
+}
+
+/** Set the event's game (null = General) unless its guild tag forbids it. */
+async function writeEventGame(
+  db: PostgresJsDatabase<typeof schemaType>,
+  eventId: number,
+  gameId: number | null,
+): Promise<boolean> {
+  if (await guildTagBlocksGameChange(db, eventId, gameId)) return false;
+  await db
+    .update(schema.events)
+    .set({ gameId, updatedAt: new Date() })
+    .where(eq(schema.events.id, eventId));
+  return true;
+}
+
 /** Apply a game change to an event. Returns a description string or null. */
 export async function applyGameChange(
   db: PostgresJsDatabase<typeof schemaType>,
   eventId: number,
   gameName: string,
 ): Promise<{ change: string } | { error: string } | null> {
-  if (
-    gameName.toLowerCase() === 'none' ||
-    gameName.toLowerCase() === 'general'
-  ) {
-    await db
-      .update(schema.events)
-      .set({ gameId: null, updatedAt: new Date() })
-      .where(eq(schema.events.id, eventId));
+  const name = gameName.toLowerCase();
+  if (name === 'none' || name === 'general') {
+    if (!(await writeEventGame(db, eventId, null))) {
+      return { error: GUILD_TAG_GAME_LOCKED };
+    }
     return { change: 'Game removed (set to General)' };
   }
 
@@ -260,11 +290,9 @@ export async function applyGameChange(
     .limit(1);
 
   if (!gameMatch) return { error: `Game "${gameName}" not found.` };
-
-  await db
-    .update(schema.events)
-    .set({ gameId: gameMatch.id, updatedAt: new Date() })
-    .where(eq(schema.events.id, eventId));
+  if (!(await writeEventGame(db, eventId, gameMatch.id))) {
+    return { error: GUILD_TAG_GAME_LOCKED };
+  }
   return { change: `Game reassigned to **${gameMatch.name}**` };
 }
 
