@@ -11,6 +11,11 @@
 #   clone_env_select_auth              picks prod auth from the loaded vars;
 #                                      sets CLONE_AUTH_MODE + CLONE_AUTH_TOKEN
 #   clone_env_write_auth_header <file> writes the bearer header to a 0600 file
+#   clone_env_assert_local_db_url <url> [label]
+#                                      refuses unless libpq can ONLY reach a
+#                                      local Postgres (every destructive path)
+#   clone_env_reset_admin_password <tree> <db_url>
+#                                      bootstrap-admin reset pinned to <db_url>
 #
 # Secrets rule: no function here ever prints a token, password or the env
 # file's contents. Every message goes to stderr; only paths and kinds are
@@ -178,4 +183,77 @@ clone_env_restore_fresh() {
     docker exec "$container" pg_restore --exit-on-error --no-owner --no-privileges \
         --dbname="$db_url" "$dump" 2>"$err_file" || return 1
     ! grep -qE 'errors ignored on restore|pg_restore: error:' "$err_file"
+}
+
+# ─── The one localhost guard (Codex r2 P1) ────────────────────────────────
+# A regex on the URL's authority is not enough: libpq lets the query string
+# (?host= / ?hostaddr= / ?service= / ?servicefile=, percent-encoded or not)
+# and PGHOST / PGHOSTADDR / PGSERVICE / PGSERVICEFILE override it, so
+# postgresql://u:p@localhost/db?host=prod would DROP SCHEMA on prod. Accepts
+# localhost / 127.0.0.1 / ::1 / a unix-socket directory only. Never prints
+# the URL (it carries a password).
+
+# Is <h> one local host: loopback name/address, or a unix-socket directory?
+clone_env_is_local_host() {
+    case "$1" in
+        localhost|127.0.0.1|::1) return 0 ;;
+        /*) [[ "$1" != *,* ]] ;;
+        *) return 1 ;;
+    esac
+}
+
+# Percent-decodes <s>; fails on a backslash (printf %b would interpret it).
+clone_env_url_decode() {
+    [[ "$1" != *\\* ]] || return 1
+    printf '%b' "${1//%/\\x}"
+}
+
+# Prints why <url> or the PG* env could reach a non-local host; empty = local.
+clone_env_db_url_problem() {
+    local url="$1" auth host query pair key val
+    local -a pairs=()
+    [[ "$url" =~ ^postgres(ql)?://([^/?#]*)(/[^?#]*)?(\?([^#]*))?$ ]] \
+        || { echo "not a plain postgres:// URL"; return; }
+    auth="${BASH_REMATCH[2]}"; query="${BASH_REMATCH[5]}"
+    host="${auth##*@}"
+    [[ "$host" =~ ^(localhost|127\.0\.0\.1|\[::1\])?(:[0-9]+)?$ ]] \
+        || { echo "its host is not local"; return; }
+    [[ -n "$query" ]] && IFS='&' read -ra pairs <<<"$query"
+    for pair in ${pairs[@]+"${pairs[@]}"}; do
+        key="$(clone_env_url_decode "${pair%%=*}")" || { echo "its query is not decodable"; return; }
+        val="$(clone_env_url_decode "${pair#*=}")" || { echo "its query is not decodable"; return; }
+        case "$key" in
+            host) clone_env_is_local_host "$val" || { echo "its query sets host="; return; } ;;
+            hostaddr) [[ "$val" == 127.0.0.1 || "$val" == ::1 ]] || { echo "its query sets hostaddr="; return; } ;;
+            service|servicefile) echo "its query sets $key="; return ;;
+        esac
+    done
+    [[ -z "${PGHOST:-}" ]] || clone_env_is_local_host "$PGHOST" || { echo "PGHOST is not local"; return; }
+    [[ -z "${PGHOSTADDR:-}" || "$PGHOSTADDR" == 127.0.0.1 || "$PGHOSTADDR" == ::1 ]] \
+        || { echo "PGHOSTADDR is not local"; return; }
+    [[ -z "${PGSERVICE:-}" ]] || { echo "PGSERVICE is set"; return; }
+    [[ -z "${PGSERVICEFILE:-}" ]] || { echo "PGSERVICEFILE is set"; return; }
+}
+
+clone_env_assert_local_db_url() {
+    local label="${2:-DATABASE_URL}" why
+    why="$(clone_env_db_url_problem "$1")"
+    [[ -z "$why" ]] && return 0
+    clone_env_err "$label must point at localhost/127.0.0.1/::1 or a local socket (host redacted): $why."
+    return 1
+}
+
+# ─── Admin password reset, pinned to the clone DB (Codex r2 P2) ───────────
+# deploy_dev.sh --reset-password runs load_env, which re-sources the tree's
+# .env and can re-point DATABASE_URL at another database. Run the tree's
+# bootstrap-admin.ts directly with the resolved clone URL pinned instead; its
+# own dotenv load never overrides a variable that is already set.
+clone_env_reset_admin_password() {
+    local tree="$1" db_url="$2"
+    clone_env_assert_local_db_url "$db_url" || return 1
+    [[ -f "$tree/api/scripts/bootstrap-admin.ts" ]] \
+        || { clone_env_err "no api/scripts/bootstrap-admin.ts under $tree"; return 1; }
+    ( cd "$tree" && DATABASE_URL="$db_url" RESET_PASSWORD=true \
+        ENABLE_TELEMETRY="${ENABLE_TELEMETRY:-false}" \
+        npx ts-node api/scripts/bootstrap-admin.ts )
 }

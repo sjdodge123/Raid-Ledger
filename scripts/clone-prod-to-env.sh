@@ -69,10 +69,7 @@ export RL_ENV_CLONE_FILE="$ENV_FILE"
 DB_VALUES="$(clone_env_load "$ENV_FILE"; printf '%s\n%s\n' "${DATABASE_URL:-}" "${LOCAL_DB_CONTAINER:-raid-ledger-db}")"
 CLONE_DATABASE_URL="$(sed -n 1p <<<"$DB_VALUES")"
 CLONE_DB_CONTAINER="$(sed -n 2p <<<"$DB_VALUES")"
-if ! [[ "$CLONE_DATABASE_URL" =~ ^postgres(ql)?://([^@/]*@)?(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/ ]]; then
-    clone_env_err "DATABASE_URL in $ENV_FILE must point at localhost/127.0.0.1/::1 (host redacted)."
-    exit 1
-fi
+clone_env_assert_local_db_url "$CLONE_DATABASE_URL" "DATABASE_URL in $ENV_FILE" || exit 1
 
 if [[ "$SKIP_LOCAL_REFRESH" == "true" ]]; then
     echo "Skipping prod→local refresh (--skip-local-refresh)." >&2

@@ -79,7 +79,7 @@ USAGE:
 FLAGS:
   --fresh         (default) Trigger a NEW backup on prod, then download it.
   --latest        Skip the create step; download the most recent existing backup.
-  --tree <path>   The checkout whose deploy_dev.sh resets the admin password and
+  --tree <path>   The checkout whose bootstrap-admin.ts resets the admin password and
                   whose .env.clone is a fallback. Default: the git top-level of
                   the current directory, else this script's checkout.
   --yes           Skip the destructive-action confirmation prompt.
@@ -162,8 +162,7 @@ clone_env_select_auth || exit 1
 : "${LOCAL_URL:=}"
 
 # ─── Localhost guard (STRICT) ─────────────────────────────────────────────
-if ! [[ "$DATABASE_URL" =~ ^postgres(ql)?://([^@/]*@)?(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/ ]]; then
-    red "DATABASE_URL must point at localhost/127.0.0.1/::1 (host redacted)."
+if ! clone_env_assert_local_db_url "$DATABASE_URL"; then
     red "Refusing to proceed; clone-prod-to-local NEVER writes to staging."
     exit 1
 fi
@@ -407,14 +406,16 @@ fi
 
 # ─── Step 7: reset local admin password (non-fatal, D13) ──────────────────
 bold "Step 7: resetting local admin password (from $TREE) ..."
-DEPLOY_DEV="$TREE/scripts/deploy_dev.sh"
-[[ -f "$DEPLOY_DEV" ]] || DEPLOY_DEV="$SCRIPT_DIR/deploy_dev.sh"
-if bash "$DEPLOY_DEV" --reset-password --ci; then
-    green "  reset done — see deploy_dev.sh output above for the new password."
+# Pinned to the clone DATABASE_URL — never via deploy_dev.sh, whose load_env
+# re-sources .env and can re-point it at another database (Codex r2 P2).
+RESET_TREE="$TREE"
+[[ -f "$RESET_TREE/api/scripts/bootstrap-admin.ts" ]] || RESET_TREE="$REPO_ROOT"
+if clone_env_reset_admin_password "$RESET_TREE" "$DATABASE_URL"; then
+    green "  reset done — see the bootstrap-admin output above for the new password."
 else
     RESET_NOTE="FAILED"
     yellow "WARN: the restore succeeded but the admin password reset failed."
-    yellow "  Recover with: (cd <an up-to-date checkout> && ./scripts/deploy_dev.sh --reset-password --ci)"
+    yellow "  Recover with: (cd <an up-to-date checkout> && DATABASE_URL=<this clone's DATABASE_URL> RESET_PASSWORD=true npx ts-node api/scripts/bootstrap-admin.ts)"
 fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────

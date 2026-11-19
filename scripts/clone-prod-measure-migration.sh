@@ -70,10 +70,7 @@ load_clone_env() {
 }
 [[ -n "${DATABASE_URL:-}" ]] || load_clone_env
 [[ -n "${DATABASE_URL:-}" ]] || { clone_env_err "DATABASE_URL is not set"; exit 1; }
-if ! [[ "$DATABASE_URL" =~ ^postgres(ql)?://([^@/]*@)?(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/ ]]; then
-    clone_env_err "DATABASE_URL must point at localhost/127.0.0.1/::1 (host redacted)."
-    exit 1
-fi
+clone_env_assert_local_db_url "$DATABASE_URL" || exit 1
 SCRATCH_URL="$(node "$MEASURE" scratch-url "$DATABASE_URL" "$SCRATCH_NAME")" || exit 2
 : "${LOCAL_DB_CONTAINER:=raid-ledger-db}"
 CONTAINER_DUMP="/tmp/rl-measure-$$.dump"

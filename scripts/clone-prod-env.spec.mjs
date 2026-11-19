@@ -363,6 +363,6 @@ describe('clone_env_reset_admin_password — pinned to the clone DB (Codex r2 P2
   it('clone-prod-to-local.sh Step 7 no longer goes through deploy_dev.sh (its load_env re-points DATABASE_URL)', () => {
     const src = readFileSync(join(dirname(LIB), '..', 'clone-prod-to-local.sh'), 'utf8');
     assert.ok(!/deploy_dev\.sh"? --reset-password/.test(src), 'Step 7 still calls deploy_dev.sh --reset-password');
-    assert.ok(/clone_env_reset_admin_password "\$TREE" "\$DATABASE_URL"/.test(src), 'Step 7 does not pin the clone URL');
+    assert.ok(/clone_env_reset_admin_password "\$\w+" "\$DATABASE_URL"/.test(src), 'Step 7 does not pin the clone URL');
   });
 });
