@@ -69,6 +69,8 @@ import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 import { CharacterInstalledAddonsController } from './character-installed-addons.controller';
 import { CharacterInstalledAddonsService } from './character-installed-addons.service';
+import { WowAddonErrorsAdminController } from './addon-errors-admin/wow-addon-errors-admin.controller';
+import { WowAddonErrorsAdminService } from './addon-errors-admin/wow-addon-errors-admin.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
 import { WowFactsModule } from './facts/wow-facts.module';
@@ -115,6 +117,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     CharacterQuestsController,
     // ROK-2147: owner/officer-only installed-addon list.
     CharacterInstalledAddonsController,
+    // ROK-2099 S3: admin reads + export of uploaded addon errors.
+    WowAddonErrorsAdminController,
     ...guildHub.CONTROLLERS,
   ],
   providers: [
@@ -164,6 +168,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     ForeverDisplayLockoutsService,
     CharacterQuestsService,
     CharacterInstalledAddonsService,
+    WowAddonErrorsAdminService,
     ...guildHub.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
