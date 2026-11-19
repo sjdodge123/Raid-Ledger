@@ -61,6 +61,9 @@ fi
 if [[ -f "$REPO_ROOT/.env" ]]; then
     set -a; . "$REPO_ROOT/.env"; set +a
 fi
+# Prod secrets from .env.clone stay shell-local: nothing this script runs
+# (docker, psql, ssh, rl-infra binaries) inherits them (Codex r2 stretch).
+export -n PROD_BACKUP_TOKEN PROD_BEARER_TOKEN PROD_ADMIN_PASSWORD 2>/dev/null || true
 
 LOCAL_DB_CONTAINER="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
 DATABASE_URL="${DATABASE_URL:-postgresql://user:password@localhost:5432/raid_ledger}"

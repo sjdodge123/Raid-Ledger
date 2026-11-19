@@ -366,3 +366,14 @@ describe('clone_env_reset_admin_password — pinned to the clone DB (Codex r2 P2
     assert.ok(/clone_env_reset_admin_password "\$\w+" "\$DATABASE_URL"/.test(src), 'Step 7 does not pin the clone URL');
   });
 });
+
+describe('sync-local-to-env.sh keeps .env.clone prod secrets shell-local', () => {
+  it('un-exports the prod token keys after sourcing the env files, before any child runs', () => {
+    const src = readFileSync(join(dirname(LIB), '..', 'sync-local-to-env.sh'), 'utf8');
+    const sourced = src.indexOf('. "$REPO_ROOT/.env"; set +a');
+    const unexport = src.indexOf('export -n PROD_BACKUP_TOKEN PROD_BEARER_TOKEN PROD_ADMIN_PASSWORD');
+    assert.ok(sourced > 0, 'env sourcing moved; update this guard');
+    assert.ok(unexport > sourced && unexport - sourced < 400,
+      'prod token keys stay exported after .env.clone is sourced');
+  });
+});
