@@ -74,6 +74,8 @@ scripts/*
 # ROK-2263: shared prod-clone helpers (scripts/lib/) + their node:test spec.
 !scripts/lib/
 !scripts/clone-prod-env.spec.mjs
+!scripts/clone-prod-measure-migration.sh
+!scripts/clone-prod-measure-migration.spec.mjs
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
 !scripts/rl-reencrypt-settings.spec.mjs
