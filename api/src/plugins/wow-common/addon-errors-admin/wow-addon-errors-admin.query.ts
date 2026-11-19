@@ -45,7 +45,7 @@ export function toMembers(value: unknown): AddonErrorMemberDto[] {
   return parseJsonArray(value)
     .map((m) => ({
       userId: Number(m['userId']),
-      username: String(m['username'] ?? ''),
+      username: typeof m['username'] === 'string' ? m['username'] : '',
     }))
     .sort(
       (a, b) => a.username.localeCompare(b.username) || a.userId - b.userId,
@@ -56,7 +56,7 @@ export function toMembers(value: unknown): AddonErrorMemberDto[] {
 export function toCharacters(value: unknown): AddonErrorCharacterDto[] {
   return parseJsonArray(value)
     .map((c) => ({
-      name: String(c['name'] ?? ''),
+      name: typeof c['name'] === 'string' ? c['name'] : '',
       realm: typeof c['realm'] === 'string' ? c['realm'] : null,
     }))
     .sort(

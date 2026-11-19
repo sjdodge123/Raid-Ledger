@@ -69,8 +69,6 @@ import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 import { CharacterInstalledAddonsController } from './character-installed-addons.controller';
 import { CharacterInstalledAddonsService } from './character-installed-addons.service';
-import { WowAddonErrorsAdminController } from './addon-errors-admin/wow-addon-errors-admin.controller';
-import { WowAddonErrorsAdminService } from './addon-errors-admin/wow-addon-errors-admin.service';
 import { GuildsCoreModule } from '../../guilds/guilds-core.module';
 import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
 import { WowFactsModule } from './facts/wow-facts.module';
@@ -81,7 +79,7 @@ import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handl
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
 import { WowAddonErrorsHandler } from './companion/wow-addon-errors.handler';
-import { WowAddonErrorsRetentionCron } from './companion/wow-addon-errors-retention.cron';
+import * as addonErrors from './companion/wow-addon-errors.registration';
 import { InstanceCatalogueService } from './instance-catalogue/instance-catalogue.service';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
@@ -118,7 +116,7 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-2147: owner/officer-only installed-addon list.
     CharacterInstalledAddonsController,
     // ROK-2099 S3: admin reads + export of uploaded addon errors.
-    WowAddonErrorsAdminController,
+    ...addonErrors.CONTROLLERS,
     ...guildHub.CONTROLLERS,
   ],
   providers: [
@@ -168,7 +166,6 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     ForeverDisplayLockoutsService,
     CharacterQuestsService,
     CharacterInstalledAddonsService,
-    WowAddonErrorsAdminService,
     ...guildHub.PROVIDERS,
     WowHubKindAdapter,
     // ROK-1913: roster-insights endpoint + its import-invalidated cache.
@@ -181,8 +178,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     LedgerlinkRulesetNoticeService,
     // ROK-2099: the `wow-addon-errors` companion contract handler.
     WowAddonErrorsHandler,
-    // ROK-2099 D7: 90-day retention of the addon-error rows.
-    WowAddonErrorsRetentionCron,
+    // ROK-2099 D7 retention cron + S3 admin read service.
+    ...addonErrors.PROVIDERS,
   ],
   exports: [
     InstanceCatalogueService,

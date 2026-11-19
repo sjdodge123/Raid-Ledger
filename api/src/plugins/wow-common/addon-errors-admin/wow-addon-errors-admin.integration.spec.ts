@@ -62,13 +62,11 @@ async function memberToken(username: string): Promise<string> {
       .returning(),
     'user',
   );
-  await testApp.db
-    .insert(schema.localCredentials)
-    .values({
-      email,
-      passwordHash: await bcrypt.hash('TestPassword123!', 4),
-      userId: user.id,
-    });
+  await testApp.db.insert(schema.localCredentials).values({
+    email,
+    passwordHash: await bcrypt.hash('TestPassword123!', 4),
+    userId: user.id,
+  });
   const res = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
