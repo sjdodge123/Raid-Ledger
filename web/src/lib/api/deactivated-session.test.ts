@@ -13,6 +13,7 @@ import {
 } from './auth-storage-keys';
 import { toast } from '../toast';
 import { setAccessToken, getAccessToken } from './access-token-store';
+import { blockWebStorage } from '../../test/block-web-storage';
 
 vi.mock('../toast', () => ({ toast: { error: vi.fn() } }));
 
@@ -102,5 +103,22 @@ describe('endDeactivatedSession', () => {
 
             expect(toast.error).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('endDeactivatedSession when the browser blocks storage (TECH-DEBT L4009)', () => {
+    let restore: () => void = () => undefined;
+    beforeEach(() => {
+        setAccessToken('tok');
+        restore = blockWebStorage();
+    });
+    afterEach(() => restore());
+
+    it('still ends the session and redirects instead of throwing', () => {
+        const redirect = vi.fn();
+
+        expect(endDeactivatedSession(redirect)).toBe(true);
+        expect(getAccessToken()).toBeNull();
+        expect(redirect).toHaveBeenCalledWith(DEACTIVATED_LOGIN_PATH);
     });
 });
