@@ -1,0 +1,66 @@
+{
+  "envelope-unknown-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "payload-unknown-key": {
+    "path": "payload",
+    "code": "unrecognized_keys"
+  },
+  "record-locals": {
+    "path": "payload.records.0",
+    "code": "unrecognized_keys"
+  },
+  "contract-version-2": {
+    "path": "contractVersion",
+    "code": "invalid_value"
+  },
+  "source-mailworthy": {
+    "path": "payload.source",
+    "code": "invalid_value"
+  },
+  "account-key-raw": {
+    "path": "payload.accountKey",
+    "code": "invalid_format"
+  },
+  "records-empty": {
+    "path": "payload.records",
+    "code": "too_small"
+  },
+  "records-51": {
+    "path": "payload.records",
+    "code": "too_big"
+  },
+  "stack-over-cap": {
+    "path": "payload.records.0.stack",
+    "code": "too_big"
+  },
+  "message-over-cap": {
+    "path": "payload.records.0.message",
+    "code": "too_big"
+  },
+  "first-after-last": {
+    "path": "payload.records.0.firstSeenAt",
+    "code": "custom"
+  },
+  "duplicate-record": {
+    "path": "payload.records.3",
+    "code": "custom"
+  },
+  "count-zero": {
+    "path": "payload.records.0.count",
+    "code": "too_small"
+  },
+  "stack-drive-path": {
+    "path": "payload.records.0.stack",
+    "code": "invalid_format"
+  },
+  "message-users-folder": {
+    "path": "payload.records.1.message",
+    "code": "invalid_format"
+  },
+  "message-nul-byte": {
+    "path": "payload.records.0.message",
+    "code": "invalid_format"
+  }
+}
