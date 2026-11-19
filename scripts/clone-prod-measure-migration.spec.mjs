@@ -169,6 +169,37 @@ describe('measure script + report', () => {
   });
 });
 
+describe('parseMeasureOutput edge cases (review fixes)', () => {
+  const queries = ['SELECT n FROM t', 'SELECT 1 AS one'];
+
+  it('parses a json_agg result that psql printed across several lines (>=2 rows)', () => {
+    // psql -tAqX prints json_agg of 2+ rows with ", \n " between elements.
+    const out = ['__RL_MEASURE__before:0', '[{"n":1}, ', ' {"n":2}]', '__RL_MEASURE__before:1', '[{"one":1}]', ''].join('\n');
+    assert.deepEqual(parseMeasureOutput(out, queries).before, [
+      { sql: queries[0], rows: [{ n: 1 }, { n: 2 }] },
+      { sql: queries[1], rows: [{ one: 1 }] },
+    ]);
+  });
+
+  it('keeps the psql error when a query fails right after its marker (no rows line)', () => {
+    const report = buildReport({
+      config: { migration: '0002_b', queries },
+      plan: { pending: [], warnings: [] },
+      stdout: '__RL_MEASURE__before:0\n[{"n":2}]\n__RL_MEASURE__before:1\n',
+      stderr: 'ERROR:  relation "nope" does not exist\n',
+      exitCode: 3,
+    });
+    assert.equal(report.error, 'ERROR:  relation "nope" does not exist');
+    assert.deepEqual(report.before, [{ sql: queries[0], rows: [{ n: 2 }] }]);
+  });
+
+  it('aggregates with jsonb_agg so psql prints one line per result', () => {
+    const sql = buildMeasureScript(queries, 'SELECT 1;');
+    assert.match(sql, /jsonb_agg\(q\)/);
+    assert.equal(/\bjson_agg\(/.test(sql), false, 'json_agg spans lines for 2+ rows');
+  });
+});
+
 describe('CLI + script entry (no Docker reached)', () => {
   it('lib parse-args exits 2 with the usage on bad input', () => {
     const res = spawnSync('node', [LIB, 'parse-args', '--migration', '0002_b'], { encoding: 'utf8' });
