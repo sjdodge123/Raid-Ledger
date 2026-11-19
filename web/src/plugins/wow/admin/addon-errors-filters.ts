@@ -45,14 +45,26 @@ export interface FilterOption { value: string; label: string }
 
 const byLabel = (a: FilterOption, b: FilterOption): number => a.label.localeCompare(b.label);
 
-/** Addons seen on the loaded page, A–Z, always keeping the selected one. */
+/**
+ * Where the Addon / Member options come from: the unfiltered first page (the
+ * default view's cached query) plus the current page, so picking an addon does
+ * not shrink the list to that one addon. Groups only on later unfiltered pages
+ * are still missing until a distinct-values endpoint exists (Codex P2, 2026-11-19).
+ */
+export function optionGroups(
+    unfiltered: readonly AddonErrorGroupDto[], current: readonly AddonErrorGroupDto[],
+): AddonErrorGroupDto[] {
+    return [...unfiltered, ...current];
+}
+
+/** Addons seen in `groups`, A–Z, always keeping the selected one. */
 export function addonOptions(groups: readonly AddonErrorGroupDto[], selected: string): FilterOption[] {
     const names = new Set(groups.map((g) => g.addon));
     if (selected) names.add(selected);
     return [...names].map((n) => ({ value: n, label: n })).sort(byLabel);
 }
 
-/** Members seen on the loaded page, A–Z, always keeping the selected one. */
+/** Members seen in `groups`, A–Z, always keeping the selected one. */
 export function memberOptions(groups: readonly AddonErrorGroupDto[], selected: string): FilterOption[] {
     const byId = new Map<string, string>();
     for (const g of groups) for (const m of g.members) byId.set(String(m.userId), m.username);
@@ -62,11 +74,17 @@ export function memberOptions(groups: readonly AddonErrorGroupDto[], selected: s
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** "4 distinct errors · 61 occurrences · 3 members" — occurrences and members count the loaded page. */
+/**
+ * "4 distinct errors · 61 occurrences · 3 members". Occurrences and members are
+ * summed over the loaded page only, so when more groups match than the page
+ * holds they say "on this page" rather than pass for the filter's totals.
+ */
 export function summaryLine(page: AddonErrorGroupPageDto): string {
     const occurrences = page.items.reduce((sum, g) => sum + g.totalCount, 0);
     const members = new Set(page.items.flatMap((g) => g.members.map((m) => m.userId))).size;
-    return [plural(page.total, 'distinct error'), plural(occurrences, 'occurrence'), plural(members, 'member')].join(' · ');
+    const local = `${plural(occurrences, 'occurrence')} · ${plural(members, 'member')}`;
+    const scope = page.total > page.items.length ? ' on this page' : '';
+    return `${plural(page.total, 'distinct error')} · ${local}${scope}`;
 }
 
 const sameDay = (a: Date, b: Date): boolean => a.toDateString() === b.toDateString();

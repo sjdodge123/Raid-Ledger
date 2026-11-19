@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AddonErrorGroupDto } from '@raid-ledger/contract';
 import {
-    EMPTY_ADDON_ERROR_FILTERS, activeFilterCount, addonOptions, formatSeen, memberOptions, summaryLine, toApiFilters,
+    EMPTY_ADDON_ERROR_FILTERS, activeFilterCount, addonOptions, formatSeen, memberOptions, optionGroups, summaryLine, toApiFilters,
 } from './addon-errors-filters';
 
 const g = (addon: string, members: [number, string][], totalCount: number): AddonErrorGroupDto => ({
@@ -27,9 +27,23 @@ describe('addon-errors filters (ROK-2099)', () => {
 
     it('summarises distinct errors, occurrences and members', () => {
         const items = [g('Questie', [[2, 'Bea']], 14), g('Mailworthy', [[1, 'Al'], [2, 'Bea']], 38)];
-        expect(summaryLine({ items, total: 4, page: 1, pageSize: 25 })).toBe('4 distinct errors · 52 occurrences · 2 members');
+        expect(summaryLine({ items, total: 2, page: 1, pageSize: 25 })).toBe('2 distinct errors · 52 occurrences · 2 members');
         expect(summaryLine({ items: [g('Questie', [[2, 'Bea']], 1)], total: 1, page: 1, pageSize: 25 }))
             .toBe('1 distinct error · 1 occurrence · 1 member');
+    });
+
+    it('keeps every unfiltered addon and member as an option once the list is filtered to one addon', () => {
+        const unfiltered = [g('Questie', [[2, 'Bea']], 14), g('DBM-Core', [[1, 'Al']], 2), g('Details', [[3, 'Cy']], 1)];
+        const filtered = [g('DBM-Core', [[1, 'Al']], 2)];
+        expect(addonOptions(optionGroups(unfiltered, filtered), 'DBM-Core').map((o) => o.value))
+            .toEqual(['DBM-Core', 'Details', 'Questie']);
+        expect(memberOptions(optionGroups(unfiltered, filtered), '').map((o) => o.label)).toEqual(['Al', 'Bea', 'Cy']);
+    });
+
+    it('says "on this page" when more groups match than the page holds', () => {
+        const items = Array.from({ length: 25 }, () => g('Questie', [[1, 'Al']], 1));
+        expect(summaryLine({ items, total: 26, page: 1, pageSize: 25 }))
+            .toBe('26 distinct errors · 25 occurrences · 1 member on this page');
     });
 
     it('labels last-seen as Today / Yesterday / a short date', () => {

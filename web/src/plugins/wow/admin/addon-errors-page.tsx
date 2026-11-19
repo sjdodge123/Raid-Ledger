@@ -10,7 +10,7 @@ import { Button } from '../../../components/ui/button';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { ADDON_ERRORS_PLUGIN } from './addon-errors-route';
 import {
-    EMPTY_ADDON_ERROR_FILTERS, activeFilterCount, summaryLine, toApiFilters, type AddonErrorsFilterState,
+    EMPTY_ADDON_ERROR_FILTERS, activeFilterCount, optionGroups, summaryLine, toApiFilters, type AddonErrorsFilterState,
 } from './addon-errors-filters';
 import { AddonErrorsTable } from './addon-errors-table';
 import { AddonErrorsToolbar } from './addon-errors-toolbar';
@@ -58,17 +58,22 @@ function useAddonErrorsPageState() {
     };
 }
 
+const UNFILTERED = toApiFilters(EMPTY_ADDON_ERROR_FILTERS, '');
+
 function AddonErrorsBody(): JSX.Element {
     const s = useAddonErrorsPageState();
     const groups = useAddonErrorGroups(s.apiFilters, s.page);
+    // The default view's query (same key, so no extra request while unfiltered) — the stable option source.
+    const unfiltered = useAddonErrorGroups(UNFILTERED, 1);
     const exporter = useAddonErrorsExport(s.apiFilters);
     const data = groups.data;
     const items = data?.items ?? [];
+    const options = optionGroups(unfiltered.data?.items ?? [], items);
     return (
         <div className="space-y-4">
             <PageHeader />
             <AddonErrorsToolbar query={s.query} onQuery={s.setQuery} onSearch={s.onSearch} filters={s.filters} onFilters={s.onFilters}
-                groups={items} exportBusy={exporter.busy} onExport={(f) => void exporter.run(f)} />
+                groups={options} exportBusy={exporter.busy} onExport={(f) => void exporter.run(f)} />
             {groups.isError && <p className="text-sm text-danger">Could not load addon errors.</p>}
             {data && data.total > 0 && <p className="text-sm text-muted">{summaryLine(data)}</p>}
             <AddonErrorsTable groups={items} isLoading={groups.isPending} filtered={s.filtered} expanded={s.expanded} onToggle={s.onToggle} />
