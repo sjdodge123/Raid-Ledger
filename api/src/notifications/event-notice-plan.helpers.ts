@@ -2,9 +2,8 @@
  * ROK-1832 D4/D5 — the merged "new event" notice plan and its per-user claim.
  *
  * Kept out of `game-affinity-notification.service.ts` so that file stays under
- * the size cap; both helpers are pure over their injected dependencies.
+ * the size cap; the helpers here are pure.
  */
-import type { NotificationDedupService } from './notification-dedup.service';
 
 /** 30 days — the same TTL as the per-event `game-alert:event:<id>` key. */
 export const EVENT_NOTICE_TTL_SECONDS = 30 * 24 * 60 * 60;

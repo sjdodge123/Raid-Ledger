@@ -138,9 +138,7 @@ describe('runFollowupFanout — per-(user, event) notice claims', () => {
     const s = setup(held);
     await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
     const later = dedupOver(held);
-    const alreadyClaimed = await later.checkAndMarkSent(
-      eventNoticeKey(55, 11),
-    );
+    const alreadyClaimed = await later.checkAndMarkSent(eventNoticeKey(55, 11));
     expect(alreadyClaimed).toBe(true);
   });
 
@@ -191,9 +189,7 @@ describe('runFollowupFanout — claims kept only for notified recipients (Codex 
     await runFollowupFanout(s.deps, 10, { eventId: 55 }, 9);
     expect([...held]).toEqual([eventNoticeKey(55, 11)]);
     const later = dedupOver(held);
-    const alreadyClaimed = await later.checkAndMarkSent(
-      eventNoticeKey(55, 22),
-    );
+    const alreadyClaimed = await later.checkAndMarkSent(eventNoticeKey(55, 22));
     expect(alreadyClaimed).toBe(false);
   });
 });
