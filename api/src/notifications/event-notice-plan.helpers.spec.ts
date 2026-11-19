@@ -1,7 +1,5 @@
 import {
-  EVENT_NOTICE_TTL_SECONDS,
   planEventNotices,
-  sendClaimedEventNotice,
   type EventNoticePlanInput,
 } from './event-notice-plan.helpers';
 
@@ -53,47 +51,5 @@ describe('planEventNotices (ROK-1832 D5)', () => {
   it('never notices a user twice across many ids', () => {
     const out = plan({ affinityIds: [1, 2, 3], groupIds: [2, 3, 4] });
     expect(out.map((n) => n.userId).sort()).toEqual([1, 2, 3, 4]);
-  });
-});
-
-describe('sendClaimedEventNotice (ROK-1832 D4)', () => {
-  function dedup(claimed: boolean) {
-    return {
-      checkAndMarkSent: jest.fn().mockResolvedValue(claimed),
-      releaseKey: jest.fn().mockResolvedValue(undefined),
-    };
-  }
-
-  it('claims the per-user key and sends', async () => {
-    const d = dedup(false);
-    const send = jest.fn().mockResolvedValue(undefined);
-    await expect(sendClaimedEventNotice(d, 9, 3, send)).resolves.toBe(true);
-    expect(d.checkAndMarkSent).toHaveBeenCalledWith(
-      'event-notice:9:user:3',
-      EVENT_NOTICE_TTL_SECONDS,
-    );
-    expect(send).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips the send when the key is already claimed', async () => {
-    const send = jest.fn();
-    await expect(sendClaimedEventNotice(dedup(true), 9, 3, send)).resolves.toBe(
-      false,
-    );
-    expect(send).not.toHaveBeenCalled();
-  });
-
-  it('releases the key when the send creates nothing (channel off)', async () => {
-    const d = dedup(false);
-    const send = jest.fn().mockResolvedValue(null);
-    await expect(sendClaimedEventNotice(d, 9, 3, send)).resolves.toBe(false);
-    expect(d.releaseKey).toHaveBeenCalledWith('event-notice:9:user:3');
-  });
-
-  it('releases the key and rethrows when the send fails', async () => {
-    const d = dedup(false);
-    const send = jest.fn().mockRejectedValue(new Error('boom'));
-    await expect(sendClaimedEventNotice(d, 9, 3, send)).rejects.toThrow('boom');
-    expect(d.releaseKey).toHaveBeenCalledWith('event-notice:9:user:3');
   });
 });

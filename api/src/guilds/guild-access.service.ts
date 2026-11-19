@@ -120,22 +120,6 @@ export class GuildAccessService {
   }
 
   /**
-   * ROK-2071 (Codex P2): `canEdit` for a caller that already read the hub's
-   * row, so it skips the per-hub kind lookup. Same ladder, same answer.
-   */
-  async canEditOfKind(
-    actor: GuildActor,
-    guildId: number,
-    kind: GuildKind,
-  ): Promise<boolean> {
-    if (isStaff(actor)) return true;
-    const role = await this.hubKinds
-      .require(kind)
-      .resolveLadder(actor, guildId);
-    return ladderCanEdit(role);
-  }
-
-  /**
    * L3884: the ids among `guildIds` (all of `kind`) the actor can edit, with
    * ONE membership read for the kind instead of a ladder query per hub. Every
    * editing rung sits above member and each adapter's `memberGroupIds` uses

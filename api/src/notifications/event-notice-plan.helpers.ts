@@ -63,28 +63,3 @@ export function eventAnnounceKey(eventId: number, groupOnly: boolean): string {
 export function eventNoticeKey(eventId: number, userId: number): string {
   return `event-notice:${eventId}:user:${userId}`;
 }
-
-/**
- * D4: claim the per-(user, event) key, then send. Returns false when another
- * path already noticed this user about this event. A failed send — or one
- * that created nothing (`create` resolves `null` when the type's channels are
- * off) — gives the claim back, so a later path (a late group tag) or a retry
- * is not suppressed for the whole TTL.
- */
-export async function sendClaimedEventNotice(
-  dedup: Pick<NotificationDedupService, 'checkAndMarkSent' | 'releaseKey'>,
-  eventId: number,
-  userId: number,
-  send: () => Promise<unknown>,
-): Promise<boolean> {
-  const key = eventNoticeKey(eventId, userId);
-  if (await dedup.checkAndMarkSent(key, EVENT_NOTICE_TTL_SECONDS)) return false;
-  try {
-    if ((await send()) !== null) return true;
-    await dedup.releaseKey(key);
-    return false;
-  } catch (err: unknown) {
-    await dedup.releaseKey(key);
-    throw err;
-  }
-}
