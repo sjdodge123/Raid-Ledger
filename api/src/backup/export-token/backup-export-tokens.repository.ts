@@ -54,6 +54,9 @@ export interface BackupExportTokenAuthRow {
   kickedAt: Date | null;
 }
 
+/** Advisory-lock key serialising mints (arbitrary, unique in this repo). */
+const MINT_LOCK_KEY = 2_263_000_001;
+
 /** `revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())`. */
 function isLive() {
   return and(
@@ -71,6 +74,28 @@ export class BackupExportTokensRepository {
     const [row] = await this.db.insert(tokens).values(values).returning();
     if (!row) throw new Error('backup-export token insert returned no row');
     return row;
+  }
+
+  /**
+   * Insert unless `cap` live tokens already exist (Q2). The count and the
+   * insert share one transaction holding a transaction-scoped advisory lock,
+   * so two concurrent mints cannot both pass the cap. Null = cap reached.
+   */
+  async insertUnderCap(
+    values: NewBackupExportToken,
+    cap: number,
+  ): Promise<BackupExportTokenRow | null> {
+    return this.db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(${MINT_LOCK_KEY})`);
+      const [live] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(tokens)
+        .where(isLive());
+      if ((live?.n ?? 0) >= cap) return null;
+      const [row] = await tx.insert(tokens).values(values).returning();
+      if (!row) throw new Error('backup-export token insert returned no row');
+      return row;
+    });
   }
 
   /** Every token, newest first, joined to the minting user's name. */

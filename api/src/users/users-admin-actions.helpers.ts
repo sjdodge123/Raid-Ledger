@@ -27,11 +27,14 @@ export const MODERATION_ACTION_KINDS = [
   'role_change',
 ] as const;
 
-/** Kinds recorded in `admin_actions.action` (ROK-1754: + impersonation). */
+/** Kinds recorded in `admin_actions.action` (ROK-1754: + impersonation;
+ * ROK-2263: + backup-export token mint/revoke). */
 export type AdminActionKind =
   | (typeof MODERATION_ACTION_KINDS)[number]
   | 'impersonate_start'
-  | 'impersonate_stop';
+  | 'impersonate_stop'
+  | 'backup_token_mint'
+  | 'backup_token_revoke';
 
 /** Rows for one target, moderation kinds only (ROK-1754). */
 function moderationRowsFor(targetId: number) {
