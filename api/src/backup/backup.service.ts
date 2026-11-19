@@ -362,10 +362,12 @@ export class BackupService implements OnModuleInit {
         );
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = restoreErrorMessage(err);
       this.logger.error(`pg_dump failed: ${msg}`);
       cleanupPartialFile(outputPath);
-      throw new Error(`pg_dump failed: ${msg}`, { cause: err });
+      // No `cause`: the raw execFile error's message/cmd hold the DATABASE_URL.
+      // eslint-disable-next-line preserve-caught-error -- TD L2808, see above
+      throw new Error(`pg_dump failed: ${msg}`);
     }
   }
 }

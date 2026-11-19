@@ -162,8 +162,8 @@ export function isRestoreFatal(error: unknown): boolean {
 }
 
 /**
- * A pg_restore error's message, safe to log or return (TD L2808): execFile
- * puts the whole command line — `--dbname=<DATABASE_URL>` — in it.
+ * A pg_restore / pg_dump / psql error's message, safe to log or return
+ * (TD L2808): execFile puts the whole command line — the DATABASE_URL — in it.
  */
 export function restoreErrorMessage(error: unknown): string {
   return scrubString(error instanceof Error ? error.message : String(error));
@@ -274,17 +274,16 @@ export async function dropSchemas(
 ): Promise<void> {
   const dropSql =
     'DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;';
-  if (!container) {
-    await execFileAsync('psql', [dbUrl, '-c', dropSql]);
-  } else {
-    await execFileAsync('docker', [
-      'exec',
-      container,
-      'psql',
-      dbUrl,
-      '-c',
-      dropSql,
-    ]);
+  const [cmd, args] = container
+    ? ['docker', ['exec', container, 'psql', dbUrl, '-c', dropSql]]
+    : ['psql', [dbUrl, '-c', dropSql]];
+  try {
+    await execFileAsync(cmd, args);
+  } catch (err) {
+    // The argv holds the DATABASE_URL — never rethrow its password, so no
+    // `cause` either: the raw error's message/cmd carry it (TD L2808).
+    // eslint-disable-next-line preserve-caught-error -- see above
+    throw new Error(`Dropping schemas failed: ${restoreErrorMessage(err)}`);
   }
 }
 

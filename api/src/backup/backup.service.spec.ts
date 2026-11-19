@@ -34,24 +34,33 @@ const migrationPath = (name: string) => path.join(MIGRATION_DIR, name);
 const BASE_MS = Date.UTC(2026, 8, 1);
 const minutes = (m: number) => new Date(BASE_MS + m * 60_000);
 
-/** pg_restore fails with execFile's real shape: "Command failed: <cmd> <args>". */
-function failPgRestore(stderr: string): void {
+/** `cmd` fails with execFile's real shape: "Command failed: <cmd> <args>". */
+function failCommand(cmd: string, stderr: string): void {
   const okImpl = (
     mockChildProcess.execFile as unknown as jest.Mock
   ).getMockImplementation() as (...args: unknown[]) => void;
   (mockChildProcess.execFile as unknown as jest.Mock).mockImplementation(
     (...args: unknown[]) => {
-      if (args[0] !== 'pg_restore') return okImpl(...args);
+      if (args[0] !== cmd) return okImpl(...args);
       const cmdArgs = args[1] as string[];
       const callback = args.find((a) => typeof a === 'function') as (
         err: Error | null,
       ) => void;
       callback(
-        new Error(`Command failed: pg_restore ${cmdArgs.join(' ')}\n${stderr}`),
+        new Error(`Command failed: ${cmd} ${cmdArgs.join(' ')}\n${stderr}`),
       );
     },
   );
 }
+
+const failPgRestore = (stderr: string) => failCommand('pg_restore', stderr);
+
+/** The rejection of `run()`, or undefined if it resolved. */
+const rejectionOf = (run: () => Promise<unknown>): Promise<unknown> =>
+  run().then(
+    () => undefined,
+    (e: unknown) => e,
+  );
 
 function spyLogger() {
   return {
@@ -565,6 +574,40 @@ function describeBackupService() {
         expect(logged(spies.warn)).toContain('completed with warnings');
         expect(logged(spies.warn)).toContain('postgresql://[redacted]@');
         expect(logged(spies.warn)).not.toContain('user:pass@');
+        spies.error.mockRestore();
+        spies.warn.mockRestore();
+      });
+
+      it('redacts the password when the pre-restore pg_dump snapshot fails', async () => {
+        (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+        failCommand('pg_dump', 'pg_dump: error: connection to server failed');
+        const spies = spyLogger();
+
+        const err = await rejectionOf(() =>
+          service.restoreFromBackup('daily', 'test.dump'),
+        );
+
+        const message = err instanceof Error ? err.message : '';
+        expect(message).toContain('pg_dump failed');
+        expect(message).toContain('postgresql://[redacted]@localhost:5432');
+        expect(message).not.toContain('user:pass@');
+        expect(logged(spies.error)).toContain('pg_dump failed');
+        expect(logged(spies.error)).not.toContain('user:pass@');
+        spies.error.mockRestore();
+        spies.warn.mockRestore();
+      });
+
+      it('redacts the password when the factory-reset psql drop fails', async () => {
+        failCommand('psql', 'psql: error: connection to server failed');
+        const spies = spyLogger();
+
+        const err = await rejectionOf(() => service.resetInstance());
+
+        const message = err instanceof Error ? err.message : '';
+        expect(message).toContain('postgresql://[redacted]@localhost:5432');
+        expect(message).not.toContain('user:pass@');
+        expect(message).toContain('Dropping schemas failed');
+        expect(logged(spies.error)).not.toContain('user:pass@');
         spies.error.mockRestore();
         spies.warn.mockRestore();
       });
