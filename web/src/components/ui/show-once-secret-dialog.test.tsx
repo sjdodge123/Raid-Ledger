@@ -90,3 +90,25 @@ describe('ShowOnceSecretDialog', () => {
         expect(document.body.innerHTML).not.toContain(SECRET);
     });
 });
+
+/** ROK-2264 — below 1024px it is a BottomSheet, and the guard keeps its show-once wording there too. */
+describe('ShowOnceSecretDialog — phone (BottomSheet)', () => {
+    beforeEach(() => {
+        window.matchMedia = (query: string) => ({
+            matches: false, media: query, onchange: null,
+            addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
+            dispatchEvent: () => false,
+        });
+    });
+
+    it('closing before a copy shows the show-once title and Stay/Leave, not "Discard your changes?"', async () => {
+        const { user, dialog, onClose } = await openDialog();
+        expect(within(dialog).queryByTestId('bottom-sheet-footer'), 'the phone path must render the BottomSheet').not.toBeNull();
+        await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+        expect(await screen.findByText('Leave without copying the token?')).toBeInTheDocument();
+        expect(screen.queryByText('Discard your changes?')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Stay' })).toBeInTheDocument();
+        await user.click(screen.getByRole('button', { name: 'Leave' }));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    });
+});

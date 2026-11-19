@@ -7,7 +7,7 @@ import { useTabTrap } from '../../hooks/use-focus-trap';
 import { useEscapeLayer } from '../../hooks/use-escape-layer';
 import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
-import { DiscardChangesConfirm } from './discard-changes-confirm';
+import { DiscardChangesConfirm, type DiscardCopy } from './discard-changes-confirm';
 import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
 
 interface BottomSheetProps {
@@ -39,6 +39,8 @@ interface BottomSheetProps {
     closeGuard?: DirtyCloseGuard;
     /** What is unsaved, in the caller's words (the confirm's message). */
     discardMessage?: string;
+    /** Confirm title + button labels, when the close loses more than an edit (ROK-2264; same as `Modal`). */
+    discardCopy?: DiscardCopy | undefined;
     /**
      * Opened from inside an open `Modal` (ROK-1738): lifts the sheet to
      * `Z_INDEX.MODAL_STACKED`, strictly above every Modal, so it renders above
@@ -193,16 +195,18 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
 }
 
 /** The confirm is a Modal (Z_INDEX.MODAL > BOTTOM_SHEET); over a stacked sheet it goes one above MODAL_STACKED. */
-function SheetDiscardConfirm({ guard, message, stacked }: { guard: DirtyCloseGuard; message?: string | undefined; stacked: boolean }) {
+interface SheetDiscardConfirmProps { guard: DirtyCloseGuard; message?: string | undefined; copy?: DiscardCopy | undefined; stacked: boolean }
+
+function SheetDiscardConfirm({ guard, message, copy, stacked }: SheetDiscardConfirmProps) {
     return (
         <DiscardChangesConfirm
-            isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} message={message}
+            isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} message={message} copy={copy}
             zIndex={stacked ? Z_INDEX.MODAL_STACKED + 1 : undefined}
         />
     );
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, stacked = false, closeDisabled = false }: BottomSheetProps) {
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, discardCopy, stacked = false, closeDisabled = false }: BottomSheetProps) {
     const requestClose = closeDisabled ? noop : (closeGuard?.requestClose ?? onClose);
     useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
@@ -229,6 +233,6 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
         </div>,
         document.body,
     );
-    const confirm = closeGuard && <SheetDiscardConfirm guard={closeGuard} message={discardMessage} stacked={stacked} />;
+    const confirm = closeGuard && <SheetDiscardConfirm guard={closeGuard} message={discardMessage} copy={discardCopy} stacked={stacked} />;
     return <>{sheet}{confirm}</>;
 }
