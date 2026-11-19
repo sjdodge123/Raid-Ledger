@@ -13,7 +13,7 @@
  *   grep -rn "references(() => users.id" api/src/drizzle/schema/
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
+import type { PgTable } from 'drizzle-orm/pg-core';
 import { eq, inArray, or } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { endMarkersInvolvingUser } from '../auth/impersonation/impersonation-markers.db';
@@ -23,6 +23,10 @@ import {
   selectUserScreenshotPaths,
 } from '../feedback/feedback-screenshot-user.helpers';
 import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
+import {
+  WIPE_BEARER_SECRETS,
+  type WipeTarget,
+} from './users-delete-secrets.manifest';
 import { wipeCommunityHubData } from '../guilds/community/community-user-wipe.helpers';
 import {
   auditGuidReleases,
@@ -33,11 +37,7 @@ const logger = new Logger('UserDelete');
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** A user-owned table deleted by a single `<column> = userId` predicate. */
-export interface WipeTarget {
-  table: PgTable;
-  column: AnyPgColumn;
-}
+export type { WipeTarget };
 
 /**
  * WIPE bucket — user-owned rows deleted by `<column> = userId`.
@@ -200,22 +200,8 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   },
   // ROK-1893: hub join prompts are personal UI state (CASCADE).
   { table: schema.hubJoinPrompts, column: schema.hubJoinPrompts.userId },
-  // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
-  { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
-  // ROK-1955: Companion device tokens (CASCADE) — bearer secrets, so a
-  // ban+wipe must revoke them. Links the user decided go first: their
-  // `device_id` is SET NULL, but deleting them keeps no stale approval trail.
-  {
-    table: schema.companionDeviceLinks,
-    column: schema.companionDeviceLinks.decidedBy,
-  },
-  { table: schema.companionDevices, column: schema.companionDevices.userId },
-  // ROK-2263: backup-export tokens the user minted (CASCADE) — bearer
-  // secrets with backup-download power, so a ban+wipe must revoke them.
-  {
-    table: schema.backupExportTokens,
-    column: schema.backupExportTokens.createdBy,
-  },
+  // Bearer secrets (ICS link, Companion devices, backup-export tokens).
+  ...WIPE_BEARER_SECRETS,
   // ROK-1956: Companion ingest payloads, blob refs and blob rows (CASCADE) —
   // the user's own uploaded data. Refs carry no FK to blobs; order is free.
   {
