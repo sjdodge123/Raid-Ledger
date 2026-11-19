@@ -21,22 +21,28 @@ interface CardSeed {
     guildId: number;
     slug: string;
     userIds: number[];
+    /** Seeded member usernames — the card must never name a member. */
+    usernames: string[];
 }
+
+/** `SEED_GUILD_ROSTER` character names (api/src/admin/demo-test-guild.helpers.ts; no `rosterSuffix` sent). */
+const SEEDED_ROSTER_CHARACTERS = ['Aldren', 'Brisa', 'Corvin', 'Dainel', 'Elowen'] as const;
 
 async function seedCardGuild(token: string, testInfo: TestInfo): Promise<CardSeed> {
     const name = `Card ${testInfo.project.name} w${testInfo.workerIndex} ${Date.now().toString(36)}`;
     const body = (await apiPost(token, '/admin/test/wow/seed-guild', { name, withPublicCard: true })) as {
         guildId?: unknown;
         publicCardSlug?: unknown;
-        users?: Record<string, { userId?: unknown }>;
+        users?: Record<string, { userId?: unknown; username?: unknown }>;
     } | null;
     if (typeof body?.guildId !== 'number' || typeof body.publicCardSlug !== 'string') {
         throw new Error(`[guild-public-card] seed-guild withPublicCard: ${JSON.stringify(body)}`);
     }
-    const userIds = Object.values(body.users ?? {})
-        .map((u) => u.userId)
-        .filter((id): id is number => typeof id === 'number');
-    return { guildId: body.guildId, slug: body.publicCardSlug, userIds };
+    const users = Object.values(body.users ?? {});
+    const userIds = users.map((u) => u.userId).filter((id): id is number => typeof id === 'number');
+    const usernames = users.map((u) => u.username).filter((n): n is string => typeof n === 'string');
+    if (usernames.length === 0) throw new Error(`[guild-public-card] seed-guild returned no usernames: ${JSON.stringify(body)}`);
+    return { guildId: body.guildId, slug: body.publicCardSlug, userIds, usernames };
 }
 
 /** The editor read (`{enabled, slug}`) as the admin sees it. */
@@ -58,12 +64,15 @@ async function signedOutPage(browser: Browser): Promise<{ page: Page; close: () 
     return { page: await anon.newPage(), close: () => anon.close() };
 }
 
-async function expectCard(pub: Page): Promise<void> {
+async function expectCard(pub: Page, seed: CardSeed): Promise<void> {
     const card = pub.getByTestId('public-guild-card');
     await expect(card, 'the card renders for a signed-out visitor').toBeVisible({ timeout: 20_000 });
     await expect(pub.getByTestId('public-guild-card-initials'), 'initials stand in for the crest').toBeVisible();
     await expect(pub.getByTestId('public-guild-card-wanted').first(), 'wanted rows come from the recruitment').toBeVisible();
     await expect(card, 'per-row editor notes never reach the public card').not.toContainText('Exceptional only');
+    for (const name of [...SEEDED_ROSTER_CHARACTERS, ...seed.usernames]) {
+        await expect(card, `no roster name on the public card (${name})`).not.toContainText(name);
+    }
     const apply = pub.getByTestId('public-guild-card-apply');
     await expect(apply, 'Apply links to the https apply URL').toHaveAttribute('href', /^https:\/\//);
     await expect(apply).toHaveAttribute('target', '_blank');
@@ -78,7 +87,7 @@ test.describe('guild public recruiting card (ROK-1813)', () => {
         try {
             const publicPath = `/p/guild/${seed.slug}`;
             await anon.page.goto(publicPath);
-            await expectCard(anon.page);
+            await expectCard(anon.page, seed);
             await expect(anon.page.locator('meta[name="robots"]'), 'the page asks search engines to stay out')
                 .toHaveAttribute('content', 'noindex, nofollow');
 
@@ -102,7 +111,7 @@ test.describe('guild public recruiting card (ROK-1813)', () => {
             await expect(section.getByTestId('wow-public-card-link'), 'the slug survives off → on')
                 .toHaveValue(new RegExp(`/p/guild/${seed.slug}$`));
             await anon.page.goto(publicPath);
-            await expectCard(anon.page);
+            await expectCard(anon.page, seed);
         } finally {
             await anon.close();
             for (const id of seed.userIds) await apiDelete(admin, `/users/${id}`).catch(() => undefined);
