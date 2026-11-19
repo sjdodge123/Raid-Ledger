@@ -1,5 +1,5 @@
 {
-  "id": "d13b439a-5c46-4f09-8635-ecfaa1c4e6a7",
+  "id": "8a6cf59a-07fb-40df-8e8a-a5d785ecf95e",
   "prevId": "e78d73e4-eb52-439f-9571-5cd3768fd509",
   "version": "7",
   "dialect": "postgresql",
@@ -13738,19 +13738,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "public_card_enabled": {
-          "name": "public_card_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "public_card_slug": {
-          "name": "public_card_slug",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -13839,22 +13826,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "guild_profiles_public_card_slug_uq": {
-          "name": "guild_profiles_public_card_slug_uq",
-          "columns": [
-            {
-              "expression": "public_card_slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"guild_profiles\".\"public_card_slug\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -19012,6 +18983,118 @@
           "value": "char_length(\"companion_ingest_latest\".\"latest_key\") <= 128"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.backup_export_tokens": {
+      "name": "backup_export_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hint": {
+          "name": "token_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_used_ip_coarse": {
+          "name": "last_used_ip_coarse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "backup_export_tokens_created_by_idx": {
+          "name": "backup_export_tokens_created_by_idx",
+          "columns": [
+            {
+              "expression": "created_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "backup_export_tokens_created_by_users_id_fk": {
+          "name": "backup_export_tokens_created_by_users_id_fk",
+          "tableFrom": "backup_export_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "backup_export_tokens_token_hash_unique": {
+          "name": "backup_export_tokens_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.valheim_item_catalogs": {
