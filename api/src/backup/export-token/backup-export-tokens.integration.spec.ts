@@ -56,7 +56,11 @@ async function memberJwt(): Promise<string> {
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
-      .values({ discordId: 'local:bx-member', username: 'bx-member', role: 'member' })
+      .values({
+        discordId: 'local:bx-member',
+        username: 'bx-member',
+        role: 'member',
+      })
       .returning(),
     'member',
   );
@@ -94,9 +98,17 @@ describe('mint', () => {
   });
 
   it('honours 30 / 365 / never expiry and rejects other values', async () => {
-    expectDaysAhead((await mint({ label: 'a', expiresInDays: 30 })).item.expiresAt, 30);
-    expectDaysAhead((await mint({ label: 'b', expiresInDays: 365 })).item.expiresAt, 365);
-    expect((await mint({ label: 'c', expiresInDays: null })).item.expiresAt).toBeNull();
+    expectDaysAhead(
+      (await mint({ label: 'a', expiresInDays: 30 })).item.expiresAt,
+      30,
+    );
+    expectDaysAhead(
+      (await mint({ label: 'b', expiresInDays: 365 })).item.expiresAt,
+      365,
+    );
+    expect(
+      (await mint({ label: 'c', expiresInDays: null })).item.expiresAt,
+    ).toBeNull();
     for (const body of [
       { label: 'd', expiresInDays: 7 },
       { label: '   ', expiresInDays: 90 },
@@ -185,7 +197,9 @@ describe('live cap', () => {
       ),
     );
     const statuses = results.map((r) => r.status).sort();
-    expect(statuses.filter((s) => s === 201)).toHaveLength(BACKUP_EXPORT_TOKEN_LIVE_CAP);
+    expect(statuses.filter((s) => s === 201)).toHaveLength(
+      BACKUP_EXPORT_TOKEN_LIVE_CAP,
+    );
     expect(statuses.filter((s) => s === 409)).toHaveLength(3);
     const rows = await testApp.db.select().from(schema.backupExportTokens);
     expect(rows).toHaveLength(BACKUP_EXPORT_TOKEN_LIVE_CAP);
@@ -216,7 +230,9 @@ describe('revoke', () => {
       .delete(`${BASE}/999999`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(missing.status).toBe(404);
-    expect(missing.body).toMatchObject({ code: 'backup_export_token_not_found' });
+    expect(missing.body).toMatchObject({
+      code: 'backup_export_token_not_found',
+    });
   });
 });
 
@@ -232,7 +248,12 @@ describe('audit', () => {
     const rows = await testApp.db.select().from(schema.adminActions);
     const ours = rows
       .filter((r) => r.action.startsWith('backup_token_'))
-      .map((r) => ({ action: r.action, actorId: r.actorId, targetId: r.targetId, metadata: r.metadata }));
+      .map((r) => ({
+        action: r.action,
+        actorId: r.actorId,
+        targetId: r.targetId,
+        metadata: r.metadata,
+      }));
     const metadata = JSON.stringify({ tokenId: item.id, label: 'audited' });
     const actorId = testApp.seed.adminUser.id;
     expect(ours).toEqual([
@@ -252,10 +273,14 @@ describe('access', () => {
       () => testApp.request.delete(`${BASE}/1`),
     ];
     for (const route of routes) {
-      expect((await route().set('Authorization', `Bearer ${member}`)).status).toBe(403);
+      expect(
+        (await route().set('Authorization', `Bearer ${member}`)).status,
+      ).toBe(403);
       expect((await route()).status).toBe(401);
     }
-    expect(await testApp.db.select().from(schema.backupExportTokens)).toEqual([]);
+    expect(await testApp.db.select().from(schema.backupExportTokens)).toEqual(
+      [],
+    );
   });
 
   it('an rlbx_ token cannot manage tokens (401 on every route)', async () => {
@@ -266,7 +291,9 @@ describe('access', () => {
       () => testApp.request.delete(`${BASE}/${item.id}`),
     ];
     for (const route of routes) {
-      expect((await route().set('Authorization', `Bearer ${token}`)).status).toBe(401);
+      expect(
+        (await route().set('Authorization', `Bearer ${token}`)).status,
+      ).toBe(401);
     }
     const rows = await testApp.db.select().from(schema.backupExportTokens);
     expect(rows.map((r) => r.revokedAt)).toEqual([null]);
