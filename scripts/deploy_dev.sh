@@ -92,8 +92,16 @@ print_error() {
 }
 
 # Get current git branch
+# A detached HEAD prints an empty string with exit 0, which env-lock.sh rejects
+# as a missing argument (TECH-DEBT L4379) — name it by commit instead.
 get_current_branch() {
-    git branch --show-current 2>/dev/null || echo "unknown"
+    local b
+    b=$(git branch --show-current 2>/dev/null) || b=""
+    if [ -n "$b" ]; then
+        echo "$b"
+    else
+        echo "detached-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    fi
 }
 
 # Check if we're on an expected branch for testing
@@ -839,9 +847,18 @@ start_dev() {
     fi
     local lease_out
     lease_out=$(mktemp -t deploy-dev-lease.XXXXXX)
-    if ! "$MAIN_REPO/scripts/env-lock.sh" "$lease_cmd" "${lease_args[@]}" >"$lease_out" 2>&1; then
-        print_error "Local dev env is held by another worktree. See lease state below; pass --wait-for-env <min> to block, or --operator to preempt."
-        "$MAIN_REPO/scripts/env-lock.sh" status | jq . >&2 || cat "$lease_out" >&2
+    local lease_rc=0
+    "$MAIN_REPO/scripts/env-lock.sh" "$lease_cmd" "${lease_args[@]}" >"$lease_out" 2>&1 || lease_rc=$?
+    if [ "$lease_rc" -ne 0 ]; then
+        # Exit 1 is the only "held by someone else" code (env-lock.sh header);
+        # anything else (64 bad args, 124 wait timeout, …) is shown verbatim.
+        if [ "$lease_rc" -eq 1 ]; then
+            print_error "Local dev env is held by another worktree. See lease state below; pass --wait-for-env <min> to block, or --operator to preempt."
+            "$MAIN_REPO/scripts/env-lock.sh" status | jq . >&2 || cat "$lease_out" >&2
+        else
+            print_error "env-lock.sh $lease_cmd failed (exit $lease_rc):"
+            cat "$lease_out" >&2
+        fi
         rm -f "$lease_out"
         exit 2
     fi
