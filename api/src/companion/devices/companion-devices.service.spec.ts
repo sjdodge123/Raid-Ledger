@@ -92,7 +92,6 @@ describe('CompanionDevicesService', () => {
     expect(events.emitAsync).not.toHaveBeenCalled();
   });
 
-
   it('self returns only deviceId, name and createdAt', async () => {
     const { service } = setup();
     await expect(
