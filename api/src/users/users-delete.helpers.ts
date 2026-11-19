@@ -227,6 +227,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   { table: schema.bg3CampaignKeys, column: schema.bg3CampaignKeys.userId },
   { table: schema.bg3UserDefaults, column: schema.bg3UserDefaults.userId },
   { table: schema.bg3Saves, column: schema.bg3Saves.uploaderUserId },
+  // ROK-2099: the user's own uploaded WoW addon errors (CASCADE) — personal
+  // diagnostic data; a ban+wipe removes it like the other companion uploads.
+  {
+    table: schema.wowAddonErrorRecords,
+    column: schema.wowAddonErrorRecords.userId,
+  },
 ];
 
 /**
