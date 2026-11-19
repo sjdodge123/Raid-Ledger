@@ -19,10 +19,19 @@ const FUTURE = new Date(Date.now() + 86_400_000);
 function setup(opts: { claimed?: boolean; marked?: boolean } = {}) {
   const adapter = { memberUserIds: jest.fn().mockResolvedValue([1, 2, 3]) };
   const registry = { forGuild: jest.fn().mockResolvedValue(adapter) };
-  const notifications = { create: jest.fn().mockResolvedValue(null) };
+  const notifications = {
+    create: jest.fn().mockResolvedValue(null),
+    createMany: jest.fn((inputs: Array<{ userId: number }>) =>
+      Promise.resolve(inputs.map(({ userId }) => ({ userId }))),
+    ),
+  };
   const dedup = {
     checkAndMarkSent: jest.fn().mockResolvedValue(opts.claimed ?? false),
+    checkAndMarkSentMany: jest.fn((keys: readonly string[]) =>
+      Promise.resolve(new Set(keys)),
+    ),
     releaseKey: jest.fn().mockResolvedValue(undefined),
+    releaseKeys: jest.fn().mockResolvedValue(undefined),
     isMarked: jest.fn().mockResolvedValue(opts.marked ?? true),
   };
   q.findGuildName.mockResolvedValue('Onyx');
@@ -39,6 +48,13 @@ function setup(opts: { claimed?: boolean; marked?: boolean } = {}) {
     dedup as unknown as NotificationDedupService,
   );
   return { svc, registry, notifications, dedup };
+}
+
+/** Every user a late tag wrote a notice for, across all `createMany` calls. */
+function taggedIds(notifications: ReturnType<typeof setup>['notifications']) {
+  return notifications.createMany.mock.calls.flatMap(([inputs]) =>
+    inputs.map(({ userId }) => userId),
+  );
 }
 
 function lateEvent(over: Partial<queries.LateTagEvent> = {}) {
@@ -198,20 +214,31 @@ describe('HubNotificationService.notifyLateTag (D6b)', () => {
     const { svc, notifications, dedup } = setup();
     await svc.notifyLateTag(9);
     expect(dedup.isMarked).toHaveBeenCalledWith('game-alert:event:9');
-    expect(dedup.checkAndMarkSent).toHaveBeenCalledWith(
-      'event-notice:9:user:2',
+    expect(dedup.checkAndMarkSentMany).toHaveBeenCalledWith(
+      ['event-notice:9:user:2', 'event-notice:9:user:3'],
       expect.any(Number),
     );
-    expect(notifications.create).toHaveBeenCalledTimes(2);
-    expect(notifications.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 3,
-        type: 'hub_event_tagged',
-        title: 'Raid night',
-        message: 'Tagged to Onyx',
-        payload: expect.objectContaining({ eventId: 9, guildId: 7, gameId: 4 }),
-      }),
+    expect(taggedIds(notifications)).toEqual([2, 3]);
+    expect(notifications.createMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        {
+          userId: 3,
+          type: 'hub_event_tagged',
+          title: 'Raid night',
+          message: 'Tagged to Onyx',
+          payload: {
+            eventId: 9,
+            gameId: 4,
+            guildId: 7,
+            guildName: 'Onyx',
+            startTime: FUTURE.toISOString(),
+            endTime: new Date(FUTURE.getTime() + 3_600_000).toISOString(),
+            url: '/events/9',
+          },
+        },
+      ]),
     );
+    expect(notifications.create).not.toHaveBeenCalled();
   });
 
   it('skips a member away on the event date (ROK-503)', async () => {
@@ -220,31 +247,63 @@ describe('HubNotificationService.notifyLateTag (D6b)', () => {
     absent.mockResolvedValue(new Set([2]));
     await svc.notifyLateTag(9);
     expect(absent).toHaveBeenCalledWith({}, [2, 3], FUTURE.toISOString());
-    expect(notifications.create).toHaveBeenCalledTimes(1);
-    expect(notifications.create).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 3 }),
-    );
+    expect(taggedIds(notifications)).toEqual([3]);
   });
 
   it('does nothing before the event is announced', async () => {
     q.findLateTagEvent.mockResolvedValue(lateEvent());
     const { svc, notifications } = setup({ marked: false });
     await svc.notifyLateTag(9);
-    expect(notifications.create).not.toHaveBeenCalled();
+    expect(notifications.createMany).not.toHaveBeenCalled();
   });
 
   it('does nothing once the event has started', async () => {
     q.findLateTagEvent.mockResolvedValue(lateEvent({ startTime: new Date(0) }));
     const { svc, notifications } = setup();
     await svc.notifyLateTag(9);
-    expect(notifications.create).not.toHaveBeenCalled();
+    expect(notifications.createMany).not.toHaveBeenCalled();
   });
 
   it('does nothing for an untagged event', async () => {
     q.findLateTagEvent.mockResolvedValue(lateEvent({ guildId: null }));
     const { svc, notifications } = setup();
     await svc.notifyLateTag(9);
-    expect(notifications.create).not.toHaveBeenCalled();
+    expect(notifications.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('HubNotificationService.notifyLateTag batched send (L4407)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('claims every member in one call and writes them in one createMany', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, registry, notifications, dedup } = setup();
+    registry.forGuild.mockResolvedValue({
+      memberUserIds: jest.fn().mockResolvedValue([1, 2, 3, 4, 5]),
+    });
+    await svc.notifyLateTag(9);
+    expect(dedup.checkAndMarkSentMany).toHaveBeenCalledTimes(1);
+    expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
+    expect(notifications.createMany).toHaveBeenCalledTimes(1);
+    expect(taggedIds(notifications)).toEqual([2, 3, 4, 5]);
+  });
+
+  it('skips a member another path already claimed', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, notifications, dedup } = setup();
+    dedup.checkAndMarkSentMany.mockResolvedValue(
+      new Set(['event-notice:9:user:3']),
+    );
+    await svc.notifyLateTag(9);
+    expect(taggedIds(notifications)).toEqual([3]);
+  });
+
+  it('gives the claim back for a member whose in-app channel is off', async () => {
+    q.findLateTagEvent.mockResolvedValue(lateEvent());
+    const { svc, notifications, dedup } = setup();
+    notifications.createMany.mockResolvedValue([{ userId: 3 }]);
+    await svc.notifyLateTag(9);
+    expect(dedup.releaseKeys).toHaveBeenCalledWith(['event-notice:9:user:2']);
   });
 });
 
@@ -257,7 +316,7 @@ describe('HubNotificationService.notifyLateTag announce + prior-notice dedup (Co
     q.hasPostedEmbed.mockResolvedValue(true);
     await svc.notifyLateTag(9);
     expect(q.hasPostedEmbed).toHaveBeenCalledWith({}, 9);
-    expect(notifications.create).toHaveBeenCalledTimes(2);
+    expect(taggedIds(notifications)).toEqual([2, 3]);
   });
 
   it('skips a member who already has a notice for the event, and claims for them', async () => {
@@ -266,12 +325,9 @@ describe('HubNotificationService.notifyLateTag announce + prior-notice dedup (Co
     q.findPriorEventNoticeUserIds.mockResolvedValue(new Set([2]));
     await svc.notifyLateTag(9);
     expect(q.findPriorEventNoticeUserIds).toHaveBeenCalledWith({}, 9, [2, 3]);
-    expect(notifications.create).toHaveBeenCalledTimes(1);
-    expect(notifications.create).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 3 }),
-    );
-    expect(dedup.checkAndMarkSent).toHaveBeenCalledWith(
-      'event-notice:9:user:2',
+    expect(taggedIds(notifications)).toEqual([3]);
+    expect(dedup.checkAndMarkSentMany).toHaveBeenCalledWith(
+      ['event-notice:9:user:2'],
       expect.any(Number),
     );
   });
@@ -288,6 +344,6 @@ describe('HubNotificationService.notifyLateTag group-only announcement (Codex r8
     );
     await svc.notifyLateTag(9);
     expect(dedup.isMarked).toHaveBeenCalledWith('game-alert-group:event:9');
-    expect(notifications.create).toHaveBeenCalledTimes(2);
+    expect(taggedIds(notifications)).toEqual([2, 3]);
   });
 });

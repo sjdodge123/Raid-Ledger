@@ -42,6 +42,8 @@ const VALHEIM_LINK_TOKEN = /rlvl_[A-Za-z0-9_-]{43}/g;
 // ROK-1955: a companion device token, and the device-link user code that
 // rides the preview PATH (`poll` / `decision` / `preview` are route names, kept).
 const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
+// ROK-2263: a backup-export token (clone-script bearer) anywhere in a string.
+const BACKUP_EXPORT_TOKEN = /rlbx_[A-Za-z0-9_-]{43}/g;
 const COMPANION_LINK_PATH =
   /(\/companion\/v1\/devices\/link\/)(?!(?:poll|decision|preview)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
 // ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
@@ -56,6 +58,10 @@ const CALDAV_PATH =
 // in its PATH (`/profile/wow/character/<realm>/<name>` or a realmless
 // `<slug>`); native-fetch spans/breadcrumbs record it. Sub-routes are folded in.
 const BLIZZARD_CHARACTER_PATH = /(\/profile\/wow\/character\/)[^?#\s"']+/g;
+// TD L2808: the userinfo of any `scheme://user:pass@host` URL — a failed
+// pg_restore's "Command failed: … --dbname=postgresql://u:p@db/rl". The scheme
+// is bounded (RFC 3986 schemes are short) so a long dotted run is linear.
+const URL_USERINFO = /(\b[a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#@]+@/gi;
 const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {
@@ -72,6 +78,7 @@ export interface ScrubbableEvent {
 
 export function scrubString(value: string): string {
   return value
+    .replace(URL_USERINFO, `$1${REDACTED}@`)
     .replace(QUERY_SECRET, `$1$2${REDACTED}`)
     .replace(PATH_SECRET, `$1${REDACTED}`)
     .replace(CALENDAR_PATH, `$1${REDACTED}`)
@@ -79,6 +86,7 @@ export function scrubString(value: string): string {
     .replace(BLIZZARD_CHARACTER_PATH, `$1${REDACTED}`)
     .replace(VALHEIM_LINK_TOKEN, REDACTED)
     .replace(COMPANION_DEVICE_TOKEN, REDACTED)
+    .replace(BACKUP_EXPORT_TOKEN, REDACTED)
     .replace(COMPANION_LINK_PATH, `$1${REDACTED}`)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }

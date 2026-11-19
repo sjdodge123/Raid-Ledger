@@ -77,6 +77,19 @@ export function findEntriesWithGames(
 }
 
 /**
+ * Join condition pinning a vote row to its game's nomination entry. Removing
+ * a nomination deletes only the entry, so its vote rows survive and must not
+ * count (TECH-DEBT 2884). `uq_lineup_entry_game` keeps the join one-to-one.
+ */
+export const voteOnNominatedEntry = and(
+  eq(
+    schema.communityLineupEntries.lineupId,
+    schema.communityLineupVotes.lineupId,
+  ),
+  eq(schema.communityLineupEntries.gameId, schema.communityLineupVotes.gameId),
+);
+
+/**
  * Count votes per game for a lineup — nominated games only.
  * The inner join on the lineup's entries drops vote rows on a game that is
  * no longer (or never was) nominated: removing a nomination deletes only the
@@ -93,24 +106,12 @@ export function countVotesPerGame(
       voteCount: sql<number>`count(*)::int`.as('vote_count'),
     })
     .from(schema.communityLineupVotes)
-    .innerJoin(
-      schema.communityLineupEntries,
-      and(
-        eq(
-          schema.communityLineupEntries.lineupId,
-          schema.communityLineupVotes.lineupId,
-        ),
-        eq(
-          schema.communityLineupEntries.gameId,
-          schema.communityLineupVotes.gameId,
-        ),
-      ),
-    )
+    .innerJoin(schema.communityLineupEntries, voteOnNominatedEntry)
     .where(eq(schema.communityLineupVotes.lineupId, lineupId))
     .groupBy(schema.communityLineupVotes.gameId);
 }
 
-/** Count distinct voters for a lineup. */
+/** Count distinct voters on nominated games for a lineup. */
 export function countDistinctVoters(
   db: PostgresJsDatabase<typeof schema>,
   lineupId: number,
@@ -123,6 +124,7 @@ export function countDistinctVoters(
         ),
     })
     .from(schema.communityLineupVotes)
+    .innerJoin(schema.communityLineupEntries, voteOnNominatedEntry)
     .where(eq(schema.communityLineupVotes.lineupId, lineupId));
 }
 

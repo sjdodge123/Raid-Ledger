@@ -3,20 +3,22 @@
  * Validates banner rendering states: loading, no data, and populated.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '../../test/render-helpers';
-import { createMockBanner } from '../../test/lineup-factories';
+import { createMockBanner, createMockLineupDetail } from '../../test/lineup-factories';
 import { LineupBanner } from './LineupBanner';
 
 // Mock the hooks module
 vi.mock('../../hooks/use-lineups', () => ({
     useLineupBanner: vi.fn(),
     useActiveLineups: vi.fn(() => ({ data: [], isLoading: false })),
+    useLineupDetail: vi.fn(() => ({ data: undefined })),
+    useCommonGround: vi.fn(() => ({ data: undefined })),
 }));
 
 // Mock NominateModal to avoid its internal hook dependencies
 vi.mock('./NominateModal', () => ({
-    NominateModal: () => null,
+    NominateModal: vi.fn(() => null),
 }));
 
 // Mock StartLineupModal — its internals (useCreateLineup, durations, etc.)
@@ -30,8 +32,9 @@ vi.mock('../../hooks/use-auth', () => ({
     isOperatorOrAdmin: vi.fn(() => false),
 }));
 
-import { useLineupBanner } from '../../hooks/use-lineups';
+import { useCommonGround, useLineupBanner, useLineupDetail } from '../../hooks/use-lineups';
 import { isOperatorOrAdmin } from '../../hooks/use-auth';
+import { NominateModal } from './NominateModal';
 
 const mockUseLineupBanner = vi.mocked(useLineupBanner);
 const mockIsOperatorOrAdmin = vi.mocked(isOperatorOrAdmin);
@@ -180,5 +183,34 @@ describe('LineupBanner — role gating (ROK-1061)', () => {
         mockHookReturn(createMockBanner());
         renderWithProviders(<LineupBanner />);
         expect(screen.getByTestId('start-another-lineup')).toBeInTheDocument();
+    });
+});
+
+// TD batch 4 B1: the Nominate search's co-op fit hint must size the group by
+// the lineup's participants, not `votingEligibleCount` (the whole community on
+// a public lineup — every co-op game read "too small for the group of 249").
+describe('LineupBanner — NominateModal group size', () => {
+    it('passes the participant count, not the community count', () => {
+        mockHookReturn(createMockBanner({ id: 7, visibility: 'public', votingEligibleCount: 249 }));
+        vi.mocked(useLineupDetail).mockReturnValue(
+            { data: createMockLineupDetail({ id: 7, votingEligibleCount: 249 }) } as ReturnType<typeof useLineupDetail>,
+        );
+        vi.mocked(useCommonGround).mockReturnValue(
+            { data: { meta: { participantCount: 3 } } } as ReturnType<typeof useCommonGround>,
+        );
+        renderWithProviders(<LineupBanner />);
+        fireEvent.click(screen.getByRole('button', { name: /nominate/i }));
+        const props = vi.mocked(NominateModal).mock.lastCall?.[0];
+        expect(props?.isOpen).toBe(true);
+        expect(props?.participantCount).toBe(3);
+    });
+
+    it('does not fetch Common Ground until the modal opens', () => {
+        mockHookReturn(createMockBanner({ id: 7 }));
+        vi.mocked(useCommonGround).mockClear();
+        renderWithProviders(<LineupBanner />);
+        const enabledFlags = vi.mocked(useCommonGround).mock.calls.map((c) => c[1]);
+        expect(enabledFlags.length).toBeGreaterThan(0);
+        expect(enabledFlags.every((e) => e === false)).toBe(true);
     });
 });

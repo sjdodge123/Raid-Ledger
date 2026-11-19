@@ -56,6 +56,9 @@ const FEED_TOKEN_PATH = /(\/(?:api\/)?cal\/u\/)[A-Za-z0-9_-]{16,}/g;
  */
 const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
 
+/** ROK-2263: a backup-export token (`rlbx_` + 43 chars), same treatment. */
+const BACKUP_EXPORT_TOKEN = /rlbx_[A-Za-z0-9_-]{43}/g;
+
 /**
  * ROK-1955: the device-link preview `/companion/v1/devices/link/<userCode>`
  * carries the user code in the PATH; `poll` and `decision` are route names
@@ -75,6 +78,7 @@ export function scrubTokenFromUrl(url: string): string {
         .replace(SHARE_TOKEN_PATH, `$1${FILTERED}`)
         .replace(FEED_TOKEN_PATH, `$1${FILTERED}`)
         .replace(COMPANION_DEVICE_TOKEN, FILTERED)
+        .replace(BACKUP_EXPORT_TOKEN, FILTERED)
         .replace(COMPANION_LINK_PATH, `$1${FILTERED}`);
 }
 

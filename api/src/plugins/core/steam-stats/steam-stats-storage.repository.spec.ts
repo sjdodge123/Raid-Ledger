@@ -55,7 +55,8 @@ describe('SteamStatsStorageRepository — owner re-check', () => {
 
 describe('SteamStatsStorageRepository.purgeUser (Codex P2 — replaced account)', () => {
   it("clears the old account's steam_library playtime, so a replacement that lacks the game never shows it", async () => {
-    const { db, repo } = setup('B');
+    // purgeUser does no owner re-check, so nothing primes a current steam_id.
+    const { db, repo } = setup(null);
     await repo.purgeUser(1);
     expect(db.update).toHaveBeenCalledWith(schema.gameInterests);
     expect(db.set).toHaveBeenCalledWith({

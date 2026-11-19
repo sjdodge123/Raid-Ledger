@@ -15,6 +15,16 @@ async function fetchMediaBlob(path: string): Promise<Blob> {
     return res.blob();
 }
 
+/** Node 24's createObjectURL (under jsdom) rejects a foreign Blob → null, the failed-load path. */
+function toObjectUrl(blob: Blob): string | null {
+    try {
+        return URL.createObjectURL(blob);
+    } catch {
+        return null;
+    }
+}
+
+/** Object URL for a hub media file; null while loading or on any failure (see header). */
 export function useHubMediaImageUrl(path: string | null): string | null {
     const { data } = useQuery({
         queryKey: ['hub-media', 'file', path ?? ''],
@@ -28,7 +38,8 @@ export function useHubMediaImageUrl(path: string | null): string | null {
     useEffect(() => {
         // jsdom lacks createObjectURL → the caller's fallback.
         if (blob === null || typeof URL.createObjectURL !== 'function') return undefined;
-        const objectUrl = URL.createObjectURL(blob);
+        const objectUrl = toObjectUrl(blob);
+        if (objectUrl === null) return undefined;
         // Lifetime must match this effect (StrictMode-safe revoke), as in useValheimBlobUrl.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setUrl(objectUrl);

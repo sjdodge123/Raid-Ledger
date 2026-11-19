@@ -448,3 +448,64 @@ describe('scrubString — Blizzard character profile paths (ROK-2129)', () => {
     expect(JSON.stringify(scrubSecrets(event))).not.toContain('hero0');
   });
 });
+
+describe('ROK-2263 backup-export token', () => {
+  const token = `rlbx_${'b'.repeat(43)}`;
+
+  it('scrubs an rlbx_ token anywhere in a string', () => {
+    expect(scrubString(`clone failed with ${token} (401)`)).toBe(
+      `clone failed with ${REDACTED} (401)`,
+    );
+  });
+});
+
+describe('TD L2808 URL userinfo (DATABASE_URL in a pg_restore error)', () => {
+  it('redacts the password in a connection URL inside a command line', () => {
+    const raw =
+      'Command failed: pg_restore --clean --dbname=postgresql://u:s3cret@db:5432/rl /x.dump';
+    const out = scrubString(raw);
+    expect(out).not.toContain('s3cret');
+    expect(out).toBe(
+      `Command failed: pg_restore --clean --dbname=postgresql://${REDACTED}@db:5432/rl /x.dump`,
+    );
+  });
+
+  it.each([
+    ['redis://:s3cret@cache:6379', `redis://${REDACTED}@cache:6379`],
+    ['https://bob:s3cret@host/p', `https://${REDACTED}@host/p`],
+  ])('redacts the userinfo of %s', (raw, expected) => {
+    expect(scrubString(raw)).toBe(expected);
+  });
+
+  it.each([
+    'https://example.com/users/@handle',
+    'https://example.com/x?mention=a@b.test',
+    'mail fixture@example.test',
+  ])('leaves %s (no userinfo) alone', (raw) => {
+    expect(scrubString(raw)).toBe(raw);
+  });
+
+  it('scrubs a crafted 100k scheme-like string in linear time (no rescan per dot)', () => {
+    // Unbounded `[a-z][a-z0-9+.-]*` restarted at every `\b` between dots and
+    // rescanned to `://` — ~1.8 s here. A bounded scheme is a few ms.
+    const raw = `${'a.'.repeat(25000)}://${'x'.repeat(50000)}`;
+    const started = performance.now();
+    const out = scrubString(raw);
+    const elapsedMs = performance.now() - started;
+    expect(out).toBe(raw);
+    expect({ elapsedMs, under: elapsedMs < 250 }).toEqual({
+      elapsedMs,
+      under: true,
+    });
+  });
+
+  it('scrubSecrets redacts it from an exception value', () => {
+    const event = {
+      exception: { values: [{ value: 'x postgres://a:s3cret@h/db' }] },
+    };
+    scrubSecrets(event);
+    expect(event.exception.values[0]?.value).toBe(
+      `x postgres://${REDACTED}@h/db`,
+    );
+  });
+});

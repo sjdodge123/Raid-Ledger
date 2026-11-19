@@ -12,8 +12,8 @@ import {
   EVENT_NOTICE_TTL_SECONDS,
   eventAnnounceKey,
   eventNoticeKey,
-  sendClaimedEventNotice,
 } from './event-notice-plan.helpers';
+import { sendEventNotices } from './event-notice-dispatch.helpers';
 import { findAbsentUserIds } from './game-affinity-recipients.helpers';
 import {
   HUB_NOTIFICATION_EVENTS,
@@ -148,19 +148,19 @@ export class HubNotificationService {
       event.startTime,
     );
     const ids = await this.withoutPriorNotice(eventId, present);
-    const payload = buildTaggedPayload(event, guildId, guildName);
-    await Promise.allSettled(
-      ids.map((userId) =>
-        sendClaimedEventNotice(this.dedup, eventId, userId, () =>
-          this.notificationService.create({
-            userId,
-            type: 'hub_event_tagged',
-            title: event.title,
-            message: `Tagged to ${guildName}`,
-            payload,
-          }),
-        ),
-      ),
+    if (ids.length === 0) return;
+    // L4407: one batched claim + one createMany, like the announce path
+    // (ROK-2252). Same recipients, payload, per-user key and give-back.
+    await sendEventNotices(
+      { notifications: this.notificationService, dedup: this.dedup },
+      {
+        eventId,
+        title: event.title,
+        gameName: '',
+        payload: buildTaggedPayload(event, guildId, guildName),
+      },
+      [],
+      { guildId, guildName, groupIds: ids, typeOff: new Set() },
     );
   }
 
@@ -186,14 +186,12 @@ export class HubNotificationService {
     ids: number[],
   ): Promise<number[]> {
     const prior = await findPriorEventNoticeUserIds(this.db, eventId, ids);
-    await Promise.allSettled(
-      [...prior].map((id) =>
-        this.dedup.checkAndMarkSent(
-          eventNoticeKey(eventId, id),
-          EVENT_NOTICE_TTL_SECONDS,
-        ),
-      ),
-    );
+    if (prior.size > 0) {
+      const keys = [...prior].map((id) => eventNoticeKey(eventId, id));
+      await Promise.allSettled([
+        this.dedup.checkAndMarkSentMany(keys, EVENT_NOTICE_TTL_SECONDS),
+      ]);
+    }
     return ids.filter((id) => !prior.has(id));
   }
 
