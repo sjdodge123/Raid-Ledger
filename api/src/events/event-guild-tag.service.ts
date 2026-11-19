@@ -17,6 +17,7 @@ import {
 } from '../plugins/plugin-host/extension-points';
 import { isOperatorOrAdmin } from './controller.helpers';
 import { resolveTargetEvents } from './event-series.helpers';
+import { gameChangeStrandsGuildTag } from './event-guild-tag.rules';
 
 type Actor = { id: number; role: UserRole };
 
@@ -61,7 +62,7 @@ export class EventGuildTagService {
     const gameId = dto.gameId !== undefined ? dto.gameId : existing.gameId;
     if (dto.guildId !== undefined) {
       await this.assertCanTag(actor, dto.guildId, gameId);
-    } else if (existing.guildId !== null && gameId !== existing.gameId) {
+    } else if (gameChangeStrandsGuildTag(existing, gameId)) {
       throw new BadRequestException(GUILD_GAME_MISMATCH);
     }
   }
@@ -105,9 +106,7 @@ export class EventGuildTagService {
       }
       return;
     }
-    if (
-      targets.some((t) => t.guildId !== null && resultingGame(t) !== t.gameId)
-    ) {
+    if (targets.some((t) => gameChangeStrandsGuildTag(t, resultingGame(t)))) {
       throw new BadRequestException(GUILD_GAME_MISMATCH);
     }
   }

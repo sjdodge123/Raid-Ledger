@@ -19,6 +19,7 @@ let mockTiebreaker: unknown = null;
 
 vi.mock('../../hooks/use-lineups', () => ({
     useLineupDetail: () => ({ data: mockLineup, isLoading: false, error: null }),
+    useCommonGround: () => ({ data: undefined }),
     useTransitionLineupStatus: () => ({ mutate: vi.fn() }),
 }));
 

@@ -30,7 +30,7 @@ interface NominateModalProps {
      * search results. Undefined = unknown, so no warning is shown. Never
      * blocks a nomination.
      */
-    participantCount?: number;
+    participantCount?: number | undefined;
 }
 
 /** Search-result row shape, incl. the ROK-1400 co-op capacity fields. */
