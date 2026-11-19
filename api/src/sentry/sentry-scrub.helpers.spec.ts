@@ -413,3 +413,13 @@ describe('ROK-2117 parity with the admin-log scrubber (logs-scrub.patterns)', ()
     expect(fromSentry.toLowerCase()).toBe(fromLogs.toLowerCase());
   });
 });
+
+describe('ROK-2263 backup-export token', () => {
+  const token = `rlbx_${'b'.repeat(43)}`;
+
+  it('scrubs an rlbx_ token anywhere in a string', () => {
+    expect(scrubString(`clone failed with ${token} (401)`)).toBe(
+      `clone failed with ${REDACTED} (401)`,
+    );
+  });
+});

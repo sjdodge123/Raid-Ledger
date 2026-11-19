@@ -41,6 +41,8 @@ const VALHEIM_LINK_TOKEN = /rlvl_[A-Za-z0-9_-]{43}/g;
 // ROK-1955: a companion device token, and the device-link user code that
 // rides the preview PATH (`poll` / `decision` / `preview` are route names, kept).
 const COMPANION_DEVICE_TOKEN = /rlcd_[A-Za-z0-9_-]{43}/g;
+// ROK-2263: a backup-export token (clone-script bearer) anywhere in a string.
+const BACKUP_EXPORT_TOKEN = /rlbx_[A-Za-z0-9_-]{43}/g;
 const COMPANION_LINK_PATH =
   /(\/companion\/v1\/devices\/link\/)(?!(?:poll|decision|preview)(?=[/?#\s"']|$))[^/?#\s"']+/gi;
 // ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
@@ -73,6 +75,7 @@ export function scrubString(value: string): string {
     .replace(CALDAV_PATH, `$1${REDACTED}`)
     .replace(VALHEIM_LINK_TOKEN, REDACTED)
     .replace(COMPANION_DEVICE_TOKEN, REDACTED)
+    .replace(BACKUP_EXPORT_TOKEN, REDACTED)
     .replace(COMPANION_LINK_PATH, `$1${REDACTED}`)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }
