@@ -4,7 +4,7 @@
  * set — specs opt in with `server.use(...)`.
  */
 import { http, HttpResponse } from 'msw';
-import type { PublicGuildCard } from '@raid-ledger/contract';
+import type { GuildPublicCardSettings, PublicGuildCard } from '@raid-ledger/contract';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -38,4 +38,30 @@ export function publicGuildCardHandler(card: PublicGuildCard, calls: string[] = 
         if (slug !== SEEDED_PUBLIC_GUILD_SLUG) return HttpResponse.json({ message: 'Not found' }, { status: 404 });
         return HttpResponse.json(card);
     });
+}
+
+export const GUILD_PUBLIC_CARD_SETTINGS_URL = `${API_BASE}/plugins/wow/guilds/:id/public-card`;
+
+/** Records what the editor section sent: `"<METHOD> <path>"` lines and PATCH bodies. */
+export interface PublicCardSettingsLog {
+    calls: string[];
+    bodies: unknown[];
+}
+
+/** GET + PATCH `/plugins/wow/guilds/:id/public-card` over one in-memory `{enabled, slug}`; PATCH keeps the slug. */
+export function guildPublicCardSettingsHandlers(initial: GuildPublicCardSettings, log: PublicCardSettingsLog) {
+    let state = { ...initial };
+    return [
+        http.get(GUILD_PUBLIC_CARD_SETTINGS_URL, ({ params }) => {
+            log.calls.push(`GET /plugins/wow/guilds/${String(params.id)}/public-card`);
+            return HttpResponse.json(state);
+        }),
+        http.patch(GUILD_PUBLIC_CARD_SETTINGS_URL, async ({ params, request }) => {
+            const body = (await request.json()) as { enabled: boolean };
+            log.calls.push(`PATCH /plugins/wow/guilds/${String(params.id)}/public-card`);
+            log.bodies.push(body);
+            state = { enabled: body.enabled, slug: state.slug ?? SEEDED_PUBLIC_GUILD_SLUG };
+            return HttpResponse.json(state);
+        }),
+    ];
 }
