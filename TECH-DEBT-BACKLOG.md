@@ -4446,3 +4446,7 @@ Existing entries are left in place; this records their status. Line numbers are 
   Suggested: wrap the badge + hint onto a second line below the name under `sm` (flex-wrap / grid row), keeping the name at ≥1 line of full width.
 ### 2026-11-19 — fix/tech-debt-batch3-2026-11-19 (surfaced during the overnight fleet gate)
 - **low** fleet runner (slot 2) — `--scoped` gate task `61502ad974f3`: the api `Lint` row was killed by the OOM killer (`Killed`, exit 137); the identical rerun `8f23efaccadf` passed lint. Not a lint finding: runner memory (6 GiB cap) under eslint with type-aware rules. Pre-existing environment issue, not caused by this branch's diff (api-only, 13 files). Suggested: give the lint step `NODE_OPTIONS=--max-old-space-size` sized under the runner cap, or lint api in two halves on the runner.
+
+### 2026-11-19 — chore/rok-1813-noindex-nginx (surfaced during infra validation)
+- **med** `Dockerfile.allinone:87` — `docker build -f Dockerfile.allinone` on an 8 GB Docker VM dies in the api build: `FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory` (nest build, SIGABRT). Pre-existing: CI sets NODE_OPTIONS=--max-old-space-size=8192 for the api build (`ci.yml:241`), but the Dockerfile's `RUN npm run build -w @raid-ledger/api` does not, so a local build OOMs at V8's default heap.
+  Suggested: set `ENV NODE_OPTIONS=--max-old-space-size=6144` (or an ARG) for the build stage in `Dockerfile.allinone` (own infra PR).
