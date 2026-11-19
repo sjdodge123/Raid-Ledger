@@ -92,14 +92,6 @@ describe('CompanionDevicesService', () => {
     expect(events.emitAsync).not.toHaveBeenCalled();
   });
 
-  it('a revoke awaits the device-revoked cleanup event (ROK-2099 D6)', async () => {
-    const { service, repo, events } = setup();
-    repo.revoke.mockResolvedValue(true);
-    await service.revoke(2, 5);
-    expect(events.emitAsync.mock.calls).toEqual([
-      [COMPANION_DEVICE_REVOKED_EVENT, { userId: 2, deviceId: 5 }],
-    ]);
-  });
 
   it('self returns only deviceId, name and createdAt', async () => {
     const { service } = setup();
@@ -110,5 +102,16 @@ describe('CompanionDevicesService', () => {
       name: 'Gaming-PC',
       createdAt: '2026-10-01T00:00:00.000Z',
     });
+  });
+});
+
+describe('CompanionDevicesService revoke cleanup (ROK-2099 D6)', () => {
+  it('a revoke awaits the device-revoked cleanup event', async () => {
+    const { service, repo, events } = setup();
+    repo.revoke.mockResolvedValue(true);
+    await service.revoke(2, 5);
+    expect(events.emitAsync.mock.calls).toEqual([
+      [COMPANION_DEVICE_REVOKED_EVENT, { userId: 2, deviceId: 5 }],
+    ]);
   });
 });

@@ -37,7 +37,9 @@ describe('addonErrorsRetentionCutoff', () => {
   it('is exactly 90 days before now (ruling 2026-11-19)', () => {
     expect(WOW_ADDON_ERRORS_RETENTION_DAYS).toBe(90);
     expect(
-      addonErrorsRetentionCutoff(new Date('2026-11-19T05:45:00Z')).toISOString(),
+      addonErrorsRetentionCutoff(
+        new Date('2026-11-19T05:45:00Z'),
+      ).toISOString(),
     ).toBe('2026-08-21T05:45:00.000Z');
   });
 });
@@ -54,7 +56,9 @@ describe('WowAddonErrorsRetentionCron', () => {
   it('runs tracked under WowAddonErrorsRetention_prune while blizzard is active', async () => {
     const { cron, db, cronJobService } = build(true, 2);
     await cron.prune();
-    expect(WOW_ADDON_ERRORS_RETENTION_JOB).toBe('WowAddonErrorsRetention_prune');
+    expect(WOW_ADDON_ERRORS_RETENTION_JOB).toBe(
+      'WowAddonErrorsRetention_prune',
+    );
     expect(cronJobService.executeWithTracking).toHaveBeenCalledWith(
       WOW_ADDON_ERRORS_RETENTION_JOB,
       expect.any(Function),
