@@ -12,7 +12,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *
  * Steam and Discord keep their own signers (TECH-DEBT, ROK-1592 L3).
  */
-export type SignedStatePurpose = 'calendar-oauth';
+export type SignedStatePurpose = 'calendar-oauth' | 'bnet-account-probe';
 
 /** Default lifetime: 10 minutes. */
 export const SIGNED_STATE_TTL_SECONDS = 600;
