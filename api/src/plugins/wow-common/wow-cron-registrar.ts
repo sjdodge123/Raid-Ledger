@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CharactersService } from '../../characters/characters.service';
+import { SettingsService } from '../../settings/settings.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { BlizzardRosterSyncJob } from './guilds/blizzard-roster-sync.job';
@@ -32,6 +33,7 @@ export class WowCronRegistrar implements CronRegistrar {
     private readonly autoLink: ForeverAutoLinkService,
     private readonly rosterArmory: RosterArmoryService,
     private readonly questImport: ForeverQuestAutoImportService,
+    private readonly settings: SettingsService,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -102,6 +104,11 @@ export class WowCronRegistrar implements CronRegistrar {
   private async handleAutoSync(): Promise<void> {
     if (this.isSyncing) {
       this.logger.warn('Auto-sync already in progress, skipping');
+      return;
+    }
+    // TECH-DEBT L4410: keyless installs would log one warning + 500 ms per row.
+    if ((await this.settings.getBlizzardConfig()) === null) {
+      this.logger.debug('Blizzard not configured — auto-sync skipped');
       return;
     }
 
