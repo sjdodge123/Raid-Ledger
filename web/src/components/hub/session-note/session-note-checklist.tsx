@@ -31,7 +31,7 @@ function pruneClicked(clicked: ClickedMap, items: readonly HubSessionNoteItem[])
 }
 
 export function SessionNoteChecklist({ items, canTick, onTick }: Props): JSX.Element | null {
-    const [clicked, setClicked] = useState<ClickedMap>(new Map());
+    const [clicked, setClicked] = useState<ClickedMap>(() => new Map());
     const live = pruneClicked(clicked, items);
     if (live !== clicked) setClicked(live); // adjust-state-during-render: React re-renders before commit
     if (items.length === 0) return null;
