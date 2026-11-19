@@ -1,5 +1,6 @@
-import { inArray } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { defined } from '../common/defined.helpers';
 import * as schema from '../drizzle/schema';
 import { addonErrorRecordHash } from '../plugins/wow-common/companion/wow-addon-errors.scrub';
 
@@ -9,6 +10,8 @@ type RecordInsert = schema.WowAddonErrorRecordInsert;
 /** Stand-in account key (the real one is a SHA-256 of a folder name). */
 export const DEMO_ACCOUNT_KEY = '0'.repeat(64);
 const HOUR_MS = 3_600_000;
+/** Advisory-lock key serialising concurrent demo seeds (one per Playwright project). */
+const SEED_LOCK_KEY = 'rok-2099:seed-addon-errors';
 
 /** One scrubbed record row; hash computed like the S2 handler (D5). */
 export function addonErrorRow(
@@ -40,7 +43,10 @@ const QUESTIE = {
 
 /** Records per demo user index: 2 addons, one group shared by two members. */
 function demoRecords(ids: number[], now: Date): RecordInsert[] {
-  const [a = 0, b = 0, c = 0] = ids;
+  const [a, b, c] = ids;
+  if (a === undefined || b === undefined || c === undefined) {
+    throw new Error(`Expected 3 demo user ids, got ${ids.length}`);
+  }
   const stack = (line: number) =>
     `[string "@Interface\\AddOns\\Questie\\Modules\\QuestieTracker.lua"]:${line}: in function <...>`;
   return [
@@ -102,12 +108,32 @@ export interface SeedAddonErrorsResult {
 /**
  * Idempotent: (re)creates the three demo uploaders and replaces their
  * records with the fixed set above. Touches no other user's records.
+ * One transaction under an advisory lock: a concurrent reader sees the old
+ * rows or the new ones, never an empty table, and parallel seeds (the
+ * desktop / mobile / tablet Playwright projects) run one after another.
  */
 export async function seedAddonErrors(
   db: Db,
   now: Date,
 ): Promise<SeedAddonErrorsResult> {
-  const users = await db
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${SEED_LOCK_KEY}))`);
+    const ids = await upsertDemoUsers(tx, now);
+    const t = schema.wowAddonErrorRecords;
+    await tx.delete(t).where(inArray(t.userId, ids));
+    const rows = await tx
+      .insert(t)
+      .values(demoRecords(ids, now))
+      .returning({ id: t.id });
+    return { userIds: ids, inserted: rows.length };
+  });
+}
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** The three demo uploaders' ids, in `DEMO_USERS` order. */
+async function upsertDemoUsers(tx: Tx, now: Date): Promise<number[]> {
+  const users = await tx
     .insert(schema.users)
     .values(
       DEMO_USERS.map((username) => ({
@@ -121,14 +147,7 @@ export async function seedAddonErrors(
       set: { updatedAt: now },
     })
     .returning({ id: schema.users.id, username: schema.users.username });
-  const ids = DEMO_USERS.map(
-    (n) => users.find((u) => u.username === n)?.id ?? 0,
+  return DEMO_USERS.map((n) =>
+    defined(users.find((u) => u.username === n)?.id, `demo user ${n}`),
   );
-  const t = schema.wowAddonErrorRecords;
-  await db.delete(t).where(inArray(t.userId, ids));
-  const rows = await db
-    .insert(t)
-    .values(demoRecords(ids, now))
-    .returning({ id: t.id });
-  return { userIds: ids, inserted: rows.length };
 }
