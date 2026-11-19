@@ -285,31 +285,49 @@ describe('review fixes B7/B9 — secrets stay shell-local, prod calls stay white
   });
 });
 
-describe('clone_env_assert_local_db_url — the one shared localhost guard (Codex r2 P1)', () => {
+describe('clone_env_assert_local_db_url — allowlist, not a deny-list (Codex r2 P1, review r3)', () => {
+  // The URL travels in an env var so control characters reach the guard verbatim.
+  const guard = (url, env = {}) => run('clone_env_assert_local_db_url "$URL"; echo "rc=$?"', { URL: url, ...env });
   const accept = [
     'postgresql://u:p@localhost:5432/raid_ledger',
     'postgres://u:p@127.0.0.1/raid_ledger?sslmode=disable',
     'postgresql://u:p@[::1]:5432/raid_ledger',
-    'postgresql:///raid_ledger',
-    'postgresql://u:p@/raid_ledger?host=/var/run/postgresql',
-    'postgresql://u:p@/raid_ledger?host=%2Fvar%2Frun%2Fpostgresql',
-    'postgresql://u:p@localhost/raid_ledger?host=localhost&hostaddr=127.0.0.1',
+    'postgresql://user@localhost/raid_ledger?sslmode=require',
+    'postgresql://u:p%40ss@localhost/raid-ledger?sslmode=prefer',
+    'postgresql://localhost/raid_ledger?sslmode=allow',
   ];
   for (const url of accept) {
     it(`accepts ${url}`, () => {
-      const r = run(`clone_env_assert_local_db_url "${url}"; echo "rc=$?"`);
+      const r = guard(url);
       assert.match(r.out, /rc=0/, `refused a local URL: ${r.err}`);
     });
   }
   const refuse = [
     ['remote host', 'postgresql://u:p@db.example.com/x', {}],
+    ['multi-@ with a comma host list (r3 BLOCKER)', 'postgresql://u@prod-host,@localhost/db', {}],
+    ['a second @ before localhost', 'postgresql://u:p@db.example.com@localhost/db', {}],
+    ['a comma host list', 'postgresql://u@localhost,db.example.com/db', {}],
+    ['LF in the query (r3 MAJOR)', 'postgresql://u@localhost:1/x?application_name=a\n&host=remote', {}],
+    ['CR in the query', 'postgresql://u@localhost:1/x?sslmode=disable\r&host=remote', {}],
+    ['a tab in the query', 'postgresql://u@localhost:1/x?sslmode=disable\t&host=remote', {}],
+    ['LF before the authority ends', 'postgresql://u@localhost\n/x', {}],
+    ['?dbname=', 'postgresql://u:p@localhost/x?dbname=raid_ledger', {}],
+    ['?options=', 'postgresql://u:p@localhost/x?options=-csearch_path%3Devil', {}],
+    ['?host= (even local)', 'postgresql://u:p@localhost/x?host=localhost', {}],
     ['?host=remote', 'postgresql://u:p@localhost/x?host=db.example.com', {}],
     ['?hostaddr=', 'postgresql://u:p@localhost/x?hostaddr=1.2.3.4', {}],
+    ['?target_session_attrs=', 'postgresql://u:p@localhost/x?target_session_attrs=any', {}],
     ['?service=', 'postgresql://u:p@localhost/x?service=x', {}],
     ['?servicefile=', 'postgresql://u:p@localhost/x?servicefile=/tmp/s', {}],
-    ['?host= socket list with a remote', 'postgresql://u:p@/x?host=/tmp,db.example.com', {}],
+    ['sslmode plus another key', 'postgresql://u:p@localhost/x?sslmode=disable&host=remote', {}],
+    ['an unknown sslmode', 'postgresql://u:p@localhost/x?sslmode=verify-full', {}],
+    ['a unix-socket URL (no host)', 'postgresql:///raid_ledger', {}],
+    ['a socket ?host=', 'postgresql://u:p@/raid_ledger?host=/var/run/postgresql', {}],
+    ['no database name', 'postgresql://u:p@localhost:5432/', {}],
     ['a fragment', 'postgresql://u:p@localhost/x#frag', {}],
+    ['an uppercase scheme', 'POSTGRESQL://u:p@localhost/x', {}],
     ['not postgres', 'mysql://u:p@localhost/x', {}],
+    ['a keyword DSN', 'host=localhost dbname=x', {}],
     ['PGHOST', 'postgresql://u:p@localhost/x', { PGHOST: 'db.example.com' }],
     ['PGHOSTADDR', 'postgresql://u:p@localhost/x', { PGHOSTADDR: '1.2.3.4' }],
     ['PGSERVICE', 'postgresql://u:p@localhost/x', { PGSERVICE: 'prod' }],
@@ -317,10 +335,10 @@ describe('clone_env_assert_local_db_url — the one shared localhost guard (Code
   ];
   for (const [name, url, env] of refuse) {
     it(`refuses ${name} without printing the URL`, () => {
-      const r = run(`clone_env_assert_local_db_url "${url}"; echo "rc=$?"`, env);
+      const r = guard(url, env);
       assert.match(r.out, /rc=1/, `let ${name} through`);
       assert.match(r.err, /must point at localhost/);
-      assert.ok(!r.err.includes(url), `printed the URL: ${r.err}`);
+      assert.ok(!r.err.includes('db.example.com') && !r.err.includes(url), `printed the URL: ${r.err}`);
     });
   }
 

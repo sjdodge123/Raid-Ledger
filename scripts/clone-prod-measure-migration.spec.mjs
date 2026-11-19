@@ -3,7 +3,7 @@
 // CONCURRENTLY; flag drizzle's skip edge) and the psql script/report round trip.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,6 +62,47 @@ describe('scratchDatabaseUrl', () => {
 
   it('refuses a DATABASE_URL that already names the scratch DB (never the main DB)', () => {
     assert.throws(() => scratchDatabaseUrl('postgresql://u@localhost/rl_clone_scratch'), /refusing/);
+  });
+
+  it('keeps only an allowed sslmode from the query', () => {
+    assert.equal(
+      scratchDatabaseUrl('postgres://u@127.0.0.1/raid_ledger?sslmode=disable', 'rl_s'),
+      'postgres://u@127.0.0.1/rl_s?sslmode=disable',
+    );
+  });
+
+  it('refuses a ?dbname= override instead of leaving it pointed at the source DB (Codex r3 P1)', () => {
+    assert.throws(() => scratchDatabaseUrl('postgresql://u:p@localhost/raid_ledger?dbname=raid_ledger'), UsageError);
+  });
+
+  it('never yields a URL that can reach the source DB name, for any hostile shape', () => {
+    const hostile = [
+      'postgresql://u:p@localhost/raid_ledger?dbname=raid_ledger',
+      'postgresql://u:p@localhost/raid_ledger?options=-cdbname%3Draid_ledger',
+      'postgresql://u:p@localhost/raid_ledger?service=raid_ledger',
+      'postgresql://u@prod-host,@localhost/raid_ledger',
+      'postgresql://u@localhost:1/raid_ledger?application_name=a\n&dbname=raid_ledger',
+      'postgresql://u:p@localhost/raid_ledger?sslmode=disable&dbname=raid_ledger',
+      'postgresql:///raid_ledger?host=/tmp',
+    ];
+    for (const url of hostile) {
+      let out;
+      try {
+        out = scratchDatabaseUrl(url, 'rl_s');
+      } catch (err) {
+        assert.ok(err instanceof UsageError, `threw a non-usage error for ${JSON.stringify(url)}: ${err}`);
+        continue;
+      }
+      assert.fail(`derived ${JSON.stringify(out)} from hostile ${JSON.stringify(url)}`);
+    }
+  });
+
+  it('the script re-guards SCRATCH_URL before CREATE DATABASE and pg_restore (review r3 MINOR)', () => {
+    const src = readFileSync(SCRIPT, 'utf8');
+    const guardAt = src.indexOf('clone_env_assert_local_db_url "$SCRATCH_URL"');
+    assert.ok(guardAt > 0, 'SCRATCH_URL is never passed to clone_env_assert_local_db_url');
+    assert.ok(guardAt < src.indexOf('admin_sql "CREATE DATABASE'), 'guard runs after CREATE DATABASE');
+    assert.ok(guardAt < src.indexOf('clone_env_restore_fresh'), 'guard runs after the restore');
   });
 });
 
