@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const fetchWithAuth = vi.hoisted(() => vi.fn());
-vi.mock('../../../lib/api/fetch-api', () => ({ fetchWithAuth }));
+vi.mock('../../../lib/api/fetch-api', () => ({ fetchWithAuth, fetchApi: vi.fn() }));
 
 import { addonErrorsExportPath, addonErrorsQuery, downloadAddonErrorsExport } from './addon-errors-api';
 
