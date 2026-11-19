@@ -14,6 +14,7 @@ import {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { capRows, type CappedRows } from './wow-addon-errors-admin.export';
 import {
   addonErrorsWhere,
   signatureSql,
@@ -118,18 +119,22 @@ export class WowAddonErrorsAdminService {
     };
   }
 
-  /** Stored (scrubbed) records matching the filters, newest first, capped. */
+  /**
+   * Stored (scrubbed) records matching the filters, newest first, at most
+   * `cap`; `truncated` when more matched (one probe row past the cap).
+   */
   async exportRows(
     filters: AddonErrorsFiltersDto,
-  ): Promise<AddonErrorExportRowDto[]> {
+    cap: number = ADDON_ERRORS_EXPORT_MAX_ROWS,
+  ): Promise<CappedRows<AddonErrorExportRowDto>> {
     const rows = await this.db
       .select(recordColumns)
       .from(t)
       .innerJoin(u, eq(u.id, t.userId))
       .where(addonErrorsWhere(filters))
       .orderBy(desc(t.lastSeenAt), desc(t.id))
-      .limit(ADDON_ERRORS_EXPORT_MAX_ROWS);
-    return rows.map(toExportRow);
+      .limit(cap + 1);
+    return capRows(rows.map(toExportRow), cap);
   }
 }
 

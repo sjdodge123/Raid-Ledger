@@ -12,6 +12,7 @@ import type { Response } from 'express';
 import type { z } from 'zod';
 import {
   ADDON_ERROR_SIGNATURE_RE,
+  ADDON_ERRORS_EXPORT_MAX_ROWS,
   AddonErrorsExportQuerySchema,
   AddonErrorsListQuerySchema,
   type AddonErrorDetailDto,
@@ -24,6 +25,7 @@ import {
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
 import { toAddonErrorsCsv } from './wow-addon-errors-admin.csv';
+import { exportTruncationHeaders } from './wow-addon-errors-admin.export';
 import { WowAddonErrorsAdminService } from './wow-addon-errors-admin.service';
 
 function parseQuery<T>(schema: z.ZodType<T>, q: unknown): T {
@@ -53,7 +55,10 @@ export class WowAddonErrorsAdminController {
     return this.service.list(parseQuery(AddonErrorsListQuerySchema, query));
   }
 
-  /** GET export?format=json|csv&… — download of the stored scrubbed rows. */
+  /**
+   * GET export?format=json|csv&… — download of the stored scrubbed rows.
+   * Past the row cap it sends `X-Export-Truncated: true` + `X-Export-Row-Cap`.
+   */
   @Get('export')
   async export(
     @Query() query: unknown,
@@ -63,7 +68,8 @@ export class WowAddonErrorsAdminController {
       AddonErrorsExportQuerySchema,
       query,
     );
-    const rows = await this.service.exportRows(filters);
+    const { rows, truncated } = await this.service.exportRows(filters);
+    res.set(exportTruncationHeaders(truncated, ADDON_ERRORS_EXPORT_MAX_ROWS));
     const exportedAt = new Date().toISOString();
     const name = `addon-errors-${exportedAt.slice(0, 10)}.${format}`;
     res.setHeader('Content-Disposition', `attachment; filename="${name}"`);

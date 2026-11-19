@@ -250,7 +250,11 @@ function describeApplyCorsPolicyWiring() {
     expect(await optionsFor(req)).toEqual({
       origin: true,
       credentials: true,
-      exposedHeaders: ['Content-Disposition'],
+      exposedHeaders: [
+        'Content-Disposition',
+        'X-Export-Truncated',
+        'X-Export-Row-Cap',
+      ],
     });
   });
 
@@ -274,7 +278,11 @@ function describeApplyCorsPolicyWiring() {
     expect(await optionsFor(siblingRequest())).toEqual({
       origin: false,
       credentials: true,
-      exposedHeaders: ['Content-Disposition'],
+      exposedHeaders: [
+        'Content-Disposition',
+        'X-Export-Truncated',
+        'X-Export-Row-Cap',
+      ],
     });
   });
 }

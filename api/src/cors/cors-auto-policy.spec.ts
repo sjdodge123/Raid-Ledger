@@ -280,7 +280,7 @@ describe('enforce mode', () => {
     expect(res.headers['access-control-allow-origin']).toBe(`https://${PROD}`);
     expect(res.headers['access-control-allow-credentials']).toBe('true');
     expect(res.headers['access-control-expose-headers']).toBe(
-      'Content-Disposition',
+      'Content-Disposition,X-Export-Truncated,X-Export-Row-Cap',
     );
     expect(ran).toBe(true);
   });
