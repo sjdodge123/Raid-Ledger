@@ -54,8 +54,9 @@ const CALENDAR_PATH =
 const CALDAV_PATH =
   /((?:p\d{1,3}-)?caldav\.icloud\.com(?::\d+)?\/)\d{4,}(?=\/)/g;
 // TD L2808: the userinfo of any `scheme://user:pass@host` URL — a failed
-// pg_restore's "Command failed: … --dbname=postgresql://u:p@db/rl".
-const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
+// pg_restore's "Command failed: … --dbname=postgresql://u:p@db/rl". The scheme
+// is bounded (RFC 3986 schemes are short) so a long dotted run is linear.
+const URL_USERINFO = /(\b[a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/?#@]+@/gi;
 const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {

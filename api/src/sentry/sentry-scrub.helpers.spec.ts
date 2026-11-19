@@ -450,6 +450,20 @@ describe('TD L2808 URL userinfo (DATABASE_URL in a pg_restore error)', () => {
     expect(scrubString(raw)).toBe(raw);
   });
 
+  it('scrubs a crafted 100k scheme-like string in linear time (no rescan per dot)', () => {
+    // Unbounded `[a-z][a-z0-9+.-]*` restarted at every `\b` between dots and
+    // rescanned to `://` — ~1.8 s here. A bounded scheme is a few ms.
+    const raw = `${'a.'.repeat(25000)}://${'x'.repeat(50000)}`;
+    const started = performance.now();
+    const out = scrubString(raw);
+    const elapsedMs = performance.now() - started;
+    expect(out).toBe(raw);
+    expect({ elapsedMs, under: elapsedMs < 250 }).toEqual({
+      elapsedMs,
+      under: true,
+    });
+  });
+
   it('scrubSecrets redacts it from an exception value', () => {
     const event = {
       exception: { values: [{ value: 'x postgres://a:s3cret@h/db' }] },
