@@ -1,6 +1,6 @@
 import type { Logger } from '@nestjs/common';
 import type { GameActivityAttributionAdapter } from '../../plugins/plugin-host/extension-points';
-import type { SessionOpenEvent } from './game-activity.helpers';
+import { creditedGameId, type SessionOpenEvent } from './game-activity.helpers';
 
 /**
  * ROK-2259 — let plugin-owned adapters re-attribute each opened session to the
@@ -74,4 +74,29 @@ async function attributeUnresolved(
     if (gameId !== null) return gameId;
   }
   return null;
+}
+
+/**
+ * Tell each adapter about the sessions whose row was stored, so open side
+ * effects (an adapter's `afterOpen`) never run for a failed insert. An adapter
+ * that throws is logged and skipped.
+ */
+export async function notifyStoredOpens(
+  stored: SessionOpenEvent[],
+  cache: Map<string, number | null>,
+  adapters: readonly GameActivityAttributionAdapter[],
+  logger: Logger,
+): Promise<void> {
+  for (const ev of stored) {
+    const gameId = creditedGameId(ev, cache);
+    for (const adapter of adapters) {
+      try {
+        await adapter.afterOpen?.(ev.userId, gameId, ev.discordActivityName);
+      } catch (err) {
+        logger.warn(
+          `Game attribution afterOpen failed for user ${ev.userId} / "${ev.discordActivityName}": ${String(err)}`,
+        );
+      }
+    }
+  }
 }

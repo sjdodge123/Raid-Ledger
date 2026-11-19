@@ -5,7 +5,10 @@
 import type { Logger } from '@nestjs/common';
 import type { GameActivityAttributionAdapter } from '../../plugins/plugin-host/extension-points';
 import type { SessionOpenEvent } from './game-activity.helpers';
-import { attributeOpenSessions } from './game-activity-attribution.helpers';
+import {
+  attributeOpenSessions,
+  notifyStoredOpens,
+} from './game-activity-attribution.helpers';
 
 const ANNIVERSARY = 20;
 const FOREVER = 10;
@@ -120,5 +123,52 @@ describe('attributeOpenSessions — raw "World of Warcraft Classic" resolved to 
     const ev = open(1, 'World of Warcraft Classic');
     await attributeOpenSessions([ev], unmapped, [toForever], logger);
     expect(ev.attributedGameId).toBeUndefined();
+  });
+});
+
+describe('notifyStoredOpens', () => {
+  const cache = new Map<string, number | null>([
+    ['World of Warcraft Classic', ANNIVERSARY],
+  ]);
+
+  beforeEach(() => {
+    jest.mocked(logger.warn).mockClear();
+  });
+
+  it('logs an adapter whose afterOpen throws and still runs the next adapter', async () => {
+    const broken: GameActivityAttributionAdapter = {
+      attribute: (_u: number, g: number) => Promise.resolve(g),
+      afterOpen: () => Promise.reject(new Error('afterOpen boom')),
+    };
+    const next = {
+      attribute: (_u: number, g: number) => Promise.resolve(g),
+      afterOpen: jest.fn(() => Promise.resolve()),
+    };
+    const ev = open(1, 'World of Warcraft Classic');
+    await notifyStoredOpens([ev], cache, [broken, next], logger);
+    expect(next.afterOpen).toHaveBeenCalledWith(
+      1,
+      ANNIVERSARY,
+      'World of Warcraft Classic',
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('afterOpen boom'),
+    );
+  });
+
+  it('skips an adapter without afterOpen and notifies the rest', async () => {
+    const next = {
+      attribute: (_u: number, g: number) => Promise.resolve(g),
+      afterOpen: jest.fn(() => Promise.resolve()),
+    };
+    const ev = open(1, 'World of Warcraft Classic');
+    ev.attributedGameId = FOREVER;
+    await notifyStoredOpens([ev], cache, [toForever, next], logger);
+    expect(next.afterOpen).toHaveBeenCalledWith(
+      1,
+      FOREVER,
+      'World of Warcraft Classic',
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });

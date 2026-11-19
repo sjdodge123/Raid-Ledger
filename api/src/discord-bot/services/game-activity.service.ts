@@ -20,7 +20,10 @@ import {
   EXTENSION_POINTS,
   type GameActivityAttributionAdapter,
 } from '../../plugins/plugin-host/extension-points';
-import { attributeOpenSessions } from './game-activity-attribution.helpers';
+import {
+  attributeOpenSessions,
+  notifyStoredOpens,
+} from './game-activity-attribution.helpers';
 import {
   FLUSH_INTERVAL_MS,
   MAX_SESSION_DURATION_SECONDS,
@@ -200,7 +203,7 @@ export class GameActivityService
    * order; an open is attributed then inserted. A plugin adapter's overlap
    * check (presence vs voice row of the same play) then sees exactly the rows
    * open at that moment: rows opened earlier in this flush, minus rows whose
-   * buffered close came first.
+   * buffered close came first. Adapters hear of an open only once it is stored.
    */
   private async applyInOrder(events: BufferedEvent[]): Promise<void> {
     const adapters = this.attributionAdapters();
@@ -211,7 +214,8 @@ export class GameActivityService
       }
       const cache = this.gameNameCache;
       await attributeOpenSessions([ev], cache, adapters, this.logger);
-      await processOpenEvents(this.db, [ev], cache, this.logger);
+      const stored = await processOpenEvents(this.db, [ev], cache, this.logger);
+      await notifyStoredOpens(stored, cache, adapters, this.logger);
     }
   }
 
