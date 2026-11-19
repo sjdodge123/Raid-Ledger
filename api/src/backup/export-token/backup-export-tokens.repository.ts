@@ -168,14 +168,27 @@ export class BackupExportTokensRepository {
     return row ?? null;
   }
 
-  /** Soft-revoke a not-yet-revoked token; null when absent or already revoked. */
-  async revoke(id: number): Promise<BackupExportTokenRow | null> {
-    const [row] = await this.db
-      .update(tokens)
-      .set({ revokedAt: sql`now()` })
-      .where(and(eq(tokens.id, id), isNull(tokens.revokedAt)))
-      .returning();
-    return row ?? null;
+  /**
+   * Soft-revoke a not-yet-revoked token; null when absent or already revoked.
+   * `afterRevoke` runs on the same `tx` (the revoke's audit row), so a failure
+   * there leaves the token live — a retry then revokes and audits it.
+   */
+  async revoke(
+    id: number,
+    afterRevoke?: (
+      tx: BackupExportTokenTx,
+      row: BackupExportTokenRow,
+    ) => Promise<void>,
+  ): Promise<BackupExportTokenRow | null> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(tokens)
+        .set({ revokedAt: sql`now()` })
+        .where(and(eq(tokens.id, id), isNull(tokens.revokedAt)))
+        .returning();
+      if (row && afterRevoke) await afterRevoke(tx, row);
+      return row ?? null;
+    });
   }
 
   /** Live tokens: not revoked and not past `expires_at` (cap check, Q2). */

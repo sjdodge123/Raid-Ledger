@@ -283,6 +283,30 @@ describe('audit atomicity', () => {
       spy.mockRestore();
     }
   });
+
+  it('a failing audit write rolls the revoke back: the token stays live', async () => {
+    const { item } = await mint({ label: 'revoke-unaudited' });
+    const spy = jest
+      .spyOn(adminActionsHelpers, 'insertAdminAction')
+      .mockRejectedValueOnce(new Error('audit insert failed (stub)'));
+    try {
+      const res = await testApp.request
+        .delete(`${BASE}/${item.id}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      const [row] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.backupExportTokens)
+          .where(eq(schema.backupExportTokens.id, item.id)),
+        'row',
+      );
+      expect(row?.revokedAt ?? null).toBeNull();
+      expect(res.status).toBe(500);
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe('access', () => {

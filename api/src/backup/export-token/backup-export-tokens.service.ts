@@ -4,16 +4,13 @@
  * `admin_actions`. The plaintext token exists only in the mint response: it
  * is never stored (hash + hint only) and never logged.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   BACKUP_EXPORT_TOKEN_LIVE_CAP,
   type BackupExportToken,
   type BackupExportTokenListResponse,
   type MintBackupExportTokenResponse,
 } from '@raid-ledger/contract';
-import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import * as schema from '../../drizzle/schema';
 import { insertAdminAction } from '../../users/users-admin-actions.helpers';
 import { backupExportTokenKit } from './backup-export-token.helpers';
 import {
@@ -28,16 +25,11 @@ import {
   type BackupExportTokenTx,
 } from './backup-export-tokens.repository';
 
-type Db = PostgresJsDatabase<typeof schema>;
-
 @Injectable()
 export class BackupExportTokensService {
   private readonly logger = new Logger(BackupExportTokensService.name);
 
-  constructor(
-    private readonly repo: BackupExportTokensRepository,
-    @Inject(DrizzleAsyncProvider) private readonly db: Db,
-  ) {}
+  constructor(private readonly repo: BackupExportTokensRepository) {}
 
   /** Every token (live, expired, revoked), newest first. */
   async list(): Promise<BackupExportTokenListResponse> {
@@ -78,15 +70,11 @@ export class BackupExportTokensService {
 
   /** Soft revoke. Already revoked → no-op (no second audit); unknown → 404. */
   async revoke(actorId: number, id: number): Promise<void> {
-    const row = await this.repo.revoke(id);
+    // Same transaction as the update: the revoke and its audit row commit together.
+    const row = await this.repo.revoke(id, (tx, revoked) =>
+      this.audit(tx, 'backup_token_revoke', actorId, revoked.id, revoked.label),
+    );
     if (row) {
-      await this.audit(
-        this.db,
-        'backup_token_revoke',
-        actorId,
-        row.id,
-        row.label,
-      );
       this.logger.log(`backup-export token #${id} revoked by user ${actorId}`);
       return;
     }
@@ -101,7 +89,7 @@ export class BackupExportTokensService {
   }
 
   private audit(
-    writer: Db | BackupExportTokenTx,
+    writer: BackupExportTokenTx,
     action: 'backup_token_mint' | 'backup_token_revoke',
     actorId: number,
     tokenId: number,
