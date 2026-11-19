@@ -26,7 +26,7 @@ import {
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
-  CronJobsPanel, GgPanel, GgPreviewPage, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
+  CronJobsPanel, GgPanel, GgPreviewPage, BackupsPanel, LogsPanel, AddonErrorsPage, HubsPanel, HubsDirectoryPage,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage, DiscordLifecyclePage,
@@ -107,6 +107,7 @@ function AdminSettingsRoutes() {
       {GgAdminRoutes()}
       <Route path="general/backups" element={<BackupsPanel />} />
       <Route path="general/logs" element={<LogsPanel />} />
+      <Route path="general/addon-errors" element={<AddonErrorsPage />} />
       <Route path="general/hubs" element={<HubsPanel />} />
       {AdminIntegrationRoutes()}
       <Route path="discord" element={<DiscordOverviewPage />} />
