@@ -12,7 +12,7 @@ import {
 import type { HubWidgetCtx } from '../../../plugins/hub-game-widgets';
 import HubSessionNoteWidget from './hub-session-note-widget';
 import { sessionNoteKey } from './hub-session-note-query';
-import SessionNoteDialog, { CONFLICT_COPY } from './session-note-dialog';
+import SessionNoteDialog, { CLEARED_CONFLICT_COPY, CONFLICT_COPY } from './session-note-dialog';
 import { useSessionNoteDialog } from './session-note-dialog-store';
 import { ARMED_CLEAR_AFTER_COPY } from './session-note-form';
 import { formatClearAfter } from './session-note.helpers';
@@ -76,6 +76,17 @@ describe('SessionNoteDialog save (T-W4)', () => {
         expect(await screen.findByTestId('session-note-conflict')).toHaveTextContent(CONFLICT_COPY);
         expect(itemInput(0).value).toBe('My edit');
         expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a 409 whose note was cleared says "This note was cleared." instead of "someone else changed it"', async () => {
+        server.use(http.put(SESSION_NOTE_URL, () =>
+            HttpResponse.json({ statusCode: 409, message: 'Note changed', note: null }, { status: 409 })));
+        await renderDialog(editorResponse(buildSessionNote()));
+        type(0, 'My edit');
+        fireEvent.click(await screen.findByTestId('session-note-save'));
+        const banner = await screen.findByTestId('session-note-conflict');
+        expect(banner).toHaveTextContent(CLEARED_CONFLICT_COPY);
+        expect(banner).not.toHaveTextContent(CONFLICT_COPY);
     });
 
     it('"Load their version" confirms, replaces the draft and rebases the next save on their updatedAt', async () => {
