@@ -90,6 +90,24 @@ describe('SessionNoteDialog save (T-W4)', () => {
         expect(banner).not.toHaveTextContent(CONFLICT_COPY);
     });
 
+    it('"Load their version" confirms, replaces the draft and rebases the next save on their updatedAt', async () => {
+        const bodies = capturePut(1);
+        await renderDialog(editorResponse(buildSessionNote()));
+        type(0, 'My edit');
+        fireEvent.click(await screen.findByTestId('session-note-save'));
+        fireEvent.click(await screen.findByTestId('session-note-load-theirs'));
+        fireEvent.click(await screen.findByTestId('discard-changes-discard'));
+        await waitFor(() => expect(itemInput(0).value).toBe('Their row'));
+        expect(screen.queryByTestId('session-note-conflict')).toBeNull();
+        type(0, 'Their row, edited');
+        fireEvent.click(screen.getByTestId('session-note-save'));
+        await waitFor(() => expect(bodies).toHaveLength(2));
+        expect(bodies[1]?.baseUpdatedAt).toBe('2026-10-27T12:30:00.654321Z');
+        expect(bodies[1]?.items).toEqual([{ id: 3, text: 'Their row, edited' }]);
+    });
+});
+
+describe('SessionNoteDialog cleared conflict (ROK-2265)', () => {
     it('ROK-2265: a cleared 409 offers "Start from empty" and confirms "Start from empty?"', async () => {
         server.use(http.put(SESSION_NOTE_URL, () =>
             HttpResponse.json({ statusCode: 409, message: 'Note changed', note: null }, { status: 409 })));
@@ -107,22 +125,6 @@ describe('SessionNoteDialog save (T-W4)', () => {
         fireEvent.click(screen.getByTestId('discard-changes-discard'));
         await waitFor(() => expect(screen.queryByTestId('session-note-item-input-0'), 'the draft starts from the empty server note').toBeNull());
         expect(screen.queryByTestId('session-note-conflict')).toBeNull();
-    });
-
-    it('"Load their version" confirms, replaces the draft and rebases the next save on their updatedAt', async () => {
-        const bodies = capturePut(1);
-        await renderDialog(editorResponse(buildSessionNote()));
-        type(0, 'My edit');
-        fireEvent.click(await screen.findByTestId('session-note-save'));
-        fireEvent.click(await screen.findByTestId('session-note-load-theirs'));
-        fireEvent.click(await screen.findByTestId('discard-changes-discard'));
-        await waitFor(() => expect(itemInput(0).value).toBe('Their row'));
-        expect(screen.queryByTestId('session-note-conflict')).toBeNull();
-        type(0, 'Their row, edited');
-        fireEvent.click(screen.getByTestId('session-note-save'));
-        await waitFor(() => expect(bodies).toHaveLength(2));
-        expect(bodies[1]?.baseUpdatedAt).toBe('2026-10-27T12:30:00.654321Z');
-        expect(bodies[1]?.items).toEqual([{ id: 3, text: 'Their row, edited' }]);
     });
 });
 

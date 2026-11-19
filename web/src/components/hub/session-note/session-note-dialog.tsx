@@ -97,6 +97,17 @@ function DialogFooter({ editor, onCancel, onSave, onClear }: FooterProps): JSX.E
     );
 }
 
+function ConflictBanner({ cleared, onLoad }: { cleared: boolean; onLoad: () => void }): JSX.Element {
+    return (
+        <DialogBanner tone="warning" testId="session-note-conflict">
+            <span>{cleared ? CLEARED_CONFLICT_COPY : CONFLICT_COPY}</span>
+            <Button variant="warning-soft" size="sm" data-testid="session-note-load-theirs" onClick={onLoad}>
+                {cleared ? START_EMPTY_LABEL : 'Load their version'}
+            </Button>
+        </DialogBanner>
+    );
+}
+
 interface EditorProps { guildId: number; data: HubSessionNoteResponse; onClose: () => void }
 
 function SessionNoteEditor({ guildId, data, onClose }: EditorProps): JSX.Element {
@@ -116,14 +127,7 @@ function SessionNoteEditor({ guildId, data, onClose }: EditorProps): JSX.Element
     return (
         <NoteOverlay guard={guard} onClose={onClose}
             footer={<DialogFooter editor={editor} onCancel={guard.requestClose} onSave={save} onClear={() => setConfirm('clear')} />}>
-            {conflict !== null && (
-                <DialogBanner tone="warning" testId="session-note-conflict">
-                    <span>{cleared ? CLEARED_CONFLICT_COPY : CONFLICT_COPY}</span>
-                    <Button variant="warning-soft" size="sm" data-testid="session-note-load-theirs" onClick={load}>
-                        {cleared ? START_EMPTY_LABEL : 'Load their version'}
-                    </Button>
-                </DialogBanner>
-            )}
+            {conflict !== null && <ConflictBanner cleared={cleared} onLoad={load} />}
             {failed && <DialogBanner tone="danger" testId="session-note-error">Couldn&apos;t save the note. Try again.</DialogBanner>}
             <SessionNoteForm draft={editor.draft} onChange={editor.setDraft} pinned={editor.base?.clearAfter ?? null} nextEvent={data.nextEvent} />
             <DiscardChangesConfirm isOpen={confirm !== null} onKeep={() => setConfirm(null)} onDiscard={onConfirm}
