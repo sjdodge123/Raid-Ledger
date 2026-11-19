@@ -229,6 +229,47 @@ describe('OllamaDockerService', () => {
         expect(runCall).toBeDefined();
         expect(runCall![1]).not.toContain('--network');
       });
+
+      function runArgs(): string[] {
+        const runCall = (mockSpawn.mock.calls as string[][][]).find((call) =>
+          call[1]?.includes('run'),
+        );
+        const args = runCall?.[1];
+        if (!args) throw new Error('docker run was never spawned');
+        return args;
+      }
+
+      function mockNotFound(network: string | null) {
+        mockSequentialExec([
+          network
+            ? { match: (a) => a.includes('/etc/hostname'), result: 'api\n' }
+            : { match: (a) => a.includes('/etc/hostname'), error: 'no file' },
+          {
+            match: (a) => a.some((x) => x.includes('NetworkSettings')),
+            result: `${network ?? ''}\n`,
+          },
+          {
+            match: (a) =>
+              a[0] === 'inspect' && a.includes(OLLAMA_CONTAINER_NAME),
+            error: 'not found',
+          },
+        ]);
+        mockSpawnSuccess();
+      }
+
+      it.each([
+        ['with a network', 'mynet'],
+        ['without a network', null],
+      ])(
+        'publishes the Ollama port on loopback only (%s)',
+        async (_label, network) => {
+          mockNotFound(network);
+          await service.startContainer();
+          const args = runArgs();
+          expect(args).toContain('127.0.0.1:11434:11434');
+          expect(args).not.toContain('11434:11434');
+        },
+      );
     });
   });
 });

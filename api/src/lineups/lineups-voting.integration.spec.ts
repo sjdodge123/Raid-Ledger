@@ -15,7 +15,11 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import { and, eq, sql } from 'drizzle-orm';
-import { countVotesPerGame } from './lineups-query.helpers';
+import {
+  countDistinctVoters,
+  countVotesPerGame,
+} from './lineups-query.helpers';
+import { countStarsPerGame, TOP_PICK_RANK } from './lineups-voting.helpers';
 import * as schema from '../drizzle/schema';
 import { at, nonEmpty } from '../common/testing/narrow';
 
@@ -841,6 +845,38 @@ function describeVoting() {
 
       const counts = await countVotesPerGame(testApp.db, lineupId);
       expect(counts).toEqual([{ gameId: nominated.id, voteCount: 1 }]);
+    });
+
+    it('ignores voters and stars that sit only on a removed nomination', async () => {
+      const { lineupId, games } = await setupVotingLineup(2);
+      const { userId: keeperId } = await loginAsMember('keeper');
+      const { userId: orphanId } = await loginAsMember('orphan');
+      const nominated = at(games, 0);
+      const removed = at(games, 1);
+      // keeper votes + stars a nominated game; orphan votes + stars only the
+      // game whose nomination is then removed (entry goes, vote row stays).
+      await testApp.db.insert(schema.communityLineupVotes).values([
+        {
+          lineupId,
+          userId: keeperId,
+          gameId: nominated.id,
+          rank: TOP_PICK_RANK,
+        },
+        { lineupId, userId: orphanId, gameId: removed.id, rank: TOP_PICK_RANK },
+      ]);
+      await testApp.db
+        .delete(schema.communityLineupEntries)
+        .where(
+          and(
+            eq(schema.communityLineupEntries.lineupId, lineupId),
+            eq(schema.communityLineupEntries.gameId, removed.id),
+          ),
+        );
+
+      const voters = await countDistinctVoters(testApp.db, lineupId);
+      expect(voters).toEqual([{ total: 1 }]);
+      const stars = await countStarsPerGame(testApp.db, lineupId);
+      expect(stars).toEqual([{ gameId: nominated.id, starCount: 1 }]);
     });
   }
   describe(
