@@ -93,14 +93,16 @@ print_error() {
 
 # Get current git branch
 # A detached HEAD prints an empty string with exit 0, which env-lock.sh rejects
-# as a missing argument (TECH-DEBT L4379) — name it by commit instead.
+# as a missing argument (TECH-DEBT L4379) — name it by worktree folder instead.
+# Not by commit: acquire and the later release must pass the same name, and a
+# commit or checkout in between would change a sha-based one.
 get_current_branch() {
     local b
     b=$(git branch --show-current 2>/dev/null) || b=""
     if [ -n "$b" ]; then
         echo "$b"
     else
-        echo "detached-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+        echo "detached-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
     fi
 }
 
