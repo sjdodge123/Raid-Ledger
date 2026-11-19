@@ -195,14 +195,14 @@ describe('clone_env_token_kind', () => {
 // closed local port, so even a regression could never reach a real server.
 describe('clone-prod-to-local.sh refuses early without leaking', () => {
   const SCRIPT = join(dirname(LIB), '..', 'clone-prod-to-local.sh');
-  function clone(envFileBody) {
+  function clone(envFileBody, extraEnv = {}) {
     const dir = mkdtempSync(join(base, 'script-'));
     const envFile = join(dir, 'env.clone');
     writeFileSync(envFile, envFileBody);
     const res = spawnSync('bash', [SCRIPT, '--yes', '--tree', dir], {
       cwd: dir,
       encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: join(dir, 'home'), RL_ENV_CLONE_FILE: envFile },
+      env: { PATH: process.env.PATH, HOME: join(dir, 'home'), RL_ENV_CLONE_FILE: envFile, ...extraEnv },
     });
     return { code: res.status, out: res.stdout, err: res.stderr };
   }
@@ -228,6 +228,27 @@ describe('clone-prod-to-local.sh refuses early without leaking', () => {
     }
     assert.doesNotMatch(res.out + res.err, /Step 0/);
   });
+
+  // Codex r2 P1: libpq honours ?host= / ?hostaddr= / ?service= and PGHOST*,
+  // so a localhost-looking URL can still reach a remote DB and DROP its schema.
+  for (const [name, url, extraEnv] of [
+    ['?host=remote', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432/x?host=db.example.com', {}],
+    ['?hostaddr=1.2.3.4', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432/x?sslmode=disable&hostaddr=1.2.3.4', {}],
+    ['?service=x', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432/x?service=prod', {}],
+    ['percent-encoded ?%68ost=', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432/x?%68ost=db.example.com', {}],
+    ['a host list', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432,db.example.com:5432/x', {}],
+    ['PGHOST=remote', 'postgresql://u:dbpw-SECRETVALUE@/x', { PGHOST: 'db.example.com' }],
+    ['PGHOSTADDR=remote', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432/x', { PGHOSTADDR: '10.0.0.9' }],
+    ['PGSERVICE set', 'postgresql://u:dbpw-SECRETVALUE@localhost:5432/x', { PGSERVICE: 'prod' }],
+  ]) {
+    it(`refuses a DATABASE_URL that reaches a remote host via ${name}, before Step 0`, () => {
+      const res = clone(`${PROD}DATABASE_URL='${url}'\nPROD_BACKUP_TOKEN=${BACKUP_TOKEN}\n`, extraEnv);
+      assert.doesNotMatch(res.out + res.err, /Step 0/, `guard let ${name} through`);
+      assert.equal(res.code, 1);
+      assert.match(res.err, /DATABASE_URL must point at localhost/);
+      assert.ok(!(res.out + res.err).includes('SECRETVALUE'), `leaked: ${res.out}${res.err}`);
+    });
+  }
 
   it('names the env file it used and the missing variable', () => {
     const res = clone(`${LOCAL_DB}PROD_BACKUP_TOKEN=${BACKUP_TOKEN}\n`);
@@ -261,5 +282,87 @@ describe('review fixes B7/B9 — secrets stay shell-local, prod calls stay white
     const ok = run('PROD_URL=https://prod.invalid; prod_get_safe /admin/backups/daily/a.dump/download -o /dev/null', env);
     assert.equal(ok.code, 0, ok.err);
     assert.match(readFileSync(marker, 'utf8'), /-fsS https:\/\/prod\.invalid\/admin\/backups\/daily\/a\.dump\/download -o \/dev\/null/);
+  });
+});
+
+describe('clone_env_assert_local_db_url — the one shared localhost guard (Codex r2 P1)', () => {
+  const accept = [
+    'postgresql://u:p@localhost:5432/raid_ledger',
+    'postgres://u:p@127.0.0.1/raid_ledger?sslmode=disable',
+    'postgresql://u:p@[::1]:5432/raid_ledger',
+    'postgresql:///raid_ledger',
+    'postgresql://u:p@/raid_ledger?host=/var/run/postgresql',
+    'postgresql://u:p@/raid_ledger?host=%2Fvar%2Frun%2Fpostgresql',
+    'postgresql://u:p@localhost/raid_ledger?host=localhost&hostaddr=127.0.0.1',
+  ];
+  for (const url of accept) {
+    it(`accepts ${url}`, () => {
+      const r = run(`clone_env_assert_local_db_url "${url}"; echo "rc=$?"`);
+      assert.match(r.out, /rc=0/, `refused a local URL: ${r.err}`);
+    });
+  }
+  const refuse = [
+    ['remote host', 'postgresql://u:p@db.example.com/x', {}],
+    ['?host=remote', 'postgresql://u:p@localhost/x?host=db.example.com', {}],
+    ['?hostaddr=', 'postgresql://u:p@localhost/x?hostaddr=1.2.3.4', {}],
+    ['?service=', 'postgresql://u:p@localhost/x?service=x', {}],
+    ['?servicefile=', 'postgresql://u:p@localhost/x?servicefile=/tmp/s', {}],
+    ['?host= socket list with a remote', 'postgresql://u:p@/x?host=/tmp,db.example.com', {}],
+    ['a fragment', 'postgresql://u:p@localhost/x#frag', {}],
+    ['not postgres', 'mysql://u:p@localhost/x', {}],
+    ['PGHOST', 'postgresql://u:p@localhost/x', { PGHOST: 'db.example.com' }],
+    ['PGHOSTADDR', 'postgresql://u:p@localhost/x', { PGHOSTADDR: '1.2.3.4' }],
+    ['PGSERVICE', 'postgresql://u:p@localhost/x', { PGSERVICE: 'prod' }],
+    ['PGSERVICEFILE', 'postgresql://u:p@localhost/x', { PGSERVICEFILE: '/tmp/s' }],
+  ];
+  for (const [name, url, env] of refuse) {
+    it(`refuses ${name} without printing the URL`, () => {
+      const r = run(`clone_env_assert_local_db_url "${url}"; echo "rc=$?"`, env);
+      assert.match(r.out, /rc=1/, `let ${name} through`);
+      assert.match(r.err, /must point at localhost/);
+      assert.ok(!r.err.includes(url), `printed the URL: ${r.err}`);
+    });
+  }
+
+  it('every clone script uses the shared guard, none keeps an inline host regex', () => {
+    const dir = dirname(LIB);
+    for (const f of ['clone-prod-to-local.sh', 'clone-prod-to-env.sh', 'clone-prod-measure-migration.sh']) {
+      const src = readFileSync(join(dir, '..', f), 'utf8');
+      assert.ok(/clone_env_assert_local_db_url /.test(src), `${f} skips the shared guard`);
+      assert.ok(!/localhost\|127\\\.0\\\.0\\\.1\|\\\[::1/.test(src), `${f} keeps an inline DB host regex`);
+    }
+  });
+});
+
+describe('clone_env_reset_admin_password — pinned to the clone DB (Codex r2 P2)', () => {
+  it('runs bootstrap-admin with the clone DATABASE_URL, not the tree .env or the caller env', () => {
+    const tree = mkdtempSync(join(base, 'reset-tree-'));
+    mkdirSync(join(tree, 'api', 'scripts'), { recursive: true });
+    writeFileSync(join(tree, 'api', 'scripts', 'bootstrap-admin.ts'), '// stub\n');
+    writeFileSync(join(tree, '.env'), 'DATABASE_URL=postgresql://u:p@localhost:5432/DECOY_DOTENV\n');
+    const bin = join(base, 'fake-npx-bin');
+    mkdirSync(bin, { recursive: true });
+    const marker = join(base, 'npx-called');
+    writeFileSync(join(bin, 'npx'),
+      `#!/usr/bin/env bash\necho "cwd=$PWD db=$DATABASE_URL reset=$RESET_PASSWORD args=$*" >"${marker}"\n`, { mode: 0o755 });
+    const clone = 'postgresql://u:p@localhost:5432/clone_db';
+    const r = run(`DATABASE_URL=postgresql://u:p@localhost:5432/DECOY_CALLER; export DATABASE_URL; ` +
+      `clone_env_reset_admin_password "${tree}" "${clone}"; echo "rc=$?"`, { PATH: `${bin}:${process.env.PATH}` });
+    assert.match(r.out, /rc=0/, r.err);
+    const line = readFileSync(marker, 'utf8');
+    assert.match(line, /db=postgresql:\/\/u:p@localhost:5432\/clone_db reset=true/, `bootstrap saw: ${line}`);
+    assert.match(line, /args=ts-node api\/scripts\/bootstrap-admin\.ts/);
+    assert.ok(line.startsWith(`cwd=${tree} `) || line.includes(`cwd=/private${tree} `), line);
+  });
+
+  it('refuses a non-local URL before bootstrap runs', () => {
+    const r = run('clone_env_reset_admin_password /nonexistent "postgresql://u:p@localhost/x?host=db.example.com"; echo "rc=$?"');
+    assert.match(r.out, /rc=1/);
+  });
+
+  it('clone-prod-to-local.sh Step 7 no longer goes through deploy_dev.sh (its load_env re-points DATABASE_URL)', () => {
+    const src = readFileSync(join(dirname(LIB), '..', 'clone-prod-to-local.sh'), 'utf8');
+    assert.ok(!/deploy_dev\.sh"? --reset-password/.test(src), 'Step 7 still calls deploy_dev.sh --reset-password');
+    assert.ok(/clone_env_reset_admin_password "\$TREE" "\$DATABASE_URL"/.test(src), 'Step 7 does not pin the clone URL');
   });
 });
