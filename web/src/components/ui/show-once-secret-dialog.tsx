@@ -22,9 +22,9 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { copyWithToast } from '../../lib/clipboard';
 
-export const SHOW_ONCE_DEFAULT_EXPLAINER = 'This token is shown once. Copy it now — Raid Ledger keeps only a fingerprint.';
-export const SHOW_ONCE_DEFAULT_DISCARD_MESSAGE = "This token won't be shown again.";
-export const SHOW_ONCE_DEFAULT_DISCARD_COPY: DiscardCopy = {
+const SHOW_ONCE_DEFAULT_EXPLAINER = 'This token is shown once. Copy it now — Raid Ledger keeps only a fingerprint.';
+const SHOW_ONCE_DEFAULT_DISCARD_MESSAGE = "This token won't be shown again.";
+const SHOW_ONCE_DEFAULT_DISCARD_COPY: DiscardCopy = {
     title: 'Leave without copying the token?', keepLabel: 'Stay', discardLabel: 'Leave',
 };
 
