@@ -170,14 +170,16 @@ export class HubForumDiscordOutboundGateway {
 
   /**
    * ROK-2260 ruling 3: silently take users out of a post (reopening an
-   * auto-archived one first). Returns the ids that are out of it.
+   * auto-archived one first). Returns the ids that are out of it. Reads the
+   * post fresh (review r2-1): a ping in the same flush unarchives it, and a
+   * stale cached `archived` would re-archive the post just pinged in.
    */
   async removeThreadMembers(
     discordThreadId: string,
     userIds: string[],
     warn: (message: string) => void,
   ): Promise<string[]> {
-    const thread = await this.thread(discordThreadId);
+    const thread = await this.thread(discordThreadId, true);
     return removePostMembers(thread, userIds, warn);
   }
 
@@ -195,8 +197,9 @@ export class HubForumDiscordOutboundGateway {
     return guild;
   }
 
-  private async thread(id: string): Promise<ThreadChannel> {
-    const ch = await this.guild().channels.fetch(id);
+  /** `force` skips the cache — only where a stale field would mislead. */
+  private async thread(id: string, force = false): Promise<ThreadChannel> {
+    const ch = await this.guild().channels.fetch(id, { force });
     if (!ch?.isThread()) throw new Error(`Discord post ${id} is not a thread`);
     return ch;
   }

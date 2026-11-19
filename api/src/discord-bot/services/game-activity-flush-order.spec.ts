@@ -21,7 +21,7 @@ jest.mock('./game-activity.helpers', () => ({
   resolveGameNames: jest.fn().mockResolvedValue(undefined),
   processOpenEvents: jest.fn((_db: unknown, opens: SessionOpenEvent[]) => {
     for (const ev of opens) calls.push(`open:${ev.discordActivityName}`);
-    return Promise.resolve();
+    return Promise.resolve(opens);
   }),
   processCloseEvents: jest.fn((_db: unknown, closes: SessionCloseEvent[]) => {
     for (const ev of closes) calls.push(`close:${ev.discordActivityName}`);
@@ -32,6 +32,10 @@ jest.mock('./game-activity.helpers', () => ({
 jest.mock('./game-activity-attribution.helpers', () => ({
   attributeOpenSessions: jest.fn((opens: SessionOpenEvent[]) => {
     for (const ev of opens) calls.push(`attribute:${ev.discordActivityName}`);
+    return Promise.resolve();
+  }),
+  notifyStoredOpens: jest.fn((stored: SessionOpenEvent[]) => {
+    for (const ev of stored) calls.push(`notify:${ev.discordActivityName}`);
     return Promise.resolve();
   }),
 }));
@@ -69,6 +73,7 @@ describe('GameActivityService — flush order (ROK-2259)', () => {
       `close:${VOICE}`,
       `attribute:${RAW}`,
       `open:${RAW}`,
+      `notify:${RAW}`,
     ]);
   });
 
@@ -79,6 +84,28 @@ describe('GameActivityService — flush order (ROK-2259)', () => {
 
     await service.flush();
 
-    expect(calls).toEqual([`attribute:${RAW}`, `open:${RAW}`, `close:${RAW}`]);
+    expect(calls).toEqual([
+      `attribute:${RAW}`,
+      `open:${RAW}`,
+      `notify:${RAW}`,
+      `close:${RAW}`,
+    ]);
+  });
+
+  it('notifies a voice open before attributing a raw open buffered after it', async () => {
+    const service = await createService();
+    service.bufferStart(1, VOICE, new Date('2026-11-18T10:00:00Z'), 'voice');
+    service.bufferStart(1, RAW, new Date('2026-11-18T10:00:10Z'));
+
+    await service.flush();
+
+    expect(calls).toEqual([
+      `attribute:${VOICE}`,
+      `open:${VOICE}`,
+      `notify:${VOICE}`,
+      `attribute:${RAW}`,
+      `open:${RAW}`,
+      `notify:${RAW}`,
+    ]);
   });
 });
