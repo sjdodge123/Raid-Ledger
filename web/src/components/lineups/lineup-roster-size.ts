@@ -38,7 +38,8 @@ export function rosterSize(
  * Roster size for a Nominate modal opened outside the nominating composite
  * (games-page banner, detail-page Nominate). Fetches nothing until `enabled`
  * (the modal is open); `participantCount` is filter-independent, so a
- * one-row Common Ground page is enough.
+ * one-row Common Ground page at the default filters is enough (minOwners 0
+ * would make the server scan the whole catalogue just to fill `meta`).
  */
 export function useNominateRosterSize(
   lineupId: number,
@@ -46,7 +47,7 @@ export function useNominateRosterSize(
 ): number | undefined {
   const { data: lineup } = useLineupDetail(enabled ? lineupId : undefined);
   const { data: commonGround } = useCommonGround(
-    { lineupId, minOwners: 0, limit: 1 },
+    { lineupId, limit: 1 },
     enabled,
   );
   if (!lineup) return undefined;
