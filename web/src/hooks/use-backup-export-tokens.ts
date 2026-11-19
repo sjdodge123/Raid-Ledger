@@ -75,6 +75,9 @@ export function useMintBackupExportToken() {
     const queryClient = useQueryClient();
     return useMutation<MintBackupExportTokenResponse, BackupExportTokenRequestError, MintBackupExportTokenRequest>({
         mutationFn: async (body) => (await send('/admin/backup-export-tokens', 'POST', 'Failed to create the token', body)).json(),
+        // The response carries the plaintext token: drop the mutation from the cache as soon as
+        // its observer (the mint modal) unmounts, so the secret lives only in component state.
+        gcTime: 0,
         onSettled: () => queryClient.invalidateQueries({ queryKey: BACKUP_EXPORT_TOKENS_KEY }),
     });
 }
