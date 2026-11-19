@@ -1,0 +1,45 @@
+{
+  "envelopeVersion": 1,
+  "contract": "wow-addon-errors",
+  "contractVersion": 2,
+  "capturedAt": "2026-11-19T12:00:05Z",
+  "appVersion": "0.4.0",
+  "collectorVersion": "0.4.0",
+  "payload": {
+    "source": "buggrabber",
+    "sourceVersion": "12.1.1",
+    "accountKey": "df0c21ea2a73aa9274591916713c9ffe97adab716e7f463e1b9b0bb10098cc84",
+    "characterHint": {
+      "name": "Testchar",
+      "realm": "Example Realm"
+    },
+    "wowFlavor": "_classic_era_",
+    "records": [
+      {
+        "addon": "Mailworthy",
+        "message": "Interface\\AddOns\\Mailworthy\\Border.lua:113: attempt to index local 'button' (a nil value)",
+        "stack": "[Interface\\AddOns\\Mailworthy\\Border.lua]:113: in function <Interface\\AddOns\\Mailworthy\\Border.lua:109>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\Mailworthy\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 14,
+        "session": 412
+      },
+      {
+        "addon": "Questie",
+        "message": "Interface\\AddOns\\Questie\\Modules\\Tracker.lua:802: attempt to compare nil with number",
+        "stack": "[Interface\\AddOns\\Questie\\Modules\\Tracker.lua]:802: in function <Interface\\AddOns\\Questie\\Modules\\Tracker.lua:798>\n[C]: in function 'xpcall'\n[Interface\\AddOns\\Questie\\Core.lua]:57: in function 'Fire'",
+        "firstSeenAt": "2026-11-18T19:02:11Z",
+        "lastSeenAt": "2026-11-18T21:40:09Z",
+        "count": 3,
+        "session": 412
+      },
+      {
+        "addon": "BuffRadar",
+        "message": "Interface\\AddOns\\BuffRadar\\Radar.lua:41: bad argument #1 to 'pairs' (table expected, got nil)",
+        "firstSeenAt": "2026-11-18T20:15:00Z",
+        "lastSeenAt": "2026-11-18T20:15:00Z",
+        "count": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "envelopeVersion": 1,
+  "contract": "wow-addon-errors",
+  "contractVersion": 1,
+  "capturedAt": "2026-11-19T12:00:05Z",
+  "appVersion": "0.4.0",
+  "collectorVersion": "0.4.0",
+  "payload": {
+    "source": "buggrabber",
+    "sourceVersion": "12.1.1",
+    "accountKey": "df0c21ea2a73aa9274591916713c9ffe97adab716e7f463e1b9b0bb10098cc84",
+    "characterHint": {
+      "name": "Testchar",
+      "realm": "Example Realm"
+    },
+    "wowFlavor": "_classic_era_",
+    "records": []
+  }
+}

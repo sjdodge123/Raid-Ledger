@@ -4,6 +4,7 @@ import { CompanionEnvelopeSchema } from './companion-envelope.schema.js';
 import { BG3_SAVE_CONTRACT_VERSION, Bg3SaveMessageSchema } from './companion-bg3-save.schema.js';
 import { BG3_SCREENSHOT_CONTRACT_VERSION, Bg3ScreenshotMessageSchema } from './companion-bg3-screenshot.schema.js';
 import { WOW_LEDGERLINK_CONTRACT_VERSION, WowLedgerlinkMessageSchema } from './companion-wow-ledgerlink.schema.js';
+import { WOW_ADDON_ERRORS_CONTRACT_VERSION, WowAddonErrorsMessageSchema } from './companion-wow-addon-errors.schema.js';
 import {
     CompanionDeviceSelfSchema,
     CompanionLinkPollErrorSchema,
@@ -37,6 +38,10 @@ export const BG3_SCREENSHOT_SCHEMA_ID =
 /** `$id` of the `wow-ledgerlink` message JSON Schema (ROK-1964). */
 export const WOW_LEDGERLINK_SCHEMA_ID =
     `https://raid.gamernight.net/contracts/companion/wow-ledgerlink/v${WOW_LEDGERLINK_CONTRACT_VERSION}/schema.json`;
+
+/** `$id` of the `wow-addon-errors` message JSON Schema (ROK-2099). */
+export const WOW_ADDON_ERRORS_SCHEMA_ID =
+    `https://raid.gamernight.net/contracts/companion/wow-addon-errors/v${WOW_ADDON_ERRORS_CONTRACT_VERSION}/schema.json`;
 
 /** Draft-2020-12 INPUT-mode conversion (what the server ACCEPTS); throws on anything unrepresentable. */
 function toInputJsonSchema(schema: z.ZodType): Record<string, unknown> {
@@ -90,6 +95,22 @@ export function buildBg3ScreenshotJsonSchema(): Record<string, unknown> {
         description:
             'GENERATED from Bg3ScreenshotMessageSchema (packages/contract/src/companion-bg3-screenshot.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: payload.image.width <= payload.width; payload.image.height <= payload.height; payload.takenAt <= capturedAt. Server-only rules (hub membership, clock, blob present) are in CONTRACT.md.',
     };
+}
+
+/** The JSON Schema object for one `wow-addon-errors` v1 message (ROK-2099). */
+export function buildWowAddonErrorsJsonSchema(): Record<string, unknown> {
+    return {
+        ...toInputJsonSchema(WowAddonErrorsMessageSchema),
+        $id: WOW_ADDON_ERRORS_SCHEMA_ID,
+        title: `RL Companion wow-addon-errors message v${WOW_ADDON_ERRORS_CONTRACT_VERSION}`,
+        description:
+            'GENERATED from WowAddonErrorsMessageSchema (packages/contract/src/companion-wow-addon-errors.schema.ts) — do not edit by hand. Refinements enforced by the Zod schema but not expressible here: a record\'s firstSeenAt <= lastSeenAt; records are unique by (addon, message, stack); no lone surrogates. The unscrubbed-path refusal IS expressed (not.pattern). The server alone checks the clock and the 262 144-byte body cap; see CONTRACT.md.',
+    };
+}
+
+/** Exact file contents of `companion/wow-addon-errors/v1/schema.json` (2-space indent, trailing newline). */
+export function serializeWowAddonErrorsJsonSchema(): string {
+    return `${JSON.stringify(buildWowAddonErrorsJsonSchema(), null, 2)}\n`;
 }
 
 /** Exact file contents of `companion/bg3-screenshot/v1/schema.json` (2-space indent, trailing newline). */
