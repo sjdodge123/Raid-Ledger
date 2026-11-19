@@ -37,9 +37,7 @@ export class GuildPublicCardSettingsController {
 
   @Get()
   @UseGuards(jwt, HubVisibleGuard, GuildEditorGuard)
-  get(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<GuildPublicCardSettings> {
+  get(@Param('id', ParseIntPipe) id: number): Promise<GuildPublicCardSettings> {
     return this.cards.getSettings(id);
   }
 

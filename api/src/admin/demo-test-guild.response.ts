@@ -79,6 +79,8 @@ export interface SeedGuildResponse {
   dungeonPlan?: SeededDungeonPlan;
   /** Present only when the body sent `withSuggestedGroup: true` (ROK-2212). */
   suggestedGroup?: SeededSuggestedGroup;
+  /** Present only when the body sent `withPublicCard: true` (ROK-1813): the `/p/guild/:slug` slug. */
+  publicCardSlug?: string;
 }
 
 /** The opt-in halves `seedOptional` adds to the response. */
@@ -96,6 +98,7 @@ export type SeedGuildExtras = Pick<
   | 'activity'
   | 'dungeonPlan'
   | 'suggestedGroup'
+  | 'publicCardSlug'
 >;
 
 export interface SeededRoster {
