@@ -73,17 +73,28 @@ describe('PublicCardSettingsSection', () => {
         await waitFor(() => expect(screen.queryByTestId('wow-public-card-link')).not.toBeInTheDocument());
     });
 
-    it('renders nothing and fetches nothing for a viewer without canEdit', () => {
-        renderSection({ enabled: true, slug: SEEDED_PUBLIC_GUILD_SLUG }, guildPage(false));
-        expect(screen.queryByTestId('wow-public-card-section')).not.toBeInTheDocument();
-        expect(log.calls).toEqual([]);
+    /**
+     * The gated viewer (guild 7) mounts beside an editor of guild 8; once guild 8's
+     * section has loaded, guild 7's request — had it been sent — has landed too.
+     */
+    async function expectGated(gated: GuildPage): Promise<void> {
+        const editor = guildPage(true);
+        server.use(...guildPublicCardSettingsHandlers({ enabled: true, slug: SEEDED_PUBLIC_GUILD_SLUG }, log));
+        renderWithProviders(<>
+            <WithCtx page={gated}>{(ctx) => <PublicCardSettingsSection {...ctx} />}</WithCtx>
+            <WithCtx page={{ ...editor, guild: { ...editor.guild, id: 8 } }}>{(ctx) => <PublicCardSettingsSection {...ctx} />}</WithCtx>
+        </>);
+        expect(await screen.findAllByTestId('wow-public-card-section'), 'only the editor gets a section').toHaveLength(1);
+        expect(log.calls, 'the gated viewer sends no request').toEqual(['GET /plugins/wow/guilds/8/public-card']);
+    }
+
+    it('renders nothing and fetches nothing for a viewer without canEdit', async () => {
+        await expectGated(guildPage(false));
     });
 
-    it('ROK-1813 N1: a rank-0 GM without an editor grant gets no section', () => {
+    it('ROK-1813 N1: a rank-0 GM without an editor grant gets no section', async () => {
         const page = guildPage(false);
-        renderSection({ enabled: false, slug: null }, { ...page, viewer: { ...page.viewer, isGuildMaster: true } });
-        expect(screen.queryByTestId('wow-public-card-section')).not.toBeInTheDocument();
-        expect(log.calls).toEqual([]);
+        await expectGated({ ...page, viewer: { ...page.viewer, isGuildMaster: true } });
     });
 
     it('publicCardUrl builds the absolute /p/guild/:slug address', () => {
