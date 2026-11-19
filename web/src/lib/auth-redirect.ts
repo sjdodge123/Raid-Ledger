@@ -1,4 +1,5 @@
 import { safeReturnPath } from './safe-return-path';
+import { safeSessionGetItem, safeSessionRemoveItem, safeSessionSetItem } from './safe-storage';
 
 const AUTH_REDIRECT_KEY = 'authRedirect';
 const AUTH_REDIRECT_SAVED_AT_KEY = 'authRedirectSavedAt';
@@ -24,8 +25,8 @@ export const AUTH_REDIRECT_CLOCK_SKEW_MS = 5000;
  * The path is stored raw; its save time goes in a sibling key.
  */
 export function saveAuthRedirect(path: string): void {
-    sessionStorage.setItem(AUTH_REDIRECT_KEY, path);
-    sessionStorage.setItem(AUTH_REDIRECT_SAVED_AT_KEY, String(Date.now()));
+    safeSessionSetItem(AUTH_REDIRECT_KEY, path);
+    safeSessionSetItem(AUTH_REDIRECT_SAVED_AT_KEY, String(Date.now()));
 }
 
 /**
@@ -38,10 +39,10 @@ export function saveAuthRedirect(path: string): void {
  * protocol-relative `//host` or a backslash variant returns null.
  */
 export function consumeAuthRedirect(): string | null {
-    const redirect: string | null = sessionStorage.getItem(AUTH_REDIRECT_KEY);
-    const savedAtRaw: string | null = sessionStorage.getItem(AUTH_REDIRECT_SAVED_AT_KEY);
-    sessionStorage.removeItem(AUTH_REDIRECT_KEY);
-    sessionStorage.removeItem(AUTH_REDIRECT_SAVED_AT_KEY);
+    const redirect: string | null = safeSessionGetItem(AUTH_REDIRECT_KEY);
+    const savedAtRaw: string | null = safeSessionGetItem(AUTH_REDIRECT_SAVED_AT_KEY);
+    safeSessionRemoveItem(AUTH_REDIRECT_KEY);
+    safeSessionRemoveItem(AUTH_REDIRECT_SAVED_AT_KEY);
     if (!redirect || savedAtRaw === null) return null;
     const savedAt = Number(savedAtRaw);
     if (!Number.isFinite(savedAt)) return null;
