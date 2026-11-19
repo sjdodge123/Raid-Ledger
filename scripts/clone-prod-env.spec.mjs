@@ -395,3 +395,15 @@ describe('sync-local-to-env.sh keeps .env.clone prod secrets shell-local', () =>
       'prod token keys stay exported after .env.clone is sourced');
   });
 });
+
+describe('clone-prod-to-local.sh refuses a dump with no migration journal (Codex r4 P2)', () => {
+  it('aborts at Step 4, before the safety dump and the drizzle-dropping restore', () => {
+    const src = readFileSync(join(dirname(LIB), '..', 'clone-prod-to-local.sh'), 'utf8');
+    const check = src.indexOf("TABLE DATA\\s+drizzle\\s+__drizzle_migrations");
+    const abort = src.indexOf('ABORT: dump has no drizzle migration journal');
+    const step5 = src.indexOf('Step 5: saving a safety copy');
+    assert.ok(check > 0, 'journal check present');
+    assert.ok(abort > check && abort < step5, 'journal-less dump aborts before Step 5');
+    assert.ok(!src.includes('the local journal survives the restore'), 'no warn-and-continue path left');
+  });
+});

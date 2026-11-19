@@ -335,7 +335,12 @@ green "  sanitized (no data segments for ${SANITIZED_TABLES[*]})"
 if grep -qE 'TABLE DATA\s+drizzle\s+__drizzle_migrations\b' <<<"$LIST_OUT"; then
     green "  dump carries prod's migration journal (it replaces the local one)"
 else
-    yellow "  WARN: dump has no drizzle journal — the local journal survives the restore."
+    # The restore drops the drizzle schema (clone_env_restore_fresh), so a dump
+    # without prod's journal would leave no migration history and db:migrate
+    # would re-run everything. Refuse before anything destructive (Codex r4 P2).
+    red "ABORT: dump has no drizzle migration journal — restoring it would leave the local DB with no migration history."
+    red "Use a newer backup (the backup service includes drizzle.__drizzle_migrations)."
+    exit 1
 fi
 
 # ─── Step 5: pre-clone safety dump of the local DB ────────────────────────
