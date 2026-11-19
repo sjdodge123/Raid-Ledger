@@ -3,7 +3,8 @@
  * ≥1024px, `BottomSheet 85vh` below (the ValheimOverlay idiom), guarded by
  * `useDirtyCloseGuard`. Save sends `baseUpdatedAt` = the `updatedAt` the draft
  * started from, verbatim. A 409 never overwrites: the draft stays, a §4.7
- * `warning` banner offers "Load their version", which replaces the draft (after
+ * `warning` banner offers "Load their version" ("Start from empty" when the
+ * note was cleared, ROK-2265), which replaces the draft (after
  * a confirm when it has edits) and rebases on the server's note. "Clear note"
  * asks "Clear the note for everyone?" first. Opening refetches the note, and a
  * clean draft rebases on the fresh one (N6). Default export for `React.lazy`.
@@ -29,7 +30,15 @@ export const CONFLICT_COPY = 'Someone else changed this note.';
 /** The 409 carried no note: it was cleared (by a member, or auto-cleared after the session). */
 export const CLEARED_CONFLICT_COPY = 'This note was cleared.';
 const LOAD_COPY: DiscardCopy = { title: 'Load their version?', keepLabel: 'Keep editing', discardLabel: 'Load their version' };
+/** ROK-2265: a cleared note has no "their version" — the action starts the draft from empty. */
+export const START_EMPTY_LABEL = 'Start from empty';
+const START_EMPTY_COPY: DiscardCopy = { title: 'Start from empty?', keepLabel: 'Keep editing', discardLabel: START_EMPTY_LABEL };
 const CLEAR_COPY: DiscardCopy = { title: 'Clear the note for everyone?', keepLabel: 'Cancel', discardLabel: 'Clear' };
+
+function confirmCopy(confirm: 'load' | 'clear' | null, cleared: boolean): DiscardCopy {
+    if (confirm === 'clear') return CLEAR_COPY;
+    return cleared ? START_EMPTY_COPY : LOAD_COPY;
+}
 
 interface OverlayProps { guard: DirtyCloseGuard; onClose: () => void; footer: ReactNode; children: ReactNode }
 
@@ -95,6 +104,7 @@ function SessionNoteEditor({ guildId, data, onClose }: EditorProps): JSX.Element
     const guard = useDirtyCloseGuard(editor.dirty, onClose);
     const [confirm, setConfirm] = useState<'load' | 'clear' | null>(null);
     const conflict = editor.save.conflict;
+    const cleared = conflict !== null && conflict.note === null;
     const save = (): void => editor.save.mutate(toPutBody(editor.draft, editor.base?.updatedAt ?? null), { onSuccess: onClose });
     const onConfirm = (): void => {
         setConfirm(null);
@@ -108,14 +118,16 @@ function SessionNoteEditor({ guildId, data, onClose }: EditorProps): JSX.Element
             footer={<DialogFooter editor={editor} onCancel={guard.requestClose} onSave={save} onClear={() => setConfirm('clear')} />}>
             {conflict !== null && (
                 <DialogBanner tone="warning" testId="session-note-conflict">
-                    <span>{conflict.note === null ? CLEARED_CONFLICT_COPY : CONFLICT_COPY}</span>
-                    <Button variant="warning-soft" size="sm" data-testid="session-note-load-theirs" onClick={load}>Load their version</Button>
+                    <span>{cleared ? CLEARED_CONFLICT_COPY : CONFLICT_COPY}</span>
+                    <Button variant="warning-soft" size="sm" data-testid="session-note-load-theirs" onClick={load}>
+                        {cleared ? START_EMPTY_LABEL : 'Load their version'}
+                    </Button>
                 </DialogBanner>
             )}
             {failed && <DialogBanner tone="danger" testId="session-note-error">Couldn&apos;t save the note. Try again.</DialogBanner>}
             <SessionNoteForm draft={editor.draft} onChange={editor.setDraft} pinned={editor.base?.clearAfter ?? null} nextEvent={data.nextEvent} />
             <DiscardChangesConfirm isOpen={confirm !== null} onKeep={() => setConfirm(null)} onDiscard={onConfirm}
-                copy={confirm === 'clear' ? CLEAR_COPY : LOAD_COPY}
+                copy={confirmCopy(confirm, cleared)}
                 message={confirm === 'clear' ? 'Members will no longer see the note or its checklist.' : 'Your unsaved changes will be replaced.'} />
         </NoteOverlay>
     );

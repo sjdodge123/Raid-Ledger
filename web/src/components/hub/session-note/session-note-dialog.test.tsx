@@ -75,6 +75,7 @@ describe('SessionNoteDialog save (T-W4)', () => {
         fireEvent.click(await screen.findByTestId('session-note-save'));
         expect(await screen.findByTestId('session-note-conflict')).toHaveTextContent(CONFLICT_COPY);
         expect(itemInput(0).value).toBe('My edit');
+        expect(screen.getByTestId('session-note-load-theirs')).toHaveTextContent('Load their version');
         expect(onClose).not.toHaveBeenCalled();
     });
 
@@ -87,6 +88,25 @@ describe('SessionNoteDialog save (T-W4)', () => {
         const banner = await screen.findByTestId('session-note-conflict');
         expect(banner).toHaveTextContent(CLEARED_CONFLICT_COPY);
         expect(banner).not.toHaveTextContent(CONFLICT_COPY);
+    });
+
+    it('ROK-2265: a cleared 409 offers "Start from empty" and confirms "Start from empty?"', async () => {
+        server.use(http.put(SESSION_NOTE_URL, () =>
+            HttpResponse.json({ statusCode: 409, message: 'Note changed', note: null }, { status: 409 })));
+        await renderDialog(editorResponse(buildSessionNote()));
+        type(0, 'My edit');
+        fireEvent.click(await screen.findByTestId('session-note-save'));
+        const button = await screen.findByTestId('session-note-load-theirs');
+        expect(button).toHaveTextContent('Start from empty');
+        expect(button).not.toHaveTextContent('Load their version');
+        fireEvent.click(button);
+        expect(await screen.findByText('Start from empty?')).toBeInTheDocument();
+        expect(screen.queryByText('Load their version?')).toBeNull();
+        expect(screen.getByTestId('discard-changes-keep')).toHaveTextContent('Keep editing');
+        expect(screen.getByTestId('discard-changes-discard')).toHaveTextContent('Start from empty');
+        fireEvent.click(screen.getByTestId('discard-changes-discard'));
+        await waitFor(() => expect(screen.queryByTestId('session-note-item-input-0'), 'the draft starts from the empty server note').toBeNull());
+        expect(screen.queryByTestId('session-note-conflict')).toBeNull();
     });
 
     it('"Load their version" confirms, replaces the draft and rebases the next save on their updatedAt', async () => {
