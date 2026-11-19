@@ -63,6 +63,8 @@ const SANITIZED_EXCLUDED_TABLES = [
   'local_credentials',
   'sessions',
   'consumed_intent_tokens',
+  // ROK-2263: export-token hashes must not ride into clones / fleet envs.
+  'backup_export_tokens',
 ] as const;
 
 @Injectable()
