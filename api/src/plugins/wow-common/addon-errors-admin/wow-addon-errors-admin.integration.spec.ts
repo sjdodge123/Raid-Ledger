@@ -17,11 +17,12 @@ import {
   loginAsAdmin,
   truncateAllTables,
 } from '../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../common/testing/narrow';
+import { at, nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { addonErrorRow } from '../../../admin/demo-test-addon-errors.helpers';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { WowAddonErrorsAdminService } from './wow-addon-errors-admin.service';
 
 const BASE = '/admin/plugins/blizzard/addon-errors';
 const SEED = '/admin/test/wow/seed-addon-errors';
@@ -168,6 +169,29 @@ describe('filters (ROK-2099 S3)', () => {
     expect((await list('?q=%25')).total).toBe(0);
   });
 
+  it('total counts only the groups the filter keeps (3 unfiltered)', async () => {
+    const since = new Date(Date.now() - 2 * HOUR_MS).toISOString();
+    const cases = [
+      '?addon=Questie',
+      `?userId=${at(userIds, 1)}`,
+      '?q=details',
+      `?since=${encodeURIComponent(since)}`,
+      `?addon=Questie&since=${encodeURIComponent(since)}`,
+    ];
+    const seen: [string, number, number][] = [];
+    for (const qs of cases) {
+      const page = await list(qs);
+      seen.push([qs, page.total, page.items.length]);
+    }
+    expect(seen).toEqual([
+      [cases[0], 1, 1],
+      [cases[1], 1, 1],
+      [cases[2], 1, 1],
+      [cases[3], 2, 2],
+      [cases[4], 1, 1],
+    ]);
+  });
+
   it('a malformed filter is a 400', async () => {
     expect((await get(`${BASE}?since=yesterday`)).status).toBe(400);
     expect((await get(`${BASE}?page=0`)).status).toBe(400);
@@ -179,7 +203,7 @@ describe('pagination (ROK-2099 S3)', () => {
     const old = new Date(Date.now() - 100 * HOUR_MS);
     const extra = Array.from({ length: 26 }, (_, i) =>
       addonErrorRow(
-        userIds[0] ?? 0,
+        at(userIds, 0),
         {
           addon: 'Bulk',
           message: `bulk error ${String(i).padStart(2, '0')}`,
@@ -268,6 +292,26 @@ describe('GET export (ROK-2099 S3)', () => {
     expect(res.text).toContain(
       '"Details\\core\\parser.lua:44: ""spell, id"" is not a number"',
     );
+  });
+
+  it('a complete export carries no truncation headers', async () => {
+    const res = await get(`${BASE}/export?format=csv`);
+    expect(res.headers['x-export-truncated']).toBeUndefined();
+    expect(res.headers['x-export-row-cap']).toBeUndefined();
+  });
+
+  it('the row cap keeps the newest rows and reports truncation only past it', async () => {
+    const service = testApp.app.get(WowAddonErrorsAdminService);
+    const cut = await service.exportRows({}, 3);
+    expect([cut.truncated, cut.rows.length]).toEqual([true, 3]);
+    // lastSeen desc, id desc: DBM-Core ties Aldric's Questie and was inserted later.
+    expect(cut.rows.map((r) => r.addon)).toEqual([
+      'DBM-Core',
+      'Questie',
+      'Questie',
+    ]);
+    const exact = await service.exportRows({}, 4);
+    expect([exact.truncated, exact.rows.length]).toEqual([false, 4]);
   });
 
   it('defaults to json and 400s an unknown format', async () => {
