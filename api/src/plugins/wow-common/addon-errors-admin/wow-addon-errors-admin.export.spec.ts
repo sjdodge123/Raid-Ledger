@@ -7,12 +7,18 @@ import {
 
 describe('capRows (ROK-2099 S3)', () => {
   it('keeps every row and is not truncated when the fetch fits the cap', () => {
-    expect(capRows([1, 2, 3], 3)).toEqual({ rows: [1, 2, 3], truncated: false });
+    expect(capRows([1, 2, 3], 3)).toEqual({
+      rows: [1, 2, 3],
+      truncated: false,
+    });
     expect(capRows([], 3)).toEqual({ rows: [], truncated: false });
   });
 
   it('drops the probe row and flags truncation when the fetch exceeds the cap', () => {
-    expect(capRows([1, 2, 3, 4], 3)).toEqual({ rows: [1, 2, 3], truncated: true });
+    expect(capRows([1, 2, 3, 4], 3)).toEqual({
+      rows: [1, 2, 3],
+      truncated: true,
+    });
   });
 });
 

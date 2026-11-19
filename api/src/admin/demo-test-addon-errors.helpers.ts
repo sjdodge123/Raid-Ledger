@@ -117,7 +117,9 @@ export async function seedAddonErrors(
   now: Date,
 ): Promise<SeedAddonErrorsResult> {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${SEED_LOCK_KEY}))`);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${SEED_LOCK_KEY}))`,
+    );
     const ids = await upsertDemoUsers(tx, now);
     const t = schema.wowAddonErrorRecords;
     await tx.delete(t).where(inArray(t.userId, ids));
