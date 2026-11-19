@@ -42,6 +42,7 @@ import {
   GgArchivePage,
   GgLatestRedirect,
   GgPublicPage,
+  PublicGuildCardPage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -160,6 +161,7 @@ export function AppRoutes() {
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
       <Route path="/p/poll/:token" element={<PollSharePage />} />
       <Route path="/w/:slug" element={<GgPublicPage />} />
+      <Route path="/p/guild/:slug" element={<PublicGuildCardPage />} />
       <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/claim" element={<ClaimPage />} />

@@ -115,4 +115,12 @@ describe('ROK-1811: dropViewerPrivateCaches', () => {
         dropViewerPrivateCaches(qc);
         expect(qc.getQueryData(['poll-share', 'preview', 'tok'])).toEqual({ title: 'poll' });
     });
+
+    it('ROK-1813 Codex P2: the token-less public guild card survives a drop', () => {
+        qc.setQueryData(['wow', 'public-guild-card', 'AbCdEfGhIjKlMnOp'], { name: 'shared' });
+        qc.setQueryData(['wow', 'guild', 5], { ownedBy: 1 });
+        dropViewerPrivateCaches(qc);
+        expect(qc.getQueryData(['wow', 'public-guild-card', 'AbCdEfGhIjKlMnOp'])).toEqual({ name: 'shared' });
+        expect(qc.getQueryData(['wow', 'guild', 5])).toBeUndefined();
+    });
 });

@@ -15,6 +15,7 @@ import { renderWithProviders } from '../../../test/render-helpers';
 import type { HubCtx } from '../../hub-module';
 import { wowHubModule } from '../hub/register-hub';
 import { BlizzardRosterSection } from './blizzard-roster-section';
+import { WowSettingsSections } from './wow-settings-sections';
 
 function foreverPage(canEdit: boolean, gameSlug = 'world-of-warcraft-forever'): GuildPage {
     return {
@@ -44,8 +45,8 @@ const TWO_HOURS_AGO = new Date(Date.now() - 2 * 3_600_000).toISOString();
 beforeEach(() => resetBlizzardRosterCalls());
 
 describe('BlizzardRosterSection', () => {
-    it('is the WoW hub module’s settings hook', () => {
-        expect(wowHubModule.settingsSections).toBe(BlizzardRosterSection);
+    it('mounts through the WoW hub module’s settings hook (ROK-1813 wrapper)', () => {
+        expect(wowHubModule.settingsSections).toBe(WowSettingsSections);
     });
 
     it.each([

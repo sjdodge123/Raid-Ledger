@@ -194,6 +194,13 @@ export const guildProfiles = pgTable(
       () => users.id,
       { onDelete: 'set null' },
     ),
+    /** ROK-1813 (AC1): opt-in public visitor card. No row ⇒ off. */
+    publicCardEnabled: boolean('public_card_enabled').notNull().default(false),
+    /**
+     * ROK-1813 (D1): random 16-char base62 slug for `/p/guild/:slug`,
+     * generated on first enable and kept across off/on. Never the hub id.
+     */
+    publicCardSlug: varchar('public_card_slug', { length: 16 }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -225,6 +232,10 @@ export const guildProfiles = pgTable(
     index('idx_guild_profiles_recruitment_updated_by').on(
       table.recruitmentUpdatedBy,
     ),
+    // ROK-1813 (D1): one public card slug per guild.
+    uniqueIndex('guild_profiles_public_card_slug_uq')
+      .on(table.publicCardSlug)
+      .where(sql`${table.publicCardSlug} IS NOT NULL`),
     ...ingameTextConstraints(table),
     ...gameTextConstraints(table),
   ],

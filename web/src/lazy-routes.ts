@@ -40,6 +40,10 @@ export const GgLatestRedirect = lazyWithRetry(() =>
 export const GgPublicPage = lazyWithRetry(() =>
     import('./pages/gg/gg-public-page').then((m) => ({ default: m.GgPublicPage })),
 );
+/** ROK-1813: signed-out WoW guild visitor card — a plugin page on a core lazy route. */
+export const PublicGuildCardPage = lazyWithRetry(() =>
+    import('./plugins/wow/public-card/public-guild-card-page').then((m) => ({ default: m.PublicGuildCardPage })),
+);
 /** ROK-1893: community-hub invite link landing (`/h/:token`). */
 export const HubInvitePage = lazyWithRetry(() =>
     import('./pages/hub-invite-page').then((m) => ({ default: m.HubInvitePage })),
