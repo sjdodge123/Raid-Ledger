@@ -42,6 +42,12 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Thins Baldur’s Gate 3 save history older than 90 days to one save per play session, nightly at 05:15',
     category: 'Maintenance',
   },
+  // ROK-2099 D7: the Blizzard plugin's addon-error retention.
+  WowAddonErrorsRetention_prune: {
+    description:
+      'Deletes WoW addon errors uploaded by the Companion that have not been seen for 90 days, nightly at 05:45',
+    category: 'Maintenance',
+  },
   // ROK-1959 D-3: the BG3 plugin's save-picture copy into hub Galleries.
   Bg3GalleryCron_sync: {
     description:

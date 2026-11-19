@@ -184,6 +184,7 @@ const blizzard = {
     { id: 'wow-ledgerlink', kind: 'ingest-source', label: 'Reads LedgerLink exports the Companion uploads' },
     // ROK-2099: the `wow-addon-errors` companion contract handler (admins read the errors).
     { id: 'wow-addon-errors', kind: 'ingest-source', label: 'Reads addon error logs the Companion uploads' },
+    { id: 'WowAddonErrorsRetention_prune', kind: 'scheduled-job', label: 'Deletes addon errors not seen for 90 days' },
     { id: 'blizzard', kind: 'claim-provider', label: 'Lets players claim their character from the guild roster' },
     // ROK-2187 — produced from `api/src/plugins/wow-common/gg/` (this plugin's folder).
     { id: 'wow-levels', kind: 'gg-card', label: 'GG <year>: levels your WoW characters dinged' },
