@@ -64,6 +64,10 @@ fi
 
 LOCAL_DB_CONTAINER="${LOCAL_DB_CONTAINER:-raid-ledger-db}"
 DATABASE_URL="${DATABASE_URL:-postgresql://user:password@localhost:5432/raid_ledger}"
+# clone-prod-to-env.sh resolves the clone env once and pins the same DB here,
+# so the clone and the sync can never hit different databases (review fix B5).
+if [[ -n "${SYNC_DATABASE_URL:-}" ]]; then DATABASE_URL="$SYNC_DATABASE_URL"; fi
+if [[ -n "${SYNC_LOCAL_DB_CONTAINER:-}" ]]; then LOCAL_DB_CONTAINER="$SYNC_LOCAL_DB_CONTAINER"; fi
 RL_PROXMOX_USER="${RL_PROXMOX_USER:-rl-agent}"   # rl-agent default — orchestrator binaries on VM route docker calls via socket-proxy (no docker-group needed)
 RL_PROXMOX_HOST="${RL_PROXMOX_HOST:-rl-infra}"
 
@@ -245,7 +249,7 @@ case "$MODE" in
         #    image, etc.). pg_dump --exclude-table-data those so the INSERT
         #    stream doesn't try to populate tables that don't exist on the
         #    target. Skipped data is logged below for operator visibility.
-        LOCAL_TABLES=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+        LOCAL_TABLES=$(docker exec "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" -tA -c \
             "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;" 2>/dev/null)
         EXTRA_LOCAL=$(comm -23 \
             <(echo "$LOCAL_TABLES" | sort -u) \
@@ -291,7 +295,7 @@ esac
 #      that the INSERT MUST include `username` (NOT NULL in the schema).
 dump_discord_identity() {
     local row_json
-    row_json=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+    row_json=$(docker exec "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" -tA -c \
         "SELECT row_to_json(u) FROM users u WHERE u.role = 'admin' AND u.discord_id IS NOT NULL AND u.discord_id NOT LIKE 'local:%' ORDER BY u.created_at LIMIT 1;" \
         2>/dev/null | tr -d '\r')
     if [[ -z "$row_json" || "$row_json" == "null" ]]; then
@@ -579,7 +583,7 @@ fi
 # local DB got reset (post `--fresh`) and a follow-on sync silently wipes
 # every API key in the env. Guard runs only when settings sync is in play
 # (always — both modes hit the re-encrypt path below).
-LOCAL_SETTINGS_COUNT=$(docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -c \
+LOCAL_SETTINGS_COUNT=$(docker exec "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" -tA -c \
     "SELECT count(*) FROM app_settings;" 2>/dev/null | tr -d '[:space:]')
 if [[ -z "$LOCAL_SETTINGS_COUNT" || "$LOCAL_SETTINGS_COUNT" == "0" ]]; then
     if (( ALLOW_EMPTY_SOURCE != 1 )); then
@@ -677,7 +681,7 @@ fi
 # re-encrypt helper, pipe the resulting SQL through psql on the env's DB.
 # Pipeline status is captured so a failure at any stage propagates.
 set +e
-docker exec "$LOCAL_DB_CONTAINER" psql -U user -d raid_ledger -tA -F$'\t' -c \
+docker exec "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" -tA -F$'\t' -c \
     "SELECT key, encrypted_value FROM app_settings ORDER BY key;" \
 | RL_REENCRYPT_SRC_SECRET="$LOCAL_JWT_SECRET_RESOLVED" \
   RL_REENCRYPT_DST_SECRET="$REMOTE_ENV_JWT_SECRET" \

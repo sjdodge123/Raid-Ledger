@@ -123,9 +123,9 @@ function refuse(error) {
   return { ok: false, error };
 }
 
-/** One query wrapped so psql prints exactly one JSON line after a marker. */
+/** One query wrapped so psql prints its rows as one JSON value after a marker (jsonb text is single-line). */
 function measuredQuery(phase, i, sql) {
-  return `\\echo ${MARK}${phase}:${i}\nSELECT coalesce(json_agg(q), '[]'::json) FROM (\n${sql}\n) q;\n`;
+  return `\\echo ${MARK}${phase}:${i}\nSELECT coalesce(jsonb_agg(q), '[]'::jsonb) FROM (\n${sql}\n) q;\n`;
 }
 
 /** The single psql session: BEGIN; before; <migration>; after; ROLLBACK. */
@@ -145,16 +145,32 @@ export function buildMeasureScript(queries, migrationSql) {
   ].join('\n');
 }
 
-/** Pulls the per-query JSON lines back out of psql's -tAqX stdout. */
+/**
+ * Pulls each query's JSON back out of psql's -tAqX stdout. A block runs from
+ * its marker to the next marker line (or EOF) and may span lines. An empty
+ * block means the query failed after its marker — psql's error is on stderr
+ * and becomes the report's `error`; the block is left out.
+ */
 export function parseMeasureOutput(stdout, queries) {
-  const lines = stdout.split('\n');
   const out = { before: [], after: [] };
-  lines.forEach((line, n) => {
-    const m = line.match(new RegExp(`^${MARK}(before|after):(\\d+)$`));
-    if (!m) return;
-    const i = Number(m[2]);
-    out[m[1]].push({ sql: queries[i], rows: JSON.parse(lines[n + 1] ?? '[]') });
-  });
+  const markerRe = new RegExp(`^${MARK}(?:(before|after):(\\d+)|\\S*)$`);
+  let current = null;
+  const flush = () => {
+    if (!current) return;
+    const text = current.lines.join('\n').trim();
+    if (text) out[current.phase].push({ sql: queries[current.i], rows: JSON.parse(text) });
+    current = null;
+  };
+  for (const line of stdout.split('\n')) {
+    const m = line.match(markerRe);
+    if (!m) {
+      current?.lines.push(line);
+      continue;
+    }
+    flush();
+    if (m[1]) current = { phase: m[1], i: Number(m[2]), lines: [] };
+  }
+  flush();
   return out;
 }
 

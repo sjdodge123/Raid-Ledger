@@ -70,6 +70,10 @@ clone_env_load() {
     # shellcheck disable=SC1090
     source "$file"
     set +a
+    # Prod secrets stay shell-local: no child process (docker, psql, npm, the
+    # sync script) inherits them. The token reaches curl only via the 0600
+    # header file (review fix B7).
+    export -n PROD_BACKUP_TOKEN PROD_BEARER_TOKEN PROD_ADMIN_PASSWORD 2>/dev/null || true
 }
 
 # Prints `backup` (rlbx_ token) or `jwt`; returns 1 for anything else.
@@ -125,4 +129,53 @@ clone_env_select_auth() {
 clone_env_write_auth_header() {
     local file="$1"
     ( umask 077 && printf 'Authorization: Bearer %s\n' "$CLONE_AUTH_TOKEN" >"$file" )
+}
+
+# ─── Prod-safe HTTP wrappers ──────────────────────────────────────────────
+# The ONLY prod calls any clone script makes: POST /auth/local (deprecated
+# login) or /admin/backups, GET the list or one backup's download.
+PROD_POST_ALLOWED=("/auth/local" "/admin/backups")
+PROD_GET_ALLOWED_PREFIX="/admin/backups"  # exact list endpoint or (daily|migration)/<file>/download
+
+prod_post_safe() {
+    # Usage: prod_post_safe <path> [curl args...]
+    local pth="$1"; shift
+    local allowed=false ap
+    for ap in "${PROD_POST_ALLOWED[@]}"; do
+        if [[ "$pth" == "$ap" ]]; then allowed=true; break; fi
+    done
+    if ! $allowed; then
+        clone_env_err "BLOCKED: POST $pth is not on the prod-safe whitelist."
+        clone_env_err "Allowed: ${PROD_POST_ALLOWED[*]}"
+        exit 1
+    fi
+    curl -fsS -X POST "$PROD_URL$pth" "$@"
+}
+
+prod_get_safe() {
+    # Usage: prod_get_safe <path> [curl args...]
+    local pth="$1"; shift
+    if [[ "$pth" != "$PROD_GET_ALLOWED_PREFIX" \
+        && ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_][A-Za-z0-9_.-]*/download$ ]]; then
+        clone_env_err "BLOCKED: GET $pth is not on the prod-safe whitelist."
+        clone_env_err "Allowed: $PROD_GET_ALLOWED_PREFIX  OR  $PROD_GET_ALLOWED_PREFIX/(daily|migration)/<file>/download"
+        exit 1
+    fi
+    curl -fsS "$PROD_URL$pth" "$@"
+}
+
+# ─── Restore from a clean slate ───────────────────────────────────────────
+# Restores <container_dump> (a path inside <container>) into <db_url>. Drops
+# the drizzle + public schemas first, so nothing from local branch migrations
+# survives beside prod's journal, then restores WITHOUT --clean and fails on
+# ANY pg_restore error: an "errors ignored on restore" DB is half-restored
+# (review fixes B1/B3). pg_restore's stderr lands in <err_file>.
+clone_env_restore_fresh() {
+    local container="$1" db_url="$2" dump="$3" err_file="$4"
+    docker exec "$container" psql "$db_url" -v ON_ERROR_STOP=1 -qX \
+        -c 'DROP SCHEMA IF EXISTS drizzle CASCADE' -c 'DROP SCHEMA public CASCADE' \
+        -c 'CREATE SCHEMA public' >/dev/null 2>"$err_file" || return 1
+    docker exec "$container" pg_restore --exit-on-error --no-owner --no-privileges \
+        --dbname="$db_url" "$dump" 2>"$err_file" || return 1
+    ! grep -qE 'errors ignored on restore|pg_restore: error:' "$err_file"
 }

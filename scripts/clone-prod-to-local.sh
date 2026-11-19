@@ -48,8 +48,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 source "$SCRIPT_DIR/lib/clone-prod-env.sh"
 
 # Whitelists. ANYTHING not on these lists is rejected.
-PROD_POST_ALLOWED=("/auth/local" "/admin/backups")
-PROD_GET_ALLOWED_PREFIX="/admin/backups"  # exact list endpoint or (daily|migration)/<file>/download
+# PROD_POST_ALLOWED / PROD_GET_ALLOWED_PREFIX + prod_post_safe/prod_get_safe
+# live in lib/clone-prod-env.sh (shared with clone-prod-measure-migration.sh).
 
 # Row data of these tables must never be in a prod dump (sanity check, step 4).
 SANITIZED_TABLES=(app_settings local_credentials sessions consumed_intent_tokens backup_export_tokens)
@@ -173,35 +173,6 @@ if [[ -n "$LOCAL_URL" ]] \
     exit 1
 fi
 
-# ─── Prod-safe HTTP wrappers ──────────────────────────────────────────────
-prod_post_safe() {
-    # Usage: prod_post_safe <path> [curl args...]
-    local pth="$1"; shift
-    local allowed=false
-    for ap in "${PROD_POST_ALLOWED[@]}"; do
-        if [[ "$pth" == "$ap" ]]; then allowed=true; break; fi
-    done
-    if ! $allowed; then
-        red "BLOCKED: POST $pth is not on the prod-safe whitelist."
-        red "Allowed: ${PROD_POST_ALLOWED[*]}"
-        exit 1
-    fi
-    curl -fsS -X POST "$PROD_URL$pth" "$@"
-}
-
-prod_get_safe() {
-    # Usage: prod_get_safe <path> [curl args...]
-    local pth="$1"; shift
-    if [[ "$pth" != "$PROD_GET_ALLOWED_PREFIX" \
-        && ! "$pth" =~ ^/admin/backups/(daily|migration)/[A-Za-z0-9_][A-Za-z0-9_.-]*/download$ ]]; then
-        red "BLOCKED: GET $pth is not on the prod-safe whitelist."
-        red "Allowed: $PROD_GET_ALLOWED_PREFIX  OR  $PROD_GET_ALLOWED_PREFIX/(daily|migration)/<file>/download"
-        exit 1
-    fi
-    curl -fsS "$PROD_URL$pth" "$@"
-}
-
-
 db_exec() { docker exec "$LOCAL_DB_CONTAINER" "$@"; }
 db_psql_value() { db_exec psql "$DATABASE_URL" -tAX -c "$1"; }
 
@@ -279,11 +250,12 @@ fi
 # ─── Step 1: prod auth ────────────────────────────────────────────────────
 if [[ "$CLONE_AUTH_MODE" == "login" ]]; then
     bold "Step 1: prod login as $PROD_ADMIN_EMAIL (deprecated) ..."
-    LOGIN_BODY=$(jq -n --arg e "$PROD_ADMIN_EMAIL" --arg p "$PROD_ADMIN_PASSWORD" \
-        '{email:$e, password:$p}')
-    LOGIN_RESP=$(prod_post_safe /auth/local \
-        -H 'Content-Type: application/json' \
-        -d "$LOGIN_BODY") || {
+    # Password goes jq-stdin → curl-stdin, never into any argv (review fix B6).
+    LOGIN_RESP=$(printf '%s' "$PROD_ADMIN_PASSWORD" \
+        | jq -Rs --arg e "$PROD_ADMIN_EMAIL" '{email:$e, password:.}' \
+        | prod_post_safe /auth/local \
+            -H 'Content-Type: application/json' \
+            --data-binary @-) || {
         red "Prod login failed (PROD_ADMIN_EMAIL=$PROD_ADMIN_EMAIL; password not shown)."
         exit 1
     }
@@ -371,7 +343,8 @@ fi
 bold "Step 5: saving a safety copy of the local DB ..."
 mkdir -p "$PRE_CLONE_DIR"
 SAFETY_FILE="$PRE_CLONE_DIR/pre-clone-$(date -u +%Y%m%dT%H%M%SZ).dump"
-if ! db_exec pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" >"$SAFETY_FILE"; then
+# umask 077: the safety copy holds the whole local DB (review fix B8).
+if ! ( umask 077 && db_exec pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" >"$SAFETY_FILE" ); then
     rm -f "$SAFETY_FILE"
     red "Safety dump of the local DB failed — refusing to overwrite it."
     exit 1
@@ -381,22 +354,17 @@ ls -1t "$PRE_CLONE_DIR"/pre-clone-*.dump 2>/dev/null | tail -n +$((PRE_CLONE_KEE
     | while IFS= read -r old; do rm -f "$old"; done
 green "  saved: $SAFETY_FILE"
 
-# ─── Step 6: restore straight into the DB ─────────────────────────────────
-# Same flags as the API's pgRestoreArgs EXCEPT --exclude-schema=drizzle: the
-# dump's journal is kept on purpose (D11).
-bold "Step 6: restoring into the local DB (pg_restore) ..."
+# ─── Step 6: restore into a clean slate ───────────────────────────────────
+# drizzle + public are dropped first so no local-only table/type/index from a
+# branch migration survives beside prod's journal (D11), and any pg_restore
+# error fails the clone — never a half-restored DB (review fix B1).
+bold "Step 6: restoring into the local DB (clean slate + pg_restore) ..."
 RESTORE_ERR="$WORK_DIR/restore.err"
-if ! db_exec pg_restore --clean --if-exists --no-owner --no-privileges \
-        --dbname="$DATABASE_URL" "$CONTAINER_DUMP" 2>"$RESTORE_ERR"; then
-    if grep -q 'errors ignored on restore' "$RESTORE_ERR"; then
-        yellow "  pg_restore reported ignorable errors: $(grep -o 'errors ignored on restore: [0-9]*' "$RESTORE_ERR")"
-        grep -m 5 'pg_restore: error:' "$RESTORE_ERR" | sed 's/^/    /' || true
-    else
-        red "Local restore failed:"
-        sed 's/^/    /' "$RESTORE_ERR" >&2
-        red "Your previous DB is saved at $SAFETY_FILE"
-        exit 1
-    fi
+if ! clone_env_restore_fresh "$LOCAL_DB_CONTAINER" "$DATABASE_URL" "$CONTAINER_DUMP" "$RESTORE_ERR"; then
+    red "Local restore failed (any pg_restore error fails the clone):"
+    sed 's/^/    /' "$RESTORE_ERR" >&2
+    red "Your previous DB is saved at $SAFETY_FILE"
+    exit 1
 fi
 green "  restored"
 

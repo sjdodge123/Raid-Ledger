@@ -6,7 +6,7 @@
 #   ./scripts/clone-prod-measure-migration.sh --dump <file|latest> \
 #       --migration <tag> --query <sql> [--query <sql> …] [--tree <path>]
 #
-# 1. Creates the scratch DB `rl_clone_scratch` in the local Postgres container
+# 1. Creates a per-run scratch DB rl_clone_scratch_<pid>_<epoch> in the container
 #    (never the DB in DATABASE_URL) and restores the dump into it WITH its
 #    migration journal.
 # 2. Refuses when <tag> is already in the dump's journal, is missing from the
@@ -38,10 +38,12 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 WORK_DIR="$(mktemp -d)"
+# Unique per run so parallel runs never drop each other's DB (review fix B10).
+SCRATCH_NAME="rl_clone_scratch_$$_$(date +%s)"
 SCRATCH_CREATED=""
 cleanup() {
     if [[ -n "$SCRATCH_CREATED" ]]; then
-        admin_sql 'DROP DATABASE IF EXISTS rl_clone_scratch' >/dev/null 2>&1 || true
+        admin_sql "DROP DATABASE IF EXISTS \"$SCRATCH_NAME\"" >/dev/null 2>&1 || true
         db_exec rm -f "$CONTAINER_DUMP" >/dev/null 2>&1 || true
     fi
     rm -rf "$WORK_DIR"
@@ -72,7 +74,7 @@ if ! [[ "$DATABASE_URL" =~ ^postgres(ql)?://([^@/]*@)?(localhost|127\.0\.0\.1|\[
     clone_env_err "DATABASE_URL must point at localhost/127.0.0.1/::1 (host redacted)."
     exit 1
 fi
-SCRATCH_URL="$(node "$MEASURE" scratch-url "$DATABASE_URL")" || exit 2
+SCRATCH_URL="$(node "$MEASURE" scratch-url "$DATABASE_URL" "$SCRATCH_NAME")" || exit 2
 : "${LOCAL_DB_CONTAINER:=raid-ledger-db}"
 CONTAINER_DUMP="/tmp/rl-measure-$$.dump"
 
@@ -97,12 +99,12 @@ download_latest() {
     fi
     local hdr="$WORK_DIR/auth.header" list name
     clone_env_write_auth_header "$hdr"
-    list="$(curl -fsS -H "@$hdr" "$PROD_URL/admin/backups")" \
+    list="$(prod_get_safe /admin/backups -H "@$hdr")" \
         || { clone_env_err "GET /admin/backups failed"; exit 1; }
     name="$(printf '%s' "$list" | jq -r \
         '[.backups[] | select(.type=="daily")] | sort_by(.createdAt) | reverse | .[0].filename // empty')"
     [[ "$name" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || { clone_env_err "no daily backup on prod"; exit 1; }
-    curl -fsS -H "@$hdr" "$PROD_URL/admin/backups/daily/$name/download" -o "$WORK_DIR/latest.dump" \
+    prod_get_safe "/admin/backups/daily/$name/download" -H "@$hdr" -o "$WORK_DIR/latest.dump" \
         || { clone_env_err "download of $name failed"; exit 1; }
     printf '%s\n' "$WORK_DIR/latest.dump"
 }
@@ -110,16 +112,15 @@ download_latest() {
 [[ -f "$DUMP" ]] || { clone_env_err "dump file not found: $DUMP"; exit 2; }
 
 # 1. Scratch DB + restore WITH the journal.
-echo "Restoring $(basename "$DUMP") into scratch DB rl_clone_scratch ..." >&2
+echo "Restoring $(basename "$DUMP") into scratch DB $SCRATCH_NAME ..." >&2
 SCRATCH_CREATED=1
-admin_sql 'DROP DATABASE IF EXISTS rl_clone_scratch' >/dev/null
-admin_sql 'CREATE DATABASE rl_clone_scratch' >/dev/null
+admin_sql "CREATE DATABASE \"$SCRATCH_NAME\"" >/dev/null
 docker cp "$DUMP" "$LOCAL_DB_CONTAINER:$CONTAINER_DUMP" >/dev/null
-if ! db_exec pg_restore --no-owner --no-privileges --dbname="$SCRATCH_URL" \
-        "$CONTAINER_DUMP" 2>"$WORK_DIR/restore.err"; then
-    grep -q 'errors ignored on restore' "$WORK_DIR/restore.err" \
-        || { cat "$WORK_DIR/restore.err" >&2; clone_env_err "pg_restore failed"; exit 1; }
-    clone_env_warn "pg_restore reported ignorable errors (see above in a verbose rerun)"
+# Any pg_restore error refuses: a half-restored scratch DB measures nonsense (B3).
+if ! clone_env_restore_fresh "$LOCAL_DB_CONTAINER" "$SCRATCH_URL" "$CONTAINER_DUMP" "$WORK_DIR/restore.err"; then
+    cat "$WORK_DIR/restore.err" >&2
+    clone_env_err "pg_restore into the scratch DB failed; refusing to measure a partial restore"
+    exit 1
 fi
 
 # 2. Plan against the dump's journal.

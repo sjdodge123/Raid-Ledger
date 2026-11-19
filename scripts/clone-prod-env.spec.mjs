@@ -236,3 +236,30 @@ describe('clone-prod-to-local.sh refuses early without leaking', () => {
     assert.match(res.err, /Missing required var in .*: PROD_URL/);
   });
 });
+
+describe('review fixes B7/B9 — secrets stay shell-local, prod calls stay whitelisted', () => {
+  it('clone_env_load keeps prod secrets out of child processes but auth still selects', () => {
+    const f = join(base, 'secrets.env');
+    writeFileSync(f, `PROD_BACKUP_TOKEN=${BACKUP_TOKEN}\nPROD_ADMIN_PASSWORD=pw-SECRET\nDATABASE_URL=postgresql://u:p@localhost:1/x\n`);
+    const r = run(`clone_env_load "${f}"; clone_env_select_auth; echo "mode=$CLONE_AUTH_MODE"; ` +
+      `bash -c 'echo "child=\${PROD_BACKUP_TOKEN:-unset} pw=\${PROD_ADMIN_PASSWORD:-unset} db=\${DATABASE_URL:-unset}"'`);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.out, /mode=token/);
+    assert.match(r.out, /child=unset pw=unset db=postgresql:\/\/u:p@localhost:1\/x/);
+  });
+
+  it('prod_get_safe blocks a non-whitelisted path before curl runs, allows the download path', () => {
+    const bin = join(base, 'fake-curl-bin');
+    mkdirSync(bin, { recursive: true });
+    const marker = join(base, 'curl-called');
+    writeFileSync(join(bin, 'curl'), `#!/usr/bin/env bash\necho "$*" >>"${marker}"\n`, { mode: 0o755 });
+    const env = { PATH: `${bin}:${process.env.PATH}` };
+    const blocked = run('PROD_URL=https://prod.invalid; prod_get_safe /admin/users', env);
+    assert.equal(blocked.code, 1);
+    assert.match(blocked.err, /BLOCKED: GET \/admin\/users/);
+    assert.throws(() => statSync(marker), 'curl must not run for a blocked path');
+    const ok = run('PROD_URL=https://prod.invalid; prod_get_safe /admin/backups/daily/a.dump/download -o /dev/null', env);
+    assert.equal(ok.code, 0, ok.err);
+    assert.match(readFileSync(marker, 'utf8'), /-fsS https:\/\/prod\.invalid\/admin\/backups\/daily\/a\.dump\/download -o \/dev\/null/);
+  });
+});
