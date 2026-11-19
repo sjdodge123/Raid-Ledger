@@ -97,6 +97,21 @@ describe('scratchDatabaseUrl', () => {
     }
   });
 
+  it('every derived scratch URL passes the shell guard (the two parsers agree)', () => {
+    const guardLib = join(HERE, 'lib', 'clone-prod-env.sh');
+    for (const url of [
+      'postgresql://user:password@localhost:5432/raid_ledger',
+      'postgres://u%40x:p@127.0.0.1/raid-ledger?sslmode=require',
+      'postgresql://[::1]/raid_ledger',
+    ]) {
+      const res = spawnSync('bash', ['-c', `source "${guardLib}"; clone_env_assert_local_db_url "$URL"`], {
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH, URL: scratchDatabaseUrl(url, 'rl_clone_scratch_1_2') },
+      });
+      assert.equal(res.status, 0, `shell guard refused the scratch URL derived from ${url}: ${res.stderr}`);
+    }
+  });
+
   it('the script re-guards SCRATCH_URL before CREATE DATABASE and pg_restore (review r3 MINOR)', () => {
     const src = readFileSync(SCRIPT, 'utf8');
     const guardAt = src.indexOf('clone_env_assert_local_db_url "$SCRATCH_URL"');

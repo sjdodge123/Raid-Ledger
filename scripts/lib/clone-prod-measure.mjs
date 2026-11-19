@@ -59,14 +59,28 @@ function stripTrailingSemicolons(sql) {
   return sql.trim().replace(/[;\s]+$/, '');
 }
 
-/** The scratch DB URL beside <databaseUrl>; refuses when it would be the main DB. */
+/**
+ * The one DATABASE_URL shape the clone scripts accept — mirrors
+ * CLONE_ENV_DB_URL_RE in scripts/lib/clone-prod-env.sh (the script re-guards
+ * the result with that one, so a disagreement fails closed).
+ */
+const DB_URL_RE =
+  /^(postgres|postgresql):\/\/((?:[A-Za-z0-9._~%!$&'()*+;=:-]*)@)?(localhost|127\.0\.0\.1|\[::1\])(:[0-9]{1,5})?\/([A-Za-z0-9_-]+)(\?sslmode=(?:disable|allow|prefer|require))?$/;
+const DB_NAME_RE = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * The scratch DB URL beside <databaseUrl>, rebuilt from its parsed parts
+ * (scheme, userinfo, host, port, sslmode) with <name> as the database. Never
+ * edits a pathname: a query key such as ?dbname= could otherwise keep it
+ * pointed at the main DB (Codex r3 P1). Refuses any other shape.
+ */
 export function scratchDatabaseUrl(databaseUrl, name = SCRATCH_DB) {
-  const url = new URL(databaseUrl);
-  const mainDb = url.pathname.replace(/^\//, '');
-  if (!mainDb) throw new UsageError('DATABASE_URL has no database name');
+  const m = DB_URL_RE.exec(databaseUrl);
+  if (!m) throw new UsageError('DATABASE_URL is not postgres[ql]://[user[:pass]@]localhost|127.0.0.1|[::1][:port]/<db>[?sslmode=…]');
+  const [, scheme, userinfo = '', host, port = '', mainDb, sslmode = ''] = m;
+  if (!DB_NAME_RE.test(name)) throw new UsageError('scratch DB name must match [A-Za-z0-9_-]+');
   if (mainDb === name) throw new UsageError(`DATABASE_URL already points at the scratch DB ${name}; refusing`);
-  url.pathname = `/${name}`;
-  return url.toString();
+  return `${scheme}://${userinfo}${host}${port}/${name}${sslmode}`;
 }
 
 /** sha256 of a migration's SQL text — drizzle's journal `hash`. */

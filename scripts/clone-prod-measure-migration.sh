@@ -72,6 +72,8 @@ load_clone_env() {
 [[ -n "${DATABASE_URL:-}" ]] || { clone_env_err "DATABASE_URL is not set"; exit 1; }
 clone_env_assert_local_db_url "$DATABASE_URL" || exit 1
 SCRATCH_URL="$(node "$MEASURE" scratch-url "$DATABASE_URL" "$SCRATCH_NAME")" || exit 2
+# Re-guard the derived URL before CREATE/DROP DATABASE and pg_restore use it.
+clone_env_assert_local_db_url "$SCRATCH_URL" "the scratch DB URL" || exit 1
 : "${LOCAL_DB_CONTAINER:=raid-ledger-db}"
 CONTAINER_DUMP="/tmp/rl-measure-$$.dump"
 
