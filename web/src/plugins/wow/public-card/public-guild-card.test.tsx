@@ -65,5 +65,8 @@ describe('PublicGuildCardView — recruitment', () => {
         expect(visibleApplyUrl(withRecruitment({ applyUrl: 'http://example.com/apply' }))).toBeNull();
         expect(visibleApplyUrl(withRecruitment({ applyUrl: 'javascript:alert(1)' }))).toBeNull();
         expect(visibleApplyUrl(withRecruitment({ applyUrl: 'https://example.com/a' }))).toBe('https://example.com/a');
+        expect(visibleApplyUrl(withRecruitment({ applyUrl: 'HTTPS://example.com/b' }))).toBe('HTTPS://example.com/b');
+        expect(visibleApplyUrl(withRecruitment({ applyUrl: 'data:text/html,x' }))).toBeNull();
+        expect(visibleApplyUrl(withRecruitment({ applyUrl: '' }))).toBeNull();
     });
 });

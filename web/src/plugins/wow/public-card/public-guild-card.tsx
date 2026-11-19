@@ -31,7 +31,7 @@ function CardHero({ card }: { card: PublicGuildCard }): JSX.Element {
                 <h1 className="break-words text-[19px] font-bold leading-tight text-foreground sm:text-[22px]">{card.name}</h1>
                 <p className="mt-1 text-[13px] text-muted" data-testid="public-guild-card-meta">
                     {meta.map((part, i) => (
-                        <span key={part}>
+                        <span key={`${i}-${part}`}>
                             {i > 0 && <span aria-hidden="true" className="px-1 text-dim">·</span>}
                             {part}
                         </span>
