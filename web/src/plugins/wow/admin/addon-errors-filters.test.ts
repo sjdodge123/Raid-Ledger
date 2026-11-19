@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AddonErrorGroupDto } from '@raid-ledger/contract';
 import {
-    EMPTY_ADDON_ERROR_FILTERS, activeFilterCount, addonOptions, formatSeen, memberOptions, optionGroups, summaryLine, toApiFilters,
+    ADDON_ERRORS_QUERY_MAX, EMPTY_ADDON_ERROR_FILTERS, activeFilterCount, addonOptions, formatSeen, memberOptions, optionGroups, summaryLine, toApiFilters,
 } from './addon-errors-filters';
 
 const g = (addon: string, members: [number, string][], totalCount: number): AddonErrorGroupDto => ({
@@ -30,6 +30,11 @@ describe('addon-errors filters (ROK-2099)', () => {
         expect(summaryLine({ items, total: 2, page: 1, pageSize: 25 })).toBe('2 distinct errors · 52 occurrences · 2 members');
         expect(summaryLine({ items: [g('Questie', [[2, 'Bea']], 1)], total: 1, page: 1, pageSize: 25 }))
             .toBe('1 distinct error · 1 occurrence · 1 member');
+    });
+
+    it('caps a pasted search at the API query limit so the list and export do not 400', () => {
+        const q = toApiFilters(EMPTY_ADDON_ERROR_FILTERS, `  ${'x'.repeat(250)}  `).q;
+        expect(q).toHaveLength(ADDON_ERRORS_QUERY_MAX);
     });
 
     it('keeps every unfiltered addon and member as an option once the list is filtered to one addon', () => {

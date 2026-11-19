@@ -30,9 +30,12 @@ export function activeFilterCount(f: AddonErrorsFilterState): number {
     return [f.addon !== '', f.userId !== '', f.lastSeen !== 'any'].filter(Boolean).length;
 }
 
-/** Page state → the API's filter DTO (empty values omitted). */
+/** `AddonErrorsFiltersSchema.q` max — a longer pasted message would 400 the list and the export. */
+export const ADDON_ERRORS_QUERY_MAX = 200;
+
+/** Page state → the API's filter DTO (empty values omitted, search capped at the API's length). */
 export function toApiFilters(f: AddonErrorsFilterState, q: string, now: Date = new Date()): AddonErrorsFiltersDto {
-    const query = q.trim();
+    const query = q.trim().slice(0, ADDON_ERRORS_QUERY_MAX).trim();
     return {
         ...(f.addon ? { addon: f.addon } : {}),
         ...(f.userId ? { userId: Number(f.userId) } : {}),

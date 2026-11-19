@@ -12,7 +12,7 @@ import { FilterEntry, FilterEntryTrigger } from '../../../components/ui/filter-e
 import { SearchInput } from '../../../components/ui/search-input';
 import { Select } from '../../../components/ui/select';
 import {
-    EMPTY_ADDON_ERROR_FILTERS, LAST_SEEN_OPTIONS, activeFilterCount, addonOptions, memberOptions,
+    ADDON_ERRORS_QUERY_MAX, EMPTY_ADDON_ERROR_FILTERS, LAST_SEEN_OPTIONS, activeFilterCount, addonOptions, memberOptions,
     type AddonErrorsFilterState, type FilterOption, type LastSeenWindow,
 } from './addon-errors-filters';
 
@@ -78,7 +78,7 @@ export function AddonErrorsToolbar(p: AddonErrorsToolbarProps): JSX.Element {
         <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
                 <SearchInput className="min-w-[12rem] flex-1" label="Search addon errors" placeholder="Search addon or message"
-                    value={p.query} onChange={p.onQuery} onSearch={p.onSearch} />
+                    maxLength={ADDON_ERRORS_QUERY_MAX} value={p.query} onChange={p.onQuery} onSearch={p.onSearch} />
                 <FilterEntryTrigger activeCount={count} isOpen={isOpen} onOpenChange={setOpen} />
                 <ExportButtons busy={p.exportBusy} onExport={p.onExport} />
             </div>
