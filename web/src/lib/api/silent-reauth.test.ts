@@ -10,12 +10,18 @@
  * proxy for "did the redirect fire" — jsdom's `location.assign` isn't spyable,
  * and the guard-state assertions cover the arm/re-arm behaviour directly.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import {
+    armSilentGuard,
     attemptSilentReauth,
+    clearAuthMethod,
+    clearSilentGuard,
+    getAuthMethod,
+    setAuthMethod,
     SILENT_REAUTH_COOLDOWN_MS,
 } from './silent-reauth';
+import { blockWebStorage } from '../../test/block-web-storage';
 import { AUTH_METHOD_KEY, SILENT_GUARD_KEY } from './auth-storage-keys';
 
 describe('attemptSilentReauth — ROK-1367 timestamped cooldown guard', () => {
@@ -53,6 +59,55 @@ describe('attemptSilentReauth — ROK-1367 timestamped cooldown guard', () => {
     it('does not fire for a non-discord auth method', () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'local');
 
+        expect(attemptSilentReauth('/somewhere')).toBe(false);
+    });
+});
+
+describe('silent-reauth when the browser blocks storage (TECH-DEBT L4009)', () => {
+    let restore: () => void = () => undefined;
+    beforeEach(() => {
+        restore = blockWebStorage();
+    });
+    afterEach(() => restore());
+
+    it('reads the auth method as unknown instead of throwing', () => {
+        expect(getAuthMethod()).toBeNull();
+    });
+
+    it('setters and clearers are silent no-ops', () => {
+        expect(() => {
+            setAuthMethod('discord');
+            armSilentGuard();
+            clearSilentGuard();
+            clearAuthMethod();
+        }).not.toThrow();
+    });
+
+    it('never fires a silent re-auth (no method on record)', () => {
+        expect(attemptSilentReauth('/somewhere')).toBe(false);
+    });
+});
+
+describe('silent-reauth when only sessionStorage is blocked (review MINOR / Codex P2)', () => {
+    let original: PropertyDescriptor | undefined;
+    beforeEach(() => {
+        localStorage.clear();
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        original = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
+        Object.defineProperty(window, 'sessionStorage', {
+            configurable: true,
+            get: () => {
+                throw new DOMException('The operation is insecure.', 'SecurityError');
+            },
+        });
+    });
+    afterEach(() => {
+        if (original) Object.defineProperty(window, 'sessionStorage', original);
+        localStorage.clear();
+    });
+
+    it('does not redirect when the cooldown guard cannot be stored', () => {
+        expect(armSilentGuard()).toBe(false);
         expect(attemptSilentReauth('/somewhere')).toBe(false);
     });
 });
