@@ -16,7 +16,9 @@ import type {
   HubForumDiscordGateway,
 } from './hub-forum-discord.gateway';
 import * as queries from './hub-forum-discord.queries';
+import type { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumDiscordService } from './hub-forum-discord.service';
+import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import * as share from './hub-forum-discord.share';
 
 jest.mock('./hub-forum-discord.queries');
@@ -104,7 +106,16 @@ function fakeGateway(store: ReturnType<typeof fakeStore>) {
 function makeService(gateway: HubForumDiscordGateway) {
   const routes = { invalidate: jest.fn() };
   const resolver = routes as unknown as HubForumDiscordRouteResolver;
-  return new HubForumDiscordService(db, gateway, resolver);
+  const decor = {
+    run: jest.fn(() => Promise.resolve('done')),
+  } as unknown as HubForumDiscordDecor;
+  return new HubForumDiscordService(
+    db,
+    gateway,
+    resolver,
+    decor,
+    new HubForumBindLock(),
+  );
 }
 
 beforeEach(() => {

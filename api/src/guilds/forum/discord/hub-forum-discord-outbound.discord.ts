@@ -7,6 +7,8 @@ import {
   type Webhook,
 } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import { removePostMembers } from './hub-forum-discord-post-members';
+import { postTagIds, type ForumTag } from './hub-forum-discord-decor';
 
 /** The bound forum and its one webhook (R9). */
 export interface OutboundTarget {
@@ -68,15 +70,17 @@ export class HubForumDiscordOutboundGateway {
   /** A new forum post; returns the post (thread) and starter message ids. */
   async createPost(
     target: OutboundTarget,
-    post: { title: string; content: string; tagIds: string[] },
+    post: { title: string; content: string; tagIds: string[]; event?: boolean },
     author: OutboundAuthor,
   ): Promise<DiscordMessageRef> {
     const hook = await this.webhook(target);
+    const forumTags = this.cachedForumTags(target.channelId);
     const msg = await hook.send({
       ...identity(author),
       threadName: post.title,
       content: post.content,
-      appliedTags: post.tagIds,
+      // ROK-2258: an event post also carries the forum's Event tag.
+      appliedTags: postTagIds(post.tagIds, post.event === true, forumTags),
       allowedMentions: NO_MENTIONS,
     });
     return { threadId: msg.channelId, messageId: msg.id };
@@ -146,6 +150,37 @@ export class HubForumDiscordOutboundGateway {
     await thread.send({ content, allowedMentions: NO_MENTIONS });
   }
 
+  /** ROK-2260: the bot is connected to its guild (else a flush waits). */
+  isOnline(): boolean {
+    return this.client.isConnected() && this.client.getGuild() !== null;
+  }
+
+  /**
+   * ROK-2260: a bot message in a post that pings exactly `userIds` — the
+   * mention is what adds each of them to the post (Discord thread rule).
+   */
+  async mention(
+    discordThreadId: string,
+    content: string,
+    userIds: string[],
+  ): Promise<void> {
+    const thread = await this.thread(discordThreadId);
+    await thread.send({ content, allowedMentions: { users: userIds } });
+  }
+
+  /**
+   * ROK-2260 ruling 3: silently take users out of a post (reopening an
+   * auto-archived one first). Returns the ids that are out of it.
+   */
+  async removeThreadMembers(
+    discordThreadId: string,
+    userIds: string[],
+    warn: (message: string) => void,
+  ): Promise<string[]> {
+    const thread = await this.thread(discordThreadId);
+    return removePostMembers(thread, userIds, warn);
+  }
+
   /** Delete one message (bot, Manage Messages — §5.3 covers both origins). */
   async deleteMessage(ref: DiscordMessageRef): Promise<DiscordWriteResult> {
     return orGone(async () => {
@@ -164,6 +199,13 @@ export class HubForumDiscordOutboundGateway {
     const ch = await this.guild().channels.fetch(id);
     if (!ch?.isThread()) throw new Error(`Discord post ${id} is not a thread`);
     return ch;
+  }
+
+  /** The forum's tags from the cache (`webhook` just fetched it). */
+  private cachedForumTags(channelId: string): ForumTag[] {
+    const ch = this.guild().channels.cache.get(channelId);
+    if (ch?.type !== ChannelType.GuildForum) return [];
+    return ch.availableTags.map((t) => ({ id: t.id, name: t.name }));
   }
 
   /** The forum's webhook, token included (OQ-9: re-fetched, never stored). */

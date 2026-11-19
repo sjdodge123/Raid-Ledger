@@ -12,6 +12,11 @@ import {
   MANAGE_CHANNELS,
   missingForumPermissions,
 } from './hub-forum-discord.helpers';
+import {
+  DEFAULT_REACTION_EMOJI,
+  failureOutcome,
+  shouldSetDefaultReaction,
+} from './hub-forum-discord-decor';
 
 /** A Discord forum as the binding service sees it (no discord.js objects). */
 export interface ForumInfo {
@@ -148,7 +153,24 @@ export class HubForumDiscordGateway {
     await forum.edit({ flags, reason: REASON });
   }
 
-  /** Apply a hub's tag to its synced posts (≤5 per post). Best-effort. */
+  /**
+   * ROK-2258 ruling 1 — set the forum's default reaction to 👍 unless a
+   * moderator already chose one. Returns true when it was set.
+   */
+  async setDefaultReactionIfUnset(channelId: string): Promise<boolean> {
+    const forum = await this.requireForum(channelId);
+    if (!shouldSetDefaultReaction(forum.defaultReactionEmoji)) return false;
+    const emoji = { id: null, name: DEFAULT_REACTION_EMOJI };
+    await forum.setDefaultReactionEmoji(emoji, REASON);
+    return true;
+  }
+
+  /**
+   * Apply a tag to synced posts (≤5 per post). A post that already carries
+   * it costs a read but no write (review r1 MAJOR 2a). A post Discord
+   * refuses for good is skipped; a transient error (429/5xx/network) throws
+   * so the caller retries (Codex P2 #4).
+   */
   async applyTag(
     channelId: string,
     threadIds: string[],
@@ -158,9 +180,11 @@ export class HubForumDiscordGateway {
     for (const id of threadIds) {
       try {
         const thread = await forum.threads.fetch(id);
-        const tags = [...new Set([...(thread?.appliedTags ?? []), tagId])];
-        await thread?.setAppliedTags(tags.slice(0, 5), REASON);
+        if (!thread || thread.appliedTags.includes(tagId)) continue;
+        const tags = [...thread.appliedTags, tagId];
+        await thread.setAppliedTags(tags.slice(0, 5), REASON);
       } catch (err) {
+        if (failureOutcome(err) === 'retry') throw err;
         this.logger.warn(`Could not tag forum post ${id}: ${describe(err)}`);
       }
     }
@@ -197,8 +221,18 @@ async function fetchForumChannel(
   guild: Guild,
   channelId: string,
 ): Promise<ForumChannel | null> {
-  const ch = await guild.channels.fetch(channelId).catch(() => null);
+  const ch = await guild.channels.fetch(channelId).catch(goneOrThrow);
   return ch?.type === ChannelType.GuildForum ? ch : null;
+}
+
+/**
+ * Codex P2 #5 — a channel Discord says is gone or hidden (10003/50001/50013)
+ * reads as null; a transient failure (429/5xx/network) rethrows, so a
+ * caller never mistakes a blip for a deleted forum.
+ */
+function goneOrThrow(err: unknown): null {
+  if (failureOutcome(err) === 'retry') throw err;
+  return null;
 }
 
 function toInfo(guild: Guild, forum: ForumChannel): ForumInfo {

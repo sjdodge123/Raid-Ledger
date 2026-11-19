@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Param,
   ParseIntPipe,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -12,6 +13,12 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import * as links from './hub-forum-discord-links.queries';
+import {
+  HubForumDiscordSignupPings,
+  type SignupPingOutcome,
+} from './hub-forum-discord-signup-pings.service';
+import { findBoundEventThread } from './hub-forum-discord-signup-pings.queries';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { findBinding, type ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -20,6 +27,13 @@ export interface WebhookTokenProbe {
   channelId: string;
   webhookId: string | null;
   tokenPresent: boolean;
+}
+
+/** What a forced signup-ping flush did, and the post it wrote in. */
+export interface SignupPingFlushProbe {
+  outcome: SignupPingOutcome;
+  /** The event's Discord post, once it exists. */
+  discordThreadId: string | null;
 }
 
 /**
@@ -34,6 +48,7 @@ export class HubForumDiscordDemoTestController {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
+    private readonly pings: HubForumDiscordSignupPings,
   ) {}
 
   @Get(':guildId/webhook-token')
@@ -47,5 +62,19 @@ export class HubForumDiscordDemoTestController {
       ? await this.gateway.webhookToken(channelId, webhookId)
       : null;
     return { channelId, webhookId, tokenPresent: Boolean(token) };
+  }
+
+  /**
+   * ROK-2260 — flush one event's pending signup pings NOW instead of after
+   * the ~2 min debounce, so the companion smoke never waits it out.
+   */
+  @Post('events/:eventId/flush-signup-pings')
+  async flushSignupPings(
+    @Param('eventId', ParseIntPipe) eventId: number,
+  ): Promise<SignupPingFlushProbe> {
+    const outcome = await this.pings.flush(eventId);
+    const ref = await findBoundEventThread(this.db, eventId);
+    const post = ref ? await links.findThreadLink(this.db, ref.threadId) : null;
+    return { outcome, discordThreadId: post?.discordThreadId ?? null };
   }
 }

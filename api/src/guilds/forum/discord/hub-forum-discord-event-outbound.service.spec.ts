@@ -117,6 +117,7 @@ describe('EventPostOutbound.ensurePost (item 1, lazy post)', () => {
         content:
           'Discussion for **Molten Core**. [Open the event](https://rl.example/events/9)',
         tagIds: ['tag-1'],
+        event: true,
       },
       { username: 'Raid Ledger', avatarURL: null },
     );
