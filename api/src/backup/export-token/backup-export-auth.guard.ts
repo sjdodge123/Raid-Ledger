@@ -34,8 +34,12 @@ import {
   type BackupExportTokenAuthRow,
 } from './backup-export-tokens.repository';
 
-/** Export-token bearers take the token path — even malformed ones (→ 401). */
-const TOKEN_BEARER_PREFIX = 'Bearer rlbx_';
+/**
+ * Export-token bearers take the token path — even malformed ones (→ 401).
+ * The scheme is case-insensitive (RFC 7235); the `rlbx_` prefix is exact.
+ */
+const BEARER_SCHEME = 'bearer ';
+const TOKEN_PREFIX = 'rlbx_';
 
 /** The session JWT strategy as an injectable guard. */
 @Injectable()
@@ -55,8 +59,10 @@ async function run(
 function tokenBearerOf(req: BackupExportRequest): string | null {
   const header = req.headers['authorization'];
   if (typeof header !== 'string') return null;
-  if (!header.startsWith(TOKEN_BEARER_PREFIX)) return null;
-  return header.slice('Bearer '.length).trim();
+  const scheme = header.slice(0, BEARER_SCHEME.length).toLowerCase();
+  if (scheme !== BEARER_SCHEME) return null;
+  const value = header.slice(BEARER_SCHEME.length);
+  return value.startsWith(TOKEN_PREFIX) ? value.trim() : null;
 }
 
 /** True when the token row (and its owner) may still export. */
