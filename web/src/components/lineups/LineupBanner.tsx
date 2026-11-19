@@ -17,6 +17,7 @@ import { formatTargetDate } from './lineup-banner-helpers';
 import { TiebreakerBadge } from './tiebreaker/TiebreakerBadge';
 import { OtherActiveLineups } from './OtherActiveLineups';
 import { coverSrcSetProps } from '../../lib/igdb-image';
+import { useNominateRosterSize } from './lineup-roster-size';
 
 /** Pulsing green dot indicator for active lineup. */
 function PulsingDot(): JSX.Element {
@@ -218,6 +219,9 @@ export function LineupBanner(): JSX.Element | null {
     const [nominateOpen, setNominateOpen] = useState(false);
     const [startOpen, setStartOpen] = useState(false);
     const processedRef = useRef(false);
+    // TD batch 4 B1: size the co-op fit hint by the lineup's participants,
+    // not `votingEligibleCount` (the whole community on a public lineup).
+    const nominateRoster = useNominateRosterSize(banner?.id ?? 0, nominateOpen && !!banner);
 
     // ROK-1167: smoke-test entry point. `?test=open-lineup-modal` opens the
     // StartLineupModal directly so smoke specs can avoid racing on the global
@@ -270,7 +274,7 @@ export function LineupBanner(): JSX.Element | null {
                 isOpen={nominateOpen}
                 onClose={() => setNominateOpen(false)}
                 lineupId={banner.id}
-                participantCount={banner.votingEligibleCount}
+                participantCount={nominateRoster}
             />
             {canStartAnother && (
                 <StartLineupModal isOpen={startOpen} onClose={() => setStartOpen(false)} />

@@ -11,6 +11,7 @@ import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 import { UploadsArchiveStatus } from './backup-uploads-archive';
 import { BackupRowActions } from './backup-row-actions';
 import { anyArchiving } from '../../hooks/backup-archive-poll';
+import { BackupExportTokensSection } from './backup-export-tokens-section';
 
 type FilterType = 'all' | 'daily' | 'migration';
 
@@ -73,6 +74,7 @@ export function BackupsPanel() {
             <BackupStates isLoading={h.backups.isLoading} isError={h.backups.isError} isEmpty={allBackups.length === 0} hasData={!!h.backups.data} />
             {filtered.length > 0 && <BackupTable filtered={filtered} tz={tz} onRestore={h.setRestoreTarget} onDelete={h.setDeleteTarget} />}
             <NoFilterMatch show={allBackups.length > 0 && filtered.length === 0} />
+            <BackupExportTokensSection />
             <DangerZone onShowResetModal={() => h.setShowResetModal(true)} />
             {h.deleteTarget && <DeleteModal backup={h.deleteTarget} onClose={() => h.setDeleteTarget(null)} onConfirm={h.handleDelete} isPending={h.deleteBackup.isPending} />}
             {h.restoreTarget && <RestoreModal backup={h.restoreTarget} onClose={() => h.setRestoreTarget(null)} onConfirm={h.handleRestore} isPending={h.restoreBackup.isPending} />}

@@ -15,6 +15,7 @@ import { toast } from '../../../lib/toast';
 import HubGalleryWidget from './hub-gallery-widget';
 import { HubGallerySeeAll } from './hub-gallery-see-all';
 import { useHubGalleryStore } from './hub-gallery-store';
+import { HubGalleryAddPictureView, PREPARING_COPY } from './hub-gallery-add-picture';
 
 vi.mock('../../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 /**
@@ -96,5 +97,14 @@ describe('Add picture — upload', () => {
         const button = await screen.findByRole('button', { name: 'Add picture' });
         // jsdom's matchMedia matches nothing, so this is the phone (< 1024px) header.
         expect(button.querySelector('[aria-hidden="true"]:not(:first-child)')?.textContent).toBe('Add');
+    });
+});
+
+describe('Add picture — progress label', () => {
+    it('reads "Preparing…" at 0% (the client-side shrink) and "Uploading… N%" once bytes are reported', () => {
+        const { rerender } = renderWithProviders(<HubGalleryAddPictureView uploading progress={0} onFiles={vi.fn()} />);
+        expect(screen.getByTestId('hub-gallery-upload-progress')).toHaveTextContent(PREPARING_COPY);
+        rerender(<HubGalleryAddPictureView uploading progress={40} onFiles={vi.fn()} />);
+        expect(screen.getByTestId('hub-gallery-upload-progress')).toHaveTextContent('Uploading… 40%');
     });
 });

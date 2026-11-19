@@ -105,3 +105,12 @@ describe('ROK-1955: scrubTokenFromUrl — device-link code', () => {
         expect(scrubTokenFromUrl('/link?unicode=1&zipcode=2')).toBe('/link?unicode=1&zipcode=2');
     });
 });
+
+describe('ROK-2263: scrubTokenFromUrl — backup-export token', () => {
+    const TOKEN = `rlbx_${'Ab9_-'.repeat(8)}xyz`;
+
+    it('filters an rlbx_ export token anywhere in a string', () => {
+        expect(TOKEN).toHaveLength(48);
+        expect(scrubTokenFromUrl(`export token ${TOKEN} rejected`)).toBe('export token [Filtered] rejected');
+    });
+});

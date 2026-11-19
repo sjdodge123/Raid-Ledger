@@ -42,6 +42,8 @@ const SANITIZED_EXCLUDED_TABLES = [
   'local_credentials',
   'sessions',
   'consumed_intent_tokens',
+  // ROK-2263: export-token hashes never ride into a dump.
+  'backup_export_tokens',
 ] as const;
 
 // Allow opting out locally when pg_dump/pg_restore are not on PATH.

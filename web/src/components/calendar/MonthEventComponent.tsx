@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { format } from 'date-fns';
-import { getGameColors } from '../../constants/game-colors';
+import { cssUrl, getGameColors } from '../../constants/game-colors';
 import type { CalendarEvent } from './CalendarView';
 import { hubSuffixText } from './event-hub-label.helpers';
 
@@ -13,7 +13,7 @@ interface MonthEventComponentProps {
 function chipStyle(coverUrl: string | null | undefined, bgColor: string) {
     if (!coverUrl) return {};
     return {
-        backgroundImage: `linear-gradient(135deg, ${bgColor}dd 50%, ${bgColor}88 100%), url(${coverUrl})`,
+        backgroundImage: `linear-gradient(135deg, ${bgColor}dd 50%, ${bgColor}88 100%), ${cssUrl(coverUrl)}`,
         backgroundSize: 'cover',
         backgroundPosition: 'center right',
     };

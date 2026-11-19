@@ -116,5 +116,9 @@ describe('per-quality cost rule (ROK-1894)', () => {
     expect(costRuleFor('0.221.4')).toBe('v0');
     expect(costRuleFor(undefined)).toBe('v0');
     expect(costRuleFor('')).toBe('v0');
+    // A later 1.x minor is still v1; an unparsable or 0.x string stays v0.
+    expect(costRuleFor('1.1.0')).toBe('v1');
+    expect(costRuleFor('0.217')).toBe('v0');
+    expect(costRuleFor('garbage')).toBe('v0');
   });
 });

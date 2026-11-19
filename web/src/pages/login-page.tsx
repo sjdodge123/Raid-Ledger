@@ -13,6 +13,7 @@ import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
 import { Button } from '../components/ui/button';
 import { nativeFetch } from '../lib/api/native-fetch';
+import { safeGetItem, safeSetItem } from '../lib/safe-storage';
 
 /** Watches for OAuth error query param and displays a toast */
 function useOAuthErrorHandler(): void {
@@ -61,9 +62,9 @@ function handlePostLoginRedirect(
     isFirstRun: boolean,
     navigate: ReturnType<typeof useNavigate>,
 ): void {
-    const hasSeenWelcome = localStorage.getItem('rl-welcome-shown');
+    const hasSeenWelcome = safeGetItem('rl-welcome-shown');
     if (isFirstRun && !hasSeenWelcome) {
-        localStorage.setItem('rl-welcome-shown', 'true');
+        safeSetItem('rl-welcome-shown', 'true');
         setTimeout(() => toast.info('Welcome! Visit your Profile to add characters.', { duration: 6000 }), 1000);
     }
     if (user.role !== 'admin' && !user.onboardingCompletedAt) {

@@ -4,6 +4,7 @@
  */
 import { useState } from 'react';
 import { useSteamLink } from '../../hooks/use-steam-link';
+import { safeGetItem, safeSetItem } from '../../lib/safe-storage';
 
 interface SteamNudgeBannerProps {
     lineupId: number;
@@ -14,7 +15,7 @@ interface SteamNudgeBannerProps {
 const STORAGE_KEY_PREFIX = 'raid_ledger_steam_nudge_dismissed_';
 
 function isDismissed(lineupId: number): boolean {
-    return localStorage.getItem(`${STORAGE_KEY_PREFIX}${lineupId}`) === 'true';
+    return safeGetItem(`${STORAGE_KEY_PREFIX}${lineupId}`) === 'true';
 }
 
 /** Banner action buttons — Link Steam CTA and dismiss. */
@@ -50,7 +51,7 @@ export function SteamNudgeBanner({ lineupId, lineupStatus, userSteamId }: SteamN
     }
 
     const handleDismiss = () => {
-        localStorage.setItem(`${STORAGE_KEY_PREFIX}${lineupId}`, 'true');
+        safeSetItem(`${STORAGE_KEY_PREFIX}${lineupId}`, 'true');
         setDismissed(true);
     };
 
