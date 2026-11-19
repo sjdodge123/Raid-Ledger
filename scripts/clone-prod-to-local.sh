@@ -1,54 +1,67 @@
 #!/usr/bin/env bash
 # =============================================================================
-# clone-prod-to-local.sh - Sanitized prod -> local DB clone (ROK-1279)
+# clone-prod-to-local.sh - Sanitized prod -> local DB clone (ROK-1279, ROK-2263)
 # =============================================================================
-# Triggers a sanitized backup on prod, downloads it, restores into the local
-# DB, then resets the local admin password. Preserves local app_settings
-# (API keys) across the clone unless explicitly disabled.
+# Triggers a sanitized backup on prod, downloads it to a temp dir, and restores
+# it STRAIGHT INTO the local Postgres container with pg_restore (no local API,
+# no local login). Then resets the local admin password. Preserves local
+# app_settings (API keys) across the clone unless explicitly disabled.
 #
 # Sanitization (server-side, baked into BackupService) excludes ROW DATA for:
-#   app_settings, local_credentials, sessions, consumed_intent_tokens
+#   app_settings, local_credentials, sessions, consumed_intent_tokens,
+#   backup_export_tokens
 # Schema is preserved, rows are empty after restore.
 #
-# Local preservation: app_settings is dumped (pg_dump --data-only --inserts)
-# BEFORE restore, then re-applied AFTER restore. Operator's IGDB/ITAD/Blizzard
-# /OAuth/Sentry keys survive the clone. The other 3 sanitized tables stay
-# empty — local_credentials/sessions have FK→users.id and would attach the
-# local admin password to a now-prod user if preserved.
+# Migration journal (ROK-2263 D11): the restore KEEPS the dump's
+# drizzle.__drizzle_migrations, so the local journal matches prod's data. A
+# branch migration therefore shows as pending and runs for real on the cloned
+# data at the next API boot / `npm run db:migrate -w api` from your tree.
 #
 # Safety rails (HARDCODED):
 #   - prod_post_safe()/prod_get_safe() whitelist the paths this script may
 #     call against $PROD_URL. Anything else aborts.
-#   - LOCAL_URL must resolve to localhost/127.0.0.1/::1 — checked before any
-#     local curl. Prevents accidental clone-into-staging.
+#   - DATABASE_URL (and LOCAL_URL, if set) must point at localhost — checked
+#     before anything touches the DB. Prevents accidental clone-into-staging.
 #   - NEVER issues restore / reset-instance / DELETE against $PROD_URL.
+#   - A pre-clone pg_dump of the local DB goes to ~/.cache/raid-ledger/pre-clone/
+#     (last 3 kept) before the restore overwrites it.
 #   - Interactive confirmation: operator must type 'clone' (--yes skips).
 #
-# Env file: .env.clone at repo root (gitignored), required vars:
-#   PROD_URL, LOCAL_URL, LOCAL_ADMIN_EMAIL, DATABASE_URL
-# Prod auth (pick ONE):
-#   PROD_BEARER_TOKEN                  (paste from browser/DM auth)
-#   PROD_ADMIN_EMAIL + PROD_ADMIN_PASSWORD  (script logs in via /auth/local)
+# Env file (first found wins — scripts/lib/clone-prod-env.sh):
+#   $RL_ENV_CLONE_FILE → ~/.config/raid-ledger/env.clone → <tree>/.env.clone
+#   → <main checkout>/.env.clone
+# Required: PROD_URL, DATABASE_URL, and prod auth:
+#   PROD_BACKUP_TOKEN=rlbx_…   (Admin -> Backups -> Clone access tokens)
+#   deprecated fallbacks: PROD_BEARER_TOKEN (JWT) or
+#                         PROD_ADMIN_EMAIL + PROD_ADMIN_PASSWORD
 # Optional:
 #   PRESERVE_LOCAL_APP_SETTINGS=true   (default: true)
 #   LOCAL_DB_CONTAINER=raid-ledger-db  (default)
+#   LOCAL_URL=http://localhost:3000    (only printed in the summary)
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$REPO_ROOT/.env.clone"
+# shellcheck source=lib/clone-prod-env.sh
+source "$SCRIPT_DIR/lib/clone-prod-env.sh"
 
 # Whitelists. ANYTHING not on these lists is rejected.
 PROD_POST_ALLOWED=("/auth/local" "/admin/backups")
 PROD_GET_ALLOWED_PREFIX="/admin/backups"  # exact list endpoint or (daily|migration)/<file>/download
 
+# Row data of these tables must never be in a prod dump (sanity check, step 4).
+SANITIZED_TABLES=(app_settings local_credentials sessions consumed_intent_tokens backup_export_tokens)
+PRE_CLONE_DIR="$HOME/.cache/raid-ledger/pre-clone"
+PRE_CLONE_KEEP=3
+CONTAINER_DUMP="/tmp/rl-clone-restore.dump"
+
 MODE="fresh"   # default per locked decision #5
-FORCE=false
 SKIP_PROMPT=false
-PRESERVE_FILE="/tmp/rl-preserved-app-settings.sql"
+TREE=""
 PRESERVED_NOTE="none"
+RESET_NOTE="done"
 
 red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
@@ -60,35 +73,39 @@ usage() {
 clone-prod-to-local.sh — sanitized prod -> local DB clone
 
 USAGE:
-  ./scripts/clone-prod-to-local.sh [--fresh|--latest] [--force] [--yes]
+  ./scripts/clone-prod-to-local.sh [--fresh|--latest] [--tree <path>] [--yes]
   ./scripts/clone-prod-to-local.sh --help
 
 FLAGS:
-  --fresh    (default) Trigger a NEW backup on prod, then download it.
-  --latest   Skip the create step; download the most recent existing backup.
-  --force    Overwrite a local dump file if one already exists with the same
-             name. Default refuses with a helpful message.
-  --yes      Skip the destructive-action confirmation prompt. Use for
-             non-interactive runs. Default: prompt the operator to type
-             'clone' before any prod call.
-  --help     Show this help.
+  --fresh         (default) Trigger a NEW backup on prod, then download it.
+  --latest        Skip the create step; download the most recent existing backup.
+  --tree <path>   The checkout whose deploy_dev.sh resets the admin password and
+                  whose .env.clone is a fallback. Default: the git top-level of
+                  the current directory, else this script's checkout.
+  --yes           Skip the destructive-action confirmation prompt.
+  --force         Accepted for compatibility; no effect (dumps go to a temp dir).
+  --help          Show this help.
 
-REQUIRED .env.clone (repo root, gitignored):
+ENV FILE (first found wins):
+  $RL_ENV_CLONE_FILE
+  ~/.config/raid-ledger/env.clone        <- recommended, shared by every tree
+  <tree>/.env.clone
+  <main checkout>/.env.clone
+
   PROD_URL=https://raid.gamernight.net
-  PROD_ADMIN_EMAIL=admin@...
-  PROD_ADMIN_PASSWORD=...
-  LOCAL_URL=http://localhost:3000
-  LOCAL_ADMIN_EMAIL=admin@local
+  PROD_BACKUP_TOKEN=rlbx_...             # Admin -> Backups -> Clone access tokens
   DATABASE_URL=postgresql://user:password@localhost:5432/raid_ledger
 
-OPTIONAL .env.clone:
-  LOCAL_ADMIN_PASSWORD=...            # for the local login step (auto-reset later)
-  LOCAL_DB_CONTAINER=raid-ledger-db   # docker container name for local Postgres
-  PRESERVE_LOCAL_APP_SETTINGS=true    # preserve API keys across clones (default: true)
+  Deprecated (one release): PROD_BEARER_TOKEN, or PROD_ADMIN_EMAIL + PROD_ADMIN_PASSWORD.
+  Optional: LOCAL_DB_CONTAINER=raid-ledger-db, PRESERVE_LOCAL_APP_SETTINGS=true,
+            LOCAL_URL=http://localhost:3000 (summary only)
+
+NEEDS: the local Postgres container running (deploy_dev.sh starts it), docker,
+curl, jq. The local API does NOT need to be running.
 
 SAFETY RAILS (HARDCODED):
   * Prod allowed paths:
-      POST  /auth/local           (login)
+      POST  /auth/local           (deprecated login fallback)
       POST  /admin/backups        (create new sanitized backup)
       GET   /admin/backups        (list)
       GET   /admin/backups/.../download   (stream file)
@@ -96,8 +113,8 @@ SAFETY RAILS (HARDCODED):
       POST  /admin/backups/.../restore
       POST  /admin/backups/reset-instance
       DELETE *
-  * LOCAL_URL must match ^https?://(localhost|127\.0\.0\.1|::1) — verified
-    before any local curl.
+  * DATABASE_URL must point at localhost/127.0.0.1/::1.
+  * The local DB is dumped to ~/.cache/raid-ledger/pre-clone/ first (last 3 kept).
 
 Operator triggered only. Production clone never writes back to prod.
 EOF
@@ -108,51 +125,51 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --fresh)  MODE="fresh"; shift ;;
         --latest) MODE="latest"; shift ;;
-        --force)  FORCE=true; shift ;;
+        --force)  shift ;;
+        --tree)
+            [[ $# -ge 2 ]] || { red "--tree needs a path"; exit 1; }
+            TREE="$2"; shift 2 ;;
         --yes|-y) SKIP_PROMPT=true; shift ;;
         --help|-h) usage; exit 0 ;;
         *) red "Unknown flag: $1"; usage; exit 1 ;;
     esac
 done
 
-# ─── Load env ─────────────────────────────────────────────────────────────
-if [[ ! -f "$ENV_FILE" ]]; then
-    red "Missing $ENV_FILE"
-    yellow "Create it at $ENV_FILE with the variables listed in --help."
+[[ -n "$TREE" ]] || TREE="$(clone_env_default_tree)"
+[[ -n "$TREE" ]] || TREE="$REPO_ROOT"
+if [[ ! -d "$TREE" ]]; then
+    red "--tree is not a directory: $TREE"
     exit 1
 fi
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+TREE="$(cd "$TREE" && pwd)"
 
-REQUIRED_VARS=(PROD_URL LOCAL_URL LOCAL_ADMIN_EMAIL DATABASE_URL)
-for v in "${REQUIRED_VARS[@]}"; do
+# ─── Load env ─────────────────────────────────────────────────────────────
+ENV_FILE="$(clone_env_resolve_file "$TREE")" || exit 1
+clone_env_load "$ENV_FILE"
+bold "Using clone env file: $ENV_FILE"
+
+for v in PROD_URL DATABASE_URL; do
     if [[ -z "${!v:-}" ]]; then
-        red "Missing required var in .env.clone: $v"
+        red "Missing required var in $ENV_FILE: $v"
         exit 1
     fi
 done
-
-# Either PROD_BEARER_TOKEN (preferred — paste from Discord/web session)
-# OR PROD_ADMIN_EMAIL + PROD_ADMIN_PASSWORD (script logs in via /auth/local).
-if [[ -z "${PROD_BEARER_TOKEN:-}" ]]; then
-    for v in PROD_ADMIN_EMAIL PROD_ADMIN_PASSWORD; do
-        if [[ -z "${!v:-}" ]]; then
-            red "Missing prod auth: set PROD_BEARER_TOKEN, or set both PROD_ADMIN_EMAIL+PROD_ADMIN_PASSWORD."
-            exit 1
-        fi
-    done
-fi
+clone_env_select_auth || exit 1
 
 # Defaults for optional vars.
 : "${PRESERVE_LOCAL_APP_SETTINGS:=true}"
 : "${LOCAL_DB_CONTAINER:=raid-ledger-db}"
+: "${LOCAL_URL:=}"
 
 # ─── Localhost guard (STRICT) ─────────────────────────────────────────────
-if ! [[ "$LOCAL_URL" =~ ^https?://(localhost|127\.0\.0\.1|::1)(:[0-9]+)?(/.*)?$ ]]; then
-    red "LOCAL_URL must be localhost/127.0.0.1/::1 — got: $LOCAL_URL"
+if ! [[ "$DATABASE_URL" =~ ^postgres(ql)?://([^@/]*@)?(localhost|127\.0\.0\.1|\[::1\])(:[0-9]+)?/ ]]; then
+    red "DATABASE_URL must point at localhost/127.0.0.1/::1 (host redacted)."
     red "Refusing to proceed; clone-prod-to-local NEVER writes to staging."
+    exit 1
+fi
+if [[ -n "$LOCAL_URL" ]] \
+    && ! [[ "$LOCAL_URL" =~ ^https?://(localhost|127\.0\.0\.1|::1)(:[0-9]+)?(/.*)?$ ]]; then
+    red "LOCAL_URL must be localhost/127.0.0.1/::1 — got: $LOCAL_URL"
     exit 1
 fi
 
@@ -184,24 +201,18 @@ prod_get_safe() {
     curl -fsS "$PROD_URL$pth" "$@"
 }
 
-local_curl() {
-    # Convenience wrapper around curl that uses LOCAL_URL only.
-    # The localhost guard above is the actual safety check; this wrapper
-    # just makes it obvious which calls target the local API.
-    local method="$1"; shift
-    local pth="$1"; shift
-    curl -fsS -X "$method" "$LOCAL_URL$pth" "$@"
-}
 
-# ─── Step 0: local API health check ───────────────────────────────────────
-bold "Step 0: checking local API at $LOCAL_URL ..."
-if ! curl -fsS -o /dev/null "$LOCAL_URL/api/health" 2>/dev/null \
-    && ! curl -fsS -o /dev/null "$LOCAL_URL/health" 2>/dev/null; then
-    red "Local API is not responding at $LOCAL_URL."
-    yellow "Run ./scripts/deploy_dev.sh --ci then retry."
+db_exec() { docker exec "$LOCAL_DB_CONTAINER" "$@"; }
+db_psql_value() { db_exec psql "$DATABASE_URL" -tAX -c "$1"; }
+
+# ─── Step 0: local Postgres container ─────────────────────────────────────
+bold "Step 0: checking local Postgres container '$LOCAL_DB_CONTAINER' ..."
+if [[ "$(docker inspect -f '{{.State.Running}}' "$LOCAL_DB_CONTAINER" 2>/dev/null || true)" != "true" ]]; then
+    red "Container '$LOCAL_DB_CONTAINER' is not running."
+    yellow "Start it with ./scripts/deploy_dev.sh --ci (the API does not need to stay up)."
     exit 2
 fi
-green "  local API healthy"
+green "  container running"
 
 # ─── Confirmation prompt (destructive action) ─────────────────────────────
 preserve_line="WILL BE PRESERVED:  app_settings (your API keys)"
@@ -210,12 +221,15 @@ if [[ "$PRESERVE_LOCAL_APP_SETTINGS" != "true" ]]; then
 fi
 cat <<EOF
 
-$(bold "This will WIPE your local Raid Ledger DB at $LOCAL_URL")
+$(bold "This will WIPE your local Raid Ledger DB (container $LOCAL_DB_CONTAINER)")
 and replace it with a sanitized clone of $PROD_URL.
 
-WILL BE WIPED THEN REPLACED: users, events, games, characters, all non-secret tables
-WILL BE EMPTY AFTER:         local_credentials (admin password reset), sessions, consumed_intent_tokens
+WILL BE WIPED THEN REPLACED: users, events, games, characters, all non-secret tables,
+                             and the migration journal (replaced by prod's)
+WILL BE EMPTY AFTER:         local_credentials (admin password reset), sessions,
+                             consumed_intent_tokens, backup_export_tokens
 $preserve_line
+SAFETY COPY FIRST:           $PRE_CLONE_DIR (last $PRE_CLONE_KEEP kept)
 
 Local admin password will be regenerated and printed at the end.
 
@@ -228,14 +242,20 @@ if [[ "$SKIP_PROMPT" != "true" ]]; then
     fi
 fi
 
+WORK_DIR="$(mktemp -d -t rl-clone.XXXXXX)"
+cleanup() {
+    rm -rf "$WORK_DIR"
+    db_exec rm -f "$CONTAINER_DUMP" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+AUTH_HEADER_FILE="$WORK_DIR/auth.header"
+PRESERVE_FILE="$WORK_DIR/preserved-app-settings.sql"
+
 # ─── Step 0.5: preserve local app_settings (if enabled) ───────────────────
 if [[ "$PRESERVE_LOCAL_APP_SETTINGS" == "true" ]]; then
     bold "Step 0.5: preserving local app_settings (API keys) ..."
-    rm -f "$PRESERVE_FILE"
-    if docker exec "$LOCAL_DB_CONTAINER" pg_dump \
-            --data-only --inserts --table=public.app_settings \
+    if db_exec pg_dump --data-only --inserts --table=public.app_settings \
             "$DATABASE_URL" >"$PRESERVE_FILE" 2>/dev/null; then
-        # Check whether any INSERT lines actually landed in the file.
         if grep -qE '^INSERT INTO ' "$PRESERVE_FILE"; then
             row_count=$(grep -cE '^INSERT INTO ' "$PRESERVE_FILE")
             green "  preserved $row_count app_settings row(s)"
@@ -246,8 +266,8 @@ if [[ "$PRESERVE_LOCAL_APP_SETTINGS" == "true" ]]; then
             PRESERVED_NOTE="app_settings (empty — nothing to preserve)"
         fi
     else
-        yellow "  pg_dump of local app_settings failed (container=$LOCAL_DB_CONTAINER not running?)"
-        yellow "  Continuing without preserve — re-configure API keys via /admin/settings after clone."
+        yellow "  pg_dump of local app_settings failed — continuing without preserve."
+        yellow "  Re-configure API keys via /admin/settings after clone."
         rm -f "$PRESERVE_FILE"
         PRESERVED_NOTE="app_settings (preserve failed)"
     fi
@@ -257,38 +277,33 @@ else
 fi
 
 # ─── Step 1: prod auth ────────────────────────────────────────────────────
-if [[ -n "${PROD_BEARER_TOKEN:-}" ]]; then
-    bold "Step 1: using PROD_BEARER_TOKEN (skipping /auth/local login) ..."
-    TOKEN="$PROD_BEARER_TOKEN"
-    # Sanity-check the token by hitting the allow-listed list endpoint.
-    if ! prod_get_safe /admin/backups \
-            -H "Authorization: Bearer $TOKEN" \
-            -o /dev/null >/dev/null 2>&1; then
-        red "Token rejected by $PROD_URL/admin/backups (expired or insufficient role?)."
-        exit 1
-    fi
-    green "  token accepted"
-else
-    bold "Step 1: prod login as $PROD_ADMIN_EMAIL ..."
+if [[ "$CLONE_AUTH_MODE" == "login" ]]; then
+    bold "Step 1: prod login as $PROD_ADMIN_EMAIL (deprecated) ..."
     LOGIN_BODY=$(jq -n --arg e "$PROD_ADMIN_EMAIL" --arg p "$PROD_ADMIN_PASSWORD" \
         '{email:$e, password:$p}')
     LOGIN_RESP=$(prod_post_safe /auth/local \
         -H 'Content-Type: application/json' \
         -d "$LOGIN_BODY") || {
-        red "Prod login failed."
-        red "  PROD_URL=$PROD_URL  PROD_ADMIN_EMAIL=$PROD_ADMIN_EMAIL"
-        red "  (password not shown)"
+        red "Prod login failed (PROD_ADMIN_EMAIL=$PROD_ADMIN_EMAIL; password not shown)."
         exit 1
     }
-    TOKEN=$(printf '%s' "$LOGIN_RESP" | jq -r '.access_token // empty')
-    if [[ -z "$TOKEN" ]]; then
+    CLONE_AUTH_TOKEN=$(printf '%s' "$LOGIN_RESP" | jq -r '.access_token // empty')
+    if [[ -z "$CLONE_AUTH_TOKEN" ]]; then
         red "Prod login: no access_token in response."
         exit 1
     fi
     green "  authenticated"
+else
+    bold "Step 1: checking the prod token against /admin/backups ..."
 fi
-
-prod_auth=( -H "Authorization: Bearer $TOKEN" )
+# The header lives in a 0600 file so the token never shows in a process list.
+clone_env_write_auth_header "$AUTH_HEADER_FILE"
+prod_auth=( -H "@$AUTH_HEADER_FILE" )
+if ! prod_get_safe /admin/backups "${prod_auth[@]}" -o /dev/null >/dev/null 2>&1; then
+    red "Token rejected by $PROD_URL/admin/backups (revoked, expired, or owner no longer admin?)."
+    exit 1
+fi
+green "  token accepted"
 
 # ─── Step 2: create new dump (--fresh) OR pick latest ─────────────────────
 if [[ "$MODE" == "fresh" ]]; then
@@ -324,86 +339,71 @@ else
     green "  latest: $FILENAME"
 fi
 
-# ─── Step 3: download ─────────────────────────────────────────────────────
-LOCAL_DAILY_DIR="$REPO_ROOT/api/backups/daily"
-mkdir -p "$LOCAL_DAILY_DIR"
-LOCAL_FILE="$LOCAL_DAILY_DIR/$FILENAME"
-
-if [[ -f "$LOCAL_FILE" && "$FORCE" != "true" ]]; then
-    red "Local file already exists: $LOCAL_FILE"
-    yellow "Re-run with --force to overwrite."
-    exit 1
-fi
-
+# ─── Step 3: download to the temp dir, copy into the container ────────────
 bold "Step 3: downloading $FILENAME ..."
-TMP_FILE="$(mktemp -t rl-clone.XXXXXX)"
-trap 'rm -f "$TMP_FILE"' EXIT
+LOCAL_FILE="$WORK_DIR/prod.dump"
 if ! prod_get_safe "/admin/backups/daily/$FILENAME/download" \
-    "${prod_auth[@]}" -o "$TMP_FILE"; then
+    "${prod_auth[@]}" -o "$LOCAL_FILE"; then
     red "Download failed."
     exit 1
 fi
-mv "$TMP_FILE" "$LOCAL_FILE"
-trap - EXIT
-green "  saved: $LOCAL_FILE ($(du -h "$LOCAL_FILE" | awk '{print $1}'))"
+green "  downloaded ($(du -h "$LOCAL_FILE" | awk '{print $1}'))"
+docker cp "$LOCAL_FILE" "$LOCAL_DB_CONTAINER:$CONTAINER_DUMP" >/dev/null
 
-# ─── Step 4: sanitization sanity check ────────────────────────────────────
+# ─── Step 4: sanitization + journal sanity check ──────────────────────────
 bold "Step 4: verifying dump is sanitized (pg_restore --list) ..."
-if ! command -v pg_restore >/dev/null 2>&1; then
-    yellow "  pg_restore not on PATH — skipping the sanity check."
-    yellow "  Install postgresql-client to enable (brew install libpq on macOS)."
+LIST_OUT=$(db_exec pg_restore --list "$CONTAINER_DUMP")
+for t in "${SANITIZED_TABLES[@]}"; do
+    if grep -qE "^\s*[0-9]+;\s+[0-9]+\s+[0-9]+\s+TABLE DATA\s+\S+\s+${t}\b" <<<"$LIST_OUT"; then
+        red "ABORT: prod backup is NOT sanitized — data segment for '$t' present."
+        red "Server config drift: re-deploy prod with the sanitized-tables list."
+        exit 1
+    fi
+done
+green "  sanitized (no data segments for ${SANITIZED_TABLES[*]})"
+if grep -qE 'TABLE DATA\s+drizzle\s+__drizzle_migrations\b' <<<"$LIST_OUT"; then
+    green "  dump carries prod's migration journal (it replaces the local one)"
 else
-    LIST_OUT=$(pg_restore --list "$LOCAL_FILE")
-    for t in app_settings local_credentials sessions consumed_intent_tokens; do
-        if printf '%s' "$LIST_OUT" \
-            | grep -E "^\s*[0-9]+;\s+[0-9]+\s+[0-9]+\s+TABLE DATA\s+\S+\s+${t}\b" \
-            >/dev/null; then
-            red "ABORT: prod backup is NOT sanitized — data segment for '$t' present."
-            red "Server config drift: re-deploy prod with ROK-1279 changes."
-            rm -f "$LOCAL_FILE"
-            exit 1
-        fi
-    done
-    green "  sanitized (no data segments for the 4 protected tables)"
+    yellow "  WARN: dump has no drizzle journal — the local journal survives the restore."
 fi
 
-# ─── Step 5: local login ──────────────────────────────────────────────────
-bold "Step 5: local login as $LOCAL_ADMIN_EMAIL ..."
-LOCAL_LOGIN_BODY=$(jq -n --arg e "$LOCAL_ADMIN_EMAIL" --arg p "${LOCAL_ADMIN_PASSWORD:-}" \
-    '{email:$e, password:$p}')
-LOCAL_LOGIN_RESP=$(local_curl POST /auth/local \
-    -H 'Content-Type: application/json' \
-    -d "$LOCAL_LOGIN_BODY") || {
-    red "Local login failed."
-    yellow "Try ./scripts/deploy_dev.sh --reset-password first, then export LOCAL_ADMIN_PASSWORD and retry."
-    exit 1
-}
-LOCAL_TOKEN=$(printf '%s' "$LOCAL_LOGIN_RESP" | jq -r '.access_token // empty')
-if [[ -z "$LOCAL_TOKEN" ]]; then
-    red "Local login: no access_token in response."
+# ─── Step 5: pre-clone safety dump of the local DB ────────────────────────
+bold "Step 5: saving a safety copy of the local DB ..."
+mkdir -p "$PRE_CLONE_DIR"
+SAFETY_FILE="$PRE_CLONE_DIR/pre-clone-$(date -u +%Y%m%dT%H%M%SZ).dump"
+if ! db_exec pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" >"$SAFETY_FILE"; then
+    rm -f "$SAFETY_FILE"
+    red "Safety dump of the local DB failed — refusing to overwrite it."
     exit 1
 fi
-green "  authenticated"
+# Keep only the newest $PRE_CLONE_KEEP safety dumps.
+ls -1t "$PRE_CLONE_DIR"/pre-clone-*.dump 2>/dev/null | tail -n +$((PRE_CLONE_KEEP + 1)) \
+    | while IFS= read -r old; do rm -f "$old"; done
+green "  saved: $SAFETY_FILE"
 
-# ─── Step 6: local restore ────────────────────────────────────────────────
-bold "Step 6: restoring into local DB ..."
-RESTORE_RESP=$(local_curl POST "/admin/backups/daily/$FILENAME/restore" \
-    -H "Authorization: Bearer $LOCAL_TOKEN") || {
-    red "Local restore failed."
-    yellow "Try: node scripts/reconcile-migrations.mjs"
-    red "Response: $RESTORE_RESP"
-    exit 1
-}
+# ─── Step 6: restore straight into the DB ─────────────────────────────────
+# Same flags as the API's pgRestoreArgs EXCEPT --exclude-schema=drizzle: the
+# dump's journal is kept on purpose (D11).
+bold "Step 6: restoring into the local DB (pg_restore) ..."
+RESTORE_ERR="$WORK_DIR/restore.err"
+if ! db_exec pg_restore --clean --if-exists --no-owner --no-privileges \
+        --dbname="$DATABASE_URL" "$CONTAINER_DUMP" 2>"$RESTORE_ERR"; then
+    if grep -q 'errors ignored on restore' "$RESTORE_ERR"; then
+        yellow "  pg_restore reported ignorable errors: $(grep -o 'errors ignored on restore: [0-9]*' "$RESTORE_ERR")"
+        grep -m 5 'pg_restore: error:' "$RESTORE_ERR" | sed 's/^/    /' || true
+    else
+        red "Local restore failed:"
+        sed 's/^/    /' "$RESTORE_ERR" >&2
+        red "Your previous DB is saved at $SAFETY_FILE"
+        exit 1
+    fi
+fi
 green "  restored"
 
 # ─── Step 6.5: re-apply preserved local app_settings ──────────────────────
 if [[ -f "$PRESERVE_FILE" ]]; then
     bold "Step 6.5: re-applying preserved local app_settings ..."
-    # Defensive truncate: sanitized restore leaves zero rows but a server-config
-    # drift could leave junk; truncate first so the INSERTs from the preserve
-    # file are the only rows.
-    if ! docker exec "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" \
-            -c "TRUNCATE app_settings" >/dev/null 2>&1; then
+    if ! db_exec psql "$DATABASE_URL" -c "TRUNCATE app_settings" >/dev/null 2>&1; then
         yellow "  TRUNCATE app_settings failed — re-apply may collide with existing rows."
     fi
     if docker exec -i "$LOCAL_DB_CONTAINER" psql "$DATABASE_URL" \
@@ -414,24 +414,51 @@ if [[ -f "$PRESERVE_FILE" ]]; then
         yellow "  Re-configure API keys via /admin/settings."
         PRESERVED_NOTE="app_settings (re-apply failed)"
     fi
-    rm -f "$PRESERVE_FILE"
 fi
 
-# ─── Step 7: reset local admin password ───────────────────────────────────
-bold "Step 7: resetting local admin password ..."
-bash "$SCRIPT_DIR/deploy_dev.sh" --reset-password --ci || {
-    red "deploy_dev.sh --reset-password failed; restore succeeded but admin login may be broken."
-    yellow "Run ./scripts/deploy_dev.sh --reset-password manually to recover."
-    exit 1
-}
-green "  reset done — see deploy_dev.sh output above for the new password."
+# ─── Step 6.8: branch migrations the migrator would skip ──────────────────
+# Drizzle skips a pending migration whose `when` is not newer than the newest
+# applied one. Warn so a branch migration is not silently left unapplied.
+JOURNAL="$TREE/api/src/drizzle/migrations/meta/_journal.json"
+if [[ -f "$JOURNAL" ]]; then
+    applied="$(db_psql_value 'SELECT created_at FROM drizzle.__drizzle_migrations' 2>/dev/null || true)"
+    max_applied="$(printf '%s\n' "$applied" | sort -n | tail -1)"
+    if [[ -n "$max_applied" ]]; then
+        skipped="$(jq -r --argjson max "$max_applied" --arg applied "$applied" \
+            '($applied | split("\n")) as $a
+             | .entries[] | select(.when <= $max)
+             | select((.when | tostring) as $w | ($a | any(. == $w)) | not)
+             | .tag' "$JOURNAL")"
+        if [[ -n "$skipped" ]]; then
+            yellow "  WARN: these $TREE migrations are older than prod's newest and would be SKIPPED:"
+            printf '%s\n' "$skipped" | sed 's/^/    /'
+            yellow "  Fix: ./scripts/fix-migration-order.sh on the branch, then re-run db:migrate."
+        fi
+    fi
+fi
+
+# ─── Step 7: reset local admin password (non-fatal, D13) ──────────────────
+bold "Step 7: resetting local admin password (from $TREE) ..."
+DEPLOY_DEV="$TREE/scripts/deploy_dev.sh"
+[[ -f "$DEPLOY_DEV" ]] || DEPLOY_DEV="$SCRIPT_DIR/deploy_dev.sh"
+if bash "$DEPLOY_DEV" --reset-password --ci; then
+    green "  reset done — see deploy_dev.sh output above for the new password."
+else
+    RESET_NOTE="FAILED"
+    yellow "WARN: the restore succeeded but the admin password reset failed."
+    yellow "  Recover with: (cd <an up-to-date checkout> && ./scripts/deploy_dev.sh --reset-password --ci)"
+fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────
 bold ""
 green "DONE."
 printf '  Prod file:        %s\n' "$FILENAME"
-printf '  Local file:       %s\n' "$LOCAL_FILE"
-printf '  Local URL:        %s\n' "$LOCAL_URL"
+printf '  Env file:         %s\n' "$ENV_FILE"
+printf '  Tree:             %s\n' "$TREE"
+printf '  Safety copy:      %s\n' "$SAFETY_FILE"
 printf '  Mode:             %s\n' "$MODE"
 printf '  Preserved tables: %s\n' "$PRESERVED_NOTE"
-printf 'Next: log in at %s with the new password above.\n' "$LOCAL_URL"
+printf '  Password reset:   %s\n' "$RESET_NOTE"
+[[ "$RESET_NOTE" == "done" ]] || printf 'WARN: admin password reset failed — run the recovery command above.\n'
+printf 'Next: run `npm run db:migrate -w api` from %s to apply branch migrations to the clone.\n' "$TREE"
+[[ -z "$LOCAL_URL" ]] || printf 'Then log in at %s with the new password above.\n' "$LOCAL_URL"
