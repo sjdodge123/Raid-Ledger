@@ -156,8 +156,8 @@ describe('secrets never reach stdout or stderr', () => {
     { PROD_BEARER_TOKEN: GARBAGE },
     { PROD_ADMIN_EMAIL: 'a@b', PROD_ADMIN_PASSWORD: 'pw-SECRETVALUE' },
   ];
-  for (const env of cases) {
-    it(`select + header write leak nothing for ${Object.keys(env).join('+')}`, () => {
+  for (const [i, env] of cases.entries()) {
+    it(`select + header write leak nothing (case ${i}: ${Object.keys(env).join('+')})`, () => {
       const hdr = join(base, `hdr-${Object.keys(env).join('-')}`);
       const res = run(`${SELECT}; [[ -n "$CLONE_AUTH_TOKEN" ]] && clone_env_write_auth_header "${hdr}"; true`, env);
       for (const s of secrets) {
@@ -188,5 +188,51 @@ describe('clone_env_token_kind', () => {
       assert.equal(res.code, 1, `expected rejection for ${bad}`);
       assert.equal(res.out, '');
     }
+  });
+});
+
+// The full script must refuse BEFORE any network or docker call. PROD_URL is a
+// closed local port, so even a regression could never reach a real server.
+describe('clone-prod-to-local.sh refuses early without leaking', () => {
+  const SCRIPT = join(dirname(LIB), '..', 'clone-prod-to-local.sh');
+  function clone(envFileBody) {
+    const dir = mkdtempSync(join(base, 'script-'));
+    const envFile = join(dir, 'env.clone');
+    writeFileSync(envFile, envFileBody);
+    const res = spawnSync('bash', [SCRIPT, '--yes', '--tree', dir], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: join(dir, 'home'), RL_ENV_CLONE_FILE: envFile },
+    });
+    return { code: res.status, out: res.stdout, err: res.stderr };
+  }
+  const LOCAL_DB = 'DATABASE_URL=postgresql://u:dbpw-SECRETVALUE@localhost:5432/raid_ledger\n';
+  const PROD = 'PROD_URL=http://127.0.0.1:9\n';
+
+  it('refuses a malformed PROD_BACKUP_TOKEN without printing it', () => {
+    const res = clone(`${PROD}${LOCAL_DB}PROD_BACKUP_TOKEN=${GARBAGE}\n`);
+    assert.equal(res.code, 1);
+    assert.match(res.err, /PROD_BACKUP_TOKEN is not an rlbx_ backup token/);
+    assert.doesNotMatch(res.out + res.err, /SECRETVALUE/);
+    assert.doesNotMatch(res.out + res.err, /Step 0/);
+  });
+
+  it('refuses a non-localhost DATABASE_URL without printing it', () => {
+    const res = clone(
+      `${PROD}DATABASE_URL=postgresql://u:dbpw-SECRETVALUE@db.example.com:5432/x\nPROD_BACKUP_TOKEN=${BACKUP_TOKEN}\n`,
+    );
+    assert.equal(res.code, 1);
+    assert.match(res.err, /DATABASE_URL must point at localhost/);
+    for (const s of ['SECRETVALUE', BACKUP_TOKEN]) {
+      assert.ok(!(res.out + res.err).includes(s), `leaked: ${res.out}${res.err}`);
+    }
+    assert.doesNotMatch(res.out + res.err, /Step 0/);
+  });
+
+  it('names the env file it used and the missing variable', () => {
+    const res = clone(`${LOCAL_DB}PROD_BACKUP_TOKEN=${BACKUP_TOKEN}\n`);
+    assert.equal(res.code, 1);
+    assert.match(res.out, /Using clone env file: .*env\.clone/);
+    assert.match(res.err, /Missing required var in .*: PROD_URL/);
   });
 });
