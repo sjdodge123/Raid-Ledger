@@ -4440,3 +4440,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 
 ### 2026-11-19 — fix/tech-debt-batch4-2026-11-19 (residual split out of L2836)
 - **med** `api/src/discord-bot/commands/bind.helpers.ts` (`applyGameChange`) — the second half of L2836 is still open: `/bind event` game changes do not check the `bannedAt` / `deactivatedAt` state the web path applies. Product/policy call (which states block a Discord-side change), so not built in batch 4, which fixed only the guild-tag game rule. Suggested: decide the rule, then reuse the web path's check in `applyGameChange`, with a unit case per state.
+
+### 2026-11-19 — fix/tech-debt-batch4-2026-11-19 (surfaced during the TD4 fleet verify, plan 2026-11-19-0947-7e55)
+- **low** `web/src/components/lineups/CoopFitHints.tsx:59` (NominateModal search row) — at phone width (375px) a game row showing the co-op badge AND "May not fit your group of N" squeezes the game name to "R.." (unreadable; no overflow). Pre-existing layout: the hint row predates TD batch 4, which only changed WHEN it shows (participants, not community size), so it now appears less often. Screenshot `brief-media/2026-11-19/TD4/4-phone-dark.png`.
+  Suggested: wrap the badge + hint onto a second line below the name under `sm` (flex-wrap / grid row), keeping the name at ≥1 line of full width.
