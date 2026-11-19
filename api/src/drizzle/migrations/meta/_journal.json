@@ -2150,6 +2150,13 @@
       "when": 1794979568180,
       "tag": "0307_forever_activity_reattribution",
       "breakpoints": true
+    },
+    {
+      "idx": 308,
+      "version": "7",
+      "when": 1795071822114,
+      "tag": "0308_guild_profiles_public_card",
+      "breakpoints": true
     }
   ]
 }
