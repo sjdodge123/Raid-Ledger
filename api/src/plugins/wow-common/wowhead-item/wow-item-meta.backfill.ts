@@ -16,6 +16,7 @@ import {
   and,
   eq,
   inArray,
+  isNotNull,
   isNull,
   or,
   sql,
@@ -66,19 +67,28 @@ function jsonbArray(column: SQLWrapper): SQL {
 }
 
 /**
+ * A reward id's text as an int, or NULL when it is not 1–9 plain digits (a
+ * non-numeric or out-of-range id must not abort the cron run). `substring`
+ * wraps the set-returning call because Postgres forbids SRFs inside CASE.
+ */
+function intOrNull(text: SQL): SQL<number | null> {
+  return sql<number | null>`(substring(${text} from '^[0-9]{1,9}$'))::int`;
+}
+
+/**
  * One row per reward item id of a classic/sod/forever quest, UNION the
  * overlay's reward ids (Codex P2 — the read path serves those in place of, or
  * beside, `rewards_json`; the overlay is Forever/classic data). UNION dedups.
- * A non-array jsonb unnests to nothing instead of failing.
+ * A non-array jsonb unnests to nothing instead of failing; a non-numeric id
+ * becomes NULL, which {@link questRewardDueQuery} drops.
  */
 export function questRewardIdsQuery() {
   const qb = new QueryBuilder();
   const dataset = qb
     .select({
-      itemId:
-        sql<number>`(jsonb_array_elements_text(${jsonbArray(wowClassicDungeonQuests.rewardsJson)}))::int`.as(
-          'item_id',
-        ),
+      itemId: intOrNull(
+        sql`jsonb_array_elements_text(${jsonbArray(wowClassicDungeonQuests.rewardsJson)})`,
+      ).as('item_id'),
     })
     .from(wowClassicDungeonQuests)
     .where(
@@ -86,10 +96,9 @@ export function questRewardIdsQuery() {
     );
   const overlay = qb
     .select({
-      itemId:
-        sql<number>`(jsonb_array_elements(${jsonbArray(wowDungeonQuestBlizzard.rewardItems)}) ->> 'id')::int`.as(
-          'item_id',
-        ),
+      itemId: intOrNull(
+        sql`jsonb_array_elements(${jsonbArray(wowDungeonQuestBlizzard.rewardItems)}) ->> 'id'`,
+      ).as('item_id'),
     })
     .from(wowDungeonQuestBlizzard);
   return dataset.union(overlay);
@@ -98,7 +107,8 @@ export function questRewardIdsQuery() {
 /**
  * The due-reward-id query. Every `item_id` is alias-qualified: the subquery's
  * aliased field renders as a bare `"item_id"`, which Postgres rejects as
- * ambiguous with `wow_item_meta.item_id` (Codex P1).
+ * ambiguous with `wow_item_meta.item_id` (Codex P1). NULL ids (non-numeric
+ * in the source jsonb) never reach the Wowhead fetch.
  */
 export function questRewardDueQuery(
   db: PostgresJsDatabase<typeof schema>,
@@ -110,7 +120,7 @@ export function questRewardDueQuery(
     .selectDistinct({ itemId })
     .from(rewards)
     .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, itemId))
-    .where(metaDueClause(WOWHEAD_TOOLTIP_PARSE_VERSION))
+    .where(and(isNotNull(itemId), metaDueClause(WOWHEAD_TOOLTIP_PARSE_VERSION)))
     .limit(limit);
 }
 
