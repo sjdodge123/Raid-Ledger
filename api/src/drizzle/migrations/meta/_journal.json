@@ -2164,6 +2164,13 @@
       "when": 1795071822114,
       "tag": "0309_guild_profiles_public_card",
       "breakpoints": true
+    },
+    {
+      "idx": 310,
+      "version": "7",
+      "when": 1795126131298,
+      "tag": "0310_wow_addon_error_records",
+      "breakpoints": true
     }
   ]
 }
