@@ -1,6 +1,6 @@
 /**
  * ROK-2263 D4/D5 — the one gate for the three export routes (list, create,
- * download). `Bearer rlbx_…` → the token path; anything else → the session
+ * download). `Bearer rlbx_…` (scheme in any case) → the token path; anything else → the session
  * JWT then `AdminGuard`, exactly as before the split (same 401 / 403).
  *
  * Token path: shape check first (malformed → 401, no DB read) → lookup by

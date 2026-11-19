@@ -212,7 +212,9 @@ describe('ROK-2263 Codex P2: the auth scheme is case-insensitive (RFC 7235)', ()
       jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
       const { guard, repo, sessionGuard } = setup();
       const { req, ctx } = ctxFor(`${scheme} ${TOKEN}`);
-      const out: unknown = await guard.canActivate(ctx).catch((e: unknown) => e);
+      const out: unknown = await guard
+        .canActivate(ctx)
+        .catch((e: unknown) => e);
       expect(sessionGuard.canActivate).not.toHaveBeenCalled();
       expect(out).toBe(true);
       expect(repo.findAuthByHash).toHaveBeenCalledWith(HASH);
@@ -224,22 +226,25 @@ describe('ROK-2263 Codex P2: the auth scheme is case-insensitive (RFC 7235)', ()
     '401s the malformed %s without reading the DB',
     async (header) => {
       const { guard, repo, sessionGuard } = setup();
-      const err: unknown = await guard
-        .canActivate(ctxFor(header).ctx)
-        .then(() => null, (e: unknown) => e);
+      const err: unknown = await guard.canActivate(ctxFor(header).ctx).then(
+        () => null,
+        (e: unknown) => e,
+      );
       expect(sessionGuard.canActivate).not.toHaveBeenCalled();
       expect(err).toBeInstanceOf(UnauthorizedException);
       expect(repo.findAuthByHash).not.toHaveBeenCalled();
     },
   );
 
-  it.each(['bearer a.b.c', 'BEARER some.jwt.value', 'bearer rlcd_x', 'Bearer RLBX_x'])(
-    'a non-rlbx_ bearer (%s) still takes the JWT path',
-    async (header) => {
-      const { guard, repo, sessionGuard } = setup(ROW, () => false);
-      await expect(guard.canActivate(ctxFor(header).ctx)).resolves.toBe(false);
-      expect(sessionGuard.canActivate).toHaveBeenCalledTimes(1);
-      expect(repo.findAuthByHash).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    'bearer a.b.c',
+    'BEARER some.jwt.value',
+    'bearer rlcd_x',
+    'Bearer RLBX_x',
+  ])('a non-rlbx_ bearer (%s) still takes the JWT path', async (header) => {
+    const { guard, repo, sessionGuard } = setup(ROW, () => false);
+    await expect(guard.canActivate(ctxFor(header).ctx)).resolves.toBe(false);
+    expect(sessionGuard.canActivate).toHaveBeenCalledTimes(1);
+    expect(repo.findAuthByHash).not.toHaveBeenCalled();
+  });
 });
