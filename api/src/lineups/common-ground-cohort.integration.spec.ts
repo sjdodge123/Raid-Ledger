@@ -13,6 +13,9 @@
  *   3. an already-nominated game is excluded, exactly as the pool excludes it;
  *   4. a brand-new lineup with ZERO nominations already gets the row — which
  *      the pre-ROK-1538 engaged-set signature made impossible.
+ *
+ * Also pins that a remembered game an admin later hid or banned drops out of
+ * the row (TECH-DEBT-BACKLOG, TD batch 7).
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -240,6 +243,30 @@ function describeCohortRow() {
     expect(body.data.find((g) => g.gameId === rememberedGame)).toBeUndefined();
     expect(body.data.find((g) => g.gameId === poolGame)).toBeDefined();
   });
+
+  it.each([
+    ['hidden', { hidden: true }],
+    ['banned', { banned: true }],
+  ] as const)(
+    'drops a remembered game an admin has since %s from the cohort row',
+    async (_label, flags) => {
+      // The remembered game is unowned (minOwners=1 keeps it out of the
+      // pool), so the cohort row is its ONLY route into the response — the
+      // first case in this file proves it shows when visible. Only the
+      // moderation filter in the by-id read can drop it here.
+      await testApp.db
+        .update(schema.games)
+        .set(flags)
+        .where(eq(schema.games.id, rememberedGame));
+
+      const body = await fetchCommonGround(currentLineup);
+
+      expect(body.data.map((g) => g.gameId)).not.toContain(rememberedGame);
+      expect(body.data.some((g) => g.theme === 'cohort')).toBe(false);
+      // Control: the rest of the response is unaffected.
+      expect(body.data.map((g) => g.gameId)).toContain(poolGame);
+    },
+  );
 
   it('never hands a lineup back its OWN remembered games', async () => {
     await remember(

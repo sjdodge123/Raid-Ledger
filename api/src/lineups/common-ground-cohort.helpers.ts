@@ -153,8 +153,9 @@ export async function applyCohortRow(
   const claimed = new Set<number>();
   for (const row of remembered) {
     const game = byGameId.get(Number(row.gameId));
-    // A remembered game whose `games` row has since been deleted resolves to
-    // nothing; the FK is ON DELETE CASCADE so this should be unreachable.
+    // A remembered game resolves to nothing when an admin has since hidden or
+    // banned it (the by-id read applies the moderation filter). A deleted
+    // `games` row cannot get here: the FK is ON DELETE CASCADE.
     if (!game) continue;
     cohortTiles.push(asCohortTile(game, row));
     claimed.add(game.gameId);
