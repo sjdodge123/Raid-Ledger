@@ -106,16 +106,14 @@ export class WowCronRegistrar implements CronRegistrar {
       this.logger.warn('Auto-sync already in progress, skipping');
       return;
     }
-    // TECH-DEBT L4410: keyless installs would log one warning + 500 ms per row.
-    if ((await this.settings.getBlizzardConfig()) === null) {
-      this.logger.debug('Blizzard not configured — auto-sync skipped');
-      return;
-    }
-
     this.isSyncing = true;
-    this.logger.log('Starting auto-sync of Blizzard characters...');
-
     try {
+      // TECH-DEBT L4410: keyless installs would log a warning + 500 ms per row.
+      if ((await this.settings.getBlizzardConfig()) === null) {
+        this.logger.debug('Blizzard not configured — auto-sync skipped');
+        return;
+      }
+      this.logger.log('Starting auto-sync of Blizzard characters...');
       const result = await this.charactersService.syncAllCharacters();
       this.logger.log(
         `Auto-sync complete: ${result.synced} synced, ${result.failed} failed`,
