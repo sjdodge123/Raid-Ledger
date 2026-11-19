@@ -23,7 +23,10 @@ import {
   tokenCapReached,
   tokenNotFound,
 } from './backup-export-token-dto.helpers';
-import { BackupExportTokensRepository } from './backup-export-tokens.repository';
+import {
+  BackupExportTokensRepository,
+  type BackupExportTokenTx,
+} from './backup-export-tokens.repository';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -58,9 +61,17 @@ export class BackupExportTokensService {
         expiresAt: expiryFrom(request.expiresInDays),
       },
       BACKUP_EXPORT_TOKEN_LIVE_CAP,
+      // Same transaction as the insert: the token and its audit row commit together.
+      (tx, inserted) =>
+        this.audit(
+          tx,
+          'backup_token_mint',
+          actorId,
+          inserted.id,
+          inserted.label,
+        ),
     );
     if (!row) throw tokenCapReached();
-    await this.audit('backup_token_mint', actorId, row.id, row.label);
     this.logger.log(`backup-export token #${row.id} minted by user ${actorId}`);
     return { token, item: await this.displayItem(row.id) };
   }
@@ -69,7 +80,13 @@ export class BackupExportTokensService {
   async revoke(actorId: number, id: number): Promise<void> {
     const row = await this.repo.revoke(id);
     if (row) {
-      await this.audit('backup_token_revoke', actorId, row.id, row.label);
+      await this.audit(
+        this.db,
+        'backup_token_revoke',
+        actorId,
+        row.id,
+        row.label,
+      );
       this.logger.log(`backup-export token #${id} revoked by user ${actorId}`);
       return;
     }
@@ -84,12 +101,13 @@ export class BackupExportTokensService {
   }
 
   private audit(
+    writer: Db | BackupExportTokenTx,
     action: 'backup_token_mint' | 'backup_token_revoke',
     actorId: number,
     tokenId: number,
     label: string,
   ): Promise<void> {
-    return insertAdminAction(this.db, {
+    return insertAdminAction(writer, {
       action,
       actorId,
       targetId: null,

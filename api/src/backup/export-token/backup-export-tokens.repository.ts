@@ -11,6 +11,10 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
+/** The transaction handle `insertUnderCap` hands its `afterInsert` hook. */
+export type BackupExportTokenTx = Parameters<
+  Parameters<Db['transaction']>[0]
+>[0];
 const tokens = schema.backupExportTokens;
 const users = schema.users;
 
@@ -80,10 +84,16 @@ export class BackupExportTokensRepository {
    * Insert unless `cap` live tokens already exist (Q2). The count and the
    * insert share one transaction holding a transaction-scoped advisory lock,
    * so two concurrent mints cannot both pass the cap. Null = cap reached.
+   * `afterInsert` runs on the same `tx` (the mint's audit row), so a failure
+   * there rolls the token back — no live, unseen token counts toward the cap.
    */
   async insertUnderCap(
     values: NewBackupExportToken,
     cap: number,
+    afterInsert?: (
+      tx: BackupExportTokenTx,
+      row: BackupExportTokenRow,
+    ) => Promise<void>,
   ): Promise<BackupExportTokenRow | null> {
     return this.db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(${MINT_LOCK_KEY})`);
@@ -94,6 +104,7 @@ export class BackupExportTokensRepository {
       if ((live?.n ?? 0) >= cap) return null;
       const [row] = await tx.insert(tokens).values(values).returning();
       if (!row) throw new Error('backup-export token insert returned no row');
+      if (afterInsert) await afterInsert(tx, row);
       return row;
     });
   }

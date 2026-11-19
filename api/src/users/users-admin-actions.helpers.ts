@@ -53,10 +53,10 @@ export interface InsertAdminActionInput {
   metadata?: string | null;
 }
 
-/** Insert one audit row. Callers gate this on a moderation write RETURNING a row
+/** Insert one audit row (`db` may be a transaction). Callers gate this on a moderation write RETURNING a row
  * so a retry does not append a duplicate (§9.10 #4). */
 export async function insertAdminAction(
-  db: Db,
+  db: Pick<Db, 'insert'>,
   input: InsertAdminActionInput,
 ): Promise<void> {
   await db.insert(schema.adminActions).values({
