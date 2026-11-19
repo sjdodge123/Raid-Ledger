@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { PelicanServerRowDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { pelicanServerFixture } from '../../../test/mocks/pelican-handlers';
-import { COMMUNITY_DEFAULT_LABEL, ServerTimezoneSelect } from './pelican-server-timezone';
+import { COMMUNITY_DEFAULT_LABEL, ServerTimezoneSelect, UTC_OPTION_LABEL } from './pelican-server-timezone';
 
 function renderSelect(row: PelicanServerRowDto) {
     const onUpdate = vi.fn();
@@ -39,5 +39,19 @@ describe('ServerTimezoneSelect (ROK-1882)', () => {
         const { select } = renderSelect({ ...pelicanServerFixture, timezone: 'Antarctica/Troll' });
         expect(select).toHaveValue('Antarctica/Troll');
         expect(screen.getByRole('option', { name: 'Antarctica/Troll' })).toBeInTheDocument();
+    });
+
+    it('UTC can be picked again (the shared zone list has no UTC entry)', async () => {
+        const row = { ...pelicanServerFixture, timezone: 'Europe/Berlin' };
+        const { select, onUpdate } = renderSelect(row);
+        await userEvent.selectOptions(select, 'UTC');
+        expect(onUpdate).toHaveBeenCalledWith(row.id, { timezone: 'UTC' });
+    });
+
+    it('a stored UTC is selected and listed exactly once', () => {
+        const { select } = renderSelect({ ...pelicanServerFixture, timezone: 'UTC' });
+        expect(select).toHaveValue('UTC');
+        expect(screen.getAllByRole('option', { name: UTC_OPTION_LABEL })).toHaveLength(1);
+        expect(screen.queryByRole('option', { name: 'UTC' })).not.toBeInTheDocument();
     });
 });
