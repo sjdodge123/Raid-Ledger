@@ -71,6 +71,9 @@ scripts/*
 !scripts/clone-prod-to-local.sh
 !scripts/sync-local-to-env.sh
 !scripts/clone-prod-to-env.sh
+# ROK-2263: shared prod-clone helpers (scripts/lib/) + their node:test spec.
+!scripts/lib/
+!scripts/clone-prod-env.spec.mjs
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
 !scripts/rl-reencrypt-settings.spec.mjs
