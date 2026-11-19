@@ -25,6 +25,11 @@ describe('PublicGuildCardView — identity', () => {
         expect(screen.getByTestId('public-guild-card-meta')).toHaveTextContent('US·WoW: Classic·Fewer than 10 members');
         expect(memberCountLabel(140)).toBe('~140 members');
     });
+
+    it('shows a lowercase stored region in capitals, as the hub header does', () => {
+        renderCard(createMockPublicGuildCard({ region: 'us', realmName: null }));
+        expect(screen.getByTestId('public-guild-card-meta')).toHaveTextContent('US·WoW: Classic');
+    });
 });
 
 describe('PublicGuildCardView — recruitment', () => {

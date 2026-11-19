@@ -19,7 +19,7 @@ function lookingFor(wanted: readonly PublicGuildWanted[]): PublicGuildWanted[] {
 }
 
 function CardHero({ card }: { card: PublicGuildCard }): JSX.Element {
-    const meta = [card.region, card.realmName, card.gameName, memberCountLabel(card.approxMemberCount)]
+    const meta = [card.region.toUpperCase(), card.realmName, card.gameName, memberCountLabel(card.approxMemberCount)]
         .filter((part): part is string => part !== null && part !== '');
     return (
         <header className="flex items-center gap-4 border-b border-edge-subtle p-4 sm:p-5">
