@@ -465,6 +465,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `use-dirty-close-guard.ts` → `useDirtyCloseGuard(isDirty, onClose)` (ROK-1640, shared by ROK-1655) | `web/src/hooks/` | Any overlay that edits data. Returns `{ requestClose, confirming, keep, discard, reset }`: pass it as `closeGuard` to `Modal` / `BottomSheet` and wire an explicit Cancel to `requestClose` (§4.4). A one-macrotask latch stops the Escape that closed the confirm from re-opening it. `Modal` / `BottomSheet` call `reset` (via `useResetGuardOnClose`) when they close by another route or unmount, so the next open never starts mid-confirm |
 | `use-flavour.ts` → `useFlavour()` / `useIsCloudFlavour()` / `useSettledFlavour()` (ROK-1700) | `web/src/hooks/` | Hiding a NAS-only surface (Ollama, Co-Optimus, Demo Data) under the `cloud` runtime flavour. Missing flavour = `nas`. Use `useSettledFlavour()` (undefined until `/system/status` answers) before a fetch that 404s under cloud; wrap a NAS-only settings route in `NasOnlyRoute` and list its path in `NAS_ONLY_SETTINGS_PATHS` (`admin-nav-data.tsx`) |
 | `use-now.ts` → `useNow(intervalMs = 60_000)` (ROK-1853) | `web/src/hooks/` | Relative-time labels that must keep ageing while a view stays mounted ("scanned 7 min ago"). `useNowTick` only ticks toward a future instant; use this for past timestamps. |
+| `use-noindex.ts` → `useNoIndex()` (ROK-1813) | `web/src/hooks/` | A signed-out page reached from a shared link that must stay out of search engines (the public guild card `/p/guild/:slug`). Appends `<meta name="robots" content="noindex, nofollow">` on mount and removes exactly that tag on unmount, so the rest of the SPA stays indexable. Pair it with an `X-Robots-Tag: noindex, nofollow` header on the page's API read; the HTML header itself needs nginx (separate infra PR). |
 | `useEscapeLayer` (existing) — a nested overlay (the Valheim item popover inside the chest Modal, `plugins/valheim/character/item-detail.tsx`) registers its own layer instead of a document keydown listener, so one Escape closes the topmost overlay only (ROK-1853). A `fixed` popover opened inside a `Modal` portals to `<body>`, not into the dialog — the frame's `overflow-hidden` plus its forwards-filled `modal-spring` transform clip a `fixed` child — and takes `Z_INDEX.MODAL_STACKED` plus a `useTabTrap` of its own (Codex r4). | — | Any overlay opened inside another overlay. |
 
 **Server- or user-supplied URLs** go through `web/src/lib/safe-http-url.ts` before they become an `href` or a navigation: `safeHttpUrl(raw)` returns the url only when it is absolute `http:`/`https:` (else `undefined` → render no link, or the surface's own fallback), `isHttpUrl(raw)` is the boolean form. An allow-list, never a `javascript:` deny-list.
@@ -1153,6 +1154,30 @@ renders a padded route (`/events`) and an unpadded wizard route (`/onboarding`).
 
 **DON'T** add a second raised slot, give a tab a fixed `min-w-[…]` (it overflows at 320px), or dock a fixed
 or sticky element to the bare `bottom: 3.5rem` bar height — the circle's 24px lift would cover it.
+
+### Pattern note — signed-out plugin public card page (ROK-1813)
+
+**New pattern: a plugin-owned page a signed-out visitor opens from a shared link.** `/p/guild/:slug` sits beside
+`/p/lineup/:slug` and `/w/:slug` outside `AuthGuard` in `app-routes.tsx`, and lazy-loads
+`plugins/wow/public-card/public-guild-card-page.tsx` (the ROK-1836 core-lazy-route → plugin-page note). Rules:
+
+- **No back button** (§4.9) — the visitor did not navigate here from inside the app. One centred card (§4.2,
+  `bg-surface border-edge rounded-lg`, `max-w-[560px]`), crest initials (`crestInitials`) instead of any uploaded image.
+- **Headline state** is a `StatusChip` with the §4.21 tones (open → success, limited → warning, closed → neutral);
+  wanted rows are **read-only pills** (§4.3) — not toggles, so no 44px chip geometry.
+- **Apply** is an `<a>` styled with `buttonClass('primary')`, `target="_blank" rel="noopener noreferrer"`, and only for an
+  `https:` URL (an `http:` one hides it).
+- **`useNoIndex()`** (§3.3) on the page, plus `X-Robots-Tag` + `Cache-Control: no-store` on the API read, so turning the
+  card off lands at once.
+- **One not-found state** (`public-guild-card-not-found`) for off / unknown / malformed / hidden — identical wording, so a
+  visitor cannot tell an "off" card from a typo.
+- **The editor side** lives in the hub's settings sheet as a `SettingsSection` + `SettingsSwitchRow` (off by default), and
+  while on a read-only mono `Input` with the absolute link + an icon-only `CopyButton` at 44px, then a `text-xs text-dim`
+  line naming what is never shown. Only `canEdit` viewers see it. The WoW module stacks it with the Blizzard roster section
+  through `WowSettingsSections` (`HubModule.settingsSections` is one slot — wrap, don't replace).
+- **DON'T** add hub links, member names, ids or free-text notes to a public card; the DTO is `.strict()` for that reason.
+
+Rendered: `/dev/design-system` → "Pattern — signed-out plugin public card".
 
 ### 4.15 Week strip — three bands, two tones, a busy cap
 

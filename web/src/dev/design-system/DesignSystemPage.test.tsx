@@ -82,6 +82,7 @@ describe('DesignSystemPage', () => {
         'Pattern — meter tones and CSS histogram',
         'Pattern — masonry-packed card grid',
         'Pattern — wizard sub-step rail',
+        'Pattern — signed-out plugin public card',
     ])('renders the "%s" section heading', async (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
