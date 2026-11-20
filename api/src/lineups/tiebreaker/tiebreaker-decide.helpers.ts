@@ -48,6 +48,14 @@ export async function decideLineupFromTiebreaker(
   decidedGameId?: number,
 ): Promise<void> {
   await flipLineupToDecided(deps.db, lineupId, decidedGameId);
+  // ROK-2272 S6: the flip committed (no tx here); the matching pass below
+  // can still throw, but the status edge already landed.
+  emitLineupStatusChanged(deps.events, {
+    lineupId,
+    from: 'voting',
+    to: 'decided',
+    visibility: null,
+  });
   // Run matching algorithm so decided view has match groups.
   await runMatchingAlgorithm(deps.db, lineupId, deps.logger, deps.events);
   // ROK-1309: this path bypasses `runStatusTransition` entirely, so it needs

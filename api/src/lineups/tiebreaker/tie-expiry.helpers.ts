@@ -18,8 +18,10 @@
  * relies on without borrowing its DTO.
  */
 import { and, eq, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { emitLineupStatusChanged } from '../lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -43,6 +45,8 @@ export interface TieExpiryDeps {
   logExpiry?: (lineupId: number) => Promise<void>;
   /** Where a per-lineup failure is reported; the sweep never throws for one. */
   logger?: { warn: (message: string) => void };
+  /** ROK-2272 S6: carries `STATUS_CHANGED` (voting → archived) per expiry. */
+  events?: EventEmitter2;
 }
 
 /** Ids the sweep moved to the expired/archived terminal state. */
@@ -132,6 +136,12 @@ export async function sweepExpiredTieHolds(
   for (const lineupId of candidates) {
     try {
       if (!(await archiveExpiredTieHold(db, lineupId, now))) continue;
+      emitLineupStatusChanged(deps.events, {
+        lineupId,
+        from: 'voting',
+        to: 'archived',
+        visibility: null,
+      });
       await logExpirySafely(deps, lineupId);
       expired.push(lineupId);
     } catch (err) {

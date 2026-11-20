@@ -40,7 +40,10 @@ import { rescheduleLockedInPoll } from './standalone-poll-reschedule-lock-in.hel
 import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { NotificationService } from '../../notifications/notification.service';
-import { emitPollLockedIn } from '../lineup-lifecycle-emit.helpers';
+import {
+  emitPollLockedIn,
+  emitStandaloneLineupArchived,
+} from '../lineup-lifecycle-emit.helpers';
 
 /** No-op rejection swallower for fire-and-forget emits. */
 const noop = (): void => {};
@@ -132,6 +135,7 @@ export class StandalonePollLockInService {
         eventsService: this.eventsService,
         notificationService: this.notificationService,
         logger: this.logger,
+        events: this.events,
       },
       { matchId, caller, dto },
     );
@@ -162,6 +166,9 @@ export class StandalonePollLockInService {
       matchId,
       eventId: eventId ?? result.linkedEventId ?? null,
     });
+    if (result.archivedLineupId !== undefined) {
+      emitStandaloneLineupArchived(this.events, result.archivedLineupId);
+    }
     // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
     // embed so its author line and colour follow.
     this.schedulingPollEmbed.fireUpdateEmbed(matchId);
@@ -190,6 +197,7 @@ export class StandalonePollLockInService {
       eventsService: this.eventsService,
       signupsService: this.signupsService,
       logger: this.logger,
+      events: this.events,
       assertCreate: async (dto: CreateEventDto): Promise<void> => {
         await this.guildTag.assertCreate(user, dto);
         await assertSchedulingMatchUsable(this.db, dto, {

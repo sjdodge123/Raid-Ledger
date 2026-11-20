@@ -12,6 +12,7 @@ import {
   type LineupStatusChangedPayload,
   type PollCancelledPayload,
   type PollLockedInPayload,
+  type PollOpenedPayload,
   type PollVotedPayload,
 } from './lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from './lineups-scheduling-hook.helpers';
@@ -87,4 +88,29 @@ export function emitPollCancelled(
   payload: PollCancelledPayload,
 ): void {
   safeEmit(events, LINEUP_MATCH_EVENTS.POLL_CANCELLED, payload);
+}
+
+/** A standalone scheduling poll was created (match → `scheduling`). */
+export function emitPollOpened(
+  events: EventEmitter2 | undefined,
+  payload: PollOpenedPayload,
+): void {
+  safeEmit(events, LINEUP_MATCH_EVENTS.POLL_OPENED, payload);
+}
+
+/**
+ * A standalone poll's carrier lineup was archived by its lock-in. The carrier
+ * is inserted `decided` and is only ever archived once (the match CAS gates
+ * it), so the edge is always `decided → archived`.
+ */
+export function emitStandaloneLineupArchived(
+  events: EventEmitter2 | undefined,
+  lineupId: number,
+): void {
+  emitLineupStatusChanged(events, {
+    lineupId,
+    from: 'decided',
+    to: 'archived',
+    visibility: null,
+  });
 }

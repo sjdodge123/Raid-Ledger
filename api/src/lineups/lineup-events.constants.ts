@@ -68,6 +68,19 @@ export interface PollLockedInPayload {
   eventId: number | null;
 }
 
+/**
+ * Payload of `LINEUP_MATCH_EVENTS.POLL_OPENED` — a standalone scheduling poll
+ * was created. A lineup match entering scheduling keeps its existing
+ * `ENTERED_SCHEDULING { matchId }` event (its listener resolves the rest).
+ */
+export interface PollOpenedPayload {
+  matchId: number;
+  lineupId: number;
+  /** The hub the poll is tagged to; `null` when untagged. */
+  guildId: number | null;
+  visibility: LineupVisibilityDto;
+}
+
 /** Payload of `LINEUP_MATCH_EVENTS.POLL_CANCELLED` (match → `archived`). */
 export interface PollCancelledPayload {
   matchId: number;

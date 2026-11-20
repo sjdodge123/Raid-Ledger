@@ -16,12 +16,14 @@ import {
   type Logger,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   EventResponseDto,
   RescheduleEventDto,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { emitStandaloneLineupArchived } from '../lineup-lifecycle-emit.helpers';
 import type { EventsService } from '../../events/events.service';
 import { findExistingOrThrow } from '../../events/event-lifecycle.helpers';
 import type { NotificationService } from '../../notifications/notification.service';
@@ -47,6 +49,8 @@ export interface RescheduleLockInDeps {
   eventsService: Pick<EventsService, 'reschedule' | 'findOne'>;
   notificationService: NotificationService;
   logger: Pick<Logger, 'error'>;
+  /** ROK-2272 S6: carries the carrier lineup's `decided → archived`. */
+  events?: EventEmitter2 | undefined;
 }
 
 /** One reschedule lock-in request. */
@@ -225,6 +229,7 @@ async function archiveOrLog(
 ): Promise<void> {
   try {
     await archiveAndRelease(deps.db, target);
+    emitStandaloneLineupArchived(deps.events, target.lineupId);
   } catch (err: unknown) {
     // Not rethrown: the event moved and the claim holds, so a retry can only
     // 409; `afterComplete` must still re-emit. The stale lock is ROK-2033's.

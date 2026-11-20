@@ -31,6 +31,8 @@ export const LINEUP_MATCH_EVENTS = {
   POLL_LOCKED_IN: 'lineup.match.poll-locked-in',
   /** ROK-2272 S6: an operator cancelled the poll (`PollCancelledPayload`). */
   POLL_CANCELLED: 'lineup.match.poll-cancelled',
+  /** ROK-2272 S6: a standalone poll was created (`PollOpenedPayload`). */
+  POLL_OPENED: 'lineup.match.poll-opened',
 } as const;
 
 /** A Discord poll card left behind by a wiped match (TDB:571). */
