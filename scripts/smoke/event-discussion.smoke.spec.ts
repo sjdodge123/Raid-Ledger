@@ -27,7 +27,8 @@ import { signInOnboardedMember } from './browser-session';
 import { editorTextbox } from './hub-post-editor';
 
 const SLUG = 'event-discussion';
-const LOCK_COPY = 'Closed 24 h after the event ended';
+/** ROK-2272: event threads close 1 h after the end (was 24 h). */
+const LOCK_COPY = 'Closed 1 h after the event ended';
 const SIGN_UP_COPY = 'Sign up to join the discussion.';
 /** The fixture's open-thread replies (`OPEN_REPLY_BODIES`). */
 const SEEDED_REPLIES = ['Bring flasks and food buffs.', 'I can tank if we are short.', 'Happy to fill a healer spot.'];

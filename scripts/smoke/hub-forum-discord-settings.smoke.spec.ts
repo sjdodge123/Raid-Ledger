@@ -10,6 +10,7 @@
  * (`hub-forum-discord-binding.test.ts`), which own a real Discord forum.
  */
 import type { Page, Route, TestInfo } from '@playwright/test';
+import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME as SHARED_NAME } from '@raid-ledger/contract';
 import { test, expect } from './base';
 import { getAdminToken } from './api-helpers';
 import { seedCommunityHubs } from './hub-seed';
@@ -17,9 +18,9 @@ import { signInOnboardedMember } from './browser-session';
 
 const PREFLIGHT = {
     botOnline: true, missingToCreate: [], suggestedName: 'seed-crew',
-    shared: { channelId: '223456789012345678', name: 'hub-forums', sharedWith: 1, tagsUsed: 2, tagsFree: 18, tagName: 'Seed Crew', missingPermissions: [] },
+    shared: { channelId: '223456789012345678', name: SHARED_NAME, sharedWith: 1, tagsUsed: 2, tagsFree: 18, tagName: 'Seed Crew', missingPermissions: [] },
 };
-const SHARED = { id: '223456789012345678', name: 'hub-forums', sharedWith: 1, tagsFree: 18 };
+const SHARED = { id: '223456789012345678', name: SHARED_NAME, sharedWith: 1, tagsFree: 18 };
 
 interface Stub { puts: unknown[]; deletes: string[]; bound: boolean }
 
@@ -76,7 +77,7 @@ test.describe('Hub settings — Discord forum (ROK-2208)', () => {
         await section.getByTestId('hub-forum-discord-ack').check();
         await turnOn.click();
         await expect.poll(() => stub.puts).toEqual([{ mode: 'create', target: 'shared', ack: true }]);
-        await expect(section.getByTestId('hub-forum-discord-channel-name')).toHaveText('#hub-forums');
+        await expect(section.getByTestId('hub-forum-discord-channel-name')).toHaveText(`#${SHARED_NAME}`);
         await expect(section.getByTestId('hub-forum-discord-shared')).toHaveText('Shared with 1 other hub · tag Seed Crew');
 
         await section.getByTestId('hub-forum-discord-unlink').click();
