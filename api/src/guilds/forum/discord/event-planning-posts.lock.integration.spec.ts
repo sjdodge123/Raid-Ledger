@@ -4,6 +4,7 @@
  * bot is reported connected, and `syncEvent` is spied. The sweep sees other
  * specs' rows too, so every assertion is scoped to rows this test inserted.
  */
+import { randomBytes } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
@@ -233,7 +234,7 @@ describe('ROK-2272 S10 deadline pass for non-hub poll posts', () => {
           createdBy: ctx.ids.creator,
           guildId: null,
           phaseDeadline: new Date(Date.now() - 2 * HOUR),
-          publicSlug: `exp-${Date.now()}-${nextSubject}`,
+          publicSlug: randomBytes(8).toString('hex'),
         })
         .returning(),
       'lineup',
