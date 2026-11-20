@@ -130,6 +130,8 @@ describe('dungeon quests acquired inside the instance (ROK-2142)', () => {
       toDungeonQuestRow({ id, name: 'Quest' }, parsed, 2);
     const inside = row(95195);
     const outside = row(386);
+    expect(inside.ok).toBe(true);
+    expect(outside.ok).toBe(true);
     expect(inside.ok && inside.row.startsInsideDungeon).toBe(true);
     expect(outside.ok && outside.row.startsInsideDungeon).toBe(false);
   });
