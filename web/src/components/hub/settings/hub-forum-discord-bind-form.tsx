@@ -1,7 +1,7 @@
 /**
  * ROK-2208 Q10 (option c, RULED 2026-11-16) — the unbound "Discord forum"
  * form: the preflight Ready / Missing line (or the bot-offline line), the
- * list `RadioGroup` shared `#hub-forums` (preselected while it has a free
+ * list `RadioGroup` shared `#event-planning` (preselected while it has a free
  * tag slot; disabled with the reason once full) vs this hub's own channel
  * (segmented Create / Use existing), the visibility acknowledgement naming
  * the chosen channel (R1), and "Turn on sync", disabled until ticked and
