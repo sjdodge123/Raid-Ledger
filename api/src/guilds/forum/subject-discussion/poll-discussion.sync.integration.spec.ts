@@ -16,6 +16,7 @@ import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.he
 import {
   planPollSync,
   POLL_CLOSE_GRACE_MS,
+  pollSubjectTitle,
   pollThreadTitle,
   syncPollDiscussion,
 } from './poll-discussion.sync';
@@ -53,6 +54,8 @@ interface PollOpts {
   guildId?: number | null;
   visibility?: 'public' | 'private';
   status?: 'suggested' | 'scheduling' | 'scheduled' | 'archived';
+  /** A standalone poll's storage lineup (`phase_duration_override.standalone`). */
+  standalone?: { title: string };
 }
 
 /** A decided lineup with one match (the poll). */
@@ -61,7 +64,10 @@ async function newPoll(opts: PollOpts = {}) {
     await testApp.db
       .insert(schema.communityLineups)
       .values({
-        title: `Poll lineup ${seq}`,
+        title: opts.standalone?.title ?? `Poll lineup ${seq}`,
+        ...(opts.standalone
+          ? { phaseDurationOverride: { standalone: true } }
+          : {}),
         status: 'decided',
         visibility: opts.visibility ?? 'public',
         createdBy: testApp.seed.adminUser.id,
@@ -108,6 +114,8 @@ describe('planPollSync (decision table)', () => {
     lineupId: 1,
     creatorId: 1,
     gameName: 'g',
+    lineupTitle: 'L',
+    standalone: false,
     guildId: 7,
     visibility: 'public' as const,
   };
@@ -128,7 +136,23 @@ describe('planPollSync (decision table)', () => {
   });
 });
 
+describe('pollSubjectTitle (Lead ruling, call 1)', () => {
+  const row = { gameName: 'Valheim', lineupTitle: 'Friday raid' };
+  it('a standalone poll uses its lineup title; a lineup poll its game', () => {
+    expect(pollSubjectTitle({ ...row, standalone: true })).toBe('Friday raid');
+    expect(pollSubjectTitle({ ...row, standalone: false })).toBe('Valheim');
+  });
+});
+
 describe('syncPollDiscussion (real db)', () => {
+  it('a standalone hub poll is titled `<poll title> — Poll`', async () => {
+    const guildId = await newHub();
+    const title = `Standalone ${Date.now()}`;
+    const { matchId } = await newPoll({ guildId, standalone: { title } });
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
+    expect((await liveThread(matchId))?.title).toBe(`${title} — Poll`);
+  });
+
   it('a hub poll opening creates exactly one thread with match_id (R4, R11)', async () => {
     const guildId = await newHub();
     const { matchId, lineupId } = await newPoll({ guildId });

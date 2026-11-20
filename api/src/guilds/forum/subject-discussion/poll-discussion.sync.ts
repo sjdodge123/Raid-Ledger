@@ -79,10 +79,20 @@ export function pollWriteClosesAt(
   return stored ?? new Date(now.getTime() + POLL_CLOSE_GRACE_MS);
 }
 
+/**
+ * Lead ruling (S7a call 1): a standalone poll is titled by its storage lineup
+ * row's title; a lineup-derived poll by its game.
+ */
+export function pollSubjectTitle(
+  poll: Pick<PollSyncRow, 'standalone' | 'lineupTitle' | 'gameName'>,
+): string {
+  return poll.standalone ? poll.lineupTitle : poll.gameName;
+}
+
 /** The fields the poll dictates on its thread. */
 function derived(poll: PollSyncRow, stored: Date | null, now: Date) {
   return {
-    title: pollThreadTitle(poll.gameName),
+    title: pollThreadTitle(pollSubjectTitle(poll)),
     body: pollThreadRootBody(poll),
     writeClosesAt: pollWriteClosesAt(poll, stored, now),
   };

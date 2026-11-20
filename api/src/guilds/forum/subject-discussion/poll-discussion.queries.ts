@@ -22,6 +22,10 @@ export interface PollSyncRow {
   visibility: 'public' | 'private';
   creatorId: number;
   gameName: string;
+  /** The storage lineup row's title (a standalone poll's own title). */
+  lineupTitle: string;
+  /** `phase_duration_override.standalone` — a standalone scheduling poll. */
+  standalone: boolean;
 }
 
 /** The poll's live (attached) thread — at most one (partial unique index). */
@@ -49,13 +53,17 @@ export async function findPollForSync(
       visibility: l.visibility,
       creatorId: l.createdBy,
       gameName: schema.games.name,
+      lineupTitle: l.title,
+      override: l.phaseDurationOverride,
     })
     .from(m)
     .innerJoin(l, eq(l.id, m.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, m.gameId))
     .where(eq(m.id, matchId))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  const { override, ...rest } = row;
+  return { ...rest, standalone: override?.standalone === true };
 }
 
 /** The poll's live (attached) thread, or null. */
