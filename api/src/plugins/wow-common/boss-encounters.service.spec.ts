@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import type { ItemTooltip } from '@raid-ledger/contract';
-import { BossEncountersService } from './boss-encounters.service';
+import {
+  BossEncountersService,
+  bossLootCacheKey,
+} from './boss-encounters.service';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
@@ -121,6 +124,17 @@ describe('BossEncountersService — variant and queries', () => {
       const result = await service.getLootForBoss(999, 'classic_era');
       expect(result).toEqual([]);
     });
+
+    // ROK-2270: a versioned key, so pre-fallback cached `[]` is never read.
+    it('reads the loot cache through the versioned key builder', async () => {
+      await service.getLootForBoss(7, 'wow_forever');
+      expect(bossLootCacheKey(7, 'wow_forever')).toBe(
+        'wow:bosses:loot:v2:7:wow_forever',
+      );
+      expect(mockRedis.get).toHaveBeenCalledWith(
+        'wow:bosses:loot:v2:7:wow_forever',
+      );
+    });
   });
 });
 
@@ -212,6 +226,19 @@ describe('BossEncountersService — Forever loot read rule (ROK-2170)', () => {
     ]);
     const result = await service.getLootForBoss(7, 'classic_anniversary');
     expect(result.map((l) => l.id)).toEqual([1, 2]);
+  });
+
+  // ROK-2270: only wow_forever falls back, and only to classic.
+  it('never falls back under a TBC-era variant with none of its own rows', async () => {
+    mockOrderBy.mockResolvedValue([lootRow(1, 'forever'), lootRow(2, 'wotlk')]);
+    const result = await service.getLootForBoss(7, 'classic_anniversary');
+    expect(result).toEqual([]);
+  });
+
+  it('falls back to classic rows only, never tbc, under wow_forever', async () => {
+    mockOrderBy.mockResolvedValue([lootRow(1, 'classic'), lootRow(2, 'tbc')]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result.map((l) => [l.id, l.expansion])).toEqual([[1, 'classic']]);
   });
 });
 

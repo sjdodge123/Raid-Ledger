@@ -2,8 +2,9 @@
  * ROK-2209: which loot expansions a boss-loot read may return. For the
  * catalogue-served variants (`classic_era`, `wow_forever`) the instance
  * catalogue's `lootExpansion` decides (ROK-2270: a labelled per-boss Classic
- * fallback is `lootFallbackExpansionFor`, below). An instance the catalogue does not know fails closed to the
- * variant's own expansion. Every other variant keeps its expansion set.
+ * fallback is `lootFallbackExpansionFor`, below). An instance the catalogue
+ * does not know fails closed to the variant's own expansion. Every other
+ * variant keeps its expansion set.
  */
 import { getInstance } from './instance-catalogue/instance-catalogue';
 import type {
