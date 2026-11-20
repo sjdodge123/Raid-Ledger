@@ -187,12 +187,8 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
                 identityRegistry.set(gameSlug, { pluginSlug: slug, provider: opaque });
             }
         },
-        registerCalendarLayer(layer) {
-            addCalendarLayer({ pluginSlug: slug, layer });
-        },
-        registerGameServerProvider() {
-            addGameServerProvider(slug);
-        },
+        registerCalendarLayer: (layer) => addCalendarLayer({ pluginSlug: slug, layer }),
+        registerGameServerProvider: () => addGameServerProvider(slug),
         ...eventPageMethods(slug),
         registerHubModule(module) {
             hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
