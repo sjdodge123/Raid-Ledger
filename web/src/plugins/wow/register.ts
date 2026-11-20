@@ -47,6 +47,7 @@ import { registerClaimBannerWidget } from './hub-widgets/claim-banner.register';
 import { wowHubClaimProvider } from './hub/wow-hub-claim-provider';
 import { craftersTab } from './hub/crafters/crafters-tab.register';
 import { dungeonPlannerTab } from './hub/dungeon-planner/dungeon-planner-tab.register';
+import { ADDON_ERRORS_NAV_ITEMS } from './admin/addon-errors-route';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -77,6 +78,8 @@ blizzard.registerHubModule(wowHubModule);
 blizzard.registerEventReportLinks(supportsEventReportLinks);
 // ROK-2215 — a dungeon-plan link pre-fills the Create Event form through this provider.
 blizzard.registerEventPlanPrefill(useWowEventPlanPrefill);
+// ROK-2099 — the Admin → General "Addon errors" row (core shows it only while blizzard is active).
+blizzard.registerAdminGeneralNavItems(ADDON_ERRORS_NAV_ITEMS);
 registerClassLevelWidgets(blizzard);
 registerRolesWidget(blizzard);
 blizzard.registerHubWidget(professionsWidget);

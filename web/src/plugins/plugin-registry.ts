@@ -8,6 +8,8 @@ import { addEventPlanPrefillProvider, clearEventPlanPrefillProviders, type Event
 import { addHubGameWidget, clearHubGameWidgets, type HubGameWidget } from './hub-game-widgets';
 import { addHubGameTab, clearHubGameTabs } from './hub-game-tabs';
 import { addGgCard, type GgCardRegistration } from './gg-cards';
+import { addAdminGeneralNavItems, clearAdminGeneralNavItems } from './admin-nav-items';
+import type { NavItem } from '../components/admin/admin-nav-data';
 import {
     addHubCompanionPrompt, clearHubCompanionPrompts, type HubCompanionPrompt,
 } from '../components/hub/companion/hub-companion-prompts';
@@ -111,6 +113,8 @@ export interface PluginHandle {
      * `gg-card` behaviour with the same id (ownership guard).
      */
     registerGgCard<P>(card: GgCardRegistration<P>): void;
+    /** Add rows to Admin → General (after Logs) for this plugin's pages, shown only while it is active (ROK-2099). */
+    registerAdminGeneralNavItems(items: readonly NavItem[]): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -198,6 +202,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerHubCompanionPrompt: (prompt) => addHubCompanionPrompt(slug, prompt),
         registerHubClaimProvider: (provider) => addHubClaimProvider(slug, provider),
         registerGgCard: (card) => addGgCard(slug, card),
+        registerAdminGeneralNavItems: (items) => addAdminGeneralNavItems(slug, items),
     };
 }
 
@@ -261,6 +266,7 @@ export function clearRegistry(): void {
     clearGameServerProviders();
     clearEventReportLinkPredicates();
     clearEventPlanPrefillProviders();
+    clearAdminGeneralNavItems();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */

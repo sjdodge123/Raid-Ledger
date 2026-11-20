@@ -2,13 +2,15 @@
  * ROK-2099 — ruling 9's plugin gate (the Admin → General row and the page exist
  * only while `blizzard` is active) and the page's failed-list state.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, renderHook, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { AddonErrorsPage } from './addon-errors-page';
-import { ADDON_ERRORS_PATH, useAddonErrorsNavItems } from './addon-errors-route';
+import { ADDON_ERRORS_NAV_ITEMS, ADDON_ERRORS_PATH, ADDON_ERRORS_PLUGIN } from './addon-errors-route';
+import { registerPlugin } from '../../plugin-registry';
+import { useAdminGeneralNavItems } from '../../admin-nav-items';
 import { EMPTY_TEXT } from './addon-errors-table';
 
 const list = vi.hoisted(() => ({ isError: false }));
@@ -40,17 +42,20 @@ function renderPage(): void {
 }
 
 describe('Addon errors plugin gate (ROK-2099 ruling 9)', () => {
+    beforeAll(() => {
+        registerPlugin(ADDON_ERRORS_PLUGIN, { icon: '/x.svg', color: 'blue', label: 'WoW' }).registerAdminGeneralNavItems(ADDON_ERRORS_NAV_ITEMS);
+    });
     beforeEach(() => { list.isError = false; });
     afterEach(() => { usePluginStore.setState({ activeSlugs: new Set([CORE_PLUGIN_ID]), initialized: false, settled: false }); });
 
     it('adds no Admin → General row while blizzard is inactive', () => {
         setBlizzard(false);
-        expect(renderHook(() => useAddonErrorsNavItems()).result.current).toEqual([]);
+        expect(renderHook(() => useAdminGeneralNavItems()).result.current).toEqual([]);
     });
 
     it('adds the Addon errors row while blizzard is active', () => {
         setBlizzard(true);
-        expect(renderHook(() => useAddonErrorsNavItems()).result.current).toEqual([{ to: ADDON_ERRORS_PATH, label: 'Addon errors' }]);
+        expect(renderHook(() => useAdminGeneralNavItems()).result.current).toEqual([{ to: ADDON_ERRORS_PATH, label: 'Addon errors' }]);
     });
 
     it('redirects to General while blizzard is inactive', () => {

@@ -1130,9 +1130,11 @@ hand-written path.
 
 **Plugin rows in Admin → General (ROK-2099).** A plugin page under `/admin/settings/general/…` gets its
 sidebar row through `buildNavSections`'s 4th parameter, `pluginGeneralItems` (`admin-nav-data.tsx`), placed after
-Logs. The plugin owns a hook that returns its rows only while it is active (`useAddonErrorsNavItems` in
-`plugins/wow/admin/addon-errors-route.ts` → `[]` unless `blizzard` is on), and core passes that list through
-(`admin-sidebar.tsx`, `more-drawer-submenus.tsx`); the page itself redirects to General while the plugin is off.
+Logs. The plugin declares its rows in its `register.ts` through
+`PluginHandle.registerAdminGeneralNavItems` (WoW: `ADDON_ERRORS_NAV_ITEMS` from
+`plugins/wow/admin/addon-errors-route.ts`); core reads them from the host API `plugins/admin-nav-items.ts`
+(`useAdminGeneralNavItems()` — only ACTIVE plugins' rows) in `admin-sidebar.tsx` and `more-drawer-submenus.tsx`,
+never importing the plugin (boundary guard `pelican-core-boundary.guard.test.ts`); the page itself redirects to General while the plugin is off.
 Operators never see these rows (General is filtered to `OPERATOR_SETTINGS_PATHS`).
 
 ### Pattern note — raised centre bottom-nav action (ROK-1875)
