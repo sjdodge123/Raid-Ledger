@@ -90,6 +90,17 @@ async function threadLinks(threadId: number) {
 
 const sorted = (...ids: string[]): string[] => [...ids].sort();
 
+const HOUR = 60 * 60 * 1000;
+
+/** Move the event to start `ms` from now (2 h long). */
+async function startsIn(eventId: number, ms: number): Promise<void> {
+  const start = new Date(Date.now() + ms);
+  await ctx.posts.testApp.db
+    .update(schema.events)
+    .set({ duration: [start, new Date(start.getTime() + 2 * HOUR)] })
+    .where(eq(schema.events.id, eventId));
+}
+
 describe('ROK-2260 signup pings — first signup and roll-ups', () => {
   it('the first signup creates the post and one mention names that player', async () => {
     const s = await bareScene(ctx);
@@ -231,6 +242,10 @@ describe('ROK-2260 signup pings — the real cancel path (review m8)', () => {
   it('DELETE /events/:id/signup, then a flush reopens the archived post, removes the player and re-archives', async () => {
     const s = await bareScene(ctx);
     await bindHub(ctx, s.guildId);
+    // A graceful decline (> 23 h out): it stays on the debounce, so the flush
+    // below is the one that removes. A late cancel (roach-out) flushes at
+    // once instead — ROK-2271 C4, covered at the bottom of this file.
+    await startsIn(s.eventId, 48 * HOUR);
     await signUp(ctx, s.eventId, 'signed', 'signed_up');
     await signUp(ctx, s.eventId, 'tentative', 'tentative');
     await flush(s.eventId);
@@ -429,8 +444,6 @@ describe('ROK-2271 signup lines — role, character and status', () => {
   });
 });
 
-const HOUR = 60 * 60 * 1000;
-
 /** Bot messages so far, once the urgent flush has posted the n-th one. */
 async function awaitMessages(n: number): Promise<void> {
   await waitFor(async () => {
@@ -469,11 +482,7 @@ describe('ROK-2271 C4 — running late and roach-out post at once', () => {
   it('a roach-out (cancel < 23 h before start) posts ONE line at once and leaves the post', async () => {
     const s = await bareScene(ctx);
     await bindHub(ctx, s.guildId);
-    const start = new Date(Date.now() + 3 * HOUR + 10 * 60_000);
-    await ctx.posts.testApp.db
-      .update(schema.events)
-      .set({ duration: [start, new Date(start.getTime() + 2 * HOUR)] })
-      .where(eq(schema.events.id, s.eventId));
+    await startsIn(s.eventId, 3 * HOUR + 10 * 60_000);
     await signUp(ctx, s.eventId, 'signed', 'signed_up');
     await flush(s.eventId);
     await ctx.posts.testApp.app
