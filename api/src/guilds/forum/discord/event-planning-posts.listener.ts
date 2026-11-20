@@ -11,7 +11,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import * as Sentry from '@sentry/nestjs';
-import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
+import {
+  APP_EVENT_EVENTS,
+  DISCORD_BOT_EVENTS,
+} from '../../../discord-bot/discord-bot.constants';
 import { lifecycleEventId } from '../event-discussion/event-discussion.listener';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 
@@ -53,6 +56,23 @@ export class EventPlanningPostsListener {
     return this.run('deleted', payload, (id) =>
       this.service.closeForDeletedEvent(id),
     );
+  }
+
+  /**
+   * Codex P2-2: on every (re)connect — the same trigger as the hub
+   * reconcile — replay retitles skipped while the bot was offline.
+   */
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED, { async: true })
+  async onConnected(): Promise<void> {
+    try {
+      await this.service.resyncLiveEventPosts();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`event-planning post reconnect resync failed: ${msg}`);
+      Sentry.captureException(err, {
+        tags: { event_planning_posts: 'reconnect' },
+      });
+    }
   }
 
   private async run(

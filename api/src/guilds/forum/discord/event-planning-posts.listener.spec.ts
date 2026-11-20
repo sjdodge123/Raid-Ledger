@@ -12,6 +12,7 @@ function setup() {
   const service = {
     syncEvent: jest.fn().mockResolvedValue(undefined),
     closeForDeletedEvent: jest.fn().mockResolvedValue(undefined),
+    resyncLiveEventPosts: jest.fn().mockResolvedValue(0),
   };
   const listener = new EventPlanningPostsListener(
     service as unknown as EventPlanningPostsService,
@@ -43,6 +44,20 @@ describe('EventPlanningPostsListener', () => {
     await listener[handler]({ eventId: 42 });
     expect(service.syncEvent).toHaveBeenCalledWith(42);
     expect(service.closeForDeletedEvent).not.toHaveBeenCalled();
+  });
+
+  it('onConnected runs the reconnect resync pass (Codex P2-2)', async () => {
+    const { listener, service } = setup();
+    await listener.onConnected();
+    expect(service.resyncLiveEventPosts).toHaveBeenCalledTimes(1);
+  });
+
+  it('onConnected never throws into the connect handler', async () => {
+    const { listener, service } = setup();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    service.resyncLiveEventPosts.mockRejectedValueOnce(new Error('db down'));
+    await expect(listener.onConnected()).resolves.toBeUndefined();
+    expect(Sentry.captureException).toHaveBeenCalled();
   });
 
   it('onDeleted closes the post without looking the event up', async () => {

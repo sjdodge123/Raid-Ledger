@@ -341,3 +341,103 @@ describe('ROK-2272 S4 syncEvent — the event left the non-hub path', () => {
     },
   );
 });
+
+/** Move the event: new title, and its window shifted by `byMs`. */
+async function moveEvent(eventId: number, title: string, byMs: number) {
+  const [start, end] = (await eventRow(eventId)).duration;
+  await db()
+    .update(schema.events)
+    .set({
+      title,
+      duration: [
+        new Date(start.getTime() + byMs),
+        new Date(end.getTime() + byMs),
+      ] as [Date, Date],
+    })
+    .where(eq(schema.events.id, eventId));
+}
+
+async function postRow(eventId: number) {
+  return nonEmpty(await liveRows(eventId), 'post row')[0];
+}
+
+describe('ROK-2272 S4 Codex P2-2 — retitles skipped while offline', () => {
+  it('offline: closes_at still moves, no rename; the reconnect pass renames', async () => {
+    const eventId = await newEvent();
+    await svc.ensureEventPost(eventId);
+    const row = await postRow(eventId);
+    planning.isOnline.mockReturnValue(false);
+    await moveEvent(eventId, 'Ragnaros', DAY);
+    await svc.syncEvent(eventId);
+    expect(planning.renameThread).not.toHaveBeenCalled();
+    const end = (await eventRow(eventId)).duration[1];
+    expect((await postRow(eventId)).closesAt?.getTime()).toBe(
+      end.getTime() + WRITE_GRACE_MS,
+    );
+    planning.isOnline.mockReturnValue(true);
+    await svc.resyncLiveEventPosts(row.id - 1);
+    expect(planning.renameThread).toHaveBeenCalledWith(
+      row.discordThreadId,
+      await expectedTitle(eventId),
+    );
+  });
+
+  it('one failing post is logged and the pass goes on to the next', async () => {
+    const first = await newEvent();
+    const second = await newEvent();
+    await svc.ensureEventPost(first);
+    await svc.ensureEventPost(second);
+    const a = await postRow(first);
+    const b = await postRow(second);
+    await moveEvent(first, 'Ragnaros', DAY);
+    await moveEvent(second, 'Nefarian', DAY);
+    planning.renameThread.mockImplementation((threadId) =>
+      threadId === a.discordThreadId
+        ? Promise.reject(new Error('Discord 500'))
+        : Promise.resolve('ok'),
+    );
+    const synced = await svc.resyncLiveEventPosts(a.id - 1);
+    expect(synced).toBe(1);
+    expect(planning.renameThread).toHaveBeenCalledWith(
+      b.discordThreadId,
+      await expectedTitle(second),
+    );
+  });
+});
+
+describe('ROK-2272 S4 Codex P2-3 — the event changed during the create', () => {
+  it('deleted while the create was in flight: the new post is due now', async () => {
+    const eventId = await newEvent();
+    planning.createPost.mockImplementation(async () => {
+      await db().delete(schema.events).where(eq(schema.events.id, eventId));
+      return snowflake();
+    });
+    const before = Date.now();
+    expect(await svc.ensureEventPost(eventId)).not.toBeNull();
+    const row = await postRow(eventId);
+    expect(row.closesAt?.getTime()).toBeGreaterThanOrEqual(before);
+    expect(row.closesAt?.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('rescheduled while the create was in flight: closes_at and title follow', async () => {
+    const eventId = await newEvent();
+    planning.createPost.mockImplementation(async () => {
+      await moveEvent(eventId, 'Ragnaros', DAY);
+      return snowflake();
+    });
+    await svc.ensureEventPost(eventId);
+    const row = await postRow(eventId);
+    const end = (await eventRow(eventId)).duration[1];
+    expect(row.closesAt?.getTime()).toBe(end.getTime() + WRITE_GRACE_MS);
+    expect(planning.renameThread).toHaveBeenCalledWith(
+      row.discordThreadId,
+      await expectedTitle(eventId),
+    );
+  });
+
+  it('nothing changed during the create: no rename', async () => {
+    const eventId = await newEvent();
+    await svc.ensureEventPost(eventId);
+    expect(planning.renameThread).not.toHaveBeenCalled();
+  });
+});

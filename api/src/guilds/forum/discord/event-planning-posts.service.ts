@@ -16,6 +16,11 @@ import type { BoundForum } from './event-planning-forum.queries';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import {
+  liveUnlockedEventSubjects,
+  planningEventChanged,
+  syncEach,
+} from './event-planning-posts.reconcile';
+import {
   findLivePlanningPost,
   findPlanningEvent,
   hubTagIdsOfForum,
@@ -129,6 +134,20 @@ export class EventPlanningPostsService {
     if (post.discordLockedAt === null) await this.retitle(post, ev);
   }
 
+  /**
+   * Codex P2-2: on (re)connect, replay retitles skipped while offline for
+   * every live, unlocked event post after `afterId` (bounded). One failing
+   * post is logged and the rest go on; returns how many synced.
+   */
+  async resyncLiveEventPosts(afterId = 0): Promise<number> {
+    const ids = await liveUnlockedEventSubjects(this.db, afterId);
+    return syncEach(
+      ids,
+      (id) => this.syncEvent(id),
+      (id, err) => this.warn(`resync of event ${id}`, err),
+    );
+  }
+
   /** The event row is gone: due now, so the sweep closes the post. */
   async closeForDeletedEvent(eventId: number): Promise<void> {
     const post = await findLivePlanningPost(this.db, 'event', eventId);
@@ -206,7 +225,10 @@ export class EventPlanningPostsService {
       discordThreadId,
       closesAt: planningEventClosesAt(ev),
     });
-    if (res.status === 'ok') return toRef(res.row);
+    if (res.status === 'ok') {
+      await this.reconcileCreated(eventId, ev);
+      return toRef(res.row);
+    }
     await this.dropThread(discordThreadId);
     if (res.status === 'no-forum') {
       this.resolver.invalidate();
@@ -214,6 +236,30 @@ export class EventPlanningPostsService {
     }
     const winner = await findLivePlanningPost(this.db, 'event', eventId);
     return winner ? toRef(winner) : null;
+  }
+
+  /**
+   * Codex P2-3: the event may have changed (or gone) while the Discord
+   * create was in flight, unseen by its lifecycle handler (no row yet).
+   * Re-derive once from the CURRENT row; a failure is logged, never thrown
+   * (the post exists; the next emit or reconnect pass heals it).
+   */
+  private async reconcileCreated(
+    eventId: number,
+    snapshot: PlanningEventSource,
+  ): Promise<void> {
+    try {
+      const current = await findPlanningEvent(this.db, eventId);
+      if (planningEventChanged(snapshot, current))
+        await this.syncEvent(eventId);
+    } catch (err) {
+      this.warn(`post-create reconcile of event ${eventId}`, err);
+    }
+  }
+
+  private warn(what: string, err: unknown): void {
+    const why = err instanceof Error ? err.message : String(err);
+    this.logger.warn(`Planning post ${what} failed: ${why}`);
   }
 
   /**
