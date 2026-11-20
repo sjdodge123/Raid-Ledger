@@ -392,7 +392,7 @@ describe('ROK-2208 binding — sharing a forum (AC3, D6)', () => {
 });
 
 describe('ROK-2208 binding — the picker and the tag budget', () => {
-  it("the picker lists a shared forum with its free tag slots (the lone hub's tag and Event spent)", async () => {
+  it("the picker lists a shared forum with its free tag slots (the lone hub's tag and the three kind tags spent)", async () => {
     const { channelId } = await boundHub();
     const res = await as(
       'admin',
@@ -403,7 +403,8 @@ describe('ROK-2208 binding — the picker and the tag budget', () => {
     const opts = (res.body as HubForumDiscordChannelOptions).channels;
     expect(opts.find((c) => c.id === channelId)).toMatchObject({
       sharedWith: 1,
-      tagsFree: 18, // ROK-2258: 20 − (hub tag + Event tag), nothing left to reserve
+      // ROK-2258 + ROK-2272 S8: 20 − (hub tag + Event + Poll + Lineup), nothing left to reserve
+      tagsFree: 16,
     });
   });
 
@@ -623,8 +624,9 @@ describe('ROK-2208 preflight — before Turn on sync (review web MAJOR 2)', () =
       channelId: f.id,
       name: SHARED_NAME,
       sharedWith: 1,
-      tagsUsed: 5, // ROK-2258: 3 moderator tags + the 1st hub's tag + Event
-      tagsFree: 15,
+      // ROK-2258 + ROK-2272 S8: 3 moderator tags + the 1st hub's tag + Event, Poll, Lineup
+      tagsUsed: 7,
+      tagsFree: 13,
       tagName: (await hubNameOf(g)).trim().slice(0, 20).trim(),
       missingPermissions: ['Manage Webhooks'],
     });

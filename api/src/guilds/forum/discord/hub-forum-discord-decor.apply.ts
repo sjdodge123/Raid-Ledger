@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
-  EVENT_TAG_NAME,
+  RESERVED_TAG_NAMES,
   eventTagIdOf,
   failureOutcome,
   findTagId,
@@ -100,7 +100,7 @@ export class HubForumDiscordDecor {
     return 'settled';
   }
 
-  /** Create the missing hub + Event tags; log the ones past the cap. */
+  /** Create missing hub + Event/Poll/Lineup tags; log those past the cap. */
   private async ensureTags(
     info: ForumInfo,
     hubs: readonly BoundHub[],
@@ -108,7 +108,7 @@ export class HubForumDiscordDecor {
     const wanted = hubs
       .filter((h) => h.tagId === null)
       .map((h) => tagNameFor(h.hubName));
-    const plan = planTagCreates(info.tags, [...wanted, EVENT_TAG_NAME]);
+    const plan = planTagCreates(info.tags, [...wanted, ...RESERVED_TAG_NAMES]);
     if (plan.skipped.length > 0)
       this.logger.warn(
         `Forum ${info.id} is at the tag limit; skipped: ${plan.skipped.join(', ')}`,

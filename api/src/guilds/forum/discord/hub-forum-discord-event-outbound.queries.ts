@@ -7,6 +7,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { ForumLink } from './hub-forum-discord-links.queries';
 import type { EventThreadWriteState } from './hub-forum-discord-event-outbound';
+import { subjectOf } from './hub-forum-discord-subject';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const threads = schema.hubForumThreads;
@@ -60,9 +61,10 @@ export async function findEventHeading(
 
 /**
  * When the thread's sync began, for the stale-binding check. A plain thread:
- * its creation (R8). An event thread is created at schedule time but posted
- * lazily (§5.7 item 1), so its sync begins with its post link — `now` when
- * it has none yet. Null once the thread is gone.
+ * its creation (R8). A subject (event / poll / lineup, ROK-2272 S8) thread is
+ * created with its subject but posted lazily (§5.7 item 1), so its sync
+ * begins with its post link — `now` when it has none yet. Null once the
+ * thread is gone.
  */
 export async function syncBornAt(
   db: ForumDiscordDb,
@@ -73,6 +75,8 @@ export async function syncBornAt(
     .select({
       createdAt: threads.createdAt,
       eventId: threads.eventId,
+      matchId: threads.matchId,
+      lineupId: threads.lineupId,
       linkedAt: links.createdAt,
     })
     .from(threads)
@@ -83,7 +87,7 @@ export async function syncBornAt(
     .where(eq(threads.id, threadId))
     .limit(1);
   if (!row) return null;
-  if (row.eventId === null) return row.createdAt;
+  if (subjectOf(row) === null) return row.createdAt;
   return row.linkedAt ?? now;
 }
 

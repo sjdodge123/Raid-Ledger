@@ -9,6 +9,10 @@
  * 2. Retitle: an event update re-drives each live post as `thread.updated`
  *    through the owner (binding + stale checks, rename budget, D9 / MAJOR-1).
  * 5. A read-only (closed or detached) event thread never posts.
+ *
+ * ROK-2272 S8: items 1 and 5 hold for every subject thread — a scheduling
+ * poll or lineup thread posts lazily too, titled `<title> — Poll|Lineup`
+ * and tagged with its kind tag. Retitle (item 2) stays event-only (F5).
  */
 import {
   discordThreadName,
@@ -22,9 +26,7 @@ import {
 } from './hub-forum-discord-event-outbound';
 import {
   findEventHeading,
-  findEventPostSource,
   liveEventPostLinks,
-  type EventPostSource,
 } from './hub-forum-discord-event-outbound.queries';
 import * as links from './hub-forum-discord-links.queries';
 import type {
@@ -32,6 +34,15 @@ import type {
   OutboundAuthor,
   OutboundTarget,
 } from './hub-forum-discord-outbound.discord';
+import {
+  subjectOf,
+  subjectPostTitle,
+  type SubjectColumns,
+} from './hub-forum-discord-subject';
+import {
+  findSubjectPostSource,
+  type SubjectPostSource,
+} from './hub-forum-discord-subject-post.queries';
 import { FORUM_WEBHOOK_NAME } from './hub-forum-discord.helpers';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -66,10 +77,16 @@ const ROOT_AUTHOR: OutboundAuthor = {
 };
 
 /** A thread row as far as its Discord post title/body go. */
-interface ThreadText {
-  eventId: number | null;
+interface ThreadText extends SubjectColumns {
+  id: number;
   title: string;
   body: string;
+}
+
+/** A Discord post's name and starter content. */
+interface PostView {
+  name: string;
+  content: string;
 }
 
 export class EventPostOutbound {
@@ -83,11 +100,22 @@ export class EventPostOutbound {
     return eventPostTitle(heading.title, heading.start, zone);
   }
 
-  /** The post name + starter content of any thread (plain or event). */
-  async postView(
-    thread: ThreadText,
-    url: string,
-  ): Promise<{ name: string; content: string }> {
+  /** True for a subject (event / poll / lineup) thread: posted lazily. */
+  isSubjectThread(thread: SubjectColumns): boolean {
+    return subjectOf(thread) !== null;
+  }
+
+  /**
+   * The post name + starter content of any thread. A poll / lineup thread
+   * renders exactly as `send` created it (S8 review MAJOR-1: a reopen's
+   * `thread.updated` re-drive is then a no-op rename, absolute links kept).
+   */
+  async postView(thread: ThreadText, url: string): Promise<PostView> {
+    const kind = subjectOf(thread)?.kind;
+    if (kind === 'poll' || kind === 'lineup') {
+      const src = await findSubjectPostSource(this.deps.db, thread.id);
+      if (src) return this.subjectView(src, url, await this.deps.clientUrl());
+    }
     const dated =
       thread.eventId === null ? null : await this.title(thread.eventId);
     if (dated === null) {
@@ -106,7 +134,7 @@ export class EventPostOutbound {
 
   /**
    * Item 1 — the post link a reply on `threadId` goes into. Null for a plain
-   * (unlinked, OQ-5) thread and for a read-only event thread (item 5);
+   * (unlinked, OQ-5) thread and for a read-only subject thread (item 5);
    * otherwise claims the post and sends it (a race loser reuses the winner's).
    * ROK-2260: `create: false` only reads the existing post (a signup removal).
    */
@@ -116,16 +144,16 @@ export class EventPostOutbound {
   ): Promise<links.ForumLink | null> {
     const { db } = this.deps;
     if (ref.create === false) return links.findThreadLink(db, ref.threadId);
-    const src = await findEventPostSource(db, ref.threadId);
+    const src = await findSubjectPostSource(db, ref.threadId);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return null;
     const claimed = await links.claimThreadLink(db, ref.guildId, ref.threadId);
     if (claimed) await this.send(to, claimed, src);
     return links.findThreadLink(db, ref.threadId);
   }
 
-  /** S6: re-send a claimed, still-unsent event post (never while read-only). */
+  /** S6: re-send a claimed, still-unsent subject post (never while read-only). */
   async resend(to: EventPostTarget, link: links.ForumLink): Promise<void> {
-    const src = await findEventPostSource(this.deps.db, link.threadId);
+    const src = await findSubjectPostSource(this.deps.db, link.threadId);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return;
     await this.send(to, link, src);
   }
@@ -143,24 +171,39 @@ export class EventPostOutbound {
   private async send(
     to: EventPostTarget,
     link: links.ForumLink,
-    src: EventPostSource,
+    src: SubjectPostSource,
   ): Promise<void> {
     const { db, gateway } = this.deps;
-    const zone = await this.deps.timeZone();
     const clientUrl = await this.deps.clientUrl();
     const url = forumThreadUrl(clientUrl, link.guildId, {
       threadId: link.threadId,
     });
+    const view = await this.subjectView(src, url, clientUrl);
     const post = {
-      title: eventPostTitle(src.eventTitle, src.start, zone),
-      content: truncateForDiscord(eventPostBody(src.body, clientUrl), url),
+      title: view.name,
+      content: view.content,
       tagIds: to.tagId ? [to.tagId] : [],
-      event: true, // ROK-2258: the gateway adds the forum's Event tag
+      kind: src.kind, // ROK-2258 / S8: the gateway adds the forum's kind tag
     };
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
     });
+  }
+
+  /** What a subject post looks like: `send` and `postView` share it. */
+  private async subjectView(
+    src: SubjectPostSource,
+    url: string,
+    clientUrl: string,
+  ): Promise<PostView> {
+    const zone = await this.deps.timeZone();
+    const name =
+      src.kind === 'event'
+        ? subjectPostTitle('event', src.eventTitle, src.start, zone)
+        : subjectPostTitle(src.kind, src.title);
+    const content = truncateForDiscord(eventPostBody(src.body, clientUrl), url);
+    return { name, content };
   }
 }

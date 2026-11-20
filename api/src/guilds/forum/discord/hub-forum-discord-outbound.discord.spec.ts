@@ -5,6 +5,7 @@
  * otherwise read a stale cached `archived=true` and re-archive it.
  */
 import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import type { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 
 function setup() {
@@ -26,6 +27,9 @@ function setup() {
   };
   const gw = new HubForumDiscordOutboundGateway(
     client as unknown as DiscordBotClientService,
+    {
+      resolve: () => Promise.resolve(null),
+    } as unknown as HubForumDiscordRouteResolver,
   );
   return { gw, fetch };
 }

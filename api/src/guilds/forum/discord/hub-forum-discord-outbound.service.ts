@@ -154,7 +154,7 @@ export class HubForumDiscordOutboundService {
     const record = await findThread(this.db, guildId, threadId);
     if (!record || fromDiscord(record.thread)) return;
     const tagId = job.bound.binding.tagId;
-    if (record.thread.eventId !== null) {
+    if (this.events.isSubjectThread(record.thread)) {
       // §5.7 item 1: never posted on creation; S6 re-sends a claimed post.
       if (job.link)
         await this.events.resend({ target: job.target, tagId }, job.link);

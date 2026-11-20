@@ -304,3 +304,21 @@ export async function rehomeReplies(
       ),
     );
 }
+
+/**
+ * D9 — the link belongs to the hub's CURRENT binding: the hub is bound and
+ * the link is not older than `bound_at` (same rule as `dueLockChanges`). A
+ * post from a previous binding (unbind, re-bind) is left alone.
+ */
+export async function isCurrentBindingLink(
+  db: ForumDiscordDb,
+  link: Pick<ForumLink, 'guildId' | 'createdAt'>,
+): Promise<boolean> {
+  const b = schema.hubForumDiscordBindings;
+  const [binding] = await db
+    .select({ boundAt: b.boundAt })
+    .from(b)
+    .where(eq(b.guildId, link.guildId))
+    .limit(1);
+  return !!binding && link.createdAt.getTime() >= binding.boundAt.getTime();
+}

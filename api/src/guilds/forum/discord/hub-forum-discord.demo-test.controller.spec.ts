@@ -4,7 +4,9 @@
  * (run the Core lock sweep at the REAL current time). Plus the class-level
  * guard chain every `/admin/test/*` controller must keep.
  */
+import { NotFoundException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import * as schema from '../../../drizzle/schema';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { AdminGuard } from '../../../auth/admin.guard';
 import type { EventPlanningPostsService } from './event-planning-posts.service';
@@ -55,5 +57,48 @@ describe('HubForumDiscordDemoTestController (ROK-2272 S4b fixtures)', () => {
     expect(sweep).toHaveBeenCalledTimes(1);
     // No caller-supplied "now": the sweep's own default (new Date()) applies.
     expect(sweep).toHaveBeenCalledWith();
+  });
+});
+
+describe('close-discussion-now (ROK-2272 S8 fixture)', () => {
+  function withDb(rows: { id: number }[]) {
+    const returning = jest.fn().mockResolvedValue(rows);
+    const where = jest.fn().mockReturnValue({ returning });
+    const set = jest.fn().mockReturnValue({ where });
+    const update = jest.fn().mockReturnValue({ set });
+    const controller = new HubForumDiscordDemoTestController(
+      { update } as unknown as ForumDiscordDb,
+      {} as HubForumDiscordGateway,
+      {} as HubForumDiscordSignupPings,
+      {} as EventPlanningPostsService,
+      {} as HubForumDiscordEventLockSweep,
+    );
+    return { controller, update, set, where };
+  }
+
+  it('moves the poll thread write window to just before now', async () => {
+    const { controller, update, set, where } = withDb([{ id: 9 }]);
+    const before = Date.now();
+    await expect(controller.closeDiscussionNow(77)).resolves.toEqual({
+      closed: 1,
+    });
+    expect(update).toHaveBeenCalledWith(schema.hubForumThreads);
+    expect(where).toHaveBeenCalledTimes(1);
+    const arg: unknown = set.mock.calls[0]?.[0];
+    const at =
+      typeof arg === 'object' && arg !== null && 'writeClosesAt' in arg
+        ? arg.writeClosesAt
+        : null;
+    expect(at).toBeInstanceOf(Date);
+    const ms = at instanceof Date ? at.getTime() : Number.NaN;
+    expect(ms).toBeLessThan(before);
+    expect(ms).toBeGreaterThan(before - 60_000);
+  });
+
+  it('404s a poll with no thread instead of reporting success', async () => {
+    const { controller } = withDb([]);
+    await expect(controller.closeDiscussionNow(77)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

@@ -10,6 +10,12 @@ import {
 import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
+
+jest.mock('../subject-discussion/poll-discussion.deadline', () => ({
+  syncExpiredPolls: jest.fn(),
+}));
+const deadline = jest.mocked(syncExpiredPolls);
 
 const NOW = new Date('2026-11-16T12:00:00Z');
 
@@ -49,6 +55,8 @@ describe('HubForumDiscordEventLockGateway.setReadOnly', () => {
 });
 
 function setup(rounds: LockChange[][], connected = true) {
+  deadline.mockReset();
+  deadline.mockResolvedValue(0);
   const sets: unknown[] = [];
   const db = {
     update: jest.fn(() => ({
@@ -176,5 +184,66 @@ describe('ROK-2272 S4a: the registry pass', () => {
     const { sweep, registry } = setup([[row(true)]], false);
     expect(await sweep.sweep(NOW)).toBe(0);
     expect(registry.sweep).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2272 S8: the poll-deadline pass', () => {
+  it('runs first, with the sweep db and now, before hub and registry', async () => {
+    const { sweep, registry, due } = setup([]);
+    const order: string[] = [];
+    deadline.mockImplementationOnce(() => {
+      order.push('poll-deadline');
+      return Promise.resolve(4);
+    });
+    due.mockImplementationOnce(() => {
+      order.push('hub');
+      return Promise.resolve([]);
+    });
+    registry.sweep.mockImplementationOnce(() => {
+      order.push('registry');
+      return Promise.resolve(0);
+    });
+    expect(await sweep.sweep(NOW)).toBe(0);
+    expect(order).toEqual(['poll-deadline', 'hub', 'registry']);
+    expect(deadline).toHaveBeenCalledWith(expect.anything(), NOW);
+  });
+
+  it('its count is not part of the posts-flipped total', async () => {
+    const { sweep, registry } = setup([[row(true)]]);
+    deadline.mockResolvedValueOnce(5);
+    registry.sweep.mockResolvedValueOnce(2);
+    expect(await sweep.sweep(NOW)).toBe(3);
+  });
+
+  it('a throw still runs hub + registry, then rejects with it', async () => {
+    const { sweep, registry, gateway } = setup([[row(true)]]);
+    const err = new Error('poll db down');
+    deadline.mockRejectedValueOnce(err);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
+    expect(gateway.setReadOnly).toHaveBeenCalledWith('9', true);
+    expect(registry.sweep).toHaveBeenCalledWith(NOW);
+  });
+
+  it('deadline + hub both throw: rejects with the FIRST (deadline) error', async () => {
+    const { sweep, due } = setup([]);
+    const first = new Error('poll db down');
+    deadline.mockRejectedValueOnce(first);
+    due.mockRejectedValueOnce(new Error('hub down'));
+    await expect(sweep.sweep(NOW)).rejects.toBe(first);
+  });
+
+  it('runs while the bot is offline; the Discord passes still do not', async () => {
+    const { sweep, registry, gateway } = setup([[row(true)]], false);
+    expect(await sweep.sweep(NOW)).toBe(0);
+    expect(deadline).toHaveBeenCalledWith(expect.anything(), NOW);
+    expect(gateway.setReadOnly).not.toHaveBeenCalled();
+    expect(registry.sweep).not.toHaveBeenCalled();
+  });
+
+  it('an offline throw is still rethrown', async () => {
+    const { sweep } = setup([], false);
+    const err = new Error('poll db down');
+    deadline.mockRejectedValueOnce(err);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
   });
 });
