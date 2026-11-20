@@ -281,3 +281,39 @@ describe('signupLines + labels', () => {
     expect(hoursLabel(2.6)).toBe('3');
   });
 });
+
+/** A markdown control character with no backslash before it. */
+const UNESCAPED = /(?<!\\)[*_~|`]/;
+
+describe('review MINOR-3 — names are text, never formatting', () => {
+  it('escapes markdown in a display name', () => {
+    const name = '**ADMIN** ~~x~~ ||s|| `c` _i_';
+    const line = signupLine({
+      ...input(state(), state({ status: 'declined' })),
+      displayName: name,
+    });
+    expect(line?.content).toMatch(/^👋 .+ can't make it$/);
+    expect(line?.content).not.toMatch(UNESCAPED);
+  });
+
+  it('escapes markdown in a character label', () => {
+    const label = characterLabel({
+      name: '*Thr_all*',
+      className: 'War`rior',
+      spec: '~~Prot~~',
+    });
+    expect(label).not.toMatch(UNESCAPED);
+  });
+
+  it('an @everyone name stays plain text and pings nobody', () => {
+    const line = signupLine({
+      ...input(state(), state({ status: 'declined' })),
+      displayName: '@everyone',
+    });
+    expect(line).toEqual({
+      discordId: ID,
+      content: "👋 @everyone can't make it",
+      mention: false,
+    });
+  });
+});

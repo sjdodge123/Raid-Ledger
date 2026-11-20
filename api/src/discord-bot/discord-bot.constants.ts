@@ -138,6 +138,14 @@ export const SIGNUP_EVENTS = {
   DELETED: 'signup.deleted',
 } as const;
 
+/**
+ * ROK-2271 review MAJOR-1 — a reschedule reset every active signup's
+ * confirmation (`resetSignupConfirmations`: tentative and roached-out become
+ * `signed_up`). Not a member's own change, so the event thread's signup
+ * lines re-sync to it silently instead of announcing it. Payload `{ eventId }`.
+ */
+export const SIGNUP_CONFIRMATIONS_RESET = 'signup.confirmations_reset';
+
 export interface SignupEventPayload {
   eventId: number;
   userId?: number | null;

@@ -7,13 +7,16 @@ import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.dis
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import {
   lineMessages,
+  lineResyncKey,
   parsePosted,
   planLineFlush,
   postedLinesKey,
   postedValue,
+  resyncStatusFields,
   seedFields,
   SEEDED_FIELD,
   type LineFlushPlan,
+  type PostedMember,
 } from './hub-forum-discord-signup-lines.flush';
 import {
   loadSignupLineStates,
@@ -48,6 +51,9 @@ interface FlushKeys {
 
 /** The pinged set outlives the event by a week, then Redis drops it. */
 const SET_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** A resync flag no flush consumed (unbound event) is dropped after a day. */
+const RESYNC_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * ROK-2260 / ROK-2271 — one debounced flush of an event's signups into its
@@ -85,6 +91,14 @@ export class HubForumDiscordSignupPings {
   }
 
   /**
+   * Review MAJOR-1: a reschedule reset confirmations. Flag the event; its
+   * next flush re-syncs the posted statuses silently (see `takeResync`).
+   */
+  async requestResync(eventId: number): Promise<void> {
+    await this.redis.set(lineResyncKey(eventId), '1', 'PX', RESYNC_TTL_MS);
+  }
+
+  /**
    * ROK-2271: diff each member's state against the last POSTED one, post
    * the lines (mentions only on a member's first line), then remove leavers.
    */
@@ -93,9 +107,12 @@ export class HubForumDiscordSignupPings {
     eventId: number,
     keys: FlushKeys,
   ): Promise<SignupPingOutcome> {
+    // The flag is taken BEFORE the read, so the read sees the reset.
+    const resync = (await this.redis.del(lineResyncKey(eventId))) > 0;
     const members = await loadSignupLineStates(this.db, eventId);
     const pinged = await this.redis.smembers(keys.pinged);
-    const posted = await this.postedOrSeed(keys.lines, pinged, members);
+    let posted = await this.postedOrSeed(keys.lines, pinged, members);
+    if (resync) posted = await this.resync(keys.lines, posted, members);
     const plan = planLineFlush(pinged, posted, members);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
@@ -123,6 +140,18 @@ export class HubForumDiscordSignupPings {
     const fields = seedFields(pinged, members);
     await this.redis.hset(key, fields);
     return parsePosted(fields);
+  }
+
+  /** Moves posted statuses to the reset ones; posts and pings nothing. */
+  private async resync(
+    key: string,
+    posted: Map<string, PostedMember>,
+    members: Map<string, SignupLineMember>,
+  ): Promise<Map<string, PostedMember>> {
+    const fields = resyncStatusFields(posted, members);
+    if (Object.keys(fields).length === 0) return posted;
+    await this.redis.hset(key, fields);
+    return new Map([...posted, ...parsePosted(fields)]);
   }
 
   /**

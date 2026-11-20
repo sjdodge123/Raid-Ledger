@@ -15,6 +15,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import * as schema from '../../../drizzle/schema';
+import { EventsService } from '../../../events/events.service';
 import { RunningLateService } from '../../../events/running-late.service';
 import { SignupsService } from '../../../events/signups.service';
 import { SettingsService } from '../../../settings/settings.service';
@@ -34,7 +35,10 @@ import {
   stubOutbound,
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
-import { postedLinesKey } from './hub-forum-discord-signup-lines.flush';
+import {
+  lineResyncKey,
+  postedLinesKey,
+} from './hub-forum-discord-signup-lines.flush';
 import {
   pingedSetKey,
   signupPingJobId,
@@ -496,5 +500,52 @@ describe('ROK-2271 C4 — running late and roach-out post at once', () => {
     }, 10_000);
     expect(await debouncedJobs(s.eventId)).toEqual([]);
     expect(await flush(s.eventId)).toBe('unchanged');
+  });
+});
+
+/** Each actor's signup status on the event, by actor. */
+async function statusOf(eventId: number, who: Pingable): Promise<string> {
+  const t = schema.eventSignups;
+  const rows = await ctx.posts.testApp.db
+    .select({ userId: t.userId, status: t.status })
+    .from(t)
+    .where(eq(t.eventId, eventId));
+  const row = rows.find((r) => r.userId === ctx.ids[who]);
+  return row?.status ?? 'none';
+}
+
+describe('review MAJOR-1 — a reschedule reset posts nothing misleading', () => {
+  it('tentative + roached-out members: reschedule ⇒ no message, no mention; a real change still posts', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    await startsIn(s.eventId, 3 * HOUR + 10 * 60_000);
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    await signUp(ctx, s.eventId, 'tentative', 'tentative');
+    await flush(s.eventId);
+    await ctx.posts.testApp.app
+      .get(SignupsService)
+      .cancel(s.eventId, ctx.ids.signed);
+    await awaitMessages(2); // the roach-out line
+    const start = Date.now() + 48 * HOUR;
+    await ctx.posts.testApp.app
+      .get(EventsService)
+      .reschedule(s.eventId, ctx.ids.bench, true, {
+        startTime: new Date(start).toISOString(),
+        endTime: new Date(start + 2 * HOUR).toISOString(),
+      });
+    const redis = ctx.posts.testApp.redisMock.client;
+    await waitFor(async () => {
+      expect(await redis.get(lineResyncKey(s.eventId))).toBe('1');
+    }, 10_000);
+    // The reset really flipped both (the false-line precondition).
+    expect(await statusOf(s.eventId, 'signed')).toBe('signed_up');
+    expect(await statusOf(s.eventId, 'tentative')).toBe('signed_up');
+    expect(await flush(s.eventId)).toBe('unchanged');
+    expect(out.spies.mention).toHaveBeenCalledTimes(2);
+    // A real change after the reschedule still posts, unpinged.
+    await setSignupStatus(ctx, s.eventId, 'tentative', 'tentative');
+    expect(await flush(s.eventId)).toBe('pinged');
+    expect(mentioned()).toEqual([[did.signed, did.tentative].sort(), [], []]);
+    expect(message(2)).toMatch(/tentative/);
   });
 });

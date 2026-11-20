@@ -1,4 +1,10 @@
-import { lineMessages } from './hub-forum-discord-signup-lines.flush';
+import {
+  lineMessages,
+  resyncStatusFields,
+  type PostedMember,
+} from './hub-forum-discord-signup-lines.flush';
+import type { SignupLineState } from './hub-forum-discord-signup-lines';
+import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
 
 const line = (n: number, mention: boolean, len = 40) => ({
   discordId: `1000000000000000${String(n).padStart(2, '0')}`,
@@ -34,5 +40,47 @@ describe('ROK-2271 lineMessages', () => {
 
   it('posts nothing for no lines', () => {
     expect(lineMessages([])).toEqual([]);
+  });
+});
+
+function st(over: Partial<SignupLineState> = {}): SignupLineState {
+  return {
+    status: 'signed_up',
+    role: 'tank',
+    bench: false,
+    character: null,
+    late: false,
+    lateMinutes: null,
+    roachedHoursBefore: null,
+    ...over,
+  };
+}
+
+const member = (id: string, s: SignupLineState): SignupLineMember => ({
+  discordId: id,
+  displayName: id,
+  state: s,
+});
+
+describe('review MAJOR-1 resyncStatusFields (reschedule reset)', () => {
+  it('moves only the STATUS of posted members whose status changed', () => {
+    const posted = new Map<string, PostedMember>([
+      ['1', { name: 'A', state: st({ status: 'tentative' }) }],
+      ['2', { name: 'B', state: st({ status: 'roached_out' }) }],
+      ['3', { name: 'C', state: st() }],
+      ['4', { name: 'D', state: st({ status: 'tentative' }) }],
+    ]);
+    const members = new Map([
+      ['1', member('1', st({ role: 'healer' }))],
+      ['2', member('2', st())],
+      ['3', member('3', st())],
+    ]);
+    const fields = resyncStatusFields(posted, members);
+    expect(Object.keys(fields).sort()).toEqual(['1', '2']);
+    // Role kept as POSTED, so A's real role change still posts a line.
+    expect(JSON.parse(fields['1'] ?? 'null')).toEqual({
+      name: 'A',
+      state: st({ status: 'signed_up', role: 'tank' }),
+    });
   });
 });

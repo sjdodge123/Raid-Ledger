@@ -73,7 +73,10 @@ export class CharacterOwnerAdminService {
 
   /**
    * ROK-2271 — after commit (never inside the tx: a rollback must not
-   * announce a write), each detached signup's thread line drops the character.
+   * announce a write), each detached signup's event re-syncs its embed and
+   * thread state. No thread line is posted for the detach itself: the line
+   * diff ignores a dropped character (`characterFragments`), so a later
+   * flush only posts if the member's line state really changed.
    */
   private afterCommit(adminId: number, out: ReassignOutcome): void {
     const { row, toUserId } = out;

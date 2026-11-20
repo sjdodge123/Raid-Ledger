@@ -41,6 +41,7 @@ import {
   deleteEvent,
   cancelEvent,
   rescheduleEvent,
+  emitConfirmationsReset,
 } from './event-lifecycle.helpers';
 import { runDelayEvent } from './event-delay.helpers';
 import {
@@ -234,6 +235,8 @@ export class EventsService {
       isAdmin,
       dto,
     );
+    // ROK-2271: before UPDATED re-arms the thread flush (see the constant).
+    emitConfirmationsReset(this.eventEmitter, eventId);
     await this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
       oldStart: eventBefore.startTime,
       newStart: dto.startTime,

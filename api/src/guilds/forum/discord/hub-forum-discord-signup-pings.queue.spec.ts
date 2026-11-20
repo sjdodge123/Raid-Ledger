@@ -1,6 +1,9 @@
 import type { Job, Queue } from 'bullmq';
 import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
-import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
+import {
+  APP_EVENT_EVENTS,
+  SIGNUP_CONFIRMATIONS_RESET,
+} from '../../../discord-bot/discord-bot.constants';
 import type Redis from 'ioredis';
 import { SIGNUP_PING_DEBOUNCE_MS } from './hub-forum-discord-signup-pings';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
@@ -120,6 +123,13 @@ describe('ROK-2260 signup-ping debounce — Codex P2-1', () => {
   });
 });
 
+/** A pings service stub: only the reschedule resync flag is reachable. */
+function noPings(
+  requestResync: (eventId: number) => Promise<void> = () => Promise.resolve(),
+) {
+  return { requestResync } as unknown as HubForumDiscordSignupPings;
+}
+
 const PRIMARY = 'forum-signup-pings-42';
 const TRAIL = 'forum-signup-pings-42-trail';
 
@@ -205,6 +215,7 @@ describe('ROK-2271 C4 listener routes urgent changes', () => {
     };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     await l.onUpdated({ eventId: 5, action: 'running_late', urgent: true });
     await l.onDeleted({ eventId: 6, action: 'signup_cancelled', urgent: true });
@@ -224,6 +235,7 @@ describe('ROK-2260 signup-ping listener', () => {
     const queue = { schedule: jest.fn(() => Promise.resolve()) };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     await l.onCreated({ eventId: 1, action: 'signup_created' });
     await l.onUpdated({ eventId: 2, action: 'signup_cancelled' });
@@ -239,6 +251,7 @@ describe('ROK-2260 signup-ping listener', () => {
     };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     const outcome = await l
       .onCreated({ eventId: 4, action: 'signup_created' })
@@ -275,9 +288,41 @@ describe('ROK-2260 signup-ping listener — Codex P2-5', () => {
     };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     await l.onEventUpdated({ eventId: 11 });
     expect(queue.schedule.mock.calls).toEqual([[11]]);
+  });
+});
+
+describe('review MAJOR-1 listener — confirmations reset', () => {
+  it('subscribes to the reset event', () => {
+    const proto = HubForumDiscordSignupPingListener.prototype;
+    const handled = Object.getOwnPropertyNames(proto).flatMap((name) =>
+      eventsOf(Reflect.get(proto, name)),
+    );
+    expect(handled).toContain(SIGNUP_CONFIRMATIONS_RESET);
+  });
+
+  it('flags the resync BEFORE arming the flush; a flag failure still arms', async () => {
+    const order: string[] = [];
+    const requestResync = jest.fn((id: number) => {
+      order.push(`flag ${id}`);
+      return id === 13 ? Promise.reject(new Error('redis')) : Promise.resolve();
+    });
+    const queue = {
+      schedule: jest.fn((id: number) => {
+        order.push(`arm ${id}`);
+        return Promise.resolve(true);
+      }),
+    };
+    const l = new HubForumDiscordSignupPingListener(
+      queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(requestResync),
+    );
+    await l.onConfirmationsReset({ eventId: 12 });
+    await l.onConfirmationsReset({ eventId: 13 });
+    expect(order).toEqual(['flag 12', 'arm 12', 'flag 13', 'arm 13']);
   });
 });
 

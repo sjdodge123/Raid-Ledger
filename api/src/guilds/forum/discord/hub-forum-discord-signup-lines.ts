@@ -11,6 +11,7 @@
  * from the thread, so a re-signup is mentioned (re-added) again.
  * All wording lives in `hub-forum-discord-signup-lines.copy.ts`.
  */
+import { escapeMarkdown } from 'discord.js';
 import {
   BENCH_LABEL,
   DETAIL_SEPARATOR,
@@ -85,7 +86,9 @@ export function roleLabel(role: string | null): string {
 /** `Thrall (Prot Warrior)` / `Thrall (Warrior)` / `Thrall`. */
 export function characterLabel(ch: SignupLineCharacter): string {
   const kind = [ch.spec, ch.className].filter((p) => !!p).join(' ');
-  return kind ? `${ch.name} (${kind})` : ch.name;
+  // Review MINOR-3: a name is player text, never formatting.
+  const name = escapeMarkdown(ch.name);
+  return kind ? `${name} (${escapeMarkdown(kind)})` : name;
 }
 
 /** `<1` under an hour, whole hours otherwise. */
@@ -215,7 +218,9 @@ function line(
   frags: readonly Fragment[],
   suffix = '',
 ): SignupLine {
-  const who = mention ? `<@${input.discordId}>` : input.displayName;
+  const who = mention
+    ? `<@${input.discordId}>`
+    : escapeMarkdown(input.displayName);
   return {
     discordId: input.discordId,
     content: render(who, frags, suffix),

@@ -16,6 +16,11 @@ import type { PingedSetScope } from './hub-forum-discord-signup-pings';
 /** Hash field marking "seeded / written by C3" — never a Discord id. */
 export const SEEDED_FIELD = '_seeded';
 
+/** The "re-sync silently" flag a confirmation reset leaves for the flush. */
+export function lineResyncKey(eventId: number): string {
+  return `hub-forum:signup-lines-resync:${eventId}`;
+}
+
 /** Discord's message content cap. */
 const CONTENT_MAX = 2000;
 /** Discord's `allowedMentions.users` cap. */
@@ -95,6 +100,25 @@ export function seedFields(
   for (const id of pinged) {
     const member = members.get(id);
     if (member) fields[id] = postedValue(member);
+  }
+  return fields;
+}
+
+/**
+ * Review MAJOR-1 — after a reschedule reset, each posted member's STATUS is
+ * moved to the current one (role, character and late are kept, so a real
+ * change of those still posts). Returns the hash fields to write.
+ */
+export function resyncStatusFields(
+  posted: ReadonlyMap<string, PostedMember>,
+  members: ReadonlyMap<string, SignupLineMember>,
+): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const [id, was] of posted) {
+    const status = members.get(id)?.state.status;
+    if (status === undefined || status === was.state.status) continue;
+    const next: PostedMember = { ...was, state: { ...was.state, status } };
+    fields[id] = JSON.stringify(next);
   }
   return fields;
 }

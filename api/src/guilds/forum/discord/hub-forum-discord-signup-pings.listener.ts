@@ -3,10 +3,12 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import {
   APP_EVENT_EVENTS,
+  SIGNUP_CONFIRMATIONS_RESET,
   SIGNUP_EVENTS,
   type SignupEventPayload,
 } from '../../../discord-bot/discord-bot.constants';
 import { HubForumDiscordSignupPingQueue } from './hub-forum-discord-signup-pings.queue';
+import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 
 /**
  * ROK-2260 — any signup change (create, status change, cancel, delete)
@@ -22,7 +24,10 @@ export class HubForumDiscordSignupPingListener {
   readonly ownerPluginId = CORE_PLUGIN_ID;
   private readonly logger = new Logger(HubForumDiscordSignupPingListener.name);
 
-  constructor(private readonly queue: HubForumDiscordSignupPingQueue) {}
+  constructor(
+    private readonly queue: HubForumDiscordSignupPingQueue,
+    private readonly pings: HubForumDiscordSignupPings,
+  ) {}
 
   @OnEvent(SIGNUP_EVENTS.CREATED, { async: true })
   async onCreated(payload: SignupEventPayload): Promise<void> {
@@ -46,6 +51,23 @@ export class HubForumDiscordSignupPingListener {
    */
   @OnEvent(APP_EVENT_EVENTS.UPDATED, { async: true })
   async onEventUpdated(payload: { eventId: number }): Promise<void> {
+    await this.rearm(payload);
+  }
+
+  /**
+   * ROK-2271 review MAJOR-1: a reschedule reset everyone's confirmation.
+   * Only flags it; the next flush (serialised in the worker) re-syncs the
+   * posted lines to the reset statuses without posting or pinging.
+   */
+  @OnEvent(SIGNUP_CONFIRMATIONS_RESET, { async: true })
+  async onConfirmationsReset(payload: { eventId: number }): Promise<void> {
+    if (!Number.isInteger(payload?.eventId)) return;
+    try {
+      await this.pings.requestResync(payload.eventId);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Signup line resync for ${payload.eventId}: ${why}`);
+    }
     await this.rearm(payload);
   }
 

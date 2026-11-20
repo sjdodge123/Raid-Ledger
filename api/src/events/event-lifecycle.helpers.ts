@@ -13,7 +13,10 @@ import type { CancelEventDto, RescheduleEventDto } from '@raid-ledger/contract';
 import type { NotificationService } from '../notifications/notification.service';
 import type { EventVoicePayload } from '../notifications/notification-voice.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import {
+  APP_EVENT_EVENTS,
+  SIGNUP_CONFIRMATIONS_RESET,
+} from '../discord-bot/discord-bot.constants';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
 
 type EventSelect = typeof schema.events.$inferSelect;
@@ -155,6 +158,17 @@ export async function resetSignupConfirmations(
     .update(schema.eventSignups)
     .set({ confirmationStatus: 'pending', status: 'signed_up' })
     .where(and(...conditions));
+}
+
+/**
+ * ROK-2271 review MAJOR-1: tell the event thread's signup lines that the
+ * statuses moved by `resetSignupConfirmations`, not by the members.
+ */
+export function emitConfirmationsReset(
+  emitter: EventEmitter2,
+  eventId: number,
+): void {
+  emitter.emit(SIGNUP_CONFIRMATIONS_RESET, { eventId });
 }
 
 /** Formats a date for Discord notification display using native timestamps. */
