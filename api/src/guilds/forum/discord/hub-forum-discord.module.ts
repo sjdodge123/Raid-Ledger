@@ -47,6 +47,8 @@ import {
   HubForumDiscordSignupPingQueue,
   SIGNUP_PING_QUEUE,
 } from './hub-forum-discord-signup-pings.queue';
+import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
+import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.listener';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
@@ -90,6 +92,9 @@ import {
     HubForumDiscordSignupPingListener,
     HubForumDiscordSignupPingProcessor,
     HubForumDiscordSignupPingCatchUp,
+    // ROK-2272 S8: poll first-vote post + closing lines.
+    HubForumDiscordClosingLines,
+    HubForumDiscordSubjectListener,
     HubForumDiscordDecor,
     HubForumDiscordDecorBackfill,
     EventPlanningForumRename,
