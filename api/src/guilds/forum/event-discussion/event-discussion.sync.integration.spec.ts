@@ -344,7 +344,7 @@ describe('event discussion lifecycle: race, lazy, cancel (integration)', () => {
     expect((await liveThread(id))?.guildId).toBe(hub);
   });
 
-  it('AC11: cancelling leaves the thread unchanged and writable to end + 24 h', async () => {
+  it('AC11: cancelling leaves the thread unchanged and writable to end + 1 h', async () => {
     const hub = await newHub();
     const { id, end } = await newEvent({ guildId: hub });
     await syncEventDiscussion(testApp.db, id);

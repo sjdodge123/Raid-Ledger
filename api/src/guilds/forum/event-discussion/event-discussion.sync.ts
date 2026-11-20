@@ -16,8 +16,8 @@ import {
   type LiveEventThread,
 } from './event-discussion.queries';
 
-/** Writes stay open until the scheduled end + 24 h (D3, ruling 10). */
-export const WRITE_GRACE_MS = 24 * 3_600_000;
+/** Writes stay open until the scheduled end + 1 h (ROK-2272: 1 h (was 24 h)). */
+export const WRITE_GRACE_MS = 1 * 3_600_000;
 const TITLE_MAX = 120;
 
 export type SyncAction = 'noop' | 'insert' | 'refresh' | 'detach' | 'move';

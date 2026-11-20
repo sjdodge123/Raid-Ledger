@@ -327,7 +327,7 @@ describe('ROK-2226 §6.1 — hidden or archived hub (Codex P1)', () => {
   });
 });
 
-describe('ROK-2226 §5.4 — read-only 24 h after the event ends', () => {
+describe('ROK-2226 §5.4 / ROK-2272 — read-only 1 h after the event ends', () => {
   it('reply 409, edit-own 403, delete-own 204; the card shows the lock', async () => {
     const s = await newScene(ctx);
     const r = await reply(s, 'signed', 'during');
