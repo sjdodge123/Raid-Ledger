@@ -39,6 +39,9 @@ import { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { EventPlanningPostsListener } from './event-planning-posts.listener';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import { EventPlanningPostCreator } from './event-planning-posts.create';
+import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
+import { EventPlanningSubjectsListener } from './event-planning-subjects.listener';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
 import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
@@ -102,6 +105,9 @@ import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.list
     EventPlanningPostsService,
     EventPlanningPostsListener,
     EventPlanningPostsLockSweep,
+    EventPlanningPostCreator,
+    EventPlanningSubjectPosts,
+    EventPlanningSubjectsListener,
   ],
   exports: [
     HubForumDiscordGateway,
@@ -115,6 +121,7 @@ import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.list
     // ROK-2272 S4a: non-hub event posts (S4b signup pings consume it).
     EventPlanningPostsGateway,
     EventPlanningPostsService,
+    EventPlanningSubjectPosts,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {
