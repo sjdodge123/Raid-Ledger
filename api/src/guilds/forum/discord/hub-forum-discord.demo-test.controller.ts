@@ -15,7 +15,12 @@ import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import {
+  findLivePlanningPost,
+  setPlanningPostClosesAt,
+} from './event-planning-posts.queries';
 import { EventPlanningPostsService } from './event-planning-posts.service';
+import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { HubForumDiscordEventLockSweep } from './hub-forum-discord-event-lock';
 import {
   HubForumDiscordSignupPings,
@@ -57,6 +62,7 @@ export class HubForumDiscordDemoTestController {
     private readonly pings: HubForumDiscordSignupPings,
     private readonly planning: EventPlanningPostsService,
     private readonly lockSweep: HubForumDiscordEventLockSweep,
+    private readonly subjects: EventPlanningSubjectPosts,
   ) {}
 
   @Get(':guildId/webhook-token')
@@ -130,5 +136,36 @@ export class HubForumDiscordDemoTestController {
       .returning({ id: t.id });
     if (rows.length === 0) throw new NotFoundException('Poll has no thread');
     return { closed: rows.length };
+  }
+
+  /**
+   * ROK-2272 S10 — re-sync a NON-hub poll's registry planning post the way a
+   * poll emit does (never creates one). Real time only.
+   */
+  @Post('polls/:matchId/sync-planning-post')
+  async syncPollPlanningPost(
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ): Promise<{ synced: true }> {
+    await this.subjects.syncPoll(matchId, new Date());
+    return { synced: true };
+  }
+
+  /**
+   * ROK-2272 S10 — close a non-hub poll's planning post NOW: its `closes_at`
+   * goes to 1 s in the past, so the next `lock-sweep` locks + archives it.
+   * The real close is an hour after the poll ends, which no smoke can wait.
+   */
+  @Post('polls/:matchId/close-planning-post-now')
+  async closePlanningPostNow(
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ): Promise<{ postId: number }> {
+    const post = await findLivePlanningPost(this.db, 'poll', matchId);
+    if (!post) throw new NotFoundException('Poll has no planning post');
+    await setPlanningPostClosesAt(
+      this.db,
+      post.id,
+      new Date(Date.now() - 1000),
+    );
+    return { postId: post.id };
   }
 }

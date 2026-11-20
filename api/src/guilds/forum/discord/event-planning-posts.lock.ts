@@ -13,6 +13,7 @@ import {
   and,
   eq,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -29,6 +30,7 @@ import {
   type PlanningSubjectKind,
 } from './event-planning-posts.queries';
 import { EventPlanningPostsService } from './event-planning-posts.service';
+import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -51,13 +53,25 @@ function asKind(raw: string): PlanningSubjectKind {
   throw new Error(`Unknown event_planning_posts.subject_kind "${raw}"`);
 }
 
+/**
+ * Open again: `closes_at` in the future, or (ROK-2272 S10, Codex P2) cleared
+ * to null on a poll / lineup post — those are open while it is null. An
+ * event post always has a `closes_at`, so a null one is left alone.
+ */
+function reopenedWhere(at: SQL) {
+  return or(
+    gt(posts.closesAt, at),
+    and(isNull(posts.closesAt), inArray(posts.subjectKind, ['poll', 'lineup'])),
+  );
+}
+
 /** Live, and `closes_at` disagrees with the recorded lock state. */
 function dueWhere(at: SQL) {
   return and(
     isNull(posts.discordDeletedAt),
     or(
       and(lte(posts.closesAt, at), isNull(posts.discordLockedAt)),
-      and(gt(posts.closesAt, at), isNotNull(posts.discordLockedAt)),
+      and(reopenedWhere(at), isNotNull(posts.discordLockedAt)),
     ),
   );
 }
@@ -65,7 +79,7 @@ function dueWhere(at: SQL) {
 /**
  * Live posts whose lock state disagrees with `closes_at`: due and unlocked
  * ⇒ close; in the future and locked ⇒ reopen. A null `closes_at` is never
- * due.
+ * due to close; on a locked poll / lineup post it means reopened.
  */
 export async function dueRegistryLockChanges(
   db: ForumDiscordDb,
@@ -127,16 +141,32 @@ export class EventPlanningPostsLockSweep {
     private readonly gateway: HubForumDiscordEventLockGateway,
     private readonly client: DiscordBotClientService,
     private readonly service: EventPlanningPostsService,
+    private readonly subjects: EventPlanningSubjectPosts,
   ) {}
 
-  /** Flip every due post; returns how many changed. Offline bot → 0. */
+  /**
+   * Flip every due post; returns how many changed. Offline bot → 0.
+   * ROK-2272 S10: first stamp `closes_at` on non-hub poll posts whose
+   * `phase_deadline` passed with no emit; a throw there is warned and the
+   * flip loop still runs.
+   */
   async sweep(now = new Date()): Promise<number> {
     if (!this.client.isConnected()) return 0;
+    await this.syncOpenPolls(now);
     let changed = 0;
     for (const row of await dueRegistryLockChanges(this.db, now)) {
       if (await this.apply(row, now)) changed += 1;
     }
     return changed;
+  }
+
+  private async syncOpenPolls(now: Date): Promise<void> {
+    try {
+      await this.subjects.syncOpenPolls(now);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Planning poll deadline pass: ${why}`);
+    }
   }
 
   /**

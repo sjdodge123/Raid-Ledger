@@ -4,7 +4,7 @@
  * insert reports the two expected races as tagged results instead of
  * throwing, so no caller ever catches inside a transaction.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 import { pgErrorCode } from '../../../common/pg-error.helpers';
 import * as schema from '../../../drizzle/schema';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
@@ -79,6 +79,32 @@ export async function insertPlanningPost(
     if (live) return { status: 'exists' };
     throw err;
   }
+}
+
+/**
+ * ROK-2272 S10 — live, unlocked `poll` posts with no `closes_at` yet, id >
+ * `afterId`, in id order (the deadline pass: a `phase_deadline` expiry
+ * emits nothing).
+ */
+export async function findOpenPlanningPollPosts(
+  db: ForumDiscordDb,
+  afterId: number,
+  limit: number,
+): Promise<{ id: number; subjectId: number }[]> {
+  return db
+    .select({ id: posts.id, subjectId: posts.subjectId })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.subjectKind, 'poll'),
+        gt(posts.id, afterId),
+        isNull(posts.discordDeletedAt),
+        isNull(posts.discordLockedAt),
+        isNull(posts.closesAt),
+      ),
+    )
+    .orderBy(asc(posts.id))
+    .limit(limit);
 }
 
 /** Set when the sweep closes the post. */

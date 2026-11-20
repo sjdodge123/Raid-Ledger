@@ -12,8 +12,11 @@ import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-plan
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
 import { WRITE_GRACE_MS } from '../event-discussion/event-discussion.sync';
-import type { BoundForum } from './event-planning-forum.queries';
-import { EventPlanningForumResolver } from './event-planning-forum.resolver';
+import {
+  EventPlanningPostCreator,
+  toPlanningPostRef,
+  type EventPlanningPostRef,
+} from './event-planning-posts.create';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import {
   liveUnlockedEventSubjects,
@@ -23,42 +26,16 @@ import {
 import {
   findLivePlanningPost,
   findPlanningEvent,
-  hubTagIdsOfForum,
-  insertPlanningPost,
   markPlanningPostDeleted,
   setPlanningPostClosesAt,
-  type InsertPlanningPostResult,
-  type NewPlanningPost,
   type PlanningEventSource,
 } from './event-planning-posts.queries';
-import {
-  EVENT_TAG_NAME,
-  findKindTagId,
-  planTagCreates,
-} from './hub-forum-discord-decor';
 import { eventPostTitle } from './hub-forum-discord-event-outbound';
-import {
-  HubForumDiscordGateway,
-  type ForumInfo,
-} from './hub-forum-discord.gateway';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
-/** A live Discord-only post. */
-export interface EventPlanningPostRef {
-  postId: number;
-  forumId: number;
-  discordThreadId: string;
-}
+export type { EventPlanningPostRef } from './event-planning-posts.create';
 
 const ABSOLUTE = /^https?:\/\//i;
-
-function toRef(row: EventPlanningPostSelect): EventPlanningPostRef {
-  return {
-    postId: row.id,
-    forumId: row.forumId,
-    discordThreadId: row.discordThreadId,
-  };
-}
 
 /** §3.5: end (or cancel, R2) + `WRITE_GRACE_MS`. */
 export function planningEventClosesAt(ev: PlanningEventSource): Date {
@@ -95,27 +72,26 @@ export class EventPlanningPostsService {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly settings: SettingsService,
-    private readonly resolver: EventPlanningForumResolver,
-    private readonly forums: HubForumDiscordGateway,
     private readonly discord: EventPlanningPostsGateway,
+    private readonly creator: EventPlanningPostCreator,
   ) {}
 
   /** The event's live post, created on first need; null when it gets none. */
   async ensureEventPost(eventId: number): Promise<EventPlanningPostRef | null> {
     const live = await findLivePlanningPost(this.db, 'event', eventId);
-    if (live) return toRef(live);
+    if (live) return toPlanningPostRef(live);
     const ev = await findPlanningEvent(this.db, eventId);
     if (!ev || !planningEventEligible(ev, new Date())) return null;
-    const forum = await this.forum();
-    if (!forum) return null;
-    const tagIds = await this.eventTagIds(forum);
-    if (!tagIds) return null;
-    const threadId = await this.discord.createPost(forum.channelId, {
+    const made = await this.creator.create({
+      kind: 'event',
+      subjectId: eventId,
       title: await this.title(ev),
-      content: planningEventBody(await getClientUrl(this.settings), eventId),
-      tagIds,
+      body: planningEventBody(await getClientUrl(this.settings), eventId),
+      closesAt: planningEventClosesAt(ev),
     });
-    return this.record(eventId, forum.forumId, threadId, ev);
+    // Codex P2-3: re-derive once if the event moved while the create ran.
+    if (made?.created) await this.reconcileCreated(eventId, ev);
+    return made?.ref ?? null;
   }
 
   /** Re-derive an EXISTING post's title and `closes_at` (never creates). */
@@ -177,67 +153,6 @@ export class EventPlanningPostsService {
     return eventPostTitle(ev.title, ev.start, zone);
   }
 
-  /** The resolved forum; null when offline or none resolves. */
-  private async forum(): Promise<BoundForum | null> {
-    const guild = this.forums.guildId();
-    if (guild === null || !this.discord.isOnline()) return null;
-    return (await this.resolver.resolve(guild)).forum;
-  }
-
-  /**
-   * [Event tag id] — created on demand like decor does. No usable tag
-   * (20-tag cap, or a hub owns the name): untagged, unless the forum
-   * requires tags — then null (no post; Discord would refuse it).
-   */
-  private async eventTagIds(forum: BoundForum): Promise<string[] | null> {
-    const info = await this.forums.fetchForum(forum.channelId);
-    if (!info) return null;
-    const hubTags = await hubTagIdsOfForum(this.db, forum.forumId);
-    const id =
-      findKindTagId(info.tags, EVENT_TAG_NAME, hubTags) ??
-      (await this.createEventTag(info, hubTags));
-    if (id !== null) return [id];
-    this.logger.warn(`Forum ${info.id} has no usable ${EVENT_TAG_NAME} tag`);
-    return info.requireTag ? null : [];
-  }
-
-  private async createEventTag(
-    info: ForumInfo,
-    hubTags: readonly (string | null)[],
-  ): Promise<string | null> {
-    const plan = planTagCreates(info.tags, [EVENT_TAG_NAME]);
-    if (plan.create.length === 0) return null;
-    const tags = await this.forums.addTags(info.id, plan.create);
-    return findKindTagId(tags, EVENT_TAG_NAME, hubTags);
-  }
-
-  /** Record the new post; on a lost race, delete our Discord thread. */
-  private async record(
-    eventId: number,
-    forumId: number,
-    discordThreadId: string,
-    ev: PlanningEventSource,
-  ): Promise<EventPlanningPostRef | null> {
-    const res = await this.insertOrDrop({
-      subjectKind: 'event',
-      subjectId: eventId,
-      forumId,
-      discordThreadId,
-      closesAt: planningEventClosesAt(ev),
-    });
-    if (res.status === 'ok') {
-      await this.reconcileCreated(eventId, ev);
-      return toRef(res.row);
-    }
-    await this.dropThread(discordThreadId);
-    if (res.status === 'no-forum') {
-      this.resolver.invalidate();
-      return null;
-    }
-    const winner = await findLivePlanningPost(this.db, 'event', eventId);
-    return winner ? toRef(winner) : null;
-  }
-
   /**
    * Codex P2-3: the event may have changed (or gone) while the Discord
    * create was in flight, unseen by its lifecycle handler (no row yet).
@@ -260,31 +175,5 @@ export class EventPlanningPostsService {
   private warn(what: string, err: unknown): void {
     const why = err instanceof Error ? err.message : String(err);
     this.logger.warn(`Planning post ${what} failed: ${why}`);
-  }
-
-  /**
-   * Review MINOR-2: an untagged insert failure (connection drop, timeout)
-   * after the Discord create would orphan the thread — and every retry
-   * would make another. Drop it, then rethrow.
-   */
-  private async insertOrDrop(
-    post: NewPlanningPost,
-  ): Promise<InsertPlanningPostResult> {
-    try {
-      return await insertPlanningPost(this.db, post);
-    } catch (err) {
-      await this.dropThread(post.discordThreadId);
-      throw err;
-    }
-  }
-
-  /** Best effort: a failed cleanup is logged, never thrown. */
-  private async dropThread(discordThreadId: string): Promise<void> {
-    try {
-      await this.discord.deleteThread(discordThreadId);
-    } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Orphan post ${discordThreadId} not deleted: ${why}`);
-    }
   }
 }

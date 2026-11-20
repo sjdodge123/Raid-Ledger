@@ -26,7 +26,7 @@ import { fail, setup, teardown, TIMEOUT_MS, type Made } from "./hub-forum-discor
 
 const FIXTURES = "/admin/test/hub-forum-discord";
 
-interface Poll {
+export interface Poll {
   matchId: number;
   lineupId: number;
 }
@@ -117,7 +117,7 @@ async function expectHubAndPollTags(forumId: string, post: ThreadChannel): Promi
   }
 }
 
-async function expectInPost(post: ThreadChannel, why: string, match: (content: string, webhook: boolean) => boolean): Promise<void> {
+export async function expectInPost(post: ThreadChannel, why: string, match: (content: string, webhook: boolean) => boolean): Promise<void> {
   let seen: string[] = [];
   try {
     await pollForCondition(async () => {
@@ -143,7 +143,7 @@ async function refusedThenReply(ctx: TestContext, poll: Poll, post: ThreadChanne
   }
 }
 
-async function lockIn(ctx: TestContext, poll: Poll, slotId: number, made: Made): Promise<number> {
+export async function lockIn(ctx: TestContext, poll: Poll, slotId: number, made: Made): Promise<number> {
   const path = `/lineups/${String(poll.lineupId)}/schedule/${String(poll.matchId)}/create-event`;
   const res = await ctx.api.post<{ eventId?: unknown }>(path, { slotId });
   if (typeof res.eventId !== "number") return fail("create-event (lock-in): no eventId", res);
@@ -159,7 +159,7 @@ async function closeAndSweep(ctx: TestContext, poll: Poll): Promise<void> {
   if (typeof res.changed !== "number") fail("lock-sweep fixture: expected { changed: number }", res);
 }
 
-async function expectLockedArchived(postId: string): Promise<void> {
+export async function expectLockedArchived(postId: string): Promise<void> {
   let last: unknown = null;
   try {
     await pollForCondition(async () => {
@@ -173,7 +173,7 @@ async function expectLockedArchived(postId: string): Promise<void> {
   }
 }
 
-async function cleanup(ctx: TestContext, poll: Poll | null, postId: string | null): Promise<void> {
+export async function cleanup(ctx: TestContext, poll: Poll | null, postId: string | null): Promise<void> {
   if (postId !== null) {
     const ch = await getGuild().channels.fetch(postId, { force: true }).catch(() => null);
     await ch?.delete("ROK-2272 S8 smoke teardown").catch((err: unknown) => {

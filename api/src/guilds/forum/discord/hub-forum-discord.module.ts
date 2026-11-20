@@ -39,6 +39,9 @@ import { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { EventPlanningPostsListener } from './event-planning-posts.listener';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import { EventPlanningPostCreator } from './event-planning-posts.create';
+import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
+import { EventPlanningSubjectsListener } from './event-planning-subjects.listener';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
 import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
@@ -49,6 +52,7 @@ import {
 } from './hub-forum-discord-signup-pings.queue';
 import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
 import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.listener';
+import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
@@ -102,6 +106,11 @@ import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.list
     EventPlanningPostsService,
     EventPlanningPostsListener,
     EventPlanningPostsLockSweep,
+    EventPlanningPostCreator,
+    EventPlanningSubjectPosts,
+    EventPlanningSubjectsListener,
+    // ROK-2272 S10: poll voter pings (hub + non-hub).
+    HubForumDiscordPollVoterPings,
   ],
   exports: [
     HubForumDiscordGateway,
@@ -115,6 +124,7 @@ import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.list
     // ROK-2272 S4a: non-hub event posts (S4b signup pings consume it).
     EventPlanningPostsGateway,
     EventPlanningPostsService,
+    EventPlanningSubjectPosts,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {
