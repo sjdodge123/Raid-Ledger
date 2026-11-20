@@ -37,12 +37,15 @@ export function lineFieldsChanged(
  */
 export function announceIfLineChanged(
   deps: Pick<RescheduleDeps, 'eventEmitter'>,
-  ids: { eventId: number; signupId: number; userId?: number },
-  before: LineFields,
+  eventId: number,
+  signup: LineFields & { id: number },
   set: Record<string, unknown>,
+  userId?: number,
 ): void {
-  if (!lineFieldsChanged(before, set)) return;
-  emitSignupUpdated(deps, { ...ids, action: 'reschedule_reconfirm' });
+  if (!lineFieldsChanged(signup, set)) return;
+  const ids = { eventId, signupId: signup.id };
+  const payload = userId === undefined ? ids : { ...ids, userId };
+  emitSignupUpdated(deps, { ...payload, action: 'reschedule_reconfirm' });
 }
 
 /** Emit one `signup.updated` (decline + reconfirm share it). */

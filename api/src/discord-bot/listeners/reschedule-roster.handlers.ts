@@ -205,12 +205,7 @@ async function updateUnlinkedSignup(
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
-  announceIfLineChanged(
-    deps,
-    { eventId: event.id, signupId: signup.id },
-    signup,
-    updateSet,
-  );
+  announceIfLineChanged(deps, event.id, signup, updateSet);
   await logDiscordAck(deps, event.id, wasPending, updateSet, {
     discordUserId: interaction.user.id,
   });
@@ -230,8 +225,7 @@ async function afterLinkedWrite(
   options?: ReconfirmOptions,
 ): Promise<void> {
   if (!options?.characterId) {
-    const ids = { eventId, userId, signupId: signup.id };
-    announceIfLineChanged(deps, ids, signup, updateSet);
+    announceIfLineChanged(deps, eventId, signup, updateSet, userId);
     return;
   }
   await deps.signupsService.confirmSignup(eventId, signup.id, userId, {
