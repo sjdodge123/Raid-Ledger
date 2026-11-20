@@ -114,6 +114,39 @@ export async function markPlanningPostDeleted(
     .where(eq(posts.id, postId));
 }
 
+/**
+ * ROK-2272 S4 review MAJOR-2: the Discord thread of a live registry post is
+ * gone (moderator delete). Marks it deleted, so the subject can get a fresh
+ * post; true when a live row was marked.
+ */
+export async function markPlanningThreadDeleted(
+  db: ForumDiscordDb,
+  discordThreadId: string,
+  at: Date,
+): Promise<boolean> {
+  const rows = await db
+    .update(posts)
+    .set({ discordDeletedAt: at })
+    .where(
+      and(
+        eq(posts.discordThreadId, discordThreadId),
+        isNull(posts.discordDeletedAt),
+      ),
+    )
+    .returning({ id: posts.id });
+  return rows.length > 0;
+}
+
+/** Inbound thread-delete of a non-hub post: imports nothing, DMs nobody. */
+export async function planningThreadDeleted(
+  db: ForumDiscordDb,
+  discordThreadId: string,
+  at: Date,
+): Promise<'deleted' | 'skipped'> {
+  const marked = await markPlanningThreadDeleted(db, discordThreadId, at);
+  return marked ? 'deleted' : 'skipped';
+}
+
 /** The event fields a non-hub event post needs. */
 export interface PlanningEventSource {
   title: string;

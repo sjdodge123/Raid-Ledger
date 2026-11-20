@@ -8,6 +8,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { HUB_FORUM_TITLE_MAX } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import { planningThreadDeleted } from './event-planning-posts.queries';
 import { HubForumDiscordEventGate } from './hub-forum-discord-event-gate';
 import type { ForumLink } from './hub-forum-discord-links.queries';
 import * as inbound from './hub-forum-discord-inbound.writes';
@@ -173,7 +174,9 @@ export class HubForumDiscordInboundIngest {
     now = new Date(),
   ): Promise<InboundResult> {
     const link = await inbound.findPostLink(this.db, thread.id);
-    if (!link || link.discordDeletedAt !== null) return 'skipped';
+    // ROK-2272 S4 MAJOR-2: a deleted registry post stops being live.
+    if (!link) return planningThreadDeleted(this.db, thread.id, now);
+    if (link.discordDeletedAt !== null) return 'skipped';
     if (!(await this.boundTo(thread.parentId, link.guildId))) return 'skipped';
     await inbound.removeFromDiscord(this.db, link, 'moderator', now);
     return 'deleted';

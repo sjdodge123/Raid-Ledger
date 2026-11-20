@@ -6,8 +6,10 @@
  * expiry) is the same flush for both; only resolving the post differs.
  */
 import type Redis from 'ioredis';
+import { markPlanningPostDeleted } from './event-planning-posts.queries';
 import type { EventPlanningPostsService } from './event-planning-posts.service';
 import * as links from './hub-forum-discord-links.queries';
+import { isGone } from './hub-forum-discord-outbound.discord';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import {
   postedLinesKey,
@@ -104,6 +106,28 @@ export async function resolvePlanningPost(
   if (!made) return 'closed';
   const scope = { planningPostId: made.postId };
   return { discordThreadId: made.discordThreadId, scope };
+}
+
+/**
+ * ROK-2272 S4 review MAJOR-2: run the Discord writes into a post. When a
+ * registry post's thread is gone (moderator delete), its row is marked
+ * deleted and the flush is `'closed'`, like a hub post marked deleted; the
+ * next flush finds no live post and creates a fresh one. A hub post's gone
+ * error is rethrown unchanged (its inbound delete handles it).
+ */
+export async function writeUnlessGone<T>(
+  db: ForumDiscordDb,
+  scope: PingedSetScope,
+  write: () => Promise<T>,
+): Promise<T | 'closed'> {
+  try {
+    return await write();
+  } catch (err) {
+    const postId = 'planningPostId' in scope ? scope.planningPostId : null;
+    if (postId === null || !isGone(err)) throw err;
+    await markPlanningPostDeleted(db, postId, new Date());
+    return 'closed';
+  }
 }
 
 /**

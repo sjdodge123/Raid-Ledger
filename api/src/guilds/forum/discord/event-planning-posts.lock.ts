@@ -23,6 +23,7 @@ import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import {
+  markPlanningPostDeleted,
   setPlanningPostLocked,
   type PlanningSubjectKind,
 } from './event-planning-posts.queries';
@@ -111,15 +112,20 @@ export class EventPlanningPostsLockSweep {
     return changed;
   }
 
-  /** Discord first, then record it; a failure retries next tick. */
+  /**
+   * Discord first, then record it; a failure retries next tick. A post gone
+   * from Discord is recorded deleted, never locked (review MAJOR-2).
+   */
   private async apply(row: RegistryLockChange, now: Date): Promise<boolean> {
     try {
-      await this.gateway.setReadOnly(row.discordThreadId, row.readOnly);
-      await setPlanningPostLocked(
-        this.db,
-        row.postId,
-        row.readOnly ? now : null,
-      );
+      const { discordThreadId, readOnly, postId } = row;
+      if (
+        (await this.gateway.setReadOnly(discordThreadId, readOnly)) === 'gone'
+      ) {
+        await markPlanningPostDeleted(this.db, postId, now);
+        return true;
+      }
+      await setPlanningPostLocked(this.db, postId, readOnly ? now : null);
     } catch (err) {
       this.warn(row, err);
       return false;

@@ -5,7 +5,10 @@
  */
 import { Injectable } from '@nestjs/common';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
-import { isGone } from './hub-forum-discord-outbound.discord';
+import {
+  isGone,
+  type DiscordWriteResult,
+} from './hub-forum-discord-outbound.discord';
 
 const REASON = 'Raid Ledger event discussion is read-only';
 
@@ -14,13 +17,19 @@ const REASON = 'Raid Ledger event discussion is read-only';
 export class HubForumDiscordEventLockGateway {
   constructor(private readonly client: DiscordBotClientService) {}
 
-  /** Read-only: lock then archive; reopened: unarchive then unlock. */
-  async setReadOnly(postId: string, readOnly: boolean): Promise<void> {
+  /**
+   * Read-only: lock then archive; reopened: unarchive then unlock. `gone`:
+   * the post no longer exists on Discord (ROK-2272 S4 review MAJOR-2).
+   */
+  async setReadOnly(
+    postId: string,
+    readOnly: boolean,
+  ): Promise<DiscordWriteResult> {
     const guild = this.client.isConnected() ? this.client.getGuild() : null;
     if (!guild) throw new Error('Discord bot is offline');
     try {
       const ch = await guild.channels.fetch(postId);
-      if (!ch?.isThread()) return;
+      if (!ch?.isThread()) return 'ok';
       if (readOnly) {
         await ch.setLocked(true, REASON);
         await ch.setArchived(true, REASON);
@@ -28,8 +37,10 @@ export class HubForumDiscordEventLockGateway {
         await ch.setArchived(false, REASON);
         await ch.setLocked(false, REASON);
       }
+      return 'ok';
     } catch (err) {
       if (!isGone(err)) throw err;
+      return 'gone';
     }
   }
 }

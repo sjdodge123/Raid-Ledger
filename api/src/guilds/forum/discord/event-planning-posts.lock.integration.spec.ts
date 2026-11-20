@@ -77,7 +77,7 @@ function spies() {
     .mockReturnValue(true);
   const setReadOnly = jest
     .spyOn(app().get(HubForumDiscordEventLockGateway), 'setReadOnly')
-    .mockResolvedValue(undefined);
+    .mockResolvedValue('ok');
   const syncEvent = jest
     .spyOn(app().get(EventPlanningPostsService), 'syncEvent')
     .mockResolvedValue(undefined);
@@ -166,7 +166,7 @@ describe('ROK-2272 S4a EventPlanningPostsLockSweep', () => {
     setReadOnly.mockImplementation((threadId) =>
       threadId === p.discordThreadId
         ? Promise.reject(new Error('discord 500'))
-        : Promise.resolve(),
+        : Promise.resolve('ok' as const),
     );
     const n = await app().get(EventPlanningPostsLockSweep).sweep();
     expect(await lockedAt(p.id)).toBeNull();
@@ -194,5 +194,25 @@ describe('ROK-2272 S4a HubForumDiscordEventLockSweep runs both passes', () => {
     await expect(hub.sweep()).resolves.toBeGreaterThanOrEqual(1);
     expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
     expect(await lockedAt(p.id)).not.toBeNull();
+  });
+});
+
+describe('ROK-2272 S4 review MAJOR-2: lock sweep on a deleted post', () => {
+  it('review MAJOR-2: a post gone from Discord is marked deleted, not locked, and not due again', async () => {
+    const { setReadOnly } = spies();
+    const p = await newPost({ closesInMs: -HOUR });
+    setReadOnly.mockImplementation((threadId) =>
+      Promise.resolve(threadId === p.discordThreadId ? 'gone' : 'ok'),
+    );
+    await app().get(EventPlanningPostsLockSweep).sweep();
+    expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
+    const [row] = nonEmpty(
+      await db().select().from(posts).where(eq(posts.id, p.id)),
+      'post',
+    );
+    expect(row.discordDeletedAt).not.toBeNull();
+    expect(row.discordLockedAt).toBeNull();
+    const due = await dueRegistryLockChanges(db(), new Date());
+    expect(due.find((d) => d.postId === p.id)).toBeUndefined();
   });
 });

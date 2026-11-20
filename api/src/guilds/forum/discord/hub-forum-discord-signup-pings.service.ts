@@ -34,6 +34,7 @@ import {
   resolvePingThread,
   resolvePlanningPost,
   type FlushKeys,
+  writeUnlessGone,
   type PingPost,
 } from './hub-forum-discord-signup-pings.target';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -153,13 +154,12 @@ export class HubForumDiscordSignupPings {
     const post = await this.postFor(ref, plan.lines.length > 0);
     if (post === 'closed' || post === 'pending') return post;
     await adoptScope(this.redis, eventId, keys, post.scope);
-    await this.post(keys, post.discordThreadId, plan, members);
-    const removedAll = await this.remove(
-      keys.pinged,
-      post.discordThreadId,
-      plan.remove,
-    );
-    return removedAll ? 'pinged' : 'incomplete';
+    return writeUnlessGone(this.db, post.scope, async () => {
+      const id = post.discordThreadId;
+      await this.post(keys, id, plan, members);
+      const all = await this.remove(keys.pinged, id, plan.remove);
+      return all ? 'pinged' : 'incomplete';
+    });
   }
 
   /**
