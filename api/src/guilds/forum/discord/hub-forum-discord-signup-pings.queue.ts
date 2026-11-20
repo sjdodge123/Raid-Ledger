@@ -29,6 +29,12 @@ const JOB_OPTIONS = {
 
 type SlotOutcome = 'debounced' | 'busy' | 'free';
 
+/** A slot for the urgent flush: `due` = it will run now and read fresh. */
+type UrgentOutcome = 'due' | 'busy' | 'free';
+
+/** Job states that have not read the signups yet. */
+const NOT_STARTED = new Set(['waiting', 'prioritized', 'waiting-children']);
+
 @Injectable()
 export class HubForumDiscordSignupPingQueue {
   private readonly logger = new Logger(HubForumDiscordSignupPingQueue.name);
@@ -68,6 +74,56 @@ export class HubForumDiscordSignupPingQueue {
     }
   }
 
+  /**
+   * ROK-2271 C4 — run the event's flush NOW (running late, roach-out). Same
+   * job ids as `schedule`, so it is the SAME flush, never a second one: a
+   * pending debounced flush is promoted (it then also carries any other
+   * change that was waiting), a running one gets a zero-delay trailing
+   * flush behind it. The worker runs one flush at a time and each diffs
+   * against the posted-state hash, so no line is posted twice. Never throws.
+   */
+  async flushNow(eventId: number): Promise<boolean> {
+    try {
+      await this.armNow(eventId);
+      return true;
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Urgent signup flush for ${eventId} not armed: ${why}`);
+      return false;
+    }
+  }
+
+  private async armNow(eventId: number): Promise<void> {
+    const trail = signupPingJobId(eventId, true);
+    const trailSlot = await this.hurry(trail);
+    if (trailSlot === 'due') return;
+    const primary = signupPingJobId(eventId);
+    const outcome = await this.hurry(primary);
+    if (outcome === 'free') return this.add(primary, eventId, 0);
+    if (outcome === 'busy' && trailSlot === 'free') {
+      await this.add(trail, eventId, 0);
+    }
+  }
+
+  /** Make a queued flush due now; `busy` = it is running already. */
+  private async hurry(jobId: string): Promise<UrgentOutcome> {
+    const job = await this.queue.getJob(jobId);
+    if (!job) return 'free';
+    const state = await job.getState();
+    if (NOT_STARTED.has(state)) return 'due';
+    if (state === 'completed' || state === 'failed') {
+      await job.remove();
+      return 'free';
+    }
+    if (state !== 'delayed') return 'busy';
+    try {
+      await job.promote();
+      return 'due';
+    } catch {
+      return 'busy'; // promoted and started between getState and promote
+    }
+  }
+
   private async debounce(jobId: string): Promise<SlotOutcome> {
     const job = await this.queue.getJob(jobId);
     if (!job) return 'free';
@@ -95,8 +151,13 @@ export class HubForumDiscordSignupPingQueue {
     }
   }
 
-  private async add(jobId: string, eventId: number): Promise<void> {
+  private async add(
+    jobId: string,
+    eventId: number,
+    delay: number = SIGNUP_PING_DEBOUNCE_MS,
+  ): Promise<void> {
     const data: SignupPingJobData = { eventId };
-    await this.queue.add('flush-signup-pings', data, { ...JOB_OPTIONS, jobId });
+    const opts = { ...JOB_OPTIONS, delay, jobId };
+    await this.queue.add('flush-signup-pings', data, opts);
   }
 }

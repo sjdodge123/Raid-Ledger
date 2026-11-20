@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -151,6 +152,7 @@ function buildRescheduleProviders() {
       provide: ActivityLogService,
       useValue: { log: jest.fn().mockResolvedValue(undefined) },
     },
+    { provide: EventEmitter2, useValue: { emit: jest.fn() } },
   ];
 }
 

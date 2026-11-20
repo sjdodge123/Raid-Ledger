@@ -11,6 +11,12 @@ import {
   cancelSeriesEvents,
 } from './event-series.helpers';
 
+/** ROK-2271: the confirmation-reset signal's emitter. */
+const RESET_EMITTER = {
+  emit: jest.fn(),
+  emitAsync: jest.fn().mockResolvedValue([]),
+};
+
 const GROUP_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const CREATOR_ID = 1;
 
@@ -56,6 +62,7 @@ describe('updateSeriesEvents', () => {
       false,
       'this',
       { title: 'Updated' },
+      RESET_EMITTER,
     );
 
     expect(mockDb.update).toHaveBeenCalled();
@@ -79,6 +86,7 @@ describe('updateSeriesEvents', () => {
       false,
       'all',
       { title: 'Updated All' },
+      RESET_EMITTER,
     );
 
     // Updates must remain per-event because buildUpdateForTarget
@@ -100,10 +108,18 @@ describe('updateSeriesEvents', () => {
     mockDb.orderBy.mockResolvedValueOnce(siblings);
 
     // Shift anchor 1 hour later: 18:00 → 19:00
-    await updateSeriesEvents(mockDb as never, 1, CREATOR_ID, false, 'all', {
-      title: 'Shifted',
-      startTime: '2026-03-10T19:00:00Z',
-    });
+    await updateSeriesEvents(
+      mockDb as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      {
+        title: 'Shifted',
+        startTime: '2026-03-10T19:00:00Z',
+      },
+      RESET_EMITTER,
+    );
 
     // Filter to update-data .set() calls (exclude signup-reset calls)
     const updateCalls = mockDb.set.mock.calls.filter(
@@ -134,9 +150,17 @@ describe('updateSeriesEvents', () => {
     mockDb.orderBy.mockResolvedValueOnce(siblings);
 
     // Title-only update: no startTime/endTime in DTO
-    await updateSeriesEvents(mockDb as never, 1, CREATOR_ID, false, 'all', {
-      title: 'No Time Change',
-    });
+    await updateSeriesEvents(
+      mockDb as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      {
+        title: 'No Time Change',
+      },
+      RESET_EMITTER,
+    );
 
     const setCalls = mockDb.set.mock.calls;
     expect(setCalls).toHaveLength(2);
@@ -162,6 +186,7 @@ describe('updateSeriesEvents', () => {
       false,
       'this_and_following',
       { startTime: '2026-03-17T17:30:00Z' },
+      RESET_EMITTER,
     );
 
     // Filter to update-data .set() calls (exclude signup-reset calls)
@@ -186,10 +211,99 @@ describe('updateSeriesEvents', () => {
     mockDb.limit.mockResolvedValueOnce([anchor]);
 
     await expect(
-      updateSeriesEvents(mockDb as never, 1, 999, false, 'this', {
-        title: 'Nope',
-      }),
+      updateSeriesEvents(
+        mockDb as never,
+        1,
+        999,
+        false,
+        'this',
+        {
+          title: 'Nope',
+        },
+        RESET_EMITTER,
+      ),
     ).rejects.toThrow(ForbiddenException);
+  });
+});
+
+/** An emitter that records the reset signals in order. */
+function traceEmitter() {
+  const order: string[] = [];
+  const emitter = {
+    emit: jest.fn((name: string, p: { eventId: number }) => {
+      order.push(`${name}:${p.eventId}`);
+      return true;
+    }),
+    emitAsync: jest.fn(
+      (name: string, p: { eventId: number; aborted?: boolean }) => {
+        const tag = p.aborted === true ? ':aborted' : '';
+        order.push(`${name}:${p.eventId}${tag}`);
+        return Promise.resolve([]);
+      },
+    ),
+  };
+  return { order, emitter };
+}
+
+describe('ROK-2271 review round 3 — series reset signals', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValueOnce([makeAnchor()]);
+    mockDb.orderBy.mockResolvedValueOnce([makeAnchor(), makeSibling(2, 7)]);
+  });
+
+  const run = (
+    emitter: ReturnType<typeof traceEmitter>['emitter'],
+    startTime: string,
+  ) =>
+    updateSeriesEvents(
+      mockDb as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      { startTime },
+      emitter,
+    );
+
+  it('flags every event before the transaction, LANDED per event after it', async () => {
+    const { order, emitter } = traceEmitter();
+    mockDb.transaction.mockImplementationOnce(
+      async (cb: (tx: MockDb) => Promise<unknown>) => {
+        order.push('tx');
+        return cb(mockDb);
+      },
+    );
+    await run(emitter, '2026-03-10T19:00:00Z');
+    expect(order).toEqual([
+      'signup.confirmations_resetting:1',
+      'signup.confirmations_resetting:2',
+      'tx',
+      'signup.confirmations_reset:1',
+      'signup.confirmations_reset:2',
+    ]);
+  });
+
+  it('Codex P2-3: an unchanged startTime resets nothing and signals nothing', async () => {
+    const { order, emitter } = traceEmitter();
+    await run(emitter, '2026-03-10T18:00:00Z');
+    expect(order).toEqual([]);
+  });
+
+  it('Codex P2-4: a rolled-back transaction aborts every flag and rethrows', async () => {
+    const { order, emitter } = traceEmitter();
+    mockDb.transaction.mockRejectedValueOnce(new Error('rollback'));
+    await expect(run(emitter, '2026-03-10T19:00:00Z')).rejects.toThrow(
+      'rollback',
+    );
+    expect(order).toEqual([
+      'signup.confirmations_resetting:1',
+      'signup.confirmations_resetting:2',
+      'signup.confirmations_resetting:1:aborted',
+      'signup.confirmations_resetting:2:aborted',
+    ]);
   });
 });
 

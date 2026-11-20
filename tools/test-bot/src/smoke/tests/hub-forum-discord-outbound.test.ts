@@ -11,19 +11,19 @@ import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
 import { getGuild } from "../../client.js";
 import { pollForCondition } from "../../helpers/polling.js";
 import { SmokeAssertionError } from "../assert.js";
-import { cancelSignupAs, createEvent, linkDiscord, signupAs } from "../fixtures.js";
+import { cancelSignupAs, createEvent, futureTime, linkDiscord, signupAs } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
 
 const SEED_GUILD = "/admin/test/wow/seed-guild";
-const TIMEOUT_MS = 30_000;
+export const TIMEOUT_MS = 30_000;
 
-interface Made {
+export interface Made {
   hub: number | null;
   forum: string | null;
   event?: number;
 }
 
-function fail(what: string, got: unknown): never {
+export function fail(what: string, got: unknown): never {
   throw new SmokeAssertionError(`${what}; got ${JSON.stringify(got)}`);
 }
 
@@ -63,14 +63,14 @@ async function expectPostGone(postId: string): Promise<void> {
   }
 }
 
-async function setup(ctx: TestContext, runId: string, made: Made) {
+export async function setup(ctx: TestContext, runId: string, made: Made) {
   const forum = await getGuild().channels.create({
     name: `rl-smoke-forum-${runId}`,
     type: ChannelType.GuildForum,
     reason: "ROK-2208 outbound smoke",
   });
   made.forum = forum.id;
-  const seeded = await ctx.api.post<{ guildId?: unknown; gameId?: unknown }>(SEED_GUILD, { name: `SF-O ${runId}` });
+  const seeded = await ctx.api.post<{ guildId?: unknown; gameId?: unknown; users?: unknown }>(SEED_GUILD, { name: `SF-O ${runId}` });
   if (typeof seeded.guildId !== "number") fail("seed-guild: no guildId", seeded);
   if (typeof seeded.gameId !== "number") fail("seed-guild: no gameId", seeded);
   made.hub = seeded.guildId;
@@ -79,7 +79,7 @@ async function setup(ctx: TestContext, runId: string, made: Made) {
     channelId: forum.id,
     ack: true,
   });
-  return { forum, hub: seeded.guildId, gameId: seeded.gameId };
+  return { forum, hub: seeded.guildId, gameId: seeded.gameId, users: seeded.users };
 }
 
 async function outbound(ctx: TestContext): Promise<void> {
@@ -104,7 +104,7 @@ async function outbound(ctx: TestContext): Promise<void> {
 const flushPath = (eventId: number) => `/admin/test/hub-forum-discord/events/${String(eventId)}/flush-signup-pings`;
 
 /** Force the debounced flush now; resolves the event's post id once it pinged. */
-async function flushPings(ctx: TestContext, eventId: number): Promise<ThreadChannel> {
+export async function flushPings(ctx: TestContext, eventId: number): Promise<ThreadChannel> {
   let last: unknown = null;
   try {
     const postId = await pollForCondition(async () => {
@@ -163,6 +163,15 @@ async function expectInNoPost(forum: ForumChannel, userId: string): Promise<void
   if (inPosts.length > 0) fail(`ROK-2260 ruling 2: ${userId} must not be in any post before the flush`, inPosts);
 }
 
+/**
+ * ROK-2271: an event 48 h out, so a cancel is a graceful decline (debounced)
+ * — inside 24 h it is a roach-out that flushes AT ONCE, racing this test's
+ * own forced flush (which would then find nothing left: `unchanged`).
+ */
+export function farOffTimes(): { startTime: string; endTime: string } {
+  return { startTime: futureTime(48 * 60), endTime: futureTime(49 * 60) };
+}
+
 async function signupPings(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
   const made: Made = { hub: null, forum: null };
@@ -170,7 +179,7 @@ async function signupPings(ctx: TestContext): Promise<void> {
   try {
     const { forum, hub, gameId } = await setup(ctx, runId, made);
     await linkDiscord(ctx.api, ctx.dmRecipientUserId, me, "SmokeTestBot");
-    const event = await createEvent(ctx.api, "forum-pings", { guildId: hub, gameId });
+    const event = await createEvent(ctx.api, "forum-pings", { guildId: hub, gameId, ...farOffTimes() });
     made.event = event.id;
     await signupAs(ctx.api, event.id, ctx.dmRecipientUserId);
     await expectInNoPost(forum, me);
@@ -186,7 +195,7 @@ async function signupPings(ctx: TestContext): Promise<void> {
 }
 
 /** Best-effort undo; never masks the failure that got us here. */
-async function teardown(ctx: TestContext, made: Made): Promise<void> {
+export async function teardown(ctx: TestContext, made: Made): Promise<void> {
   if (made.event !== undefined) {
     await ctx.api.delete(`/events/${String(made.event)}`).catch(() => undefined);
   }

@@ -61,3 +61,59 @@ export function mockRedisSets(
     },
   };
 }
+
+function readHash(
+  store: Map<string, string>,
+  key: string,
+): Record<string, string> {
+  const raw = store.get(key);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).map(([k, v]) => [k, String(v)]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeHash(
+  store: Map<string, string>,
+  expiries: Map<string, number>,
+  key: string,
+  hash: Record<string, string>,
+): void {
+  if (Object.keys(hash).length > 0) {
+    store.set(key, JSON.stringify(hash));
+    return;
+  }
+  // Redis deletes a hash when its last field goes.
+  store.delete(key);
+  expiries.delete(key);
+}
+
+/** ROK-2271 — HGETALL / HSET (object form) / HDEL over the backing store. */
+export function mockRedisHashes(
+  store: Map<string, string>,
+  expiries: Map<string, number>,
+) {
+  return {
+    hgetall: (key: string): Promise<Record<string, string>> =>
+      Promise.resolve(readHash(store, key)),
+    hset: (key: string, fields: Record<string, string>): Promise<number> => {
+      const hash = readHash(store, key);
+      const added = Object.keys(fields).filter((f) => !(f in hash)).length;
+      writeHash(store, expiries, key, { ...hash, ...fields });
+      return Promise.resolve(added);
+    },
+    hdel: (key: string, ...fields: string[]): Promise<number> => {
+      const hash = readHash(store, key);
+      const gone = fields.filter((f) => f in hash);
+      for (const f of gone) delete hash[f];
+      writeHash(store, expiries, key, hash);
+      return Promise.resolve(gone.length);
+    },
+  };
+}

@@ -38,6 +38,7 @@ import {
   queryAggregateGameTime,
 } from './event-availability.helpers';
 import {
+  resetSignupConfirmations,
   deleteEvent,
   cancelEvent,
   rescheduleEvent,
@@ -218,6 +219,15 @@ export class EventsService {
     return queryAggregateGameTime(this.db, eventId);
   }
 
+  /**
+   * ROK-2271: reset every active signup's confirmation (the rescheduler
+   * excepted), signalling the event thread around the write.
+   */
+  async resetConfirmations(eventId: number, by: number | null): Promise<void> {
+    const { db, eventEmitter } = this;
+    await resetSignupConfirmations(db, eventId, by, eventEmitter);
+  }
+
   /** Reschedules an event and notifies participants. */
   async reschedule(
     eventId: number,
@@ -226,14 +236,8 @@ export class EventsService {
     dto: RescheduleEventDto,
   ): Promise<EventResponseDto> {
     const eventBefore = await this.findOne(eventId);
-    await rescheduleEvent(
-      this.db,
-      this.notificationService,
-      eventId,
-      userId,
-      isAdmin,
-      dto,
-    );
+    const { db, notificationService: ns, eventEmitter: em } = this;
+    await rescheduleEvent(db, ns, eventId, userId, isAdmin, dto, em);
     await this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
       oldStart: eventBefore.startTime,
       newStart: dto.startTime,

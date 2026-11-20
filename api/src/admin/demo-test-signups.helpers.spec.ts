@@ -7,6 +7,8 @@ import {
   createSignupForTest,
   cancelSignupForTest,
   triggerDepartureForTest,
+  setRunningLateForTest,
+  RunningLateTestSchema,
 } from './demo-test-signups.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -102,5 +104,54 @@ describe('demo-test-signups.helpers - cancel and departure', () => {
       { eventId: 7, signupId: 42, discordUserId: 'discord-1' },
       0,
     );
+  });
+});
+
+describe('demo-test-signups.helpers - setRunningLateForTest (ROK-2271)', () => {
+  function lateService() {
+    return {
+      setRunningLate: jest.fn().mockResolvedValue(true),
+      clearRunningLate: jest.fn().mockResolvedValue(false),
+    };
+  }
+
+  it('marks late through RunningLateService (urgent emit path)', async () => {
+    const svc = lateService();
+    const moduleRef = mockModuleRef({ RunningLateService: svc });
+
+    const res = await setRunningLateForTest(moduleRef, {
+      eventId: 7,
+      userId: 42,
+      minutes: 15,
+    });
+
+    expect(res).toEqual({ changed: true });
+    expect(svc.setRunningLate).toHaveBeenCalledWith(7, 42, 15);
+    expect(svc.clearRunningLate).not.toHaveBeenCalled();
+  });
+
+  it('clears through RunningLateService when clear is true', async () => {
+    const svc = lateService();
+    const moduleRef = mockModuleRef({ RunningLateService: svc });
+
+    const res = await setRunningLateForTest(moduleRef, {
+      eventId: 7,
+      userId: 42,
+      clear: true,
+    });
+
+    expect(res).toEqual({ changed: false });
+    expect(svc.clearRunningLate).toHaveBeenCalledWith(7, 42);
+    expect(svc.setRunningLate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-positive event id and out-of-range minutes', () => {
+    expect(
+      RunningLateTestSchema.safeParse({ eventId: 0, userId: 1 }).success,
+    ).toBe(false);
+    expect(
+      RunningLateTestSchema.safeParse({ eventId: 1, userId: 1, minutes: 0 })
+        .success,
+    ).toBe(false);
   });
 });

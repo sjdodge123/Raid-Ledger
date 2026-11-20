@@ -46,7 +46,10 @@ type EventRow = typeof schema.events.$inferSelect;
 /** What the reschedule lock-in needs from its service. */
 export interface RescheduleLockInDeps {
   db: Db;
-  eventsService: Pick<EventsService, 'reschedule' | 'findOne'>;
+  eventsService: Pick<
+    EventsService,
+    'reschedule' | 'findOne' | 'resetConfirmations'
+  >;
   notificationService: NotificationService;
   logger: Pick<Logger, 'error'>;
   /** ROK-2272 S6: carries the carrier lineup's `decided → archived`. */

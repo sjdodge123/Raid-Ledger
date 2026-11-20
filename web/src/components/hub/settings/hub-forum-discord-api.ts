@@ -36,7 +36,7 @@ export function fetchHubForumDiscordChannels(guildId: number): Promise<HubForumD
 /**
  * What the form needs before it can offer anything: bot online, the
  * permissions a create would lack, the own-forum name and the shared
- * `#hub-forums` (with its free tag slots). Never 503s — read it first.
+ * `#event-planning` (with its free tag slots). Never 503s — read it first.
  */
 export function fetchHubForumDiscordPreflight(guildId: number): Promise<HubForumDiscordPreflight> {
     return fetchApi(`${base(guildId)}/preflight`, {}, HubForumDiscordPreflightSchema);

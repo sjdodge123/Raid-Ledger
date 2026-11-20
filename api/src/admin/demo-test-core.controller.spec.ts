@@ -226,6 +226,26 @@ function linkDiscordTests(
       }),
     ).rejects.toThrow(/Validation failed/);
   });
+
+  it('accepts a local: placeholder so a smoke test can restore it (ROK-2271)', async () => {
+    await getController().linkDiscordForTest({
+      userId: 1,
+      discordId: 'local:admin@local',
+      username: 'admin',
+    });
+    expect(getMock().linkDiscordForTest).toHaveBeenCalledWith(
+      1,
+      'local:admin@local',
+      'admin',
+    );
+    await expect(
+      getController().linkDiscordForTest({
+        userId: 1,
+        discordId: 'local:',
+        username: 'x',
+      }),
+    ).rejects.toThrow(/Validation failed/);
+  });
 }
 
 function enableDiscordNotificationsTests(

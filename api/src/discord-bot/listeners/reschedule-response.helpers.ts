@@ -7,6 +7,7 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 import { Logger } from '@nestjs/common';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -40,6 +41,7 @@ export interface RescheduleDeps {
   embedSyncQueue: EmbedSyncQueueService;
   emojiService: DiscordEmojiService;
   activityLog: ActivityLogService;
+  eventEmitter: EventEmitter2;
   logger: Logger;
 }
 

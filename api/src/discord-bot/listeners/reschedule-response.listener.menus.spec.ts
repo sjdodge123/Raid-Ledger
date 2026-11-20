@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
 import * as rescheduleBack from './reschedule-back.handlers';
@@ -177,6 +178,7 @@ async function setupMenusModule() {
         provide: ActivityLogService,
         useValue: { log: jest.fn().mockResolvedValue(undefined) },
       },
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
     ],
   }).compile();
   const instance: unknown = testModule.get(RescheduleResponseListener);

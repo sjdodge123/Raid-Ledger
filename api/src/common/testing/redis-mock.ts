@@ -19,7 +19,7 @@
  * expiry, matching Redis.
  */
 import { COMPARE_AND_DELETE_LUA, INCR_FIXED_WINDOW_LUA } from '../redis-lease';
-import { mockRedisSets } from './redis-mock-sets';
+import { mockRedisHashes, mockRedisSets } from './redis-mock-sets';
 
 /** True when the trailing ioredis args carry the given bare flag (NX/XX). */
 function hasFlag(args: (string | number)[], flag: 'NX' | 'XX'): boolean {
@@ -219,6 +219,7 @@ function buildRedisMockClient(
     },
     set: mockRedisSet(store, expiries),
     ...mockRedisSets(store, expiries),
+    ...mockRedisHashes(store, expiries),
     eval: mockRedisEval(store, expiries),
     setex: (key: string, seconds: number, value: string) => {
       store.set(key, value);

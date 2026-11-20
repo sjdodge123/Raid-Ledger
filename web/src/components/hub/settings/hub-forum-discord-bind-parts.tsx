@@ -1,13 +1,13 @@
 /**
  * ROK-2208 Q10 (option c, RULED) — the pieces of the unbound form: the
  * preflight Ready / Missing line, the "where posts go" choice (shared
- * `#hub-forums` vs this hub's own channel), and the own-channel controls
+ * `#event-planning` vs this hub's own channel), and the own-channel controls
  * (segmented Create / Use existing, the name input or the forum `Select`).
  * The picked forum's Ready / Missing shows once, on the form's preflight
  * line (mockup), not again under the `Select`. Tokens only.
  */
 import type { JSX } from 'react';
-import { HUB_FORUM_DISCORD_TAG_LIMIT } from '@raid-ledger/contract';
+import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME, HUB_FORUM_DISCORD_TAG_LIMIT } from '@raid-ledger/contract';
 import { Field } from '../../ui/field';
 import { Input } from '../../ui/input';
 import { RadioGroup, type RadioOption } from '../../ui/radio-group';
@@ -35,7 +35,7 @@ export function ReadyLine({ missing, ready, testId }: ReadyProps): JSX.Element {
 
 function sharedOption(preflight: HubForumDiscordPreflight): RadioOption<HubForumDiscordTarget> {
     const shared = preflight.shared;
-    const name = `#${shared?.name ?? 'hub-forums'}`;
+    const name = `#${shared?.name ?? HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME}`;
     if (shared && shared.tagsFree === 0) {
         return { value: 'shared', label: 'Shared server forum', disabled: true,
             description: `${name} is full: it already carries Discord’s maximum of ${String(HUB_FORUM_DISCORD_TAG_LIMIT)} tags. New hubs get their own channel.` };
