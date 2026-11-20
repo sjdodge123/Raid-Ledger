@@ -40,3 +40,17 @@ export const FOREVER_LOOT_NOT_CAPTURED_MESSAGE = "Forever loot for this boss isn
 export function lootEmptyMessage(variant: string): string {
     return variant === 'wow_forever' ? FOREVER_LOOT_NOT_CAPTURED_MESSAGE : NO_LOOT_MESSAGE;
 }
+
+/**
+ * ROK-2270 (operator 2026-11-20): a Forever boss with no Forever loot rows on
+ * a classic-edition instance reads its Classic rows; each still carries
+ * `expansion: 'classic'`, and this note says so above the list.
+ * Copy is the Lead's call (reversible) — change it here only.
+ */
+export const CLASSIC_FALLBACK_LOOT_NOTICE = 'Classic loot, Forever drops not captured';
+
+/** The Classic-fallback note for a loot list, or null when the rows are the variant's own. */
+export function lootFallbackNotice(variant: string, loot: readonly BossLootDto[] | undefined): string | null {
+    if (variant !== 'wow_forever' || !loot || loot.length === 0) return null;
+    return loot.every((item) => item.expansion === 'classic') ? CLASSIC_FALLBACK_LOOT_NOTICE : null;
+}

@@ -20,6 +20,8 @@ export interface BossLootBodyProps {
     hasCharacter: boolean;
     /** Sentence shown when the boss has no loot rows (by variant — `lootEmptyMessage`). */
     emptyMessage: string;
+    /** ROK-2270: muted note above the list when the rows are a Classic fallback (`lootFallbackNotice`). */
+    notice?: string | null | undefined;
 }
 
 function LootFilterToggle({ filterUsable, onToggle }: { filterUsable: boolean; onToggle: () => void }) {
@@ -35,7 +37,7 @@ function LootFilterToggle({ filterUsable, onToggle }: { filterUsable: boolean; o
 /** Loot table rendered under an expanded boss row */
 export function BossLootBody({
     loot, isLoading, isError, wowheadVariant,
-    equippedBySlot, characterClass, hasCharacter, emptyMessage,
+    equippedBySlot, characterClass, hasCharacter, emptyMessage, notice,
 }: BossLootBodyProps) {
     const [filterUsable, setFilterUsable] = useState(false);
 
@@ -48,6 +50,7 @@ export function BossLootBody({
 
     return (
         <div className="boss-loot-body">
+            {notice && <p className="boss-loot-body__notice" role="note">{notice}</p>}
             {hasCharacter && hasClassRestrictions && <LootFilterToggle filterUsable={filterUsable} onToggle={() => setFilterUsable((v) => !v)} />}
             <div className="quest-rewards">
                 {displayLoot.map((item) => (
