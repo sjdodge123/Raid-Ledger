@@ -3,6 +3,7 @@ import type { HubForumDiscordClosingLines } from './hub-forum-discord-closing-li
 import {
   HubForumDiscordSubjectListener,
   isLineupAbort,
+  isLineupReopen,
 } from './hub-forum-discord-subject.listener';
 
 function build() {
@@ -12,6 +13,8 @@ function build() {
     pollCancelled: jest.fn().mockResolvedValue(undefined),
     lineupDecided: jest.fn().mockResolvedValue(undefined),
     lineupAborted: jest.fn().mockResolvedValue(undefined),
+    pollReopened: jest.fn().mockResolvedValue(undefined),
+    lineupReopened: jest.fn().mockResolvedValue(undefined),
   };
   const listener = new HubForumDiscordSubjectListener(
     closing as unknown as HubForumDiscordClosingLines,
@@ -74,6 +77,61 @@ describe('HubForumDiscordSubjectListener (ROK-2272 S8)', () => {
       standalone: false,
     });
     expect(closing.lineupAborted).not.toHaveBeenCalled();
+  });
+
+  it('reopen signals clear the end keys: re-entered scheduling, lineup back to open', async () => {
+    const { closing, listener } = build();
+    await listener.onPollReopened({ matchId: 7 });
+    await listener.onLineupStatusChanged({
+      lineupId: 2,
+      from: 'decided',
+      to: 'voting',
+      standalone: false,
+    });
+    expect(closing.pollReopened).toHaveBeenCalledWith(7);
+    expect(closing.lineupReopened).toHaveBeenCalledWith(2);
+    expect(closing.lineupAborted).not.toHaveBeenCalled();
+  });
+
+  it('isLineupReopen: only decided/archived → an open status, never a carrier', () => {
+    const base = { lineupId: 1, standalone: false } as const;
+    expect(isLineupReopen({ ...base, from: 'decided', to: 'voting' })).toBe(
+      true,
+    );
+    expect(isLineupReopen({ ...base, from: 'archived', to: 'building' })).toBe(
+      true,
+    );
+    expect(isLineupReopen({ ...base, from: 'decided', to: 'archived' })).toBe(
+      false,
+    );
+    expect(isLineupReopen({ ...base, from: 'voting', to: 'decided' })).toBe(
+      false,
+    );
+    expect(
+      isLineupReopen({
+        ...base,
+        standalone: true,
+        from: 'decided',
+        to: 'voting',
+      }),
+    ).toBe(false);
+  });
+
+  it('a failing reopen is logged, never thrown', async () => {
+    const { closing, listener } = build();
+    closing.pollReopened.mockRejectedValue(new Error('boom'));
+    closing.lineupReopened.mockRejectedValue(new Error('boom'));
+    await expect(
+      listener.onPollReopened({ matchId: 1 }),
+    ).resolves.toBeUndefined();
+    await expect(
+      listener.onLineupStatusChanged({
+        lineupId: 2,
+        from: 'archived',
+        to: 'voting',
+        standalone: false,
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it('never throws into the emitter', async () => {

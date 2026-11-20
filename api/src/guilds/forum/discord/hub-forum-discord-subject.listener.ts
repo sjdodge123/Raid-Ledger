@@ -10,7 +10,10 @@ import {
   type PollLockedInPayload,
   type PollVotedPayload,
 } from '../../../lineups/lineup-events.constants';
-import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
+import {
+  LINEUP_MATCH_EVENTS,
+  type MatchEnteredSchedulingPayload,
+} from '../../../lineups/lineups-scheduling-hook.helpers';
 import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
 
 /** STATUS_CHANGED edges that abort a lineup subject (not a decide, not a carrier). */
@@ -18,9 +21,17 @@ export function isLineupAbort(p: LineupStatusChangedPayload): boolean {
   return p.to === 'archived' && p.from !== 'decided' && !p.standalone;
 }
 
+const ENDED: readonly string[] = ['decided', 'archived'];
+
+/** STATUS_CHANGED edges that reopen an ended lineup (decided/archived → open). */
+export function isLineupReopen(p: LineupStatusChangedPayload): boolean {
+  return ENDED.includes(p.from) && !ENDED.includes(p.to) && !p.standalone;
+}
+
 /**
  * ROK-2272 S8 — poll / lineup lifecycle → the hub thread's Discord post: the
- * first vote creates the post, an end posts one closing line. Part of the
+ * first vote creates the post, an end posts one closing line, a reopen lets
+ * the next end post again. Part of the
  * Core forum sync (`hub-forum.discord-sync`). Failures are logged, never
  * thrown into the lineup write path.
  */
@@ -40,6 +51,16 @@ export class HubForumDiscordSubjectListener {
       await this.closing.firstVote(p.matchId);
     } catch (err) {
       this.warn(`first-vote post for poll ${p.matchId}`, err);
+    }
+  }
+
+  /** A match (re-)entered scheduling: its next cancel posts a line again. */
+  @OnEvent(LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING, { async: true })
+  async onPollReopened(p: MatchEnteredSchedulingPayload): Promise<void> {
+    try {
+      await this.closing.pollReopened(p.matchId);
+    } catch (err) {
+      this.warn(`reopen of poll ${p.matchId}`, err);
     }
   }
 
@@ -72,11 +93,14 @@ export class HubForumDiscordSubjectListener {
 
   @OnEvent(LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED, { async: true })
   async onLineupStatusChanged(p: LineupStatusChangedPayload): Promise<void> {
-    if (!isLineupAbort(p)) return;
+    const reopen = isLineupReopen(p);
+    if (!reopen && !isLineupAbort(p)) return;
     try {
-      await this.closing.lineupAborted(p.lineupId);
+      if (reopen) await this.closing.lineupReopened(p.lineupId);
+      else await this.closing.lineupAborted(p.lineupId);
     } catch (err) {
-      this.warn(`abort line for lineup ${p.lineupId}`, err);
+      const what = reopen ? 'reopen of' : 'abort line for';
+      this.warn(`${what} lineup ${p.lineupId}`, err);
     }
   }
 
