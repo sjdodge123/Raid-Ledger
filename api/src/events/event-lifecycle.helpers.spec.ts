@@ -535,13 +535,13 @@ describe('ROK-2271 fix round 2 — resetSignupConfirmations signals around the w
     ]);
   });
 
-  it('leaves LANDED to a transaction caller (landedByCaller)', async () => {
+  it('leaves every signal to a transaction caller (signalledByCaller)', async () => {
     const { mockDb } = buildResetMockDb();
     const { emitter } = trace();
     await resetSignupConfirmations(mockDb as never, 42, 7, emitter, {
-      landedByCaller: true,
+      signalledByCaller: true,
     });
     expect(emitter.emit).not.toHaveBeenCalled();
-    expect(emitter.emitAsync).toHaveBeenCalledTimes(1);
+    expect(emitter.emitAsync).not.toHaveBeenCalled();
   });
 });

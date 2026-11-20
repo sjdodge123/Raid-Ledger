@@ -19,7 +19,12 @@ import {
   resetSignupConfirmations,
 } from './event-lifecycle.helpers';
 import { buildUpdateData } from './event-update.helpers';
-import type { ResetSignalEmitter } from './signup-confirmations-reset.signal';
+import {
+  signalResetAborted,
+  signalResetLanded,
+  signalResetStarting,
+  type ResetSignalEmitter,
+} from './signup-confirmations-reset.signal';
 
 type EventSelect = typeof schema.events.$inferSelect;
 
@@ -94,24 +99,47 @@ export async function updateSeriesEvents(
     ? computeTimeDelta(anchor.duration[0], dto.startTime)
     : null;
 
-  await db.transaction(async (tx) => {
-    for (const evt of targets) {
-      const updateData = buildUpdateForTarget(evt, anchor, dto, timeDelta);
-      await tx
-        .update(schema.events)
-        .set(updateData)
-        .where(eq(schema.events.id, evt.id));
-      if (timeDelta) {
-        // ROK-1269: pass acting userId so the series editor stays confirmed.
-        // The service signals LANDED once the transaction commits.
-        await resetSignupConfirmations(tx, evt.id, userId, emitter, {
-          landedByCaller: true,
-        });
+  // ROK-2271: only a real time change resets (and signals) confirmations.
+  const resetIds = timeDelta ? targets.map((e) => e.id) : [];
+  await withResetSignals(emitter, resetIds, () =>
+    db.transaction(async (tx) => {
+      for (const evt of targets) {
+        const updateData = buildUpdateForTarget(evt, anchor, dto, timeDelta);
+        await tx
+          .update(schema.events)
+          .set(updateData)
+          .where(eq(schema.events.id, evt.id));
+        if (timeDelta) {
+          // ROK-1269: pass acting userId so the series editor stays confirmed.
+          await resetSignupConfirmations(tx, evt.id, userId, emitter, {
+            signalledByCaller: true,
+          });
+        }
       }
-    }
-  });
+    }),
+  );
 
   return targets.map((e) => e.id);
+}
+
+/**
+ * ROK-2271 review round 3: the reset signals around a whole series
+ * transaction — every flag up before it (no Redis call inside it), aborted
+ * per event when it rolls back (rethrown), LANDED per event after commit.
+ */
+async function withResetSignals(
+  emitter: ResetSignalEmitter,
+  eventIds: readonly number[],
+  write: () => Promise<void>,
+): Promise<void> {
+  for (const id of eventIds) await signalResetStarting(emitter, id);
+  try {
+    await write();
+  } catch (err: unknown) {
+    for (const id of eventIds) await signalResetAborted(emitter, id);
+    throw err;
+  }
+  for (const id of eventIds) signalResetLanded(emitter, id);
 }
 
 /** Builds update data for a target event, applying time delta. */

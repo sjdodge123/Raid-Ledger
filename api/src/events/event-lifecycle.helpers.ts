@@ -146,8 +146,14 @@ export async function resetSignupConfirmations(
   eventId: number,
   reschedulerId: number | null,
   emitter: ResetSignalEmitter,
-  opts: { landedByCaller?: boolean } = {},
+  opts: { signalledByCaller?: boolean } = {},
 ): Promise<void> {
+  // A transaction's caller signals around the whole transaction instead
+  // (review round 3: no Redis call inside it; abort on its rollback).
+  if (opts.signalledByCaller) {
+    await writeConfirmationReset(db, eventId, reschedulerId);
+    return;
+  }
   // ROK-2271 fix round 2: flag first, so no flush reads the reset unflagged.
   await signalResetStarting(emitter, eventId);
   try {
@@ -156,8 +162,7 @@ export async function resetSignupConfirmations(
     await signalResetAborted(emitter, eventId);
     throw err;
   }
-  // A transaction's caller signals after its commit instead.
-  if (!opts.landedByCaller) signalResetLanded(emitter, eventId);
+  signalResetLanded(emitter, eventId);
 }
 
 /** The reset write itself: reminders re-armed, signups back to pending. */

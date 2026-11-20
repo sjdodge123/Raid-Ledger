@@ -226,6 +226,87 @@ describe('updateSeriesEvents', () => {
   });
 });
 
+/** An emitter that records the reset signals in order. */
+function traceEmitter() {
+  const order: string[] = [];
+  const emitter = {
+    emit: jest.fn((name: string, p: { eventId: number }) => {
+      order.push(`${name}:${p.eventId}`);
+      return true;
+    }),
+    emitAsync: jest.fn(
+      (name: string, p: { eventId: number; aborted?: boolean }) => {
+        const tag = p.aborted === true ? ':aborted' : '';
+        order.push(`${name}:${p.eventId}${tag}`);
+        return Promise.resolve([]);
+      },
+    ),
+  };
+  return { order, emitter };
+}
+
+describe('ROK-2271 review round 3 — series reset signals', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValueOnce([makeAnchor()]);
+    mockDb.orderBy.mockResolvedValueOnce([makeAnchor(), makeSibling(2, 7)]);
+  });
+
+  const run = (
+    emitter: ReturnType<typeof traceEmitter>['emitter'],
+    startTime: string,
+  ) =>
+    updateSeriesEvents(
+      mockDb as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      { startTime },
+      emitter,
+    );
+
+  it('flags every event before the transaction, LANDED per event after it', async () => {
+    const { order, emitter } = traceEmitter();
+    mockDb.transaction.mockImplementationOnce(
+      async (cb: (tx: MockDb) => Promise<unknown>) => {
+        order.push('tx');
+        return cb(mockDb);
+      },
+    );
+    await run(emitter, '2026-03-10T19:00:00Z');
+    expect(order).toEqual([
+      'signup.confirmations_resetting:1',
+      'signup.confirmations_resetting:2',
+      'tx',
+      'signup.confirmations_reset:1',
+      'signup.confirmations_reset:2',
+    ]);
+  });
+
+  it('Codex P2-3: an unchanged startTime resets nothing and signals nothing', async () => {
+    const { order, emitter } = traceEmitter();
+    await run(emitter, '2026-03-10T18:00:00Z');
+    expect(order).toEqual([]);
+  });
+
+  it('Codex P2-4: a rolled-back transaction aborts every flag and rethrows', async () => {
+    const { order, emitter } = traceEmitter();
+    mockDb.transaction.mockRejectedValueOnce(new Error('rollback'));
+    await expect(run(emitter, '2026-03-10T19:00:00Z')).rejects.toThrow(
+      'rollback',
+    );
+    expect(order).toEqual([
+      'signup.confirmations_resetting:1',
+      'signup.confirmations_resetting:2',
+      'signup.confirmations_resetting:1:aborted',
+      'signup.confirmations_resetting:2:aborted',
+    ]);
+  });
+});
+
 describe('deleteSeriesEvents', () => {
   let mockDb: MockDb;
 

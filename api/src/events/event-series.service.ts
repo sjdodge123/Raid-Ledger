@@ -15,10 +15,7 @@ import type {
 } from '@raid-ledger/contract';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotificationService } from '../notifications/notification.service';
-import {
-  APP_EVENT_EVENTS,
-  SIGNUP_CONFIRMATIONS_RESET,
-} from '../discord-bot/discord-bot.constants';
+import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { findOneEvent } from './event-find.helpers';
 import {
   mapEventToResponse,
@@ -64,12 +61,8 @@ export class EventSeriesService {
       this.eventEmitter,
     );
     this.logger.log(`Series updated: ${id} scope=${scope} by user ${userId}`);
-    // ROK-2271: a time change reset confirmations (updateSeriesEvents).
-    if (dto.startTime) {
-      for (const eventId of ids) {
-        this.eventEmitter.emit(SIGNUP_CONFIRMATIONS_RESET, { eventId });
-      }
-    }
+    // ROK-2271: updateSeriesEvents signals a confirmation reset itself,
+    // and only when one happened (Codex P2-3).
     await this.emitLifecycleForIds(ids, APP_EVENT_EVENTS.UPDATED);
     // ROK-1832 OQ-3: the late-tag fan-out skips unannounced/started ones.
     for (const eventId of tagged) {
