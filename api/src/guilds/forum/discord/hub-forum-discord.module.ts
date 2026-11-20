@@ -35,6 +35,8 @@ import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import { HubForumDiscordDecorBackfill } from './hub-forum-discord-decor.backfill';
 import { EventPlanningForumRename } from './event-planning-forum.rename';
+import { EventPlanningPostsGateway } from './event-planning-posts.discord';
+import { EventPlanningPostsService } from './event-planning-posts.service';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
 import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
@@ -89,6 +91,8 @@ import {
     HubForumDiscordDecor,
     HubForumDiscordDecorBackfill,
     EventPlanningForumRename,
+    EventPlanningPostsGateway,
+    EventPlanningPostsService,
   ],
   exports: [
     HubForumDiscordGateway,
@@ -99,6 +103,9 @@ import {
     HubForumDiscordSignupPings,
     // ROK-2272 S4 (event-planning posts) + S5a (admin forum card) inject it.
     EventPlanningForumResolver,
+    // ROK-2272 S4a: non-hub event posts (S4b signup pings consume it).
+    EventPlanningPostsGateway,
+    EventPlanningPostsService,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {
