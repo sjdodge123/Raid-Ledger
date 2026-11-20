@@ -294,6 +294,9 @@ describe('ROK-2208 inbound Discord → RL', () => {
   });
 });
 
+/** One live registry post per subject, so each call takes a fresh subject. */
+let registrySubjectId = 0;
+
 /** Register a Discord-only post in the forum bound at `channelId`. */
 async function registryPost(channelId: string): Promise<InboundThread> {
   const f = schema.hubForumDiscordForums;
@@ -307,7 +310,7 @@ async function registryPost(channelId: string): Promise<InboundThread> {
   const thread = post(channelId, { name: 'Pizza night — Poll' });
   await ctx.testApp.db.insert(schema.eventPlanningPosts).values({
     subjectKind: 'poll',
-    subjectId: 1,
+    subjectId: (registrySubjectId += 1),
     forumId: forum.id,
     discordThreadId: thread.id,
   });
