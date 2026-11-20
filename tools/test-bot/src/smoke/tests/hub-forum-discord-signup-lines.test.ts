@@ -59,6 +59,35 @@ async function relinkDmRecipient(ctx: TestContext): Promise<void> {
   });
 }
 
+interface DiscordLink {
+  discordId: string;
+  username: string;
+}
+
+/**
+ * The API user's own Discord link, read before a test points that user at the
+ * companion bot. Null when there is none, or when it already is the bot's.
+ */
+async function ownDiscordLink(ctx: TestContext): Promise<DiscordLink | null> {
+  const profile: unknown = await ctx.api.get<unknown>("/auth/me");
+  const discordId: unknown = typeof profile === "object" && profile !== null ? Reflect.get(profile, "discordId") : null;
+  const username: unknown = typeof profile === "object" && profile !== null ? Reflect.get(profile, "username") : null;
+  if (typeof discordId !== "string" || typeof username !== "string" || discordId === ctx.testBotDiscordId) return null;
+  return { discordId, username };
+}
+
+/**
+ * Give the API user its own Discord id and name back. `relinkDmRecipient`
+ * leaves that user with NO Discord id, and later categories on the same DB
+ * (ROK-943 voice classification) count the event creator by Discord id.
+ */
+async function restoreOwnLink(ctx: TestContext, link: DiscordLink | null): Promise<void> {
+  if (!link) return;
+  await linkDiscord(ctx.api, ctx.testUserId, link.discordId, link.username).catch((err: unknown) => {
+    console.warn(`  restore of the API user's Discord link failed: ${String(err)}`);
+  });
+}
+
 function characterName(res: unknown): string {
   const ch: unknown = typeof res === "object" && res !== null ? Reflect.get(res, "character") : null;
   const name: unknown = typeof ch === "object" && ch !== null ? Reflect.get(ch, "name") : null;
@@ -94,6 +123,7 @@ async function tentativeThenConfirmed(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
   const made: Made = { hub: null, forum: null };
   const me = ctx.testBotDiscordId;
+  const own = await ownDiscordLink(ctx);
   try {
     const { hub, gameId } = await setup(ctx, runId, made);
     await linkDiscord(ctx.api, ctx.testUserId, me, BOT_NAME);
@@ -109,6 +139,7 @@ async function tentativeThenConfirmed(ctx: TestContext): Promise<void> {
   } finally {
     await teardown(ctx, made);
     await relinkDmRecipient(ctx);
+    await restoreOwnLink(ctx, own);
   }
 }
 
