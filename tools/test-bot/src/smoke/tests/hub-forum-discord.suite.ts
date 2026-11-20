@@ -8,11 +8,13 @@ import { hubForumDiscordInboundTests } from "./hub-forum-discord-inbound.test.js
 import { hubForumDiscordOutboundTests } from "./hub-forum-discord-outbound.test.js";
 import { hubForumDiscordSignupLineTests } from "./hub-forum-discord-signup-lines.test.js";
 import { eventPlanningNonHubEventTests } from "./event-planning-nonhub-event.test.js";
+import { hubPollForumTests } from "./hub-poll-forum.test.js";
 
 export const hubForumDiscordTests: SmokeTest[] = [
   ...hubForumDiscordBindingTests,
   ...hubForumDiscordOutboundTests,
   ...hubForumDiscordSignupLineTests,
   ...eventPlanningNonHubEventTests,
+  ...hubPollForumTests,
   ...hubForumDiscordInboundTests,
 ];
