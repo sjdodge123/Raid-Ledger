@@ -34,7 +34,10 @@ export class EventPlanningPostsGateway {
   }
 
   /** Create a bot-posted forum thread; returns its (thread) id. */
-  async createPost(channelId: string, post: PlanningPostDraft): Promise<string> {
+  async createPost(
+    channelId: string,
+    post: PlanningPostDraft,
+  ): Promise<string> {
     const ch = await this.guild().channels.fetch(channelId);
     if (ch?.type !== ChannelType.GuildForum) {
       throw new Error(`Forum ${channelId} is gone`);

@@ -30,7 +30,10 @@ import {
   planTagCreates,
 } from './hub-forum-discord-decor';
 import { eventPostTitle } from './hub-forum-discord-event-outbound';
-import { HubForumDiscordGateway, type ForumInfo } from './hub-forum-discord.gateway';
+import {
+  HubForumDiscordGateway,
+  type ForumInfo,
+} from './hub-forum-discord.gateway';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /** A live Discord-only post. */
