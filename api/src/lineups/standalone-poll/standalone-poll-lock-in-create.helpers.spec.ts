@@ -12,6 +12,8 @@ import {
   SCHEDULING_POLL_ALREADY_LOCKED_IN_MESSAGE,
   type CreateEventDto,
 } from '@raid-ledger/contract';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { LINEUP_LIFECYCLE_EVENTS } from '../lineup-events.constants';
 import {
   claimMatchForLockIn,
   linkClaimedMatch,
@@ -363,5 +365,49 @@ describe('createLockedInPollEvent: cleanup and 409 mapping', () => {
     );
     expect(statusLimit).not.toHaveBeenCalled();
     expect(claim).not.toHaveBeenCalled();
+  });
+});
+
+describe('createLockedInPollEvent — ROK-2272 S6 STATUS_CHANGED', () => {
+  function withBus(): {
+    deps: LockInCreateDeps;
+    emit: jest.Mock;
+  } {
+    const emit = jest.fn();
+    const { deps } = buildDeps([]);
+    const events = { emit } as unknown as EventEmitter2;
+    return { deps: { ...asDeps(deps), events }, emit };
+  }
+
+  it('emits decided → archived once for a standalone carrier lineup', async () => {
+    const { deps, emit } = withBus();
+    await run(deps);
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED, {
+      lineupId: 3,
+      from: 'decided',
+      to: 'archived',
+      visibility: null,
+    });
+  });
+
+  it('emits nothing for a regular lineup match (its lineup is kept)', async () => {
+    target.mockResolvedValue({
+      id: MATCH_ID,
+      lineupId: 3,
+      linkedEventId: null,
+      linkedEventCancelled: false,
+      standalone: false,
+    });
+    const { deps, emit } = withBus();
+    await run(deps);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('emits nothing when the link loses (409, nothing archived)', async () => {
+    link.mockResolvedValue(false);
+    const { deps, emit } = withBus();
+    await expect(run(deps)).rejects.toThrow(ConflictException);
+    expect(emit).not.toHaveBeenCalled();
   });
 });
