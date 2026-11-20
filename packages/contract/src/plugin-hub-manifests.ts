@@ -82,6 +82,8 @@ const core = {
     { id: 'game_community', kind: 'hub-kind', label: 'Community hubs for any game' },
     { id: 'event-guild-tagger', kind: 'event-tagger', label: 'Tags events with the hub they belong to' },
     { id: 'event-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged event' },
+    // ROK-2272 S7 — scheduling-poll (and, S7b, lineup) Raid Ledger threads.
+    { id: 'poll-discussion', kind: 'event-tagger', label: 'Opens a forum thread for each hub-tagged scheduling poll and lineup' },
     { id: 'hub-media.upload', kind: 'ingest-source', label: 'Members upload pictures to the hub Gallery' },
     // ROK-2208 — the hub Forum ↔ Discord forum channel sync.
     { id: 'hub-forum.discord-sync', kind: 'ingest-source', label: 'Syncs the hub Forum with a Discord forum channel' },
