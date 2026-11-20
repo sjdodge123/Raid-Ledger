@@ -12,8 +12,11 @@ import type { Queue } from 'bullmq';
 import type { Guild } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { waitFor } from '../../../common/testing/integration-helpers';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import * as schema from '../../../drizzle/schema';
+import { RunningLateService } from '../../../events/running-late.service';
+import { SignupsService } from '../../../events/signups.service';
 import { SettingsService } from '../../../settings/settings.service';
 import {
   as,
@@ -32,7 +35,10 @@ import {
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
 import { postedLinesKey } from './hub-forum-discord-signup-lines.flush';
-import { pingedSetKey } from './hub-forum-discord-signup-pings';
+import {
+  pingedSetKey,
+  signupPingJobId,
+} from './hub-forum-discord-signup-pings';
 import { SIGNUP_PING_QUEUE } from './hub-forum-discord-signup-pings.queue';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import {
@@ -420,5 +426,66 @@ describe('ROK-2271 signup lines — role, character and status', () => {
     expect(await flush(s.eventId)).toBe('pinged');
     expect(mentioned()).toEqual([[]]);
     expect(message(0)).toContain('is confirmed (was tentative)');
+  });
+});
+
+const HOUR = 60 * 60 * 1000;
+
+/** Bot messages so far, once the urgent flush has posted the n-th one. */
+async function awaitMessages(n: number): Promise<void> {
+  await waitFor(async () => {
+    expect(out.spies.mention).toHaveBeenCalledTimes(n);
+    return Promise.resolve();
+  }, 10_000);
+}
+
+/** No debounced flush left that could post the same line again later. */
+async function debouncedJobs(eventId: number): Promise<string[]> {
+  const q = ctx.posts.testApp.app.get<Queue>(getQueueToken(SIGNUP_PING_QUEUE));
+  const ids = [signupPingJobId(eventId), signupPingJobId(eventId, true)];
+  const delayed = await q.getJobs(['delayed']);
+  return delayed.map((j) => j.id ?? '').filter((id) => ids.includes(id));
+}
+
+describe('ROK-2271 C4 — running late and roach-out post at once', () => {
+  it('running late via the service posts ONE late line at once, no ping', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    await flush(s.eventId);
+    const late = ctx.posts.testApp.app.get(RunningLateService);
+    expect(await late.setRunningLate(s.eventId, ctx.ids.signed, 15)).toBe(true);
+    await awaitMessages(2);
+    expect(message(1)).toMatch(/^⏰ .+ is running late \(~15 min\)$/);
+    expect(mentioned()).toEqual([[did.signed], []]);
+    expect(await debouncedJobs(s.eventId)).toEqual([]);
+    expect(await flush(s.eventId)).toBe('unchanged');
+    // Clearing it posts "on time again", also at once.
+    expect(await late.clearRunningLate(s.eventId, ctx.ids.signed)).toBe(true);
+    await awaitMessages(3);
+    expect(message(2)).toMatch(/^👍 .+ is on time again$/);
+  });
+
+  it('a roach-out (cancel < 23 h before start) posts ONE line at once and leaves the post', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    const start = new Date(Date.now() + 3 * HOUR + 10 * 60_000);
+    await ctx.posts.testApp.db
+      .update(schema.events)
+      .set({ duration: [start, new Date(start.getTime() + 2 * HOUR)] })
+      .where(eq(schema.events.id, s.eventId));
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    await flush(s.eventId);
+    await ctx.posts.testApp.app
+      .get(SignupsService)
+      .cancel(s.eventId, ctx.ids.signed);
+    await awaitMessages(2);
+    expect(message(1)).toMatch(/^🪳 .+ roached out \(3 h before start\)$/);
+    expect(mentioned()).toEqual([[did.signed], []]);
+    await waitFor(async () => {
+      expect(await pinged(s)).toEqual([]);
+    }, 10_000);
+    expect(await debouncedJobs(s.eventId)).toEqual([]);
+    expect(await flush(s.eventId)).toBe('unchanged');
   });
 });

@@ -208,7 +208,11 @@ describe('ROK-2271 C4 listener routes urgent changes', () => {
     );
     await l.onUpdated({ eventId: 5, action: 'running_late', urgent: true });
     await l.onDeleted({ eventId: 6, action: 'signup_cancelled', urgent: true });
-    await l.onDeleted({ eventId: 7, action: 'signup_cancelled', urgent: false });
+    await l.onDeleted({
+      eventId: 7,
+      action: 'signup_cancelled',
+      urgent: false,
+    });
     await l.onUpdated({ eventId: 8, action: 'status_changed_to_tentative' });
     expect(queue.flushNow.mock.calls).toEqual([[5], [6]]);
     expect(queue.schedule.mock.calls).toEqual([[7], [8]]);
