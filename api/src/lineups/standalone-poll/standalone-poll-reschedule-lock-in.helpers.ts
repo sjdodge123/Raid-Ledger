@@ -68,7 +68,7 @@ export interface RescheduledPoll {
 }
 
 /** The poll row a reschedule lock-in works on. */
-interface RescheduleTarget {
+export interface RescheduleTarget {
   lineupId: number;
   eventId: number;
   eventCreatorId: number | null;
@@ -221,8 +221,11 @@ async function archiveAndRelease(
   });
 }
 
-/** Archive + release, logged on failure so `afterComplete` still runs. */
-async function archiveOrLog(
+/**
+ * Archive + release, logged on failure so `afterComplete` still runs.
+ * Exported for its ROK-2272 S6 emit spec only.
+ */
+export async function archiveOrLog(
   deps: RescheduleLockInDeps,
   matchId: number,
   target: RescheduleTarget,
