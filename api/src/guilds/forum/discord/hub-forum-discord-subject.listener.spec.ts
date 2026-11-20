@@ -1,5 +1,7 @@
+import { Logger } from '@nestjs/common';
 import { LINEUP_LIFECYCLE_EVENTS } from '../../../lineups/lineup-events.constants';
 import type { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
+import type { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 import {
   HubForumDiscordSubjectListener,
   isLineupAbort,
@@ -8,7 +10,6 @@ import {
 
 function build() {
   const closing = {
-    firstVote: jest.fn().mockResolvedValue(undefined),
     pollLockedIn: jest.fn().mockResolvedValue(undefined),
     pollCancelled: jest.fn().mockResolvedValue(undefined),
     lineupDecided: jest.fn().mockResolvedValue(undefined),
@@ -16,21 +17,19 @@ function build() {
     pollReopened: jest.fn().mockResolvedValue(undefined),
     lineupReopened: jest.fn().mockResolvedValue(undefined),
   };
+  const voterPings = { hubVote: jest.fn().mockResolvedValue('pinged') };
   const listener = new HubForumDiscordSubjectListener(
     closing as unknown as HubForumDiscordClosingLines,
+    voterPings as unknown as HubForumDiscordPollVoterPings,
   );
-  return { closing, listener };
+  return { closing, voterPings, listener };
 }
 
 describe('HubForumDiscordSubjectListener (ROK-2272 S8)', () => {
-  it('routes each emit to its closing-lines call', async () => {
-    const { closing, listener } = build();
-    await listener.onPollVoted({
-      matchId: 1,
-      lineupId: 2,
-      userId: 3,
-      stance: null,
-    });
+  it('routes each emit to its closing-lines / voter-ping call', async () => {
+    const { closing, voterPings, listener } = build();
+    const vote = { matchId: 1, lineupId: 2, userId: 3, stance: null };
+    await listener.onPollVoted(vote);
     await listener.onPollLockedIn({ matchId: 1, eventId: 9 });
     await listener.onPollCancelled({ matchId: 1, lineupId: 2, reason: 'r' });
     await listener.onLineupDecided({ lineupId: 2 });
@@ -40,11 +39,28 @@ describe('HubForumDiscordSubjectListener (ROK-2272 S8)', () => {
       to: 'archived',
       standalone: false,
     });
-    expect(closing.firstVote).toHaveBeenCalledWith(1);
+    // S10: POLL_VOTED goes to hubVote (it still creates the hub post).
+    expect(voterPings.hubVote).toHaveBeenCalledWith(vote);
     expect(closing.pollLockedIn).toHaveBeenCalledWith(1, 9);
     expect(closing.pollCancelled).toHaveBeenCalledWith(1, 'r');
     expect(closing.lineupDecided).toHaveBeenCalledWith(2);
     expect(closing.lineupAborted).toHaveBeenCalledWith(2);
+  });
+
+  it('a failing hub vote ping is logged, never thrown (ROK-2272 S10)', async () => {
+    const { voterPings, listener } = build();
+    voterPings.hubVote.mockRejectedValueOnce(new Error('discord down'));
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    await expect(
+      listener.onPollVoted({
+        matchId: 1,
+        lineupId: 2,
+        userId: 3,
+        stance: 'yes',
+      }),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('discord down'));
+    warn.mockRestore();
   });
 
   it('STATUS_CHANGED: only a non-standalone archive that was not decided aborts', () => {
@@ -135,9 +151,9 @@ describe('HubForumDiscordSubjectListener (ROK-2272 S8)', () => {
   });
 
   it('never throws into the emitter', async () => {
-    const { closing, listener } = build();
+    const { closing, voterPings, listener } = build();
     closing.pollLockedIn.mockRejectedValue(new Error('boom'));
-    closing.firstVote.mockRejectedValue(new Error('boom'));
+    voterPings.hubVote.mockRejectedValue(new Error('boom'));
     await expect(
       listener.onPollLockedIn({ matchId: 1, eventId: 2 }),
     ).resolves.toBeUndefined();

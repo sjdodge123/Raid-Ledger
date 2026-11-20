@@ -14,11 +14,13 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   LINEUP_EVENTS,
   LINEUP_LIFECYCLE_EVENTS,
+  type PollVotedPayload,
 } from '../../../lineups/lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
 import { findPollMatchIds } from '../subject-discussion/poll-discussion.queries';
 import { payloadId } from '../subject-discussion/poll-discussion.listener';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
+import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /** A field of an emit payload, or undefined. */
@@ -39,15 +41,19 @@ export class EventPlanningSubjectsListener {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly subjects: EventPlanningSubjectPosts,
+    private readonly voterPings: HubForumDiscordPollVoterPings,
   ) {}
 
-  /** A committed vote creates the poll's post; a cleared tap does nothing. */
+  /**
+   * A committed vote creates the poll's post and pings the voter once (S10
+   * R5, `HubForumDiscordPollVoterPings.planningVote`); a cleared tap does
+   * nothing.
+   */
   @OnEvent(LINEUP_MATCH_EVENTS.POLL_VOTED, { async: true })
-  async onPollVoted(payload: unknown): Promise<void> {
-    const stance = field(payload, 'stance');
-    if (stance === null || stance === undefined) return;
-    await this.run('poll-voted', payloadId(payload, 'matchId'), (id) =>
-      this.subjects.ensurePollPost(id),
+  async onPollVoted(p: PollVotedPayload): Promise<void> {
+    if (p.stance === null) return;
+    await this.run('poll-voted', p.matchId, () =>
+      this.voterPings.planningVote(p),
     );
   }
 

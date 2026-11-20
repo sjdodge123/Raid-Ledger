@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/nestjs';
 import { findPollMatchIds } from '../subject-discussion/poll-discussion.queries';
 import type { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { EventPlanningSubjectsListener } from './event-planning-subjects.listener';
+import type { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
@@ -22,11 +23,13 @@ function setup() {
     syncPoll: jest.fn().mockResolvedValue(undefined),
     syncLineup: jest.fn().mockResolvedValue(undefined),
   };
+  const voterPings = { planningVote: jest.fn().mockResolvedValue('pinged') };
   const listener = new EventPlanningSubjectsListener(
     {} as unknown as ForumDiscordDb,
     subjects as unknown as EventPlanningSubjectPosts,
+    voterPings as unknown as HubForumDiscordPollVoterPings,
   );
-  return { listener, subjects };
+  return { listener, subjects, voterPings };
 }
 
 beforeEach(() => {
@@ -45,26 +48,39 @@ describe('EventPlanningSubjectsListener', () => {
     expect(listener.ownerPluginId).toBe('core');
   });
 
-  it('a committed vote ensures the poll post', async () => {
-    const { listener, subjects } = setup();
-    await listener.onPollVoted({
-      matchId: 7,
-      lineupId: 3,
-      userId: 1,
-      stance: 'yes',
-    });
-    expect(subjects.ensurePollPost).toHaveBeenCalledWith(7);
+  it('a committed vote goes to planningVote (post + voter ping, S10 R5)', async () => {
+    const { listener, voterPings } = setup();
+    const vote = { matchId: 7, lineupId: 3, userId: 1, stance: 'yes' } as const;
+    await listener.onPollVoted(vote);
+    expect(voterPings.planningVote).toHaveBeenCalledWith(vote);
   });
 
-  it('a cleared tap (stance null) creates nothing', async () => {
-    const { listener, subjects } = setup();
+  it('a cleared tap (stance null) creates and pings nothing', async () => {
+    const { listener, subjects, voterPings } = setup();
     await listener.onPollVoted({
       matchId: 7,
       lineupId: 3,
       userId: 1,
       stance: null,
     });
+    expect(voterPings.planningVote).not.toHaveBeenCalled();
     expect(subjects.ensurePollPost).not.toHaveBeenCalled();
+  });
+
+  it('a failing voter ping is warned and captured, never thrown', async () => {
+    const { listener, voterPings } = setup();
+    voterPings.planningVote.mockRejectedValueOnce(new Error('boom'));
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    await expect(
+      listener.onPollVoted({
+        matchId: 7,
+        lineupId: 3,
+        userId: 1,
+        stance: 'yes',
+      }),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('boom'));
+    expect(Sentry.captureException).toHaveBeenCalled();
   });
 
   it.each(['onLockedIn', 'onCancelled', 'onEnteredScheduling'] as const)(
@@ -129,18 +145,23 @@ describe('EventPlanningSubjectsListener lineup emits', () => {
 describe('EventPlanningSubjectsListener failure handling', () => {
   it('ignores a payload with no id', async () => {
     const { listener, subjects } = setup();
-    await listener.onPollVoted({ stance: 'yes' });
+    // S10: onPollVoted takes the typed PollVotedPayload (always has ids).
     await listener.onLockedIn(null);
     expect(subjects.ensurePollPost).not.toHaveBeenCalled();
     expect(subjects.syncPoll).not.toHaveBeenCalled();
   });
 
   it('swallows a handler error (warn + Sentry), never throws into the emitter', async () => {
-    const { listener, subjects } = setup();
+    const { listener, voterPings } = setup();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    subjects.ensurePollPost.mockRejectedValueOnce(new Error('discord down'));
+    voterPings.planningVote.mockRejectedValueOnce(new Error('discord down'));
     await expect(
-      listener.onPollVoted({ matchId: 7, stance: 'yes' }),
+      listener.onPollVoted({
+        matchId: 7,
+        lineupId: 3,
+        userId: 1,
+        stance: 'yes',
+      }),
     ).resolves.toBeUndefined();
     expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
       tags: { event_planning_posts: 'poll-voted' },

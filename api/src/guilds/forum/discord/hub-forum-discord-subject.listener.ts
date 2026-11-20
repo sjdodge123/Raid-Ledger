@@ -15,6 +15,7 @@ import {
   type MatchEnteredSchedulingPayload,
 } from '../../../lineups/lineups-scheduling-hook.helpers';
 import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
+import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 
 /** STATUS_CHANGED edges that abort a lineup subject (not a decide, not a carrier). */
 export function isLineupAbort(p: LineupStatusChangedPayload): boolean {
@@ -30,8 +31,8 @@ export function isLineupReopen(p: LineupStatusChangedPayload): boolean {
 
 /**
  * ROK-2272 S8 — poll / lineup lifecycle → the hub thread's Discord post: the
- * first vote creates the post, an end posts one closing line, a reopen lets
- * the next end post again. Part of the
+ * first vote creates the post (and, S10, pings a committed voter once), an
+ * end posts one closing line, a reopen lets the next end post again. Part of the
  * Core forum sync (`hub-forum.discord-sync`). Failures are logged, never
  * thrown into the lineup write path.
  */
@@ -43,14 +44,17 @@ export class HubForumDiscordSubjectListener {
   readonly ownerPluginId = CORE_PLUGIN_ID;
   private readonly logger = new Logger(HubForumDiscordSubjectListener.name);
 
-  constructor(private readonly closing: HubForumDiscordClosingLines) {}
+  constructor(
+    private readonly closing: HubForumDiscordClosingLines,
+    private readonly voterPings: HubForumDiscordPollVoterPings,
+  ) {}
 
   @OnEvent(LINEUP_MATCH_EVENTS.POLL_VOTED, { async: true })
   async onPollVoted(p: PollVotedPayload): Promise<void> {
     try {
-      await this.closing.firstVote(p.matchId);
+      await this.voterPings.hubVote(p);
     } catch (err) {
-      this.warn(`first-vote post for poll ${p.matchId}`, err);
+      this.warn(`vote post / ping for poll ${p.matchId}`, err);
     }
   }
 

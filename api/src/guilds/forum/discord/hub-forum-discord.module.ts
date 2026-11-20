@@ -52,6 +52,7 @@ import {
 } from './hub-forum-discord-signup-pings.queue';
 import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
 import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.listener';
+import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
@@ -108,6 +109,8 @@ import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.list
     EventPlanningPostCreator,
     EventPlanningSubjectPosts,
     EventPlanningSubjectsListener,
+    // ROK-2272 S10: poll voter pings (hub + non-hub).
+    HubForumDiscordPollVoterPings,
   ],
   exports: [
     HubForumDiscordGateway,
