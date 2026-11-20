@@ -343,6 +343,6 @@ Two tools test Discord bot functionality: the **companion bot** (`tools/test-bot
 4. Never modify a smoke test just to make CI pass — investigate why it broke first
 5. Run the no-sleep lint before pushing: `npm run lint:no-sleep` (from `tools/test-bot/`)
 
-**Files that trigger smoke test review:** `api/src/discord-bot/**` · `api/src/notifications/**` · `api/src/events/signups*` · `api/src/events/event-lifecycle*` · `api/src/lineups/standalone-poll/**` (ROK-1392) · `api/src/lineups/scheduling/**` (ROK-1547) · `api/src/guilds/forum/discord/**` (ROK-2272) · `api/src/admin/demo-test*` · `tools/test-bot/src/smoke/**` · `tools/test-bot/src/helpers/polling.ts`
+**Files that trigger smoke test review:** `api/src/discord-bot/**` · `api/src/notifications/**` · `api/src/events/signups*` · `api/src/events/event-lifecycle*` · `api/src/lineups/standalone-poll/**` (ROK-1392) · `api/src/lineups/scheduling/**` (ROK-1547) · `api/src/admin/demo-test*` · `tools/test-bot/src/smoke/**` · `tools/test-bot/src/helpers/polling.ts`
 
 **Key limitation:** bots cannot interact with other bots' message components. Test button/interaction handlers directly in NestJS integration tests instead.
