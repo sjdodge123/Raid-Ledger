@@ -17,10 +17,7 @@ import * as schema from '../../../drizzle/schema';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
-import {
-  findLivePollThread,
-  findPollForSync,
-} from '../subject-discussion/poll-discussion.queries';
+import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
 import {
   closingLineText,
   type ClosingLine,
@@ -36,7 +33,6 @@ import {
   type ClosingTarget,
 } from './hub-forum-discord-closing-lines.target';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
-import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 export {
@@ -56,21 +52,10 @@ export class HubForumDiscordClosingLines {
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
-    private readonly outbound: HubForumDiscordOutboundService,
     private readonly gateway: HubForumDiscordOutboundGateway,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly settings: SettingsService,
   ) {}
-
-  /** R4: a poll's first vote creates its hub thread's Discord post. */
-  async firstVote(matchId: number): Promise<void> {
-    const thread = await findLivePollThread(this.db, matchId);
-    if (!thread) return;
-    await this.outbound.ensureEventPost({
-      guildId: thread.guildId,
-      threadId: thread.id,
-    });
-  }
 
   /** A poll locked in: the event line. An eventless lock-in posts nothing. */
   async pollLockedIn(matchId: number, eventId: number | null): Promise<void> {

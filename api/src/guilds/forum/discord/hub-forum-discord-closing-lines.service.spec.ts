@@ -14,7 +14,6 @@ import {
   isCurrentBindingLink,
 } from './hub-forum-discord-links.queries';
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
-import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./hub-forum-discord-links.queries', () => ({
@@ -72,16 +71,14 @@ function build(online = true) {
     isOnline: jest.fn().mockReturnValue(online),
     mention: jest.fn().mockResolvedValue(undefined),
   };
-  const outbound = { ensureEventPost: jest.fn().mockResolvedValue(null) };
   const redis = fakeRedis();
   const svc = new HubForumDiscordClosingLines(
     {} as unknown as ForumDiscordDb,
-    outbound as unknown as HubForumDiscordOutboundService,
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
     {} as unknown as SettingsService,
   );
-  return { svc, gateway, outbound, redis };
+  return { svc, gateway, redis };
 }
 
 beforeEach(() => {
@@ -170,23 +167,6 @@ describe('subject entry points (ROK-2272 S8)', () => {
     body: 'b',
     writeClosesAt: null,
   };
-
-  it('first vote ensures the post of the live poll thread', async () => {
-    const { svc, outbound } = build();
-    findPoll.mockResolvedValue(thread);
-    await svc.firstVote(4);
-    expect(outbound.ensureEventPost).toHaveBeenCalledWith({
-      guildId: 3,
-      threadId: 8,
-    });
-  });
-
-  it('first vote with no live thread does nothing', async () => {
-    const { svc, outbound } = build();
-    findPoll.mockResolvedValue(null);
-    await svc.firstVote(4);
-    expect(outbound.ensureEventPost).not.toHaveBeenCalled();
-  });
 
   it('cancel posts the reason line once', async () => {
     const { svc, gateway } = build();
