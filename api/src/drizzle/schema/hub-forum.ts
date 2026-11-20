@@ -39,7 +39,7 @@ function discordIdIndex(table: 'threads' | 'replies', column: AnyPgColumn) {
  * ROK-2226 + ROK-2272: discussion-thread constraints — a thread discusses at
  * most one subject (event, scheduling poll or lineup), one live thread each.
  */
-function subjectConstraints(table: {
+function subjectChecks(table: {
   eventId: AnyPgColumn;
   matchId: AnyPgColumn;
   lineupId: AnyPgColumn;
@@ -61,6 +61,17 @@ function subjectConstraints(table: {
       'hub_forum_threads_one_subject',
       sql`num_nonnulls(${table.eventId}, ${table.matchId}, ${table.lineupId}) <= 1`,
     ),
+  ];
+}
+
+/** ROK-2226 + ROK-2272: one live discussion thread per subject. */
+function subjectIndexes(table: {
+  eventId: AnyPgColumn;
+  matchId: AnyPgColumn;
+  lineupId: AnyPgColumn;
+  eventDetachedAt: AnyPgColumn;
+}) {
+  return [
     uniqueIndex('uq_hub_forum_threads_event_live')
       .on(table.eventId)
       .where(
@@ -166,7 +177,8 @@ export const hubForumThreads = pgTable(
     index('idx_hub_forum_threads_pinned_by').on(table.pinnedBy),
     index('idx_hub_forum_threads_deleted_by').on(table.deletedBy),
     discordIdIndex('threads', table.authorDiscordId),
-    ...subjectConstraints(table),
+    ...subjectChecks(table),
+    ...subjectIndexes(table),
   ],
 );
 
