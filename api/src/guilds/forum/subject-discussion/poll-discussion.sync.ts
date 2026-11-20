@@ -33,6 +33,9 @@ const SUFFIX = ' — Poll';
  */
 export function pollEndedAt(poll: PollSyncRow, now: Date): Date | null {
   if (poll.status === 'scheduled' || poll.status === 'archived') return now;
+  // Parity with `pollStatusFromMatch`: a match tied to an event (a reschedule
+  // poll) stays open and votable whatever happened to its lineup or deadline.
+  if (poll.linkedEventId !== null) return null;
   if (poll.lineupStatus === 'archived') return now;
   const deadline = poll.phaseDeadline?.getTime();
   if (deadline !== undefined && deadline <= now.getTime()) {

@@ -122,6 +122,7 @@ describe('planPollSync (decision table)', () => {
     visibility: 'public' as const,
     lineupStatus: 'decided' as const,
     phaseDeadline: null,
+    linkedEventId: null,
   };
   it('inserts only for an open hub poll', () => {
     expect(planPollSync({ ...base, status: 'scheduling' }, null)).toBe(
@@ -155,6 +156,18 @@ describe('planPollSync (decision table)', () => {
       past.getTime() + POLL_CLOSE_GRACE_MS,
     );
     expect(pollWriteClosesAt(future, null, now)).toBeNull();
+  });
+  it('a reschedule poll (linked event) stays open past its lineup', () => {
+    const now = new Date('2026-11-20T12:00:00Z');
+    const linked = { ...base, status: 'scheduling' as const, linkedEventId: 9 };
+    const archived = { ...linked, lineupStatus: 'archived' as const };
+    const expired = { ...linked, phaseDeadline: new Date(now.getTime() - 1) };
+    expect(planPollSync(archived, null, now)).toBe('insert');
+    expect(pollWriteClosesAt(archived, null, now)).toBeNull();
+    expect(pollWriteClosesAt(expired, null, now)).toBeNull();
+    expect(
+      pollWriteClosesAt({ ...archived, status: 'scheduled' }, null, now),
+    ).not.toBeNull();
   });
 });
 
