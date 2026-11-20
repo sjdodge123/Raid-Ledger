@@ -8,11 +8,12 @@
  *     tagged ONLY `Poll`, its bot starter linking the poll page;
  *  3. that voter gets ONE ping line (`🗳 <@id> voted`); changing the vote
  *     adds no second line (anchor: the lock-in line lands after it);
- *  4. lock-in posts `is happening!` + the event link;
+ *  4. the organiser votes (an open poll is locked in only by a voter), then
+ *     lock-in posts `is happening!` + the event link;
  *  5. `close-planning-post-now` + `lock-sweep` lock and archive the post.
  * `finally` deletes the post, the event, the binding and the forum, archives
- * the poll's lineup, gives the voter back its own Discord id and re-links
- * the DM recipient.
+ * the poll's lineup and re-links the DM recipient (the fixture voter is left
+ * unlinked: its own fixture id is not a linkable id).
  */
 import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
 import { getGuild } from "../../client.js";
@@ -106,13 +107,13 @@ async function closePostAndSweep(ctx: TestContext, poll: Poll): Promise<void> {
   if (typeof res.changed !== "number") fail("lock-sweep fixture: expected { changed: number }", res);
 }
 
-async function restoreVoter(ctx: TestContext, voter: FixtureUser | null): Promise<void> {
-  if (voter !== null) {
-    await linkDiscord(ctx.api, voter.userId, voter.discordId, `smoke-invitee-fixture-${String(VOTER_SLOT)}`).catch((err: unknown) => {
-      console.warn(`  voter re-link failed: ${String(err)}`);
-    });
-  }
-  await relinkDmRecipient(ctx);
+/**
+ * The organiser may lock in an OPEN poll only after voting on it
+ * (`assertUserHasVoted`), and here the voter — not the admin — suggested.
+ */
+async function organiserVotes(ctx: TestContext, poll: Poll, slotId: number): Promise<void> {
+  const res = await ctx.api.post<{ stance?: unknown }>(`${schedulePath(poll)}/vote`, { slotId, stance: "yes" });
+  if (res.stance !== "yes") fail("organiser vote: expected stance 'yes'", res);
 }
 
 /** Steps 3–5: the single ping survives a second vote; lock-in line; lock. */
@@ -120,6 +121,7 @@ async function pingThenLockIn(ctx: TestContext, voter: FixtureUser, poll: Poll, 
   const me = ctx.testBotDiscordId;
   await expectInPost(post, `ROK-2272 S10: expected one ping line "<@${me}> voted"`, (c, wh) => !wh && c.includes(`<@${me}>`) && c.includes("voted"));
   await changeVote(voter, poll, slotId);
+  await organiserVotes(ctx, poll, slotId);
   const eventId = await lockIn(ctx, poll, slotId, made);
   const link = `/events/${String(eventId)}`;
   await expectInPost(post, `ROK-2272 S10: expected the lock-in closing line linking ${link}`, (c, wh) => !wh && c.includes("is happening!") && c.includes(link));
@@ -152,7 +154,9 @@ async function nonHubPollPost(ctx: TestContext): Promise<void> {
   } finally {
     await cleanup(ctx, poll, postId);
     await teardown(ctx, made);
-    await restoreVoter(ctx, voter);
+    // The bot's id goes back to the DM recipient. The fixture user is left
+    // unlinked (its own fixture id is not linkable); the next seed re-creates it.
+    await relinkDmRecipient(ctx);
   }
 }
 
