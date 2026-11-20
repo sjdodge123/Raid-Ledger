@@ -6,6 +6,8 @@
  * to close it, once per subject end. A reopen forgets the end's once-key so
  * the next end posts again. Best-effort: a failed send is logged and the
  * line is lost (nothing re-emits an end); it never throws into the listener.
+ * S10: a non-hub subject (no live hub thread) gets the same line in its
+ * registry planning post — target + send arms in `.target.ts`.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
@@ -15,7 +17,6 @@ import * as schema from '../../../drizzle/schema';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
-import { findLiveLineupThread } from '../subject-discussion/lineup-discussion.queries';
 import {
   findLivePollThread,
   findPollForSync,
@@ -25,29 +26,29 @@ import {
   type ClosingLine,
 } from './hub-forum-discord-closing-lines';
 import {
-  findThreadLink,
-  isCurrentBindingLink,
-  isUnsent,
-} from './hub-forum-discord-links.queries';
+  postHubClosingLine,
+  postPlanningClosingLine,
+  resolveClosingTarget,
+  targetLabel,
+  targetOnceKey,
+  type ClosingOutcome,
+  type ClosingSendDeps,
+  type ClosingTarget,
+} from './hub-forum-discord-closing-lines.target';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
-/** A claimed once-key outlives any subject's end by far. */
-export const CLOSING_ONCE_TTL_SECONDS = 30 * 24 * 3600;
-
-/** Redis key that lets exactly one caller post a thread's closing line. */
-export function closingOnceKey(threadId: number, onceKey: string): string {
-  return `hfd:closing:${threadId}:${onceKey}`;
-}
+export {
+  CLOSING_ONCE_TTL_SECONDS,
+  closingOnceKey,
+  planningClosingOnceKey,
+  type ClosingOutcome,
+} from './hub-forum-discord-closing-lines.target';
 
 /** Once-keys that a reopen clears (lock-in keys on its event id instead). */
 export const POLL_END_KEYS = ['cancelled'] as const;
 export const LINEUP_END_KEYS = ['decided', 'aborted'] as const;
-
-/** Why a closing line did or did not go out. */
-export type ClosingOutcome =
-  'posted' | 'no-post' | 'closed-post' | 'offline' | 'already' | 'send-failed';
 
 @Injectable()
 export class HubForumDiscordClosingLines {
@@ -74,118 +75,84 @@ export class HubForumDiscordClosingLines {
   /** A poll locked in: the event line. An eventless lock-in posts nothing. */
   async pollLockedIn(matchId: number, eventId: number | null): Promise<void> {
     if (eventId === null) return;
-    const thread = await findLivePollThread(this.db, matchId);
-    if (!thread) return;
+    const target = await resolveClosingTarget(this.db, 'poll', matchId);
+    if (!target) return;
     const eventTitle = await this.eventTitle(eventId, matchId);
     const line = { kind: 'poll-locked-in', eventId, eventTitle } as const;
-    await this.close(thread.id, line, `locked-in:${eventId}`);
+    await this.close(target, line, `locked-in:${eventId}`);
   }
 
   async pollCancelled(matchId: number, reason: string | null): Promise<void> {
-    const thread = await findLivePollThread(this.db, matchId);
-    if (!thread) return;
-    await this.close(
-      thread.id,
-      { kind: 'poll-cancelled', reason },
-      'cancelled',
-    );
+    const target = await resolveClosingTarget(this.db, 'poll', matchId);
+    if (!target) return;
+    await this.close(target, { kind: 'poll-cancelled', reason }, 'cancelled');
   }
 
   async lineupDecided(lineupId: number): Promise<void> {
-    const thread = await findLiveLineupThread(this.db, lineupId);
-    if (!thread) return;
+    const target = await resolveClosingTarget(this.db, 'lineup', lineupId);
+    if (!target) return;
     const games = await this.decidedGames(lineupId);
     const line = { kind: 'lineup-decided', lineupId, games } as const;
-    await this.close(thread.id, line, 'decided');
+    await this.close(target, line, 'decided');
   }
 
   async lineupAborted(lineupId: number): Promise<void> {
-    const thread = await findLiveLineupThread(this.db, lineupId);
-    if (!thread) return;
-    await this.close(thread.id, { kind: 'lineup-aborted' }, 'aborted');
+    const target = await resolveClosingTarget(this.db, 'lineup', lineupId);
+    if (!target) return;
+    await this.close(target, { kind: 'lineup-aborted' }, 'aborted');
   }
 
   /** A poll (re-)entered scheduling: its next cancel posts a line again. */
   async pollReopened(matchId: number): Promise<void> {
-    const thread = await findLivePollThread(this.db, matchId);
-    if (!thread) return;
-    await this.forget(thread.id, POLL_END_KEYS);
+    const target = await resolveClosingTarget(this.db, 'poll', matchId);
+    if (!target) return;
+    await this.forget(target, POLL_END_KEYS);
   }
 
   /** A lineup left decided/archived for an open status: next end posts. */
   async lineupReopened(lineupId: number): Promise<void> {
-    const thread = await findLiveLineupThread(this.db, lineupId);
-    if (!thread) return;
-    await this.forget(thread.id, LINEUP_END_KEYS);
-  }
-
-  private async forget(
-    threadId: number,
-    onceKeys: readonly string[],
-  ): Promise<void> {
-    await this.redis.del(...onceKeys.map((k) => closingOnceKey(threadId, k)));
-  }
-
-  private async close(
-    threadId: number,
-    line: ClosingLine,
-    onceKey: string,
-  ): Promise<void> {
-    const text = closingLineText(line, await getClientUrl(this.settings));
-    const outcome = await this.postClosingLine(threadId, text, onceKey);
-    this.logger.debug(`Closing line ${onceKey} #${threadId}: ${outcome}`);
+    const target = await resolveClosingTarget(this.db, 'lineup', lineupId);
+    if (!target) return;
+    await this.forget(target, LINEUP_END_KEYS);
   }
 
   /**
-   * One bot line into the thread's existing Discord post. Skips a thread
-   * with no post, an unsent one, a post from a previous binding (D9: hub
-   * unbound or re-bound since), a deleted / locked one, or an offline bot; only
-   * the caller that claims the once-key posts. A failed send releases the
-   * key, logs one warning naming the thread and the line, and reports
-   * `send-failed`: best-effort, nothing retries it.
+   * One bot line into a hub thread's existing Discord post (S8 arm — see
+   * `postHubClosingLine` for every skip).
    */
   async postClosingLine(
     threadId: number,
     text: string,
     onceKey: string,
   ): Promise<ClosingOutcome> {
-    const link = await findThreadLink(this.db, threadId);
-    if (!link || isUnsent(link)) return 'no-post';
-    if (!(await isCurrentBindingLink(this.db, link))) return 'no-post';
-    if (link.discordDeletedAt !== null || link.discordLockedAt !== null) {
-      return 'closed-post';
-    }
-    if (!this.gateway.isOnline()) return 'offline';
-    const key = closingOnceKey(threadId, onceKey);
-    const claimed = await this.redis.set(
-      key,
-      '1',
-      'EX',
-      CLOSING_ONCE_TTL_SECONDS,
-      'NX',
-    );
-    if (claimed === null) return 'already';
-    return this.send(link.discordThreadId, text, threadId, onceKey);
+    return postHubClosingLine(this.deps(), threadId, text, onceKey);
   }
 
-  /** Send a claimed line; a failure releases the key and warns once. */
-  private async send(
-    discordThreadId: string,
-    text: string,
-    threadId: number,
+  private async forget(
+    target: ClosingTarget,
+    onceKeys: readonly string[],
+  ): Promise<void> {
+    await this.redis.del(...onceKeys.map((k) => targetOnceKey(target, k)));
+  }
+
+  private async close(
+    target: ClosingTarget,
+    line: ClosingLine,
     onceKey: string,
-  ): Promise<ClosingOutcome> {
-    try {
-      await this.gateway.mention(discordThreadId, text, []);
-      return 'posted';
-    } catch (err) {
-      await this.redis.del(closingOnceKey(threadId, onceKey));
-      const why = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Closing line ${onceKey} for thread #${threadId} lost (not retried): ${why}`,
-      );
-      return 'send-failed';
-    }
+  ): Promise<void> {
+    const text = closingLineText(line, await getClientUrl(this.settings));
+    const outcome =
+      target.kind === 'hub'
+        ? await this.postClosingLine(target.threadId, text, onceKey)
+        : await postPlanningClosingLine(this.deps(), target, text, onceKey);
+    this.logger.debug(
+      `Closing line ${onceKey} ${targetLabel(target)}: ${outcome}`,
+    );
+  }
+
+  private deps(): ClosingSendDeps {
+    const { db, redis, gateway, logger } = this;
+    return { db, redis, gateway, logger };
   }
 
   /** The linked event's title; the poll's own title when unreadable. */

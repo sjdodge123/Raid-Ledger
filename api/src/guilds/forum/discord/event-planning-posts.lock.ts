@@ -29,6 +29,7 @@ import {
   type PlanningSubjectKind,
 } from './event-planning-posts.queries';
 import { EventPlanningPostsService } from './event-planning-posts.service';
+import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -127,16 +128,32 @@ export class EventPlanningPostsLockSweep {
     private readonly gateway: HubForumDiscordEventLockGateway,
     private readonly client: DiscordBotClientService,
     private readonly service: EventPlanningPostsService,
+    private readonly subjects: EventPlanningSubjectPosts,
   ) {}
 
-  /** Flip every due post; returns how many changed. Offline bot → 0. */
+  /**
+   * Flip every due post; returns how many changed. Offline bot → 0.
+   * ROK-2272 S10: first stamp `closes_at` on non-hub poll posts whose
+   * `phase_deadline` passed with no emit; a throw there is warned and the
+   * flip loop still runs.
+   */
   async sweep(now = new Date()): Promise<number> {
     if (!this.client.isConnected()) return 0;
+    await this.syncOpenPolls(now);
     let changed = 0;
     for (const row of await dueRegistryLockChanges(this.db, now)) {
       if (await this.apply(row, now)) changed += 1;
     }
     return changed;
+  }
+
+  private async syncOpenPolls(now: Date): Promise<void> {
+    try {
+      await this.subjects.syncOpenPolls(now);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Planning poll deadline pass: ${why}`);
+    }
   }
 
   /**
