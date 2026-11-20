@@ -6,6 +6,7 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -41,6 +42,10 @@ export class CompanionDeviceRevokedListener {
       logger.error(
         `revoke cleanup for device ${payload.deviceId} failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+      Sentry.captureException(err, {
+        tags: { context: 'companion-device-revoke-cleanup' },
+        extra: { userId: payload.userId, deviceId: payload.deviceId },
+      });
     }
   }
 }
