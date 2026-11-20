@@ -141,14 +141,20 @@ export class HubForumDiscordSignupPings {
     eventId: number,
     keys: FlushKeys,
   ): Promise<SignupPingOutcome> {
-    // Read BEFORE the signups: a landed flag means the read sees the reset.
-    const flag = await this.redis.get(lineResyncKey(eventId));
+    // Flag read before AND after the signups (Codex P2-5): a reset that
+    // starts or lands in between makes this a resync pass too.
+    const before = await this.redis.get(lineResyncKey(eventId));
     const members = await loadSignupLineStates(this.db, eventId);
+    const after = await this.redis.get(lineResyncKey(eventId));
     const pinged = await this.redis.smembers(keys.pinged);
     let posted = await this.postedOrSeed(keys.lines, pinged, members);
-    if (flag !== null) {
+    if (before !== null || after !== null) {
       posted = await this.resync(keys.lines, posted, members);
-      await this.takeLanded(eventId, flag);
+      // Only a flag stable across the read is used up; a moved one is
+      // left for the next flush, whose read surely sees that reset.
+      if (before !== null && before === after) {
+        await this.takeLanded(eventId, before);
+      }
     }
     const plan = planLineFlush(pinged, posted, members);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only

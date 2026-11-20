@@ -491,3 +491,48 @@ describe('ROK-2271 fix round 2 — the flag is up before the reset write', () =>
     expect(t.gateway.mention).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('Codex P2-5 — a reset landing during the signup read', () => {
+  it('a flag that appears between the reads still makes the flush a silent resync, and is kept', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'tank')),
+    );
+    const t = setup();
+    await t.svc.flush(5);
+    // The reset writes + lands while the flush reads the signups.
+    mockedLq.loadSignupLineStates.mockImplementationOnce(async () => {
+      await t.svc.requestResync(5);
+      return rows(row('signed_up', A, 'tank'));
+    });
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(1);
+    // Not used up: the next flush (re-armed by LANDED) takes it.
+    expect(t.strings.has(lineResyncKey(5))).toBe(true);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank')),
+    );
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.strings.has(lineResyncKey(5))).toBe(false);
+  });
+});
+
+describe('review round 3 MAJOR-D1 — real changes during a resync still post', () => {
+  it('a decline after the reset, before the flush, posts its line', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'tank'), row('signed_up', B, 'dps')),
+    );
+    const t = setup();
+    await t.svc.flush(5);
+    await t.svc.requestResync(5);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank'), row('declined', B, 'dps')),
+    );
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(2);
+    expect(t.gateway.mention).toHaveBeenLastCalledWith(
+      'dthread',
+      "👋 Bob can't make it",
+      [],
+    );
+  });
+});
