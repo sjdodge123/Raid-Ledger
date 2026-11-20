@@ -292,28 +292,6 @@ async function testForeverNewNeverFallsBack() {
   expect(await lootNames(boss.id, 'wow_forever')).toEqual([]);
 }
 
-/**
- * ROK-2270 batch 2: Blackmaw Hold (90000008) now has Forever rows for six
- * bosses; Blackmaw Behemoth, not on the capture, still reads [] under
- * wow_forever — a stray Classic row never surfaces for a Forever-new boss.
- */
-async function testBlackmawBehemothStaysUncaptured() {
-  const boss = await insertBoss(testApp, {
-    instanceId: 90000008,
-    name: 'Blackmaw Behemoth',
-    order: 6,
-    expansion: 'forever',
-  });
-  await insertLoot(testApp, {
-    bossId: boss.id,
-    itemId: 7401,
-    itemName: 'Stray Behemoth Classic Row',
-    quality: 'Rare',
-    expansion: 'classic',
-  });
-  expect(await lootNames(boss.id, 'wow_forever')).toEqual([]);
-}
-
 /** ROK-2270: a Forever-new boss with captured drops reads them as `forever`. */
 async function testForeverNewReadsForeverLoot() {
   const boss = await insertBoss(testApp, {
@@ -393,9 +371,6 @@ describe('Boss Encounters (integration)', () => {
 
     it('returns forever-tagged loot for a Forever-new boss with captured drops (ROK-2270)', () =>
       testForeverNewReadsForeverLoot());
-
-    it('returns [] under wow_forever for Blackmaw Behemoth, the uncaptured Blackmaw Hold boss (ROK-2270)', () =>
-      testBlackmawBehemothStaysUncaptured());
 
     it('should return empty array for boss with no loot', async () => {
       const boss = await insertBoss(testApp, {
