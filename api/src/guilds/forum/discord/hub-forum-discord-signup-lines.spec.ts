@@ -84,6 +84,22 @@ describe('signupLine — first signup', () => {
   });
 });
 
+describe('Codex P2-2 — late before the first line', () => {
+  it('a first signup already running late announces both', () => {
+    const now = state({ late: true, lateMinutes: 15 });
+    expect(text(input(null, now, false))).toBe(
+      `✅ <@${ID}> signed up · is running late (~15 min) — Tank · Thrall (Prot Warrior)`,
+    );
+  });
+
+  it('a return already running late announces both', () => {
+    const was = state({ status: 'declined', late: true });
+    expect(text(input(was, state({ late: true }), true))).toBe(
+      '↩️ Bob is back · is running late — Tank · Thrall (Prot Warrior)',
+    );
+  });
+});
+
 describe('signupLine — coming back', () => {
   it('says "is back" after a decline and mentions again once cleared', () => {
     const was = state({ status: 'declined' });

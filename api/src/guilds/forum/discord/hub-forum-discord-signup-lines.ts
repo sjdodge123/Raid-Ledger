@@ -174,6 +174,15 @@ function lateFragments(
   return [];
 }
 
+/**
+ * Codex P2-2 (review round 3): lateness set before the member's first line
+ * is announced with it — the line's state is stored as posted, so it would
+ * never be announced otherwise.
+ */
+function joinLate(cur: SignupLineState): Fragment[] {
+  return cur.late ? lateFragments({ ...cur, late: false }, cur) : [];
+}
+
 /** Every change between two ACTIVE states, in reading order. */
 export function changeFragments(
   prev: SignupLineState,
@@ -204,8 +213,8 @@ export function signupLine(input: SignupLineInput): SignupLine | null {
   }
   const mention = !input.mentioned;
   if (prev === null || !wasActive) {
-    const frag = joinFragment(cur, prev !== null);
-    return line(input, mention, [frag], detail(cur));
+    const frags = [joinFragment(cur, prev !== null), ...joinLate(cur)];
+    return line(input, mention, frags, detail(cur));
   }
   const frags = changeFragments(prev, cur);
   if (frags.length === 0) return null;

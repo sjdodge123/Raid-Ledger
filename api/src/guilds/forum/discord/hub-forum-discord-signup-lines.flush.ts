@@ -116,10 +116,16 @@ export function seedFields(
   return fields;
 }
 
+/** Statuses a confirmation reset moves to `signed_up` (its only effect). */
+const RESET_FROM = new Set(['tentative', 'roached_out']);
+
 /**
- * Review MAJOR-1 — after a reschedule reset, each posted member's STATUS is
- * moved to the current one (role, character and late are kept, so a real
- * change of those still posts). Returns the hash fields to write.
+ * Review MAJOR-1 — after a reschedule reset, a posted member whose STATUS
+ * went tentative/roached-out → signed_up (the reset's own effect) is moved
+ * to it silently (role, character and late are kept, so a real change of
+ * those still posts). Any other status change (a decline, a roach-out, a
+ * tentative, a re-signup) is real and still posts its line (review round 3,
+ * MAJOR-D1). Returns the hash fields to write.
  */
 export function resyncStatusFields(
   posted: ReadonlyMap<string, PostedMember>,
@@ -128,7 +134,7 @@ export function resyncStatusFields(
   const fields: Record<string, string> = {};
   for (const [id, was] of posted) {
     const status = members.get(id)?.state.status;
-    if (status === undefined || status === was.state.status) continue;
+    if (status !== 'signed_up' || !RESET_FROM.has(was.state.status)) continue;
     const next: PostedMember = { ...was, state: { ...was.state, status } };
     fields[id] = JSON.stringify(next);
   }

@@ -83,4 +83,22 @@ describe('review MAJOR-1 resyncStatusFields (reschedule reset)', () => {
       state: st({ status: 'signed_up', role: 'tank' }),
     });
   });
+
+  it('review round 3 MAJOR-D1: real changes after the reset are NOT re-synced', () => {
+    const posted = new Map<string, PostedMember>([
+      ['1', { name: 'A', state: st() }],
+      ['2', { name: 'B', state: st() }],
+      ['3', { name: 'C', state: st() }],
+      ['4', { name: 'D', state: st({ status: 'declined' }) }],
+      ['5', { name: 'E', state: st({ status: 'tentative' }) }],
+    ]);
+    const members = new Map([
+      ['1', member('1', st({ status: 'declined' }))],
+      ['2', member('2', st({ status: 'roached_out' }))],
+      ['3', member('3', st({ status: 'tentative' }))],
+      ['4', member('4', st())],
+      ['5', member('5', st({ status: 'declined' }))],
+    ]);
+    expect(resyncStatusFields(posted, members)).toEqual({});
+  });
 });
