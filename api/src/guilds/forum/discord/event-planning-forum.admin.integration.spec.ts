@@ -16,6 +16,7 @@ import {
   newHub,
   type PostsCtx,
 } from '../../posts/hub-posts.test-fixtures';
+import { EVENT_PLANNING_FORUM_BOT_OFFLINE } from './event-planning-forum.admin';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import {
   FAKE_DISCORD_GUILD,
@@ -26,6 +27,8 @@ import {
 
 const ROUTE = '/admin/discord/event-planning-forum';
 const KEY = schema.SETTING_KEYS.DISCORD_BOT_EVENT_PLANNING_FORUM;
+/** A Discord server other than the bot's; its forums are never candidates. */
+const OTHER_DISCORD_GUILD = '999999999999999999';
 
 let ctx: PostsCtx;
 let adminToken: string;
@@ -54,9 +57,9 @@ beforeAll(async () => {
 beforeEach(async () => {
   fake = stubForumGateway(ctx.testApp);
   const f = schema.hubForumDiscordForums;
-  await ctx.testApp.db
-    .delete(f)
-    .where(eq(f.discordGuildId, FAKE_DISCORD_GUILD));
+  for (const discordGuildId of [FAKE_DISCORD_GUILD, OTHER_DISCORD_GUILD]) {
+    await ctx.testApp.db.delete(f).where(eq(f.discordGuildId, discordGuildId));
+  }
   await settings().delete(KEY);
   resolver().invalidate();
 });
@@ -70,13 +73,17 @@ const resolver = () => ctx.testApp.app.get(EventPlanningForumResolver);
 const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
 
 /** A Discord forum `name` that a fresh hub binds; returns its channel id. */
-async function boundForum(name: string, managed = false): Promise<string> {
+async function boundForum(
+  name: string,
+  managed = false,
+  discordGuildId: string = FAKE_DISCORD_GUILD,
+): Promise<string> {
   const channelId = fake.put({ name }).id;
   const hubId = await newHub(ctx);
   const [row] = nonEmpty(
     await ctx.testApp.db
       .insert(schema.hubForumDiscordForums)
-      .values({ discordGuildId: FAKE_DISCORD_GUILD, channelId, managed })
+      .values({ discordGuildId, channelId, managed })
       .returning(),
     'forum',
   );
@@ -148,12 +155,20 @@ describe('event-planning forum admin — GET', () => {
     });
   });
 
-  it('bot offline ⇒ the unknown warning', async () => {
-    await boundForum('raids');
+  it('bot offline ⇒ the unknown warning; a pick is refused, null clears', async () => {
+    const a = await boundForum('raids');
     fake.state.online = false;
     const dto = await getAsAdmin();
     expect(dto.warning).toBe('unknown');
+    expect(dto.candidates).toEqual([]);
     expect(dto.resolvedChannelId).toBeNull();
+    const refused = await putAsAdmin({ channelId: a });
+    expect(refused.status).toBe(400);
+    expect(refused.body).toMatchObject({
+      message: EVENT_PLANNING_FORUM_BOT_OFFLINE,
+    });
+    expect(await settings().get(KEY)).toBeNull();
+    expect((await putAsAdmin({ channelId: null })).status).toBe(200);
   });
 });
 
@@ -177,7 +192,10 @@ describe('event-planning forum admin — PUT', () => {
     await boundForum('pvp');
     expect((await putAsAdmin({ channelId: a })).status).toBe(200);
     const unbound = fake.put({ name: 'general' }).id;
-    for (const channelId of [unbound, snowflake()]) {
+    const elsewhere = await boundForum('other', false, OTHER_DISCORD_GUILD);
+    const listed = (await getAsAdmin()).candidates.map((c) => c.channelId);
+    expect(listed).not.toContain(elsewhere);
+    for (const channelId of [unbound, snowflake(), elsewhere]) {
       expect((await putAsAdmin({ channelId })).status).toBe(400);
     }
     expect((await putAsAdmin({ channelId: 'nope' })).status).toBe(400);

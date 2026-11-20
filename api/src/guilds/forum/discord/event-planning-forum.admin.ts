@@ -25,6 +25,10 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const KEY = SETTING_KEYS.DISCORD_BOT_EVENT_PLANNING_FORUM;
 
+/** PUT refusal when the bot is offline and the candidate check cannot run. */
+export const EVENT_PLANNING_FORUM_BOT_OFFLINE =
+  'The Discord bot is offline, so forums cannot be checked right now. Try again once it reconnects.';
+
 /**
  * The admin DTO from a resolution (no I/O). A channel whose name the bot
  * cannot read is labelled with its id so the card still lists it.
@@ -108,13 +112,16 @@ export class EventPlanningForumAdmin {
     return this.read();
   }
 
-  /** 400 unless `channelId` is a bound forum of the bot's Discord guild. */
+  /**
+   * 400 unless `channelId` is a bound forum of the bot's Discord guild, or
+   * a distinct 400 when the bot is offline and forums cannot be checked.
+   */
   private async assertCandidate(channelId: string): Promise<void> {
     const discordGuildId = this.gateway.guildId();
-    const candidates =
-      discordGuildId === null
-        ? []
-        : await loadBoundForums(this.db, discordGuildId);
+    if (discordGuildId === null) {
+      throw new BadRequestException(EVENT_PLANNING_FORUM_BOT_OFFLINE);
+    }
+    const candidates = await loadBoundForums(this.db, discordGuildId);
     if (!candidates.some((c) => c.channelId === channelId)) {
       throw new BadRequestException(
         'That channel is not a forum a hub is bound to',
