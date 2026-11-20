@@ -242,11 +242,12 @@ async function testForeverLootReplacesClassic() {
 }
 
 /**
- * ROK-2209 regression: a boss with only Classic loot (240 = Wailing Caverns,
- * no Forever loot captured) reads as [] for a Forever guild — never the
- * Classic table — while a Classic Era guild still sees it.
+ * ROK-2270 (operator ruling 2026-11-20, partially reverses ROK-2209): a boss
+ * with only Classic loot on a classic-edition dungeon (240 = Wailing Caverns,
+ * no Forever loot captured) reads its Classic rows under wow_forever, each
+ * tagged `expansion: 'classic'` so the web labels them.
  */
-async function testForeverNeverFallsBackToClassic() {
+async function testForeverFallsBackToLabelledClassic() {
   const boss = await insertBoss(testApp, {
     instanceId: 240,
     name: 'Lord Cobrahn',
@@ -260,10 +261,35 @@ async function testForeverNeverFallsBackToClassic() {
     quality: 'Rare',
     expansion: 'classic',
   });
-  expect(await lootNames(boss.id, 'wow_forever')).toEqual([]);
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/bosses/${boss.id}/loot?variant=wow_forever`,
+  );
+  expect(res.status).toBe(200);
+  const rows = res.body as Array<{ itemName: string; expansion: string }>;
+  expect(rows.map((l) => [l.itemName, l.expansion])).toEqual([
+    ['Classic Serpent Gloves', 'classic'],
+  ]);
   expect(await lootNames(boss.id, 'classic_era')).toEqual([
     'Classic Serpent Gloves',
   ]);
+}
+
+/** ROK-2270: a Forever-new dungeon (no Classic edition) never falls back. */
+async function testForeverNewNeverFallsBack() {
+  const boss = await insertBoss(testApp, {
+    instanceId: 90000002,
+    name: 'The Butcher',
+    order: 3,
+    expansion: 'forever',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 7201,
+    itemName: 'Stray Classic Row',
+    quality: 'Rare',
+    expansion: 'classic',
+  });
+  expect(await lootNames(boss.id, 'wow_forever')).toEqual([]);
 }
 
 describe('Boss Encounters (integration)', () => {
@@ -312,8 +338,11 @@ describe('Boss Encounters (integration)', () => {
     it('returns only forever loot under wow_forever, only classic under classic_era (ROK-2170)', () =>
       testForeverLootReplacesClassic());
 
-    it('returns [] under wow_forever for a boss with only classic loot — never the classic table (ROK-2209)', () =>
-      testForeverNeverFallsBackToClassic());
+    it('falls back to labelled classic loot under wow_forever on a classic-edition dungeon (ROK-2270)', () =>
+      testForeverFallsBackToLabelledClassic());
+
+    it('returns [] under wow_forever for a Forever-new dungeon boss (ROK-2270)', () =>
+      testForeverNewNeverFallsBack());
 
     it('should return empty array for boss with no loot', async () => {
       const boss = await insertBoss(testApp, {

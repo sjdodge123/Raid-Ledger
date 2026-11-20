@@ -158,14 +158,24 @@ describe('BossEncountersService — Forever loot read rule (ROK-2170)', () => {
     expect(result.map((l) => [l.id, l.expansion])).toEqual([[2, 'forever']]);
   });
 
-  // ROK-2209 (operator ruling 2026-11-15): this case used to assert a
-  // fallback to the classic rows. Forever guilds must never see Classic loot,
-  // so a boss without forever rows now reads as an empty list.
-  it('returns [] under wow_forever when the boss has only classic rows', async () => {
+  // ROK-2270 (operator ruling 2026-11-20, partially reversing ROK-2209's
+  // "returns []"): a boss with no forever rows on an instance with a Classic
+  // edition reads its classic rows, each still `expansion: 'classic'` so the
+  // web can label them.
+  it('falls back to the classic rows under wow_forever when the boss has no forever rows', async () => {
     mockOrderBy.mockResolvedValue([
       lootRow(1, 'classic'),
       lootRow(3, 'classic'),
     ]);
+    const result = await service.getLootForBoss(7, 'wow_forever');
+    expect(result.map((l) => [l.id, l.expansion])).toEqual([
+      [1, 'classic'],
+      [3, 'classic'],
+    ]);
+  });
+
+  it('returns [] under wow_forever for a Forever-new dungeon (no Classic edition)', async () => {
+    mockOrderBy.mockResolvedValue([lootRow(1, 'classic', 90_000_002)]);
     const result = await service.getLootForBoss(7, 'wow_forever');
     expect(result).toEqual([]);
   });

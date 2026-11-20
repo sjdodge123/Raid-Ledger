@@ -30,8 +30,8 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
   // ROK-1719: vanilla bosses plus Forever's own. ROK-2209: loot does NOT use
-  // this set — the catalogue's lootExpansion decides (boss-loot-expansions.ts),
-  // so a Forever loot read never returns classic rows.
+  // this set — the catalogue's lootExpansion decides (boss-loot-expansions.ts);
+  // ROK-2270: classic rows only as a labelled per-boss fallback.
   wow_forever: ['classic', 'forever'],
 };
 
