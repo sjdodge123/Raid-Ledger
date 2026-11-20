@@ -75,6 +75,7 @@ export class SignupsRosterService {
       userId,
       signupId: signup.id,
       action: 'signup_cancelled',
+      urgent: cancelInfo.cancelStatus === 'roached_out',
     } satisfies SignupEventPayload);
     if (notifyData && assignment) {
       this.bufferLeave(eventId, userId, assignment, notifyData);

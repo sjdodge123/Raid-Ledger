@@ -143,6 +143,11 @@ export interface SignupEventPayload {
   userId?: number | null;
   signupId?: number;
   action: string;
+  /**
+   * ROK-2271 C4: post the member's Discord thread line at once instead of
+   * after the debounce (running late / roach-out). Absent = debounced.
+   */
+  urgent?: boolean;
 }
 
 /**

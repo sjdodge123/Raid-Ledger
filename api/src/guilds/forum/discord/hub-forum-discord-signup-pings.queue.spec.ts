@@ -14,7 +14,12 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
 
-type Fake = { state: string; changeDelay: jest.Mock; remove: jest.Mock };
+type Fake = {
+  state: string;
+  changeDelay: jest.Mock;
+  remove: jest.Mock;
+  promote: jest.Mock;
+};
 
 function fakeQueue(jobs: Record<string, string> = {}) {
   const held = new Map<string, Fake>();
@@ -23,6 +28,7 @@ function fakeQueue(jobs: Record<string, string> = {}) {
       state,
       changeDelay: jest.fn(() => Promise.resolve()),
       remove: jest.fn(() => Promise.resolve()),
+      promote: jest.fn(() => Promise.resolve()),
     });
   }
   const queue = {
@@ -111,6 +117,101 @@ describe('ROK-2260 signup-ping debounce — Codex P2-1', () => {
       t.held.get('forum-signup-pings-42-trail')?.changeDelay,
     ).toHaveBeenCalledWith(SIGNUP_PING_DEBOUNCE_MS);
     expect(t.queue.add).not.toHaveBeenCalled();
+  });
+});
+
+const PRIMARY = 'forum-signup-pings-42';
+const TRAIL = 'forum-signup-pings-42-trail';
+
+describe('ROK-2271 C4 urgent flush (running late, roach-out)', () => {
+  it('no pending flush: arms the primary with NO delay', async () => {
+    const t = fakeQueue();
+    await expect(t.svc.flushNow(42)).resolves.toBe(true);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: PRIMARY, delay: 0 }),
+    );
+  });
+
+  it('a pending debounced flush is promoted, not doubled (it carries the waiting change too)', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'delayed' });
+    await t.svc.flushNow(42);
+    expect(t.held.get(PRIMARY)?.promote).toHaveBeenCalledTimes(1);
+    expect(t.held.get(PRIMARY)?.changeDelay).not.toHaveBeenCalled();
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('a pending trailing flush is the one promoted', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'active', [TRAIL]: 'delayed' });
+    await t.svc.flushNow(42);
+    expect(t.held.get(TRAIL)?.promote).toHaveBeenCalledTimes(1);
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('a flush already queued to run (waiting) is left alone: it has not read yet', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'waiting' });
+    await t.svc.flushNow(42);
+    expect(t.queue.add).not.toHaveBeenCalled();
+    expect(t.held.get(PRIMARY)?.promote).not.toHaveBeenCalled();
+  });
+
+  it('a RUNNING flush gets ONE zero-delay trailing flush behind it', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'active' });
+    await t.svc.flushNow(42);
+    expect(t.queue.add).toHaveBeenCalledTimes(1);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: TRAIL, delay: 0 }),
+    );
+  });
+
+  it('a promote that loses the race (job started) falls back to the trailing flush', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'delayed' });
+    t.held
+      .get(PRIMARY)
+      ?.promote.mockRejectedValueOnce(new Error('not delayed'));
+    await t.svc.flushNow(42);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: TRAIL, delay: 0 }),
+    );
+  });
+
+  it('a later debounced change after an urgent flush does not arm a second immediate one', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'waiting' });
+    await t.svc.schedule(42); // primary busy (waiting) → debounced trail
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: TRAIL, delay: SIGNUP_PING_DEBOUNCE_MS }),
+    );
+  });
+
+  it('never throws: a Redis failure resolves false', async () => {
+    const t = fakeQueue();
+    t.queue.getJob.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    await expect(t.svc.flushNow(42)).resolves.toBe(false);
+  });
+});
+
+describe('ROK-2271 C4 listener routes urgent changes', () => {
+  it('urgent payloads flush now; the rest keep the debounce', async () => {
+    const queue = {
+      schedule: jest.fn(() => Promise.resolve(true)),
+      flushNow: jest.fn(() => Promise.resolve(true)),
+    };
+    const l = new HubForumDiscordSignupPingListener(
+      queue as unknown as HubForumDiscordSignupPingQueue,
+    );
+    await l.onUpdated({ eventId: 5, action: 'running_late', urgent: true });
+    await l.onDeleted({ eventId: 6, action: 'signup_cancelled', urgent: true });
+    await l.onDeleted({ eventId: 7, action: 'signup_cancelled', urgent: false });
+    await l.onUpdated({ eventId: 8, action: 'status_changed_to_tentative' });
+    expect(queue.flushNow.mock.calls).toEqual([[5], [6]]);
+    expect(queue.schedule.mock.calls).toEqual([[7], [8]]);
   });
 });
 

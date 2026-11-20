@@ -49,11 +49,18 @@ export class HubForumDiscordSignupPingListener {
     await this.rearm(payload);
   }
 
-  /** Arms the flush; a failure is logged, never thrown into the emitter. */
-  private async rearm(payload: { eventId: number }): Promise<void> {
+  /**
+   * Arms the flush; a failure is logged, never thrown into the emitter.
+   * ROK-2271 C4: an `urgent` change (running late, roach-out) flushes now.
+   */
+  private async rearm(payload: {
+    eventId: number;
+    urgent?: boolean;
+  }): Promise<void> {
     if (!Number.isInteger(payload?.eventId)) return;
     try {
-      await this.queue.schedule(payload.eventId);
+      if (payload.urgent === true) await this.queue.flushNow(payload.eventId);
+      else await this.queue.schedule(payload.eventId);
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Signup ping re-arm for ${payload.eventId}: ${why}`);
