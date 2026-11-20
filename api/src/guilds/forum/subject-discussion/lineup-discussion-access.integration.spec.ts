@@ -137,6 +137,47 @@ async function hubThreadPath(lineupId: number): Promise<string> {
 
 const notParticipant = { status: 403, message: FORUM_NOT_LINEUP_PARTICIPANT };
 
+/** A tiebreaker of `mode` on `lineupId`, tied on the seed game. */
+async function newTiebreaker(
+  lineupId: number,
+  mode: 'bracket' | 'veto',
+): Promise<number> {
+  const gameId = ctx.posts.testApp.seed.game.id;
+  const [t] = nonEmpty(
+    await db()
+      .insert(schema.communityLineupTiebreakers)
+      .values({ lineupId, mode, tiedGameIds: [gameId], originalVoteCount: 1 })
+      .returning(),
+    'tiebreaker',
+  );
+  return t.id;
+}
+
+/** `who`'s ONLY action on the lineup: a tiebreaker bracket vote. */
+async function seedBracketVote(lineupId: number, who: Actor): Promise<void> {
+  const gameId = ctx.posts.testApp.seed.game.id;
+  const tiebreakerId = await newTiebreaker(lineupId, 'bracket');
+  const [m] = nonEmpty(
+    await db()
+      .insert(schema.communityLineupTiebreakerBracketMatchups)
+      .values({ tiebreakerId, round: 1, position: 0, gameAId: gameId })
+      .returning(),
+    'matchup',
+  );
+  await db()
+    .insert(schema.communityLineupTiebreakerBracketVotes)
+    .values({ matchupId: m.id, userId: ctx.ids[who], gameId });
+}
+
+/** `who`'s ONLY action on the lineup: a tiebreaker veto. */
+async function seedVeto(lineupId: number, who: Actor): Promise<void> {
+  const gameId = ctx.posts.testApp.seed.game.id;
+  const tiebreakerId = await newTiebreaker(lineupId, 'veto');
+  await db()
+    .insert(schema.communityLineupTiebreakerVetoes)
+    .values({ tiebreakerId, userId: ctx.ids[who], gameId });
+}
+
 describe('lineup discussion access (R7, R10)', () => {
   it('a hub member who nominated reads and replies; the GET lazily creates the thread', async () => {
     const lineupId = await hubLineup();
@@ -179,6 +220,43 @@ describe('lineup discussion access (R7, R10)', () => {
     expect(outcome(await replyAs(lineupId, 'outsider'))).toEqual(
       notParticipant,
     );
+  });
+});
+
+describe('lineup participation edges (R7, ruled 2026-11-20)', () => {
+  it('a member whose only action is a tiebreaker bracket vote can reply (201)', async () => {
+    const lineupId = await hubLineup();
+    await seedBracketVote(lineupId, 'tentative');
+    expect(await card(lineupId, 'tentative')).toMatchObject({
+      can: { read: true, reply: true },
+    });
+    expect(outcome(await replyAs(lineupId, 'tentative')).status).toBe(201);
+  });
+
+  it('a member whose only action is a tiebreaker veto can reply (201)', async () => {
+    const lineupId = await hubLineup();
+    await seedVeto(lineupId, 'tentative');
+    expect(await card(lineupId, 'tentative')).toMatchObject({
+      can: { read: true, reply: true },
+    });
+    expect(outcome(await replyAs(lineupId, 'tentative')).status).toBe(201);
+  });
+
+  it('the original nominator of a carried-over entry counts as a participant (201)', async () => {
+    const guildId = await newHub(ctx.posts);
+    await link(ctx.posts, guildId, ctx.ids.tentative);
+    const previous = await newLineup({ guildId });
+    const lineupId = await newLineup({ guildId });
+    await db().insert(schema.communityLineupEntries).values({
+      lineupId,
+      gameId: ctx.posts.testApp.seed.game.id,
+      nominatedBy: ctx.ids.tentative,
+      carriedOverFrom: previous,
+    });
+    expect(await card(lineupId, 'tentative')).toMatchObject({
+      can: { read: true, reply: true },
+    });
+    expect(outcome(await replyAs(lineupId, 'tentative')).status).toBe(201);
   });
 });
 

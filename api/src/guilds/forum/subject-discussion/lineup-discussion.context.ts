@@ -1,6 +1,7 @@
 /**
  * ROK-2272 S7b (R7) — one lineup thread plus who is looking: the facts a
- * lineup thread's matrix needs (hub membership, nomination, vote) and the
+ * lineup thread's matrix needs (hub membership, nomination, any vote —
+ * round, tiebreaker bracket or veto) and the
  * resolved actor + read-only state. Nominations and votes only count while
  * the thread is attached to its lineup (mirrors event signups / poll votes).
  */
@@ -18,7 +19,11 @@ import {
   type LineupThreadFacts,
 } from './lineup-discussion.access';
 
-/** True when `userId` nominated an entry of `lineupId` (carried-over kept). */
+/**
+ * True when `userId` nominated an entry of `lineupId`. A carried-over entry
+ * keeps its original nominator, who therefore counts as a participant here —
+ * deliberate (ROK-2272 R7, ruled 2026-11-20).
+ */
 export async function hasLineupNomination(
   db: Db,
   lineupId: number,
@@ -33,8 +38,8 @@ export async function hasLineupNomination(
   return rows.length > 0;
 }
 
-/** True when `userId` has a vote row on `lineupId`. */
-export async function hasLineupVote(
+/** True when `userId` has a nomination-round vote row on `lineupId`. */
+async function hasRoundVote(
   db: Db,
   lineupId: number,
   userId: number,
@@ -46,6 +51,59 @@ export async function hasLineupVote(
     .where(and(eq(v.lineupId, lineupId), eq(v.userId, userId)))
     .limit(1);
   return rows.length > 0;
+}
+
+/** True when `userId` voted in a tiebreaker bracket matchup of `lineupId`. */
+async function hasBracketVote(
+  db: Db,
+  lineupId: number,
+  userId: number,
+): Promise<boolean> {
+  const t = schema.communityLineupTiebreakers;
+  const m = schema.communityLineupTiebreakerBracketMatchups;
+  const v = schema.communityLineupTiebreakerBracketVotes;
+  const rows = await db
+    .select({ id: v.id })
+    .from(v)
+    .innerJoin(m, eq(m.id, v.matchupId))
+    .innerJoin(t, eq(t.id, m.tiebreakerId))
+    .where(and(eq(t.lineupId, lineupId), eq(v.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** True when `userId` cast a veto in a tiebreaker of `lineupId`. */
+async function hasVeto(
+  db: Db,
+  lineupId: number,
+  userId: number,
+): Promise<boolean> {
+  const t = schema.communityLineupTiebreakers;
+  const v = schema.communityLineupTiebreakerVetoes;
+  const rows = await db
+    .select({ id: v.id })
+    .from(v)
+    .innerJoin(t, eq(t.id, v.tiebreakerId))
+    .where(and(eq(t.lineupId, lineupId), eq(v.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * True when `userId` voted on `lineupId` in any form (R7 "has voted"): a
+ * nomination-round vote, a tiebreaker bracket vote, or a tiebreaker veto.
+ */
+export async function hasLineupVote(
+  db: Db,
+  lineupId: number,
+  userId: number,
+): Promise<boolean> {
+  const checks = await Promise.all([
+    hasRoundVote(db, lineupId, userId),
+    hasBracketVote(db, lineupId, userId),
+    hasVeto(db, lineupId, userId),
+  ]);
+  return checks.some(Boolean);
 }
 
 async function lineupFacts(
