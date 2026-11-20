@@ -25,6 +25,7 @@ import {
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
@@ -50,7 +51,8 @@ export interface LockChange {
 }
 
 /**
- * Linked, sent, undeleted event-thread posts whose lock state must flip —
+ * Linked, sent, undeleted subject-thread posts (event, poll or lineup —
+ * ROK-2272 S8) whose lock state must flip —
  * only in the hub's CURRENT binding (D9: an unbound or re-bound hub's old
  * posts are left alone, review MINOR-5).
  */
@@ -75,7 +77,11 @@ export async function dueLockChanges(
       and(
         eq(links.kind, 'thread'),
         gte(links.createdAt, bindings.boundAt),
-        isNotNull(threads.eventId),
+        or(
+          isNotNull(threads.eventId),
+          isNotNull(threads.matchId),
+          isNotNull(threads.lineupId),
+        ),
         isNull(links.discordDeletedAt),
         not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
         or(
@@ -102,19 +108,32 @@ export class HubForumDiscordEventLockSweep {
   ) {}
 
   /**
-   * Flip every due post — hub links, then the event-planning registry
-   * (ROK-2272 S4a); a throw in one pass never stops the other, but the
-   * first one is rethrown after both ran so the cron records a failure
-   * (review MAJOR-1). Returns how many changed. Offline bot → 0.
+   * ROK-2272 S8: first the poll-deadline pass (RL-side state — stamps the
+   * close time on polls whose deadline passed unobserved; runs even while
+   * the bot is offline), then flip every due post — hub links, then the
+   * event-planning registry (ROK-2272 S4a). A throw in one pass never stops
+   * the others, but the first one is rethrown after all ran so the cron
+   * records a failure (review MAJOR-1). Returns how many POSTS changed (the
+   * deadline pass is not counted). Offline bot → no Discord pass, 0.
    */
   async sweep(now = new Date()): Promise<number> {
-    if (!this.client.isConnected()) return 0;
     const errors: unknown[] = [];
+    await this.pass('poll-deadline', errors, () =>
+      syncExpiredPolls(this.db, now),
+    );
+    const posts = this.client.isConnected()
+      ? await this.sweepPosts(now, errors)
+      : 0;
+    if (errors.length > 0) throw errors[0];
+    return posts;
+  }
+
+  /** The two Discord passes, each isolated by `pass`. */
+  private async sweepPosts(now: Date, errors: unknown[]): Promise<number> {
     const hub = await this.pass('hub', errors, () => this.sweepHub(now));
     const reg = await this.pass('registry', errors, () =>
       this.registry.sweep(now),
     );
-    if (errors.length > 0) throw errors[0];
     return hub + reg;
   }
 
