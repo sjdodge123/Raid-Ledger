@@ -78,14 +78,22 @@ export async function loadBossLoot(
     .leftJoin(wowItemMeta, eq(wowItemMeta.itemId, wowClassicBossLoot.itemId))
     .where(eq(wowClassicBossLoot.bossId, bossId))
     .orderBy(wowClassicBossLoot.quality);
+  return pickLootRows(rows, variant, fallbackExpansions).map(toLootDto);
+}
+
+/** The variant's own rows; else the ROK-2270 fallback expansion's; else []. */
+function pickLootRows(
+  rows: BossLootReadRow[],
+  variant: string,
+  fallbackExpansions: (variant: string) => string[],
+): BossLootReadRow[] {
   const first = rows[0];
   if (!first) return [];
   const allowed = new Set(
     lootExpansionsFor(variant, first.instanceId, fallbackExpansions),
   );
   const own = rows.filter((r) => allowed.has(r.expansion));
-  if (own.length > 0) return own.map(toLootDto);
+  if (own.length > 0) return own;
   const fallback = lootFallbackExpansionFor(variant, first.instanceId);
-  if (!fallback) return [];
-  return rows.filter((r) => r.expansion === fallback).map(toLootDto);
+  return fallback ? rows.filter((r) => r.expansion === fallback) : [];
 }
