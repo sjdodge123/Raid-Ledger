@@ -11,7 +11,10 @@ import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
-import { managedChannelIds, type ForumDiscordDb } from './hub-forum-discord.queries';
+import {
+  managedChannelIds,
+  type ForumDiscordDb,
+} from './hub-forum-discord.queries';
 
 const LEGACY_NAMES: ReadonlySet<string> = new Set(
   HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES,
@@ -89,7 +92,10 @@ export class EventPlanningForumRename {
       const forum = await this.gateway.fetchForum(id);
       const targetTaken = this.gateway.channelNameTaken(TARGET_NAME);
       if (!forum) continue;
-      if (!shouldRenameForum({ managed: true, liveName: forum.name, targetTaken })) continue;
+      if (
+        !shouldRenameForum({ managed: true, liveName: forum.name, targetTaken })
+      )
+        continue;
       if (await this.renameOne(id, forum.name)) renamed += 1;
     }
     return renamed;
@@ -101,7 +107,8 @@ export class EventPlanningForumRename {
       this.logger.log(`Renamed forum ${id} #${from} → #${TARGET_NAME}`);
       return true;
     } catch (err) {
-      if (!(err instanceof DiscordAPIError) || err.code !== MISSING_PERMISSIONS) throw err;
+      if (!(err instanceof DiscordAPIError) || err.code !== MISSING_PERMISSIONS)
+        throw err;
       this.logger.warn(`Cannot rename forum ${id}: bot lacks Manage Channels`);
       Sentry.addBreadcrumb({
         category: 'hub-forum.discord',

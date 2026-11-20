@@ -16,18 +16,40 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 describe('shouldRenameForum (§3.4 exact condition)', () => {
   it.each([
-    ['managed #hub-forums, name free ⇒ rename', true, 'hub-forums', false, true],
+    [
+      'managed #hub-forums, name free ⇒ rename',
+      true,
+      'hub-forums',
+      false,
+      true,
+    ],
     ['unmanaged #hub-forums ⇒ never', false, 'hub-forums', false, false],
     ['managed forum with another name ⇒ never', true, 'raiders', false, false],
-    ['managed already #event-planning ⇒ no-op', true, 'event-planning', true, false],
+    [
+      'managed already #event-planning ⇒ no-op',
+      true,
+      'event-planning',
+      true,
+      false,
+    ],
     ['#event-planning already exists ⇒ no', true, 'hub-forums', true, false],
   ])('%s', (_label, managed, liveName, targetTaken, expected) => {
-    expect(shouldRenameForum({ managed, liveName, targetTaken })).toBe(expected);
+    expect(shouldRenameForum({ managed, liveName, targetTaken })).toBe(
+      expected,
+    );
   });
 });
 
 function forum(name: string): ForumInfo {
-  return { id: 'c1', name, tags: [], missing: [], canManage: true, isPublic: true, requireTag: false };
+  return {
+    id: 'c1',
+    name,
+    tags: [],
+    missing: [],
+    canManage: true,
+    isPublic: true,
+    requireTag: false,
+  };
 }
 
 function setup(liveName: string, taken: boolean, rename: jest.Mock) {
@@ -63,7 +85,11 @@ describe('EventPlanningForumRename.run', () => {
   it('a 50013 (Missing Permissions) refusal does not throw', async () => {
     const refused = new DiscordAPIError(
       { code: 50013, message: 'Missing Permissions' },
-      50013, 403, 'PATCH', '/channels/c1', { body: undefined, files: undefined },
+      50013,
+      403,
+      'PATCH',
+      '/channels/c1',
+      { body: undefined, files: undefined },
     );
     const rename = jest.fn(() => Promise.reject(refused));
     await expect(setup('hub-forums', false, rename).run()).resolves.toBe(0);

@@ -12,7 +12,15 @@ import {
 } from './hub-forum-discord.picker';
 
 function forum(id: string, name: string): ForumInfo {
-  return { id, name, tags: [], missing: [], canManage: true, isPublic: true, requireTag: false };
+  return {
+    id,
+    name,
+    tags: [],
+    missing: [],
+    canManage: true,
+    isPublic: true,
+    requireTag: false,
+  };
 }
 
 describe('freeSlots', () => {
@@ -42,17 +50,27 @@ describe('freeSlots', () => {
 describe('ROK-2272 shared forum by name (default event-planning, legacy hub-forums)', () => {
   it('treats a legacy #hub-forums as the shared forum', () => {
     const legacy = forum('c1', 'hub-forums');
-    expect(sharedCandidates([forum('c0', 'general'), legacy])).toEqual([legacy]);
+    expect(sharedCandidates([forum('c0', 'general'), legacy])).toEqual([
+      legacy,
+    ]);
   });
 
   it('lists #event-planning before a legacy #hub-forums', () => {
     const legacy = forum('c1', 'hub-forums');
     const current = forum('c2', 'event-planning');
-    expect(sharedCandidates([legacy, current]).map((f) => f.id)).toEqual(['c2', 'c1']);
+    expect(sharedCandidates([legacy, current]).map((f) => f.id)).toEqual([
+      'c2',
+      'c1',
+    ]);
   });
 
   it('ignores forums with any other name', () => {
-    expect(sharedCandidates([forum('c3', 'hub-forum'), forum('c4', 'Event Planning')])).toEqual([]);
+    expect(
+      sharedCandidates([
+        forum('c3', 'hub-forum'),
+        forum('c4', 'Event Planning'),
+      ]),
+    ).toEqual([]);
   });
 
   it('prefers the bot-made forum, else the default-named one', () => {
