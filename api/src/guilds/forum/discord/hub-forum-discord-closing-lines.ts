@@ -18,10 +18,26 @@ export type ClosingLine =
   | { kind: 'lineup-decided'; lineupId: number; games: readonly string[] }
   | { kind: 'lineup-aborted' };
 
-/** Escape markdown and break `@everyone`/`@here`/`<@id>` so nothing pings. */
+/** Block-level markdown a user field must never start inside a bot line. */
+const ESCAPE_ALL = {
+  maskedLink: true,
+  heading: true,
+  bulletedList: true,
+  numberedList: true,
+} as const;
+
+/**
+ * Make user text inert inside a bot line: one line only (every whitespace
+ * run, newlines included, becomes one space), markdown escaped including
+ * masked links, headings, lists, a leading quote or `-#` sub-text, and `@everyone` /
+ * `@here` / `<@id>` broken so nothing pings.
+ */
 export function neutralise(text: string): string {
-  const cut = [...text.trim()].slice(0, CLOSING_FIELD_MAX).join('');
-  return escapeMarkdown(cut).replace(/@/g, '@\u200b');
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const cut = [...flat].slice(0, CLOSING_FIELD_MAX).join('');
+  return escapeMarkdown(cut, ESCAPE_ALL)
+    .replace(/^(>|-#)/, '\\$1')
+    .replace(/@/g, '@\u200b');
 }
 
 function fill(template: string, slots: Record<string, string>): string {

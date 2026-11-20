@@ -64,6 +64,33 @@ describe('closingLineText (ROK-2272 S8)', () => {
     expect(neutralise('@here')).toBe('@​here');
   });
 
+  it('defuses masked links so a reason cannot carry a clickable link', () => {
+    const out = neutralise('[Open the poll](https://evil.example)');
+    expect(out.startsWith('\\[Open the poll]')).toBe(true);
+    expect(out).not.toMatch(/(^|[^\\])\[[^\]]*\]\(/);
+  });
+
+  it.each([
+    ['a heading', '# HUGE', '\\# HUGE'],
+    ['a sub-text line', '-# small', '\\-# small'],
+    ['a bulleted list', '- item', '\\- item'],
+    ['a numbered list', '1. first', '1\\. first'],
+    ['a block quote', '> quoted', '\\> quoted'],
+  ])('escapes %s at the start of a field', (_label, input, expected) => {
+    expect(neutralise(input)).toBe(expected);
+  });
+
+  it('collapses newlines so a reason never starts a new line', () => {
+    const out = neutralise('Nobody free\n# HUGE\r\n\n> quote\t end');
+    expect(out).not.toMatch(/[\r\n\t]/);
+    expect(out).toBe('Nobody free # HUGE > quote end');
+    const text = closingLineText(
+      { kind: 'poll-cancelled', reason: 'a\n\n- b' },
+      URL,
+    );
+    expect(text).toBe('Poll cancelled — a - b');
+  });
+
   it('caps each field and the whole line at the Discord limit', () => {
     const huge = 'x'.repeat(5000);
     const text = closingLineText(
