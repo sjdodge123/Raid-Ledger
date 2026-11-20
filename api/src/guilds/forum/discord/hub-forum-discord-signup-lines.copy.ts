@@ -15,6 +15,9 @@ export const ROLE_LABELS: Readonly<Record<string, string>> = {
   flex: 'Flex',
 };
 
+/** A member with no display name, username or Discord username on file. */
+export const UNKNOWN_MEMBER_NAME = 'A player';
+
 /** Shown in place of a role for a benched signup. */
 export const BENCH_LABEL = 'Bench';
 /** Shown for "no role" on either side of a role change. */
