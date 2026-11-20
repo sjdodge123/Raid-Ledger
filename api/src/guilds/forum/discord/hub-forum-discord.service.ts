@@ -216,7 +216,7 @@ export class HubForumDiscordService {
 
   /**
    * Q10(c) — the forum to bind: `existing` as picked; `create` + `shared`
-   * joins the one `#hub-forums` (made only when none exists); `create` +
+   * joins the one `#event-planning` (made only when none exists); `create` +
    * `own` makes a forum named from the request or the hub.
    */
   private async target(

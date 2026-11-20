@@ -3,7 +3,11 @@
  * permission names. A reserved own-forum name belongs on the name field;
  * every other refusal shows in the form's alert line.
  */
-import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME, HUB_FORUM_DISCORD_TAG_LIMIT } from '@raid-ledger/contract';
+import {
+    HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME,
+    HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES,
+    HUB_FORUM_DISCORD_TAG_LIMIT,
+} from '@raid-ledger/contract';
 import { errorBodyOf } from '../../../lib/api/api-error';
 
 /** "ManageWebhooks" → "Manage Webhooks"; already-spaced labels pass through. */
@@ -21,10 +25,24 @@ function errorCode(error: unknown): string | undefined {
     return typeof code === 'string' ? code : undefined;
 }
 
+const LEGACY_NAMES: readonly string[] = HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES;
+
+/** The reserved name the admin typed ("Hub Forums" → "hub-forums"), or the default. */
+function reservedNameTyped(typed: string): string {
+    const slug = typed
+        .trim()
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}_-]+/gu, '-')
+        .replace(/^-+|-+$/g, '');
+    return LEGACY_NAMES.includes(slug) ? slug : HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME;
+}
+
 /** The inline name-field error, or undefined when the error is not a reserved name. */
-export function nameFieldError(error: unknown): string | undefined {
+export function nameFieldError(error: unknown, typed = ''): string | undefined {
     if (errorCode(error) !== 'FORUM_DISCORD_NAME_RESERVED') return undefined;
-    return `#${HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME} is the shared forum. Pick another name for this hub’s own forum.`;
+    const name = reservedNameTyped(typed);
+    const owner = name === HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME ? 'is the shared forum' : `is reserved for the shared forum (#${HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME})`;
+    return `#${name} ${owner}. Pick another name for this hub’s own forum.`;
 }
 
 function missingList(error: unknown): string {

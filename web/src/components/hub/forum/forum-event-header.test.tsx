@@ -60,7 +60,7 @@ describe('ForumEventHeader (ROK-2226 §7.1)', () => {
     });
 
     it.each<[HubForumLockReason, string]>([
-        ['event-ended', 'Closed 24 h after the event ended'],
+        ['event-ended', 'Closed 1 h after the event ended'],
         ['event-detached', 'This event moved to another hub'],
         ['event-deleted', 'This event was deleted'],
     ])('locked (%s) shows the read-only line "%s"', (reason, copy) => {
@@ -157,7 +157,7 @@ describe('ForumThreadView on an event thread (ROK-2226 §7.1)', () => {
             true,
         );
         expect(await screen.findByTestId('forum-lock-bar')).toHaveTextContent(
-            'Closed 24 h after the event ended',
+            'Closed 1 h after the event ended',
         );
         expect(screen.queryByTestId('forum-reply-composer')).toBeNull();
     });

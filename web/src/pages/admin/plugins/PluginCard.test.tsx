@@ -76,7 +76,7 @@ describe('admin plugins PluginCard — hub contributions', () => {
         expect(within(setup).getAllByText('Ready').length).toBeGreaterThan(0);
         expect(within(setup).getByText('Steam Web API key')).toBeInTheDocument();
         expect(within(setup).getByText('Players link Steam')).toBeInTheDocument();
-        expect(within(setup).getByText('Discord forum for the hub Forum')).toBeInTheDocument();
+        expect(within(setup).getByText('Discord forum for events, polls and lineups')).toBeInTheDocument();
     });
 
     it('W8: the Valheim card lists Characters, Map, Materials and Planner tabs and the Deaths widget — not Gallery', () => {

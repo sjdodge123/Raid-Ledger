@@ -143,6 +143,71 @@ describe('boss-loot-data.json — Forever-new imports (ROK-2270)', () => {
   });
 });
 
+/**
+ * boss name -> forever row count for one Forever-new instance. Returned as a
+ * plain object so `toEqual` ignores the JSON's capture order.
+ */
+function perBossCounts(instanceId: number): Record<string, number> {
+  const counts = new Map<string, number>();
+  for (const l of lootData) {
+    if (l.instanceId !== instanceId || l.expansion !== 'forever') continue;
+    const name = String(l.bossName);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return Object.fromEntries(counts);
+}
+
+describe('boss-loot-data.json — Alcaz Prison and Blackmaw Hold (ROK-2270 batch 2)', () => {
+  it('carries Alcaz Prison (90000007) drops for all five bosses', () => {
+    expect(perBossCounts(90000007)).toEqual({
+      'Overseer Wrex': 3,
+      "Tidemistress Ca'zass": 3,
+      'Katerina the Cleaner': 3,
+      'The Questioner': 3,
+      Blazeroar: 3,
+    });
+  });
+
+  it('carries Blackmaw Hold (90000008) drops for six of seven bosses', () => {
+    expect(perBossCounts(90000008)).toEqual({
+      Withermaw: 3,
+      'Impaan the Imprisoner': 3,
+      'Elder Shaman Bloodmane': 4,
+      'Bonesnout the Unbroken': 3,
+      'Varrox Bleakhoof': 3,
+      'Unbound Spirit': 3,
+    });
+  });
+
+  it('carries nothing for Blackmaw Behemoth (not on the capture)', () => {
+    expect(foreverRowsOfBoss('Blackmaw Behemoth')).toEqual([]);
+  });
+
+  it('imports no trash, rare or zone-drop source from either capture', () => {
+    const unmatched = [
+      'Alcaz Jailer',
+      'Strashaz Enchantress',
+      'Zone Drop',
+      'Legashi Summoner',
+      'Blackmaw Druid',
+      'Gortek the Apprentice',
+      'Moontouched Wanderer',
+      'Mopes',
+      'Tunnelweb Matriarch',
+    ];
+    const hits = lootData.filter((l) =>
+      unmatched.some((n) => n === l.bossName),
+    );
+    expect(hits.map((l) => l.bossName)).toEqual([]);
+  });
+});
+
+function foreverRowsOfBoss(boss: string): number[] {
+  return lootData
+    .filter((l) => l.bossName === boss && l.expansion === 'forever')
+    .map((l) => l.itemId);
+}
+
 function must(rows: BossRow[], name: string): BossRow {
   const row = rows.find((b) => b.name === name && b.expansion === 'classic');
   if (!row) throw new Error(`fixture boss ${name} missing`);

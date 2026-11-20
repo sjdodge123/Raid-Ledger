@@ -190,6 +190,21 @@ export class HubForumDiscordGateway {
     }
   }
 
+  /** ROK-2272 §3.4: a channel of any type in the guild already has `name`. */
+  channelNameTaken(name: string): boolean {
+    const guild = this.onlineGuild();
+    if (!guild) return false;
+    return guild.channels.cache.some((c) => c.name === name);
+  }
+
+  /** ROK-2272 §3.4: rename a forum; Discord errors (e.g. 50013) propagate. */
+  async renameForum(channelId: string, name: string): Promise<ForumInfo> {
+    const guild = this.requireGuild();
+    const forum = await this.requireForum(channelId);
+    const renamed = await forum.edit({ name, reason: REASON });
+    return toInfo(guild, renamed);
+  }
+
   /** Delete a bot-made forum on unlink. Best-effort. */
   async deleteForum(channelId: string): Promise<void> {
     try {
