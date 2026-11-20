@@ -1,6 +1,9 @@
 import type { Job, Queue } from 'bullmq';
 import { EVENT_LISTENER_METADATA } from '@nestjs/event-emitter/dist/constants';
-import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
+import {
+  APP_EVENT_EVENTS,
+  SIGNUP_CONFIRMATIONS_RESET,
+} from '../../../discord-bot/discord-bot.constants';
 import type Redis from 'ioredis';
 import { SIGNUP_PING_DEBOUNCE_MS } from './hub-forum-discord-signup-pings';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
@@ -14,7 +17,12 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
 
-type Fake = { state: string; changeDelay: jest.Mock; remove: jest.Mock };
+type Fake = {
+  state: string;
+  changeDelay: jest.Mock;
+  remove: jest.Mock;
+  promote: jest.Mock;
+};
 
 function fakeQueue(jobs: Record<string, string> = {}) {
   const held = new Map<string, Fake>();
@@ -23,6 +31,7 @@ function fakeQueue(jobs: Record<string, string> = {}) {
       state,
       changeDelay: jest.fn(() => Promise.resolve()),
       remove: jest.fn(() => Promise.resolve()),
+      promote: jest.fn(() => Promise.resolve()),
     });
   }
   const queue = {
@@ -114,11 +123,119 @@ describe('ROK-2260 signup-ping debounce — Codex P2-1', () => {
   });
 });
 
+/** A pings service stub: only the reschedule resync flag is reachable. */
+function noPings(
+  requestResync: (eventId: number) => Promise<void> = () => Promise.resolve(),
+) {
+  return { requestResync } as unknown as HubForumDiscordSignupPings;
+}
+
+const PRIMARY = 'forum-signup-pings-42';
+const TRAIL = 'forum-signup-pings-42-trail';
+
+describe('ROK-2271 C4 urgent flush (running late, roach-out)', () => {
+  it('no pending flush: arms the primary with NO delay', async () => {
+    const t = fakeQueue();
+    await expect(t.svc.flushNow(42)).resolves.toBe(true);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: PRIMARY, delay: 0 }),
+    );
+  });
+
+  it('a pending debounced flush is promoted, not doubled (it carries the waiting change too)', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'delayed' });
+    await t.svc.flushNow(42);
+    expect(t.held.get(PRIMARY)?.promote).toHaveBeenCalledTimes(1);
+    expect(t.held.get(PRIMARY)?.changeDelay).not.toHaveBeenCalled();
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('a pending trailing flush is the one promoted', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'active', [TRAIL]: 'delayed' });
+    await t.svc.flushNow(42);
+    expect(t.held.get(TRAIL)?.promote).toHaveBeenCalledTimes(1);
+    expect(t.queue.add).not.toHaveBeenCalled();
+  });
+
+  it('a flush already queued to run (waiting) is left alone: it has not read yet', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'waiting' });
+    await t.svc.flushNow(42);
+    expect(t.queue.add).not.toHaveBeenCalled();
+    expect(t.held.get(PRIMARY)?.promote).not.toHaveBeenCalled();
+  });
+
+  it('a RUNNING flush gets ONE zero-delay trailing flush behind it', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'active' });
+    await t.svc.flushNow(42);
+    expect(t.queue.add).toHaveBeenCalledTimes(1);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: TRAIL, delay: 0 }),
+    );
+  });
+
+  it('a promote that loses the race (job started) falls back to the trailing flush', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'delayed' });
+    t.held
+      .get(PRIMARY)
+      ?.promote.mockRejectedValueOnce(new Error('not delayed'));
+    await t.svc.flushNow(42);
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: TRAIL, delay: 0 }),
+    );
+  });
+
+  it('a later debounced change after an urgent flush does not arm a second immediate one', async () => {
+    const t = fakeQueue({ [PRIMARY]: 'waiting' });
+    await t.svc.schedule(42); // primary busy (waiting) → debounced trail
+    expect(t.queue.add).toHaveBeenCalledWith(
+      'flush-signup-pings',
+      { eventId: 42 },
+      expect.objectContaining({ jobId: TRAIL, delay: SIGNUP_PING_DEBOUNCE_MS }),
+    );
+  });
+
+  it('never throws: a Redis failure resolves false', async () => {
+    const t = fakeQueue();
+    t.queue.getJob.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    await expect(t.svc.flushNow(42)).resolves.toBe(false);
+  });
+});
+
+describe('ROK-2271 C4 listener routes urgent changes', () => {
+  it('urgent payloads flush now; the rest keep the debounce', async () => {
+    const queue = {
+      schedule: jest.fn(() => Promise.resolve(true)),
+      flushNow: jest.fn(() => Promise.resolve(true)),
+    };
+    const l = new HubForumDiscordSignupPingListener(
+      queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
+    );
+    await l.onUpdated({ eventId: 5, action: 'running_late', urgent: true });
+    await l.onDeleted({ eventId: 6, action: 'signup_cancelled', urgent: true });
+    await l.onDeleted({
+      eventId: 7,
+      action: 'signup_cancelled',
+      urgent: false,
+    });
+    await l.onUpdated({ eventId: 8, action: 'status_changed_to_tentative' });
+    expect(queue.flushNow.mock.calls).toEqual([[5], [6]]);
+    expect(queue.schedule.mock.calls).toEqual([[7], [8]]);
+  });
+});
+
 describe('ROK-2260 signup-ping listener', () => {
   it('re-arms the event on create, update and delete; ignores a payload with no event', async () => {
     const queue = { schedule: jest.fn(() => Promise.resolve()) };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     await l.onCreated({ eventId: 1, action: 'signup_created' });
     await l.onUpdated({ eventId: 2, action: 'signup_cancelled' });
@@ -134,6 +251,7 @@ describe('ROK-2260 signup-ping listener', () => {
     };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     const outcome = await l
       .onCreated({ eventId: 4, action: 'signup_created' })
@@ -170,9 +288,41 @@ describe('ROK-2260 signup-ping listener — Codex P2-5', () => {
     };
     const l = new HubForumDiscordSignupPingListener(
       queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(),
     );
     await l.onEventUpdated({ eventId: 11 });
     expect(queue.schedule.mock.calls).toEqual([[11]]);
+  });
+});
+
+describe('review MAJOR-1 listener — confirmations reset', () => {
+  it('subscribes to the reset event', () => {
+    const proto = HubForumDiscordSignupPingListener.prototype;
+    const handled = Object.getOwnPropertyNames(proto).flatMap((name) =>
+      eventsOf(Reflect.get(proto, name)),
+    );
+    expect(handled).toContain(SIGNUP_CONFIRMATIONS_RESET);
+  });
+
+  it('flags the resync BEFORE arming the flush; a flag failure still arms', async () => {
+    const order: string[] = [];
+    const requestResync = jest.fn((id: number) => {
+      order.push(`flag ${id}`);
+      return id === 13 ? Promise.reject(new Error('redis')) : Promise.resolve();
+    });
+    const queue = {
+      schedule: jest.fn((id: number) => {
+        order.push(`arm ${id}`);
+        return Promise.resolve(true);
+      }),
+    };
+    const l = new HubForumDiscordSignupPingListener(
+      queue as unknown as HubForumDiscordSignupPingQueue,
+      noPings(requestResync),
+    );
+    await l.onConfirmationsReset({ eventId: 12 });
+    await l.onConfirmationsReset({ eventId: 13 });
+    expect(order).toEqual(['flag 12', 'arm 12', 'flag 13', 'arm 13']);
   });
 });
 

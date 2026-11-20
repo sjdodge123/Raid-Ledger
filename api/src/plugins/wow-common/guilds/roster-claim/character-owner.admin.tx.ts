@@ -137,18 +137,24 @@ async function assertTarget(
   return user.displayName ?? user.username;
 }
 
+/** A signup FLAG 10 detached — the caller announces it after commit. */
+export interface DetachedSignup {
+  signupId: number;
+  eventId: number;
+}
+
 /** FLAG 10 — the old owner's not-yet-started signups on it drop the character. */
 async function detachFutureSignups(
   tx: AddonImportTx,
   row: CharacterRow,
-): Promise<void> {
+): Promise<DetachedSignup[]> {
   const future = tx
     .select({ id: events.id })
     .from(events)
     .where(
       sql`lower(${events.duration}) > ${new Date().toISOString()}::timestamptz`,
     );
-  await tx
+  return tx
     .update(eventSignups)
     .set({ characterId: null })
     .where(
@@ -157,7 +163,8 @@ async function detachFutureSignups(
         eq(eventSignups.userId, row.userId),
         inArray(eventSignups.eventId, future),
       ),
-    );
+    )
+    .returning({ signupId: eventSignups.id, eventId: eventSignups.eventId });
 }
 
 /** Whether `userId` already has a main of `gameId`. */
@@ -192,6 +199,8 @@ export interface ReassignOutcome {
   row: CharacterRow;
   toUserId: number;
   toName: string;
+  /** Old owner's future signups that lost the character (ROK-2271). */
+  detached: DetachedSignup[];
 }
 
 /** The whole Change owner inside `tx`: move, mains, FLAG 10, audit. */
@@ -205,7 +214,7 @@ export async function reassignWithin(
   );
   const toName = await assertTarget(tx, row, args.toUserId);
   const isMain = !(await hasMain(tx, args.toUserId, row.gameId));
-  await detachFutureSignups(tx, row);
+  const detached = await detachFutureSignups(tx, row);
   await tx
     .update(characters)
     .set({ userId: args.toUserId, isMain, updatedAt: new Date() })
@@ -213,7 +222,7 @@ export async function reassignWithin(
   await deleteInstalledAddons(tx, row.id);
   await autoPromoteAfterDelete(tx, row.userId, row.gameId, args.logger);
   await auditReassign(tx, row, args);
-  return { row, toUserId: args.toUserId, toName };
+  return { row, toUserId: args.toUserId, toName, detached };
 }
 
 /**

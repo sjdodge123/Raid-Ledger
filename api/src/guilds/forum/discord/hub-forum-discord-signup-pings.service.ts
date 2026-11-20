@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -6,15 +7,28 @@ import * as links from './hub-forum-discord-links.queries';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import {
-  diffPings,
-  mentionMessages,
-  pingedSetKey,
-  signupPingDiscordIds,
-  type SignupPingPlan,
-} from './hub-forum-discord-signup-pings';
+  DEL_IF_EQUALS,
+  lineMessages,
+  lineResyncKey,
+  RESYNC_PENDING,
+  resyncLandedValue,
+  parsePosted,
+  planLineFlush,
+  postedLinesKey,
+  postedValue,
+  resyncStatusFields,
+  seedFields,
+  SEEDED_FIELD,
+  type LineFlushPlan,
+  type PostedMember,
+} from './hub-forum-discord-signup-lines.flush';
+import {
+  loadSignupLineStates,
+  type SignupLineMember,
+} from './hub-forum-discord-signup-lines.queries';
+import { pingedSetKey } from './hub-forum-discord-signup-pings';
 import {
   findBoundEventThread,
-  listSignupPingRows,
   type PingThreadRef,
 } from './hub-forum-discord-signup-pings.queries';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -33,14 +47,24 @@ export type SignupPingOutcome =
   | 'incomplete'
   | 'pinged';
 
+/** The two Redis keys of one event post. */
+interface FlushKeys {
+  pinged: string;
+  lines: string;
+}
+
 /** The pinged set outlives the event by a week, then Redis drops it. */
 const SET_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** A resync flag no flush consumed (unbound event) is dropped after a day. */
+const RESYNC_TTL_MS = 24 * 60 * 60 * 1000;
+
 /**
- * ROK-2260 — one debounced flush of an event's signups into its Discord post.
- * Diffs the eligible signups against the Redis "already pinged" set: new ones
- * get ONE roll-up bot @mention (which adds them to the post; the first one
- * creates the post — ruling 1), gone ones are removed silently (ruling 3).
+ * ROK-2260 / ROK-2271 — one debounced flush of an event's signups into its
+ * Discord post: one line per member whose role, character or status changed
+ * since the last posted line. A member's first line @mentions them (which
+ * adds them to the post; the first one creates it — ruling 1); leavers are
+ * named without a ping and removed from the post (ruling 3).
  * Runs only for an event thread whose hub is bound to a Discord forum.
  */
 @Injectable()
@@ -58,32 +82,82 @@ export class HubForumDiscordSignupPings {
   async flush(eventId: number): Promise<SignupPingOutcome> {
     const ref = await findBoundEventThread(this.db, eventId);
     if (!ref) return 'unbound';
-    const key = pingedSetKey(eventId, ref);
-    const outcome = await this.flushBound(ref, eventId, key);
+    const keys = {
+      pinged: pingedSetKey(eventId, ref),
+      lines: postedLinesKey(eventId, ref),
+    };
+    const outcome = await this.flushBound(ref, eventId, keys);
     // Every bound flush (review r1 m2): a rescheduled event moves the expiry.
-    await this.redis.pexpireat(key, ref.endsAt.getTime() + SET_GRACE_MS);
+    const at = ref.endsAt.getTime() + SET_GRACE_MS;
+    await this.redis.pexpireat(keys.pinged, at);
+    await this.redis.pexpireat(keys.lines, at);
     return outcome;
   }
 
+  /**
+   * Fix round 2: set BEFORE the reset write. While pending, every flush
+   * re-syncs silently but keeps the flag (the reset may not have landed).
+   */
+  async markResetPending(eventId: number): Promise<void> {
+    await this.redis.set(
+      lineResyncKey(eventId),
+      RESYNC_PENDING,
+      'PX',
+      RESYNC_TTL_MS,
+    );
+  }
+
+  /** The reset write threw: drop its pending flag (never a landed one). */
+  async abortReset(eventId: number): Promise<void> {
+    await this.redis.eval(
+      DEL_IF_EQUALS,
+      1,
+      lineResyncKey(eventId),
+      RESYNC_PENDING,
+    );
+  }
+
+  /**
+   * Review MAJOR-1: the reset landed. The next flush re-syncs the posted
+   * statuses silently and takes the flag (see `takeLanded`).
+   */
+  async requestResync(eventId: number): Promise<void> {
+    const value = resyncLandedValue(randomUUID());
+    await this.redis.set(lineResyncKey(eventId), value, 'PX', RESYNC_TTL_MS);
+  }
+
+  /** A landed flag is used once; a newer reset's flag is left alone. */
+  private async takeLanded(eventId: number, flag: string): Promise<void> {
+    if (flag === RESYNC_PENDING) return;
+    await this.redis.eval(DEL_IF_EQUALS, 1, lineResyncKey(eventId), flag);
+  }
+
+  /**
+   * ROK-2271: diff each member's state against the last POSTED one, post
+   * the lines (mentions only on a member's first line), then remove leavers.
+   */
   private async flushBound(
     ref: PingThreadRef,
     eventId: number,
-    key: string,
+    keys: FlushKeys,
   ): Promise<SignupPingOutcome> {
-    const rows = await listSignupPingRows(this.db, eventId);
-    const plan = diffPings(
-      signupPingDiscordIds(rows),
-      await this.redis.smembers(key),
-    );
-    if (ref.cancelled) plan.ping = []; // review r1 m4: removals only
-    if (plan.ping.length === 0 && plan.remove.length === 0) return 'unchanged';
+    const { members, flags } = await this.readMembers(eventId);
+    const pinged = await this.redis.smembers(keys.pinged);
+    let posted = await this.postedOrSeed(keys.lines, pinged, members);
+    if (flags.some((f) => f !== null)) {
+      posted = await this.resync(keys.lines, posted, members);
+      await this.takeIfStable(eventId, flags);
+    }
+    const plan = planLineFlush(pinged, posted, members);
+    if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
+    if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
     const post = await this.postFor(ref, plan);
     if (post === null) return 'closed';
     if (links.isUnsent(post)) return 'pending';
-    await this.ping(key, post.discordThreadId, plan.ping);
+    await this.post(keys, post.discordThreadId, plan, members);
     const removedAll = await this.remove(
-      key,
+      keys.pinged,
       post.discordThreadId,
       plan.remove,
     );
@@ -91,16 +165,68 @@ export class HubForumDiscordSignupPings {
   }
 
   /**
-   * The post to write in: created by the first ping (ruling 1); a removal
+   * The signups, with the resync flag read before AND after them (Codex
+   * P2-5): a reset that starts or lands in between makes the flush a
+   * resync pass too.
+   */
+  private async readMembers(eventId: number): Promise<{
+    members: Map<string, SignupLineMember>;
+    flags: [string | null, string | null];
+  }> {
+    const before = await this.redis.get(lineResyncKey(eventId));
+    const members = await loadSignupLineStates(this.db, eventId);
+    const after = await this.redis.get(lineResyncKey(eventId));
+    return { members, flags: [before, after] };
+  }
+
+  /**
+   * Only a flag stable across the signup read is used up; a moved one is
+   * left for the next flush, whose read surely sees that reset.
+   */
+  private async takeIfStable(
+    eventId: number,
+    [before, after]: [string | null, string | null],
+  ): Promise<void> {
+    if (before === null || before !== after) return;
+    await this.takeLanded(eventId, before);
+  }
+
+  /** The last-posted states; seeds them (posting nothing) on first sight. */
+  private async postedOrSeed(
+    key: string,
+    pinged: string[],
+    members: Map<string, SignupLineMember>,
+  ) {
+    const hash = await this.redis.hgetall(key);
+    if (hash[SEEDED_FIELD] !== undefined) return parsePosted(hash);
+    const fields = seedFields(pinged, members);
+    await this.redis.hset(key, fields);
+    return parsePosted(fields);
+  }
+
+  /** Moves posted statuses to the reset ones; posts and pings nothing. */
+  private async resync(
+    key: string,
+    posted: Map<string, PostedMember>,
+    members: Map<string, SignupLineMember>,
+  ): Promise<Map<string, PostedMember>> {
+    const fields = resyncStatusFields(posted, members);
+    if (Object.keys(fields).length === 0) return posted;
+    await this.redis.hset(key, fields);
+    return new Map([...posted, ...parsePosted(fields)]);
+  }
+
+  /**
+   * The post to write in: created by the first line (ruling 1); a removal
    * alone never creates one. Both go through the binding/stale gate (review
    * r1 m3). Null when read-only, unbound, stale, locked or deleted.
    */
   private async postFor(
     ref: PingThreadRef,
-    plan: SignupPingPlan,
+    plan: LineFlushPlan,
   ): Promise<links.ForumLink | null> {
     const { guildId, threadId } = ref;
-    const create = plan.ping.length > 0;
+    const create = plan.lines.length > 0;
     const post = await this.outbound.ensureEventPost({
       guildId,
       threadId,
@@ -110,16 +236,37 @@ export class HubForumDiscordSignupPings {
     return post;
   }
 
-  /** One roll-up message per Discord-sized chunk; remembered as it lands. */
-  private async ping(
-    key: string,
+  /** One message per Discord-sized chunk; each remembered as it lands. */
+  private async post(
+    keys: FlushKeys,
     discordThreadId: string,
-    userIds: string[],
+    plan: LineFlushPlan,
+    members: Map<string, SignupLineMember>,
   ): Promise<void> {
-    for (const msg of mentionMessages(userIds)) {
+    for (const msg of lineMessages(plan.lines)) {
       await this.gateway.mention(discordThreadId, msg.content, msg.userIds);
-      await this.redis.sadd(key, ...msg.userIds);
+      if (msg.userIds.length > 0) {
+        await this.redis.sadd(keys.pinged, ...msg.userIds);
+      }
+      await this.remember(keys.lines, msg.lines, members);
     }
+  }
+
+  /** Store each posted line's member state (gone = field dropped). */
+  private async remember(
+    key: string,
+    posted: { discordId: string }[],
+    members: Map<string, SignupLineMember>,
+  ): Promise<void> {
+    const fields: Record<string, string> = {};
+    const gone: string[] = [];
+    for (const { discordId } of posted) {
+      const member = members.get(discordId);
+      if (member) fields[discordId] = postedValue(member);
+      else gone.push(discordId);
+    }
+    if (Object.keys(fields).length > 0) await this.redis.hset(key, fields);
+    if (gone.length > 0) await this.redis.hdel(key, ...gone);
   }
 
   /**
