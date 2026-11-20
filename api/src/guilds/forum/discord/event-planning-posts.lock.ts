@@ -13,6 +13,7 @@ import {
   and,
   eq,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -52,13 +53,25 @@ function asKind(raw: string): PlanningSubjectKind {
   throw new Error(`Unknown event_planning_posts.subject_kind "${raw}"`);
 }
 
+/**
+ * Open again: `closes_at` in the future, or (ROK-2272 S10, Codex P2) cleared
+ * to null on a poll / lineup post — those are open while it is null. An
+ * event post always has a `closes_at`, so a null one is left alone.
+ */
+function reopenedWhere(at: SQL) {
+  return or(
+    gt(posts.closesAt, at),
+    and(isNull(posts.closesAt), inArray(posts.subjectKind, ['poll', 'lineup'])),
+  );
+}
+
 /** Live, and `closes_at` disagrees with the recorded lock state. */
 function dueWhere(at: SQL) {
   return and(
     isNull(posts.discordDeletedAt),
     or(
       and(lte(posts.closesAt, at), isNull(posts.discordLockedAt)),
-      and(gt(posts.closesAt, at), isNotNull(posts.discordLockedAt)),
+      and(reopenedWhere(at), isNotNull(posts.discordLockedAt)),
     ),
   );
 }
@@ -66,7 +79,7 @@ function dueWhere(at: SQL) {
 /**
  * Live posts whose lock state disagrees with `closes_at`: due and unlocked
  * ⇒ close; in the future and locked ⇒ reopen. A null `closes_at` is never
- * due.
+ * due to close; on a locked poll / lineup post it means reopened.
  */
 export async function dueRegistryLockChanges(
   db: ForumDiscordDb,

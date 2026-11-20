@@ -282,3 +282,32 @@ describe('ROK-2272 S10 deadline pass for non-hub poll posts', () => {
     expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
   });
 });
+
+describe('ROK-2272 S10 reopen of a poll / lineup post (Codex P2)', () => {
+  it('Codex P2: a locked poll or lineup post whose closes_at was cleared is reopened', async () => {
+    const { setReadOnly } = spies();
+    const poll = await newPost({
+      closesInMs: null,
+      locked: true,
+      subjectKind: 'poll',
+    });
+    const lineup = await newPost({
+      closesInMs: null,
+      locked: true,
+      subjectKind: 'lineup',
+    });
+    await app().get(EventPlanningPostsLockSweep).sweep();
+    expect(setReadOnly).toHaveBeenCalledWith(poll.discordThreadId, false);
+    expect(setReadOnly).toHaveBeenCalledWith(lineup.discordThreadId, false);
+    expect(await lockedAt(poll.id)).toBeNull();
+    expect(await lockedAt(lineup.id)).toBeNull();
+  });
+
+  it('a locked EVENT post with a null closes_at stays locked', async () => {
+    const { setReadOnly } = spies();
+    const p = await newPost({ closesInMs: null, locked: true });
+    await app().get(EventPlanningPostsLockSweep).sweep();
+    expect(setReadOnly).not.toHaveBeenCalledWith(p.discordThreadId, false);
+    expect(await lockedAt(p.id)).not.toBeNull();
+  });
+});
