@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   FORUM_EVENT_THREAD_MANAGED,
+  FORUM_NOT_LINEUP_PARTICIPANT,
   FORUM_NOT_POLL_VOTER,
   FORUM_NOT_SIGNED_UP,
   FORUM_THREAD_READ_ONLY,
@@ -226,5 +227,15 @@ describe('ROK-2272 S7a — poll and lineup subject threads', () => {
     expect(() =>
       assertEventEditable({ userId: 9, canReply: false }, own, null, poll),
     ).toThrow(new ForbiddenException(FORUM_NOT_POLL_VOTER));
+  });
+
+  it('a lineup-thread non-participant gets the lineup copy (ROK-2272 S7b)', () => {
+    const lineup = { eventId: null, matchId: null, lineupId: 4 };
+    expect(() => assertCanReply(false, null, lineup)).toThrow(
+      new ForbiddenException(FORUM_NOT_LINEUP_PARTICIPANT),
+    );
+    expect(() =>
+      assertEventEditable({ userId: 9, canReply: false }, own, null, lineup),
+    ).toThrow(new ForbiddenException(FORUM_NOT_LINEUP_PARTICIPANT));
   });
 });

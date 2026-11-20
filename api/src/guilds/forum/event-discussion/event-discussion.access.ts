@@ -15,6 +15,9 @@ export const FORUM_NOT_SIGNED_UP =
   'Sign up for the event to join its discussion';
 /** R7: reply to a scheduling-poll thread without a vote / match membership. */
 export const FORUM_NOT_POLL_VOTER = 'Vote on the poll to join its discussion';
+/** R7: reply to a lineup thread without a nomination or vote. */
+export const FORUM_NOT_LINEUP_PARTICIPANT =
+  'Nominate or vote in the lineup to join its discussion';
 /** §12: reply (409) or edit (403) once the thread is read-only. */
 export const FORUM_THREAD_READ_ONLY = 'This discussion is read-only';
 /** §5.5: PATCH/DELETE of an event thread itself. */
@@ -127,9 +130,9 @@ export function assertCanReply(
 
 /** The 403 copy for a viewer who may read but not write this subject thread. */
 function notWritableCopy(thread: ThreadSubjectRef): string {
-  return (thread.matchId ?? null) !== null
-    ? FORUM_NOT_POLL_VOTER
-    : FORUM_NOT_SIGNED_UP;
+  if ((thread.matchId ?? null) !== null) return FORUM_NOT_POLL_VOTER;
+  if ((thread.lineupId ?? null) !== null) return FORUM_NOT_LINEUP_PARTICIPANT;
+  return FORUM_NOT_SIGNED_UP;
 }
 
 /**
