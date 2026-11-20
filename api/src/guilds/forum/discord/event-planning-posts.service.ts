@@ -22,6 +22,8 @@ import {
   insertPlanningPost,
   markPlanningPostDeleted,
   setPlanningPostClosesAt,
+  type InsertPlanningPostResult,
+  type NewPlanningPost,
   type PlanningEventSource,
 } from './event-planning-posts.queries';
 import {
@@ -117,8 +119,9 @@ export class EventPlanningPostsService {
     if (!post) return;
     const ev = await findPlanningEvent(this.db, eventId);
     if (!ev) return this.closeNow(post);
-    // Became hub-tagged or ad-hoc: left alone (no migration path, S4a).
-    if (ev.guildId !== null || ev.isAdHoc) return;
+    // Became hub-tagged (the hub's post takes over) or ad-hoc: due now, so
+    // the sweep locks + archives this one (review MINOR-4).
+    if (ev.guildId !== null || ev.isAdHoc) return this.closeNow(post);
     const closesAt = planningEventClosesAt(ev);
     if (post.closesAt?.getTime() !== closesAt.getTime()) {
       await setPlanningPostClosesAt(this.db, post.id, closesAt);
@@ -196,7 +199,7 @@ export class EventPlanningPostsService {
     discordThreadId: string,
     ev: PlanningEventSource,
   ): Promise<EventPlanningPostRef | null> {
-    const res = await insertPlanningPost(this.db, {
+    const res = await this.insertOrDrop({
       subjectKind: 'event',
       subjectId: eventId,
       forumId,
@@ -211,6 +214,22 @@ export class EventPlanningPostsService {
     }
     const winner = await findLivePlanningPost(this.db, 'event', eventId);
     return winner ? toRef(winner) : null;
+  }
+
+  /**
+   * Review MINOR-2: an untagged insert failure (connection drop, timeout)
+   * after the Discord create would orphan the thread — and every retry
+   * would make another. Drop it, then rethrow.
+   */
+  private async insertOrDrop(
+    post: NewPlanningPost,
+  ): Promise<InsertPlanningPostResult> {
+    try {
+      return await insertPlanningPost(this.db, post);
+    } catch (err) {
+      await this.dropThread(post.discordThreadId);
+      throw err;
+    }
   }
 
   /** Best effort: a failed cleanup is logged, never thrown. */

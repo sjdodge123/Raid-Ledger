@@ -241,6 +241,26 @@ describe('ROK-2272 S4a ensureEventPost races', () => {
     expect(planning.deleteThread).toHaveBeenCalledWith(own);
     expect(await liveRows(eventId)).toHaveLength(1);
   });
+
+  it('any other insert failure deletes the created thread and rethrows (MINOR-2)', async () => {
+    const eventId = await newEvent();
+    const other = await newEvent();
+    const own = snowflake();
+    // Another subject already holds this thread id: a 23505 that is not
+    // "this event already has a post", so the insert rethrows it.
+    planning.createPost.mockImplementation(async () => {
+      await db().insert(schema.eventPlanningPosts).values({
+        subjectKind: 'event',
+        subjectId: other,
+        forumId,
+        discordThreadId: own,
+      });
+      return own;
+    });
+    await expect(svc.ensureEventPost(eventId)).rejects.toThrow();
+    expect(planning.deleteThread).toHaveBeenCalledWith(own);
+    expect(await liveRows(eventId)).toEqual([]);
+  });
 });
 
 describe('ROK-2272 S4a syncEvent / closeForDeletedEvent', () => {
@@ -297,4 +317,27 @@ describe('ROK-2272 S4a syncEvent / closeForDeletedEvent', () => {
     expect(row.closesAt?.getTime()).toBeLessThanOrEqual(Date.now());
     expect(row.closesAt?.getTime()).toBeGreaterThanOrEqual(before);
   });
+});
+
+describe('ROK-2272 S4 syncEvent — the event left the non-hub path', () => {
+  it.each<[string, () => Promise<Partial<typeof schema.events.$inferInsert>>]>([
+    ['hub-tagged', async () => ({ guildId: await newHub(ctx.posts) })],
+    ['ad-hoc', () => Promise.resolve({ isAdHoc: true })],
+  ])(
+    'an event that became %s: its live post is due now, not retitled (MINOR-4)',
+    async (_label, change) => {
+      const eventId = await newEvent();
+      await svc.ensureEventPost(eventId);
+      await db()
+        .update(schema.events)
+        .set(await change())
+        .where(eq(schema.events.id, eventId));
+      const before = Date.now();
+      await svc.syncEvent(eventId);
+      const [row] = nonEmpty(await liveRows(eventId), 'post row');
+      expect(row.closesAt?.getTime()).toBeGreaterThanOrEqual(before);
+      expect(row.closesAt?.getTime()).toBeLessThanOrEqual(Date.now());
+      expect(planning.renameThread).not.toHaveBeenCalled();
+    },
+  );
 });
