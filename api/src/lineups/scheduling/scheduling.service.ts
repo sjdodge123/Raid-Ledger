@@ -339,6 +339,7 @@ export class SchedulingService {
           lineupNotifications: this.lineupNotifications,
           pollEmbed: this.pollEmbed,
           logger: this.logger,
+          events: this.events,
         },
         match,
         slot,

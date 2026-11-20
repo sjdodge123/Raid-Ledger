@@ -140,7 +140,7 @@ export async function sweepExpiredTieHolds(
         lineupId,
         from: 'voting',
         to: 'archived',
-        visibility: null,
+        standalone: false,
       });
       await logExpirySafely(deps, lineupId);
       expired.push(lineupId);

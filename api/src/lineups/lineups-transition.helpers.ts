@@ -36,7 +36,10 @@ import type { LineupsGateway } from './lineups.gateway';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 import { LINEUP_EVENTS } from './lineup-events.constants';
-import { emitLineupStatusChanged } from './lineup-lifecycle-emit.helpers';
+import {
+  emitLineupStatusChanged,
+  lineupSubjectFields,
+} from './lineup-lifecycle-emit.helpers';
 import { writeDecidedCohortMemory } from './cohort-memory-write.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -105,7 +108,7 @@ export async function runStatusTransition(
     lineupId: id,
     from: lineup.status,
     to: dto.status,
-    visibility: lineup.visibility,
+    ...lineupSubjectFields(lineup),
   });
   if (dto.status === 'decided') {
     await runMatchingAlgorithm(deps.db, id, deps.logger, deps.eventEmitter);

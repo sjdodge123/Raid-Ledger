@@ -19,13 +19,27 @@ import { LINEUP_MATCH_EVENTS } from './lineups-scheduling-hook.helpers';
 
 const logger = new Logger('LineupLifecycleEmit');
 
-/** Emit `name`, swallowing (and logging) any listener failure. */
+/** Event names already warned about for a missing bus (warn once each). */
+const warnedMissingBus = new Set<string>();
+
+/**
+ * Emit `name`, swallowing (and logging) any listener failure. The bus is
+ * optional on four services (`@Optional()` keeps positional spec
+ * construction compiling); a missing bus in a real module graph would be
+ * silent, so it warns once per event name.
+ */
 function safeEmit(
   events: EventEmitter2 | undefined,
   name: string,
   payload: object,
 ): void {
-  if (!events) return;
+  if (!events) {
+    if (!warnedMissingBus.has(name)) {
+      warnedMissingBus.add(name);
+      logger.warn(`No EventEmitter2 wired — ${name} not emitted`);
+    }
+    return;
+  }
   try {
     events.emit(name, payload);
   } catch (err: unknown) {
@@ -111,6 +125,19 @@ export function emitStandaloneLineupArchived(
     lineupId,
     from: 'decided',
     to: 'archived',
-    visibility: null,
+    standalone: true,
   });
+}
+
+/** The row fields a lineup payload carries when the emitter has the row. */
+export function lineupSubjectFields(row: {
+  visibility: LineupCreatedPayload['visibility'];
+  guildId: number | null;
+  phaseDurationOverride: { standalone?: boolean } | null;
+}): Pick<LineupCreatedPayload, 'visibility' | 'guildId' | 'standalone'> {
+  return {
+    visibility: row.visibility,
+    guildId: row.guildId,
+    standalone: row.phaseDurationOverride?.standalone === true,
+  };
 }

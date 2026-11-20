@@ -41,15 +41,36 @@ export interface LineupCreatedPayload {
   lineupId: number;
   /** Private lineups never get a forum post (spec §3.7). */
   visibility: LineupVisibilityDto;
+  /** The hub the lineup is tagged to; `null` when untagged. */
+  guildId: number | null;
+  /** A standalone poll's hidden carrier row, NOT a lineup subject (§3.1). */
+  standalone: boolean;
 }
 
-/** Payload emitted with {@link LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED}. */
+/**
+ * Payload emitted with {@link LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED}.
+ *
+ * `to: 'decided'` fires BEFORE the matching pass — a listener that needs the
+ * match rows keys on `LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING` instead.
+ */
 export interface LineupStatusChangedPayload {
   lineupId: number;
   from: LineupStatusDto;
   to: LineupStatusDto;
-  /** `null` when the emitting path had no lineup row loaded. */
-  visibility: LineupVisibilityDto | null;
+  /**
+   * A standalone poll's carrier row (never a lineup subject, §3.1). Always
+   * known: carriers are inserted `decided`, so only the standalone archive
+   * edges can carry `true`.
+   */
+  standalone: boolean;
+  /**
+   * Present only when the emitting path had the lineup row loaded (create,
+   * runStatusTransition, abort). Absent on the tiebreaker, tie-expiry and
+   * standalone-archive edges — a listener must read `community_lineups`.
+   */
+  visibility?: LineupVisibilityDto;
+  /** Same presence rule as `visibility`; `null` = loaded but untagged. */
+  guildId?: number | null;
 }
 
 /** Payload of `LINEUP_MATCH_EVENTS.POLL_VOTED` (one committed slot tap). */

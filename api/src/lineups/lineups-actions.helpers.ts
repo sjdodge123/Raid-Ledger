@@ -55,7 +55,10 @@ import {
 } from './lineups-removal.helpers';
 import type { CallerIdentity } from './lineups.service';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import { emitLineupCreated } from './lineup-lifecycle-emit.helpers';
+import {
+  emitLineupCreated,
+  lineupSubjectFields,
+} from './lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type ResolveChannelName = (channelId: string) => string | null;
@@ -94,7 +97,7 @@ export async function runCreateLineup(
   // ROK-2272 S6: the insert transaction has committed by now.
   emitLineupCreated(deps.eventEmitter, {
     lineupId: row.id,
-    visibility: row.visibility,
+    ...lineupSubjectFields(row),
   });
   if (row.visibility === 'public') {
     void deps.steamNudge.nudgeUnlinkedMembers(row.id);

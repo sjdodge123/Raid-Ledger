@@ -26,7 +26,10 @@ import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logAborted } from './lineups-activity.helpers';
-import { emitLineupStatusChanged } from './lineup-lifecycle-emit.helpers';
+import {
+  emitLineupStatusChanged,
+  lineupSubjectFields,
+} from './lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -122,7 +125,7 @@ async function finalizeAbort(
     lineupId: lineup.id,
     from: lineup.status,
     to: 'archived',
-    visibility: lineup.visibility,
+    ...lineupSubjectFields(lineup),
   });
   const actorDisplayName =
     actorId === null
