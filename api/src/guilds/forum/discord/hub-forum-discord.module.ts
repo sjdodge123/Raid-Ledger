@@ -27,6 +27,9 @@ import {
 import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.discord';
 import { HubForumDiscordReconcileService } from './hub-forum-discord-reconcile';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
+import { EventPlanningForumResolver } from './event-planning-forum.resolver';
+import { EventPlanningForumAdmin } from './event-planning-forum.admin';
+import { EventPlanningForumAdminController } from './event-planning-forum.admin.controller';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
@@ -53,7 +56,11 @@ import {
     SettingsModule,
     BullModule.registerQueue({ name: SIGNUP_PING_QUEUE }),
   ],
-  controllers: [HubForumDiscordController, HubForumDiscordDemoTestController],
+  controllers: [
+    HubForumDiscordController,
+    HubForumDiscordDemoTestController,
+    EventPlanningForumAdminController,
+  ],
   providers: [
     HubForumDiscordGateway,
     HubForumBindLock,
@@ -62,6 +69,8 @@ import {
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
     HubForumDiscordRouteResolver,
+    EventPlanningForumResolver,
+    EventPlanningForumAdmin,
     HubForumDiscordPinGateway,
     HubForumDiscordPinSync,
     HubForumDiscordNotices,
@@ -88,6 +97,8 @@ import {
     HubForumDiscordReconcileService,
     HubForumDiscordEventLockSweep,
     HubForumDiscordSignupPings,
+    // ROK-2272 S4 (event-planning posts) + S5a (admin forum card) inject it.
+    EventPlanningForumResolver,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {

@@ -88,6 +88,12 @@ describe('ROK-2208 hub forum Discord tag names + bind body', () => {
     expect(tagNameFor('Events')).toBe('Events');
   });
 
+  it('ROK-2272 §3.3: hubs called "Poll" or "Lineup" never take a kind tag', () => {
+    expect(tagNameFor('Poll')).toBe('Poll hub');
+    expect(tagNameFor(' LINEUP ')).toBe('LINEUP hub');
+    expect(tagNameFor('Polls')).toBe('Polls');
+  });
+
   it('AC1: a body without ack: true is FORUM_DISCORD_ACK_REQUIRED', () => {
     for (const body of [
       { mode: 'create' },

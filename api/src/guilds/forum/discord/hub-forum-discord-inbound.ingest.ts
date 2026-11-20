@@ -103,6 +103,8 @@ export class HubForumDiscordInboundIngest {
       const bound = route.bindings.some((b) => b.guildId === post.guildId);
       return bound ? this.importReply(post, m, now) : 'skipped';
     }
+    // ROK-2272 S3: a Discord-only event-planning post stays on Discord.
+    if (await inbound.isEventPlanningPost(this.db, thread.id)) return 'skipped';
     const hub = pickHub(route.bindings, thread.appliedTags);
     if (!hub) return this.tagNotice(route, thread);
     if (predatesBinding(thread.id, hub.boundAt)) return 'skipped';

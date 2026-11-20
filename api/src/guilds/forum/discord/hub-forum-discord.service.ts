@@ -40,6 +40,7 @@ import {
   type ForumDiscordDb,
 } from './hub-forum-discord.queries';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
+import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { shareForumTags } from './hub-forum-discord.share';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 
@@ -71,6 +72,7 @@ export class HubForumDiscordService {
     private readonly routes: HubForumDiscordRouteResolver,
     private readonly decor: HubForumDiscordDecor,
     private readonly binds: HubForumBindLock,
+    private readonly planningForum: EventPlanningForumResolver,
   ) {}
 
   /** `GET` — the hub's binding (null while unlinked) and its health. */
@@ -142,6 +144,7 @@ export class HubForumDiscordService {
     await this.ensureWebhook(forum, info.id);
     await this.insert(actor, guildId, forum.id, tagId);
     this.routes.invalidate(); // §5.4: inbound routing sees the new hub now
+    this.planningForum.invalidate(); // ROK-2272 §3.2: candidates changed
     // ROK-2258: tags + 👍, best-effort. Awaited under the bind lock (a 2nd
     // bind must not rewrite the tag list mid-run); bounded to the joining
     // hub's event posts, and already-tagged posts cost no write.
@@ -155,6 +158,7 @@ export class HubForumDiscordService {
     if (!row) return;
     await deleteBinding(this.db, guildId);
     this.routes.invalidate(); // D9: an unbound hub stops syncing now
+    this.planningForum.invalidate(); // ROK-2272 §3.2: candidates changed
     if (!deleteForum || !row.forum.managed) return;
     // Review M1: under the bind lock, so a bind that just picked this forum
     // lands (and keeps it) before the "nobody uses it" check runs.

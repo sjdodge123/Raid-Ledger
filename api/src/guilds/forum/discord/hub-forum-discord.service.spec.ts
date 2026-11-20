@@ -18,6 +18,7 @@ import type {
 import * as queries from './hub-forum-discord.queries';
 import type { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumDiscordService } from './hub-forum-discord.service';
+import type { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import * as share from './hub-forum-discord.share';
 
@@ -115,6 +116,7 @@ function makeService(gateway: HubForumDiscordGateway) {
     resolver,
     decor,
     new HubForumBindLock(),
+    { invalidate: jest.fn() } as unknown as EventPlanningForumResolver,
   );
 }
 

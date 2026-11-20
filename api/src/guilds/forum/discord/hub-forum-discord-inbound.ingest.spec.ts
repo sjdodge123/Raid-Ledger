@@ -130,6 +130,17 @@ describe('HubForumDiscordInboundIngest.onCreate — starter import race', () => 
     await expect(got).resolves.toBe('skipped');
   });
 
+  it('ROK-2272 S3: an event-planning registry post is never imported', async () => {
+    w.findPostLink.mockResolvedValue(null);
+    w.isEventPlanningPost.mockResolvedValue(true);
+    const got = makeIngest().onCreate(message(POST), thread, {
+      botUserId: 'bot',
+    });
+    await expect(got).resolves.toBe('skipped');
+    expect(w.isEventPlanningPost).toHaveBeenCalledWith(expect.anything(), POST);
+    expect(w.insertDiscordThread).not.toHaveBeenCalled();
+  });
+
   it('any other insert failure still throws', async () => {
     w.findPostLink.mockResolvedValue(null);
     w.insertDiscordThread.mockRejectedValue(new Error('connection lost'));

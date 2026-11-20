@@ -56,6 +56,23 @@ export async function findPostLink(
   return row ?? null;
 }
 
+/**
+ * ROK-2272 §6 S3 — the post is a Discord-only event-planning post (the
+ * `event_planning_posts` registry): never imported, never noticed.
+ */
+export async function isEventPlanningPost(
+  db: ForumDiscordDb,
+  discordThreadId: string,
+): Promise<boolean> {
+  const p = schema.eventPlanningPosts;
+  const [row] = await db
+    .select({ id: p.id })
+    .from(p)
+    .where(eq(p.discordThreadId, discordThreadId))
+    .limit(1);
+  return row !== undefined;
+}
+
 /** The RL user linked to a Discord account (R2), if any. */
 export async function userIdForDiscord(
   db: ForumDiscordDb,
