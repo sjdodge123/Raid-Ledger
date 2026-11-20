@@ -120,7 +120,8 @@ export async function adoptScope(
 ): Promise<void> {
   const next = flushKeysFor(eventId, scope);
   if (next.lines === keys.lines) return;
-  await redis.hset(next.lines, SEEDED_FIELD, '1');
+  // Object form, as every other hset here (the test Redis has no 3-arg form).
+  await redis.hset(next.lines, { [SEEDED_FIELD]: '1' });
   await redis.del(keys.pinged, keys.lines);
   Object.assign(keys, next);
 }
