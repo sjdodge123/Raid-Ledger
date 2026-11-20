@@ -119,6 +119,10 @@ export const HubForumThreadSummarySchema = z
     ...discordSyncFields,
     /** ROK-2226: the discussed event; null/absent for a normal thread. */
     event: HubForumThreadEventSchema.nullable().optional(),
+    /** ROK-2272: the discussed scheduling poll (lineup match) id; null/absent otherwise. */
+    matchId: id.nullable().optional(),
+    /** ROK-2272: the discussed lineup id; null/absent otherwise. */
+    lineupId: id.nullable().optional(),
     /** ROK-2226: read-only state of an event thread; null/absent otherwise. */
     lock: HubForumLockSchema.nullable().optional(),
     /**

@@ -9,7 +9,7 @@
  */
 import type { Logger } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { runMatchingAlgorithm } from '../lineups-lifecycle.helpers';
@@ -22,6 +22,7 @@ import {
   fireMatchEnteredScheduling,
   fireOrphanedPollCards,
 } from '../lineups-scheduling-hook.helpers';
+import { emitLineupStatusChanged } from '../lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -46,12 +47,35 @@ export async function decideLineupFromTiebreaker(
   lineupId: number,
   decidedGameId?: number,
 ): Promise<void> {
-  await flipLineupToDecided(deps.db, lineupId, decidedGameId);
+  const leftVoting = await flipLineupToDecided(
+    deps.db,
+    lineupId,
+    decidedGameId,
+  );
+  // ROK-2272 S6: the flip committed (no tx here); the matching pass below
+  // can still throw, but the status edge already landed. A re-decide of an
+  // already-decided lineup (dismiss retry) is a no-op edge — no emit.
+  if (leftVoting) {
+    emitLineupStatusChanged(deps.events, {
+      lineupId,
+      from: 'voting',
+      to: 'decided',
+      standalone: false,
+    });
+  }
   // Run matching algorithm so decided view has match groups.
   await runMatchingAlgorithm(deps.db, lineupId, deps.logger, deps.events);
   // ROK-1309: this path bypasses `runStatusTransition` entirely, so it needs
   // its own cohort-memory write — after matching, for the same reason.
   await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
+}
+
+/**
+ * A decide's matching pass plus whether ITS flip moved the lineup out of
+ * `voting` (false on the finalize path's already-decided rebuild).
+ */
+export interface DecidePassResult extends MatchingPassResult {
+  leftVoting: boolean;
 }
 
 /**
@@ -65,10 +89,11 @@ export async function decideLineupInTx(
   tx: Db,
   lineupId: number,
   decidedGameId: number,
-): Promise<MatchingPassResult> {
-  await flipLineupToDecided(tx, lineupId, decidedGameId);
+): Promise<DecidePassResult> {
+  const leftVoting = await flipLineupToDecided(tx, lineupId, decidedGameId);
   // `?? EMPTY_PASS` — several specs mock the matching helper bare.
-  return (await buildMatchesForLineup(tx, lineupId)) ?? EMPTY_PASS;
+  const pass = (await buildMatchesForLineup(tx, lineupId)) ?? EMPTY_PASS;
+  return { ...pass, leftVoting };
 }
 
 /**
@@ -80,10 +105,20 @@ export async function decideLineupInTx(
 export async function announceLineupDecided(
   deps: TiebreakerDecideDeps,
   lineupId: number,
-  pass: MatchingPassResult,
+  pass: DecidePassResult,
 ): Promise<void> {
   fireOrphanedPollCards(deps.events, pass.orphanedCards);
   fireMatchEnteredScheduling(deps.events, pass.schedulingMatchIds);
+  // ROK-2272 S6: only when THIS decide flipped the row out of `voting` — the
+  // finalize path also lands here to rebuild an already-decided lineup.
+  if (pass.leftVoting) {
+    emitLineupStatusChanged(deps.events, {
+      lineupId,
+      from: 'voting',
+      to: 'decided',
+      standalone: false,
+    });
+  }
   await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
 }
 
@@ -92,19 +127,33 @@ const EMPTY_PASS: MatchingPassResult = {
   orphanedCards: [],
 };
 
-/** Flip the lineup row to `decided`, stamping the winner when there is one. */
+/**
+ * Flip the lineup row to `decided`, stamping the winner when there is one.
+ *
+ * ROK-2272 S6: tries the `voting → decided` edge first so the caller learns
+ * whether the status actually changed. When the row was not in `voting`
+ * (an already-decided retry) the original unconditional write still runs, so
+ * the stored result is unchanged — only the lifecycle emit is skipped.
+ *
+ * @returns true when this call moved the lineup out of `voting`.
+ */
 async function flipLineupToDecided(
   db: Db,
   lineupId: number,
   decidedGameId?: number,
-): Promise<void> {
+): Promise<boolean> {
   const update: Partial<typeof schema.communityLineups.$inferInsert> = {
     status: 'decided',
     updatedAt: new Date(),
   };
   if (decidedGameId) update.decidedGameId = decidedGameId;
-  await db
-    .update(schema.communityLineups)
+  const lineup = schema.communityLineups;
+  const flipped = await db
+    .update(lineup)
     .set(update)
-    .where(eq(schema.communityLineups.id, lineupId));
+    .where(and(eq(lineup.id, lineupId), eq(lineup.status, 'voting')))
+    .returning({ id: lineup.id });
+  if (flipped.length > 0) return true;
+  await db.update(lineup).set(update).where(eq(lineup.id, lineupId));
+  return false;
 }

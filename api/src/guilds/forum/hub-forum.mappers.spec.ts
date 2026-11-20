@@ -57,6 +57,8 @@ function thread(
     updatedAt: AT,
     eventId: null,
     eventDetachedAt: null,
+    matchId: null,
+    lineupId: null,
     writeClosesAt: null,
     ...over,
   };

@@ -68,6 +68,8 @@ import {
 import { NotificationService } from '../../notifications/notification.service';
 import { errorStack } from '../../common/error-format.helpers';
 import { GuildAccessService } from '../../guilds/guild-access.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { emitPollVotedFor } from '../lineup-lifecycle-emit.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -84,6 +86,7 @@ export class SchedulingService {
     private readonly unanimous: SchedulingUnanimousService,
     private readonly guildAccess: GuildAccessService,
     @Optional() private readonly nudge?: GameActivityNudge,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /**
@@ -160,16 +163,18 @@ export class SchedulingService {
 
   /**
    * Codex r9 P2: a committed auto-vote is a fresh vote, so it nudges the
-   * game's channel lifecycle post-commit exactly as `toggleVote` does.
+   * game's channel lifecycle and emits POLL_VOTED post-commit exactly as
+   * `toggleVote` does; a failed (rolled-back) auto-vote does neither.
    */
   private async autoVoteAndNudge(
     slotId: number,
-    match: { id: number; gameId: number | null },
+    match: { id: number; lineupId: number; gameId: number | null },
     userId: number,
     source: ScheduleVoteSource,
   ): Promise<void> {
-    if (await this.autoVoteForSlot(slotId, match.id, userId, source))
-      GameActivityNudge.safeTouch(this.nudge, match.gameId);
+    if (!(await this.autoVoteForSlot(slotId, match.id, userId, source))) return;
+    GameActivityNudge.safeTouch(this.nudge, match.gameId);
+    emitPollVotedFor(this.events, match, userId, 'yes'); // ROK-2272 S6
   }
 
   /**
@@ -252,6 +257,7 @@ export class SchedulingService {
       writeSlotTap(tx, slot, userId, stance, source),
     );
     this.fireVoteSideEffects(matchId);
+    emitPollVotedFor(this.events, match, userId, action.stance);
     GameActivityNudge.safeTouch(this.nudge, match.gameId);
     return { voted: action.stance === 'yes', stance: action.stance };
   }
@@ -335,6 +341,7 @@ export class SchedulingService {
           lineupNotifications: this.lineupNotifications,
           pollEmbed: this.pollEmbed,
           logger: this.logger,
+          events: this.events,
         },
         match,
         slot,
@@ -388,6 +395,7 @@ export class SchedulingService {
       match,
       actorUserId,
       normalizeReason(reason),
+      this.events,
     );
     // ROK-1461: archived — re-render so the embed shows "POLL CLOSED".
     this.pollEmbed.fireUpdateEmbed(matchId);

@@ -10,6 +10,7 @@ import {
   ConflictException,
   Optional,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GameActivityNudge } from '../../discord-bot/channel-lifecycle/channel-lifecycle.nudge';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -102,6 +103,7 @@ export class StandalonePollService {
     private readonly lockIn: StandalonePollLockInService,
     private readonly guildAccess: GuildAccessService,
     @Optional() private readonly nudge?: GameActivityNudge,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** List the active standalone polls the caller may see (ROK-1750). */
@@ -228,6 +230,7 @@ export class StandalonePollService {
         notifications: this.notifications,
         pollEmbed: this.schedulingPollEmbed,
         nudge: this.nudge,
+        events: this.events,
       },
       game,
       { lineupId: lineup.id, matchId: match.id, creatorId: userId },

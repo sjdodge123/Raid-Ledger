@@ -13,9 +13,11 @@
  * text), the edge-once behaviour and the shape of the ONE UPDATE the sweep
  * issues per lineup.
  */
+import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
+import { LINEUP_LIFECYCLE_EVENTS } from '../lineup-events.constants';
 import {
   TIE_EXPIRY_CRON_EXPRESSION,
   TIE_EXPIRY_JOB_NAME,
@@ -207,5 +209,50 @@ describe('the sweep s cron identity', () => {
     expect(TIE_EXPIRY_JOB_NAME).toBe('TieExpiryService_expireTieHolds');
     // 6-field expression, daily: seconds minutes hour * * *
     expect(TIE_EXPIRY_CRON_EXPRESSION).toMatch(/^\d+ \d+ \d+ \* \* \*$/);
+  });
+});
+
+describe('sweepExpiredTieHolds — ROK-2272 S6 STATUS_CHANGED', () => {
+  function makeBus(): { bus: EventEmitter2; emit: jest.Mock } {
+    const emit = jest.fn();
+    return { bus: { emit } as unknown as EventEmitter2, emit };
+  }
+
+  it('emits voting → archived once per lineup the sweep archived', async () => {
+    const h = createHarness();
+    const { bus, emit } = makeBus();
+    h.selectWhere.mockResolvedValue([{ id: 7 }]);
+
+    await sweepExpiredTieHolds(h.db, NOW, { events: bus });
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith(LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED, {
+      lineupId: 7,
+      from: 'voting',
+      to: 'archived',
+      standalone: false,
+    });
+  });
+
+  it('emits nothing when the archive UPDATE lost its race (no row)', async () => {
+    const h = createHarness();
+    const { bus, emit } = makeBus();
+    h.selectWhere.mockResolvedValue([{ id: 7 }]);
+    h.updateReturning.mockResolvedValue([]);
+
+    await sweepExpiredTieHolds(h.db, NOW, { events: bus });
+
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('emits nothing when the archive UPDATE throws', async () => {
+    const h = createHarness();
+    const { bus, emit } = makeBus();
+    h.selectWhere.mockResolvedValue([{ id: 7 }]);
+    h.updateReturning.mockRejectedValue(new Error('db down'));
+
+    await sweepExpiredTieHolds(h.db, NOW, { events: bus });
+
+    expect(emit).not.toHaveBeenCalled();
   });
 });

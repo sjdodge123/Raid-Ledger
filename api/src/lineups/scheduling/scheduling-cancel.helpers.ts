@@ -15,6 +15,8 @@ import type { CreateNotificationInput } from '../../notifications/notification.t
 import type { NotificationService } from '../../notifications/notification.service';
 import { findMatchMembers } from '../lineups-match-query.helpers';
 import { resolveGameInfo } from './scheduling-event.helpers';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { emitPollCancelled } from '../lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -96,6 +98,8 @@ export async function archiveAndNotifyCancel(
   match: { id: number; lineupId: number; gameId: number },
   actorUserId: number,
   reason: string | null,
+  /** ROK-2272 S6: lifecycle bus for `POLL_CANCELLED` (winner only). */
+  events?: EventEmitter2,
 ): Promise<void> {
   const archived = await deps.db
     .update(schema.communityLineupMatches)
@@ -118,6 +122,11 @@ export async function archiveAndNotifyCancel(
     .returning({ id: schema.communityLineupMatches.id });
   // Lost the race to a concurrent cancel — that request owns the notifications.
   if (archived.length === 0) return;
+  emitPollCancelled(events, {
+    matchId: match.id,
+    lineupId: match.lineupId,
+    reason,
+  });
   try {
     const members = await findMatchMembers(deps.db, [match.id]);
     const recipientUserIds = members
