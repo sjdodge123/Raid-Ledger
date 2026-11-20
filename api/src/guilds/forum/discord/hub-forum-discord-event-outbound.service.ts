@@ -9,6 +9,10 @@
  * 2. Retitle: an event update re-drives each live post as `thread.updated`
  *    through the owner (binding + stale checks, rename budget, D9 / MAJOR-1).
  * 5. A read-only (closed or detached) event thread never posts.
+ *
+ * ROK-2272 S8: items 1 and 5 hold for every subject thread — a scheduling
+ * poll or lineup thread posts lazily too, titled `<title> — Poll|Lineup`
+ * and tagged with its kind tag. Retitle (item 2) stays event-only (F5).
  */
 import {
   discordThreadName,
@@ -22,9 +26,7 @@ import {
 } from './hub-forum-discord-event-outbound';
 import {
   findEventHeading,
-  findEventPostSource,
   liveEventPostLinks,
-  type EventPostSource,
 } from './hub-forum-discord-event-outbound.queries';
 import * as links from './hub-forum-discord-links.queries';
 import type {
@@ -32,6 +34,15 @@ import type {
   OutboundAuthor,
   OutboundTarget,
 } from './hub-forum-discord-outbound.discord';
+import {
+  subjectOf,
+  subjectPostTitle,
+  type SubjectColumns,
+} from './hub-forum-discord-subject';
+import {
+  findSubjectPostSource,
+  type SubjectPostSource,
+} from './hub-forum-discord-subject-post.queries';
 import { FORUM_WEBHOOK_NAME } from './hub-forum-discord.helpers';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -83,6 +94,11 @@ export class EventPostOutbound {
     return eventPostTitle(heading.title, heading.start, zone);
   }
 
+  /** True for a subject (event / poll / lineup) thread: posted lazily. */
+  isSubjectThread(thread: SubjectColumns): boolean {
+    return subjectOf(thread) !== null;
+  }
+
   /** The post name + starter content of any thread (plain or event). */
   async postView(
     thread: ThreadText,
@@ -106,7 +122,7 @@ export class EventPostOutbound {
 
   /**
    * Item 1 — the post link a reply on `threadId` goes into. Null for a plain
-   * (unlinked, OQ-5) thread and for a read-only event thread (item 5);
+   * (unlinked, OQ-5) thread and for a read-only subject thread (item 5);
    * otherwise claims the post and sends it (a race loser reuses the winner's).
    * ROK-2260: `create: false` only reads the existing post (a signup removal).
    */
@@ -116,16 +132,16 @@ export class EventPostOutbound {
   ): Promise<links.ForumLink | null> {
     const { db } = this.deps;
     if (ref.create === false) return links.findThreadLink(db, ref.threadId);
-    const src = await findEventPostSource(db, ref.threadId);
+    const src = await findSubjectPostSource(db, ref.threadId);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return null;
     const claimed = await links.claimThreadLink(db, ref.guildId, ref.threadId);
     if (claimed) await this.send(to, claimed, src);
     return links.findThreadLink(db, ref.threadId);
   }
 
-  /** S6: re-send a claimed, still-unsent event post (never while read-only). */
+  /** S6: re-send a claimed, still-unsent subject post (never while read-only). */
   async resend(to: EventPostTarget, link: links.ForumLink): Promise<void> {
-    const src = await findEventPostSource(this.deps.db, link.threadId);
+    const src = await findSubjectPostSource(this.deps.db, link.threadId);
     if (!src || eventThreadReadOnly(src, this.deps.now())) return;
     await this.send(to, link, src);
   }
@@ -143,7 +159,7 @@ export class EventPostOutbound {
   private async send(
     to: EventPostTarget,
     link: links.ForumLink,
-    src: EventPostSource,
+    src: SubjectPostSource,
   ): Promise<void> {
     const { db, gateway } = this.deps;
     const zone = await this.deps.timeZone();
@@ -151,11 +167,15 @@ export class EventPostOutbound {
     const url = forumThreadUrl(clientUrl, link.guildId, {
       threadId: link.threadId,
     });
+    const title =
+      src.kind === 'event'
+        ? subjectPostTitle('event', src.eventTitle, src.start, zone)
+        : subjectPostTitle(src.kind, src.title);
     const post = {
-      title: eventPostTitle(src.eventTitle, src.start, zone),
+      title,
       content: truncateForDiscord(eventPostBody(src.body, clientUrl), url),
       tagIds: to.tagId ? [to.tagId] : [],
-      event: true, // ROK-2258: the gateway adds the forum's Event tag
+      kind: src.kind, // ROK-2258 / S8: the gateway adds the forum's kind tag
     };
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);

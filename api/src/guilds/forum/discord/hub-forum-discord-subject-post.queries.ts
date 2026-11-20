@@ -1,0 +1,77 @@
+/**
+ * ROK-2272 S8 — the read behind any subject thread's lazy Discord post:
+ * the event branch is the existing `findEventPostSource`; a poll or lineup
+ * thread takes its title from the S7 subject reads.
+ */
+import { eq } from 'drizzle-orm';
+import * as schema from '../../../drizzle/schema';
+import { findLineupForSync } from '../subject-discussion/lineup-discussion.queries';
+import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
+import { pollSubjectTitle } from '../subject-discussion/poll-discussion.sync';
+import type { EventThreadWriteState } from './hub-forum-discord-event-outbound';
+import {
+  findEventPostSource,
+  type EventPostSource,
+} from './hub-forum-discord-event-outbound.queries';
+import { subjectOf, type SubjectRef } from './hub-forum-discord-subject';
+import type { ForumDiscordDb } from './hub-forum-discord.queries';
+
+const threads = schema.hubForumThreads;
+
+/** A poll or lineup thread and the title its Discord post shows. */
+export interface ScheduleSubjectPostSource extends EventThreadWriteState {
+  kind: 'poll' | 'lineup';
+  /** The match id (poll) or lineup id. */
+  id: number;
+  /** The subject title, before the ` — Poll|Lineup` suffix. */
+  title: string;
+  /** The S7 root text. */
+  body: string;
+}
+
+/** Any subject thread's post source, discriminated on `kind`. */
+export type SubjectPostSource =
+  | ({ kind: 'event' } & EventPostSource)
+  | ScheduleSubjectPostSource;
+
+/** The subject's title; null once the poll / lineup row is gone. */
+async function scheduleTitle(
+  db: ForumDiscordDb,
+  subject: SubjectRef,
+): Promise<string | null> {
+  if (subject.kind === 'poll') {
+    const poll = await findPollForSync(db, subject.id);
+    return poll ? pollSubjectTitle(poll) : null;
+  }
+  const lineup = await findLineupForSync(db, subject.id);
+  return lineup ? lineup.title : null;
+}
+
+/** The subject thread `threadId` with its subject; null for a plain thread. */
+export async function findSubjectPostSource(
+  db: ForumDiscordDb,
+  threadId: number,
+): Promise<SubjectPostSource | null> {
+  const [row] = await db
+    .select({
+      eventId: threads.eventId,
+      matchId: threads.matchId,
+      lineupId: threads.lineupId,
+      body: threads.body,
+      writeClosesAt: threads.writeClosesAt,
+      eventDetachedAt: threads.eventDetachedAt,
+    })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .limit(1);
+  const subject = row ? subjectOf(row) : null;
+  if (!row || !subject) return null;
+  if (subject.kind === 'event') {
+    const src = await findEventPostSource(db, threadId);
+    return src ? { kind: 'event', ...src } : null;
+  }
+  const title = await scheduleTitle(db, subject);
+  if (title === null) return null;
+  const { body, writeClosesAt, eventDetachedAt } = row;
+  return { kind: subject.kind, id: subject.id, title, body, writeClosesAt, eventDetachedAt };
+}

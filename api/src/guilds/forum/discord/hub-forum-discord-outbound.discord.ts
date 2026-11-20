@@ -9,6 +9,7 @@ import {
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { removePostMembers } from './hub-forum-discord-post-members';
 import { postTagIds, type ForumTag } from './hub-forum-discord-decor';
+import type { SubjectKind } from './hub-forum-discord-subject';
 
 /** The bound forum and its one webhook (R9). */
 export interface OutboundTarget {
@@ -70,7 +71,12 @@ export class HubForumDiscordOutboundGateway {
   /** A new forum post; returns the post (thread) and starter message ids. */
   async createPost(
     target: OutboundTarget,
-    post: { title: string; content: string; tagIds: string[]; event?: boolean },
+    post: {
+      title: string;
+      content: string;
+      tagIds: string[];
+      kind?: SubjectKind;
+    },
     author: OutboundAuthor,
   ): Promise<DiscordMessageRef> {
     const hook = await this.webhook(target);
@@ -79,8 +85,8 @@ export class HubForumDiscordOutboundGateway {
       ...identity(author),
       threadName: post.title,
       content: post.content,
-      // ROK-2258: an event post also carries the forum's Event tag.
-      appliedTags: postTagIds(post.tagIds, post.event === true, forumTags),
+      // ROK-2258 / ROK-2272 S8: a subject post also carries its kind tag.
+      appliedTags: postTagIds(post.tagIds, post.kind ?? null, forumTags),
       allowedMentions: NO_MENTIONS,
     });
     return { threadId: msg.channelId, messageId: msg.id };

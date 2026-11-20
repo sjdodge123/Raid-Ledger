@@ -3,6 +3,7 @@ import {
   HUB_FORUM_DISCORD_TAG_LIMIT,
 } from '@raid-ledger/contract';
 import { DiscordAPIError } from 'discord.js';
+import type { SubjectKind } from './hub-forum-discord-subject';
 
 /** ROK-2258 ruling 2 — the tag every synced event post carries. */
 export const EVENT_TAG_NAME = EVENT_PLANNING_TAGS.event;
@@ -147,18 +148,27 @@ export function eventTagIdOf(
 /** Discord allows at most 5 tags on one forum post. */
 const POST_TAG_MAX = 5;
 
+/** ROK-2272 S8 — the kind tag each subject post carries. */
+const KIND_TAG_NAMES: Record<SubjectKind, string> = {
+  event: EVENT_TAG_NAME,
+  poll: POLL_TAG_NAME,
+  lineup: LINEUP_TAG_NAME,
+};
+
 /**
- * ROK-2258 ruling 2 — the tags a new forum post carries: the hub's tag(s),
- * plus the forum's Event tag on an event post (when the forum has one),
+ * ROK-2258 ruling 2 / ROK-2272 S8 — the tags a new forum post carries: the
+ * hub's tag(s), plus the forum's kind tag (Event / Poll / Lineup) on a
+ * subject post when the forum has one (F4: none ⇒ hub tag only),
  * de-duplicated and capped at Discord's 5 per post.
  */
 export function postTagIds(
   base: readonly string[],
-  isEvent: boolean,
+  kind: SubjectKind | null,
   forumTags: readonly ForumTag[],
 ): string[] {
-  const eventTagId = isEvent ? findTagId(forumTags, EVENT_TAG_NAME) : null;
-  const all = eventTagId === null ? base : [...base, eventTagId];
+  const kindTagId =
+    kind === null ? null : findTagId(forumTags, KIND_TAG_NAMES[kind]);
+  const all = kindTagId === null ? base : [...base, kindTagId];
   return [...new Set(all)].slice(0, POST_TAG_MAX);
 }
 
