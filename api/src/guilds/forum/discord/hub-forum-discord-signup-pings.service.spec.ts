@@ -13,6 +13,7 @@ import type { HubForumDiscordOutboundService } from './hub-forum-discord-outboun
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import type Redis from 'ioredis';
+import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import type { EventPlanningPostsService } from './event-planning-posts.service';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
@@ -134,6 +135,7 @@ function setup(pinged: string[] = [], online = true) {
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
     planning as unknown as EventPlanningPostsService,
+    { reopenIfPending: jest.fn() } as unknown as EventPlanningPostsLockSweep,
   );
   return { svc, redis, outbound, gateway, set, hash, strings };
 }

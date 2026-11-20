@@ -8,6 +8,7 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import * as schema from '../../../drizzle/schema';
 import {
   bootDiscussion,
@@ -17,6 +18,7 @@ import {
 } from '../event-discussion/event-discussion.test-fixtures';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
+import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import {
   stubOutbound,
   type FakeOutbound,
@@ -210,6 +212,66 @@ describe('ROK-2272 S4b non-hub signup pings — the registry post', () => {
     expect(out.spies.mention).toHaveBeenCalledTimes(2);
     expect(mentioned()[1]).toEqual([]);
     expect(await pinged(eventId, row.id)).toEqual([did.tentative]);
+  });
+});
+
+/** First signup's flush makes the post; then lock it with `closesAt`. */
+async function lockedPost(eventId: number, closesAt: Date) {
+  await signUp(ctx, eventId, 'signed', 'signed_up');
+  expect(await flush(eventId)).toBe('pinged');
+  const [row] = nonEmpty(await registryRows(eventId), 'registry row');
+  await db()
+    .update(schema.eventPlanningPosts)
+    .set({ discordLockedAt: new Date(), closesAt })
+    .where(eq(schema.eventPlanningPosts.id, row.id));
+  jest
+    .spyOn(app().get(DiscordBotClientService), 'isConnected')
+    .mockReturnValue(true);
+  const setReadOnly = jest.spyOn(
+    app().get(HubForumDiscordEventLockGateway),
+    'setReadOnly',
+  );
+  await signUp(ctx, eventId, 'tentative', 'tentative');
+  return { row, setReadOnly };
+}
+
+describe('ROK-2272 S4 Codex P2-1 — a locked post rescheduled into the future', () => {
+  it('the flush reopens it (Discord first, then the row) and mentions the member', async () => {
+    const eventId = await nonHubEvent();
+    const { row, setReadOnly } = await lockedPost(
+      eventId,
+      new Date(Date.now() + HOUR),
+    );
+    setReadOnly.mockResolvedValue('ok');
+    expect(await flush(eventId)).toBe('pinged');
+    expect(setReadOnly).toHaveBeenCalledWith(row.discordThreadId, false);
+    const [after] = nonEmpty(await registryRows(eventId), 'registry row');
+    expect(after.discordLockedAt).toBeNull();
+    expect(mentioned()).toEqual([[did.signed], [did.tentative]]);
+  });
+
+  it('a failed reopen is offline (retried) and mentions nobody', async () => {
+    const eventId = await nonHubEvent();
+    const { setReadOnly } = await lockedPost(
+      eventId,
+      new Date(Date.now() + HOUR),
+    );
+    setReadOnly.mockRejectedValue(new Error('Discord 500'));
+    expect(await flush(eventId)).toBe('offline');
+    expect(out.spies.mention).toHaveBeenCalledTimes(1);
+    const [after] = nonEmpty(await registryRows(eventId), 'registry row');
+    expect(after.discordLockedAt).not.toBeNull();
+  });
+
+  it('a locked post genuinely past its close stays closed', async () => {
+    const eventId = await nonHubEvent();
+    const { setReadOnly } = await lockedPost(
+      eventId,
+      new Date(Date.now() - HOUR),
+    );
+    expect(await flush(eventId)).toBe('closed');
+    expect(setReadOnly).not.toHaveBeenCalled();
+    expect(out.spies.mention).toHaveBeenCalledTimes(1);
   });
 });
 

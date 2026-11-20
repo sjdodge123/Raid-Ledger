@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
+import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
@@ -78,6 +79,7 @@ export class HubForumDiscordSignupPings {
     private readonly gateway: HubForumDiscordOutboundGateway,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly planning: EventPlanningPostsService,
+    private readonly registryLock: EventPlanningPostsLockSweep,
   ) {}
 
   /** Flush one event; never pings a user twice for the same signup. */
@@ -152,7 +154,7 @@ export class HubForumDiscordSignupPings {
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
     const post = await this.postFor(ref, plan.lines.length > 0);
-    if (post === 'closed' || post === 'pending') return post;
+    if (typeof post === 'string') return post;
     await adoptScope(this.redis, eventId, keys, post.scope);
     return writeUnlessGone(this.db, post.scope, async () => {
       const id = post.discordThreadId;
@@ -218,7 +220,12 @@ export class HubForumDiscordSignupPings {
   private postFor(ref: PingThreadRef, create: boolean): Promise<PingPost> {
     return ref.kind === 'hub'
       ? resolveHubPost(this.outbound, ref, create)
-      : resolvePlanningPost(this.planning, ref, create);
+      : resolvePlanningPost(
+          this.planning,
+          (id) => this.registryLock.reopenIfPending(id),
+          ref,
+          create,
+        );
   }
 
   /** One message per Discord-sized chunk; each remembered as it lands. */

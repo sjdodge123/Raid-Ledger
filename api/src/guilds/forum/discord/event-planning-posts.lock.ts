@@ -11,6 +11,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   and,
+  eq,
   gt,
   isNotNull,
   isNull,
@@ -90,6 +91,32 @@ export async function dueRegistryLockChanges(
   }));
 }
 
+/**
+ * Codex P2-1: what a signup flush may do with a locked post. `open` = write
+ * (reopened now, or never locked); `closed` = genuinely past its close;
+ * `failed` = a reopen is due but did not land (retry the flush).
+ */
+export type ReopenResult = 'open' | 'closed' | 'failed';
+
+/** One post's reopen state; null when it is gone (deleted or no row). */
+async function reopenState(
+  db: ForumDiscordDb,
+  postId: number,
+  now: Date,
+): Promise<RegistryLockChange | 'open' | 'closed' | null> {
+  const [row] = await db.select().from(posts).where(eq(posts.id, postId));
+  if (!row || row.discordDeletedAt !== null) return null;
+  if (row.closesAt === null || row.closesAt <= now) return 'closed';
+  if (row.discordLockedAt === null) return 'open';
+  return {
+    postId,
+    subjectKind: asKind(row.subjectKind),
+    subjectId: row.subjectId,
+    discordThreadId: row.discordThreadId,
+    readOnly: false,
+  };
+}
+
 /** The registry pass of the Core lock sweep. */
 @Injectable()
 export class EventPlanningPostsLockSweep {
@@ -113,25 +140,53 @@ export class EventPlanningPostsLockSweep {
   }
 
   /**
+   * Codex P2-1: reopen one post now when its `closes_at` moved into the
+   * future but the sweep has not unlocked it yet — the same single-row
+   * flip (and title refresh) the sweep does for a due reopen.
+   */
+  async reopenIfPending(
+    postId: number,
+    now = new Date(),
+  ): Promise<ReopenResult> {
+    const state = await reopenState(this.db, postId, now);
+    if (state === null) return 'failed';
+    if (state === 'open' || state === 'closed') return state;
+    if (!this.client.isConnected()) return 'failed';
+    if ((await this.flip(state, now)) !== 'ok') return 'failed';
+    if (state.subjectKind === 'event') await this.refresh(state);
+    return 'open';
+  }
+
+  private async apply(row: RegistryLockChange, now: Date): Promise<boolean> {
+    const res = await this.flip(row, now);
+    if (res === 'ok' && !row.readOnly && row.subjectKind === 'event') {
+      await this.refresh(row);
+    }
+    return res !== 'failed';
+  }
+
+  /**
    * Discord first, then record it; a failure retries next tick. A post gone
    * from Discord is recorded deleted, never locked (review MAJOR-2).
    */
-  private async apply(row: RegistryLockChange, now: Date): Promise<boolean> {
+  private async flip(
+    row: RegistryLockChange,
+    now: Date,
+  ): Promise<'ok' | 'gone' | 'failed'> {
     try {
       const { discordThreadId, readOnly, postId } = row;
       if (
         (await this.gateway.setReadOnly(discordThreadId, readOnly)) === 'gone'
       ) {
         await markPlanningPostDeleted(this.db, postId, now);
-        return true;
+        return 'gone';
       }
       await setPlanningPostLocked(this.db, postId, readOnly ? now : null);
+      return 'ok';
     } catch (err) {
       this.warn(row, err);
-      return false;
+      return 'failed';
     }
-    if (!row.readOnly && row.subjectKind === 'event') await this.refresh(row);
-    return true;
   }
 
   /** Reopened: push the title skipped while the post was locked. */

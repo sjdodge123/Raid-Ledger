@@ -7,6 +7,7 @@
  */
 import type Redis from 'ioredis';
 import { markPlanningPostDeleted } from './event-planning-posts.queries';
+import type { ReopenResult } from './event-planning-posts.lock';
 import type { EventPlanningPostsService } from './event-planning-posts.service';
 import * as links from './hub-forum-discord-links.queries';
 import { isGone } from './hub-forum-discord-outbound.discord';
@@ -36,7 +37,13 @@ export interface FlushKeys {
 
 /** The post to write in, or why there is none (a `SignupPingOutcome`). */
 export type PingPost =
-  { discordThreadId: string; scope: PingedSetScope } | 'closed' | 'pending';
+  | { discordThreadId: string; scope: PingedSetScope }
+  | 'closed'
+  | 'pending'
+  | 'offline';
+
+/** Reopen a locked registry post whose close moved into the future. */
+export type ReopenPlanningPost = (postId: number) => Promise<ReopenResult>;
 
 /**
  * The event's ping target. The hub ALWAYS wins; a hub event whose hub has
@@ -87,18 +94,26 @@ export async function resolveHubPost(
 }
 
 /**
- * The registry post: an existing live one (closed once locked), else made
- * by `ensureEventPost` — only when there is a line to post. Closed when
- * none can be made (no forum, bot offline, event cancelled or past close).
+ * The registry post: an existing live one, else made by `ensureEventPost` —
+ * only when there is a line to post. Closed when none can be made (no
+ * forum, bot offline, event cancelled or past close). A locked post is
+ * closed only when genuinely past its close; one rescheduled into the
+ * future is reopened here (Codex P2-1), and a failed reopen is `'offline'`
+ * (retried), never `'closed'` (terminal).
  */
 export async function resolvePlanningPost(
   planning: EventPlanningPostsService,
+  reopen: ReopenPlanningPost,
   ref: PlanningPingThreadRef,
   create: boolean,
 ): Promise<PingPost> {
   if (ref.post) {
-    if (ref.post.locked) return 'closed';
-    const { id, discordThreadId } = ref.post;
+    const { id, discordThreadId, locked } = ref.post;
+    if (locked) {
+      const state = await reopen(id);
+      if (state === 'closed') return 'closed';
+      if (state === 'failed') return 'offline';
+    }
     return { discordThreadId, scope: { planningPostId: id } };
   }
   if (!create) return 'closed';
