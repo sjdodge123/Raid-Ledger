@@ -111,6 +111,26 @@ async function hubPoll(): Promise<number> {
   return matchId;
 }
 
+/** Move the poll's match to `status` (`scheduled` = decided, R6 close). */
+async function setMatchStatus(
+  matchId: number,
+  status: 'scheduling' | 'scheduled',
+): Promise<void> {
+  await db()
+    .update(schema.communityLineupMatches)
+    .set({ status })
+    .where(eq(schema.communityLineupMatches.id, matchId));
+}
+
+/** Decide the poll, then backdate the stamped deadline so the lock holds. */
+async function closePoll(matchId: number): Promise<void> {
+  await setMatchStatus(matchId, 'scheduled');
+  await db()
+    .update(schema.hubForumThreads)
+    .set({ writeClosesAt: new Date(Date.now() - 60_000) })
+    .where(eq(schema.hubForumThreads.matchId, matchId));
+}
+
 async function card(matchId: number, who: Actor): Promise<SubjectDiscussion> {
   const res = await as(ctx, who, 'get', route(matchId));
   expect(outcome(res)).toEqual({ status: 200, message: undefined });
@@ -185,10 +205,7 @@ describe('scheduling-poll discussion refusals (R7, §3.7)', () => {
   it('a closed thread (deadline passed) reads but refuses replies (409)', async () => {
     const matchId = await hubPoll();
     await card(matchId, 'signed');
-    await db()
-      .update(schema.hubForumThreads)
-      .set({ writeClosesAt: new Date(Date.now() - 60_000) })
-      .where(eq(schema.hubForumThreads.matchId, matchId));
+    await closePoll(matchId);
     const c = await card(matchId, 'signed');
     expect(c).toMatchObject({ can: { read: true, reply: false } });
     expect(c.state === 'ready' && c.lock?.reason).toBe('event-ended');
