@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
-import * as links from './hub-forum-discord-links.queries';
+import { EventPlanningPostsService } from './event-planning-posts.service';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import {
@@ -14,7 +14,6 @@ import {
   resyncLandedValue,
   parsePosted,
   planLineFlush,
-  postedLinesKey,
   postedValue,
   resyncStatusFields,
   seedFields,
@@ -26,11 +25,17 @@ import {
   loadSignupLineStates,
   type SignupLineMember,
 } from './hub-forum-discord-signup-lines.queries';
-import { pingedSetKey } from './hub-forum-discord-signup-pings';
+import type { PingThreadRef } from './hub-forum-discord-signup-pings.queries';
 import {
-  findBoundEventThread,
-  type PingThreadRef,
-} from './hub-forum-discord-signup-pings.queries';
+  adoptScope,
+  flushKeysFor,
+  pingScope,
+  resolveHubPost,
+  resolvePingThread,
+  resolvePlanningPost,
+  type FlushKeys,
+  type PingPost,
+} from './hub-forum-discord-signup-pings.target';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /**
@@ -47,12 +52,6 @@ export type SignupPingOutcome =
   | 'incomplete'
   | 'pinged';
 
-/** The two Redis keys of one event post. */
-interface FlushKeys {
-  pinged: string;
-  lines: string;
-}
-
 /** The pinged set outlives the event by a week, then Redis drops it. */
 const SET_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -65,7 +64,8 @@ const RESYNC_TTL_MS = 24 * 60 * 60 * 1000;
  * since the last posted line. A member's first line @mentions them (which
  * adds them to the post; the first one creates it — ruling 1); leavers are
  * named without a ping and removed from the post (ruling 3).
- * Runs only for an event thread whose hub is bound to a Discord forum.
+ * Runs for an event thread whose hub is bound to a Discord forum, and
+ * (ROK-2272 S4b) for a non-hub event's Discord-only registry post.
  */
 @Injectable()
 export class HubForumDiscordSignupPings {
@@ -76,16 +76,14 @@ export class HubForumDiscordSignupPings {
     private readonly outbound: HubForumDiscordOutboundService,
     private readonly gateway: HubForumDiscordOutboundGateway,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly planning: EventPlanningPostsService,
   ) {}
 
   /** Flush one event; never pings a user twice for the same signup. */
   async flush(eventId: number): Promise<SignupPingOutcome> {
-    const ref = await findBoundEventThread(this.db, eventId);
+    const ref = await resolvePingThread(this.db, eventId);
     if (!ref) return 'unbound';
-    const keys = {
-      pinged: pingedSetKey(eventId, ref),
-      lines: postedLinesKey(eventId, ref),
-    };
+    const keys = flushKeysFor(eventId, pingScope(ref));
     const outcome = await this.flushBound(ref, eventId, keys);
     // Every bound flush (review r1 m2): a rescheduled event moves the expiry.
     const at = ref.endsAt.getTime() + SET_GRACE_MS;
@@ -152,9 +150,9 @@ export class HubForumDiscordSignupPings {
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
-    const post = await this.postFor(ref, plan);
-    if (post === null) return 'closed';
-    if (links.isUnsent(post)) return 'pending';
+    const post = await this.postFor(ref, plan.lines.length > 0);
+    if (post === 'closed' || post === 'pending') return post;
+    await adoptScope(this.redis, eventId, keys, post.scope);
     await this.post(keys, post.discordThreadId, plan, members);
     const removedAll = await this.remove(
       keys.pinged,
@@ -216,24 +214,11 @@ export class HubForumDiscordSignupPings {
     return new Map([...posted, ...parsePosted(fields)]);
   }
 
-  /**
-   * The post to write in: created by the first line (ruling 1); a removal
-   * alone never creates one. Both go through the binding/stale gate (review
-   * r1 m3). Null when read-only, unbound, stale, locked or deleted.
-   */
-  private async postFor(
-    ref: PingThreadRef,
-    plan: LineFlushPlan,
-  ): Promise<links.ForumLink | null> {
-    const { guildId, threadId } = ref;
-    const create = plan.lines.length > 0;
-    const post = await this.outbound.ensureEventPost({
-      guildId,
-      threadId,
-      create,
-    });
-    if (!post || post.discordDeletedAt || post.discordLockedAt) return null;
-    return post;
+  /** The post to write in (S4b: the one step the two targets differ on). */
+  private postFor(ref: PingThreadRef, create: boolean): Promise<PingPost> {
+    return ref.kind === 'hub'
+      ? resolveHubPost(this.outbound, ref, create)
+      : resolvePlanningPost(this.planning, ref, create);
   }
 
   /** One message per Discord-sized chunk; each remembered as it lands. */

@@ -11,7 +11,10 @@ import {
   type SignupLineState,
 } from './hub-forum-discord-signup-lines';
 import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
-import type { PingedSetScope } from './hub-forum-discord-signup-pings';
+import {
+  pingScopeSuffix,
+  type PingedSetScope,
+} from './hub-forum-discord-signup-pings';
 
 /** Hash field marking "seeded / written by C3" — never a Discord id. */
 export const SEEDED_FIELD = '_seeded';
@@ -59,7 +62,7 @@ export interface LineMessage {
 
 /** The Redis hash of last-posted states; same scope as the pinged set. */
 export function postedLinesKey(eventId: number, scope: PingedSetScope): string {
-  return `hub-forum:signup-lines:${eventId}:${scope.guildId}:${scope.threadId}`;
+  return `hub-forum:signup-lines:${eventId}:${pingScopeSuffix(scope)}`;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

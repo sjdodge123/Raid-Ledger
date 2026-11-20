@@ -13,12 +13,14 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as links from './hub-forum-discord-links.queries';
 import {
   HubForumDiscordSignupPings,
   type SignupPingOutcome,
 } from './hub-forum-discord-signup-pings.service';
-import { findBoundEventThread } from './hub-forum-discord-signup-pings.queries';
+import {
+  pingPostThreadId,
+  resolvePingThread,
+} from './hub-forum-discord-signup-pings.target';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { findBinding, type ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -66,15 +68,16 @@ export class HubForumDiscordDemoTestController {
 
   /**
    * ROK-2260 — flush one event's pending signup pings NOW instead of after
-   * the ~2 min debounce, so the companion smoke never waits it out.
+   * the ~2 min debounce, so the companion smoke never waits it out. Also
+   * reports a non-hub event's Discord-only post (ROK-2272 S4b).
    */
   @Post('events/:eventId/flush-signup-pings')
   async flushSignupPings(
     @Param('eventId', ParseIntPipe) eventId: number,
   ): Promise<SignupPingFlushProbe> {
     const outcome = await this.pings.flush(eventId);
-    const ref = await findBoundEventThread(this.db, eventId);
-    const post = ref ? await links.findThreadLink(this.db, ref.threadId) : null;
-    return { outcome, discordThreadId: post?.discordThreadId ?? null };
+    const ref = await resolvePingThread(this.db, eventId);
+    const discordThreadId = await pingPostThreadId(this.db, ref);
+    return { outcome, discordThreadId };
   }
 }
