@@ -37,6 +37,9 @@ jobs:
               - 'api/src/admin/demo-test*'
               - 'api/src/lineups/standalone-poll/**'
               - 'api/src/lineups/scheduling/**'
+              # ROK-2272: the hub-forum / event-planning Discord code (posts,
+              # signup pings and lines, lock sweep) had no smoke trigger.
+              - 'api/src/guilds/forum/discord/**'
               - 'tools/test-bot/**'
               - 'packages/contract/**'
               # ROK-1522: the smoke harness itself — a lease or workflow
