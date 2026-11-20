@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
+import * as Sentry from '@sentry/nestjs';
 import { APP_EVENT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { Db } from '../hub-forum.queries';
@@ -39,18 +40,29 @@ export class EventDiscussionListener implements OnApplicationBootstrap {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
   /**
-   * ROK-2272 S0a — one-shot on boot: re-derive `write_closes_at` for threads
-   * still carrying the old end + 24 h deadline. Part of this Core-owned
-   * `event-discussion` behaviour; never throws into bootstrap.
+   * ROK-2272 S0a — on boot, re-derive `write_closes_at` for threads still
+   * carrying the old end + 24 h deadline. Fire-and-forget: never blocks or
+   * throws into bootstrap; a no-op once no stale row is left. Skipped under
+   * CRON_DISABLED (the integration realm), like the other boot jobs.
    */
-  async onApplicationBootstrap(): Promise<void> {
-    try {
-      const n = await closeCatchUp(this.db, new Date());
-      if (n > 0) this.logger.log(`close catch-up reconciled ${n} event(s)`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`event discussion close catch-up failed: ${msg}`);
-    }
+  onApplicationBootstrap(): void {
+    if (process.env.CRON_DISABLED === 'true') return;
+    this.catchUp().catch((err: unknown) => this.reportCatchUp(err));
+  }
+
+  /** The boot catch-up; returns how many events it reconciled. */
+  async catchUp(now: Date = new Date()): Promise<number> {
+    const n = await closeCatchUp(this.db, now);
+    if (n > 0) this.logger.log(`close catch-up reconciled ${n} event(s)`);
+    return n;
+  }
+
+  private reportCatchUp(err: unknown): void {
+    const msg = err instanceof Error ? err.message : String(err);
+    this.logger.warn(`event discussion close catch-up failed: ${msg}`);
+    Sentry.captureException(err, {
+      tags: { event_discussion: 'close-catch-up' },
+    });
   }
 
   @OnEvent(APP_EVENT_EVENTS.CREATED, { async: true })

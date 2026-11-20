@@ -40,7 +40,7 @@ export function shouldRenameForum(c: RenameCandidate): boolean {
   return c.managed && LEGACY_NAMES.has(c.liveName) && !c.targetTaken;
 }
 
-function describe(err: unknown): string {
+function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -110,17 +110,18 @@ export class EventPlanningForumRename {
       if (!(err instanceof DiscordAPIError) || err.code !== MISSING_PERMISSIONS)
         throw err;
       this.logger.warn(`Cannot rename forum ${id}: bot lacks Manage Channels`);
-      Sentry.addBreadcrumb({
-        category: 'hub-forum.discord',
-        level: 'warning',
-        message: `event-planning rename refused (50013) for forum ${id}`,
-      });
+      // §3.4 "admin notice": this module has no admin-notification channel,
+      // so the notice is a warning-level Sentry event (alerting sees it).
+      Sentry.captureMessage(
+        `event-planning rename refused (50013) for forum ${id}`,
+        { level: 'warning', tags: { hub_forum_discord: 'rename' } },
+      );
       return false;
     }
   }
 
   private report(err: unknown): void {
-    this.logger.warn(`event-planning forum rename skipped: ${describe(err)}`);
+    this.logger.warn(`event-planning forum rename skipped: ${errText(err)}`);
     Sentry.captureException(err);
   }
 }

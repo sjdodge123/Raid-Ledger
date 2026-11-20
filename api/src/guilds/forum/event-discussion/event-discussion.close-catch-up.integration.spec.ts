@@ -1,7 +1,9 @@
 /**
  * ROK-2272 S0a — the boot catch-up re-derives `write_closes_at` for live
- * event threads still carrying the old end + 24 h deadline, and leaves
- * detached and already-closed threads alone. Every test builds its own hub
+ * event threads still carrying the old end + 24 h deadline (stale = later
+ * than end + 1 h), and leaves detached, already-closed and up-to-date threads
+ * alone. A second run is a no-op. The boot hook itself is skipped here
+ * (CRON_DISABLED), so only these explicit calls run it. Every test builds its own hub
  * and event; no shared truncation.
  */
 import { and, eq, isNull } from 'drizzle-orm';
@@ -129,5 +131,34 @@ describe('ROK-2272 S0a — closeCatchUp', () => {
     await setThread(eventId, { writeClosesAt: new Date(past) });
     await closeCatchUp(testApp.db, new Date());
     expect(await closesAt(eventId)).toBe(past);
+  });
+});
+
+describe('ROK-2272 S0a — closeCatchUp selects stale rows only', () => {
+  it('a second run is a no-op: nothing stale is left after the first', async () => {
+    const { eventId, end } = await scene(5 * HOUR);
+    await setThread(eventId, {
+      writeClosesAt: new Date(end.getTime() + 24 * HOUR),
+    });
+    expect(await closeCatchUp(testApp.db, new Date())).toBeGreaterThanOrEqual(
+      1,
+    );
+    expect(await closesAt(eventId)).toBe(end.getTime() + HOUR);
+    expect(await closeCatchUp(testApp.db, new Date())).toBe(0);
+  });
+
+  it('an upcoming event with a correct end + 1 h deadline is not selected', async () => {
+    const { eventId, end } = await scene(6 * HOUR);
+    expect(await closesAt(eventId)).toBe(end.getTime() + HOUR);
+    expect(await closeCatchUp(testApp.db, new Date())).toBe(0);
+    expect(await closesAt(eventId)).toBe(end.getTime() + HOUR);
+  });
+
+  it('an upcoming thread whose deadline is not later than end + 1 h is left alone', async () => {
+    const { eventId, end } = await scene(4 * HOUR);
+    const early = end.getTime() + 30 * 60_000;
+    await setThread(eventId, { writeClosesAt: new Date(early) });
+    await closeCatchUp(testApp.db, new Date());
+    expect(await closesAt(eventId)).toBe(early);
   });
 });

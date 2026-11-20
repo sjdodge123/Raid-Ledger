@@ -2,6 +2,7 @@
  * ROK-2272 S0b §3.4 — the one-time `#hub-forums` → `#event-planning` rename:
  * the exact condition table, and a 50013 refusal that never throws.
  */
+import * as Sentry from '@sentry/nestjs';
 import { DiscordAPIError } from 'discord.js';
 import {
   EventPlanningForumRename,
@@ -13,6 +14,11 @@ import type {
   HubForumDiscordGateway,
 } from './hub-forum-discord.gateway';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+
+jest.mock('@sentry/nestjs', () => ({
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+}));
 
 describe('shouldRenameForum (§3.4 exact condition)', () => {
   it.each([
@@ -52,11 +58,20 @@ function forum(name: string): ForumInfo {
   };
 }
 
-function setup(liveName: string, taken: boolean, rename: jest.Mock) {
+function setup(
+  liveName: string,
+  taken: boolean | (() => boolean),
+  rename: jest.Mock,
+  ids: string[] = ['c1'],
+) {
   const gateway = {
     guildId: () => 'g1',
-    fetchForum: jest.fn(() => Promise.resolve(forum(liveName))),
-    channelNameTaken: jest.fn(() => taken),
+    fetchForum: jest.fn((id: string) =>
+      Promise.resolve({ ...forum(liveName), id }),
+    ),
+    channelNameTaken: jest.fn(
+      typeof taken === 'function' ? taken : () => taken,
+    ),
     renameForum: rename,
   };
   const binds = { run: <T>(_k: string, task: () => Promise<T>) => task() };
@@ -65,11 +80,24 @@ function setup(liveName: string, taken: boolean, rename: jest.Mock) {
     gateway as unknown as HubForumDiscordGateway,
     binds as unknown as HubForumBindLock,
   );
-  jest.spyOn(svc, 'managedForumIds').mockResolvedValue(new Set(['c1']));
+  jest.spyOn(svc, 'managedForumIds').mockResolvedValue(new Set(ids));
   return svc;
 }
 
+function discordError(code: number, status: number): DiscordAPIError {
+  return new DiscordAPIError(
+    { code, message: 'refused' },
+    code,
+    status,
+    'PATCH',
+    '/channels/c1',
+    { body: undefined, files: undefined },
+  );
+}
+
 describe('EventPlanningForumRename.run', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   it('renames the managed #hub-forums to #event-planning', async () => {
     const rename = jest.fn(() => Promise.resolve(forum('event-planning')));
     await expect(setup('hub-forums', false, rename).run()).resolves.toBe(1);
@@ -83,16 +111,37 @@ describe('EventPlanningForumRename.run', () => {
   });
 
   it('a 50013 (Missing Permissions) refusal does not throw', async () => {
-    const refused = new DiscordAPIError(
-      { code: 50013, message: 'Missing Permissions' },
-      50013,
-      403,
-      'PATCH',
-      '/channels/c1',
-      { body: undefined, files: undefined },
-    );
-    const rename = jest.fn(() => Promise.reject(refused));
+    const rename = jest.fn(() => Promise.reject(discordError(50013, 403)));
     await expect(setup('hub-forums', false, rename).run()).resolves.toBe(0);
     expect(rename).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      expect.stringContaining('50013'),
+      expect.objectContaining({ level: 'warning' }),
+    );
+  });
+
+  it('any other Discord error is reported, never thrown, and the next READY retries', async () => {
+    const failure = discordError(50035, 400);
+    const rename = jest
+      .fn()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(forum('event-planning'));
+    const svc = setup('hub-forums', false, rename);
+    await expect(svc.run()).resolves.toBe(0);
+    expect(Sentry.captureException).toHaveBeenCalledWith(failure);
+    await expect(svc.run()).resolves.toBe(1);
+    expect(rename).toHaveBeenCalledTimes(2);
+  });
+
+  it('two managed #hub-forums in one guild ⇒ exactly one rename', async () => {
+    let taken = false;
+    const rename = jest.fn((id: string) => {
+      taken = true;
+      return Promise.resolve({ ...forum('event-planning'), id });
+    });
+    const svc = setup('hub-forums', () => taken, rename, ['c1', 'c2']);
+    await expect(svc.run()).resolves.toBe(1);
+    expect(rename).toHaveBeenCalledTimes(1);
+    expect(rename).toHaveBeenCalledWith('c1', 'event-planning');
   });
 });
