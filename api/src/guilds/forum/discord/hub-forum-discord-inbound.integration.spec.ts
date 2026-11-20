@@ -18,6 +18,7 @@ import {
   type PostsCtx,
 } from '../../posts/hub-posts.test-fixtures';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
+import { HubForumDiscordNotices } from './hub-forum-discord-notice';
 import {
   stubOutbound,
   type FakeOutbound,
@@ -290,6 +291,49 @@ describe('ROK-2208 inbound Discord → RL', () => {
     const old = post(channelId, { id: oldId });
     expect(await ingest.onCreate(msg(old), old, noBot)).toBe('skipped');
     expect(await threadCount(g)).toBe(0);
+  });
+});
+
+describe('ROK-2272 S3: event-planning registry posts stay on Discord', () => {
+  /** Register a Discord-only post in the forum bound at `channelId`. */
+  async function registryPost(channelId: string): Promise<InboundThread> {
+    const f = schema.hubForumDiscordForums;
+    const [forum] = nonEmpty(
+      await ctx.testApp.db
+        .select({ id: f.id })
+        .from(f)
+        .where(eq(f.channelId, channelId)),
+      'forum',
+    );
+    const thread = post(channelId, { name: 'Pizza night — Poll' });
+    await ctx.testApp.db.insert(schema.eventPlanningPosts).values({
+      subjectKind: 'poll',
+      subjectId: 1,
+      forumId: forum.id,
+      discordThreadId: thread.id,
+    });
+    return thread;
+  }
+
+  it('single-hub forum + registry post ⇒ not imported, no notice', async () => {
+    const { g, channelId } = await boundHub();
+    const notify = jest.spyOn(
+      ctx.testApp.app.get(HubForumDiscordNotices),
+      'notify',
+    );
+    const thread = await registryPost(channelId);
+    const starter = msg(thread, { id: thread.id });
+    expect(await ingest.onCreate(starter, thread, noBot)).toBe('skipped');
+    const reply = msg(thread);
+    const fetchStarter = () => Promise.resolve(starter);
+    expect(
+      await ingest.onCreate(reply, thread, { ...noBot, fetchStarter }),
+    ).toBe('skipped');
+    expect(await threadCount(g)).toBe(0);
+    expect(notify).not.toHaveBeenCalled();
+    // Control: an ordinary post in the same forum still imports.
+    await importPost(channelId);
+    expect(await threadCount(g)).toBe(1);
   });
 });
 

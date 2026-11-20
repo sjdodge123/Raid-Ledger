@@ -5,6 +5,10 @@
  */
 import {
   EVENT_TAG_NAME,
+  LINEUP_TAG_NAME,
+  POLL_TAG_NAME,
+  RESERVED_TAG_NAMES,
+  isReservedTagName,
   findTagId,
   planTagCreates,
   postTagIds,
@@ -105,5 +109,30 @@ describe('ROK-2258 postTagIds', () => {
     expect(postTagIds(['e'], true, forumTags)).toEqual(['e']);
     const five = ['a', 'b', 'c', 'd', 'f'];
     expect(postTagIds(five, true, forumTags)).toEqual(five);
+  });
+});
+
+describe('ROK-2272 §3.3 Poll + Lineup kind tags', () => {
+  it('reserves Event, Poll and Lineup (any case, trimmed)', () => {
+    expect(RESERVED_TAG_NAMES).toEqual(['Event', 'Poll', 'Lineup']);
+    expect(isReservedTagName(' poll ')).toBe(true);
+    expect(isReservedTagName('LINEUP')).toBe(true);
+    expect(isReservedTagName('Polls')).toBe(false);
+  });
+
+  it('creates a missing Poll tag on demand and reuses an existing Lineup', () => {
+    const existing = [{ id: 'l', name: 'lineup' }];
+    expect(planTagCreates(existing, [POLL_TAG_NAME, LINEUP_TAG_NAME])).toEqual({
+      create: ['Poll'],
+      skipped: [],
+    });
+    expect(findTagId(existing, LINEUP_TAG_NAME)).toBe('l');
+  });
+
+  it('skips a kind tag that does not fit under the 20-tag cap', () => {
+    expect(planTagCreates(tags(20), [POLL_TAG_NAME])).toEqual({
+      create: [],
+      skipped: ['Poll'],
+    });
   });
 });
