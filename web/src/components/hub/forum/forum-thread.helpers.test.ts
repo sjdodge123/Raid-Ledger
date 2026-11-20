@@ -57,4 +57,13 @@ describe('forum thread helpers', () => {
         const orphan = buildForumThread({ ...fresh, event: null, lock: buildForumLock({ reason: 'event-deleted' }) });
         expect(forumRowCan(orphan, author, NOW)).toEqual({ edit: false, delete: false, pin: true });
     });
+
+    it('row rights: a scheduling-poll or lineup thread never offers Edit/Delete, keeps Pin (ROK-2272 S7)', () => {
+        const fresh = { createdAt: new Date(NOW - 60_000).toISOString() };
+        const author = { userId: 1, canWrite: true, canModerate: true };
+        expect(forumRowCan(buildForumThread({ ...fresh, matchId: 41 }), author, NOW), 'poll thread')
+            .toEqual({ edit: false, delete: false, pin: true });
+        expect(forumRowCan(buildForumThread({ ...fresh, lineupId: 12 }), author, NOW), 'lineup thread')
+            .toEqual({ edit: false, delete: false, pin: true });
+    });
 });

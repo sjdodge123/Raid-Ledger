@@ -137,6 +137,27 @@ describe('toThreadSummary', () => {
     expect(orphan.lock).toMatchObject({ reason: 'event-deleted' });
   });
 
+  // ROK-2272 S7 Codex: poll / lineup threads are lifecycle-owned too, so the
+  // list row must name the subject for `forumRowCan` to withhold Edit/Delete.
+  it('names a poll or lineup subject on the row, and nothing on a normal thread', () => {
+    const normal = toThreadSummary({ thread: thread(), author: person });
+    expect('matchId' in normal || 'lineupId' in normal).toBe(false);
+    const poll = toThreadSummary({
+      thread: thread({ matchId: 41 }),
+      author: person,
+    });
+    expect(HubForumThreadSummarySchema.parse(poll)).toMatchObject({
+      matchId: 41,
+    });
+    expect('lineupId' in poll).toBe(false);
+    const lineup = toThreadSummary({
+      thread: thread({ lineupId: 12 }),
+      author: person,
+    });
+    expect(lineup).toMatchObject({ lineupId: 12 });
+    expect('matchId' in lineup).toBe(false);
+  });
+
   it('blanks title + preview of a deleted thread and says who removed it', () => {
     const gone = thread({
       deletedAt: LATER,
