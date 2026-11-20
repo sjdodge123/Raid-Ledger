@@ -31,6 +31,7 @@ import {
   stubOutbound,
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
+import { postedLinesKey } from './hub-forum-discord-signup-lines.flush';
 import { pingedSetKey } from './hub-forum-discord-signup-pings';
 import { SIGNUP_PING_QUEUE } from './hub-forum-discord-signup-pings.queue';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
@@ -156,13 +157,16 @@ describe('ROK-2260 signup pings — cancel and re-signup (ruling 3)', () => {
     expect(out.spies.removeThreadMembers.mock.calls).toEqual([
       [link.discordThreadId, [did.signed], expect.any(Function)],
     ]);
-    expect(out.spies.mention).toHaveBeenCalledTimes(1);
+    // ROK-2271: the leaver gets a line naming them, never a ping.
+    expect(out.spies.mention).toHaveBeenCalledTimes(2);
+    expect(mentioned()[1]).toEqual([]);
     expect(await pinged(s)).toEqual([did.tentative]);
 
     await signUp(ctx, s.eventId, 'signed', 'signed_up');
     expect(await flush(s.eventId)).toBe('pinged');
     expect(mentioned()).toEqual([
       sorted(did.signed, did.tentative),
+      [],
       [did.signed],
     ]);
     expect(out.spies.createPost).toHaveBeenCalledTimes(1);
@@ -245,7 +249,8 @@ describe('ROK-2260 signup pings — the real cancel path (review m8)', () => {
       ['remove', did.signed],
       ['setArchived', true],
     ]);
-    expect(out.spies.mention).toHaveBeenCalledTimes(1);
+    // ROK-2271: one leave line (no ping) on top of the first signup lines.
+    expect(out.spies.mention).toHaveBeenCalledTimes(2);
     expect(await pinged(s)).toEqual([did.tentative]);
   });
 });
@@ -319,5 +324,101 @@ describe('ROK-2260 DEMO_MODE flush endpoint (companion smoke)', () => {
       body: { outcome: 'pinged', discordThreadId: link.discordThreadId },
     });
     expect(mentioned()).toEqual([[did.signed]]);
+  });
+});
+
+/** Put `signupId` on a fresh character (Warrior) in roster slot `role`. */
+async function onCharacter(s: Scene, signupId: number, role: string) {
+  const db = ctx.posts.testApp.db;
+  const [c] = nonEmpty(
+    await db
+      .insert(schema.characters)
+      .values({
+        userId: ctx.ids.signed,
+        gameId: ctx.posts.testApp.seed.game.id,
+        name: `Thrall${s.eventId}`,
+        class: 'Warrior',
+        spec: 'Protection',
+      })
+      .returning({ id: schema.characters.id }),
+    'character',
+  );
+  await db
+    .update(schema.eventSignups)
+    .set({ characterId: c.id })
+    .where(eq(schema.eventSignups.id, signupId));
+  await db
+    .insert(schema.rosterAssignments)
+    .values({ eventId: s.eventId, signupId, role, position: 1 });
+}
+
+/** The text of the n-th bot message (0-based). */
+const message = (n: number): string =>
+  String(out.spies.mention.mock.calls[n]?.[1]);
+
+describe('ROK-2271 signup lines — role, character and status', () => {
+  it('a first signup with role + character posts one line that pings them', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    const id = await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    await onCharacter(s, id, 'tank');
+    expect(await flush(s.eventId)).toBe('pinged');
+    expect(mentioned()).toEqual([[did.signed]]);
+    expect(message(0)).toBe(
+      `✅ <@${did.signed}> signed up — Tank · Thrall${s.eventId} (Protection Warrior)`,
+    );
+  });
+
+  it('tentative → confirmed posts a line WITHOUT a ping; no change posts nothing', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    await signUp(ctx, s.eventId, 'signed', 'tentative');
+    await flush(s.eventId);
+    await setSignupStatus(ctx, s.eventId, 'signed', 'signed_up');
+    expect(await flush(s.eventId)).toBe('pinged');
+    expect(mentioned()).toEqual([[did.signed], []]);
+    expect(message(1)).toContain('is confirmed (was tentative)');
+    expect(message(1)).not.toContain('<@');
+    expect(await flush(s.eventId)).toBe('unchanged');
+    expect(out.spies.mention).toHaveBeenCalledTimes(2);
+  });
+
+  it('two changes in one window post ONE combined line', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    const id = await signUp(ctx, s.eventId, 'signed', 'tentative');
+    await onCharacter(s, id, 'tank');
+    await flush(s.eventId);
+    await setSignupStatus(ctx, s.eventId, 'signed', 'signed_up');
+    const r = schema.rosterAssignments;
+    await ctx.posts.testApp.db
+      .update(r)
+      .set({ role: 'healer' })
+      .where(eq(r.signupId, id));
+    expect(await flush(s.eventId)).toBe('pinged');
+    expect(out.spies.mention).toHaveBeenCalledTimes(2);
+    expect(message(1).split('\n')).toHaveLength(1);
+    expect(message(1)).toContain('is confirmed (was tentative)');
+    expect(message(1)).toContain('Tank → Healer');
+  });
+
+  it('deploy-time seeding: a thread pinged before ROK-2271 posts nothing on its first flush', async () => {
+    const s = await bareScene(ctx);
+    await bindHub(ctx, s.guildId);
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    await signUp(ctx, s.eventId, 'tentative', 'tentative');
+    const redis = ctx.posts.testApp.redisMock.client;
+    await redis.sadd(pingedSetKey(s.eventId, s), did.signed, did.tentative);
+    expect(await flush(s.eventId)).toBe('unchanged');
+    expect(out.spies.mention).not.toHaveBeenCalled();
+    const seeded = await redis.hgetall(postedLinesKey(s.eventId, s));
+    expect(Object.keys(seeded).sort()).toEqual(
+      sorted('_seeded', did.signed, did.tentative),
+    );
+    // A real change after the seed is posted, without a ping.
+    await setSignupStatus(ctx, s.eventId, 'tentative', 'signed_up');
+    expect(await flush(s.eventId)).toBe('pinged');
+    expect(mentioned()).toEqual([[]]);
+    expect(message(0)).toContain('is confirmed (was tentative)');
   });
 });
