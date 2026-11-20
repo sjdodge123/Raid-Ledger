@@ -1,9 +1,9 @@
 /**
  * ROK-2272 S4 review MAJOR-2 — a non-hub event's Discord-only registry post
  * that a moderator deleted on Discord. The signup flush that finds the
- * thread gone marks the registry row deleted and stops (`'closed'`); the
- * next flush creates a fresh post (decision: re-created by the next signup
- * change, exactly like the first signup creates it). Harness copied from
+ * thread gone marks the registry row deleted and returns `'offline'` (a
+ * retried outcome, review round 2 MINOR-R2-1); the retry creates a fresh
+ * post, exactly like the first signup creates it. Harness copied from
  * `event-planning-posts.signup-pings.integration.spec.ts`.
  */
 import { and, eq } from 'drizzle-orm';
@@ -24,6 +24,10 @@ import {
 } from './hub-forum-discord-outbound.test-fixtures';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import {
+  giveDiscordIds,
+  type Pingable,
+} from './hub-forum-discord-signup-pings.test-fixtures';
+import {
   FAKE_DISCORD_GUILD,
   snowflake,
   stubForumGateway,
@@ -33,6 +37,7 @@ const HOUR = 3_600_000;
 
 let ctx: DiscussionCtx;
 let out: FakeOutbound;
+let did: Record<Pingable, string>;
 let createPost: jest.SpyInstance;
 let channelId: string;
 
@@ -113,6 +118,9 @@ async function registryRows(eventId: number) {
 
 beforeAll(async () => {
   ctx = await bootDiscussion('evplgn');
+  // Only members with a Discord id get a line; without these every flush
+  // is 'unchanged' (same setup as the signup-pings spec).
+  did = await giveDiscordIds(ctx);
 });
 
 beforeEach(async () => {
@@ -137,24 +145,27 @@ describe('ROK-2272 S4 review MAJOR-2: a registry post deleted on Discord', () =>
 
     await signUp(ctx, eventId, 'tentative', 'tentative');
     out.spies.mention.mockRejectedValueOnce(unknownChannel());
-    expect(await flush(eventId)).toBe('closed');
+    // MINOR-R2-1: a retried outcome, so the queue re-runs the flush.
+    expect(await flush(eventId)).toBe('offline');
     const [gone] = nonEmpty(await registryRows(eventId), 'gone post');
     expect(gone.id).toBe(first.id);
     expect(gone.discordDeletedAt).not.toBeNull();
     expect(createPost).toHaveBeenCalledTimes(1);
 
+    // What the retry does: a NEW post, both members mentioned into it.
     expect(await flush(eventId)).toBe('pinged');
     expect(createPost).toHaveBeenCalledTimes(2);
     const rows = await registryRows(eventId);
     expect(rows).toHaveLength(2);
     const fresh = nonEmpty(rows.slice(1), 'fresh post')[0];
+    expect(fresh.id).not.toBe(first.id);
     expect(fresh.discordDeletedAt).toBeNull();
     expect(fresh.discordThreadId).not.toBe(first.discordThreadId);
-    expect(out.spies.mention).toHaveBeenLastCalledWith(
-      fresh.discordThreadId,
-      expect.any(String),
-      expect.any(Array),
-    );
+    const intoFresh = out.spies.mention.mock.calls
+      .filter((c) => c[0] === fresh.discordThreadId)
+      .flatMap((c) => [...c[2]])
+      .sort();
+    expect(intoFresh).toEqual([did.signed, did.tentative].sort());
   });
 
   it('any other Discord error still throws and leaves the post live', async () => {

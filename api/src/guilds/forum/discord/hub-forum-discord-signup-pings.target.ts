@@ -111,22 +111,23 @@ export async function resolvePlanningPost(
 /**
  * ROK-2272 S4 review MAJOR-2: run the Discord writes into a post. When a
  * registry post's thread is gone (moderator delete), its row is marked
- * deleted and the flush is `'closed'`, like a hub post marked deleted; the
- * next flush finds no live post and creates a fresh one. A hub post's gone
+ * deleted and the flush is `'offline'` — a retried outcome (review round 2
+ * MINOR-R2-1), so the queue's retry finds no live post, creates a fresh
+ * one and posts the change that found the deletion. A hub post's gone
  * error is rethrown unchanged (its inbound delete handles it).
  */
 export async function writeUnlessGone<T>(
   db: ForumDiscordDb,
   scope: PingedSetScope,
   write: () => Promise<T>,
-): Promise<T | 'closed'> {
+): Promise<T | 'offline'> {
   try {
     return await write();
   } catch (err) {
     const postId = 'planningPostId' in scope ? scope.planningPostId : null;
     if (postId === null || !isGone(err)) throw err;
     await markPlanningPostDeleted(db, postId, new Date());
-    return 'closed';
+    return 'offline';
   }
 }
 
