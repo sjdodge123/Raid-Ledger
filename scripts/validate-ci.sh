@@ -587,9 +587,10 @@ detect_scope() {
   # notifications, signup flows, lifecycle ops, demo-test endpoints used by
   # smoke fixtures, the smoke tests themselves, and the polling helper — plus
   # standalone-poll, which enqueues embed syncs at reschedule-poll lock-in, and
-  # scheduling, home of scheduling-poll-embed.service.ts (ROK-1547).
+  # scheduling, home of scheduling-poll-embed.service.ts (ROK-1547), and the
+  # event-planning forum's Discord code (ROK-2272).
   if echo "$changed_files" \
-    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$|^api/src/lineups/standalone-poll/|^api/src/lineups/scheduling/'; then
+    | grep -qE '^api/src/discord-bot/|^api/src/notifications/|^api/src/events/signups|^api/src/events/event-lifecycle|^api/src/admin/demo-test|^tools/test-bot/src/smoke/|^tools/test-bot/src/helpers/polling\.ts$|^api/src/lineups/standalone-poll/|^api/src/lineups/scheduling/|^api/src/guilds/forum/discord/'; then
     discord_smoke_relevant=true
     echo -e "  Discord-smoke-relevant changes: ${YELLOW}yes${NC}"
   else
