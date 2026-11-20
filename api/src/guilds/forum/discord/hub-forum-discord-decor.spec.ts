@@ -175,3 +175,33 @@ describe('ROK-2272 §3.3 findKindTagId (review MINOR 3)', () => {
     expect(findKindTagId(tags, LINEUP_TAG_NAME, ['hub-poll'])).toBe('lineup');
   });
 });
+
+describe('ROK-2272 S8 Codex P2 — postTagIds never takes a hub tag as a kind tag', () => {
+  it("a hub tag named Poll is not used as the Poll kind tag on another hub's poll post", () => {
+    const forumTags = [
+      { id: 'hub-poll', name: 'Poll' },
+      { id: 'h', name: 'Night Owls' },
+    ];
+    expect(postTagIds(['h'], 'poll', forumTags, ['hub-poll', 'h'])).toEqual([
+      'h',
+    ]);
+  });
+
+  it('a hub tag named Lineup is not used as the Lineup kind tag', () => {
+    const forumTags = [{ id: 'hub-lineup', name: 'LINEUP' }];
+    expect(postTagIds(['h'], 'lineup', forumTags, ['hub-lineup'])).toEqual([
+      'h',
+    ]);
+  });
+
+  it('a kind tag no hub owns is still added', () => {
+    const forumTags = [
+      { id: 'p', name: 'Poll' },
+      { id: 'h', name: 'Night Owls' },
+    ];
+    expect(postTagIds(['h'], 'poll', forumTags, ['h', null])).toEqual([
+      'h',
+      'p',
+    ]);
+  });
+});

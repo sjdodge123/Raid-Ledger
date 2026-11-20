@@ -9,6 +9,7 @@ import {
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { removePostMembers } from './hub-forum-discord-post-members';
 import { postTagIds, type ForumTag } from './hub-forum-discord-decor';
+import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import type { SubjectKind } from './hub-forum-discord-subject';
 
 /** The bound forum and its one webhook (R9). */
@@ -66,7 +67,10 @@ function identity(author: OutboundAuthor) {
  */
 @Injectable()
 export class HubForumDiscordOutboundGateway {
-  constructor(private readonly client: DiscordBotClientService) {}
+  constructor(
+    private readonly client: DiscordBotClientService,
+    private readonly routes: HubForumDiscordRouteResolver,
+  ) {}
 
   /** A new forum post; returns the post (thread) and starter message ids. */
   async createPost(
@@ -80,13 +84,15 @@ export class HubForumDiscordOutboundGateway {
     author: OutboundAuthor,
   ): Promise<DiscordMessageRef> {
     const hook = await this.webhook(target);
+    const kind = post.kind ?? null;
     const forumTags = this.cachedForumTags(target.channelId);
+    const hubTags = kind === null ? [] : await this.hubTagIds(target.channelId);
     const msg = await hook.send({
       ...identity(author),
       threadName: post.title,
       content: post.content,
       // ROK-2258 / ROK-2272 S8: a subject post also carries its kind tag.
-      appliedTags: postTagIds(post.tagIds, post.kind ?? null, forumTags),
+      appliedTags: postTagIds(post.tagIds, kind, forumTags, hubTags),
       allowedMentions: NO_MENTIONS,
     });
     return { threadId: msg.channelId, messageId: msg.id };
@@ -211,6 +217,12 @@ export class HubForumDiscordOutboundGateway {
   }
 
   /** The forum's tags from the cache (`webhook` just fetched it). */
+  /** Tags the forum's bound hubs own (never a kind tag, Codex P2). */
+  private async hubTagIds(channelId: string): Promise<(string | null)[]> {
+    const route = await this.routes.resolve(channelId);
+    return route?.bindings.map((b) => b.tagId) ?? [];
+  }
+
   private cachedForumTags(channelId: string): ForumTag[] {
     const ch = this.guild().channels.cache.get(channelId);
     if (ch?.type !== ChannelType.GuildForum) return [];

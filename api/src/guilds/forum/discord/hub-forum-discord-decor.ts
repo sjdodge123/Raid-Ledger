@@ -159,15 +159,23 @@ const KIND_TAG_NAMES: Record<SubjectKind, string> = {
  * ROK-2258 ruling 2 / ROK-2272 S8 — the tags a new forum post carries: the
  * hub's tag(s), plus the forum's kind tag (Event / Poll / Lineup) on a
  * subject post when the forum has one (F4: none ⇒ hub tag only),
- * de-duplicated and capped at Discord's 5 per post.
+ * de-duplicated and capped at Discord's 5 per post. A tag a hub owns is
+ * never taken as the kind tag (Codex P2: a legacy hub named "Poll"), the
+ * same rule as {@link findKindTagId} / {@link eventTagIdOf}.
+ *
+ * @param hubTagIds - Tag ids the forum's bound hubs own (`base` is added).
  */
 export function postTagIds(
   base: readonly string[],
   kind: SubjectKind | null,
   forumTags: readonly ForumTag[],
+  hubTagIds: readonly (string | null)[] = [],
 ): string[] {
+  const owned = [...base, ...hubTagIds];
   const kindTagId =
-    kind === null ? null : findTagId(forumTags, KIND_TAG_NAMES[kind]);
+    kind === null
+      ? null
+      : findKindTagId(forumTags, KIND_TAG_NAMES[kind], owned);
   const all = kindTagId === null ? base : [...base, kindTagId];
   return [...new Set(all)].slice(0, POST_TAG_MAX);
 }
