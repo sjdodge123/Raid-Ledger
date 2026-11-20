@@ -95,6 +95,15 @@ async function newLineup(guildId: number, status: 'voting' | 'decided') {
   return l;
 }
 
+/** `signed` nominates the seed game, so they may reply on the lineup thread (R7). */
+async function nominate(lineupId: number): Promise<void> {
+  await db().insert(schema.communityLineupEntries).values({
+    lineupId,
+    gameId: ctx.posts.testApp.seed.game.id,
+    nominatedBy: ctx.ids.signed,
+  });
+}
+
 /** An open poll `signed` voted on; returns match + lineup ids. */
 async function hubPoll(guildId: number) {
   const lineup = await newLineup(guildId, 'decided');
@@ -213,11 +222,7 @@ describe('ROK-2272 S8 closing lines in the Discord post', () => {
   it('a decided lineup posts the decided line with its game and link', async () => {
     const guildId = await boundHub();
     const lineup = await newLineup(guildId, 'voting');
-    await db().insert(schema.communityLineupEntries).values({
-      lineupId: lineup.id,
-      gameId: ctx.posts.testApp.seed.game.id,
-      nominatedBy: ctx.ids.signed,
-    });
+    await nominate(lineup.id);
     await openThread(lineupRoute(lineup.id), true);
     await db()
       .update(schema.communityLineups)
@@ -247,6 +252,7 @@ describe('ROK-2272 S8 closing lines in the Discord post', () => {
   it('a lineup aborted from voting posts "Lineup aborted" once', async () => {
     const guildId = await boundHub();
     const lineup = await newLineup(guildId, 'voting');
+    await nominate(lineup.id);
     await openThread(lineupRoute(lineup.id), true);
     await setLineup(lineup.id, { status: 'archived' });
     const edge = {
@@ -264,6 +270,7 @@ describe('ROK-2272 S8 closing lines in the Discord post', () => {
   it("archiving a standalone poll's carrier lineup posts no lineup line", async () => {
     const guildId = await boundHub();
     const lineup = await newLineup(guildId, 'voting');
+    await nominate(lineup.id);
     await openThread(lineupRoute(lineup.id), true);
     for (const from of ['voting', 'decided'] as const) {
       await listener().onLineupStatusChanged({
@@ -308,6 +315,7 @@ describe('ROK-2272 S8 closing lines in the Discord post', () => {
   it('a lineup turned private gets no closing line (its thread is detached)', async () => {
     const guildId = await boundHub();
     const lineup = await newLineup(guildId, 'voting');
+    await nominate(lineup.id);
     const threadId = await openThread(lineupRoute(lineup.id), true);
     await setLineup(lineup.id, { visibility: 'private' });
     await syncLineupDiscussion(db(), lineup.id);
