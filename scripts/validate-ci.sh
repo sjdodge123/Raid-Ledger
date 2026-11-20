@@ -176,7 +176,9 @@
 #     tools/test-bot/src/helpers/polling.ts changed AND env is up AND this
 #     checkout has companion-bot credentials (tools/test-bot/.env, or both
 #     TEST_BOT_TOKEN and TEST_GUILD_ID). Without them the tier is SKIPPED
-#     locally and FAILS under --ci, mirroring the pg_dump precedent.
+#     locally and FAILS under --ci, mirroring the pg_dump precedent. On a
+#     fleet runner (RL_TARGET=runner) they come from the VM's
+#     RL_TEST_BOT_TOKEN / RL_DISCORD_TEST_GUILD_ID, and the SKIP names those.
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
@@ -1286,8 +1288,20 @@ check_test_bot_env() {
     return 1
   fi
 
-  echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
-  echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
+  # ROK-2280: on a fleet runner the credentials come from the VM's
+  # /srv/rl-infra/.env, forwarded by run-on-runner-with-heartbeat — which is
+  # also what exports RL_TARGET=runner. Name the missing VM keys there instead
+  # of the laptop's "copy tools/test-bot/.env" advice. Names only, never values.
+  if [[ "${RL_TARGET:-local}" == "runner" ]]; then
+    local vm_missing=""
+    [[ -z "${TEST_BOT_TOKEN:-}" ]] && vm_missing="RL_TEST_BOT_TOKEN"
+    [[ -z "${TEST_GUILD_ID:-}" ]] && vm_missing="${vm_missing:+$vm_missing and }RL_DISCORD_TEST_GUILD_ID"
+    echo -e "${YELLOW}Fleet runner: companion-bot credentials come from the VM — set ${vm_missing} in /srv/rl-infra/.env${NC}"
+    echo -e "${YELLOW}(rl-infra/SETUP.md §3.2; takes effect on the next gate, no restart)${NC}"
+  else
+    echo -e "${YELLOW}No tools/test-bot/.env on this checkout (missing: ${missing}) — skipping Discord smoke.${NC}"
+    echo -e "${YELLOW}Copy it from the main repo (or export TEST_BOT_TOKEN + TEST_GUILD_ID) to cover the changed bot/notification flows.${NC}"
+  fi
   export SKIP_DISCORD_SMOKE_NO_BOT_ENV=1
   return 0
 }
