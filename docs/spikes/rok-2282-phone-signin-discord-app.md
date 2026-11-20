@@ -93,7 +93,8 @@ redeemed by `POST /auth/redeem-magic-link`), used by the bot today (e.g. `lfg-co
    after "Authorize": default browser, the browser that started, or its in-app browser. An old iOS
    bug (discord-api-docs #6160, 2023, fixed) shows the app opening the redirect in its **in-app
    browser**. Any of those except "the same browser" loses our state cookie and fails.
-7. **Alternatives on Discord's side — CONFIRMED (Discord help centre).** The web login page offers
+7. **Alternatives on Discord's side — REPORTED (search summaries of Discord help-centre pages; a
+   direct fetch returned 403).** The web login page offers
    QR-code login (scan with the phone app — useless when the web page **is** on that phone) and
    passkey login. A member with a passkey on their phone can sign in to Discord's web page without a
    password.
