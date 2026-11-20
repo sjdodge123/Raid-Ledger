@@ -10,7 +10,10 @@ import { eq } from 'drizzle-orm';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
-import { LINEUP_EVENTS } from '../../../lineups/lineup-events.constants';
+import {
+  LINEUP_EVENTS,
+  LINEUP_LIFECYCLE_EVENTS,
+} from '../../../lineups/lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
 import { link, newHub, settle } from '../../posts/hub-posts.test-fixtures';
 import {
@@ -21,7 +24,9 @@ import {
   type DiscussionCtx,
 } from '../event-discussion/event-discussion.test-fixtures';
 import { LineupDiscussionReplyThrottleGuard } from '../subject-discussion/lineup-discussion-throttle.guard';
+import { syncLineupDiscussion } from '../subject-discussion/lineup-discussion.sync';
 import { PollDiscussionReplyThrottleGuard } from '../subject-discussion/poll-discussion-throttle.guard';
+import { syncPollDiscussion } from '../subject-discussion/poll-discussion.sync';
 import { neutralise } from './hub-forum-discord-closing-lines';
 import { CLOSING_LINE_COPY } from './hub-forum-discord-closing-lines.copy';
 import {
@@ -238,4 +243,107 @@ describe('ROK-2272 S8 closing lines in the Discord post', () => {
     );
     expect(CLOSING_LINE_COPY.pollCancelled).toBe('Poll cancelled');
   });
+
+  it('a lineup aborted from voting posts "Lineup aborted" once', async () => {
+    const guildId = await boundHub();
+    const lineup = await newLineup(guildId, 'voting');
+    await openThread(lineupRoute(lineup.id), true);
+    await setLineup(lineup.id, { status: 'archived' });
+    const edge = {
+      lineupId: lineup.id,
+      from: 'voting',
+      to: 'archived',
+      standalone: false,
+    } as const;
+    emit(LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED, edge);
+    expect(await mentions(1)).toEqual([CLOSING_LINE_COPY.lineupAborted]);
+    await listener().onLineupStatusChanged(edge);
+    expect(out.spies.mention).toHaveBeenCalledTimes(1);
+  });
+
+  it("archiving a standalone poll's carrier lineup posts no lineup line", async () => {
+    const guildId = await boundHub();
+    const lineup = await newLineup(guildId, 'voting');
+    await openThread(lineupRoute(lineup.id), true);
+    for (const from of ['voting', 'decided'] as const) {
+      await listener().onLineupStatusChanged({
+        lineupId: lineup.id,
+        from,
+        to: 'archived',
+        standalone: true,
+      });
+    }
+    expect(out.spies.mention).not.toHaveBeenCalled();
+  });
+
+  it('cancel → reopen → cancel posts two cancel lines', async () => {
+    const guildId = await boundHub();
+    const { matchId, lineupId } = await hubPoll(guildId);
+    await openThread(pollRoute(matchId), true);
+    await setMatch(matchId, 'archived');
+    await listener().onPollCancelled({ matchId, lineupId, reason: null });
+    await setMatch(matchId, 'scheduling');
+    await listener().onPollReopened({ matchId });
+    await setMatch(matchId, 'archived');
+    await listener().onPollCancelled({ matchId, lineupId, reason: 'Again' });
+    expect(await mentions(2)).toEqual([
+      CLOSING_LINE_COPY.pollCancelled,
+      'Poll cancelled — Again',
+    ]);
+  });
+
+  it('a poll turned private gets no closing line (its thread is detached)', async () => {
+    const guildId = await boundHub();
+    const { matchId, lineupId } = await hubPoll(guildId);
+    const threadId = await openThread(pollRoute(matchId), true);
+    await setLineup(lineupId, { visibility: 'private' });
+    await syncPollDiscussion(db(), matchId);
+    await expectDetached(threadId);
+    await listener().onPollCancelled({ matchId, lineupId, reason: 'x' });
+    const eventId = await newEvent(guildId, 'Private Raid');
+    await listener().onPollLockedIn({ matchId, eventId });
+    expect(out.spies.mention).not.toHaveBeenCalled();
+  });
+
+  it('a lineup turned private gets no closing line (its thread is detached)', async () => {
+    const guildId = await boundHub();
+    const lineup = await newLineup(guildId, 'voting');
+    const threadId = await openThread(lineupRoute(lineup.id), true);
+    await setLineup(lineup.id, { visibility: 'private' });
+    await syncLineupDiscussion(db(), lineup.id);
+    await expectDetached(threadId);
+    await listener().onLineupDecided({ lineupId: lineup.id });
+    await listener().onLineupStatusChanged({
+      lineupId: lineup.id,
+      from: 'voting',
+      to: 'archived',
+      standalone: false,
+    });
+    expect(out.spies.mention).not.toHaveBeenCalled();
+  });
 });
+
+async function setLineup(
+  id: number,
+  set: { status?: 'archived'; visibility?: 'private' },
+): Promise<void> {
+  const l = schema.communityLineups;
+  await db().update(l).set(set).where(eq(l.id, id));
+}
+
+async function setMatch(
+  id: number,
+  status: 'archived' | 'scheduling',
+): Promise<void> {
+  const m = schema.communityLineupMatches;
+  await db().update(m).set({ status }).where(eq(m.id, id));
+}
+
+async function expectDetached(threadId: number): Promise<void> {
+  const t = schema.hubForumThreads;
+  const [row] = nonEmpty(
+    await db().select().from(t).where(eq(t.id, threadId)),
+    'thread',
+  );
+  expect(row.eventDetachedAt).not.toBeNull();
+}
