@@ -2,9 +2,16 @@ import { z } from 'zod';
 import { AiSuggestionSchema } from '@raid-ledger/contract';
 import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
 
+/**
+ * A real snowflake, or a `local:` placeholder (`local:admin@local`) so a smoke
+ * test that pointed a local-only user at the companion bot can put that
+ * user's own id back (ROK-2271; ROK-943 counts the creator by Discord id).
+ */
+const LINKABLE_DISCORD_ID = /^(\d{17,20}|local:\S{1,200})$/;
+
 export const LinkDiscordSchema = z.object({
   userId: z.number().int().positive(),
-  discordId: z.string().regex(/^\d{17,20}$/, 'Invalid Discord ID format'),
+  discordId: z.string().regex(LINKABLE_DISCORD_ID, 'Invalid Discord ID format'),
   username: z.string().min(1).max(100),
 });
 
