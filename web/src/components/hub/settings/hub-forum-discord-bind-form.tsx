@@ -52,7 +52,7 @@ export function HubForumDiscordBindForm({ guildId, preflight, channels }: HubFor
         <div className="flex flex-col gap-3" data-testid="hub-forum-discord-form">
             <PreflightLine preflight={preflight} missing={missing} />
             <TargetPick preflight={preflight} value={choice.target} disabled={!preflight.botOnline} onChange={(target) => update({ target })} />
-            {choice.target === 'own' && preflight.botOnline && <OwnPick choice={choice} channels={channels} nameError={nameFieldError(bind.error)} onChange={update} />}
+            {choice.target === 'own' && preflight.botOnline && <OwnPick choice={choice} channels={channels} nameError={nameFieldError(bind.error, choice.name)} onChange={update} />}
             <Checkbox label={forumDiscordAckLabel(chosenChannelName(choice, preflight, channels))} checked={ack} data-testid="hub-forum-discord-ack"
                 onChange={(e) => setAck(e.target.checked)} />
             {alert && <p role="alert" className="text-sm text-danger" data-testid="hub-forum-discord-bind-error">{alert}</p>}
