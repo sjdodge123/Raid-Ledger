@@ -9,10 +9,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { eq } from 'drizzle-orm';
 import { SkipThrottle } from '@nestjs/throttler';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import * as schema from '../../../drizzle/schema';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { HubForumDiscordEventLockSweep } from './hub-forum-discord-event-lock';
 import {
@@ -108,5 +110,25 @@ export class HubForumDiscordDemoTestController {
   async lockSweepNow(): Promise<{ changed: number }> {
     const changed = await this.lockSweep.sweep();
     return { changed };
+  }
+
+  /**
+   * ROK-2272 S8 — close a poll thread's Discord write window NOW: its
+   * `write_closes_at` goes to 1 s in the past, so the next `lock-sweep`
+   * locks + archives the poll's Discord post. The real window ends an hour
+   * after the poll does, which no smoke can wait out.
+   */
+  @Post('polls/:matchId/close-discussion-now')
+  async closeDiscussionNow(
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ): Promise<{ closed: number }> {
+    const t = schema.hubForumThreads;
+    const rows = await this.db
+      .update(t)
+      .set({ writeClosesAt: new Date(Date.now() - 1000) })
+      .where(eq(t.matchId, matchId))
+      .returning({ id: t.id });
+    if (rows.length === 0) throw new NotFoundException('Poll has no thread');
+    return { closed: rows.length };
   }
 }
