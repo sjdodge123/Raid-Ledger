@@ -5,8 +5,14 @@
  */
 import type { HubForumLock, HubForumLockReason, HubForumThreadEvent } from '@raid-ledger/contract';
 
+/** Hours an event thread stays writable after the event ends (ROK-2272: was 24). */
+export const EVENT_THREAD_CLOSE_HOURS = 1;
+
+/** The `event-ended` lock line — the one place the close window is spelled out. */
+export const EVENT_ENDED_LOCK_COPY = `Closed ${EVENT_THREAD_CLOSE_HOURS} h after the event ended`;
+
 const LOCK_REASON_COPY: Record<HubForumLockReason, string> = {
-    'event-ended': 'Closed 24 h after the event ended',
+    'event-ended': EVENT_ENDED_LOCK_COPY,
     'event-detached': 'This event moved to another hub',
     'event-deleted': 'This event was deleted',
 };
@@ -56,7 +62,7 @@ export function signupLabel(event: HubForumThreadEvent): string | null {
     return max === null ? `${event.signupCount} signed up` : `${event.signupCount} / ${max} signed up`;
 }
 
-/** "Read-only since Mon 24 Nov · Closed 24 h after the event ended". */
+/** "Read-only since Mon 24 Nov · Closed 1 h after the event ended". */
 export function lockLine(lock: HubForumLock): string {
     return `Read-only since ${eventShortDate(lock.at)} · ${lockReasonCopy(lock.reason)}`;
 }

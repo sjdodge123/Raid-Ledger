@@ -24,7 +24,7 @@ const EVENT_TAG = { id: 't-event', name: 'Event' };
 function forumInfo(over: Partial<ForumInfo> = {}): ForumInfo {
   return {
     id: 'c1',
-    name: 'hub-forums',
+    name: 'event-planning',
     tags: [EVENT_TAG],
     missing: [],
     canManage: true,

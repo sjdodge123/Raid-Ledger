@@ -1,6 +1,7 @@
 import { HttpException } from '@nestjs/common';
 import {
   HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME as SHARED_NAME,
+  HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES,
   HUB_FORUM_DISCORD_TAG_LIMIT,
   type HubForumDiscordChannelOptions,
   type HubForumDiscordPreflight,
@@ -54,19 +55,39 @@ export function suggestedForumName(name: string): string {
   }
 }
 
+/** ROK-2272 §3.4: the shared forum's names, default `event-planning` first. */
+const SHARED_NAMES: readonly string[] = [
+  SHARED_NAME,
+  ...HUB_FORUM_DISCORD_LEGACY_CHANNEL_NAMES,
+];
+
+/** Forums named as the shared one, default-named first, then legacy names. */
+export function sharedCandidates(forums: ForumInfo[]): ForumInfo[] {
+  return SHARED_NAMES.flatMap((n) => forums.filter((f) => f.name === n));
+}
+
+/** The bot-made candidate first, else the first by name order. */
+export function pickShared(
+  named: ForumInfo[],
+  managed: ReadonlySet<string>,
+): ForumInfo | null {
+  return named.find((f) => managed.has(f.id)) ?? named[0] ?? null;
+}
+
 /**
- * The shared `#hub-forums` on Discord: the bot-made one first, else any forum
- * by that name — so binding "shared" never makes a second one.
+ * The shared `#event-planning` on Discord (or a not-yet-renamed legacy
+ * `#hub-forums`): the bot-made one first, else any forum by that name — so
+ * binding "shared" never makes a second one.
  */
 export async function findSharedForum(
   db: ForumDiscordDb,
   gateway: HubForumDiscordGateway,
   discordGuildId: string,
 ): Promise<ForumInfo | null> {
-  const named = gateway.listForums().filter((f) => f.name === SHARED_NAME);
+  const named = sharedCandidates(gateway.listForums());
   if (named.length < 2) return named[0] ?? null;
   const managed = await managedChannelIds(db, discordGuildId);
-  return named.find((f) => managed.has(f.id)) ?? named[0] ?? null;
+  return pickShared(named, managed);
 }
 
 /**
@@ -134,7 +155,7 @@ async function sharedCount(
   return (await bindingCountsByChannel(db)).get(id) ?? NO_HUBS;
 }
 
-/** The shared option before the bot has made `#hub-forums`. */
+/** The shared option before the bot has made `#event-planning`. */
 function unmadeShared(missing: string[]): HubForumDiscordSharedOption {
   return {
     channelId: null,
@@ -147,7 +168,7 @@ function unmadeShared(missing: string[]): HubForumDiscordSharedOption {
   };
 }
 
-/** The live `#hub-forums`; tag edits (2nd hub on) need Manage Channels. */
+/** The live shared forum; tag edits (2nd hub on) need Manage Channels. */
 function sharedOption(
   f: ForumInfo,
   n: ChannelBindingCount,
