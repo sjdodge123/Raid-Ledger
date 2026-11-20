@@ -163,16 +163,18 @@ export class SchedulingService {
 
   /**
    * Codex r9 P2: a committed auto-vote is a fresh vote, so it nudges the
-   * game's channel lifecycle post-commit exactly as `toggleVote` does.
+   * game's channel lifecycle and emits POLL_VOTED post-commit exactly as
+   * `toggleVote` does; a failed (rolled-back) auto-vote does neither.
    */
   private async autoVoteAndNudge(
     slotId: number,
-    match: { id: number; gameId: number | null },
+    match: { id: number; lineupId: number; gameId: number | null },
     userId: number,
     source: ScheduleVoteSource,
   ): Promise<void> {
-    if (await this.autoVoteForSlot(slotId, match.id, userId, source))
-      GameActivityNudge.safeTouch(this.nudge, match.gameId);
+    if (!(await this.autoVoteForSlot(slotId, match.id, userId, source))) return;
+    GameActivityNudge.safeTouch(this.nudge, match.gameId);
+    emitPollVotedFor(this.events, match, userId, 'yes'); // ROK-2272 S6
   }
 
   /**

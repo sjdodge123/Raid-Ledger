@@ -71,6 +71,14 @@ export async function decideLineupFromTiebreaker(
 }
 
 /**
+ * A decide's matching pass plus whether ITS flip moved the lineup out of
+ * `voting` (false on the finalize path's already-decided rebuild).
+ */
+export interface DecidePassResult extends MatchingPassResult {
+  leftVoting: boolean;
+}
+
+/**
  * ROK-2098: the flip + matching pass of a decide, on `tx` (the finalize
  * path's round-advance-lock transaction). Pure DB work: it fires no events
  * and swallows no error — a failed statement poisons the transaction, so it
@@ -81,10 +89,11 @@ export async function decideLineupInTx(
   tx: Db,
   lineupId: number,
   decidedGameId: number,
-): Promise<MatchingPassResult> {
-  await flipLineupToDecided(tx, lineupId, decidedGameId);
+): Promise<DecidePassResult> {
+  const leftVoting = await flipLineupToDecided(tx, lineupId, decidedGameId);
   // `?? EMPTY_PASS` — several specs mock the matching helper bare.
-  return (await buildMatchesForLineup(tx, lineupId)) ?? EMPTY_PASS;
+  const pass = (await buildMatchesForLineup(tx, lineupId)) ?? EMPTY_PASS;
+  return { ...pass, leftVoting };
 }
 
 /**
@@ -96,17 +105,20 @@ export async function decideLineupInTx(
 export async function announceLineupDecided(
   deps: TiebreakerDecideDeps,
   lineupId: number,
-  pass: MatchingPassResult,
+  pass: DecidePassResult,
 ): Promise<void> {
   fireOrphanedPollCards(deps.events, pass.orphanedCards);
   fireMatchEnteredScheduling(deps.events, pass.schedulingMatchIds);
-  // ROK-2272 S6: a tiebreaker only resolves a lineup that is in `voting`.
-  emitLineupStatusChanged(deps.events, {
-    lineupId,
-    from: 'voting',
-    to: 'decided',
-    standalone: false,
-  });
+  // ROK-2272 S6: only when THIS decide flipped the row out of `voting` — the
+  // finalize path also lands here to rebuild an already-decided lineup.
+  if (pass.leftVoting) {
+    emitLineupStatusChanged(deps.events, {
+      lineupId,
+      from: 'voting',
+      to: 'decided',
+      standalone: false,
+    });
+  }
   await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
 }
 

@@ -112,3 +112,44 @@ describe('SchedulingService.toggleVote — POLL_VOTED emit (ROK-2272 S6)', () =>
     expect(emit).not.toHaveBeenCalled();
   });
 });
+
+/** findMatchOrThrow → assertCallerMayVote → assertNoDuplicateSlot → insert. */
+function primeSuggest(db: MockDb): void {
+  db.limit.mockResolvedValueOnce([MATCH]);
+  db.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+  db.limit.mockResolvedValueOnce([]);
+  db.returning.mockResolvedValueOnce([{ id: 42 }]);
+}
+
+const FUTURE = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+
+describe('SchedulingService.suggestSlot — auto-vote POLL_VOTED emit (ROK-2272 S6 Codex)', () => {
+  it('emits once with the suggester and stance yes after the auto-vote commits', async () => {
+    const { service, db, emit } = build();
+    primeSuggest(db);
+    db.transaction.mockResolvedValueOnce(undefined);
+    await expect(service.suggestSlot(10, FUTURE, 7)).resolves.toEqual({
+      id: 42,
+    });
+    expect(emit.mock.calls).toEqual([
+      [
+        LINEUP_MATCH_EVENTS.POLL_VOTED,
+        { matchId: 10, lineupId: 1, userId: 7, stance: 'yes' },
+      ],
+    ]);
+    expect(db.transaction.mock.invocationCallOrder[0] ?? Infinity).toBeLessThan(
+      emit.mock.invocationCallOrder[0] ?? -Infinity,
+    );
+  });
+
+  it('emits nothing when the auto-vote transaction fails (no vote cast)', async () => {
+    const { service, db, emit } = build();
+    primeSuggest(db);
+    db.transaction.mockRejectedValueOnce(new Error('DB constraint'));
+    await expect(service.suggestSlot(10, FUTURE, 7)).resolves.toEqual({
+      id: 42,
+    });
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(emit).not.toHaveBeenCalled();
+  });
+});
