@@ -18,7 +18,7 @@
 
 A discord.js v14 bot. CI-compatible, stable, uses official Discord APIs.
 
-- **Config:** `tools/test-bot/.env` (token + guild ID are static; channel IDs are per-test)
+- **Config:** `tools/test-bot/.env` (token + guild ID are static; channel IDs are per-test). Laptop runs read this file. Fleet gates do not: the orchestrator forwards `RL_TEST_BOT_TOKEN` + `RL_DISCORD_TEST_GUILD_ID` from `/srv/rl-infra/.env` as `TEST_BOT_TOKEN` / `TEST_GUILD_ID` for Discord-tier runs (ROK-2280). The fleet and GitHub's `discord-smoke` job share one test guild and the fleet does not take GitHub's lease, so avoid starting a fleet Discord tier while a PR's `discord-smoke` job is running.
 - **Programmatic usage:** `import { connect, readLastMessages, joinVoice, ... } from '../tools/test-bot/src/index.js'`
 - **Helpers:**
   - Messages: `readLastMessages(channelId, count)`, `waitForMessage(channelId, predicate, timeout)`, `readDMs(count)`
