@@ -37,6 +37,8 @@ import { PollDiscussionListener } from './forum/subject-discussion/poll-discussi
 import { LineupDiscussionListener } from './forum/subject-discussion/lineup-discussion.listener';
 import { PollDiscussionController } from './forum/subject-discussion/poll-discussion.controller';
 import { PollDiscussionService } from './forum/subject-discussion/poll-discussion.service';
+import { LineupDiscussionController } from './forum/subject-discussion/lineup-discussion.controller';
+import { LineupDiscussionService } from './forum/subject-discussion/lineup-discussion.service';
 import { EventDiscussionController } from './forum/event-discussion/event-discussion.controller';
 import { EventDiscussionService } from './forum/event-discussion/event-discussion.service';
 import { HubSessionNoteController } from './session-note/hub-session-note.controller';
@@ -78,6 +80,7 @@ import {
     HubForumController,
     EventDiscussionController,
     PollDiscussionController,
+    LineupDiscussionController,
     HubSessionNoteController,
     HubClaimController,
   ],
@@ -106,6 +109,7 @@ import {
     PollDiscussionListener,
     LineupDiscussionListener,
     PollDiscussionService,
+    LineupDiscussionService,
     EventDiscussionService,
     HubSessionNoteService,
     CommunityHubKindAdapter,
