@@ -18,6 +18,10 @@ import { showRescheduleRoleForCharacter } from './reschedule-role-step.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
 import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
+import {
+  emitSignupUpdated,
+  lineFieldsChanged,
+} from './reschedule-signup-emit.helpers';
 
 export type { RescheduleDeps, ReconfirmOptions };
 
@@ -173,8 +177,17 @@ async function updateLinkedSignup(
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
   if (options?.characterId) {
+    // confirmSignup emits signup.updated itself — one emit per change.
     await deps.signupsService.confirmSignup(event.id, signup.id, userId, {
       characterId: options.characterId,
+    });
+  } else if (lineFieldsChanged(signup, updateSet)) {
+    const action = 'reschedule_reconfirm';
+    emitSignupUpdated(deps, {
+      eventId: event.id,
+      userId,
+      signupId: signup.id,
+      action,
     });
   }
   await logDiscordAck(deps, event.id, wasPending, updateSet, { userId });
@@ -205,6 +218,10 @@ async function updateUnlinkedSignup(
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
+  if (lineFieldsChanged(signup, updateSet)) {
+    const action = 'reschedule_reconfirm';
+    emitSignupUpdated(deps, { eventId: event.id, signupId: signup.id, action });
+  }
   await logDiscordAck(deps, event.id, wasPending, updateSet, {
     discordUserId: interaction.user.id,
   });

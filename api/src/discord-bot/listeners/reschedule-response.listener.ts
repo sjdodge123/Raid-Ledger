@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
 import {
   MessageFlags,
@@ -48,6 +48,7 @@ import {
 } from './reschedule-roster.handlers';
 import { errorStack } from '../../common/error-format.helpers';
 import { routeRescheduleBack } from './reschedule-back.handlers';
+import { emitSignupUpdated } from './reschedule-signup-emit.helpers';
 
 /**
  * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).
@@ -69,6 +70,7 @@ export class RescheduleResponseListener {
     private readonly embedSyncQueue: EmbedSyncQueueService,
     private readonly emojiService: DiscordEmojiService,
     private readonly activityLog: ActivityLogService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   private get deps(): RescheduleDeps {
@@ -79,6 +81,7 @@ export class RescheduleResponseListener {
       embedSyncQueue: this.embedSyncQueue,
       emojiService: this.emojiService,
       activityLog: this.activityLog,
+      eventEmitter: this.eventEmitter,
       logger: this.logger,
     };
   }
@@ -190,6 +193,10 @@ export class RescheduleResponseListener {
           eq(schema.rosterAssignments.signupId, v.signup.id),
         ),
       );
+    if (v.signup.status !== 'declined') {
+      const action = 'reschedule_decline';
+      emitSignupUpdated(this.deps, { eventId, signupId: v.signup.id, action });
+    }
     await i.editReply({
       content: `You've been removed from **${v.event.title}**. No worries!`,
     });
@@ -265,7 +272,10 @@ export class RescheduleResponseListener {
   private async validateSignup(
     i: ButtonInteraction,
     eventId: number,
-  ): Promise<{ event: EventRow; signup: { id: number } } | null> {
+  ): Promise<{
+    event: EventRow;
+    signup: { id: number; status: string };
+  } | null> {
     const event = await lookupRescheduleEvent(this.db, eventId);
     if (!event) {
       await i.editReply({ content: 'Event not found.' });
