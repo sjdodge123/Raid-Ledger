@@ -35,6 +35,17 @@ export function lineFieldsChanged(
  * (the thread's debounced signup-line flush among them). Call after the
  * write succeeded, once per changed signup.
  */
+export function announceIfLineChanged(
+  deps: Pick<RescheduleDeps, 'eventEmitter'>,
+  ids: { eventId: number; signupId: number; userId?: number },
+  before: LineFields,
+  set: Record<string, unknown>,
+): void {
+  if (!lineFieldsChanged(before, set)) return;
+  emitSignupUpdated(deps, { ...ids, action: 'reschedule_reconfirm' });
+}
+
+/** Emit one `signup.updated` (decline + reconfirm share it). */
 export function emitSignupUpdated(
   deps: Pick<RescheduleDeps, 'eventEmitter'>,
   payload: SignupEventPayload,

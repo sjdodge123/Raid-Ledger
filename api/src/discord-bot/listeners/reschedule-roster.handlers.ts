@@ -19,8 +19,8 @@ import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
 import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
 import {
-  emitSignupUpdated,
-  lineFieldsChanged,
+  announceIfLineChanged,
+  type LineFields,
 } from './reschedule-signup-emit.helpers';
 
 export type { RescheduleDeps, ReconfirmOptions };
@@ -176,20 +176,7 @@ async function updateLinkedSignup(
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
-  if (options?.characterId) {
-    // confirmSignup emits signup.updated itself — one emit per change.
-    await deps.signupsService.confirmSignup(event.id, signup.id, userId, {
-      characterId: options.characterId,
-    });
-  } else if (lineFieldsChanged(signup, updateSet)) {
-    const action = 'reschedule_reconfirm';
-    emitSignupUpdated(deps, {
-      eventId: event.id,
-      userId,
-      signupId: signup.id,
-      action,
-    });
-  }
+  await afterLinkedWrite(deps, event.id, userId, signup, updateSet, options);
   await logDiscordAck(deps, event.id, wasPending, updateSet, { userId });
   return signup.id;
 }
@@ -218,14 +205,38 @@ async function updateUnlinkedSignup(
     .update(schema.eventSignups)
     .set(updateSet)
     .where(eq(schema.eventSignups.id, signup.id));
-  if (lineFieldsChanged(signup, updateSet)) {
-    const action = 'reschedule_reconfirm';
-    emitSignupUpdated(deps, { eventId: event.id, signupId: signup.id, action });
-  }
+  announceIfLineChanged(
+    deps,
+    { eventId: event.id, signupId: signup.id },
+    signup,
+    updateSet,
+  );
   await logDiscordAck(deps, event.id, wasPending, updateSet, {
     discordUserId: interaction.user.id,
   });
   return signup.id;
+}
+
+/**
+ * ROK-2271 — a character change goes through confirmSignup, which emits
+ * signup.updated itself; otherwise announce a line-visible change here.
+ */
+async function afterLinkedWrite(
+  deps: RescheduleDeps,
+  eventId: number,
+  userId: number,
+  signup: LineFields & { id: number },
+  updateSet: Record<string, unknown>,
+  options?: ReconfirmOptions,
+): Promise<void> {
+  if (!options?.characterId) {
+    const ids = { eventId, userId, signupId: signup.id };
+    announceIfLineChanged(deps, ids, signup, updateSet);
+    return;
+  }
+  await deps.signupsService.confirmSignup(eventId, signup.id, userId, {
+    characterId: options.characterId,
+  });
 }
 
 async function replyEventError(
