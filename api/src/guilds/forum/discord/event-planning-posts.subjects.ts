@@ -76,6 +76,23 @@ export class EventPlanningSubjectPosts {
     return made?.ref ?? null;
   }
 
+  /**
+   * The poll's live post while the poll is still on the planning path; a
+   * poll since hub-tagged or made private gets null and its post is made
+   * due now (the sweep closes it). Never creates.
+   */
+  async livePollPostOnPath(
+    matchId: number,
+    now: Date = new Date(),
+  ): Promise<EventPlanningPostSelect | null> {
+    const post = await findLivePlanningPost(this.db, 'poll', matchId);
+    if (!post) return null;
+    const poll = await findPollForSync(this.db, matchId);
+    if (poll && pollOnPlanningPath(poll)) return post;
+    await this.closeNow(post, now);
+    return null;
+  }
+
   /** The lineup's live post, created on first need; null when it gets none. */
   async ensureLineupPost(
     lineupId: number,

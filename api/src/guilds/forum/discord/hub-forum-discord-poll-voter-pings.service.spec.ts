@@ -6,10 +6,7 @@ import { Logger } from '@nestjs/common';
 import { DiscordAPIError } from 'discord.js';
 import type Redis from 'ioredis';
 import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
-import {
-  findLivePlanningPost,
-  markPlanningPostDeleted,
-} from './event-planning-posts.queries';
+import { markPlanningPostDeleted } from './event-planning-posts.queries';
 import type { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
@@ -22,12 +19,10 @@ jest.mock('../subject-discussion/poll-discussion.queries', () => ({
   findLivePollThread: jest.fn(),
 }));
 jest.mock('./event-planning-posts.queries', () => ({
-  findLivePlanningPost: jest.fn(),
   markPlanningPostDeleted: jest.fn().mockResolvedValue(undefined),
 }));
 
 const findThread = jest.mocked(findLivePollThread);
-const findPost = jest.mocked(findLivePlanningPost);
 const markDeleted = jest.mocked(markPlanningPostDeleted);
 
 const DISCORD_ID = '123456789012345678';
@@ -61,6 +56,12 @@ function fakeDb(discordId: string | null) {
   return chain;
 }
 
+function livePlanningRow(over: Record<string, unknown> = {}) {
+  return { id: 40, discordLockedAt: null, ...over } as unknown as Awaited<
+    ReturnType<EventPlanningSubjectPosts['livePollPostOnPath']>
+  >;
+}
+
 function hubLink(over: Record<string, unknown> = {}) {
   return {
     discordThreadId: 'hub-d-thread',
@@ -83,6 +84,7 @@ function build(opts: { online?: boolean; discordId?: string | null } = {}) {
       forumId: 1,
       discordThreadId: 'reg-d-thread',
     }),
+    livePollPostOnPath: jest.fn().mockResolvedValue(livePlanningRow()),
   };
   const redis = fakeRedis();
   const db = fakeDb(opts.discordId === undefined ? DISCORD_ID : opts.discordId);
@@ -96,17 +98,10 @@ function build(opts: { online?: boolean; discordId?: string | null } = {}) {
   return { svc, gateway, outbound, subjects, redis };
 }
 
-function livePlanningRow(over: Record<string, unknown> = {}) {
-  return { id: 40, discordLockedAt: null, ...over } as unknown as Awaited<
-    ReturnType<typeof findLivePlanningPost>
-  >;
-}
-
 beforeEach(() => {
   findThread.mockResolvedValue({ id: 5, guildId: 2 } as unknown as Awaited<
     ReturnType<typeof findLivePollThread>
   >);
-  findPost.mockResolvedValue(livePlanningRow());
   jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 });
 
@@ -195,10 +190,10 @@ describe('HubForumDiscordPollVoterPings.planningVote', () => {
   });
 
   it('a locked registry post pings nothing and claims nothing', async () => {
-    findPost.mockResolvedValue(
+    const { svc, gateway, redis, subjects } = build();
+    subjects.livePollPostOnPath.mockResolvedValue(
       livePlanningRow({ discordLockedAt: new Date() }),
     );
-    const { svc, gateway, redis } = build();
     expect(await svc.planningVote(vote)).toBe('closed-post');
     expect(gateway.mention).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
@@ -223,6 +218,17 @@ describe('HubForumDiscordPollVoterPings.planningVote', () => {
       expect.any(Date),
     );
     expect(redis.store.size).toBe(0);
+  });
+});
+
+describe('HubForumDiscordPollVoterPings.planningVote — off the planning path', () => {
+  it('a poll hub-tagged or made private after its post exists pings nothing (MINOR-1)', async () => {
+    const { svc, gateway, redis, subjects } = build();
+    subjects.livePollPostOnPath.mockResolvedValue(null);
+    expect(await svc.planningVote(vote)).toBe('no-post');
+    expect(subjects.livePollPostOnPath).toHaveBeenCalledWith(7);
+    expect(gateway.mention).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
   });
 });
 

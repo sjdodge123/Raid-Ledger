@@ -16,10 +16,7 @@ import * as schema from '../../../drizzle/schema';
 import type { PollVotedPayload } from '../../../lineups/lineup-events.constants';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
-import {
-  findLivePlanningPost,
-  markPlanningPostDeleted,
-} from './event-planning-posts.queries';
+import { markPlanningPostDeleted } from './event-planning-posts.queries';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { isUnsent } from './hub-forum-discord-links.queries';
 import {
@@ -77,8 +74,11 @@ export class HubForumDiscordPollVoterPings {
     if (p.stance === null) return 'cleared';
     const ref = await this.subjects.ensurePollPost(p.matchId);
     if (!ref) return 'no-post';
-    const row = await findLivePlanningPost(this.db, 'poll', p.matchId);
-    if (!row || row.id !== ref.postId || row.discordLockedAt !== null) {
+    // A poll hub-tagged or made private after its post exists pings nowhere
+    // here (the hub arm owns a hub-tagged poll's ping).
+    const row = await this.subjects.livePollPostOnPath(p.matchId);
+    if (!row) return 'no-post';
+    if (row.id !== ref.postId || row.discordLockedAt !== null) {
       return 'closed-post';
     }
     const scope = { planningPostId: ref.postId };
