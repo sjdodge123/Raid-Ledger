@@ -16,6 +16,9 @@ import {
 
 const ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/large';
 
+/** Boss-row expansions a capture can attach loot to (ROK-2270). */
+const LISTED_EXPANSIONS: ReadonlySet<string> = new Set(['classic', 'forever']);
+
 export interface CaptureDrop {
   itemId: number;
   name: string;
@@ -168,7 +171,11 @@ function sourceBosses(drop: CaptureDrop, listed: string[]): string[] {
     .filter((s) => listed.includes(s));
 }
 
-/** Classic bosses listed for any instance the capture's zone covers. */
+/**
+ * Bosses listed for any instance the capture's zone covers: the classic rows
+ * of a classic-edition dungeon, the `forever` rows of a Forever-new one
+ * (ROK-2270; those instances have no classic rows). Matched by exact name.
+ */
 function listedBosses(
   capture: Capture,
   bosses: readonly BossRow[],
@@ -176,7 +183,9 @@ function listedBosses(
   const ids = instanceIdsFor(capture);
   const out = new Map<string, number | null>();
   for (const b of bosses) {
-    if (!ids.has(b.instanceId) || b.expansion !== 'classic') continue;
+    if (!ids.has(b.instanceId) || !LISTED_EXPANSIONS.has(b.expansion)) {
+      continue;
+    }
     const seen = out.get(b.name);
     const unique = seen === undefined || seen === b.instanceId;
     out.set(b.name, unique ? b.instanceId : null);
