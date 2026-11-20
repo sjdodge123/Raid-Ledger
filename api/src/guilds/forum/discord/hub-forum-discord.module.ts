@@ -27,6 +27,7 @@ import {
 import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.discord';
 import { HubForumDiscordReconcileService } from './hub-forum-discord-reconcile';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
+import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
@@ -62,6 +63,7 @@ import {
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
     HubForumDiscordRouteResolver,
+    EventPlanningForumResolver,
     HubForumDiscordPinGateway,
     HubForumDiscordPinSync,
     HubForumDiscordNotices,
