@@ -298,10 +298,13 @@ Two optional entries in that file are worth setting now:
 - `RL_TEST_BOT_TOKEN=<companion test bot token>` — the companion test bot's
   token (ROK-2280). The orchestrator forwards it into the runner as
   `TEST_BOT_TOKEN` (with `RL_DISCORD_TEST_GUILD_ID` as `TEST_GUILD_ID`), only
-  for an `rl_validate_ci` run that includes the Discord tier. It is never
+  for an `rl_validate_ci` task that includes the Discord tier (not `rl
+  validate-ci`, a `/push` self-dispatch or `rl_run_on_runner`). It is never
   written under `/workspace` and never logged. No compose restart is needed:
   it is read at the start of each task. Unset, the Discord smoke SKIPs and the
-  task log says so. Copy it from the laptop without echoing it:
+  task log and SKIP row name the missing key. Copy it from the laptop without
+  echoing it — **run this once**: it appends, so a second run adds a duplicate
+  line (the last one wins). To rotate the token, edit the existing line instead:
   `sed -n 's/^TEST_BOT_TOKEN=/RL_TEST_BOT_TOKEN=/p' tools/test-bot/.env | ssh <vm> 'cat >> /srv/rl-infra/.env'`
 
 ### 3.3  Make scripts executable
