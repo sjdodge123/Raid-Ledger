@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
@@ -17,6 +18,10 @@ import {
   CreateTestSignupSchema,
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
+import {
+  RunningLateTestSchema,
+  setRunningLateForTest,
+} from './demo-test-signups.helpers';
 
 /**
  * Signup test endpoints — DEMO_MODE only (smoke tests).
@@ -25,7 +30,10 @@ import { parseDemoBody } from './demo-test.utils';
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestSignupsController {
-  constructor(private readonly demoTestService: DemoTestService) {}
+  constructor(
+    private readonly demoTestService: DemoTestService,
+    private readonly moduleRef: ModuleRef,
+  ) {}
 
   /** Create a signup for any user -- DEMO_MODE only (smoke tests). */
   @Post('signup')
@@ -67,5 +75,19 @@ export class DemoTestSignupsController {
       parsed.userId,
     );
     return { success: true };
+  }
+
+  /**
+   * Mark / clear running late via RunningLateService (urgent thread line,
+   * ROK-2271) — DEMO_MODE only. Body `{ eventId, userId, minutes?, clear? }`.
+   */
+  @Post('running-late')
+  @HttpCode(HttpStatus.OK)
+  async runningLateForTest(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; changed: boolean }> {
+    const parsed = parseDemoBody(RunningLateTestSchema, body);
+    const { changed } = await setRunningLateForTest(this.moduleRef, parsed);
+    return { success: true, changed };
   }
 }
