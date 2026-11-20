@@ -19,7 +19,7 @@ const FIXTURES = "/admin/test/hub-forum-discord";
 const DASH = " — ";
 
 /** Precondition: the event-planning resolver answers with THIS run's forum. */
-async function expectResolvedForum(ctx: TestContext, forumId: string): Promise<void> {
+export async function expectResolvedForum(ctx: TestContext, forumId: string): Promise<void> {
   const dto = await ctx.api.get<{ resolvedChannelId?: unknown }>("/admin/discord/event-planning-forum");
   if (dto.resolvedChannelId !== forumId) fail(`precondition: event-planning forum should resolve to ${forumId}`, dto);
 }
