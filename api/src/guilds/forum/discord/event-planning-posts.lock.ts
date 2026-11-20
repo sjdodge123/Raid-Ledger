@@ -9,7 +9,16 @@
  * locked.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, gt, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import {
+  and,
+  gt,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -40,6 +49,17 @@ function asKind(raw: string): PlanningSubjectKind {
   throw new Error(`Unknown event_planning_posts.subject_kind "${raw}"`);
 }
 
+/** Live, and `closes_at` disagrees with the recorded lock state. */
+function dueWhere(at: SQL) {
+  return and(
+    isNull(posts.discordDeletedAt),
+    or(
+      and(lte(posts.closesAt, at), isNull(posts.discordLockedAt)),
+      and(gt(posts.closesAt, at), isNotNull(posts.discordLockedAt)),
+    ),
+  );
+}
+
 /**
  * Live posts whose lock state disagrees with `closes_at`: due and unlocked
  * ⇒ close; in the future and locked ⇒ reopen. A null `closes_at` is never
@@ -59,15 +79,7 @@ export async function dueRegistryLockChanges(
       locked: isNotNull(posts.discordLockedAt),
     })
     .from(posts)
-    .where(
-      and(
-        isNull(posts.discordDeletedAt),
-        or(
-          and(lte(posts.closesAt, at), isNull(posts.discordLockedAt)),
-          and(gt(posts.closesAt, at), isNotNull(posts.discordLockedAt)),
-        ),
-      ),
-    )
+    .where(dueWhere(at))
     .orderBy(posts.id)
     .limit(BATCH);
   return rows.map(({ locked, subjectKind, ...r }) => ({
@@ -103,7 +115,11 @@ export class EventPlanningPostsLockSweep {
   private async apply(row: RegistryLockChange, now: Date): Promise<boolean> {
     try {
       await this.gateway.setReadOnly(row.discordThreadId, row.readOnly);
-      await setPlanningPostLocked(this.db, row.postId, row.readOnly ? now : null);
+      await setPlanningPostLocked(
+        this.db,
+        row.postId,
+        row.readOnly ? now : null,
+      );
     } catch (err) {
       this.warn(row, err);
       return false;

@@ -20,10 +20,7 @@ function setup() {
 }
 
 type Handler =
-  | 'onUpdated'
-  | 'onCancelled'
-  | 'onRescheduling'
-  | 'onRescheduleCleared';
+  'onUpdated' | 'onCancelled' | 'onRescheduling' | 'onRescheduleCleared';
 
 afterEach(() => {
   jest.restoreAllMocks();
