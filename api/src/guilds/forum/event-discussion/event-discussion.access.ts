@@ -13,6 +13,8 @@ import type { HubForumActor, HubForumOwnedRow } from '../hub-forum.helpers';
 /** §12: reply without a writable signup. */
 export const FORUM_NOT_SIGNED_UP =
   'Sign up for the event to join its discussion';
+/** R7: reply to a scheduling-poll thread without a vote / match membership. */
+export const FORUM_NOT_POLL_VOTER = 'Vote on the poll to join its discussion';
 /** §12: reply (409) or edit (403) once the thread is read-only. */
 export const FORUM_THREAD_READ_ONLY = 'This discussion is read-only';
 /** §5.5: PATCH/DELETE of an event thread itself. */
@@ -117,9 +119,17 @@ export function assertNotEventThread(thread: ThreadSubjectRef): void {
 export function assertCanReply(
   canReply: boolean,
   lock: HubForumLock | null,
+  thread: ThreadSubjectRef = { eventId: null },
 ): void {
   if (lock !== null) throw new ConflictException(FORUM_THREAD_READ_ONLY);
-  if (!canReply) throw new ForbiddenException(FORUM_NOT_SIGNED_UP);
+  if (!canReply) throw new ForbiddenException(notWritableCopy(thread));
+}
+
+/** The 403 copy for a viewer who may read but not write this subject thread. */
+function notWritableCopy(thread: ThreadSubjectRef): string {
+  return (thread.matchId ?? null) !== null
+    ? FORUM_NOT_POLL_VOTER
+    : FORUM_NOT_SIGNED_UP;
 }
 
 /**
@@ -131,8 +141,9 @@ export function assertEventEditable(
   who: { userId: number; canReply: boolean },
   row: HubForumOwnedRow,
   lock: HubForumLock | null,
+  thread: ThreadSubjectRef = { eventId: null },
 ): void {
   if (row.authorId !== who.userId || row.deletedAt !== null) return;
   if (lock !== null) throw new ForbiddenException(FORUM_THREAD_READ_ONLY);
-  if (!who.canReply) throw new ForbiddenException(FORUM_NOT_SIGNED_UP);
+  if (!who.canReply) throw new ForbiddenException(notWritableCopy(thread));
 }

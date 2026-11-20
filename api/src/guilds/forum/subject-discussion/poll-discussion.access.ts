@@ -9,12 +9,13 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import type { HubForumLock } from '@raid-ledger/contract';
 import {
+  FORUM_NOT_POLL_VOTER,
   FORUM_THREAD_READ_ONLY,
   type EventThreadActor,
 } from '../event-discussion/event-discussion.access';
 
-/** R7: reply without a vote / match membership. */
-export const FORUM_NOT_POLL_VOTER = 'Vote on the poll to join its discussion';
+/** R7: reply without a vote / match membership (defined beside the event copy). */
+export { FORUM_NOT_POLL_VOTER };
 
 /** What the service resolved about the viewer for one poll thread. */
 export interface PollThreadFacts {

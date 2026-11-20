@@ -228,7 +228,7 @@ export class HubForumService {
     const { body } = parseOrThrow(CreateHubForumReplySchema, input);
     const clean = finalBody(body);
     const ctx = await this.thread(actor, guildId, threadId);
-    assertCanReply(ctx.canReply, ctx.lock);
+    assertCanReply(ctx.canReply, ctx.lock, ctx.record.thread);
     const row = await writes.insertReply(
       this.db,
       { guildId, threadId },
@@ -254,7 +254,7 @@ export class HubForumService {
     const { reply } = await this.requireReply(target);
     const now = this.now();
     const replier = { ...ctx.who, canReply: ctx.canReply };
-    assertEventEditable(replier, reply, ctx.lock);
+    assertEventEditable(replier, reply, ctx.lock, ctx.record.thread);
     assertCanEdit(ctx.who, reply, now);
     const row = await writes.updateReply(this.db, target, { body, now });
     if (!row) throw new NotFoundException('Reply not found');

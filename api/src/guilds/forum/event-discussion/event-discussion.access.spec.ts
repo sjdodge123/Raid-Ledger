@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import {
   FORUM_EVENT_THREAD_MANAGED,
+  FORUM_NOT_POLL_VOTER,
   FORUM_NOT_SIGNED_UP,
   FORUM_THREAD_READ_ONLY,
   assertCanReply,
@@ -136,14 +137,6 @@ describe('event thread refusals (§12)', () => {
       new ForbiddenException(FORUM_EVENT_THREAD_MANAGED),
     );
     expect(() => assertNotEventThread({ eventId: null })).not.toThrow();
-    for (const subject of [{ matchId: 5 }, { lineupId: 6 }]) {
-      expect(() => assertNotEventThread({ eventId: null, ...subject })).toThrow(
-        new ForbiddenException(FORUM_EVENT_THREAD_MANAGED),
-      );
-    }
-    expect(() =>
-      assertNotEventThread({ eventId: null, matchId: null, lineupId: null }),
-    ).not.toThrow();
   });
 
   it('reply: 409 read-only first (for everyone), then 403 not signed up', () => {
@@ -200,5 +193,38 @@ describe('canFor readOnly', () => {
       pin: false,
     });
     expect(canFor(who, row, { now: NOW, pinnable: false }).edit).toBe(true);
+  });
+});
+
+describe('ROK-2272 S7a — poll and lineup subject threads', () => {
+  const own = {
+    authorId: 9,
+    authorDiscordId: null,
+    createdAt: BEFORE,
+    deletedAt: null,
+  };
+  const poll = { eventId: null, matchId: 3 };
+
+  it('PATCH/DELETE of a poll or lineup thread root is 403 managed', () => {
+    for (const subject of [{ matchId: 5 }, { lineupId: 6 }]) {
+      expect(() => assertNotEventThread({ eventId: null, ...subject })).toThrow(
+        new ForbiddenException(FORUM_EVENT_THREAD_MANAGED),
+      );
+    }
+    expect(() =>
+      assertNotEventThread({ eventId: null, matchId: null, lineupId: null }),
+    ).not.toThrow();
+  });
+
+  it('a poll-thread non-voter gets the poll copy; an event thread keeps the signup copy', () => {
+    expect(() => assertCanReply(false, null, poll)).toThrow(
+      new ForbiddenException(FORUM_NOT_POLL_VOTER),
+    );
+    expect(() => assertCanReply(false, null, { eventId: 3 })).toThrow(
+      new ForbiddenException(FORUM_NOT_SIGNED_UP),
+    );
+    expect(() =>
+      assertEventEditable({ userId: 9, canReply: false }, own, null, poll),
+    ).toThrow(new ForbiddenException(FORUM_NOT_POLL_VOTER));
   });
 });
