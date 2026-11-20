@@ -25,15 +25,18 @@ import {
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
-import { isGone } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+
+// Re-exported: specs and the module import it from here.
+export { HubForumDiscordEventLockGateway };
 
 const links = schema.hubForumDiscordLinks;
 const threads = schema.hubForumThreads;
 const bindings = schema.hubForumDiscordBindings;
-const REASON = 'Raid Ledger event discussion is read-only';
 /** Posts per tick; the rest wait 5 minutes. */
 const BATCH = 50;
 
@@ -44,31 +47,6 @@ export interface LockChange {
   threadId: number;
   discordThreadId: string;
   readOnly: boolean;
-}
-
-/** Lock/archive a forum post behind a plain id (spied on by specs). */
-@Injectable()
-export class HubForumDiscordEventLockGateway {
-  constructor(private readonly client: DiscordBotClientService) {}
-
-  /** Read-only: lock then archive; reopened: unarchive then unlock. */
-  async setReadOnly(postId: string, readOnly: boolean): Promise<void> {
-    const guild = this.client.isConnected() ? this.client.getGuild() : null;
-    if (!guild) throw new Error('Discord bot is offline');
-    try {
-      const ch = await guild.channels.fetch(postId);
-      if (!ch?.isThread()) return;
-      if (readOnly) {
-        await ch.setLocked(true, REASON);
-        await ch.setArchived(true, REASON);
-      } else {
-        await ch.setArchived(false, REASON);
-        await ch.setLocked(false, REASON);
-      }
-    } catch (err) {
-      if (!isGone(err)) throw err;
-    }
-  }
 }
 
 /**
@@ -120,16 +98,48 @@ export class HubForumDiscordEventLockSweep {
     private readonly gateway: HubForumDiscordEventLockGateway,
     private readonly client: DiscordBotClientService,
     private readonly outbound: HubForumDiscordOutboundService,
+    private readonly registry: EventPlanningPostsLockSweep,
   ) {}
 
-  /** Flip every due post; returns how many changed. Offline bot → 0. */
+  /**
+   * Flip every due post — hub links, then the event-planning registry
+   * (ROK-2272 S4a); a throw in one pass never stops the other, but the
+   * first one is rethrown after both ran so the cron records a failure
+   * (review MAJOR-1). Returns how many changed. Offline bot → 0.
+   */
   async sweep(now = new Date()): Promise<number> {
     if (!this.client.isConnected()) return 0;
+    const errors: unknown[] = [];
+    const hub = await this.pass('hub', errors, () => this.sweepHub(now));
+    const reg = await this.pass('registry', errors, () =>
+      this.registry.sweep(now),
+    );
+    if (errors.length > 0) throw errors[0];
+    return hub + reg;
+  }
+
+  private async sweepHub(now: Date): Promise<number> {
     let changed = 0;
     for (const row of await this.due(now)) {
       if (await this.apply(row, now)) changed += 1;
     }
     return changed;
+  }
+
+  /** One pass; a throw is logged, collected into `errors`, counted as 0. */
+  private async pass(
+    what: string,
+    errors: unknown[],
+    fn: () => Promise<number>,
+  ): Promise<number> {
+    try {
+      return await fn();
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Event lock sweep (${what}) failed: ${why}`);
+      errors.push(err);
+      return 0;
+    }
   }
 
   /** The posts to flip this tick. */

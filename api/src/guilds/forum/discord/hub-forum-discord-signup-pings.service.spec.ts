@@ -13,6 +13,8 @@ import type { HubForumDiscordOutboundService } from './hub-forum-discord-outboun
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import type Redis from 'ioredis';
+import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
+import type { EventPlanningPostsService } from './event-planning-posts.service';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
 jest.mock('./hub-forum-discord-signup-lines.queries');
@@ -24,6 +26,7 @@ jest.mock('./hub-forum-discord-links.queries', () => ({
 const A = '100000000000000001';
 const B = '100000000000000002';
 const REF = {
+  kind: 'hub' as const,
   guildId: 7,
   threadId: 70,
   endsAt: new Date('2026-12-01T00:00:00Z'),
@@ -125,11 +128,14 @@ function setup(pinged: string[] = [], online = true) {
       Promise.resolve(ids),
     ),
   };
+  const planning = { ensureEventPost: jest.fn() };
   const svc = new HubForumDiscordSignupPings(
     {} as ForumDiscordDb,
     outbound as unknown as HubForumDiscordOutboundService,
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
+    planning as unknown as EventPlanningPostsService,
+    { reopenIfPending: jest.fn() } as unknown as EventPlanningPostsLockSweep,
   );
   return { svc, redis, outbound, gateway, set, hash, strings };
 }

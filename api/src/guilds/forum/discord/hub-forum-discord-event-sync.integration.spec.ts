@@ -225,7 +225,7 @@ function lockSpies() {
     .spyOn(app.get(DiscordBotClientService), 'isConnected')
     .mockReturnValue(true);
   const gw = app.get(HubForumDiscordEventLockGateway);
-  const set = jest.spyOn(gw, 'setReadOnly').mockResolvedValue(undefined);
+  const set = jest.spyOn(gw, 'setReadOnly').mockResolvedValue('ok');
   const sweep = app.get(HubForumDiscordEventLockSweep);
   const callsFor = (id: string) =>
     set.mock.calls.filter((c) => c[0] === id).map((c) => c[1]);

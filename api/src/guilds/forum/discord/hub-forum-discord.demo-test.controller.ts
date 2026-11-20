@@ -13,12 +13,16 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { DemoModeGuard } from '../../../admin/demo-mode.guard';
 import { AdminGuard } from '../../../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as links from './hub-forum-discord-links.queries';
+import { EventPlanningPostsService } from './event-planning-posts.service';
+import { HubForumDiscordEventLockSweep } from './hub-forum-discord-event-lock';
 import {
   HubForumDiscordSignupPings,
   type SignupPingOutcome,
 } from './hub-forum-discord-signup-pings.service';
-import { findBoundEventThread } from './hub-forum-discord-signup-pings.queries';
+import {
+  pingPostThreadId,
+  resolvePingThread,
+} from './hub-forum-discord-signup-pings.target';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { findBinding, type ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -49,6 +53,8 @@ export class HubForumDiscordDemoTestController {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordGateway,
     private readonly pings: HubForumDiscordSignupPings,
+    private readonly planning: EventPlanningPostsService,
+    private readonly lockSweep: HubForumDiscordEventLockSweep,
   ) {}
 
   @Get(':guildId/webhook-token')
@@ -66,15 +72,41 @@ export class HubForumDiscordDemoTestController {
 
   /**
    * ROK-2260 — flush one event's pending signup pings NOW instead of after
-   * the ~2 min debounce, so the companion smoke never waits it out.
+   * the ~2 min debounce, so the companion smoke never waits it out. Also
+   * reports a non-hub event's Discord-only post (ROK-2272 S4b).
    */
   @Post('events/:eventId/flush-signup-pings')
   async flushSignupPings(
     @Param('eventId', ParseIntPipe) eventId: number,
   ): Promise<SignupPingFlushProbe> {
     const outcome = await this.pings.flush(eventId);
-    const ref = await findBoundEventThread(this.db, eventId);
-    const post = ref ? await links.findThreadLink(this.db, ref.threadId) : null;
-    return { outcome, discordThreadId: post?.discordThreadId ?? null };
+    const ref = await resolvePingThread(this.db, eventId);
+    const discordThreadId = await pingPostThreadId(this.db, ref);
+    return { outcome, discordThreadId };
+  }
+
+  /**
+   * ROK-2272 S4b — re-sync a non-hub event's planning post (closes_at +
+   * title) the way a real edit's `APP_EVENT_EVENTS.UPDATED` does. The
+   * `set-event-times` fixture writes the row directly and emits nothing, and
+   * making it emit would fire every other UPDATED listener in other smokes.
+   */
+  @Post('events/:eventId/sync-planning-post')
+  async syncPlanningPost(
+    @Param('eventId', ParseIntPipe) eventId: number,
+  ): Promise<{ synced: true }> {
+    await this.planning.syncEvent(eventId);
+    return { synced: true };
+  }
+
+  /**
+   * ROK-2272 S4b — run the Core event lock sweep NOW (hub + planning posts)
+   * instead of waiting for the 5-minute cron. Always the real current time:
+   * a caller-supplied future "now" would close other runs' live posts.
+   */
+  @Post('lock-sweep')
+  async lockSweepNow(): Promise<{ changed: number }> {
+    const changed = await this.lockSweep.sweep();
+    return { changed };
   }
 }
