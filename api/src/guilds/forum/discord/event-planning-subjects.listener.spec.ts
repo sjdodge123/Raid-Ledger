@@ -76,7 +76,6 @@ describe('EventPlanningSubjectsListener', () => {
       expect(subjects.ensurePollPost).not.toHaveBeenCalled();
     },
   );
-
 });
 
 describe('EventPlanningSubjectsListener lineup emits', () => {
@@ -125,7 +124,6 @@ describe('EventPlanningSubjectsListener lineup emits', () => {
     expect(subjects.ensureLineupPost).not.toHaveBeenCalled();
     expect(subjects.syncPoll).toHaveBeenCalledWith(21);
   });
-
 });
 
 describe('EventPlanningSubjectsListener failure handling', () => {
