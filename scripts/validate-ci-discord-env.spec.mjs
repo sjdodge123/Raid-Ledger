@@ -41,7 +41,7 @@ function extractFunction(name) {
  * Returns { code, skipped, stdout } — `skipped` reflects the exported
  * SKIP_DISCORD_SMOKE_NO_BOT_ENV the real step branches on.
  */
-function runGate({ hasEnvFile, token, guildId, ciMode }) {
+function runGate({ hasEnvFile, token, guildId, ciMode, rlTarget }) {
   const root = mkdtempSync(join(tmpdir(), 'validate-ci-botenv-'));
   try {
     mkdirSync(join(root, 'tools', 'test-bot'), { recursive: true });
@@ -52,6 +52,9 @@ function runGate({ hasEnvFile, token, guildId, ciMode }) {
       `REPO_ROOT=${JSON.stringify(root)}`,
       'RED=""; YELLOW=""; NC=""',
       `ci_mode=${ciMode ? 'true' : 'false'}`,
+      rlTarget === undefined
+        ? 'unset RL_TARGET || true'
+        : `export RL_TARGET=${JSON.stringify(rlTarget)}`,
       token === undefined
         ? 'unset TEST_BOT_TOKEN || true'
         : `export TEST_BOT_TOKEN=${JSON.stringify(token)}`,
@@ -124,4 +127,44 @@ test('an incomplete env hard-fails under --ci and names what is missing', () => 
   const r = runGate({ hasEnvFile: false, token: 'a-token', ciMode: true });
   assert.equal(r.code, 1);
   assert.match(r.stdout, /TEST_GUILD_ID/);
+});
+
+// ROK-2280: on a fleet runner the credentials come from the VM's
+// /srv/rl-infra/.env (RL_TEST_BOT_TOKEN / RL_DISCORD_TEST_GUILD_ID), forwarded
+// by run-on-runner-with-heartbeat, which also exports RL_TARGET=runner. "Copy
+// tools/test-bot/.env from the main repo" is wrong advice there, so the SKIP
+// names the VM keys that are missing instead.
+test('fleet runner with no creds names both VM keys and the setup pointer', () => {
+  const r = runGate({ hasEnvFile: false, ciMode: false, rlTarget: 'runner' });
+  assert.equal(r.code, 0);
+  assert.equal(r.skipped, true);
+  assert.match(r.stdout, /Fleet runner: companion-bot credentials come from the VM/);
+  assert.match(r.stdout, /RL_TEST_BOT_TOKEN/);
+  assert.match(r.stdout, /RL_DISCORD_TEST_GUILD_ID/);
+  assert.match(r.stdout, /\/srv\/rl-infra\/\.env/);
+  assert.match(r.stdout, /rl-infra\/SETUP\.md §3\.2; takes effect on the next gate, no restart/);
+  assert.doesNotMatch(r.stdout, /Copy it from the main repo/);
+});
+
+test('fleet runner missing only the token names only RL_TEST_BOT_TOKEN', () => {
+  const r = runGate({ hasEnvFile: false, guildId: '42', ciMode: false, rlTarget: 'runner' });
+  assert.equal(r.skipped, true);
+  assert.match(r.stdout, /RL_TEST_BOT_TOKEN/);
+  assert.doesNotMatch(r.stdout, /RL_DISCORD_TEST_GUILD_ID/);
+});
+
+test('fleet runner missing only the guild names only RL_DISCORD_TEST_GUILD_ID', () => {
+  const r = runGate({ hasEnvFile: false, token: 'sentinel-tok-XYZ', ciMode: false, rlTarget: 'runner' });
+  assert.equal(r.skipped, true);
+  assert.match(r.stdout, /RL_DISCORD_TEST_GUILD_ID/);
+  assert.doesNotMatch(r.stdout, /RL_TEST_BOT_TOKEN/);
+  assert.doesNotMatch(r.stdout, /sentinel-tok-XYZ/, 'a credential value is never echoed');
+});
+
+test('laptop wording is unchanged and never mentions the VM keys', () => {
+  const r = runGate({ hasEnvFile: false, ciMode: false });
+  assert.equal(r.skipped, true);
+  assert.match(r.stdout, /No tools\/test-bot\/\.env on this checkout \(missing: TEST_BOT_TOKEN, TEST_GUILD_ID\) — skipping Discord smoke\./);
+  assert.match(r.stdout, /Copy it from the main repo \(or export TEST_BOT_TOKEN \+ TEST_GUILD_ID\)/);
+  assert.doesNotMatch(r.stdout, /RL_TEST_BOT_TOKEN|RL_DISCORD_TEST_GUILD_ID|Fleet runner/);
 });
