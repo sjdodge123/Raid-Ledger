@@ -32,6 +32,8 @@ export class EventPlanningSubjectsListener {
   private readonly logger = new Logger(EventPlanningSubjectsListener.name);
   /** Hub behaviour — read by the ownership guard's listener scan. */
   readonly hubBehaviour = 'event-planning.discord-posts';
+  /** Kinded: its handlers are lineup/poll emits, not APP_EVENT_EVENTS. */
+  readonly hubBehaviourKind = 'event-tagger';
   readonly ownerPluginId = CORE_PLUGIN_ID;
 
   constructor(
