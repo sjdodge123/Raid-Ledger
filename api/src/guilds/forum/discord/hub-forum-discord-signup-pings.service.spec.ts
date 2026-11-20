@@ -80,7 +80,13 @@ function setup(pinged: string[] = [], online = true) {
     hashes.set(k, found);
     return found;
   };
+  const strings = new Map<string, string>();
   const redis = {
+    set: jest.fn((k: string, v: string) => {
+      strings.set(k, v);
+      return Promise.resolve('OK');
+    }),
+    del: jest.fn((k: string) => Promise.resolve(strings.delete(k) ? 1 : 0)),
     smembers: jest.fn((k: string) => Promise.resolve([...at(k)])),
     sadd: jest.fn((k: string, ...ids: string[]) => {
       ids.forEach((i) => at(k).add(i));
@@ -413,5 +419,32 @@ describe('ROK-2271 HubForumDiscordSignupPings.flush — state lines', () => {
     );
     expect(t.hash(postedLinesKey(5, REF))[A]).toBeUndefined();
     expect(t.set.size).toBe(0);
+  });
+});
+
+describe('review MAJOR-1 HubForumDiscordSignupPings — reschedule resync', () => {
+  it('after a reset, tentative → signed_up posts nothing; the flag is used once; a later real change posts', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'tank')),
+    );
+    const t = setup();
+    await t.svc.flush(5);
+    // The reschedule reset flips Alice to signed_up and flags the event.
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank')),
+    );
+    await t.svc.requestResync(5);
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(1);
+    // The flag is gone: her next real change is a normal line.
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'healer')),
+    );
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenLastCalledWith(
+      'dthread',
+      expect.stringMatching(/tentative[^\n]*Tank → Healer/),
+      [],
+    );
   });
 });
