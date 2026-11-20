@@ -1,5 +1,7 @@
+import { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import type { SettingsService } from '../../../settings/settings.service';
+import { findLiveLineupThread } from '../subject-discussion/lineup-discussion.queries';
 import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
 import {
   closingOnceKey,
@@ -18,12 +20,16 @@ jest.mock('../subject-discussion/poll-discussion.queries', () => ({
   findLivePollThread: jest.fn(),
   findPollForSync: jest.fn(),
 }));
+jest.mock('../subject-discussion/lineup-discussion.queries', () => ({
+  findLiveLineupThread: jest.fn(),
+}));
 jest.mock('../../../settings/settings-bot.helpers', () => ({
   getClientUrl: jest.fn().mockResolvedValue('https://rl.example'),
 }));
 
 const findLink = jest.mocked(findThreadLink);
 const findPoll = jest.mocked(findLivePollThread);
+const findLineup = jest.mocked(findLiveLineupThread);
 
 function sentLink(over: Record<string, unknown> = {}) {
   return {
@@ -44,7 +50,9 @@ function fakeRedis() {
       store.set(key, value);
       return Promise.resolve('OK');
     }),
-    del: jest.fn((key: string) => Promise.resolve(store.delete(key) ? 1 : 0)),
+    del: jest.fn((...keys: string[]) =>
+      Promise.resolve(keys.filter((k) => store.delete(k)).length),
+    ),
   };
 }
 
@@ -105,15 +113,26 @@ describe('postClosingLine (ROK-2272 S8)', () => {
     ]);
   });
 
-  it('releases the key when the send fails so a retry can post', async () => {
+  it('a failed send releases the key and warns once, naming thread and line', async () => {
     const { svc, gateway, redis } = build();
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     findLink.mockResolvedValue(sentLink() as never);
     gateway.mention.mockRejectedValueOnce(new Error('discord down'));
-    await expect(svc.postClosingLine(5, 'bye', 'k')).rejects.toThrow(
-      'discord down',
+    await expect(svc.postClosingLine(5, 'bye', 'cancelled')).resolves.toBe(
+      'send-failed',
     );
-    expect(redis.store.has(closingOnceKey(5, 'k'))).toBe(false);
-    await expect(svc.postClosingLine(5, 'bye', 'k')).resolves.toBe('posted');
+    expect(redis.store.has(closingOnceKey(5, 'cancelled'))).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [msg] = warn.mock.calls[0] ?? [];
+    expect(msg).toEqual(expect.stringContaining('thread #5'));
+    expect(msg).toEqual(expect.stringContaining('cancelled'));
+    expect(msg).toEqual(expect.stringContaining('discord down'));
+    await expect(svc.postClosingLine(5, 'bye', 'cancelled')).resolves.toBe(
+      'posted',
+    );
+    warn.mockRestore();
   });
 });
 
@@ -152,6 +171,36 @@ describe('subject entry points (ROK-2272 S8)', () => {
     expect(gateway.mention.mock.calls).toEqual([
       ['d-thread', 'Poll cancelled — Nobody free', []],
     ]);
+  });
+
+  it('cancel → reopen → cancel posts two lines', async () => {
+    const { svc, gateway } = build();
+    findPoll.mockResolvedValue(thread);
+    findLink.mockResolvedValue(sentLink() as never);
+    await svc.pollCancelled(4, null);
+    await svc.pollReopened(4);
+    await svc.pollCancelled(4, 'Again');
+    expect(gateway.mention.mock.calls).toEqual([
+      ['d-thread', 'Poll cancelled', []],
+      ['d-thread', 'Poll cancelled — Again', []],
+    ]);
+  });
+
+  it('a lineup reopen clears its decided and aborted keys only', async () => {
+    const { svc, redis } = build();
+    findLineup.mockResolvedValue(thread);
+    for (const k of ['decided', 'aborted', 'locked-in:9']) {
+      redis.store.set(closingOnceKey(8, k), '1');
+    }
+    await svc.lineupReopened(2);
+    expect([...redis.store.keys()]).toEqual([closingOnceKey(8, 'locked-in:9')]);
+  });
+
+  it('a reopen with no live thread clears nothing', async () => {
+    const { svc, redis } = build();
+    findPoll.mockResolvedValue(null);
+    await svc.pollReopened(4);
+    expect(redis.del).not.toHaveBeenCalled();
   });
 
   it('an eventless lock-in posts nothing and reads nothing', async () => {

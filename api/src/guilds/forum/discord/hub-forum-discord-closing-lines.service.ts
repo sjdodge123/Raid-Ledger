@@ -3,7 +3,9 @@
  * a poll's first vote creates the post; a lock-in, cancel, decide or abort
  * posts ONE closing bot line into the post that already exists (Discord
  * only — the RL page shows the end state itself). Never creates a post just
- * to close it, never throws (the listener logs), once per subject end.
+ * to close it, once per subject end. A reopen forgets the end's once-key so
+ * the next end posts again. Best-effort: a failed send is logged and the
+ * line is lost (nothing re-emits an end); it never throws into the listener.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
@@ -35,9 +37,13 @@ export function closingOnceKey(threadId: number, onceKey: string): string {
   return `hfd:closing:${threadId}:${onceKey}`;
 }
 
+/** Once-keys that a reopen clears (lock-in keys on its event id instead). */
+export const POLL_END_KEYS = ['cancelled'] as const;
+export const LINEUP_END_KEYS = ['decided', 'aborted'] as const;
+
 /** Why a closing line did or did not go out. */
 export type ClosingOutcome =
-  'posted' | 'no-post' | 'closed-post' | 'offline' | 'already';
+  'posted' | 'no-post' | 'closed-post' | 'offline' | 'already' | 'send-failed';
 
 @Injectable()
 export class HubForumDiscordClosingLines {
@@ -95,6 +101,27 @@ export class HubForumDiscordClosingLines {
     await this.close(thread.id, { kind: 'lineup-aborted' }, 'aborted');
   }
 
+  /** A poll (re-)entered scheduling: its next cancel posts a line again. */
+  async pollReopened(matchId: number): Promise<void> {
+    const thread = await findLivePollThread(this.db, matchId);
+    if (!thread) return;
+    await this.forget(thread.id, POLL_END_KEYS);
+  }
+
+  /** A lineup left decided/archived for an open status: next end posts. */
+  async lineupReopened(lineupId: number): Promise<void> {
+    const thread = await findLiveLineupThread(this.db, lineupId);
+    if (!thread) return;
+    await this.forget(thread.id, LINEUP_END_KEYS);
+  }
+
+  private async forget(
+    threadId: number,
+    onceKeys: readonly string[],
+  ): Promise<void> {
+    await this.redis.del(...onceKeys.map((k) => closingOnceKey(threadId, k)));
+  }
+
   private async close(
     threadId: number,
     line: ClosingLine,
@@ -108,8 +135,9 @@ export class HubForumDiscordClosingLines {
   /**
    * One bot line into the thread's existing Discord post. Skips a thread
    * with no post, an unsent / deleted / locked one, or an offline bot; only
-   * the caller that claims the once-key posts, and a failed send releases
-   * it so a later emit can retry.
+   * the caller that claims the once-key posts. A failed send releases the
+   * key, logs one warning naming the thread and the line, and reports
+   * `send-failed`: best-effort, nothing retries it.
    */
   async postClosingLine(
     threadId: number,
@@ -131,13 +159,27 @@ export class HubForumDiscordClosingLines {
       'NX',
     );
     if (claimed === null) return 'already';
+    return this.send(link.discordThreadId, text, threadId, onceKey);
+  }
+
+  /** Send a claimed line; a failure releases the key and warns once. */
+  private async send(
+    discordThreadId: string,
+    text: string,
+    threadId: number,
+    onceKey: string,
+  ): Promise<ClosingOutcome> {
     try {
-      await this.gateway.mention(link.discordThreadId, text, []);
+      await this.gateway.mention(discordThreadId, text, []);
+      return 'posted';
     } catch (err) {
-      await this.redis.del(key);
-      throw err;
+      await this.redis.del(closingOnceKey(threadId, onceKey));
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `Closing line ${onceKey} for thread #${threadId} lost (not retried): ${why}`,
+      );
+      return 'send-failed';
     }
-    return 'posted';
   }
 
   /** The linked event's title; the poll's own title when unreadable. */
