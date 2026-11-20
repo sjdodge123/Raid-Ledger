@@ -141,20 +141,12 @@ export class HubForumDiscordSignupPings {
     eventId: number,
     keys: FlushKeys,
   ): Promise<SignupPingOutcome> {
-    // Flag read before AND after the signups (Codex P2-5): a reset that
-    // starts or lands in between makes this a resync pass too.
-    const before = await this.redis.get(lineResyncKey(eventId));
-    const members = await loadSignupLineStates(this.db, eventId);
-    const after = await this.redis.get(lineResyncKey(eventId));
+    const { members, flags } = await this.readMembers(eventId);
     const pinged = await this.redis.smembers(keys.pinged);
     let posted = await this.postedOrSeed(keys.lines, pinged, members);
-    if (before !== null || after !== null) {
+    if (flags.some((f) => f !== null)) {
       posted = await this.resync(keys.lines, posted, members);
-      // Only a flag stable across the read is used up; a moved one is
-      // left for the next flush, whose read surely sees that reset.
-      if (before !== null && before === after) {
-        await this.takeLanded(eventId, before);
-      }
+      await this.takeIfStable(eventId, flags);
     }
     const plan = planLineFlush(pinged, posted, members);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
@@ -170,6 +162,33 @@ export class HubForumDiscordSignupPings {
       plan.remove,
     );
     return removedAll ? 'pinged' : 'incomplete';
+  }
+
+  /**
+   * The signups, with the resync flag read before AND after them (Codex
+   * P2-5): a reset that starts or lands in between makes the flush a
+   * resync pass too.
+   */
+  private async readMembers(eventId: number): Promise<{
+    members: Map<string, SignupLineMember>;
+    flags: [string | null, string | null];
+  }> {
+    const before = await this.redis.get(lineResyncKey(eventId));
+    const members = await loadSignupLineStates(this.db, eventId);
+    const after = await this.redis.get(lineResyncKey(eventId));
+    return { members, flags: [before, after] };
+  }
+
+  /**
+   * Only a flag stable across the signup read is used up; a moved one is
+   * left for the next flush, whose read surely sees that reset.
+   */
+  private async takeIfStable(
+    eventId: number,
+    [before, after]: [string | null, string | null],
+  ): Promise<void> {
+    if (before === null || before !== after) return;
+    await this.takeLanded(eventId, before);
   }
 
   /** The last-posted states; seeds them (posting nothing) on first sight. */

@@ -109,17 +109,25 @@ export async function updateSeriesEvents(
           .update(schema.events)
           .set(updateData)
           .where(eq(schema.events.id, evt.id));
-        if (timeDelta) {
-          // ROK-1269: pass acting userId so the series editor stays confirmed.
-          await resetSignupConfirmations(tx, evt.id, userId, emitter, {
-            signalledByCaller: true,
-          });
-        }
+        // ROK-1269: pass acting userId so the series editor stays confirmed.
+        if (timeDelta) await resetInSeriesTx(tx, evt.id, userId, emitter);
       }
     }),
   );
 
   return targets.map((e) => e.id);
+}
+
+/** The reset write inside a series transaction; signalled by the caller. */
+function resetInSeriesTx(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  userId: number,
+  emitter: ResetSignalEmitter,
+): Promise<void> {
+  return resetSignupConfirmations(tx, eventId, userId, emitter, {
+    signalledByCaller: true,
+  });
 }
 
 /**
