@@ -17,7 +17,7 @@ import { farOffTimes, fail, flushPings, setup, teardown, TIMEOUT_MS, type Made }
 /** Well under the 2-minute debounce, so a line seen inside it was urgent. */
 const URGENT_WINDOW_MS = 45_000;
 const MMO_SLOTS = { type: "mmo", tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 };
-const BOT_NAME = "SmokeTestBot";
+export const BOT_NAME = "SmokeTestBot";
 
 interface SeededMember {
   userId: number;
@@ -25,7 +25,7 @@ interface SeededMember {
 }
 
 /** The seed-guild cast's `member`: a user with a character in the hub game. */
-function seededMember(users: unknown): SeededMember {
+export function seededMember(users: unknown): SeededMember {
   const member: unknown = typeof users === "object" && users !== null ? Reflect.get(users, "member") : null;
   const userId: unknown = typeof member === "object" && member !== null ? Reflect.get(member, "userId") : null;
   const characterId: unknown = typeof member === "object" && member !== null ? Reflect.get(member, "characterId") : null;
@@ -53,7 +53,7 @@ async function expectLine(post: ThreadChannel, match: (line: string) => boolean,
 }
 
 /** Put the companion bot's Discord link back on the DM recipient. */
-async function relinkDmRecipient(ctx: TestContext): Promise<void> {
+export async function relinkDmRecipient(ctx: TestContext): Promise<void> {
   await linkDiscord(ctx.api, ctx.dmRecipientUserId, ctx.testBotDiscordId, BOT_NAME).catch((err: unknown) => {
     console.warn(`  re-link of the DM recipient failed: ${String(err)}`);
   });
