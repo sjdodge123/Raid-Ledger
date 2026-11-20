@@ -535,7 +535,8 @@ describe('review MAJOR-1 — a reschedule reset posts nothing misleading', () =>
       });
     const redis = ctx.posts.testApp.redisMock.client;
     await waitFor(async () => {
-      expect(await redis.get(lineResyncKey(s.eventId))).toBe('1');
+      // Fix round 2: the LANDED flag (pending → landed:<token>).
+      expect(await redis.get(lineResyncKey(s.eventId))).toMatch(/^landed:/);
     }, 10_000);
     // The reset really flipped both (the false-line precondition).
     expect(await statusOf(s.eventId, 'signed')).toBe('signed_up');
