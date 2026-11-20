@@ -58,6 +58,29 @@ export function findTagId(
 }
 
 /**
+ * ROK-2272 §3.3 — the id of kind tag `name` (Event/Poll/Lineup), skipping
+ * any tag a hub binding owns. A hub named "Poll" before the reservation
+ * keeps its "Poll" tag (no retroactive rename); a kind post then goes
+ * untagged rather than wearing that hub's tag. `planTagCreates` still sees
+ * the name as taken, so no duplicate-named tag is attempted.
+ *
+ * @param existing - The forum's tags.
+ * @param name - The kind tag name.
+ * @param hubTagIds - Tag ids bound to hubs on this forum (`bindings.tagId`).
+ */
+export function findKindTagId(
+  existing: readonly ForumTag[],
+  name: string,
+  hubTagIds: readonly (string | null)[],
+): string | null {
+  const owned = new Set(hubTagIds);
+  return findTagId(
+    existing.filter((t) => !owned.has(t.id)),
+    name,
+  );
+}
+
+/**
  * ROK-2258 ruling 2 — which wanted tags to create: a name already on the
  * forum (any case) is reused; what does not fit under Discord's 20-tag cap
  * is skipped (the caller logs it) rather than failing the bind.

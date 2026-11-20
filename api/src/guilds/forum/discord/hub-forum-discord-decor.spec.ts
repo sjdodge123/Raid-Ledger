@@ -9,6 +9,7 @@ import {
   POLL_TAG_NAME,
   RESERVED_TAG_NAMES,
   isReservedTagName,
+  findKindTagId,
   findTagId,
   planTagCreates,
   postTagIds,
@@ -134,5 +135,20 @@ describe('ROK-2272 §3.3 Poll + Lineup kind tags', () => {
       create: [],
       skipped: ['Poll'],
     });
+  });
+});
+
+describe('ROK-2272 §3.3 findKindTagId (review MINOR 3)', () => {
+  const tags = [
+    { id: 'hub-poll', name: 'Poll' },
+    { id: 'lineup', name: 'Lineup' },
+  ];
+
+  it('never returns a tag a hub named "Poll" owns', () => {
+    expect(findKindTagId(tags, POLL_TAG_NAME, ['hub-poll', null])).toBeNull();
+  });
+
+  it('returns the kind tag when no hub owns it', () => {
+    expect(findKindTagId(tags, LINEUP_TAG_NAME, ['hub-poll'])).toBe('lineup');
   });
 });
