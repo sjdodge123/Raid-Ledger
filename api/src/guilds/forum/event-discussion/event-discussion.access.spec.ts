@@ -136,6 +136,14 @@ describe('event thread refusals (§12)', () => {
       new ForbiddenException(FORUM_EVENT_THREAD_MANAGED),
     );
     expect(() => assertNotEventThread({ eventId: null })).not.toThrow();
+    for (const subject of [{ matchId: 5 }, { lineupId: 6 }]) {
+      expect(() => assertNotEventThread({ eventId: null, ...subject })).toThrow(
+        new ForbiddenException(FORUM_EVENT_THREAD_MANAGED),
+      );
+    }
+    expect(() =>
+      assertNotEventThread({ eventId: null, matchId: null, lineupId: null }),
+    ).not.toThrow();
   });
 
   it('reply: 409 read-only first (for everyone), then 403 not signed up', () => {

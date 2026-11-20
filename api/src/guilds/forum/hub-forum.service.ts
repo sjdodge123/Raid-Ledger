@@ -44,6 +44,7 @@ import {
   assertCanReply,
   assertEventEditable,
   assertNotEventThread,
+  isSubjectThread,
 } from './event-discussion/event-discussion.access';
 import {
   forumThreadContext,
@@ -313,9 +314,9 @@ export class HubForumService {
     const id = record.thread.id;
     const page = await listReplies(this.db, id, HUB_FORUM_PAGE_MAX, after);
     const now = this.now();
-    const managed = record.thread.eventId !== null;
+    const managed = isSubjectThread(record.thread);
     const base = canFor(ctx.who, record.thread, { now, pinnable: true });
-    // D6/§5.5: the lifecycle owns an event thread's root — nobody edits or removes it.
+    // D6/§5.5: a subject's lifecycle owns its thread root — nobody edits/removes it.
     const can = managed ? { ...base, edit: false, delete: false } : base;
     const replies = page.records.map((r) => this.replyView(ctx, r, now));
     const live = record.thread.deletedAt === null;

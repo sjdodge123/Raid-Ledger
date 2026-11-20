@@ -12,7 +12,10 @@ import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { link, newHub } from '../../posts/hub-posts.test-fixtures';
-import { FORUM_THREAD_READ_ONLY } from '../event-discussion/event-discussion.access';
+import {
+  FORUM_EVENT_THREAD_MANAGED,
+  FORUM_THREAD_READ_ONLY,
+} from '../event-discussion/event-discussion.access';
 import {
   as,
   bootDiscussion,
@@ -117,6 +120,18 @@ async function card(matchId: number, who: Actor): Promise<SubjectDiscussion> {
 const replyAs = (matchId: number, who: Actor) =>
   as(ctx, who, 'post', `${route(matchId)}/replies`, { body: 'hi' });
 
+/** The hub-route path of the poll's live thread (create it with a GET first). */
+async function hubThreadPath(matchId: number): Promise<string> {
+  const [t] = nonEmpty(
+    await db()
+      .select()
+      .from(schema.hubForumThreads)
+      .where(eq(schema.hubForumThreads.matchId, matchId)),
+    'poll thread',
+  );
+  return `/guilds/${t.guildId}/forum/${t.id}`;
+}
+
 describe('scheduling-poll discussion access (R7, R10)', () => {
   it('a hub member who voted reads and replies; the GET lazily creates the thread', async () => {
     const matchId = await hubPoll();
@@ -195,4 +210,24 @@ describe('scheduling-poll discussion refusals (R7, §3.7)', () => {
       expect(outcome(await replyAs(matchId, 'signed'))).toEqual(notFound);
     }
   });
+});
+
+describe('scheduling-poll thread through the hub forum routes (§5.5, R7)', () => {
+  it.each<Actor>(['admin', 'officerA'])(
+    '%s (creator / hub officer) cannot PATCH or DELETE the root (403 managed)',
+    async (who) => {
+      const matchId = await hubPoll();
+      await card(matchId, 'signed');
+      const path = await hubThreadPath(matchId);
+      const managed = { status: 403, message: FORUM_EVENT_THREAD_MANAGED };
+      const patch = await as(ctx, who, 'patch', path, { body: 'x' });
+      expect(outcome(patch)).toEqual(managed);
+      expect(outcome(await as(ctx, who, 'delete', path))).toEqual(managed);
+      const still = await db()
+        .select()
+        .from(schema.hubForumThreads)
+        .where(eq(schema.hubForumThreads.matchId, matchId));
+      expect(still.map((t) => t.deletedAt)).toEqual([null]);
+    },
+  );
 });

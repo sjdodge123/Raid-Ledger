@@ -86,9 +86,25 @@ export function eventThreadLock(
   return null;
 }
 
-/** §5.5: the thread itself is lifecycle-owned (nobody edits or removes it). */
-export function assertNotEventThread(thread: { eventId: number | null }): void {
-  if (thread.eventId !== null) {
+/** The subject columns of a thread row (event, scheduling poll, lineup). */
+export interface ThreadSubjectRef {
+  eventId: number | null;
+  matchId?: number | null;
+  lineupId?: number | null;
+}
+
+/** A thread owned by a subject's lifecycle (event, poll or lineup). */
+export function isSubjectThread(thread: ThreadSubjectRef): boolean {
+  return (
+    thread.eventId !== null ||
+    (thread.matchId ?? null) !== null ||
+    (thread.lineupId ?? null) !== null
+  );
+}
+
+/** §5.5: a subject thread is lifecycle-owned (nobody edits or removes it). */
+export function assertNotEventThread(thread: ThreadSubjectRef): void {
+  if (isSubjectThread(thread)) {
     throw new ForbiddenException(FORUM_EVENT_THREAD_MANAGED);
   }
 }
