@@ -11,6 +11,12 @@ import {
   cancelSeriesEvents,
 } from './event-series.helpers';
 
+/** ROK-2271: the confirmation-reset signal's emitter. */
+const RESET_EMITTER = {
+  emit: jest.fn(),
+  emitAsync: jest.fn().mockResolvedValue([]),
+};
+
 const GROUP_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const CREATOR_ID = 1;
 
@@ -56,6 +62,7 @@ describe('updateSeriesEvents', () => {
       false,
       'this',
       { title: 'Updated' },
+      RESET_EMITTER,
     );
 
     expect(mockDb.update).toHaveBeenCalled();
@@ -79,6 +86,7 @@ describe('updateSeriesEvents', () => {
       false,
       'all',
       { title: 'Updated All' },
+      RESET_EMITTER,
     );
 
     // Updates must remain per-event because buildUpdateForTarget
@@ -100,10 +108,18 @@ describe('updateSeriesEvents', () => {
     mockDb.orderBy.mockResolvedValueOnce(siblings);
 
     // Shift anchor 1 hour later: 18:00 → 19:00
-    await updateSeriesEvents(mockDb as never, 1, CREATOR_ID, false, 'all', {
-      title: 'Shifted',
-      startTime: '2026-03-10T19:00:00Z',
-    });
+    await updateSeriesEvents(
+      mockDb as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      {
+        title: 'Shifted',
+        startTime: '2026-03-10T19:00:00Z',
+      },
+      RESET_EMITTER,
+    );
 
     // Filter to update-data .set() calls (exclude signup-reset calls)
     const updateCalls = mockDb.set.mock.calls.filter(
@@ -134,9 +150,17 @@ describe('updateSeriesEvents', () => {
     mockDb.orderBy.mockResolvedValueOnce(siblings);
 
     // Title-only update: no startTime/endTime in DTO
-    await updateSeriesEvents(mockDb as never, 1, CREATOR_ID, false, 'all', {
-      title: 'No Time Change',
-    });
+    await updateSeriesEvents(
+      mockDb as never,
+      1,
+      CREATOR_ID,
+      false,
+      'all',
+      {
+        title: 'No Time Change',
+      },
+      RESET_EMITTER,
+    );
 
     const setCalls = mockDb.set.mock.calls;
     expect(setCalls).toHaveLength(2);
@@ -162,6 +186,7 @@ describe('updateSeriesEvents', () => {
       false,
       'this_and_following',
       { startTime: '2026-03-17T17:30:00Z' },
+      RESET_EMITTER,
     );
 
     // Filter to update-data .set() calls (exclude signup-reset calls)
@@ -186,9 +211,17 @@ describe('updateSeriesEvents', () => {
     mockDb.limit.mockResolvedValueOnce([anchor]);
 
     await expect(
-      updateSeriesEvents(mockDb as never, 1, 999, false, 'this', {
-        title: 'Nope',
-      }),
+      updateSeriesEvents(
+        mockDb as never,
+        1,
+        999,
+        false,
+        'this',
+        {
+          title: 'Nope',
+        },
+        RESET_EMITTER,
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 });

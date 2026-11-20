@@ -61,6 +61,7 @@ export class EventSeriesService {
       isAdmin,
       scope,
       dto,
+      this.eventEmitter,
     );
     this.logger.log(`Series updated: ${id} scope=${scope} by user ${userId}`);
     // ROK-2271: a time change reset confirmations (updateSeriesEvents).

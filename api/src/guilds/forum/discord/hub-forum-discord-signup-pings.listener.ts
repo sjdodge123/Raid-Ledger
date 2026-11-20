@@ -4,6 +4,7 @@ import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import {
   APP_EVENT_EVENTS,
   SIGNUP_CONFIRMATIONS_RESET,
+  SIGNUP_CONFIRMATIONS_RESETTING,
   SIGNUP_EVENTS,
   type SignupEventPayload,
 } from '../../../discord-bot/discord-bot.constants';
@@ -52,6 +53,28 @@ export class HubForumDiscordSignupPingListener {
   @OnEvent(APP_EVENT_EVENTS.UPDATED, { async: true })
   async onEventUpdated(payload: { eventId: number }): Promise<void> {
     await this.rearm(payload);
+  }
+
+  /**
+   * ROK-2271 fix round 2: awaited by `resetSignupConfirmations` BEFORE its
+   * write, so the flag is up before any flush can read the reset. Not
+   * `async: true` on purpose: Nest's wrapper is not an AsyncFunction, so an
+   * async listener would not be awaited by `emitAsync`.
+   */
+  @OnEvent(SIGNUP_CONFIRMATIONS_RESETTING)
+  async onConfirmationsResetting(payload: {
+    eventId: number;
+    aborted?: boolean;
+  }): Promise<void> {
+    if (!Number.isInteger(payload?.eventId)) return;
+    try {
+      if (payload.aborted === true)
+        await this.pings.abortReset(payload.eventId);
+      else await this.pings.markResetPending(payload.eventId);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Signup line reset flag for ${payload.eventId}: ${why}`);
+    }
   }
 
   /**

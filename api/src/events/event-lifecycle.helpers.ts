@@ -13,11 +13,14 @@ import type { CancelEventDto, RescheduleEventDto } from '@raid-ledger/contract';
 import type { NotificationService } from '../notifications/notification.service';
 import type { EventVoicePayload } from '../notifications/notification-voice.helpers';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import {
-  APP_EVENT_EVENTS,
-  SIGNUP_CONFIRMATIONS_RESET,
-} from '../discord-bot/discord-bot.constants';
+import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
+import {
+  signalResetAborted,
+  signalResetLanded,
+  signalResetStarting,
+  type ResetSignalEmitter,
+} from './signup-confirmations-reset.signal';
 
 type EventSelect = typeof schema.events.$inferSelect;
 
@@ -141,7 +144,27 @@ export async function cancelEvent(
 export async function resetSignupConfirmations(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-  reschedulerId: number | null = null,
+  reschedulerId: number | null,
+  emitter: ResetSignalEmitter,
+  opts: { landedByCaller?: boolean } = {},
+): Promise<void> {
+  // ROK-2271 fix round 2: flag first, so no flush reads the reset unflagged.
+  await signalResetStarting(emitter, eventId);
+  try {
+    await writeConfirmationReset(db, eventId, reschedulerId);
+  } catch (err: unknown) {
+    await signalResetAborted(emitter, eventId);
+    throw err;
+  }
+  // A transaction's caller signals after its commit instead.
+  if (!opts.landedByCaller) signalResetLanded(emitter, eventId);
+}
+
+/** The reset write itself: reminders re-armed, signups back to pending. */
+async function writeConfirmationReset(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  reschedulerId: number | null,
 ): Promise<void> {
   await db
     .delete(schema.eventRemindersSent)
@@ -158,17 +181,6 @@ export async function resetSignupConfirmations(
     .update(schema.eventSignups)
     .set({ confirmationStatus: 'pending', status: 'signed_up' })
     .where(and(...conditions));
-}
-
-/**
- * ROK-2271 review MAJOR-1: tell the event thread's signup lines that the
- * statuses moved by `resetSignupConfirmations`, not by the members.
- */
-export function emitConfirmationsReset(
-  emitter: EventEmitter2,
-  eventId: number,
-): void {
-  emitter.emit(SIGNUP_CONFIRMATIONS_RESET, { eventId });
 }
 
 /** Formats a date for Discord notification display using native timestamps. */
@@ -278,6 +290,7 @@ export async function rescheduleEvent(
   userId: number,
   isAdmin: boolean,
   dto: RescheduleEventDto,
+  emitter: ResetSignalEmitter,
 ): Promise<void> {
   const existing = await findExistingOrThrow(db, eventId);
   assertOwnerOrAdmin(existing, userId, isAdmin, 'reschedule');
@@ -286,7 +299,7 @@ export async function rescheduleEvent(
     .update(schema.events)
     .set({ duration: [newStart, new Date(dto.endTime)], updatedAt: new Date() })
     .where(eq(schema.events.id, eventId));
-  await resetSignupConfirmations(db, eventId, userId);
+  await resetSignupConfirmations(db, eventId, userId, emitter);
   await notifyReschedule(
     db,
     notificationService,

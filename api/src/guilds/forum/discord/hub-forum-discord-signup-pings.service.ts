@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -6,8 +7,11 @@ import * as links from './hub-forum-discord-links.queries';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import {
+  DEL_IF_EQUALS,
   lineMessages,
   lineResyncKey,
+  RESYNC_PENDING,
+  resyncLandedValue,
   parsePosted,
   planLineFlush,
   postedLinesKey,
@@ -91,11 +95,41 @@ export class HubForumDiscordSignupPings {
   }
 
   /**
-   * Review MAJOR-1: a reschedule reset confirmations. Flag the event; its
-   * next flush re-syncs the posted statuses silently (see `takeResync`).
+   * Fix round 2: set BEFORE the reset write. While pending, every flush
+   * re-syncs silently but keeps the flag (the reset may not have landed).
+   */
+  async markResetPending(eventId: number): Promise<void> {
+    await this.redis.set(
+      lineResyncKey(eventId),
+      RESYNC_PENDING,
+      'PX',
+      RESYNC_TTL_MS,
+    );
+  }
+
+  /** The reset write threw: drop its pending flag (never a landed one). */
+  async abortReset(eventId: number): Promise<void> {
+    await this.redis.eval(
+      DEL_IF_EQUALS,
+      1,
+      lineResyncKey(eventId),
+      RESYNC_PENDING,
+    );
+  }
+
+  /**
+   * Review MAJOR-1: the reset landed. The next flush re-syncs the posted
+   * statuses silently and takes the flag (see `takeLanded`).
    */
   async requestResync(eventId: number): Promise<void> {
-    await this.redis.set(lineResyncKey(eventId), '1', 'PX', RESYNC_TTL_MS);
+    const value = resyncLandedValue(randomUUID());
+    await this.redis.set(lineResyncKey(eventId), value, 'PX', RESYNC_TTL_MS);
+  }
+
+  /** A landed flag is used once; a newer reset's flag is left alone. */
+  private async takeLanded(eventId: number, flag: string): Promise<void> {
+    if (flag === RESYNC_PENDING) return;
+    await this.redis.eval(DEL_IF_EQUALS, 1, lineResyncKey(eventId), flag);
   }
 
   /**
@@ -107,12 +141,15 @@ export class HubForumDiscordSignupPings {
     eventId: number,
     keys: FlushKeys,
   ): Promise<SignupPingOutcome> {
-    // The flag is taken BEFORE the read, so the read sees the reset.
-    const resync = (await this.redis.del(lineResyncKey(eventId))) > 0;
+    // Read BEFORE the signups: a landed flag means the read sees the reset.
+    const flag = await this.redis.get(lineResyncKey(eventId));
     const members = await loadSignupLineStates(this.db, eventId);
     const pinged = await this.redis.smembers(keys.pinged);
     let posted = await this.postedOrSeed(keys.lines, pinged, members);
-    if (resync) posted = await this.resync(keys.lines, posted, members);
+    if (flag !== null) {
+      posted = await this.resync(keys.lines, posted, members);
+      await this.takeLanded(eventId, flag);
+    }
     const plan = planLineFlush(pinged, posted, members);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';

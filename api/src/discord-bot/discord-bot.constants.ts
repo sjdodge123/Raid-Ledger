@@ -146,6 +146,13 @@ export const SIGNUP_EVENTS = {
  */
 export const SIGNUP_CONFIRMATIONS_RESET = 'signup.confirmations_reset';
 
+/**
+ * ROK-2271 fix round 2 — awaited (`emitAsync`) BEFORE the reset write, so
+ * the thread flags it before any flush can read the reset statuses.
+ * Payload `{ eventId, aborted?: true }`; `aborted` = the write threw.
+ */
+export const SIGNUP_CONFIRMATIONS_RESETTING = 'signup.confirmations_resetting';
+
 export interface SignupEventPayload {
   eventId: number;
   userId?: number | null;

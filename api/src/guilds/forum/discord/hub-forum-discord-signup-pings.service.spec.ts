@@ -2,6 +2,7 @@ import * as q from './hub-forum-discord-signup-pings.queries';
 import * as lq from './hub-forum-discord-signup-lines.queries';
 import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
 import {
+  lineResyncKey,
   postedLinesKey,
   SEEDED_FIELD,
 } from './hub-forum-discord-signup-lines.flush';
@@ -87,6 +88,11 @@ function setup(pinged: string[] = [], online = true) {
       return Promise.resolve('OK');
     }),
     del: jest.fn((k: string) => Promise.resolve(strings.delete(k) ? 1 : 0)),
+    get: jest.fn((k: string) => Promise.resolve(strings.get(k) ?? null)),
+    // DEL_IF_EQUALS: delete KEYS[1] only while it holds ARGV[1].
+    eval: jest.fn((_lua: string, _n: number, k: string, v: string) =>
+      Promise.resolve(strings.get(k) === v && strings.delete(k) ? 1 : 0),
+    ),
     smembers: jest.fn((k: string) => Promise.resolve([...at(k)])),
     sadd: jest.fn((k: string, ...ids: string[]) => {
       ids.forEach((i) => at(k).add(i));
@@ -125,7 +131,7 @@ function setup(pinged: string[] = [], online = true) {
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
   );
-  return { svc, redis, outbound, gateway, set, hash };
+  return { svc, redis, outbound, gateway, set, hash, strings };
 }
 
 const mockedQ = jest.mocked(q);
@@ -446,5 +452,42 @@ describe('review MAJOR-1 HubForumDiscordSignupPings — reschedule resync', () =
       expect.stringMatching(/tentative[^\n]*Tank → Healer/),
       [],
     );
+  });
+});
+
+describe('ROK-2271 fix round 2 — the flag is up before the reset write', () => {
+  it('flag set, flush, reset lands, flush ⇒ still no line; LANDED then takes the flag', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'tank')),
+    );
+    const t = setup();
+    await t.svc.flush(5);
+    await t.svc.markResetPending(5);
+    // A flush racing the write still reads the old status: nothing to post.
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    // The write lands; a flush before the LANDED signal keeps quiet too.
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank')),
+    );
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    await t.svc.requestResync(5);
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(1);
+    expect(t.strings.has(lineResyncKey(5))).toBe(false);
+  });
+
+  it('an aborted reset drops the pending flag: a later real change posts', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'tank')),
+    );
+    const t = setup();
+    await t.svc.flush(5);
+    await t.svc.markResetPending(5);
+    await t.svc.abortReset(5);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank')),
+    );
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(2);
   });
 });

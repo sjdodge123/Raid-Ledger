@@ -19,6 +19,7 @@ import {
   resetSignupConfirmations,
 } from './event-lifecycle.helpers';
 import { buildUpdateData } from './event-update.helpers';
+import type { ResetSignalEmitter } from './signup-confirmations-reset.signal';
 
 type EventSelect = typeof schema.events.$inferSelect;
 
@@ -84,6 +85,7 @@ export async function updateSeriesEvents(
   isAdmin: boolean,
   scope: SeriesScope,
   dto: UpdateEventDto,
+  emitter: ResetSignalEmitter,
 ): Promise<number[]> {
   const anchor = await findExistingOrThrow(db, id);
   assertOwnerOrAdmin(anchor, userId, isAdmin, 'update');
@@ -101,7 +103,10 @@ export async function updateSeriesEvents(
         .where(eq(schema.events.id, evt.id));
       if (timeDelta) {
         // ROK-1269: pass acting userId so the series editor stays confirmed.
-        await resetSignupConfirmations(tx, evt.id, userId);
+        // The service signals LANDED once the transaction commits.
+        await resetSignupConfirmations(tx, evt.id, userId, emitter, {
+          landedByCaller: true,
+        });
       }
     }
   });

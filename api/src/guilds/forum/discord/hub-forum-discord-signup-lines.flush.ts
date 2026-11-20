@@ -21,6 +21,18 @@ export function lineResyncKey(eventId: number): string {
   return `hub-forum:signup-lines-resync:${eventId}`;
 }
 
+/** The flag while a reset's write is in flight (fix round 2). */
+export const RESYNC_PENDING = 'pending';
+
+/** A landed reset's flag: unique, so a newer reset's flag is never taken. */
+export function resyncLandedValue(nonce: string): string {
+  return `landed:${nonce}`;
+}
+
+/** Deletes KEYS[1] only while it still holds ARGV[1] (atomic). */
+export const DEL_IF_EQUALS =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0";
+
 /** Discord's message content cap. */
 const CONTENT_MAX = 2000;
 /** Discord's `allowedMentions.users` cap. */
