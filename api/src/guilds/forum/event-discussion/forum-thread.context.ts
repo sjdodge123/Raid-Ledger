@@ -23,6 +23,7 @@ import {
   type EventThreadFacts,
 } from './event-discussion.access';
 import { isEventSignup } from './event-discussion.queries';
+import { resolvePollThread } from '../subject-discussion/poll-discussion.context';
 
 /** The thread, the viewer's forum rights and the event-thread extras. */
 export interface ForumThreadContext {
@@ -74,12 +75,16 @@ export async function forumThreadContext(
     : await resolveForumActor(deps.access, actor, target.guildId);
   const record = await findThread(deps.db, target.guildId, target.threadId);
   if (!record) throw new NotFoundException('Thread not found');
-  if (record.thread.eventId === null) {
+  const { eventId, matchId } = record.thread;
+  if (eventId === null && matchId === null) {
     const who =
       member ?? (await resolveForumActor(deps.access, actor, target.guildId));
     return { record, who, canReply: true, lock: null };
   }
-  const { who, lock } = await resolveEventThread(deps, actor, record);
+  const { who, lock } =
+    eventId === null
+      ? await resolvePollThread(deps, actor, record)
+      : await resolveEventThread(deps, actor, record);
   if (who.canRead) return { record, who, canReply: who.canReply, lock };
   if (!(await isOwnReply(deps.db, target, actor.id))) {
     throw new ForbiddenException(FORUM_NOT_MEMBER);

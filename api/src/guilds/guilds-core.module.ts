@@ -34,6 +34,8 @@ import { HubForumService } from './forum/hub-forum.service';
 import { HubForumGuestClaimListener } from './forum/hub-forum-guest-claim.listener';
 import { EventDiscussionListener } from './forum/event-discussion/event-discussion.listener';
 import { PollDiscussionListener } from './forum/subject-discussion/poll-discussion.listener';
+import { PollDiscussionController } from './forum/subject-discussion/poll-discussion.controller';
+import { PollDiscussionService } from './forum/subject-discussion/poll-discussion.service';
 import { EventDiscussionController } from './forum/event-discussion/event-discussion.controller';
 import { EventDiscussionService } from './forum/event-discussion/event-discussion.service';
 import { HubSessionNoteController } from './session-note/hub-session-note.controller';
@@ -74,6 +76,7 @@ import {
     HubPostsController,
     HubForumController,
     EventDiscussionController,
+    PollDiscussionController,
     HubSessionNoteController,
     HubClaimController,
   ],
@@ -100,6 +103,7 @@ import {
     HubForumGuestClaimListener,
     EventDiscussionListener,
     PollDiscussionListener,
+    PollDiscussionService,
     EventDiscussionService,
     HubSessionNoteService,
     CommunityHubKindAdapter,
