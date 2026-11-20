@@ -77,10 +77,16 @@ const ROOT_AUTHOR: OutboundAuthor = {
 };
 
 /** A thread row as far as its Discord post title/body go. */
-interface ThreadText {
-  eventId: number | null;
+interface ThreadText extends SubjectColumns {
+  id: number;
   title: string;
   body: string;
+}
+
+/** A Discord post's name and starter content. */
+interface PostView {
+  name: string;
+  content: string;
 }
 
 export class EventPostOutbound {
@@ -99,11 +105,17 @@ export class EventPostOutbound {
     return subjectOf(thread) !== null;
   }
 
-  /** The post name + starter content of any thread (plain or event). */
-  async postView(
-    thread: ThreadText,
-    url: string,
-  ): Promise<{ name: string; content: string }> {
+  /**
+   * The post name + starter content of any thread. A poll / lineup thread
+   * renders exactly as `send` created it (S8 review MAJOR-1: a reopen's
+   * `thread.updated` re-drive is then a no-op rename, absolute links kept).
+   */
+  async postView(thread: ThreadText, url: string): Promise<PostView> {
+    const kind = subjectOf(thread)?.kind;
+    if (kind === 'poll' || kind === 'lineup') {
+      const src = await findSubjectPostSource(this.deps.db, thread.id);
+      if (src) return this.subjectView(src, url, await this.deps.clientUrl());
+    }
     const dated =
       thread.eventId === null ? null : await this.title(thread.eventId);
     if (dated === null) {
@@ -162,18 +174,14 @@ export class EventPostOutbound {
     src: SubjectPostSource,
   ): Promise<void> {
     const { db, gateway } = this.deps;
-    const zone = await this.deps.timeZone();
     const clientUrl = await this.deps.clientUrl();
     const url = forumThreadUrl(clientUrl, link.guildId, {
       threadId: link.threadId,
     });
-    const title =
-      src.kind === 'event'
-        ? subjectPostTitle('event', src.eventTitle, src.start, zone)
-        : subjectPostTitle(src.kind, src.title);
+    const view = await this.subjectView(src, url, clientUrl);
     const post = {
-      title,
-      content: truncateForDiscord(eventPostBody(src.body, clientUrl), url),
+      title: view.name,
+      content: view.content,
       tagIds: to.tagId ? [to.tagId] : [],
       kind: src.kind, // ROK-2258 / S8: the gateway adds the forum's kind tag
     };
@@ -182,5 +190,20 @@ export class EventPostOutbound {
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
     });
+  }
+
+  /** What a subject post looks like: `send` and `postView` share it. */
+  private async subjectView(
+    src: SubjectPostSource,
+    url: string,
+    clientUrl: string,
+  ): Promise<PostView> {
+    const zone = await this.deps.timeZone();
+    const name =
+      src.kind === 'event'
+        ? subjectPostTitle('event', src.eventTitle, src.start, zone)
+        : subjectPostTitle(src.kind, src.title);
+    const content = truncateForDiscord(eventPostBody(src.body, clientUrl), url);
+    return { name, content };
   }
 }

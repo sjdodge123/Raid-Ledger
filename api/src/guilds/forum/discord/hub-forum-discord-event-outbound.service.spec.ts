@@ -32,6 +32,8 @@ const TO = {
   tagId: 'tag-1',
 };
 const REF = { guildId: 7, threadId: 3 };
+/** A plain thread row (no subject) for `postView`. */
+const PLAIN = { id: 3, eventId: null, matchId: null, lineupId: null };
 
 function linkRow(over: Partial<ForumLink> = {}): ForumLink {
   return {
@@ -252,19 +254,86 @@ describe('EventPostOutbound.postView', () => {
   it('a plain thread keeps its own title', async () => {
     const { svc } = setup();
     const view = await svc.postView(
-      { eventId: null, title: 'Raid night', body: 'Bring flasks' },
+      { ...PLAIN, title: 'Raid night', body: 'Bring flasks' },
       'https://rl.example/hubs/7?thread=3#forum',
     );
     expect(view).toEqual({ name: 'Raid night', content: 'Bring flasks' });
+    expect(mocked.source).not.toHaveBeenCalled();
   });
 
   it('an event thread uses the dated title', async () => {
     const { svc } = setup();
     mocked.heading.mockResolvedValue({ title: 'Onyxia', start: START });
     const view = await svc.postView(
-      { eventId: 9, title: 'Onyxia', body: 'x' },
+      { ...PLAIN, eventId: 9, title: 'Onyxia', body: 'x' },
       'https://rl.example/hubs/7?thread=3#forum',
     );
     expect(view.name).toBe('Onyxia — Sat 22 Nov');
+    expect(mocked.source).not.toHaveBeenCalled();
+  });
+});
+
+/** S8 review MAJOR-1: a poll / lineup re-drive renders as `send` posted it. */
+describe('EventPostOutbound.postView — poll and lineup threads', () => {
+  const URL3 = 'https://rl.example/hubs/7?thread=3#forum';
+  const pollBody =
+    'Scheduling poll for **Onyxia**. [Open the poll](/community-lineup/12/schedule/34)';
+
+  function schedule(
+    kind: 'poll' | 'lineup',
+    title: string,
+    body: string,
+  ): subjectReads.SubjectPostSource {
+    const id = kind === 'poll' ? 34 : 12;
+    return {
+      kind,
+      id,
+      title,
+      body,
+      writeClosesAt: null,
+      eventDetachedAt: null,
+    };
+  }
+
+  it('a poll thread keeps " — Poll" and an absolute link, not the S7 thread title', async () => {
+    const { svc } = setup();
+    mocked.source.mockResolvedValue(schedule('poll', 'Onyxia', pollBody));
+    const view = await svc.postView(
+      { ...PLAIN, matchId: 34, title: 'Scheduling: Onyxia', body: pollBody },
+      URL3,
+    );
+    expect(mocked.source).toHaveBeenCalledWith({}, 3);
+    expect(view).toEqual({
+      name: 'Onyxia — Poll',
+      content:
+        'Scheduling poll for **Onyxia**. [Open the poll](https://rl.example/community-lineup/12/schedule/34)',
+    });
+  });
+
+  it('a long poll title is cut at a word boundary and keeps the suffix', async () => {
+    const { svc } = setup();
+    const long = Array.from({ length: 30 }, (_, i) => `word${i}`).join(' ');
+    mocked.source.mockResolvedValue(schedule('poll', long, pollBody));
+    const view = await svc.postView(
+      { ...PLAIN, matchId: 34, title: long, body: pollBody },
+      URL3,
+    );
+    expect(view.name.length).toBeLessThanOrEqual(100);
+    expect(view.name).toMatch(/^word0 .*word\d+ — Poll$/);
+  });
+
+  it('a lineup thread is named "<title> — Lineup" with an absolute link', async () => {
+    const { svc } = setup();
+    const body = 'Lineup **Week 47**. [Open the lineup](/community-lineup/12)';
+    mocked.source.mockResolvedValue(schedule('lineup', 'Week 47', body));
+    const view = await svc.postView(
+      { ...PLAIN, lineupId: 12, title: 'Week 47', body },
+      URL3,
+    );
+    expect(view).toEqual({
+      name: 'Week 47 — Lineup',
+      content:
+        'Lineup **Week 47**. [Open the lineup](https://rl.example/community-lineup/12)',
+    });
   });
 });
