@@ -7,9 +7,19 @@
  */
 import type { Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
-import { findLiveLineupThread } from '../subject-discussion/lineup-discussion.queries';
-import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
+import {
+  findLineupForSync,
+  findLiveLineupThread,
+} from '../subject-discussion/lineup-discussion.queries';
+import {
+  findLivePollThread,
+  findPollForSync,
+} from '../subject-discussion/poll-discussion.queries';
 import { findLivePlanningPost } from './event-planning-posts.queries';
+import {
+  lineupOnPlanningPath,
+  pollOnPlanningPath,
+} from './event-planning-posts.subjects.rules';
 import {
   findThreadLink,
   isCurrentBindingLink,
@@ -56,7 +66,11 @@ export interface ClosingSendDeps {
   logger: Logger;
 }
 
-/** The live hub thread first; else the live registry post; else null. */
+/**
+ * The live hub thread first; else the live registry post — unless the
+ * subject has since gone private or hub-tagged (R6: no line into a post
+ * that should no longer exist); else null.
+ */
 export async function resolveClosingTarget(
   db: ForumDiscordDb,
   kind: 'poll' | 'lineup',
@@ -68,13 +82,27 @@ export async function resolveClosingTarget(
       : await findLiveLineupThread(db, id);
   if (thread) return { kind: 'hub', threadId: thread.id };
   const post = await findLivePlanningPost(db, kind, id);
-  if (!post) return null;
+  if (!post || !(await stillOnPlanningPath(db, kind, id))) return null;
   return {
     kind: 'planning',
     postId: post.id,
     discordThreadId: post.discordThreadId,
     closed: post.discordDeletedAt !== null || post.discordLockedAt !== null,
   };
+}
+
+/** A vanished subject row keeps its closing line (S10 behaviour). */
+async function stillOnPlanningPath(
+  db: ForumDiscordDb,
+  kind: 'poll' | 'lineup',
+  id: number,
+): Promise<boolean> {
+  if (kind === 'poll') {
+    const poll = await findPollForSync(db, id);
+    return !poll || pollOnPlanningPath(poll);
+  }
+  const lineup = await findLineupForSync(db, id);
+  return !lineup || lineupOnPlanningPath(lineup);
 }
 
 /** The Redis once-key of a target. */

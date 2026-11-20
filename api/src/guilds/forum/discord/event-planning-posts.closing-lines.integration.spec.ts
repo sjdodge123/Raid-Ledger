@@ -147,6 +147,23 @@ async function planningRows(kind: 'poll' | 'lineup', subjectId: number) {
     .where(and(eq(p.subjectKind, kind), eq(p.subjectId, subjectId)));
 }
 
+/** Flip the poll's storage lineup visibility directly (R6 private flip). */
+async function setLineupVisibilityOfMatch(
+  matchId: number,
+  visibility: 'public' | 'private',
+): Promise<void> {
+  const m = schema.communityLineupMatches;
+  const [row] = nonEmpty(
+    await db()
+      .select({ lineupId: m.lineupId })
+      .from(m)
+      .where(eq(m.id, matchId)),
+    'match',
+  );
+  const l = schema.communityLineups;
+  await db().update(l).set({ visibility }).where(eq(l.id, row.lineupId));
+}
+
 const lines = (): unknown[] => mention.mock.calls.map((c: unknown[]) => c[1]);
 
 beforeAll(async () => {
@@ -197,6 +214,17 @@ describe('ROK-2272 S10 closing lines on non-hub poll posts', () => {
     ]);
   });
 
+  it('a poll made private after its post exists gets no closing line (MINOR-2)', async () => {
+    const matchId = await newPoll();
+    expect(await subjects.ensurePollPost(matchId)).not.toBeNull();
+    await setLineupVisibilityOfMatch(matchId, 'private');
+    await closing.pollCancelled(matchId, 'Nobody free');
+    expect(mention).not.toHaveBeenCalled();
+    await setLineupVisibilityOfMatch(matchId, 'public');
+    await closing.pollCancelled(matchId, 'Nobody free');
+    expect(mention).toHaveBeenCalledTimes(1);
+  });
+
   it('no registry post: no line, and no post is created to close it', async () => {
     const matchId = await newPoll();
     await closing.pollCancelled(matchId, null);
@@ -210,6 +238,22 @@ describe('ROK-2272 S10 closing lines on non-hub poll posts', () => {
 });
 
 describe('ROK-2272 S10 closing lines on non-hub lineup posts', () => {
+  it('a lineup made private after its post exists gets no decided line (MINOR-2)', async () => {
+    const lineupId = await newLineup(false, 'voting');
+    expect(await subjects.ensureLineupPost(lineupId)).not.toBeNull();
+    const l = schema.communityLineups;
+    await db()
+      .update(l)
+      .set({
+        status: 'decided',
+        visibility: 'private',
+        decidedGameId: ctx.posts.testApp.seed.game.id,
+      })
+      .where(eq(l.id, lineupId));
+    await closing.lineupDecided(lineupId);
+    expect(mention).not.toHaveBeenCalled();
+  });
+
   it('decided posts the `🏆 Decided:` line once', async () => {
     const lineupId = await newLineup(false, 'voting');
     const ref = await subjects.ensureLineupPost(lineupId);
