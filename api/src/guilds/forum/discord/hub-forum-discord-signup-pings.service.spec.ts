@@ -1,13 +1,20 @@
 import * as q from './hub-forum-discord-signup-pings.queries';
+import * as lq from './hub-forum-discord-signup-lines.queries';
+import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
+import {
+  postedLinesKey,
+  SEEDED_FIELD,
+} from './hub-forum-discord-signup-lines.flush';
 import * as links from './hub-forum-discord-links.queries';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
-import { MENTION_PREFIX, pingedSetKey } from './hub-forum-discord-signup-pings';
+import { pingedSetKey } from './hub-forum-discord-signup-pings';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import type Redis from 'ioredis';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
+jest.mock('./hub-forum-discord-signup-lines.queries');
 jest.mock('./hub-forum-discord-links.queries', () => ({
   ...jest.requireActual('./hub-forum-discord-links.queries'),
   findThreadLink: jest.fn(),
@@ -39,11 +46,24 @@ const POST: links.ForumLink = {
   createdAt: new Date(0),
 };
 
-const row = (status: string, id: string) => ({
-  status,
-  userDiscordId: id,
-  discordUserId: null,
+const row = (status: string, id: string, role: string | null = null) => ({
+  discordId: id,
+  displayName: id === A ? 'Alice' : 'Bob',
+  state: {
+    status,
+    role,
+    bench: false,
+    character: null,
+    late: false,
+    lateMinutes: null,
+    roachedHoursBefore: null,
+  },
 });
+
+/** The loader's map for these members. */
+function rows(...members: SignupLineMember[]) {
+  return new Map(members.map((m) => [m.discordId, m]));
+}
 
 function setup(pinged: string[] = [], online = true) {
   // Key-aware, so a set scoped to another post is a different set (P2-4).
@@ -52,6 +72,12 @@ function setup(pinged: string[] = [], online = true) {
   const at = (k: string): Set<string> => {
     const found = sets.get(k) ?? new Set<string>();
     sets.set(k, found);
+    return found;
+  };
+  const hashes = new Map<string, Record<string, string>>();
+  const hash = (k: string): Record<string, string> => {
+    const found = hashes.get(k) ?? {};
+    hashes.set(k, found);
     return found;
   };
   const redis = {
@@ -65,6 +91,15 @@ function setup(pinged: string[] = [], online = true) {
       return Promise.resolve(ids.length);
     }),
     pexpireat: jest.fn(() => Promise.resolve(1)),
+    hgetall: jest.fn((k: string) => Promise.resolve({ ...hash(k) })),
+    hset: jest.fn((k: string, fields: Record<string, string>) => {
+      Object.assign(hash(k), fields);
+      return Promise.resolve(1);
+    }),
+    hdel: jest.fn((k: string, ...ids: string[]) => {
+      ids.forEach((i) => delete hash(k)[i]);
+      return Promise.resolve(ids.length);
+    }),
   };
   const outbound = {
     ensureEventPost: jest.fn((): Promise<links.ForumLink | null> =>
@@ -84,16 +119,17 @@ function setup(pinged: string[] = [], online = true) {
     gateway as unknown as HubForumDiscordOutboundGateway,
     redis as unknown as Redis,
   );
-  return { svc, redis, outbound, gateway, set };
+  return { svc, redis, outbound, gateway, set, hash };
 }
 
 const mockedQ = jest.mocked(q);
+const mockedLq = jest.mocked(lq);
 const mockedLinks = jest.mocked(links);
 
 beforeEach(() => {
   jest.resetAllMocks();
   mockedQ.findBoundEventThread.mockResolvedValue(REF);
-  mockedQ.listSignupPingRows.mockResolvedValue([]);
+  mockedLq.loadSignupLineStates.mockResolvedValue(new Map());
   mockedLinks.findThreadLink.mockResolvedValue(POST);
 });
 
@@ -107,10 +143,9 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
   });
 
   it('first signups create the post and get ONE roll-up mention, then are remembered', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([
-      row('signed_up', A),
-      row('tentative', B),
-    ]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A), row('tentative', B)),
+    );
     const t = setup();
     expect(await t.svc.flush(5)).toBe('pinged');
     expect(t.outbound.ensureEventPost).toHaveBeenCalledWith({
@@ -121,7 +156,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
     expect(t.gateway.mention).toHaveBeenCalledTimes(1);
     expect(t.gateway.mention).toHaveBeenCalledWith(
       'dthread',
-      `${MENTION_PREFIX} <@${A}> <@${B}>`,
+      expect.stringMatching(new RegExp(`<@${A}>[^\\n]*\\n.*<@${B}>`)),
       [A, B],
     );
     expect([...t.set]).toEqual([A, B]);
@@ -130,21 +165,20 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
   });
 
   it('never pings someone twice', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([
-      row('signed_up', A),
-      row('signed_up', B),
-    ]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A), row('signed_up', B)),
+    );
     const t = setup([A]);
     await t.svc.flush(5);
     expect(t.gateway.mention).toHaveBeenCalledWith(
       'dthread',
-      `${MENTION_PREFIX} <@${B}>`,
+      expect.stringContaining(`<@${B}>`),
       [B],
     );
   });
 
   it('does nothing when everyone was already pinged', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup([A]);
     expect(await t.svc.flush(5)).toBe('unchanged');
     expect(t.outbound.ensureEventPost).not.toHaveBeenCalled();
@@ -154,10 +188,9 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush', () => {
 
 describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () => {
   it('a cancel is removed from the post silently and forgotten (a re-signup pings again)', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([
-      row('signed_up', A),
-      row('declined', B),
-    ]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A), row('declined', B)),
+    );
     const t = setup([A, B]);
     expect(await t.svc.flush(5)).toBe('pinged');
     expect(t.gateway.mention).not.toHaveBeenCalled();
@@ -176,7 +209,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
   });
 
   it('waits (pings nobody, remembers nobody) while the bot is offline', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup([], false);
     expect(await t.svc.flush(5)).toBe('offline');
     expect(t.gateway.mention).not.toHaveBeenCalled();
@@ -184,7 +217,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
   });
 
   it('pings nobody when the thread is read-only (no post) or its post is locked', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup();
     t.outbound.ensureEventPost.mockResolvedValueOnce(null);
     expect(await t.svc.flush(5)).toBe('closed');
@@ -198,7 +231,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
   });
 
   it('reports pending while the post is claimed but not sent yet', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup();
     t.outbound.ensureEventPost.mockResolvedValueOnce({
       ...POST,
@@ -211,7 +244,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — removals and waits', () 
 
 describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () => {
   it('M1/P2-2: a failed removal is kept and reported incomplete, so the job retries it', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('declined', B)));
     const t = setup([B]);
     t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
     // Codex P2-2: retryable, so the job is retried with backoff.
@@ -223,10 +256,9 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
   });
 
   it('r2-2: the retry after an incomplete removal never pings the same signup twice', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([
-      row('signed_up', A),
-      row('declined', B),
-    ]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A), row('declined', B)),
+    );
     const t = setup([B]);
     t.gateway.removeThreadMembers.mockResolvedValueOnce([]);
     expect(await t.svc.flush(5)).toBe('incomplete');
@@ -236,7 +268,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
   });
 
   it('m3: a removal alone goes through the binding/stale gate, never a raw link read', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('declined', B)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('declined', B)));
     const t = setup([B]);
     t.outbound.ensureEventPost.mockResolvedValueOnce(null);
     expect(await t.svc.flush(5)).toBe('closed');
@@ -251,7 +283,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
 
   it('m4: a cancelled event pings nobody (and creates no post)', async () => {
     mockedQ.findBoundEventThread.mockResolvedValue({ ...REF, cancelled: true });
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup();
     expect(await t.svc.flush(5)).toBe('unchanged');
     expect(t.outbound.ensureEventPost).not.toHaveBeenCalled();
@@ -260,7 +292,7 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
   });
 
   it('m2: an unchanged flush still moves the pinged set expiry to the event end + grace', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup([A]);
     expect(await t.svc.flush(5)).toBe('unchanged');
     expect(t.redis.pexpireat).toHaveBeenCalledWith(
@@ -272,16 +304,114 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — review r1 guards', () =>
 
 describe('ROK-2260 HubForumDiscordSignupPings.flush — Codex P2', () => {
   it('P2-4: after a retag to another hub, players pinged into the old post are pinged into the new one', async () => {
-    mockedQ.listSignupPingRows.mockResolvedValue([row('signed_up', A)]);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
     const t = setup([A]); // already pinged into hub 7's post
     const moved = { ...REF, guildId: 8, threadId: 80 };
     mockedQ.findBoundEventThread.mockResolvedValue(moved);
     expect(await t.svc.flush(5)).toBe('pinged');
     expect(t.gateway.mention).toHaveBeenCalledWith(
       'dthread',
-      `${MENTION_PREFIX} <@${A}>`,
+      expect.stringContaining(`<@${A}>`),
       [A],
     );
     expect(t.redis.sadd).toHaveBeenCalledWith(pingedSetKey(5, moved), A);
+  });
+});
+
+describe('ROK-2271 HubForumDiscordSignupPings.flush — state lines', () => {
+  it('a first signup posts a line with its role that pings, then records the posted state', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank')),
+    );
+    const t = setup();
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledWith(
+      'dthread',
+      expect.stringMatching(new RegExp(`<@${A}> signed up — Tank`)),
+      [A],
+    );
+    const stored = t.hash(postedLinesKey(5, REF));
+    expect(stored[SEEDED_FIELD]).toBe('1');
+    expect(JSON.parse(stored[A] ?? '{}')).toMatchObject({
+      name: 'Alice',
+      state: { status: 'signed_up', role: 'tank' },
+    });
+  });
+
+  it('tentative → confirmed posts one line WITHOUT a mention; no change posts nothing', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('tentative', A)));
+    const t = setup();
+    await t.svc.flush(5);
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenLastCalledWith(
+      'dthread',
+      expect.stringContaining('Alice is confirmed (was tentative)'),
+      [],
+    );
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.gateway.mention).toHaveBeenCalledTimes(2);
+  });
+
+  it('two changes in one window combine into ONE line', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('tentative', A, 'tank')),
+    );
+    const t = setup();
+    await t.svc.flush(5);
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'healer')),
+    );
+    await t.svc.flush(5);
+    // One line (no newline) carrying both changes.
+    expect(t.gateway.mention).toHaveBeenNthCalledWith(
+      2,
+      'dthread',
+      expect.stringMatching(
+        /^[^\n]*is confirmed \(was tentative\)[^\n]*Tank → Healer[^\n]*$/,
+      ),
+      [],
+    );
+  });
+
+  it('deploy-time seeding: a pinged thread with no posted-state hash posts nothing and is seeded', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank'), row('tentative', B)),
+    );
+    const t = setup([A, B]);
+    expect(await t.svc.flush(5)).toBe('unchanged');
+    expect(t.gateway.mention).not.toHaveBeenCalled();
+    const stored = t.hash(postedLinesKey(5, REF));
+    expect(Object.keys(stored).sort()).toEqual([A, B, SEEDED_FIELD].sort());
+    // After seeding, a real change is posted (without a ping).
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank'), row('signed_up', B)),
+    );
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledWith(
+      'dthread',
+      expect.stringContaining('Bob is confirmed'),
+      [],
+    );
+  });
+
+  it('a leaver is named without a ping, removed from the post, and forgotten', async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(rows(row('signed_up', A)));
+    const t = setup();
+    await t.svc.flush(5);
+    mockedLq.loadSignupLineStates.mockResolvedValue(new Map());
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenLastCalledWith(
+      'dthread',
+      expect.stringContaining("Alice can't make it"),
+      [],
+    );
+    expect(t.gateway.removeThreadMembers).toHaveBeenCalledWith(
+      'dthread',
+      [A],
+      expect.any(Function),
+    );
+    expect(t.hash(postedLinesKey(5, REF))[A]).toBeUndefined();
+    expect(t.set.size).toBe(0);
   });
 });
