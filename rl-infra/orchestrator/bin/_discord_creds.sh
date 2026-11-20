@@ -10,9 +10,15 @@
 # the Discord tier gets them; everything else fails closed.
 #
 # Sets DISCORD_CREDS_FLAGS (array) for the caller to splice into docker exec.
+#
+# When the tier is wanted but a VM key is missing, the missing key NAMES (never
+# a value) go to the runner as RL_DISCORD_CREDS_MISSING, so validate-ci.sh can
+# tell "set this VM key" from "this kind of run never gets creds" (no marker).
 
 # shellcheck disable=SC2034 # read by the sourcing wrapper.
 DISCORD_CREDS_FLAGS=()
+# An inherited marker must never reach the runner on a run that did not set it.
+unset RL_DISCORD_CREDS_MISSING
 
 # discord_creds::tier_wanted "$@" — 0 when the wrapped argv runs validate-ci.sh
 # with args that can reach the Discord smoke tier. Exclusions win over
@@ -44,9 +50,11 @@ _discord_creds::trim() {
 
 # discord_creds::flags — exports TEST_BOT_TOKEN / TEST_GUILD_ID in THIS process
 # and fills DISCORD_CREDS_FLAGS with `-e NAME` pairs. A missing key is named on
-# stdout (never a value or its length) and NEITHER var is forwarded.
+# stdout (never a value or its length), NEITHER var is forwarded, and the names
+# go to the runner as RL_DISCORD_CREDS_MISSING instead.
 discord_creds::flags() {
     DISCORD_CREDS_FLAGS=()
+    unset RL_DISCORD_CREDS_MISSING
     local token guild missing=""
     token=$(_discord_creds::trim "${RL_TEST_BOT_TOKEN:-}")
     guild=$(_discord_creds::trim "${RL_DISCORD_TEST_GUILD_ID:-}")
@@ -54,6 +62,9 @@ discord_creds::flags() {
     [[ -n "$guild" ]] || missing="${missing:+$missing, }RL_DISCORD_TEST_GUILD_ID"
     if [[ -n "$missing" ]]; then
         echo "[discord-creds] $missing unset in /srv/rl-infra/.env — Discord smoke will SKIP (rl-infra/SETUP.md §3.2)"
+        export RL_DISCORD_CREDS_MISSING="$missing"
+        # shellcheck disable=SC2034 # read by the sourcing wrapper.
+        DISCORD_CREDS_FLAGS=(-e RL_DISCORD_CREDS_MISSING)
         return 0
     fi
     export TEST_BOT_TOKEN="$token" TEST_GUILD_ID="$guild"
