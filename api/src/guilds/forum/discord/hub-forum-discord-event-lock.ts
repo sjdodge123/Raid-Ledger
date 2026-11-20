@@ -21,6 +21,7 @@ import {
   not,
   or,
   sql,
+  type SQL,
 } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -50,6 +51,27 @@ export interface LockChange {
   readOnly: boolean;
 }
 
+/** A thread with a subject (event, poll or lineup — ROK-2272 S8). */
+const HAS_SUBJECT = or(
+  isNotNull(threads.eventId),
+  isNotNull(threads.matchId),
+  isNotNull(threads.lineupId),
+);
+
+/** The RL thread is read-only at `now` (closed or detached). */
+function readOnlyAt(now: Date) {
+  const at = sql`${now.toISOString()}::timestamptz`;
+  return sql<boolean>`(${threads.eventDetachedAt} IS NOT NULL OR COALESCE(${threads.writeClosesAt} <= ${at}, false))`;
+}
+
+/** The recorded Discord lock state differs from the RL read-only state. */
+function disagrees(readOnly: SQL<boolean>) {
+  return or(
+    and(readOnly, isNull(links.discordLockedAt)),
+    and(not(readOnly), isNotNull(links.discordLockedAt)),
+  );
+}
+
 /**
  * Linked, sent, undeleted subject-thread posts (event, poll or lineup —
  * ROK-2272 S8) whose lock state must flip —
@@ -60,8 +82,7 @@ export async function dueLockChanges(
   db: ForumDiscordDb,
   now: Date,
 ): Promise<LockChange[]> {
-  const at = sql`${now.toISOString()}::timestamptz`;
-  const readOnly = sql<boolean>`(${threads.eventDetachedAt} IS NOT NULL OR COALESCE(${threads.writeClosesAt} <= ${at}, false))`;
+  const readOnly = readOnlyAt(now);
   return db
     .select({
       linkId: links.id,
@@ -77,17 +98,10 @@ export async function dueLockChanges(
       and(
         eq(links.kind, 'thread'),
         gte(links.createdAt, bindings.boundAt),
-        or(
-          isNotNull(threads.eventId),
-          isNotNull(threads.matchId),
-          isNotNull(threads.lineupId),
-        ),
+        HAS_SUBJECT,
         isNull(links.discordDeletedAt),
         not(like(links.discordThreadId, `${UNSENT_PREFIX}%`)),
-        or(
-          and(readOnly, isNull(links.discordLockedAt)),
-          and(not(readOnly), isNotNull(links.discordLockedAt)),
-        ),
+        disagrees(readOnly),
       ),
     )
     .orderBy(links.id)

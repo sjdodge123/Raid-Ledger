@@ -19,6 +19,22 @@ const logger = new Logger('PollDiscussionDeadline');
 /** Candidates per tick; the rest wait for the next one. */
 export const POLL_DEADLINE_BATCH = 50;
 
+const t = schema.hubForumThreads;
+const m = schema.communityLineupMatches;
+const l = schema.communityLineups;
+
+/** `pollEndedAt` as SQL: locked in / archived, or an event-free poll expired. */
+function pollEndedBy(now: Date) {
+  const at = sql`${now.toISOString()}::timestamptz`;
+  return or(
+    inArray(m.status, ['scheduled', 'archived']),
+    and(
+      isNull(m.linkedEventId),
+      or(eq(l.status, 'archived'), sql`${l.phaseDeadline} <= ${at}`),
+    ),
+  );
+}
+
 /**
  * Match ids of live, still-open poll threads (attached, no close deadline
  * yet) whose poll has ended by `pollEndedAt`'s reading: the match is locked
@@ -30,10 +46,6 @@ export async function findExpiredOpenPollMatchIds(
   now: Date,
   limit: number = POLL_DEADLINE_BATCH,
 ): Promise<number[]> {
-  const t = schema.hubForumThreads;
-  const m = schema.communityLineupMatches;
-  const l = schema.communityLineups;
-  const at = sql`${now.toISOString()}::timestamptz`;
   const rows = await db
     .select({ matchId: m.id })
     .from(t)
@@ -44,13 +56,7 @@ export async function findExpiredOpenPollMatchIds(
         isNotNull(t.matchId),
         isNull(t.eventDetachedAt),
         isNull(t.writeClosesAt),
-        or(
-          inArray(m.status, ['scheduled', 'archived']),
-          and(
-            isNull(m.linkedEventId),
-            or(eq(l.status, 'archived'), sql`${l.phaseDeadline} <= ${at}`),
-          ),
-        ),
+        pollEndedBy(now),
       ),
     )
     .orderBy(t.id)
