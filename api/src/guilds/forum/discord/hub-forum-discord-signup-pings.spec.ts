@@ -95,4 +95,16 @@ describe('ROK-2260 signup pings — debounce keying', () => {
       pingedSetKey(42, { guildId: 7, threadId: 71 }),
     );
   });
+
+  it('keys a non-hub event per registry post (ROK-2272 S4b)', () => {
+    expect(pingedSetKey(42, { planningPostId: 9 })).toBe(
+      'hub-forum:signup-pings:42:planning:9',
+    );
+    expect(pingedSetKey(42, { planningPostId: null })).toBe(
+      'hub-forum:signup-pings:42:planning:new',
+    );
+    expect(pingedSetKey(42, { planningPostId: 9 })).not.toBe(
+      pingedSetKey(42, { planningPostId: 10 }),
+    );
+  });
 });
