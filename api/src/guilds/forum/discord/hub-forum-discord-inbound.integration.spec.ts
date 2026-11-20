@@ -294,27 +294,27 @@ describe('ROK-2208 inbound Discord → RL', () => {
   });
 });
 
-describe('ROK-2272 S3: event-planning registry posts stay on Discord', () => {
-  /** Register a Discord-only post in the forum bound at `channelId`. */
-  async function registryPost(channelId: string): Promise<InboundThread> {
-    const f = schema.hubForumDiscordForums;
-    const [forum] = nonEmpty(
-      await ctx.testApp.db
-        .select({ id: f.id })
-        .from(f)
-        .where(eq(f.channelId, channelId)),
-      'forum',
-    );
-    const thread = post(channelId, { name: 'Pizza night — Poll' });
-    await ctx.testApp.db.insert(schema.eventPlanningPosts).values({
-      subjectKind: 'poll',
-      subjectId: 1,
-      forumId: forum.id,
-      discordThreadId: thread.id,
-    });
-    return thread;
-  }
+/** Register a Discord-only post in the forum bound at `channelId`. */
+async function registryPost(channelId: string): Promise<InboundThread> {
+  const f = schema.hubForumDiscordForums;
+  const [forum] = nonEmpty(
+    await ctx.testApp.db
+      .select({ id: f.id })
+      .from(f)
+      .where(eq(f.channelId, channelId)),
+    'forum',
+  );
+  const thread = post(channelId, { name: 'Pizza night — Poll' });
+  await ctx.testApp.db.insert(schema.eventPlanningPosts).values({
+    subjectKind: 'poll',
+    subjectId: 1,
+    forumId: forum.id,
+    discordThreadId: thread.id,
+  });
+  return thread;
+}
 
+describe('ROK-2272 S3: event-planning registry posts stay on Discord', () => {
   it('single-hub forum + registry post ⇒ not imported, no notice', async () => {
     const { g, channelId } = await boundHub();
     const notify = jest.spyOn(

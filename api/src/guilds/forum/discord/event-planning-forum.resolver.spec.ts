@@ -8,10 +8,12 @@ import * as queries from './event-planning-forum.queries';
 import type { BoundForum } from './event-planning-forum.queries';
 import {
   EVENT_PLANNING_FORUM_AMBIGUOUS,
+  EVENT_PLANNING_FORUM_UNKNOWN,
   EventPlanningForumResolver,
   pickEventPlanningForum,
 } from './event-planning-forum.resolver';
 import type { HubForumDiscordGateway } from './hub-forum-discord.gateway';
+import { HubForumDiscordModule } from './hub-forum-discord.module';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./event-planning-forum.queries');
@@ -92,6 +94,33 @@ describe('pickEventPlanningForum (§3.2)', () => {
       pickEventPlanningForum([M, M2], { pickedChannelId: null, nameOf }),
     ).toEqual({ forum: null, warning: EVENT_PLANNING_FORUM_AMBIGUOUS });
   });
+});
+
+describe('pickEventPlanningForum (§3.2, review: precedence + unknown)', () => {
+  it('≥2 ⇒ a valid pick wins over a managed event-planning forum', () => {
+    const nameOf = names({ [M.channelId]: 'event-planning' });
+    expect(
+      pickEventPlanningForum([A, M], { pickedChannelId: A.channelId, nameOf }),
+    ).toEqual({ forum: A, warning: null });
+  });
+
+  it('R3: a managed forum whose name cannot be read ⇒ none + unknown', () => {
+    expect(
+      pickEventPlanningForum([A, M], {
+        pickedChannelId: null,
+        nameOf: () => undefined,
+      }),
+    ).toEqual({ forum: null, warning: EVENT_PLANNING_FORUM_UNKNOWN });
+  });
+
+  it('R3: unreadable names of unmanaged forums only ⇒ ambiguous', () => {
+    expect(
+      pickEventPlanningForum([A, B], {
+        pickedChannelId: null,
+        nameOf: () => undefined,
+      }),
+    ).toEqual({ forum: null, warning: EVENT_PLANNING_FORUM_AMBIGUOUS });
+  });
 
   it('R3: a managed forum under another name is not the fallback', () => {
     const nameOf = names({ [M.channelId]: 'hub-forums' });
@@ -101,22 +130,34 @@ describe('pickEventPlanningForum (§3.2)', () => {
   });
 });
 
+const GUILD = '200000000000000001';
+
+/** A resolver over stubbed settings (pick B) + an online gateway, no names. */
+function build() {
+  jest.resetAllMocks();
+  q.loadBoundForums.mockResolvedValue([A, B]);
+  const settings = {
+    get: jest.fn(() => Promise.resolve<string | null>(B.channelId)),
+  };
+  const gateway = {
+    cachedForum: jest.fn<{ name: string } | null, [string]>(() => null),
+    guildId: jest.fn((): string | null => GUILD),
+  };
+  const resolver = new EventPlanningForumResolver(
+    {} as unknown as ForumDiscordDb,
+    settings as unknown as SettingsService,
+    gateway as unknown as HubForumDiscordGateway,
+  );
+  return { settings, gateway, resolver };
+}
+
 describe('EventPlanningForumResolver (60 s cache)', () => {
-  const GUILD = '200000000000000001';
-  let settings: { get: jest.Mock };
-  let gateway: { cachedForum: jest.Mock };
+  let settings: ReturnType<typeof build>['settings'];
+  let gateway: ReturnType<typeof build>['gateway'];
   let resolver: EventPlanningForumResolver;
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    q.loadBoundForums.mockResolvedValue([A, B]);
-    settings = { get: jest.fn(() => Promise.resolve(B.channelId)) };
-    gateway = { cachedForum: jest.fn(() => null) };
-    resolver = new EventPlanningForumResolver(
-      {} as unknown as ForumDiscordDb,
-      settings as unknown as SettingsService,
-      gateway as unknown as HubForumDiscordGateway,
-    );
+    ({ settings, gateway, resolver } = build());
   });
 
   it('reads the bound forums and the setting key, returning the pick', async () => {
@@ -153,5 +194,58 @@ describe('EventPlanningForumResolver (60 s cache)', () => {
     );
     const res = await resolver.resolve(GUILD, 0);
     expect(res.forum).toEqual(M);
+  });
+});
+
+describe('EventPlanningForumResolver (review MAJOR: cold cache)', () => {
+  let settings: ReturnType<typeof build>['settings'];
+  let gateway: ReturnType<typeof build>['gateway'];
+  let resolver: EventPlanningForumResolver;
+
+  beforeEach(() => {
+    ({ settings, gateway, resolver } = build());
+  });
+
+  it('offline gateway ⇒ unknown, never cached; resolves once the cache warms', async () => {
+    q.loadBoundForums.mockResolvedValue([A, M]);
+    settings.get.mockResolvedValue(null);
+    gateway.guildId.mockReturnValue(null);
+    const cold = await resolver.resolve(GUILD, 0);
+    expect(cold).toEqual({
+      forum: null,
+      candidates: [A, M],
+      warning: EVENT_PLANNING_FORUM_UNKNOWN,
+    });
+    gateway.guildId.mockReturnValue(GUILD);
+    gateway.cachedForum.mockImplementation((id: string) =>
+      id === M.channelId ? { name: 'event-planning' } : null,
+    );
+    const warm = await resolver.resolve(GUILD, 1);
+    expect(warm).toEqual({ forum: M, candidates: [A, M], warning: null });
+    expect(q.loadBoundForums).toHaveBeenCalledTimes(2);
+    await resolver.resolve(GUILD, 2);
+    expect(q.loadBoundForums).toHaveBeenCalledTimes(2);
+  });
+
+  it('an invalidate() during a read keeps that stale read out of the cache', async () => {
+    settings.get.mockImplementation(() => {
+      resolver.invalidate(); // a bind lands while this read is in flight
+      return Promise.resolve(B.channelId);
+    });
+    await resolver.resolve(GUILD, 0);
+    await resolver.resolve(GUILD, 1);
+    expect(q.loadBoundForums).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('HubForumDiscordModule', () => {
+  it('exports EventPlanningForumResolver (S4 + S5a inject it)', () => {
+    const exported: unknown = Reflect.getMetadata(
+      'exports',
+      HubForumDiscordModule,
+    );
+    expect(exported).toEqual(
+      expect.arrayContaining([EventPlanningForumResolver]),
+    );
   });
 });
