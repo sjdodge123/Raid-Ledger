@@ -5,6 +5,7 @@
  * app holds (never a `jest.mock` — it would not reach the app).
  * Excluded from `nest build` by the `*.test-fixtures.ts` pattern.
  */
+import { HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME } from '@raid-ledger/contract';
 import type { TestApp } from '../../../common/testing/test-app';
 import {
   HubForumDiscordGateway,
@@ -25,7 +26,7 @@ export const snowflake = (): string =>
 export function fakeForum(over: Partial<ForumInfo> = {}): ForumInfo {
   return {
     id: snowflake(),
-    name: 'hub-forums',
+    name: HUB_FORUM_DISCORD_DEFAULT_CHANNEL_NAME,
     tags: [],
     missing: [],
     canManage: true,

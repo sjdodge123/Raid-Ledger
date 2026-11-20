@@ -55,7 +55,7 @@ export class HubForumDiscordController {
     return this.service.channels();
   }
 
-  /** Before binding: bot online, missing perms, the shared #hub-forums. */
+  /** Before binding: bot online, missing perms, the shared #event-planning. */
   @Get('preflight')
   @UseGuards(jwt, GuildLeaderGuard)
   @Header('Cache-Control', NO_STORE)
