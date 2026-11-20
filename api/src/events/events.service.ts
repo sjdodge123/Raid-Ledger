@@ -236,15 +236,8 @@ export class EventsService {
     dto: RescheduleEventDto,
   ): Promise<EventResponseDto> {
     const eventBefore = await this.findOne(eventId);
-    await rescheduleEvent(
-      this.db,
-      this.notificationService,
-      eventId,
-      userId,
-      isAdmin,
-      dto,
-      this.eventEmitter,
-    );
+    const { db, notificationService: ns, eventEmitter: em } = this;
+    await rescheduleEvent(db, ns, eventId, userId, isAdmin, dto, em);
     await this.activityLog.log('event', eventId, 'event_rescheduled', userId, {
       oldStart: eventBefore.startTime,
       newStart: dto.startTime,
