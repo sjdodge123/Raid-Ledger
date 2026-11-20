@@ -7,6 +7,7 @@ import {
   HubForumDiscordEventLockSweep,
   type LockChange,
 } from './hub-forum-discord-event-lock';
+import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -62,16 +63,18 @@ function setup(rounds: LockChange[][], connected = true) {
     isConnected: () => connected,
   } as unknown as DiscordBotClientService;
   const outbound = { apply: jest.fn().mockResolvedValue(undefined) };
+  const registry = { sweep: jest.fn().mockResolvedValue(0) };
   const sweep = new HubForumDiscordEventLockSweep(
     db,
     gateway as unknown as HubForumDiscordEventLockGateway,
     client,
     outbound as unknown as HubForumDiscordOutboundService,
+    registry as unknown as EventPlanningPostsLockSweep,
   );
   const due = jest.spyOn(sweep, 'due');
   for (const r of rounds) due.mockResolvedValueOnce(r);
   due.mockResolvedValue([]);
-  return { sweep, gateway, sets, outbound };
+  return { sweep, gateway, sets, outbound, registry, due };
 }
 
 const row = (readOnly: boolean): LockChange => ({
@@ -124,5 +127,33 @@ describe('HubForumDiscordEventLockSweep.sweep', () => {
     const { sweep, gateway } = setup([[row(true)]], false);
     expect(await sweep.sweep(NOW)).toBe(0);
     expect(gateway.setReadOnly).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2272 S4a: the registry pass', () => {
+  it('adds the registry count to the hub count', async () => {
+    const { sweep, registry } = setup([[row(true)]]);
+    registry.sweep.mockResolvedValueOnce(2);
+    expect(await sweep.sweep(NOW)).toBe(3);
+    expect(registry.sweep).toHaveBeenCalledWith(NOW);
+  });
+
+  it('a hub-pass throw does not stop the registry pass', async () => {
+    const { sweep, registry, due } = setup([]);
+    due.mockRejectedValueOnce(new Error('db down'));
+    registry.sweep.mockResolvedValueOnce(1);
+    expect(await sweep.sweep(NOW)).toBe(1);
+  });
+
+  it('a registry-pass throw keeps the hub count', async () => {
+    const { sweep, registry } = setup([[row(true)]]);
+    registry.sweep.mockRejectedValueOnce(new Error('boom'));
+    expect(await sweep.sweep(NOW)).toBe(1);
+  });
+
+  it('offline bot runs neither pass', async () => {
+    const { sweep, registry } = setup([[row(true)]], false);
+    expect(await sweep.sweep(NOW)).toBe(0);
+    expect(registry.sweep).not.toHaveBeenCalled();
   });
 });

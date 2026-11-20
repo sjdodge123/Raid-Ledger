@@ -37,6 +37,8 @@ import { HubForumDiscordDecorBackfill } from './hub-forum-discord-decor.backfill
 import { EventPlanningForumRename } from './event-planning-forum.rename';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import { EventPlanningPostsService } from './event-planning-posts.service';
+import { EventPlanningPostsListener } from './event-planning-posts.listener';
+import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
 import { HubForumDiscordSignupPingListener } from './hub-forum-discord-signup-pings.listener';
@@ -93,6 +95,8 @@ import {
     EventPlanningForumRename,
     EventPlanningPostsGateway,
     EventPlanningPostsService,
+    EventPlanningPostsListener,
+    EventPlanningPostsLockSweep,
   ],
   exports: [
     HubForumDiscordGateway,
