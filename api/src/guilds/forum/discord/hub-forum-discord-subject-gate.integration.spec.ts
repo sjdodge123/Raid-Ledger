@@ -6,6 +6,7 @@
  * imports. A closed thread drops silently. Each test builds its own subject.
  */
 import { randomBytes } from 'crypto';
+import { eq } from 'drizzle-orm';
 import type Redis from 'ioredis';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
@@ -185,6 +186,23 @@ describe('ROK-2272 S8 — poll thread write gate', () => {
     expect(await gate.admits({ threadId: p.threadId }, u.discordId)).toBe(
       false,
     );
+    expect(dm).not.toHaveBeenCalled();
+  });
+});
+
+describe('ROK-2272 S8 review — detached poll thread', () => {
+  it('drops a message in a DETACHED poll thread without a DM, even from a voter', async () => {
+    const p = await pollThread();
+    await db()
+      .update(schema.hubForumThreads)
+      .set({ eventDetachedAt: new Date(Date.now() - 60_000) })
+      .where(eq(schema.hubForumThreads.id, p.threadId));
+    const voter = await discordUser();
+    await vote(p.matchId, voter.id);
+    const stranger = await discordUser();
+    const post = { threadId: p.threadId };
+    expect(await gate.admits(post, voter.discordId)).toBe(false);
+    expect(await gate.admits(post, stranger.discordId)).toBe(false);
     expect(dm).not.toHaveBeenCalled();
   });
 });

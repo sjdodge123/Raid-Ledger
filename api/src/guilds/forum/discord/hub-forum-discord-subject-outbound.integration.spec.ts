@@ -24,6 +24,7 @@ import {
 } from '../event-discussion/event-discussion.test-fixtures';
 import { LineupDiscussionReplyThrottleGuard } from '../subject-discussion/lineup-discussion-throttle.guard';
 import { PollDiscussionReplyThrottleGuard } from '../subject-discussion/poll-discussion-throttle.guard';
+import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
 import {
   stubOutbound,
   type FakeOutbound,
@@ -287,5 +288,117 @@ describe('ROK-2272 S8 poll thread post edges', () => {
     expect(posted).toBeNull();
     expect(out.spies.createPost).not.toHaveBeenCalled();
     expect(await threadLinks(thread.id)).toEqual([]);
+  });
+});
+
+/** The lineup a poll (match) belongs to. */
+async function lineupOf(matchId: number): Promise<number> {
+  const m = schema.communityLineupMatches;
+  const [row] = nonEmpty(
+    await db().select({ id: m.lineupId }).from(m).where(eq(m.id, matchId)),
+    'match',
+  );
+  return row.id;
+}
+
+async function makePrivate(lineupId: number): Promise<void> {
+  await db()
+    .update(schema.communityLineups)
+    .set({ visibility: 'private' })
+    .where(eq(schema.communityLineups.id, lineupId));
+}
+
+/** The first-vote path the POLL_VOTED listener takes, awaited. */
+async function firstVote(matchId: number): Promise<void> {
+  const app = ctx.posts.testApp.app;
+  await app
+    .get(HubForumDiscordClosingLines, { strict: false })
+    .firstVote(matchId);
+}
+
+/** No post was ever created for `threadId`, even when asked directly. */
+async function expectNeverPosted(guildId: number, threadId: number) {
+  const posted = await out.service.ensureEventPost({ guildId, threadId });
+  expect(posted).toBeNull();
+  expect(out.spies.createPost).not.toHaveBeenCalled();
+  expect(await threadLinks(threadId)).toEqual([]);
+}
+
+describe('ROK-2272 S8 review — a reopen re-drive of a poll post', () => {
+  it('a thread.updated re-drive (lock-sweep reopen) keeps "<game> — Poll" and an absolute link', async () => {
+    const guildId = await hubWithSigned();
+    const matchId = await hubPoll(guildId);
+    await bind(guildId);
+    const thread = await openThread(pollRoute(matchId));
+    await reply(pollRoute(matchId), 'Before the lock', 1);
+    const [postLink] = nonEmpty(await threadLinks(thread.id), 'post link');
+
+    await out.service.apply({
+      guildId,
+      threadId: thread.id,
+      op: 'thread.updated',
+      actorId: 0,
+    });
+    const game = ctx.posts.testApp.seed.game.name;
+    expect(out.spies.renameThread).toHaveBeenCalledWith(
+      postLink.discordThreadId,
+      subjectPostTitle('poll', game),
+      expect.any(Function),
+    );
+    const [edit] = nonEmpty(out.spies.editMessage.mock.calls, 'editMessage');
+    expect(edit[2]).toMatch(
+      new RegExp(`\\]\\(https?://[^)\\s]+/schedule/${matchId}\\)`),
+    );
+  });
+});
+
+describe('ROK-2272 S8 review — private and detached subjects never post', () => {
+  it('a PRIVATE poll never gets a Discord post on a vote or a reply', async () => {
+    const guildId = await hubWithSigned();
+    const matchId = await hubPoll(guildId);
+    await bind(guildId);
+    const thread = await openThread(pollRoute(matchId));
+    await makePrivate(await lineupOf(matchId));
+    const read = await as(ctx, 'signed', 'get', pollRoute(matchId));
+    expect(outcome(read).status).toBe(404);
+    const res = await as(
+      ctx,
+      'signed',
+      'post',
+      `${pollRoute(matchId)}/replies`,
+      {
+        body: 'Hidden?',
+      },
+    );
+    expect(outcome(res).status).toBe(404);
+    await firstVote(matchId);
+    await expectNeverPosted(guildId, thread.id);
+  });
+
+  it('a PRIVATE lineup never gets a Discord post on a reply', async () => {
+    const guildId = await hubWithSigned();
+    const lineup = await hubLineup(guildId);
+    await bind(guildId);
+    const thread = await openThread(lineupRoute(lineup.id));
+    await makePrivate(lineup.id);
+    const read = await as(ctx, 'signed', 'get', lineupRoute(lineup.id));
+    expect(outcome(read).status).toBe(404);
+    const route = `${lineupRoute(lineup.id)}/replies`;
+    const res = await as(ctx, 'signed', 'post', route, { body: 'Hidden?' });
+    expect(outcome(res).status).toBe(404);
+    await expectNeverPosted(guildId, thread.id);
+  });
+
+  it('a DETACHED poll thread never posts, not even on a vote', async () => {
+    const guildId = await hubWithSigned();
+    const matchId = await hubPoll(guildId);
+    await bind(guildId);
+    const thread = await openThread(pollRoute(matchId));
+    await db()
+      .update(schema.hubForumThreads)
+      .set({ eventDetachedAt: new Date(Date.now() - 60_000) })
+      .where(eq(schema.hubForumThreads.id, thread.id));
+    await firstVote(matchId);
+    await expectNeverPosted(guildId, thread.id);
   });
 });
