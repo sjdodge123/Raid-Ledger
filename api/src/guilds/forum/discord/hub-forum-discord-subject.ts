@@ -59,6 +59,9 @@ export function subjectPostTitle(
   }
   const { suffix, fallback } = NAMING[kind];
   const tail = `${DASH}${suffix}`;
-  const head = cutAtBoundary(title.trim(), DISCORD_THREAD_NAME_MAX - tail.length);
+  const head = cutAtBoundary(
+    title.trim(),
+    DISCORD_THREAD_NAME_MAX - tail.length,
+  );
   return `${head.length > 0 ? head : fallback}${tail}`;
 }

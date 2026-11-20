@@ -31,8 +31,7 @@ export interface ScheduleSubjectPostSource extends EventThreadWriteState {
 
 /** Any subject thread's post source, discriminated on `kind`. */
 export type SubjectPostSource =
-  | ({ kind: 'event' } & EventPostSource)
-  | ScheduleSubjectPostSource;
+  ({ kind: 'event' } & EventPostSource) | ScheduleSubjectPostSource;
 
 /** The subject's title; null once the poll / lineup row is gone. */
 async function scheduleTitle(
@@ -47,11 +46,8 @@ async function scheduleTitle(
   return lineup ? lineup.title : null;
 }
 
-/** The subject thread `threadId` with its subject; null for a plain thread. */
-export async function findSubjectPostSource(
-  db: ForumDiscordDb,
-  threadId: number,
-): Promise<SubjectPostSource | null> {
+/** The thread's subject columns, root text and write state. */
+async function findSubjectThreadRow(db: ForumDiscordDb, threadId: number) {
   const [row] = await db
     .select({
       eventId: threads.eventId,
@@ -64,6 +60,15 @@ export async function findSubjectPostSource(
     .from(threads)
     .where(eq(threads.id, threadId))
     .limit(1);
+  return row ?? null;
+}
+
+/** The subject thread `threadId` with its subject; null for a plain thread. */
+export async function findSubjectPostSource(
+  db: ForumDiscordDb,
+  threadId: number,
+): Promise<SubjectPostSource | null> {
+  const row = await findSubjectThreadRow(db, threadId);
   const subject = row ? subjectOf(row) : null;
   if (!row || !subject) return null;
   if (subject.kind === 'event') {
@@ -73,5 +78,6 @@ export async function findSubjectPostSource(
   const title = await scheduleTitle(db, subject);
   if (title === null) return null;
   const { body, writeClosesAt, eventDetachedAt } = row;
-  return { kind: subject.kind, id: subject.id, title, body, writeClosesAt, eventDetachedAt };
+  const { kind, id } = subject;
+  return { kind, id, title, body, writeClosesAt, eventDetachedAt };
 }

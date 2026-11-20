@@ -94,22 +94,45 @@ describe('ROK-2258 postTagIds', () => {
   const forumTags = [{ id: 'e', name: 'event' }];
 
   it('adds the Event tag to an event post after the hub tag', () => {
-    expect(postTagIds(['h'], true, forumTags)).toEqual(['h', 'e']);
+    expect(postTagIds(['h'], 'event', forumTags)).toEqual(['h', 'e']);
   });
 
   it('leaves a plain post with only the hub tag', () => {
-    expect(postTagIds(['h'], false, forumTags)).toEqual(['h']);
-    expect(postTagIds([], false, forumTags)).toEqual([]);
+    expect(postTagIds(['h'], null, forumTags)).toEqual(['h']);
+    expect(postTagIds([], null, forumTags)).toEqual([]);
   });
 
   it('posts an event without the Event tag when the forum has none', () => {
-    expect(postTagIds([], true, [])).toEqual([]);
+    expect(postTagIds([], 'event', [])).toEqual([]);
   });
 
   it("never repeats a tag and keeps to Discord's 5 per post", () => {
-    expect(postTagIds(['e'], true, forumTags)).toEqual(['e']);
+    expect(postTagIds(['e'], 'event', forumTags)).toEqual(['e']);
     const five = ['a', 'b', 'c', 'd', 'f'];
-    expect(postTagIds(five, true, forumTags)).toEqual(five);
+    expect(postTagIds(five, 'event', forumTags)).toEqual(five);
+  });
+});
+
+describe('ROK-2272 S8 postTagIds kind tags', () => {
+  const forumTags = [
+    { id: 'e', name: 'Event' },
+    { id: 'p', name: 'Poll' },
+    { id: 'l', name: 'Lineup' },
+  ];
+
+  it('adds the Poll tag to a poll post and the Lineup tag to a lineup post', () => {
+    expect(postTagIds(['h'], 'poll', forumTags)).toEqual(['h', 'p']);
+    expect(postTagIds(['h'], 'lineup', forumTags)).toEqual(['h', 'l']);
+  });
+
+  it('F4: a forum without the Poll/Lineup tag gets the hub tag only', () => {
+    const eventOnly = [{ id: 'e', name: 'Event' }];
+    expect(postTagIds(['h'], 'poll', eventOnly)).toEqual(['h']);
+    expect(postTagIds(['h'], 'lineup', eventOnly)).toEqual(['h']);
+  });
+
+  it('never repeats the Poll tag when the hub tag is it', () => {
+    expect(postTagIds(['p'], 'poll', forumTags)).toEqual(['p']);
   });
 });
 

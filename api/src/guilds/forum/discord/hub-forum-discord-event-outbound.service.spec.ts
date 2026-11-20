@@ -9,12 +9,14 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import type { ForumLink } from './hub-forum-discord-links.queries';
 import * as links from './hub-forum-discord-links.queries';
 import * as reads from './hub-forum-discord-event-outbound.queries';
+import * as subjectReads from './hub-forum-discord-subject-post.queries';
 import {
   EventPostOutbound,
   type EventPostDeps,
 } from './hub-forum-discord-event-outbound.service';
 
 jest.mock('./hub-forum-discord-event-outbound.queries');
+jest.mock('./hub-forum-discord-subject-post.queries');
 jest.mock('./hub-forum-discord-links.queries', () => ({
   ...jest.requireActual<object>('./hub-forum-discord-links.queries'),
   claimThreadLink: jest.fn(),
@@ -54,8 +56,9 @@ function linkRow(over: Partial<ForumLink> = {}): ForumLink {
 
 function source(
   over: Partial<reads.EventPostSource> = {},
-): reads.EventPostSource {
+): subjectReads.SubjectPostSource {
   return {
+    kind: 'event',
     eventId: 9,
     eventTitle: 'Molten Core',
     start: START,
@@ -91,7 +94,7 @@ function setup() {
 }
 
 const mocked = {
-  source: jest.mocked(reads.findEventPostSource),
+  source: jest.mocked(subjectReads.findSubjectPostSource),
   heading: jest.mocked(reads.findEventHeading),
   posts: jest.mocked(reads.liveEventPostLinks),
   claim: jest.mocked(links.claimThreadLink),
@@ -117,7 +120,7 @@ describe('EventPostOutbound.ensurePost (item 1, lazy post)', () => {
         content:
           'Discussion for **Molten Core**. [Open the event](https://rl.example/events/9)',
         tagIds: ['tag-1'],
-        event: true,
+        kind: 'event',
       },
       { username: 'Raid Ledger', avatarURL: null },
     );
@@ -155,6 +158,74 @@ describe('EventPostOutbound.ensurePost (item 1, lazy post)', () => {
     const link = await svc.ensurePost(TO, REF);
     expect(gateway.createPost).not.toHaveBeenCalled();
     expect(link?.discordThreadId).toBe('p1');
+  });
+});
+
+function scheduleSource(
+  over: Partial<subjectReads.ScheduleSubjectPostSource> = {},
+): subjectReads.ScheduleSubjectPostSource {
+  return {
+    kind: 'poll',
+    id: 21,
+    title: 'Friday raid',
+    body: 'Scheduling poll for **WoW**. [Open the poll](/community-lineup/4/schedule/21)',
+    writeClosesAt: null,
+    eventDetachedAt: null,
+    ...over,
+  };
+}
+
+describe('ROK-2272 S8 ensurePost for poll / lineup threads', () => {
+  it('posts a poll thread titled "<title> — Poll" with the Poll kind', async () => {
+    const { svc, gateway } = setup();
+    mocked.source.mockResolvedValue(scheduleSource());
+    const link = await svc.ensurePost(TO, REF);
+    expect(gateway.createPost).toHaveBeenCalledWith(
+      TO.target,
+      {
+        title: 'Friday raid — Poll',
+        content:
+          'Scheduling poll for **WoW**. [Open the poll](https://rl.example/community-lineup/4/schedule/21)',
+        tagIds: ['tag-1'],
+        kind: 'poll',
+      },
+      { username: 'Raid Ledger', avatarURL: null },
+    );
+    expect(link?.discordThreadId).toBe('p1');
+  });
+
+  it('posts a lineup thread titled "<title> — Lineup" with the Lineup kind', async () => {
+    const { svc, gateway } = setup();
+    mocked.source.mockResolvedValue(
+      scheduleSource({ kind: 'lineup', id: 4, title: 'Game night' }),
+    );
+    await svc.ensurePost(TO, REF);
+    expect(gateway.createPost).toHaveBeenCalledWith(
+      TO.target,
+      expect.objectContaining({ title: 'Game night — Lineup', kind: 'lineup' }),
+      expect.anything(),
+    );
+  });
+
+  it('a read-only poll thread never posts (closed or detached)', async () => {
+    const { svc, gateway } = setup();
+    mocked.source.mockResolvedValueOnce(scheduleSource({ writeClosesAt: NOW }));
+    mocked.source.mockResolvedValueOnce(
+      scheduleSource({ eventDetachedAt: NOW }),
+    );
+    expect(await svc.ensurePost(TO, REF)).toBeNull();
+    expect(await svc.ensurePost(TO, REF)).toBeNull();
+    expect(gateway.createPost).not.toHaveBeenCalled();
+    expect(mocked.claim).not.toHaveBeenCalled();
+  });
+
+  it('isSubjectThread: event, poll and lineup threads yes, plain no', () => {
+    const { svc } = setup();
+    const none = { eventId: null, matchId: null, lineupId: null };
+    expect(svc.isSubjectThread(none)).toBe(false);
+    expect(svc.isSubjectThread({ ...none, eventId: 1 })).toBe(true);
+    expect(svc.isSubjectThread({ ...none, matchId: 2 })).toBe(true);
+    expect(svc.isSubjectThread({ ...none, lineupId: 3 })).toBe(true);
   });
 });
 
