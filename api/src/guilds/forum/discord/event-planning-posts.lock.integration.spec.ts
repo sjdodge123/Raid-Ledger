@@ -17,6 +17,7 @@ import {
   EventPlanningPostsLockSweep,
 } from './event-planning-posts.lock';
 import { EventPlanningPostsService } from './event-planning-posts.service';
+import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
 import { HubForumDiscordEventLockSweep } from './hub-forum-discord-event-lock';
 import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import {
@@ -38,6 +39,7 @@ interface PostOver {
   locked?: boolean;
   deleted?: boolean;
   subjectKind?: 'event' | 'poll' | 'lineup';
+  subjectId?: number;
 }
 
 let nextSubject = 900_000 + Math.floor(Math.random() * 50_000);
@@ -50,7 +52,7 @@ async function newPost(over: PostOver = {}) {
       .insert(posts)
       .values({
         subjectKind: over.subjectKind ?? 'event',
-        subjectId: (nextSubject += 1),
+        subjectId: over.subjectId ?? (nextSubject += 1),
         forumId,
         discordThreadId: snowflake(),
         closesAt: closesInMs === null ? null : new Date(now + closesInMs),
@@ -214,5 +216,68 @@ describe('ROK-2272 S4 review MAJOR-2: lock sweep on a deleted post', () => {
     expect(row.discordLockedAt).toBeNull();
     const due = await dueRegistryLockChanges(db(), new Date());
     expect(due.find((d) => d.postId === p.id)).toBeUndefined();
+  });
+});
+
+describe('ROK-2272 S10 deadline pass for non-hub poll posts', () => {
+  /** A non-hub standalone poll whose phase_deadline passed 2 h ago. */
+  async function expiredPoll(): Promise<number> {
+    const [l] = nonEmpty(
+      await db()
+        .insert(schema.communityLineups)
+        .values({
+          title: `Expired poll ${nextSubject}`,
+          phaseDurationOverride: { standalone: true },
+          status: 'decided',
+          visibility: 'public',
+          createdBy: ctx.ids.creator,
+          guildId: null,
+          phaseDeadline: new Date(Date.now() - 2 * HOUR),
+          publicSlug: `exp-${Date.now()}-${nextSubject}`,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [m] = nonEmpty(
+      await db()
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: l.id,
+          gameId: ctx.posts.testApp.seed.game.id,
+          status: 'scheduling',
+        })
+        .returning(),
+      'match',
+    );
+    return m.id;
+  }
+
+  it('an expired poll post with no closes_at is stamped and locked by one sweep', async () => {
+    const { setReadOnly } = spies();
+    const matchId = await expiredPoll();
+    const p = await newPost({
+      subjectKind: 'poll',
+      subjectId: matchId,
+      closesInMs: null,
+    });
+    await app().get(EventPlanningPostsLockSweep).sweep(new Date());
+    const [row] = nonEmpty(
+      await db().select().from(posts).where(eq(posts.id, p.id)),
+      'post',
+    );
+    expect(row.closesAt?.getTime()).toBeLessThanOrEqual(Date.now() - HOUR / 2);
+    expect(row.discordLockedAt).not.toBeNull();
+    expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
+  });
+
+  it('a throwing deadline pass is warned and the flip loop still runs', async () => {
+    const { setReadOnly } = spies();
+    jest
+      .spyOn(app().get(EventPlanningSubjectPosts), 'syncOpenPolls')
+      .mockRejectedValue(new Error('boom'));
+    const p = await newPost();
+    await app().get(EventPlanningPostsLockSweep).sweep(new Date());
+    expect(await lockedAt(p.id)).not.toBeNull();
+    expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
   });
 });
