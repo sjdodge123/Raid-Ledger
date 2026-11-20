@@ -8,10 +8,12 @@
  * Discord is the in-memory gateway.
  */
 import { randomBytes } from 'crypto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
 import { link, newHub, settle } from '../../posts/hub-posts.test-fixtures';
 import {
   as,
@@ -235,6 +237,38 @@ describe('ROK-2272 S8 poll thread post edges', () => {
     await bind(guildId);
     await reply(pollRoute(matchId), 'Late bind', 1);
     await expectPostThenReply(thread.id, 'Late bind');
+  });
+
+  it('the first vote creates the poll post (no reply needed, no mention)', async () => {
+    const guildId = await hubWithSigned();
+    const matchId = await hubPoll(guildId);
+    await bind(guildId);
+    const thread = await openThread(pollRoute(matchId));
+    expect(out.spies.createPost).not.toHaveBeenCalled();
+    const lineupId = nonEmpty(
+      await db()
+        .select({ id: schema.communityLineupMatches.lineupId })
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, matchId)),
+      'match',
+    )[0].id;
+    ctx.posts.testApp.app
+      .get(EventEmitter2)
+      .emit(LINEUP_MATCH_EVENTS.POLL_VOTED, {
+        matchId,
+        lineupId,
+        userId: ctx.ids.signed,
+        stance: null,
+      });
+    await waitFor(async () => {
+      const [postLink] = nonEmpty(await threadLinks(thread.id), 'post link');
+      expect(postLink).toMatchObject({ kind: 'thread', syncState: 'synced' });
+    });
+    expect(out.spies.createPost).toHaveBeenCalledTimes(1);
+    const [[, post]] = nonEmpty(out.spies.createPost.mock.calls, 'createPost');
+    expect(post).toMatchObject({ kind: 'poll' });
+    expect(out.spies.mention).not.toHaveBeenCalled();
+    expect(out.spies.createReply).not.toHaveBeenCalled();
   });
 
   it('a closed poll thread never posts', async () => {
