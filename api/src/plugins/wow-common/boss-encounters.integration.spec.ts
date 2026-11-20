@@ -292,6 +292,31 @@ async function testForeverNewNeverFallsBack() {
   expect(await lootNames(boss.id, 'wow_forever')).toEqual([]);
 }
 
+/** ROK-2270: a Forever-new boss with captured drops reads them as `forever`. */
+async function testForeverNewReadsForeverLoot() {
+  const boss = await insertBoss(testApp, {
+    instanceId: 90000002,
+    name: 'Viktor the Vile',
+    order: 5,
+    expansion: 'forever',
+  });
+  await insertLoot(testApp, {
+    bossId: boss.id,
+    itemId: 7301,
+    itemName: 'Vile Captured Drop',
+    quality: 'Rare',
+    expansion: 'forever',
+  });
+  const res = await testApp.request.get(
+    `/plugins/wow-classic/bosses/${boss.id}/loot?variant=wow_forever`,
+  );
+  expect(res.status).toBe(200);
+  const rows = res.body as Array<{ itemName: string; expansion: string }>;
+  expect(rows.map((l) => [l.itemName, l.expansion])).toEqual([
+    ['Vile Captured Drop', 'forever'],
+  ]);
+}
+
 describe('Boss Encounters (integration)', () => {
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -343,6 +368,9 @@ describe('Boss Encounters (integration)', () => {
 
     it('returns [] under wow_forever for a Forever-new dungeon boss (ROK-2270)', () =>
       testForeverNewNeverFallsBack());
+
+    it('returns forever-tagged loot for a Forever-new boss with captured drops (ROK-2270)', () =>
+      testForeverNewReadsForeverLoot());
 
     it('should return empty array for boss with no loot', async () => {
       const boss = await insertBoss(testApp, {
