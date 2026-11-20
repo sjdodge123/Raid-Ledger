@@ -191,7 +191,10 @@ describe('scheduling-poll discussion access (R7, R10)', () => {
       can: { read: false, reply: false },
       latestReplies: [],
     });
-    expect(outcome(await replyAs(matchId, 'outsider')).status).toBe(403);
+    expect(outcome(await replyAs(matchId, 'outsider'))).toEqual({
+      status: 403,
+      message: FORUM_NOT_POLL_VOTER,
+    });
   });
 });
 
@@ -213,6 +216,27 @@ describe('scheduling-poll discussion refusals (R7, §3.7)', () => {
       status: 409,
       message: FORUM_THREAD_READ_ONLY,
     });
+  });
+
+  it('reopening a decided poll clears the deadline: replies are allowed again', async () => {
+    const matchId = await hubPoll();
+    await card(matchId, 'signed');
+    await closePoll(matchId);
+    expect(outcome(await replyAs(matchId, 'signed')).status).toBe(409);
+    await setMatchStatus(matchId, 'scheduling');
+    const c = await card(matchId, 'signed');
+    expect(c).toMatchObject({ can: { read: true, reply: true } });
+    expect(c.state === 'ready' && c.lock).toBeNull();
+    expect(outcome(await replyAs(matchId, 'signed')).status).toBe(201);
+  });
+
+  it('an unknown match id is 404 on both routes (no existence leak)', async () => {
+    const route404 = { status: 404, message: POLL_NOT_FOUND };
+    const missing = 2_000_000_000;
+    expect(outcome(await as(ctx, 'signed', 'get', route(missing)))).toEqual(
+      route404,
+    );
+    expect(outcome(await replyAs(missing, 'signed'))).toEqual(route404);
   });
 
   it('a private poll and a hub-less poll are 404 on both routes', async () => {
@@ -247,4 +271,16 @@ describe('scheduling-poll thread through the hub forum routes (§5.5, R7)', () =
       expect(still.map((t) => t.deletedAt)).toEqual([null]);
     },
   );
+
+  it('R7 holds on the hub reply route: a voter posts (201), a non-voting member is 403', async () => {
+    const matchId = await hubPoll();
+    await card(matchId, 'signed');
+    const replies = `${await hubThreadPath(matchId)}/replies`;
+    const post = (who: Actor) => as(ctx, who, 'post', replies, { body: 'x' });
+    expect(outcome(await post('signed')).status).toBe(201);
+    expect(outcome(await post('tentative'))).toEqual({
+      status: 403,
+      message: FORUM_NOT_POLL_VOTER,
+    });
+  });
 });
