@@ -18,6 +18,10 @@ export interface PollSyncRow {
   matchId: number;
   lineupId: number;
   status: PollMatchStatus;
+  /** Parent lineup status — `archived` ends a still-`scheduling` poll. */
+  lineupStatus: (typeof schema.communityLineups.$inferSelect)['status'];
+  /** Parent lineup `phase_deadline` — a passed one expires the poll. */
+  phaseDeadline: Date | null;
   guildId: number | null;
   visibility: 'public' | 'private';
   creatorId: number;
@@ -49,6 +53,8 @@ export async function findPollForSync(
       matchId: m.id,
       lineupId: m.lineupId,
       status: m.status,
+      lineupStatus: l.status,
+      phaseDeadline: l.phaseDeadline,
       guildId: l.guildId,
       visibility: l.visibility,
       creatorId: l.createdBy,

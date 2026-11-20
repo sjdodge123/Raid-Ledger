@@ -24,9 +24,21 @@ export const POLL_CLOSE_GRACE_MS = 3_600_000;
 const TITLE_MAX = 120;
 const SUFFIX = ' — Poll';
 
-/** Poll in a closed state (locked in or cancelled). */
-function isClosed(poll: PollSyncRow): boolean {
-  return poll.status === 'scheduled' || poll.status === 'archived';
+/**
+ * The moment the poll ended, or null while it is open. Locked in / cancelled
+ * (match row) ⇒ `now`, the first sync that sees it. Codex A: the phase job and
+ * abort archive the LINEUP and leave the match on `scheduling` (same reading
+ * as `pollStatusFromMatch`) ⇒ an archived lineup ends it at `now`, a passed
+ * `phase_deadline` at that deadline.
+ */
+export function pollEndedAt(poll: PollSyncRow, now: Date): Date | null {
+  if (poll.status === 'scheduled' || poll.status === 'archived') return now;
+  if (poll.lineupStatus === 'archived') return now;
+  const deadline = poll.phaseDeadline?.getTime();
+  if (deadline !== undefined && deadline <= now.getTime()) {
+    return new Date(deadline);
+  }
+  return null;
 }
 
 /** A hub-tagged, non-private poll that has opened (§3.1, §3.7). */
@@ -46,9 +58,13 @@ function isEligible(poll: PollSyncRow | null): poll is PollSyncRow {
 export function planPollSync(
   poll: PollSyncRow | null,
   thread: Pick<LivePollThread, 'guildId'> | null,
+  now: Date = new Date(),
 ): SyncAction {
   if (!isEligible(poll)) return thread ? 'detach' : 'noop';
-  if (!thread) return poll.status === 'scheduling' ? 'insert' : 'noop';
+  if (!thread) {
+    const open = poll.status === 'scheduling' && !pollEndedAt(poll, now);
+    return open ? 'insert' : 'noop';
+  }
   return thread.guildId === poll.guildId ? 'refresh' : 'move';
 }
 
@@ -67,16 +83,17 @@ export function pollThreadRootBody(poll: PollSyncRow): string {
 }
 
 /**
- * Close deadline: open ⇒ none; closed ⇒ the stored one if any (the first
- * sync that saw the close stamped it), else `now + 1 h`.
+ * Close deadline: open ⇒ none; ended ⇒ the stored one if any (the first
+ * sync that saw the end stamped it), else `pollEndedAt + 1 h`.
  */
 export function pollWriteClosesAt(
   poll: PollSyncRow,
   stored: Date | null,
   now: Date,
 ): Date | null {
-  if (!isClosed(poll)) return null;
-  return stored ?? new Date(now.getTime() + POLL_CLOSE_GRACE_MS);
+  const ended = pollEndedAt(poll, now);
+  if (!ended) return null;
+  return stored ?? new Date(ended.getTime() + POLL_CLOSE_GRACE_MS);
 }
 
 /**
@@ -168,7 +185,7 @@ export async function syncPollDiscussion(
     );
     const poll = await findPollForSync(tx, matchId);
     const thread = await findLivePollThread(tx, matchId);
-    const action = planPollSync(poll, thread);
+    const action = planPollSync(poll, thread, now);
     await apply(tx, matchId, action, { poll, thread }, now);
     return action;
   });

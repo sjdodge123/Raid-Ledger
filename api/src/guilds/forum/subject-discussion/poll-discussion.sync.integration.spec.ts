@@ -12,10 +12,12 @@ import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { waitFor } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { LINEUP_LIFECYCLE_EVENTS } from '../../../lineups/lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
 import {
   planPollSync,
   POLL_CLOSE_GRACE_MS,
+  pollWriteClosesAt,
   pollSubjectTitle,
   pollThreadTitle,
   syncPollDiscussion,
@@ -118,6 +120,8 @@ describe('planPollSync (decision table)', () => {
     standalone: false,
     guildId: 7,
     visibility: 'public' as const,
+    lineupStatus: 'decided' as const,
+    phaseDeadline: null,
   };
   it('inserts only for an open hub poll', () => {
     expect(planPollSync({ ...base, status: 'scheduling' }, null)).toBe(
@@ -133,6 +137,24 @@ describe('planPollSync (decision table)', () => {
     expect(planPollSync({ ...open, guildId: null }, th)).toBe('detach');
     expect(planPollSync(null, th)).toBe('detach');
     expect(planPollSync({ ...open, guildId: 8 }, th)).toBe('move');
+  });
+  it('a scheduling poll whose lineup ended is closed (Codex A)', () => {
+    const now = new Date('2026-11-20T12:00:00Z');
+    const open = { ...base, status: 'scheduling' as const };
+    const archived = { ...open, lineupStatus: 'archived' as const };
+    const past = new Date(now.getTime() - 60_000);
+    const expired = { ...open, phaseDeadline: past };
+    const future = { ...open, phaseDeadline: new Date(now.getTime() + 1) };
+    expect(planPollSync(archived, null, now)).toBe('noop');
+    expect(planPollSync(expired, null, now)).toBe('noop');
+    expect(planPollSync(future, null, now)).toBe('insert');
+    expect(pollWriteClosesAt(archived, null, now)?.getTime()).toBe(
+      now.getTime() + POLL_CLOSE_GRACE_MS,
+    );
+    expect(pollWriteClosesAt(expired, null, now)?.getTime()).toBe(
+      past.getTime() + POLL_CLOSE_GRACE_MS,
+    );
+    expect(pollWriteClosesAt(future, null, now)).toBeNull();
   });
 });
 
@@ -243,4 +265,57 @@ describe('syncPollDiscussion close + detach (real db)', () => {
       );
     },
   );
+});
+
+describe('syncPollDiscussion — parent lineup ended (Codex A, real db)', () => {
+  const setLineup = (
+    lineupId: number,
+    set: { status?: 'decided' | 'archived'; phaseDeadline?: Date | null },
+  ) =>
+    testApp.db
+      .update(schema.communityLineups)
+      .set(set)
+      .where(eq(schema.communityLineups.id, lineupId));
+
+  it('lineup archived with the match still scheduling closes in 1 h; reopening clears it', async () => {
+    const guildId = await newHub();
+    const { matchId, lineupId } = await newPoll({ guildId });
+    await syncPollDiscussion(testApp.db, matchId);
+    await setLineup(lineupId, { status: 'archived' });
+    const before = Date.now();
+    emitter().emit(LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED, {
+      lineupId,
+      from: 'decided',
+      to: 'archived',
+    });
+    await waitFor(async () => {
+      expect((await liveThread(matchId))?.writeClosesAt).toBeInstanceOf(Date);
+    }, 5000);
+    const closes = (await liveThread(matchId))?.writeClosesAt?.getTime();
+    expect(closes).toBeGreaterThanOrEqual(before + POLL_CLOSE_GRACE_MS);
+    expect(closes).toBeLessThanOrEqual(Date.now() + POLL_CLOSE_GRACE_MS);
+    await setLineup(lineupId, { status: 'decided' });
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
+    expect((await liveThread(matchId))?.writeClosesAt).toBeNull();
+  });
+
+  it('a passed phase_deadline closes 1 h after the deadline', async () => {
+    const guildId = await newHub();
+    const { matchId, lineupId } = await newPoll({ guildId });
+    await syncPollDiscussion(testApp.db, matchId);
+    const deadline = new Date(Date.now() - 10 * 60_000);
+    await setLineup(lineupId, { phaseDeadline: deadline });
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
+    expect((await liveThread(matchId))?.writeClosesAt?.getTime()).toBe(
+      deadline.getTime() + POLL_CLOSE_GRACE_MS,
+    );
+  });
+
+  it('an already-ended poll never gets a fresh thread', async () => {
+    const guildId = await newHub();
+    const { matchId, lineupId } = await newPoll({ guildId });
+    await setLineup(lineupId, { status: 'archived' });
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('noop');
+    expect(await threadRows(matchId)).toHaveLength(0);
+  });
 });
