@@ -156,6 +156,9 @@ export const SETTING_KEYS = {
   AI_OLLAMA_SETUP_ERROR: 'ai_ollama_setup_error',
   /** ROK-932: Dedicated Discord channel for Community Lineup embeds */
   DISCORD_BOT_LINEUP_CHANNEL: 'discord_bot_lineup_channel',
+  /** ROK-2272: Discord forum channel id for non-hub events, polls and
+   *  lineups. Only read when the Discord guild has ≥2 bound forums. */
+  DISCORD_BOT_EVENT_PLANNING_FORUM: 'discord_bot_event_planning_forum',
   /** ROK-1118: Minimum distinct nominations required for building→voting auto-advance. */
   LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS: 'lineup_auto_advance_min_nominations',
   /** ROK-1118: Minimum nominations per voter required for building→voting auto-advance. */

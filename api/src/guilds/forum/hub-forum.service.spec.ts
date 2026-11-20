@@ -81,6 +81,8 @@ function thread(
     updatedAt: NOW,
     eventId: null,
     eventDetachedAt: null,
+    matchId: null,
+    lineupId: null,
     writeClosesAt: null,
     ...over,
   };

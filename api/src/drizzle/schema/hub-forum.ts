@@ -36,6 +36,54 @@ function discordIdIndex(table: 'threads' | 'replies', column: AnyPgColumn) {
 }
 
 /**
+ * ROK-2226 + ROK-2272: discussion-thread constraints — a thread discusses at
+ * most one subject (event, scheduling poll or lineup), one live thread each.
+ */
+function subjectConstraints(table: {
+  eventId: AnyPgColumn;
+  matchId: AnyPgColumn;
+  lineupId: AnyPgColumn;
+  eventDetachedAt: AnyPgColumn;
+  writeClosesAt: AnyPgColumn;
+}) {
+  return [
+    // ROK-2226: event discussion threads — one live thread per event.
+    // ROK-2272: loosened from event-only so poll/lineup threads reuse them.
+    check(
+      'hub_forum_threads_event_detached',
+      sql`${table.eventDetachedAt} IS NULL OR num_nonnulls(${table.eventId}, ${table.matchId}, ${table.lineupId}) = 1`,
+    ),
+    check(
+      'hub_forum_threads_write_closes',
+      sql`${table.writeClosesAt} IS NULL OR num_nonnulls(${table.eventId}, ${table.matchId}, ${table.lineupId}) = 1`,
+    ),
+    check(
+      'hub_forum_threads_one_subject',
+      sql`num_nonnulls(${table.eventId}, ${table.matchId}, ${table.lineupId}) <= 1`,
+    ),
+    uniqueIndex('uq_hub_forum_threads_event_live')
+      .on(table.eventId)
+      .where(
+        sql`${table.eventId} IS NOT NULL AND ${table.eventDetachedAt} IS NULL`,
+      ),
+    index('idx_hub_forum_threads_event_id')
+      .on(table.eventId)
+      .where(sql`${table.eventId} IS NOT NULL`),
+    // ROK-2272: one live thread per scheduling poll / lineup.
+    uniqueIndex('uq_hub_forum_threads_match_live')
+      .on(table.matchId)
+      .where(
+        sql`${table.matchId} IS NOT NULL AND ${table.eventDetachedAt} IS NULL`,
+      ),
+    uniqueIndex('uq_hub_forum_threads_lineup_live')
+      .on(table.lineupId)
+      .where(
+        sql`${table.lineupId} IS NOT NULL AND ${table.eventDetachedAt} IS NULL`,
+      ),
+  ];
+}
+
+/**
  * ROK-1175: a hub's forum threads (Core plugin, every hub kind). Bodies are
  * markdown source in the hub-post subset. Soft delete keeps the row: the API
  * blanks title/body in responses, never in the DB. `reply_count` and
@@ -77,6 +125,12 @@ export const hubForumThreads = pgTable(
     // ROK-2226: event discussion threads. No FK on event_id (spec D1): a
     // series delete emits DELETED after the event rows are gone.
     eventId: integer('event_id'),
+    // ROK-2272: scheduling-poll (lineup match) and lineup discussion threads,
+    // no FK either. A thread discusses at most one subject.
+    matchId: integer('match_id'),
+    lineupId: integer('lineup_id'),
+    // ROK-2272 R8: "subject detached" — reused for poll/lineup threads (the
+    // column keeps its ROK-2226 name).
     eventDetachedAt: timestamp('event_detached_at', { withTimezone: true }),
     writeClosesAt: timestamp('write_closes_at', { withTimezone: true }),
   },
@@ -112,23 +166,7 @@ export const hubForumThreads = pgTable(
     index('idx_hub_forum_threads_pinned_by').on(table.pinnedBy),
     index('idx_hub_forum_threads_deleted_by').on(table.deletedBy),
     discordIdIndex('threads', table.authorDiscordId),
-    // ROK-2226: event discussion threads — one live thread per event.
-    check(
-      'hub_forum_threads_event_detached',
-      sql`${table.eventDetachedAt} IS NULL OR ${table.eventId} IS NOT NULL`,
-    ),
-    check(
-      'hub_forum_threads_write_closes',
-      sql`${table.writeClosesAt} IS NULL OR ${table.eventId} IS NOT NULL`,
-    ),
-    uniqueIndex('uq_hub_forum_threads_event_live')
-      .on(table.eventId)
-      .where(
-        sql`${table.eventId} IS NOT NULL AND ${table.eventDetachedAt} IS NULL`,
-      ),
-    index('idx_hub_forum_threads_event_id')
-      .on(table.eventId)
-      .where(sql`${table.eventId} IS NOT NULL`),
+    ...subjectConstraints(table),
   ],
 );
 
