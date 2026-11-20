@@ -219,4 +219,18 @@ describe('ROK-2272 S8 — hub forums get the Poll and Lineup tags', () => {
     await t.decor.run(1, 'c1');
     expect(t.gw.addTags).toHaveBeenCalledWith('c1', []);
   });
+
+  it('the v2 backfill on a forum dressed under v1 adds exactly Poll + Lineup', async () => {
+    const tags = [
+      { id: 't5', name: 'Alpha' },
+      { id: 't7', name: 'Beta' },
+      EVENT_TAG,
+    ];
+    const t = setup(forumInfo({ tags, requireTag: true }));
+    expect(await t.decor.run(1, 'c1')).toBe('done');
+    expect(t.gw.addTags.mock.calls).toEqual([['c1', ['Poll', 'Lineup']]]);
+    expect(t.gw.applyTag.mock.calls).toEqual([['c1', ['p1'], 't-event']]);
+    expect(q.setBindingTag).not.toHaveBeenCalled();
+    expect(t.gw.requireTags).not.toHaveBeenCalled();
+  });
 });

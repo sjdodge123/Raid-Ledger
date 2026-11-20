@@ -59,6 +59,12 @@ describe('ROK-2258 forum decor backfill guard', () => {
     expect(t.redis.del).not.toHaveBeenCalled();
   });
 
+  it('ROK-2272 S8: the guard is v2, so forums dressed under v1 run again', () => {
+    expect(FORUM_DECOR_BACKFILL_KEY).toBe(
+      'hub-forum:discord-decor:backfill:v2',
+    );
+  });
+
   it('skips everything when the guard is already held', async () => {
     const t = backfill(null);
     expect(await t.svc.run(new Date())).toBe(0);
