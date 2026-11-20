@@ -27,7 +27,8 @@ export class LineupDiscussionListener {
   // R6 note: no subscription covers a lineup's `visibility` or `guildId`
   // changing, because no code path edits either column today. If one is
   // added, emit a lineup event from it; until then the lazy sync on the
-  // discussion GET (`syncLineupDiscussion`) converges the thread on next read.
+  // discussion GET (`syncLineupDiscussion`, run ahead of its 404) converges the
+  // thread on next read. A DELETED subject never emits — see TECH-DEBT.
 
   /** A lineup was created (R4: hub RL thread at create). */
   @OnEvent(LINEUP_LIFECYCLE_EVENTS.CREATED, { async: true })

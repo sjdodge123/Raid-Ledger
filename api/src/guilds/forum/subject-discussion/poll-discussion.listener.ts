@@ -34,7 +34,8 @@ export class PollDiscussionListener {
   // R6 note: no subscription covers a poll lineup's `visibility` or `guildId`
   // changing, because no code path edits either column today. If one is
   // added, emit a poll event from it; until then the lazy sync on the
-  // discussion GET (`syncPollDiscussion`) converges the thread on next read.
+  // discussion GET (`syncPollDiscussion`, run ahead of its 404) converges the
+  // thread on next read. A DELETED subject never emits — see TECH-DEBT.
 
   /** A standalone poll was created (R4: hub RL thread at create). */
   @OnEvent(LINEUP_MATCH_EVENTS.POLL_OPENED, { async: true })

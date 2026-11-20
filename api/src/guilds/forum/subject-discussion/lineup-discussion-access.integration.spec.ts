@@ -9,11 +9,16 @@
  * hub, `outsider` = neither.
  */
 import { randomBytes } from 'crypto';
-import type { HubForumThread, SubjectDiscussion } from '@raid-ledger/contract';
+import type {
+  HubForumThread,
+  HubForumThreadList,
+  SubjectDiscussion,
+} from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { link, newHub } from '../../posts/hub-posts.test-fixtures';
+import { FORUM_NOT_MEMBER } from '../hub-forum.access';
 import {
   FORUM_EVENT_THREAD_MANAGED,
   FORUM_THREAD_READ_ONLY,
@@ -106,8 +111,11 @@ async function setStatus(lineupId: number, status: Status): Promise<void> {
  * Decide the lineup FIRST, then backdate the deadline: backdating while it
  * is still `voting` would be cleared by the GET's sync (reopen rule).
  */
-async function closeLineup(lineupId: number): Promise<void> {
-  await setStatus(lineupId, 'decided');
+async function closeLineup(
+  lineupId: number,
+  status: 'decided' | 'archived' = 'decided',
+): Promise<void> {
+  await setStatus(lineupId, status);
   await db()
     .update(schema.hubForumThreads)
     .set({ writeClosesAt: new Date(Date.now() - 60_000) })
@@ -293,6 +301,11 @@ describe('lineup discussion refusals (R7, §3.1, §3.7)', () => {
       notFound,
     );
     expect(outcome(await replyAs(missing, 'signed'))).toEqual(notFound);
+    const created = await db()
+      .select()
+      .from(schema.hubForumThreads)
+      .where(eq(schema.hubForumThreads.lineupId, missing));
+    expect(created).toEqual([]);
   });
 
   it('a private, a hub-less and a standalone-carrier lineup are 404 on both routes', async () => {
@@ -309,6 +322,40 @@ describe('lineup discussion refusals (R7, §3.1, §3.7)', () => {
       );
       expect(outcome(await replyAs(lineupId, 'signed'))).toEqual(notFound);
     }
+  });
+});
+
+describe('lineup discussion private flip and archive (R6, R1/R2)', () => {
+  it('a lineup flipped private with a live thread is 404 AND the GET detaches + closes the thread (R6)', async () => {
+    const lineupId = await hubLineup();
+    await card(lineupId, 'signed');
+    await db()
+      .update(schema.communityLineups)
+      .set({ visibility: 'private' })
+      .where(eq(schema.communityLineups.id, lineupId));
+    expect(outcome(await as(ctx, 'signed', 'get', route(lineupId)))).toEqual({
+      status: 404,
+      message: LINEUP_NOT_FOUND,
+    });
+    const rows = await db()
+      .select()
+      .from(schema.hubForumThreads)
+      .where(eq(schema.hubForumThreads.lineupId, lineupId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.eventDetachedAt).toBeInstanceOf(Date);
+    expect(rows[0]?.writeClosesAt?.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('an archived lineup past its deadline reads but refuses replies (409)', async () => {
+    const lineupId = await hubLineup();
+    await card(lineupId, 'signed');
+    await closeLineup(lineupId, 'archived');
+    const c = await card(lineupId, 'signed');
+    expect(c).toMatchObject({ can: { read: true, reply: false } });
+    expect(outcome(await replyAs(lineupId, 'signed'))).toEqual({
+      status: 409,
+      message: FORUM_THREAD_READ_ONLY,
+    });
   });
 });
 
@@ -348,5 +395,47 @@ describe('lineup thread through the hub forum routes (§5.5, R7)', () => {
     const post = (who: Actor) => as(ctx, who, 'post', replies, { body: 'x' });
     expect(outcome(await post('signed')).status).toBe(201);
     expect(outcome(await post('tentative'))).toEqual(notParticipant);
+  });
+});
+
+describe('lineup thread hub-route refusals and listing (R7, D7)', () => {
+  it('a closed lineup thread refuses a reply on the hub route too (409)', async () => {
+    const lineupId = await hubLineup();
+    await card(lineupId, 'signed');
+    const replies = `${await hubThreadPath(lineupId)}/replies`;
+    await closeLineup(lineupId);
+    await card(lineupId, 'signed');
+    const res = await as(ctx, 'signed', 'post', replies, { body: 'x' });
+    expect(outcome(res)).toEqual({
+      status: 409,
+      message: FORUM_THREAD_READ_ONLY,
+    });
+  });
+
+  it('an outsider neither reads nor replies on the hub routes (403 FORUM_NOT_MEMBER)', async () => {
+    const lineupId = await hubLineup();
+    await card(lineupId, 'signed');
+    const path = await hubThreadPath(lineupId);
+    const deny = { status: 403, message: FORUM_NOT_MEMBER };
+    expect(outcome(await as(ctx, 'outsider', 'get', path))).toEqual(deny);
+    const post = await as(ctx, 'outsider', 'post', `${path}/replies`, {
+      body: 'x',
+    });
+    expect(outcome(post)).toEqual(deny);
+  });
+
+  it('an empty lineup thread stays off the hub list until its first reply (D7)', async () => {
+    const lineupId = await hubLineup();
+    await card(lineupId, 'signed');
+    const path = await hubThreadPath(lineupId);
+    const threadId = Number(path.split('/').pop());
+    const listed = async (): Promise<number[]> => {
+      const list = await as(ctx, 'signed', 'get', path.replace(/\/\d+$/, ''));
+      expect(list.status).toBe(200);
+      return (list.body as HubForumThreadList).threads.map((t) => t.id);
+    };
+    expect(await listed()).not.toContain(threadId);
+    expect(outcome(await replyAs(lineupId, 'signed')).status).toBe(201);
+    expect(await listed()).toContain(threadId);
   });
 });

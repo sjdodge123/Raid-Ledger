@@ -257,6 +257,35 @@ describe('scheduling-poll discussion refusals (R7, §3.7)', () => {
   });
 });
 
+describe('scheduling-poll private flip (R6)', () => {
+  it('a poll flipped private with a live thread is 404 AND the GET detaches + closes the thread (R6)', async () => {
+    const matchId = await hubPoll();
+    await card(matchId, 'signed');
+    const [m] = nonEmpty(
+      await db()
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, matchId)),
+      'match',
+    );
+    await db()
+      .update(schema.communityLineups)
+      .set({ visibility: 'private' })
+      .where(eq(schema.communityLineups.id, m.lineupId));
+    expect(outcome(await as(ctx, 'signed', 'get', route(matchId)))).toEqual({
+      status: 404,
+      message: POLL_NOT_FOUND,
+    });
+    const rows = await db()
+      .select()
+      .from(schema.hubForumThreads)
+      .where(eq(schema.hubForumThreads.matchId, matchId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.eventDetachedAt).toBeInstanceOf(Date);
+    expect(rows[0]?.writeClosesAt?.getTime()).toBeLessThanOrEqual(Date.now());
+  });
+});
+
 describe('scheduling-poll thread through the hub forum routes (§5.5, R7)', () => {
   it.each<Actor>(['admin', 'officerA'])(
     '%s (creator / hub officer) cannot PATCH or DELETE the root (403 managed)',

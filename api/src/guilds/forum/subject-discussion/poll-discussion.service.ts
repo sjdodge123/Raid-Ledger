@@ -1,7 +1,8 @@
 /**
  * ROK-2272 S7a (R10) — the scheduling-poll discussion routes. The card
- * summary runs the lazy reconciler first (a state change with no emit still
- * converges on read), then reports header + count to anyone signed in and the
+ * summary runs the lazy reconciler first (even ahead of its 404, so a
+ * private / hub-less flip with no emit still converges on read), then
+ * reports header + count to anyone signed in and the
  * newest replies to readers. A reply resolves the poll's LIVE thread, applies
  * the R7 gate (poll copy), then delegates to `HubForumService` (event scope:
  * no hub member gate — the thread context applies the poll matrix).
@@ -52,9 +53,12 @@ export class PollDiscussionService {
     actor: GuildActor,
     matchId: number,
   ): Promise<SubjectDiscussion> {
-    await this.requireHubPoll(matchId);
     const now = this.now();
+    // Sync BEFORE the 404: a subject that turned private or lost its hub
+    // still has its thread closed + detached by this read (R6). An unknown
+    // id is a sync no-op (nothing to detach, nothing created).
     await syncPollDiscussion(this.db, matchId, now);
+    await this.requireHubPoll(matchId);
     const live = await findLivePollThread(this.db, matchId);
     const record = live && (await findThread(this.db, live.guildId, live.id));
     if (!live || !record) return { state: 'none' };

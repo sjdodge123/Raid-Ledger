@@ -1,8 +1,9 @@
 /**
  * ROK-2272 S7b (R10) — the community-lineup discussion routes (mirror of the
  * poll service). The card
- * summary runs the lazy reconciler first (a state change with no emit still
- * converges on read), then reports header + count to anyone signed in and the
+ * summary runs the lazy reconciler first (even ahead of its 404, so a
+ * private / hub-less flip with no emit still converges on read), then
+ * reports header + count to anyone signed in and the
  * newest replies to readers. A reply resolves the lineup's LIVE thread, applies
  * the R7 gate (lineup copy), then delegates to `HubForumService` (event scope:
  * no hub member gate — the thread context applies the lineup matrix).
@@ -56,9 +57,12 @@ export class LineupDiscussionService {
     actor: GuildActor,
     lineupId: number,
   ): Promise<SubjectDiscussion> {
-    await this.requireHubLineup(lineupId);
     const now = this.now();
+    // Sync BEFORE the 404: a subject that turned private or lost its hub
+    // still has its thread closed + detached by this read (R6). An unknown
+    // id is a sync no-op (nothing to detach, nothing created).
     await syncLineupDiscussion(this.db, lineupId, now);
+    await this.requireHubLineup(lineupId);
     const live = await findLiveLineupThread(this.db, lineupId);
     const record = live && (await findThread(this.db, live.guildId, live.id));
     if (!live || !record) return { state: 'none' };
