@@ -80,7 +80,8 @@ async function closeEvent(ctx: TestContext, eventId: number): Promise<void> {
   await ctx.api.post("/admin/test/set-event-times", { eventId, startTime: futureTime(-180), endTime: futureTime(-120) });
   await syncPlanningPost(ctx, eventId);
   const res = await ctx.api.post<{ changed?: unknown }>(`${FIXTURES}/lock-sweep`, {});
-  if (typeof res.changed !== "number" || res.changed < 1) fail("ROK-2272: the lock sweep should close the ended event's post", res);
+  // `changed` may be 0 if the 5-min cron got there first; the Discord state is the assertion.
+  if (typeof res.changed !== "number") fail("lock-sweep fixture: expected { changed: number }", res);
 }
 
 async function expectLockedArchived(postId: string): Promise<void> {
