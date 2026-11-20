@@ -1131,18 +1131,45 @@ _lint_node_opts() {
   fi
 }
 
-# `npm run lint -w api` as two eslint processes (fleet heap OOM, 2026-11-02).
-# api/tsconfig.json has no `include`, so projectService puts every api file in
-# ONE program, and the type checker's caches for every linted file pile up in
-# that one process. Splitting the file list caps each process's share: pass 1
-# is the npm script's own glob minus `*.spec.ts`, pass 2 is exactly the
-# `*.spec.ts` files of that glob, so the union is the original file set. The
-# step fails if either pass fails.
+# `npm run lint -w api` as fourteen eslint processes, one after another (fleet heap
+# OOM, 2026-11-02 and 2026-11-20). api/tsconfig.json has no `include`, so
+# projectService puts every api file in ONE program (~2 GB RSS before a file is
+# linted), and the type checker's caches for every linted file pile up on top
+# of it. Two passes (non-spec, spec) each still peaked at 5.2-5.8 GB of the
+# 6 GiB runner; per-directory shards cap the cache share (measured: 780 files
+# of src/plugins peak at ~3.5 GB; the "rest" non-spec process is the largest
+# at ~4.7 GB). Each kind (non-spec, spec) runs one process
+# per API_LINT_SHARDS entry plus a last "rest" process that ignores every
+# listed directory, so the union is exactly the npm script's file set.
+# Same config, same rules; the step fails if any process fails.
+# scripts/validate-ci-api-lint-shards.spec.mjs keeps API_LINT_GLOB equal to
+# api/package.json's `lint` glob.
+API_LINT_GLOB='{src,apps,libs,test}/**/*.ts'
+API_LINT_SHARDS=('src/plugins' 'src/discord-bot' 'src/lineups src/guilds' 'src/admin src/events src/drizzle src/calendar-sync'
+  'src/notifications src/igdb src/companion src/common' 'src/users src/auth src/lfg src/ai src/hub-media src/steam')
+
+_api_lint_shards_for() {
+  local spec="$1" kind_flag shard dir rest_ignores=() globs
+  if [ "$spec" = spec ]; then kind_flag=(); else kind_flag=(--ignore-pattern '**/*.spec.ts'); fi
+  for shard in "${API_LINT_SHARDS[@]}"; do
+    globs=()
+    for dir in $shard; do
+      if [ "$spec" = spec ]; then globs+=("$dir/**/*.spec.ts"); else globs+=("$dir/**/*.ts"); fi
+      rest_ignores+=(--ignore-pattern "$dir/**")
+    done
+    echo "api lint ($spec): $shard"
+    npx eslint "${globs[@]}" ${kind_flag[@]+"${kind_flag[@]}"} || return $?
+  done
+  echo "api lint ($spec): rest"
+  if [ "$spec" = spec ]; then globs=('{src,apps,libs,test}/**/*.spec.ts'); else globs=("$API_LINT_GLOB"); fi
+  npx eslint "${globs[@]}" ${kind_flag[@]+"${kind_flag[@]}"} "${rest_ignores[@]}" || return $?
+}
+
 run_api_lint() {
   local opts
   opts="$(_lint_node_opts)"
-  NODE_OPTIONS="$opts" npm run lint -w api -- --ignore-pattern '**/*.spec.ts' || return $?
-  (cd "$REPO_ROOT/api" && NODE_OPTIONS="$opts" npx eslint '{src,apps,libs,test}/**/*.spec.ts') || return $?
+  (cd "$REPO_ROOT/api" && export NODE_OPTIONS="$opts" \
+    && _api_lint_shards_for nonspec && _api_lint_shards_for spec) || return $?
 }
 
 run_unit_tests() {
