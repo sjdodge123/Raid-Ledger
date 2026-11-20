@@ -11,6 +11,10 @@
  * are well-known in-instance starters whose Wowhead page did not show the
  * start location. Keep this small and correct rather than complete: a quest
  * missing here only shows in the "before you go in" list.
+ *
+ * ROK-2269: WoW: Forever dungeon quests are listed too. The seeder, the
+ * Blizzard overlay and the Forever importer all read this list, so a
+ * Forever row flips to inside on the next boot without a migration.
  */
 export interface InsideQuest {
   questId: number;
@@ -135,6 +139,22 @@ export const INSIDE_DUNGEON_QUESTS: readonly InsideQuest[] = [
   q(7483, 'Libram of Rapidity', 'Dire Maul', false),
   q(7484, 'Libram of Focus', 'Dire Maul', false),
   q(7485, 'Libram of Protection', 'Dire Maul', false),
+  // ROK-2269 (WoW: Forever): no start NPC in the Forever quest data ⇒ item/
+  // object pickup inside; operator report 2026-11-20 (ROK-2269). Unverified
+  // in game. The guard in dungeon-quest-inside.spec.ts fails until every
+  // bundled no-start-NPC Forever dungeon quest is listed here.
+  q(96395, 'An Ancient Grudge', 'The Hall of Thanes', false),
+  q(92415, 'Remember That I Love You', 'Ruins of Lordaeron', false),
+  q(95189, 'Crest of Lordaeron', 'Ruins of Lordaeron', false),
+  q(95195, 'Bloodied Insignia', 'Ruins of Lordaeron', false),
+  q(95204, 'Crest of Lordaeron', 'Ruins of Lordaeron', false),
+  q(95250, 'Abominable Creatures', 'Ruins of Lordaeron', false),
+  q(97288, 'Unending Torment', 'Ruins of Lordaeron', false),
+  q(95664, 'Elder Knowledge', 'Excavation Site: Wetlands', false),
+  q(95795, 'Fallen in the Fen', 'Excavation Site: Wetlands', false),
+  q(95809, 'Heartwoven', 'Excavation Site: Wetlands', false),
+  q(95810, 'Lost Relic Carry', 'Excavation Site: Wetlands', false),
+  q(96987, 'Opportunistic Education', 'City of Dalaran', false),
 ];
 
 export const INSIDE_DUNGEON_QUEST_IDS: ReadonlySet<number> = new Set(
