@@ -137,6 +137,20 @@ function eventFields(
   };
 }
 
+/**
+ * ROK-2272 S7 (Codex): a poll / lineup thread names its subject so the web
+ * list's `forumRowCan` treats it as lifecycle-owned (no Edit/Delete), as the
+ * thread view does. Absent on every other thread.
+ */
+function subjectIds(
+  thread: HubForumThreadSelect,
+): Pick<HubForumThreadSummary, 'matchId' | 'lineupId'> {
+  return {
+    ...(thread.matchId === null ? {} : { matchId: thread.matchId }),
+    ...(thread.lineupId === null ? {} : { lineupId: thread.lineupId }),
+  };
+}
+
 /** ROK-2229: folds the signup count into an event thread's `event`. */
 function withSignupCount(
   summary: HubForumThreadSummary,
@@ -166,6 +180,7 @@ export function toThreadSummary(
     deleted,
     ...forumSync(thread, record.author),
     ...eventFields(record, now),
+    ...subjectIds(thread),
   };
 }
 
