@@ -103,13 +103,18 @@ export class HubForumDiscordEventLockSweep {
 
   /**
    * Flip every due post — hub links, then the event-planning registry
-   * (ROK-2272 S4a); a throw in one pass never stops the other. Returns how
-   * many changed. Offline bot → 0.
+   * (ROK-2272 S4a); a throw in one pass never stops the other, but the
+   * first one is rethrown after both ran so the cron records a failure
+   * (review MAJOR-1). Returns how many changed. Offline bot → 0.
    */
   async sweep(now = new Date()): Promise<number> {
     if (!this.client.isConnected()) return 0;
-    const hub = await this.pass('hub', () => this.sweepHub(now));
-    const reg = await this.pass('registry', () => this.registry.sweep(now));
+    const errors: unknown[] = [];
+    const hub = await this.pass('hub', errors, () => this.sweepHub(now));
+    const reg = await this.pass('registry', errors, () =>
+      this.registry.sweep(now),
+    );
+    if (errors.length > 0) throw errors[0];
     return hub + reg;
   }
 
@@ -121,12 +126,18 @@ export class HubForumDiscordEventLockSweep {
     return changed;
   }
 
-  private async pass(what: string, fn: () => Promise<number>): Promise<number> {
+  /** One pass; a throw is logged, collected into `errors`, counted as 0. */
+  private async pass(
+    what: string,
+    errors: unknown[],
+    fn: () => Promise<number>,
+  ): Promise<number> {
     try {
       return await fn();
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Event lock sweep (${what}) failed: ${why}`);
+      errors.push(err);
       return 0;
     }
   }

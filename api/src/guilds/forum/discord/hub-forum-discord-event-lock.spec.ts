@@ -138,16 +138,37 @@ describe('ROK-2272 S4a: the registry pass', () => {
     expect(registry.sweep).toHaveBeenCalledWith(NOW);
   });
 
-  it('a hub-pass throw does not stop the registry pass', async () => {
+  it('a hub-pass throw still runs the registry pass, then rejects with it (MAJOR-1)', async () => {
     const { sweep, registry, due } = setup([]);
-    due.mockRejectedValueOnce(new Error('db down'));
+    const err = new Error('db down');
+    due.mockRejectedValueOnce(err);
     registry.sweep.mockResolvedValueOnce(1);
-    expect(await sweep.sweep(NOW)).toBe(1);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
+    expect(registry.sweep).toHaveBeenCalledWith(NOW);
   });
 
-  it('a registry-pass throw keeps the hub count', async () => {
-    const { sweep, registry } = setup([[row(true)]]);
-    registry.sweep.mockRejectedValueOnce(new Error('boom'));
+  it('a registry-pass throw still applies the hub pass, then rejects with it (MAJOR-1)', async () => {
+    const { sweep, registry, gateway, sets } = setup([[row(true)]]);
+    const err = new Error('boom');
+    registry.sweep.mockRejectedValueOnce(err);
+    await expect(sweep.sweep(NOW)).rejects.toBe(err);
+    expect(gateway.setReadOnly).toHaveBeenCalledWith('9', true);
+    expect(sets).toEqual([{ discordLockedAt: NOW }]);
+  });
+
+  it('both passes throw: rejects with the FIRST (hub) error', async () => {
+    const { sweep, registry, due } = setup([]);
+    const first = new Error('hub down');
+    due.mockRejectedValueOnce(first);
+    registry.sweep.mockRejectedValueOnce(new Error('registry down'));
+    await expect(sweep.sweep(NOW)).rejects.toBe(first);
+    expect(registry.sweep).toHaveBeenCalledTimes(1);
+  });
+
+  it('a per-row Discord failure stays logged-and-skipped (no rejection)', async () => {
+    const { sweep, gateway, registry } = setup([[row(true)]]);
+    gateway.setReadOnly.mockRejectedValueOnce(new Error('50013'));
+    registry.sweep.mockResolvedValueOnce(1);
     expect(await sweep.sweep(NOW)).toBe(1);
   });
 
