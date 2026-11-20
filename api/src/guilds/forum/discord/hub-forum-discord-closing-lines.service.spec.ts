@@ -27,6 +27,7 @@ jest.mock('../subject-discussion/poll-discussion.queries', () => ({
 }));
 jest.mock('../subject-discussion/lineup-discussion.queries', () => ({
   findLiveLineupThread: jest.fn(),
+  findLineupForSync: jest.fn(),
 }));
 jest.mock('./event-planning-posts.queries', () => ({
   findLivePlanningPost: jest.fn(),
