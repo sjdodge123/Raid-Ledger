@@ -22,6 +22,7 @@ import {
   fireMatchEnteredScheduling,
   fireOrphanedPollCards,
 } from '../lineups-scheduling-hook.helpers';
+import { emitLineupStatusChanged } from '../lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -84,6 +85,13 @@ export async function announceLineupDecided(
 ): Promise<void> {
   fireOrphanedPollCards(deps.events, pass.orphanedCards);
   fireMatchEnteredScheduling(deps.events, pass.schedulingMatchIds);
+  // ROK-2272 S6: a tiebreaker only resolves a lineup that is in `voting`.
+  emitLineupStatusChanged(deps.events, {
+    lineupId,
+    from: 'voting',
+    to: 'decided',
+    visibility: null,
+  });
   await writeDecidedCohortMemory(deps.db, lineupId, deps.logger);
 }
 

@@ -36,6 +36,7 @@ import type { LineupsGateway } from './lineups.gateway';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 import { LINEUP_EVENTS } from './lineup-events.constants';
+import { emitLineupStatusChanged } from './lineup-lifecycle-emit.helpers';
 import { writeDecidedCohortMemory } from './cohort-memory-write.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -99,6 +100,13 @@ export async function runStatusTransition(
   // subscribed clients see the phase flip without polling. The timestamp
   // matches the row's `updatedAt` we just wrote (within milliseconds).
   deps.lineupsGateway.emitStatusChange(id, dto.status, new Date());
+  // ROK-2272 S6: the CAS committed (applyStatusUpdate threw otherwise).
+  emitLineupStatusChanged(deps.eventEmitter, {
+    lineupId: id,
+    from: lineup.status,
+    to: dto.status,
+    visibility: lineup.visibility,
+  });
   if (dto.status === 'decided') {
     await runMatchingAlgorithm(deps.db, id, deps.logger, deps.eventEmitter);
     // ROK-1309: AFTER matching — the `match`-tier rows the memory write reads

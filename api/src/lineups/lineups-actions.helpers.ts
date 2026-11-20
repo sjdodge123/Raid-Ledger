@@ -54,6 +54,8 @@ import {
   deleteEntry,
 } from './lineups-removal.helpers';
 import type { CallerIdentity } from './lineups.service';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { emitLineupCreated } from './lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type ResolveChannelName = (channelId: string) => string | null;
@@ -66,6 +68,8 @@ export interface CreateLineupDeps {
   lineupNotifications: LineupNotificationService;
   logger: Logger;
   resolveChannelName: ResolveChannelName;
+  /** ROK-2272 S6: lifecycle bus for `LINEUP_LIFECYCLE_EVENTS.CREATED`. */
+  eventEmitter?: EventEmitter2;
 }
 
 /**
@@ -87,6 +91,11 @@ export async function runCreateLineup(
     'inserted lineup row',
   );
   await deps.activityLog.log('lineup', row.id, 'lineup_created', userId);
+  // ROK-2272 S6: the insert transaction has committed by now.
+  emitLineupCreated(deps.eventEmitter, {
+    lineupId: row.id,
+    visibility: row.visibility,
+  });
   if (row.visibility === 'public') {
     void deps.steamNudge.nudgeUnlinkedMembers(row.id);
     await carryOverFromLastDecided(deps.db, row.id);

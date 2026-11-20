@@ -3,7 +3,14 @@
  * the legacy `POST …/complete` (after `POST /events`) and the claim-first
  * `POST …/lock-in`, which creates the event only after claiming the match.
  */
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  Optional,
+  forwardRef,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   type CreateEventDto,
@@ -33,6 +40,7 @@ import { rescheduleLockedInPoll } from './standalone-poll-reschedule-lock-in.hel
 import { LineupNotificationService } from '../lineup-notification.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 import { NotificationService } from '../../notifications/notification.service';
+import { emitPollLockedIn } from '../lineup-lifecycle-emit.helpers';
 
 /** No-op rejection swallower for fire-and-forget emits. */
 const noop = (): void => {};
@@ -69,6 +77,7 @@ export class StandalonePollLockInService {
     private readonly embedSyncQueue: EmbedSyncQueueService,
     private readonly guildTag: EventGuildTagService,
     private readonly notificationService: NotificationService,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /**
@@ -87,6 +96,8 @@ export class StandalonePollLockInService {
       this.createDeps(user, caller.isAdmin),
       { matchId, caller, body },
     );
+    // ROK-2272 S6: the claim + link committed inside createLockedInPollEvent.
+    emitPollLockedIn(this.events, { matchId, eventId: created.event.id });
     this.schedulingPollEmbed.fireUpdateEmbed(matchId);
     // D4: no start time → no slot voters to sign up, nothing to announce.
     // Always `announce: true`: this path refuses reschedule polls.
@@ -146,6 +157,11 @@ export class StandalonePollLockInService {
     lockIn: CompletedLockIn,
   ): Promise<void> {
     const { matchId, eventId, startTime } = lockIn;
+    // ROK-2272 S6: legacy complete + reschedule lock-in both land here.
+    emitPollLockedIn(this.events, {
+      matchId,
+      eventId: eventId ?? result.linkedEventId ?? null,
+    });
     // ROK-1461: lock-in flips the match to `scheduled` — re-render the poll
     // embed so its author line and colour follow.
     this.schedulingPollEmbed.fireUpdateEmbed(matchId);

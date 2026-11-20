@@ -68,6 +68,8 @@ import {
 import { NotificationService } from '../../notifications/notification.service';
 import { errorStack } from '../../common/error-format.helpers';
 import { GuildAccessService } from '../../guilds/guild-access.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { emitPollVotedFor } from '../lineup-lifecycle-emit.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -84,6 +86,7 @@ export class SchedulingService {
     private readonly unanimous: SchedulingUnanimousService,
     private readonly guildAccess: GuildAccessService,
     @Optional() private readonly nudge?: GameActivityNudge,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /**
@@ -252,6 +255,7 @@ export class SchedulingService {
       writeSlotTap(tx, slot, userId, stance, source),
     );
     this.fireVoteSideEffects(matchId);
+    emitPollVotedFor(this.events, match, userId, action.stance);
     GameActivityNudge.safeTouch(this.nudge, match.gameId);
     return { voted: action.stance === 'yes', stance: action.stance };
   }
@@ -388,6 +392,7 @@ export class SchedulingService {
       match,
       actorUserId,
       normalizeReason(reason),
+      this.events,
     );
     // ROK-1461: archived — re-render so the embed shows "POLL CLOSED".
     this.pollEmbed.fireUpdateEmbed(matchId);

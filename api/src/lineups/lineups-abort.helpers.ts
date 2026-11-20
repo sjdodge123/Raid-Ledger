@@ -26,6 +26,7 @@ import { healClearedEventEmbeds } from './lineups-embed-heal.helpers';
 import type { EmbedSyncQueueService } from '../discord-bot/queues/embed-sync.queue';
 import { buildDetailResponse } from './lineups-response.helpers';
 import { logAborted } from './lineups-activity.helpers';
+import { emitLineupStatusChanged } from './lineup-lifecycle-emit.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -116,6 +117,13 @@ async function finalizeAbort(
 ): Promise<void> {
   await deps.phaseQueue.cancelAllForLineup(lineup.id);
   deps.lineupsGateway.emitStatusChange(lineup.id, 'archived', new Date());
+  // ROK-2272 S6: `lineup` is the PRE-abort snapshot, so `status` is `from`.
+  emitLineupStatusChanged(deps.eventEmitter, {
+    lineupId: lineup.id,
+    from: lineup.status,
+    to: 'archived',
+    visibility: lineup.visibility,
+  });
   const actorDisplayName =
     actorId === null
       ? SYSTEM_ACTOR_NAME

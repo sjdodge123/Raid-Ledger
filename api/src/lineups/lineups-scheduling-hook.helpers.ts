@@ -25,6 +25,12 @@ export const LINEUP_MATCH_EVENTS = {
   ENTERED_SCHEDULING: 'lineup.match.entered-scheduling',
   /** A re-decide wiped matches that owned poll cards (TDB:571). */
   POLL_CARDS_ORPHANED: 'lineup.match.poll-cards-orphaned',
+  /** ROK-2272 S6: a slot tap committed (payload `PollVotedPayload`). */
+  POLL_VOTED: 'lineup.match.poll-voted',
+  /** ROK-2272 S6: a match locked in → `scheduled` (`PollLockedInPayload`). */
+  POLL_LOCKED_IN: 'lineup.match.poll-locked-in',
+  /** ROK-2272 S6: an operator cancelled the poll (`PollCancelledPayload`). */
+  POLL_CANCELLED: 'lineup.match.poll-cancelled',
 } as const;
 
 /** A Discord poll card left behind by a wiped match (TDB:571). */
