@@ -24,11 +24,11 @@ import {
 } from '../event-discussion/event-discussion.test-fixtures';
 import { LineupDiscussionReplyThrottleGuard } from '../subject-discussion/lineup-discussion-throttle.guard';
 import { PollDiscussionReplyThrottleGuard } from '../subject-discussion/poll-discussion-throttle.guard';
-import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
 import {
   stubOutbound,
   type FakeOutbound,
 } from './hub-forum-discord-outbound.test-fixtures';
+import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 import { subjectPostTitle } from './hub-forum-discord-subject';
 import { stubForumGateway } from './hub-forum-discord.test-fixtures';
 
@@ -308,12 +308,16 @@ async function makePrivate(lineupId: number): Promise<void> {
     .where(eq(schema.communityLineups.id, lineupId));
 }
 
-/** The first-vote path the POLL_VOTED listener takes, awaited. */
+/**
+ * The first-vote path the POLL_VOTED listener takes, awaited. ROK-2272 S10:
+ * that is `hubVote`; a cleared tap creates the post without a voter ping.
+ */
 async function firstVote(matchId: number): Promise<void> {
   const app = ctx.posts.testApp.app;
+  const lineupId = await lineupOf(matchId);
   await app
-    .get(HubForumDiscordClosingLines, { strict: false })
-    .firstVote(matchId);
+    .get(HubForumDiscordPollVoterPings, { strict: false })
+    .hubVote({ matchId, lineupId, userId: ctx.ids.signed, stance: null });
 }
 
 /** No post was ever created for `threadId`, even when asked directly. */
