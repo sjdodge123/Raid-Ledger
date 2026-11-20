@@ -41,7 +41,7 @@ function extractFunction(name) {
  * Returns { code, skipped, stdout } — `skipped` reflects the exported
  * SKIP_DISCORD_SMOKE_NO_BOT_ENV the real step branches on.
  */
-function runGate({ hasEnvFile, token, guildId, ciMode, rlTarget }) {
+function runGate({ hasEnvFile, token, guildId, ciMode, rlTarget, marker }) {
   const root = mkdtempSync(join(tmpdir(), 'validate-ci-botenv-'));
   try {
     mkdirSync(join(root, 'tools', 'test-bot'), { recursive: true });
@@ -55,6 +55,9 @@ function runGate({ hasEnvFile, token, guildId, ciMode, rlTarget }) {
       rlTarget === undefined
         ? 'unset RL_TARGET || true'
         : `export RL_TARGET=${JSON.stringify(rlTarget)}`,
+      marker === undefined
+        ? 'unset RL_DISCORD_CREDS_MISSING || true'
+        : `export RL_DISCORD_CREDS_MISSING=${JSON.stringify(marker)}`,
       token === undefined
         ? 'unset TEST_BOT_TOKEN || true'
         : `export TEST_BOT_TOKEN=${JSON.stringify(token)}`,
@@ -131,38 +134,68 @@ test('an incomplete env hard-fails under --ci and names what is missing', () => 
 
 // ROK-2280: on a fleet runner the credentials come from the VM's
 // /srv/rl-infra/.env (RL_TEST_BOT_TOKEN / RL_DISCORD_TEST_GUILD_ID), forwarded
-// by run-on-runner-with-heartbeat, which also exports RL_TARGET=runner. "Copy
-// tools/test-bot/.env from the main repo" is wrong advice there, so the SKIP
-// names the VM keys that are missing instead.
-test('fleet runner with no creds names both VM keys and the setup pointer', () => {
-  const r = runGate({ hasEnvFile: false, ciMode: false, rlTarget: 'runner' });
+// by run-on-runner-with-heartbeat (which also exports RL_TARGET=runner) ONLY
+// into an rl_validate_ci task that includes the Discord tier. When such a task
+// lacks a VM key, the wrapper forwards RL_DISCORD_CREDS_MISSING (key NAMES) and
+// the SKIP names exactly those keys. With no marker the creds were withheld on
+// purpose (rl validate-ci, /push self-dispatch, rl_run_on_runner), so the SKIP
+// must NOT tell the reader to set a VM key.
+const FLEET_SETUP_LINE = /rl-infra\/SETUP\.md §3\.2; takes effect on the next gate, no restart/;
+
+test('fleet runner with a marker naming both keys names both and the setup pointer', () => {
+  const r = runGate({
+    hasEnvFile: false, ciMode: false, rlTarget: 'runner',
+    marker: 'RL_TEST_BOT_TOKEN, RL_DISCORD_TEST_GUILD_ID',
+  });
   assert.equal(r.code, 0);
   assert.equal(r.skipped, true);
-  assert.match(r.stdout, /Fleet runner: companion-bot credentials come from the VM/);
-  assert.match(r.stdout, /RL_TEST_BOT_TOKEN/);
-  assert.match(r.stdout, /RL_DISCORD_TEST_GUILD_ID/);
-  assert.match(r.stdout, /\/srv\/rl-infra\/\.env/);
-  assert.match(r.stdout, /rl-infra\/SETUP\.md §3\.2; takes effect on the next gate, no restart/);
+  assert.match(r.stdout, /Fleet runner: companion-bot credentials come from the VM — set RL_TEST_BOT_TOKEN, RL_DISCORD_TEST_GUILD_ID in \/srv\/rl-infra\/\.env/);
+  assert.match(r.stdout, FLEET_SETUP_LINE);
   assert.doesNotMatch(r.stdout, /Copy it from the main repo/);
 });
 
-test('fleet runner missing only the token names only RL_TEST_BOT_TOKEN', () => {
-  const r = runGate({ hasEnvFile: false, guildId: '42', ciMode: false, rlTarget: 'runner' });
+test('fleet runner with a marker naming only the token names only RL_TEST_BOT_TOKEN', () => {
+  const r = runGate({ hasEnvFile: false, ciMode: false, rlTarget: 'runner', marker: 'RL_TEST_BOT_TOKEN' });
   assert.equal(r.skipped, true);
-  assert.match(r.stdout, /RL_TEST_BOT_TOKEN/);
+  assert.match(r.stdout, /set RL_TEST_BOT_TOKEN in \/srv\/rl-infra\/\.env/);
   assert.doesNotMatch(r.stdout, /RL_DISCORD_TEST_GUILD_ID/);
 });
 
-test('fleet runner missing only the guild names only RL_DISCORD_TEST_GUILD_ID', () => {
-  const r = runGate({ hasEnvFile: false, token: 'sentinel-tok-XYZ', ciMode: false, rlTarget: 'runner' });
+test('fleet runner with a marker naming only the guild names only RL_DISCORD_TEST_GUILD_ID', () => {
+  const r = runGate({ hasEnvFile: false, ciMode: false, rlTarget: 'runner', marker: 'RL_DISCORD_TEST_GUILD_ID' });
   assert.equal(r.skipped, true);
-  assert.match(r.stdout, /RL_DISCORD_TEST_GUILD_ID/);
+  assert.match(r.stdout, /set RL_DISCORD_TEST_GUILD_ID in \/srv\/rl-infra\/\.env/);
   assert.doesNotMatch(r.stdout, /RL_TEST_BOT_TOKEN/);
+});
+
+test('fleet runner with no marker says creds go only to a Discord-tier rl_validate_ci task', () => {
+  const r = runGate({ hasEnvFile: false, ciMode: false, rlTarget: 'runner' });
+  assert.equal(r.code, 0);
+  assert.equal(r.skipped, true);
+  assert.match(r.stdout, /Fleet runner: companion-bot credentials are forwarded only into an rl_validate_ci task that includes the Discord tier \(--only-e2e \/ --with-e2e \/ --fleet \/ a full run\), not into rl validate-ci, \/push self-dispatch or rl_run_on_runner\./);
+  assert.match(r.stdout, /Run the tier with rl_validate_ci to cover the changed bot\/notification flows\./);
+  assert.doesNotMatch(r.stdout, /\/srv\/rl-infra\/\.env/, 'the key may be set; do not send the reader to the VM');
+  assert.doesNotMatch(r.stdout, /Copy it from the main repo/);
+});
+
+test('fleet runner with a junk marker falls back to naming both keys and never echoes it', () => {
+  const r = runGate({
+    hasEnvFile: false, ciMode: false, rlTarget: 'runner',
+    marker: 'RL_TEST_BOT_TOKEN; rm -rf $(sentinel-tok-XYZ)',
+  });
+  assert.equal(r.skipped, true);
+  assert.match(r.stdout, /set RL_TEST_BOT_TOKEN, RL_DISCORD_TEST_GUILD_ID in \/srv\/rl-infra\/\.env/);
+  assert.doesNotMatch(r.stdout, /sentinel-tok-XYZ|rm -rf/);
+});
+
+test('a runner token value is never echoed', () => {
+  const r = runGate({ hasEnvFile: false, token: 'sentinel-tok-XYZ', ciMode: false, rlTarget: 'runner', marker: 'RL_DISCORD_TEST_GUILD_ID' });
+  assert.equal(r.skipped, true);
   assert.doesNotMatch(r.stdout, /sentinel-tok-XYZ/, 'a credential value is never echoed');
 });
 
 test('laptop wording is unchanged and never mentions the VM keys', () => {
-  const r = runGate({ hasEnvFile: false, ciMode: false });
+  const r = runGate({ hasEnvFile: false, ciMode: false, marker: 'RL_TEST_BOT_TOKEN' });
   assert.equal(r.skipped, true);
   assert.match(r.stdout, /No tools\/test-bot\/\.env on this checkout \(missing: TEST_BOT_TOKEN, TEST_GUILD_ID\) — skipping Discord smoke\./);
   assert.match(r.stdout, /Copy it from the main repo \(or export TEST_BOT_TOKEN \+ TEST_GUILD_ID\)/);

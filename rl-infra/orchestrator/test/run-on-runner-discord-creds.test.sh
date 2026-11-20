@@ -15,8 +15,13 @@
 #   D3 — --scoped, --static, --no-e2e, --only-unit, --only-integration,
 #        RL_GATE_DISCORD=defer → nothing TEST_* forwarded.
 #   D4 — RL_TASK_TOOL=rl_run_on_runner → not injected even for --only-e2e.
-#   D5 — a missing VM key is named on stdout; neither var is forwarded.
+#   D5 — a missing VM key is named on stdout; neither var is forwarded; the
+#        missing key NAMES go to the runner as RL_DISCORD_CREDS_MISSING
+#        (`-e` by name) so validate-ci.sh can say which VM key to set.
 #   D6 — the value appears nowhere in the wrapper's output or $RL_STATE_DIR.
+#   D7 — no RL_DISCORD_CREDS_MISSING marker when creds are forwarded (even if
+#        the caller's env carried one), for excluded tiers, or for
+#        rl_run_on_runner — so a marker-less runner SKIP means "not forwarded".
 #
 # Technique: `docker` is stubbed on PATH. The shim records its argv, and — for
 # the caller's command — the environment it inherited, then exits 0. Nothing
@@ -147,14 +152,30 @@ test_d4_other_tools_never_inject() {
     _assert_not_injected "D4 [no RL_TASK_TOOL]"
 }
 
+# _assert_marker <label> <expected key names> — the shim saw
+# `-e RL_DISCORD_CREDS_MISSING` and inherited exactly that value (key NAMES).
+_assert_marker() {
+    assert_contains "$ARGV" "-e RL_DISCORD_CREDS_MISSING " "$1: argv must forward the missing-key marker by name"
+    assert_eq "$(_env_has "RL_DISCORD_CREDS_MISSING=$2")" "yes" "$1: the marker must carry exactly the missing VM key names"
+}
+
+# _assert_no_marker <label> — neither argv nor the shim's env has the marker.
+_assert_no_marker() {
+    local seen=""
+    [[ "$ARGV" == *RL_DISCORD_CREDS_MISSING* ]] && seen="argv"
+    grep -q '^RL_DISCORD_CREDS_MISSING=' <<<"$ENVDUMP" && seen="${seen} env"
+    assert_eq "${seen:-none}" "none" "$1: no RL_DISCORD_CREDS_MISSING marker may reach the runner"
+}
+
 test_d5_missing_key_is_named_and_nothing_forwarded() {
-    CURRENT_TEST_NAME="D5: a missing VM key is named; neither var forwarded"
+    CURRENT_TEST_NAME="D5: a missing VM key is named; neither var forwarded; marker set"
     _with_creds
     unset RL_TEST_BOT_TOKEN
     _run rl_validate_ci "bash /workspace/scripts/validate-ci.sh '--only-e2e'"
     assert_contains "$OUT" "[discord-creds] RL_TEST_BOT_TOKEN unset in /srv/rl-infra/.env — Discord smoke will SKIP (rl-infra/SETUP.md §3.2)" \
         "D5: a missing token must be named on stdout so the SKIP is explainable"
     _assert_not_injected "D5 [token unset]"
+    _assert_marker "D5 [token unset]" "RL_TEST_BOT_TOKEN"
 
     _with_creds
     export RL_DISCORD_TEST_GUILD_ID=$' \r'
@@ -162,14 +183,18 @@ test_d5_missing_key_is_named_and_nothing_forwarded() {
     assert_contains "$OUT" "[discord-creds] RL_DISCORD_TEST_GUILD_ID unset" \
         "D5: a whitespace-only guild id counts as unset"
     _assert_not_injected "D5 [guild blank]"
+    _assert_marker "D5 [guild blank]" "RL_DISCORD_TEST_GUILD_ID"
 
     _without_creds
     _run rl_validate_ci "bash /workspace/scripts/validate-ci.sh '--only-e2e'"
     assert_contains "$OUT" "[discord-creds] RL_TEST_BOT_TOKEN, RL_DISCORD_TEST_GUILD_ID unset" \
         "D5: both missing keys are named on one line"
     _assert_not_injected "D5 [both unset]"
+    _assert_marker "D5 [both unset]" "RL_TEST_BOT_TOKEN, RL_DISCORD_TEST_GUILD_ID"
 }
 
+# D6 drives the wrapper directly (its stdout IS the task .log); the task-record
+# half — env capture and RL_TASK_TOOL in the record — is D7 in test_task_start.sh.
 test_d6_value_never_logged() {
     CURRENT_TEST_NAME="D6: the token value never reaches output or state"
     export RL_TEST_BOT_TOKEN=$'  '"$SENTINEL_TOKEN"$'\r\n'
@@ -182,7 +207,28 @@ test_d6_value_never_logged() {
     assert_eq "$hits" "0 " "D6: the token must appear in neither the wrapper's stdout/stderr nor any file under RL_STATE_DIR (audit log)"
 }
 
-_cleanup_creds() { _without_creds; }
+test_d7_marker_only_when_creds_withheld_for_a_missing_key() {
+    CURRENT_TEST_NAME="D7: no missing-key marker unless a wanted run lacks a VM key"
+    _with_creds
+    export RL_DISCORD_CREDS_MISSING="RL_TEST_BOT_TOKEN"
+    _run rl_validate_ci "bash /workspace/scripts/validate-ci.sh '--only-e2e'"
+    _assert_injected "D7 [creds forwarded]"
+    _assert_no_marker "D7 [creds forwarded, caller had a stale marker]"
+    unset RL_DISCORD_CREDS_MISSING
+
+    _without_creds
+    local args
+    for args in "'--static'" "'--scoped'" "'--fleet' '--no-e2e'"; do
+        _run rl_validate_ci "bash /workspace/scripts/validate-ci.sh $args"
+        _assert_no_marker "D7 [excluded $args]"
+    done
+    _run rl_run_on_runner "bash /workspace/scripts/validate-ci.sh '--only-e2e'"
+    _assert_no_marker "D7 [rl_run_on_runner]"
+    _run "" "bash /workspace/scripts/validate-ci.sh '--only-e2e'"
+    _assert_no_marker "D7 [no RL_TASK_TOOL]"
+}
+
+_cleanup_creds() { _without_creds; unset RL_DISCORD_CREDS_MISSING; }
 
 run_test "D1 only-e2e forwards by name"        test_d1_only_e2e_forwards_by_name;            _cleanup_creds
 run_test "D2 discord-tier args inject"         test_d2_discord_tier_args_inject;             _cleanup_creds
@@ -190,5 +236,6 @@ run_test "D3 non-discord args never inject"    test_d3_non_discord_args_never_in
 run_test "D4 other tools never inject"         test_d4_other_tools_never_inject;             _cleanup_creds
 run_test "D5 missing key named"                test_d5_missing_key_is_named_and_nothing_forwarded; _cleanup_creds
 run_test "D6 value never logged"               test_d6_value_never_logged;                   _cleanup_creds
+run_test "D7 marker only for a missing key"    test_d7_marker_only_when_creds_withheld_for_a_missing_key; _cleanup_creds
 
 print_test_summary
