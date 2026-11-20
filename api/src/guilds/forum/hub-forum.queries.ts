@@ -65,8 +65,19 @@ export const listedThread = or(
   gt(threads.replyCount, 0),
 );
 
-/** ROK-2226 D7: an event thread stays off the list/widget until its first reply. */
-const eventThreadShown = or(isNull(threads.eventId), gt(threads.replyCount, 0));
+/**
+ * ROK-2226 D7, widened by ROK-2272 S7: a subject thread (event, scheduling
+ * poll or lineup — `isSubjectThread` in SQL) stays off the list/widget until
+ * its first reply.
+ */
+const subjectThreadShown = or(
+  and(
+    isNull(threads.eventId),
+    isNull(threads.matchId),
+    isNull(threads.lineupId),
+  ),
+  gt(threads.replyCount, 0),
+);
 
 /** One page; `next` is null on the last page. */
 export interface ForumPage<R> {
@@ -126,7 +137,7 @@ export function listThreadsQuery(
     eq(threads.guildId, guildId),
     isNull(threads.pinnedAt),
     listedThread,
-    eventThreadShown,
+    subjectThreadShown,
     after,
   );
   return selectThreads(db, where)
@@ -190,7 +201,7 @@ const liveThreadOf = (guildId: number) =>
   and(
     eq(threads.guildId, guildId),
     isNull(threads.deletedAt),
-    eventThreadShown,
+    subjectThreadShown,
   );
 
 /** Widget probe: removed threads are excluded BEFORE the limit (SQL tests). */
