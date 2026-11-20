@@ -299,6 +299,18 @@ describe('ROK-2272 S8 closing lines in the Discord post', () => {
     ]);
   });
 
+  it('Codex P2 (D9): after the hub unbinds, a cancel posts no line into the old post', async () => {
+    const guildId = await boundHub();
+    const { matchId, lineupId } = await hubPoll(guildId);
+    await openThread(pollRoute(matchId), true);
+    const res = await ctx.posts.testApp.request
+      .delete(`/guilds/${guildId}/forum-discord`)
+      .set('Authorization', `Bearer ${ctx.tokens.admin}`);
+    expect(res.status).toBe(204);
+    await listener().onPollCancelled({ matchId, lineupId, reason: 'Gone' });
+    expect(out.spies.mention).not.toHaveBeenCalled();
+  });
+
   it('a poll turned private gets no closing line (its thread is detached)', async () => {
     const guildId = await boundHub();
     const { matchId, lineupId } = await hubPoll(guildId);

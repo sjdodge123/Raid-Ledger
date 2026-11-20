@@ -24,7 +24,11 @@ import {
   closingLineText,
   type ClosingLine,
 } from './hub-forum-discord-closing-lines';
-import { findThreadLink, isUnsent } from './hub-forum-discord-links.queries';
+import {
+  findThreadLink,
+  isCurrentBindingLink,
+  isUnsent,
+} from './hub-forum-discord-links.queries';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -134,7 +138,8 @@ export class HubForumDiscordClosingLines {
 
   /**
    * One bot line into the thread's existing Discord post. Skips a thread
-   * with no post, an unsent / deleted / locked one, or an offline bot; only
+   * with no post, an unsent one, a post from a previous binding (D9: hub
+   * unbound or re-bound since), a deleted / locked one, or an offline bot; only
    * the caller that claims the once-key posts. A failed send releases the
    * key, logs one warning naming the thread and the line, and reports
    * `send-failed`: best-effort, nothing retries it.
@@ -146,6 +151,7 @@ export class HubForumDiscordClosingLines {
   ): Promise<ClosingOutcome> {
     const link = await findThreadLink(this.db, threadId);
     if (!link || isUnsent(link)) return 'no-post';
+    if (!(await isCurrentBindingLink(this.db, link))) return 'no-post';
     if (link.discordDeletedAt !== null || link.discordLockedAt !== null) {
       return 'closed-post';
     }

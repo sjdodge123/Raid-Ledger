@@ -7,7 +7,10 @@ import {
   closingOnceKey,
   HubForumDiscordClosingLines,
 } from './hub-forum-discord-closing-lines.service';
-import { findThreadLink } from './hub-forum-discord-links.queries';
+import {
+  findThreadLink,
+  isCurrentBindingLink,
+} from './hub-forum-discord-links.queries';
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
@@ -15,6 +18,7 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 jest.mock('./hub-forum-discord-links.queries', () => ({
   ...jest.requireActual('./hub-forum-discord-links.queries'),
   findThreadLink: jest.fn(),
+  isCurrentBindingLink: jest.fn(),
 }));
 jest.mock('../subject-discussion/poll-discussion.queries', () => ({
   findLivePollThread: jest.fn(),
@@ -28,6 +32,7 @@ jest.mock('../../../settings/settings-bot.helpers', () => ({
 }));
 
 const findLink = jest.mocked(findThreadLink);
+const currentBinding = jest.mocked(isCurrentBindingLink);
 const findPoll = jest.mocked(findLivePollThread);
 const findLineup = jest.mocked(findLiveLineupThread);
 
@@ -73,7 +78,10 @@ function build(online = true) {
   return { svc, gateway, outbound, redis };
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  currentBinding.mockResolvedValue(true);
+});
 
 describe('postClosingLine (ROK-2272 S8)', () => {
   it.each([
@@ -89,6 +97,17 @@ describe('postClosingLine (ROK-2272 S8)', () => {
     const { svc, gateway, redis } = build();
     findLink.mockResolvedValue(link as never);
     await expect(svc.postClosingLine(5, 'bye', 'k')).resolves.toBe(outcome);
+    expect(gateway.mention).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it('D9: skips a post from a previous binding without claiming the key', async () => {
+    const { svc, gateway, redis } = build();
+    const link = sentLink();
+    findLink.mockResolvedValue(link as never);
+    currentBinding.mockResolvedValue(false);
+    await expect(svc.postClosingLine(5, 'bye', 'k')).resolves.toBe('no-post');
+    expect(currentBinding).toHaveBeenCalledWith(expect.anything(), link);
     expect(gateway.mention).not.toHaveBeenCalled();
     expect(redis.set).not.toHaveBeenCalled();
   });
