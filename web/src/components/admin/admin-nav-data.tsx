@@ -164,9 +164,11 @@ export function buildNavSections(
     coreIntegrations: NavItem[],
     pluginIntegrations: NavItem[],
     discordItems?: NavItem[] | null,
+    /** Plugin-owned General rows, placed after Logs (ROK-2099: the `blizzard` "Addon errors" page). */
+    pluginGeneralItems: readonly NavItem[] = [],
 ): NavSection[] {
     const sections: NavSection[] = [
-        { id: 'general', label: 'General', icon: GeneralIcon, children: GENERAL_CHILDREN },
+        { id: 'general', label: 'General', icon: GeneralIcon, children: [...GENERAL_CHILDREN, ...pluginGeneralItems] },
     ];
 
     if (discordItems) {

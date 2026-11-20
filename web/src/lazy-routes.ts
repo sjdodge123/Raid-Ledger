@@ -261,6 +261,10 @@ export const BackupsPanel = lazyWithRetry(() =>
 export const LogsPanel = lazyWithRetry(() =>
     import('./pages/admin/logs-panel').then((m) => ({ default: m.LogsPanel })),
 );
+/** ROK-2099: Admin → General → Addon errors — a `blizzard` plugin page on a core lazy route (ROK-1836 pattern). */
+export const AddonErrorsPage = lazyWithRetry(() =>
+    import('./plugins/wow/admin/addon-errors-page').then((m) => ({ default: m.AddonErrorsPage })),
+);
 /** ROK-1870 — Admin → Hubs queue. */
 export const HubsPanel = lazyWithRetry(() =>
     import('./pages/admin/hubs-panel').then((m) => ({ default: m.HubsPanel })),

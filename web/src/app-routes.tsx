@@ -26,7 +26,7 @@ import {
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
   IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
-  CronJobsPanel, GgPanel, GgPreviewPage, BackupsPanel, LogsPanel, HubsPanel, HubsDirectoryPage,
+  CronJobsPanel, GgPanel, GgPreviewPage, BackupsPanel, LogsPanel, AddonErrorsPage, HubsPanel, HubsDirectoryPage,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
   DiscordFeaturesPage, DiscordLifecyclePage,
@@ -87,6 +87,16 @@ function AdminIntegrationRoutes() {
 }
 
 /** Admin → General → GG and its admin-only "Preview my GG" story (ROK-2187). */
+/** Logs, then the `blizzard` plugin's Addon errors page (ROK-2099; it redirects while the plugin is off). */
+function LogsAdminRoutes() {
+  return (
+    <>
+      <Route path="general/logs" element={<LogsPanel />} />
+      <Route path="general/addon-errors" element={<AddonErrorsPage />} />
+    </>
+  );
+}
+
 function GgAdminRoutes() {
   return (
     <>
@@ -106,7 +116,7 @@ function AdminSettingsRoutes() {
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
       {GgAdminRoutes()}
       <Route path="general/backups" element={<BackupsPanel />} />
-      <Route path="general/logs" element={<LogsPanel />} />
+      {LogsAdminRoutes()}
       <Route path="general/hubs" element={<HubsPanel />} />
       {AdminIntegrationRoutes()}
       <Route path="discord" element={<DiscordOverviewPage />} />

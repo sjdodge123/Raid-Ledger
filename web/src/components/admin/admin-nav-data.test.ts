@@ -427,3 +427,12 @@ describe('filterNavForFlavour (ROK-1700)', () => {
         expect(paths(out)).toContain('/admin/settings/integrations/cooptimus');
     });
 });
+
+describe('buildNavSections — plugin General rows', () => {
+    it('ROK-2099: plugin General rows (Addon errors) follow Logs; none by default', () => {
+        const item = { to: '/admin/settings/general/addon-errors', label: 'Addon errors' };
+        const labels = (s: ReturnType<typeof buildNavSections>) => s.find((x) => x.id === 'general')?.children.map((c) => c.label);
+        expect(labels(buildNavSections([], [], null, [item]))?.slice(-2)).toEqual(['Logs', 'Addon errors']);
+        expect(labels(buildNavSections([], []))).not.toContain('Addon errors');
+    });
+});
