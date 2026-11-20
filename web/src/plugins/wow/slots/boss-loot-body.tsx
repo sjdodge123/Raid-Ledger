@@ -50,7 +50,7 @@ export function BossLootBody({
 
     return (
         <div className="boss-loot-body">
-            {notice && <p className="boss-loot-body__notice" role="note">{notice}</p>}
+            {notice && <p className="mb-2 text-xs text-muted" role="note">{notice}</p>}
             {hasCharacter && hasClassRestrictions && <LootFilterToggle filterUsable={filterUsable} onToggle={() => setFilterUsable((v) => !v)} />}
             <div className="quest-rewards">
                 {displayLoot.map((item) => (

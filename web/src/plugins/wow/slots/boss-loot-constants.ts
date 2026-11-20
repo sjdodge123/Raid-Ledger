@@ -49,7 +49,13 @@ export function lootEmptyMessage(variant: string): string {
  */
 export const CLASSIC_FALLBACK_LOOT_NOTICE = 'Classic loot, Forever drops not captured';
 
-/** The Classic-fallback note for a loot list, or null when the rows are the variant's own. */
+/**
+ * The Classic-fallback note for a loot list, or null when the rows are the variant's own.
+ * Inferred from the rows: relies on every Forever catalogue instance's own loot rows being
+ * tagged `expansion: 'forever'` (api `catalogue-builders.ts`), so an all-`classic` list under
+ * `wow_forever` can only be the fallback. A Forever instance catalogued as `classic` loot
+ * would be mislabelled here.
+ */
 export function lootFallbackNotice(variant: string, loot: readonly BossLootDto[] | undefined): string | null {
     if (variant !== 'wow_forever' || !loot || loot.length === 0) return null;
     return loot.every((item) => item.expansion === 'classic') ? CLASSIC_FALLBACK_LOOT_NOTICE : null;
