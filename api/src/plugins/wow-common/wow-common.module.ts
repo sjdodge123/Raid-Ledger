@@ -79,7 +79,7 @@ import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handl
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
 import { WowAddonErrorsHandler } from './companion/wow-addon-errors.handler';
-import { WowAddonErrorsRetentionCron } from './companion/wow-addon-errors-retention.cron';
+import * as addonErrors from './companion/wow-addon-errors.registration';
 import { InstanceCatalogueService } from './instance-catalogue/instance-catalogue.service';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
@@ -115,6 +115,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     CharacterQuestsController,
     // ROK-2147: owner/officer-only installed-addon list.
     CharacterInstalledAddonsController,
+    // ROK-2099 S3: admin reads + export of uploaded addon errors.
+    ...addonErrors.CONTROLLERS,
     ...guildHub.CONTROLLERS,
   ],
   providers: [
@@ -176,8 +178,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     LedgerlinkRulesetNoticeService,
     // ROK-2099: the `wow-addon-errors` companion contract handler.
     WowAddonErrorsHandler,
-    // ROK-2099 D7: 90-day retention of the addon-error rows.
-    WowAddonErrorsRetentionCron,
+    // ROK-2099 D7 retention cron + S3 admin read service.
+    ...addonErrors.PROVIDERS,
   ],
   exports: [
     InstanceCatalogueService,
