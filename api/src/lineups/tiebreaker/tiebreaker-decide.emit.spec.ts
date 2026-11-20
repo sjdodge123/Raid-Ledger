@@ -21,21 +21,29 @@ const DECIDED = {
   lineupId: 12,
   from: 'voting',
   to: 'decided',
-  visibility: null,
+  standalone: false,
 };
 
-function buildDeps(where: jest.Mock): {
+/**
+ * `returning` resolves the `voting → decided` CAS rows; an empty result
+ * makes the helper fall back to the unconditional write (awaited `where`).
+ */
+function buildDeps(returning: jest.Mock): {
   deps: TiebreakerDecideDeps;
   emit: jest.Mock;
+  update: jest.Mock;
 } {
   const emit = jest.fn();
-  const db = { update: jest.fn(() => ({ set: () => ({ where }) })) };
+  const where = jest.fn(() =>
+    Object.assign(Promise.resolve(undefined), { returning }),
+  );
+  const update = jest.fn(() => ({ set: () => ({ where }) }));
   const deps = {
-    db,
+    db: { update },
     logger: { log: jest.fn(), warn: jest.fn() },
     events: { emit },
   } as unknown as TiebreakerDecideDeps;
-  return { deps, emit };
+  return { deps, emit, update };
 }
 
 function statusEmits(emit: jest.Mock): unknown[][] {
@@ -46,11 +54,19 @@ function statusEmits(emit: jest.Mock): unknown[][] {
 
 describe('decideLineupFromTiebreaker — STATUS_CHANGED', () => {
   it('emits voting → decided once after the flip', async () => {
-    const { deps, emit } = buildDeps(jest.fn().mockResolvedValue(undefined));
+    const { deps, emit } = buildDeps(jest.fn().mockResolvedValue([{ id: 12 }]));
     await decideLineupFromTiebreaker(deps, 12, 99);
     expect(statusEmits(emit)).toEqual([
       [LINEUP_LIFECYCLE_EVENTS.STATUS_CHANGED, DECIDED],
     ]);
+  });
+
+  it('emits nothing when the lineup was already decided (dismiss retry), but still writes', async () => {
+    const { deps, emit, update } = buildDeps(jest.fn().mockResolvedValue([]));
+    await decideLineupFromTiebreaker(deps, 12, 99);
+    expect(statusEmits(emit)).toEqual([]);
+    // The CAS missed, so the original unconditional write still ran.
+    expect(update).toHaveBeenCalledTimes(2);
   });
 
   it('emits nothing when the flip throws', async () => {

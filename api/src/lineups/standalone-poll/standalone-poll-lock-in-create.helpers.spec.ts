@@ -387,7 +387,7 @@ describe('createLockedInPollEvent — ROK-2272 S6 STATUS_CHANGED', () => {
       lineupId: 3,
       from: 'decided',
       to: 'archived',
-      visibility: null,
+      standalone: true,
     });
   });
 

@@ -230,7 +230,7 @@ describe('sweepExpiredTieHolds — ROK-2272 S6 STATUS_CHANGED', () => {
       lineupId: 7,
       from: 'voting',
       to: 'archived',
-      visibility: null,
+      standalone: false,
     });
   });
 
