@@ -186,12 +186,12 @@ describe('ROK-2272 S4a EventPlanningPostsLockSweep', () => {
 });
 
 describe('ROK-2272 S4a HubForumDiscordEventLockSweep runs both passes', () => {
-  it('a hub-pass throw does not stop the registry pass', async () => {
+  it('a hub-pass throw still runs the registry pass, then rethrows', async () => {
     const { setReadOnly } = spies();
     const hub = app().get(HubForumDiscordEventLockSweep);
     jest.spyOn(hub, 'due').mockRejectedValue(new Error('hub pass down'));
     const p = await newPost({ closesInMs: -HOUR });
-    await expect(hub.sweep()).resolves.toBeGreaterThanOrEqual(1);
+    await expect(hub.sweep()).rejects.toThrow('hub pass down');
     expect(setReadOnly).toHaveBeenCalledWith(p.discordThreadId, true);
     expect(await lockedAt(p.id)).not.toBeNull();
   });
