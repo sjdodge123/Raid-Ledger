@@ -101,6 +101,7 @@ export const TYPE_MAP: Readonly<Record<string, string | null>> = {
   'Leatherworking Pattern': 'Leatherworking',
   'Tailoring Pattern': 'Tailoring',
   'Enchanting Formula': 'Enchanting',
+  'Alchemy Recipe': 'Alchemy',
   Book: 'Book',
   Arrow: 'Arrow',
   'Cooking Recipe': 'Cooking',

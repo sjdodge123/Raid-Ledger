@@ -16,6 +16,16 @@ import { resolveSubInstance } from './boss-encounters.wings';
 
 /** Cache key prefix for WoW Classic boss data */
 const CACHE_PREFIX = 'wow:bosses';
+/**
+ * ROK-2270: the loot read's cache key. `v2` because the Classic fallback
+ * changed what a `wow_forever` read returns — entries cached before it (`[]`)
+ * are never read again, even when the boot seed fails and skips `clearCache`.
+ * Every loot-cache read/write goes through this builder; `clearCache` still
+ * matches it via `${CACHE_PREFIX}:*`.
+ */
+export function bossLootCacheKey(bossId: number, variant: string): string {
+  return `${CACHE_PREFIX}:loot:v2:${bossId}:${variant}`;
+}
 /** 24 hours in seconds */
 const CACHE_TTL_SEC = 86400;
 
@@ -30,8 +40,8 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
   // ROK-1719: vanilla bosses plus Forever's own. ROK-2209: loot does NOT use
-  // this set — the catalogue's lootExpansion decides (boss-loot-expansions.ts),
-  // so a Forever loot read never returns classic rows.
+  // this set — the catalogue's lootExpansion decides (boss-loot-expansions.ts);
+  // ROK-2270: classic rows only as a labelled per-boss fallback.
   wow_forever: ['classic', 'forever'],
 };
 
@@ -116,7 +126,7 @@ export class BossEncountersService {
     bossId: number,
     variant: string = 'classic_era',
   ): Promise<BossLootDto[]> {
-    const cacheKey = `${CACHE_PREFIX}:loot:${bossId}:${variant}`;
+    const cacheKey = bossLootCacheKey(bossId, variant);
     const result = await redisSwr<BossLootDto[]>({
       redis: this.redis,
       key: cacheKey,

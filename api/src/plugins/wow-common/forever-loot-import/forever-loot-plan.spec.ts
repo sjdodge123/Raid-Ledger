@@ -3,6 +3,7 @@
  * 2017) covers every wing's bosses, not just the parent row's.
  */
 import bossData from '../data/boss-encounter-data.json';
+import lootData from '../data/boss-loot-data.json';
 import {
   planCapture,
   type BossRow,
@@ -96,6 +97,49 @@ describe('planCapture — rows carry the listed boss instanceId (ROK-2209)', () 
     expect(() => planCapture(c, [...BOSSES, twin])).toThrow(
       'Hydrospawn is not listed on exactly one instance of the zone',
     );
+  });
+});
+
+describe('planCapture — Forever-new dungeons (ROK-2270)', () => {
+  it('attaches a Ruins of Lordaeron drop to the forever boss row 90000002', () => {
+    const c = capture('Ruins of Lordaeron', 16611, [
+      drop(271223, 'Viktor the Vile'),
+    ]);
+    const plan = planCapture(c, BOSSES);
+    expect(
+      plan.rows.map((r) => [r.bossName, r.instanceId, r.expansion]),
+    ).toEqual([['Viktor the Vile', 90000002, 'forever']]);
+  });
+
+  it('skips a source that is not one of our boss names (no guessing)', () => {
+    const c = capture('Ruins of Lordaeron', 16611, [
+      drop(271204, 'The Baron'),
+      drop(286977, 'Zone Drop'),
+    ]);
+    const plan = planCapture(c, BOSSES);
+    expect(plan.rows).toEqual([]);
+    expect(plan.skipped.map((d) => d.source)).toEqual([
+      'The Baron',
+      'Zone Drop',
+    ]);
+  });
+});
+
+describe('boss-loot-data.json — Forever-new imports (ROK-2270)', () => {
+  const foreverRowsOf = (boss: string) =>
+    lootData.filter((l) => l.bossName === boss && l.expansion === 'forever');
+
+  it("carries Viktor the Vile's captured drops on Ruins of Lordaeron", () => {
+    const rows = foreverRowsOf('Viktor the Vile');
+    expect(rows.map((l) => l.instanceId)).toEqual([
+      90000002, 90000002, 90000002,
+    ]);
+  });
+
+  it('carries nothing for bosses the capture did not name', () => {
+    for (const boss of ['The Butcher', 'Lordaeron Captain', 'Infurnus']) {
+      expect([boss, foreverRowsOf(boss).length]).toEqual([boss, 0]);
+    }
   });
 });
 
