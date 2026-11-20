@@ -335,6 +335,31 @@ describe('ROK-2272 S3: event-planning registry posts stay on Discord', () => {
     await importPost(channelId);
     expect(await threadCount(g)).toBe(1);
   });
+
+  it('shared forum + registry post (kind tag only) ⇒ never tag-noticed', async () => {
+    const { g, channelId } = await boundHub();
+    const b = schema.hubForumDiscordBindings;
+    const [aBinding] = nonEmpty(
+      await ctx.testApp.db.select().from(b).where(eq(b.guildId, g)),
+      'A binding',
+    );
+    await ctx.testApp.db.insert(b).values({
+      guildId: await newHub(ctx),
+      forumId: aBinding.forumId,
+      ackAt: new Date(),
+      boundAt: new Date(),
+    });
+    ctx.testApp.app.get(HubForumDiscordRouteResolver).invalidate();
+    const notify = jest
+      .spyOn(ctx.testApp.app.get(HubForumDiscordNotices), 'notify')
+      .mockResolvedValue(true);
+    const base = await registryPost(channelId);
+    const thread = { ...base, appliedTags: [freshId()] }; // the Poll kind tag
+    const starter = msg(thread, { id: thread.id });
+    expect(await ingest.onCreate(starter, thread, noBot)).toBe('skipped');
+    expect(notify).not.toHaveBeenCalled();
+    expect(await threadCount(g)).toBe(0);
+  });
 });
 
 describe('review MAJOR-2: inbound follows the CURRENT binding', () => {

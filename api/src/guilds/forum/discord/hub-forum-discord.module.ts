@@ -90,6 +90,8 @@ import {
     HubForumDiscordReconcileService,
     HubForumDiscordEventLockSweep,
     HubForumDiscordSignupPings,
+    // ROK-2272 S4 (event-planning posts) + S5a (admin forum card) inject it.
+    EventPlanningForumResolver,
   ],
 })
 export class HubForumDiscordModule implements OnModuleInit {
