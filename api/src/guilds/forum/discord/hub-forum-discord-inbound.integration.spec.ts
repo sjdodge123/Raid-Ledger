@@ -365,6 +365,31 @@ describe('ROK-2272 S3: event-planning registry posts stay on Discord', () => {
   });
 });
 
+describe('ROK-2272 S4 review MAJOR-2: a registry post deleted on Discord', () => {
+  it('thread-delete marks the registry row deleted; imports nothing, DMs nobody', async () => {
+    const { g, channelId } = await boundHub();
+    const notify = jest.spyOn(
+      ctx.testApp.app.get(HubForumDiscordNotices),
+      'notify',
+    );
+    const thread = await registryPost(channelId);
+    expect(await ingest.onThreadDelete(thread)).toBe('deleted');
+    const p = schema.eventPlanningPosts;
+    const [row] = nonEmpty(
+      await ctx.testApp.db
+        .select()
+        .from(p)
+        .where(eq(p.discordThreadId, thread.id)),
+      'registry post',
+    );
+    expect(row.discordDeletedAt).not.toBeNull();
+    expect(await threadCount(g)).toBe(0);
+    expect(notify).not.toHaveBeenCalled();
+    // A repeat delete event finds no live row.
+    expect(await ingest.onThreadDelete(thread)).toBe('skipped');
+  });
+});
+
 describe('review MAJOR-2: inbound follows the CURRENT binding', () => {
   it('shared forum: after hub A unbinds, a reply in an A post is skipped', async () => {
     const { g, channelId } = await boundHub();
