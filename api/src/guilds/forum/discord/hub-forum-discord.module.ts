@@ -28,6 +28,8 @@ import { HubForumDiscordReconcileGateway } from './hub-forum-discord-reconcile.d
 import { HubForumDiscordReconcileService } from './hub-forum-discord-reconcile';
 import { HubForumDiscordRouteResolver } from './hub-forum-discord-route';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
+import { EventPlanningForumAdmin } from './event-planning-forum.admin';
+import { EventPlanningForumAdminController } from './event-planning-forum.admin.controller';
 import { HubForumDiscordService } from './hub-forum-discord.service';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
@@ -54,7 +56,11 @@ import {
     SettingsModule,
     BullModule.registerQueue({ name: SIGNUP_PING_QUEUE }),
   ],
-  controllers: [HubForumDiscordController, HubForumDiscordDemoTestController],
+  controllers: [
+    HubForumDiscordController,
+    HubForumDiscordDemoTestController,
+    EventPlanningForumAdminController,
+  ],
   providers: [
     HubForumDiscordGateway,
     HubForumBindLock,
@@ -64,6 +70,7 @@ import {
     HubForumDiscordOutboundListener,
     HubForumDiscordRouteResolver,
     EventPlanningForumResolver,
+    EventPlanningForumAdmin,
     HubForumDiscordPinGateway,
     HubForumDiscordPinSync,
     HubForumDiscordNotices,
