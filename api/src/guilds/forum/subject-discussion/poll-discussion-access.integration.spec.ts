@@ -158,7 +158,6 @@ describe('scheduling-poll discussion access (R7, R10)', () => {
     });
     expect(outcome(await replyAs(matchId, 'outsider')).status).toBe(403);
   });
-
 });
 
 describe('scheduling-poll discussion refusals (R7, §3.7)', () => {
