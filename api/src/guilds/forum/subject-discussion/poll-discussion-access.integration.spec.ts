@@ -7,7 +7,11 @@
  * `bench` = match member who has not voted, `outsider` = neither.
  */
 import { randomBytes } from 'crypto';
-import type { SubjectDiscussion } from '@raid-ledger/contract';
+import type {
+  HubForumThread,
+  HubForumThreadList,
+  SubjectDiscussion,
+} from '@raid-ledger/contract';
 import { eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
@@ -271,6 +275,31 @@ describe('scheduling-poll thread through the hub forum routes (§5.5, R7)', () =
       expect(still.map((t) => t.deletedAt)).toEqual([null]);
     },
   );
+
+  it('the hub thread view gives its author no edit/delete on the managed root', async () => {
+    const matchId = await hubPoll();
+    await card(matchId, 'signed');
+    const res = await as(ctx, 'admin', 'get', await hubThreadPath(matchId));
+    expect(res.status).toBe(200);
+    const view = res.body as HubForumThread;
+    expect(view.author?.userId).toBe(ctx.ids.admin);
+    expect(view.can).toMatchObject({ edit: false, delete: false });
+  });
+
+  it('an empty poll thread stays off the hub list until its first reply (D7)', async () => {
+    const matchId = await hubPoll();
+    await card(matchId, 'signed');
+    const path = await hubThreadPath(matchId);
+    const threadId = Number(path.split('/').pop());
+    const listed = async (): Promise<number[]> => {
+      const list = await as(ctx, 'signed', 'get', path.replace(/\/\d+$/, ''));
+      expect(list.status).toBe(200);
+      return (list.body as HubForumThreadList).threads.map((t) => t.id);
+    };
+    expect(await listed()).not.toContain(threadId);
+    expect(outcome(await replyAs(matchId, 'signed')).status).toBe(201);
+    expect(await listed()).toContain(threadId);
+  });
 
   it('R7 holds on the hub reply route: a voter posts (201), a non-voting member is 403', async () => {
     const matchId = await hubPoll();
