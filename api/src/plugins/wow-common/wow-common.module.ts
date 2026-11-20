@@ -50,6 +50,7 @@ import { SuggestedGroupsModule } from './guilds/suggested-groups/suggested-group
 import { EventRaidReadinessController } from './event-raid-readiness.controller';
 import { EventRaidReadinessService } from './event-raid-readiness.service';
 import { SettingsModule } from '../../settings/settings.module';
+import { CronJobModule } from '../../cron-jobs/cron-job.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
@@ -77,6 +78,8 @@ import { RecentDingsService } from './guilds/recent-dings/recent-dings.service';
 import { CompanionHandlerRegistry } from '../../companion/ingest/companion-handler.registry';
 import { CompanionIngestModule } from '../../companion/ingest/companion-ingest.module';
 import { WowLedgerlinkHandler } from './companion/wow-ledgerlink.handler';
+import { WowAddonErrorsHandler } from './companion/wow-addon-errors.handler';
+import { WowAddonErrorsRetentionCron } from './companion/wow-addon-errors-retention.cron';
 import { InstanceCatalogueService } from './instance-catalogue/instance-catalogue.service';
 import { LedgerlinkRulesetNoticeService } from './companion/ledgerlink-ruleset-notice.service';
 import { NotificationModule } from '../../notifications/notification.module';
@@ -93,6 +96,8 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-1910/1920: roster fact sources + WowFactsService.
     WowFactsModule,
     SuggestedGroupsModule,
+    // ROK-2099 D7: the addon-error retention cron's tracked run.
+    CronJobModule,
   ],
   controllers: [
     BlizzardController,
@@ -169,6 +174,10 @@ import { WowGgCardRegistration } from './gg/wow-gg.registration';
     // ROK-1964: the `wow-ledgerlink` companion contract handler.
     WowLedgerlinkHandler,
     LedgerlinkRulesetNoticeService,
+    // ROK-2099: the `wow-addon-errors` companion contract handler.
+    WowAddonErrorsHandler,
+    // ROK-2099 D7: 90-day retention of the addon-error rows.
+    WowAddonErrorsRetentionCron,
   ],
   exports: [
     InstanceCatalogueService,
@@ -200,6 +209,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly hubKindAdapter: WowHubKindAdapter,
     private readonly companionRegistry: CompanionHandlerRegistry,
     private readonly ledgerlink: WowLedgerlinkHandler,
+    private readonly addonErrors: WowAddonErrorsHandler,
     @Inject(WOW_BOOT_SEED_ENABLED) private readonly bootSeedEnabled: boolean,
   ) {}
 
@@ -208,6 +218,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     // and a failed seed must not leave the contract unhandled. The registry
     // resolves it only while `blizzard` is active.
     this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.ledgerlink);
+    this.companionRegistry.register(WOW_COMMON_MANIFEST.id, this.addonErrors);
     await bestEffortInit('WowCommonModule.init', this.logger, async () => {
       this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
       await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);

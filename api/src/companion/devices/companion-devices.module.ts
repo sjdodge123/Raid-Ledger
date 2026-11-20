@@ -8,6 +8,7 @@ import { CompanionDeviceRateLimiter } from './companion-device-link.limits';
 import { CompanionDeviceLinkService } from './companion-device-link.service';
 import { CompanionDeviceLinksRepository } from './companion-device-links.repository';
 import { CompanionDeviceGuard } from './companion-device.guard';
+import { CompanionDeviceRevokedListener } from './companion-device-revoked.listener';
 import { CompanionDevicesController } from './companion-devices.controller';
 import { CompanionDevicesRepository } from './companion-devices.repository';
 import { CompanionDevicesService } from './companion-devices.service';
@@ -28,6 +29,7 @@ import { CompanionDevicesService } from './companion-devices.service';
     CompanionDevicesRepository,
     CompanionDevicesService,
     CompanionDeviceGuard,
+    CompanionDeviceRevokedListener,
   ],
   // C3's ingest routes reuse the guard (and its repository + limiter).
   exports: [

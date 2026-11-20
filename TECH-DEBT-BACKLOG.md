@@ -4450,3 +4450,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-19 — chore/rok-1813-noindex-nginx (surfaced during infra validation)
 - **med** `Dockerfile.allinone:87` — `docker build -f Dockerfile.allinone` on an 8 GB Docker VM dies in the api build: `FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory` (nest build, SIGABRT). Pre-existing: CI sets NODE_OPTIONS=--max-old-space-size=8192 for the api build (`ci.yml:241`), but the Dockerfile's `RUN npm run build -w @raid-ledger/api` does not, so a local build OOMs at V8's default heap.
   Suggested: set `ENV NODE_OPTIONS=--max-old-space-size=6144` (or an ARG) for the build stage in `Dockerfile.allinone` (own infra PR).
+
+### 2026-11-19 — feat/rok-2099-s2a-addon-errors-store (surfaced during the ROK-2099 S2 Codex pass)
+
+- **low** — `packages/contract/src/plugin-hub-manifests.ts` (and ~177 other `packages/contract/src/**` files): `prettier --check` fails. Pre-existing on main (the S2 lane found it before touching the file); no gate catches it because the contract workspace's `lint` script is an echo. A `--write` with the root config flips every quote style, and with api's config reflows ~400 lines of the manifest — any branch touching the manifest would conflict. Suggested: one dedicated chore PR that adds a contract prettier config matching the current style, formats the package once, and wires `prettier --check` into the contract `lint` script.
