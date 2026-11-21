@@ -11,6 +11,7 @@ import * as schema from '../../../drizzle/schema';
 import { deleteUserTransaction } from '../../../users/users-delete.helpers';
 import { bareScene } from '../discord/hub-forum-discord-signup-pings.test-fixtures';
 import { EventDiscussionSignupLines } from './event-discussion-signup-lines.service';
+import { newestLiveReplies } from './event-discussion.queries';
 import {
   bootDiscussion,
   setSignupStatus,
@@ -109,6 +110,25 @@ describe('ROK-2274 RL signup lines — unbound hub thread', () => {
       ctx.ids.declined,
     ]);
     expect(rows[0]?.body).not.toBe(rows[1]?.body);
+  });
+});
+
+describe('ROK-2274 RL signup lines — event Discussion card', () => {
+  it('the card preview never shows a signup line, only real replies', async () => {
+    const s = await bareScene(ctx);
+    await flush(s.eventId);
+    await db().insert(replies).values({
+      threadId: s.threadId,
+      guildId: s.guildId,
+      authorId: ctx.ids.officerA,
+      body: 'edsl card reply',
+    });
+    await signUp(ctx, s.eventId, 'signed', 'signed_up');
+    expect((await flush(s.eventId)).outcome).toBe('written');
+    expect(await lineRows(s.threadId)).toHaveLength(1);
+
+    const card = await newestLiveReplies(db(), s.threadId, 3);
+    expect(card.map((row) => row.reply.body)).toEqual(['edsl card reply']);
   });
 });
 
