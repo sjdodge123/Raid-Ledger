@@ -26,7 +26,8 @@ export function ForumSignupLine({ threadId, reply, highlighted, remove }: ForumS
     const [confirming, setConfirming] = useState(false);
     const ref = useScrollOnce(highlighted);
     const ids = { threadId, replyId: reply.id };
-    const removed = reply.deleted !== null;
+    const { deleted } = reply;
+    const removed = deleted !== null;
     const items = removed ? [] : forumMenuItems({ ...reply.can, edit: false, pin: false }, { onDelete: () => setConfirming(true) });
     const ring = highlighted ? 'ring-1 ring-success' : '';
     return (
@@ -34,7 +35,7 @@ export function ForumSignupLine({ threadId, reply, highlighted, remove }: ForumS
             <article ref={ref} id={`forum-reply-${reply.id}`} data-testid="forum-signup-line" aria-current={highlighted ? 'true' : undefined}
                 className={`flex min-h-8 scroll-mt-4 items-center gap-2 rounded-md px-4 py-1 text-sm text-muted ${ring}`}>
                 <p className="min-w-0 flex-1 break-words" data-testid="forum-signup-line-text">
-                    {reply.deleted !== null ? forumDeletedLabel(reply.deleted) : reply.body}
+                    {removed ? forumDeletedLabel(deleted) : reply.body}
                 </p>
                 <time dateTime={reply.createdAt} className="shrink-0 text-xs text-dim" data-testid="forum-signup-line-time">{forumAgo(reply.createdAt)}</time>
                 <ForumActionMenu label="Signup line actions" items={items} testId="forum-signup-line-actions" />

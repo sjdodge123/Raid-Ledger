@@ -10,6 +10,7 @@ import {
   absoluteAvatarUrl,
   discordThreadName,
   forumThreadUrl,
+  notMirrored,
   truncateForDiscord,
   webhookUsername,
 } from './hub-forum-discord-content';
@@ -42,13 +43,6 @@ type EventPostRef = { guildId: number; threadId: number; create?: boolean };
 
 /** What one `retry` did: sent something, or why it could not. */
 export type RetryOutcome = 'dispatched' | 'unbound' | 'stale';
-
-/**
- * Rows the inbound lane wrote carry a Discord author: never echo them out.
- * ROK-2274 sync loop 1: a signup line (system text) is never mirrored either.
- */
-const notMirrored = (row: { authorDiscordId: string | null; kind?: string }) =>
-  row.authorDiscordId !== null || row.kind === 'signup_line';
 
 const describe = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
