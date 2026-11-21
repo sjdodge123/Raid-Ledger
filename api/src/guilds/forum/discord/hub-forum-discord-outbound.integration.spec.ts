@@ -279,6 +279,43 @@ describe('ROK-2208 outbound RL → Discord', () => {
     expect(await linkRows(threadId)).toEqual([]);
   });
 
+  it('ROK-2274 loop 1: a signup line is never mirrored to Discord', async () => {
+    const g = await newHub(ctx);
+    await bind(g, { mode: 'create' });
+    const threadId = await newThread(g);
+    await synced();
+    const [line] = nonEmpty(
+      await ctx.testApp.db
+        .insert(schema.hubForumReplies)
+        .values({
+          threadId,
+          guildId: g,
+          authorId: null,
+          kind: 'signup_line',
+          body: '✅ Mirelle signed up',
+        })
+        .returning(),
+      'line',
+    );
+    // Lines never emit; even a stray reply.created for one sends nothing.
+    await expect(
+      out.service.apply({
+        guildId: g,
+        op: 'reply.created',
+        threadId,
+        replyId: line.id,
+        actorId: 0,
+      }),
+    ).resolves.toBeUndefined();
+    expect(out.spies.createReply).not.toHaveBeenCalled();
+    const l = schema.hubForumDiscordLinks;
+    const rows = await ctx.testApp.db
+      .select()
+      .from(l)
+      .where(eq(l.replyId, line.id));
+    expect(rows).toEqual([]);
+  });
+
   it('a Discord-origin thread is never echoed back out', async () => {
     const g = await newHub(ctx);
     await bind(g, { mode: 'create' });

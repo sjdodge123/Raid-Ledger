@@ -18,6 +18,14 @@ import { author, authorColumns, type Db } from './hub-forum.queries';
 
 const replies = schema.hubForumReplies;
 
+/** Live, real replies of `threadIds` (ROK-2274 D8: never a signup line). */
+const previewable = (threadIds: number[]) =>
+  and(
+    inArray(replies.threadId, threadIds),
+    isNull(replies.deletedAt),
+    eq(replies.kind, 'reply'),
+  );
+
 /** Newest live reply per thread id, keyed by thread id (one query). */
 export async function latestReplyPreviews(
   db: Db,
@@ -36,14 +44,7 @@ export async function latestReplyPreviews(
     })
     .from(replies)
     .leftJoin(author, eq(author.id, replies.authorId))
-    .where(
-      and(
-        inArray(replies.threadId, threadIds),
-        isNull(replies.deletedAt),
-        // ROK-2274 D8: a signup line is never the row's "latest reply".
-        eq(replies.kind, 'reply'),
-      ),
-    )
+    .where(previewable(threadIds))
     .orderBy(replies.threadId, desc(replies.createdAt), desc(replies.id));
   for (const row of rows) {
     const person = row.author ? toPerson(row.author) : null;
