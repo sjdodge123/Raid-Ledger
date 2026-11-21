@@ -106,6 +106,8 @@ function reply(id: number): { reply: HubForumReplySelect; author: null } {
     threadId: 21,
     guildId: 7,
     authorId: 9,
+    kind: 'reply',
+    subjectUserId: null,
     authorDiscordId: null,
     authorDiscordName: null,
     authorDiscordAvatar: null,

@@ -5,11 +5,20 @@
 import {
   characterLabel,
   hoursLabel,
-  signupLine,
-  signupLines,
+  signupLine as buildLine,
+  signupLines as buildLines,
+  type SignupLineEmoji,
   type SignupLineInput,
   type SignupLineState,
 } from './hub-forum-discord-signup-lines';
+
+/**
+ * ROK-2273: a guild with no role/class glyphs — the wording under test
+ * here; the glyphs are `hub-forum-discord-signup-lines.emoji.spec.ts`.
+ */
+const NONE: SignupLineEmoji = { role: () => '', klass: () => '' };
+const signupLine = (i: SignupLineInput) => buildLine(i, NONE);
+const signupLines = (is: readonly SignupLineInput[]) => buildLines(is, NONE);
 
 const ID = '111111111111111111';
 const THRALL = { name: 'Thrall', className: 'Warrior', spec: 'Prot' };
@@ -50,7 +59,7 @@ describe('signupLine — first signup', () => {
 
   it('says tentative for a tentative signup', () => {
     expect(text(input(null, state({ status: 'tentative' }), false))).toBe(
-      `🤔 <@${ID}> is tentative — Tank · Thrall (Prot Warrior)`,
+      `⏳ <@${ID}> is tentative — Tank · Thrall (Prot Warrior)`,
     );
   });
 
@@ -111,7 +120,7 @@ describe('signupLine — coming back', () => {
   it('says "is back (tentative)" for a tentative return', () => {
     const was = state({ status: 'roached_out' });
     expect(text(input(was, state({ status: 'tentative' }), true))).toBe(
-      '↩️ Bob is back (tentative) — Tank · Thrall (Prot Warrior)',
+      '⏳ Bob is back (tentative) — Tank · Thrall (Prot Warrior)',
     );
   });
 });
@@ -135,7 +144,7 @@ describe('signupLine — changes while signed up (no ping)', () => {
 
   it('confirmed → tentative', () => {
     expect(text(input(state(), state({ status: 'tentative' })))).toBe(
-      '🤔 Bob is now tentative',
+      '⏳ Bob is now tentative',
     );
   });
 });
@@ -155,7 +164,7 @@ describe('signupLine — roster and character changes (no ping)', () => {
 
   it('character change', () => {
     expect(text(input(state(), state({ character: JAINA })))).toBe(
-      '🛡️ Bob now on Jaina (Mage)',
+      '🔁 Bob now on Jaina (Mage)',
     );
   });
 
@@ -228,13 +237,13 @@ describe('signupLine — leaving (never pings)', () => {
     );
     expect(line).toEqual({
       discordId: ID,
-      content: "👋 Bob can't make it",
+      content: '👋 Bob declined',
       mention: false,
     });
   });
 
   it('row gone (current null)', () => {
-    expect(text(input(state(), null))).toBe("👋 Bob can't make it");
+    expect(text(input(state(), null))).toBe('👋 Bob declined');
   });
 
   it('departed', () => {
@@ -308,7 +317,7 @@ describe('review MINOR-3 — names are text, never formatting', () => {
       ...input(state(), state({ status: 'declined' })),
       displayName: name,
     });
-    expect(line?.content).toMatch(/^👋 .+ can't make it$/);
+    expect(line?.content).toMatch(/^👋 .+ declined$/);
     expect(line?.content).not.toMatch(UNESCAPED);
   });
 
@@ -328,7 +337,7 @@ describe('review MINOR-3 — names are text, never formatting', () => {
     });
     expect(line).toEqual({
       discordId: ID,
-      content: "👋 @everyone can't make it",
+      content: '👋 @everyone declined',
       mention: false,
     });
   });

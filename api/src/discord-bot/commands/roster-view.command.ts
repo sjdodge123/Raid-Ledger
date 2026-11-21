@@ -13,6 +13,7 @@ import {
 import { and, ilike, gte, sql, asc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { SIGNUP_STATE_EMOJI } from '../embeds/signup-state-emoji.constants';
 import * as schema from '../../drizzle/schema';
 import {
   buildWordMatchFilters,
@@ -199,9 +200,9 @@ function groupAssignmentsByRole(
 
 const ROLE_ORDER = ['tank', 'healer', 'dps', 'flex', 'player', 'bench'];
 const STATIC_EMOJIS: Record<string, string> = {
-  flex: '\uD83D\uDD00',
+  flex: SIGNUP_STATE_EMOJI.flex,
   player: '\uD83C\uDFAE',
-  bench: '\uD83E\uDE91',
+  bench: SIGNUP_STATE_EMOJI.bench,
 };
 
 function buildViewRosterRow(

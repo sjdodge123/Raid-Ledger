@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
+import { DiscordEmojiService } from '../../../discord-bot/services/discord-emoji.service';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
@@ -23,6 +24,10 @@ import {
   type PostedMember,
 } from './hub-forum-discord-signup-lines.flush';
 import {
+  signupLineEmoji,
+  type SignupLineEmoji,
+} from './hub-forum-discord-signup-lines';
+import {
   loadSignupLineStates,
   type SignupLineMember,
 } from './hub-forum-discord-signup-lines.queries';
@@ -39,11 +44,17 @@ import {
   type PingPost,
 } from './hub-forum-discord-signup-pings.target';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import {
+  EventDiscussionSignupLines,
+  flagBothPassesSaw,
+  type RlLineFlush,
+} from '../event-discussion/event-discussion-signup-lines.service';
 
 /**
  * What one flush did. `offline` / `pending` / `incomplete` (a removal
- * Discord refused — Codex P2-2) mean "try again" (the processor retries);
- * the rest are final for this flush.
+ * Discord refused — Codex P2-2) / `rl_failed` (the Raid Ledger thread
+ * pass threw — ROK-2274 Codex P2-1) mean "try again" (the processor
+ * retries); the rest are final for this flush.
  */
 export type SignupPingOutcome =
   | 'unbound'
@@ -52,6 +63,7 @@ export type SignupPingOutcome =
   | 'closed'
   | 'pending'
   | 'incomplete'
+  | 'rl_failed'
   | 'pinged';
 
 /** The pinged set outlives the event by a week, then Redis drops it. */
@@ -72,6 +84,8 @@ const RESYNC_TTL_MS = 24 * 60 * 60 * 1000;
 @Injectable()
 export class HubForumDiscordSignupPings {
   private readonly logger = new Logger(HubForumDiscordSignupPings.name);
+  /** ROK-2273 — role/class glyphs from the embed's own emoji source. */
+  private readonly lineEmoji: SignupLineEmoji;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
@@ -80,19 +94,30 @@ export class HubForumDiscordSignupPings {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly planning: EventPlanningPostsService,
     private readonly registryLock: EventPlanningPostsLockSweep,
-  ) {}
+    emoji: DiscordEmojiService,
+    private readonly rlLines: EventDiscussionSignupLines,
+  ) {
+    this.lineEmoji = signupLineEmoji(emoji);
+  }
 
   /** Flush one event; never pings a user twice for the same signup. */
   async flush(eventId: number): Promise<SignupPingOutcome> {
+    // ROK-2274 D5: the Raid Ledger thread's lines first, bound hub or not.
+    const rl = await this.rlLines.flush(eventId);
     const ref = await resolvePingThread(this.db, eventId);
-    if (!ref) return 'unbound';
+    if (!ref) {
+      // No Discord flush will take a reset flag the RL pass used.
+      await this.takeIfStable(eventId, rl.flags);
+      return rl.outcome === 'failed' ? 'rl_failed' : 'unbound';
+    }
     const keys = flushKeysFor(eventId, pingScope(ref));
-    const outcome = await this.flushBound(ref, eventId, keys);
+    const outcome = await this.flushBound(ref, eventId, keys, rl);
     // Every bound flush (review r1 m2): a rescheduled event moves the expiry.
     const at = ref.endsAt.getTime() + SET_GRACE_MS;
     await this.redis.pexpireat(keys.pinged, at);
     await this.redis.pexpireat(keys.lines, at);
-    return outcome;
+    // Codex P2-1: the Discord half is done; the RL half is retried.
+    return rl.outcome === 'failed' ? 'rl_failed' : outcome;
   }
 
   /**
@@ -141,15 +166,18 @@ export class HubForumDiscordSignupPings {
     ref: PingThreadRef,
     eventId: number,
     keys: FlushKeys,
+    rl: RlLineFlush,
   ): Promise<SignupPingOutcome> {
     const { members, flags } = await this.readMembers(eventId);
     const pinged = await this.redis.smembers(keys.pinged);
     let posted = await this.postedOrSeed(keys.lines, pinged, members);
     if (flags.some((f) => f !== null)) {
       posted = await this.resync(keys.lines, posted, members);
-      await this.takeIfStable(eventId, flags);
+      // Codex P2-2: used up only once the RL pass re-synced with it too.
+      const flag = flagBothPassesSaw(flags, rl);
+      if (flag !== null) await this.takeLanded(eventId, flag);
     }
-    const plan = planLineFlush(pinged, posted, members);
+    const plan = planLineFlush(pinged, posted, members, this.lineEmoji);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';

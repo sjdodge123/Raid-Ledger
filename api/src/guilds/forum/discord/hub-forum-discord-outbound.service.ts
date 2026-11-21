@@ -10,6 +10,7 @@ import {
   absoluteAvatarUrl,
   discordThreadName,
   forumThreadUrl,
+  notMirrored,
   truncateForDiscord,
   webhookUsername,
 } from './hub-forum-discord-content';
@@ -42,10 +43,6 @@ type EventPostRef = { guildId: number; threadId: number; create?: boolean };
 
 /** What one `retry` did: sent something, or why it could not. */
 export type RetryOutcome = 'dispatched' | 'unbound' | 'stale';
-
-/** Rows the inbound lane wrote carry a Discord author: never echo them out. */
-const fromDiscord = (row: { authorDiscordId: string | null }): boolean =>
-  row.authorDiscordId !== null;
 
 const describe = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
@@ -152,7 +149,7 @@ export class HubForumDiscordOutboundService {
   private async createThread(job: Job): Promise<void> {
     const { guildId, threadId } = job.change;
     const record = await findThread(this.db, guildId, threadId);
-    if (!record || fromDiscord(record.thread)) return;
+    if (!record || notMirrored(record.thread)) return;
     const tagId = job.bound.binding.tagId;
     if (this.events.isSubjectThread(record.thread)) {
       // §5.7 item 1: never posted on creation; S6 re-sends a claimed post.
@@ -185,7 +182,7 @@ export class HubForumDiscordOutboundService {
     const { guildId, threadId, replyId } = job.change;
     if (replyId === undefined) return;
     const record = await findReply(this.db, { guildId, threadId, replyId });
-    if (!record || fromDiscord(record.reply)) return;
+    if (!record || notMirrored(record.reply)) return;
     const parent =
       (await links.findThreadLink(this.db, threadId)) ??
       (await this.events.ensurePost(

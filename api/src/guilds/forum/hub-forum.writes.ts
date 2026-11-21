@@ -242,6 +242,8 @@ export async function softDeleteReply(
       .where(liveReply(target))
       .returning();
     if (!row) return undefined;
+    // ROK-2274 D8: a signup line never counted, so its removal drops nothing.
+    if (row.kind !== 'reply') return row;
     await tx
       .update(threads)
       .set({ replyCount: sql`greatest(${threads.replyCount} - 1, 0)` })

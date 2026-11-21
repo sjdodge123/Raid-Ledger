@@ -6,8 +6,12 @@
  * subject's state is set on its rows instead of through votes / nominations.
  */
 import { randomBytes } from 'crypto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq } from 'drizzle-orm';
+import { waitFor } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
+import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import * as schema from '../../../drizzle/schema';
 import { newHub } from '../../posts/hub-posts.test-fixtures';
 import {
@@ -16,7 +20,10 @@ import {
 } from '../event-discussion/event-discussion.test-fixtures';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
+import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
+import { EventPlanningSubjectsListener } from './event-planning-subjects.listener';
+import { HubForumDiscordEventLockGateway } from './hub-forum-discord-event-lock.gateway';
 import { LINEUP_TAG_NAME, POLL_TAG_NAME } from './hub-forum-discord-decor';
 import {
   FAKE_DISCORD_GUILD,
@@ -31,6 +38,7 @@ let ctx: DiscussionCtx;
 let subjects: EventPlanningSubjectPosts;
 let fake: FakeDiscord;
 let channelId: string;
+let forumId: number;
 let createPost: jest.SpyInstance;
 let seq = 0;
 
@@ -56,6 +64,7 @@ async function pinForum(): Promise<void> {
       .returning(),
     'forum',
   );
+  forumId = f.id;
   const forum = { forumId: f.id, channelId, managed: true, webhookId: null };
   jest
     .spyOn(app().get(EventPlanningForumResolver), 'resolve')
@@ -68,6 +77,7 @@ interface LineupOver {
   standalone?: boolean;
   status?: 'building' | 'voting' | 'decided' | 'archived';
   phaseDeadline?: Date | null;
+  votingDeadline?: Date | null;
 }
 
 async function newLineup(over: LineupOver = {}): Promise<number> {
@@ -84,6 +94,7 @@ async function newLineup(over: LineupOver = {}): Promise<number> {
         createdBy: ctx.ids.creator,
         guildId: over.guildId ?? null,
         phaseDeadline: over.phaseDeadline ?? null,
+        votingDeadline: over.votingDeadline ?? null,
         publicSlug: randomBytes(8).toString('hex'),
       })
       .returning(),
@@ -272,5 +283,198 @@ describe('ROK-2272 S10 non-hub lineup posts', () => {
     });
     expect(await subjects.ensureLineupPost(lineupId)).toBeNull();
     expect(createPost).not.toHaveBeenCalled();
+  });
+});
+
+/* ROK-2287 — the lineup catch-up (lock sweep + bot reconnect). The DB is
+ * shared, so every assertion is scoped to THIS test's lineup (another
+ * spec's row-less voting lineup may be posted by the same sweep). */
+const sweep = () => app().get(EventPlanningPostsLockSweep).sweep();
+const goneOffline = () =>
+  jest
+    .spyOn(app().get(EventPlanningPostsGateway), 'isOnline')
+    .mockReturnValue(false);
+
+/** createPost calls whose post title is `title`. */
+function createdTitled(title: string): number {
+  return createPost.mock.calls.filter((c: unknown[]) => {
+    const arg: unknown = c[1];
+    return (
+      typeof arg === 'object' &&
+      arg !== null &&
+      Reflect.get(arg, 'title') === title
+    );
+  }).length;
+}
+
+/** An eligible voting lineup whose voting edge ran while the bot was offline. */
+async function missedLineup(over: LineupOver = {}) {
+  const id = await newLineup({ standalone: false, status: 'voting', ...over });
+  const title = `Planning subject ${seq} — Lineup`;
+  const offline = goneOffline();
+  await app()
+    .get(EventPlanningSubjectsListener)
+    .onStatusChanged({ lineupId: id, from: 'building', to: 'voting' });
+  offline.mockReturnValue(true);
+  return { id, title };
+}
+
+const botConnected = () =>
+  jest
+    .spyOn(app().get(DiscordBotClientService), 'isConnected')
+    .mockReturnValue(true);
+
+describe('ROK-2287 fix: lineup post catch-up after an offline voting edge', () => {
+  beforeEach(() => {
+    botConnected();
+  });
+
+  it('the offline edge leaves no row; the next sweep creates exactly ONE post, a second sweep none', async () => {
+    const { id, title } = await missedLineup();
+    expect(await rows('lineup', id)).toEqual([]);
+    expect(createdTitled(title)).toBe(0);
+    await sweep();
+    const row = await only('lineup', id);
+    expect(row.discordDeletedAt).toBeNull();
+    expect(createdTitled(title)).toBe(1);
+    await sweep();
+    expect(await rows('lineup', id)).toHaveLength(1);
+    expect(createdTitled(title)).toBe(1);
+  });
+
+  it('a bot (re)connect creates the missed post', async () => {
+    const { id, title } = await missedLineup();
+    app().get(EventEmitter2).emit(DISCORD_BOT_EVENTS.CONNECTED);
+    await waitFor(async () => {
+      expect(await rows('lineup', id)).toHaveLength(1);
+    }, 5000);
+    expect(createdTitled(title)).toBe(1);
+  });
+
+  it.each<[string, () => Promise<LineupOver>]>([
+    ['hub-tagged', async () => ({ guildId: await newHub(ctx.posts) })],
+    ['private', () => Promise.resolve({ visibility: 'private' })],
+    ['standalone-carrier', () => Promise.resolve({ standalone: true })],
+    ['building', () => Promise.resolve({ status: 'building' })],
+    [
+      'past voting_deadline (operator Q2)',
+      () => Promise.resolve({ votingDeadline: new Date(Date.now() - HOUR) }),
+    ],
+  ])('a %s lineup gets no post from the sweep', async (_, make) => {
+    const { id, title } = await missedLineup(await make());
+    await sweep();
+    expect(await rows('lineup', id)).toEqual([]);
+    expect(createdTitled(title)).toBe(0);
+  });
+
+  it('a lineup whose post was deleted on Discord is NOT re-posted (operator Q1)', async () => {
+    const { id, title } = await missedLineup();
+    await db()
+      .insert(schema.eventPlanningPosts)
+      .values({
+        subjectKind: 'lineup',
+        subjectId: id,
+        forumId,
+        discordThreadId: snowflake(),
+        closesAt: null,
+        discordDeletedAt: new Date(Date.now() - HOUR),
+      });
+    await sweep();
+    const all = await rows('lineup', id);
+    expect(all).toHaveLength(1);
+    expect(all[0]?.discordDeletedAt).not.toBeNull();
+    expect(createdTitled(title)).toBe(0);
+  });
+});
+
+describe('ROK-2287 lineup catch-up: effective deadline + forum age', () => {
+  beforeEach(() => {
+    botConnected();
+  });
+
+  it('an expired phase_deadline with no voting_deadline is NOT posted', async () => {
+    const { id, title } = await missedLineup({
+      phaseDeadline: new Date(Date.now() - HOUR),
+      votingDeadline: null,
+    });
+    await sweep();
+    expect(await rows('lineup', id)).toEqual([]);
+    expect(createdTitled(title)).toBe(0);
+  });
+
+  it('a reopened lineup (stale past voting_deadline, future phase_deadline) IS posted', async () => {
+    const { id, title } = await missedLineup({
+      votingDeadline: new Date(Date.now() - HOUR),
+      phaseDeadline: new Date(Date.now() + HOUR),
+    });
+    await sweep();
+    expect(await rows('lineup', id)).toHaveLength(1);
+    expect(createdTitled(title)).toBe(1);
+  });
+
+  it('a voting lineup created BEFORE the forum was bound is NOT posted', async () => {
+    const { id, title } = await missedLineup();
+    await pinForum(); // a newer forum row: the lineup predates it
+    await sweep();
+    expect(await rows('lineup', id)).toEqual([]);
+    expect(createdTitled(title)).toBe(0);
+  });
+});
+
+describe('ROK-2287 lineup catch-up guards', () => {
+  let connected: jest.SpyInstance;
+  beforeEach(() => {
+    connected = botConnected();
+  });
+
+  it('an offline bot sweeps nothing', async () => {
+    connected.mockReturnValue(false);
+    const catchUp = jest.spyOn(subjects, 'ensureMissingLineupPosts');
+    const { id } = await missedLineup();
+    expect(await sweep()).toBe(0);
+    expect(catchUp).not.toHaveBeenCalled();
+    expect(await rows('lineup', id)).toEqual([]);
+  });
+
+  it('one failing lineup does not stop the others', async () => {
+    const bad = await missedLineup();
+    const good = await missedLineup();
+    const real = EventPlanningSubjectPosts.prototype.ensureLineupPost;
+    jest
+      .spyOn(subjects, 'ensureLineupPost')
+      .mockImplementation((lineupId) =>
+        lineupId === bad.id
+          ? Promise.reject(new Error('boom'))
+          : real.call(subjects, lineupId),
+      );
+    await sweep();
+    expect(await rows('lineup', bad.id)).toEqual([]);
+    expect(await rows('lineup', good.id)).toHaveLength(1);
+  });
+
+  it('a throwing catch-up never stops the lock flip', async () => {
+    jest
+      .spyOn(subjects, 'ensureMissingLineupPosts')
+      .mockRejectedValue(new Error('catch-up down'));
+    const setReadOnly = jest
+      .spyOn(app().get(HubForumDiscordEventLockGateway), 'setReadOnly')
+      .mockResolvedValue('ok');
+    const lineupId = await newLineup({ standalone: false, status: 'decided' });
+    const [due] = nonEmpty(
+      await db()
+        .insert(schema.eventPlanningPosts)
+        .values({
+          subjectKind: 'lineup',
+          subjectId: lineupId,
+          forumId,
+          discordThreadId: snowflake(),
+          closesAt: new Date(Date.now() - HOUR),
+        })
+        .returning(),
+      'due post',
+    );
+    await sweep();
+    expect(setReadOnly).toHaveBeenCalledWith(due.discordThreadId, true);
+    expect((await only('lineup', lineupId)).discordLockedAt).not.toBeNull();
   });
 });

@@ -111,9 +111,7 @@ export class SignupsService {
       action: 'signup_created',
     });
     this.rosterNotificationBuffer.bufferJoin(eventId, userId);
-    await this.activityLog.log('event', eventId, 'signup_added', userId, {
-      role: dto?.slotRole ?? dto?.preferredRoles?.[0] ?? null,
-    });
+    await statusH.auditSignupAdded(this.activityLog, eventId, userId, dto);
     const character = dto?.characterId
       ? await cancelH.getCharacterById(this.db, dto.characterId)
       : null;
@@ -256,7 +254,7 @@ export class SignupsService {
 
   async cancel(eventId: number, userId: number): Promise<void> {
     await this.rosterService.cancel(eventId, userId);
-    await this.activityLog.log('event', eventId, 'signup_cancelled', userId);
+    await statusH.auditSignupCancelled(this.activityLog, eventId, userId);
   }
 
   async selfUnassign(
