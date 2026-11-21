@@ -18,7 +18,9 @@ function store(initial: readonly (readonly [SettingKey, string])[] = []) {
 
 describe('readSigninReminderSettings', () => {
   it('unset ⇒ ON, every 3 weeks, max 3 (ruled Q2/Q8)', async () => {
-    expect(await readSigninReminderSettings(store())).toEqual({
+    expect(
+      await readSigninReminderSettings(store(), { demoMode: false }),
+    ).toEqual({
       enabled: true,
       weeks: 3,
       max: 3,
@@ -30,11 +32,19 @@ describe('readSigninReminderSettings', () => {
       [SETTING_KEYS.SIGNIN_REMINDER_WEEKS, '5'],
       [SETTING_KEYS.SIGNIN_REMINDER_MAX, '10'],
     ]);
-    expect(await readSigninReminderSettings(s)).toEqual({
+    expect(await readSigninReminderSettings(s, { demoMode: false })).toEqual({
       enabled: false,
       weeks: 5,
       max: 10,
     });
+  });
+  it('DEMO_MODE: unset ⇒ OFF, an explicit true ⇒ ON (fleet envs share real guilds)', async () => {
+    const demo = { demoMode: true };
+    expect((await readSigninReminderSettings(store(), demo)).enabled).toBe(
+      false,
+    );
+    const on = store([[SETTING_KEYS.SIGNIN_REMINDER_ENABLED, 'true']]);
+    expect((await readSigninReminderSettings(on, demo)).enabled).toBe(true);
   });
   it('malformed or out-of-range numbers fall back to the defaults', async () => {
     const s = store([
@@ -42,7 +52,7 @@ describe('readSigninReminderSettings', () => {
       [SETTING_KEYS.SIGNIN_REMINDER_WEEKS, '0'],
       [SETTING_KEYS.SIGNIN_REMINDER_MAX, 'lots'],
     ]);
-    expect(await readSigninReminderSettings(s)).toEqual({
+    expect(await readSigninReminderSettings(s, { demoMode: false })).toEqual({
       enabled: true,
       weeks: 3,
       max: 3,

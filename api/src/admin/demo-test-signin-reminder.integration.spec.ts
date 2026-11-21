@@ -16,6 +16,7 @@ import { createMemberAndLogin } from '../events/signups.integration.spec-helpers
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { SIGNIN_REMINDER_BUTTON_IDS } from '../plugins/core/signin-reminder/signin-reminder.constants';
+import { SigninReminderService } from '../plugins/core/signin-reminder/signin-reminder.service';
 import type { SigninReminderStateResponse } from './demo-test-signin-reminder.controller';
 
 const BOT = '400000000000000001';
@@ -174,5 +175,19 @@ describe('ROK-2284 signin-reminder fixture — state and reset', () => {
     expect(after.row).toBeNull();
     const again = await post('tick', adminToken, { botDiscordId: BOT });
     expect(again.body).toMatchObject({ status: 'ran', sent: 1 });
+  });
+});
+
+describe('ROK-2284 signin-reminder fixture — DEMO_MODE switch default', () => {
+  it('switch unset: the cron pass is disabled, but the bot-targeted tick still runs', async () => {
+    const cron = await testApp.app.get(SigninReminderService).runTick();
+    expect(cron).toEqual({ status: 'disabled' });
+    expect(sendDm).not.toHaveBeenCalled();
+    const res = await post('tick', adminToken, { botDiscordId: BOT });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ status: 'ran', sent: 1 });
+    expect(sendDm.mock.calls.map((c: unknown[]) => String(c[0]))).toEqual([
+      BOT,
+    ]);
   });
 });

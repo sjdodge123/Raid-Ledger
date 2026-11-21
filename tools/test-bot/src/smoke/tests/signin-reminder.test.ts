@@ -20,7 +20,8 @@
  * Its handler is covered by `signin-reminder-interaction.integration.spec.ts`.
  *
  * The switch is NOT flipped here: turning it on would let the hourly cron DM
- * real members of the test guild. A fresh env has it on (unset ⇒ on).
+ * real members of the test guild. Under DEMO_MODE an unset switch is OFF, and
+ * the bot-targeted tick bypasses the switch, so this runs with the cron idle.
  */
 import { pollForCondition } from "../../helpers/polling.js";
 import { SmokeAssertionError } from "../assert.js";

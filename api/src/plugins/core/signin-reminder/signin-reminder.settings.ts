@@ -1,7 +1,10 @@
 /**
  * ROK-2284 — read the sign-in reminder settings (app_settings). The switch is
- * unset ⇒ ON (ruled Q8); weeks/max fall back to the ruled defaults when unset
- * or malformed (GG "malformed ⇒ default" pattern, `gg-delivery.settings.ts`).
+ * unset ⇒ ON (ruled Q8) EXCEPT under DEMO_MODE, where unset ⇒ OFF: fleet and
+ * local dev envs share real guilds with humans who have no user row there, so
+ * a fresh env must never start DM-ing them (an explicit 'true' still turns it
+ * on). Weeks/max fall back to the ruled defaults when unset or malformed (GG
+ * "malformed ⇒ default" pattern, `gg-delivery.settings.ts`).
  */
 import { SETTING_KEYS, type SettingKey } from '../../../drizzle/schema';
 import {
@@ -33,9 +36,20 @@ function intIn(
   return n >= range.min && n <= range.max ? n : fallback;
 }
 
-/** Current settings, defaults applied. Only the literal 'false' turns it off. */
+/** True when either DEMO_MODE signal (env or the DB setting) is on. */
+export async function isSigninReminderDemoMode(store: {
+  getDemoMode(): Promise<boolean>;
+}): Promise<boolean> {
+  return process.env.DEMO_MODE === 'true' || (await store.getDemoMode());
+}
+
+/**
+ * Current settings, defaults applied. A stored value: only the literal
+ * 'false' turns it off. Unset: ON, or OFF when `demoMode` is true.
+ */
 export async function readSigninReminderSettings(
   store: Pick<SigninReminderSettingsStore, 'get'>,
+  opts: { demoMode: boolean },
 ): Promise<SigninReminderSettings> {
   const k = SETTING_KEYS;
   const [enabled, weeks, max] = await Promise.all([
@@ -44,7 +58,7 @@ export async function readSigninReminderSettings(
     store.get(k.SIGNIN_REMINDER_MAX),
   ]);
   return {
-    enabled: enabled?.trim() !== 'false',
+    enabled: enabled === null ? !opts.demoMode : enabled.trim() !== 'false',
     weeks: intIn(
       weeks,
       SIGNIN_REMINDER_WEEKS_RANGE,

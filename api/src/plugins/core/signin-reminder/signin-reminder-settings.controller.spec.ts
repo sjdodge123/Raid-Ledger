@@ -8,10 +8,14 @@ import {
   writeSigninReminderSettings,
 } from './signin-reminder-settings.controller';
 
-function store(initial: readonly (readonly [SettingKey, string])[] = []) {
+function store(
+  initial: readonly (readonly [SettingKey, string])[] = [],
+  demoMode = false,
+) {
   const map = new Map<SettingKey, string>(initial);
   return {
     map,
+    getDemoMode: () => Promise.resolve(demoMode),
     get: (k: SettingKey) => Promise.resolve(map.get(k) ?? null),
     set: (k: SettingKey, v: string) => {
       map.set(k, v);
@@ -63,6 +67,15 @@ describe('writeSigninReminderSettings', () => {
 });
 
 describe('SigninReminderSettingsController', () => {
+  const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
+  beforeEach(() => {
+    delete process.env.DEMO_MODE;
+  });
+  afterAll(() => {
+    if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+    else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
+  });
+
   it('is admin-guarded', () => {
     const guards: unknown[] =
       Reflect.getMetadata(GUARDS_METADATA, SigninReminderSettingsController) ??
@@ -86,5 +99,19 @@ describe('SigninReminderSettingsController', () => {
       weeks: 6,
       max: 4,
     });
+  });
+
+  it('GET under DEMO_MODE shows an unset switch as OFF; a saved true reads ON', async () => {
+    const s = store([], true);
+    const ctrl = new SigninReminderSettingsController(
+      s as unknown as SettingsService,
+    );
+    expect(await ctrl.getSettings()).toEqual({
+      enabled: false,
+      weeks: 3,
+      max: 3,
+    });
+    await ctrl.updateSettings({ enabled: true, weeks: 3, max: 3 });
+    expect((await ctrl.getSettings()).enabled).toBe(true);
   });
 });
