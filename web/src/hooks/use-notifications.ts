@@ -51,6 +51,8 @@ export type NotificationType =
     | 'valheim_claim_suggestion'
     /** ROK-2187 — your GG <year> is ready (the in-app path for players without Discord, Q6). */
     | 'gg_ready'
+    /** ROK-1866 — a connected calendar stopped syncing and needs reconnecting. */
+    | 'calendar_needs_reconnect'
     | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';
