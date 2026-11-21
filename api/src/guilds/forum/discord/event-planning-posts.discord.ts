@@ -7,7 +7,12 @@
  * on rename/delete is `'gone'`.
  */
 import { Injectable } from '@nestjs/common';
-import { ChannelType, type Guild, type ThreadChannel } from 'discord.js';
+import {
+  ChannelType,
+  ThreadAutoArchiveDuration,
+  type Guild,
+  type ThreadChannel,
+} from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
 import {
@@ -17,6 +22,7 @@ import {
 
 const REASON = 'Raid Ledger event-planning post';
 const NO_MENTIONS = { parse: [] };
+const ONE_WEEK = ThreadAutoArchiveDuration.OneWeek;
 
 /** A new Discord-only post. */
 export interface PlanningPostDraft {
@@ -56,6 +62,9 @@ export class EventPlanningPostsGateway {
       name: post.title,
       message: { ...starterMessage(post), allowedMentions: NO_MENTIONS },
       appliedTags: post.tagIds,
+      // ROK-2292 review MAJOR: an event post exists from announce, days
+      // ahead, so it idles the longest Discord allows before auto-archiving.
+      ...(post.card ? { autoArchiveDuration: ONE_WEEK } : {}),
       reason: REASON,
     });
     return thread.id;

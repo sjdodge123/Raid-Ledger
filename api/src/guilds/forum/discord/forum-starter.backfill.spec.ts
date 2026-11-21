@@ -8,6 +8,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../../common/testing/drizzle-mock';
+import { DiscordAPIError } from 'discord.js';
 import { EMBED_STATES } from '../../../discord-bot/discord-bot.constants';
 import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import {
@@ -128,5 +129,44 @@ describe('ROK-2292 ForumStarterBackfill.run', () => {
     const { svc, db } = setup([], []);
     db.limit.mockReset().mockRejectedValue(new Error('db down'));
     await expect(svc.onConnected()).resolves.toBeUndefined();
+  });
+});
+
+function discordError(code: number): DiscordAPIError {
+  const err = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
+  Object.defineProperty(err, 'code', { value: code, configurable: true });
+  Object.defineProperty(err, 'message', { value: `code ${code}` });
+  return err;
+}
+
+/** The thread ids `editStarter` was called with, in order. */
+const editedThreads = (editor: { editStarter: jest.Mock }): unknown[] =>
+  editor.editStarter.mock.calls.map((c: unknown[]) => c[0]);
+
+describe('ROK-2292 review NIT — the backfill does not retry unfixable posts', () => {
+  it('a gone post (deleted / hub unbound) or a permanent error is skipped on the next connect', async () => {
+    const { svc, editor, db } = setup([t(1), t(2), t(3)], []);
+    editor.editStarter
+      .mockResolvedValueOnce('gone')
+      .mockRejectedValueOnce(discordError(50005))
+      .mockResolvedValueOnce('edited');
+    await svc.run();
+    // Second connect: the same three still qualify (no starter row for 1, 2).
+    db.limit.mockResolvedValueOnce([t(1), t(2)]).mockResolvedValueOnce([]);
+    editor.editStarter.mockClear();
+    await svc.run();
+    expect(editedThreads(editor)).toEqual([]);
+  });
+
+  it('a transient failure is retried on the next connect', async () => {
+    const { svc, editor, db } = setup([t(1)], []);
+    editor.editStarter.mockRejectedValueOnce(
+      new Error('Discord bot is offline'),
+    );
+    await svc.run();
+    db.limit.mockResolvedValueOnce([t(1)]).mockResolvedValueOnce([]);
+    editor.editStarter.mockClear();
+    await svc.run();
+    expect(editedThreads(editor)).toEqual(['thread-1']);
   });
 });

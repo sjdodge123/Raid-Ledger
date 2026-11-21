@@ -13,8 +13,12 @@
  * row yet. Idempotent: the "no starter row" filter (plus the row's unique
  * key) makes a second run a no-op; a crash mid-run re-does at most one edit.
  * Paced like `resyncLiveEventPosts`: strictly sequential (discord.js queues
- * per-route rate limits), capped per run. A failure (incl. 50005 / 50083 /
- * 10003) skips that post and the rest go on; never throws.
+ * per-route rate limits), capped per run. A failure skips that post and the
+ * rest go on; never throws. A post that can NEVER be edited — the port says
+ * `'gone'` (deleted, or its hub is no longer bound) or a permanent error
+ * (`isStarterGoneError`: another author, locked, no access) — is remembered
+ * for the process's life and not retried on every reconnect (review NIT; an
+ * unlocked archived post is unarchived by the port, not skipped).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -24,6 +28,7 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import {
   FORUM_STARTER_EDIT_PORT,
+  isStarterGoneError,
   type ForumStarterEditPort,
 } from '../../../discord-bot/services/event-embed-message.editor';
 import { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
@@ -138,6 +143,8 @@ export class ForumStarterBackfill {
   readonly hubBehaviourKind = 'ingest-source';
   readonly ownerPluginId = CORE_PLUGIN_ID;
   private readonly logger = new Logger(ForumStarterBackfill.name);
+  /** Posts that can never take the card (never persisted: no schema). */
+  private readonly unfixable = new Set<string>();
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
@@ -165,6 +172,7 @@ export class ForumStarterBackfill {
     const targets = await starterBackfillTargets(this.db, afterId);
     let edited = 0;
     for (const target of targets) {
+      if (this.unfixable.has(target.discordThreadId)) continue;
       if (await this.backfillOne(target)) edited += 1;
     }
     return edited;
@@ -178,14 +186,20 @@ export class ForumStarterBackfill {
       if (!card) return false;
       const { state, ...body } = card;
       const res = await this.editor.editStarter(discordThreadId, body);
-      if (res === 'gone') return false;
+      if (res === 'gone') return this.giveUp(discordThreadId);
       await this.cards.record(eventId, discordThreadId, state);
       return true;
     } catch (err) {
+      if (isStarterGoneError(err)) this.unfixable.add(discordThreadId);
       this.logger.warn(
         `Starter card backfill skipped post ${discordThreadId} (event ${eventId}): ${describe(err)}`,
       );
       return false;
     }
+  }
+
+  private giveUp(discordThreadId: string): false {
+    this.unfixable.add(discordThreadId);
+    return false;
   }
 }
