@@ -9,6 +9,8 @@ import {
   type MockDb,
 } from '../../../common/testing/drizzle-mock';
 import { DiscordAPIError } from 'discord.js';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { EMBED_STATES } from '../../../discord-bot/discord-bot.constants';
 import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import {
@@ -168,5 +170,39 @@ describe('ROK-2292 review NIT — the backfill does not retry unfixable posts', 
     editor.editStarter.mockClear();
     await svc.run();
     expect(editedThreads(editor)).toEqual(['thread-1']);
+  });
+});
+
+/** Each `where(...)` the target queries built, rendered to SQL + params. */
+function renderedWheres(db: MockDb): { sql: string; params: unknown[] }[] {
+  const dialect = new PgDialect();
+  return db.where.mock.calls.map((c: unknown[]) =>
+    dialect.sqlToQuery(c[0] as SQL),
+  );
+}
+
+describe('ROK-2292 Codex P2 — unfixable posts are excluded BEFORE the cap', () => {
+  it('the next pass filters remembered unfixable threads in both target queries', async () => {
+    const { svc, editor, db } = setup([t(1)], [t(2)]);
+    editor.editStarter
+      .mockResolvedValueOnce('gone')
+      .mockResolvedValueOnce('edited');
+    await svc.run();
+    db.where.mockClear();
+    db.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    await svc.run();
+    const wheres = renderedWheres(db);
+    expect(wheres).toHaveLength(2);
+    for (const w of wheres) {
+      expect(w.sql).toMatch(/not in \(\$\d+\)/);
+      expect(w.params).toContain('thread-1');
+      expect(w.params).not.toContain('thread-2');
+    }
+  });
+
+  it('a first pass (nothing unfixable yet) adds no exclusion', async () => {
+    const { svc, db } = setup([], []);
+    await svc.run();
+    for (const w of renderedWheres(db)) expect(w.sql).not.toMatch(/not in/);
   });
 });

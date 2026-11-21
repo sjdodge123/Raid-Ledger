@@ -23,7 +23,16 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
-import { and, asc, eq, gt, isNull, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  isNull,
+  notInArray,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import {
@@ -56,6 +65,14 @@ function noStarterRow(thread: AnyPgColumn): SQL {
   return sql`NOT EXISTS (SELECT 1 FROM ${starters} WHERE ${starters.channelId} = ${thread} AND ${starters.messageId} = ${thread})`;
 }
 
+/** Not one of the posts remembered as unfixable (applied BEFORE the cap). */
+function notExcluded(
+  thread: AnyPgColumn,
+  exclude: readonly string[],
+): SQL | undefined {
+  return exclude.length > 0 ? notInArray(thread, [...exclude]) : undefined;
+}
+
 /** The event is still to come, with a card: not cancelled, not ad-hoc. */
 function upcomingEvent(afterId: number): SQL | undefined {
   return and(
@@ -71,6 +88,7 @@ async function registryTargets(
   db: ForumDiscordDb,
   afterId: number,
   limit: number,
+  exclude: readonly string[],
 ): Promise<StarterBackfillTarget[]> {
   return db
     .select({ eventId: events.id, discordThreadId: posts.discordThreadId })
@@ -84,6 +102,7 @@ async function registryTargets(
         sql`${posts.closesAt} > now()`,
         upcomingEvent(afterId),
         noStarterRow(posts.discordThreadId),
+        notExcluded(posts.discordThreadId, exclude),
       ),
     )
     .orderBy(asc(events.id))
@@ -95,6 +114,7 @@ async function hubTargets(
   db: ForumDiscordDb,
   afterId: number,
   limit: number,
+  exclude: readonly string[],
 ): Promise<StarterBackfillTarget[]> {
   return db
     .select({ eventId: events.id, discordThreadId: links.discordThreadId })
@@ -111,21 +131,27 @@ async function hubTargets(
         isNull(threads.eventDetachedAt),
         upcomingEvent(afterId),
         noStarterRow(links.discordThreadId),
+        notExcluded(links.discordThreadId, exclude),
       ),
     )
     .orderBy(asc(events.id))
     .limit(limit);
 }
 
-/** Both kinds, by event id, events after `afterId`, at most `limit`. */
+/**
+ * Both kinds, by event id, events after `afterId`, at most `limit`. Posts in
+ * `exclude` (remembered unfixable) are filtered in SQL before the limit, so
+ * they can never fill the cap and starve later posts (Codex P2).
+ */
 export async function starterBackfillTargets(
   db: ForumDiscordDb,
   afterId = 0,
   limit = STARTER_BACKFILL_CAP,
+  exclude: readonly string[] = [],
 ): Promise<StarterBackfillTarget[]> {
   const [registry, hub] = await Promise.all([
-    registryTargets(db, afterId, limit),
-    hubTargets(db, afterId, limit),
+    registryTargets(db, afterId, limit, exclude),
+    hubTargets(db, afterId, limit, exclude),
   ]);
   return [...registry, ...hub]
     .sort((a, b) => a.eventId - b.eventId)
@@ -169,7 +195,12 @@ export class ForumStarterBackfill {
    * a time; returns how many were edited and recorded.
    */
   async run(afterId = 0): Promise<number> {
-    const targets = await starterBackfillTargets(this.db, afterId);
+    const targets = await starterBackfillTargets(
+      this.db,
+      afterId,
+      STARTER_BACKFILL_CAP,
+      [...this.unfixable],
+    );
     let edited = 0;
     for (const target of targets) {
       if (this.unfixable.has(target.discordThreadId)) continue;
