@@ -44,6 +44,21 @@ beforeEach(() => {
 });
 
 describe('SigninReminderSettingsForm — render', () => {
+    it('the shipped default (switch unset ⇒ OFF, 3 weeks, max 3) renders the switch off', () => {
+        mocks.signinReminder.data = { enabled: false, weeks: 3, max: 3 };
+        render(<SigninReminderSettingsForm />);
+        expect(toggle()).toHaveAttribute('aria-checked', 'false');
+        expect(weeks()).toHaveValue(3);
+        expect(max()).toHaveValue(3);
+    });
+
+    it('shows the switch off until the settings have loaded', () => {
+        mocks.signinReminder.isLoading = true;
+        mocks.signinReminder.data = undefined;
+        render(<SigninReminderSettingsForm />);
+        expect(toggle()).toHaveAttribute('aria-checked', 'false');
+    });
+
     it('shows the stored switch, weeks and max with their ranges', () => {
         mocks.signinReminder.data = { enabled: false, weeks: 6, max: 2 };
         render(<SigninReminderSettingsForm />);
