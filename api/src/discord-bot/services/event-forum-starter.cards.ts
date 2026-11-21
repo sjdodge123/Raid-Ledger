@@ -35,7 +35,11 @@ import {
   embedComponents,
   type EmbedContext,
 } from './discord-embed.factory';
-import type { ForumStarterCard } from './event-embed-message.editor';
+import {
+  EventEmbedMessageEditor,
+  type ForumStarterCard,
+} from './event-embed-message.editor';
+import { isForeignKeyViolation } from '../../cron-jobs/cron-job.fk-recovery.helpers';
 
 /** Emitted after an event's announcement embed is first posted (D8). */
 export const EVENT_ANNOUNCEMENT_POSTED = 'discord.event-announcement.posted';
@@ -91,6 +95,7 @@ export class EventForumStarterCards {
     private readonly channelResolver: ChannelResolverService,
     private readonly settings: SettingsService,
     private readonly sync: EmbedSyncQueueService,
+    private readonly editor: EventEmbedMessageEditor,
   ) {}
 
   /**
@@ -98,11 +103,7 @@ export class EventForumStarterCards {
    * event (those keep a text starter — Quick Play has its own card).
    */
   async build(eventId: number): Promise<EventStarterCard | null> {
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
+    const event = await this.findEvent(eventId);
     if (!event || event.cancelledAt !== null || event.isAdHoc) return null;
     const data = await buildEventData(
       this.db,
@@ -140,6 +141,36 @@ export class EventForumStarterCards {
   }
 
   /**
+   * Codex P2 — record a starter a creator JUST posted, then settle it against
+   * the event's CURRENT state: a cancel or delete that landed while the
+   * Discord create was in flight could not see the post (no row yet). Deleted
+   * → nothing is recorded (an FK violation is swallowed; the post follows the
+   * delete lifecycle). Cancelled → the starter is edited to the button-free
+   * cancelled card, like the cancel handler does for tracked rows.
+   */
+  async track(
+    eventId: number,
+    threadId: string,
+    state: EmbedState,
+  ): Promise<void> {
+    try {
+      await this.record(eventId, threadId, state);
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return;
+      throw err;
+    }
+    const event = await this.findEvent(eventId);
+    if (!event?.cancelledAt) return;
+    try {
+      await this.applyCancelled(event, threadId);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to cancel forum starter ${threadId} (event ${eventId}): ${String(err)}`,
+      );
+    }
+  }
+
+  /**
    * A locked post reopened (rescheduled into the future): track its starter
    * again (D7 dropped the row) and re-sync the card it missed while closed.
    * False when the event has no card (missing, cancelled, ad-hoc).
@@ -155,6 +186,38 @@ export class EventForumStarterCards {
   /** D7 — post `threadId` closed, moved or vanished: stop syncing it. */
   forget(threadId: string): Promise<void> {
     return deleteForumStarterRows(this.db, threadId);
+  }
+
+  private async findEvent(eventId: number): Promise<EventRow | null> {
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return event ?? null;
+  }
+
+  /** The cancel handler's card for one starter, then its row's state. */
+  private async applyCancelled(event: EventRow, threadId: string) {
+    const t = schema.discordEventMessages;
+    const where = and(eq(t.channelId, threadId), eq(t.messageId, threadId));
+    const [row] = await this.db.select({ id: t.id }).from(t).where(where);
+    if (!row) return;
+    const data = await buildEventData(
+      this.db,
+      event,
+      this.channelResolver,
+      this.settings,
+    );
+    const context = await this.context(event);
+    const { embed, content } = this.factory.buildEventCancelled(data, context);
+    const card = content ? { embed, content } : { embed };
+    const ref = { id: row.id, channelId: threadId, messageId: threadId };
+    if ((await this.editor.edit(ref, card)) === 'gone') return;
+    await this.db
+      .update(t)
+      .set({ embedState: EMBED_STATES.CANCELLED, updatedAt: new Date() })
+      .where(eq(t.id, row.id));
   }
 
   private async context(event: EventRow): Promise<EmbedContext> {

@@ -64,7 +64,7 @@ export interface EventPostDeps {
    */
   redrive: (link: links.ForumLink) => Promise<unknown>;
   /** ROK-2292 D2: an event post opens with its tracked signup card. */
-  starters: Pick<EventForumStarterCards, 'build' | 'record'>;
+  starters: Pick<EventForumStarterCards, 'build' | 'track'>;
 }
 
 /** Where a post goes: the bound forum and the hub's shared tag, if any. */
@@ -197,7 +197,7 @@ export class EventPostOutbound {
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
       if (card && eventId !== null) {
-        await this.deps.starters.record(eventId, sent.threadId, card.state);
+        await this.deps.starters.track(eventId, sent.threadId, card.state);
       }
     });
   }

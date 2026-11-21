@@ -7,6 +7,7 @@
  * (§3.5 R2) — the lock sweep acts on `closes_at`.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { EmbedState } from '../../../discord-bot/discord-bot.constants';
 import { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
@@ -93,9 +94,11 @@ export class EventPlanningPostsService {
       closesAt: planningEventClosesAt(ev),
       ...(card ? { card } : {}),
     });
-    // ROK-2292 D2: track the starter so the embed sync keeps it current.
+    // ROK-2292 D2: track the starter so the embed sync keeps it current;
+    // `track` settles a cancel/delete that landed during the create (Codex
+    // P2). A failure is logged: the reconcile below must still run.
     if (made?.created && card) {
-      await this.starters.record(eventId, made.ref.discordThreadId, card.state);
+      await this.trackStarter(eventId, made.ref.discordThreadId, card.state);
     }
     // Codex P2-3: re-derive once if the event moved while the create ran.
     if (made?.created) await this.reconcileCreated(eventId, ev);
@@ -177,6 +180,18 @@ export class EventPlanningPostsService {
         await this.syncEvent(eventId);
     } catch (err) {
       this.warn(`post-create reconcile of event ${eventId}`, err);
+    }
+  }
+
+  private async trackStarter(
+    eventId: number,
+    threadId: string,
+    state: EmbedState,
+  ): Promise<void> {
+    try {
+      await this.starters.track(eventId, threadId, state);
+    } catch (err) {
+      this.warn(`starter tracking of event ${eventId}`, err);
     }
   }
 

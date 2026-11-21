@@ -91,7 +91,7 @@ function setup() {
     redrive,
     clientUrl: () => Promise.resolve('https://rl.example'),
     timeZone: () => Promise.resolve('UTC'),
-    starters: { build: jest.fn().mockResolvedValue(null), record: jest.fn() },
+    starters: { build: jest.fn().mockResolvedValue(null), track: jest.fn() },
   };
   return { svc: new EventPostOutbound(deps), gateway, redrive, attempt };
 }
