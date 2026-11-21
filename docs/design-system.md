@@ -766,6 +766,10 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   The admin integration forms use it (IGDB, ITAD, Steam, Co-Optimus, Discord Bot/OAuth, Blizzard; ROK-1652
   ruling 9). A provider's brand appears only as a logo tile (`admin-settings-integration-cards.tsx`'s
   `bg-[#148EFF]`), never as a callout fill.
+- **Phone sign-in hint (ROK-2291)** adopts the neutral callout on the login card: `PhoneSignInHint`
+  (`pages/login/PhoneSignInHint.tsx`, `role="note"`, `p-3` like the first-run banner beside it), a
+  `text-foreground` lead phrase and `/login` as `<code>` on `bg-panel`. Rendered only below 1024px
+  (`useMediaQuery(PHONE_MQ)`), with Discord sign-in offered, and never on first run (one callout at a time).
 - **Claim your character (ROK-2153)** is the core adopter on hubs: `HubClaimPrompt`
   (`components/hub/claim/`) is a neutral instruction callout `<section aria-label="Claim your character">`
   with an `h2` (`text-base font-semibold text-foreground`), a `text-secondary` body (a shorter one below
