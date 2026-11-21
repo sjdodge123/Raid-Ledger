@@ -17,9 +17,9 @@ interface ButtonJson {
 describe('disableStopButton', () => {
   it('disables the stop button and leaves the link button enabled', () => {
     const { row } = buildSigninReminderDm('Guild', 'https://raid.example');
-    // The shape a ButtonInteraction's `message.components` really has.
-    const live = new ActionRow(row.toJSON());
-    const rows = disableStopButton([live] as never);
+    // Raw API JSON (discord.js's ActionRow constructor is private); the
+    // helper reads every button through ButtonBuilder, so both shapes work.
+    const rows = disableStopButton([row.toJSON()] as never);
     expect(rows).toHaveLength(1);
     const buttons = (rows[0]?.toJSON().components ?? []) as ButtonJson[];
     expect(buttons.map((b) => b.type)).toEqual([
