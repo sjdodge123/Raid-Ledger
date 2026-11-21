@@ -44,6 +44,7 @@ import {
   type PingPost,
 } from './hub-forum-discord-signup-pings.target';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { EventDiscussionSignupLines } from '../event-discussion/event-discussion-signup-lines.service';
 
 /**
  * What one flush did. `offline` / `pending` / `incomplete` (a removal
@@ -88,14 +89,21 @@ export class HubForumDiscordSignupPings {
     private readonly planning: EventPlanningPostsService,
     private readonly registryLock: EventPlanningPostsLockSweep,
     emoji: DiscordEmojiService,
+    private readonly rlLines: EventDiscussionSignupLines,
   ) {
     this.lineEmoji = signupLineEmoji(emoji);
   }
 
   /** Flush one event; never pings a user twice for the same signup. */
   async flush(eventId: number): Promise<SignupPingOutcome> {
+    // ROK-2274 D5: the Raid Ledger thread's lines first, bound hub or not.
+    const rl = await this.rlLines.flush(eventId);
     const ref = await resolvePingThread(this.db, eventId);
-    if (!ref) return 'unbound';
+    if (!ref) {
+      // No Discord flush will take a reset flag the RL pass used.
+      await this.takeIfStable(eventId, rl.flags);
+      return 'unbound';
+    }
     const keys = flushKeysFor(eventId, pingScope(ref));
     const outcome = await this.flushBound(ref, eventId, keys);
     // Every bound flush (review r1 m2): a rescheduled event moves the expiry.

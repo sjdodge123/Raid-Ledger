@@ -16,6 +16,10 @@ import type Redis from 'ioredis';
 import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import type { EventPlanningPostsService } from './event-planning-posts.service';
 import type { DiscordEmojiService } from '../../../discord-bot/services/discord-emoji.service';
+import type {
+  EventDiscussionSignupLines,
+  RlLineFlush,
+} from '../event-discussion/event-discussion-signup-lines.service';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
 jest.mock('./hub-forum-discord-signup-lines.queries');
@@ -70,7 +74,13 @@ function rows(...members: SignupLineMember[]) {
   return new Map(members.map((m) => [m.discordId, m]));
 }
 
+/** ROK-2274: the RL pass's result; no flag read by default. */
+function rlPass(flags: RlLineFlush['flags'] = [null, null]): RlLineFlush {
+  return { outcome: 'unchanged', flags };
+}
+
 function setup(pinged: string[] = [], online = true) {
+  const rlLines = { flush: jest.fn(() => Promise.resolve(rlPass())) };
   // Key-aware, so a set scoped to another post is a different set (P2-4).
   const set = new Set(pinged);
   const sets = new Map([[pingedSetKey(5, REF), set]]);
@@ -143,8 +153,9 @@ function setup(pinged: string[] = [], online = true) {
     planning as unknown as EventPlanningPostsService,
     { reopenIfPending: jest.fn() } as unknown as EventPlanningPostsLockSweep,
     emoji as unknown as DiscordEmojiService,
+    rlLines as unknown as EventDiscussionSignupLines,
   );
-  return { svc, redis, outbound, gateway, set, hash, strings, emoji };
+  return { svc, redis, outbound, gateway, set, hash, strings, emoji, rlLines };
 }
 
 const mockedQ = jest.mocked(q);
@@ -563,5 +574,47 @@ describe('review round 3 MAJOR-D1 — real changes during a resync still post', 
       '👋 Bob declined',
       [],
     );
+  });
+});
+
+describe('ROK-2274 — the Raid Ledger thread pass', () => {
+  it('runs before the Discord thread lookup, unbound hub included', async () => {
+    const order: string[] = [];
+    mockedQ.findBoundEventThread.mockImplementation(() => {
+      order.push('discord');
+      return Promise.resolve(null);
+    });
+    const t = setup();
+    t.rlLines.flush.mockImplementation(() => {
+      order.push('rl');
+      return Promise.resolve(rlPass());
+    });
+    expect(await t.svc.flush(5)).toBe('unbound');
+    expect(t.rlLines.flush).toHaveBeenCalledWith(5);
+    expect(order[0]).toBe('rl');
+  });
+
+  it('unbound: takes a LANDED reset flag the RL pass read on both sides', async () => {
+    mockedQ.findBoundEventThread.mockResolvedValue(null);
+    const t = setup();
+    await t.svc.requestResync(5);
+    const flag = t.strings.get(lineResyncKey(5)) ?? 'missing';
+    t.rlLines.flush.mockResolvedValue(rlPass([flag, flag]));
+    await t.svc.flush(5);
+    expect(t.strings.has(lineResyncKey(5))).toBe(false);
+  });
+
+  it('unbound: keeps a PENDING flag and a flag that moved during the RL read', async () => {
+    mockedQ.findBoundEventThread.mockResolvedValue(null);
+    const t = setup();
+    await t.svc.markResetPending(5);
+    t.rlLines.flush.mockResolvedValue(rlPass(['pending', 'pending']));
+    await t.svc.flush(5);
+    expect(t.strings.get(lineResyncKey(5))).toBe('pending');
+    await t.svc.requestResync(5);
+    const flag = t.strings.get(lineResyncKey(5)) ?? 'missing';
+    t.rlLines.flush.mockResolvedValue(rlPass([null, flag]));
+    await t.svc.flush(5);
+    expect(t.strings.get(lineResyncKey(5))).toBe(flag);
   });
 });
