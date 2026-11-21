@@ -23,6 +23,7 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import { deleteForumStarterRows } from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -228,6 +229,8 @@ export class EventPlanningPostsLockSweep {
         return 'gone';
       }
       await setPlanningPostLocked(this.db, postId, readOnly ? now : null);
+      // ROK-2292 D7: a closed post's starter is no longer synced.
+      if (readOnly) await deleteForumStarterRows(this.db, discordThreadId);
       return 'ok';
     } catch (err) {
       this.warn(row, err);

@@ -14,6 +14,7 @@
  * poll or lineup thread posts lazily too, titled `<title> — Poll|Lineup`
  * and tagged with its kind tag. Retitle (item 2) stays event-only (F5).
  */
+import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import {
   discordThreadName,
   forumThreadUrl,
@@ -62,6 +63,8 @@ export interface EventPostDeps {
    * job path (unbound / stale ⇒ nothing; locked ⇒ skipped until reopened).
    */
   redrive: (link: links.ForumLink) => Promise<unknown>;
+  /** ROK-2292 D2: an event post opens with its tracked signup card. */
+  starters: Pick<EventForumStarterCards, 'build' | 'record'>;
 }
 
 /** Where a post goes: the bound forum and the hub's shared tag, if any. */
@@ -179,16 +182,23 @@ export class EventPostOutbound {
       threadId: link.threadId,
     });
     const view = await this.subjectView(src, url, clientUrl);
+    const eventId = src.kind === 'event' ? src.eventId : null;
+    const card =
+      eventId === null ? null : await this.deps.starters.build(eventId);
     const post = {
       title: view.name,
       content: view.content,
       tagIds: to.tagId ? [to.tagId] : [],
       kind: src.kind, // ROK-2258 / S8: the gateway adds the forum's kind tag
+      ...(card ? { card } : {}),
     };
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
+      if (card && eventId !== null) {
+        await this.deps.starters.record(eventId, sent.threadId, card.state);
+      }
     });
   }
 

@@ -24,6 +24,7 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import { deleteForumStarterRows } from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
@@ -188,6 +189,9 @@ export class HubForumDiscordEventLockSweep {
         .update(links)
         .set({ discordLockedAt: row.readOnly ? now : null })
         .where(eq(links.id, row.linkId));
+      // ROK-2292 D7: a locked (closed / detached) post's starter stops syncing.
+      if (row.readOnly)
+        await deleteForumStarterRows(this.db, row.discordThreadId);
     } catch (err) {
       this.warn(row, err);
       return false;

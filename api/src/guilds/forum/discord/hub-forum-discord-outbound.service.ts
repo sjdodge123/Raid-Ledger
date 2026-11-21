@@ -1,3 +1,4 @@
+import { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ThreadRenameBudget } from '../../../discord-bot/lfg-board/lfg-board-thread.helpers';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
@@ -68,8 +69,10 @@ export class HubForumDiscordOutboundService {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly gateway: HubForumDiscordOutboundGateway,
     private readonly settings: SettingsService,
+    starters: EventForumStarterCards,
   ) {
     this.events = new EventPostOutbound({
+      starters,
       db,
       gateway,
       now: () => this.now(),

@@ -51,6 +51,17 @@ export interface EventStarterCard extends ForumStarterCard {
 
 type EventRow = typeof schema.events.$inferSelect;
 
+/** D7 — drop post `threadId`'s starter row(s); the sync stops editing it. */
+export async function deleteForumStarterRows(
+  db: Pick<PostgresJsDatabase<typeof schema>, 'delete'>,
+  threadId: string,
+): Promise<void> {
+  const t = schema.discordEventMessages;
+  await db
+    .delete(t)
+    .where(and(eq(t.channelId, threadId), eq(t.messageId, threadId)));
+}
+
 @Injectable()
 export class EventForumStarterCards {
   private readonly logger = new Logger(EventForumStarterCards.name);
@@ -111,15 +122,8 @@ export class EventForumStarterCards {
   }
 
   /** D7 — post `threadId` closed, moved or vanished: stop syncing it. */
-  async forget(threadId: string): Promise<void> {
-    await this.db
-      .delete(schema.discordEventMessages)
-      .where(
-        and(
-          eq(schema.discordEventMessages.channelId, threadId),
-          eq(schema.discordEventMessages.messageId, threadId),
-        ),
-      );
+  forget(threadId: string): Promise<void> {
+    return deleteForumStarterRows(this.db, threadId);
   }
 
   private async context(event: EventRow): Promise<EmbedContext> {

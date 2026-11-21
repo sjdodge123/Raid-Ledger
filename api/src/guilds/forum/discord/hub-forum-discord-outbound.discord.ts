@@ -1,3 +1,4 @@
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
 import { Injectable } from '@nestjs/common';
 import {
   ChannelType,
@@ -89,6 +90,8 @@ export class HubForumDiscordOutboundGateway {
       content: string;
       tagIds: string[];
       kind?: SubjectKind;
+      /** ROK-2292 D2: an event post opens with its card (content `''`). */
+      card?: ForumStarterCard;
     },
     author: OutboundAuthor,
   ): Promise<DiscordMessageRef> {
@@ -99,7 +102,13 @@ export class HubForumDiscordOutboundGateway {
     const msg = await hook.send({
       ...identity(author),
       threadName: post.title,
-      content: post.content,
+      ...(post.card
+        ? {
+            content: '',
+            embeds: post.card.embeds,
+            components: post.card.components,
+          }
+        : { content: post.content }),
       // ROK-2258 / ROK-2272 S8: a subject post also carries its kind tag.
       appliedTags: postTagIds(post.tagIds, kind, forumTags, hubTags),
       allowedMentions: NO_MENTIONS,

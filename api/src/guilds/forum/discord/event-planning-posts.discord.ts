@@ -9,6 +9,7 @@
 import { Injectable } from '@nestjs/common';
 import { ChannelType, type Guild, type ThreadChannel } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
 import {
   isGone,
   type DiscordWriteResult,
@@ -22,6 +23,15 @@ export interface PlanningPostDraft {
   title: string;
   content: string;
   tagIds: string[];
+  /** ROK-2292 D2: an event post opens with its signup card instead. */
+  card?: ForumStarterCard;
+}
+
+/** The card (content `''`) when there is one, else the text starter. */
+function starterMessage(post: PlanningPostDraft) {
+  if (!post.card) return { content: post.content };
+  const { embeds, components } = post.card;
+  return { content: '', embeds, components };
 }
 
 @Injectable()
@@ -44,7 +54,7 @@ export class EventPlanningPostsGateway {
     }
     const thread = await ch.threads.create({
       name: post.title,
-      message: { content: post.content, allowedMentions: NO_MENTIONS },
+      message: { ...starterMessage(post), allowedMentions: NO_MENTIONS },
       appliedTags: post.tagIds,
       reason: REASON,
     });
