@@ -11,7 +11,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { GuildMemberRow, GuildPage as GuildPageDto, GuildRaidsDto } from '@raid-ledger/contract';
-import type { HubMemberFilters, HubMemberRow, HubModule } from '../../plugins/hub-module';
+import type { HubMemberFilters, HubMemberRow, HubMemberSort, HubModule } from '../../plugins/hub-module';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { Checkbox } from '../ui/checkbox';
 import { server } from '../../test/mocks/server';
@@ -216,5 +216,48 @@ describe('Members filters — the funnel standard (ROK-1173 AC3/AC10)', () => {
         await waitFor(() => expect(screen.getByTestId('guild-members-no-match')).toHaveTextContent('No members match “storm”.'));
         await userEvent.clear(screen.getByRole('searchbox', { name: 'Search members' }));
         expect(screen.getByTestId('guild-members-count')).toHaveTextContent('2 of 3 members');
+    });
+});
+
+/* ROK-2281: a stand-in filter hook whose state adds a "Sort by" option ("Name length") while its lead checkbox is on. */
+const LENGTH_SORT: HubMemberSort = { id: 'name-length', label: 'Name length', compare: (a, b) => a.name.length - b.name.length };
+const LENGTH_SORTS: readonly HubMemberSort[] = [LENGTH_SORT];
+const NO_SORTS: readonly HubMemberSort[] = [];
+function useSortAddingFilter(): HubMemberFilters {
+    const [on, setOn] = useState(false);
+    return {
+        activeCount: 0, matches: () => true, clearAll: () => setOn(false), controls: null,
+        extraSorts: on ? LENGTH_SORTS : NO_SORTS,
+        lead: <Checkbox label="Offer name length" checked={on} onChange={(e) => setOn(e.target.checked)} />,
+    };
+}
+
+const SORT_MODULE: HubModule = { ...FAKE_MODULE, useMemberFilters: useSortAddingFilter };
+
+function SortHarness(): JSX.Element {
+    const raids = useQuery<GuildRaidsDto, Error>({ queryKey: ['fake-raids'], queryFn: () => Promise.reject(new Error('unused')), enabled: false });
+    return <HubMembers ctx={{ page: PAGE, raids }} module={SORT_MODULE} />;
+}
+
+function sortLabels(): string[] {
+    return within(screen.getByRole('combobox', { name: 'Sort by' })).getAllByRole('option').map((o) => o.textContent ?? '');
+}
+
+describe('Members sort — options from the filter state (ROK-2281)', () => {
+    it('appends the filter hook’s sorts, keeps the sort when one appears, and falls back to the default when the active one leaves', async () => {
+        renderWithProviders(<SortHarness />);
+        const sort = await screen.findByRole('combobox', { name: 'Sort by' });
+        expect(sortLabels()).toEqual(['Rank', 'Name A–Z', 'Name Z–A']);
+        await userEvent.selectOptions(sort, 'Name Z–A');
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Offer name length' }));
+        expect(sortLabels()).toEqual(['Rank', 'Name A–Z', 'Name Z–A', 'Name length']);
+        expect(sort, 'a new option does not change the current sort (ruling 3)').toHaveValue('name-desc');
+        await userEvent.selectOptions(sort, 'Name length');
+        await waitFor(() => expect(listedNames()).toEqual(['Nolina', 'Grimtusk', 'Stormcall']));
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Offer name length' }));
+        await waitFor(() => expect(sort, 'the active option left the list — back to the default').toHaveValue('rank'));
+        expect(screen.getByTestId('guild-rank-0'), 'the default sort brings the rank bands back').toBeInTheDocument();
+        await userEvent.click(screen.getByRole('checkbox', { name: 'Offer name length' }));
+        expect(sort, 'offering it again does not re-apply the old pick').toHaveValue('rank');
     });
 });

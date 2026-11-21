@@ -3,8 +3,8 @@
  * component state (spec Q7: the hub owns the hash; ROK-2172's one exception is
  * `#members?role=<role>`, see `wow-role-filter.helpers.ts`), the options
  * derived from the listed rows, and professions joined from roster insights by
- * `characterId` (spec D2). `matches` is memoised — core lists it as a
- * `useMemo` dependency.
+ * `characterId` (spec D2). `matches` and `extraSorts` (ROK-2281: the
+ * per-profession sorts) are memoised — core lists them as `useMemo` dependencies.
  */
 import { createElement, useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import type { CharacterRole } from '@raid-ledger/contract';
@@ -18,6 +18,7 @@ import {
     EMPTY_WOW_MEMBER_FILTERS, buildProfessionIndex, countActiveWowFilters, professionCoverage,
     toggleValue, wowFilterOptions, wowMemberMatches, type WowMemberFilterState,
 } from './wow-member-filters.helpers';
+import { buildProfessionSkillIndex, professionSorts } from './wow-profession-sorts';
 
 /** ROK-2172: re-seed on `hashchange` / `popstate` (the Members tab, Back/Forward, a hand-edited `?role=`); `replaceState` fires neither, so no loop. */
 function useFollowMembersHash(setState: Dispatch<SetStateAction<WowMemberFilterState>>): void {
@@ -49,6 +50,9 @@ export function useWowMemberFilters(ctx: HubCtx, rows: readonly HubMemberRow[]):
     const insights = useRosterInsights(ctx.page.guild.id);
     const raw = insights.data?.professions;
     const index = useMemo(() => buildProfessionIndex(raw), [raw]);
+    const skills = useMemo(() => buildProfessionSkillIndex(raw), [raw]);
+    // ROK-2281: a high→low / low→high pair per picked profession pill.
+    const extraSorts = useMemo(() => professionSorts(state.professions, skills), [state.professions, skills]);
     const coverage = useMemo(() => (raw === undefined ? undefined : professionCoverage(raw)), [raw]);
     const options = useMemo(() => wowFilterOptions(rows), [rows]);
     const matches = useCallback((row: HubMemberRow) => wowMemberMatches(state, row, index), [state, index]);
@@ -66,6 +70,7 @@ export function useWowMemberFilters(ctx: HubCtx, rows: readonly HubMemberRow[]):
         summary: createElement(RoleSummary, rows.length > 0
             ? { counts: ctx.page.roleCounts, selected: state.roles, onToggle: toggleRole }
             : { counts: ctx.page.roleCounts }),
+        extraSorts,
         lead: createElement(WowProfessionCoverage, { rows, professions: coverage, index, selected: state.professions, onToggle: toggleProfession }),
     };
 }
