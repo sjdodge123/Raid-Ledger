@@ -4,7 +4,18 @@
  * insert reports the two expected races as tagged results instead of
  * throwing, so no caller ever catches inside a transaction.
  */
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  isNull,
+  ne,
+  notExists,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { pgErrorCode } from '../../../common/pg-error.helpers';
 import * as schema from '../../../drizzle/schema';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
@@ -105,6 +116,42 @@ export async function findOpenPlanningPollPosts(
     )
     .orderBy(asc(posts.id))
     .limit(limit);
+}
+
+/**
+ * ROK-2287 — the lineup catch-up's candidates: voting lineups on the
+ * planning path (the SQL twin of `lineupEligible`: no hub, not private, not
+ * a standalone carrier) with NO registry row at all, newest first. A row
+ * marked deleted counts (a moderator's delete is not undone, operator Q1);
+ * a lineup past its `voting_deadline` is skipped (operator Q2).
+ */
+export async function findVotingLineupsWithoutPlanningPost(
+  db: ForumDiscordDb,
+  now: Date,
+  limit: number,
+): Promise<number[]> {
+  const l = schema.communityLineups;
+  const anyRow = db
+    .select({ one: sql`1` })
+    .from(posts)
+    .where(and(eq(posts.subjectKind, 'lineup'), eq(posts.subjectId, l.id)));
+  const rows = await db
+    .select({ id: l.id })
+    .from(l)
+    .where(
+      and(
+        eq(l.status, 'voting'),
+        isNull(l.guildId),
+        ne(l.visibility, 'private'),
+        // Mirrors `override?.standalone === true` (findLineupForSync).
+        sql`(${l.phaseDurationOverride} -> 'standalone') is distinct from 'true'::jsonb`,
+        or(isNull(l.votingDeadline), gt(l.votingDeadline, now)),
+        notExists(anyRow),
+      ),
+    )
+    .orderBy(desc(l.id))
+    .limit(limit);
+  return rows.map((r) => r.id);
 }
 
 /** Set when the sweep closes the post. */

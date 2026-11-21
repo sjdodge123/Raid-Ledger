@@ -148,11 +148,13 @@ export class EventPlanningPostsLockSweep {
    * Flip every due post; returns how many changed. Offline bot → 0.
    * ROK-2272 S10: first stamp `closes_at` on non-hub poll posts whose
    * `phase_deadline` passed with no emit; a throw there is warned and the
-   * flip loop still runs.
+   * flip loop still runs. ROK-2287: then post voting lineups that have no
+   * registry row yet (same warn-and-continue).
    */
   async sweep(now = new Date()): Promise<number> {
     if (!this.client.isConnected()) return 0;
     await this.syncOpenPolls(now);
+    await this.catchUpLineups(now);
     let changed = 0;
     for (const row of await dueRegistryLockChanges(this.db, now)) {
       if (await this.apply(row, now)) changed += 1;
@@ -166,6 +168,16 @@ export class EventPlanningPostsLockSweep {
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Planning poll deadline pass: ${why}`);
+    }
+  }
+
+  /** ROK-2287: post voting lineups whose edge found the bot offline. */
+  private async catchUpLineups(now: Date): Promise<void> {
+    try {
+      await this.subjects.ensureMissingLineupPosts(now);
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Planning lineup catch-up: ${why}`);
     }
   }
 
