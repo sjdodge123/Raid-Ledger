@@ -16,15 +16,20 @@ import { toast } from '../../lib/toast';
 const PATH = '/admin/discord/event-planning-forum';
 export const EVENT_PLANNING_FORUM_KEY = ['admin', 'discord', 'event-planning-forum'] as const;
 
-/** The stored pick, the bound forums (candidates) and the forum in use. */
+/**
+ * The stored pick, the bound forums (candidates) and the forum in use.
+ * Read fresh on every mount: a hub bind/unlink elsewhere changes the
+ * candidates, and a stale list would hide (or wrongly show) the picker.
+ */
 export function useEventPlanningForum() {
     return useQuery<EventPlanningForumSettingsDto>({
         queryKey: [...EVENT_PLANNING_FORUM_KEY],
         queryFn: () => fetchApi(PATH, {}, EventPlanningForumSettingsSchema),
+        refetchOnMount: 'always',
     });
 }
 
-/** Store a candidate's channel id, or null to clear the pick. */
+/** Store a candidate's channel id (null clears the pick; the card never sends it). */
 export function useSaveEventPlanningForum() {
     const queryClient = useQueryClient();
     return useMutation<EventPlanningForumSettingsDto, Error, string | null>({
