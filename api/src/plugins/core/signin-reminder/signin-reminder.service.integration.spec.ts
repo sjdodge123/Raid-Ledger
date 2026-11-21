@@ -39,7 +39,8 @@ function fakeGuild(): unknown {
       joinedAt: m.joinedAt ?? ago(100),
     },
   ]);
-  return { members: { fetch: () => Promise.resolve(new Collection(entries)) } };
+  // REST members.list only: the roster must never use the gateway op-8 fetch.
+  return { members: { list: () => Promise.resolve(new Collection(entries)) } };
 }
 
 const dmIds = (): string[] =>

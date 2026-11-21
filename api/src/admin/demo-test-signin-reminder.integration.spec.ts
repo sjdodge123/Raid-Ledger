@@ -33,7 +33,8 @@ function fakeGuild(): unknown {
     { user: { id, bot }, joinedAt: new Date(Date.now() - 100 * 86_400_000) },
   ];
   const entries = [member(BOT, true), member(HUMAN, false)];
-  return { members: { fetch: () => Promise.resolve(new Collection(entries)) } };
+  // REST members.list only: the roster must never use the gateway op-8 fetch.
+  return { members: { list: () => Promise.resolve(new Collection(entries)) } };
 }
 
 function post(path: string, token: string | null, body: object) {
