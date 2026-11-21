@@ -1,7 +1,8 @@
 /**
- * ROK-2287 — `ensureMissingLineupPosts` (unit): the candidate query is asked
- * for the batch, each id goes through `ensureLineupPost`, and one failing
- * lineup is warned while the rest still run.
+ * ROK-2287 — `ensureMissingLineupPosts` (unit): no resolved forum → no
+ * query; otherwise the candidate query is asked for the batch in THAT forum,
+ * each id goes through `ensureLineupPost`, and one failing lineup is warned
+ * while the rest still run.
  */
 import { Logger } from '@nestjs/common';
 import type { SettingsService } from '../../../settings/settings.service';
@@ -21,11 +22,14 @@ jest.mock('./event-planning-posts.queries', () => ({
 const candidates = jest.mocked(findVotingLineupsWithoutPlanningPost);
 const db = {} as unknown as ForumDiscordDb;
 
-function setup() {
+const FORUM = { forumId: 77, channelId: 'c1', managed: true, webhookId: null };
+
+function setup(forum: typeof FORUM | null = FORUM) {
+  const creator = { resolveForum: jest.fn().mockResolvedValue(forum) };
   const subjects = new EventPlanningSubjectPosts(
     db,
     {} as unknown as SettingsService,
-    {} as unknown as EventPlanningPostCreator,
+    creator as unknown as EventPlanningPostCreator,
   );
   const ensure = jest
     .spyOn(subjects, 'ensureLineupPost')
@@ -45,8 +49,20 @@ describe('EventPlanningSubjectPosts.ensureMissingLineupPosts', () => {
     const now = new Date('2026-11-21T06:00:00Z');
     expect(await subjects.ensureMissingLineupPosts(now)).toBe(2);
     expect(LINEUP_CATCH_UP_BATCH).toBe(10);
-    expect(candidates).toHaveBeenCalledWith(db, now, LINEUP_CATCH_UP_BATCH);
+    expect(candidates).toHaveBeenCalledWith(
+      db,
+      FORUM.forumId,
+      now,
+      LINEUP_CATCH_UP_BATCH,
+    );
     expect(ensure.mock.calls).toEqual([[9], [4]]);
+  });
+
+  it('no resolved forum (none bound / offline) → no query, nothing ensured', async () => {
+    const { subjects, ensure } = setup(null);
+    expect(await subjects.ensureMissingLineupPosts()).toBe(0);
+    expect(candidates).not.toHaveBeenCalled();
+    expect(ensure).not.toHaveBeenCalled();
   });
 
   it('no candidates → nothing ensured', async () => {

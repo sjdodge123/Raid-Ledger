@@ -387,6 +387,40 @@ describe('ROK-2287 fix: lineup post catch-up after an offline voting edge', () =
   });
 });
 
+describe('ROK-2287 lineup catch-up: effective deadline + forum age', () => {
+  beforeEach(() => {
+    botConnected();
+  });
+
+  it('an expired phase_deadline with no voting_deadline is NOT posted', async () => {
+    const { id, title } = await missedLineup({
+      phaseDeadline: new Date(Date.now() - HOUR),
+      votingDeadline: null,
+    });
+    await sweep();
+    expect(await rows('lineup', id)).toEqual([]);
+    expect(createdTitled(title)).toBe(0);
+  });
+
+  it('a reopened lineup (stale past voting_deadline, future phase_deadline) IS posted', async () => {
+    const { id, title } = await missedLineup({
+      votingDeadline: new Date(Date.now() - HOUR),
+      phaseDeadline: new Date(Date.now() + HOUR),
+    });
+    await sweep();
+    expect(await rows('lineup', id)).toHaveLength(1);
+    expect(createdTitled(title)).toBe(1);
+  });
+
+  it('a voting lineup created BEFORE the forum was bound is NOT posted', async () => {
+    const { id, title } = await missedLineup();
+    await pinForum(); // a newer forum row: the lineup predates it
+    await sweep();
+    expect(await rows('lineup', id)).toEqual([]);
+    expect(createdTitled(title)).toBe(0);
+  });
+});
+
 describe('ROK-2287 lineup catch-up guards', () => {
   let connected: jest.SpyInstance;
   beforeEach(() => {
