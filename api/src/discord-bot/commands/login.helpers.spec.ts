@@ -25,6 +25,7 @@ function caller(over: Partial<LoginCaller> = {}): LoginCaller {
     bannedAt: null,
     kickedAt: null,
     deactivatedAt: null,
+    tokenVersion: 3,
     ...over,
   };
 }
@@ -90,10 +91,12 @@ describe('decideLogin — branches', () => {
     expect(decide(null)).toEqual({ kind: 'first-time', clientUrl: URL_ });
   });
 
-  it('an unlinked:<id> row is first-time (redeem relinks it)', () => {
-    expect(decide(caller({ discordId: `unlinked:${SNOWFLAKE}` }))).toEqual({
+  it('an unlinked:<id> row is first-time, pinned to its id and token version', () => {
+    const unlinked = caller({ discordId: `unlinked:${SNOWFLAKE}`, id: 9 });
+    expect(decide(unlinked)).toEqual({
       kind: 'first-time',
       clientUrl: URL_,
+      rebind: { userId: 9, tokenVersion: 3 },
     });
   });
 });

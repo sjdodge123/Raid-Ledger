@@ -34,10 +34,28 @@ export interface DiscordSigninClaims {
   avatar: string | null;
 }
 
+/** An `unlinked:<id>` row the link relinks, pinned at mint (`uid` + `tv`). */
+export interface SigninRebind {
+  userId: number;
+  tokenVersion: number;
+}
+
+/** Verified claims: identity plus the pinned row, null for no row at mint. */
+export interface ParsedDiscordSigninClaims extends DiscordSigninClaims {
+  rebind: SigninRebind | null;
+}
+
+/** `uid`/`tv` come as a pair or not at all; a half pair is malformed. */
+function parseRebind(uid: unknown, tv: unknown): SigninRebind | null | false {
+  if (uid === undefined && tv === undefined) return null;
+  if (!Number.isInteger(uid) || !Number.isInteger(tv)) return false;
+  return { userId: uid as number, tokenVersion: tv as number };
+}
+
 /** Read the claims off a verified `discord-signin` payload, or null. */
 export function parseDiscordSigninClaims(
   payload: Record<string, unknown>,
-): DiscordSigninClaims | null {
+): ParsedDiscordSigninClaims | null {
   const { discordId, username, avatar, signin, src, iat } = payload;
   if (signin !== true || src !== COMMAND_LINK_SRC) return null;
   if (typeof iat !== 'number' || !isDiscordSnowflake(discordId as string)) {
@@ -45,7 +63,9 @@ export function parseDiscordSigninClaims(
   }
   if (typeof username !== 'string' || username.length === 0) return null;
   if (avatar !== null && typeof avatar !== 'string') return null;
-  return { discordId: discordId as string, username, avatar };
+  const rebind = parseRebind(payload.uid, payload.tv);
+  if (rebind === false) return null;
+  return { discordId: discordId as string, username, avatar, rebind };
 }
 
 /** `<clientUrl><path>#token=<token>` — the fragment never reaches a server. */

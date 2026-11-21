@@ -26,6 +26,16 @@ export interface LoginCaller {
   bannedAt: Date | null;
   kickedAt: Date | null;
   deactivatedAt: Date | null;
+  tokenVersion: number;
+}
+
+/**
+ * The `unlinked:<id>` row a first-time link will relink, pinned at mint time
+ * (Codex P2): redeem refuses the link once that row's token version moved.
+ */
+export interface LoginRebind {
+  userId: number;
+  tokenVersion: number;
 }
 
 export interface LoginDecisionInput {
@@ -42,7 +52,7 @@ export type LoginDecision =
   | { kind: 'deactivated' }
   | { kind: 'not-member' }
   | { kind: 'existing'; userId: number; clientUrl: string }
-  | { kind: 'first-time'; clientUrl: string };
+  | { kind: 'first-time'; clientUrl: string; rebind?: LoginRebind };
 
 /** A refusal outcome (every decision that mints no link). */
 export type LoginRefusal = Exclude<
@@ -69,10 +79,12 @@ export function decideLogin(input: LoginDecisionInput): LoginDecision {
   }
   if (caller?.deactivatedAt) return { kind: 'deactivated' };
   if (!input.isGuildMember) return { kind: 'not-member' };
-  if (caller && !isUnlinkedRow(caller)) {
+  if (!caller) return { kind: 'first-time', clientUrl };
+  if (!isUnlinkedRow(caller)) {
     return { kind: 'existing', userId: caller.id, clientUrl };
   }
-  return { kind: 'first-time', clientUrl };
+  const rebind = { userId: caller.id, tokenVersion: caller.tokenVersion };
+  return { kind: 'first-time', clientUrl, rebind };
 }
 
 /** The community name, or the product name when none is set. */

@@ -20,6 +20,7 @@ import {
 import { MagicLinkService } from './magic-link.service';
 import { derivePurposeSecret, signPurposeJwt } from './purpose-jwt.helpers';
 import { hashToken } from './single-use-token.helpers';
+import { readTokenVersion } from './token-version.helpers';
 
 jest.mock('./token-version.helpers', () => ({
   readTokenVersion: jest.fn().mockResolvedValue(7),
@@ -159,6 +160,57 @@ describe('DiscordSigninLinkService.redeem', () => {
   });
 });
 
+describe('DiscordSigninLinkService — unlinked-row links pin the token version', () => {
+  const REBIND = { userId: 41, tokenVersion: 7 };
+
+  it('carries uid + tv only when minted for an unlinked row', () => {
+    const plain = jwt.decode<Record<string, unknown>>(
+      tokenOf(signin.mint(INPUT, 'https://rl.test')),
+    );
+    expect([plain.uid, plain.tv]).toEqual([undefined, undefined]);
+    const pinned = jwt.decode<Record<string, unknown>>(
+      tokenOf(signin.mint({ ...INPUT, rebind: REBIND }, 'https://rl.test')),
+    );
+    expect([pinned.uid, pinned.tv]).toEqual([41, 7]);
+  });
+
+  it('redeems while the row is still at the minted version', async () => {
+    const token = tokenOf(
+      signin.mint({ ...INPUT, rebind: REBIND }, 'https://rl.test'),
+    );
+    await expect(signin.redeem(token)).resolves.toMatchObject({ id: 41 });
+    expect(readTokenVersion).toHaveBeenCalledWith(db, 41);
+  });
+
+  it('401s once the row moved on (password/role change) and relinks nothing', async () => {
+    const token = tokenOf(
+      signin.mint(
+        { ...INPUT, rebind: { userId: 41, tokenVersion: 6 } },
+        'https://rl.test',
+      ),
+    );
+    await redeemError(token);
+    expect(validateDiscordUser).not.toHaveBeenCalled();
+  });
+
+  it('401s when the pinned row is gone', async () => {
+    jest.mocked(readTokenVersion).mockRejectedValueOnce(new Error('not found'));
+    const token = tokenOf(
+      signin.mint({ ...INPUT, rebind: REBIND }, 'https://rl.test'),
+    );
+    await redeemError(token);
+    expect(validateDiscordUser).not.toHaveBeenCalled();
+  });
+
+  it('401s when the sign-in lands on a different row than the pinned one', async () => {
+    validateDiscordUser.mockResolvedValueOnce({ ...NEW_USER, id: 99 });
+    const token = tokenOf(
+      signin.mint({ ...INPUT, rebind: REBIND }, 'https://rl.test'),
+    );
+    await redeemError(token);
+  });
+});
+
 describe('parseDiscordSigninClaims / isDiscordSnowflake', () => {
   const base = { ...INPUT, signin: true, iat: 1 };
   it('accepts well-formed claims (null avatar allowed)', () => {
@@ -166,9 +218,18 @@ describe('parseDiscordSigninClaims / isDiscordSnowflake', () => {
       discordId: SNOWFLAKE,
       username: 'newbie',
       avatar: null,
+      rebind: null,
     });
   });
+  it('reads a uid + tv pair as the pinned row', () => {
+    expect(
+      parseDiscordSigninClaims({ ...base, uid: 4, tv: 2 })?.rebind,
+    ).toEqual({ userId: 4, tokenVersion: 2 });
+  });
   it.each([
+    ['a uid without tv', { uid: 4 }],
+    ['a tv without uid', { tv: 2 }],
+    ['a string tv', { uid: 4, tv: '2' }],
     ['an unlinked id', { discordId: `unlinked:${SNOWFLAKE}` }],
     ['a local stand-in id', { discordId: 'local:7' }],
     ['an empty username', { username: '' }],

@@ -11,6 +11,8 @@ import {
   SIGNIN_LINK_TTL,
   type CommandLinkSrc,
   type DiscordSigninClaims,
+  type ParsedDiscordSigninClaims,
+  type SigninRebind,
 } from './discord-signin-link.helpers';
 import type { MagicLinkUser } from './magic-link.service';
 import { signPurposeJwt, verifyPurposeJwt } from './purpose-jwt.helpers';
@@ -23,6 +25,8 @@ export const INVALID_DISCORD_LINK_MESSAGE = 'Invalid or expired sign-in link';
 /** What the `/login` command knows about a first-time member. */
 export interface DiscordSigninMintInput extends DiscordSigninClaims {
   src: CommandLinkSrc;
+  /** The `unlinked:<id>` row to relink, pinned to its token version. */
+  rebind?: SigninRebind;
 }
 
 function invalidLink(): UnauthorizedException {
@@ -58,6 +62,9 @@ export class DiscordSigninLinkService {
         avatar: input.avatar,
         signin: true,
         src: input.src,
+        ...(input.rebind
+          ? { uid: input.rebind.userId, tv: input.rebind.tokenVersion }
+          : {}),
       },
       SIGNIN_LINK_TTL,
     );
@@ -68,12 +75,14 @@ export class DiscordSigninLinkService {
   async redeem(token: string): Promise<MagicLinkUser> {
     const claims = this.verify(token);
     if (!(await consumeTokenOnce(this.db, token))) throw invalidLink();
+    if (claims.rebind) await this.assertRebindCurrent(claims.rebind);
     const user = await this.authService
       .validateDiscordUser(claims.discordId, claims.username, claims.avatar)
       .catch(() => {
         throw invalidLink();
       });
     if (!user) throw invalidLink();
+    if (claims.rebind && user.id !== claims.rebind.userId) throw invalidLink();
     return {
       id: user.id,
       username: user.username,
@@ -82,7 +91,20 @@ export class DiscordSigninLinkService {
     };
   }
 
-  private verify(token: string): DiscordSigninClaims {
+  /**
+   * Codex P2: a link minted for an `unlinked:<id>` row dies with that row's
+   * token version (password reset, role change), like every magic link. Runs
+   * after consume and before validateDiscordUser, so a stale link relinks
+   * nothing. A row that is gone is the same generic 401.
+   */
+  private async assertRebindCurrent(rebind: SigninRebind): Promise<void> {
+    const current = await readTokenVersion(this.db, rebind.userId).catch(
+      () => null,
+    );
+    if (current !== rebind.tokenVersion) throw invalidLink();
+  }
+
+  private verify(token: string): ParsedDiscordSigninClaims {
     let payload: Record<string, unknown>;
     try {
       payload = verifyPurposeJwt(this.jwtService, 'discord-signin', token);

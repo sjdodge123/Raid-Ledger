@@ -72,7 +72,10 @@ export class LoginCommand
     try {
       await this.respond(interaction);
     } catch (error) {
-      this.logger.error('Failed to mint a /login sign-in link:', error);
+      // MINOR-2: never the error object — a failed editReply's DiscordAPIError
+      // carries the request body, which holds the link.
+      const reason = error instanceof Error ? error.message : 'unknown error';
+      this.logger.error(`Failed to mint a /login sign-in link: ${reason}`);
       await interaction.editReply({ content: LOGIN_FAILED_COPY });
     }
   }
@@ -144,6 +147,7 @@ export class LoginCommand
         username,
         avatar: avatar ?? null,
         src: COMMAND_LINK_SRC,
+        ...(decision.rebind ? { rebind: decision.rebind } : {}),
       },
       clientUrl,
     );

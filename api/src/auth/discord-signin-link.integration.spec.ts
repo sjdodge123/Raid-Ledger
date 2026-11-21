@@ -20,6 +20,7 @@ import {
 } from './discord-signin-link.service';
 import { MagicLinkService } from './magic-link.service';
 import { derivePurposeSecret } from './purpose-jwt.helpers';
+import { bumpTokenVersion } from './token-version.helpers';
 
 const REDEEM = '/auth/redeem-discord-link';
 const CLIENT = 'http://localhost:5173';
@@ -212,6 +213,51 @@ describe('POST /auth/redeem-discord-link — existing accounts', () => {
   });
 });
 
+// ── a link pinned to an unlinked:<id> row (Codex P2) ─────────────────────────
+
+describe('POST /auth/redeem-discord-link — unlinked row pinned to its token version', () => {
+  function mintPinned(discordId: string, userId: number, tokenVersion: number) {
+    const link = testApp.app.get(DiscordSigninLinkService).mint(
+      {
+        discordId,
+        username: 'back-again',
+        avatar: null,
+        src: 'cmd',
+        rebind: { userId, tokenVersion },
+      },
+      CLIENT,
+    );
+    return tokenOf(link);
+  }
+
+  it('relinks while the row is still at the minted version', async () => {
+    const discordId = snowflake();
+    const old = await insertUser(`unlinked:${discordId}`);
+
+    const res = await redeem(mintPinned(discordId, old.id, old.tokenVersion));
+
+    expect(res.status).toBe(200);
+    expect((await usersWith(discordId)).map((r) => r.id)).toEqual([old.id]);
+  });
+
+  it('401s after a password/role change bumped the version, and relinks nothing', async () => {
+    const discordId = snowflake();
+    const old = await insertUser(`unlinked:${discordId}`);
+    const token = mintPinned(discordId, old.id, old.tokenVersion);
+    await bumpTokenVersion(testApp.db, old.id);
+    const logins = spyDiscordLogins();
+
+    const res = await redeem(token);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual(INVALID_BODY);
+    expect(await usersWith(`unlinked:${discordId}`)).toHaveLength(1);
+    expect(await usersWith(discordId)).toHaveLength(0);
+    expect(await refreshMethods(old.id)).toEqual([]);
+    expect(logins()).toEqual([]);
+  });
+});
+
 // ── magic links minted by the command ────────────────────────────────────────
 
 describe("POST /auth/redeem-magic-link — src:'cmd' (ROK-2283)", () => {
@@ -237,5 +283,19 @@ describe("POST /auth/redeem-magic-link — src:'cmd' (ROK-2283)", () => {
     expect(res.status).toBe(200);
     expect(await refreshMethods(user.id)).toEqual(['magic']);
     expect(logins()).toEqual(times ? [{ userId: user.id, discordId }] : []);
+  });
+
+  it('each redeem endpoint refuses the other kind of link (NIT-2)', async () => {
+    const discordId = snowflake();
+    const user = await insertUser(snowflake());
+    const atMagic = await redeem(
+      mintSignin(discordId),
+      '/auth/redeem-magic-link',
+    );
+    const atDiscord = await redeem(await mintMagic(user.id, true));
+
+    expect([atMagic.status, atDiscord.status]).toEqual([401, 401]);
+    expect(await usersWith(discordId)).toHaveLength(0);
+    expect(await refreshMethods(user.id)).toEqual([]);
   });
 });
