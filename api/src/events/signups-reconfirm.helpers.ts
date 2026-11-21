@@ -17,6 +17,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SignupResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { ActivityLogService } from '../activity-log/activity-log.service';
+import { logBestEffort } from '../activity-log/activity-log-best-effort';
 import { getAssignedSlotRole } from './signups-roster-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -33,7 +34,8 @@ export interface DuplicateSignupResult {
 
 /**
  * Emit the ROK-1269 `signup_reconfirmed` audit entry for a pending→confirmed
- * re-assertion (Discord Sign Up re-click or a duplicate signup POST). Keeps
+ * re-assertion (Discord Sign Up re-click or a duplicate signup POST).
+ * Best-effort: the heal already landed, so a failed insert never fails it. Keeps
  * both heal call-sites within their file-size budgets and the reason strings
  * in one place.
  */
@@ -43,9 +45,16 @@ export function logSignupReconfirmed(
   userId: number,
   reason: string,
 ): Promise<void> {
-  return activityLog.log('event', eventId, 'signup_reconfirmed', userId, {
-    reason,
-  });
+  return logBestEffort(
+    activityLog,
+    'event',
+    eventId,
+    'signup_reconfirmed',
+    userId,
+    {
+      reason,
+    },
+  );
 }
 
 /**
@@ -65,7 +74,8 @@ export async function finalizeDuplicate(
   result: DuplicateSignupResult,
 ): Promise<SignupResponseDto> {
   if (result.reactivated && result.reconfirmedUserId != null)
-    await activityLog.log(
+    await logBestEffort(
+      activityLog,
       'event',
       eventId,
       'signup_status_changed',

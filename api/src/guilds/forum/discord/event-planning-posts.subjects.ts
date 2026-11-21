@@ -26,6 +26,7 @@ import {
 import {
   findLivePlanningPost,
   findOpenPlanningPollPosts,
+  findVotingLineupsWithoutPlanningPost,
   setPlanningPostClosesAt,
 } from './event-planning-posts.queries';
 import { syncEach } from './event-planning-posts.reconcile';
@@ -40,6 +41,8 @@ import { subjectPostTitle } from './hub-forum-discord-subject';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const OPEN_POLL_BATCH = 50;
+/** ROK-2287: lineups the catch-up posts per run (Discord rate limits). */
+export const LINEUP_CATCH_UP_BATCH = 10;
 
 @Injectable()
 export class EventPlanningSubjectPosts {
@@ -113,6 +116,32 @@ export class EventPlanningSubjectPosts {
     });
     if (made?.created) await this.syncLineup(lineupId, new Date());
     return made?.ref ?? null;
+  }
+
+  /**
+   * ROK-2287 catch-up: a lineup whose voting edge found the bot offline has
+   * no registry row and no second trigger. Each eligible one created after
+   * the resolved forum gets its post through `ensureLineupPost` (still the
+   * authority); one failing lineup is warned and the rest go on. No forum
+   * (or offline) → nothing. Returns how many ran.
+   */
+  async ensureMissingLineupPosts(
+    now: Date = new Date(),
+    limit: number = LINEUP_CATCH_UP_BATCH,
+  ): Promise<number> {
+    const forum = await this.creator.resolveForum();
+    if (!forum) return 0;
+    const ids = await findVotingLineupsWithoutPlanningPost(
+      this.db,
+      forum.forumId,
+      now,
+      limit,
+    );
+    return syncEach(
+      ids,
+      (id) => this.ensureLineupPost(id).then(() => undefined),
+      (id, err) => this.warn(`catch-up of lineup ${id}`, err),
+    );
   }
 
   /** Re-derive an EXISTING poll post's `closes_at` (never creates). */

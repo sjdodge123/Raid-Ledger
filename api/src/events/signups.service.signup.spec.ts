@@ -9,7 +9,13 @@ import { BenchPromotionService } from './bench-promotion.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SignupsRosterService } from './signups-roster.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import * as Sentry from '@sentry/nestjs';
 import { SettingsService } from '../settings/settings.service';
+
+jest.mock('@sentry/nestjs', () => ({
+  ...jest.requireActual<object>('@sentry/nestjs'),
+  captureException: jest.fn(),
+}));
 
 /** ROK-1769 voice-line gate: ephemeral voice off globally. */
 function voiceGateSettingsOff() {
@@ -21,6 +27,7 @@ function voiceGateSettingsOff() {
 
 describe('SignupsService — signup', () => {
   let service: SignupsService;
+  let mockActivityLog: { log: jest.Mock; getTimeline: jest.Mock };
   let mockDb: Record<
     'delete' | 'insert' | 'select' | 'transaction' | 'update',
     jest.Mock
@@ -147,6 +154,10 @@ describe('SignupsService — signup', () => {
     setupSelectChain();
     setupMutationChains();
 
+    mockActivityLog = {
+      log: jest.fn().mockResolvedValue(undefined),
+      getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SignupsService,
@@ -177,13 +188,7 @@ describe('SignupsService — signup', () => {
           },
         },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
-        {
-          provide: ActivityLogService,
-          useValue: {
-            log: jest.fn().mockResolvedValue(undefined),
-            getTimeline: jest.fn().mockResolvedValue({ data: [] }),
-          },
-        },
+        { provide: ActivityLogService, useValue: mockActivityLog },
       ],
     }).compile();
 
@@ -221,6 +226,34 @@ describe('SignupsService — signup', () => {
       expect(result.eventId).toBe(1);
       expect(result.confirmationStatus).toBe('pending');
       expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('resolves with the signup when the signup_added audit write fails', async () => {
+      const auditErr = new Error('audit down');
+      mockActivityLog.log.mockRejectedValueOnce(auditErr);
+      const selectRows = [[mockEvent], [], [mockUser]];
+      for (const rows of selectRows)
+        mockDb.select.mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue(rows),
+            }),
+          }),
+        });
+
+      const result = await service.signup(1, 1);
+
+      expect(result.eventId).toBe(1);
+      expect(mockActivityLog.log).toHaveBeenCalledWith(
+        'event',
+        1,
+        'signup_added',
+        1,
+        { role: null },
+      );
+      expect(Sentry.captureException).toHaveBeenCalledWith(auditErr, {
+        tags: { activityLog: 'signup_added' },
+      });
     });
 
     it('should throw NotFoundException when event does not exist', async () => {

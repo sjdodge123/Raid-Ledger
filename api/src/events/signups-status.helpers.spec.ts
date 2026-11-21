@@ -1,7 +1,13 @@
 /**
  * Unit tests for the updateStatus side effects (ROK-1728 review MINOR 3).
  */
+import * as Sentry from '@sentry/nestjs';
 import { afterStatusChange } from './signups-status.helpers';
+
+jest.mock('@sentry/nestjs', () => ({
+  ...jest.requireActual<object>('@sentry/nestjs'),
+  captureException: jest.fn(),
+}));
 
 function setup() {
   const activityLog = { log: jest.fn().mockResolvedValue(undefined) };
@@ -37,5 +43,20 @@ describe('afterStatusChange', () => {
     });
     expect(activityLog.log).not.toHaveBeenCalled();
     expect(allocation.checkTentativeDisplacement).toHaveBeenCalledWith(3, 7);
+  });
+
+  it('still starts the tentative displacement check when the audit write fails', async () => {
+    const { activityLog, allocation, logger, row } = setup();
+    const auditErr = new Error('audit down');
+    activityLog.log.mockRejectedValueOnce(auditErr);
+    await expect(
+      afterStatusChange(activityLog, allocation, logger, row, {
+        status: 'tentative',
+      }),
+    ).resolves.toBeUndefined();
+    expect(allocation.checkTentativeDisplacement).toHaveBeenCalledWith(3, 7);
+    expect(Sentry.captureException).toHaveBeenCalledWith(auditErr, {
+      tags: { activityLog: 'signup_status_changed' },
+    });
   });
 });
