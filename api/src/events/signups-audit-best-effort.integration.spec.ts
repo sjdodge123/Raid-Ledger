@@ -3,7 +3,7 @@
  * already landed must not turn the request into a 500: the change persists,
  * the audit failure goes to Sentry.
  */
-import * as Sentry from '@sentry/nestjs';
+import type * as SentryModule from '@sentry/nestjs';
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -17,22 +17,31 @@ import {
   createFutureEvent,
 } from './signups.integration.spec-helpers';
 
-jest.mock('@sentry/nestjs', () => ({
-  ...jest.requireActual<object>('@sentry/nestjs'),
-  captureException: jest.fn(),
-}));
+/**
+ * Spy on the live CJS exports, NOT `jest.mock`: `setupFilesAfterEnv` loads
+ * AppModule -> the best-effort helper -> the real `@sentry/nestjs` before a
+ * hoisted `jest.mock` registers, so a module mock never reaches the helper
+ * (same trap as `blizzard-roster-sync.integration.spec.ts`).
+ */
+const sentry = jest.requireActual<typeof SentryModule>('@sentry/nestjs');
 
 let testApp: TestApp;
 let adminToken: string;
+let captureException: jest.SpyInstance;
 
 beforeAll(async () => {
   testApp = await getTestApp();
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });
 
+beforeEach(() => {
+  captureException = jest
+    .spyOn(sentry, 'captureException')
+    .mockImplementation(() => '');
+});
+
 afterEach(async () => {
   jest.restoreAllMocks();
-  jest.mocked(Sentry.captureException).mockClear();
   testApp.seed = await truncateAllTables(testApp.db);
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });
@@ -63,11 +72,23 @@ async function signupRow(eventId: number, userId: number) {
   return rows[0];
 }
 
-async function auditActions(eventId: number): Promise<string[]> {
+/**
+ * Audit actions on `eventId` by `actorId` only: creating the event auto-signs
+ * the admin creator up, which writes its own (successful) `signup_added`.
+ */
+async function auditActions(
+  eventId: number,
+  actorId: number,
+): Promise<string[]> {
   const rows = await testApp.db
     .select({ action: schema.activityLog.action })
     .from(schema.activityLog)
-    .where(eq(schema.activityLog.entityId, eventId));
+    .where(
+      and(
+        eq(schema.activityLog.entityId, eventId),
+        eq(schema.activityLog.actorId, actorId),
+      ),
+    );
   return rows.map((r) => r.action);
 }
 
@@ -82,7 +103,7 @@ async function setup(name: string) {
 }
 
 function expectCaptured(err: Error, action: string): void {
-  expect(Sentry.captureException).toHaveBeenCalledWith(err, {
+  expect(captureException).toHaveBeenCalledWith(err, {
     tags: { activityLog: action },
   });
 }
@@ -98,7 +119,7 @@ describe('signup audit writes are best-effort', () => {
     expect(await signupRow(eventId, userId)).toMatchObject({
       status: 'signed_up',
     });
-    expect(await auditActions(eventId)).not.toContain('signup_added');
+    expect(await auditActions(eventId, userId)).not.toContain('signup_added');
     expectCaptured(err, 'signup_added');
   });
 
@@ -117,7 +138,9 @@ describe('signup audit writes are best-effort', () => {
     expect(await signupRow(eventId, userId)).toMatchObject({
       status: 'tentative',
     });
-    expect(await auditActions(eventId)).not.toContain('signup_status_changed');
+    expect(await auditActions(eventId, userId)).not.toContain(
+      'signup_status_changed',
+    );
     expectCaptured(err, 'signup_status_changed');
   });
 
@@ -135,7 +158,9 @@ describe('signup audit writes are best-effort', () => {
     expect(await signupRow(eventId, userId)).toMatchObject({
       status: 'declined',
     });
-    expect(await auditActions(eventId)).not.toContain('signup_cancelled');
+    expect(await auditActions(eventId, userId)).not.toContain(
+      'signup_cancelled',
+    );
     expectCaptured(err, 'signup_cancelled');
   });
 });
