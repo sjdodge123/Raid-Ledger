@@ -20,7 +20,8 @@ import {
   isForumStarterRow,
 } from '../services/event-message-rows.helpers';
 import type { PlannedVoiceSettingsSource } from '../services/planned-ephemeral-voice.helpers';
-import { EMBED_COLORS, EMBED_STATES } from '../discord-bot.constants';
+import { EMBED_STATES } from '../discord-bot.constants';
+import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
 import { deleteRecordBump } from '../processors/embed-sync-bump.helpers';
 import type { EventPayload } from './event.listener';
 
@@ -233,8 +234,7 @@ export async function cancelEmbedRecord(
 
 /** The button-free card a deleted event's forum post is left showing. */
 export function removedStarterEmbed(): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(EMBED_COLORS.ERROR)
+  return createChannelEmbed({ state: EMBED_STATES.CANCELLED, timestamp: false })
     .setTitle('Event removed')
     .setDescription('This event was deleted. Signups are closed.');
 }
