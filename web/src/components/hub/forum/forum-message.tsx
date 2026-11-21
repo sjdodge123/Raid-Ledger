@@ -4,13 +4,14 @@
  * removed message shows only its placeholder, never its text (AC6, Q8).
  * `PostByline` takes a whole `HubPost`, so this keeps its own thin byline.
  */
-import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { HubForumReply } from '@raid-ledger/contract';
 import { MarkdownBlock } from '../../ui/markdown-block';
 import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
 import { Pill } from '../hub-bits';
 import { forumByline } from './forum-byline';
 import { forumAgo, forumDeletedLabel } from './forum-thread.helpers';
+import { useScrollOnce } from './use-scroll-once';
 
 /** The fields a root and a reply share. */
 export type ForumMessageData = Pick<HubForumReply, 'author' | 'body' | 'createdAt' | 'editedAt' | 'deleted' | 'source' | 'discordAuthor'>;
@@ -46,15 +47,6 @@ function Byline({ message }: { message: ForumMessageData }): JSX.Element {
             </p>
         </div>
     );
-}
-
-/** The `?reply=<id>` target scrolls into view once it mounts (same as Posts' `post-item.tsx`). */
-export function useScrollOnce(highlighted: boolean): RefObject<HTMLElement | null> {
-    const ref = useRef<HTMLElement>(null);
-    useEffect(() => {
-        if (highlighted) ref.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
-    }, [highlighted]);
-    return ref;
 }
 
 /** A root or reply (see file docstring). */

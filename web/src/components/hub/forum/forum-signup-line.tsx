@@ -10,9 +10,9 @@ import type { HubForumReply } from '@raid-ledger/contract';
 import { ForumActionMenu } from './forum-action-menu';
 import { ForumDeleteConfirm } from './forum-delete-confirm';
 import { forumMenuItems } from './forum-menu-items';
-import { useScrollOnce } from './forum-message';
 import { forumAgo, forumDeletedLabel } from './forum-thread.helpers';
 import type { ForumReplyWrites } from './forum-thread-items';
+import { useScrollOnce } from './use-scroll-once';
 
 export interface ForumSignupLineProps {
     threadId: number;
