@@ -1,10 +1,11 @@
 /**
  * ROK-2284 — read the sign-in reminder settings (app_settings). The switch is
- * unset ⇒ ON (ruled Q8) EXCEPT under DEMO_MODE, where unset ⇒ OFF: fleet and
- * local dev envs share real guilds with humans who have no user row there, so
- * a fresh env must never start DM-ing them (an explicit 'true' still turns it
- * on). Weeks/max fall back to the ruled defaults when unset or malformed (GG
- * "malformed ⇒ default" pattern, `gg-delivery.settings.ts`).
+ * ON only when the stored value is exactly 'true' (trimmed); unset, 'false' or
+ * anything else ⇒ OFF, in EVERY environment, prod included. Operator ruling
+ * 2026-11-21 (supersedes spec ruling Q8 "ships ON"): nothing may go out on
+ * deploy — an admin turns it on after reviewing the message. Weeks/max fall
+ * back to the ruled defaults when unset or malformed (GG "malformed ⇒
+ * default" pattern, `gg-delivery.settings.ts`).
  */
 import { SETTING_KEYS, type SettingKey } from '../../../drizzle/schema';
 import {
@@ -36,20 +37,12 @@ function intIn(
   return n >= range.min && n <= range.max ? n : fallback;
 }
 
-/** True when either DEMO_MODE signal (env or the DB setting) is on. */
-export async function isSigninReminderDemoMode(store: {
-  getDemoMode(): Promise<boolean>;
-}): Promise<boolean> {
-  return process.env.DEMO_MODE === 'true' || (await store.getDemoMode());
-}
-
 /**
- * Current settings, defaults applied. A stored value: only the literal
- * 'false' turns it off. Unset: ON, or OFF when `demoMode` is true.
+ * Current settings, defaults applied. Only a stored 'true' turns the switch
+ * on; unset or any other value is OFF (ruling 2026-11-21).
  */
 export async function readSigninReminderSettings(
   store: Pick<SigninReminderSettingsStore, 'get'>,
-  opts: { demoMode: boolean },
 ): Promise<SigninReminderSettings> {
   const k = SETTING_KEYS;
   const [enabled, weeks, max] = await Promise.all([
@@ -58,7 +51,7 @@ export async function readSigninReminderSettings(
     store.get(k.SIGNIN_REMINDER_MAX),
   ]);
   return {
-    enabled: enabled === null ? !opts.demoMode : enabled.trim() !== 'false',
+    enabled: enabled?.trim() === 'true',
     weeks: intIn(
       weeks,
       SIGNIN_REMINDER_WEEKS_RANGE,

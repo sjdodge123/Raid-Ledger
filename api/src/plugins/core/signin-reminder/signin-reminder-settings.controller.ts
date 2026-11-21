@@ -22,7 +22,6 @@ import { AdminGuard } from '../../../auth/admin.guard';
 import { SETTING_KEYS } from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import {
-  isSigninReminderDemoMode,
   readSigninReminderSettings,
   type SigninReminderSettingsStore,
 } from './signin-reminder.settings';
@@ -42,8 +41,7 @@ export async function writeSigninReminderSettings(
   await store.set(SETTING_KEYS.SIGNIN_REMINDER_ENABLED, String(enabled));
   await store.set(SETTING_KEYS.SIGNIN_REMINDER_WEEKS, String(weeks));
   await store.set(SETTING_KEYS.SIGNIN_REMINDER_MAX, String(max));
-  // The switch is stored explicitly above, so the DEMO default never applies.
-  return readSigninReminderSettings(store, { demoMode: false });
+  return readSigninReminderSettings(store);
 }
 
 @Controller('admin/settings')
@@ -51,11 +49,10 @@ export async function writeSigninReminderSettings(
 export class SigninReminderSettingsController {
   constructor(private readonly settings: SettingsService) {}
 
-  /** The EFFECTIVE values: an unset switch reads OFF under DEMO_MODE. */
+  /** The EFFECTIVE values: an unset switch reads OFF (ruling 2026-11-21). */
   @Get('signin-reminder')
-  async getSettings(): Promise<SigninReminderSettingsDto> {
-    const demoMode = await isSigninReminderDemoMode(this.settings);
-    return readSigninReminderSettings(this.settings, { demoMode });
+  getSettings(): Promise<SigninReminderSettingsDto> {
+    return readSigninReminderSettings(this.settings);
   }
 
   @Put('signin-reminder')

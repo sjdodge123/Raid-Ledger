@@ -34,7 +34,6 @@ import {
 } from './signin-reminder.eligibility';
 import {
   ensureSigninReminderLaunchedAt,
-  isSigninReminderDemoMode,
   readSigninReminderSettings,
 } from './signin-reminder.settings';
 
@@ -92,8 +91,7 @@ export class SigninReminderService {
     opts: SigninReminderTickOptions,
   ): Promise<SigninReminderOutcome> {
     const targeted = opts.onlyBotId !== undefined;
-    const demoMode = await isSigninReminderDemoMode(this.settings);
-    const cfg = await readSigninReminderSettings(this.settings, { demoMode });
+    const cfg = await readSigninReminderSettings(this.settings);
     if (!cfg.enabled && !targeted) return { status: 'disabled' };
     if (!this.discord.isConnected()) return { status: 'not-connected' };
     const roster = await listGuildMembersForReminders(this.discord.getGuild());
