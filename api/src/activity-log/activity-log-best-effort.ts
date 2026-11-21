@@ -12,10 +12,21 @@ import type { ActivityLogService } from './activity-log.service';
 
 const logger = new Logger('ActivityLog');
 
+type LogArgs = Parameters<ActivityLogService['log']>;
+// No `executor` arg: swallowing a failed INSERT inside a postgres.js
+// transaction poisons it, so best-effort writes always use the service's db.
+type BestEffortLogArgs = [
+  LogArgs[0],
+  LogArgs[1],
+  LogArgs[2],
+  LogArgs[3]?,
+  LogArgs[4]?,
+];
+
 /** `activityLog.log(...args)`, never rejecting. */
 export async function logBestEffort(
   activityLog: Pick<ActivityLogService, 'log'>,
-  ...args: Parameters<ActivityLogService['log']>
+  ...args: BestEffortLogArgs
 ): Promise<void> {
   try {
     await activityLog.log(...args);
