@@ -27,6 +27,7 @@ import { seedCommunityHubs } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 import { editorTextbox } from './hub-post-editor';
 import { getFirstGameId } from './scheduling-poll-fixtures';
+import { dismissGameTimeCheck } from './helpers';
 
 const SLUG = 'poll-discussion';
 const READER_NOTE = 'Vote in the poll to join the discussion.';
@@ -102,6 +103,9 @@ async function summaryStatus(jwt: string, pollId: number): Promise<number> {
 
 async function openPollCard(page: Page, seed: PollSeed): Promise<Locator> {
     await page.goto(`/community-lineup/${seed.lineupId}/schedule/${seed.pollId}`);
+    // A seeded member never confirmed their game time, so the ROK-1574 check
+    // opens over the composite; close it the way a real user would (Skip / ×).
+    await dismissGameTimeCheck(page);
     const card = page.getByTestId('poll-discussion-card');
     await expect(card, 'the poll page shows the Discussion card').toBeVisible({ timeout: 20_000 });
     return card;
