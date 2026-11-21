@@ -17,18 +17,20 @@
  * surface locators are the shared ones in `games-filters.ts`.
  *
  * ROK-2281: a second case gives the three linked members Mining through the
- * ordinary `PATCH /users/me/characters/:id` (each as themselves, the GM last so
- * the browser ends signed in as the GM), BEFORE anything reads roster insights
- * (the endpoint caches per guild + audience for 5 minutes). Picking the Mining
+ * ordinary `PATCH /users/me/characters/:id`, each as themselves with an access
+ * token minted over plain API requests (no browser sign-ins), BEFORE anything
+ * reads roster insights (the endpoint caches per guild + audience for 5
+ * minutes); the browser then signs in ONCE, as the GM. Picking the Mining
  * pill adds "Mining high→low" / "Mining low→high" to Sort by; the step reads
  * each row's Mining skill from its profession badge and checks the order, then
  * unpicks the pill and expects the sort back on Rank.
  */
-import type { Page, TestInfo } from '@playwright/test';
+import { request, type Page, type TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
-import { signInOnboardedMember } from './browser-session';
+import { signInContextAs, signInOnboardedMember } from './browser-session';
 import { filtersOpener, filtersSurface, hasFilterFunnel } from './games-filters';
+import { resolveApiUrl } from './target';
 
 interface SeededGuild {
     guildId: number;
@@ -126,7 +128,7 @@ test('Members: filter narrows the count, Name Z–A reorders flat rows, Clear al
 });
 
 const PROFESSION = 'Mining';
-/** Linked seed members → the Mining skill each records; the GM goes last (the browser stays signed in as them). */
+/** Linked seed members → the Mining skill each records (the browser views the list as the GM). */
 const MINING_SKILLS = [['officer', 275], ['member', 120], ['gm', 200]] as const;
 
 /** One linked member records Mining on their own character (a manual professions fact). */
@@ -140,17 +142,48 @@ async function setMining(jwt: string, characterId: string, skillLevel: number): 
     expect(res.professions, `the Mining PATCH should save: ${JSON.stringify(res.message ?? res)}`).toBeTruthy();
 }
 
-/** Every linked member records Mining; returns the GM's JWT. */
-async function seedMining(page: Page, guild: SeededGuild): Promise<string> {
+/**
+ * A seeded member's access JWT without a browser: a fresh refresh family
+ * (`/admin/test/browser-session`) in a throwaway API request context's cookie
+ * jar, rotated once by `POST /auth/refresh` (no Origin → the same-origin guard
+ * allows a non-browser client).
+ */
+async function memberAccessToken(adminToken: string, userId: number): Promise<string> {
+    const api = await request.newContext({ baseURL: resolveApiUrl() });
+    try {
+        const session = await api.post('/admin/test/browser-session', { headers: { Authorization: `Bearer ${adminToken}` }, data: { userId } });
+        if (session.status() !== 204) throw new Error(`browser-session {userId:${userId}} → ${session.status()}: ${await session.text()}`);
+        const refresh = await api.post('/auth/refresh');
+        const jwt = ((await refresh.json().catch(() => null)) as { access_token?: unknown } | null)?.access_token;
+        if (refresh.status() !== 200 || typeof jwt !== 'string') throw new Error(`POST /auth/refresh for user ${userId} → ${refresh.status()} without an access_token`);
+        return jwt;
+    } finally {
+        await api.dispose();
+    }
+}
+
+/** Every linked member records Mining over the API; returns the GM's JWT. */
+async function seedMining(adminToken: string, guild: SeededGuild): Promise<string> {
     let gmJwt = '';
     for (const [role, skill] of MINING_SKILLS) {
         const user = guild.users[role];
         if (!user?.characterId) throw new Error(`seed-guild: the ${role} should own a linked character`);
-        const jwt = await signInOnboardedMember(page, user.userId);
+        const jwt = await memberAccessToken(adminToken, user.userId);
         await setMining(jwt, user.characterId, skill);
         if (role === 'gm') gmJwt = jwt;
     }
     return gmJwt;
+}
+
+/**
+ * Sign the browser in once, as the GM. Onboarding is finished over the API first,
+ * so no boot ever caches the not-onboarded user and AuthGuard never detours to
+ * the `/onboarding` wizard.
+ */
+async function signInAsGm(page: Page, gmJwt: string, gmUserId: number): Promise<void> {
+    const done = await page.context().request.post(`${resolveApiUrl()}/users/me/complete-onboarding`, { headers: { Authorization: `Bearer ${gmJwt}` } });
+    expect(done.ok(), `complete-onboarding for the GM → ${done.status()}`).toBe(true);
+    await signInContextAs(page.context(), gmUserId);
 }
 
 async function waitForMining(gmJwt: string, guildId: number): Promise<void> {
@@ -182,8 +215,11 @@ test('Members: a picked profession pill adds high→low / low→high sorts by th
     const token = await getAdminToken();
     const guild = await seedGuild(token, testInfo);
     try {
-        const gmJwt = await seedMining(page, guild);
+        const gmJwt = await seedMining(token, guild);
         await waitForMining(gmJwt, guild.guildId);
+        const gm = guild.users['gm'];
+        if (!gm) throw new Error('seed-guild: no gm user');
+        await signInAsGm(page, gmJwt, gm.userId);
         await page.goto(`/hubs/${guild.guildId}#members`);
         await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
         const sort = page.getByRole('combobox', { name: 'Sort by' });
