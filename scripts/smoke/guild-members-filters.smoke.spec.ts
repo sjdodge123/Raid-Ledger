@@ -149,11 +149,12 @@ async function setMining(jwt: string, characterId: string, skillLevel: number): 
  * allows a non-browser client).
  */
 async function memberAccessToken(adminToken: string, userId: number): Promise<string> {
-    const api = await request.newContext({ baseURL: resolveApiUrl() });
+    const apiUrl = resolveApiUrl();
+    const api = await request.newContext();
     try {
-        const session = await api.post('/admin/test/browser-session', { headers: { Authorization: `Bearer ${adminToken}` }, data: { userId } });
+        const session = await api.post(`${apiUrl}/admin/test/browser-session`, { headers: { Authorization: `Bearer ${adminToken}` }, data: { userId } });
         if (session.status() !== 204) throw new Error(`browser-session {userId:${userId}} → ${session.status()}: ${await session.text()}`);
-        const refresh = await api.post('/auth/refresh');
+        const refresh = await api.post(`${apiUrl}/auth/refresh`);
         const jwt = ((await refresh.json().catch(() => null)) as { access_token?: unknown } | null)?.access_token;
         if (refresh.status() !== 200 || typeof jwt !== 'string') throw new Error(`POST /auth/refresh for user ${userId} → ${refresh.status()} without an access_token`);
         return jwt;
