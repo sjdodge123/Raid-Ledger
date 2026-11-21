@@ -9,7 +9,6 @@ import {
   type MockDb,
 } from '../../../common/testing/drizzle-mock';
 import { EMBED_STATES } from '../../../discord-bot/discord-bot.constants';
-import type { ForumStarterEditPort } from '../../../discord-bot/services/event-embed-message.editor';
 import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import {
   ForumStarterBackfill,
@@ -41,7 +40,7 @@ function setup(
   const svc = new ForumStarterBackfill(
     db as unknown as ForumDiscordDb,
     cards as unknown as EventForumStarterCards,
-    editor as unknown as ForumStarterEditPort,
+    editor,
   );
   return { db, cards, editor, svc };
 }
