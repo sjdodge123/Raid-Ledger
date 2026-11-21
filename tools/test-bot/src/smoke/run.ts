@@ -82,6 +82,7 @@ import { hubPollEmbedTests } from "./tests/hub-poll-embed.test.js";
 import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 import { valheimClaimDmTests } from "./tests/valheim-claim-dm.test.js";
+import { calendarReconnectDmTests } from "./tests/calendar-reconnect-dm.test.js";
 import { valheimHubWelcomeTests } from "./tests/valheim-hub-welcome.test.js";
 import { hubMediaIngestTests } from "./tests/hub-media-ingest.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
@@ -256,6 +257,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...hubPostRelayTests,
     ...hubProposalNotificationsTests,
     ...valheimClaimDmTests,
+    ...calendarReconnectDmTests,
     ...valheimHubWelcomeTests,
     ...hubMediaIngestTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.

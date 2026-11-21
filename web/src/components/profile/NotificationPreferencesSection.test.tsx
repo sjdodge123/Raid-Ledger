@@ -31,6 +31,8 @@ const mockPreferences = {
         // ROK-1933 default: Discord on, in-app and push off.
         valheim_claim_suggestion: { inApp: false, push: false, discord: true },
         gg_ready: { inApp: true, push: false, discord: true },
+        // ROK-1866 default (D4): all three channels on.
+        calendar_needs_reconnect: { inApp: true, push: true, discord: true },
     },
 };
 
@@ -224,6 +226,32 @@ it('renders description for each notification type', () => {
             fireEvent.click(screen.getByLabelText('Disable Character claim suggestions discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { valheim_claim_suggestion: { discord: false } },
+            });
+        });
+    });
+
+    describe('Calendar needs reconnecting row (ROK-1866)', () => {
+        it('renders the row under its #notif- anchor with the shared copy', () => {
+            renderSection();
+            const row = document.getElementById('notif-calendar_needs_reconnect');
+            expect(row, 'the DM "Adjust notifications" link deep-links #notif-calendar_needs_reconnect').not.toBeNull();
+            expect(row).toHaveTextContent('Calendar needs reconnecting');
+            expect(row).toHaveTextContent('When a connected calendar stops syncing and needs you to reconnect it');
+        });
+
+        it('opting out of the Discord DM sends the calendar_needs_reconnect type', () => {
+            renderSection();
+            fireEvent.click(screen.getByLabelText('Disable Calendar needs reconnecting discord notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { calendar_needs_reconnect: { discord: false } },
+            });
+        });
+
+        it('opting out of the in-app item sends the calendar_needs_reconnect type', () => {
+            renderSection();
+            fireEvent.click(screen.getByLabelText('Disable Calendar needs reconnecting inApp notifications'));
+            expect(mockUpdatePreferences).toHaveBeenCalledWith({
+                channelPrefs: { calendar_needs_reconnect: { inApp: false } },
             });
         });
     });

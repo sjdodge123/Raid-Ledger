@@ -43,6 +43,11 @@ export const calendarConnections = pgTable(
     credentialsEncrypted: text('credentials_encrypted').notNull(),
     status: varchar('status', { length: 24 }).notNull().default('active'),
     lastErrorCode: varchar('last_error_code', { length: 64 }),
+    /**
+     * ROK-1866 D1: set when the reconnect nudge for the current
+     * `needs_reconnect` episode was claimed; a reconnect clears it.
+     */
+    reconnectNudgedAt: timestamp('reconnect_nudged_at', { withTimezone: true }),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
     nextSyncAt: timestamp('next_sync_at', { withTimezone: true }),
     syncCursor: jsonb('sync_cursor'),
