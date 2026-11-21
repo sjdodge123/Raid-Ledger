@@ -3,6 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../../redis/redis.module';
+import { DiscordEmojiService } from '../../../discord-bot/services/discord-emoji.service';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { EventPlanningPostsService } from './event-planning-posts.service';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
@@ -22,6 +23,7 @@ import {
   type LineFlushPlan,
   type PostedMember,
 } from './hub-forum-discord-signup-lines.flush';
+import type { SignupLineEmoji } from './hub-forum-discord-signup-lines';
 import {
   loadSignupLineStates,
   type SignupLineMember,
@@ -80,7 +82,16 @@ export class HubForumDiscordSignupPings {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly planning: EventPlanningPostsService,
     private readonly registryLock: EventPlanningPostsLockSweep,
+    private readonly emoji: DiscordEmojiService,
   ) {}
+
+  /** ROK-2273 — lines take role/class glyphs from the embed's own source. */
+  private lineEmoji(): SignupLineEmoji {
+    return {
+      role: (r) => this.emoji.getRoleEmoji(r),
+      klass: (c) => this.emoji.getClassEmoji(c),
+    };
+  }
 
   /** Flush one event; never pings a user twice for the same signup. */
   async flush(eventId: number): Promise<SignupPingOutcome> {
@@ -149,7 +160,7 @@ export class HubForumDiscordSignupPings {
       posted = await this.resync(keys.lines, posted, members);
       await this.takeIfStable(eventId, flags);
     }
-    const plan = planLineFlush(pinged, posted, members);
+    const plan = planLineFlush(pinged, posted, members, this.lineEmoji());
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
