@@ -6,6 +6,7 @@ import {
   ROACH_OUT_BUTTON_IDS,
   RUNNING_LATE_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
+import { SIGNUP_STATE_EMOJI } from '../discord-bot/embeds/signup-state-emoji.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { toStr } from './notification-embed.helpers';
 import { buildLfgPlayerInviteRow } from './notification-embed.lfg-player-invite';
@@ -66,12 +67,12 @@ export function buildExtraRows(
           .setCustomId(`${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:${eid}`)
           .setLabel('Roach Out')
           .setStyle(ButtonStyle.Danger)
-          .setEmoji('\uD83E\uDEB3'),
+          .setEmoji(SIGNUP_STATE_EMOJI.roachOut),
         new ButtonBuilder()
           .setCustomId(`${RUNNING_LATE_BUTTON_IDS.LATE}:${eid}`)
           .setLabel('Running Late')
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('\u23F0'),
+          .setEmoji(SIGNUP_STATE_EMOJI.late),
       ),
     ];
   if (type === 'event_rescheduled') return [buildRescheduleRow(eid)];
