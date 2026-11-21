@@ -53,6 +53,8 @@ import {
 import { HubForumDiscordClosingLines } from './hub-forum-discord-closing-lines.service';
 import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.listener';
 import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
+import { ForumStarterEditor } from './forum-starter-edit.port';
+import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-embed-message.editor';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
@@ -76,6 +78,9 @@ import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pi
     HubForumBindLock,
     HubForumDiscordService,
     HubForumDiscordOutboundGateway,
+    // ROK-2292 D4: the bot's embed editor resolves this token lazily.
+    ForumStarterEditor,
+    { provide: FORUM_STARTER_EDIT_PORT, useExisting: ForumStarterEditor },
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
     HubForumDiscordRouteResolver,

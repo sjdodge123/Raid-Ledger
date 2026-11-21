@@ -68,6 +68,7 @@ import {
   EVENT_LIFECYCLE_QUEUE,
 } from './queues/event-lifecycle.queue';
 import { EmbedSyncProcessor } from './processors/embed-sync.processor';
+import { EventEmbedMessageEditor } from './services/event-embed-message.editor';
 import { AdHocGracePeriodProcessor } from './processors/ad-hoc-grace-period.processor';
 import { DepartureGraceProcessor } from './processors/departure-grace.processor';
 import { EventLifecycleProcessor } from './processors/event-lifecycle.processor';
@@ -184,6 +185,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     DiscordSyncListener,
     EmbedSyncQueueService,
     EmbedSyncProcessor,
+    EventEmbedMessageEditor,
     AdHocGracePeriodQueueService,
     AdHocGracePeriodProcessor,
     DepartureGraceQueueService,

@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import {
   ChannelType,
   DiscordAPIError,
+  type ActionRowBuilder,
+  type ButtonBuilder,
+  type EmbedBuilder,
   type Guild,
   type ThreadChannel,
   type Webhook,
@@ -28,6 +31,12 @@ export interface OutboundAuthor {
 export interface DiscordMessageRef {
   threadId: string;
   messageId: string;
+}
+
+/** ROK-2292: the event card a post's starter is edited to. */
+export interface StarterCard {
+  embeds: EmbedBuilder[];
+  components: ActionRowBuilder<ButtonBuilder>[];
 }
 
 /** `gone`: Discord 404 — the message/post no longer exists (mark synced). */
@@ -129,6 +138,39 @@ export class HubForumDiscordOutboundGateway {
         allowedMentions: NO_MENTIONS,
       });
     });
+  }
+
+  /**
+   * ROK-2292 D4/D5 — edit a post's starter message to the event card,
+   * content `''`. A webhook starter (hub post) is edited through that
+   * webhook, a bot starter (planning post) by the bot: Discord rejects the
+   * bot editing a webhook's message (50005).
+   */
+  async editStarterCard(
+    threadId: string,
+    card: StarterCard,
+  ): Promise<DiscordWriteResult> {
+    try {
+      const thread = await this.thread(threadId);
+      const starter = await thread.fetchStarterMessage();
+      if (!starter) return 'gone';
+      const body = { content: '', ...card, allowedMentions: NO_MENTIONS };
+      if (!starter.webhookId) {
+        await starter.edit(body);
+        return 'ok';
+      }
+      const forum = thread.parentId;
+      if (!forum) throw new Error(`Discord post ${threadId} has no forum`);
+      const hook = await this.webhook({
+        channelId: forum,
+        webhookId: starter.webhookId,
+      });
+      await hook.editMessage(starter.id, { ...body, threadId });
+      return 'ok';
+    } catch (err) {
+      if (isGone(err)) return 'gone';
+      throw err;
+    }
   }
 
   /**

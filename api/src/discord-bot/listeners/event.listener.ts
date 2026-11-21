@@ -11,6 +11,7 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
@@ -73,6 +74,7 @@ export class DiscordEventListener {
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly embedPoster: EmbedPosterService,
+    private readonly messageEditor: EventEmbedMessageEditor,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly scheduledEventService: ScheduledEventService,
@@ -93,6 +95,7 @@ export class DiscordEventListener {
       embedPoster: this.embedPoster,
       channelResolver: this.channelResolver,
       settings: this.settingsService,
+      messageEditor: this.messageEditor,
       logger: this.logger,
     };
   }

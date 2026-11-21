@@ -8,7 +8,7 @@ import type {
   EmbedEventData,
   EmbedContext,
 } from '../services/discord-embed.factory';
-import { embedComponents } from '../services/discord-embed.factory';
+import type { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
 import type { ScheduledEventService } from '../services/scheduled-event.service';
@@ -32,6 +32,8 @@ export interface EventListenerDeps {
   channelResolver: ChannelResolverService;
   /** Planned temporary voice channel settings (2026-11-13). */
   settings: PlannedVoiceSettingsSource;
+  /** ROK-2292 D4: routes announcement vs forum-starter rows. */
+  messageEditor: Pick<EventEmbedMessageEditor, 'edit'>;
   logger: Logger;
 }
 
@@ -121,13 +123,7 @@ export async function updateEmbedRecord(
   const built = deps.embedFactory.buildEventEmbed(eventData, context, {
     state,
   });
-  await deps.clientService.editEmbed(
-    record.channelId,
-    record.messageId,
-    built.embed,
-    embedComponents(built),
-    built.content,
-  );
+  await deps.messageEditor.edit(record, built, { withContent: true });
   // ROK-1370: persist the resolved state so a RESCHEDULING↔POSTED transition
   // sticks across re-renders (a no-op when state matches the stored value).
   await deps.db
@@ -198,17 +194,11 @@ export async function cancelEmbedRecord(
   eventId: number,
 ): Promise<void> {
   try {
-    const { embed, content } = deps.embedFactory.buildEventCancelled(
-      event,
-      context,
-    );
-    await deps.clientService.editEmbed(
-      record.channelId,
-      record.messageId,
-      embed,
-      undefined,
-      content,
-    );
+    const cancelled = deps.embedFactory.buildEventCancelled(event, context);
+    const edit = await deps.messageEditor.edit(record, cancelled, {
+      withContent: true,
+    });
+    if (edit === 'gone') return;
     await deps.db
       .update(schema.discordEventMessages)
       .set({ embedState: EMBED_STATES.CANCELLED, updatedAt: new Date() })
@@ -285,13 +275,7 @@ async function updateSingleEmbedState(
   const built = deps.embedFactory.buildEventEmbed(event, context, {
     state: newState,
   });
-  await deps.clientService.editEmbed(
-    record.channelId,
-    record.messageId,
-    built.embed,
-    embedComponents(built),
-    built.content,
-  );
+  await deps.messageEditor.edit(record, built, { withContent: true });
   await deps.db
     .update(schema.discordEventMessages)
     .set({ embedState: newState, updatedAt: new Date() })
