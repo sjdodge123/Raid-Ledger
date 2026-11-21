@@ -13,7 +13,10 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
-import { listGuildMembersForReminders } from '../../../discord-bot/discord-bot-client.guild.helpers';
+import {
+  listGuildMembersForReminders,
+  type ReminderRosterMember,
+} from '../../../discord-bot/discord-bot-client.guild.helpers';
 import {
   claimDueSigninReminders,
   ensureSigninReminderRows,
@@ -38,7 +41,8 @@ export type SigninReminderOutcome =
 /**
  * DEMO_MODE fixture only (`/admin/test/signin-reminder/tick`): aim the pass
  * at one BOT guild member instead of the human roster, so a smoke run never
- * DMs a person. The cron never passes options.
+ * DMs a person. The account-holder skip is bypassed for that bot only (the
+ * smoke links the companion bot to a demo user). The cron never passes options.
  */
 export interface SigninReminderTickOptions {
   onlyBotId?: string;
@@ -86,16 +90,14 @@ export class SigninReminderService {
     const roster = await listGuildMembersForReminders(this.discord.getGuild());
     if (roster === null) return { status: 'not-connected' };
     const launchedAt = await ensureSigninReminderLaunchedAt(this.settings, now);
-    const ids = await this.dropAccountHolders(
-      opts.onlyBotId === undefined
-        ? reminderCandidateIds(roster, launchedAt, now)
-        : targetedBotIds(roster, opts.onlyBotId),
-    );
+    const targeted = opts.onlyBotId !== undefined;
+    const ids = await this.candidates(roster, launchedAt, now, opts);
     await ensureSigninReminderRows(this.db, ids);
     const claimed = await claimDueSigninReminders(this.db, {
       candidateIds: ids,
       weeks: cfg.weeks,
       max: cfg.max,
+      ...(targeted ? { includeAccountHolders: true } : {}),
     });
     const sent = await this.sendAll(claimed);
     return {
@@ -104,6 +106,21 @@ export class SigninReminderService {
       sent,
       failed: claimed.length - sent,
     };
+  }
+
+  /** The roster's due-to-consider ids, or just the targeted bot (DEMO). */
+  private async candidates(
+    roster: readonly ReminderRosterMember[],
+    launchedAt: Date,
+    now: Date,
+    opts: SigninReminderTickOptions,
+  ): Promise<string[]> {
+    if (opts.onlyBotId !== undefined) {
+      return targetedBotIds(roster, opts.onlyBotId);
+    }
+    return this.dropAccountHolders(
+      reminderCandidateIds(roster, launchedAt, now),
+    );
   }
 
   /** Drop ids with any user row (`<id>` or `unlinked:<id>`) — no row for them. */

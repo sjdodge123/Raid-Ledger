@@ -5,6 +5,8 @@
  * Discord is stubbed at the boundary (`getGuild` roster + `sendEmbedDM`).
  */
 import { Collection } from 'discord.js';
+import { eq } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -78,23 +80,80 @@ describe('ROK-2284 signin-reminder fixture — guards', () => {
   });
 
   it('rejects a body that is not a snowflake (400)', async () => {
-    expect((await post('tick', adminToken, { botDiscordId: 'x' })).status).toBe(400);
+    expect((await post('tick', adminToken, { botDiscordId: 'x' })).status).toBe(
+      400,
+    );
   });
 });
 
 describe('ROK-2284 signin-reminder fixture — targeted tick', () => {
   it('DMs only the named bot, once; the human in the roster gets nothing', async () => {
     const first = await post('tick', adminToken, { botDiscordId: BOT });
-    expect(first.body).toEqual({ status: 'ran', candidates: 1, sent: 1, failed: 0 });
+    expect(first.body).toEqual({
+      status: 'ran',
+      candidates: 1,
+      sent: 1,
+      failed: 0,
+    });
     expect(sendDm.mock.calls.map((c: unknown[]) => c[0])).toEqual([BOT]);
     const second = await post('tick', adminToken, { botDiscordId: BOT });
-    expect(second.body).toEqual({ status: 'ran', candidates: 1, sent: 0, failed: 0 });
+    expect(second.body).toEqual({
+      status: 'ran',
+      candidates: 1,
+      sent: 0,
+      failed: 0,
+    });
+    expect(sendDm).toHaveBeenCalledTimes(1);
+  });
+
+  it('still targets the bot when the smoke has linked it to a demo user', async () => {
+    const member = await createMemberAndLogin(testApp, 'srb', 'srb@test.local');
+    await testApp.db
+      .update(schema.users)
+      .set({ discordId: BOT })
+      .where(eq(schema.users.id, member.userId));
+    const res = await post('tick', adminToken, { botDiscordId: BOT });
+    expect(res.body).toEqual({
+      status: 'ran',
+      candidates: 1,
+      sent: 1,
+      failed: 0,
+    });
+    expect(sendDm.mock.calls.map((c: unknown[]) => c[0])).toEqual([BOT]);
+  });
+
+  it('records a bot-to-bot refusal (50007) and the next tick sends nothing', async () => {
+    sendDm.mockRejectedValueOnce(
+      Object.assign(new Error('Cannot send'), { code: 50007 }),
+    );
+    const first = await post('tick', adminToken, { botDiscordId: BOT });
+    expect(first.body).toEqual({
+      status: 'ran',
+      candidates: 1,
+      sent: 0,
+      failed: 1,
+    });
+    const state = (await post('state', adminToken, { discordId: BOT }))
+      .body as SigninReminderStateResponse;
+    expect(state.row).toMatchObject({ sentCount: 1, lastFailureCode: 50007 });
+    const second = await post('tick', adminToken, { botDiscordId: BOT });
+    expect(second.body).toEqual({
+      status: 'ran',
+      candidates: 1,
+      sent: 0,
+      failed: 0,
+    });
     expect(sendDm).toHaveBeenCalledTimes(1);
   });
 
   it('never DMs a human, even when the body names one', async () => {
     const res = await post('tick', adminToken, { botDiscordId: HUMAN });
-    expect(res.body).toEqual({ status: 'ran', candidates: 0, sent: 0, failed: 0 });
+    expect(res.body).toEqual({
+      status: 'ran',
+      candidates: 0,
+      sent: 0,
+      failed: 0,
+    });
     expect(sendDm).not.toHaveBeenCalled();
   });
 });

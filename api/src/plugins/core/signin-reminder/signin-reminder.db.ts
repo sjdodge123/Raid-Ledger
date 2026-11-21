@@ -37,6 +37,13 @@ export interface SigninReminderClaimInput {
   max: number;
   /** Batch size; defaults to `SIGNIN_REMINDER_BATCH`. */
   limit?: number;
+  /**
+   * DEMO_MODE bot-targeted tick only: skip the "no user row" check. The smoke
+   * setup links the companion BOT's Discord id to a demo user, and the
+   * caller has already reduced `candidateIds` to that one bot. Never set by
+   * the cron.
+   */
+  includeAccountHolders?: boolean;
 }
 
 function idList(ids: readonly string[]): SQL {
@@ -44,6 +51,13 @@ function idList(ids: readonly string[]): SQL {
     ids.map((id) => sql`${id}`),
     sql`, `,
   );
+}
+
+/** No Raid Ledger user row (`<id>` or `unlinked:<id>`) for the reminder row. */
+function noAccountRow(): SQL {
+  return sql`AND NOT EXISTS (
+          SELECT 1 FROM users u
+          WHERE u.discord_id IN (r.discord_id, 'unlinked:' || r.discord_id))`;
 }
 
 /** Make sure every candidate has a row (new ones start at count 0). */
@@ -83,9 +97,7 @@ export async function claimDueSigninReminders(
           OR r.last_failure_at <= now() - make_interval(weeks => ${input.weeks}))
         AND (r.claimed_at IS NULL
           OR r.claimed_at < now() - make_interval(mins => ${SIGNIN_REMINDER_STALE_CLAIM_MINUTES}))
-        AND NOT EXISTS (
-          SELECT 1 FROM users u
-          WHERE u.discord_id IN (r.discord_id, 'unlinked:' || r.discord_id))
+        ${input.includeAccountHolders ? sql`` : noAccountRow()}
       ORDER BY r.last_sent_at ASC NULLS FIRST, r.discord_id
       LIMIT ${limit}
       FOR UPDATE OF r SKIP LOCKED

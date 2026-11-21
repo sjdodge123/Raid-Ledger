@@ -17,7 +17,9 @@ interface ButtonJson {
 describe('disableStopButton', () => {
   it('disables the stop button and leaves the link button enabled', () => {
     const { row } = buildSigninReminderDm('Guild', 'https://raid.example');
-    const rows = disableStopButton([row.toJSON()] as never);
+    // The shape a ButtonInteraction's `message.components` really has.
+    const live = new ActionRow(row.toJSON());
+    const rows = disableStopButton([live] as never);
     expect(rows).toHaveLength(1);
     const buttons = (rows[0]?.toJSON().components ?? []) as ButtonJson[];
     expect(buttons.map((b) => b.type)).toEqual([

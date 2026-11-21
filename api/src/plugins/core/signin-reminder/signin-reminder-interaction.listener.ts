@@ -25,10 +25,7 @@ import {
   DiscordListenerBinding,
   gatewayBinding,
 } from '../../../discord-bot/listeners/discord-listener-binding';
-import {
-  errorMessage,
-  errorStack,
-} from '../../../common/error-format.helpers';
+import { errorMessage, errorStack } from '../../../common/error-format.helpers';
 import { SIGNIN_REMINDER_BUTTON_IDS } from './signin-reminder.constants';
 import { optOutOfSigninReminders } from './signin-reminder.db';
 
@@ -52,7 +49,11 @@ export function disableStopButton(
     for (const component of row.components) {
       if (component.type !== ComponentType.Button) continue;
       const btn = ButtonBuilder.from(component);
-      if (component.customId === SIGNIN_REMINDER_BUTTON_IDS.STOP) {
+      const data = btn.toJSON();
+      if (
+        'custom_id' in data &&
+        data.custom_id === SIGNIN_REMINDER_BUTTON_IDS.STOP
+      ) {
         btn.setDisabled(true);
       }
       next.addComponents(btn);
