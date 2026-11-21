@@ -69,9 +69,11 @@ function ReplyBox({ subject, d }: Omit<FootProps, 'lockedInEventId'>): JSX.Eleme
                 create={create}
                 failureCopy={(e) => subjectReplyFailureCopy(subject.kind, e)}
             />
-            <div className="flex justify-end">
-                <HubThreadLink subject={subject} d={d} />
-            </div>
+            {d.member === true && (
+                <div className="flex justify-end">
+                    <HubThreadLink subject={subject} d={d} />
+                </div>
+            )}
         </div>
     );
 }
@@ -103,7 +105,10 @@ function ReadOnlyFoot({ subject, d, lockedInEventId }: FootProps): JSX.Element {
 function SubjectFoot(props: FootProps): JSX.Element {
     const { d, lockedInEventId } = props;
     const canReply = d.can.reply && d.lock === null && lockedInEventId === null;
-    return canReply ? <ReplyBox subject={props.subject} d={d} /> : <ReadOnlyFoot {...props} />;
+    // Keyed by subject: a cached poll → poll navigation keeps the card mounted,
+    // and a draft (or a reply error) must never carry over to another thread.
+    const key = `${props.subject.kind}-${props.subject.id}`;
+    return canReply ? <ReplyBox key={key} subject={props.subject} d={d} /> : <ReadOnlyFoot {...props} />;
 }
 
 /** The poll / lineup page Discussion card (see file docstring). */

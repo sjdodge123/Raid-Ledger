@@ -155,6 +155,48 @@ describe('SubjectDiscussionCard — voter can reply (R7)', () => {
     });
 });
 
+describe('SubjectDiscussionCard — reply failures that change access', () => {
+    it.each([403, 409])('a %i on post refetches the summary, so the composer goes away', async (status) => {
+        serve(ready());
+        server.use(
+            http.post(`${POLL_URL}/replies`, () => {
+                serve(ready({ can: { read: true, reply: false } }));
+                return HttpResponse.json({ message: 'no' }, { status });
+            }),
+        );
+        renderCard();
+        await typeAndSubmit('Hello there');
+        await waitFor(() => expect(calls).toBe(2));
+        await waitFor(() => expect(screen.queryByTestId('forum-reply-composer')).toBeNull());
+        expect(screen.getByText(SUBJECT_READER_NOTE.poll)).toBeInTheDocument();
+    });
+
+    it('a 429 on post does not refetch the summary (access has not changed)', async () => {
+        serve(ready());
+        failReplies(429);
+        renderCard();
+        await typeAndSubmit('Hello there');
+        expect(await screen.findByText(SUBJECT_REPLY_TOO_FAST)).toBeInTheDocument();
+        expect(calls).toBe(1);
+    });
+});
+
+describe('SubjectDiscussionCard — composer is scoped to its subject', () => {
+    it('a draft on one cached poll does not carry over to another cached poll', async () => {
+        const user = userEvent.setup();
+        serve(ready());
+        serve(ready({ threadId: 6 }), `${API}/scheduling-polls/32/discussion`);
+        const view = renderCard();
+        await screen.findByTestId('forum-reply-input');
+        view.rerender(<SubjectDiscussionCard subject={{ kind: 'poll', id: 32 }} enabled />);
+        await waitFor(() => expect(calls).toBe(2));
+        await user.type(await screen.findByTestId('forum-reply-input'), 'Draft for poll 32');
+        view.rerender(<SubjectDiscussionCard subject={POLL} enabled />);
+        await waitFor(() => expect(screen.getByTestId('forum-reply-input')).toHaveValue(''));
+        expect(screen.queryByLabelText('Loading discussion')).toBeNull();
+    });
+});
+
 describe('SubjectDiscussionCard — read-only states', () => {
     it('non-voter: replies, the poll reader note, and no composer (R7)', async () => {
         serve(ready({ can: { read: true, reply: false } }));
