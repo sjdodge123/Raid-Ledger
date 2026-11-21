@@ -1,4 +1,5 @@
 import type { Logger } from '@nestjs/common';
+import { EmbedBuilder } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -19,7 +20,7 @@ import {
   isForumStarterRow,
 } from '../services/event-message-rows.helpers';
 import type { PlannedVoiceSettingsSource } from '../services/planned-ephemeral-voice.helpers';
-import { EMBED_STATES } from '../discord-bot.constants';
+import { EMBED_COLORS, EMBED_STATES } from '../discord-bot.constants';
 import { deleteRecordBump } from '../processors/embed-sync-bump.helpers';
 import type { EventPayload } from './event.listener';
 
@@ -55,6 +56,15 @@ export async function findEventMessages(
         eq(schema.discordEventMessages.guildId, guildId),
       ),
     );
+}
+
+/**
+ * Codex P2: whether the event still lacks its channel announcement. A forum
+ * post's starter row (ROK-2292) is not an announcement, so it must not stop
+ * `event.updated` from posting the missing one.
+ */
+export function lacksAnnouncement(records: readonly MessageRecord[]): boolean {
+  return records.every((record) => isForumStarterRow(record));
 }
 
 /** Look up the Discord message record for game affinity notifications. */
@@ -194,8 +204,14 @@ export async function cancelEmbedRecord(
   eventId: number,
 ): Promise<void> {
   try {
-    const cancelled = deps.embedFactory.buildEventCancelled(event, context);
-    const edit = await deps.messageEditor.edit(record, cancelled, {
+    // A cancelled card carries no buttons on either row kind (pre-ROK-2292
+    // announcement behaviour), whatever rows the factory would attach.
+    const { embed, content } = deps.embedFactory.buildEventCancelled(
+      event,
+      context,
+    );
+    const card = content ? { embed, content } : { embed };
+    const edit = await deps.messageEditor.edit(record, card, {
       withContent: true,
     });
     if (edit === 'gone') return;
@@ -215,17 +231,28 @@ export async function cancelEmbedRecord(
   }
 }
 
+/** The button-free card a deleted event's forum post is left showing. */
+export function removedStarterEmbed(): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(EMBED_COLORS.ERROR)
+    .setTitle('Event removed')
+    .setDescription('This event was deleted. Signups are closed.');
+}
+
 /**
  * Delete a Discord message and remove the DB record. A forum post's starter
- * row (ROK-2292) is removed from the DB only — deleting a starter message would
- * delete the whole post; the forum lifecycle closes it instead.
+ * row (ROK-2292) is never deleted on Discord (that would delete the whole
+ * post; the forum lifecycle closes it): its card is edited to a button-free
+ * "removed" card first so nobody signs up to a deleted event.
  */
 export async function deleteEmbedRecord(
   deps: EventListenerDeps,
   record: MessageRecord,
   eventId: number,
 ): Promise<void> {
-  if (!isForumStarterRow(record)) {
+  if (isForumStarterRow(record)) {
+    await retireStarterCard(deps, record, eventId);
+  } else {
     await deps.clientService.deleteMessage(record.channelId, record.messageId);
     deps.logger.log(
       `Deleted Discord message for event ${eventId} (msg: ${record.messageId})`,
@@ -234,6 +261,21 @@ export async function deleteEmbedRecord(
   await deps.db
     .delete(schema.discordEventMessages)
     .where(eq(schema.discordEventMessages.id, record.id));
+}
+
+/** Best effort: a failed edit is logged and the row is still dropped. */
+async function retireStarterCard(
+  deps: EventListenerDeps,
+  record: MessageRecord,
+  eventId: number,
+): Promise<void> {
+  try {
+    await deps.messageEditor.edit(record, { embed: removedStarterEmbed() });
+  } catch (error) {
+    deps.logger.warn(
+      `Failed to retire forum starter for deleted event ${eventId}: ${String(error)}`,
+    );
+  }
 }
 
 /** Update embed state for all records of an event. */

@@ -34,6 +34,7 @@ import {
   updateEmbedStateForRecords,
   getReschedulingPollId,
   isAdHocEvent,
+  lacksAnnouncement,
   applyEmbedUpdates,
   fireScheduledEventUpdate,
   type EventListenerDeps,
@@ -136,8 +137,13 @@ export class DiscordEventListener {
     if (!this.clientService.isConnected()) return;
     if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
-    if (records.length === 0) return this.handleMissingEmbedOnUpdate(payload);
-    await this.updateExistingEmbeds(payload, records, isRescheduling);
+    if (records.length > 0) {
+      await this.updateExistingEmbeds(payload, records, isRescheduling);
+    }
+    // Codex P2 (ROK-2292): a forum starter row is not the announcement.
+    if (lacksAnnouncement(records)) {
+      await this.handleMissingEmbedOnUpdate(payload);
+    }
   }
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)

@@ -24,7 +24,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { resolveGameHubLinkSafe } from '../channel-lifecycle/hub-link.resolver';
 import { hubLinkPart } from '../channel-lifecycle/embed-hub-link.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import type { EmbedState } from '../discord-bot.constants';
+import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import {
   buildEventData,
   computeEmbedState,
@@ -63,6 +63,22 @@ export async function deleteForumStarterRows(
     .where(and(eq(t.channelId, threadId), eq(t.messageId, threadId)));
 }
 
+/**
+ * Codex P2: an open reschedule poll holds the card at RESCHEDULING — the
+ * state `event.listener` gives the announcement. `computeEmbedState` never
+ * returns it, and the embed sync skips rescheduling events, so a post
+ * created/restored/backfilled mid-poll would otherwise keep a live card.
+ */
+export function starterState(
+  event: Pick<EventRow, 'reschedulingPollId'>,
+  computed: EmbedState,
+): EmbedState {
+  if ((event.reschedulingPollId ?? null) !== null) {
+    return EMBED_STATES.RESCHEDULING;
+  }
+  return computed;
+}
+
 @Injectable()
 export class EventForumStarterCards {
   private readonly logger = new Logger(EventForumStarterCards.name);
@@ -94,7 +110,7 @@ export class EventForumStarterCards {
       this.channelResolver,
       this.settings,
     );
-    const state = computeEmbedState(event, data);
+    const state = starterState(event, computeEmbedState(event, data));
     const context = await this.context(event);
     const built = this.factory.buildEventEmbed(data, context, { state });
     return { embeds: [built.embed], components: embedComponents(built), state };
