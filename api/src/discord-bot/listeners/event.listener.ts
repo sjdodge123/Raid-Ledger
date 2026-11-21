@@ -327,13 +327,7 @@ export class DiscordEventListener {
       this.logger.log(
         `Rescheduled event ${payload.eventId} is now within lead-time, posting`,
       );
-      const posted = await this.embedPoster.postEmbed(
-        payload.eventId,
-        payload.event,
-        payload.gameId,
-        payload.recurrenceGroupId,
-        payload.notificationChannelOverride,
-      );
+      const posted = await this.postEmbed(payload);
       if (posted) await this.announceGroup(payload.eventId);
     }
   }

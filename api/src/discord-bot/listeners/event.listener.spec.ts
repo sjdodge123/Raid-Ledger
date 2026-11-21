@@ -223,6 +223,7 @@ describe('DiscordEventListener', () => {
 
   describe('handleEventUpdated', () => {
     eventUpdatedTests();
+    eventUpdatedStarterTests();
   });
 
   describe('ad-hoc guard (ROK-1766)', () => {
@@ -324,6 +325,22 @@ function eventCreatedTests() {
     const adHocPayload: EventPayload = { ...mockPayload, isAdHoc: true };
     await listener.handleEventCreated(adHocPayload);
     expect(eventLifecycleQueue.enqueue).not.toHaveBeenCalled();
+  });
+}
+
+function eventUpdatedStarterTests() {
+  it('ROK-2292: a forum starter row alone still posts the missing announcement', async () => {
+    const starter = { ...mockRecord, channelId: 'thr-1', messageId: 'thr-1' };
+    mockDb.select.mockReturnValue(createSelectChainWithRecord(starter));
+    mockDb.update.mockReturnValue(createUpdateChain());
+    const edit = jest
+      .spyOn(testModule.get(EventEmbedMessageEditor), 'edit')
+      .mockResolvedValue('edited');
+    await listener.handleEventUpdated(mockPayload);
+    expect(edit).toHaveBeenCalledWith(starter, expect.anything(), {
+      withContent: true,
+    });
+    expect(embedPoster.postEmbed).toHaveBeenCalledTimes(1);
   });
 }
 
