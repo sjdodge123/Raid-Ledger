@@ -35,6 +35,7 @@ export const NOTIFICATION_TYPES = [
   'hub_proposal_reviewed',
   'valheim_claim_suggestion',
   'gg_ready',
+  'calendar_needs_reconnect',
   'system',
 ] as const;
 
@@ -88,6 +89,8 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   // ROK-1933 Q7 (recommended, not yet ruled): a Discord DM only.
   valheim_claim_suggestion: { inApp: false, push: false, discord: true },
   gg_ready: { inApp: true, push: false, discord: true },
+  // ROK-1866 D4: one nudge per reconnect episode, in-app + DM, default on.
+  calendar_needs_reconnect: { inApp: true, push: false, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 

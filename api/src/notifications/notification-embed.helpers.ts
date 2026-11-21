@@ -71,6 +71,7 @@ export const NOTIFICATION_EMBED_STATES: Record<NotificationType, EmbedState> = {
   valheim_claim_suggestion: 'needs_you',
   // ROK-2187: "your GG <year> is ready" announces, asks nothing.
   gg_ready: 'announcing',
+  calendar_needs_reconnect: 'needs_you',
   user_deactivated_discord: 'done',
   user_reactivated_discord: 'done',
   post_event_followup: 'done',
@@ -139,6 +140,7 @@ const TYPE_EMOJI: Record<string, string> = {
   hub_proposal_reviewed: '🏕️',
   valheim_claim_suggestion: '🛡️',
   gg_ready: '🎮',
+  calendar_needs_reconnect: '📅',
   role_gap_alert: '\u26A0\uFE0F',
 };
 
@@ -175,6 +177,7 @@ const TYPE_LABEL: Record<string, string> = {
   hub_proposal_reviewed: 'Hub Proposal Reviewed',
   valheim_claim_suggestion: 'Raid Ledger · Valheim',
   gg_ready: 'GG',
+  calendar_needs_reconnect: 'Calendar',
   role_gap_alert: 'Role Gap Alert',
 };
 

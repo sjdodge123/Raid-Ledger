@@ -13,6 +13,7 @@ import type { Guild } from 'discord.js';
 import {
   listAllGuildMemberAvatars,
   listGuildForumChannels,
+  listGuildMembersForReminders,
   listGuildTextChannels,
 } from './discord-bot-client.guild.helpers';
 
@@ -125,5 +126,31 @@ describe('listAllGuildMemberAvatars (ROK-1282, ROK-1714)', () => {
 
   it('returns null when the bot is disconnected (no guild)', async () => {
     expect(await listAllGuildMemberAvatars(null)).toBeNull();
+  });
+});
+
+describe('listGuildMembersForReminders (ROK-2284)', () => {
+  it('pages the REST member list and never sends a gateway op-8 fetch', async () => {
+    const joinedAt = new Date('2026-11-01T00:00:00Z');
+    const page = new Collection<string, unknown>([
+      ['u-1', { user: { id: 'u-1', bot: false }, joinedAt }],
+      ['b-1', { user: { id: 'b-1', bot: true }, joinedAt: null }],
+    ]);
+    const list = jest.fn().mockResolvedValue(page);
+    const fetch = jest.fn().mockRejectedValue(new Error('op 8 rate limited'));
+    const guild = { members: { list, fetch } } as unknown as Guild;
+
+    const result = await listGuildMembersForReminders(guild);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledWith({ limit: 1000 });
+    expect(result).toEqual([
+      { discordId: 'u-1', isBot: false, joinedAt },
+      { discordId: 'b-1', isBot: true, joinedAt: null },
+    ]);
+  });
+
+  it('returns null when the bot is disconnected', async () => {
+    expect(await listGuildMembersForReminders(null)).toBeNull();
   });
 });
