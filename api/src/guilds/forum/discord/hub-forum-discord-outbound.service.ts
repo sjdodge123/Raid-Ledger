@@ -4,15 +4,12 @@ import { ThreadRenameBudget } from '../../../discord-bot/lfg-board/lfg-board-thr
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
-import { toPerson, type HubPostPersonRow } from '../../posts/hub-posts.helpers';
+import type { HubPostPersonRow } from '../../posts/hub-posts.helpers';
 import type { ForumOp, HubForumChange } from '../hub-forum.emit';
 import { findReply, findThread } from '../hub-forum.queries';
 import {
-  absoluteAvatarUrl,
   discordThreadName,
-  forumThreadUrl,
   truncateForDiscord,
-  webhookUsername,
 } from './hub-forum-discord-content';
 import { EventPostOutbound } from './hub-forum-discord-event-outbound.service';
 import { syncBornAt } from './hub-forum-discord-event-outbound.queries';
@@ -23,6 +20,11 @@ import {
   type OutboundAuthor,
   type OutboundTarget,
 } from './hub-forum-discord-outbound.discord';
+import {
+  outboundUrl,
+  outboundVoice,
+  type OutboundRef,
+} from './hub-forum-discord-outbound.voice';
 import {
   findBinding,
   type BindingWithForum,
@@ -327,6 +329,17 @@ export class HubForumDiscordOutboundService {
     );
   }
 
+  private voice(
+    row: HubPostPersonRow | null,
+    ref: OutboundRef,
+  ): Promise<[OutboundAuthor, string]> {
+    return outboundVoice(this.settings, row, ref);
+  }
+
+  private url(ref: OutboundRef): Promise<string> {
+    return outboundUrl(this.settings, ref);
+  }
+
   private async attempt(
     link: links.ForumLink,
     run: () => Promise<void>,
@@ -339,26 +352,5 @@ export class HubForumDiscordOutboundService {
         `Discord forum sync failed for link ${link.id}: ${describe(err)}`,
       );
     }
-  }
-
-  private async voice(
-    row: HubPostPersonRow | null,
-    ref: { guildId: number; threadId: number; replyId?: number },
-  ): Promise<[OutboundAuthor, string]> {
-    const clientUrl = await getClientUrl(this.settings);
-    const person = toPerson(row);
-    const author = {
-      username: webhookUsername(person.displayName),
-      avatarURL: absoluteAvatarUrl(person.avatarUrl, clientUrl),
-    };
-    return [author, forumThreadUrl(clientUrl, ref.guildId, ref)];
-  }
-
-  private async url(ref: {
-    guildId: number;
-    threadId: number;
-    replyId?: number;
-  }): Promise<string> {
-    return forumThreadUrl(await getClientUrl(this.settings), ref.guildId, ref);
   }
 }
