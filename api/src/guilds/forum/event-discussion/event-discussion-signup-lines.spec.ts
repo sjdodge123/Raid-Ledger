@@ -7,6 +7,7 @@ import {
 import type { KeyedSignupLineMember } from '../discord/hub-forum-discord-signup-lines.queries';
 import {
   planRlLines,
+  plainLineEmoji,
   SEED_MEMBER_KEY,
   userIdOfKey,
 } from './event-discussion-signup-lines';
@@ -33,7 +34,14 @@ function member(
   over: Partial<SignupLineState> = {},
 ): KeyedSignupLineMember {
   const userId = userIdOfKey(key);
-  return { memberKey: key, userId, displayName: name, state: state(over) };
+  const discordId = key.startsWith('d:') ? key.slice(2) : null;
+  return {
+    memberKey: key,
+    userId,
+    discordId,
+    displayName: name,
+    state: state(over),
+  };
 }
 
 const members = (...ms: KeyedSignupLineMember[]) =>
@@ -176,5 +184,61 @@ describe('ROK-2274 userIdOfKey', () => {
   it('reads an account key; a guest key has none', () => {
     expect(userIdOfKey('u:42')).toBe(42);
     expect(userIdOfKey('d:42')).toBeNull();
+  });
+});
+
+describe('Codex P2-4 — a guest claiming an account keeps their line history', () => {
+  const GUEST = member('d:555', 'Gus');
+  const CLAIMED: KeyedSignupLineMember = {
+    ...member('u:5', 'Gus'),
+    discordId: '555',
+  };
+
+  it('moves the guest state to the account key: no leave or join line', () => {
+    const out = plan(prior(GUEST), members(CLAIMED));
+    expect(out.lines).toEqual([]);
+    expect(out.upsert.get('u:5')).toEqual({ ...GUEST.state, name: 'Gus' });
+    expect(out.drop).toEqual(['d:555']);
+  });
+
+  it('a real change made with the claim gets one line, under the account key', () => {
+    const tentative = { ...CLAIMED, state: state({ status: 'tentative' }) };
+    const out = plan(prior(GUEST), members(tentative));
+    expect(out.lines.map((l) => [l.memberKey, l.subjectUserId])).toEqual([
+      ['u:5', 5],
+    ]);
+    expect(out.lines[0]?.body).not.toContain('declined');
+    expect(out.drop).toEqual(['d:555']);
+  });
+
+  it('leaves the guest key alone while that guest signup still exists', () => {
+    const out = plan(prior(GUEST), members(GUEST, CLAIMED));
+    expect(out.drop).toEqual([]);
+    expect(out.upsert.has('d:555')).toBe(false);
+  });
+});
+
+describe('Codex P2-3 — RL thread glyphs are plain text', () => {
+  const discord: SignupLineEmoji = {
+    role: (r) => (r === 'tank' ? '<:rl_tank:123>' : '\uD83D\uDC9A'),
+    klass: () => '<a:rl_warrior:9>',
+  };
+  const plain = plainLineEmoji(discord);
+
+  it('a custom role token becomes its Unicode fallback; Unicode passes through', () => {
+    expect(plain.role('tank')).toBe('\uD83D\uDEE1\uFE0F');
+    expect(plain.role('healer')).toBe('\uD83D\uDC9A');
+  });
+
+  it('a custom class token (no Unicode fallback) is dropped', () => {
+    expect(plain.klass('Warrior')).toBe('');
+  });
+
+  it('a line written with them carries no Discord emoji token', () => {
+    const ch = { name: 'Thrall', className: 'Warrior', spec: null };
+    const cur = state({ role: 'tank', character: ch });
+    const text = signupLineText(null, cur, 'Ann', plain) ?? '';
+    expect(text).not.toMatch(/<a?:\w+:\d+>/);
+    expect(text).toContain('Thrall (Warrior)');
   });
 });

@@ -9,6 +9,7 @@
  * line — consecutive lines are never merged (ruling Q2). Members are keyed
  * `u:<userId>` / `d:<discordId>`, so local accounts get lines (Q5).
  */
+import { UNICODE_FALLBACK } from '../../../discord-bot/services/discord-emoji.constants';
 import {
   signupLineText,
   type SignupLineEmoji,
@@ -79,6 +80,54 @@ function seedPlan(members: Members): RlLinePlan {
   return { seed: true, lines: [], upsert, drop: [] };
 }
 
+/** A Discord custom emoji token (`<:rl_tank:123>`, animated `<a:…>`). */
+const CUSTOM_EMOJI = /<a?:\w+:\d+>/;
+
+/**
+ * Codex P2-3 — the glyphs as plain text for the Raid Ledger thread, which
+ * cannot render a Discord custom emoji token: a role token becomes its
+ * Unicode fallback, a class token (none exists) is dropped.
+ */
+export function plainLineEmoji(discord: SignupLineEmoji): SignupLineEmoji {
+  const plain = (glyph: string, fallback: string): string =>
+    CUSTOM_EMOJI.test(glyph) ? fallback : glyph;
+  return {
+    role: (r) => plain(discord.role(r), UNICODE_FALLBACK[r] ?? ''),
+    klass: (c) => plain(discord.klass(c), ''),
+  };
+}
+
+/**
+ * Codex P2-4 — a Discord guest who claims an account moves from `d:<id>`
+ * to `u:<userId>`: their written state moves with them (upsert the new
+ * key, drop the old) so the diff sees one member, not a leave + a join.
+ * Skipped while the guest signup itself still exists.
+ */
+function claimedMoves(prior: Prior, members: Members): RlLinePlan {
+  const upsert = new Map<string, WrittenLineState>();
+  const drop: string[] = [];
+  for (const [key, member] of members) {
+    const guestKey = member.discordId === null ? null : `d:${member.discordId}`;
+    if (guestKey === null || member.userId === null) continue;
+    const was = prior.get(guestKey);
+    if (!was || prior.has(key) || members.has(guestKey)) continue;
+    upsert.set(key, was);
+    drop.push(guestKey);
+  }
+  return { seed: false, lines: [], upsert, drop };
+}
+
+/** The prior states with the claimed moves applied. */
+function movedPrior(
+  prior: Prior,
+  moves: RlLinePlan,
+): Map<string, WrittenLineState> {
+  const out = new Map(prior);
+  for (const key of moves.drop) out.delete(key);
+  for (const [key, state] of moves.upsert) out.set(key, state);
+  return out;
+}
+
 /** Sync loop 3: a reset's own status move is written silently. */
 function resynced(
   prior: Prior,
@@ -106,12 +155,14 @@ export function planRlLines(
   resyncing: boolean,
 ): RlLinePlan {
   if (prior === null) return seedPlan(members);
-  const upsert = resyncing
-    ? resynced(prior, members)
-    : new Map<string, WrittenLineState>();
-  const base = new Map([...prior, ...upsert]);
+  const moves = claimedMoves(prior, members);
+  const moved = movedPrior(prior, moves);
+  const upsert = new Map(moves.upsert);
+  if (resyncing)
+    for (const [k, v] of resynced(moved, members)) upsert.set(k, v);
+  const base = new Map([...moved, ...upsert]);
   const lines: RlSignupLine[] = [];
-  const drop: string[] = [];
+  const drop = [...moves.drop];
   for (const key of new Set([...base.keys(), ...members.keys()])) {
     const was = base.get(key) ?? null;
     const member = members.get(key);

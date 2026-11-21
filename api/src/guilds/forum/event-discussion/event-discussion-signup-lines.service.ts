@@ -9,7 +9,7 @@ import {
 } from '../discord/hub-forum-discord-signup-lines';
 import { lineResyncKey } from '../discord/hub-forum-discord-signup-lines.flush';
 import type { ForumDiscordDb } from '../discord/hub-forum-discord.queries';
-import { planRlLines } from './event-discussion-signup-lines';
+import { plainLineEmoji, planRlLines } from './event-discussion-signup-lines';
 import {
   writeRlSignupLines,
   type RlLineOutcome,
@@ -40,7 +40,8 @@ export class EventDiscussionSignupLines {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     emoji: DiscordEmojiService,
   ) {
-    this.lineEmoji = signupLineEmoji(emoji);
+    // Codex P2-3: plain text — the RL thread cannot render `<:rl_tank:…>`.
+    this.lineEmoji = plainLineEmoji(signupLineEmoji(emoji));
   }
 
   /**

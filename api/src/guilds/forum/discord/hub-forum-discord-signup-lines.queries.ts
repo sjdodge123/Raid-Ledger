@@ -37,6 +37,11 @@ export interface KeyedSignupLineMember {
   memberKey: string;
   /** The account the line is about; null for a Discord guest. */
   userId: number | null;
+  /**
+   * The member's real Discord id (account's, else the signup's), null when
+   * none — Codex P2-4: how a claimed guest's `d:` history is found.
+   */
+  discordId: string | null;
   displayName: string;
   state: SignupLineState;
 }
@@ -111,9 +116,15 @@ function displayNameOf(row: Row): string {
   );
 }
 
+/** The signer's real Discord id (account's first), or null. */
+function realDiscordIdOf(row: Row): string | null {
+  const id = row.userDiscordId ?? row.discordUserId;
+  return id !== null && REAL_DISCORD_ID.test(id) ? id : null;
+}
+
 function toMember(row: Row): SignupLineMember | null {
-  const discordId = row.userDiscordId ?? row.discordUserId;
-  if (discordId === null || !REAL_DISCORD_ID.test(discordId)) return null;
+  const discordId = realDiscordIdOf(row);
+  if (discordId === null) return null;
   return { discordId, displayName: displayNameOf(row), state: toState(row) };
 }
 
@@ -174,6 +185,7 @@ export async function loadSignupLineStatesByMemberKey(
     out.set(memberKey, {
       memberKey,
       userId: row.userId,
+      discordId: realDiscordIdOf(row),
       displayName: displayNameOf(row),
       state: toState(row),
     });
