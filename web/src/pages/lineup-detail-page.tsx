@@ -28,6 +28,7 @@ import { TieReadinessSection } from '../components/lineups/tie/TieReadinessSecti
 import { LineupAbortedBanner } from '../components/lineups/LineupAbortedBanner';
 import { useLineupAbortedAt } from '../lib/lineup-aborted';
 import { useNominateRosterSize } from '../components/lineups/lineup-roster-size';
+import { SubjectDiscussionCardLazy } from '../components/discussion/subject-discussion-lazy';
 
 /**
  * Render the lineup invitee panel (ROK-1065, ROK-1440). Creator/operator
@@ -287,6 +288,10 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         leaderboardRef={leaderboardRef}
         bracketRef={bracketRef}
       />
+
+      <div className="mt-6">
+        <SubjectDiscussionCardLazy subject={{ kind: 'lineup', id: lineup.id }} enabled={user != null} />
+      </div>
 
       <div className="mt-6">
         <ActivityTimeline

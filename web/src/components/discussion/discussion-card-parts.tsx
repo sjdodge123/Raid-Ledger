@@ -116,14 +116,17 @@ export function SubjectDiscussionFrame({
     kind,
     d,
     foot,
+    flush = false,
 }: {
     kind: Kind;
     d: SubjectDiscussionReady;
     foot: ReactNode;
+    /** True drops the bottom margin, for pages that space their sections (`space-y-*`). */
+    flush?: boolean;
 }): JSX.Element {
     return (
         <section
-            className="mb-6 rounded-xl border border-edge bg-surface p-4"
+            className={`${flush ? '' : 'mb-6 '}rounded-xl border border-edge bg-surface p-4`}
             data-testid={`${kind}-discussion-card`}
             aria-labelledby={`${kind}-discussion-title`}
         >
@@ -135,10 +138,10 @@ export function SubjectDiscussionFrame({
 }
 
 /** The loading skeleton every Discussion card shows while its summary is in flight. */
-export function DiscussionCardSkeleton(): JSX.Element {
+export function DiscussionCardSkeleton({ flush = false }: { flush?: boolean }): JSX.Element {
     return (
         <div
-            className="mb-6 h-24 animate-pulse rounded-xl border border-edge bg-panel"
+            className={`${flush ? '' : 'mb-6 '}h-24 animate-pulse rounded-xl border border-edge bg-panel`}
             aria-busy="true"
             aria-label="Loading discussion"
         />
