@@ -44,12 +44,17 @@ import {
   type PingPost,
 } from './hub-forum-discord-signup-pings.target';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
-import { EventDiscussionSignupLines } from '../event-discussion/event-discussion-signup-lines.service';
+import {
+  EventDiscussionSignupLines,
+  flagBothPassesSaw,
+  type RlLineFlush,
+} from '../event-discussion/event-discussion-signup-lines.service';
 
 /**
  * What one flush did. `offline` / `pending` / `incomplete` (a removal
- * Discord refused — Codex P2-2) mean "try again" (the processor retries);
- * the rest are final for this flush.
+ * Discord refused — Codex P2-2) / `rl_failed` (the Raid Ledger thread
+ * pass threw — ROK-2274 Codex P2-1) mean "try again" (the processor
+ * retries); the rest are final for this flush.
  */
 export type SignupPingOutcome =
   | 'unbound'
@@ -58,6 +63,7 @@ export type SignupPingOutcome =
   | 'closed'
   | 'pending'
   | 'incomplete'
+  | 'rl_failed'
   | 'pinged';
 
 /** The pinged set outlives the event by a week, then Redis drops it. */
@@ -102,15 +108,16 @@ export class HubForumDiscordSignupPings {
     if (!ref) {
       // No Discord flush will take a reset flag the RL pass used.
       await this.takeIfStable(eventId, rl.flags);
-      return 'unbound';
+      return rl.outcome === 'failed' ? 'rl_failed' : 'unbound';
     }
     const keys = flushKeysFor(eventId, pingScope(ref));
-    const outcome = await this.flushBound(ref, eventId, keys);
+    const outcome = await this.flushBound(ref, eventId, keys, rl);
     // Every bound flush (review r1 m2): a rescheduled event moves the expiry.
     const at = ref.endsAt.getTime() + SET_GRACE_MS;
     await this.redis.pexpireat(keys.pinged, at);
     await this.redis.pexpireat(keys.lines, at);
-    return outcome;
+    // Codex P2-1: the Discord half is done; the RL half is retried.
+    return rl.outcome === 'failed' ? 'rl_failed' : outcome;
   }
 
   /**
@@ -159,13 +166,16 @@ export class HubForumDiscordSignupPings {
     ref: PingThreadRef,
     eventId: number,
     keys: FlushKeys,
+    rl: RlLineFlush,
   ): Promise<SignupPingOutcome> {
     const { members, flags } = await this.readMembers(eventId);
     const pinged = await this.redis.smembers(keys.pinged);
     let posted = await this.postedOrSeed(keys.lines, pinged, members);
     if (flags.some((f) => f !== null)) {
       posted = await this.resync(keys.lines, posted, members);
-      await this.takeIfStable(eventId, flags);
+      // Codex P2-2: used up only once the RL pass re-synced with it too.
+      const flag = flagBothPassesSaw(flags, rl);
+      if (flag !== null) await this.takeLanded(eventId, flag);
     }
     const plan = planLineFlush(pinged, posted, members, this.lineEmoji);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only

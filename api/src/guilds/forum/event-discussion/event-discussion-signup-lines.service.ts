@@ -26,6 +26,23 @@ export interface RlLineFlush {
 }
 
 /**
+ * Codex P2-2 — the reset flag the Discord pass may take: the one it read
+ * unchanged across its signup read, and only when the RL pass also read it
+ * unchanged (or had no thread to resync). A failed RL pass (flags null)
+ * takes nothing, so its retry still re-syncs instead of writing false
+ * confirmation / rejoin lines.
+ */
+export function flagBothPassesSaw(
+  [before, after]: [string | null, string | null],
+  rl: RlLineFlush,
+): string | null {
+  if (before === null || before !== after) return null;
+  if (rl.outcome === 'no-thread') return before;
+  const [rlBefore, rlAfter] = rl.flags;
+  return rlBefore === before && rlAfter === before ? before : null;
+}
+
+/**
  * ROK-2274 — signup lines inside a hub event's Raid Ledger thread, bound to
  * Discord or not (ruling Q1). Run by the signup-ping flush BEFORE its
  * Discord half (D5): same debounce, same triggers, same reset flag.
@@ -46,8 +63,9 @@ export class EventDiscussionSignupLines {
 
   /**
    * Never throws, so a DB hiccup here cannot hold back the Discord lines.
-   * Nothing is lost: the transaction rolled back, so the next flush's diff
-   * still carries the change.
+   * Nothing is lost: the transaction rolled back, and `failed` makes the
+   * signup-ping flush ask for a retry (Codex P2-1), whose diff still
+   * carries the change.
    */
   async flush(eventId: number): Promise<RlLineFlush> {
     try {
