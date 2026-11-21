@@ -106,6 +106,31 @@ export async function listAllGuildMemberAvatars(
   return new Map(members.map((m) => [m.user.id, m.user.avatar ?? null]));
 }
 
+/** One guild member as the sign-in reminder job sees it (ROK-2284). */
+export interface ReminderRosterMember {
+  discordId: string;
+  isBot: boolean;
+  /** When they joined this guild; null when Discord did not say. */
+  joinedAt: Date | null;
+}
+
+/**
+ * Every guild member with the bot flag and join date (ROK-2284), from the same
+ * full `guild.members.fetch()` as `listAllGuildMemberAvatars` (needs the
+ * Guild Members intent). Null when the bot is disconnected — a no-op tick.
+ */
+export async function listGuildMembersForReminders(
+  guild: Guild | null,
+): Promise<ReminderRosterMember[] | null> {
+  if (!guild) return null;
+  const members = await guild.members.fetch();
+  return members.map((m) => ({
+    discordId: m.user.id,
+    isBot: m.user.bot,
+    joinedAt: m.joinedAt ?? null,
+  }));
+}
+
 /** ROK-1352: List category channels (parents for ephemeral voice channels). */
 export function listGuildCategories(
   guild: Guild | null,

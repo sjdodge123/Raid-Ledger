@@ -24,6 +24,12 @@ export const PLUGIN_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Delivers GG <year> on the configured December day: computes every snapshot, posts the announcement once, then sends up to 25 player notifications every 5 minutes',
     category: 'Notifications',
   },
+  // ROK-2284: Core's sign-in reminder DMs (direct, never the notification queue).
+  SigninReminderCron_tick: {
+    description:
+      'DMs guild members who have never signed in to Raid Ledger a /login reminder, at most 25 per hour, every few weeks up to a lifetime maximum (admin settings)',
+    category: 'Notifications',
+  },
   // ROK-2208 §5.6: Core's hub Forum → Discord outbound retry sweep.
   HubForumDiscordSync_retrySweep: {
     description:
