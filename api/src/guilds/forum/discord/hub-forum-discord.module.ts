@@ -35,6 +35,7 @@ import { HubForumDiscordService } from './hub-forum-discord.service';
 import { HubForumDiscordDecor } from './hub-forum-discord-decor.apply';
 import { HubForumBindLock } from './hub-forum-discord.bind-lock';
 import { HubForumDiscordDecorBackfill } from './hub-forum-discord-decor.backfill';
+import { ForumStarterBackfill } from './forum-starter.backfill';
 import { EventPlanningForumRename } from './event-planning-forum.rename';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
 import { EventPlanningPostsService } from './event-planning-posts.service';
@@ -109,6 +110,7 @@ import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-emb
     HubForumDiscordSubjectListener,
     HubForumDiscordDecor,
     HubForumDiscordDecorBackfill,
+    ForumStarterBackfill,
     EventPlanningForumRename,
     EventPlanningPostsGateway,
     EventPlanningPostsService,
