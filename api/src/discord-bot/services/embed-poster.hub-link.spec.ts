@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 /**
  * ROK-1872 (ROK-1428 §2.8/§2.9): the event card's context carries the hub
  * link resolved from the event's game + tagged hub; no hub ⇒ no `hubLink`
@@ -54,6 +55,7 @@ async function setup(guilds: GuildRows): Promise<{
   const module = await Test.createTestingModule({
     providers: [
       EmbedPosterService,
+      { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       { provide: DrizzleAsyncProvider, useValue: routedDb(guilds) },
       {
         provide: DiscordBotClientService,

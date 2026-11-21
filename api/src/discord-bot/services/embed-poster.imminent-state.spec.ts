@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 /**
  * ROK-1622: an event created INSIDE the 2h window used to post cyan
  * `announcing` (POSTED) because `postOrEditEmbed` called `buildEventEmbed`
@@ -77,6 +78,7 @@ describe('EmbedPosterService — first post derives its own state (ROK-1622)', (
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmbedPosterService,
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         {
           provide: DiscordBotClientService,

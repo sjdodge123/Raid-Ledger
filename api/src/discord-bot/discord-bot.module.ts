@@ -69,6 +69,7 @@ import {
 } from './queues/event-lifecycle.queue';
 import { EmbedSyncProcessor } from './processors/embed-sync.processor';
 import { EventEmbedMessageEditor } from './services/event-embed-message.editor';
+import { EventForumStarterCards } from './services/event-forum-starter.cards';
 import { AdHocGracePeriodProcessor } from './processors/ad-hoc-grace-period.processor';
 import { DepartureGraceProcessor } from './processors/departure-grace.processor';
 import { EventLifecycleProcessor } from './processors/event-lifecycle.processor';
@@ -186,6 +187,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     EmbedSyncQueueService,
     EmbedSyncProcessor,
     EventEmbedMessageEditor,
+    EventForumStarterCards,
     AdHocGracePeriodQueueService,
     AdHocGracePeriodProcessor,
     DepartureGraceQueueService,
@@ -274,6 +276,8 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     // The DEMO_MODE lfg/end-session endpoint (DemoTestLfgController) tears down
     // the session's temp channel, which a CI run would otherwise orphan.
     EphemeralVoiceService,
+    // ROK-2292 D2: the forum creators open an event post with its card.
+    EventForumStarterCards,
   ],
 })
 export class DiscordBotModule {}

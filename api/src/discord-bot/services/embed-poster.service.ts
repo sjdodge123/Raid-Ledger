@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EmbedBuilder } from 'discord.js';
@@ -34,6 +35,10 @@ import {
   hubLinkPart,
   resolveEventHubLink,
 } from '../channel-lifecycle/embed-hub-link.helpers';
+import {
+  EVENT_ANNOUNCEMENT_POSTED,
+  type EventAnnouncementPostedPayload,
+} from './event-forum-starter.cards';
 
 interface ChannelOpts {
   gameId?: number | null | undefined;
@@ -62,6 +67,7 @@ export class EmbedPosterService {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /** Post an embed for an event to the appropriate Discord channel. */
@@ -253,6 +259,9 @@ export class EmbedPosterService {
       return false;
     }
     this.logger.log(`Posted embed for event ${eventId} (msg: ${message.id})`);
+    // ROK-2292 D8: the forum module opens the event's post now (idempotent).
+    const announced: EventAnnouncementPostedPayload = { eventId };
+    this.eventEmitter.emit(EVENT_ANNOUNCEMENT_POSTED, announced);
     return true;
   }
 
