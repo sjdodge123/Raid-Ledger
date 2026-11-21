@@ -8,6 +8,12 @@ import { UsersService } from '../users/users.service';
 import { assertKickCooldownOrClear } from './auth-status.helpers';
 import { signPurposeJwt, verifyPurposeJwt } from './purpose-jwt.helpers';
 import { consumeTokenOnce } from './single-use-token.helpers';
+import {
+  buildFragmentLink,
+  COMMAND_LINK_SRC,
+  isDiscordSnowflake,
+  type CommandLinkSrc,
+} from './discord-signin-link.helpers';
 
 /** One body for every redeem failure — no oracle (ROK-1366 AC4). */
 export const INVALID_MAGIC_LINK_MESSAGE = 'Invalid or expired sign-in link';
@@ -19,6 +25,14 @@ interface MagicLinkPayload {
   /** ROK-1823 D11: the user's token version at mint. Optional in the shape so
    * a claimless link is still CONSUMED before `redeem` refuses it. */
   tv?: number;
+  /** ROK-2283: 'cmd' when the Discord `/login` command minted the link. */
+  src?: unknown;
+}
+
+/** ROK-2283: options for `generateLink`. Omitted = today's link, unchanged. */
+export interface MagicLinkOptions {
+  /** Mark a link minted by the `/login` command; its redeem is a Discord sign-in. */
+  src?: CommandLinkSrc;
 }
 
 /** The user a redeemed link signs in, shaped for `AuthService.login`. */
@@ -28,6 +42,11 @@ export interface MagicLinkUser {
   role: UserRole;
   /** ROK-1823: the version `redeem` checked — the session binds to exactly it. */
   tokenVersion: number;
+  /**
+   * ROK-2283: set only when a `/login` link (`src:'cmd'`) is redeemed by a user
+   * with a real Discord id — the caller then emits AUTH_EVENTS.DISCORD_LOGIN.
+   */
+  commandDiscordId?: string;
 }
 
 function invalidLink(): UnauthorizedException {
@@ -54,23 +73,28 @@ export class MagicLinkService {
   /**
    * Build `<clientUrl><path>#token=<jwt>` (15m, `{sub, magicLink:true, tv}`), or
    * null when the user does not exist. The fragment never reaches a server.
+   * ROK-2283: `opts.src` adds a `src` claim; without it the token is unchanged.
    */
   async generateLink(
     userId: number,
     path: string,
     clientUrl: string,
+    opts: MagicLinkOptions = {},
   ): Promise<string | null> {
     const user = await this.usersService.findById(userId);
     if (!user) return null;
     const token = signPurposeJwt(
       this.jwtService,
       'magic-link',
-      { sub: user.id, magicLink: true, tv: user.tokenVersion },
+      {
+        sub: user.id,
+        magicLink: true,
+        tv: user.tokenVersion,
+        ...(opts.src !== undefined ? { src: opts.src } : {}),
+      },
       '15m',
     );
-    const url = new URL(path, clientUrl);
-    url.hash = `token=${encodeURIComponent(token)}`;
-    return url.toString();
+    return buildFragmentLink(clientUrl, path, token);
   }
 
   /**
@@ -89,11 +113,16 @@ export class MagicLinkService {
     await assertKickCooldownOrClear(this.db, user).catch(() => {
       throw invalidLink();
     });
+    const fromCommand =
+      payload.src === COMMAND_LINK_SRC && isDiscordSnowflake(user.discordId);
     return {
       id: user.id,
       username: user.username,
       role: user.role,
       tokenVersion: user.tokenVersion,
+      ...(fromCommand && user.discordId
+        ? { commandDiscordId: user.discordId }
+        : {}),
     };
   }
 
