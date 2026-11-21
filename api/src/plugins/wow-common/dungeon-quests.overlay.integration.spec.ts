@@ -27,6 +27,7 @@ interface QuestBody {
   rewardGold: number | null;
   rewardsJson: number[] | null;
   startsInsideDungeon: boolean;
+  startLocationUnconfirmed?: boolean;
   questGiverNpc: string | null;
   prerequisiteChain?: unknown;
 }
@@ -246,6 +247,7 @@ describe('Quest Prep overlay read path (ROK-2143)', () => {
     const only = await questOf(FURY.instanceId, OVERLAY_ONLY_ID);
     expectBlizzardValues(only, 'Only On Blizzard');
     expect(only.startsInsideDungeon).toBe(false);
+    expect(only.startLocationUnconfirmed).toBe(true);
   });
 });
 

@@ -93,6 +93,18 @@ export function isOverlayOnlyType(typeId: number | null): boolean {
 }
 
 /**
+ * ROK-2276: an overlay-only row has no start NPC or item, so only the inside
+ * allowlist says where it starts; any other one is "location not confirmed".
+ */
+function startLocationFields(
+  questId: number,
+): Pick<DungeonQuestDto, 'startsInsideDungeon' | 'startLocationUnconfirmed'> {
+  return INSIDE_DUNGEON_QUEST_IDS.has(questId)
+    ? { startsInsideDungeon: true }
+    : { startsInsideDungeon: false, startLocationUnconfirmed: true };
+}
+
+/**
  * A quest Blizzard lists for the dungeon that our JSON lacks (R4).
  * `rewardType` follows the curated rows: any reward item → `'choice'`
  * (the bundled JSON uses `'choice'` for single-item quests too; the card only
@@ -121,7 +133,7 @@ export function overlayOnlyDto(
     objectives: null,
     classRestriction: req.classRestriction,
     raceRestriction: req.raceRestriction,
-    startsInsideDungeon: INSIDE_DUNGEON_QUEST_IDS.has(row.questId),
+    ...startLocationFields(row.questId),
     sharable: true,
     rewardXp: row.rewardXp,
     rewardGold: row.rewardMoneyCopper,
