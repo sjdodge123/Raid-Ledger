@@ -158,21 +158,22 @@ function fakeRedis(clock: { now: number }) {
     }
   };
   const redis = {
-    incr: jest.fn(async (key: string) => {
+    incr: jest.fn((key: string) => {
       sweep(key);
       const next = (counts.get(key) ?? 0) + 1;
       counts.set(key, next);
-      return next;
+      return Promise.resolve(next);
     }),
-    expire: jest.fn(async (key: string, seconds: number) => {
+    expire: jest.fn((key: string, seconds: number) => {
       expiries.set(key, clock.now + seconds * 1000);
-      return 1;
+      return Promise.resolve(1);
     }),
-    ttl: jest.fn(async (key: string) => {
+    ttl: jest.fn((key: string) => {
       sweep(key);
-      if (!counts.has(key)) return -2;
+      if (!counts.has(key)) return Promise.resolve(-2);
       const at = expiries.get(key);
-      return at === undefined ? -1 : Math.ceil((at - clock.now) / 1000);
+      const left = at === undefined ? -1 : Math.ceil((at - clock.now) / 1000);
+      return Promise.resolve(left);
     }),
   };
   return { redis: redis as unknown as LoginRateLimitRedis, expiries };
