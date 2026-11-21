@@ -29,12 +29,28 @@ export interface SignupLineMember {
   state: SignupLineState;
 }
 
+/**
+ * ROK-2274 — a member as a Raid Ledger thread line names them, keyed by
+ * `signupMemberKey` (local accounts included: they have no Discord id).
+ */
+export interface KeyedSignupLineMember {
+  memberKey: string;
+  /** The account the line is about; null for a Discord guest. */
+  userId: number | null;
+  displayName: string;
+  state: SignupLineState;
+}
+
+/** Anything that runs the loader's select: the db or a transaction. */
+type SelectDb = Pick<ForumDiscordDb, 'select'>;
+
 type Row = Awaited<ReturnType<typeof selectRows>>[number];
 
-function selectRows(db: ForumDiscordDb, where: SQL | undefined) {
+function selectRows(db: SelectDb, where: SQL | undefined) {
   return db
     .select({
       status: signups.status,
+      userId: signups.userId,
       userDiscordId: users.discordId,
       discordUserId: signups.discordUserId,
       displayName: users.displayName,
@@ -86,15 +102,34 @@ function toState(row: Row): SignupLineState {
   };
 }
 
-function toMember(row: Row): SignupLineMember | null {
-  const discordId = row.userDiscordId ?? row.discordUserId;
-  if (discordId === null || !REAL_DISCORD_ID.test(discordId)) return null;
-  const displayName =
+function displayNameOf(row: Row): string {
+  return (
     row.displayName ??
     row.username ??
     row.discordUsername ??
-    UNKNOWN_MEMBER_NAME;
-  return { discordId, displayName, state: toState(row) };
+    UNKNOWN_MEMBER_NAME
+  );
+}
+
+function toMember(row: Row): SignupLineMember | null {
+  const discordId = row.userDiscordId ?? row.discordUserId;
+  if (discordId === null || !REAL_DISCORD_ID.test(discordId)) return null;
+  return { discordId, displayName: displayNameOf(row), state: toState(row) };
+}
+
+/**
+ * ROK-2274 — `u:<userId>` for an account, `d:<discordId>` for a Discord
+ * guest (no account); null when the signup has neither.
+ */
+export function signupMemberKey(
+  userId: number | null,
+  guestDiscordId: string | null,
+): string | null {
+  if (userId !== null) return `u:${userId}`;
+  if (guestDiscordId === null || !REAL_DISCORD_ID.test(guestDiscordId)) {
+    return null;
+  }
+  return `d:${guestDiscordId}`;
 }
 
 /**
@@ -120,6 +155,28 @@ export async function loadSignupLineStates(
   for (const row of await selectRows(db, where)) {
     const member = toMember(row);
     if (member && !out.has(member.discordId)) out.set(member.discordId, member);
+  }
+  return out;
+}
+
+/**
+ * ROK-2274 — every signup of `eventId` (any status) keyed by member key,
+ * accounts without a Discord id included. Runs on the db or a transaction.
+ */
+export async function loadSignupLineStatesByMemberKey(
+  db: SelectDb,
+  eventId: number,
+): Promise<Map<string, KeyedSignupLineMember>> {
+  const out = new Map<string, KeyedSignupLineMember>();
+  for (const row of await selectRows(db, eq(signups.eventId, eventId))) {
+    const memberKey = signupMemberKey(row.userId, row.discordUserId);
+    if (memberKey === null || out.has(memberKey)) continue;
+    out.set(memberKey, {
+      memberKey,
+      userId: row.userId,
+      displayName: displayNameOf(row),
+      state: toState(row),
+    });
   }
   return out;
 }

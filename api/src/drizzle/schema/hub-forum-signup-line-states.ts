@@ -6,7 +6,7 @@ import {
   timestamp,
   primaryKey,
 } from 'drizzle-orm/pg-core';
-import type { SignupLineState } from '../../guilds/forum/discord/hub-forum-discord-signup-lines';
+import type { WrittenLineState } from '../../guilds/forum/event-discussion/event-discussion-signup-lines';
 import { hubForumThreads } from './hub-forum';
 
 /**
@@ -14,7 +14,8 @@ import { hubForumThreads } from './hub-forum';
  * thread, one row per member per thread. Independent of the Discord binding
  * (unbound hubs get lines too) and written in the same transaction as the
  * line rows. `member_key` is `u:<userId>` for an account, `d:<discordId>` for
- * a Discord guest. First sight of a thread seeds these rows without lines.
+ * a Discord guest. First sight of a thread seeds these rows without lines
+ * (plus a `#seeded` marker row). `state` keeps the name the line used too.
  */
 export const hubForumSignupLineStates = pgTable(
   'hub_forum_signup_line_states',
@@ -23,7 +24,7 @@ export const hubForumSignupLineStates = pgTable(
       .notNull()
       .references(() => hubForumThreads.id, { onDelete: 'cascade' }),
     memberKey: varchar('member_key', { length: 40 }).notNull(),
-    state: jsonb('state').$type<SignupLineState>().notNull(),
+    state: jsonb('state').$type<WrittenLineState>().notNull(),
     writtenAt: timestamp('written_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
