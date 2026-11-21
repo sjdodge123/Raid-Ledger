@@ -3,20 +3,18 @@
  * "Open Raid Ledger" link button to the site and the stop button. No sign-in
  * token in the DM — a 15-minute link would sit expired in DM history.
  */
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} from 'discord.js';
-import { EMBED_COLORS } from '../../../discord-bot/discord-bot.constants';
+  createDmEmbed,
+  type DmEmbed,
+} from '../../../discord-bot/embeds/embed-chrome.helpers';
 import {
   SIGNIN_REMINDER_BUTTON_IDS,
   SIGNIN_REMINDER_STOP_LABEL,
 } from './signin-reminder.constants';
 
 export interface SigninReminderDm {
-  embed: EmbedBuilder;
+  embed: DmEmbed;
   row: ActionRowBuilder<ButtonBuilder>;
 }
 
@@ -34,9 +32,11 @@ export function buildSigninReminderDm(
   communityName: string | null,
   clientUrl: string,
 ): SigninReminderDm {
-  const embed = new EmbedBuilder()
-    .setColor(EMBED_COLORS.ANNOUNCEMENT)
-    .setDescription(signinReminderText(communityName));
+  const embed = createDmEmbed({
+    state: 'announcing',
+    communityName,
+    timestamp: false,
+  }).setDescription(signinReminderText(communityName));
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)

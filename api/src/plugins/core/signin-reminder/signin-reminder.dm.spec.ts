@@ -4,6 +4,7 @@ import {
   signinReminderText,
 } from './signin-reminder.dm';
 import { discordErrorCode } from './signin-reminder.service';
+import { colorForState } from '../../../discord-bot/embeds/embed-chrome.helpers';
 
 describe('buildSigninReminderDm (ruled Q4/Q7)', () => {
   it('says type /login, links the site and carries the stop button', () => {
@@ -17,6 +18,8 @@ describe('buildSigninReminderDm (ruled Q4/Q7)', () => {
     expect(embed.toJSON().description).toContain(
       'Type **/login** in any channel',
     );
+    expect(embed.toJSON().color).toBe(colorForState('announcing'));
+    expect(embed.toJSON().author?.name).toBe('Night Raiders');
     const [link, stop] = row.toJSON().components;
     expect(link).toMatchObject({
       type: ComponentType.Button,
