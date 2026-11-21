@@ -24,6 +24,8 @@ import { hubSeedTag, seedCommunityHubs } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 
 const SLUG = 'event-discussion-signup-lines';
+/** Seed-tag slug: hubSeedTag caps `<slug>-<project>-wNN` at 32 chars, so the spec name is too long. */
+const SEED_SLUG = 'ev-signup-lines';
 
 interface LineSeed {
     guildId: number;
@@ -61,13 +63,13 @@ async function flushLines(admin: string, eventId: number): Promise<void> {
 /** Seed crew + discussion, seed the line states, then sign the reader up and flush again. */
 async function seedSignupLine(testInfo: TestInfo): Promise<LineSeed> {
     const admin = await getAdminToken();
-    const hubs = (await seedCommunityHubs(admin, testInfo, SLUG, { dedicatedGame: true })) as
+    const hubs = (await seedCommunityHubs(admin, testInfo, SEED_SLUG, { dedicatedGame: true })) as
         { hubIds?: { crew?: number }; memberUserIds?: number[] } | null;
     const crew = must(hubs?.hubIds?.crew, `crew hub in ${JSON.stringify(hubs)}`);
     const officerUserId = must(hubs?.memberUserIds?.[0], 'crew officer');
     const memberUserId = must(hubs?.memberUserIds?.[1], 'crew member-1');
     const readerUserId = must(hubs?.memberUserIds?.[2], 'crew member-2');
-    const body = { memberUserId, readerUserId, tag: hubSeedTag(SLUG, testInfo) };
+    const body = { memberUserId, readerUserId, tag: hubSeedTag(SEED_SLUG, testInfo) };
     const seed = (await apiPost(admin, `/admin/test/hubs/${crew}/event-discussion/seed`, body)) as
         { guildId?: unknown; eventId?: unknown; threadId?: unknown } | null;
     const eventId = num(seed?.eventId, 'seed.eventId');
