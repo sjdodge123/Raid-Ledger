@@ -128,7 +128,17 @@ describe('applyInstanceOverlay', () => {
       rewardGold: 1800,
       rewardsJson: [918],
       startsInsideDungeon: false,
+      startLocationUnconfirmed: true,
     });
+    expect(out[0]).not.toHaveProperty('startLocationUnconfirmed');
+  });
+
+  it('keeps an allowlisted overlay-only quest inside, with no unconfirmed flag (ROK-2276)', async () => {
+    listOverlay.mockResolvedValue(new Map());
+    const d = deps(null, [overlay(95809)]);
+    const [only] = await applyInstanceOverlay(d.value, [], SCOPE);
+    expect(only?.startsInsideDungeon).toBe(true);
+    expect(only).not.toHaveProperty('startLocationUnconfirmed');
   });
 
   it('adds no overlay-only quests for a variant without classic content', async () => {
