@@ -58,7 +58,11 @@ function setup(rounds: LockChange[][], connected = true) {
   deadline.mockReset();
   deadline.mockResolvedValue(0);
   const sets: unknown[] = [];
+  const deletes = jest.fn(() => ({
+    where: jest.fn().mockResolvedValue(undefined),
+  }));
   const db = {
+    delete: deletes,
     update: jest.fn(() => ({
       set: (v: unknown) => {
         sets.push(v);
@@ -82,7 +86,7 @@ function setup(rounds: LockChange[][], connected = true) {
   const due = jest.spyOn(sweep, 'due');
   for (const r of rounds) due.mockResolvedValueOnce(r);
   due.mockResolvedValue([]);
-  return { sweep, gateway, sets, outbound, registry, due };
+  return { sweep, gateway, sets, outbound, registry, due, deletes };
 }
 
 const row = (readOnly: boolean): LockChange => ({
@@ -94,6 +98,15 @@ const row = (readOnly: boolean): LockChange => ({
 });
 
 describe('HubForumDiscordEventLockSweep.sweep', () => {
+  it('ROK-2292 D7: a lock drops the post starter row; a reopen keeps it', async () => {
+    const locked = setup([[row(true)]]);
+    await locked.sweep.sweep(NOW);
+    expect(locked.deletes).toHaveBeenCalledTimes(1);
+    const reopened = setup([[row(false)]]);
+    await reopened.sweep.sweep(NOW);
+    expect(reopened.deletes).not.toHaveBeenCalled();
+  });
+
   it('locks + archives once and records the lock', async () => {
     const { sweep, gateway, sets, outbound } = setup([[row(true)]]);
     expect(await sweep.sweep(NOW)).toBe(1);
