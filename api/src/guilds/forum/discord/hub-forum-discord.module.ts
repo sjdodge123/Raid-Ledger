@@ -10,6 +10,7 @@ import { HubForumDiscordController } from './hub-forum-discord.controller';
 import { HubForumDiscordDemoTestController } from './hub-forum-discord.demo-test.controller';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import { HubForumDiscordOutboundListener } from './hub-forum-discord-outbound.listener';
+import { HubForumDiscordAnnounceListener } from './hub-forum-discord-announce.listener';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import { HubForumDiscordGateway } from './hub-forum-discord.gateway';
 import { HubForumDiscordEventGate } from './hub-forum-discord-event-gate';
@@ -83,6 +84,8 @@ import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-emb
     { provide: FORUM_STARTER_EDIT_PORT, useExisting: ForumStarterEditor },
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
+    // ROK-2292 D8: create the event's forum post when it is announced.
+    HubForumDiscordAnnounceListener,
     HubForumDiscordRouteResolver,
     EventPlanningForumResolver,
     EventPlanningForumAdmin,
