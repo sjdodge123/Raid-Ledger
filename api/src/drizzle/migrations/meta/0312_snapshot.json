@@ -1,5 +1,5 @@
 {
-  "id": "acd97dc0-e45f-4c71-b621-a7218bfa1f70",
+  "id": "bd2d9ae4-63cf-4ebf-99d1-de33d355439e",
   "prevId": "47092eb4-dcea-4264-9ec8-fba1690780bd",
   "version": "7",
   "dialect": "postgresql",
@@ -2612,7 +2612,7 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"slot_vacated\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"new_event\":{\"inApp\":true,\"push\":true,\"discord\":true},\"subscribed_game\":{\"inApp\":true,\"push\":true,\"discord\":true},\"achievement_unlocked\":{\"inApp\":true,\"push\":false,\"discord\":false},\"level_up\":{\"inApp\":true,\"push\":false,\"discord\":false},\"missed_event_nudge\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_rescheduled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_delayed\":{\"inApp\":true,\"push\":true,\"discord\":true},\"running_late\":{\"inApp\":true,\"push\":true,\"discord\":true},\"bench_promoted\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_cancelled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"roster_reassigned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"tentative_displaced\":{\"inApp\":true,\"push\":true,\"discord\":true},\"member_returned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"recruitment_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"role_gap_alert\":{\"inApp\":true,\"push\":true,\"discord\":true},\"lineup_steam_nudge\":{\"inApp\":true,\"push\":false,\"discord\":true},\"community_lineup\":{\"inApp\":true,\"push\":true,\"discord\":true},\"user_deactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"user_reactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"post_event_followup\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_player_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_leader_post\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_event_tagged\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_submitted\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_reviewed\":{\"inApp\":true,\"push\":false,\"discord\":true},\"valheim_claim_suggestion\":{\"inApp\":false,\"push\":false,\"discord\":true},\"gg_ready\":{\"inApp\":true,\"push\":false,\"discord\":true},\"system\":{\"inApp\":true,\"push\":false,\"discord\":false}}'::jsonb"
+          "default": "'{\"slot_vacated\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"new_event\":{\"inApp\":true,\"push\":true,\"discord\":true},\"subscribed_game\":{\"inApp\":true,\"push\":true,\"discord\":true},\"achievement_unlocked\":{\"inApp\":true,\"push\":false,\"discord\":false},\"level_up\":{\"inApp\":true,\"push\":false,\"discord\":false},\"missed_event_nudge\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_rescheduled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_delayed\":{\"inApp\":true,\"push\":true,\"discord\":true},\"running_late\":{\"inApp\":true,\"push\":true,\"discord\":true},\"bench_promoted\":{\"inApp\":true,\"push\":true,\"discord\":true},\"event_cancelled\":{\"inApp\":true,\"push\":true,\"discord\":true},\"roster_reassigned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"tentative_displaced\":{\"inApp\":true,\"push\":true,\"discord\":true},\"member_returned\":{\"inApp\":true,\"push\":true,\"discord\":true},\"recruitment_reminder\":{\"inApp\":true,\"push\":true,\"discord\":true},\"role_gap_alert\":{\"inApp\":true,\"push\":true,\"discord\":true},\"lineup_steam_nudge\":{\"inApp\":true,\"push\":false,\"discord\":true},\"community_lineup\":{\"inApp\":true,\"push\":true,\"discord\":true},\"user_deactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"user_reactivated_discord\":{\"inApp\":true,\"push\":false,\"discord\":false},\"post_event_followup\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"lfg_player_invite\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_leader_post\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_event_tagged\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_submitted\":{\"inApp\":true,\"push\":false,\"discord\":true},\"hub_proposal_reviewed\":{\"inApp\":true,\"push\":false,\"discord\":true},\"valheim_claim_suggestion\":{\"inApp\":false,\"push\":false,\"discord\":true},\"gg_ready\":{\"inApp\":true,\"push\":false,\"discord\":true},\"calendar_needs_reconnect\":{\"inApp\":true,\"push\":false,\"discord\":true},\"system\":{\"inApp\":true,\"push\":false,\"discord\":false}}'::jsonb"
         }
       },
       "indexes": {},
@@ -17290,6 +17290,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "reconnect_nudged_at": {
+          "name": "reconnect_nudged_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_synced_at": {
           "name": "last_synced_at",
           "type": "timestamp with time zone",
@@ -23776,69 +23782,6 @@
           "value": "(\"gg_snapshots\".\"share_slug\" IS NULL) = (\"gg_snapshots\".\"shared_at\" IS NULL)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.discord_signin_reminders": {
-      "name": "discord_signin_reminders",
-      "schema": "",
-      "columns": {
-        "discord_id": {
-          "name": "discord_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "sent_count": {
-          "name": "sent_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_sent_at": {
-          "name": "last_sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "opted_out_at": {
-          "name": "opted_out_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_failure_at": {
-          "name": "last_failure_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_failure_code": {
-          "name": "last_failure_code",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     }
   },
