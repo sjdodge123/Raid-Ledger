@@ -23,6 +23,17 @@ import { SchedulingTerminalBanner } from '../components/lineups/cycle-4/Scheduli
 import { SchedulingReopenLockInAction } from '../components/lineups/cycle-4/SchedulingReopenLockInAction';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
 import { PollPrivateBar } from './scheduling/PollPrivateBar';
+import { useAuth } from '../hooks/use-auth';
+import { SubjectDiscussionCardLazy } from '../components/discussion/subject-discussion-lazy';
+
+/** ROK-2272 S9: the poll's Discussion card (hidden signed out, private, or no hub); a locked-in poll links its event. */
+function PollDiscussion({ matchId, lockedInEventId }: { matchId: number; lockedInEventId?: number | null }): JSX.Element | null {
+  const { user } = useAuth();
+  return (
+    <SubjectDiscussionCardLazy subject={{ kind: 'poll', id: matchId }} enabled={user != null}
+      lockedInEventId={lockedInEventId} />
+  );
+}
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -103,6 +114,7 @@ function CompletedPollState({ matchId, poll }: {
       <SchedulingReopenLockInAction matchId={matchId} recoverable={poll.lockInRecoverable} />
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       {!stalled && <CompletedOutcome poll={poll} />}
+      <PollDiscussion matchId={matchId} lockedInEventId={poll.match.linkedEventId} />
     </div>
   );
 }
@@ -116,6 +128,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
     <div className="max-w-3xl mx-auto px-4 pt-6 md:pb-12 space-y-6">
       <PollPrivateBar poll={poll} />
       <SchedulingComposite poll={poll} lineupId={lineupId} matchId={matchId} />
+      <PollDiscussion matchId={matchId} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
     </div>
   );

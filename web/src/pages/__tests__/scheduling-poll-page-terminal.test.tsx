@@ -17,6 +17,7 @@ import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../test/render-helpers';
 import { buildPoll } from '../../components/lineups/cycle-4/__tests__/scheduling-poll-fixtures';
 import { SchedulingPollPage } from '../scheduling-poll-page';
+import type { SubjectDiscussionCardProps } from '../../components/discussion/SubjectDiscussionCard';
 
 const schedulePoll = vi.fn();
 
@@ -42,6 +43,18 @@ vi.mock('../scheduling/GameTimeRefreshModal', () => ({
 vi.mock('../../components/lineups/cycle-4/SchedulingComposite', () => ({
     SchedulingComposite: (): JSX.Element => (
         <div data-testid="scheduling-composite" />
+    ),
+}));
+
+// ROK-2272 S9: a probe for the Discussion card, so the page wiring (which
+// subject, and whether a locked-in poll hands over its event) is pinned.
+vi.mock('../../components/discussion/subject-discussion-lazy', () => ({
+    SubjectDiscussionCardLazy: (p: SubjectDiscussionCardProps): JSX.Element => (
+        <div
+            data-testid="poll-discussion-probe"
+            data-subject={`${p.subject.kind}:${p.subject.id}`}
+            data-locked-in={String(p.lockedInEventId ?? 'none')}
+        />
     ),
 }));
 
@@ -121,5 +134,28 @@ describe('SchedulingPollPage — locked-in ending (ROK-1545)', () => {
         renderPage(poll);
         expect(screen.getByTestId('scheduling-composite')).toBeInTheDocument();
         expect(screen.queryByTestId('read-only-banner')).not.toBeInTheDocument();
+    });
+});
+
+describe('SchedulingPollPage — Discussion card wiring (ROK-2272 S9)', () => {
+    beforeEach(() => {
+        schedulePoll.mockReset();
+    });
+
+    it('a locked-in poll hands its linked event to the card (read-only + "View the event")', () => {
+        renderPage(buildLockedInPoll());
+        const probe = screen.getByTestId('poll-discussion-probe');
+        expect(probe).toHaveAttribute('data-subject', 'poll:500');
+        expect(probe).toHaveAttribute('data-locked-in', '314');
+    });
+
+    it('an open poll (even a reschedule with a linked event) keeps the card writable', () => {
+        const poll = buildPoll({ pollStatus: 'open', canVote: true });
+        poll.match.status = 'scheduling';
+        poll.match.linkedEventId = 314;
+        renderPage(poll);
+        const probe = screen.getByTestId('poll-discussion-probe');
+        expect(probe).toHaveAttribute('data-subject', 'poll:500');
+        expect(probe).toHaveAttribute('data-locked-in', 'none');
     });
 });
