@@ -273,6 +273,22 @@ describe('QuestPrepPanel — before-you-go-in vs picked-up-inside (ROK-2142)', (
         expect(screen.queryByText('Get these during the run')).not.toBeInTheDocument();
     });
 
+    it('keeps the sharable sub-group inside the before-you-go-in group', async () => {
+        setupMswHandlers({ [STOCKADE_INSTANCE.id]: stockadeQuests });
+
+        renderPanel([STOCKADE_INSTANCE]);
+
+        await screen.findByText('Get before you go in (2)');
+        expect(screen.getByText(/Sharable/)).toBeInTheDocument();
+        expect(screen.getByText(/Must pick up yourself/)).toBeInTheDocument();
+    });
+});
+
+describe('QuestPrepPanel — location not confirmed (ROK-2276)', () => {
+    beforeEach(() => {
+        server.resetHandlers();
+    });
+
     it('renders "Location not confirmed" last, after the two known groups (ROK-2276)', async () => {
         const unconfirmed = createQuest({ questId: 203, name: 'Blizzard Only', dungeonInstanceId: 63, startLocationUnconfirmed: true });
         setupMswHandlers({ [DEADMINES_INSTANCE.id]: [...singleDungeonQuests, unconfirmed] });
@@ -294,15 +310,5 @@ describe('QuestPrepPanel — before-you-go-in vs picked-up-inside (ROK-2142)', (
 
         await screen.findByText('Get before you go in (1)');
         expect(screen.queryByText(/Location not confirmed/)).not.toBeInTheDocument();
-    });
-
-    it('keeps the sharable sub-group inside the before-you-go-in group', async () => {
-        setupMswHandlers({ [STOCKADE_INSTANCE.id]: stockadeQuests });
-
-        renderPanel([STOCKADE_INSTANCE]);
-
-        await screen.findByText('Get before you go in (2)');
-        expect(screen.getByText(/Sharable/)).toBeInTheDocument();
-        expect(screen.getByText(/Must pick up yourself/)).toBeInTheDocument();
     });
 });

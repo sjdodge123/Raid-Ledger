@@ -96,7 +96,7 @@ export function isOverlayOnlyType(typeId: number | null): boolean {
  * ROK-2276: an overlay-only row has no start NPC or item, so only the inside
  * allowlist says where it starts; any other one is "location not confirmed".
  */
-export function startLocationFields(
+function startLocationFields(
   questId: number,
 ): Pick<DungeonQuestDto, 'startsInsideDungeon' | 'startLocationUnconfirmed'> {
   return INSIDE_DUNGEON_QUEST_IDS.has(questId)

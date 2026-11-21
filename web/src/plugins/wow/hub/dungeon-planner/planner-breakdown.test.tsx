@@ -21,7 +21,7 @@ const UNCONFIRMED = createQuest({ questId: 3, name: 'Blizzard Only', startLocati
 
 /** The location-group headings in document order. */
 function groupHeadings(): string[] {
-    return screen.getAllByText(/\(\d+\)$/, { selector: 'p.text-sm' }).map((el) => el.textContent ?? '');
+    return screen.getAllByText(/^(Get before you go in|Picked up inside|Location not confirmed) \(\d+\)$/).map((el) => el.textContent ?? '');
 }
 
 describe('QuestBreakdown location groups (ROK-2276)', () => {
