@@ -42,8 +42,8 @@ export class ForumStarterEditor implements ForumStarterEditPort {
       return await this.editOnce(threadId, card, post);
     } catch (err) {
       if (!isArchivedError(err) || post.locked) throw err;
+      if (!(await this.gateway.unarchiveThread(threadId))) throw err;
     }
-    await this.gateway.unarchiveThread(threadId);
     return this.editOnce(threadId, card, post);
   }
 

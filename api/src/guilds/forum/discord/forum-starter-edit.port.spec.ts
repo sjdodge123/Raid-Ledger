@@ -30,7 +30,7 @@ function setup(post: StarterPost | 'gone') {
   findPost.mockReset().mockResolvedValue(post);
   const gateway = {
     editStarterCard: jest.fn().mockResolvedValue('ok'),
-    unarchiveThread: jest.fn().mockResolvedValue(undefined),
+    unarchiveThread: jest.fn().mockResolvedValue(true),
   };
   const port = new ForumStarterEditor(
     {} as ForumDiscordDb,
@@ -64,6 +64,16 @@ describe('ROK-2292 ForumStarterEditor', () => {
     gateway.editStarterCard.mockRejectedValueOnce(archived);
     await expect(port.editStarter('t1', CARD)).rejects.toBe(archived);
     expect(gateway.unarchiveThread).not.toHaveBeenCalled();
+  });
+
+  it('archived, records say open, but Discord already shows it locked → 50083 rethrown, no retry', async () => {
+    const { port, gateway } = setup(BOT_POST);
+    const archived = discordError(50083);
+    gateway.editStarterCard.mockRejectedValueOnce(archived);
+    gateway.unarchiveThread.mockResolvedValueOnce(false);
+    await expect(port.editStarter('t1', CARD)).rejects.toBe(archived);
+    expect(gateway.unarchiveThread).toHaveBeenCalledWith('t1');
+    expect(gateway.editStarterCard).toHaveBeenCalledTimes(1);
   });
 
   it('a retry that fails again surfaces that failure (no second unarchive)', async () => {

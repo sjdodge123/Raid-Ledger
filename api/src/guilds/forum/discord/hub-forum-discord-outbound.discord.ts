@@ -217,10 +217,17 @@ export class HubForumDiscordOutboundGateway {
     }
   }
 
-  /** ROK-2292 review MAJOR: reopen an auto-archived post (Manage Threads). */
-  async unarchiveThread(discordThreadId: string): Promise<void> {
+  /**
+   * ROK-2292 review MAJOR: reopen an auto-archived post (Manage Threads).
+   * Returns false — and leaves the post alone — when Discord already shows it
+   * locked: the lock sweep locks on Discord before it stamps our records, so
+   * reopening it there would undo a close (delta-review MINOR).
+   */
+  async unarchiveThread(discordThreadId: string): Promise<boolean> {
     const thread = await this.thread(discordThreadId, true);
+    if (thread.locked) return false;
     if (thread.archived) await thread.setArchived(false, REASON);
+    return true;
   }
 
   /**
