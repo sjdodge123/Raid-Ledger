@@ -1,5 +1,8 @@
 import {
   Controller,
+  Delete,
+  Inject,
+  Param,
   Post,
   Body,
   UseGuards,
@@ -10,7 +13,11 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
+import type Redis from 'ioredis';
 import { AdminGuard } from '../auth/admin.guard';
+import { isDiscordSnowflake } from '../auth/discord-signin-link.helpers';
+import { loginRateLimitKey } from '../discord-bot/commands/login.helpers';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import { DemoModeGuard } from './demo-mode.guard';
 import { SlashCommandTestService } from './slash-command-test.service';
 import type { CapturedResponse } from './fake-interaction';
@@ -42,7 +49,25 @@ const AutocompleteSchema = z.object({
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class SlashCommandTestController {
-  constructor(private readonly service: SlashCommandTestService) {}
+  constructor(
+    private readonly service: SlashCommandTestService,
+    @Inject(REDIS_CLIENT) private readonly redis: Pick<Redis, 'del'>,
+  ) {}
+
+  /**
+   * ROK-2283: clear a member's `/login` link counter (3 per 10 minutes), so
+   * the companion smoke can re-run against the same env.
+   */
+  @Delete('login-rate-limit/:discordId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async clearLoginRateLimit(
+    @Param('discordId') discordId: string,
+  ): Promise<void> {
+    if (!isDiscordSnowflake(discordId)) {
+      throw new BadRequestException('discordId must be a Discord snowflake');
+    }
+    await this.redis.del(loginRateLimitKey(discordId));
+  }
 
   /** Execute a slash command and return the captured response. */
   @Post('slash-command')

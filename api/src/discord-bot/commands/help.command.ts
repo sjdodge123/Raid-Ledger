@@ -43,6 +43,10 @@ const COMMANDS: { name: string; description: string }[] = [
       'Raise a hand for a game, or list the groups you are already in',
   },
   { name: '/lfg-leave', description: "Leave an LFG you're in" },
+  {
+    name: '/login',
+    description: 'Get a private one-time link that signs you in',
+  },
   { name: '/help', description: 'Show this help message' },
 ];
 

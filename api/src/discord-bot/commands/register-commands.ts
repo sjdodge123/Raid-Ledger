@@ -19,6 +19,7 @@ import { HelpCommand } from './help.command';
 import { PlayingCommand } from './playing.command';
 import { LfgCommand } from './lfg.command';
 import { LfgLeaveCommand } from './lfg-leave.command';
+import { LoginCommand } from './login.command';
 import {
   declaredFleetClientId,
   guildScopeMessage,
@@ -73,6 +74,7 @@ export class RegisterCommandsService implements OnApplicationShutdown {
     private readonly playingCommand: PlayingCommand,
     private readonly lfgCommand: LfgCommand,
     private readonly lfgLeaveCommand: LfgLeaveCommand,
+    private readonly loginCommand: LoginCommand,
   ) {}
 
   /**
@@ -91,6 +93,7 @@ export class RegisterCommandsService implements OnApplicationShutdown {
       this.playingCommand,
       this.lfgCommand,
       this.lfgLeaveCommand,
+      this.loginCommand,
     ];
   }
 
