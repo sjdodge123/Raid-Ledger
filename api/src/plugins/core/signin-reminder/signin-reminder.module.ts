@@ -15,8 +15,10 @@ import { SigninReminderService } from './signin-reminder.service';
  */
 @Module({
   imports: [SettingsModule, CronJobModule, forwardRef(() => DiscordBotModule)],
-  controllers: [SigninReminderSettingsController],
-  controllers: [DemoTestSigninReminderController],
+  controllers: [
+    SigninReminderSettingsController,
+    DemoTestSigninReminderController,
+  ],
   providers: [
     SigninReminderService,
     SigninReminderCron,

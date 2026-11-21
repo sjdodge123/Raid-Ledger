@@ -21,7 +21,10 @@ import {
   recordSigninReminderFailure,
 } from './signin-reminder.db';
 import { buildSigninReminderDm } from './signin-reminder.dm';
-import { reminderCandidateIds } from './signin-reminder.eligibility';
+import {
+  reminderCandidateIds,
+  targetedBotIds,
+} from './signin-reminder.eligibility';
 import {
   ensureSigninReminderLaunchedAt,
   readSigninReminderSettings,
@@ -31,6 +34,15 @@ import {
 export type SigninReminderOutcome =
   | { status: 'disabled' | 'not-connected' | 'busy' }
   | { status: 'ran'; candidates: number; sent: number; failed: number };
+
+/**
+ * DEMO_MODE fixture only (`/admin/test/signin-reminder/tick`): aim the pass
+ * at one BOT guild member instead of the human roster, so a smoke run never
+ * DMs a person. The cron never passes options.
+ */
+export interface SigninReminderTickOptions {
+  onlyBotId?: string;
+}
 
 /** The numeric Discord API error code on a thrown error, else null. */
 export function discordErrorCode(err: unknown): number | null {
@@ -51,17 +63,23 @@ export class SigninReminderService {
     private readonly discord: DiscordBotClientService,
   ) {}
 
-  async runTick(now: Date = new Date()): Promise<SigninReminderOutcome> {
+  async runTick(
+    now: Date = new Date(),
+    opts: SigninReminderTickOptions = {},
+  ): Promise<SigninReminderOutcome> {
     if (this.running) return { status: 'busy' };
     this.running = true;
     try {
-      return await this.runPass(now);
+      return await this.runPass(now, opts);
     } finally {
       this.running = false;
     }
   }
 
-  private async runPass(now: Date): Promise<SigninReminderOutcome> {
+  private async runPass(
+    now: Date,
+    opts: SigninReminderTickOptions,
+  ): Promise<SigninReminderOutcome> {
     const cfg = await readSigninReminderSettings(this.settings);
     if (!cfg.enabled) return { status: 'disabled' };
     if (!this.discord.isConnected()) return { status: 'not-connected' };
@@ -69,7 +87,9 @@ export class SigninReminderService {
     if (roster === null) return { status: 'not-connected' };
     const launchedAt = await ensureSigninReminderLaunchedAt(this.settings, now);
     const ids = await this.dropAccountHolders(
-      reminderCandidateIds(roster, launchedAt, now),
+      opts.onlyBotId === undefined
+        ? reminderCandidateIds(roster, launchedAt, now)
+        : targetedBotIds(roster, opts.onlyBotId),
     );
     await ensureSigninReminderRows(this.db, ids);
     const claimed = await claimDueSigninReminders(this.db, {

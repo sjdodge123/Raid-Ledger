@@ -35,3 +35,16 @@ export function reminderCandidateIds(
     .map((m) => m.discordId);
   return [...new Set(ids)];
 }
+
+/**
+ * DEMO_MODE smoke targeting only: `[botId]` when that id is a BOT in the
+ * roster, else `[]`. The smoke has no human it may DM, and the regular pass
+ * drops every bot — so the fixture can aim one tick at a bot and never at a
+ * person. Never used by the cron.
+ */
+export function targetedBotIds(
+  roster: readonly ReminderRosterMember[],
+  botId: string,
+): string[] {
+  return roster.some((m) => m.isBot && m.discordId === botId) ? [botId] : [];
+}
