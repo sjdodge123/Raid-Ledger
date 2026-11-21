@@ -24,6 +24,7 @@ import { TabRowDemo } from './tab-row-demo';
 import { RowCapDemo } from './row-cap-demo';
 import { HubRowBitsDemo } from './hub-row-bits-demo';
 import { ForumBylineDemo } from './forum-byline-demo';
+import { ForumSignupLineDemo } from './forum-signup-line-demo';
 import { EventDiscussionDemo } from './event-discussion-demo';
 import { SubjectDiscussionDemo } from './subject-discussion-demo';
 import { CharacterHeaderDemo } from './character-header-demo';
@@ -196,6 +197,7 @@ export function PrimitivesSection(): JSX.Element {
                 <RowCapDemo />
                 <HubRowBitsDemo />
                 <ForumBylineDemo />
+                <ForumSignupLineDemo />
                 <EventDiscussionDemo />
                 <SubjectDiscussionDemo />
                 <CharacterHeaderDemo />

@@ -22,13 +22,13 @@ import {
   ROLE_LABELS,
   SIGNUP_LINE_COPY as COPY,
 } from './hub-forum-discord-signup-lines.copy';
+import type {
+  SignupLineCharacter,
+  SignupLineState,
+} from '../../../drizzle/schema/hub-forum-signup-line-states';
 
-/** The character a signup is on, as far as a line goes. */
-export interface SignupLineCharacter {
-  name: string;
-  className: string | null;
-  spec: string | null;
-}
+/** The persisted line shapes live with their table (ROK-2274 layering). */
+export type { SignupLineCharacter, SignupLineState };
 
 /**
  * ROK-2273 — the per-guild role / class glyphs, resolved by the same
@@ -48,23 +48,6 @@ export function signupLineEmoji(
     role: (r) => svc.getRoleEmoji(r),
     klass: (c) => svc.getClassEmoji(c),
   };
-}
-
-/**
- * A member's line-relevant signup state. JSON-safe (no Date) so the caller
- * can store the last POSTED one as-is (e.g. a Redis hash field).
- */
-export interface SignupLineState {
-  /** `event_signups.status`; `'gone'` when the row no longer exists. */
-  status: string;
-  /** Roster slot role (tank/healer/dps/flex); null when unassigned/benched. */
-  role: string | null;
-  bench: boolean;
-  character: SignupLineCharacter | null;
-  late: boolean;
-  lateMinutes: number | null;
-  /** Hours between the roach-out and the event start; null if not roached. */
-  roachedHoursBefore: number | null;
 }
 
 /** One member's input to a flush. */
@@ -91,6 +74,10 @@ interface Fragment {
   text: string;
 }
 
+/** Player text as a surface shows it: Discord-escaped, or plain (RL). */
+type Escape = (text: string) => string;
+const PLAIN: Escape = (text) => text;
+
 const ACTIVE = new Set(['signed_up', 'tentative']);
 
 /** Active = can post in the thread (signed_up / tentative, bench incl.). */
@@ -106,11 +93,14 @@ export function roleLabel(role: string | null): string {
 }
 
 /** `Thrall (Prot Warrior)` / `Thrall (Warrior)` / `Thrall`. */
-export function characterLabel(ch: SignupLineCharacter): string {
+export function characterLabel(
+  ch: SignupLineCharacter,
+  esc: Escape = escapeMarkdown,
+): string {
   const kind = [ch.spec, ch.className].filter((p) => !!p).join(' ');
-  // Review MINOR-3: a name is player text, never formatting.
-  const name = escapeMarkdown(ch.name);
-  return kind ? `${name} (${escapeMarkdown(kind)})` : name;
+  // Review MINOR-3: a name is player text, never formatting (on Discord).
+  const name = esc(ch.name);
+  return kind ? `${name} (${esc(kind)})` : name;
 }
 
 /** `<1` under an hour, whole hours otherwise. */
@@ -132,7 +122,11 @@ function withGlyph(glyph: string, label: string): string {
 }
 
 /** ` — 🛡️ Tank · Thrall (Prot Warrior)`, or '' when neither is known. */
-function detail(s: SignupLineState, emoji: SignupLineEmoji): string {
+function detail(
+  s: SignupLineState,
+  emoji: SignupLineEmoji,
+  esc: Escape,
+): string {
   const parts: string[] = [];
   if (s.bench) parts.push(BENCH_LABEL);
   else if (s.role !== null) {
@@ -140,7 +134,7 @@ function detail(s: SignupLineState, emoji: SignupLineEmoji): string {
   }
   if (s.character) {
     const ch = s.character;
-    parts.push(withGlyph(classGlyph(ch, emoji), characterLabel(ch)));
+    parts.push(withGlyph(classGlyph(ch, emoji), characterLabel(ch, esc)));
   }
   return parts.length ? DETAIL_SEPARATOR + parts.join(PART_SEPARATOR) : '';
 }
@@ -197,10 +191,11 @@ function characterFragments(
   prev: SignupLineState,
   cur: SignupLineState,
   emoji: SignupLineEmoji,
+  esc: Escape,
 ): Fragment[] {
   if (cur.character === null) return [];
-  const was = prev.character ? characterLabel(prev.character) : null;
-  const now = characterLabel(cur.character);
+  const was = prev.character ? characterLabel(prev.character, esc) : null;
+  const now = characterLabel(cur.character, esc);
   if (was === now) return [];
   const glyph = classGlyph(cur.character, emoji) || COPY.characterChange.emoji;
   return [{ emoji: glyph, text: COPY.characterChange.text(now) }];
@@ -233,11 +228,12 @@ export function changeFragments(
   prev: SignupLineState,
   cur: SignupLineState,
   emoji: SignupLineEmoji,
+  esc: Escape = escapeMarkdown,
 ): Fragment[] {
   return [
     ...statusFragment(prev, cur),
     ...rosterFragments(prev, cur, emoji),
-    ...characterFragments(prev, cur, emoji),
+    ...characterFragments(prev, cur, emoji, esc),
     ...lateFragments(prev, cur),
   ];
 }
@@ -249,41 +245,63 @@ function render(who: string, frags: readonly Fragment[], suffix = ''): string {
   return `${emoji} ${who} ${text}${suffix}`;
 }
 
+/** A line before it names anyone; `mayMention` = not a leave line. */
+interface LineParts {
+  frags: Fragment[];
+  suffix: string;
+  mayMention: boolean;
+}
+
+/** What a member's line says, or null when nothing a reader cares about changed. */
+function lineParts(
+  prev: SignupLineState | null,
+  cur: SignupLineState | null,
+  emoji: SignupLineEmoji,
+  esc: Escape,
+): LineParts | null {
+  const wasActive = isActiveSignup(prev);
+  if (!isActiveSignup(cur)) {
+    if (!wasActive) return null;
+    return { frags: [leaveFragment(cur)], suffix: '', mayMention: false };
+  }
+  if (prev === null || !wasActive) {
+    const frags = [joinFragment(cur, prev !== null), ...joinLate(cur)];
+    return { frags, suffix: detail(cur, emoji, esc), mayMention: true };
+  }
+  const frags = changeFragments(prev, cur, emoji, esc);
+  return frags.length === 0 ? null : { frags, suffix: '', mayMention: true };
+}
+
 /** The one line to post for a member, or null when nothing changed. */
 export function signupLine(
   input: SignupLineInput,
   emoji: SignupLineEmoji,
 ): SignupLine | null {
-  const { previous: prev, current: cur } = input;
-  const wasActive = isActiveSignup(prev);
-  if (!isActiveSignup(cur)) {
-    if (!wasActive) return null;
-    return line(input, false, [leaveFragment(cur)]);
-  }
-  const mention = !input.mentioned;
-  if (prev === null || !wasActive) {
-    const frags = [joinFragment(cur, prev !== null), ...joinLate(cur)];
-    return line(input, mention, frags, detail(cur, emoji));
-  }
-  const frags = changeFragments(prev, cur, emoji);
-  if (frags.length === 0) return null;
-  return line(input, mention, frags);
-}
-
-function line(
-  input: SignupLineInput,
-  mention: boolean,
-  frags: readonly Fragment[],
-  suffix = '',
-): SignupLine {
+  const parts = lineParts(input.previous, input.current, emoji, escapeMarkdown);
+  if (!parts) return null;
+  const mention = parts.mayMention && !input.mentioned;
   const who = mention
     ? `<@${input.discordId}>`
     : escapeMarkdown(input.displayName);
   return {
     discordId: input.discordId,
-    content: render(who, frags, suffix),
+    content: render(who, parts.frags, parts.suffix),
     mention,
   };
+}
+
+/**
+ * ROK-2274 — the same line as plain text naming `name` (never a mention):
+ * what a Raid Ledger event thread shows. Same copy, same glyphs.
+ */
+export function signupLineText(
+  prev: SignupLineState | null,
+  cur: SignupLineState | null,
+  name: string,
+  emoji: SignupLineEmoji,
+): string | null {
+  const parts = lineParts(prev, cur, emoji, PLAIN);
+  return parts ? render(name, parts.frags, parts.suffix) : null;
 }
 
 /** Lines for a whole flush, input order, unchanged members dropped. */

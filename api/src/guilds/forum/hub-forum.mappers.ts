@@ -200,6 +200,8 @@ export function toForumReply(
     deleted: live ? null : forumDeleted(reply.deletedAs),
     can,
     ...forumSync(reply, record.author),
+    // ROK-2274: only a system row names its kind (absent = plain reply).
+    ...(reply.kind === 'reply' ? {} : { kind: reply.kind }),
   };
 }
 

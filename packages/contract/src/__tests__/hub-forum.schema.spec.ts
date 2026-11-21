@@ -135,6 +135,13 @@ describe('response shapes', () => {
     expect(HubForumReplySchema.safeParse({ ...reply, can: { ...can, lock: true } }).success).toBe(false);
   });
 
+  it('a reply may carry kind (ROK-2274): absent = reply, signup_line ok, other values not', () => {
+    const reply = { id: 2, body: 'me', author: null, createdAt: at, editedAt: null, deleted: null, can };
+    expect(HubForumReplySchema.parse(reply).kind).toBeUndefined();
+    expect(HubForumReplySchema.parse({ ...reply, kind: 'signup_line' }).kind).toBe('signup_line');
+    expect(HubForumReplySchema.safeParse({ ...reply, kind: 'system' }).success).toBe(false);
+  });
+
   it('the widget payload holds at most five threads', () => {
     const six = Array.from({ length: 6 }, (_, i) => ({ ...summary, id: i + 1 }));
     expect(HubForumLatestSchema.safeParse({ threads: six.slice(0, 5), total: 6 }).success).toBe(true);
