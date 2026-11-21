@@ -96,7 +96,11 @@ export class SigninReminderService {
     if (!this.discord.isConnected()) return { status: 'not-connected' };
     const roster = await listGuildMembersForReminders(this.discord.getGuild());
     if (roster === null) return { status: 'not-connected' };
-    const launchedAt = await ensureSigninReminderLaunchedAt(this.settings, now);
+    // Stamp the launch only on an ENABLED pass: a DEMO bot-only tick with the
+    // switch off must not start the backdated first wave (ruling 2026-11-21).
+    const launchedAt = cfg.enabled
+      ? await ensureSigninReminderLaunchedAt(this.settings, now)
+      : now;
     const ids = await this.candidates(roster, launchedAt, now, opts);
     await ensureSigninReminderRows(this.db, ids);
     const claimed = await claimDueSigninReminders(this.db, {

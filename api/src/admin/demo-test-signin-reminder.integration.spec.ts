@@ -178,16 +178,24 @@ describe('ROK-2284 signin-reminder fixture — state and reset', () => {
   });
 });
 
-describe('ROK-2284 signin-reminder fixture — DEMO_MODE switch default', () => {
-  it('switch unset: the cron pass is disabled, but the bot-targeted tick still runs', async () => {
+describe('ROK-2284 signin-reminder fixture — switch ships OFF', () => {
+  it('switch unset: the cron pass is disabled and stamps no launch time, but the bot-targeted tick still runs', async () => {
+    const settings = testApp.app.get(SettingsService);
+    await settings.delete(schema.SETTING_KEYS.SIGNIN_REMINDER_ENABLED);
     const cron = await testApp.app.get(SigninReminderService).runTick();
     expect(cron).toEqual({ status: 'disabled' });
     expect(sendDm).not.toHaveBeenCalled();
+    expect(
+      await settings.get(schema.SETTING_KEYS.SIGNIN_REMINDER_LAUNCHED_AT),
+    ).toBeNull();
     const res = await post('tick', adminToken, { botDiscordId: BOT });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ status: 'ran', sent: 1 });
     expect(sendDm.mock.calls.map((c: unknown[]) => String(c[0]))).toEqual([
       BOT,
     ]);
+    expect(
+      await settings.get(schema.SETTING_KEYS.SIGNIN_REMINDER_LAUNCHED_AT),
+    ).toBeNull();
   });
 });

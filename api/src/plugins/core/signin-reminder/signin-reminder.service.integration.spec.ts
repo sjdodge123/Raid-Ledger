@@ -30,7 +30,6 @@ let testApp: TestApp;
 let service: SigninReminderService;
 let sendDm: jest.SpyInstance;
 let roster: FakeMember[] = [];
-const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
 function fakeGuild(): unknown {
   const entries = roster.map((m): [string, unknown] => [
@@ -70,10 +69,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // CI's integration env runs with DEMO_MODE=true; these cases pin the
-  // non-DEMO default (unset ⇒ ON) unless they set DEMO_MODE themselves.
-  delete process.env.DEMO_MODE;
-  await setting(SETTING_KEYS.DEMO_MODE, 'false');
+  // The switch ships OFF (ruling 2026-11-21); the sending cases turn it on
+  // explicitly, the way an admin would. The switch cases override it.
+  await setting(SETTING_KEYS.SIGNIN_REMINDER_ENABLED, 'true');
   roster = [];
   const client = testApp.app.get(DiscordBotClientService);
   jest.spyOn(client, 'isConnected').mockReturnValue(true);
@@ -84,11 +82,6 @@ beforeEach(async () => {
 afterEach(async () => {
   jest.restoreAllMocks();
   testApp.seed = await truncateAllTables(testApp.db);
-});
-
-afterAll(() => {
-  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
-  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
 
 describe('sign-in reminders — eligibility', () => {
@@ -182,17 +175,24 @@ describe('sign-in reminders — per-person filters', () => {
     expect(launched).toBeNull();
   });
 
-  it('DEMO_MODE + switch unset ⇒ disabled (fleet/dev envs never DM their guild); explicit true ⇒ runs', async () => {
+  it('switch unset ⇒ the cron pass sends nothing and stamps no launch time (ships OFF); explicit true ⇒ runs', async () => {
     roster = [{ id: '7551' }];
-    process.env.DEMO_MODE = 'true';
+    const settings = testApp.app.get(SettingsService);
+    await settings.delete(SETTING_KEYS.SIGNIN_REMINDER_ENABLED);
     expect(await service.runTick(NOW)).toEqual({ status: 'disabled' });
     expect(sendDm).not.toHaveBeenCalled();
+    expect(
+      await settings.get(SETTING_KEYS.SIGNIN_REMINDER_LAUNCHED_AT),
+    ).toBeNull();
     await setting(SETTING_KEYS.SIGNIN_REMINDER_ENABLED, 'true');
     expect(await service.runTick(NOW)).toMatchObject({
       status: 'ran',
       sent: 1,
     });
     expect(dmIds()).toEqual(['7551']);
+    expect(await settings.get(SETTING_KEYS.SIGNIN_REMINDER_LAUNCHED_AT)).toBe(
+      NOW.toISOString(),
+    );
   });
 
   it('bot offline ⇒ not-connected, nothing sent', async () => {
