@@ -94,7 +94,11 @@ function mapEligibleRow(r: EligibleEventRow): EligibleEvent {
   };
 }
 
-/** Find future, non-cancelled events starting within [now, now + 48h] that have a Discord embed, are NOT full, and have a game. */
+/**
+ * Find future, non-cancelled events starting within [now, now + 48h] that have a Discord embed, are NOT full, and have a game.
+ * ROK-2292 Codex P2: the join takes announcement rows only — a forum starter
+ * row (channel_id = message_id) must not consume the per-event bump dedup key.
+ */
 export async function findEligibleEvents(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<EligibleEvent[]> {
@@ -110,7 +114,7 @@ export async function findEligibleEvents(
       dem.channel_id, dem.guild_id, dem.message_id
     FROM events e
     INNER JOIN games g ON g.id = e.game_id
-    INNER JOIN discord_event_messages dem ON dem.event_id = e.id
+    INNER JOIN discord_event_messages dem ON dem.event_id = e.id AND dem.channel_id <> dem.message_id
     WHERE e.cancelled_at IS NULL
       AND e.rescheduling_poll_id IS NULL
       AND lower(e.duration) >= ${utcWallClock(now)}
