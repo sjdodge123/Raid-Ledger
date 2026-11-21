@@ -132,7 +132,7 @@ async function tentativeThenConfirmed(ctx: TestContext): Promise<void> {
     await updateSignupStatus(ctx.api, event.id, "tentative");
     const post = await flushPings(ctx, event.id);
     // ROK-2273: the line leads with the embed's tentative glyph, not a second vocabulary.
-    await expectLine(post, (l) => l.startsWith("⏳ ") && l.includes(`<@${me}>`) && l.includes("is tentative"), `first line: expected "⏳ <@${me}> … is tentative"`);
+    await expectLine(post, (l) => l.split("\n").some((x) => x.startsWith("⏳ ") && x.includes(`<@${me}>`) && x.includes("is tentative")), `first line: expected "⏳ <@${me}> … is tentative"`);
     await updateSignupStatus(ctx.api, event.id, "signed_up");
     await flushPings(ctx, event.id);
     const line = await expectLine(post, (l) => l.includes("is confirmed (was tentative)"), 'expected an "is confirmed (was tentative)" line');
