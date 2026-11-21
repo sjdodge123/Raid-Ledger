@@ -15,7 +15,7 @@
  * non-final attempt is marked so Sentry drops it (the same error object is
  * rethrown, so BullMQ's backoff and Retry-After are unchanged).
  */
-import { Inject, Optional, type OnModuleInit } from '@nestjs/common';
+import { Inject, type OnModuleInit } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
@@ -67,7 +67,7 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly queue: Queue,
     private readonly queueHealth: QueueHealthService,
     @InjectQueue(CALENDAR_READ_QUEUE) private readonly readQueue: Queue,
-    @Optional() private readonly emitter?: EventEmitter2,
+    private readonly emitter: EventEmitter2,
   ) {
     super();
   }

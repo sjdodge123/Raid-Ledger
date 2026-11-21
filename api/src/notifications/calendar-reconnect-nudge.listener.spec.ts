@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { CalendarReconnectNudgeListener } from './calendar-reconnect-nudge.listener';
 import * as helpers from './calendar-reconnect-nudge.helpers';
 import type { NotificationService } from './notification.service';
@@ -52,5 +53,20 @@ describe('CalendarReconnectNudgeListener (ROK-1866)', () => {
       .mockRejectedValue(new Error('db down'));
     const { listener } = setup({ syncOn: true });
     await expect(listener.handle({ connectionId: 3 })).resolves.toBe(false);
+  });
+
+  it('logs at error level when the create throws after the claim (at-most-once)', async () => {
+    jest
+      .spyOn(helpers, 'claimReconnectNudge')
+      .mockResolvedValue({ userId: 7, provider: 'google' });
+    const { listener, create } = setup({ syncOn: true });
+    create.mockRejectedValue(new Error('insert failed'));
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    await expect(listener.handle({ connectionId: 3 })).resolves.toBe(false);
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('claimed but not created for connection 3'),
+    );
   });
 });
