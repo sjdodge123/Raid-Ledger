@@ -35,7 +35,10 @@ import { AdminGuard } from '../../auth/admin.guard';
 import { DemoModeGuard } from '../../admin/demo-mode.guard';
 import { parseDemoBody } from '../../admin/demo-test.utils';
 import { SettingsService } from '../../settings/settings.service';
-import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
+import {
+  CALENDAR_FAKE_PROVIDER,
+  isDemoFakeSubject,
+} from '../providers/calendar-provider.registry';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { ProviderAuthError } from '../providers/calendar-provider.errors';
 import { CalendarReadProcessor } from '../read/calendar-read.processor';
@@ -82,6 +85,7 @@ export class CalendarDemoAuthFailureController {
   async failReadAuth(@Body() body: unknown): Promise<FailReadAuthResult> {
     await this.assertDemoMode();
     const { connectionId } = parseDemoBody(ConnectionBodySchema, body ?? {});
+    await this.assertDemoConnection(connectionId);
     const c = schema.calendarConnections;
     await this.db
       .update(c)
@@ -104,11 +108,24 @@ export class CalendarDemoAuthFailureController {
   ): Promise<{ nudged: boolean }> {
     await this.assertDemoMode();
     const { connectionId } = parseDemoBody(ConnectionBodySchema, body ?? {});
+    await this.assertDemoConnection(connectionId);
     const results: unknown[] = await this.emitter.emitAsync(
       CALENDAR_NEEDS_RECONNECT_EVENT,
       { connectionId },
     );
     return { nudged: results.some((r) => r === true) };
+  }
+
+  /** Only demo Fake connections — never a real user's Google/Apple tokens. */
+  private async assertDemoConnection(connectionId: number): Promise<void> {
+    const c = schema.calendarConnections;
+    const [row] = await this.db
+      .select({ subject: c.accountSubject })
+      .from(c)
+      .where(eq(c.id, connectionId));
+    if (!row || !isDemoFakeSubject(row.subject)) {
+      throw new ForbiddenException('Only demo calendar connections');
+    }
   }
 
   /** The processor throws on a failed sync; that is the expected path. */
