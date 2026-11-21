@@ -73,7 +73,8 @@ export class MagicLinkService {
   /**
    * Build `<clientUrl><path>#token=<jwt>` (15m, `{sub, magicLink:true, tv}`), or
    * null when the user does not exist. The fragment never reaches a server.
-   * ROK-2283: `opts.src` adds a `src` claim; without it the token is unchanged.
+   * ROK-2283: `opts.src` adds `src` + a display `name` claim; without it the
+   * token is unchanged.
    */
   async generateLink(
     userId: number,
@@ -90,7 +91,11 @@ export class MagicLinkService {
         sub: user.id,
         magicLink: true,
         tv: user.tokenVersion,
-        ...(opts.src !== undefined ? { src: opts.src } : {}),
+        // MAJOR-1: a /login link names its account so /signin-link can say
+        // "as <name>" before the tap. Display-only; redeem never reads it.
+        ...(opts.src !== undefined
+          ? { src: opts.src, name: user.username }
+          : {}),
       },
       '15m',
     );

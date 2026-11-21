@@ -13,7 +13,10 @@ export type SigninLinkKind = 'signin' | 'magic';
 
 export interface SigninLinkClaims {
     kind: SigninLinkKind;
-    /** Discord name carried by a first-time link; magic links carry none. */
+    /**
+     * The name the link signs in as: a first-time link's Discord `username`,
+     * a `/login` magic link's `name` claim (ROK-2283 MAJOR-1). Null when absent.
+     */
     displayName: string | null;
 }
 
@@ -41,14 +44,15 @@ function readPayload(token: string): Record<string, unknown> | null {
     }
 }
 
+function nameOf(raw: unknown): string | null {
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+}
+
 /** The link's kind and display name, or null when it is not a sign-in link. */
 export function readSigninLinkClaims(token: string): SigninLinkClaims | null {
     const payload = readPayload(token);
     if (!payload) return null;
-    if (payload.signin === true) {
-        const name = typeof payload.username === 'string' && payload.username.trim() ? payload.username.trim() : null;
-        return { kind: 'signin', displayName: name };
-    }
-    if (payload.magicLink === true) return { kind: 'magic', displayName: null };
+    if (payload.signin === true) return { kind: 'signin', displayName: nameOf(payload.username) };
+    if (payload.magicLink === true) return { kind: 'magic', displayName: nameOf(payload.name) };
     return null;
 }

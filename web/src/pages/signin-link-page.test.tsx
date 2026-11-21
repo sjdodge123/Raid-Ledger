@@ -35,7 +35,7 @@ function fakeJwt(payload: Record<string, unknown>): string {
     return `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify(payload)).replace(/=+$/, '')}.sig`;
 }
 const SIGNIN_TOKEN = fakeJwt({ discordId: '123456789012345678', username: 'Disco', signin: true, src: 'cmd' });
-const MAGIC_TOKEN = fakeJwt({ sub: 7, magicLink: true, tv: 0, src: 'cmd' });
+const MAGIC_TOKEN = fakeJwt({ sub: 7, magicLink: true, tv: 0, src: 'cmd', name: 'Member7' });
 
 function redeemCounter(url: string, status: number, body: Record<string, unknown>): { calls: number; bodies: unknown[] } {
     const seen = { calls: 0, bodies: [] as unknown[] };
@@ -97,13 +97,16 @@ describe('SigninLinkPage', () => {
         const discord = redeemCounter(DISCORD_REDEEM, 200, { access_token: 'wrong.jwt' });
         const magic = redeemCounter(MAGIC_REDEEM, 200, { access_token: 'magic.session' });
         renderPage();
-        expect(await screen.findByRole('heading', { name: 'Sign in to Night Owls' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { name: 'Sign in to Night Owls as Member7' })).toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
         await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/calendar'));
         expect(magic.calls).toBe(1);
         expect(discord.calls, 'a magic token must never go to the discord-link endpoint').toBe(0);
     });
 
+});
+
+describe('SigninLinkPage — refusals, sessions and dead links', () => {
     it('shows the used/expired card when the redeem answers 401, and stays off Calendar', async () => {
         held.token = SIGNIN_TOKEN;
         redeemCounter(DISCORD_REDEEM, 401, { statusCode: 401, message: 'Invalid or expired sign-in link' });

@@ -269,14 +269,12 @@ describe("MagicLinkService — src:'cmd' links (ROK-2283)", () => {
     return tokenOf(link);
   }
 
-  it("adds src:'cmd' only when asked", async () => {
+  it("adds src:'cmd' and the display name only when asked", async () => {
     findById.mockResolvedValue(user(SNOWFLAKE));
-    expect(jwt.decode<Record<string, unknown>>(await mintMagic()).src).toBe(
-      undefined,
-    );
-    expect(
-      jwt.decode<Record<string, unknown>>(await mintMagic('cmd')).src,
-    ).toBe('cmd');
+    const plain = jwt.decode<Record<string, unknown>>(await mintMagic());
+    expect([plain.src, plain.name]).toEqual([undefined, undefined]);
+    const cmd = jwt.decode<Record<string, unknown>>(await mintMagic('cmd'));
+    expect([cmd.src, cmd.name]).toEqual(['cmd', 'm']);
   });
 
   it.each<[string, 'cmd' | undefined, string | null, string | undefined]>([
