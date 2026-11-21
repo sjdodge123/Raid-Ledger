@@ -174,6 +174,12 @@ export interface HubMemberFilters {
     lead?: ReactNode;
     /** Optional band above the toolbar built from the filter state; replaces `membersSummary` when set (WoW: role pills that toggle the Role filter, ROK-2172). */
     summary?: ReactNode;
+    /**
+     * ROK-2281: "Sort by" options built from the filter state, after `HubModule.memberSorts`
+     * (WoW: a high→low / low→high pair per picked profession). Memoise it. When the
+     * active option leaves this list, core drops back to the default sort.
+     */
+    extraSorts?: readonly HubMemberSort[];
 }
 
 export interface HubModule {
