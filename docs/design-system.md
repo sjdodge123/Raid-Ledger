@@ -2274,9 +2274,9 @@ card ends with the share panel and a `Button secondary` "Replay" that remounts t
 
 ### 4.35 Event discussion — event-page card + forum event header (ROK-2226)
 
-Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/design-system` → Primitives → "Event discussion".
+Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/design-system` → Primitives → "Event discussion" and "Poll / lineup discussion" (`subject-discussion-demo.tsx`).
 
-- **Discussion card** (`pages/event-detail/EventDiscussionCard.tsx`) — after the Signups roster, before Activity. Same frame as the
+- **Discussion card** (`pages/event-detail/EventDiscussionCard.tsx`, composed from the subject-agnostic `components/discussion/discussion-card-parts.tsx` — ROK-2272 S9) — after the Signups roster, before Activity. Same frame as the
   page's other cards (`bg-surface border-edge rounded-xl p-4`). A compact reply preview: 28px `AvatarWithFallback`, name
   (`text-foreground`), time (`text-dim`), body `line-clamp-2` `text-secondary`, rows split by `border-edge-subtle`. Empty =
   `QuietEmpty`. The CTA is a router `Link` styled with `buttonClass` and NAVIGATES to `/events/<id>?discussion=1` (the panel
@@ -2284,6 +2284,18 @@ Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/
   "Sign up" `Button` running the page's own signup action (absent when the viewer cannot join) + secondary "Read the full
   thread"; cannot read → header + count only; locked → neutral `Pill` "Closed" + `ForumLockBar`. `forum-latest-widget`
   lists titles, not reply bodies, so it does not fit here.
+- **Poll / lineup Discussion card** (`components/discussion/SubjectDiscussionCard.tsx`, lazy via `subject-discussion-lazy.tsx`;
+  ROK-2272 S9) — the same frame, heading, preview and `QuietEmpty` as the event card (shared `discussion-card-parts`, test ids
+  `<kind>-discussion-*`), on the scheduling-poll page (after the composite / the locked-in outcome) and the lineup page (before
+  Activity). These subjects have no thread panel route, so a viewer who may reply (R7: voted / nominated) gets the forum's own
+  `ForumReplyComposerView` inline — the one deliberate difference from the event card's navigate-only CTA (Q2). Reader → muted
+  "Vote in the poll to join the discussion." / "Nominate or vote to join the discussion."; a locked-in poll is read-only with a
+  primary "View the event" link and the line "This poll is decided — discussion continues on the event"; locked →
+  `ForumLockBar` with the subject line "This discussion is closed" (its `line` override — never the event lock copy); hub members also get a secondary "Read the full thread" (hub Forum
+  tab). A private poll 404s and a hub-less one answers `none`; either hides the card. Only a *locked-in* poll (`scheduled`
+  match) is read-only — an active reschedule poll with a linked event keeps the reply box. Votes, suggestions, nominations,
+  withdrawals and hub Forum replies refresh the card (`hooks/subject-discussion-key.ts`), and the reply box is keyed by
+  subject so a draft never carries to another poll. Pass `flush` to the frame on `space-y-*` pages.
 - **Discussion panel** (`pages/event-detail/EventDiscussionPanel.tsx`, L4b) — `?discussion=1` swaps the card for the full
   thread in the same card frame: "← Back to event" (the Back-to-Forum idiom), title + `ForumEventPills`, a muted
   `UsersIcon` "N / M signed up" line, `ForumLockBar` when locked, then the forum's own `ForumMessage` root (no menu — the

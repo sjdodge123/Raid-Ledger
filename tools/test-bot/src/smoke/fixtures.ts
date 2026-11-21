@@ -159,15 +159,6 @@ export async function signupAs(
   });
 }
 
-/** Update a signup's status (tentative, declined, etc.). */
-export async function updateSignupStatus(
-  api: ApiClient,
-  eventId: number,
-  status: string,
-) {
-  return api.patch(`/events/${eventId}/signup/status`, { status });
-}
-
 /** Create a PUG invite slot for a Discord user. */
 export async function createPugInvite(
   api: ApiClient,

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
+import { EventPlanningForumCard } from '../../components/admin/discord-event-planning/event-planning-forum-card';
 
 export function DiscordOverviewPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -46,6 +47,7 @@ function DiscordOverviewContent() {
             <QuickActionsCard onReconnect={handleReconnect} onTestMessage={handleTestMessage}
                 isReconnecting={reconnectBot.isPending} isSending={sendTestMessage.isPending}
                 isConfigured={botData?.configured ?? false} isConnected={botData?.connected ?? false} />
+            <EventPlanningForumCard />
         </div>
     );
 }
