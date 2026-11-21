@@ -9,7 +9,13 @@ import { BenchPromotionService } from './bench-promotion.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SignupsRosterService } from './signups-roster.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import * as Sentry from '@sentry/nestjs';
 import { SettingsService } from '../settings/settings.service';
+
+jest.mock('@sentry/nestjs', () => ({
+  ...jest.requireActual<object>('@sentry/nestjs'),
+  captureException: jest.fn(),
+}));
 
 /** ROK-1769 voice-line gate: ephemeral voice off globally. */
 function voiceGateSettingsOff() {
@@ -21,6 +27,7 @@ function voiceGateSettingsOff() {
 
 describe('SignupsService — cancel', () => {
   let service: SignupsService;
+  let mockActivityLog: { log: jest.Mock; getTimeline: jest.Mock };
   let mockDb: Record<
     'delete' | 'insert' | 'select' | 'transaction' | 'update',
     jest.Mock
@@ -135,6 +142,10 @@ describe('SignupsService — cancel', () => {
     setupSelectChain();
     setupMutationChains();
 
+    mockActivityLog = {
+      log: jest.fn().mockResolvedValue(undefined),
+      getTimeline: jest.fn().mockResolvedValue({ data: [] }),
+    };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SignupsService,
@@ -163,13 +174,7 @@ describe('SignupsService — cancel', () => {
             emitAsync: jest.fn().mockResolvedValue([]),
           },
         },
-        {
-          provide: ActivityLogService,
-          useValue: {
-            log: jest.fn().mockResolvedValue(undefined),
-            getTimeline: jest.fn().mockResolvedValue({ data: [] }),
-          },
-        },
+        { provide: ActivityLogService, useValue: mockActivityLog },
       ],
     }).compile();
 
@@ -220,6 +225,27 @@ describe('SignupsService — cancel', () => {
       // ROK-562: cancel now soft-deletes with time-based status
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('resolves when the signup_cancelled audit write fails after the cancel landed', async () => {
+      const auditErr = new Error('audit down');
+      mockActivityLog.log.mockRejectedValueOnce(auditErr);
+      const selectRows = [[mockSignup], [mockEventDuration], []];
+      for (const rows of selectRows)
+        mockDb.select.mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue(rows),
+            }),
+          }),
+        });
+
+      await expect(service.cancel(1, 1)).resolves.toBeUndefined();
+
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(Sentry.captureException).toHaveBeenCalledWith(auditErr, {
+        tags: { activityLog: 'signup_cancelled' },
+      });
     });
 
     it('should throw NotFoundException when signup does not exist', async () => {
