@@ -11,7 +11,9 @@
  *
  *  1. Voter: the card shows, the inline reply posts and appears on the card.
  *  2. Non-voter: the poll reader note and no composer.
- *  3. Private poll: the summary is `none` and the page shows no card.
+ *  3. Private poll: the discussion routes 404 (`requireHubPoll` — a private
+ *     poll never gets a thread), and an invited member sees the poll page
+ *     render with no card.
  *  4. Lineup: `page.route` stubs `GET /lineups/:id/discussion` ONLY — no
  *     api/fixture path tags a non-standalone lineup to a hub — and the lineup
  *     page renders the card from it.
@@ -20,7 +22,7 @@
  */
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiGet, apiPost, getAdminToken } from './api-helpers';
+import { API_BASE, apiGet, apiPost, getAdminToken } from './api-helpers';
 import { seedCommunityHubs } from './hub-seed';
 import { signInOnboardedMember } from './browser-session';
 import { editorTextbox } from './hub-post-editor';
@@ -58,35 +60,44 @@ async function summary(jwt: string, pollId: number): Promise<Summary | null> {
     return (await apiGet(jwt, `/scheduling-polls/${pollId}/discussion`)) as Summary | null;
 }
 
-/** Seed the crew hub and a hub-tagged standalone poll (`visibility`). */
+/** Seed the crew hub and a hub-tagged standalone poll (`visibility`); a private poll invites the reader. */
 async function seedPoll(testInfo: TestInfo, visibility: 'public' | 'private'): Promise<PollSeed & { admin: string; crew: number }> {
     const admin = await getAdminToken();
     const gameId = await getFirstGameId(admin);
     const hubs = (await seedCommunityHubs(admin, testInfo, SLUG, { gameId })) as
         { hubIds?: { crew?: number }; memberUserIds?: number[] } | null;
     const crew = must(hubs?.hubIds?.crew, `crew hub in ${JSON.stringify(hubs)}`);
-    const poll = (await apiPost(admin, '/scheduling-polls', { gameId, hubId: crew, visibility })) as
+    const voterUserId = must(hubs?.memberUserIds?.[1], 'crew member-1');
+    const readerUserId = must(hubs?.memberUserIds?.[2], 'crew member-2');
+    const invite = visibility === 'private' ? { memberUserIds: [readerUserId] } : {};
+    const poll = (await apiPost(admin, '/scheduling-polls', { gameId, hubId: crew, visibility, ...invite })) as
         { id?: number; lineupId?: number } | null;
     return {
         admin,
         crew,
         pollId: must(poll?.id, `poll id in ${JSON.stringify(poll)}`),
         lineupId: must(poll?.lineupId, 'poll lineupId'),
-        voterUserId: must(hubs?.memberUserIds?.[1], 'crew member-1'),
-        readerUserId: must(hubs?.memberUserIds?.[2], 'crew member-2'),
+        voterUserId,
+        readerUserId,
     };
 }
 
-/** Sign in as `userId` and wait until the poll's thread summary is `ready`. */
-async function signInReady(page: Page, seed: PollSeed, userId: number): Promise<string> {
-    const jwt = await signInOnboardedMember(page, userId);
+/** Wait until the poll's thread summary is `ready` for `jwt` (the S7 sync is async). */
+async function waitReady(jwt: string, seed: PollSeed): Promise<void> {
     await expect
         .poll(async () => (await summary(jwt, seed.pollId))?.state, {
             message: 'the S7 sync created the poll thread',
             timeout: 20_000,
         })
         .toBe('ready');
-    return jwt;
+}
+
+/** The raw HTTP status of the poll discussion summary for `jwt`. */
+async function summaryStatus(jwt: string, pollId: number): Promise<number> {
+    const res = await fetch(`${API_BASE}/scheduling-polls/${pollId}/discussion`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+    });
+    return res.status;
 }
 
 async function openPollCard(page: Page, seed: PollSeed): Promise<Locator> {
@@ -101,7 +112,7 @@ test.describe('poll discussion card', () => {
         const seed = await seedPoll(testInfo, 'public');
         const voterJwt = await signInOnboardedMember(page, seed.voterUserId);
         await apiPost(voterJwt, `/lineups/${seed.lineupId}/schedule/${seed.pollId}/suggest`, { proposedTime: futureIso(5) });
-        await signInReady(page, seed, seed.voterUserId);
+        await waitReady(voterJwt, seed);
         const card = await openPollCard(page, seed);
         const text = `Poll discussion smoke ${testInfo.project.name} ${Date.now()}`;
         const box = await editorTextbox(page, card.getByTestId('forum-reply-input'));
@@ -120,20 +131,25 @@ test.describe('poll discussion card', () => {
 
     test('a hub member who has not voted reads with the reader note and no composer (R7)', async ({ page }, testInfo) => {
         const seed = await seedPoll(testInfo, 'public');
-        await signInReady(page, seed, seed.readerUserId);
+        await waitReady(await signInOnboardedMember(page, seed.readerUserId), seed);
         const card = await openPollCard(page, seed);
         await expect(card.getByTestId('poll-discussion-signup-note'), 'the reader note').toContainText(READER_NOTE);
         await expect(card.getByTestId('forum-reply-composer'), 'no composer for a non-voter').toHaveCount(0);
     });
 
-    test('a private poll has no Discussion card', async ({ page }, testInfo) => {
+    test('a private poll has no Discussion card, even for an invited member', async ({ page }, testInfo) => {
         const seed = await seedPoll(testInfo, 'private');
-        await signInOnboardedMember(page, seed.readerUserId);
-        const adminView = await summary(seed.admin, seed.pollId);
-        expect(adminView?.state, 'a private poll never gets a discussion thread').toBe('none');
-        const fetched = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith(`/scheduling-polls/${seed.pollId}/discussion`));
+        const inviteeJwt = await signInOnboardedMember(page, seed.readerUserId);
+        // requireHubPoll: a private poll 404s the discussion route for everyone (creator and invitee).
+        expect(await summaryStatus(seed.admin, seed.pollId), 'the creator gets a 404 discussion').toBe(404);
+        expect(await summaryStatus(inviteeJwt, seed.pollId), 'the invitee gets a 404 discussion').toBe(404);
+        const fetched = page.waitForResponse((r) =>
+            new URL(r.url()).pathname.endsWith(`/scheduling-polls/${seed.pollId}/discussion`),
+        );
         await page.goto(`/community-lineup/${seed.lineupId}/schedule/${seed.pollId}`);
-        await fetched;
+        // The invitee can see the poll itself, so the card would have mounted here.
+        await expect(page.getByTestId('scheduling-composite'), 'the invitee sees the private poll').toBeVisible({ timeout: 20_000 });
+        expect((await fetched).status(), 'the page asked for the discussion and got a 404').toBe(404);
         await expect(page.getByTestId('poll-discussion-card'), 'no card on a private poll').toHaveCount(0);
     });
 });
