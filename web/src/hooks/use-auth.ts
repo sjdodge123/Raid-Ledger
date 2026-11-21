@@ -12,7 +12,7 @@ import { readClaims } from '../lib/api/token-expiry';
 import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
-import { peekCapturedSigninLinkToken } from '../lib/magic-link-capture';
+import { peekCapturedSigninLinkToken, isSigninLinkPage } from '../lib/magic-link-capture';
 import { clearCapturedQueryToken } from '../lib/query-token-capture';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import { dropViewerPrivateCaches } from './viewer-private-caches';
@@ -119,7 +119,7 @@ function handleRefreshFailure(client: QueryClient | undefined): null {
     if (client) dropViewerPrivateCaches(client);
     // ROK-2283 (Codex P2): a held /signin-link token lives only in memory, so
     // a silent OAuth hop would lose it — stay put and let Continue spend it.
-    if (peekCapturedSigninLinkToken()) return null;
+    if (peekCapturedSigninLinkToken() && isSigninLinkPage(window.location.pathname)) return null;
     attemptSilentReauth(window.location.pathname + window.location.search);
     return null;
 }

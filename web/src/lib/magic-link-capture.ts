@@ -16,7 +16,7 @@ import { takeMagicLinkToken } from './magic-link';
 /** The tap-to-continue landing for `/login` links (api `SIGNIN_LINK_PATH`). */
 export const SIGNIN_LINK_PAGE_PATH = '/signin-link';
 
-function isSigninLinkPage(pathname: string): boolean {
+export function isSigninLinkPage(pathname: string): boolean {
     return pathname.replace(/\/+$/, '') === SIGNIN_LINK_PAGE_PATH;
 }
 

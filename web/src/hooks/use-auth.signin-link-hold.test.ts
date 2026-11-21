@@ -39,11 +39,13 @@ describe('ROK-2283: a held /signin-link token suppresses silent re-auth', () => 
         localStorage.clear();
         clearAccessToken();
         held.token = null;
+        window.history.replaceState(null, '', '/');
         vi.mocked(attemptSilentReauth).mockClear();
     });
 
     it('settles signed-out without redirecting while a sign-in link is held', async () => {
         held.token = 'held.signin.token';
+        window.history.replaceState(null, '', '/signin-link');
         expect(await bootWithExpiredRefresh()).toBeNull();
         expect(attemptSilentReauth, 'the silent OAuth hop would drop the held link').not.toHaveBeenCalled();
     });
@@ -51,5 +53,12 @@ describe('ROK-2283: a held /signin-link token suppresses silent re-auth', () => 
     it('still attempts the silent re-auth when no sign-in link is held', async () => {
         expect(await bootWithExpiredRefresh()).toBeNull();
         expect(attemptSilentReauth).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-auths again once the member has left /signin-link with a token still held', async () => {
+        held.token = 'held.signin.token';
+        window.history.replaceState(null, '', '/calendar');
+        expect(await bootWithExpiredRefresh()).toBeNull();
+        expect(attemptSilentReauth, 'a stale hold must not switch silent re-auth off on other routes').toHaveBeenCalledTimes(1);
     });
 });
