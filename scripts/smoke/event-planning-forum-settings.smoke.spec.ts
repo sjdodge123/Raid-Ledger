@@ -9,18 +9,24 @@
  * api integration spec (`event-planning-forum.admin.integration.spec.ts`).
  */
 import type { Page, Route } from '@playwright/test';
+import type { EventPlanningForumCandidate, EventPlanningForumSettingsDto } from '@raid-ledger/contract';
 import { test, expect } from './base';
 
-const SHARED = { channelId: '323456789012345678', name: 'event-planning', managed: true };
-const RAIDS = { channelId: '423456789012345678', name: 'raid-forum', managed: false };
+const SHARED: EventPlanningForumCandidate = { channelId: '323456789012345678', name: 'event-planning', managed: true };
+const RAIDS: EventPlanningForumCandidate = { channelId: '423456789012345678', name: 'raid-forum', managed: false };
+const LOOT: EventPlanningForumCandidate = { channelId: '523456789012345678', name: 'loot-forum', managed: false };
 const OVERVIEW = '/admin/settings/discord';
 
-type Candidate = typeof SHARED;
 interface Stub { puts: unknown[]; picked: string | null }
 
-function settings(candidates: Candidate[], picked: string | null): Record<string, unknown> {
-    const resolved = candidates.length === 1 ? candidates[0]?.channelId ?? null : picked;
-    return { channelId: picked, candidates, resolvedChannelId: resolved, ...(resolved === null && candidates.length >= 2 ? { warning: 'ambiguous' } : {}) };
+/** The api resolver's rules (§3.2): one forum ⇒ it; a valid pick ⇒ it; else the single bot-made #event-planning; else ambiguous. */
+function settings(candidates: EventPlanningForumCandidate[], picked: string | null): EventPlanningForumSettingsDto {
+    const pick = candidates.find((c) => c.channelId === picked);
+    const managed = candidates.filter((c) => c.managed && c.name === 'event-planning');
+    const auto = managed.length === 1 ? managed[0] : undefined;
+    const resolved = candidates.length <= 1 ? candidates[0] : (pick ?? auto);
+    const ambiguous = candidates.length >= 2 && !resolved;
+    return { channelId: picked, candidates, resolvedChannelId: resolved?.channelId ?? null, ...(ambiguous ? { warning: 'ambiguous' } : {}) };
 }
 
 function pickedFrom(body: unknown): string | null {
@@ -29,7 +35,7 @@ function pickedFrom(body: unknown): string | null {
 }
 
 /** Serve the card's route from in-memory state that a PUT updates (so a reload reads it back). */
-async function stubPlanningForum(page: Page, candidates: Candidate[]): Promise<Stub> {
+async function stubPlanningForum(page: Page, candidates: EventPlanningForumCandidate[]): Promise<Stub> {
     const stub: Stub = { puts: [], picked: null };
     await page.route((url) => url.pathname.endsWith('/admin/discord/event-planning-forum'), async (route: Route) => {
         if (route.request().method() === 'PUT') {
@@ -51,8 +57,8 @@ async function openCard(page: Page) {
 }
 
 test.describe('Admin Discord — Event planning forum (ROK-2272)', () => {
-    test('two bound forums: the admin picks one and it survives a reload', async ({ page }) => {
-        const stub = await stubPlanningForum(page, [SHARED, RAIDS]);
+    test('two bound forums, none bot-made: the admin picks one and it survives a reload', async ({ page }) => {
+        const stub = await stubPlanningForum(page, [RAIDS, LOOT]);
         let card = await openCard(page);
         const select = card.getByRole('combobox', { name: 'Discord forum' });
         await expect(select).toHaveValue('');

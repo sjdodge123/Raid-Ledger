@@ -67,18 +67,30 @@ function ForumPicker({ settings }: { settings: EventPlanningForumSettingsDto }):
     return (
         <div className="flex flex-col gap-3">
             <Field label="Discord forum" hint="Hub posts keep going to each hub’s own forum." error={save.error?.message}>
-                <Select value={picked} placeholder="Choose a forum" disabled={save.isPending} data-testid="event-planning-forum-select"
-                    onChange={(e) => save.mutate(e.target.value === '' ? null : e.target.value)}>
+                {/* The prompt option is disabled: picking it must never clear a stored forum. */}
+                <Select value={picked} disabled={save.isPending} data-testid="event-planning-forum-select"
+                    onChange={(e) => { if (e.target.value) save.mutate(e.target.value); }}>
+                    <option value="" disabled>Choose a forum</option>
                     {settings.candidates.map((c) => <option key={c.channelId} value={c.channelId}>{candidateLabel(c)}</option>)}
                 </Select>
             </Field>
-            <ResolvedLine resolved={resolved} />
+            <ResolvedLine resolved={resolved} unknown={settings.warning === BOT_OFFLINE} />
         </div>
     );
 }
 
-/** What non-hub posts use right now; nothing ⇒ a warning to pick one. */
-function ResolvedLine({ resolved }: { resolved: EventPlanningForumCandidate | undefined }): JSX.Element {
+interface ResolvedProps { resolved: EventPlanningForumCandidate | undefined; unknown: boolean }
+
+/** What non-hub posts use right now; nothing ⇒ a warning to pick one (or that forums can't be checked). */
+function ResolvedLine({ resolved, unknown }: ResolvedProps): JSX.Element {
+    if (!resolved && unknown) {
+        return (
+            <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="event-planning-forum-resolved">
+                <StatusChip tone="neutral" title="Event planning forum">Unknown</StatusChip>
+                <span className="text-secondary">Forums can’t be checked right now, so the forum in use isn’t known.</span>
+            </div>
+        );
+    }
     return (
         <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="event-planning-forum-resolved">
             <StatusChip tone={resolved ? 'success' : 'warning'} title="Event planning forum">{resolved ? 'In use' : 'Not set'}</StatusChip>
