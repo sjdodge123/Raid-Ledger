@@ -8,6 +8,7 @@ import {
   isActiveSignup,
   signupLines,
   type SignupLine,
+  type SignupLineEmoji,
   type SignupLineState,
 } from './hub-forum-discord-signup-lines';
 import type { SignupLineMember } from './hub-forum-discord-signup-lines.queries';
@@ -152,6 +153,7 @@ export function planLineFlush(
   pinged: readonly string[],
   posted: ReadonlyMap<string, PostedMember>,
   members: ReadonlyMap<string, SignupLineMember>,
+  emoji: SignupLineEmoji,
 ): LineFlushPlan {
   const was = new Set(pinged);
   const ids = [...new Set([...posted.keys(), ...members.keys()])];
@@ -166,6 +168,7 @@ export function planLineFlush(
       current: members.get(discordId)?.state ?? null,
       mentioned: was.has(discordId),
     })),
+    emoji,
   );
   const remove = pinged.filter(
     (id) => !isActiveSignup(members.get(id)?.state ?? null),

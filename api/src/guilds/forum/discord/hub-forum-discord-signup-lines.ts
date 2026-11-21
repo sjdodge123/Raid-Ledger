@@ -9,9 +9,11 @@
  * what adds them to it); every later line names them without a ping. The
  * caller owns the "mentioned" flag and clears it when it removes the member
  * from the thread, so a re-signup is mentioned (re-added) again.
- * All wording lives in `hub-forum-discord-signup-lines.copy.ts`.
+ * All wording lives in `hub-forum-discord-signup-lines.copy.ts`; role and
+ * class glyphs come from the caller's `SignupLineEmoji` (ROK-2273).
  */
 import { escapeMarkdown } from 'discord.js';
+import type { DiscordEmojiService } from '../../../discord-bot/services/discord-emoji.service';
 import {
   BENCH_LABEL,
   DETAIL_SEPARATOR,
@@ -26,6 +28,26 @@ export interface SignupLineCharacter {
   name: string;
   className: string | null;
   spec: string | null;
+}
+
+/**
+ * ROK-2273 — the per-guild role / class glyphs, resolved by the same
+ * `DiscordEmojiService` calls the channel embed makes, so a line and the
+ * embed show the same (custom or Unicode) emoji. '' = no glyph.
+ */
+export interface SignupLineEmoji {
+  role(role: string): string;
+  klass(className: string): string;
+}
+
+/** The resolver over `DiscordEmojiService` — the embed's own two calls. */
+export function signupLineEmoji(
+  svc: Pick<DiscordEmojiService, 'getRoleEmoji' | 'getClassEmoji'>,
+): SignupLineEmoji {
+  return {
+    role: (r) => svc.getRoleEmoji(r),
+    klass: (c) => svc.getClassEmoji(c),
+  };
 }
 
 /**
@@ -96,12 +118,30 @@ export function hoursLabel(hours: number): string {
   return hours < 1 ? '<1' : String(Math.round(hours));
 }
 
-/** ` — Tank · Thrall (Prot Warrior)`, or '' when neither is known. */
-function detail(s: SignupLineState): string {
+function roleGlyph(role: string | null, emoji: SignupLineEmoji): string {
+  return role === null ? '' : emoji.role(role);
+}
+
+function classGlyph(ch: SignupLineCharacter, emoji: SignupLineEmoji): string {
+  return ch.className ? emoji.klass(ch.className) : '';
+}
+
+/** `🛡️ Tank`, or the bare label when there is no glyph. */
+function withGlyph(glyph: string, label: string): string {
+  return glyph ? `${glyph} ${label}` : label;
+}
+
+/** ` — 🛡️ Tank · Thrall (Prot Warrior)`, or '' when neither is known. */
+function detail(s: SignupLineState, emoji: SignupLineEmoji): string {
   const parts: string[] = [];
   if (s.bench) parts.push(BENCH_LABEL);
-  else if (s.role !== null) parts.push(roleLabel(s.role));
-  if (s.character) parts.push(characterLabel(s.character));
+  else if (s.role !== null) {
+    parts.push(withGlyph(emoji.role(s.role), roleLabel(s.role)));
+  }
+  if (s.character) {
+    const ch = s.character;
+    parts.push(withGlyph(classGlyph(ch, emoji), characterLabel(ch)));
+  }
   return parts.length ? DETAIL_SEPARATOR + parts.join(PART_SEPARATOR) : '';
 }
 
@@ -134,31 +174,36 @@ function statusFragment(
   return [cur.status === 'signed_up' ? COPY.confirmed : COPY.nowTentative];
 }
 
+/** A promotion / role change leads with the NEW role's glyph (ROK-2273). */
 function rosterFragments(
   prev: SignupLineState,
   cur: SignupLineState,
+  emoji: SignupLineEmoji,
 ): Fragment[] {
   if (!prev.bench && cur.bench) return [COPY.benched];
+  const glyph = roleGlyph(cur.role, emoji);
   if (prev.bench && !cur.bench) {
     const to = cur.role === null ? '' : ` → ${roleLabel(cur.role)}`;
-    return [{ emoji: COPY.promoted.emoji, text: COPY.promoted.text + to }];
+    const text = COPY.promoted.text + to;
+    return [{ emoji: glyph || COPY.promoted.emoji, text }];
   }
   if (cur.bench || prev.role === cur.role) return [];
   const text = COPY.roleChange.text(roleLabel(prev.role), roleLabel(cur.role));
-  return [{ emoji: COPY.roleChange.emoji, text }];
+  return [{ emoji: glyph || COPY.roleChange.emoji, text }];
 }
 
+/** Leads with the new character's class glyph, never a role glyph. */
 function characterFragments(
   prev: SignupLineState,
   cur: SignupLineState,
+  emoji: SignupLineEmoji,
 ): Fragment[] {
   if (cur.character === null) return [];
   const was = prev.character ? characterLabel(prev.character) : null;
   const now = characterLabel(cur.character);
   if (was === now) return [];
-  return [
-    { emoji: COPY.characterChange.emoji, text: COPY.characterChange.text(now) },
-  ];
+  const glyph = classGlyph(cur.character, emoji) || COPY.characterChange.emoji;
+  return [{ emoji: glyph, text: COPY.characterChange.text(now) }];
 }
 
 function lateFragments(
@@ -187,11 +232,12 @@ function joinLate(cur: SignupLineState): Fragment[] {
 export function changeFragments(
   prev: SignupLineState,
   cur: SignupLineState,
+  emoji: SignupLineEmoji,
 ): Fragment[] {
   return [
     ...statusFragment(prev, cur),
-    ...rosterFragments(prev, cur),
-    ...characterFragments(prev, cur),
+    ...rosterFragments(prev, cur, emoji),
+    ...characterFragments(prev, cur, emoji),
     ...lateFragments(prev, cur),
   ];
 }
@@ -204,7 +250,10 @@ function render(who: string, frags: readonly Fragment[], suffix = ''): string {
 }
 
 /** The one line to post for a member, or null when nothing changed. */
-export function signupLine(input: SignupLineInput): SignupLine | null {
+export function signupLine(
+  input: SignupLineInput,
+  emoji: SignupLineEmoji,
+): SignupLine | null {
   const { previous: prev, current: cur } = input;
   const wasActive = isActiveSignup(prev);
   if (!isActiveSignup(cur)) {
@@ -214,9 +263,9 @@ export function signupLine(input: SignupLineInput): SignupLine | null {
   const mention = !input.mentioned;
   if (prev === null || !wasActive) {
     const frags = [joinFragment(cur, prev !== null), ...joinLate(cur)];
-    return line(input, mention, frags, detail(cur));
+    return line(input, mention, frags, detail(cur, emoji));
   }
-  const frags = changeFragments(prev, cur);
+  const frags = changeFragments(prev, cur, emoji);
   if (frags.length === 0) return null;
   return line(input, mention, frags);
 }
@@ -238,8 +287,11 @@ function line(
 }
 
 /** Lines for a whole flush, input order, unchanged members dropped. */
-export function signupLines(inputs: readonly SignupLineInput[]): SignupLine[] {
+export function signupLines(
+  inputs: readonly SignupLineInput[],
+  emoji: SignupLineEmoji,
+): SignupLine[] {
   return inputs
-    .map((input) => signupLine(input))
+    .map((input) => signupLine(input, emoji))
     .filter((l): l is SignupLine => l !== null);
 }
