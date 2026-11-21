@@ -10,6 +10,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
 import * as Sentry from '@sentry/nestjs';
+import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import {
   LINEUP_EVENTS,
@@ -105,6 +106,23 @@ export class EventPlanningSubjectsListener {
         );
       }
     });
+  }
+
+  /**
+   * ROK-2287: on every (re)connect, post the voting lineups whose edge found
+   * the bot offline (the 5-minute sweep is the backstop).
+   */
+  @OnEvent(DISCORD_BOT_EVENTS.CONNECTED, { async: true })
+  async onConnected(): Promise<void> {
+    try {
+      await this.subjects.ensureMissingLineupPosts();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`event-planning lineup catch-up failed: ${msg}`);
+      Sentry.captureException(err, {
+        tags: { event_planning_posts: 'lineup-catch-up' },
+      });
+    }
   }
 
   private syncPoll(what: string, payload: unknown): Promise<void> {

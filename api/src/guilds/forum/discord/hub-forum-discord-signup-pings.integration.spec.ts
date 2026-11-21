@@ -412,7 +412,7 @@ describe('ROK-2271 signup lines — role, character and status', () => {
     expect(await flush(s.eventId)).toBe('pinged');
     expect(mentioned()).toEqual([[did.signed]]);
     expect(message(0)).toBe(
-      `✅ <@${did.signed}> signed up — Tank · Thrall${s.eventId} (Protection Warrior)`,
+      `✅ <@${did.signed}> signed up — 🛡️ Tank · Thrall${s.eventId} (Protection Warrior)`,
     );
   });
 

@@ -19,6 +19,7 @@ import type {
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { logBestEffort } from '../activity-log/activity-log-best-effort';
 import { SignupsService } from './signups.service';
 import {
   assertEventAcceptingSignups,
@@ -202,7 +203,8 @@ export class SeriesSignupsService {
     seriesSignupId: number,
     nights: number,
   ): Promise<void> {
-    await this.activityLog.log(
+    await logBestEffort(
+      this.activityLog,
       'event',
       anchorEventId,
       'series_joined',
@@ -224,11 +226,18 @@ export class SeriesSignupsService {
     seriesSignupId: number,
     cancelledEventIds: number[],
   ): Promise<void> {
-    await this.activityLog.log('event', anchorEventId, 'series_left', userId, {
-      seriesSignupId,
-      cancelled: cancelledEventIds.length,
-      cancelledEventIds,
-    });
+    await logBestEffort(
+      this.activityLog,
+      'event',
+      anchorEventId,
+      'series_left',
+      userId,
+      {
+        seriesSignupId,
+        cancelled: cancelledEventIds.length,
+        cancelledEventIds,
+      },
+    );
   }
 
   /**

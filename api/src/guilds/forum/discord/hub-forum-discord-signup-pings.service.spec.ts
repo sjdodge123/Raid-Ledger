@@ -15,6 +15,7 @@ import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import type Redis from 'ioredis';
 import type { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import type { EventPlanningPostsService } from './event-planning-posts.service';
+import type { DiscordEmojiService } from '../../../discord-bot/services/discord-emoji.service';
 
 jest.mock('./hub-forum-discord-signup-pings.queries');
 jest.mock('./hub-forum-discord-signup-lines.queries');
@@ -129,6 +130,11 @@ function setup(pinged: string[] = [], online = true) {
     ),
   };
   const planning = { ensureEventPost: jest.fn() };
+  // ROK-2273: no glyphs by default; a test may stub a role's emoji.
+  const emoji = {
+    getRoleEmoji: jest.fn<string, [string]>(() => ''),
+    getClassEmoji: jest.fn<string, [string]>(() => ''),
+  };
   const svc = new HubForumDiscordSignupPings(
     {} as ForumDiscordDb,
     outbound as unknown as HubForumDiscordOutboundService,
@@ -136,8 +142,9 @@ function setup(pinged: string[] = [], online = true) {
     redis as unknown as Redis,
     planning as unknown as EventPlanningPostsService,
     { reopenIfPending: jest.fn() } as unknown as EventPlanningPostsLockSweep,
+    emoji as unknown as DiscordEmojiService,
   );
-  return { svc, redis, outbound, gateway, set, hash, strings };
+  return { svc, redis, outbound, gateway, set, hash, strings, emoji };
 }
 
 const mockedQ = jest.mocked(q);
@@ -337,6 +344,22 @@ describe('ROK-2260 HubForumDiscordSignupPings.flush — Codex P2', () => {
 });
 
 describe('ROK-2271 HubForumDiscordSignupPings.flush — state lines', () => {
+  it("ROK-2273: the line's role glyph comes from the embed's DiscordEmojiService", async () => {
+    mockedLq.loadSignupLineStates.mockResolvedValue(
+      rows(row('signed_up', A, 'tank')),
+    );
+    const t = setup();
+    t.emoji.getRoleEmoji.mockImplementation((r: string) =>
+      r === 'tank' ? '<:rl_tank:9>' : '',
+    );
+    expect(await t.svc.flush(5)).toBe('pinged');
+    expect(t.gateway.mention).toHaveBeenCalledWith(
+      'dthread',
+      expect.stringContaining(`<@${A}> signed up — <:rl_tank:9> Tank`),
+      [A],
+    );
+  });
+
   it('a first signup posts a line with its role that pings, then records the posted state', async () => {
     mockedLq.loadSignupLineStates.mockResolvedValue(
       rows(row('signed_up', A, 'tank')),
@@ -421,7 +444,7 @@ describe('ROK-2271 HubForumDiscordSignupPings.flush — state lines', () => {
     expect(await t.svc.flush(5)).toBe('pinged');
     expect(t.gateway.mention).toHaveBeenLastCalledWith(
       'dthread',
-      expect.stringContaining("Alice can't make it"),
+      expect.stringContaining('Alice declined'),
       [],
     );
     expect(t.gateway.removeThreadMembers).toHaveBeenCalledWith(
@@ -537,7 +560,7 @@ describe('review round 3 MAJOR-D1 — real changes during a resync still post', 
     expect(t.gateway.mention).toHaveBeenCalledTimes(2);
     expect(t.gateway.mention).toHaveBeenLastCalledWith(
       'dthread',
-      "👋 Bob can't make it",
+      '👋 Bob declined',
       [],
     );
   });
