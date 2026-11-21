@@ -124,6 +124,7 @@ export class SigninReminderInteractionListener {
       this.logger.warn(
         `Sign-in reminder opt-out saved but the DM was not updated: ${errorMessage(error)}`,
       );
+      await this.safeReply(interaction, SIGNIN_REMINDER_OPTED_OUT_REPLY);
     }
   }
 

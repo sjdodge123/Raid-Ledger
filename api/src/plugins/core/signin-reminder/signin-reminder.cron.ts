@@ -16,11 +16,11 @@ export class SigninReminderCron {
     private readonly cronJobService: CronJobService,
   ) {}
 
-  /** `false` = a no-op tick (switch off, bot offline, nobody due). */
   @Cron('0 0 * * * *', { name: 'SigninReminderCron_tick' })
   async tick(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       SIGNIN_REMINDER_JOB_NAME,
+      /** `false` = a no-op tick (switch off, bot offline, nobody due). */
       async () => {
         const outcome = await this.reminders.runTick(new Date());
         return outcome.status === 'ran' && outcome.sent + outcome.failed > 0;
