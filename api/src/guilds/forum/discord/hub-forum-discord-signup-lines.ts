@@ -13,6 +13,7 @@
  * class glyphs come from the caller's `SignupLineEmoji` (ROK-2273).
  */
 import { escapeMarkdown } from 'discord.js';
+import type { DiscordEmojiService } from '../../../discord-bot/services/discord-emoji.service';
 import {
   BENCH_LABEL,
   DETAIL_SEPARATOR,
@@ -37,6 +38,16 @@ export interface SignupLineCharacter {
 export interface SignupLineEmoji {
   role(role: string): string;
   klass(className: string): string;
+}
+
+/** The resolver over `DiscordEmojiService` — the embed's own two calls. */
+export function signupLineEmoji(
+  svc: Pick<DiscordEmojiService, 'getRoleEmoji' | 'getClassEmoji'>,
+): SignupLineEmoji {
+  return {
+    role: (r) => svc.getRoleEmoji(r),
+    klass: (c) => svc.getClassEmoji(c),
+  };
 }
 
 /**

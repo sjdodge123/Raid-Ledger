@@ -23,7 +23,7 @@ import {
   type LineFlushPlan,
   type PostedMember,
 } from './hub-forum-discord-signup-lines.flush';
-import type { SignupLineEmoji } from './hub-forum-discord-signup-lines';
+import { signupLineEmoji } from './hub-forum-discord-signup-lines';
 import {
   loadSignupLineStates,
   type SignupLineMember,
@@ -84,14 +84,6 @@ export class HubForumDiscordSignupPings {
     private readonly registryLock: EventPlanningPostsLockSweep,
     private readonly emoji: DiscordEmojiService,
   ) {}
-
-  /** ROK-2273 — lines take role/class glyphs from the embed's own source. */
-  private lineEmoji(): SignupLineEmoji {
-    return {
-      role: (r) => this.emoji.getRoleEmoji(r),
-      klass: (c) => this.emoji.getClassEmoji(c),
-    };
-  }
 
   /** Flush one event; never pings a user twice for the same signup. */
   async flush(eventId: number): Promise<SignupPingOutcome> {
@@ -160,7 +152,12 @@ export class HubForumDiscordSignupPings {
       posted = await this.resync(keys.lines, posted, members);
       await this.takeIfStable(eventId, flags);
     }
-    const plan = planLineFlush(pinged, posted, members, this.lineEmoji());
+    const plan = planLineFlush(
+      pinged,
+      posted,
+      members,
+      signupLineEmoji(this.emoji),
+    );
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
