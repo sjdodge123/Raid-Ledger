@@ -13,9 +13,10 @@
  *
  * A starter edit sends the embed + buttons with content `''` and never the
  * card's push line `built.content` (D5, ruling 1). A starter the bot can no
- * longer edit — another author (50005), a locked/archived post (50083) or a
- * deleted post (10003) — is `'gone'` and its row is deleted, so the sync job
- * stops retrying it (D7).
+ * longer edit — another author (50005), a locked post (50083, after the port's
+ * unarchive-and-retry), a deleted post (10003) or any other permanent edit
+ * failure (`isPermanentEmbedEditError`: 10008, 50001, 50013) — is `'gone'`
+ * and its row is deleted, so the sync job stops retrying it (D7).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
@@ -30,6 +31,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
+import { isPermanentEmbedEditError } from '../processors/embed-sync-edit.helpers';
 import { embedComponents, type EmbedResult } from './discord-embed.factory';
 import { isForumStarterRow } from './event-message-rows.helpers';
 
@@ -44,7 +46,8 @@ export interface ForumStarterEditPort {
   /**
    * Edit the starter of post `threadId` to `card`, content `''`.
    *
-   * @returns `'gone'` when the post or its starter no longer exists.
+   * @returns `'gone'` when the post or its starter no longer exists, or
+   *   its hub is no longer bound to the forum.
    * @throws The Discord error for any other failure.
    */
   editStarter(
@@ -56,13 +59,21 @@ export interface ForumStarterEditPort {
 /** DI token of the {@link ForumStarterEditPort} implementation. */
 export const FORUM_STARTER_EDIT_PORT = 'FORUM_STARTER_EDIT_PORT';
 
-/** Cannot edit another author's message, thread archived/locked, unknown channel. */
+/**
+ * Cannot edit another author's message, thread archived (the port already
+ * unarchived and retried an unlocked post), unknown channel.
+ */
 const STARTER_GONE_CODES: ReadonlySet<number | string> = new Set([
   50005, 50083, 10003,
 ]);
 
-/** True when a starter edit failed in a way no retry can fix (D7). */
+/**
+ * True when a starter edit failed in a way no retry can fix (D7): the starter
+ * codes above or any permanent embed-edit code (review MINOR — a 50001 after
+ * the bot loses the forum would otherwise be retried on every sync).
+ */
 export function isStarterGoneError(err: unknown): boolean {
+  if (isPermanentEmbedEditError(err)) return true;
   return err instanceof DiscordAPIError && STARTER_GONE_CODES.has(err.code);
 }
 

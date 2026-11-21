@@ -99,7 +99,9 @@ describe('EventEmbedMessageEditor — forum starter rows', () => {
     expect(JSON.stringify(sent)).not.toContain(built.content);
   });
 
-  it.each([50005, 50083, 10003])(
+  // 10008 / 50001 / 50013: permanent embed-edit codes outside the starter
+  // set (review MINOR) — dropped too, so the sync stops retrying them.
+  it.each([50005, 50083, 10003, 10008, 50001, 50013])(
     'Discord %i → gone and the row is deleted',
     async (code) => {
       const { editor, editStarter, db, where } = await setup();
@@ -109,6 +111,14 @@ describe('EventEmbedMessageEditor — forum starter rows', () => {
       expect(where).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('a permanent code on an ANNOUNCEMENT still rethrows (unchanged)', async () => {
+    const { editor, editEmbed, db } = await setup();
+    const failure = discordError(50001);
+    editEmbed.mockRejectedValue(failure);
+    await expect(editor.edit(ANNOUNCEMENT, card())).rejects.toBe(failure);
+    expect(db.delete).not.toHaveBeenCalled();
+  });
 
   it('a port "gone" (post deleted) also deletes the row', async () => {
     const { editor, editStarter, db } = await setup();
