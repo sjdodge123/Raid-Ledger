@@ -14,6 +14,10 @@ import type { ChannelResolverService } from '../services/channel-resolver.servic
 import type { ScheduledEventService } from '../services/scheduled-event.service';
 import { getEphemeralVoiceState } from '../services/ephemeral-voice.db-helpers';
 import { applyEmbedVoice } from '../services/embed-voice.helpers';
+import {
+  findAnnouncementMessage,
+  isForumStarterRow,
+} from '../services/event-message-rows.helpers';
 import type { PlannedVoiceSettingsSource } from '../services/planned-ephemeral-voice.helpers';
 import { EMBED_STATES } from '../discord-bot.constants';
 import { deleteRecordBump } from '../processors/embed-sync-bump.helpers';
@@ -56,16 +60,7 @@ export async function findDiscordMessageRecord(
   deps: EventListenerDeps,
   eventId: number,
 ): Promise<{ guildId: string; channelId: string; messageId: string } | null> {
-  const [msgRecord] = await deps.db
-    .select({
-      guildId: schema.discordEventMessages.guildId,
-      channelId: schema.discordEventMessages.channelId,
-      messageId: schema.discordEventMessages.messageId,
-    })
-    .from(schema.discordEventMessages)
-    .where(eq(schema.discordEventMessages.eventId, eventId))
-    .limit(1);
-  return msgRecord ?? null;
+  return findAnnouncementMessage(deps.db, eventId);
 }
 
 /** Fetch the event's current reschedulingPollId (ROK-1370). */
@@ -230,16 +225,22 @@ export async function cancelEmbedRecord(
   }
 }
 
-/** Delete a Discord message and remove the DB record. */
+/**
+ * Delete a Discord message and remove the DB record. A forum post's starter
+ * row (ROK-2292) is removed from the DB only — deleting a starter message would
+ * delete the whole post; the forum lifecycle closes it instead.
+ */
 export async function deleteEmbedRecord(
   deps: EventListenerDeps,
   record: MessageRecord,
   eventId: number,
 ): Promise<void> {
-  await deps.clientService.deleteMessage(record.channelId, record.messageId);
-  deps.logger.log(
-    `Deleted Discord message for event ${eventId} (msg: ${record.messageId})`,
-  );
+  if (!isForumStarterRow(record)) {
+    await deps.clientService.deleteMessage(record.channelId, record.messageId);
+    deps.logger.log(
+      `Deleted Discord message for event ${eventId} (msg: ${record.messageId})`,
+    );
+  }
   await deps.db
     .delete(schema.discordEventMessages)
     .where(eq(schema.discordEventMessages.id, record.id));

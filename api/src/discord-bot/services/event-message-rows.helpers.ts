@@ -12,7 +12,8 @@
  * Every reader that picks ONE row (`.limit(1)`), the bump paths and the delete
  * path read announcement rows only; the embed updater edits both kinds.
  */
-import { eq, ne, type SQL } from 'drizzle-orm';
+import { and, eq, ne, type SQL } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
 /** The two columns that tell a forum starter row from an announcement row. */
@@ -36,4 +37,33 @@ export function announcementRowsOnly(): SQL {
 export function forumStarterRowsOnly(): SQL {
   const t = schema.discordEventMessages;
   return eq(t.channelId, t.messageId);
+}
+
+/** Where an event's announcement embed lives in Discord. */
+export interface AnnouncementMessageRef {
+  guildId: string;
+  channelId: string;
+  messageId: string;
+}
+
+/**
+ * The event's announcement-channel embed message (any guild), or null. Never
+ * a forum starter: a starter row must not stand in for "the embed is posted"
+ * nor for the "View in Discord" link (ROK-2292 R1).
+ */
+export async function findAnnouncementMessage(
+  db: Pick<PostgresJsDatabase<typeof schema>, 'select'>,
+  eventId: number,
+): Promise<AnnouncementMessageRef | null> {
+  const t = schema.discordEventMessages;
+  const [row] = await db
+    .select({
+      guildId: t.guildId,
+      channelId: t.channelId,
+      messageId: t.messageId,
+    })
+    .from(t)
+    .where(and(eq(t.eventId, eventId), announcementRowsOnly()))
+    .limit(1);
+  return row ?? null;
 }

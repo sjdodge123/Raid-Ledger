@@ -4,6 +4,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EmbedBuilder } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { findAnnouncementMessage } from './event-message-rows.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
@@ -98,12 +99,7 @@ export class EmbedPosterService {
 
   /** Check if an event already has a discord_event_messages row. */
   async hasEmbed(eventId: number): Promise<boolean> {
-    const rows = await this.db
-      .select({ id: schema.discordEventMessages.id })
-      .from(schema.discordEventMessages)
-      .where(eq(schema.discordEventMessages.eventId, eventId))
-      .limit(1);
-    return rows.length > 0;
+    return (await findAnnouncementMessage(this.db, eventId)) !== null;
   }
 
   /** Enrich event data with live roster/signup information from the DB. */
