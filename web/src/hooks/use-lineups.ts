@@ -2,6 +2,7 @@
  * React Query hooks for Community Lineup features (ROK-934).
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { invalidateSubjectDiscussion } from './subject-discussion-key';
 import type {
   LineupDetailResponseDto,
   LineupParticipantsResponseDto,
@@ -74,6 +75,11 @@ export function useCommonGround(
   });
 }
 
+/** ROK-2272 S9: nominating / voting grants (withdrawing revokes) reply on the lineup Discussion card. */
+function invalidateLineupDiscussion(qc: ReturnType<typeof useQueryClient>, lineupId: number): void {
+  invalidateSubjectDiscussion(qc, { kind: 'lineup', id: lineupId });
+}
+
 /** Hook for nominating a game into a lineup. */
 export function useNominateGame() {
   const queryClient = useQueryClient();
@@ -84,9 +90,10 @@ export function useNominateGame() {
     { lineupId: number; body: NominateGameDto }
   >({
     mutationFn: ({ lineupId, body }) => nominateGame(lineupId, body),
-    onSuccess: () => {
+    onSuccess: (_res, { lineupId }) => {
       void queryClient.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
       void queryClient.invalidateQueries({ queryKey: [...COMMON_GROUND_KEY] });
+      invalidateLineupDiscussion(queryClient, lineupId);
     },
   });
 }
@@ -175,8 +182,9 @@ export function useRemoveNomination() {
     { lineupId: number; gameId: number }
   >({
     mutationFn: ({ lineupId, gameId }) => removeNomination(lineupId, gameId),
-    onSuccess: () => {
+    onSuccess: (_res, { lineupId }) => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+      invalidateLineupDiscussion(qc, lineupId);
     },
   });
 }
@@ -207,8 +215,9 @@ export function useToggleVote() {
     { lineupId: number; gameId: number }
   >({
     mutationFn: ({ lineupId, gameId }) => toggleVote(lineupId, gameId),
-    onSuccess: () => {
+    onSuccess: (_res, { lineupId }) => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+      invalidateLineupDiscussion(qc, lineupId);
     },
   });
 }
@@ -229,8 +238,9 @@ export function useSetStar() {
     { lineupId: number; gameId: number | null }
   >({
     mutationFn: ({ lineupId, gameId }) => setStar(lineupId, gameId),
-    onSuccess: () => {
+    onSuccess: (_res, { lineupId }) => {
       void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
+      invalidateLineupDiscussion(qc, lineupId);
     },
   });
 }

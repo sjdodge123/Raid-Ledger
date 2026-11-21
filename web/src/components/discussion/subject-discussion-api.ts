@@ -24,21 +24,18 @@ import { fetchApi } from '../../lib/api-client';
 import { httpStatusOf } from '../../lib/api/api-error';
 import { useViewerCacheScope } from '../../hooks/use-auth';
 import type { ReplyVars } from '../hub/forum/use-hub-forum';
+import {
+    invalidateSubjectDiscussion,
+    subjectDiscussionKey,
+    type DiscussionSubject,
+} from '../../hooks/subject-discussion-key';
 
-/** A non-event discussion subject: a scheduling poll (lineup match id) or a lineup. */
-export type DiscussionSubject =
-    | { kind: 'poll'; id: number }
-    | { kind: 'lineup'; id: number };
+export { subjectDiscussionKey, type DiscussionSubject };
 
 function base(subject: DiscussionSubject): string {
     return subject.kind === 'poll'
         ? `/scheduling-polls/${subject.id}/discussion`
         : `/lineups/${subject.id}/discussion`;
-}
-
-/** Invalidation prefix for one subject's discussion summary (all viewers). */
-export function subjectDiscussionKey(subject: DiscussionSubject): readonly unknown[] {
-    return ['subject-discussion', subject.kind, subject.id] as const;
 }
 
 /** The card summary: `none` (no hub, private, hidden), or ids, count, ≤3 replies, lock and `can`. */
@@ -61,7 +58,10 @@ export function useSubjectDiscussion(
     });
 }
 
-/** POST a reply to the subject thread (`threadId` is implied by the URL); refetches the card. */
+/** A 403 (lost reply access) or 409 (thread locked) means the card's `can` / `lock` are stale. */
+const STALE_CARD_STATUSES = new Set([403, 409]);
+
+/** POST a reply to the subject thread (`threadId` is implied by the URL); refetches the card on success, and on a 403 / 409 so the composer goes away. */
 export function useCreateSubjectReply(
     subject: DiscussionSubject,
 ): UseMutationResult<HubForumReply, Error, ReplyVars> {
@@ -75,6 +75,9 @@ export function useCreateSubjectReply(
             ),
         onSuccess: () =>
             queryClient.invalidateQueries({ queryKey: subjectDiscussionKey(subject) }),
+        onError: (error: Error) => {
+            if (STALE_CARD_STATUSES.has(httpStatusOf(error) ?? 0)) invalidateSubjectDiscussion(queryClient, subject);
+        },
     });
 }
 
