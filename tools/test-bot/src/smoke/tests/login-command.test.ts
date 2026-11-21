@@ -6,8 +6,9 @@
  * link button to `<site>/signin-link#token=…`. The token is a credential: it
  * is never asserted on, printed or put in an error message.
  *
- * One call per run; the per-member limit is 3 links per 10 minutes, so more
- * than three runs inside 10 minutes against the same env refuse the 4th.
+ * The per-member limit is 3 links per 10 minutes, so the test first clears
+ * the bot's counter (DEMO_MODE `DELETE /admin/test/login-rate-limit/:id`);
+ * re-runs against the same env never trip it.
  */
 import type { SmokeTest, TestContext } from "../types.js";
 
@@ -66,6 +67,7 @@ const loginReturnsPrivateSigninLink: SmokeTest = {
   name: "/login replies privately with a one-time /signin-link button",
   category: "command",
   async run(ctx) {
+    await ctx.api.delete(`/admin/test/login-rate-limit/${ctx.testBotDiscordId}`);
     const res = await invokeLogin(ctx);
     if (res.ephemeral !== true) {
       throw new Error(`/login: reply must be ephemeral, got ${describeReply(res)}`);
