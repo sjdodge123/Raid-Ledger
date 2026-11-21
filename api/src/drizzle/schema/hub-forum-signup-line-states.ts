@@ -6,8 +6,36 @@ import {
   timestamp,
   primaryKey,
 } from 'drizzle-orm/pg-core';
-import type { WrittenLineState } from '../../guilds/forum/event-discussion/event-discussion-signup-lines';
 import { hubForumThreads } from './hub-forum';
+
+/** The character a signup is on, as far as a line goes. */
+export interface SignupLineCharacter {
+  name: string;
+  className: string | null;
+  spec: string | null;
+}
+
+/**
+ * A member's line-relevant signup state. JSON-safe (no Date) so the caller
+ * can store the last POSTED one as-is (e.g. a Redis hash field).
+ */
+export interface SignupLineState {
+  /** `event_signups.status`; `'gone'` when the row no longer exists. */
+  status: string;
+  /** Roster slot role (tank/healer/dps/flex); null when unassigned/benched. */
+  role: string | null;
+  bench: boolean;
+  character: SignupLineCharacter | null;
+  late: boolean;
+  lateMinutes: number | null;
+  /** Hours between the roach-out and the event start; null if not roached. */
+  roachedHoursBefore: number | null;
+}
+
+/** A state row: the state last written as a line, and the name it used. */
+export interface WrittenLineState extends SignupLineState {
+  name: string;
+}
 
 /**
  * ROK-2274: the signup state last written as a line into a Raid Ledger event

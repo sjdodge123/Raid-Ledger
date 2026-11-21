@@ -9,8 +9,8 @@ import {
   planRlLines,
   SEED_MEMBER_KEY,
   userIdOfKey,
-  type WrittenLineState,
 } from './event-discussion-signup-lines';
+import type { WrittenLineState } from '../../../drizzle/schema/hub-forum-signup-line-states';
 
 const NO_GLYPHS: SignupLineEmoji = { role: () => '', klass: () => '' };
 

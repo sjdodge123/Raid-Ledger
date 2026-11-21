@@ -22,13 +22,13 @@ import {
   ROLE_LABELS,
   SIGNUP_LINE_COPY as COPY,
 } from './hub-forum-discord-signup-lines.copy';
+import type {
+  SignupLineCharacter,
+  SignupLineState,
+} from '../../../drizzle/schema/hub-forum-signup-line-states';
 
-/** The character a signup is on, as far as a line goes. */
-export interface SignupLineCharacter {
-  name: string;
-  className: string | null;
-  spec: string | null;
-}
+/** The persisted line shapes live with their table (ROK-2274 layering). */
+export type { SignupLineCharacter, SignupLineState };
 
 /**
  * ROK-2273 — the per-guild role / class glyphs, resolved by the same
@@ -48,23 +48,6 @@ export function signupLineEmoji(
     role: (r) => svc.getRoleEmoji(r),
     klass: (c) => svc.getClassEmoji(c),
   };
-}
-
-/**
- * A member's line-relevant signup state. JSON-safe (no Date) so the caller
- * can store the last POSTED one as-is (e.g. a Redis hash field).
- */
-export interface SignupLineState {
-  /** `event_signups.status`; `'gone'` when the row no longer exists. */
-  status: string;
-  /** Roster slot role (tank/healer/dps/flex); null when unassigned/benched. */
-  role: string | null;
-  bench: boolean;
-  character: SignupLineCharacter | null;
-  late: boolean;
-  lateMinutes: number | null;
-  /** Hours between the roach-out and the event start; null if not roached. */
-  roachedHoursBefore: number | null;
 }
 
 /** One member's input to a flush. */

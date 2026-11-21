@@ -12,19 +12,14 @@
 import {
   signupLineText,
   type SignupLineEmoji,
-  type SignupLineState,
 } from '../discord/hub-forum-discord-signup-lines';
 import { UNKNOWN_MEMBER_NAME } from '../discord/hub-forum-discord-signup-lines.copy';
 import { isResetMove } from '../discord/hub-forum-discord-signup-lines.flush';
 import type { KeyedSignupLineMember } from '../discord/hub-forum-discord-signup-lines.queries';
+import type { WrittenLineState } from '../../../drizzle/schema/hub-forum-signup-line-states';
 
 /** The state row marking "this thread is seeded" — never a member key. */
 export const SEED_MEMBER_KEY = '#seeded';
-
-/** A state row: the state last written as a line, and the name it used. */
-export interface WrittenLineState extends SignupLineState {
-  name: string;
-}
 
 /** One line row to insert. */
 export interface RlSignupLine {

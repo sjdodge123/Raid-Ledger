@@ -18,8 +18,8 @@ import {
   SEED_MEMBER_KEY,
   type RlLinePlan,
   type RlSignupLine,
-  type WrittenLineState,
 } from './event-discussion-signup-lines';
+import type { WrittenLineState } from '../../../drizzle/schema/hub-forum-signup-line-states';
 
 const threads = schema.hubForumThreads;
 const replies = schema.hubForumReplies;
