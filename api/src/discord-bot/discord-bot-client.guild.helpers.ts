@@ -4,6 +4,7 @@
  */
 import { ChannelType, type Guild } from 'discord.js';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
+import { fetchGuildMembers } from './game-roles/game-role-discord.helpers';
 
 /** Search guild members by username query. */
 export async function searchGuildMembers(
@@ -115,15 +116,18 @@ export interface ReminderRosterMember {
 }
 
 /**
- * Every guild member with the bot flag and join date (ROK-2284), from the same
- * full `guild.members.fetch()` as `listAllGuildMemberAvatars` (needs the
- * Guild Members intent). Null when the bot is disconnected — a no-op tick.
+ * Every guild member with the bot flag and join date (ROK-2284). Pages the
+ * REST list endpoint (`fetchGuildMembers`, one rate-limit retry), NOT the
+ * no-arg `guild.members.fetch()`: that is a gateway op-8 request Discord
+ * limits to ~1 per 30s per guild, so a pass landing near any other full
+ * fetch threw `GatewayRateLimitError` (CI discord-smoke, PR #2278). Needs
+ * the Guild Members intent. Null when the bot is disconnected — a no-op tick.
  */
 export async function listGuildMembersForReminders(
   guild: Guild | null,
 ): Promise<ReminderRosterMember[] | null> {
   if (!guild) return null;
-  const members = await guild.members.fetch();
+  const members = await fetchGuildMembers(guild);
   return members.map((m) => ({
     discordId: m.user.id,
     isBot: m.user.bot,
