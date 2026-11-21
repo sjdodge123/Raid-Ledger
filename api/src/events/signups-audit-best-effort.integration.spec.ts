@@ -37,11 +37,16 @@ afterEach(async () => {
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });
 
-function failNextAudit(): Error {
+/** Reject only the audit write for `action`; every other write goes through. */
+function failAudit(action: string): Error {
   const err = new Error('audit down');
+  const svc = testApp.app.get(ActivityLogService);
+  const real = svc.log.bind(svc);
   jest
-    .spyOn(testApp.app.get(ActivityLogService), 'log')
-    .mockRejectedValueOnce(err);
+    .spyOn(svc, 'log')
+    .mockImplementation((...args) =>
+      args[2] === action ? Promise.reject(err) : real(...args),
+    );
   return err;
 }
 
@@ -85,7 +90,7 @@ function expectCaptured(err: Error, action: string): void {
 describe('signup audit writes are best-effort', () => {
   it('signup: 201, row persisted, no signup_added row, Sentry captured', async () => {
     const { userId, token, eventId } = await setup('auditsignup');
-    const err = failNextAudit();
+    const err = failAudit('signup_added');
     const res = await testApp.request
       .post(`/events/${eventId}/signup`)
       .set('Authorization', `Bearer ${token}`);
@@ -103,7 +108,7 @@ describe('signup audit writes are best-effort', () => {
       .post(`/events/${eventId}/signup`)
       .set('Authorization', `Bearer ${token}`);
     expect(signup.status).toBe(201);
-    const err = failNextAudit();
+    const err = failAudit('signup_status_changed');
     const res = await testApp.request
       .patch(`/events/${eventId}/signup/status`)
       .set('Authorization', `Bearer ${token}`)
@@ -112,22 +117,24 @@ describe('signup audit writes are best-effort', () => {
     expect(await signupRow(eventId, userId)).toMatchObject({
       status: 'tentative',
     });
+    expect(await auditActions(eventId)).not.toContain('signup_status_changed');
     expectCaptured(err, 'signup_status_changed');
   });
 
-  it('cancel: 200 and the row is no longer signed up', async () => {
+  it('cancel: 200 and the row is declined (event is >23h out)', async () => {
     const { userId, token, eventId } = await setup('auditcancel');
     const signup = await testApp.request
       .post(`/events/${eventId}/signup`)
       .set('Authorization', `Bearer ${token}`);
     expect(signup.status).toBe(201);
-    const err = failNextAudit();
+    const err = failAudit('signup_cancelled');
     const res = await testApp.request
       .delete(`/events/${eventId}/signup`)
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    const row = await signupRow(eventId, userId);
-    expect(row?.status).not.toBe('signed_up');
+    expect(await signupRow(eventId, userId)).toMatchObject({
+      status: 'declined',
+    });
     expect(await auditActions(eventId)).not.toContain('signup_cancelled');
     expectCaptured(err, 'signup_cancelled');
   });
