@@ -119,16 +119,24 @@ export class EventPlanningSubjectPosts {
   }
 
   /**
-   * ROK-2287 catch-up: a lineup whose voting edge found the bot offline (or
-   * no forum) has no registry row and no second trigger. Each eligible one
-   * gets its post through `ensureLineupPost` (still the authority); one
-   * failing lineup is warned and the rest go on. Returns how many ran.
+   * ROK-2287 catch-up: a lineup whose voting edge found the bot offline has
+   * no registry row and no second trigger. Each eligible one created after
+   * the resolved forum gets its post through `ensureLineupPost` (still the
+   * authority); one failing lineup is warned and the rest go on. No forum
+   * (or offline) → nothing. Returns how many ran.
    */
   async ensureMissingLineupPosts(
     now: Date = new Date(),
     limit: number = LINEUP_CATCH_UP_BATCH,
   ): Promise<number> {
-    const ids = await findVotingLineupsWithoutPlanningPost(this.db, now, limit);
+    const forum = await this.creator.resolveForum();
+    if (!forum) return 0;
+    const ids = await findVotingLineupsWithoutPlanningPost(
+      this.db,
+      forum.forumId,
+      now,
+      limit,
+    );
     return syncEach(
       ids,
       (id) => this.ensureLineupPost(id).then(() => undefined),

@@ -13,7 +13,6 @@ import {
   isNull,
   ne,
   notExists,
-  or,
   sql,
 } from 'drizzle-orm';
 import { pgErrorCode } from '../../../common/pg-error.helpers';
@@ -123,10 +122,16 @@ export async function findOpenPlanningPollPosts(
  * planning path (the SQL twin of `lineupEligible`: no hub, not private, not
  * a standalone carrier) with NO registry row at all, newest first. A row
  * marked deleted counts (a moderator's delete is not undone, operator Q1);
- * a lineup past its `voting_deadline` is skipped (operator Q2).
+ * a lineup past its effective deadline (`phase_deadline`, else the legacy
+ * `voting_deadline` — the reminders' precedence) is skipped (operator Q2).
+ * Only lineups created AFTER `forumId`'s forum row qualify, so a newly
+ * bound forum is never back-filled with older lineups (none when the forum
+ * row is gone). `community_lineups.created_at` is a UTC `timestamp` (no
+ * zone), the forum's a `timestamptz`: the lineup's is read as UTC.
  */
 export async function findVotingLineupsWithoutPlanningPost(
   db: ForumDiscordDb,
+  forumId: number,
   now: Date,
   limit: number,
 ): Promise<number[]> {
@@ -145,13 +150,28 @@ export async function findVotingLineupsWithoutPlanningPost(
         ne(l.visibility, 'private'),
         // Mirrors `override?.standalone === true` (findLineupForSync).
         sql`(${l.phaseDurationOverride} -> 'standalone') is distinct from 'true'::jsonb`,
-        or(isNull(l.votingDeadline), gt(l.votingDeadline, now)),
+        beforeEffectiveDeadline(now),
+        createdAfterForum(forumId),
         notExists(anyRow),
       ),
     )
     .orderBy(desc(l.id))
     .limit(limit);
   return rows.map((r) => r.id);
+}
+
+/** Q2: `coalesce(phase_deadline, voting_deadline)` unset or still ahead. */
+function beforeEffectiveDeadline(now: Date) {
+  const l = schema.communityLineups;
+  const deadline = sql`coalesce(${l.phaseDeadline}, ${l.votingDeadline})`;
+  return sql`(${deadline} is null or ${deadline} > ${now.toISOString()}::timestamptz)`;
+}
+
+/** The lineup (UTC `timestamp`) is newer than the forum row (`timestamptz`). */
+function createdAfterForum(forumId: number) {
+  const l = schema.communityLineups;
+  const f = schema.hubForumDiscordForums;
+  return sql`(${l.createdAt} at time zone 'UTC') > (select ${f.createdAt} from ${f} where ${f.id} = ${forumId})`;
 }
 
 /** Set when the sweep closes the post. */

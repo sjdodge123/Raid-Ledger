@@ -9,6 +9,7 @@
  * locked.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import {
   and,
   eq,
@@ -178,6 +179,9 @@ export class EventPlanningPostsLockSweep {
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Planning lineup catch-up: ${why}`);
+      Sentry.captureException(err, {
+        tags: { event_planning_posts: 'lineup-catch-up-sweep' },
+      });
     }
   }
 
