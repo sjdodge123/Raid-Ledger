@@ -132,8 +132,8 @@ function setup(pinged: string[] = [], online = true) {
   const planning = { ensureEventPost: jest.fn() };
   // ROK-2273: no glyphs by default; a test may stub a role's emoji.
   const emoji = {
-    getRoleEmoji: jest.fn((_role: string) => ''),
-    getClassEmoji: jest.fn((_className: string) => ''),
+    getRoleEmoji: jest.fn<string, [string]>(() => ''),
+    getClassEmoji: jest.fn<string, [string]>(() => ''),
   };
   const svc = new HubForumDiscordSignupPings(
     {} as ForumDiscordDb,

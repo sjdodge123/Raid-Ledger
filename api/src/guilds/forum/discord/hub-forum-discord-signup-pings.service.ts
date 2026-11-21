@@ -23,7 +23,10 @@ import {
   type LineFlushPlan,
   type PostedMember,
 } from './hub-forum-discord-signup-lines.flush';
-import { signupLineEmoji } from './hub-forum-discord-signup-lines';
+import {
+  signupLineEmoji,
+  type SignupLineEmoji,
+} from './hub-forum-discord-signup-lines';
 import {
   loadSignupLineStates,
   type SignupLineMember,
@@ -74,6 +77,8 @@ const RESYNC_TTL_MS = 24 * 60 * 60 * 1000;
 @Injectable()
 export class HubForumDiscordSignupPings {
   private readonly logger = new Logger(HubForumDiscordSignupPings.name);
+  /** ROK-2273 — role/class glyphs from the embed's own emoji source. */
+  private readonly lineEmoji: SignupLineEmoji;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
@@ -82,8 +87,10 @@ export class HubForumDiscordSignupPings {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly planning: EventPlanningPostsService,
     private readonly registryLock: EventPlanningPostsLockSweep,
-    private readonly emoji: DiscordEmojiService,
-  ) {}
+    emoji: DiscordEmojiService,
+  ) {
+    this.lineEmoji = signupLineEmoji(emoji);
+  }
 
   /** Flush one event; never pings a user twice for the same signup. */
   async flush(eventId: number): Promise<SignupPingOutcome> {
@@ -152,12 +159,7 @@ export class HubForumDiscordSignupPings {
       posted = await this.resync(keys.lines, posted, members);
       await this.takeIfStable(eventId, flags);
     }
-    const plan = planLineFlush(
-      pinged,
-      posted,
-      members,
-      signupLineEmoji(this.emoji),
-    );
+    const plan = planLineFlush(pinged, posted, members, this.lineEmoji);
     if (ref.cancelled) plan.lines = []; // review r1 m4: removals only
     if (plan.lines.length === 0 && plan.remove.length === 0) return 'unchanged';
     if (!this.gateway.isOnline()) return 'offline';
