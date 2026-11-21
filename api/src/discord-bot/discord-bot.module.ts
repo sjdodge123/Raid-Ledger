@@ -108,6 +108,7 @@ import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.cont
 import { PlayingCommand } from './commands/playing.command';
 import { LfgCommand } from './commands/lfg.command';
 import { LfgLeaveCommand } from './commands/lfg-leave.command';
+import { LoginCommand } from './commands/login.command';
 import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
 import { LfgLeaveListener } from './listeners/lfg-leave.listener';
 import { LfgJoinListener } from './listeners/lfg-join.listener';
@@ -238,6 +239,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     PlayingCommand,
     LfgCommand,
     LfgLeaveCommand,
+    LoginCommand,
     LfgWithdrawListener,
     LfgLeaveListener,
     LfgJoinListener,

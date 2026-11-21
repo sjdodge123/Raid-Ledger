@@ -13,6 +13,7 @@ import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
 import { LfgCommand } from '../commands/lfg.command';
 import { LfgLeaveCommand } from '../commands/lfg-leave.command';
+import { LoginCommand } from '../commands/login.command';
 import { Events, MessageFlags, type Client } from 'discord.js';
 
 let testModule: TestingModule;
@@ -111,6 +112,13 @@ function buildInteractionProviders() {
         commandName: 'lfg-leave',
         handleInteraction: jest.fn().mockResolvedValue(undefined),
         handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    {
+      provide: LoginCommand,
+      useValue: {
+        commandName: 'login',
+        handleInteraction: jest.fn().mockResolvedValue(undefined),
       },
     },
   ];

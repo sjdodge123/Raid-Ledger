@@ -2,15 +2,15 @@
  * ROK-2271 — signup lines in an event's Discord thread carry role, character
  * and status; running late and roach-out post AT ONCE (no ~2 min debounce).
  * Each test makes its own run-scoped forum via the ROK-2208 setup (never a
- * shared channel), links the companion bot's Discord id to the signing-up
- * user, and in `finally` tears the forum/event down and re-links the bot to
+ * shared channel), links the companion bot's Discord id to the seed-guild
+ * `member` (never the shared admin — ROK-2275), and in `finally` tears the forum/event down and re-links the bot to
  * the DM recipient (the link setup made for every other test).
  * Wording comes from `api/src/guilds/forum/discord/hub-forum-discord-signup-lines.copy.ts`;
  * only stable text is matched, never emoji.
  */
 import type { ThreadChannel } from "discord.js";
 import { pollForCondition } from "../../helpers/polling.js";
-import { cancelSignupAs, createEvent, futureTime, linkDiscord, signupAs, updateSignupStatus } from "../fixtures.js";
+import { cancelSignupAs, createEvent, futureTime, linkDiscord, signupAs } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
 import { farOffTimes, fail, flushPings, setup, teardown, TIMEOUT_MS, type Made } from "./hub-forum-discord-outbound.test.js";
 
@@ -59,33 +59,13 @@ export async function relinkDmRecipient(ctx: TestContext): Promise<void> {
   });
 }
 
-interface DiscordLink {
-  discordId: string;
-  username: string;
-}
-
 /**
- * The API user's own Discord link, read before a test points that user at the
- * companion bot. Null when there is none, or when it already is the bot's.
+ * Change a seeded user's signup status through `SignupsService.updateStatus`
+ * (the PATCH route's own call), so the line pipeline sees a genuine change
+ * without the shared admin acting (ROK-2275).
  */
-async function ownDiscordLink(ctx: TestContext): Promise<DiscordLink | null> {
-  const profile: unknown = await ctx.api.get<unknown>("/auth/me");
-  const discordId: unknown = typeof profile === "object" && profile !== null ? Reflect.get(profile, "discordId") : null;
-  const username: unknown = typeof profile === "object" && profile !== null ? Reflect.get(profile, "username") : null;
-  if (typeof discordId !== "string" || typeof username !== "string" || discordId === ctx.testBotDiscordId) return null;
-  return { discordId, username };
-}
-
-/**
- * Give the API user its own Discord id and name back. `relinkDmRecipient`
- * leaves that user with NO Discord id, and later categories on the same DB
- * (ROK-943 voice classification) count the event creator by Discord id.
- */
-async function restoreOwnLink(ctx: TestContext, link: DiscordLink | null): Promise<void> {
-  if (!link) return;
-  await linkDiscord(ctx.api, ctx.testUserId, link.discordId, link.username).catch((err: unknown) => {
-    console.warn(`  restore of the API user's Discord link failed: ${String(err)}`);
-  });
+async function setStatusAs(ctx: TestContext, eventId: number, userId: number, status: "signed_up" | "tentative"): Promise<void> {
+  await ctx.api.post("/admin/test/signup-status", { eventId, userId, status });
 }
 
 function characterName(res: unknown): string {
@@ -123,23 +103,23 @@ async function tentativeThenConfirmed(ctx: TestContext): Promise<void> {
   const runId = Date.now().toString(36);
   const made: Made = { hub: null, forum: null };
   const me = ctx.testBotDiscordId;
-  const own = await ownDiscordLink(ctx);
   try {
-    const { hub, gameId } = await setup(ctx, runId, made);
-    await linkDiscord(ctx.api, ctx.testUserId, me, BOT_NAME);
+    const { hub, gameId, users } = await setup(ctx, runId, made);
+    const member = seededMember(users);
+    await linkDiscord(ctx.api, member.userId, me, BOT_NAME);
     const event = await createEvent(ctx.api, "signup-confirm", { guildId: hub, gameId, ...farOffTimes() });
     made.event = event.id;
-    await updateSignupStatus(ctx.api, event.id, "tentative");
+    await signupAs(ctx.api, event.id, member.userId);
+    await setStatusAs(ctx, event.id, member.userId, "tentative");
     const post = await flushPings(ctx, event.id);
     await expectLine(post, (l) => l.includes(`<@${me}>`) && l.includes("is tentative"), `first line: expected <@${me}> "is tentative"`);
-    await updateSignupStatus(ctx.api, event.id, "signed_up");
+    await setStatusAs(ctx, event.id, member.userId, "signed_up");
     await flushPings(ctx, event.id);
     const line = await expectLine(post, (l) => l.includes("is confirmed (was tentative)"), 'expected an "is confirmed (was tentative)" line');
     if (line.includes("<@")) fail("ROK-2271: a later line must not @mention again", line);
   } finally {
     await teardown(ctx, made);
     await relinkDmRecipient(ctx);
-    await restoreOwnLink(ctx, own);
   }
 }
 

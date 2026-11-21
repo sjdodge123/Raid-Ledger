@@ -37,7 +37,7 @@ export const refreshTokens = pgTable(
     /** The child row that replaced this one in the family. */
     replacedBy: uuid('replaced_by'),
     userAgent: text('user_agent'),
-    /** 'discord' | 'local' | 'magic'. */
+    /** 'discord' | 'local' | 'magic' | 'discord-link'. */
     authMethod: text('auth_method').notNull(),
   },
   (table) => [
