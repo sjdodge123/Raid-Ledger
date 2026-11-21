@@ -186,6 +186,7 @@ export class HubForumDiscordOutboundService {
     if (replyId === undefined) return;
     const record = await findReply(this.db, { guildId, threadId, replyId });
     if (!record || fromDiscord(record.reply)) return;
+    if (record.reply.kind !== 'reply') return; // ROK-2274 sync loop 1
     const parent =
       (await links.findThreadLink(this.db, threadId)) ??
       (await this.events.ensurePost(

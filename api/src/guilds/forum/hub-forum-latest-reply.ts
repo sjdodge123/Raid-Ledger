@@ -1,6 +1,7 @@
 /**
  * ROK-2229 — the Forum list row of an event thread previews its newest live
- * reply ("Mirelle: Count me in…"), as in the approved mockup. One batched
+ * reply ("Mirelle: Count me in…"), as in the approved mockup. Signup lines
+ * (ROK-2274) are skipped. One batched
  * `DISTINCT ON (thread_id)` query covers every event thread on the page —
  * never one query per row. Normal threads keep their root preview.
  */
@@ -35,7 +36,14 @@ export async function latestReplyPreviews(
     })
     .from(replies)
     .leftJoin(author, eq(author.id, replies.authorId))
-    .where(and(inArray(replies.threadId, threadIds), isNull(replies.deletedAt)))
+    .where(
+      and(
+        inArray(replies.threadId, threadIds),
+        isNull(replies.deletedAt),
+        // ROK-2274 D8: a signup line is never the row's "latest reply".
+        eq(replies.kind, 'reply'),
+      ),
+    )
     .orderBy(replies.threadId, desc(replies.createdAt), desc(replies.id));
   for (const row of rows) {
     const person = row.author ? toPerson(row.author) : null;
