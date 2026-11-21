@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { buildHubProposalButton } from './notification-embed.hub-proposal';
 import { buildPollHubButton } from './notification-embed.poll-hub';
 import { buildGgReadyButton } from './notification-embed.gg-ready';
+import { buildCalendarReconnectButton } from './calendar-reconnect-nudge.helpers';
 import {
   ROACH_OUT_BUTTON_IDS,
   RUNNING_LATE_BUTTON_IDS,
@@ -141,6 +142,8 @@ const PAYLOAD_BUTTONS: Partial<
   hub_proposal_submitted: buildHubProposalButton,
   hub_proposal_reviewed: buildHubProposalButton,
   gg_ready: buildGgReadyButton,
+  // ROK-1866: "Reconnect calendar" → the Integrations page.
+  calendar_needs_reconnect: buildCalendarReconnectButton,
 };
 
 /** Build the primary action button for a notification. */

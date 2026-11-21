@@ -97,6 +97,9 @@ function overrides(input: SeedConnectionInput) {
     ...(input.status === 'needs_reconnect' && {
       status: 'needs_reconnect' as const,
       lastErrorCode: 'auth' as const,
+      // ROK-1866 AC6: a seeded episode counts as already nudged, so a later
+      // unrelated write failure on this row can never send the reconnect DM.
+      reconnectNudgedAt: new Date(),
     }),
   };
 }

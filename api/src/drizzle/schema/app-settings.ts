@@ -256,6 +256,15 @@ export const SETTING_KEYS = {
   /** ROK-2187: Community mascot (JSON `GgMascot`: emoji + optional soundboard
    *  sound copied into uploads/gg-mascot/). Unset ⇒ plain intro. */
   GG_MASCOT: 'gg_mascot',
+  /** ROK-2284: sign-in reminder DM switch. Unset ⇒ ON (ruled Q8); 'false' ⇒ off. */
+  SIGNIN_REMINDER_ENABLED: 'signin_reminder_enabled',
+  /** ROK-2284: weeks between two reminders to the same person, '1'–'12'. Default '3'. */
+  SIGNIN_REMINDER_WEEKS: 'signin_reminder_weeks',
+  /** ROK-2284: lifetime maximum reminders per person, '1'–'10'. Default '3'. */
+  SIGNIN_REMINDER_MAX: 'signin_reminder_max',
+  /** ROK-2284: ISO time of the first enabled tick. Set once, never overwritten —
+   *  members who join after it wait 3 days before a first reminder (Q3). */
+  SIGNIN_REMINDER_LAUNCHED_AT: 'signin_reminder_launched_at',
   /** ROK-121: Pelican panel base URL (admin-supplied; server-side fetch). */
   PELICAN_PANEL_URL: 'pelican_panel_url',
   /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */
