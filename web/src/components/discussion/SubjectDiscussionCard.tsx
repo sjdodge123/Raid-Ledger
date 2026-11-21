@@ -5,9 +5,9 @@
  * error); loading skeleton; replies + inline reply box (may reply, R7 — these
  * subjects have no thread panel route, so the card posts in place); replies +
  * reader note (may read, has not voted / nominated); header + count only
- * (cannot read); Closed pill + lock line, or a locked-in poll's "View the
- * event" link (read-only). Hub members also get "Read the full thread" on the
- * hub Forum tab. Tokens only.
+ * (cannot read); Closed pill + a subject lock line (never the event copy), or
+ * a locked-in poll's "decided" line + "View the event" link (read-only).
+ * Hub members also get "Read the full thread" on the hub Forum tab. Tokens only.
  */
 import type { JSX } from 'react';
 import type { SubjectDiscussionReady } from '@raid-ledger/contract';
@@ -24,6 +24,7 @@ import {
 } from './discussion-card-parts';
 import {
     SUBJECT_READER_NOTE,
+    subjectLockLine,
     subjectReplyFailureCopy,
     useCreateSubjectReply,
     useSubjectDiscussion,
@@ -52,6 +53,7 @@ function HubThreadLink({ subject, d }: Omit<FootProps, 'lockedInEventId'>): JSX.
             kind={subject.kind}
             to={`${HUB_PAGE_PREFIX}${d.guildId}${forumThreadHref(d.threadId)}`}
             primary={false}
+            testId={`${subject.kind}-discussion-hub-link`}
         >
             Read the full thread
         </DiscussionCtaLink>
@@ -76,12 +78,13 @@ function ReplyBox({ subject, d }: Omit<FootProps, 'lockedInEventId'>): JSX.Eleme
 
 /** Read-only footer: lock line / locked-in event link, or the reader note. */
 function ReadOnlyFoot({ subject, d, lockedInEventId }: FootProps): JSX.Element {
-    const closed = d.lock !== null || lockedInEventId !== null;
+    const line = subjectLockLine(subject.kind, d.lock, lockedInEventId);
+    const closed = line !== null;
     return (
         <DiscussionFootRow>
-            {d.lock !== null && (
+            {line !== null && (
                 <div className="flex-1">
-                    <ForumLockBar lock={d.lock} />
+                    <ForumLockBar lock={d.lock} line={line} />
                 </div>
             )}
             {!closed && (

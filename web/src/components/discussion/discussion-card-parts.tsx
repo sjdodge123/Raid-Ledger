@@ -163,16 +163,19 @@ export function DiscussionCtaLink({
     to,
     primary,
     children,
+    testId,
 }: {
     kind: Kind;
     to: string;
     primary: boolean;
     children: ReactNode;
+    /** Defaults to `${kind}-discussion-cta`. */
+    testId?: string | undefined;
 }): JSX.Element {
     return (
         <Link
             to={to}
-            data-testid={`${kind}-discussion-cta`}
+            data-testid={testId ?? `${kind}-discussion-cta`}
             className={buttonClass({ variant: primary ? 'primary' : 'secondary', size: 'md' })}
         >
             {primary && <ChatBubbleLeftRightIcon className="h-4 w-4" aria-hidden="true" />}

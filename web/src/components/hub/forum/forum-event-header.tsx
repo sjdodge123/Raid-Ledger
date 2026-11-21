@@ -48,7 +48,16 @@ export function ForumEventPills({
 }
 
 /** The locked-thread line (§4.7 quiet banner), shared with the event page card. */
-export function ForumLockBar({ lock }: { lock: HubForumLock }): JSX.Element {
+export function ForumLockBar({
+    lock,
+    line,
+}: {
+    lock: HubForumLock | null;
+    /** Overrides the event lock-reason sentence (poll / lineup cards, ROK-2272 S9). */
+    line?: string | undefined;
+}): JSX.Element | null {
+    const text = line ?? (lock === null ? null : lockLine(lock));
+    if (text === null) return null;
     return (
         <p
             role="status"
@@ -60,7 +69,7 @@ export function ForumLockBar({ lock }: { lock: HubForumLock }): JSX.Element {
                 <span className="font-semibold text-foreground">
                     Discussion closed
                 </span>{' '}
-                · {lockLine(lock)}
+                · {text}
             </span>
         </p>
     );

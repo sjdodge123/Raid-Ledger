@@ -16,6 +16,7 @@ import {
 import {
     HubForumReplySchema,
     SubjectDiscussionSchema,
+    type HubForumLock,
     type HubForumReply,
     type SubjectDiscussion,
 } from '@raid-ledger/contract';
@@ -93,4 +94,25 @@ export function subjectReplyFailureCopy(kind: DiscussionSubject['kind'], error: 
     if (status === 409) return SUBJECT_REPLY_READ_ONLY;
     if (status === 429) return SUBJECT_REPLY_TOO_FAST;
     return undefined;
+}
+
+/** A locked-in poll's read-only line: the conversation moves to the event. */
+export const POLL_DECIDED_LOCK_LINE = 'This poll is decided — discussion continues on the event';
+
+/** A closed poll / lineup thread (private flip, hub untag, or past its close deadline). */
+export const SUBJECT_CLOSED_LOCK_LINE = 'This discussion is closed';
+
+/**
+ * The lock line a poll / lineup card shows, or null while writable. The api
+ * reuses the event lock reasons for these subjects, so the card never shows
+ * event copy ("after the event ended") — a locked-in poll says it is decided,
+ * anything else is simply closed.
+ */
+export function subjectLockLine(
+    kind: DiscussionSubject['kind'],
+    lock: HubForumLock | null,
+    lockedInEventId: number | null,
+): string | null {
+    if (kind === 'poll' && lockedInEventId !== null) return POLL_DECIDED_LOCK_LINE;
+    return lock === null ? null : SUBJECT_CLOSED_LOCK_LINE;
 }
