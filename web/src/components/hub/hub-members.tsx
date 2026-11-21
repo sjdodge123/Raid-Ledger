@@ -120,7 +120,7 @@ function MembersStatusLine({ total, shown, query, empty }: { total: number; show
 }
 
 /** The module's sorts plus the ones its filter state adds (ROK-2281), after core's. */
-function useSortOptions(groupLabel: string | null, mod: HubModule | undefined, fromFilters: readonly HubMemberSort[] | undefined) {
+function useSortOptions(groupLabel: string | null, mod: HubModule | undefined, fromFilters: readonly HubMemberSort[] | undefined): readonly HubMemberSort[] {
     return useMemo(
         () => memberSortOptions(groupLabel, [...(mod?.memberSorts ?? []), ...(fromFilters ?? [])]),
         [groupLabel, mod, fromFilters],

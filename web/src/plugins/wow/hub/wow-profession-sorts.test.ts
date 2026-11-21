@@ -80,6 +80,13 @@ describe('profession sort options (ROK-2281)', () => {
         expect(options.map((o) => o.id)).toEqual(['profession-mining-desc', 'profession-mining-asc', 'profession-herbalism-desc', 'profession-herbalism-asc']);
     });
 
+    it('keeps a pill’s option ids when a different pill is unpicked, so core keeps that sort (ruling 3)', () => {
+        const both = professionSorts(['Mining', 'Herbalism'], INDEX).map((o) => o.id);
+        const miningOnly = professionSorts(['Mining'], INDEX).map((o) => o.id);
+        expect(miningOnly).toEqual(['profession-mining-desc', 'profession-mining-asc']);
+        expect(both, 'Mining’s ids are the same with or without Herbalism picked').toEqual(expect.arrayContaining(miningOnly));
+    });
+
     it('slugs a multi-word profession into its id', () => {
         expect(professionSortId('First Aid', 'asc')).toBe('profession-first-aid-asc');
     });

@@ -176,8 +176,9 @@ export interface HubMemberFilters {
     summary?: ReactNode;
     /**
      * ROK-2281: "Sort by" options built from the filter state, after `HubModule.memberSorts`
-     * (WoW: a high→low / low→high pair per picked profession). Memoise it. When the
-     * active option leaves this list, core drops back to the default sort.
+     * (WoW: a high→low / low→high pair per picked profession). Memoise it, else the rows
+     * re-sort every render. When the active option leaves this list — an unpicked pill,
+     * Clear all included — core drops back to the default sort.
      */
     extraSorts?: readonly HubMemberSort[];
 }
