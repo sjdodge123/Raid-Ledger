@@ -7,7 +7,7 @@
 import type { JSX } from 'react';
 import type { DungeonLevelFit, DungeonPlanDto, EnrichedDungeonQuestDto } from '@raid-ledger/contract';
 import { StatusChip, type StatusChipTone } from '../../../../components/ui/status-chip';
-import { groupByType, splitByLocation } from '../../slots/quest-prep-groups';
+import { groupByType, splitByLocation, UNCONFIRMED_GROUP } from '../../slots/quest-prep-groups';
 import { levelFitCopy } from '../../utils/level-fit';
 import { stateOf, type PlanSignup } from './planner-display';
 import { QuestRow } from './planner-quest-row';
@@ -83,13 +83,14 @@ export function QuestBreakdown({ quests, signups, note }: GroupProps & { note: s
             </section>
         );
     }
-    const { before, inside } = splitByLocation(quests);
+    const { before, inside, unconfirmed } = splitByLocation(quests);
     return (
         <section aria-labelledby="planner-quests" className="space-y-3">
             <h3 id="planner-quests" className={SECTION_HEADING}>Quest prep · {summary({ quests, signups })}</h3>
             {noteLine}
             <LocationGroup title="Get before you go in" icon="🗺️" quests={before} signups={signups} />
             <LocationGroup title="Picked up inside" hint="Get these during the run" icon="🏰" quests={inside} signups={signups} />
+            <LocationGroup {...UNCONFIRMED_GROUP} quests={unconfirmed} signups={signups} />
         </section>
     );
 }

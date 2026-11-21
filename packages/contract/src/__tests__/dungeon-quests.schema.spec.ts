@@ -49,3 +49,19 @@ describe('DungeonQuestDtoSchema.isEscort (ROK-2224)', () => {
     expect(EnrichedDungeonQuestDtoSchema.parse(enriched).isEscort).toBe(true);
   });
 });
+
+describe('DungeonQuestDtoSchema.startLocationUnconfirmed (ROK-2276)', () => {
+  it('keeps startLocationUnconfirmed: true instead of stripping it', () => {
+    const parsed = DungeonQuestDtoSchema.parse({ ...quest, startLocationUnconfirmed: true });
+    expect(parsed.startLocationUnconfirmed).toBe(true);
+  });
+
+  it('leaves the key absent when the API omits it (additive)', () => {
+    expect(DungeonQuestDtoSchema.parse(quest)).not.toHaveProperty('startLocationUnconfirmed');
+  });
+
+  it('carries the flag through the enriched Quest Prep DTO', () => {
+    const enriched = { ...quest, startLocationUnconfirmed: true, rewards: null, prerequisiteChain: null };
+    expect(EnrichedDungeonQuestDtoSchema.parse(enriched).startLocationUnconfirmed).toBe(true);
+  });
+});
