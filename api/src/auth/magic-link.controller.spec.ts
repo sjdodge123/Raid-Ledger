@@ -133,3 +133,23 @@ describe('MagicLinkController — POST /auth/redeem-magic-link', () => {
     ).toBeUndefined();
   });
 });
+
+describe("MagicLinkController — src:'cmd' links emit DISCORD_LOGIN (ROK-2283)", () => {
+  it.each<[string, string | undefined, number]>([
+    ['a /login link', '123456789012345678', 1],
+    ['an ordinary magic link', undefined, 0],
+  ])('%s → emitDiscordLogin called %s', async (_l, commandDiscordId, calls) => {
+    const { ctrl, magic, auth, res } = setup();
+    const emitDiscordLogin = jest.fn();
+    Object.assign(auth, { emitDiscordLogin });
+    magic.redeem.mockResolvedValueOnce(
+      commandDiscordId ? { ...USER, commandDiscordId } : USER,
+    );
+
+    await ctrl.redeem({ token: 'tok' }, jsonReq(), res);
+
+    expect(emitDiscordLogin).toHaveBeenCalledTimes(calls);
+    if (calls)
+      expect(emitDiscordLogin).toHaveBeenCalledWith(9, commandDiscordId);
+  });
+});

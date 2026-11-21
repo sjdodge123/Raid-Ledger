@@ -4,11 +4,13 @@
  * (ROK-1314). Bind / unlink refresh the status, the channel list and the
  * preflight (share counts and free tag slots change with every binding);
  * unlink also drops the cached picker data so a remounted form never
- * preselects a forum the unlink just deleted.
+ * preselects a forum the unlink just deleted. Both also refresh the admin
+ * "Event planning forum" read (ROK-2272 S5b): its candidates are the bound forums.
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
 import { guildPageKey } from '../api/use-guild';
+import { EVENT_PLANNING_FORUM_KEY } from '../../../hooks/admin/use-event-planning-forum';
 import {
     deleteHubForumDiscord, fetchHubForumDiscord, fetchHubForumDiscordChannels, fetchHubForumDiscordPreflight,
     putHubForumDiscord, type HubForumDiscordChannelOptions, type HubForumDiscordPreflight,
@@ -59,7 +61,10 @@ function useRefresh(guildId: number, dropPicker = false): () => Promise<void> {
         if (dropPicker) {
             for (const part of ['channels', 'preflight']) queryClient.removeQueries({ queryKey: [...hubForumDiscordKey(guildId), part] });
         }
-        return queryClient.invalidateQueries({ queryKey: hubForumDiscordKey(guildId) });
+        return Promise.all([
+            queryClient.invalidateQueries({ queryKey: hubForumDiscordKey(guildId) }),
+            queryClient.invalidateQueries({ queryKey: [...EVENT_PLANNING_FORUM_KEY] }),
+        ]).then(() => undefined);
     };
 }
 

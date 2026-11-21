@@ -25,6 +25,7 @@ import { interactionFlowTests } from "./tests/interaction-flows.test.js";
 import { rosterCalculationTests } from "./tests/roster-calculation.test.js";
 import { pushContentTests } from "./tests/push-content.test.js";
 import { slashCommandTests } from "./tests/slash-commands.test.js";
+import { loginCommandTests } from "./tests/login-command.test.js";
 import { cdpSlashCommandTests } from "./tests/cdp-slash-commands.test.js";
 import { cdpSteamInterestTests } from "./tests/cdp-steam-interest.test.js";
 import { cdpSteamNominationTests } from "./tests/cdp-steam-nomination.test.js";
@@ -82,6 +83,7 @@ import { hubPollEmbedTests } from "./tests/hub-poll-embed.test.js";
 import { hubPostRelayTests } from "./tests/hub-post-relay.test.js";
 import { hubProposalNotificationsTests } from "./tests/hub-proposal-notifications.test.js";
 import { valheimClaimDmTests } from "./tests/valheim-claim-dm.test.js";
+import { calendarReconnectDmTests } from "./tests/calendar-reconnect-dm.test.js";
 import { valheimHubWelcomeTests } from "./tests/valheim-hub-welcome.test.js";
 import { hubMediaIngestTests } from "./tests/hub-media-ingest.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
@@ -199,6 +201,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...suppressionEndSyncTests,
     ...interactionFlowTests,
     ...slashCommandTests,
+    ...loginCommandTests,
     ...cdpSlashCommandTests,
     ...cdpSteamInterestTests,
     ...cdpSteamNominationTests,
@@ -256,6 +259,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...hubPostRelayTests,
     ...hubProposalNotificationsTests,
     ...valheimClaimDmTests,
+    ...calendarReconnectDmTests,
     ...valheimHubWelcomeTests,
     ...hubMediaIngestTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.

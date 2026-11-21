@@ -24,6 +24,7 @@ import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
 import { LfgCommand } from '../commands/lfg.command';
 import { LfgLeaveCommand } from '../commands/lfg-leave.command';
+import { LoginCommand } from '../commands/login.command';
 
 /**
  * Describes a command that can handle slash command interactions.
@@ -59,6 +60,7 @@ export class InteractionListener {
     private readonly playingCommand: PlayingCommand,
     private readonly lfgCommand: LfgCommand,
     private readonly lfgLeaveCommand: LfgLeaveCommand,
+    private readonly loginCommand: LoginCommand,
   ) {}
 
   private getHandlers(): CommandInteractionHandler[] {
@@ -74,6 +76,7 @@ export class InteractionListener {
       this.playingCommand,
       this.lfgCommand,
       this.lfgLeaveCommand,
+      this.loginCommand,
     ];
   }
 

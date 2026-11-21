@@ -40,6 +40,18 @@ export const RedeemMagicLinkSchema = z.object({
 export type RedeemMagicLinkDto = z.infer<typeof RedeemMagicLinkSchema>;
 
 /**
+ * ROK-2283: body of POST /auth/redeem-discord-link — the one-time sign-in
+ * link the Discord `/login` command hands a first-time member (the account is
+ * created when it is redeemed). Response: TokenResponseSchema.
+ * Relay: instance-private (carries a credential).
+ */
+export const RedeemDiscordLinkSchema = z.object({
+    token: z.string().min(1).max(4096),
+});
+
+export type RedeemDiscordLinkDto = z.infer<typeof RedeemDiscordLinkSchema>;
+
+/**
  * ROK-1630: body of POST /auth/{discord,steam}/link/start. Strict — the start
  * endpoints authenticate ONLY via the Authorization header and must never read
  * a token from the body. `returnTo` is Steam-only (allowlisted server-side).

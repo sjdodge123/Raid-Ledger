@@ -87,7 +87,11 @@ export class AuthService {
     return relinked;
   }
 
-  private emitDiscordLogin(userId: number, discordId: string): void {
+  /**
+   * Announce a Discord sign-in (guild-seen stamp, PUG/forum claims). Public
+   * for ROK-2283: a `/login` magic link redeems as a Discord sign-in.
+   */
+  emitDiscordLogin(userId: number, discordId: string): void {
     this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
       userId,
       discordId,

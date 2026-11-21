@@ -388,6 +388,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `game-badges.tsx` / `game-badges.helpers.ts` | `components/games/` | Badge row on a game card (sale %, owners, players, early access). `YouOwnBadge` takes an optional `playtimeMinutes` ("You own · 12h played", ROK-1375) — fed by `GameBadgeData.currentUserPlaytimeMinutes`, which only lineup nominations populate today |
 | `GameRef.tsx`, `GameResearchDrawer.tsx`, `DrawerCard.tsx` | `components/games/` | Inline game reference that opens the research drawer (Cycle 4 U2) |
 | `PriceBadge.tsx`, `GameCarousel.tsx`, `ScreenshotGallery.tsx` | `components/games/` | Price pill, tile rail, screenshot lightbox |
+| `hub-invite-cards.tsx` → `HubInviteShell` (ROK-1893; reused by ROK-2283) | `pages/hub-invite/` | The signed-out **link-landing card**: a page someone reaches from a one-time or shared link that shows one centred card (`max-w-md rounded-xl bg-surface border border-edge p-6`, `min-h-[60vh]` centring, `px-4` phone gutter) with a title, one line of copy and one full-width action. Adopters: `/h/:token` (hub invite) and `/signin-link` (the Discord `/login` tap-to-continue page, `pages/signin-link/signin-link-cards.tsx`). Reuse it for the next link landing instead of a fourth copy; `/p/poll/:token` still has a private `max-w-sm` twin (`ShareCardShell`). Tokens only, so it flips with every scheme. |
 | `CommonGroundThemedRow.tsx`, `CommonGroundHero.tsx` | `components/lineups/cycle-4/` | Themed (Owned/Taste/Trending) rows, nomination hero |
 | `HubMemberVirtualList` + `virtualSlice` (`hub-member-virtual.helpers.ts`) | `components/hub/` | A long, fixed-row-height list that must stay cheap at 2,000 rows — the §4.32 windowed member list. Reuse it; do not add a virtualisation library |
 | `ArrangeRow` + `useRowDrag` + `arrange-draft.ts` (`moveRow`, `moveTo`, `toggleRow`, `moveAnnouncement`) | `components/hub/arrange/` | Letting someone reorder / hide / add the cells of a configurable widget grid — the §4.28 arrange list. Reuse these; do not build a second sortable list or add a drag library |
@@ -2273,9 +2274,9 @@ card ends with the share panel and a `Button secondary` "Replay" that remounts t
 
 ### 4.35 Event discussion — event-page card + forum event header (ROK-2226)
 
-Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/design-system` → Primitives → "Event discussion".
+Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/design-system` → Primitives → "Event discussion" and "Poll / lineup discussion" (`subject-discussion-demo.tsx`).
 
-- **Discussion card** (`pages/event-detail/EventDiscussionCard.tsx`) — after the Signups roster, before Activity. Same frame as the
+- **Discussion card** (`pages/event-detail/EventDiscussionCard.tsx`, composed from the subject-agnostic `components/discussion/discussion-card-parts.tsx` — ROK-2272 S9) — after the Signups roster, before Activity. Same frame as the
   page's other cards (`bg-surface border-edge rounded-xl p-4`). A compact reply preview: 28px `AvatarWithFallback`, name
   (`text-foreground`), time (`text-dim`), body `line-clamp-2` `text-secondary`, rows split by `border-edge-subtle`. Empty =
   `QuietEmpty`. The CTA is a router `Link` styled with `buttonClass` and NAVIGATES to `/events/<id>?discussion=1` (the panel
@@ -2283,6 +2284,18 @@ Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/
   "Sign up" `Button` running the page's own signup action (absent when the viewer cannot join) + secondary "Read the full
   thread"; cannot read → header + count only; locked → neutral `Pill` "Closed" + `ForumLockBar`. `forum-latest-widget`
   lists titles, not reply bodies, so it does not fit here.
+- **Poll / lineup Discussion card** (`components/discussion/SubjectDiscussionCard.tsx`, lazy via `subject-discussion-lazy.tsx`;
+  ROK-2272 S9) — the same frame, heading, preview and `QuietEmpty` as the event card (shared `discussion-card-parts`, test ids
+  `<kind>-discussion-*`), on the scheduling-poll page (after the composite / the locked-in outcome) and the lineup page (before
+  Activity). These subjects have no thread panel route, so a viewer who may reply (R7: voted / nominated) gets the forum's own
+  `ForumReplyComposerView` inline — the one deliberate difference from the event card's navigate-only CTA (Q2). Reader → muted
+  "Vote in the poll to join the discussion." / "Nominate or vote to join the discussion."; a locked-in poll is read-only with a
+  primary "View the event" link and the line "This poll is decided — discussion continues on the event"; locked →
+  `ForumLockBar` with the subject line "This discussion is closed" (its `line` override — never the event lock copy); hub members also get a secondary "Read the full thread" (hub Forum
+  tab). A private poll 404s and a hub-less one answers `none`; either hides the card. Only a *locked-in* poll (`scheduled`
+  match) is read-only — an active reschedule poll with a linked event keeps the reply box. Votes, suggestions, nominations,
+  withdrawals and hub Forum replies refresh the card (`hooks/subject-discussion-key.ts`), and the reply box is keyed by
+  subject so a draft never carries to another poll. Pass `flush` to the frame on `space-y-*` pages.
 - **Discussion panel** (`pages/event-detail/EventDiscussionPanel.tsx`, L4b) — `?discussion=1` swaps the card for the full
   thread in the same card frame: "← Back to event" (the Back-to-Forum idiom), title + `ForumEventPills`, a muted
   `UsersIcon` "N / M signed up" line, `ForumLockBar` when locked, then the forum's own `ForumMessage` root (no menu — the

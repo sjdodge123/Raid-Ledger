@@ -119,17 +119,34 @@ function MembersStatusLine({ total, shown, query, empty }: { total: number; show
     );
 }
 
+/** The module's sorts plus the ones its filter state adds (ROK-2281), after core's. */
+function useSortOptions(groupLabel: string | null, mod: HubModule | undefined, fromFilters: readonly HubMemberSort[] | undefined): readonly HubMemberSort[] {
+    return useMemo(
+        () => memberSortOptions(groupLabel, [...(mod?.memberSorts ?? []), ...(fromFilters ?? [])]),
+        [groupLabel, mod, fromFilters],
+    );
+}
+
+/** The picked sort; back to the default (state too, so it never comes back on its own) once it leaves the list (ROK-2281). */
+function useActiveSortId(sorts: readonly HubMemberSort[]): [string, (id: string) => void] {
+    const [picked, setPicked] = useState(DEFAULT_MEMBER_SORT_ID);
+    const present = sorts.some((s) => s.id === picked);
+    // Adjusting state while rendering (not in an effect): React re-renders before the children see it.
+    if (!present && picked !== DEFAULT_MEMBER_SORT_ID) setPicked(DEFAULT_MEMBER_SORT_ID);
+    return [present ? picked : DEFAULT_MEMBER_SORT_ID, setPicked];
+}
+
 /** Search + filter + sort state, and the rows/bands they leave. */
 function useMembersView(mod: HubModule | undefined, ctx: HubCtx, columns: readonly HubMemberColumn[]) {
     const [query, setQuery] = useState('');
-    const [sortId, setSortId] = useState(DEFAULT_MEMBER_SORT_ID);
     const [grouped, setGrouped] = useState(true);
     const [open, setOpen] = useState(false);
     const allRows = useMemo(() => mod?.memberRows(ctx.page) ?? [], [mod, ctx.page]);
     const useFilters = mod?.useMemberFilters ?? useNoMemberFilters;
     const filters = useFilters(ctx, allRows);
     const groupCol = groupingColumn(columns);
-    const sorts = useMemo(() => memberSortOptions(groupCol?.header ?? null, mod?.memberSorts), [groupCol, mod]);
+    const sorts = useSortOptions(groupCol?.header ?? null, mod, filters.extraSorts);
+    const [sortId, setSortId] = useActiveSortId(sorts);
     const flat = isFlatMode(query, filters.activeCount, sortId);
     const sort = sorts.find((s) => s.id === sortId);
     const rows = useMemo(
