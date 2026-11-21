@@ -15,6 +15,7 @@ import { ForumDeleteConfirm } from './forum-delete-confirm';
 import { ForumMessage } from './forum-message';
 import { forumThreadHref } from './forum-link';
 import { ForumRootMessage } from './forum-event-root';
+import { ForumSignupLine } from './forum-signup-line';
 import {
     useDeleteForumReply, useDeleteForumThread, useSetForumThreadPin, useUpdateForumReply, useUpdateForumThread,
     type ReplyDeleteVars, type ReplyEditVars,
@@ -78,8 +79,15 @@ export function ForumReplyItem({ guildId, ...rest }: ForumReplyItemProps): JSX.E
 
 export type ForumReplyItemViewProps = Omit<ForumReplyItemProps, 'guildId'> & ForumReplyWrites;
 
-/** The reply row over whichever `ForumReplyWrites` the caller hands it. */
-export function ForumReplyItemView({ threadId, reply, highlighted, update, remove }: ForumReplyItemViewProps): JSX.Element {
+/** The reply row over whichever `ForumReplyWrites` the caller hands it; a signup line gets its own muted row (ROK-2274). */
+export function ForumReplyItemView(props: ForumReplyItemViewProps): JSX.Element {
+    const { threadId, reply, highlighted, remove } = props;
+    if (reply.kind === 'signup_line') return <ForumSignupLine threadId={threadId} reply={reply} highlighted={highlighted} remove={remove} />;
+    return <ForumPlainReply {...props} />;
+}
+
+/** A member's reply: byline, body, edit/delete menu. */
+function ForumPlainReply({ threadId, reply, highlighted, update, remove }: ForumReplyItemViewProps): JSX.Element {
     const [mode, setMode] = useState<Mode>('read');
     const items = forumMenuItems(reply.can, { onEdit: () => setMode('edit'), onDelete: () => setMode('delete') });
     const ids = { threadId, replyId: reply.id };

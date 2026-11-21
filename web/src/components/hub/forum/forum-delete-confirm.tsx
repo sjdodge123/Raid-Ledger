@@ -11,7 +11,7 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 
 export interface ForumDeleteConfirmProps {
-    what: 'thread' | 'reply';
+    what: 'thread' | 'reply' | 'line';
     isOpen: boolean;
     pending: boolean;
     failed: boolean;
@@ -22,6 +22,7 @@ export interface ForumDeleteConfirmProps {
 const COPY = {
     thread: { title: 'Delete this thread?', keep: 'Keep thread', note: 'Its replies stay readable.' },
     reply: { title: 'Delete this reply?', keep: 'Keep reply', note: '' },
+    line: { title: 'Delete this signup line?', keep: 'Keep line', note: '' },
 } as const;
 
 /** The §4.4 shell around the delete question. */

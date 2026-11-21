@@ -6,6 +6,7 @@ import { DrizzleModule } from '../../../drizzle/drizzle.module';
 import { registerHubIngestSource } from '../../../hub-media/hub-media-ingest-sources';
 import { SettingsModule } from '../../../settings/settings.module';
 import { GuildsCoreModule } from '../../guilds-core.module';
+import { EventDiscussionSignupLines } from '../event-discussion/event-discussion-signup-lines.service';
 import { HubForumDiscordController } from './hub-forum-discord.controller';
 import { HubForumDiscordDemoTestController } from './hub-forum-discord.demo-test.controller';
 import { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
@@ -101,6 +102,8 @@ import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-emb
     HubForumDiscordEventLockGateway,
     HubForumDiscordEventLockSweep,
     HubForumDiscordSignupPings,
+    // ROK-2274: the same flush writes lines into the RL event thread.
+    EventDiscussionSignupLines,
     HubForumDiscordSignupPingQueue,
     HubForumDiscordSignupPingListener,
     HubForumDiscordSignupPingProcessor,
