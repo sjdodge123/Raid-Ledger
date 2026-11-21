@@ -74,8 +74,11 @@ describe('LoginPage phone sign-in hint (ROK-2291)', () => {
 
     it('is not rendered when Discord sign-in is not offered', () => {
         setPhone(true);
-        mockSystemStatus({ authProviders: [] });
+        // A provider that is not Discord: providers render, the hint must not.
+        const google = { key: 'google', label: 'Continue with Google', icon: 'google', loginPath: '/auth/google' };
+        mockSystemStatus({ authProviders: [google] });
         renderPage();
+        expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
         expect(screen.queryByText(/On a phone\?/)).toBeNull();
     });
 

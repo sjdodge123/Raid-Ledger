@@ -38,23 +38,26 @@ async function openLoginWithDiscord(browser: Browser): Promise<{ page: Page; clo
 test.describe('Login phone sign-in hint (ROK-2291)', () => {
     test('phones show the hint under the Discord button; desktop does not', async ({ browser }, testInfo) => {
         const { page, close } = await openLoginWithDiscord(browser);
-        const hint = page.getByTestId('phone-signin-hint');
-        if (isPhoneLayout(testInfo)) {
-            await expect(hint).toBeVisible();
-            await expect(hint).toHaveText(HINT_COPY);
-            await expect(hint.locator('code')).toHaveText('/login');
-            const discordBox = await page.getByRole('button', { name: /continue with discord/i }).boundingBox();
-            const hintBox = await hint.boundingBox();
-            const toggleBox = await page.getByRole('button', { name: 'Sign in with username instead' }).boundingBox();
-            expect(discordBox && hintBox && toggleBox, 'all three are laid out').toBeTruthy();
-            if (discordBox && hintBox && toggleBox) {
-                expect(hintBox.y).toBeGreaterThan(discordBox.y);
-                expect(toggleBox.y).toBeGreaterThan(hintBox.y);
+        try {
+            const hint = page.getByTestId('phone-signin-hint');
+            if (isPhoneLayout(testInfo)) {
+                await expect(hint).toBeVisible();
+                await expect(hint).toHaveText(HINT_COPY);
+                await expect(hint.locator('code')).toHaveText('/login');
+                const discordBox = await page.getByRole('button', { name: /continue with discord/i }).boundingBox();
+                const hintBox = await hint.boundingBox();
+                const toggleBox = await page.getByRole('button', { name: 'Sign in with username instead' }).boundingBox();
+                expect(discordBox && hintBox && toggleBox, 'all three are laid out').toBeTruthy();
+                if (discordBox && hintBox && toggleBox) {
+                    expect(hintBox.y).toBeGreaterThanOrEqual(discordBox.y + discordBox.height);
+                    expect(toggleBox.y).toBeGreaterThanOrEqual(hintBox.y + hintBox.height);
+                }
+            } else {
+                await expect(page.getByRole('button', { name: 'Sign in with username instead' })).toBeVisible();
+                await expect(hint).toHaveCount(0);
             }
-        } else {
-            await expect(page.getByRole('button', { name: 'Sign in with username instead' })).toBeVisible();
-            await expect(hint).toHaveCount(0);
+        } finally {
+            await close();
         }
-        await close();
     });
 });
