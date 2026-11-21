@@ -70,6 +70,8 @@ function reply(over: Partial<HubForumReplySelect> = {}): HubForumReplySelect {
     threadId: 9,
     guildId: 2,
     authorId: 5,
+    kind: 'reply',
+    subjectUserId: null,
     body: 'see you there',
     editedAt: null,
     deletedAt: null,
