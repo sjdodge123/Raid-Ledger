@@ -128,6 +128,5 @@ export function planRlLines(
     if (member) upsert.set(key, written(member));
     else drop.push(key);
   }
-  for (const key of drop) upsert.delete(key);
   return { seed: false, lines, upsert, drop };
 }
