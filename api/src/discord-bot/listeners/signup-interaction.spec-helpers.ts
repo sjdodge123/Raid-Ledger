@@ -20,6 +20,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 /** Shared mock types for signup interaction tests */
 export interface SignupInteractionMocks {
@@ -218,6 +219,7 @@ function createEmojiServiceProvider() {
 function buildSignupProviders(mocks: Record<string, unknown>) {
   return [
     SignupInteractionListener,
+    EventEmbedMessageEditor,
     { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
     { provide: DiscordBotClientService, useValue: mocks.mockClientService },
     { provide: SignupsService, useValue: mocks.mockSignupsService },

@@ -15,6 +15,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 let testModule: TestingModule;
 let listener: DiscordEventListener;
@@ -52,6 +53,7 @@ async function setupModule() {
   testModule = await Test.createTestingModule({
     providers: [
       DiscordEventListener,
+      EventEmbedMessageEditor,
       { provide: DrizzleAsyncProvider, useValue: mockDb },
       {
         provide: DiscordBotClientService,
