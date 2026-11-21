@@ -165,10 +165,15 @@ export const HubForumThreadQuerySchema = z
   .strict();
 export type HubForumThreadQuery = z.infer<typeof HubForumThreadQuerySchema>;
 
+/** ROK-2274: a member reply, or a system signup line (absent = reply). */
+export const HubForumReplyKindSchema = z.enum(['reply', 'signup_line']);
+export type HubForumReplyKind = z.infer<typeof HubForumReplyKindSchema>;
+
 /** A flat reply, oldest first. */
 export const HubForumReplySchema = z
   .object({
     id,
+    kind: HubForumReplyKindSchema.optional(),
     /** '' when deleted. */
     body: z.string(),
     author: HubPostPersonSchema.nullable(),
