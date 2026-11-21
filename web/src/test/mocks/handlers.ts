@@ -26,6 +26,7 @@ import { hubDiscordHandlers } from './hub-discord-handlers';
 import { hubNotificationMuteHandlers } from './hub-notification-mute-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 import { eventDiscussionHandlers } from './event-discussion-handlers';
+import { eventPlanningForumHandlers } from './event-planning-forum-handlers';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -46,6 +47,8 @@ export const handlers = [
     ...guildIngameTextHandlers, ...guildRecruitmentHandlers, ...guildProgressionHandlers,
     ...guildContributionsHandlers, ...bg3Handlers, ...guildDiscordHandlers,
     ...hubDiscordHandlers, ...eventDiscussionHandlers,
+    // Admin event planning forum (ROK-2272) — no bound forums.
+    ...eventPlanningForumHandlers,
     // Per-group notification mute (ROK-1832) — echo writes, no muted groups.
     ...hubNotificationMuteHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes
