@@ -15,16 +15,24 @@
  * Filters open from the inline funnel at 1024px and up, from the Filters FAB +
  * BottomSheet below (the funnel standard, design-system §4.1); the opener /
  * surface locators are the shared ones in `games-filters.ts`.
+ *
+ * ROK-2281: a second case gives the three linked members Mining through the
+ * ordinary `PATCH /users/me/characters/:id` (each as themselves, the GM last so
+ * the browser ends signed in as the GM), BEFORE anything reads roster insights
+ * (the endpoint caches per guild + audience for 5 minutes). Picking the Mining
+ * pill adds "Mining high→low" / "Mining low→high" to Sort by; the step reads
+ * each row's Mining skill from its profession badge and checks the order, then
+ * unpicks the pill and expects the sort back on Rank.
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiPost, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 import { filtersOpener, filtersSurface, hasFilterFunnel } from './games-filters';
 
 interface SeededGuild {
     guildId: number;
-    users: Record<string, { userId: number }>;
+    users: Record<string, { userId: number; characterId?: string | null }>;
 }
 
 const RANK_BANDS = ['0', '1', '2', '3', '4'] as const;
@@ -112,6 +120,86 @@ test('Members: filter narrows the count, Name Z–A reorders flat rows, Clear al
         await page.getByRole('combobox', { name: 'Sort by' }).selectOption({ label: 'Rank' });
         for (const rank of RANK_BANDS) await expect(page.getByTestId(`guild-rank-${rank}`), `rank band ${rank} is back`).toBeVisible();
         await expect(memberRow(page, 0)).toContainText('Aldren');
+    } finally {
+        for (const user of Object.values(guild.users)) await apiDelete(token, `/users/${user.userId}`).catch(() => undefined);
+    }
+});
+
+const PROFESSION = 'Mining';
+/** Linked seed members → the Mining skill each records; the GM goes last (the browser stays signed in as them). */
+const MINING_SKILLS = [['officer', 275], ['member', 120], ['gm', 200]] as const;
+
+/** One linked member records Mining on their own character (a manual professions fact). */
+async function setMining(jwt: string, characterId: string, skillLevel: number): Promise<void> {
+    const professions = {
+        primary: [{ id: 186, name: PROFESSION, slug: 'mining', skillLevel, maxSkillLevel: 300, tiers: [] }],
+        secondary: [],
+        syncedAt: new Date().toISOString(),
+    };
+    const res = (await apiPatch(jwt, `/users/me/characters/${characterId}`, { professions })) as { professions?: unknown; message?: unknown };
+    expect(res.professions, `the Mining PATCH should save: ${JSON.stringify(res.message ?? res)}`).toBeTruthy();
+}
+
+/** Every linked member records Mining; returns the GM's JWT. */
+async function seedMining(page: Page, guild: SeededGuild): Promise<string> {
+    let gmJwt = '';
+    for (const [role, skill] of MINING_SKILLS) {
+        const user = guild.users[role];
+        if (!user?.characterId) throw new Error(`seed-guild: the ${role} should own a linked character`);
+        const jwt = await signInOnboardedMember(page, user.userId);
+        await setMining(jwt, user.characterId, skill);
+        if (role === 'gm') gmJwt = jwt;
+    }
+    return gmJwt;
+}
+
+async function waitForMining(gmJwt: string, guildId: number): Promise<void> {
+    type Insights = { professions?: { name: string; members: unknown[] }[] } | null;
+    await pollForCondition(
+        async () => {
+            const data = (await apiGet(gmJwt, `/plugins/wow/guilds/${guildId}/roster-insights`)) as Insights;
+            const mining = data?.professions?.find((p) => p.name === PROFESSION);
+            return (mining?.members.length ?? 0) >= MINING_SKILLS.length ? true : null;
+        },
+        { timeoutMs: 15_000, description: `roster-insights for guild ${guildId} lists ${MINING_SKILLS.length} miners` },
+    );
+}
+
+/** The Mining skill on each listed row, top to bottom (from the badge title "Mining 275/300"). */
+async function listedMiningSkills(page: Page): Promise<number[]> {
+    const titles = await page.getByTestId('guild-member-row').getByTestId('guild-member-professions')
+        .locator(`[title^="${PROFESSION} "]`).evaluateAll((els) => els.map((el) => el.getAttribute('title') ?? ''));
+    return titles.map((t) => Number(/ (\d+)\//.exec(t)?.[1] ?? Number.NaN));
+}
+
+async function expectMiningOrder(page: Page, label: string, direction: 'desc' | 'asc'): Promise<void> {
+    await page.getByRole('combobox', { name: 'Sort by' }).selectOption({ label });
+    const want = MINING_SKILLS.map(([, skill]) => skill).sort((a, b) => (direction === 'desc' ? b - a : a - b));
+    await expect.poll(() => listedMiningSkills(page), { message: `${label} orders the rows by Mining skill` }).toEqual(want);
+}
+
+test('Members: a picked profession pill adds high→low / low→high sorts by that skill (ROK-2281)', async ({ page }, testInfo) => {
+    const token = await getAdminToken();
+    const guild = await seedGuild(token, testInfo);
+    try {
+        const gmJwt = await seedMining(page, guild);
+        await waitForMining(gmJwt, guild.guildId);
+        await page.goto(`/hubs/${guild.guildId}#members`);
+        await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
+        const sort = page.getByRole('combobox', { name: 'Sort by' });
+        await expect(sort.getByRole('option', { name: `${PROFESSION} high→low` }), 'no pill picked → no profession sorts').toHaveCount(0);
+
+        const chip = page.getByTestId(`wow-profession-chip-${PROFESSION}`);
+        await chip.click();
+        await expect(page.getByTestId('guild-members-count'), 'the Mining pill keeps the three miners').toHaveText('3 of 5 members');
+        await expect(sort, 'picking a pill does not change the sort').toHaveValue('rank');
+        await expectMiningOrder(page, `${PROFESSION} high→low`, 'desc');
+        await expectMiningOrder(page, `${PROFESSION} low→high`, 'asc');
+
+        await chip.click();
+        await expect(sort, 'unpicking the pill whose sort is active falls back to Rank').toHaveValue('rank');
+        await expect(sort.getByRole('option', { name: `${PROFESSION} low→high` })).toHaveCount(0);
+        await expect(page.getByTestId('guild-members-count')).toHaveText('5 members');
     } finally {
         for (const user of Object.values(guild.users)) await apiDelete(token, `/users/${user.userId}`).catch(() => undefined);
     }
