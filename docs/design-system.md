@@ -2289,7 +2289,8 @@ Approved mockup (operator, 2026-11-16, Q1–Q4 as recommended). Rendered: `/dev/
   Activity). These subjects have no thread panel route, so a viewer who may reply (R7: voted / nominated) gets the forum's own
   `ForumReplyComposerView` inline — the one deliberate difference from the event card's navigate-only CTA (Q2). Reader → muted
   "Vote in the poll to join the discussion." / "Nominate or vote to join the discussion."; a locked-in poll is read-only with a
-  primary "View the event" link; locked → `ForumLockBar`; hub members also get a secondary "Read the full thread" (hub Forum
+  primary "View the event" link and the line "This poll is decided — discussion continues on the event"; locked →
+  `ForumLockBar` with the subject line "This discussion is closed" (its `line` override — never the event lock copy); hub members also get a secondary "Read the full thread" (hub Forum
   tab). Private poll / no hub → the api answers `none` and the card is hidden. Pass `flush` to the frame on `space-y-*` pages.
 - **Discussion panel** (`pages/event-detail/EventDiscussionPanel.tsx`, L4b) — `?discussion=1` swaps the card for the full
   thread in the same card frame: "← Back to event" (the Back-to-Forum idiom), title + `ForumEventPills`, a muted
