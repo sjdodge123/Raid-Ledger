@@ -289,7 +289,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
         bracketRef={bracketRef}
       />
 
-      <div className="mt-6">
+      <div className="mt-6 empty:hidden">
         <SubjectDiscussionCardLazy subject={{ kind: 'lineup', id: lineup.id }} enabled={user != null} />
       </div>
 
