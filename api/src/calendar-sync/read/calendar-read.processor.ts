@@ -14,7 +14,8 @@
  * tagged `CalendarDeriveError`, never recorded on the connection (no
  * `provider_error` in the UI), logged, and rethrown for a BullMQ retry.
  */
-import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Logger, Optional, type OnModuleInit } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { type Job, type Queue, UnrecoverableError } from 'bullmq';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -27,6 +28,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_READ_QUEUE } from '../calendar-sync.constants';
 import { calendarRetryBackoff } from '../calendar-retry-backoff.helpers';
+import { emitNeedsReconnect } from '../calendar-needs-reconnect.events';
 import { markRetryPendingProviderError } from '../calendar-retry-report.helpers';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { isFinalAttempt } from '../write/calendar-write-reconcile-persist.helpers';
@@ -107,6 +109,7 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     private readonly gameTime: GameTimeService,
     @InjectQueue(CALENDAR_READ_QUEUE) private readonly queue: Queue,
     private readonly queueHealth: QueueHealthService,
+    @Optional() private readonly emitter?: EventEmitter2,
   ) {
     super();
   }
@@ -175,6 +178,8 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     }
     this.gameTime.invalidateUserCache(conn.userId);
     await onReadConnectionBroken(this.queue, conn.userId, decision);
+    // ROK-1866: the `needs_reconnect` flip has committed — nudge the member.
+    if (decision.code === 'auth') emitNeedsReconnect(this.emitter, conn.id);
     if (decision.retry) throw err;
     throw new UnrecoverableError(`calendar read sync: ${decision.code}`);
   }
