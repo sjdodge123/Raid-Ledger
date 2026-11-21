@@ -4,7 +4,6 @@ import { ThreadRenameBudget } from '../../../discord-bot/lfg-board/lfg-board-thr
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
-import type { HubPostPersonRow } from '../../posts/hub-posts.helpers';
 import type { ForumOp, HubForumChange } from '../hub-forum.emit';
 import { findReply, findThread } from '../hub-forum.queries';
 import {
@@ -12,7 +11,10 @@ import {
   truncateForDiscord,
 } from './hub-forum-discord-content';
 import { EventPostOutbound } from './hub-forum-discord-event-outbound.service';
-import { syncBornAt } from './hub-forum-discord-event-outbound.queries';
+import {
+  hasForumStarterCard,
+  syncBornAt,
+} from './hub-forum-discord-event-outbound.queries';
 import * as links from './hub-forum-discord-links.queries';
 import {
   HubForumDiscordOutboundGateway,
@@ -20,11 +22,7 @@ import {
   type OutboundAuthor,
   type OutboundTarget,
 } from './hub-forum-discord-outbound.discord';
-import {
-  outboundUrl,
-  outboundVoice,
-  type OutboundRef,
-} from './hub-forum-discord-outbound.voice';
+import { outboundUrl, outboundVoice } from './hub-forum-discord-outbound.voice';
 import {
   findBinding,
   type BindingWithForum,
@@ -170,7 +168,7 @@ export class HubForumDiscordOutboundService {
       job.link ?? (await links.claimThreadLink(this.db, guildId, threadId));
     if (!link) return;
     const { title, body } = record.thread;
-    const [author, url] = await this.voice(record.author, {
+    const [author, url] = await outboundVoice(this.settings, record.author, {
       guildId,
       threadId,
     });
@@ -208,7 +206,11 @@ export class HubForumDiscordOutboundService {
       }));
     if (!link || links.isUnsent(parent)) return; // S6 sends it after the post
     const ref = { guildId, threadId, replyId };
-    const [author, url] = await this.voice(record.author, ref);
+    const [author, url] = await outboundVoice(
+      this.settings,
+      record.author,
+      ref,
+    );
     await this.sendReply(job.target, link, parent.discordThreadId, {
       body: record.reply.body,
       url,
@@ -247,14 +249,18 @@ export class HubForumDiscordOutboundService {
     if (!link || !this.editable(link) || link.discordLockedAt) return;
     const record = await findThread(this.db, guildId, threadId);
     if (!record) return;
-    const url = await this.url({ guildId, threadId });
+    const url = await outboundUrl(this.settings, { guildId, threadId });
     const ref = {
       threadId: link.discordThreadId,
       messageId: link.discordMessageId,
     };
     const { name, content } = await this.events.postView(record.thread, url);
+    // ROK-2292 D6: a carded starter is never overwritten by the text body.
+    const carded = await hasForumStarterCard(this.db, ref.threadId);
     await this.attempt(link, async () => {
-      const edited = await this.gateway.editMessage(job.target, ref, content);
+      const edited = carded
+        ? 'ok'
+        : await this.gateway.editMessage(job.target, ref, content);
       if (edited === 'ok') {
         await this.gateway.renameThread(ref.threadId, name, () =>
           this.renames.trySpend(ref.threadId),
@@ -271,7 +277,11 @@ export class HubForumDiscordOutboundService {
     if (!link || !this.editable(link)) return;
     const record = await findReply(this.db, { guildId, threadId, replyId });
     if (!record) return;
-    const url = await this.url({ guildId, threadId, replyId });
+    const url = await outboundUrl(this.settings, {
+      guildId,
+      threadId,
+      replyId,
+    });
     const ref = {
       threadId: link.discordThreadId,
       messageId: link.discordMessageId,
@@ -327,17 +337,6 @@ export class HubForumDiscordOutboundService {
       !link.discordDeletedAt &&
       !links.isUnsent(link)
     );
-  }
-
-  private voice(
-    row: HubPostPersonRow | null,
-    ref: OutboundRef,
-  ): Promise<[OutboundAuthor, string]> {
-    return outboundVoice(this.settings, row, ref);
-  }
-
-  private url(ref: OutboundRef): Promise<string> {
-    return outboundUrl(this.settings, ref);
   }
 
   private async attempt(

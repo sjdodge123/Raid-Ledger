@@ -14,6 +14,7 @@
  * announcement embed is posted — `EmbedPosterService` emits
  * {@link EVENT_ANNOUNCEMENT_POSTED} and the forum module listens.
  */
+import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -73,6 +74,7 @@ export class EventForumStarterCards {
     private readonly factory: DiscordEmbedFactory,
     private readonly channelResolver: ChannelResolverService,
     private readonly settings: SettingsService,
+    private readonly sync: EmbedSyncQueueService,
   ) {}
 
   /**
@@ -119,6 +121,19 @@ export class EventForumStarterCards {
         embedState: state,
       })
       .onConflictDoNothing();
+  }
+
+  /**
+   * A locked post reopened (rescheduled into the future): track its starter
+   * again (D7 dropped the row) and re-sync the card it missed while closed.
+   * False when the event has no card (missing, cancelled, ad-hoc).
+   */
+  async restore(eventId: number, threadId: string): Promise<boolean> {
+    const card = await this.build(eventId);
+    if (!card) return false;
+    await this.record(eventId, threadId, card.state);
+    await this.sync.enqueue(eventId, 'forum-starter-reopened');
+    return true;
   }
 
   /** D7 — post `threadId` closed, moved or vanished: stop syncing it. */
