@@ -86,7 +86,7 @@ export class EventPlanningPostCreator {
   async create(
     draft: PlanningPostDraftFor,
   ): Promise<CreatedPlanningPost | null> {
-    const forum = await this.forum();
+    const forum = await this.resolveForum();
     if (!forum) return null;
     const tagIds = await this.kindTagIds(forum, KIND_TAG_NAME[draft.kind]);
     if (!tagIds) return null;
@@ -99,7 +99,7 @@ export class EventPlanningPostCreator {
   }
 
   /** The resolved forum; null when offline or none resolves. */
-  private async forum(): Promise<BoundForum | null> {
+  async resolveForum(): Promise<BoundForum | null> {
     const guild = this.forums.guildId();
     if (guild === null || !this.discord.isOnline()) return null;
     return (await this.resolver.resolve(guild)).forum;

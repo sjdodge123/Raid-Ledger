@@ -22,6 +22,7 @@ function setup() {
     ensureLineupPost: jest.fn().mockResolvedValue(null),
     syncPoll: jest.fn().mockResolvedValue(undefined),
     syncLineup: jest.fn().mockResolvedValue(undefined),
+    ensureMissingLineupPosts: jest.fn().mockResolvedValue(0),
   };
   const voterPings = { planningVote: jest.fn().mockResolvedValue('pinged') };
   const listener = new EventPlanningSubjectsListener(
@@ -175,5 +176,24 @@ describe('EventPlanningSubjectsListener failure handling', () => {
     subjects.syncPoll.mockRejectedValueOnce(new Error('db'));
     await listener.onStatusChanged({ lineupId: 3, to: 'archived' });
     expect(subjects.syncPoll).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ROK-2287 EventPlanningSubjectsListener reconnect catch-up', () => {
+  it('a bot (re)connect posts the missed voting lineups', async () => {
+    const { listener, subjects } = setup();
+    await listener.onConnected();
+    expect(subjects.ensureMissingLineupPosts).toHaveBeenCalledTimes(1);
+    expect(subjects.ensureLineupPost).not.toHaveBeenCalled();
+  });
+
+  it('a failing catch-up is warned and captured, never thrown', async () => {
+    const { listener, subjects } = setup();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    subjects.ensureMissingLineupPosts.mockRejectedValueOnce(new Error('db'));
+    await expect(listener.onConnected()).resolves.toBeUndefined();
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { event_planning_posts: 'lineup-catch-up' },
+    });
   });
 });
