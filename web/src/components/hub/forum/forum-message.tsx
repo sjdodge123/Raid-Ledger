@@ -49,7 +49,7 @@ function Byline({ message }: { message: ForumMessageData }): JSX.Element {
 }
 
 /** The `?reply=<id>` target scrolls into view once it mounts (same as Posts' `post-item.tsx`). */
-function useScrollOnce(highlighted: boolean): RefObject<HTMLElement | null> {
+export function useScrollOnce(highlighted: boolean): RefObject<HTMLElement | null> {
     const ref = useRef<HTMLElement>(null);
     useEffect(() => {
         if (highlighted) ref.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
