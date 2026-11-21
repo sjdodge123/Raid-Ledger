@@ -21,7 +21,9 @@ export const SIGNIN_LINK_TTL = '15m' as const;
 const SNOWFLAKE = /^\d{15,25}$/;
 
 /** True for a real Discord id — not null, `unlinked:<id>` or a local stand-in. */
-export function isDiscordSnowflake(id: string | null | undefined): id is string {
+export function isDiscordSnowflake(
+  id: string | null | undefined,
+): id is string {
   return typeof id === 'string' && SNOWFLAKE.test(id);
 }
 
