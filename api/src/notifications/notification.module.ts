@@ -4,6 +4,7 @@ import { NotificationController } from './notification.controller';
 import { GameNotificationMutesController } from './game-notification-mutes.controller';
 import { NotificationService } from './notification.service';
 import { VoiceAccessLostListener } from './voice-access-lost.listener';
+import { CalendarReconnectNudgeListener } from './calendar-reconnect-nudge.listener';
 import { RosterNotificationBufferService } from './roster-notification-buffer.service';
 import { EventReminderService } from './event-reminder.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
@@ -45,6 +46,7 @@ import { HubNotificationService } from './hub-notification.service';
   providers: [
     NotificationService,
     VoiceAccessLostListener,
+    CalendarReconnectNudgeListener,
     RosterNotificationBufferService,
     EventReminderService,
     RoleGapAlertService,

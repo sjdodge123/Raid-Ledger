@@ -388,6 +388,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `game-badges.tsx` / `game-badges.helpers.ts` | `components/games/` | Badge row on a game card (sale %, owners, players, early access). `YouOwnBadge` takes an optional `playtimeMinutes` ("You own · 12h played", ROK-1375) — fed by `GameBadgeData.currentUserPlaytimeMinutes`, which only lineup nominations populate today |
 | `GameRef.tsx`, `GameResearchDrawer.tsx`, `DrawerCard.tsx` | `components/games/` | Inline game reference that opens the research drawer (Cycle 4 U2) |
 | `PriceBadge.tsx`, `GameCarousel.tsx`, `ScreenshotGallery.tsx` | `components/games/` | Price pill, tile rail, screenshot lightbox |
+| `hub-invite-cards.tsx` → `HubInviteShell` (ROK-1893; reused by ROK-2283) | `pages/hub-invite/` | The signed-out **link-landing card**: a page someone reaches from a one-time or shared link that shows one centred card (`max-w-md rounded-xl bg-surface border border-edge p-6`, `min-h-[60vh]` centring, `px-4` phone gutter) with a title, one line of copy and one full-width action. Adopters: `/h/:token` (hub invite) and `/signin-link` (the Discord `/login` tap-to-continue page, `pages/signin-link/signin-link-cards.tsx`). Reuse it for the next link landing instead of a fourth copy; `/p/poll/:token` still has a private `max-w-sm` twin (`ShareCardShell`). Tokens only, so it flips with every scheme. |
 | `CommonGroundThemedRow.tsx`, `CommonGroundHero.tsx` | `components/lineups/cycle-4/` | Themed (Owned/Taste/Trending) rows, nomination hero |
 | `HubMemberVirtualList` + `virtualSlice` (`hub-member-virtual.helpers.ts`) | `components/hub/` | A long, fixed-row-height list that must stay cheap at 2,000 rows — the §4.32 windowed member list. Reuse it; do not add a virtualisation library |
 | `ArrangeRow` + `useRowDrag` + `arrange-draft.ts` (`moveRow`, `moveTo`, `toggleRow`, `moveAnnouncement`) | `components/hub/arrange/` | Letting someone reorder / hide / add the cells of a configurable widget grid — the §4.28 arrange list. Reuse these; do not build a second sortable list or add a drag library |
@@ -765,6 +766,10 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
   The admin integration forms use it (IGDB, ITAD, Steam, Co-Optimus, Discord Bot/OAuth, Blizzard; ROK-1652
   ruling 9). A provider's brand appears only as a logo tile (`admin-settings-integration-cards.tsx`'s
   `bg-[#148EFF]`), never as a callout fill.
+- **Phone sign-in hint (ROK-2291)** adopts the neutral callout on the login card: `PhoneSignInHint`
+  (`pages/login/PhoneSignInHint.tsx`, `role="note"`, `p-3` like the first-run banner beside it), a
+  `text-foreground` lead phrase and `/login` as `<code>` on `bg-panel`. Rendered only below 1024px
+  (`useMediaQuery(PHONE_MQ)`), with Discord sign-in offered, and never on first run (one callout at a time).
 - **Claim your character (ROK-2153)** is the core adopter on hubs: `HubClaimPrompt`
   (`components/hub/claim/`) is a neutral instruction callout `<section aria-label="Claim your character">`
   with an `h2` (`text-base font-semibold text-foreground`), a `text-secondary` body (a shorter one below

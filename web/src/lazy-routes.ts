@@ -140,6 +140,9 @@ export const UserProfilePage = lazyWithRetry(() =>
 export const ClaimPage = lazyWithRetry(() =>
     import('./pages/claim/claim-page').then((m) => ({ default: m.ClaimPage })),
 );
+export const SigninLinkPage = lazyWithRetry(() =>
+    import('./pages/signin-link-page').then((m) => ({ default: m.SigninLinkPage })),
+);
 export const OnboardingWizardPage = lazyWithRetry(() =>
     import('./pages/onboarding-wizard-page').then((m) => ({ default: m.OnboardingWizardPage })),
 );

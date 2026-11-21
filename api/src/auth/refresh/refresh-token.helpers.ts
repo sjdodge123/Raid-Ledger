@@ -5,7 +5,8 @@ import * as crypto from 'crypto';
  * Extracted from refresh-token.service.ts to keep it under the 300-line cap.
  */
 
-export type AuthMethod = 'discord' | 'local' | 'magic';
+/** ROK-2283: 'discord-link' = a first-time member's `/login` sign-in link. */
+export type AuthMethod = 'discord' | 'local' | 'magic' | 'discord-link';
 
 /** Generate a 256-bit base64url raw token (lives only in the cookie). */
 export function generateRawToken(): string {

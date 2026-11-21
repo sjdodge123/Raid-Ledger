@@ -16,11 +16,13 @@ import {
   TriggerDepartureSchema,
   CancelSignupSchema,
   CreateTestSignupSchema,
+  SetSignupStatusTestSchema,
 } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
 import {
   RunningLateTestSchema,
   setRunningLateForTest,
+  setSignupStatusForTest,
 } from './demo-test-signups.helpers';
 
 /**
@@ -89,5 +91,17 @@ export class DemoTestSignupsController {
     const parsed = parseDemoBody(RunningLateTestSchema, body);
     const { changed } = await setRunningLateForTest(this.moduleRef, parsed);
     return { success: true, changed };
+  }
+
+  /**
+   * Change any user's signup status via SignupsService.updateStatus (the
+   * PATCH route's call, ROK-2275) — DEMO_MODE only.
+   * Body `{ eventId, userId, status: 'signed_up' | 'tentative' }`.
+   */
+  @Post('signup-status')
+  @HttpCode(HttpStatus.OK)
+  async signupStatusForTest(@Body() body: unknown): Promise<unknown> {
+    const parsed = parseDemoBody(SetSignupStatusTestSchema, body);
+    return setSignupStatusForTest(this.moduleRef, parsed);
   }
 }

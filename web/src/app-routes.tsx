@@ -37,7 +37,7 @@ import {
   SchedulingWireframesPage, ServerScheduleWireframesPage, CommunityHubWireframesPage, HubPostsWireframesPage, ViewportProbePage,
   ValheimCharacterPage,
   CompanionLinkPage,
-  ClaimPage,
+  ClaimPage, SigninLinkPage,
   GgYearPage,
   GgArchivePage,
   GgLatestRedirect,
@@ -175,6 +175,8 @@ export function AppRoutes() {
       <Route path="/h/:token" element={<HubInvitePage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/claim" element={<ClaimPage />} />
+      {/* ROK-2283: Discord /login one-time link — tap to continue, never auto-redeemed. */}
+      <Route path="/signin-link" element={<SigninLinkPage />} />
       {/* ROK-1891: old hub links (Discord, notifications, bookmarks) → /hubs/… */}
       <Route path="/guilds/:id" element={<LegacyHubRedirect />} />
       <Route path="/guilds/:id/*" element={<LegacyHubRedirect />} />

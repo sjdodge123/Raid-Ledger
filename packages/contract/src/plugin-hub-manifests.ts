@@ -93,6 +93,8 @@ const core = {
     { id: 'HubForumDiscordSync_eventLockSweep', kind: 'scheduled-job', label: 'Closes event, poll and lineup posts in the Discord forum 1 hour after they end' },
     { id: 'SteamAppStatsProcessor_scheduledRefresh', kind: 'scheduled-job', label: 'Refreshes Steam achievements for game hubs every night' },
     { id: 'GgDeliveryCron_tick', kind: 'scheduled-job', label: 'Delivers GG <year>: the announcement, then paced player DMs' },
+    // ROK-2284 — paced reminder DMs to guild members who never signed in.
+    { id: 'SigninReminderCron_tick', kind: 'scheduled-job', label: 'DMs guild members who have never signed in, every few weeks' },
     ...ggCoreCards,
   ],
   setup: CORE_SETUP,
