@@ -3,8 +3,10 @@
  * roster (humans past the 3-day join wait) → drop account holders → upsert
  * rows → claim ≤25 due → DM each one DIRECTLY (never the notification queue,
  * so a closed DM can never deactivate anyone; these people have no user row
- * anyway). Success stamps the row; any error is recorded and counted as a
- * send, so a closed DM is tried at most once per cadence and stops at the cap.
+ * anyway). Each send first rechecks the opt-out. Success stamps the row; a
+ * Discord-coded error (50007…) is recorded and counted as a send, so a closed
+ * DM is tried at most once per cadence and stops at the cap; a code-less
+ * error (bot dropped mid-pass) only releases the claim for the next tick.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { inArray } from 'drizzle-orm';
@@ -22,6 +24,8 @@ import {
   ensureSigninReminderRows,
   markSigninReminderSent,
   recordSigninReminderFailure,
+  releaseIfOptedOut,
+  releaseSigninReminderClaim,
 } from './signin-reminder.db';
 import { buildSigninReminderDm } from './signin-reminder.dm';
 import {
@@ -30,6 +34,7 @@ import {
 } from './signin-reminder.eligibility';
 import {
   ensureSigninReminderLaunchedAt,
+  isSigninReminderDemoMode,
   readSigninReminderSettings,
 } from './signin-reminder.settings';
 
@@ -42,7 +47,9 @@ export type SigninReminderOutcome =
  * DEMO_MODE fixture only (`/admin/test/signin-reminder/tick`): aim the pass
  * at one BOT guild member instead of the human roster, so a smoke run never
  * DMs a person. The account-holder skip is bypassed for that bot only (the
- * smoke links the companion bot to a demo user). The cron never passes options.
+ * smoke links the companion bot to a demo user), and so is the on/off switch
+ * (unset ⇒ OFF under DEMO_MODE; the pass can only reach that bot). The cron
+ * never passes options.
  */
 export interface SigninReminderTickOptions {
   onlyBotId?: string;
@@ -84,13 +91,14 @@ export class SigninReminderService {
     now: Date,
     opts: SigninReminderTickOptions,
   ): Promise<SigninReminderOutcome> {
-    const cfg = await readSigninReminderSettings(this.settings);
-    if (!cfg.enabled) return { status: 'disabled' };
+    const targeted = opts.onlyBotId !== undefined;
+    const demoMode = await isSigninReminderDemoMode(this.settings);
+    const cfg = await readSigninReminderSettings(this.settings, { demoMode });
+    if (!cfg.enabled && !targeted) return { status: 'disabled' };
     if (!this.discord.isConnected()) return { status: 'not-connected' };
     const roster = await listGuildMembersForReminders(this.discord.getGuild());
     if (roster === null) return { status: 'not-connected' };
     const launchedAt = await ensureSigninReminderLaunchedAt(this.settings, now);
-    const targeted = opts.onlyBotId !== undefined;
     const ids = await this.candidates(roster, launchedAt, now, opts);
     await ensureSigninReminderRows(this.db, ids);
     const claimed = await claimDueSigninReminders(this.db, {
@@ -99,13 +107,8 @@ export class SigninReminderService {
       max: cfg.max,
       ...(targeted ? { includeAccountHolders: true } : {}),
     });
-    const sent = await this.sendAll(claimed);
-    return {
-      status: 'ran',
-      candidates: ids.length,
-      sent,
-      failed: claimed.length - sent,
-    };
+    const { sent, failed } = await this.sendAll(claimed);
+    return { status: 'ran', candidates: ids.length, sent, failed };
   }
 
   /** The roster's due-to-consider ids, or just the targeted bot (DEMO). */
@@ -137,37 +140,52 @@ export class SigninReminderService {
     return ids.filter((id) => !taken.has(id));
   }
 
-  /** DM every claimed id in turn; returns how many sends succeeded. */
-  private async sendAll(discordIds: readonly string[]): Promise<number> {
-    if (discordIds.length === 0) return 0;
+  /** DM every claimed id in turn; tallies delivered and failed sends. */
+  private async sendAll(
+    discordIds: readonly string[],
+  ): Promise<{ sent: number; failed: number }> {
+    const tally = { sent: 0, failed: 0 };
+    if (discordIds.length === 0) return tally;
     const branding = await this.settings.getBranding();
     const clientUrl = await this.settings.getClientUrl();
-    let sent = 0;
     for (const discordId of discordIds) {
-      if (await this.sendOne(discordId, branding.communityName, clientUrl)) {
-        sent += 1;
-      }
+      const result = await this.sendOne(
+        discordId,
+        branding.communityName,
+        clientUrl,
+      );
+      if (result !== 'skipped') tally[result] += 1;
     }
-    return sent;
+    return tally;
   }
 
   private async sendOne(
     discordId: string,
     communityName: string | null,
     clientUrl: string,
-  ): Promise<boolean> {
+  ): Promise<'sent' | 'failed' | 'skipped'> {
+    if (await releaseIfOptedOut(this.db, discordId)) return 'skipped';
     const { embed, row } = buildSigninReminderDm(communityName, clientUrl);
     try {
       await this.discord.sendEmbedDM(discordId, embed, row);
     } catch (err) {
-      const code = discordErrorCode(err);
-      await recordSigninReminderFailure(this.db, discordId, code);
-      this.logger.warn(
-        `Sign-in reminder DM to ${discordId} failed (code ${code ?? 'none'})`,
-      );
-      return false;
+      await this.recordFailure(discordId, err);
+      return 'failed';
     }
     await markSigninReminderSent(this.db, discordId);
-    return true;
+    return 'sent';
+  }
+
+  /** Coded Discord error ⇒ counted; code-less ⇒ claim released, retry. */
+  private async recordFailure(discordId: string, err: unknown): Promise<void> {
+    const code = discordErrorCode(err);
+    if (code === null) {
+      await releaseSigninReminderClaim(this.db, discordId);
+    } else {
+      await recordSigninReminderFailure(this.db, discordId, code);
+    }
+    this.logger.warn(
+      `Sign-in reminder DM to ${discordId} failed (code ${code ?? 'none'}${code === null ? ', will retry' : ''})`,
+    );
   }
 }

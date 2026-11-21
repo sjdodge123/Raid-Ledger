@@ -5,10 +5,11 @@
  * `FOR UPDATE SKIP LOCKED` (two ticks never share a row), each send either
  * stamps the row as sent or records a failure, and both clear the claim.
  * A claim older than `SIGNIN_REMINDER_STALE_CLAIM_MINUTES` (process died
- * mid-send) is claimable again. A failed DM counts as a send, so a closed DM
- * is retried at most once per cadence and stops at the cap.
+ * mid-send) is claimable again. A failed DM with a Discord error code counts
+ * as a send, so a closed DM is retried at most once per cadence and stops at
+ * the cap; a code-less error only releases the claim (retried next tick).
  */
-import { eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../../drizzle/schema';
 import { discordSigninReminders } from '../../../drizzle/schema';
@@ -93,6 +94,9 @@ export async function claimDueSigninReminders(
         AND r.sent_count < ${input.max}
         AND (r.last_sent_at IS NULL
           OR r.last_sent_at <= now() - make_interval(weeks => ${input.weeks}))
+        -- Belt-and-braces: a failure also sets last_sent_at, so the cadence
+        -- clause above already covers a 50007; kept so a hand-edited row
+        -- cannot re-open a closed DM early.
         AND (r.last_failure_code IS DISTINCT FROM ${DISCORD_DM_CLOSED_CODE}
           OR r.last_failure_at <= now() - make_interval(weeks => ${input.weeks}))
         AND (r.claimed_at IS NULL
@@ -140,6 +144,43 @@ export async function recordSigninReminderFailure(
       claimedAt: null,
     })
     .where(eq(discordSigninReminders.discordId, discordId));
+}
+
+/**
+ * Drop a claim WITHOUT counting it (a code-less error such as the bot
+ * disconnecting mid-pass): the person keeps their reminder and the next tick
+ * retries.
+ */
+export async function releaseSigninReminderClaim(
+  db: SigninReminderDb,
+  discordId: string,
+): Promise<void> {
+  await db
+    .update(discordSigninReminders)
+    .set({ claimedAt: null })
+    .where(eq(discordSigninReminders.discordId, discordId));
+}
+
+/**
+ * Right before a send: if the person opted out after the batch was claimed
+ * (pressed the button on an earlier DM mid-pass), drop the claim and return
+ * true so the caller skips the send.
+ */
+export async function releaseIfOptedOut(
+  db: SigninReminderDb,
+  discordId: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(discordSigninReminders)
+    .set({ claimedAt: null })
+    .where(
+      and(
+        eq(discordSigninReminders.discordId, discordId),
+        isNotNull(discordSigninReminders.optedOutAt),
+      ),
+    )
+    .returning({ discordId: discordSigninReminders.discordId });
+  return rows.length > 0;
 }
 
 /**

@@ -30,6 +30,7 @@ let testApp: TestApp;
 let service: SigninReminderService;
 let sendDm: jest.SpyInstance;
 let roster: FakeMember[] = [];
+const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
 function fakeGuild(): unknown {
   const entries = roster.map((m): [string, unknown] => [
@@ -68,7 +69,11 @@ beforeAll(async () => {
   service = testApp.app.get(SigninReminderService);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
+  // CI's integration env runs with DEMO_MODE=true; these cases pin the
+  // non-DEMO default (unset ⇒ ON) unless they set DEMO_MODE themselves.
+  delete process.env.DEMO_MODE;
+  await setting(SETTING_KEYS.DEMO_MODE, 'false');
   roster = [];
   const client = testApp.app.get(DiscordBotClientService);
   jest.spyOn(client, 'isConnected').mockReturnValue(true);
@@ -79,6 +84,11 @@ beforeEach(() => {
 afterEach(async () => {
   jest.restoreAllMocks();
   testApp.seed = await truncateAllTables(testApp.db);
+});
+
+afterAll(() => {
+  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
 
 describe('sign-in reminders — eligibility', () => {
@@ -172,6 +182,19 @@ describe('sign-in reminders — per-person filters', () => {
     expect(launched).toBeNull();
   });
 
+  it('DEMO_MODE + switch unset ⇒ disabled (fleet/dev envs never DM their guild); explicit true ⇒ runs', async () => {
+    roster = [{ id: '7551' }];
+    process.env.DEMO_MODE = 'true';
+    expect(await service.runTick(NOW)).toEqual({ status: 'disabled' });
+    expect(sendDm).not.toHaveBeenCalled();
+    await setting(SETTING_KEYS.SIGNIN_REMINDER_ENABLED, 'true');
+    expect(await service.runTick(NOW)).toMatchObject({
+      status: 'ran',
+      sent: 1,
+    });
+    expect(dmIds()).toEqual(['7551']);
+  });
+
   it('bot offline ⇒ not-connected, nothing sent', async () => {
     jest
       .spyOn(testApp.app.get(DiscordBotClientService), 'getGuild')
@@ -228,20 +251,20 @@ describe('sign-in reminders — send outcomes', () => {
 });
 
 describe('sign-in reminders — other send errors', () => {
-  it('an error without a code is recorded (code null) and the wave continues', async () => {
+  it('a code-less error (bot dropped mid-pass) releases the claim without using up a reminder; the next tick retries', async () => {
     roster = [{ id: '7801' }, { id: '7802' }];
     sendDm.mockImplementation((id: string) =>
       id === '7801'
-        ? Promise.reject(new Error('socket hang up'))
+        ? Promise.reject(new Error('Discord bot is not connected'))
         : Promise.resolve(),
     );
-    await service.runTick(NOW);
+    expect(await service.runTick(NOW)).toMatchObject({ sent: 1, failed: 1 });
     expect(await reminderRow('7801')).toMatchObject({
-      sentCount: 1,
-      lastFailureCode: null,
+      sentCount: 0,
+      lastSentAt: null,
+      lastFailureAt: null,
       claimedAt: null,
     });
-    expect((await reminderRow('7801'))?.lastFailureAt).not.toBeNull();
     expect(await reminderRow('7802')).toMatchObject({
       sentCount: 1,
       lastFailureAt: null,
@@ -252,5 +275,22 @@ describe('sign-in reminders — other send errors', () => {
       ),
     );
     expect(pending?.n).toBe(0);
+    sendDm.mockReset().mockResolvedValue(undefined);
+    await service.runTick(NOW);
+    expect(dmIds()).toEqual(['7801']);
+    expect(await reminderRow('7801')).toMatchObject({ sentCount: 1 });
+  });
+
+  it('an opt-out pressed after the batch was claimed stops that send and releases the claim', async () => {
+    roster = [{ id: '7901' }, { id: '7902' }];
+    sendDm.mockImplementation(async (id: string) => {
+      // 7902 presses "Don't remind me again" on an older DM mid-pass.
+      if (id === '7901') await optOutOfSigninReminders(testApp.db, '7902');
+    });
+    expect(await service.runTick(NOW)).toMatchObject({ sent: 1, failed: 0 });
+    expect(dmIds()).toEqual(['7901']);
+    const row = await reminderRow('7902');
+    expect(row).toMatchObject({ sentCount: 0, claimedAt: null });
+    expect(row?.optedOutAt).not.toBeNull();
   });
 });
