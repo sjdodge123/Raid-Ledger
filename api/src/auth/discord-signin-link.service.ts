@@ -76,6 +76,9 @@ export class DiscordSigninLinkService {
     const claims = this.verify(token);
     if (!(await consumeTokenOnce(this.db, token))) throw invalidLink();
     if (claims.rebind) await this.assertRebindCurrent(claims.rebind);
+    // MINOR-3, accepted: DISCORD_LOGIN fires inside validateDiscordUser, before
+    // the controller issues the session; its side effects are idempotent, so a
+    // rare token-version race that then 401s leaves nothing to undo.
     const user = await this.authService
       .validateDiscordUser(claims.discordId, claims.username, claims.avatar)
       .catch(() => {

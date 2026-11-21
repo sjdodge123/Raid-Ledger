@@ -84,6 +84,7 @@ export class LoginCommand
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     const discordId = interaction.user.id;
+    // Intentional: refusals count too (limit runs before decide) — throttles probing.
     const limit = await checkLoginRateLimit(this.redis, discordId);
     if (!limit.allowed) {
       await interaction.editReply({

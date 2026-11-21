@@ -36,6 +36,8 @@ export async function redeemSigninLink(token: string, kind: SigninLinkKind): Pro
         const accessToken = await readAccessToken(res);
         if (!accessToken) return 'retry';
         setAccessToken(accessToken);
+        // Deliberately 'magic' even for a discord-link family: a 'discord'
+        // marker would arm the silent OAuth bounce on the next refresh failure.
         setAuthMethod('magic');
         clearSilentGuard();
         return 'ok';
