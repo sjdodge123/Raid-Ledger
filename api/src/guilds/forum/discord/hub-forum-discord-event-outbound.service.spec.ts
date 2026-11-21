@@ -83,6 +83,10 @@ function setup() {
   const attempt = jest.fn(async (_l: ForumLink, run: () => Promise<void>) =>
     run(),
   );
+  const starters = {
+    build: jest.fn().mockResolvedValue(null),
+    track: jest.fn().mockResolvedValue(undefined),
+  };
   const deps: EventPostDeps = {
     db: {} as ForumDiscordDb,
     gateway,
@@ -91,9 +95,15 @@ function setup() {
     redrive,
     clientUrl: () => Promise.resolve('https://rl.example'),
     timeZone: () => Promise.resolve('UTC'),
-    starters: { build: jest.fn().mockResolvedValue(null), track: jest.fn() },
+    starters,
   };
-  return { svc: new EventPostOutbound(deps), gateway, redrive, attempt };
+  return {
+    svc: new EventPostOutbound(deps),
+    gateway,
+    redrive,
+    attempt,
+    starters,
+  };
 }
 
 const mocked = {
@@ -336,5 +346,22 @@ describe('EventPostOutbound.postView — poll and lineup threads', () => {
       content:
         'Lineup **Week 47**. [Open the lineup](https://rl.example/community-lineup/12)',
     });
+  });
+});
+
+describe('ROK-2292 delta-3: starter tracking after a sent post', () => {
+  it('a tracking failure is logged, never fails the sent post (no retry, no second post)', async () => {
+    const { svc, gateway, attempt, starters } = setup();
+    mocked.source.mockResolvedValue(source());
+    const card = { embeds: [], components: [], state: 'posted' };
+    starters.build.mockResolvedValue(card);
+    starters.track.mockRejectedValue(new Error('re-read failed'));
+    const link = await svc.ensurePost(TO, REF);
+    expect(gateway.createPost).toHaveBeenCalledTimes(1);
+    expect(mocked.markSent).toHaveBeenCalledTimes(1);
+    expect(starters.track).toHaveBeenCalledWith(9, 'p1', 'posted');
+    const run = attempt.mock.results[0]?.value as Promise<void>;
+    await expect(run).resolves.toBeUndefined();
+    expect(link?.discordThreadId).toBe('p1');
   });
 });

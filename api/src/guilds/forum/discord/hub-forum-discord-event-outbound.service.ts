@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 /**
  * ROK-2208 §5.7 items 1, 2, 5 — the outbound half of event threads. Owned by
  * `HubForumDiscordOutboundService` (shares its gateway, rename budget and
@@ -90,6 +91,28 @@ interface ThreadText extends SubjectColumns {
 interface PostView {
   name: string;
   content: string;
+}
+
+const starterLogger = new Logger('HubForumDiscordEventOutbound');
+
+/**
+ * ROK-2292 delta-3 MINOR: the post is already sent and its link marked sent,
+ * so a starter-tracking failure must not fail `attempt` (that would mark the
+ * sent link failed and a retry could post twice). Log it like the planning
+ * creator does; the connect-time backfill picks the post up later.
+ */
+async function trackSentStarter(
+  starters: Pick<EventForumStarterCards, 'track'>,
+  eventId: number,
+  threadId: string,
+  state: Parameters<EventForumStarterCards['track']>[2],
+): Promise<void> {
+  try {
+    await starters.track(eventId, threadId, state);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    starterLogger.warn(`starter tracking of event ${eventId} failed: ${why}`);
+  }
 }
 
 export class EventPostOutbound {
@@ -197,7 +220,12 @@ export class EventPostOutbound {
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
       if (card && eventId !== null) {
-        await this.deps.starters.track(eventId, sent.threadId, card.state);
+        await trackSentStarter(
+          this.deps.starters,
+          eventId,
+          sent.threadId,
+          card.state,
+        );
       }
     });
   }
