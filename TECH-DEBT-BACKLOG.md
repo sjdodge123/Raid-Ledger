@@ -4491,3 +4491,7 @@ Existing entries are left in place; this records their status. Line numbers are 
 ### 2026-11-21 — feat/rok-2284-signin-reminder-dm (surfaced during the PR #2278 discord-smoke RCA)
 
 - **med** `api/src/discord-bot/discord-bot-client.guild.helpers.ts:106` — `listAllGuildMemberAvatars` calls the no-arg `guild.members.fetch()`, a gateway op-8 RequestGuildMembers that Discord limits to ~1 per 30s per guild; any other full fetch inside that window throws `GatewayRateLimitError: Request with opcode 8 was rate limited. Retry after 29.179 seconds.` (seen in CI job 136794755506, where it made ROK-2284's roster fetch 500). Pre-existing on main; ROK-2284 moved its own caller off it. Suggested: switch to `fetchGuildMembers(guild)` (REST `members.list` paging + one rate-limit retry, `game-roles/game-role-discord.helpers.ts:177`).
+
+### 2026-11-21 — feat/rok-2292-forum-post-embed (surfaced during the ROK-2292 review)
+
+- **low** — `api/src/guilds/forum/discord/event-planning-posts.create.ts:96-102,141-160` calls Discord `threads.create` BEFORE the unique insert into `event_planning_posts`; a concurrent creator that loses the insert deletes its thread. ROK-2292 (create on announce) makes announce + first signup line racing more likely, so a forum briefly shows a duplicate post that then disappears. Pre-existing (ROK-2272 pattern); the hub creator already claims its link row first. Suggested: claim the `event_planning_posts` row before calling Discord (needs a nullable/placeholder thread id — a migration), mirroring the hub creator's claim-then-send.
