@@ -70,6 +70,8 @@ function reply(over: Partial<HubForumReplySelect> = {}): HubForumReplySelect {
     threadId: 9,
     guildId: 2,
     authorId: 5,
+    kind: 'reply',
+    subjectUserId: null,
     body: 'see you there',
     editedAt: null,
     deletedAt: null,
@@ -195,6 +197,19 @@ describe('toForumReply', () => {
     const gone = reply({ deletedAt: LATER, deletedAs: 'author', deletedBy: 5 });
     const out = toForumReply({ reply: gone, author: person }, CAN);
     expect(out).toMatchObject({ body: '', deleted: 'author' });
+  });
+
+  // ROK-2274: only a system row names its kind; a plain reply omits it.
+  it('carries kind for a signup line and omits it for a reply', () => {
+    const line = reply({
+      kind: 'signup_line',
+      authorId: null,
+      subjectUserId: 5,
+    });
+    const out = toForumReply({ reply: line, author: null }, CAN);
+    expect(HubForumReplySchema.parse(out).kind).toBe('signup_line');
+    const plain = toForumReply({ reply: reply(), author: person }, CAN);
+    expect('kind' in plain).toBe(false);
   });
 });
 

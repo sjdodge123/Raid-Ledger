@@ -281,6 +281,26 @@ describe('ROK-2208 inbound Discord → RL', () => {
     expect(await threadCount(g)).toBe(1);
   });
 
+  it('ROK-2274 loop 2: a bot-authored signup line never imports as a reply', async () => {
+    const { channelId } = await boundHub();
+    const { thread, rlThread } = await importPost(channelId);
+    const line = msg(thread, {
+      authorId: 'our-bot',
+      content: '✅ <@123456789012345678> signed up',
+    });
+    expect(await ingest.onCreate(line, thread, { botUserId: 'our-bot' })).toBe(
+      'skipped',
+    );
+    expect(await replyRow(line.id)).toBeNull();
+    const r = schema.hubForumReplies;
+    const rows = await ctx.testApp.db
+      .select({ id: r.id })
+      .from(r)
+      .where(eq(r.threadId, rlThread.id));
+    expect(rows).toEqual([]);
+    expect((await threadRow(thread.id)).replyCount).toBe(0);
+  });
+
   it('an unbound channel and a post older than bound_at are ignored (AC13)', async () => {
     const { g, channelId } = await boundHub();
     const stray = post(freshId());

@@ -2,14 +2,22 @@ import { Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import { QueueHealthService } from '../../../queue/queue-health.service';
-import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
+import {
+  HubForumDiscordSignupPings,
+  type SignupPingOutcome,
+} from './hub-forum-discord-signup-pings.service';
 import {
   SIGNUP_PING_QUEUE,
   type SignupPingJobData,
 } from './hub-forum-discord-signup-pings.queue';
 
 /** Outcomes that mean "not all written yet — try again with backoff". */
-const RETRY = new Set(['offline', 'pending', 'incomplete']);
+const RETRY: ReadonlySet<SignupPingOutcome> = new Set<SignupPingOutcome>([
+  'offline',
+  'pending',
+  'incomplete',
+  'rl_failed',
+]);
 
 /** ROK-2260 — runs one event's debounced signup-ping flush. */
 @Processor(SIGNUP_PING_QUEUE)

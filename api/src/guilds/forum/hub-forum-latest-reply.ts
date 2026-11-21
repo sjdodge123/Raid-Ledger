@@ -1,6 +1,7 @@
 /**
  * ROK-2229 — the Forum list row of an event thread previews its newest live
- * reply ("Mirelle: Count me in…"), as in the approved mockup. One batched
+ * reply ("Mirelle: Count me in…"), as in the approved mockup. Signup lines
+ * (ROK-2274) are skipped. One batched
  * `DISTINCT ON (thread_id)` query covers every event thread on the page —
  * never one query per row. Normal threads keep their root preview.
  */
@@ -16,6 +17,14 @@ import { forumSync } from './hub-forum.mappers';
 import { author, authorColumns, type Db } from './hub-forum.queries';
 
 const replies = schema.hubForumReplies;
+
+/** Live, real replies of `threadIds` (ROK-2274 D8: never a signup line). */
+const previewable = (threadIds: number[]) =>
+  and(
+    inArray(replies.threadId, threadIds),
+    isNull(replies.deletedAt),
+    eq(replies.kind, 'reply'),
+  );
 
 /** Newest live reply per thread id, keyed by thread id (one query). */
 export async function latestReplyPreviews(
@@ -35,7 +44,7 @@ export async function latestReplyPreviews(
     })
     .from(replies)
     .leftJoin(author, eq(author.id, replies.authorId))
-    .where(and(inArray(replies.threadId, threadIds), isNull(replies.deletedAt)))
+    .where(previewable(threadIds))
     .orderBy(replies.threadId, desc(replies.createdAt), desc(replies.id));
   for (const row of rows) {
     const person = row.author ? toPerson(row.author) : null;

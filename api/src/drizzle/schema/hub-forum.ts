@@ -11,6 +11,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { HubForumReplyKind } from '@raid-ledger/contract';
 import { guilds } from './guilds';
 import { users } from './users';
 
@@ -182,6 +183,20 @@ export const hubForumThreads = pgTable(
   ],
 );
 
+/** ROK-2274: reply kinds; a signup line is system text — never authored. */
+function replyKindChecks(table: { kind: AnyPgColumn; authorId: AnyPgColumn }) {
+  return [
+    check(
+      'hub_forum_replies_kind',
+      sql`${table.kind} IN ('reply', 'signup_line')`,
+    ),
+    check(
+      'hub_forum_replies_line_no_author',
+      sql`${table.kind} = 'reply' OR ${table.authorId} IS NULL`,
+    ),
+  ];
+}
+
 /**
  * ROK-1175: flat replies to a forum thread, oldest first. `guild_id` is
  * denormalised so guards and the user-delete sweep need no join.
@@ -197,6 +212,15 @@ export const hubForumReplies = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: 'cascade' }),
     authorId: integer('author_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    /** ROK-2274: 'reply' (a member post) or 'signup_line' (system text). */
+    kind: varchar('kind', { length: 16 })
+      .$type<HubForumReplyKind>()
+      .notNull()
+      .default('reply'),
+    /** ROK-2274: the member a signup line is about; null on plain replies. */
+    subjectUserId: integer('subject_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),
     body: text('body').notNull(),
@@ -227,6 +251,7 @@ export const hubForumReplies = pgTable(
       'hub_forum_replies_deleted_pair',
       sql`(${table.deletedAt} IS NULL) = (${table.deletedAs} IS NULL)`,
     ),
+    ...replyKindChecks(table),
     // Reply page: oldest first, id breaks ties.
     index('idx_hub_forum_replies_thread').on(
       table.threadId,
@@ -237,6 +262,7 @@ export const hubForumReplies = pgTable(
     index('idx_hub_forum_replies_guild_id').on(table.guildId),
     index('idx_hub_forum_replies_author_id').on(table.authorId),
     index('idx_hub_forum_replies_deleted_by').on(table.deletedBy),
+    index('idx_hub_forum_replies_subject_user_id').on(table.subjectUserId),
     discordIdIndex('replies', table.authorDiscordId),
   ],
 );

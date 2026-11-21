@@ -84,6 +84,7 @@ export * from './schema/guild-profiles';
 export * from './schema/hub-posts';
 export * from './schema/hub-forum';
 export * from './schema/hub-forum-discord';
+export * from './schema/hub-forum-signup-line-states';
 export * from './schema/event-planning-posts';
 export * from './schema/hub-session-notes';
 export * from './schema/hub-media';

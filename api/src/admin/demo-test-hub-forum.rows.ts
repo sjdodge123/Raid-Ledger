@@ -92,17 +92,23 @@ export async function insertSeedReplies(
   return out.map((row) => row.id);
 }
 
+/**
+ * Mirrors the real write path: live REPLIES only — a signup line (ROK-2274)
+ * never counts toward reply_count or last_activity_at.
+ */
 async function syncThreadCounters(db: SeedDb, threadId: number) {
   const r = schema.hubForumReplies;
   const t = schema.hubForumThreads;
-  const [live] = await db
-    .select({ n: count() })
-    .from(r)
-    .where(and(eq(r.threadId, threadId), isNull(r.deletedAt)));
+  const liveReplies = and(
+    eq(r.threadId, threadId),
+    isNull(r.deletedAt),
+    eq(r.kind, 'reply'),
+  );
+  const [live] = await db.select({ n: count() }).from(r).where(liveReplies);
   const [latest] = await db
     .select({ at: max(r.createdAt) })
     .from(r)
-    .where(and(eq(r.threadId, threadId), isNull(r.deletedAt)));
+    .where(liveReplies);
   await db
     .update(t)
     .set({

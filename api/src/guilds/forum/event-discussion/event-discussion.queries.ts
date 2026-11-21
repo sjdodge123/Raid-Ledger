@@ -117,7 +117,10 @@ export async function countEventSignups(
   return Number(rows[0]?.n ?? 0);
 }
 
-/** The `limit` newest live replies of a thread, oldest first (the event card). */
+/**
+ * The `limit` newest live replies of a thread, oldest first (the event card).
+ * ROK-2274: signup lines are not replies — they never reach the card.
+ */
 export async function newestLiveReplies(
   db: Db,
   threadId: number,
@@ -126,7 +129,7 @@ export async function newestLiveReplies(
   const r = schema.hubForumReplies;
   const rows = await selectReplies(
     db,
-    and(eq(r.threadId, threadId), isNull(r.deletedAt)),
+    and(eq(r.threadId, threadId), isNull(r.deletedAt), eq(r.kind, 'reply')),
   )
     .orderBy(desc(r.createdAt), desc(r.id))
     .limit(limit);
