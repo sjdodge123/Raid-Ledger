@@ -17,7 +17,7 @@ import type { QuestPrepTodo } from './quest-prep-todo';
 import { QuestPrepAsOfLine } from './quest-prep-asof-line';
 import { hasFactionQuest, type QuestSide } from '../utils/quest-faction';
 import { filterUsableQuests, flattenQuestMap, useAllUsableQuests, useQuestSide, type RosterCharacter } from './quest-prep-filter';
-import { groupByType, splitByLocation } from './quest-prep-groups';
+import { groupByType, splitByLocation, UNCONFIRMED_GROUP } from './quest-prep-groups';
 import './quest-prep-panel.css';
 
 /** Props passed via PluginSlot context from event-detail-page */
@@ -231,14 +231,16 @@ interface SharedQuestProps {
 
 /**
  * Render the entrance checklist: quests to get before going in, then the
- * ones only acquired inside the instance (ROK-2142 — hidden when none).
+ * ones only acquired inside the instance (ROK-2142), then the ones with no
+ * start evidence (ROK-2276); each group is hidden when empty.
  */
 function QuestLocationGroups({ quests, ...rest }: { quests: EnrichedDungeonQuestDto[] } & SharedQuestProps) {
-    const { before, inside } = splitByLocation(quests);
+    const { before, inside, unconfirmed } = splitByLocation(quests);
     return (
         <>
             <QuestGroup title="Get before you go in" icon="&#x1F5FA;&#xFE0F;" quests={before} {...rest} />
             <QuestGroup title="Picked up inside" hint="Get these during the run" icon="&#x1F3F0;" quests={inside} {...rest} />
+            <QuestGroup {...UNCONFIRMED_GROUP} quests={unconfirmed} {...rest} />
         </>
     );
 }

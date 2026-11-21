@@ -44,6 +44,12 @@ export const DungeonQuestDtoSchema = z.object({
      * ESCORT_QUEST_IDS list); key absent otherwise.
      */
     isEscort: z.boolean().optional(),
+    /**
+     * ROK-2276: true when we have no evidence of where the quest starts (a
+     * Blizzard-only row with no start NPC, not on the inside allowlist); key
+     * absent otherwise. `startsInsideDungeon` is false on such a row.
+     */
+    startLocationUnconfirmed: z.boolean().optional(),
 });
 
 export type DungeonQuestDto = z.infer<typeof DungeonQuestDtoSchema>;
