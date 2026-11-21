@@ -98,15 +98,24 @@ describe('CalendarWriteProcessor → derive on needs_reconnect', () => {
 
   it.each([
     ['write-off', { kind: 'write-off', connectionId: 8 }],
-    ['reconcile', { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 }],
-  ])('ROK-1866: failed %s → emits the reconnect nudge (F2/F3)', async (_k, data) => {
-    writeOff.mockResolvedValue({ result: 'failed', reason: 'auth' });
-    reconcile.mockResolvedValue({ result: 'failed', reason: 'auth' });
-    await makeProcessor().process(job(data as CalendarWriteJobData));
-    expect(EMITTER.emit).toHaveBeenCalledWith(CALENDAR_NEEDS_RECONNECT_EVENT, {
-      connectionId: 8,
-    });
-  });
+    [
+      'reconcile',
+      { kind: 'reconcile', connectionId: 8, eventId: 2, userId: 4 },
+    ],
+  ])(
+    'ROK-1866: failed %s → emits the reconnect nudge (F2/F3)',
+    async (_k, data) => {
+      writeOff.mockResolvedValue({ result: 'failed', reason: 'auth' });
+      reconcile.mockResolvedValue({ result: 'failed', reason: 'auth' });
+      await makeProcessor().process(job(data as CalendarWriteJobData));
+      expect(EMITTER.emit).toHaveBeenCalledWith(
+        CALENDAR_NEEDS_RECONNECT_EVENT,
+        {
+          connectionId: 8,
+        },
+      );
+    },
+  );
 });
 
 const attempt = (data: CalendarWriteJobData, attemptsMade: number) =>

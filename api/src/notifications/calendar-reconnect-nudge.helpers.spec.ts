@@ -17,16 +17,19 @@ describe('buildReconnectNudgeInput (ROK-1866 D5)', () => {
   it.each([
     ['google', 'Google'],
     ['microsoft', 'Microsoft'],
-  ])('names the %s provider and deep-links the Integrations page', (provider, label) => {
-    const input = buildReconnectNudgeInput({ userId: 7, provider }, 3);
-    expect(input).toEqual({
-      userId: 7,
-      type: 'calendar_needs_reconnect',
-      title: `Reconnect your ${label} calendar`,
-      message: `Raid Ledger lost access to your ${label} calendar, so game nights aren't syncing. Reconnect it on your Integrations page.`,
-      payload: { connectionId: 3, provider, url: '/profile/integrations' },
-    });
-  });
+  ])(
+    'names the %s provider and deep-links the Integrations page',
+    (provider, label) => {
+      const input = buildReconnectNudgeInput({ userId: 7, provider }, 3);
+      expect(input).toEqual({
+        userId: 7,
+        type: 'calendar_needs_reconnect',
+        title: `Reconnect your ${label} calendar`,
+        message: `Raid Ledger lost access to your ${label} calendar, so game nights aren't syncing. Reconnect it on your Integrations page.`,
+        payload: { connectionId: 3, provider, url: '/profile/integrations' },
+      });
+    },
+  );
 
   it('tells an Apple member the app-specific password was revoked', () => {
     const input = buildReconnectNudgeInput({ userId: 7, provider: 'apple' }, 4);

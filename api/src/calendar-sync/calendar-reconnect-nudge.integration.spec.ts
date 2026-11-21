@@ -103,7 +103,7 @@ async function nudgesOf(userId: number) {
 async function nudgedAt(id: number): Promise<Date | null> {
   const c = schema.calendarConnections;
   const rows = await testApp.db.select().from(c).where(eq(c.id, id));
-  return nonEmpty(rows)[0].reconnectNudgedAt;
+  return nonEmpty(rows, 'connection')[0].reconnectNudgedAt;
 }
 
 const flip = (id: number) => setConn(id, { status: 'needs_reconnect' });
@@ -121,11 +121,13 @@ describe('ROK-1866 reconnect nudge', () => {
   it('AC1 F1: a read auth failure flips the row and sends exactly one nudge', async () => {
     const m = await member();
     fake.failNextFetch(new ProviderAuthError('invalid_grant'));
-    await expect(readProcessor.process(readJob(m.connectionId))).rejects.toThrow();
+    await expect(
+      readProcessor.process(readJob(m.connectionId)),
+    ).rejects.toThrow();
     await waitFor(async () => {
       expect(await nudgesOf(m.userId)).toHaveLength(1);
     }, 5_000);
-    const [row] = nonEmpty(await nudgesOf(m.userId));
+    const [row] = nonEmpty(await nudgesOf(m.userId), 'nudge');
     expect(row.title).toBe('Reconnect your Google calendar');
     expect(row.payload).toEqual(
       expect.objectContaining({ url: '/profile/integrations' }),
