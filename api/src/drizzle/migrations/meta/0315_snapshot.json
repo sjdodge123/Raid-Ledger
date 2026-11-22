@@ -1323,7 +1323,7 @@
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
-          "default": "now()"
+          "default": "(now() at time zone 'utc')"
         },
         "series_signup_id": {
           "name": "series_signup_id",

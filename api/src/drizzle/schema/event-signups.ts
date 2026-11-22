@@ -123,7 +123,11 @@ export const eventSignups = pgTable(
      * because roster/bench order sorts by it. The reminder cron skips a window
      * for a signup activated within REMINDER_FRESH_SIGNUP_GRACE_MS.
      */
-    activatedAt: timestamp('activated_at').defaultNow().notNull(),
+    // UTC wall clock regardless of the DB session zone (compared as an
+    // instant against Date.now() by the reminder skip rule).
+    activatedAt: timestamp('activated_at')
+      .default(sql`(now() at time zone 'utc')`)
+      .notNull(),
     /**
      * Series membership that created/attached this signup (ROK-1728).
      * Null = a single-night signup. Cleared on future rows when the
