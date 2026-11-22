@@ -17,7 +17,7 @@ import {
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { loadGameContext } from './signup-signup-context.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
-import { showCharacterSelect } from './signup-signup.handlers';
+import { showCharacterSelect } from './signup-select-wrappers';
 
 /**
  * Claim a signup-flow Back click. Returns false when the button is not a
@@ -103,5 +103,6 @@ async function rerenderCharacterList(
     deps,
     status,
     embed,
+    ctx.gameId,
   );
 }

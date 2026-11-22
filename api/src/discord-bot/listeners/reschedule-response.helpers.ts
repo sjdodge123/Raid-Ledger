@@ -15,6 +15,7 @@ import { SignupsService } from '../../events/signups.service';
 import { CharactersService } from '../../characters/characters.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import type { CharacterImportSettings } from '../utils/character-import-link.helpers';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { logBestEffort } from '../../activity-log/activity-log-best-effort';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
@@ -44,6 +45,8 @@ export interface RescheduleDeps {
   activityLog: ActivityLogService;
   eventEmitter: EventEmitter2;
   logger: Logger;
+  /** ROK-2294: trusted client URL for the character-import link. */
+  settingsService: CharacterImportSettings;
 }
 
 /** Options for signup re-confirmation. */

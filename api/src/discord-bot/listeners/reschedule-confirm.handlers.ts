@@ -6,6 +6,7 @@ import {
   showCharacterSelect,
   showRoleSelect,
 } from '../utils/signup-dropdown-builders';
+import { resolveCharacterImportUrl } from '../utils/character-import-link.helpers';
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import { reconfirmSignup } from './reschedule-roster.handlers';
@@ -162,6 +163,10 @@ async function showCharSelect(
     characters,
     emojiService: ctx.deps.emojiService,
     customIdSuffix: suffix,
+    importUrl: await resolveCharacterImportUrl(
+      ctx.deps.settingsService,
+      ctx.event.gameId,
+    ),
   });
 }
 

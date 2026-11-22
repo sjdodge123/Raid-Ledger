@@ -5,6 +5,7 @@
 import type { ButtonInteraction } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { showCharacterSelect } from '../utils/signup-dropdown-builders';
+import { resolveCharacterImportUrl } from '../utils/character-import-link.helpers';
 import {
   parseCharacterBackId,
   type CharacterBackTarget,
@@ -96,5 +97,9 @@ async function rerenderCharacterList(
     characters: chars.characters,
     emojiService: deps.emojiService,
     customIdSuffix: target.suffix,
+    importUrl: await resolveCharacterImportUrl(
+      deps.settingsService,
+      event.gameId,
+    ),
   });
 }

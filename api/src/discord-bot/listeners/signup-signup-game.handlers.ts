@@ -1,7 +1,11 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { showCharacterSelect, showRoleSelect } from './signup-signup.handlers';
+import { showCharacterSelect, showRoleSelect } from './signup-select-wrappers';
+import {
+  buildCharacterImportRow,
+  resolveCharacterImportUrl,
+} from '../utils/character-import-link.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { signupTimeSuffix } from './signup-event-time.helpers';
@@ -68,6 +72,7 @@ async function tryCharacterSignupPath(
       deps,
       undefined,
       embed,
+      event.gameId,
     );
     return true;
   }
@@ -131,6 +136,7 @@ async function handleNonCharPath(
       undefined,
       undefined,
       embed,
+      { gameId: event.gameId },
     );
     return true;
   }
@@ -181,15 +187,15 @@ interface NoCharSignupArgs {
 async function signupWithoutCharacter(a: NoCharSignupArgs): Promise<boolean> {
   const { interaction, eventId, userId, event, game, deps } = a;
   const result = await deps.signupsService.signup(eventId, userId);
-  const clientUrl = process.env.CLIENT_URL ?? '';
-  const nudge =
-    game.hasRoles && clientUrl
-      ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
-      : '';
+  // ROK-2294: the old text Tip became the import link button.
+  const importUrl = game.hasRoles
+    ? await resolveCharacterImportUrl(deps.settingsService, event.gameId)
+    : undefined;
   const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `You're signed up for **${event.title}**!${signupTimeSuffix(event)}${benchSuffix(result.assignedSlot)}${nudge}${conflictSuffix}`,
+    content: `You're signed up for **${event.title}**!${signupTimeSuffix(event)}${benchSuffix(result.assignedSlot)}${conflictSuffix}`,
     embeds: [],
+    ...(importUrl ? { components: [buildCharacterImportRow(importUrl)] } : {}),
   });
   void deps.updateEmbedSignupCount(eventId);
   return true;

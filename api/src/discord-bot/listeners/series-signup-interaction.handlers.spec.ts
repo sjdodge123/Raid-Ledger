@@ -54,6 +54,9 @@ function makeDeps(): SeriesInteractionDeps & {
     charactersService: {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
     },
+    settingsService: {
+      getTrustedClientUrl: jest.fn().mockResolvedValue(null),
+    },
     emojiService: {
       getRoleEmojiComponent: jest.fn(),
       getClassEmojiComponent: jest.fn(),
