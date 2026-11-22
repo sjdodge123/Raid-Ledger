@@ -18,19 +18,19 @@ jest.mock('@sentry/nestjs', () => ({
 
 const captureException = jest.mocked(Sentry.captureException);
 
+const err = new Error('audit down');
+let errorSpy: jest.SpyInstance;
+
+beforeEach(() => {
+  captureException.mockClear();
+  errorSpy = jest
+    .spyOn(Logger.prototype, 'error')
+    .mockImplementation(() => undefined);
+});
+
+afterEach(() => errorSpy.mockRestore());
+
 describe('event audit helpers', () => {
-  let errorSpy: jest.SpyInstance;
-  const err = new Error('audit down');
-
-  beforeEach(() => {
-    captureException.mockClear();
-    errorSpy = jest
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => undefined);
-  });
-
-  afterEach(() => errorSpy.mockRestore());
-
   it('auditEventCancelled resolves and reports when the insert rejects', async () => {
     const activityLog = { log: jest.fn().mockRejectedValue(err) };
     await expect(
@@ -57,7 +57,12 @@ describe('event audit helpers', () => {
     const oldStart = '2026-02-10T18:00:00.000Z';
     const newStart = '2026-02-11T18:00:00.000Z';
     await expect(
-      auditEventRescheduled(activityLog, 7, 3, oldStart, newStart),
+      auditEventRescheduled(activityLog, {
+        eventId: 7,
+        userId: 3,
+        oldStart,
+        newStart,
+      }),
     ).resolves.toBeUndefined();
     expect(activityLog.log).toHaveBeenCalledWith(
       'event',
@@ -70,7 +75,9 @@ describe('event audit helpers', () => {
       tags: { activityLog: 'event_rescheduled' },
     });
   });
+});
 
+describe('auditRosterReconfirms', () => {
   it('auditRosterReconfirms writes every attendee even when the first insert rejects', async () => {
     const activityLog = {
       log: jest

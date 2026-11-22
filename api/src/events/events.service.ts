@@ -242,8 +242,8 @@ export class EventsService {
     const { db, notificationService: ns, eventEmitter: em } = this;
     await rescheduleEvent(db, ns, eventId, userId, isAdmin, dto, em);
     const { startTime: oldStart } = eventBefore;
-    const log = this.activityLog;
-    await auditEventRescheduled(log, eventId, userId, oldStart, dto.startTime);
+    const change = { eventId, userId, oldStart, newStart: dto.startTime };
+    await auditEventRescheduled(this.activityLog, change);
     return this.postMutate(
       eventId,
       userId,

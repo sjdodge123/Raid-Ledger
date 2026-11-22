@@ -26,14 +26,20 @@ export function auditEventCancelled(
   );
 }
 
+/** What a reschedule audit row records (named so the two ISO strings cannot swap). */
+export interface RescheduleAudit {
+  eventId: number;
+  userId: number;
+  oldStart: string;
+  newStart: string;
+}
+
 /** `event_rescheduled` audit row for a reschedule that already committed. */
 export function auditEventRescheduled(
   activityLog: ActivityLog,
-  eventId: number,
-  userId: number,
-  oldStart: string,
-  newStart: string,
+  change: RescheduleAudit,
 ): Promise<void> {
+  const { eventId, userId, oldStart, newStart } = change;
   const meta = { oldStart, newStart };
   return logBestEffort(
     activityLog,
