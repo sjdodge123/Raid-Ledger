@@ -134,7 +134,7 @@ export class PollVoterLines {
     userId: number,
     line: StoredVoterLine,
   ): Promise<void> {
-    await this.redis.hset(key, String(userId), JSON.stringify(line));
+    await this.redis.hset(key, { [String(userId)]: JSON.stringify(line) });
     await this.redis.expire(key, VOTER_ONCE_TTL_SECONDS);
   }
 

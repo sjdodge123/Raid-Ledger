@@ -7,6 +7,7 @@ import type { ForumStarterEditor } from './forum-starter-edit.port';
 import * as linkReads from './hub-forum-discord-links.queries';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 import { PollForumStarterSync } from './poll-forum-starter.sync';
+import type { PollVoterLines } from './poll-voter-lines.refresh';
 
 jest.mock('../subject-discussion/poll-discussion.queries', () => ({
   findLivePollThread: jest.fn(),
@@ -34,11 +35,13 @@ function discordError(code: number): DiscordAPIError {
 
 function setup() {
   const editStarter = jest.fn().mockResolvedValue('edited');
+  const refreshVoterLines = jest.fn().mockResolvedValue(undefined);
   const sync = new PollForumStarterSync(
     {} as ForumDiscordDb,
     { editStarter } as unknown as ForumStarterEditor,
+    { refreshVoterLines } as unknown as PollVoterLines,
   );
-  return { sync, editStarter };
+  return { sync, editStarter, refreshVoterLines };
 }
 
 function hubLink(over: Record<string, unknown> = {}) {
@@ -100,5 +103,24 @@ describe('PollForumStarterSync.syncStarter', () => {
     await expect(sync.syncStarter(7, CARD)).resolves.toBeUndefined();
     editStarter.mockRejectedValueOnce(discordError(50001));
     await expect(sync.syncStarter(7, CARD)).rejects.toThrow('discord 50001');
+  });
+
+  it('ROK-2295 lane C: the voted lines refresh in the same post, even when the starter edit throws', async () => {
+    const { sync, editStarter, refreshVoterLines } = setup();
+    mocked.planning.mockResolvedValue({
+      discordThreadId: 'plan-post-9',
+      discordDeletedAt: null,
+    } as never);
+    await sync.syncStarter(7, CARD);
+    expect(refreshVoterLines).toHaveBeenCalledWith(7, 'plan-post-9');
+    editStarter.mockRejectedValueOnce(discordError(50001));
+    await expect(sync.syncStarter(7, CARD)).rejects.toThrow('discord 50001');
+    expect(refreshVoterLines).toHaveBeenCalledTimes(2);
+  });
+
+  it('ROK-2295 lane C: no post ⇒ no voted-line refresh', async () => {
+    const { sync, refreshVoterLines } = setup();
+    await sync.syncStarter(7, CARD);
+    expect(refreshVoterLines).not.toHaveBeenCalled();
   });
 });
