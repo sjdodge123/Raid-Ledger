@@ -201,7 +201,8 @@ describe('copyForumChat (ROK-2297)', () => {
       createdAt: new Date(s.t0 + 3 * MIN),
       copiedFromReplyId: guest,
     });
-    expect(await replyCount(s.pollThread)).toBe(before + 3);
+    // The header is a system line: only the 2 copies count.
+    expect(await replyCount(s.pollThread)).toBe(before + 2);
   });
 
   it('a second run writes nothing', async () => {
@@ -227,7 +228,7 @@ describe('copyForumChat (ROK-2297)', () => {
 
     expect(results.filter((r) => r !== null)).toHaveLength(1);
     expect(await rowsOf(s.pollThread)).toHaveLength(3);
-    expect(await replyCount(s.pollThread)).toBe(3);
+    expect(await replyCount(s.pollThread)).toBe(2);
   });
 
   it('a reschedule round trip brings back only the poll’s own replies', async () => {

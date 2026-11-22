@@ -194,9 +194,13 @@ async function copyInTx(
   const headerId = await insertHeader(tx, t, body, plan);
   if (headerId === null) return null;
   const copyIds = await insertCopies(tx, t, plan.picked);
-  const replyIds = [headerId, ...copyIds];
-  await bumpThread(tx, dst.id, replyIds.length, input.now ?? new Date());
-  return { guildId: dst.guildId, threadId: dst.id, replyIds };
+  // The header is a system line (ROK-2274 D8): only the copies count.
+  await bumpThread(tx, dst.id, copyIds.length, input.now ?? new Date());
+  return {
+    guildId: dst.guildId,
+    threadId: dst.id,
+    replyIds: [headerId, ...copyIds],
+  };
 }
 
 /**
