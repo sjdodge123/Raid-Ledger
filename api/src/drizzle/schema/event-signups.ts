@@ -117,6 +117,14 @@ export const eventSignups = pgTable(
     lateMinutes: integer('late_minutes'),
     signedUpAt: timestamp('signed_up_at').defaultNow().notNull(),
     /**
+     * When this signup last became active (ROK-2293): set on insert and on
+     * every inactive → active flip (declined / roached_out / departed back to
+     * signed_up / tentative). `signed_up_at` keeps the original signup time
+     * because roster/bench order sorts by it. The reminder cron skips a window
+     * for a signup activated within REMINDER_FRESH_SIGNUP_GRACE_MS.
+     */
+    activatedAt: timestamp('activated_at').defaultNow().notNull(),
+    /**
      * Series membership that created/attached this signup (ROK-1728).
      * Null = a single-night signup. Cleared on future rows when the
      * membership ends; past rows keep it as history.
