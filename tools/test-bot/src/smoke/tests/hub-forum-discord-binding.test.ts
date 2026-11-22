@@ -3,7 +3,8 @@
  * Discord guild:
  *   1. create: hub A asks Raid Ledger's bot to make a forum; it exists, and
  *      (OQ-9) the bot's `fetchWebhooks()` hands back the token of the webhook
- *      it made — so nothing is stored. Unbind with deleteForum removes it.
+ *      it made — so nothing is stored. Unbind with deleteForum removes it,
+ *      and (ROK-2296) deletes the bot's webhook first.
  *   2. share: the companion bot makes a run-scoped forum
  *      `rl-smoke-forum-<runId>`; hub A binds it, hub B joins it — the forum
  *      gains a tag per hub and Require tags.
@@ -12,7 +13,7 @@
  * Every channel is found by the id the API returned or the one this test
  * made — never by position. Teardown deletes both forums and both bindings.
  */
-import { ChannelFlags, ChannelType, type ForumChannel } from "discord.js";
+import { AuditLogEvent, ChannelFlags, ChannelType, type ForumChannel } from "discord.js";
 import { getGuild } from "../../client.js";
 import { pollForCondition } from "../../helpers/polling.js";
 import { SmokeAssertionError } from "../assert.js";
@@ -97,6 +98,32 @@ async function expectGone(channelId: string): Promise<void> {
   }
 }
 
+/**
+ * ROK-2296: a deleted channel's webhooks keep counting toward the guild's
+ * 1000-webhook cap, so the unlink must delete the bot's webhook itself. The
+ * test bot lacks Manage Webhooks (it cannot list them), so the guild audit log
+ * (View Audit Log) is the witness: a WEBHOOK_DELETE entry for that id.
+ */
+async function expectWebhookDeleted(webhookId: string): Promise<void> {
+  let lastErr: unknown = null;
+  try {
+    await pollForCondition(async () => {
+      const log = await getGuild()
+        .fetchAuditLogs({ type: AuditLogEvent.WebhookDelete, limit: 50 })
+        .catch((err: unknown) => {
+          lastErr = err;
+          return null;
+        });
+      return log?.entries.some((e) => e.targetId === webhookId) ? true : null;
+    }, TIMEOUT_MS);
+  } catch {
+    fail(
+      `ROK-2296: unlink with deleteForum must delete the bot's webhook ${webhookId} (no WEBHOOK_DELETE audit entry)`,
+      lastErr === null ? "no entry" : String(lastErr),
+    );
+  }
+}
+
 function describe(f: ForumChannel | null): unknown {
   if (!f) return null;
   return {
@@ -123,6 +150,7 @@ async function createPhase(ctx: TestContext, runId: string, made: Made) {
   }
   await ctx.api.delete(`${route(hub)}?deleteForum=true`);
   await expectGone(b.channelId);
+  await expectWebhookDeleted(probe.webhookId);
 }
 
 /** Phase 2 + 3: two hubs share a run-scoped forum, then leave. */
