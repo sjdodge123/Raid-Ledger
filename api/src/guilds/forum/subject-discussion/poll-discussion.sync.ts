@@ -91,10 +91,10 @@ export function pollThreadRootBody(poll: PollSyncRow): string {
  */
 export function rescheduledEvent(
   poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle'>,
-): { id: number; title: string } | null {
+): { title: string } | null {
   const title = poll.linkedEventTitle?.trim() ?? '';
   if (poll.linkedEventId === null || title.length === 0) return null;
-  return { id: poll.linkedEventId, title };
+  return { title };
 }
 
 /**
