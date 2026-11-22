@@ -94,6 +94,7 @@ function build(opts: { online?: boolean; discordId?: string | null } = {}) {
   const lines = {
     slotsOf: jest.fn().mockResolvedValue([SLOT]),
     store: jest.fn().mockResolvedValue(undefined),
+    refreshVoterLines: jest.fn().mockResolvedValue(undefined),
   };
   const outbound = { ensureEventPost: jest.fn().mockResolvedValue(hubLink()) };
   const subjects = {

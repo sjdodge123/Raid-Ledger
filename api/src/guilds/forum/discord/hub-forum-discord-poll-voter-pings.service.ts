@@ -108,15 +108,7 @@ export class HubForumDiscordPollVoterPings {
     const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
     if (claimed === null) return 'already';
     try {
-      const slots = await this.lines.slotsOf(matchId, userId);
-      const line = voterLine(discordId, slots);
-      const ids = [discordId];
-      const messageId = await this.gateway.mention(discordThreadId, line, ids);
-      await this.lines.store(discordThreadId, userId, {
-        messageId,
-        discordId,
-        slots,
-      });
+      await this.sendLine(matchId, userId, discordId, discordThreadId);
       return 'pinged';
     } catch (err) {
       await this.redis.del(key);
@@ -127,6 +119,28 @@ export class HubForumDiscordPollVoterPings {
       );
       return 'send-failed';
     }
+  }
+
+  /** The first voted line: sent, stored, then re-checked once. */
+  private async sendLine(
+    matchId: number,
+    userId: number,
+    discordId: string,
+    discordThreadId: string,
+  ): Promise<void> {
+    const slots = await this.lines.slotsOf(matchId, userId);
+    const line = voterLine(discordId, slots);
+    const ids = [discordId];
+    const messageId = await this.gateway.mention(discordThreadId, line, ids);
+    await this.lines.store(discordThreadId, userId, {
+      messageId,
+      discordId,
+      slots,
+    });
+    // Codex P2 / review m-1: a vote change during the send may have run its
+    // coalesced refresh before this line was stored (and skipped it). One
+    // trailing pass re-reads; it edits only on a difference, never throws.
+    await this.lines.refreshVoterLines(matchId, discordThreadId);
   }
 
   private async discordIdOf(userId: number): Promise<string | null> {
