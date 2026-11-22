@@ -206,11 +206,8 @@ export class HubForumDiscordOutboundService {
       }));
     if (!link || links.isUnsent(parent)) return; // S6 sends it after the post
     const ref = { guildId, threadId, replyId };
-    const [author, url] = await outboundVoice(
-      this.settings,
-      record.author,
-      ref,
-    );
+    const voice = [this.settings, record.author, ref, record.reply] as const;
+    const [author, url] = await outboundVoice(...voice);
     await this.sendReply(job.target, link, parent.discordThreadId, {
       body: record.reply.body,
       url,

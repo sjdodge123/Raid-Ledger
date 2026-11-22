@@ -66,6 +66,12 @@ import {
 import { POLL_FORUM_STARTER_PORT } from '../../../lineups/scheduling/poll-forum-starter.port';
 import { PollForumStarterSync } from './poll-forum-starter.sync';
 import { PollVoterLines } from './poll-voter-lines.refresh';
+import {
+  FORUM_CHAT_COPY_QUEUE,
+  ForumChatCopyQueue,
+} from './forum-chat-copy.queue';
+import { ForumChatCopyListener } from './forum-chat-copy.listener';
+import { ForumChatCopyProcessor } from './forum-chat-copy.processor';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
@@ -80,6 +86,7 @@ import { PollVoterLines } from './poll-voter-lines.refresh';
     BullModule.registerQueue({ name: SIGNUP_PING_QUEUE }),
     // ROK-2295 Codex P2: a new poll post re-runs the coalesced card sync.
     BullModule.registerQueue({ name: SCHEDULING_POLL_EMBED_QUEUE }),
+    BullModule.registerQueue({ name: FORUM_CHAT_COPY_QUEUE }),
   ],
   controllers: [
     HubForumDiscordController,
@@ -140,6 +147,10 @@ import { PollVoterLines } from './poll-voter-lines.refresh';
     EventPlanningSubjectsListener,
     // ROK-2272 S10: poll voter pings (hub + non-hub).
     HubForumDiscordPollVoterPings,
+    // ROK-2297: copy earlier chat between an event and its poll.
+    ForumChatCopyQueue,
+    ForumChatCopyListener,
+    ForumChatCopyProcessor,
   ],
   exports: [
     HubForumDiscordGateway,
