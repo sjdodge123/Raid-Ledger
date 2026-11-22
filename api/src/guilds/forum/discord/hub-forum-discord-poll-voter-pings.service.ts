@@ -6,7 +6,9 @@
  * in its registry post (created on the vote by `EventPlanningSubjectPosts`).
  * A cleared tap, an unlinked user, a locked / deleted / unsent post or an
  * offline bot pings nothing; only a claimed once-key sends, and a failed
- * send releases it. Lineups get no pings.
+ * send releases it. Lineups get no pings. A send that finds the Discord
+ * post gone (10003 / 404 — deleted while the bot missed the inbound delete)
+ * marks it deleted on either arm, so later votes stop claiming and failing.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -18,7 +20,7 @@ import { REDIS_CLIENT } from '../../../redis/redis.module';
 import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
 import { markPlanningPostDeleted } from './event-planning-posts.queries';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
-import { isUnsent } from './hub-forum-discord-links.queries';
+import { isUnsent, markDeleted } from './hub-forum-discord-links.queries';
 import {
   HubForumDiscordOutboundGateway,
   isGone,
@@ -66,7 +68,8 @@ export class HubForumDiscordPollVoterPings {
     }
     if (isUnsent(post)) return 'pending';
     const scope = { hubThreadId: thread.id };
-    return this.ping(scope, post.discordThreadId, p.userId);
+    const gone = () => markDeleted(this.db, post.id, new Date());
+    return this.ping(scope, post.discordThreadId, p.userId, gone);
   }
 
   /** Non-hub arm: the registry post (created by this vote when eligible). */
@@ -82,13 +85,15 @@ export class HubForumDiscordPollVoterPings {
       return 'closed-post';
     }
     const scope = { planningPostId: ref.postId };
-    return this.ping(scope, ref.discordThreadId, p.userId);
+    const gone = () => markPlanningPostDeleted(this.db, ref.postId, new Date());
+    return this.ping(scope, ref.discordThreadId, p.userId, gone);
   }
 
   private async ping(
     scope: VoterPingScope,
     discordThreadId: string,
     userId: number,
+    markGone: () => Promise<void>,
   ): Promise<VoterPingOutcome> {
     const discordId = await this.discordIdOf(userId);
     if (discordId === null) return 'unlinked';
@@ -103,19 +108,13 @@ export class HubForumDiscordPollVoterPings {
       return 'pinged';
     } catch (err) {
       await this.redis.del(key);
-      await this.markIfGone(scope, err);
+      if (isGone(err)) await markGone();
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(
         `Voter ping for user ${userId} in ${voterScopeKey(scope)} lost: ${why}`,
       );
       return 'send-failed';
     }
-  }
-
-  /** A gone registry thread marks its row deleted (as signup pings do). */
-  private async markIfGone(scope: VoterPingScope, err: unknown): Promise<void> {
-    if (!('planningPostId' in scope) || !isGone(err)) return;
-    await markPlanningPostDeleted(this.db, scope.planningPostId, new Date());
   }
 
   private async discordIdOf(userId: number): Promise<string | null> {
