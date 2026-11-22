@@ -87,6 +87,18 @@ if ! command -v flock >/dev/null 2>&1; then
     }
 fi
 
+# ROK-2289 — the claims.json rows a caller may be OFFERED. RUNNER_SLOTS is the
+# single source of truth for how many runners exist; claims.json can hold more
+# rows (state::init never shrinks it, and slots 3-4 were rowed when the
+# `extra-slots` profile was once on), and a free row above RUNNER_SLOTS is a
+# slot with no rl-runner-N container — every claim/dispatch on it dies (the
+# runner-dir check's exit 96). So a free row above the cap is hidden; a CLAIMED
+# one stays visible, so its holder and the operator still see it until release.
+state::offered_claims() {
+    jq -c --argjson max "$RUNNER_SLOTS" \
+        '[.[] | select(.slot <= $max or .claimed == true)]' "$RL_CLAIMS_FILE"
+}
+
 # Initialize state files if missing. Safe to call repeatedly.
 state::init() {
     if [[ ! -s "$RL_CLAIMS_FILE" ]]; then

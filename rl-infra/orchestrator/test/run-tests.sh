@@ -66,6 +66,8 @@ else
         "$TEST_DIR/task-admission-ledger.test.sh"
         # README memory-hardening step 4 — flocked slot shrink/grow.
         "$TEST_DIR/slots-resize.test.sh"
+        # ROK-2289 — never offer a slot above RUNNER_SLOTS (no runner behind it).
+        "$TEST_DIR/slot-cap.test.sh"
         # ROK-1469 — per-slot Discord bot identities (overlay + one-live-bot).
         "$TEST_DIR/env-settings-overlay.test.sh"
         # The stat-probe portability guard: `owner_of` tried BSD `stat -f`

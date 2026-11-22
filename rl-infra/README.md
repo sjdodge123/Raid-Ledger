@@ -627,6 +627,31 @@ not the daily flow.
 - Discord MCP + Chrome MCP (need local Electron / Chrome with CDP).
 - Sentry, Linear, GitHub clients (network, not compute-heavy).
 
+## Slot count = the runners that exist (ROK-2289)
+
+`RUNNER_SLOTS` in `/srv/rl-infra/.env` (default `2`, `_state.sh`) is the one
+source of truth for how many slots the fleet offers. `claims.json` can carry
+more rows than that — `init-state` never shrinks it, and slots 3–4 got rows
+while the `extra-slots` profile was on — so `claim` and `status` both cap at
+`RUNNER_SLOTS`: a free row above it is never granted, queued on or listed (a
+claimed one stays listed until its holder releases). Before ROK-2289 those
+rows showed as FREE in `rl_status`, and a claim that landed on slot 3/4 died
+with exit 96 because no `rl-runner-3`/`-4` container exists.
+
+**Operator step on the VM after this deploys** (agents cannot do it; ROK-1338).
+Only when `rl status` shows slots 3 and 4 unclaimed:
+
+```bash
+cd /srv/rl-infra && grep '^RUNNER_SLOTS=' .env          # expect RUNNER_SLOTS=2
+sed -i 's/^RUNNER_SLOTS=.*/RUNNER_SLOTS=2/' .env        # only if it said 3 or 4
+./orchestrator/bin/slots-resize 2                       # drops rows 3-4; refuses if claimed/queued
+```
+
+The `slots-resize` step is tidy-up — the cap already hides the rows — but the
+fleet dashboard reads `claims.json` directly and keeps showing slots 3/4 until
+it runs. To bring slots 3/4 back later, follow the reverse order in "Memory
+hardening" step 4: start the runners, `slots-resize 4`, then `RUNNER_SLOTS=4`.
+
 ## First-time setup (operator-only)
 
 See `proxmox/cloud-init.yaml` for VM provisioning. After the VM is up, the
