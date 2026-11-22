@@ -182,3 +182,21 @@ describe('HubForumDiscordInboundIngest.onThreadDelete — outbound 404 stamp', (
     expect(w.removeFromDiscord).not.toHaveBeenCalled();
   });
 });
+
+describe('HubForumDiscordInboundIngest.onDelete — reports what removeFromDiscord did', () => {
+  it('a message whose RL row was already removed reports skipped, not deleted', async () => {
+    w.findLinkByMessage.mockResolvedValue(postLink);
+    w.removeFromDiscord.mockResolvedValue(false);
+    const result = await makeIngest().onDelete(POST, 'forum-1');
+    expect(w.removeFromDiscord).toHaveBeenCalledTimes(1);
+    expect(result).toBe('skipped');
+  });
+
+  it('a message whose RL row it soft-deleted reports deleted', async () => {
+    w.findLinkByMessage.mockResolvedValue(postLink);
+    w.removeFromDiscord.mockResolvedValue(true);
+    await expect(makeIngest().onDelete(POST, 'forum-1')).resolves.toBe(
+      'deleted',
+    );
+  });
+});
