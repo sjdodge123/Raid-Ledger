@@ -24,6 +24,10 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import {
+  deleteForumStarterRows,
+  EventForumStarterCards,
+} from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { syncExpiredPolls } from '../subject-discussion/poll-discussion.deadline';
@@ -49,6 +53,8 @@ export interface LockChange {
   threadId: number;
   discordThreadId: string;
   readOnly: boolean;
+  /** The thread's event (null for a poll / lineup thread). */
+  eventId: number | null;
 }
 
 /** A thread with a subject (event, poll or lineup — ROK-2272 S8). */
@@ -90,6 +96,7 @@ export async function dueLockChanges(
       threadId: links.threadId,
       discordThreadId: links.discordThreadId,
       readOnly,
+      eventId: threads.eventId,
     })
     .from(links)
     .innerJoin(threads, eq(threads.id, links.threadId))
@@ -119,6 +126,7 @@ export class HubForumDiscordEventLockSweep {
     private readonly client: DiscordBotClientService,
     private readonly outbound: HubForumDiscordOutboundService,
     private readonly registry: EventPlanningPostsLockSweep,
+    private readonly starters: EventForumStarterCards,
   ) {}
 
   /**
@@ -188,6 +196,9 @@ export class HubForumDiscordEventLockSweep {
         .update(links)
         .set({ discordLockedAt: row.readOnly ? now : null })
         .where(eq(links.id, row.linkId));
+      // ROK-2292 D7: a locked (closed / detached) post's starter stops syncing.
+      if (row.readOnly)
+        await deleteForumStarterRows(this.db, row.discordThreadId);
     } catch (err) {
       this.warn(row, err);
       return false;
@@ -196,10 +207,15 @@ export class HubForumDiscordEventLockSweep {
     return true;
   }
 
-  /** Reopened: push the title/starter skipped while locked (binding-checked). */
+  /**
+   * Reopened: track the event starter again (ROK-2292, D7 dropped it), then
+   * push the title/starter skipped while locked (binding-checked).
+   */
   private async refresh(row: LockChange): Promise<void> {
-    const { guildId, threadId } = row;
+    const { guildId, threadId, eventId } = row;
     try {
+      if (eventId !== null)
+        await this.starters.restore(eventId, row.discordThreadId);
       await this.outbound.apply({
         guildId,
         threadId,

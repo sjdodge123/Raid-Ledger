@@ -5,6 +5,7 @@
  * forum resolver is pinned to a fresh forum row per test, so randomized
  * order and other specs' bound forums share nothing.
  */
+import { ActionRowBuilder, EmbedBuilder } from 'discord.js';
 import { and, eq } from 'drizzle-orm';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
@@ -160,6 +161,14 @@ describe('ROK-2272 S4a ensureEventPost', () => {
       title: await expectedTitle(eventId),
       content: expect.stringContaining(`/events/${eventId}`) as string,
       tagIds: [tag?.id],
+      // ROK-2292 D2: the post opens with the event's signup card.
+      card: {
+        embeds: [expect.any(EmbedBuilder)],
+        components: expect.arrayContaining([
+          expect.any(ActionRowBuilder),
+        ]) as unknown[],
+        state: expect.any(String) as string,
+      },
     });
     const [row] = nonEmpty(await liveRows(eventId), 'post row');
     expect(ref).toEqual({

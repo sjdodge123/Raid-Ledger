@@ -4,6 +4,7 @@
  * (for the MAJOR-2 stale check), and the posts a retitle renames.
  */
 import { and, eq, isNull } from 'drizzle-orm';
+import { forumStarterRowsOnly } from '../../../discord-bot/services/event-message-rows.helpers';
 import * as schema from '../../../drizzle/schema';
 import type { ForumLink } from './hub-forum-discord-links.queries';
 import type { EventThreadWriteState } from './hub-forum-discord-event-outbound';
@@ -108,4 +109,21 @@ export async function liveEventPostLinks(
       ),
     );
   return rows.map((r) => r.link);
+}
+
+/**
+ * ROK-2292 D6 — the post `discordThreadId` opens with a tracked signup card
+ * (a forum starter row): its starter is the card, never the text body.
+ */
+export async function hasForumStarterCard(
+  db: ForumDiscordDb,
+  discordThreadId: string,
+): Promise<boolean> {
+  const t = schema.discordEventMessages;
+  const [row] = await db
+    .select({ id: t.id })
+    .from(t)
+    .where(and(forumStarterRowsOnly(), eq(t.channelId, discordThreadId)))
+    .limit(1);
+  return row !== undefined;
 }

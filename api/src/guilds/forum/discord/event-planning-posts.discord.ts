@@ -7,8 +7,14 @@
  * on rename/delete is `'gone'`.
  */
 import { Injectable } from '@nestjs/common';
-import { ChannelType, type Guild, type ThreadChannel } from 'discord.js';
+import {
+  ChannelType,
+  ThreadAutoArchiveDuration,
+  type Guild,
+  type ThreadChannel,
+} from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
 import {
   isGone,
   type DiscordWriteResult,
@@ -16,12 +22,22 @@ import {
 
 const REASON = 'Raid Ledger event-planning post';
 const NO_MENTIONS = { parse: [] };
+const ONE_WEEK = ThreadAutoArchiveDuration.OneWeek;
 
 /** A new Discord-only post. */
 export interface PlanningPostDraft {
   title: string;
   content: string;
   tagIds: string[];
+  /** ROK-2292 D2: an event post opens with its signup card instead. */
+  card?: ForumStarterCard;
+}
+
+/** The card (content `''`) when there is one, else the text starter. */
+function starterMessage(post: PlanningPostDraft) {
+  if (!post.card) return { content: post.content };
+  const { embeds, components } = post.card;
+  return { content: '', embeds, components };
 }
 
 @Injectable()
@@ -44,8 +60,11 @@ export class EventPlanningPostsGateway {
     }
     const thread = await ch.threads.create({
       name: post.title,
-      message: { content: post.content, allowedMentions: NO_MENTIONS },
+      message: { ...starterMessage(post), allowedMentions: NO_MENTIONS },
       appliedTags: post.tagIds,
+      // ROK-2292 review MAJOR: an event post exists from announce, days
+      // ahead, so it idles the longest Discord allows before auto-archiving.
+      ...(post.card ? { autoArchiveDuration: ONE_WEEK } : {}),
       reason: REASON,
     });
     return thread.id;

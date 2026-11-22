@@ -1,19 +1,22 @@
 /**
  * ROK-2272 S4b — a NON-hub event (no hub tag, not ad-hoc) gets its Discord
- * post in the event-planning forum, lazily: none before a signup, one on the
- * first signup line (tagged only `Event`, dated title, event page link),
- * and it is locked + archived once the event ended more than 1 h ago.
+ * post in the event-planning forum (tagged only `Event`, dated title) and it
+ * is locked + archived once the event ended more than 1 h ago.
+ * ROK-2292 (D8, ruling 1): the post is created on announce — before any
+ * signup — and opens with the event's signup card (empty content, embed +
+ * buttons, bot-authored); the first signup line reuses that post.
  * The forum is this run's own `rl-smoke-forum-<runId>` (ROK-2208 setup), the
  * only bound forum in the guild, so the event-planning resolver picks it.
  * `finally` deletes this test's Discord post, event, binding and forum by id.
  */
-import { ChannelType, type ForumChannel, type ThreadChannel } from "discord.js";
+import { ChannelType, type ThreadChannel } from "discord.js";
 import { getGuild } from "../../client.js";
 import { pollForCondition } from "../../helpers/polling.js";
 import { createEvent, futureTime, linkDiscord, signupAs } from "../fixtures.js";
 import type { SmokeTest, TestContext } from "../types.js";
 import { farOffTimes, fail, flushPings, setup, teardown, TIMEOUT_MS, type Made } from "./hub-forum-discord-outbound.test.js";
 import { BOT_NAME, relinkDmRecipient, seededMember } from "./hub-forum-discord-signup-lines.test.js";
+import { expectStarterCard, postCreatedOnAnnounce } from "./forum-starter-card.helpers.js";
 
 const FIXTURES = "/admin/test/hub-forum-discord";
 const DASH = " — ";
@@ -26,13 +29,6 @@ export async function expectResolvedForum(ctx: TestContext, forumId: string): Pr
 
 async function syncPlanningPost(ctx: TestContext, eventId: number): Promise<void> {
   await ctx.api.post(`${FIXTURES}/events/${String(eventId)}/sync-planning-post`, {});
-}
-
-/** No empty posts: the run's fresh forum holds no post before any line. */
-async function expectNoPost(forum: ForumChannel): Promise<void> {
-  const active = await forum.threads.fetchActive();
-  const names = [...active.threads.values()].map((t) => t.name);
-  if (names.length > 0) fail("ROK-2272: no post may exist before the first signup line", names);
 }
 
 async function expectOnlyEventTag(forumId: string, post: ThreadChannel): Promise<void> {
@@ -51,14 +47,6 @@ function expectDatedTitle(post: ThreadChannel, title: string): void {
   const prefix = `${title}${DASH}`;
   if (!post.name.startsWith(prefix) || post.name.length <= prefix.length) {
     fail(`ROK-2272: post title should be "${prefix}<date>"`, post.name);
-  }
-}
-
-async function expectStarterLink(post: ThreadChannel, eventId: number): Promise<void> {
-  const starter = await post.fetchStarterMessage().catch(() => null);
-  const content = starter?.content ?? null;
-  if (!content?.includes(`/events/${String(eventId)}`) || starter?.webhookId) {
-    fail(`ROK-2272: the starter is a bot message linking /events/${String(eventId)}`, { content, webhookId: starter?.webhookId ?? null });
   }
 }
 
@@ -117,15 +105,16 @@ async function nonHubEventPost(ctx: TestContext): Promise<void> {
     await linkDiscord(ctx.api, member.userId, me, BOT_NAME);
     const event = await createEvent(ctx.api, "planning-post", farOffTimes());
     made.event = event.id;
+    const announced = await postCreatedOnAnnounce(forum, event.title);
+    postId = announced.id;
     await syncPlanningPost(ctx, event.id);
-    await expectNoPost(forum);
     await signupAs(ctx.api, event.id, member.userId);
     const post = await flushPings(ctx, event.id);
-    postId = post.id;
+    if (post.id !== announced.id) fail(`ROK-2292 D8: the first signup line should reuse post ${announced.id}, not open another`, post.id);
     if (post.parentId !== forum.id) fail(`ROK-2272: the post should be in forum ${forum.id}`, post.parentId);
     await expectOnlyEventTag(forum.id, post);
     expectDatedTitle(post, event.title);
-    await expectStarterLink(post, event.id);
+    await expectStarterCard(post, event.id, event.title, "bot");
     await expectSignupLine(post, me);
     await closeEvent(ctx, event.id);
     await expectLockedArchived(post.id);
@@ -138,7 +127,7 @@ async function nonHubEventPost(ctx: TestContext): Promise<void> {
 
 export const eventPlanningNonHubEventTests: SmokeTest[] = [
   {
-    name: "event-planning: non-hub event post — lazy, Event-tagged, locked after close (ROK-2272)",
+    name: "event-planning: non-hub event post — on announce, card starter, Event-tagged, locked after close (ROK-2272, ROK-2292)",
     category: "flow",
     serial: true,
     run: nonHubEventPost,

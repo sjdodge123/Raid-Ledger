@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 /**
  * ROK-2208 §5.7 items 1, 2, 5 — the outbound half of event threads. Owned by
  * `HubForumDiscordOutboundService` (shares its gateway, rename budget and
@@ -14,6 +15,7 @@
  * poll or lineup thread posts lazily too, titled `<title> — Poll|Lineup`
  * and tagged with its kind tag. Retitle (item 2) stays event-only (F5).
  */
+import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import {
   discordThreadName,
   forumThreadUrl,
@@ -62,6 +64,8 @@ export interface EventPostDeps {
    * job path (unbound / stale ⇒ nothing; locked ⇒ skipped until reopened).
    */
   redrive: (link: links.ForumLink) => Promise<unknown>;
+  /** ROK-2292 D2: an event post opens with its tracked signup card. */
+  starters: Pick<EventForumStarterCards, 'build' | 'track'>;
 }
 
 /** Where a post goes: the bound forum and the hub's shared tag, if any. */
@@ -87,6 +91,28 @@ interface ThreadText extends SubjectColumns {
 interface PostView {
   name: string;
   content: string;
+}
+
+const starterLogger = new Logger('HubForumDiscordEventOutbound');
+
+/**
+ * ROK-2292 delta-3 MINOR: the post is already sent and its link marked sent,
+ * so a starter-tracking failure must not fail `attempt` (that would mark the
+ * sent link failed and a retry could post twice). Log it like the planning
+ * creator does; the connect-time backfill picks the post up later.
+ */
+async function trackSentStarter(
+  starters: Pick<EventForumStarterCards, 'track'>,
+  eventId: number,
+  threadId: string,
+  state: Parameters<EventForumStarterCards['track']>[2],
+): Promise<void> {
+  try {
+    await starters.track(eventId, threadId, state);
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    starterLogger.warn(`starter tracking of event ${eventId} failed: ${why}`);
+  }
 }
 
 export class EventPostOutbound {
@@ -179,16 +205,28 @@ export class EventPostOutbound {
       threadId: link.threadId,
     });
     const view = await this.subjectView(src, url, clientUrl);
+    const eventId = src.kind === 'event' ? src.eventId : null;
+    const card =
+      eventId === null ? null : await this.deps.starters.build(eventId);
     const post = {
       title: view.name,
       content: view.content,
       tagIds: to.tagId ? [to.tagId] : [],
       kind: src.kind, // ROK-2258 / S8: the gateway adds the forum's kind tag
+      ...(card ? { card } : {}),
     };
     await this.deps.attempt(link, async () => {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
+      if (card && eventId !== null) {
+        await trackSentStarter(
+          this.deps.starters,
+          eventId,
+          sent.threadId,
+          card.state,
+        );
+      }
     });
   }
 

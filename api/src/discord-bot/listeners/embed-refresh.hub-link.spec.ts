@@ -25,6 +25,7 @@ import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 jest.mock('../channel-lifecycle/embed-hub-link.helpers', () => ({
   ...jest.requireActual<object>('../channel-lifecycle/embed-hub-link.helpers'),
@@ -103,6 +104,7 @@ describe('card refresh paths keep the hub link (ROK-1872)', () => {
     const module = await Test.createTestingModule({
       providers: [
         DiscordEventListener,
+        EventEmbedMessageEditor,
         ...stubs([DrizzleAsyncProvider, DiscordBotClientService]),
         ...stubs([DiscordEmbedFactory, EmbedPosterService]),
         ...stubs([ChannelResolverService, ScheduledEventService]),

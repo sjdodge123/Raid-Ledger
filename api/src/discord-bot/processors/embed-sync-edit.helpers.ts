@@ -11,11 +11,8 @@
 import type { Logger } from '@nestjs/common';
 import { DiscordAPIError } from 'discord.js';
 import type * as schema from '../../drizzle/schema';
-import type { DiscordBotClientService } from '../discord-bot-client.service';
-import {
-  embedComponents,
-  type DiscordEmbedFactory,
-} from '../services/discord-embed.factory';
+import type { DiscordEmbedFactory } from '../services/discord-embed.factory';
+import type { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 import { UNKNOWN_MESSAGE } from '../discord-bot-client.messages.helpers';
 import {
   MISSING_ACCESS,
@@ -51,14 +48,15 @@ export function isPermanentEmbedEditError(err: unknown): boolean {
 
 /** Collaborators `editTrackedEmbed` needs from the processor. */
 export interface EmbedEditDeps {
-  clientService: Pick<DiscordBotClientService, 'editEmbed'>;
+  /** ROK-2292 D4: routes announcement vs forum-starter rows. */
+  editor: Pick<EventEmbedMessageEditor, 'edit'>;
   logger: Pick<Logger, 'warn'>;
 }
 
 /** The tracked message row an embed edit targets. */
 type TrackedMessage = Pick<
   typeof schema.discordEventMessages.$inferSelect,
-  'channelId' | 'messageId'
+  'id' | 'channelId' | 'messageId'
 >;
 
 /**
@@ -70,7 +68,7 @@ export type EmbedEditOutcome = 'edited' | 'gone' | Error;
 /**
  * Edit one tracked embed message and classify any failure (ROK-2227).
  *
- * @param deps - Discord client + logger.
+ * @param deps - Embed editor + logger.
  * @param record - The tracked message to edit.
  * @param built - The rebuilt embed payload.
  * @param eventId - The event being synced (for the log line).
@@ -82,14 +80,8 @@ export async function editTrackedEmbed(
   eventId: number,
 ): Promise<EmbedEditOutcome> {
   try {
-    await deps.clientService.editEmbed(
-      record.channelId,
-      record.messageId,
-      built.embed,
-      embedComponents(built),
-      built.content,
-    );
-    return 'edited';
+    // A starter the editor could not reach is `gone` and already untracked.
+    return await deps.editor.edit(record, built, { withContent: true });
   } catch (err) {
     const gone = isPermanentEmbedEditError(err);
     deps.logger.warn(

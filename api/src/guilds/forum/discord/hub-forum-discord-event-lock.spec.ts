@@ -1,6 +1,7 @@
 /**
  * ROK-2208 §5.7 item 4 (R12) — the event-thread lock sweep (unit).
  */
+import type { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import type { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import {
   HubForumDiscordEventLockGateway,
@@ -58,7 +59,11 @@ function setup(rounds: LockChange[][], connected = true) {
   deadline.mockReset();
   deadline.mockResolvedValue(0);
   const sets: unknown[] = [];
+  const deletes = jest.fn(() => ({
+    where: jest.fn().mockResolvedValue(undefined),
+  }));
   const db = {
+    delete: deletes,
     update: jest.fn(() => ({
       set: (v: unknown) => {
         sets.push(v);
@@ -72,28 +77,60 @@ function setup(rounds: LockChange[][], connected = true) {
   } as unknown as DiscordBotClientService;
   const outbound = { apply: jest.fn().mockResolvedValue(undefined) };
   const registry = { sweep: jest.fn().mockResolvedValue(0) };
+  const starters = { restore: jest.fn().mockResolvedValue(true) };
   const sweep = new HubForumDiscordEventLockSweep(
     db,
     gateway as unknown as HubForumDiscordEventLockGateway,
     client,
     outbound as unknown as HubForumDiscordOutboundService,
     registry as unknown as EventPlanningPostsLockSweep,
+    starters as unknown as EventForumStarterCards,
   );
   const due = jest.spyOn(sweep, 'due');
   for (const r of rounds) due.mockResolvedValueOnce(r);
   due.mockResolvedValue([]);
-  return { sweep, gateway, sets, outbound, registry, due };
+  return { sweep, gateway, sets, outbound, registry, due, deletes, starters };
 }
 
-const row = (readOnly: boolean): LockChange => ({
+const row = (readOnly: boolean, eventId: number | null = 42): LockChange => ({
   linkId: 1,
   guildId: 7,
   threadId: 3,
   discordThreadId: '9',
   readOnly,
+  eventId,
 });
 
 describe('HubForumDiscordEventLockSweep.sweep', () => {
+  it('ROK-2292 D7: a lock drops the post starter row; a reopen keeps it', async () => {
+    const locked = setup([[row(true)]]);
+    await locked.sweep.sweep(NOW);
+    expect(locked.deletes).toHaveBeenCalledTimes(1);
+    const reopened = setup([[row(false)]]);
+    await reopened.sweep.sweep(NOW);
+    expect(reopened.deletes).not.toHaveBeenCalled();
+  });
+
+  it('ROK-2292: a reopened event post tracks its starter again BEFORE the re-drive', async () => {
+    const { sweep, starters, outbound } = setup([[row(false)]]);
+    await sweep.sweep(NOW);
+    expect(starters.restore).toHaveBeenCalledWith(42, '9');
+    const restoredAt = starters.restore.mock.invocationCallOrder[0] ?? -1;
+    const redriveAt = outbound.apply.mock.invocationCallOrder[0] ?? -1;
+    // D6 reads the restored row: a re-drive first would re-send the text.
+    expect(restoredAt).toBeLessThan(redriveAt);
+  });
+
+  it('ROK-2292: a lock, or a reopened poll / lineup post, restores no starter', async () => {
+    const locked = setup([[row(true)]]);
+    await locked.sweep.sweep(NOW);
+    const poll = setup([[row(false, null)]]);
+    await poll.sweep.sweep(NOW);
+    expect(locked.starters.restore).not.toHaveBeenCalled();
+    expect(poll.starters.restore).not.toHaveBeenCalled();
+    expect(poll.outbound.apply).toHaveBeenCalledTimes(1);
+  });
+
   it('locks + archives once and records the lock', async () => {
     const { sweep, gateway, sets, outbound } = setup([[row(true)]]);
     expect(await sweep.sweep(NOW)).toBe(1);
