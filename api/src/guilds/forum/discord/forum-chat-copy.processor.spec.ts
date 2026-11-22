@@ -33,9 +33,9 @@ const syncEvent = jest.mocked(syncEventDiscussion);
 const syncPoll = jest.mocked(syncPollDiscussion);
 
 const DB = {} as unknown as Db;
-const thread = (id: number) => ({
+const thread = (id: number, guildId = 7) => ({
   id,
-  guildId: 7,
+  guildId,
   title: 't',
   body: '',
   writeClosesAt: null,
@@ -162,6 +162,15 @@ describe('ForumChatCopyProcessor', () => {
     expect(outbound.apply).not.toHaveBeenCalled();
   });
 
+  it('Codex P1: threads in two hubs copy, re-read and send nothing', async () => {
+    pollThread.mockResolvedValue(thread(200, 8));
+    const { processor, outbound } = setup(() => Promise.resolve());
+    await processor.process(job('event-to-poll'));
+    expect(copy).not.toHaveBeenCalled();
+    expect(existing).not.toHaveBeenCalled();
+    expect(outbound.apply).not.toHaveBeenCalled();
+  });
+
   it('a fresh copy is mirrored without reading the existing copy', async () => {
     copy.mockResolvedValue({ guildId: 7, threadId: 200, replyIds: [9] });
     const { processor } = setup(() => Promise.resolve());
@@ -201,7 +210,10 @@ describe('ForumChatCopyProcessor', () => {
     const sends: number[] = [];
     const { processor, outbound } = setup((c) => {
       const id = c.replyId ?? 0;
-      if (!linked.has(id)) (linked.add(id), sends.push(id));
+      if (!linked.has(id)) {
+        linked.add(id);
+        sends.push(id);
+      }
       return Promise.resolve();
     });
     copy.mockResolvedValueOnce({ guildId: 7, threadId: 200, replyIds: [9] });

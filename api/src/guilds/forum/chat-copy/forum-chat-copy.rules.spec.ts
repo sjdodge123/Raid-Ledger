@@ -9,6 +9,7 @@ import {
   copyHeaderTime,
   copyRoot,
   planChatCopy,
+  sameHub,
   type ChatCopySourceRow,
 } from './forum-chat-copy.rules';
 
@@ -126,5 +127,15 @@ describe('copyHeaderTime / copyDateRange', () => {
     expect(copyDateRange(new Date(T0), new Date(T0 + MIN))).toBe(
       'Nov 20, 2026',
     );
+  });
+});
+
+describe('sameHub (Codex P1)', () => {
+  it('threads of one hub may copy', () => {
+    expect(sameHub({ guildId: 3 }, { guildId: 3 })).toBe(true);
+  });
+
+  it('threads of two hubs never copy', () => {
+    expect(sameHub({ guildId: 3 }, { guildId: 4 })).toBe(false);
   });
 });

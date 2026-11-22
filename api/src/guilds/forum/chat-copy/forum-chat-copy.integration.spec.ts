@@ -2,13 +2,15 @@
  * ROK-2297 D1 — `copyForumChat` against a real database: what is copied and
  * how (authors, guest columns, timestamps, roots, header, counter), that a
  * re-run and a concurrent run write nothing more, and that a reschedule round
- * trip (event → poll → same event) brings back only the poll's own replies.
+ * trip (event → poll → same event) brings back only the poll's own replies,
+ * and that chat never crosses into another hub's thread (Codex P1).
  * Every test builds its own hub and threads (no FK from thread to subject).
  */
 import { asc, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
+import { findChatCopy } from './forum-chat-copy.queries';
 import { copyForumChat } from './forum-chat-copy.writes';
 
 const threads = schema.hubForumThreads;
@@ -268,5 +270,39 @@ describe('copyForumChat (ROK-2297)', () => {
 
     expect(await copy(s.eventThread, s.pollThread)).toBeNull();
     expect(await rowsOf(s.pollThread)).toHaveLength(0);
+  });
+
+  it('Codex P1: a thread in another hub gets nothing copied', async () => {
+    const s = await newScene();
+    await seedEventChat(s);
+    const otherHub = await newHub(`other-${seq}-${Date.now()}`);
+    const foreign = await newThread(otherHub, 'Retagged poll', {
+      matchId: 950_000 + seq,
+    });
+    const before = await replyCount(foreign);
+
+    expect(await copy(s.eventThread, foreign)).toBeNull();
+
+    expect(await rowsOf(foreign)).toHaveLength(0);
+    expect(await replyCount(foreign)).toBe(before);
+  });
+
+  it('Codex P1: findChatCopy never returns a cross-hub pair', async () => {
+    const s = await newScene();
+    const otherHub = await newHub(`stale-${seq}-${Date.now()}`);
+    const foreign = await newThread(otherHub, 'Retagged poll', {
+      matchId: 960_000 + seq,
+    });
+    // A copy row left by an earlier cross-hub copy (pre-guard data).
+    await testApp.db.insert(replies).values({
+      threadId: foreign,
+      guildId: otherHub,
+      kind: 'copy_header',
+      body: 'Earlier chat from Raid night',
+      copiedFromThreadId: s.eventThread,
+    });
+    const pair = { srcThreadId: s.eventThread, dstThreadId: foreign };
+
+    expect(await findChatCopy(testApp.db, pair)).toBeNull();
   });
 });

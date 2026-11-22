@@ -97,3 +97,15 @@ export function copyHeaderTime(plan: ChatCopyPlan<ChatCopySourceRow>): Date {
   const first = plan.picked[0];
   return new Date((first?.createdAt.getTime() ?? Date.now()) - 1);
 }
+
+/**
+ * Codex P1: chat never crosses a hub boundary. An event retagged to another
+ * hub mid-poll leaves its poll thread in the old hub — copying would expose
+ * one hub's messages in another's forum.
+ */
+export function sameHub(
+  src: { guildId: number },
+  dst: { guildId: number },
+): boolean {
+  return src.guildId === dst.guildId;
+}

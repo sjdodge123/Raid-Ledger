@@ -19,6 +19,7 @@ import type { Job, Queue } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { QueueHealthService } from '../../../queue/queue-health.service';
 import { findChatCopy } from '../chat-copy/forum-chat-copy.queries';
+import { sameHub } from '../chat-copy/forum-chat-copy.rules';
 import {
   copyForumChat,
   type ChatCopyResult,
@@ -34,7 +35,12 @@ import {
 } from './forum-chat-copy.queue';
 import { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 
-/** The source and target RL thread ids, or null when either is missing. */
+const resolveLogger = new Logger('ForumChatCopyThreads');
+
+/**
+ * The source and target RL thread ids, or null when either is missing or
+ * the two live in different hubs (an event retagged mid-poll — Codex P1).
+ */
 export async function resolveCopyThreads(
   db: Db,
   data: ChatCopyJobData,
@@ -44,6 +50,12 @@ export async function resolveCopyThreads(
   const event = await findLiveEventThread(db, data.eventId);
   const poll = await findLivePollThread(db, data.matchId);
   if (!event || !poll) return null;
+  if (!sameHub(event, poll)) {
+    resolveLogger.log(
+      `Chat copy skipped: event ${data.eventId} (hub ${event.guildId}) and match ${data.matchId} (hub ${poll.guildId}) are in different hubs`,
+    );
+    return null;
+  }
   return data.direction === 'event-to-poll'
     ? { srcThreadId: event.id, dstThreadId: poll.id }
     : { srcThreadId: poll.id, dstThreadId: event.id };

@@ -18,6 +18,7 @@ import {
   copyHeaderTime,
   copyRoot,
   planChatCopy,
+  sameHub,
   type ChatCopyPlan,
 } from './forum-chat-copy.rules';
 
@@ -185,7 +186,8 @@ async function copyInTx(
 ): Promise<ChatCopyResult | null> {
   const dst = await liveThread(tx, input.dstThreadId);
   const src = await liveThread(tx, input.srcThreadId);
-  if (!dst || !src || (await headerExists(tx, input))) return null;
+  if (!dst || !src || !sameHub(src, dst)) return null;
+  if (await headerExists(tx, input)) return null;
   const rows = await sourceRows(tx, input.srcThreadId);
   const plan = planChatCopy(rows, await takenRoots(tx, input.dstThreadId));
   const body = copyHeaderBody(src.title, plan);
@@ -204,9 +206,10 @@ async function copyInTx(
 }
 
 /**
- * Copy `src`'s earlier chat into `dst` (both live threads). Null when nothing
- * was written: a thread is missing or deleted, the pair was copied before,
- * or no row qualifies (see `planChatCopy`). Idempotent and race-safe.
+ * Copy `src`'s earlier chat into `dst` (both live threads of ONE hub). Null
+ * when nothing was written: a thread is missing or deleted, the threads are
+ * in different hubs, the pair was copied before, or no row qualifies (see
+ * `planChatCopy`). Idempotent and race-safe.
  */
 export async function copyForumChat(
   db: Db,
