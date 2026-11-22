@@ -80,7 +80,7 @@ function fakeRedis() {
 function build(online = true) {
   const gateway = {
     isOnline: jest.fn().mockReturnValue(online),
-    mention: jest.fn().mockResolvedValue(undefined),
+    mention: jest.fn().mockResolvedValue('closing-msg'),
   };
   const redis = fakeRedis();
   const svc = new HubForumDiscordClosingLines(
