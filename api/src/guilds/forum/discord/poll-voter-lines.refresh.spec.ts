@@ -39,7 +39,8 @@ function fakeRedis(hash: Record<string, string> = {}) {
       return Promise.resolve(1);
     }),
     hdel: jest.fn((k: string, field: string) => {
-      const { [field]: _gone, ...rest } = store.get(k) ?? {};
+      const rest = { ...(store.get(k) ?? {}) };
+      delete rest[field];
       store.set(k, rest);
       return Promise.resolve(1);
     }),
