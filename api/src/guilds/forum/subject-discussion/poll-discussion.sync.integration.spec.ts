@@ -207,10 +207,10 @@ describe('syncPollDiscussion (real db)', () => {
     );
   });
 
-  it('ROK-2295: a reschedule poll is "Reschedule: <event> — Poll" and its root links the event', async () => {
+  it('ROK-2295: a reschedule poll is "Reschedule: <event> — Poll"', async () => {
     const guildId = await newHub();
     const eventId = await newEvent('Thursday Raid');
-    const { matchId, lineupId } = await newPoll({
+    const { matchId } = await newPoll({
       guildId,
       standalone: { title: 'Standalone Scheduling Poll' },
       linkedEventId: eventId,
@@ -218,10 +218,6 @@ describe('syncPollDiscussion (real db)', () => {
     expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
     const thread = await liveThread(matchId);
     expect(thread?.title).toBe('Reschedule: Thursday Raid — Poll');
-    expect(thread?.body).toBe(
-      `Scheduling poll for **${testApp.seed.game.name}**. [Open the poll](/community-lineup/${lineupId}/schedule/${matchId})` +
-        `\n\nContinues the discussion of [Thursday Raid](/events/${eventId}).`,
-    );
   });
 
   it('ROK-2295: an old storage-titled thread is retitled on its next sync', async () => {

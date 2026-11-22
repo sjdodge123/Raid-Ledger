@@ -47,7 +47,6 @@ import {
 } from './hub-forum-discord-subject-post.queries';
 import { FORUM_WEBHOOK_NAME } from './hub-forum-discord.helpers';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
-import type { PollRescheduleCrosslink } from './poll-reschedule-crosslink';
 
 /** What the owning outbound service lends. */
 export interface EventPostDeps {
@@ -67,8 +66,6 @@ export interface EventPostDeps {
   redrive: (link: links.ForumLink) => Promise<unknown>;
   /** ROK-2292 D2: an event post opens with its tracked signup card. */
   starters: Pick<EventForumStarterCards, 'build' | 'track'>;
-  /** ROK-2295: a reschedule poll's new post links its event's (never throws). */
-  crosslink: Pick<PollRescheduleCrosslink, 'linkPollPost'>;
 }
 
 /** Where a post goes: the bound forum and the hub's shared tag, if any. */
@@ -222,9 +219,6 @@ export class EventPostOutbound {
       const sent = await gateway.createPost(to.target, post, ROOT_AUTHOR);
       await links.markSent(db, link.id, sent, this.deps.now());
       await links.rehomeReplies(db, link.threadId, sent.threadId);
-      if (src.kind === 'poll') {
-        await this.deps.crosslink.linkPollPost(src.id, sent.threadId);
-      }
       if (card && eventId !== null) {
         await trackSentStarter(
           this.deps.starters,

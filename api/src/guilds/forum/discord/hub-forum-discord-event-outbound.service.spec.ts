@@ -87,7 +87,6 @@ function setup() {
     build: jest.fn().mockResolvedValue(null),
     track: jest.fn().mockResolvedValue(undefined),
   };
-  const crosslink = { linkPollPost: jest.fn().mockResolvedValue(undefined) };
   const deps: EventPostDeps = {
     db: {} as ForumDiscordDb,
     gateway,
@@ -97,11 +96,9 @@ function setup() {
     clientUrl: () => Promise.resolve('https://rl.example'),
     timeZone: () => Promise.resolve('UTC'),
     starters,
-    crosslink,
   };
   return {
     svc: new EventPostOutbound(deps),
-    crosslink,
     gateway,
     redrive,
     attempt,
@@ -208,24 +205,6 @@ describe('ROK-2272 S8 ensurePost for poll / lineup threads', () => {
       { username: 'Raid Ledger', avatarURL: null },
     );
     expect(link?.discordThreadId).toBe('p1');
-  });
-
-  it('ROK-2295: a sent poll post runs the reschedule cross-link once', async () => {
-    const { svc, crosslink } = setup();
-    mocked.source.mockResolvedValue(scheduleSource());
-    await svc.ensurePost(TO, REF);
-    expect(crosslink.linkPollPost.mock.calls).toEqual([[21, 'p1']]);
-  });
-
-  it('ROK-2295: lineup and event posts never run the cross-link', async () => {
-    const { svc, crosslink } = setup();
-    mocked.source.mockResolvedValueOnce(
-      scheduleSource({ kind: 'lineup', id: 4, title: 'Game night' }),
-    );
-    mocked.source.mockResolvedValueOnce(source());
-    await svc.ensurePost(TO, REF);
-    await svc.ensurePost(TO, REF);
-    expect(crosslink.linkPollPost).not.toHaveBeenCalled();
   });
 
   it('posts a lineup thread titled "<title> — Lineup" with the Lineup kind', async () => {

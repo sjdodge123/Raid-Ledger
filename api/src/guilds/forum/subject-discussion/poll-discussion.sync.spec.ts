@@ -1,17 +1,12 @@
 /**
  * ROK-2295 — a poll thread is titled by its goal: a reschedule poll
  * `Reschedule: <event title>`, any other poll its game; the synthetic
- * standalone storage title never surfaces. The RL root links the event a
- * reschedule poll continues. Pure; the real-db lifecycle is the integration
- * spec.
+ * standalone storage title never surfaces. Pure; the real-db lifecycle is
+ * the integration spec.
  */
 import { subjectPostTitle } from '../discord/hub-forum-discord-subject';
 import type { PollSyncRow } from './poll-discussion.queries';
-import {
-  pollSubjectTitle,
-  pollThreadRootBody,
-  pollThreadTitle,
-} from './poll-discussion.sync';
+import { pollSubjectTitle, pollThreadTitle } from './poll-discussion.sync';
 
 const STORAGE_TITLE = 'Standalone Scheduling Poll';
 
@@ -90,21 +85,6 @@ describe('goal title limits', () => {
     );
     expect(subjectPostTitle('poll', pollSubjectTitle(poll()))).toBe(
       'World of Warcraft: Forever — Poll',
-    );
-  });
-});
-
-describe('pollThreadRootBody (ROK-2295 event link)', () => {
-  it('a reschedule poll links the event whose chat it continues', () => {
-    expect(pollThreadRootBody(resched('Thursday *Raid*'))).toBe(
-      'Scheduling poll for **World of Warcraft: Forever**. [Open the poll](/community-lineup/4/schedule/21)' +
-        '\n\nContinues the discussion of [Thursday \\*Raid\\*](/events/9).',
-    );
-  });
-
-  it('any other poll has no event line', () => {
-    expect(pollThreadRootBody(poll())).toBe(
-      'Scheduling poll for **World of Warcraft: Forever**. [Open the poll](/community-lineup/4/schedule/21)',
     );
   });
 });

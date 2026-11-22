@@ -78,27 +78,16 @@ export function pollThreadTitle(title: string): string {
   return `${cut.length > 0 ? cut : 'Scheduling'}${SUFFIX}`;
 }
 
-/** Markdown-escape a title inlined into a root post. */
-function escapeMd(text: string): string {
-  return text.trim().replace(/[\\*_`[\]<>~|#]/g, '\\$&');
-}
-
-/**
- * The generated, system-owned root post — links the poll page; a reschedule
- * poll also links the event whose chat it continues (ROK-2295 ruling Q1 b).
- */
+/** The generated, system-owned root post — links the poll page. */
 export function pollThreadRootBody(poll: PollSyncRow): string {
+  const safe = poll.gameName.trim().replace(/[\\*_`[\]<>~|#]/g, '\\$&');
   const href = `/community-lineup/${poll.lineupId}/schedule/${poll.matchId}`;
-  const root = `Scheduling poll for **${escapeMd(poll.gameName)}**. [Open the poll](${href})`;
-  const event = rescheduledEvent(poll);
-  if (!event) return root;
-  const link = `[${escapeMd(event.title)}](/events/${event.id})`;
-  return `${root}\n\nContinues the discussion of ${link}.`;
+  return `Scheduling poll for **${safe}**. [Open the poll](${href})`;
 }
 
 /**
- * The event a reschedule poll continues, or null (unlinked, gone, produced by
- * this poll, or an empty title). The cross-links key on it too.
+ * ROK-2295: the event a reschedule poll is for, or null (unlinked, gone,
+ * produced by this poll at lock-in, or an empty title).
  */
 export function rescheduledEvent(
   poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle'>,

@@ -44,7 +44,6 @@ import { EventPlanningPostsListener } from './event-planning-posts.listener';
 import { EventPlanningPostsLockSweep } from './event-planning-posts.lock';
 import { EventPlanningPostCreator } from './event-planning-posts.create';
 import { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
-import { PollRescheduleCrosslink } from './poll-reschedule-crosslink';
 import { EventPlanningSubjectsListener } from './event-planning-subjects.listener';
 import { HubForumDiscordSignupPings } from './hub-forum-discord-signup-pings.service';
 import { HubForumDiscordSignupPingCatchUp } from './hub-forum-discord-signup-pings.catch-up';
@@ -125,8 +124,6 @@ import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-emb
     EventPlanningSubjectsListener,
     // ROK-2272 S10: poll voter pings (hub + non-hub).
     HubForumDiscordPollVoterPings,
-    // ROK-2295: a reschedule poll's post and its event's post link both ways.
-    PollRescheduleCrosslink,
   ],
   exports: [
     HubForumDiscordGateway,

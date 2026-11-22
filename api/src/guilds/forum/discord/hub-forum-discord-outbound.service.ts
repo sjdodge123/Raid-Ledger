@@ -29,7 +29,6 @@ import {
   type BindingWithForum,
   type ForumDiscordDb,
 } from './hub-forum-discord.queries';
-import { PollRescheduleCrosslink } from './poll-reschedule-crosslink';
 
 /** One change, resolved against the hub's live binding. */
 interface Job {
@@ -68,11 +67,9 @@ export class HubForumDiscordOutboundService {
     private readonly gateway: HubForumDiscordOutboundGateway,
     private readonly settings: SettingsService,
     starters: EventForumStarterCards,
-    crosslink: PollRescheduleCrosslink,
   ) {
     this.events = new EventPostOutbound({
       starters,
-      crosslink,
       db,
       gateway,
       now: () => this.now(),
