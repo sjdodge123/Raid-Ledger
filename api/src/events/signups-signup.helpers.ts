@@ -253,6 +253,8 @@ export function buildReactivationFields(
     attendanceStatus: null,
     attendanceRecordedAt: null,
     roachedOutAt: null,
+    // ROK-2293: the caller only reaches here for a cancelled row.
+    activatedAt: new Date(),
   };
 }
 

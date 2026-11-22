@@ -104,6 +104,7 @@ export class DepartureGraceService {
   private async restoreSignup(signupId: number): Promise<void> {
     await this.db
       .update(schema.eventSignups)
+      // ROK-2293: a system restore keeps activated_at (no reminder-clock reset).
       .set({ status: 'signed_up' })
       .where(eq(schema.eventSignups.id, signupId));
   }
