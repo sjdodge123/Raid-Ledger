@@ -83,8 +83,9 @@ describe('EventsService — best-effort audit after a landed mutation', () => {
 
   it('cancel resolves with the event and reports the failed audit', async () => {
     const { service, activityLog } = await build();
-    const res = await service.cancel(7, 3, false, { reason: 'sick' });
-    expect(res).toEqual(eventStub);
+    await expect(
+      service.cancel(7, 3, false, { reason: 'sick' }),
+    ).resolves.toEqual(eventStub);
     expect(jest.mocked(cancelEvent)).toHaveBeenCalledTimes(1);
     expect(activityLog.log).toHaveBeenCalledTimes(1);
     expect(captureException).toHaveBeenCalledWith(auditErr, {
@@ -103,8 +104,9 @@ describe('EventsService — best-effort audit after a landed mutation', () => {
       startTime: '2026-02-11T18:00:00.000Z',
       endTime: '2026-02-11T20:00:00.000Z',
     };
-    const res = await service.reschedule(7, 3, false, dto);
-    expect(res).toEqual(eventStub);
+    await expect(service.reschedule(7, 3, false, dto)).resolves.toEqual(
+      eventStub,
+    );
     expect(jest.mocked(rescheduleEvent)).toHaveBeenCalledTimes(1);
     expect(activityLog.log).toHaveBeenCalledTimes(1);
     expect(captureException).toHaveBeenCalledWith(auditErr, {
