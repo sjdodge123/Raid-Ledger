@@ -27,6 +27,7 @@ import { ActivityLogService } from '../../activity-log/activity-log.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 function makeButtonInteraction(
   customId: string,
@@ -118,6 +119,7 @@ function buildCooldownMockEvents() {
 function buildCooldownProviders() {
   return [
     SignupInteractionListener,
+    EventEmbedMessageEditor,
     { provide: DrizzleAsyncProvider, useValue: mockDb },
     {
       provide: DiscordBotClientService,

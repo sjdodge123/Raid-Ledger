@@ -9,6 +9,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
 import type { BoundForum } from './event-planning-forum.queries';
 import { EventPlanningForumResolver } from './event-planning-forum.resolver';
 import { EventPlanningPostsGateway } from './event-planning-posts.discord';
@@ -47,6 +48,8 @@ export interface PlanningPostDraftFor {
   title: string;
   body: string;
   closesAt: Date | null;
+  /** ROK-2292 D2: an event post's signup card (replaces `body`). */
+  card?: ForumStarterCard;
 }
 
 /** The live post; `created` only when THIS call inserted it. */
@@ -94,6 +97,7 @@ export class EventPlanningPostCreator {
       title: draft.title,
       content: draft.body,
       tagIds,
+      ...(draft.card ? { card: draft.card } : {}),
     });
     return this.record(draft, forum.forumId, threadId);
   }

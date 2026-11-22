@@ -25,6 +25,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { Job } from 'bullmq';
 import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
 const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
@@ -92,6 +93,7 @@ describe('EmbedSyncProcessor — missing tracked message (ROK-1622)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmbedSyncProcessor,
+        EventEmbedMessageEditor,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         {
           provide: getQueueToken(EMBED_SYNC_QUEUE),

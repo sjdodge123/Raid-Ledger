@@ -28,6 +28,7 @@ import { eq } from 'drizzle-orm';
 import type { EmbedBuilder, Message } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { isForumStarterRow } from '../services/event-message-rows.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   fetchMessageOrNull,
@@ -74,7 +75,8 @@ export async function reconcileBumpMessage(
   input: BumpSyncInput,
 ): Promise<void> {
   const { record, newState, eventData } = input;
-  if (!record.bumpMessageId) return;
+  // ROK-2292: a forum starter row never carries a bump.
+  if (!record.bumpMessageId || isForumStarterRow(record)) return;
   // Legacy rows predating the column fall back to the embed's channel (ROK-1335).
   const channelId = record.bumpChannelId ?? record.channelId;
   const target = { channelId, messageId: record.bumpMessageId };
@@ -100,7 +102,7 @@ export async function deleteRecordBump(
   record: EventMessageRow,
   eventId: number,
 ): Promise<void> {
-  if (!record.bumpMessageId) return;
+  if (!record.bumpMessageId || isForumStarterRow(record)) return;
   const channelId = record.bumpChannelId ?? record.channelId;
   await deleteBump(
     deps,

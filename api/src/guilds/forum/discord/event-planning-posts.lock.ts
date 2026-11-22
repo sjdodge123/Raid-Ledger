@@ -23,6 +23,10 @@ import {
   type SQL,
 } from 'drizzle-orm';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
+import {
+  deleteForumStarterRows,
+  EventForumStarterCards,
+} from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -143,6 +147,7 @@ export class EventPlanningPostsLockSweep {
     private readonly client: DiscordBotClientService,
     private readonly service: EventPlanningPostsService,
     private readonly subjects: EventPlanningSubjectPosts,
+    private readonly starters: EventForumStarterCards,
   ) {}
 
   /**
@@ -228,6 +233,8 @@ export class EventPlanningPostsLockSweep {
         return 'gone';
       }
       await setPlanningPostLocked(this.db, postId, readOnly ? now : null);
+      // ROK-2292 D7: a closed post's starter is no longer synced.
+      if (readOnly) await deleteForumStarterRows(this.db, discordThreadId);
       return 'ok';
     } catch (err) {
       this.warn(row, err);
@@ -235,9 +242,13 @@ export class EventPlanningPostsLockSweep {
     }
   }
 
-  /** Reopened: push the title skipped while the post was locked. */
+  /**
+   * Reopened: track the starter again (ROK-2292, D7 dropped it), then push
+   * the title skipped while the post was locked.
+   */
   private async refresh(row: RegistryLockChange): Promise<void> {
     try {
+      await this.starters.restore(row.subjectId, row.discordThreadId);
       await this.service.syncEvent(row.subjectId);
     } catch (err) {
       this.warn(row, err);

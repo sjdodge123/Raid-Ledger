@@ -13,6 +13,7 @@ import { EMBED_STATES } from '../discord-bot.constants';
 import { EventLifecycleQueueService } from '../queues/event-lifecycle.queue';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { announceGroupForEvent } from '../services/embed-scheduler-announce.helpers';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 jest.mock('../services/embed-scheduler-announce.helpers', () => ({
   announceGroupForEvent: jest.fn().mockResolvedValue(undefined),
@@ -115,6 +116,7 @@ function buildServiceProviders() {
 function buildEventListenerProviders() {
   return [
     DiscordEventListener,
+    EventEmbedMessageEditor,
     { provide: DrizzleAsyncProvider, useValue: mockDb },
     {
       provide: DiscordBotClientService,
@@ -221,6 +223,7 @@ describe('DiscordEventListener', () => {
 
   describe('handleEventUpdated', () => {
     eventUpdatedTests();
+    eventUpdatedStarterTests();
   });
 
   describe('ad-hoc guard (ROK-1766)', () => {
@@ -322,6 +325,22 @@ function eventCreatedTests() {
     const adHocPayload: EventPayload = { ...mockPayload, isAdHoc: true };
     await listener.handleEventCreated(adHocPayload);
     expect(eventLifecycleQueue.enqueue).not.toHaveBeenCalled();
+  });
+}
+
+function eventUpdatedStarterTests() {
+  it('ROK-2292: a forum starter row alone still posts the missing announcement', async () => {
+    const starter = { ...mockRecord, channelId: 'thr-1', messageId: 'thr-1' };
+    mockDb.select.mockReturnValue(createSelectChainWithRecord(starter));
+    mockDb.update.mockReturnValue(createUpdateChain());
+    const edit = jest
+      .spyOn(testModule.get(EventEmbedMessageEditor), 'edit')
+      .mockResolvedValue('edited');
+    await listener.handleEventUpdated(mockPayload);
+    expect(edit).toHaveBeenCalledWith(starter, expect.anything(), {
+      withContent: true,
+    });
+    expect(embedPoster.postEmbed).toHaveBeenCalledTimes(1);
   });
 }
 
@@ -457,7 +476,9 @@ function eventCancelledTests() {
       'channel-789',
       'msg-456',
       mockEmbed,
-      undefined,
+      // ROK-2292: the edit seam passes the card's (empty) button rows; the
+      // client sends `components: []` for this and for `undefined` alike.
+      [],
       undefined,
     );
   });

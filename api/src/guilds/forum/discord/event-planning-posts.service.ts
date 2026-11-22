@@ -7,6 +7,8 @@
  * (§3.5 R2) — the lock sweep acts on `closes_at`.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { EmbedState } from '../../../discord-bot/discord-bot.constants';
+import { EventForumStarterCards } from '../../../discord-bot/services/event-forum-starter.cards';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
@@ -74,6 +76,7 @@ export class EventPlanningPostsService {
     private readonly settings: SettingsService,
     private readonly discord: EventPlanningPostsGateway,
     private readonly creator: EventPlanningPostCreator,
+    private readonly starters: EventForumStarterCards,
   ) {}
 
   /** The event's live post, created on first need; null when it gets none. */
@@ -82,13 +85,21 @@ export class EventPlanningPostsService {
     if (live) return toPlanningPostRef(live);
     const ev = await findPlanningEvent(this.db, eventId);
     if (!ev || !planningEventEligible(ev, new Date())) return null;
+    const card = await this.starters.build(eventId);
     const made = await this.creator.create({
       kind: 'event',
       subjectId: eventId,
       title: await this.title(ev),
       body: planningEventBody(await getClientUrl(this.settings), eventId),
       closesAt: planningEventClosesAt(ev),
+      ...(card ? { card } : {}),
     });
+    // ROK-2292 D2: track the starter so the embed sync keeps it current;
+    // `track` settles a cancel/delete that landed during the create (Codex
+    // P2). A failure is logged: the reconcile below must still run.
+    if (made?.created && card) {
+      await this.trackStarter(eventId, made.ref.discordThreadId, card.state);
+    }
     // Codex P2-3: re-derive once if the event moved while the create ran.
     if (made?.created) await this.reconcileCreated(eventId, ev);
     return made?.ref ?? null;
@@ -169,6 +180,18 @@ export class EventPlanningPostsService {
         await this.syncEvent(eventId);
     } catch (err) {
       this.warn(`post-create reconcile of event ${eventId}`, err);
+    }
+  }
+
+  private async trackStarter(
+    eventId: number,
+    threadId: string,
+    state: EmbedState,
+  ): Promise<void> {
+    try {
+      await this.starters.track(eventId, threadId, state);
+    } catch (err) {
+      this.warn(`starter tracking of event ${eventId}`, err);
     }
   }
 

@@ -31,6 +31,7 @@ import {
 } from './embed-sync.helpers';
 import { resolveGameHubLinkSafe } from '../channel-lifecycle/hub-link.resolver';
 import { isExpectedRetry } from '../../sentry/sentry-expected-retry.helpers';
+import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 
 jest.mock('./embed-sync.helpers', () => ({
   findTrackedMessages: jest.fn(),
@@ -111,6 +112,7 @@ function updateChain(): Record<string, jest.Mock> {
 function providers(db: Record<string, jest.Mock>) {
   return [
     EmbedSyncProcessor,
+    EventEmbedMessageEditor,
     { provide: DrizzleAsyncProvider, useValue: db },
     { provide: getQueueToken(EMBED_SYNC_QUEUE), useValue: {} },
     { provide: QueueHealthService, useValue: { register: jest.fn() } },

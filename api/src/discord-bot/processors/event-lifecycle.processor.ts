@@ -7,6 +7,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { isPerfEnabled, perfLog } from '../../common/perf-logger';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { findAnnouncementMessage } from '../services/event-message-rows.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
@@ -219,15 +220,6 @@ export class EventLifecycleProcessor
     channelId: string;
     messageId: string;
   } | null> {
-    const [record] = await this.db
-      .select({
-        guildId: schema.discordEventMessages.guildId,
-        channelId: schema.discordEventMessages.channelId,
-        messageId: schema.discordEventMessages.messageId,
-      })
-      .from(schema.discordEventMessages)
-      .where(eq(schema.discordEventMessages.eventId, eventId))
-      .limit(1);
-    return record ?? null;
+    return findAnnouncementMessage(this.db, eventId);
   }
 }

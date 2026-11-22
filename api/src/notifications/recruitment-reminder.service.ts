@@ -4,6 +4,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { announcementRowsOnly } from '../discord-bot/services/event-message-rows.helpers';
 import { NotificationService } from './notification.service';
 import type { EventVoicePayload } from './notification-voice.helpers';
 import { NotificationDedupService } from './notification-dedup.service';
@@ -332,6 +333,7 @@ export class RecruitmentReminderService {
         and(
           eq(schema.discordEventMessages.eventId, event.id),
           eq(schema.discordEventMessages.channelId, event.channelId),
+          announcementRowsOnly(),
         ),
       );
   }

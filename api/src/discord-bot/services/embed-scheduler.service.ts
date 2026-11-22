@@ -4,6 +4,7 @@ import { eq, sql, and, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { announcementRowsOnly } from './event-message-rows.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { EmbedPosterService } from './embed-poster.service';
@@ -95,7 +96,11 @@ export class EmbedSchedulerService {
       .from(schema.events)
       .leftJoin(
         schema.discordEventMessages,
-        eq(schema.events.id, schema.discordEventMessages.eventId),
+        and(
+          eq(schema.events.id, schema.discordEventMessages.eventId),
+          // ROK-2292: a forum starter row is not a posted announcement.
+          announcementRowsOnly(),
+        ),
       )
       .where(
         and(
