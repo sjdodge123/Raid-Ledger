@@ -79,6 +79,15 @@ describe('readGranted / status line', () => {
         expect(readStatusLine({ ...readConnectionFixture, provider: 'apple', status: 'needs_reconnect' }, false, now))
             .toBe('Password was revoked · reconnect');
     });
+    it('read stopped with provider_error (picked calendar deleted in Google) → the calendar-removed line, not "Synced"', () => {
+        const removed = { ...readConnectionFixture, errorCode: 'provider_error', read: { enabled: false, calendarIds: ['gone@group.calendar.google.com'] } };
+        const expected = 'The calendar you picked was removed in Google Calendar · choose calendars again';
+        expect(readStatusLine(removed, false, now)).toBe(expected);
+        expect(readStatusLine(removed, true, now)).toBe(expected);
+    });
+    it('provider_error while still reading (one calendar failing) keeps the synced line', () => {
+        expect(readStatusLine({ ...readConnectionFixture, errorCode: 'provider_error' }, false, now)).toBe('Synced 4 min ago · 1 calendar');
+    });
     it('never synced → the ROK-1594 "Connected · <email>" line', () => {
         expect(readStatusLine({ ...readConnectionFixture, lastSyncedAt: null }, false, now)).toBe('Connected · raider@example.com');
     });

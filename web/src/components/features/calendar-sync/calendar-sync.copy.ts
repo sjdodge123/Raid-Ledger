@@ -190,6 +190,8 @@ export const READ_COPY = {
     reconnect: 'Access was revoked · reconnect',
     /** ROK-1598 Q7: an Apple ID password change revokes every app-specific password. */
     reconnectApple: 'Password was revoked · reconnect',
+    /** Read stopped because every picked calendar 404/410'd at the provider (api `pruneFields`, ROK-1783). */
+    calendarRemoved: (providerName: string) => `The calendar you picked was removed in ${providerName} · choose calendars again`,
     fix: 'Fix',
     fixFailed: 'Could not start the Google sign-in. Try again.',
     grantTitle: 'Let Raid Ledger see when you are busy',
@@ -214,10 +216,18 @@ export const READ_COPY = {
 } as const;
 
 /** The status line under the account name; `desktop` drops the calendar count (K4). */
-type StatusInput = Pick<CalendarConnection, 'provider' | 'status' | 'accountLabel' | 'lastSyncedAt' | 'read'>;
+type StatusInput = Pick<CalendarConnection, 'provider' | 'status' | 'accountLabel' | 'lastSyncedAt' | 'read' | 'errorCode'>;
 
+/**
+ * The read card's status line. A connection whose reading the server turned
+ * off with `provider_error` lost every picked calendar at the provider, so it
+ * says so instead of a stale "Synced" (TECH-DEBT-BACKLOG L2677).
+ */
 export function readStatusLine(c: StatusInput, desktop: boolean, now: number = Date.now()): string {
     if (c.status === 'needs_reconnect') return c.provider === 'apple' ? READ_COPY.reconnectApple : READ_COPY.reconnect;
+    if (c.status === 'active' && !c.read.enabled && c.errorCode === 'provider_error') {
+        return READ_COPY.calendarRemoved(PROVIDER_DISPLAY[c.provider].name);
+    }
     if (c.status !== 'active' || !c.lastSyncedAt) return connectionStatusLine(c);
     const ago = syncedAgo(c.lastSyncedAt, now);
     if (desktop || !c.read.enabled) return READ_COPY.synced(ago);
