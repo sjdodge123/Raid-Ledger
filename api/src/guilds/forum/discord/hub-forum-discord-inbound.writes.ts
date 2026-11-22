@@ -248,10 +248,8 @@ export async function removeFromDiscord(
   return db.transaction(async (tx) => {
     await tx
       .update(links)
-      .set({
-        discordDeletedAt: sql`coalesce(${links.discordDeletedAt}, ${now})`,
-      })
-      .where(eq(links.id, link.id));
+      .set({ discordDeletedAt: now })
+      .where(and(eq(links.id, link.id), isNull(links.discordDeletedAt)));
     if (link.replyId !== null) {
       return removeReply(tx, link, link.replyId, gone);
     }
