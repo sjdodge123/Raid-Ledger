@@ -18,7 +18,6 @@ import {
   planPollSync,
   POLL_CLOSE_GRACE_MS,
   pollWriteClosesAt,
-  pollSubjectTitle,
   pollThreadTitle,
   syncPollDiscussion,
 } from './poll-discussion.sync';
@@ -58,6 +57,8 @@ interface PollOpts {
   status?: 'suggested' | 'scheduling' | 'scheduled' | 'archived';
   /** A standalone poll's storage lineup (`phase_duration_override.standalone`). */
   standalone?: { title: string };
+  /** ROK-2295: the event this poll reschedules (`linked_event_id`). */
+  linkedEventId?: number;
 }
 
 /** A decided lineup with one match (the poll). */
@@ -86,11 +87,34 @@ async function newPoll(opts: PollOpts = {}) {
         lineupId: l.id,
         gameId: testApp.seed.game.id,
         status: opts.status ?? 'scheduling',
+        linkedEventId: opts.linkedEventId ?? null,
       })
       .returning(),
     'match',
   );
   return { lineupId: l.id, matchId: m.id };
+}
+
+/** ROK-2295: an event (optionally created from `fromPollId` at lock-in). */
+async function newEvent(title: string, fromPollId?: number): Promise<number> {
+  const start = new Date(Date.now() + 86_400_000);
+  const [e] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+        duration: [start, new Date(start.getTime() + 7_200_000)] as [
+          Date,
+          Date,
+        ],
+        ...(fromPollId === undefined ? {} : { createdFromPollId: fromPollId }),
+      })
+      .returning(),
+    'event',
+  );
+  return e.id;
 }
 
 const threadRows = (matchId: number) =>
@@ -123,6 +147,7 @@ describe('planPollSync (decision table)', () => {
     lineupStatus: 'decided' as const,
     phaseDeadline: null,
     linkedEventId: null,
+    linkedEventTitle: null,
   };
   it('inserts only for an open hub poll', () => {
     expect(planPollSync({ ...base, status: 'scheduling' }, null)).toBe(
@@ -171,21 +196,62 @@ describe('planPollSync (decision table)', () => {
   });
 });
 
-describe('pollSubjectTitle (Lead ruling, call 1)', () => {
-  const row = { gameName: 'Valheim', lineupTitle: 'Friday raid' };
-  it('a standalone poll uses its lineup title; a lineup poll its game', () => {
-    expect(pollSubjectTitle({ ...row, standalone: true })).toBe('Friday raid');
-    expect(pollSubjectTitle({ ...row, standalone: false })).toBe('Valheim');
-  });
-});
-
 describe('syncPollDiscussion (real db)', () => {
-  it('a standalone hub poll is titled `<poll title> — Poll`', async () => {
+  it('ROK-2295: a standalone hub poll is titled by its game, never the storage title', async () => {
     const guildId = await newHub();
-    const title = `Standalone ${Date.now()}`;
+    const title = 'Standalone Scheduling Poll';
     const { matchId } = await newPoll({ guildId, standalone: { title } });
     expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
-    expect((await liveThread(matchId))?.title).toBe(`${title} — Poll`);
+    expect((await liveThread(matchId))?.title).toBe(
+      `${testApp.seed.game.name} — Poll`,
+    );
+  });
+
+  it('ROK-2295: a reschedule poll is "Reschedule: <event> — Poll" and its root links the event', async () => {
+    const guildId = await newHub();
+    const eventId = await newEvent('Thursday Raid');
+    const { matchId, lineupId } = await newPoll({
+      guildId,
+      standalone: { title: 'Standalone Scheduling Poll' },
+      linkedEventId: eventId,
+    });
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('insert');
+    const thread = await liveThread(matchId);
+    expect(thread?.title).toBe('Reschedule: Thursday Raid — Poll');
+    expect(thread?.body).toBe(
+      `Scheduling poll for **${testApp.seed.game.name}**. [Open the poll](/community-lineup/${lineupId}/schedule/${matchId})` +
+        `\n\nContinues the discussion of [Thursday Raid](/events/${eventId}).`,
+    );
+  });
+
+  it('ROK-2295: an old storage-titled thread is retitled on its next sync', async () => {
+    const guildId = await newHub();
+    const title = 'Standalone Scheduling Poll';
+    const { matchId } = await newPoll({ guildId, standalone: { title } });
+    await syncPollDiscussion(testApp.db, matchId);
+    await testApp.db
+      .update(threads)
+      .set({ title: `${title} — Poll` })
+      .where(eq(threads.matchId, matchId));
+    expect(await syncPollDiscussion(testApp.db, matchId)).toBe('refresh');
+    expect((await liveThread(matchId))?.title).toBe(
+      `${testApp.seed.game.name} — Poll`,
+    );
+  });
+
+  it('ROK-2295: a poll that produced its event keeps its game title', async () => {
+    const guildId = await newHub();
+    const { matchId } = await newPoll({ guildId });
+    await syncPollDiscussion(testApp.db, matchId);
+    const eventId = await newEvent('Created Raid', matchId);
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ status: 'scheduled', linkedEventId: eventId })
+      .where(eq(schema.communityLineupMatches.id, matchId));
+    await syncPollDiscussion(testApp.db, matchId);
+    expect((await liveThread(matchId))?.title).toBe(
+      `${testApp.seed.game.name} — Poll`,
+    );
   });
 
   it('a hub poll opening creates exactly one thread with match_id (R4, R11)', async () => {

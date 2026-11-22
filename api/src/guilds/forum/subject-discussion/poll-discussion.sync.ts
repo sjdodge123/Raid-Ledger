@@ -78,11 +78,34 @@ export function pollThreadTitle(title: string): string {
   return `${cut.length > 0 ? cut : 'Scheduling'}${SUFFIX}`;
 }
 
-/** The generated, system-owned root post — links the poll page. */
+/** Markdown-escape a title inlined into a root post. */
+function escapeMd(text: string): string {
+  return text.trim().replace(/[\\*_`[\]<>~|#]/g, '\\$&');
+}
+
+/**
+ * The generated, system-owned root post — links the poll page; a reschedule
+ * poll also links the event whose chat it continues (ROK-2295 ruling Q1 b).
+ */
 export function pollThreadRootBody(poll: PollSyncRow): string {
-  const safe = poll.gameName.trim().replace(/[\\*_`[\]<>~|#]/g, '\\$&');
   const href = `/community-lineup/${poll.lineupId}/schedule/${poll.matchId}`;
-  return `Scheduling poll for **${safe}**. [Open the poll](${href})`;
+  const root = `Scheduling poll for **${escapeMd(poll.gameName)}**. [Open the poll](${href})`;
+  const event = rescheduledEvent(poll);
+  if (!event) return root;
+  const link = `[${escapeMd(event.title)}](/events/${event.id})`;
+  return `${root}\n\nContinues the discussion of ${link}.`;
+}
+
+/**
+ * The event a reschedule poll continues, or null (unlinked, gone, produced by
+ * this poll, or an empty title). The cross-links key on it too.
+ */
+export function rescheduledEvent(
+  poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle'>,
+): { id: number; title: string } | null {
+  const title = poll.linkedEventTitle?.trim() ?? '';
+  if (poll.linkedEventId === null || title.length === 0) return null;
+  return { id: poll.linkedEventId, title };
 }
 
 /**
@@ -100,13 +123,16 @@ export function pollWriteClosesAt(
 }
 
 /**
- * Lead ruling (S7a call 1): a standalone poll is titled by its storage lineup
- * row's title; a lineup-derived poll by its game.
+ * ROK-2295: the poll's goal. A reschedule poll (linked event) ⇒
+ * `Reschedule: <event title>`; any other poll ⇒ its game. A standalone poll's
+ * storage lineup title is synthetic ("Standalone Scheduling Poll") and never
+ * surfaces. Callers add the ` — Poll` suffix and cut to their own limit.
  */
 export function pollSubjectTitle(
-  poll: Pick<PollSyncRow, 'standalone' | 'lineupTitle' | 'gameName'>,
+  poll: Pick<PollSyncRow, 'linkedEventId' | 'linkedEventTitle' | 'gameName'>,
 ): string {
-  return poll.standalone ? poll.lineupTitle : poll.gameName;
+  const event = rescheduledEvent(poll);
+  return event ? `Reschedule: ${event.title}` : poll.gameName;
 }
 
 /** The fields the poll dictates on its thread. */

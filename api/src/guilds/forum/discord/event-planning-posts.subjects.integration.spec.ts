@@ -117,7 +117,8 @@ async function newPoll(over: LineupOver = {}) {
       .returning(),
     'match',
   );
-  return { lineupId, matchId: m.id, title: `Planning subject ${seq}` };
+  // ROK-2295: a poll post is titled by its game, never the carrier's title.
+  return { lineupId, matchId: m.id, title: ctx.posts.testApp.seed.game.name };
 }
 
 async function setMatch(

@@ -12,6 +12,7 @@ import {
   EventPlanningSubjectPosts,
   LINEUP_CATCH_UP_BATCH,
 } from './event-planning-posts.subjects';
+import type { PollRescheduleCrosslink } from './poll-reschedule-crosslink';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 jest.mock('./event-planning-posts.queries', () => ({
@@ -30,6 +31,7 @@ function setup(forum: typeof FORUM | null = FORUM) {
     db,
     {} as unknown as SettingsService,
     creator as unknown as EventPlanningPostCreator,
+    { linkPollPost: jest.fn() } as unknown as PollRescheduleCrosslink,
   );
   const ensure = jest
     .spyOn(subjects, 'ensureLineupPost')

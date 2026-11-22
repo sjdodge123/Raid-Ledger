@@ -39,6 +39,7 @@ import {
 } from './event-planning-posts.subjects.rules';
 import { subjectPostTitle } from './hub-forum-discord-subject';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { PollRescheduleCrosslink } from './poll-reschedule-crosslink';
 
 const OPEN_POLL_BATCH = 50;
 /** ROK-2287: lineups the catch-up posts per run (Discord rate limits). */
@@ -52,6 +53,7 @@ export class EventPlanningSubjectPosts {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly settings: SettingsService,
     private readonly creator: EventPlanningPostCreator,
+    private readonly crosslink: PollRescheduleCrosslink,
   ) {}
 
   /** The poll's live post, created on first need; null when it gets none. */
@@ -74,9 +76,14 @@ export class EventPlanningSubjectPosts {
       }),
       closesAt: null,
     });
-    // The poll may have ended while the create ran, unseen (no row yet).
-    if (made?.created) await this.syncPoll(matchId, new Date());
-    return made?.ref ?? null;
+    if (!made) return null;
+    if (made.created) {
+      // The poll may have ended while the create ran, unseen (no row yet).
+      await this.syncPoll(matchId, new Date());
+      // ROK-2295: a reschedule poll's post links its event's (never throws).
+      await this.crosslink.linkPollPost(matchId, made.ref.discordThreadId);
+    }
+    return made.ref;
   }
 
   /**
