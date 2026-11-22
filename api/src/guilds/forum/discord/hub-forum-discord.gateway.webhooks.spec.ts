@@ -14,14 +14,21 @@ interface FakeHook {
   id: string;
   name: string;
   owner: { id: string } | null;
+  token: string | null;
   delete: jest.Mock<Promise<void>, [string]>;
 }
 
-function hook(id: string, ownerId: string | null, name = 'Raid Ledger') {
+function hook(
+  id: string,
+  ownerId: string | null,
+  name = 'Raid Ledger',
+  token: string | null = 'tok',
+) {
   const h: FakeHook = {
     id,
     name,
     owner: ownerId === null ? null : { id: ownerId },
+    token,
     delete: jest.fn<Promise<void>, [string]>(() => Promise.resolve()),
   };
   return h;
@@ -107,6 +114,12 @@ describe('ROK-2296 ensureWebhook — reuse before create', () => {
     ]);
     expect(await t.gw.ensureWebhook('c1', null)).toBe('h-mine');
     expect(t.forum.createWebhook).not.toHaveBeenCalled();
+  });
+
+  it('skips a bot-owned hook with no token and creates a new one', async () => {
+    const t = setup([hook('h-tokenless', BOT_ID, 'Raid Ledger', null)]);
+    expect(await t.gw.ensureWebhook('c1', null)).toBe('new-hook');
+    expect(t.forum.createWebhook).toHaveBeenCalled();
   });
 
   it('creates a webhook when the bot owns none on the channel', async () => {

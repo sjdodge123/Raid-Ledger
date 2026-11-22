@@ -119,7 +119,8 @@ export class HubForumDiscordGateway {
     const hooks = await forum.fetchWebhooks();
     if (webhookId && hooks.has(webhookId)) return webhookId;
     const own = hooks.find(
-      (h) => h.name === FORUM_WEBHOOK_NAME && this.ownsHook(h),
+      (h) =>
+        h.name === FORUM_WEBHOOK_NAME && this.ownsHook(h) && Boolean(h.token),
     );
     if (own) return own.id;
     const hook = await forum.createWebhook({
