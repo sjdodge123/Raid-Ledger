@@ -71,6 +71,24 @@ describe('EventReminderService', () => {
   });
 
   describe('sendReminder', () => {
+    it('claims the window but sends no DM for a fresh signup (ROK-2293)', async () => {
+      mockDb.execute.mockResolvedValue([{ id: 1 }]);
+      const result = await service.sendReminder({
+        eventId: 10,
+        userId: 1,
+        windowType: '15min',
+        windowLabel: '15 Minutes',
+        title: 'Raid Night',
+        startTime: new Date(Date.now() + 15 * 60 * 1000),
+        minutesUntil: 15,
+        characterDisplay: null,
+        freshSignup: true,
+      });
+      expect(result).toBe(false);
+      expect(mockDb.execute).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
     it('should insert tracking row and create notification', async () => {
       const trackingRow = {
         id: 1,

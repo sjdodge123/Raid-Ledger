@@ -79,7 +79,10 @@ describe('demo-test-signups.helpers - createSignupForTest', () => {
     });
 
     expect(db.update).toHaveBeenCalled();
-    expect(db.set).toHaveBeenCalledWith({ status: 'tentative' });
+    expect(db.set).toHaveBeenCalledWith({
+      status: 'tentative',
+      activatedAt: expect.anything(), // ROK-2293 reactivation stamp
+    });
   });
 });
 

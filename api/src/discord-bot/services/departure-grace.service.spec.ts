@@ -351,7 +351,10 @@ describe('DepartureGraceService', () => {
       setupPriorityRejoin();
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
       expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith({ status: 'signed_up' });
+      expect(mockDb.set).toHaveBeenCalledWith({
+        status: 'signed_up',
+        activatedAt: expect.anything(), // ROK-2293 reactivation stamp
+      });
     });
 
     it('emits SIGNUP_EVENTS.UPDATED with "priority_rejoin" action', async () => {
@@ -438,7 +441,10 @@ describe('DepartureGraceService', () => {
       setupWithSlotConfig(null, []);
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
       expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith({ status: 'signed_up' });
+      expect(mockDb.set).toHaveBeenCalledWith({
+        status: 'signed_up',
+        activatedAt: expect.anything(), // ROK-2293 reactivation stamp
+      });
     });
 
     it('does not displace existing slot occupants (no-displacement rule)', async () => {
