@@ -344,9 +344,9 @@ function charSelectNudgeTests() {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
     );
-    expect(interaction.editReply).toHaveBeenCalledWith(
-      expect.not.objectContaining({ components: expect.anything() }),
-    );
+    const last = interaction.editReply.mock.calls.at(-1)?.[0] as
+      { components?: unknown } | undefined;
+    expect(last?.components).toBeUndefined();
   });
 
   it('should do plain signup when event has no gameId', async () => {
