@@ -59,6 +59,10 @@ import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pi
 import { ForumStarterEditor } from './forum-starter-edit.port';
 import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-embed-message.editor';
 import { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
+import {
+  SCHEDULING_POLL_EMBED_QUEUE,
+  SchedulingPollEmbedQueueService,
+} from '../../../lineups/scheduling/scheduling-poll-embed.queue';
 import { POLL_FORUM_STARTER_PORT } from '../../../lineups/scheduling/poll-forum-starter.port';
 import { PollForumStarterSync } from './poll-forum-starter.sync';
 import { PollVoterLines } from './poll-voter-lines.refresh';
@@ -74,6 +78,8 @@ import { PollVoterLines } from './poll-voter-lines.refresh';
     GuildsCoreModule,
     SettingsModule,
     BullModule.registerQueue({ name: SIGNUP_PING_QUEUE }),
+    // ROK-2295 Codex P2: a new poll post re-runs the coalesced card sync.
+    BullModule.registerQueue({ name: SCHEDULING_POLL_EMBED_QUEUE }),
   ],
   controllers: [
     HubForumDiscordController,
@@ -90,6 +96,7 @@ import { PollVoterLines } from './poll-voter-lines.refresh';
     { provide: FORUM_STARTER_EDIT_PORT, useExisting: ForumStarterEditor },
     // ROK-2295: poll posts open with (and keep) the live poll embed.
     SchedulingPollForumCard,
+    SchedulingPollEmbedQueueService,
     PollForumStarterSync,
     PollVoterLines,
     { provide: POLL_FORUM_STARTER_PORT, useExisting: PollForumStarterSync },
