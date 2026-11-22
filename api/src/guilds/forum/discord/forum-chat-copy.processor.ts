@@ -9,8 +9,9 @@
  *     When B writes nothing because the pair was already copied (a retry
  *     after B committed), C re-drives that existing copy: rows already
  *     linked send nothing again (the link claim is ON CONFLICT DO NOTHING).
- * A failed send never stops the rest: its link row stays retryable (S6).
- * A/B errors throw so BullMQ retries; the final failure goes to Sentry.
+ * A failed send never stops the rest; once every row was tried, the failures
+ * throw together so BullMQ retries (the retry re-drives the existing copy).
+ * Errors in any step throw for that retry; the final failure goes to Sentry.
  */
 import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
@@ -83,13 +84,24 @@ export class ForumChatCopyProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async process(job: Job<ChatCopyJobData>): Promise<void> {
-    let copied: ChatCopyResult | null;
+    const copied = await this.step(job, () => this.copy(job.data));
+    if (copied) await this.step(job, () => this.mirror(copied));
+  }
+
+  /** Steps A + B; a pair already copied re-reads its rows for step C. */
+  private async copy(data: ChatCopyJobData): Promise<ChatCopyResult | null> {
+    const pair = await resolveCopyThreads(this.db, data);
+    if (!pair) return null;
+    return (
+      (await copyForumChat(this.db, pair)) ??
+      (await findChatCopy(this.db, pair))
+    );
+  }
+
+  /** Runs a step; an error is logged, sent to Sentry on the final attempt and rethrown. */
+  private async step<T>(job: Job<ChatCopyJobData>, run: () => Promise<T>) {
     try {
-      const pair = await resolveCopyThreads(this.db, job.data);
-      copied =
-        pair &&
-        ((await copyForumChat(this.db, pair)) ??
-          (await findChatCopy(this.db, pair)));
+      return await run();
     } catch (err) {
       this.logger.error(`Chat copy ${job.id ?? '?'}: ${describe(err)}`);
       if (isFinalAttempt(job)) {
@@ -100,12 +112,17 @@ export class ForumChatCopyProcessor extends WorkerHost implements OnModuleInit {
       }
       throw err;
     }
-    if (copied) await this.mirror(copied);
   }
 
-  /** Step C: one awaited send per row, in insert order; failures logged. */
+  /**
+   * Step C: one awaited send per row, in insert order. A failed send never
+   * stops the rest; failures are collected and thrown together afterwards so
+   * BullMQ retries (Codex P2) — the retry re-drives the existing copy and
+   * already-linked rows send nothing again.
+   */
   async mirror(copied: ChatCopyResult): Promise<void> {
     const { guildId, threadId } = copied;
+    const failed: number[] = [];
     for (const replyId of copied.replyIds) {
       try {
         await this.outbound.apply({
@@ -119,7 +136,13 @@ export class ForumChatCopyProcessor extends WorkerHost implements OnModuleInit {
         this.logger.warn(
           `Chat copy send of reply ${replyId}: ${describe(err)}`,
         );
+        failed.push(replyId);
       }
+    }
+    if (failed.length > 0) {
+      throw new Error(
+        `Discord send failed for ${failed.length} of ${copied.replyIds.length} copied replies (${failed.join(', ')})`,
+      );
     }
   }
 }

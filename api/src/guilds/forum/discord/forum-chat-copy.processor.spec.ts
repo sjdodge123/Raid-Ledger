@@ -1,8 +1,10 @@
 /**
  * ROK-2297 D2 — the copy job: threads are synced before they are read, the
  * RL copy runs once, and each new row is mirrored in insert order, one
- * awaited send at a time; a failed send never stops the rest.
+ * awaited send at a time; a failed send never stops the rest, and the job
+ * then fails so BullMQ retries it.
  */
+import * as Sentry from '@sentry/nestjs';
 import type { Job, Queue } from 'bullmq';
 import { findChatCopy } from '../chat-copy/forum-chat-copy.queries';
 import { copyForumChat } from '../chat-copy/forum-chat-copy.writes';
@@ -31,6 +33,7 @@ const eventThread = jest.mocked(findLiveEventThread);
 const pollThread = jest.mocked(findLivePollThread);
 const syncEvent = jest.mocked(syncEventDiscussion);
 const syncPoll = jest.mocked(syncPollDiscussion);
+const sentry = jest.mocked(Sentry.captureException);
 
 const DB = {} as unknown as Db;
 const thread = (id: number, guildId = 7) => ({
@@ -41,12 +44,15 @@ const thread = (id: number, guildId = 7) => ({
   writeClosesAt: null,
 });
 
-function job(direction: ChatCopyJobData['direction']): Job<ChatCopyJobData> {
+function job(
+  direction: ChatCopyJobData['direction'],
+  attemptsMade = 0,
+): Job<ChatCopyJobData> {
   const data = { direction, matchId: 4, eventId: 12 };
   return {
     id: 'j',
     data,
-    attemptsMade: 0,
+    attemptsMade,
     opts: { attempts: 3 },
   } as Job<ChatCopyJobData>;
 }
@@ -138,7 +144,7 @@ describe('ForumChatCopyProcessor', () => {
     });
   });
 
-  it('one failed send does not stop the rest', async () => {
+  it('Codex P2: a failed send does not stop the rest, then fails the job for a retry', async () => {
     copy.mockResolvedValue({
       guildId: 7,
       threadId: 200,
@@ -147,11 +153,34 @@ describe('ForumChatCopyProcessor', () => {
     const { processor, outbound } = setup((c) =>
       c.replyId === 10 ? Promise.reject(new Error('429')) : Promise.resolve(),
     );
+    await expect(processor.process(job('event-to-poll'))).rejects.toThrow(
+      'Discord send failed for 1 of 3 copied replies (10)',
+    );
+    const sent = outbound.apply.mock.calls.map(([c]) => c.replyId);
+    expect(sent).toEqual([9, 10, 11]);
+    expect(sentry).not.toHaveBeenCalled();
+  });
+
+  it('Codex P2: a send failure on the final attempt goes to Sentry', async () => {
+    copy.mockResolvedValue({ guildId: 7, threadId: 200, replyIds: [9] });
+    const { processor } = setup(() => Promise.reject(new Error('429')));
+    await expect(processor.process(job('event-to-poll', 2))).rejects.toThrow(
+      'Discord send failed for 1 of 1 copied replies (9)',
+    );
+    expect(sentry).toHaveBeenCalledTimes(1);
+  });
+
+  it('a fully successful mirror resolves', async () => {
+    copy.mockResolvedValue({
+      guildId: 7,
+      threadId: 200,
+      replyIds: [9, 10, 11],
+    });
+    const { processor, outbound } = setup(() => Promise.resolve());
     await expect(
       processor.process(job('event-to-poll')),
     ).resolves.toBeUndefined();
-    const sent = outbound.apply.mock.calls.map(([c]) => c.replyId);
-    expect(sent).toEqual([9, 10, 11]);
+    expect(outbound.apply).toHaveBeenCalledTimes(3);
   });
 
   it('a missing target thread copies and sends nothing', async () => {
