@@ -6,16 +6,24 @@
  * `hub_forum_threads.lineup_id` / `.match_id` carry no FK, so the delete alone
  * leaves the lineup's and its scheduling polls' hub threads attached (and open)
  * forever. They are closed + detached first with the same writes the discussion
- * reconcilers use when a lineup or poll is gone. Cleanup of withdrawn data runs
+ * reconcilers use when a lineup or poll is gone, each under that subject's
+ * discussion advisory lock (ascending id order) so a reconciler mid-insert
+ * cannot re-attach a thread after the detach. Cleanup of withdrawn data runs
  * regardless of plugin activation.
  */
 import { eq, inArray } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { detachLineupThreads } from '../guilds/forum/subject-discussion/lineup-discussion.queries';
-import { detachPollThreads } from '../guilds/forum/subject-discussion/poll-discussion.queries';
+import type { DbOrTx } from '../guilds/forum/event-discussion/event-discussion.queries';
+import {
+  detachLineupThreads,
+  lockLineupDiscussion,
+} from '../guilds/forum/subject-discussion/lineup-discussion.queries';
+import {
+  detachPollThreads,
+  lockPollDiscussion,
+} from '../guilds/forum/subject-discussion/poll-discussion.queries';
 
-type Db = PostgresJsDatabase<typeof schema>;
+type Db = DbOrTx;
 
 /** Close + detach the hub threads of the user's lineups and their polls. */
 async function detachUserLineupThreads(tx: Db, userId: number): Promise<void> {
@@ -24,16 +32,24 @@ async function detachUserLineupThreads(tx: Db, userId: number): Promise<void> {
   const lineups = await tx
     .select({ id: l.id })
     .from(l)
-    .where(eq(l.createdBy, userId));
+    .where(eq(l.createdBy, userId))
+    .orderBy(l.id);
   if (lineups.length === 0) return;
   const lineupIds = lineups.map((r) => r.id);
   const matches = await tx
     .select({ id: m.id })
     .from(m)
-    .where(inArray(m.lineupId, lineupIds));
+    .where(inArray(m.lineupId, lineupIds))
+    .orderBy(m.id);
   const now = new Date();
-  for (const id of lineupIds) await detachLineupThreads(tx, id, now);
-  for (const { id } of matches) await detachPollThreads(tx, id, now);
+  for (const id of lineupIds) {
+    await lockLineupDiscussion(tx, id);
+    await detachLineupThreads(tx, id, now);
+  }
+  for (const { id } of matches) {
+    await lockPollDiscussion(tx, id);
+    await detachPollThreads(tx, id, now);
+  }
 }
 
 /** Delete the lineups `userId` created. */

@@ -132,3 +132,18 @@ export async function detachPollThreads(
     })
     .where(and(eq(t.matchId, matchId), isNull(t.eventDetachedAt)));
 }
+
+/**
+ * Take the per-scheduling poll discussion advisory lock for the rest of `tx`. Every
+ * writer of this scheduling poll's hub thread (the reconciler, user deletion) holds it,
+ * so a find-then-insert cannot interleave with a detach. Callers locking
+ * several ids must lock in ascending order.
+ */
+export async function lockPollDiscussion(
+  tx: DbOrTx,
+  matchId: number,
+): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext('poll-discussion'), ${matchId}::int)`,
+  );
+}

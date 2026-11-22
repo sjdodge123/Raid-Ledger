@@ -7,7 +7,7 @@
  * turns private, loses its hub or is gone (R6), detach-and-reinsert on a hub
  * move. A standalone poll's carrier row is never a lineup subject (§3.1).
  */
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { Db } from '../hub-forum.queries';
 import type { DbOrTx } from '../event-discussion/event-discussion.queries';
@@ -16,6 +16,7 @@ import {
   detachLineupThreads,
   findLineupForSync,
   findLiveLineupThread,
+  lockLineupDiscussion,
   type LineupSyncRow,
   type LiveLineupThread,
 } from './lineup-discussion.queries';
@@ -154,9 +155,7 @@ export async function syncLineupDiscussion(
   now: Date = new Date(),
 ): Promise<SyncAction> {
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtext('lineup-discussion'), ${lineupId}::int)`,
-    );
+    await lockLineupDiscussion(tx, lineupId);
     const lineup = await findLineupForSync(tx, lineupId);
     const thread = await findLiveLineupThread(tx, lineupId);
     const action = planLineupSync(lineup, thread);
