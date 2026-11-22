@@ -3,7 +3,8 @@
  * prefilled (the name-mismatch deep link). Game-neutral: any registered game.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import { renderWithProviders } from '../../test/render-helpers';
 import { readCharacterPrefill } from '../../plugins/character-identity';
 import { CharactersPanel } from './characters-panel';
@@ -15,8 +16,10 @@ vi.mock('../../hooks/use-auth', async (importOriginal) => ({
 vi.mock('../../hooks/use-characters', () => ({
     useMyCharacters: () => ({ data: { data: [] }, isLoading: false }),
 }));
+// One stable array, like the registry query's cached data.
+const GAMES = [{ id: 7, name: 'Test Quest', slug: 'test-quest', hasRoles: true }];
 vi.mock('../../hooks/use-game-registry', () => ({
-    useGameRegistry: () => ({ games: [{ id: 7, name: 'Test Quest', slug: 'test-quest', hasRoles: true }], isLoading: false }),
+    useGameRegistry: () => ({ games: GAMES, isLoading: false }),
 }));
 
 const PATH = '/profile/gaming/characters';
@@ -36,6 +39,31 @@ describe('CharactersPanel router-state prefill', () => {
     it('stays closed without router state', () => {
         renderPanel(null);
         expect(screen.queryByRole('dialog', { name: /Add Character/ })).toBeNull();
+    });
+});
+
+function LocationProbe() {
+    const { search } = useLocation();
+    return <output data-testid="search">{search}</output>;
+}
+
+function renderAt(search: string) {
+    return renderWithProviders(<><CharactersPanel /><LocationProbe /></>, { initialEntries: [`${PATH}${search}`] });
+}
+
+describe('CharactersPanel ?game= deep link (ROK-2294)', () => {
+    it('opens Add Character with the game preselected and strips the param', () => {
+        renderAt('?game=7&tab=x');
+        const dialog = screen.getByRole('dialog', { name: /Add Character/ });
+        expect(within(dialog).getAllByText(/Test Quest/).length).toBeGreaterThan(0);
+        expect(screen.getByTestId('search').textContent).toBe('?tab=x');
+    });
+
+    it.each([['?game=999'], ['?game=abc'], ['?game=']])('ignores an unknown/invalid id %s but still strips it', (search) => {
+        renderAt(search);
+        expect(screen.getByText('My Characters')).toBeInTheDocument();
+        expect(screen.queryByRole('dialog', { name: /Add Character/ })).toBeNull();
+        expect(screen.getByTestId('search').textContent).toBe('');
     });
 });
 

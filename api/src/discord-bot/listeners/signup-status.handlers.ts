@@ -3,7 +3,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
-import { showRoleSelect } from './signup-signup.handlers';
+import { showRoleSelect } from './signup-select-wrappers';
 import { resignupIfDeparted } from './signup-reactivation.helpers';
 import { isCancelledStatus } from '../../events/signups-signup.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';

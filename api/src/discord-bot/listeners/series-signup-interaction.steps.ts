@@ -13,6 +13,7 @@ import {
   showRoleSelect,
 } from '../utils/signup-dropdown-builders';
 import { buildCharacterBackId } from '../utils/character-back-id';
+import { resolveCharacterImportUrl } from '../utils/character-import-link.helpers';
 import {
   buildSeriesCustomId,
   formatJoinSummary,
@@ -82,6 +83,10 @@ async function showCharacterStep(
     characters,
     emojiService: deps.emojiService,
     embed,
+    importUrl: await resolveCharacterImportUrl(
+      deps.settingsService,
+      event.gameId,
+    ),
   });
 }
 
@@ -94,6 +99,10 @@ async function showRoleStep(
 ): Promise<void> {
   const embed = await summaryEmbed(event.id, userId, deps);
   if (!embed) return noNights(interaction);
+  // ROK-2294: no character picked = the member has none to pick.
+  const importUrl = picks.characterId
+    ? undefined
+    : await resolveCharacterImportUrl(deps.settingsService, event.gameId);
   await showRoleSelect(interaction, {
     customIdPrefix: SERIES_BUTTON_IDS.ROLE,
     eventId: event.id,
@@ -105,6 +114,7 @@ async function showRoleStep(
       charSelectPrefix: SERIES_BUTTON_IDS.CHARACTER,
       eventId: event.id,
     }),
+    importUrl,
   });
 }
 
