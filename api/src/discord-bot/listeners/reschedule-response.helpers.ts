@@ -279,13 +279,24 @@ export async function lookupRescheduleEvent(
   return event ?? null;
 }
 
+/** The linked account, with the two flags that block a gateway click. */
+export interface LinkedRescheduleUser {
+  id: number;
+  bannedAt: Date | null;
+  deactivatedAt: Date | null;
+}
+
 /** Resolve the user linked to a Discord account, if any. */
 export async function findLinkedUserByDiscordId(
   db: PostgresJsDatabase<typeof schema>,
   discordId: string,
-): Promise<{ id: number } | null> {
+): Promise<LinkedRescheduleUser | null> {
   const [user] = await db
-    .select()
+    .select({
+      id: schema.users.id,
+      bannedAt: schema.users.bannedAt,
+      deactivatedAt: schema.users.deactivatedAt,
+    })
     .from(schema.users)
     .where(eq(schema.users.discordId, discordId))
     .limit(1);
