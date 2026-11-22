@@ -7,7 +7,8 @@
  *      detail page; the modal opens with the warning + reason textarea +
  *      red confirm; submitting flips the lineup status badge to
  *      "Archived" and the abort button disappears.
- *   2. Member (non-admin/non-operator) does NOT see the abort button.
+ *   2. A signed-in member (non-admin/non-operator) sees no abort control,
+ *      and `POST /lineups/:id/abort` with their token is refused (403).
  *   3. Already-archived lineup → no abort button visible.
  *
  * TDD gate: these tests intentionally fail today — the route
@@ -22,7 +23,7 @@
  * pattern from `lineup-creation.smoke.spec.ts`, ROK-1147).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, getInviteeFixture, createLineupOrRetry } from './api-helpers';
+import { API_BASE, apiGet, getAdminToken, getInviteeFixture, createLineupOrRetry } from './api-helpers';
 import { signInContextAs } from './browser-session';
 
 // This file mutates a single lineup through abort and asserts on the
@@ -314,66 +315,65 @@ test.describe('Abort Lineup — member visibility', () => {
         adminToken = await getAdminToken();
     });
 
-    test('member-role user does not see abort button on detail page', async ({
+    test('signed-in member sees no abort control and the API refuses their abort', async ({
         page,
     }) => {
         lineupId = await ensureActiveLineup(adminToken);
 
-        // Provision a member account via the DEMO_MODE-only test endpoint
-        // and log in as that user. The endpoint and login flow already exist
-        // in TestApp/integration helpers; here we use the public POST
-        // /auth/local against a fresh member fixture. If the helper is
-        // unavailable, we fall back to expecting "not visible" without
-        // role-switching — the button must remain hidden either way for
-        // anyone without operator/admin role.
-        const memberEmail = `${workerPrefix}member@test.local`;
-        const memberPass = 'MemberSmokePass1!';
-        await fetch(`${API_BASE}/admin/test/create-member`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${adminToken}`,
-            },
-            body: JSON.stringify({ email: memberEmail, password: memberPass }),
-        }).catch(() => null);
+        // Sign this context in as the seeded non-admin fixture member
+        // (`seed-fixture-user`, role `member`, pre-onboarded) — a real
+        // `rl_rt` session, not a localStorage token the app never reads.
+        const member = await getInviteeFixture();
+        await signInContextAs(page.context(), member.userId);
 
-        const loginRes = await fetch(`${API_BASE}/auth/local`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: memberEmail, password: memberPass }),
-        });
-        if (!loginRes.ok) {
-            // Fallback: navigate as anonymous — member-role behaviour mirrors
-            // unauth for visibility purposes (button still absent).
-            await page.goto(`/community-lineup/${lineupId}`);
-            const abortButton = page.getByRole('button', {
-                name: /Abort Lineup/i,
-            });
-            await expect(abortButton).toHaveCount(0);
-            return;
-        }
-        const { access_token } = (await loginRes.json()) as {
-            access_token: string;
-        };
-
-        // Inject the member's JWT into localStorage and reload as that user.
-        await page.goto('/');
-        await page.evaluate((token) => {
-            localStorage.setItem('jwt', token);
-            localStorage.setItem('access_token', token);
-        }, access_token);
-
+        // Prove the page booted AS the member before asserting absences:
+        // otherwise a signed-out visit (bounced to /login) passes vacuously.
+        const meResponse = page.waitForResponse(
+            (r) =>
+                r.request().method() === 'GET' &&
+                new URL(r.url()).pathname.endsWith('/auth/me'),
+            { timeout: 15_000 },
+        );
         await page.goto(`/community-lineup/${lineupId}`);
+        const me = await meResponse;
+        expect(me.status()).toBe(200);
+        const meBody = (await me.json()) as { id?: unknown; role?: unknown };
+        expect({ id: meBody.id, role: meBody.role }).toEqual({
+            id: member.userId,
+            role: 'member',
+        });
+
+        await expect(page).toHaveURL(new RegExp(`/community-lineup/${lineupId}(?:[?#]|$)`));
         await expect(page.locator('body')).not.toHaveText(
             /something went wrong/i,
             { timeout: 10_000 },
         );
-
         await expect(
             page.getByText(/Smoke Lineup|Lineup — /).first(),
         ).toBeVisible({ timeout: 15_000 });
 
-        const abortButton = page.getByRole('button', { name: /Abort Lineup/i });
-        await expect(abortButton).toHaveCount(0);
+        // ROK-1323: Abort lives in the operator ⋮ menu, which renders only for
+        // operators/admins (or the lineup's creator). The admin test above is
+        // the positive control: the same trigger IS visible to an operator.
+        await expect(page.getByTestId('lineup-operator-menu-trigger')).toHaveCount(0);
+        await expect(page.getByTestId('lineup-operator-menu-abort')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /Abort Lineup/i })).toHaveCount(0);
+
+        // Server-side: the member's own token is refused (RolesGuard →
+        // 403), and the lineup is left un-archived.
+        const abortRes = await fetch(`${API_BASE}/lineups/${lineupId}/abort`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${member.jwt}`,
+            },
+            body: JSON.stringify({ reason: 'member must not abort' }),
+        });
+        expect(abortRes.status).toBe(403);
+        const after = (await apiGet(adminToken, `/lineups/${lineupId}`)) as {
+            status?: unknown;
+        } | null;
+        expect(after?.status).not.toBe('archived');
+        expect(after).not.toBeNull();
     });
 });
