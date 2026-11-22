@@ -80,7 +80,11 @@ export class SchedulingPollForumCard {
       lineupId: match.lineupId,
       gameId: match.gameId,
       status,
-      lockedInTime: await loadLockedInTime(this.db, match.linkedEventId, status),
+      lockedInTime: await loadLockedInTime(
+        this.db,
+        match.linkedEventId,
+        status,
+      ),
       deadline: lineup?.phaseDeadline?.toISOString() ?? null,
       cancelReason: match.cancellationReason ?? null,
     });

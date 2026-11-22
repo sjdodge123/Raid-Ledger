@@ -205,6 +205,12 @@ describe('ROK-2272 S8 poll / lineup threads → Discord', () => {
       tagIds: await bindingTagIds(guildId),
     });
     expect(post.content).toContain(`/schedule/${matchId})`);
+    // ROK-2295: the post opens with the live poll embed (no buttons); the
+    // gateway then sends content '' (ROK-2292 `starterBody`).
+    expect(post.card?.components).toEqual([]);
+    const [embed, ...more] = post.card?.embeds ?? [];
+    expect(more).toEqual([]);
+    expect(embed?.data.title).toMatch(/^When should we play/);
 
     await reply(pollRoute(matchId), 'Friday!', 2);
     expect(out.spies.createPost).toHaveBeenCalledTimes(1);

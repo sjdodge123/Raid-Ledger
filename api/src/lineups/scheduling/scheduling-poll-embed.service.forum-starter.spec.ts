@@ -3,7 +3,10 @@
  * The render is mocked (its own path is covered by the lifecycle spec): this
  * spec pins WHEN the starter port runs and that it never blocks the card.
  */
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { POLL_FORUM_STARTER_PORT } from './poll-forum-starter.port';
 

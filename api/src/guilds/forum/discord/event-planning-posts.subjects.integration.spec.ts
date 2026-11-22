@@ -179,6 +179,17 @@ describe('ROK-2272 S10 non-hub poll posts', () => {
         `/community-lineup/${lineupId}/schedule/${matchId}`,
       ) as string,
       tagIds: [tagId(POLL_TAG_NAME)],
+      // ROK-2295: the post opens with the live poll embed (no buttons).
+      card: {
+        embeds: [
+          expect.objectContaining({
+            data: expect.objectContaining({
+              title: expect.stringMatching(/^When should we play/) as string,
+            }) as object,
+          }) as object,
+        ],
+        components: [],
+      },
     });
     const row = await only('poll', matchId);
     expect(row.closesAt).toBeNull();
