@@ -353,17 +353,18 @@ describe('registry planning posts (ROK-2272 S10)', () => {
   });
 });
 
-describe('a send that finds the Discord post gone (TECH-DEBT L4487)', () => {
-  const unknownChannel = () =>
-    new DiscordAPIError(
-      { code: 10003, message: 'Unknown Channel' },
-      10003,
-      404,
-      'POST',
-      '/x',
-      {},
-    );
+/** The error Discord returns when the thread/post was deleted. */
+const unknownChannel = (): DiscordAPIError =>
+  new DiscordAPIError(
+    { code: 10003, message: 'Unknown Channel' },
+    10003,
+    404,
+    'POST',
+    '/x',
+    {},
+  );
 
+describe('a send that finds the Discord post gone (TECH-DEBT L4487)', () => {
   beforeEach(() => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
   });
