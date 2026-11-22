@@ -84,44 +84,44 @@ describe('isManualSyncThrottled', () => {
   });
 });
 
-describe('applyReadUpdate — queued jobs', () => {
-  function setup() {
-    const added: string[] = [];
-    const sets: Record<string, unknown>[] = [];
-    const queue = {
-      getJob: () => Promise.resolve(undefined),
-      remove: () => Promise.resolve(0),
-      add: (_n: string, _d: unknown, o: { jobId: string }) => {
-        added.push(o.jobId);
-        return Promise.resolve({});
+function setup() {
+  const added: string[] = [];
+  const sets: Record<string, unknown>[] = [];
+  const queue = {
+    getJob: () => Promise.resolve(undefined),
+    remove: () => Promise.resolve(0),
+    add: (_n: string, _d: unknown, o: { jobId: string }) => {
+      added.push(o.jobId);
+      return Promise.resolve({});
+    },
+  };
+  const db = {
+    update: () => ({
+      set: (v: Record<string, unknown>) => {
+        sets.push(v);
+        return { where: () => Promise.resolve() };
       },
-    };
-    const db = {
-      update: () => ({
-        set: (v: Record<string, unknown>) => {
-          sets.push(v);
-          return { where: () => Promise.resolve() };
-        },
-      }),
-    };
-    const deps = {
-      db,
-      readQueue: { queue, isSyncEnabled: () => Promise.resolve(true) },
-      invalidateUser: () => undefined,
-    } as unknown as CalendarReadSettingsDeps;
-    return { deps, added, sets };
-  }
-  const plan = (
-    was: boolean,
-    now: boolean,
-    lastErrorCode: string | null = null,
-  ) =>
-    ({
-      row: { id: 3, userId: 7, readEnabled: was, lastErrorCode },
-      readEnabled: now,
-      readCalendarIds: [],
-    }) as unknown as ReadUpdatePlan;
+    }),
+  };
+  const deps = {
+    db,
+    readQueue: { queue, isSyncEnabled: () => Promise.resolve(true) },
+    invalidateUser: () => undefined,
+  } as unknown as CalendarReadSettingsDeps;
+  return { deps, added, sets };
+}
+const plan = (
+  was: boolean,
+  now: boolean,
+  lastErrorCode: string | null = null,
+) =>
+  ({
+    row: { id: 3, userId: 7, readEnabled: was, lastErrorCode },
+    readEnabled: now,
+    readCalendarIds: [],
+  }) as unknown as ReadUpdatePlan;
 
+describe('applyReadUpdate — queued jobs', () => {
   it('read turned off → a derive for the owner, no sync', async () => {
     const { deps, added } = setup();
     await applyReadUpdate(deps, plan(true, false));
@@ -139,7 +139,9 @@ describe('applyReadUpdate — queued jobs', () => {
     await applyReadUpdate(deps, plan(false, false));
     expect(added).toEqual([]);
   });
+});
 
+describe('applyReadUpdate — last error code', () => {
   it('a user edit clears a stale read-side provider_error (no "calendar removed" after switch-off)', async () => {
     const { deps, sets } = setup();
     await applyReadUpdate(deps, plan(true, false, 'provider_error'));

@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { providerCalendarsFixture, readConnectionFixture } from '../../../test/mocks/calendar-sync-handlers';
 import { checkedIds, enabledTargets, modeOf, pickable, readChangeFor, readGranted, readableConnections, switchesOf } from './use-read-rules';
-import { readStatusLine } from './calendar-sync.copy';
+import { isCalendarRemoved, readStatusLine } from './calendar-sync.copy';
 import { syncedAgo } from '../../../lib/synced-ago';
 
 describe('switchesOf / modeOf', () => {
@@ -81,9 +81,14 @@ describe('readGranted / status line', () => {
     });
     it('read stopped with provider_error (picked calendar deleted in Google) → the calendar-removed line, not "Synced"', () => {
         const removed = { ...readConnectionFixture, errorCode: 'provider_error', read: { enabled: false, calendarIds: ['gone@group.calendar.google.com'] } };
-        const expected = 'The calendar you picked was removed in Google Calendar · choose calendars again';
+        const expected = 'Calendar removed · pick another';
         expect(readStatusLine(removed, false, now)).toBe(expected);
         expect(readStatusLine(removed, true, now)).toBe(expected);
+        expect(isCalendarRemoved(removed)).toBe(true);
+    });
+    it('isCalendarRemoved (warning tone) only fires when reading was switched off with provider_error', () => {
+        expect(isCalendarRemoved({ ...readConnectionFixture, errorCode: 'provider_error' })).toBe(false);
+        expect(isCalendarRemoved({ ...readConnectionFixture, errorCode: null, read: { enabled: false, calendarIds: [] } })).toBe(false);
     });
     it('provider_error while still reading (one calendar failing) keeps the synced line', () => {
         expect(readStatusLine({ ...readConnectionFixture, errorCode: 'provider_error' }, false, now)).toBe('Synced 4 min ago · 1 calendar');
