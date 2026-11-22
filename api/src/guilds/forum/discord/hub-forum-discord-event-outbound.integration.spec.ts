@@ -73,7 +73,8 @@ async function reply(s: Scene, body: string, calls: number): Promise<void> {
 
 async function threadLinks(threadId: number) {
   const l = schema.hubForumDiscordLinks;
-  return db().select().from(l).where(eq(l.threadId, threadId));
+  // Ordered: callers destructure the thread row first, and Postgres does not keep insert order.
+  return db().select().from(l).where(eq(l.threadId, threadId)).orderBy(l.id);
 }
 
 /** The title the post should carry for the event as it is now. */
