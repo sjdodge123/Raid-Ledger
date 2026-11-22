@@ -97,7 +97,9 @@ export class ForumChatCopyProcessor extends WorkerHost implements OnModuleInit {
           actorId: 0,
         });
       } catch (err) {
-        this.logger.warn(`Chat copy send of reply ${replyId}: ${describe(err)}`);
+        this.logger.warn(
+          `Chat copy send of reply ${replyId}: ${describe(err)}`,
+        );
       }
     }
   }

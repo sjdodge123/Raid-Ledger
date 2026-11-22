@@ -40,7 +40,12 @@ const thread = (id: number) => ({
 
 function job(direction: ChatCopyJobData['direction']): Job<ChatCopyJobData> {
   const data = { direction, matchId: 4, eventId: 12 };
-  return { id: 'j', data, attemptsMade: 0, opts: { attempts: 3 } } as Job<ChatCopyJobData>;
+  return {
+    id: 'j',
+    data,
+    attemptsMade: 0,
+    opts: { attempts: 3 },
+  } as Job<ChatCopyJobData>;
 }
 
 function setup(apply: (c: HubForumChange) => Promise<void>) {
@@ -66,26 +71,46 @@ beforeEach(() => {
 describe('ForumChatCopyProcessor', () => {
   it('syncs both threads before reading them, then copies src → dst', async () => {
     const order: string[] = [];
-    syncEvent.mockImplementation(() => (order.push('syncEvent'), Promise.resolve('noop')));
-    syncPoll.mockImplementation(() => (order.push('syncPoll'), Promise.resolve('noop')));
-    eventThread.mockImplementation(() => (order.push('findEvent'), Promise.resolve(thread(100))));
+    syncEvent.mockImplementation(
+      () => (order.push('syncEvent'), Promise.resolve('noop')),
+    );
+    syncPoll.mockImplementation(
+      () => (order.push('syncPoll'), Promise.resolve('noop')),
+    );
+    eventThread.mockImplementation(
+      () => (order.push('findEvent'), Promise.resolve(thread(100))),
+    );
     copy.mockResolvedValue(null);
     const { processor } = setup(() => Promise.resolve());
     await processor.process(job('poll-to-event'));
-    expect(order.indexOf('findEvent')).toBeGreaterThan(order.indexOf('syncPoll'));
-    expect(order.indexOf('findEvent')).toBeGreaterThan(order.indexOf('syncEvent'));
-    expect(copy).toHaveBeenCalledWith(DB, { srcThreadId: 200, dstThreadId: 100 });
+    expect(order.indexOf('findEvent')).toBeGreaterThan(
+      order.indexOf('syncPoll'),
+    );
+    expect(order.indexOf('findEvent')).toBeGreaterThan(
+      order.indexOf('syncEvent'),
+    );
+    expect(copy).toHaveBeenCalledWith(DB, {
+      srcThreadId: 200,
+      dstThreadId: 100,
+    });
   });
 
   it('event → poll copies the event thread into the poll thread', async () => {
     copy.mockResolvedValue(null);
     const { processor } = setup(() => Promise.resolve());
     await processor.process(job('event-to-poll'));
-    expect(copy).toHaveBeenCalledWith(DB, { srcThreadId: 100, dstThreadId: 200 });
+    expect(copy).toHaveBeenCalledWith(DB, {
+      srcThreadId: 100,
+      dstThreadId: 200,
+    });
   });
 
   it('sends each row in insert order, one awaited send at a time', async () => {
-    copy.mockResolvedValue({ guildId: 7, threadId: 200, replyIds: [9, 10, 11] });
+    copy.mockResolvedValue({
+      guildId: 7,
+      threadId: 200,
+      replyIds: [9, 10, 11],
+    });
     let inFlight = 0;
     const seen: { replyId: number | undefined; inFlight: number }[] = [];
     const { processor, outbound } = setup(async (c) => {
@@ -110,11 +135,17 @@ describe('ForumChatCopyProcessor', () => {
   });
 
   it('one failed send does not stop the rest', async () => {
-    copy.mockResolvedValue({ guildId: 7, threadId: 200, replyIds: [9, 10, 11] });
+    copy.mockResolvedValue({
+      guildId: 7,
+      threadId: 200,
+      replyIds: [9, 10, 11],
+    });
     const { processor, outbound } = setup((c) =>
       c.replyId === 10 ? Promise.reject(new Error('429')) : Promise.resolve(),
     );
-    await expect(processor.process(job('event-to-poll'))).resolves.toBeUndefined();
+    await expect(
+      processor.process(job('event-to-poll')),
+    ).resolves.toBeUndefined();
     const sent = outbound.apply.mock.calls.map(([c]) => c.replyId);
     expect(sent).toEqual([9, 10, 11]);
   });
@@ -137,7 +168,9 @@ describe('ForumChatCopyProcessor', () => {
   it('an RL copy failure is rethrown for the BullMQ retry', async () => {
     copy.mockRejectedValue(new Error('deadlock'));
     const { processor, outbound } = setup(() => Promise.resolve());
-    await expect(processor.process(job('poll-to-event'))).rejects.toThrow('deadlock');
+    await expect(processor.process(job('poll-to-event'))).rejects.toThrow(
+      'deadlock',
+    );
     expect(outbound.apply).not.toHaveBeenCalled();
   });
 });

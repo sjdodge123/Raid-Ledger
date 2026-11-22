@@ -39,7 +39,11 @@ export class ForumChatCopyListener {
     try {
       const eventId = await this.linkedEventId(matchId);
       if (eventId === null) return;
-      await this.queue.enqueue({ direction: 'event-to-poll', matchId, eventId });
+      await this.queue.enqueue({
+        direction: 'event-to-poll',
+        matchId,
+        eventId,
+      });
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Chat copy for opened poll ${matchId}: ${why}`);

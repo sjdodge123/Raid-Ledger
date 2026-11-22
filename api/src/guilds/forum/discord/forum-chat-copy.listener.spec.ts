@@ -26,7 +26,10 @@ function setup(rows: { eventId: number | null }[]) {
     return Promise.resolve(true);
   });
   const queue = { enqueue } as unknown as ForumChatCopyQueue;
-  return { listener: new ForumChatCopyListener(dbReturning(rows), queue), enqueue };
+  return {
+    listener: new ForumChatCopyListener(dbReturning(rows), queue),
+    enqueue,
+  };
 }
 
 describe('ForumChatCopyListener', () => {
