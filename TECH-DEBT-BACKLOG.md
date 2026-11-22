@@ -4541,6 +4541,35 @@ Existing entries are left in place; this records their status. Line numbers are 
 - resolved: inbound Discord message delete reported `'deleted'` even when `removeFromDiscord` removed nothing (tonight's review finding, `hub-forum-discord-inbound.ingest.ts` `onDelete`) — fixed in this batch: `2f244ac36` (now returns `'skipped'`; unit cases in `hub-forum-discord-inbound.ingest.spec.ts`)
 - resolved: no coverage that an RL-side delete of a Discord-linked thread keeps its original `deletedBy`/`deletedAs` when the gateway thread-delete arrives (tonight's review finding) — fixed in this batch: `c9c2f5c13` (integration case in `hub-forum-discord-inbound.integration.spec.ts`)
 - resolved: a transient read failure finishing after the user switched reading off could re-set `provider_error` (tonight's review finding, `calendar-read-failure.helpers.ts` `failureTarget`) — fixed in this batch: `0c97cdaa6` (transient branch also requires `read_enabled = true`; integration case in `calendar-read-sync-guards.integration.spec.ts`)
+### 2026-11-22 — overnight sweep 5 resolution notes (backlog L1–1500)
+
+Line numbers are origin/main `TECH-DEBT-BACKLOG.md` lines at 740618c11. Evidence: tech-debt confirmation lane 5 (`planning-artifacts/story-notes/overnight-2026-11-22/TECHDEBT-CONFIRM-5.md`).
+
+- L175 — FIXED-ALREADY: binding-heal WARN fires once per process (`voice-state.listener.ts:85`).
+- L221 — FIXED-ALREADY: `ad-hoc-suppression.helpers.ts:357` `notifyWindowExtended` → `ad-hoc-event.service.ts:60` emits `SUPPRESSION_WINDOW_EVENTS.EXTENDED` (ROK-1696).
+- L251 — FIXED-ALREADY: `%s` printf survivors interpolated (`voice-attendance-flush.helpers.ts:233`); no `%s`/`%d` left in the cited files.
+- L259 — FIXED-ALREADY: `discord-channels-page.tsx:59` `resetUpdateError` → `updateBinding.reset()`.
+- L277 — FIXED-ALREADY: `demo-test-core.helpers.spec.ts` covers `getNotificationsForTest`.
+- L316 — FIXED-ALREADY: `use-coop-filter-state.ts:9,13` is a thin wrapper over `useSessionState`.
+- L360 — FIXED-ALREADY: signup-interaction and pug-invite listeners use `DiscordListenerBinding` (`signup-interaction.listener.ts:55,65`; `pug-invite.listener.ts:43,57`).
+- L394 — FIXED-ALREADY: `isMissingTableError` guard at `game-time-absence.helpers.ts:109`.
+- L422 — FIXED-ALREADY: `ci.yml` `code:` filter lists `api/package.json`, `web/package.json`, `packages/*/package.json`.
+- L490 — OBSOLETE: `buildAdHocSpawnPushContent` / `buildAdHocCompletedPushContent` no longer exist in `api/src`.
+- L562 — FIXED-ALREADY: `upsertFixtureUser` uses `onConflictDoUpdate` (#1374; lane 4's L1860 note).
+- L578 — FIXED-ALREADY: `orchestrateSchedulingOpen` (`lineup-notification-public-dispatch.helpers.ts:216-236`) only DMs; the card is the only channel surface.
+- L745 — FIXED-ALREADY: `demo-test-core.helpers.ts:165-195` logs busy queues/failing jobs and throws a diagnostic 409 (ROK-1511).
+- L922 — FIXED-ALREADY: `lineup-detail-page.tsx:207` `showPrompt` no longer checks `'pending'`.
+- L923 — FIXED-ALREADY: `lineup-notification.service.ts` is down to 204 counted lines.
+- L956 — FIXED-ALREADY: `replaceDeletedPost` restores the row on failure (`lfm-embed.service.ts:375-391`, TDB:954).
+- L958 — FIXED-ALREADY: no `CLIENT_URL` read left in `lfm-embed.helpers.ts`.
+- L984 — FIXED-ALREADY: `use-onboarding-fte.ts:68-72` `setQueryData` + invalidate of `['auth','me']`.
+- L1087 — FIXED-ALREADY: `listGuildTextChannels` matches `ChannelType.GuildText|GuildAnnouncement` (`discord-bot-client.guild.helpers.ts:154-168`, ROK-1518).
+- L1418 — FIXED-ALREADY: sentinel sha compatibility pair retired (`playwright-sentinel.ts:6`, TDB:1416).
+- L1445 — FIXED-ALREADY: poll-page reads run under `Promise.all` (`scheduling-poll-page.helpers.ts:111`); votes → terminal stays sequential on purpose (TDB:1443).
+- L1457 — FIXED-ALREADY: `validate-ci.sh:117` `E2E_SCOPE=none` skips Playwright; resolution memoized at `:2120`.
+- L1495 — FIXED-ALREADY: `bg-amber-500/20|/30` light overrides at `index.css:813,841-842`, pinned by `light-fill.guard.test.ts:106`.
+- L967 — still LIVE, parked for an operator ruling (overnight 2026-11-22): a cleared LFG intent can't tell "signed up for this event" from "withdrew", so widening `resolveConvertRole` lets a member who left convert a later group (review MAJOR + Codex P2s). Options: `cleared_reason`/`cleared_at` column (migration) or creator-only. Tried fix eacad11b0 reverted.
+- L957 — fixed in fix/overnight-batch-5-2026-11-22: `LfgGroupChangedPayload.pollId` / `eventId` narrowed to `?: number` (`lfg.constants.ts`); no emitter sent an explicit null (tsc clean).
 ### 2026-11-22 — overnight flake triage + contract-tests check (resolution notes, backlog L1–1500)
 
 Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md` and `CONTRACT-TESTS-GAP.md` (local only). Line refs are origin/main backlog lines.
