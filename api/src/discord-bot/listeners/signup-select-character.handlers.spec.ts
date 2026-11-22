@@ -373,7 +373,9 @@ describe('handleCharacterSelectMenu — no import link after a pick (ROK-2294 Q4
 
     await handleCharacterSelectMenu(interaction, 50, deps);
 
-    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(
+      -1,
+    )?.[0] as
       | { components?: Array<{ toJSON(): { components: unknown[] } }> }
       | undefined;
     const buttons = (reply?.components ?? []).flatMap(

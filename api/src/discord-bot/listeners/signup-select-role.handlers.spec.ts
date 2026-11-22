@@ -58,8 +58,7 @@ function makeMenuInteraction() {
 
 function lastContent(editReply: jest.Mock): string | undefined {
   const reply = editReply.mock.calls.at(-1)?.[0] as
-    | { content?: string }
-    | undefined;
+    { content?: string } | undefined;
   return reply?.content;
 }
 

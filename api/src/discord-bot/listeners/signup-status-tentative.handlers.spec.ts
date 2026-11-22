@@ -267,9 +267,9 @@ describe('handleLinkedTentative — zero-character MMO import link (ROK-2294)', 
     await handleLinkedTentative(interaction, 10, MOCK_USER, deps);
 
     expect(deps.signupsService.signup).not.toHaveBeenCalled();
-    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as
-      | { components?: Array<{ toJSON(): unknown }> }
-      | undefined;
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(
+      -1,
+    )?.[0] as { components?: Array<{ toJSON(): unknown }> } | undefined;
     const rows = reply?.components?.map((row) => row.toJSON()) ?? [];
     expect(rows).toHaveLength(2);
     expect(rows[1]).toEqual({

@@ -222,9 +222,9 @@ describe('handleExistingSignup — zero-character MMO import link (ROK-2294)', (
       deps,
     );
 
-    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as
-      | { components?: Array<{ toJSON(): unknown }> }
-      | undefined;
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(
+      -1,
+    )?.[0] as { components?: Array<{ toJSON(): unknown }> } | undefined;
     const rows = reply?.components?.map((row) => row.toJSON()) ?? [];
     expect(rows).toHaveLength(2);
     expect(rows[1]).toEqual(IMPORT_ROW_GAME_1);
