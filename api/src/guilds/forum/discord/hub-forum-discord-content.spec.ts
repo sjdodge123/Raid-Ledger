@@ -9,6 +9,7 @@ import {
   absoluteAvatarUrl,
   discordThreadName,
   forumThreadUrl,
+  notMirrored,
   truncateForDiscord,
   webhookUsername,
 } from './hub-forum-discord-content';
@@ -100,5 +101,29 @@ describe('forumThreadUrl', () => {
     expect(
       forumThreadUrl('https://rl.test/', 7, { threadId: 3, replyId: 9 }),
     ).toBe('https://rl.test/hubs/7?thread=3&reply=9#forum');
+  });
+});
+
+describe('notMirrored (ROK-2208 echo guard, ROK-2297 copies)', () => {
+  const guest = { authorDiscordId: '123', kind: 'reply' as const };
+  const member = { authorDiscordId: null, kind: 'reply' as const };
+
+  it('keeps a plain Discord-origin row off Discord (no echo)', () => {
+    expect(notMirrored(guest)).toBe(true);
+    expect(notMirrored({ ...guest, copiedFromThreadId: null })).toBe(true);
+  });
+
+  it('keeps a signup line off Discord', () => {
+    expect(notMirrored({ ...member, kind: 'signup_line' })).toBe(true);
+  });
+
+  it('mirrors an RL member reply', () => {
+    expect(notMirrored(member)).toBe(false);
+  });
+
+  it('mirrors a copied guest row and a copy header', () => {
+    expect(notMirrored({ ...guest, copiedFromThreadId: 9 })).toBe(false);
+    const header = { authorDiscordId: null, kind: 'copy_header' as const };
+    expect(notMirrored({ ...header, copiedFromThreadId: 9 })).toBe(false);
   });
 });
