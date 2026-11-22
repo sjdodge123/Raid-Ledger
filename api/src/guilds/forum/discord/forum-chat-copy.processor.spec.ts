@@ -4,6 +4,7 @@
  * awaited send at a time; a failed send never stops the rest.
  */
 import type { Job, Queue } from 'bullmq';
+import { findChatCopy } from '../chat-copy/forum-chat-copy.queries';
 import { copyForumChat } from '../chat-copy/forum-chat-copy.writes';
 import { findLiveEventThread } from '../event-discussion/event-discussion.queries';
 import { syncEventDiscussion } from '../event-discussion/event-discussion.sync';
@@ -17,6 +18,7 @@ import type { ChatCopyJobData } from './forum-chat-copy.queue';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 
 jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
+jest.mock('../chat-copy/forum-chat-copy.queries');
 jest.mock('../chat-copy/forum-chat-copy.writes');
 jest.mock('../event-discussion/event-discussion.queries');
 jest.mock('../event-discussion/event-discussion.sync');
@@ -24,6 +26,7 @@ jest.mock('../subject-discussion/poll-discussion.queries');
 jest.mock('../subject-discussion/poll-discussion.sync');
 
 const copy = jest.mocked(copyForumChat);
+const existing = jest.mocked(findChatCopy);
 const eventThread = jest.mocked(findLiveEventThread);
 const pollThread = jest.mocked(findLivePollThread);
 const syncEvent = jest.mocked(syncEventDiscussion);
@@ -66,6 +69,7 @@ beforeEach(() => {
   syncPoll.mockResolvedValue('noop');
   eventThread.mockResolvedValue(thread(100));
   pollThread.mockResolvedValue(thread(200));
+  existing.mockResolvedValue(null);
 });
 
 describe('ForumChatCopyProcessor', () => {
@@ -158,7 +162,63 @@ describe('ForumChatCopyProcessor', () => {
     expect(outbound.apply).not.toHaveBeenCalled();
   });
 
-  it('an already-copied pair (null) sends nothing', async () => {
+  it('a fresh copy is mirrored without reading the existing copy', async () => {
+    copy.mockResolvedValue({ guildId: 7, threadId: 200, replyIds: [9] });
+    const { processor } = setup(() => Promise.resolve());
+    await processor.process(job('event-to-poll'));
+    expect(existing).not.toHaveBeenCalled();
+  });
+
+  it('review MAJOR-2: an already-copied pair (null) re-drives its existing rows in order', async () => {
+    copy.mockResolvedValue(null);
+    existing.mockResolvedValue({
+      guildId: 7,
+      threadId: 100,
+      replyIds: [5, 6, 7],
+    });
+    const { processor, outbound } = setup(() => Promise.resolve());
+    await processor.process(job('poll-to-event'));
+    expect(existing).toHaveBeenCalledWith(DB, {
+      srcThreadId: 200,
+      dstThreadId: 100,
+    });
+    const sent = outbound.apply.mock.calls.map(([c]) => c);
+    expect(sent).toEqual(
+      [5, 6, 7].map((replyId) => ({
+        guildId: 7,
+        op: 'reply.created',
+        threadId: 100,
+        replyId,
+        actorId: 0,
+      })),
+    );
+  });
+
+  it('a second run re-sends nothing new: only rows the claim has not linked go out', async () => {
+    // `apply` stands in for the outbound link claim (ON CONFLICT DO NOTHING):
+    // a row linked by the first run is a no-op on the second.
+    const linked = new Set<number>();
+    const sends: number[] = [];
+    const { processor, outbound } = setup((c) => {
+      const id = c.replyId ?? 0;
+      if (!linked.has(id)) (linked.add(id), sends.push(id));
+      return Promise.resolve();
+    });
+    copy.mockResolvedValueOnce({ guildId: 7, threadId: 200, replyIds: [9] });
+    await processor.process(job('event-to-poll'));
+    copy.mockResolvedValueOnce(null);
+    existing.mockResolvedValueOnce({
+      guildId: 7,
+      threadId: 200,
+      replyIds: [9, 10],
+    });
+    await processor.process(job('event-to-poll'));
+    const applied = outbound.apply.mock.calls.map(([c]) => c.replyId);
+    expect(applied).toEqual([9, 9, 10]);
+    expect(sends).toEqual([9, 10]);
+  });
+
+  it('a pair with nothing copied (null, no copy rows) sends nothing', async () => {
     copy.mockResolvedValue(null);
     const { processor, outbound } = setup(() => Promise.resolve());
     await processor.process(job('poll-to-event'));

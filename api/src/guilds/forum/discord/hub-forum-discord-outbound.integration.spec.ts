@@ -245,6 +245,40 @@ describe('ROK-2208 outbound RL → Discord', () => {
     expect(out.spies.deleteThread).toHaveBeenCalledWith(thread.discordThreadId);
   });
 
+  it('ROK-2297 review MAJOR-2: re-driving reply.created for a linked reply sends nothing again', async () => {
+    const g = await newHub(ctx);
+    await bind(g, { mode: 'create' });
+    const threadId = await newThread(g);
+    await synced();
+    const res = await as(
+      'officerA',
+      'post',
+      `/guilds/${g}/forum/${threadId}/replies`,
+      { body: 'Copied once' },
+    );
+    expect(res.status).toBe(201);
+    const replyId = idOf(res);
+    await synced(2);
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
+
+    // What a retried chat-copy job does for a row it already mirrored.
+    await out.service.apply({
+      guildId: g,
+      op: 'reply.created',
+      threadId,
+      replyId,
+      actorId: 0,
+    });
+
+    expect(out.spies.createReply).toHaveBeenCalledTimes(1);
+    const l = schema.hubForumDiscordLinks;
+    const rows = await ctx.testApp.db
+      .select({ id: l.id })
+      .from(l)
+      .where(eq(l.replyId, replyId));
+    expect(rows).toHaveLength(1);
+  });
+
   it('a failed send leaves a retryable failed link row', async () => {
     const g = await newHub(ctx);
     await bind(g, { mode: 'create' });

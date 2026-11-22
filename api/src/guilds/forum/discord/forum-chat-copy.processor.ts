@@ -6,6 +6,9 @@
  *  B. copy the RL rows in one locked transaction (`copyForumChat`);
  *  C. mirror each new row to Discord in insert order (header first), one at a
  *     time, through the outbound service — never via `HUB_FORUM_CHANGED`.
+ *     When B writes nothing because the pair was already copied (a retry
+ *     after B committed), C re-drives that existing copy: rows already
+ *     linked send nothing again (the link claim is ON CONFLICT DO NOTHING).
  * A failed send never stops the rest: its link row stays retryable (S6).
  * A/B errors throw so BullMQ retries; the final failure goes to Sentry.
  */
@@ -15,6 +18,7 @@ import * as Sentry from '@sentry/nestjs';
 import type { Job, Queue } from 'bullmq';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { QueueHealthService } from '../../../queue/queue-health.service';
+import { findChatCopy } from '../chat-copy/forum-chat-copy.queries';
 import {
   copyForumChat,
   type ChatCopyResult,
@@ -70,7 +74,10 @@ export class ForumChatCopyProcessor extends WorkerHost implements OnModuleInit {
     let copied: ChatCopyResult | null;
     try {
       const pair = await resolveCopyThreads(this.db, job.data);
-      copied = pair && (await copyForumChat(this.db, pair));
+      copied =
+        pair &&
+        ((await copyForumChat(this.db, pair)) ??
+          (await findChatCopy(this.db, pair)));
     } catch (err) {
       this.logger.error(`Chat copy ${job.id ?? '?'}: ${describe(err)}`);
       if (isFinalAttempt(job)) {
