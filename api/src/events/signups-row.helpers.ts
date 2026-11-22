@@ -3,11 +3,12 @@
  * the caller has already loaded by primary key, so `.returning()` yields it.
  */
 import { eq } from 'drizzle-orm';
+import type { PgUpdateSetSource } from 'drizzle-orm/pg-core';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import type { Tx } from './signups.service.types';
 
-type SignupPatch = Partial<typeof schema.eventSignups.$inferInsert>;
+type SignupPatch = PgUpdateSetSource<typeof schema.eventSignups>;
 
 /** Update one signup by id and return the updated row. */
 export async function updateSignupById(

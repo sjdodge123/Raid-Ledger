@@ -18,6 +18,7 @@ import { showRescheduleRoleForCharacter } from './reschedule-role-step.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
 import { defined } from '../../common/defined.helpers';
 import { unclaimedOrOwnedBy } from '../../events/signups-ownership.helpers';
+import { activatedAtOnReactivation } from '../../events/signup-activated-at.helpers';
 import {
   announceIfLineChanged,
   type LineFields,
@@ -140,6 +141,8 @@ export function buildUpdateSet(
     status: options?.signupStatus === 'tentative' ? 'tentative' : 'signed_up',
     roachedOutAt: null,
     confirmationStatus: 'confirmed',
+    // ROK-2293: re-stamped only when the row was declined/roached out/departed.
+    activatedAt: activatedAtOnReactivation(),
   };
   if (options?.preferredRoles) {
     set.preferredRoles = options.preferredRoles.filter((r: string) =>
