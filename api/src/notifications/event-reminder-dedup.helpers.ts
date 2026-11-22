@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm';
+import { eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
 
 /** Input for claiming one reminder dedup slot. */
 export interface ReminderDedupClaim {
@@ -23,6 +24,11 @@ export interface ReminderDedupClaim {
  * `timestamp` (independent of the session TimeZone) and the stored start is
  * truncated to milliseconds — the precision of the JS Date it was read into.
  *
+ * The claim also re-checks the recipient (ROK-2293): it succeeds only while
+ * the user still holds an active signup (`ACTIVE_SIGNUP_STATUSES`) for the
+ * event or is its host, so a cancel that lands between the pass's recipient
+ * query and this claim stops the DM.
+ *
  * `FOR SHARE` closes the overlap with a delay: a claim that meets the delay's
  * uncommitted UPDATE waits for it, then re-checks the new start (and refuses);
  * a claim that locks first commits before the UPDATE, so the delay's dedup
@@ -41,10 +47,27 @@ export async function claimReminderDedup(
       WHERE ${schema.events.id} = ${input.eventId}::int
         AND date_trunc('milliseconds', lower(${schema.events.duration}))
           = (${loadedStart}::timestamptz AT TIME ZONE 'UTC')
+        AND ${recipientStillDue(input)}
       FOR SHARE
     )
     ON CONFLICT (event_id, user_id, reminder_type) DO NOTHING
     RETURNING id
   `);
   return rows.length > 0;
+}
+
+/**
+ * SQL predicate (inside the claim's `events` subquery): the user is the
+ * event's host, or still has an active signup for it (ROK-2293).
+ */
+export function recipientStillDue(
+  input: Pick<ReminderDedupClaim, 'eventId' | 'userId'>,
+): SQL {
+  const s = schema.eventSignups;
+  return sql`(${schema.events.creatorId} = ${input.userId}::int OR EXISTS (
+    SELECT 1 FROM ${s}
+    WHERE ${eq(s.eventId, input.eventId)}
+      AND ${eq(s.userId, input.userId)}
+      AND ${inArray(s.status, [...ACTIVE_SIGNUP_STATUSES])}
+  ))`;
 }

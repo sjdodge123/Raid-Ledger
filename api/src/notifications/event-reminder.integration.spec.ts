@@ -10,7 +10,10 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq, isNull } from 'drizzle-orm';
 import { EventReminderService } from './event-reminder.service';
-import { loadReminderContext } from './event-reminder.helpers';
+import {
+  fetchCandidateEvents,
+  loadReminderContext,
+} from './event-reminder.helpers';
 import type { SignupStatus } from '../drizzle/schema/event-signups';
 import { nonEmpty } from '../common/testing/narrow';
 
@@ -431,6 +434,78 @@ function describeEventReminderPipeline() {
   }
   describe('reminder recipients by signup status', () =>
     describeRecipientStatusFilter());
+
+  // =================================================================
+  // Claim re-checks the recipient at send time (ROK-2293)
+  // =================================================================
+
+  function describeClaimRecheck() {
+    const notificationsFor = (userId: number) =>
+      testApp.db
+        .select()
+        .from(schema.notifications)
+        .where(eq(schema.notifications.userId, userId));
+    const dedupFor = (userId: number) =>
+      testApp.db
+        .select()
+        .from(schema.eventRemindersSent)
+        .where(eq(schema.eventRemindersSent.userId, userId));
+
+    it('a cancel between the recipient query and the claim stops the DM', async () => {
+      const hostId = testApp.seed.adminUser.id;
+      const member = await createUser(testApp, 'midpass-cancel');
+      const event = await createEvent(testApp, hostId, 'Race', 10 * 60_000);
+      await signUpUser(testApp, event.id, member.id);
+      const now = new Date();
+      // The pass loads candidates (and, inside, recipients) before the cancel.
+      const stale = await fetchCandidateEvents(testApp.db, now);
+      const ctx = await loadReminderContext(testApp.db, [event.id], [hostId]);
+      expect(ctx?.signupsByEvent.get(event.id)).toContain(member.id);
+
+      await testApp.db
+        .update(schema.eventSignups)
+        .set({ status: 'declined' })
+        .where(eq(schema.eventSignups.userId, member.id));
+      const claimed = await reminderService.sendReminder(
+        reminderInput(event, member.id, '15min', '15 Minutes', 10),
+      );
+
+      expect(claimed).toBe(false);
+      await reminderService['dispatchReminderWindows'](stale, now, 'UTC');
+      expect(await notificationsFor(member.id)).toHaveLength(0);
+      expect(await dedupFor(member.id)).toHaveLength(0);
+    });
+
+    it('a user who never signed up and is not the host cannot claim', async () => {
+      const stranger = await createUser(testApp, 'stranger');
+      const event = await createEvent(
+        testApp,
+        testApp.seed.adminUser.id,
+        'Closed',
+        10 * 60_000,
+      );
+      const claimed = await reminderService.sendReminder(
+        reminderInput(event, stranger.id, '15min', '15 Minutes', 10),
+      );
+      expect(claimed).toBe(false);
+    });
+
+    it('the host with no signup still gets the reminder DM', async () => {
+      const host = await createUser(testApp, 'host-no-signup');
+      const event = await createEvent(testApp, host.id, 'Hosted', 10 * 60_000);
+      await reminderService['dispatchReminderWindows'](
+        await fetchCandidateEvents(testApp.db, new Date()),
+        new Date(),
+        'UTC',
+      );
+      const types = (await dedupFor(host.id)).map((r) => r.reminderType);
+      expect(types.sort()).toEqual(['15min', '1hour', '24hour']);
+      expect(await notificationsFor(host.id)).toHaveLength(3);
+      expect(event.creatorId).toBe(host.id);
+    });
+  }
+  describe('claim re-checks the recipient (ROK-2293)', () =>
+    describeClaimRecheck());
 
   // =================================================================
   // Role Gap Alerts
