@@ -118,6 +118,16 @@ describe('PollForumStarterSync.syncStarter', () => {
     expect(refreshVoterLines).toHaveBeenCalledTimes(2);
   });
 
+  it('Codex P2: a gone post (stale / unbound hub) ⇒ no voted-line refresh', async () => {
+    const { sync, editStarter, refreshVoterLines } = setup();
+    mocked.thread.mockResolvedValue({ id: 5 } as never);
+    mocked.link.mockResolvedValue(hubLink());
+    editStarter.mockResolvedValueOnce('gone');
+    await sync.syncStarter(7, CARD);
+    expect(editStarter).toHaveBeenCalledWith('hub-post-1', CARD);
+    expect(refreshVoterLines).not.toHaveBeenCalled();
+  });
+
   it('ROK-2295 lane C: no post ⇒ no voted-line refresh', async () => {
     const { sync, refreshVoterLines } = setup();
     await sync.syncStarter(7, CARD);

@@ -59,10 +59,13 @@ export class PollForumStarterSync implements PollForumStarterPort {
   async syncStarter(matchId: number, card: ForumStarterCard): Promise<void> {
     const threadId = await findPollPostThreadId(this.db, matchId);
     if (threadId === null) return;
+    let gone = false;
     try {
-      await this.editStarter(matchId, threadId, card);
+      gone = (await this.editStarter(matchId, threadId, card)) === 'gone';
     } finally {
-      await this.voterLines.refreshVoterLines(matchId, threadId);
+      // Codex P2: a 'gone' post (stale or unbound hub, deleted post) is no
+      // longer ours to drive — its voted lines are left alone too.
+      if (!gone) await this.voterLines.refreshVoterLines(matchId, threadId);
     }
   }
 
@@ -71,14 +74,15 @@ export class PollForumStarterSync implements PollForumStarterPort {
     matchId: number,
     threadId: string,
     card: ForumStarterCard,
-  ): Promise<void> {
+  ): Promise<'edited' | 'gone' | 'locked'> {
     try {
-      await this.editor.editStarter(threadId, card);
+      return await this.editor.editStarter(threadId, card);
     } catch (err) {
       if (!isArchivedError(err)) throw err;
       this.logger.log(
         `Poll ${matchId} post ${threadId} is locked; starter left as is`,
       );
+      return 'locked';
     }
   }
 }
