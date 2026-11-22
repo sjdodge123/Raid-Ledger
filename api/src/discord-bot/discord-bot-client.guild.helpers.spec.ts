@@ -106,9 +106,27 @@ describe('listAllGuildMemberAvatars (ROK-1282, ROK-1714)', () => {
       });
     }
     return {
-      members: { fetch: jest.fn().mockResolvedValue(all) },
+      members: { list: memberList.mockResolvedValue(all), fetch: gatewayFetch },
     } as unknown as Guild;
   }
+
+  /** Resolves empty so a regression fails on the assertion, not a throw. */
+  const gatewayFetch = jest.fn().mockResolvedValue(new Collection());
+  const memberList = jest.fn();
+  beforeEach(() => {
+    gatewayFetch.mockClear();
+    memberList.mockReset();
+  });
+
+  it('pages the REST member list and never sends a gateway op-8 fetch', async () => {
+    const guild = memberGuild([{ id: 'u-1', guildAvatar: null, avatar: 'h' }]);
+
+    const result = await listAllGuildMemberAvatars(guild);
+
+    expect(gatewayFetch).not.toHaveBeenCalled();
+    expect(memberList).toHaveBeenCalledWith({ limit: 1000 });
+    expect(result && [...result.entries()]).toStrictEqual([['u-1', 'h']]);
+  });
 
   it('maps each member id to the GLOBAL user avatar, never the guild avatar', async () => {
     const guild = memberGuild([

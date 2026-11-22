@@ -15,7 +15,10 @@ import {
   findLivePollThread,
   findPollForSync,
 } from '../subject-discussion/poll-discussion.queries';
-import { findLivePlanningPost } from './event-planning-posts.queries';
+import {
+  findLivePlanningPost,
+  markPlanningPostDeleted,
+} from './event-planning-posts.queries';
 import {
   lineupOnPlanningPath,
   pollOnPlanningPath,
@@ -24,8 +27,12 @@ import {
   findThreadLink,
   isCurrentBindingLink,
   isUnsent,
+  markDeleted,
 } from './hub-forum-discord-links.queries';
-import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
+import {
+  type HubForumDiscordOutboundGateway,
+  isGone,
+} from './hub-forum-discord-outbound.discord';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 /** A claimed once-key outlives any subject's end by far. */
@@ -136,7 +143,9 @@ export async function postHubClosingLine(
     return 'closed-post';
   }
   const target: ClosingTarget = { kind: 'hub', threadId };
-  return claimAndSend(deps, target, link.discordThreadId, text, onceKey);
+  const gone = () => markDeleted(deps.db, link.id, new Date());
+  const line = { text, onceKey };
+  return claimAndSend(deps, target, link.discordThreadId, line, gone);
 }
 
 /** S10 registry arm: skips a locked / deleted post or an offline bot. */
@@ -147,36 +156,48 @@ export async function postPlanningClosingLine(
   onceKey: string,
 ): Promise<ClosingOutcome> {
   if (target.closed) return 'closed-post';
-  return claimAndSend(deps, target, target.discordThreadId, text, onceKey);
+  const gone = () =>
+    markPlanningPostDeleted(deps.db, target.postId, new Date());
+  const line = { text, onceKey };
+  return claimAndSend(deps, target, target.discordThreadId, line, gone);
 }
 
-/**
- * Only the caller that claims the once-key posts; a failed send releases
- * the key, logs one warning naming the target and the line, and reports
- * `send-failed` (best-effort, nothing retries it).
- */
-async function claimAndSend(
-  deps: ClosingSendDeps,
-  target: ClosingTarget,
-  discordThreadId: string,
-  text: string,
-  onceKey: string,
-): Promise<ClosingOutcome> {
-  if (!deps.gateway.isOnline()) return 'offline';
-  const key = targetOnceKey(target, onceKey);
-  const claimed = await deps.redis.set(
+/** Claim the once-key; `true` only for the first caller within the TTL. */
+async function claimOnce(deps: ClosingSendDeps, key: string): Promise<boolean> {
+  const set = await deps.redis.set(
     key,
     '1',
     'EX',
     CLOSING_ONCE_TTL_SECONDS,
     'NX',
   );
-  if (claimed === null) return 'already';
+  return set !== null;
+}
+
+/**
+ * Only the caller that claims the once-key posts; a failed send releases
+ * the key, logs one warning naming the target and the line, and reports
+ * `send-failed` (best-effort, nothing retries it). A send that finds the
+ * Discord post gone (deleted while the bot missed the inbound delete) also
+ * marks it deleted via `markGone`, so later lines skip it as `closed-post`.
+ */
+async function claimAndSend(
+  deps: ClosingSendDeps,
+  target: ClosingTarget,
+  discordThreadId: string,
+  line: { text: string; onceKey: string },
+  markGone: () => Promise<void>,
+): Promise<ClosingOutcome> {
+  const { text, onceKey } = line;
+  if (!deps.gateway.isOnline()) return 'offline';
+  const key = targetOnceKey(target, onceKey);
+  if (!(await claimOnce(deps, key))) return 'already';
   try {
     await deps.gateway.mention(discordThreadId, text, []);
     return 'posted';
   } catch (err) {
     await deps.redis.del(key);
+    if (isGone(err)) await markGone();
     const why = err instanceof Error ? err.message : String(err);
     deps.logger.warn(
       `Closing line ${onceKey} for ${targetLabel(target)} lost (not retried): ${why}`,

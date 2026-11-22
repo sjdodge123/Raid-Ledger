@@ -263,9 +263,11 @@ describe('sign-in reminders — other send errors', () => {
     expect(await reminderRow('7801')).toMatchObject({
       sentCount: 0,
       lastSentAt: null,
-      lastFailureAt: null,
+      lastFailureCode: null,
       claimedAt: null,
     });
+    // Stamped for ordering only (retry sorts last); not counted, no cadence.
+    expect((await reminderRow('7801'))?.lastFailureAt).not.toBeNull();
     expect(await reminderRow('7802')).toMatchObject({
       sentCount: 1,
       lastFailureAt: null,

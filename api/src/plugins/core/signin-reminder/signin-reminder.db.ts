@@ -7,7 +7,9 @@
  * A claim older than `SIGNIN_REMINDER_STALE_CLAIM_MINUTES` (process died
  * mid-send) is claimable again. A failed DM with a Discord error code counts
  * as a send, so a closed DM is retried at most once per cadence and stops at
- * the cap; a code-less error only releases the claim (retried next tick).
+ * the cap; a code-less error only releases the claim (retried next tick)
+ * and stamps `last_failure_at`, which sorts that retry behind every other
+ * due row so a member whose DM keeps failing cannot starve the batch.
  */
 import { and, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -61,6 +63,22 @@ function noAccountRow(): SQL {
           WHERE u.discord_id IN (r.discord_id, 'unlinked:' || r.discord_id))`;
 }
 
+/**
+ * True while the latest attempt was a code-less failure still awaiting its
+ * retry: the release stamps `last_failure_at` alone, whereas a counted
+ * failure stamps it together with `last_sent_at` (same `now()`).
+ */
+function retryPending(): SQL {
+  return sql`(r.last_failure_at IS NOT NULL
+          AND (r.last_sent_at IS NULL OR r.last_failure_at > r.last_sent_at))`;
+}
+
+/** Never reminded first; code-less retries last, oldest failure first. */
+function claimOrder(): SQL {
+  return sql`ORDER BY ${retryPending()} ASC, r.last_sent_at ASC NULLS FIRST,
+        r.last_failure_at ASC NULLS FIRST, r.discord_id`;
+}
+
 /** Make sure every candidate has a row (new ones start at count 0). */
 export async function ensureSigninReminderRows(
   db: SigninReminderDb,
@@ -77,7 +95,8 @@ export async function ensureSigninReminderRows(
  * Claim up to `limit` due rows among `candidateIds`. Due = not opted out,
  * under the cap, last reminder (or failed attempt) at least `weeks` ago or
  * never, no live claim, and no Raid Ledger user row for that Discord id
- * (`discord_id` or `unlinked:<id>`). Never-reminded people go first.
+ * (`discord_id` or `unlinked:<id>`). Never-reminded people go first;
+ * code-less retries go last, oldest failure first.
  */
 export async function claimDueSigninReminders(
   db: SigninReminderDb,
@@ -102,7 +121,7 @@ export async function claimDueSigninReminders(
         AND (r.claimed_at IS NULL
           OR r.claimed_at < now() - make_interval(mins => ${SIGNIN_REMINDER_STALE_CLAIM_MINUTES}))
         ${input.includeAccountHolders ? sql`` : noAccountRow()}
-      ORDER BY r.last_sent_at ASC NULLS FIRST, r.discord_id
+      ${claimOrder()}
       LIMIT ${limit}
       FOR UPDATE OF r SKIP LOCKED
     )
@@ -149,7 +168,9 @@ export async function recordSigninReminderFailure(
 /**
  * Drop a claim WITHOUT counting it (a code-less error such as the bot
  * disconnecting mid-pass): the person keeps their reminder and the next tick
- * retries.
+ * retries. `last_failure_at` is stamped (cadence and count untouched) so the
+ * retry sorts behind every other due row; the code is cleared because this
+ * failure had none — an older 50007 must not re-block a person already due.
  */
 export async function releaseSigninReminderClaim(
   db: SigninReminderDb,
@@ -157,7 +178,7 @@ export async function releaseSigninReminderClaim(
 ): Promise<void> {
   await db
     .update(discordSigninReminders)
-    .set({ claimedAt: null })
+    .set({ claimedAt: null, lastFailureAt: sql`now()`, lastFailureCode: null })
     .where(eq(discordSigninReminders.discordId, discordId));
 }
 

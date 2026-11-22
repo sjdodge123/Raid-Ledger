@@ -18,6 +18,7 @@ import {
   type PostsCtx,
 } from '../../posts/hub-posts.test-fixtures';
 import { HubForumDiscordInboundIngest } from './hub-forum-discord-inbound.ingest';
+import { markDeleted } from './hub-forum-discord-links.queries';
 import { HubForumDiscordNotices } from './hub-forum-discord-notice';
 import {
   stubOutbound,
@@ -261,6 +262,30 @@ describe('ROK-2208 inbound Discord → RL', () => {
       deletedAs: 'moderator',
       deletedBy: null,
     });
+  });
+
+  it('codex P2: a post stamped by an outbound 404 is still removed by the gateway delete', async () => {
+    const { channelId } = await boundHub();
+    const { thread } = await importPost(channelId);
+    const l = schema.hubForumDiscordLinks;
+    const linkOf = async () =>
+      nonEmpty(
+        await ctx.testApp.db
+          .select()
+          .from(l)
+          .where(eq(l.discordMessageId, thread.id)),
+        'post link',
+      )[0];
+    const stampedAt = new Date(Date.now() - 60_000);
+    await markDeleted(ctx.testApp.db, (await linkOf()).id, stampedAt);
+    expect(await ingest.onThreadDelete(thread)).toBe('deleted');
+    expect(await threadRow(thread.id)).toMatchObject({
+      deletedAs: 'moderator',
+      deletedBy: null,
+    });
+    expect((await linkOf()).discordDeletedAt).toEqual(stampedAt);
+    // The RL thread is now removed: a repeat delete event skips.
+    expect(await ingest.onThreadDelete(thread)).toBe('skipped');
   });
 
   it('AC7/D5: our webhook, our bot and already-linked messages are echoes', async () => {
