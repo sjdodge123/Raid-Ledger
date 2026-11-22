@@ -28,6 +28,7 @@ import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
+import { clearedBySignupTo } from './lfg-convert.helpers';
 import { tonightExpiresAt } from './lfg-tonight.helpers';
 import { agedBoardPostGameIds } from './lfg-post-age.helpers';
 import {
@@ -349,8 +350,9 @@ export async function convertHolderIntent(
 /**
  * The caller's standing to convert this game's group RIGHT NOW.
  *
- *   - `'member'` — they hold a live active intent on the game, so they may
- *     convert the current live group.
+ *   - `'member'` — they hold a live active intent on the game, or (event
+ *     targets only) an unexpired intent that their signup on that event
+ *     cleared (TDB:967), so they may convert the current live group.
  *   - `'retry'`  — their only qualifying row already converted into *this
  *     exact target*: a retry of their own call. It must stay idempotent rather
  *     than 403, but it grants NO authority over whoever is live now — otherwise
@@ -376,6 +378,13 @@ export async function resolveConvertRole(
     gt(schema.lfgIntents.expiresAt, new Date()),
   );
   if (await hasIntentRow(db, userId, gameId, live)) return 'member';
+  // TDB:967 — signing up to the target event cleared the caller's intent.
+  const cleared =
+    target.eventId !== undefined &&
+    clearedBySignupTo(db, target.eventId, new Date());
+  if (cleared && (await hasIntentRow(db, userId, gameId, cleared))) {
+    return 'member';
+  }
   const retried = and(
     eq(schema.lfgIntents.status, 'converted'),
     convertedToTarget(target),

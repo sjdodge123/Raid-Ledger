@@ -50,7 +50,10 @@ import {
 import { readGroupDetail } from './lfg-group-detail.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
-import { resolveTargetGameId } from './lfg-convert.helpers';
+import {
+  convertSignedUpCaller,
+  resolveTargetGameId,
+} from './lfg-convert.helpers';
 import {
   clearIntent,
   convertGroup,
@@ -299,7 +302,9 @@ export class LfgService {
     // live intent now) gets the idempotent answer and touches nobody: the
     // live rows belong to a LATER group they are not part of.
     if (role === 'retry') return { converted: 0 };
-    const converted = await convertGroup(this.db, gameId, target);
+    const converted =
+      (await convertGroup(this.db, gameId, target)) +
+      (await convertSignedUpCaller(this.db, gameId, userId, target));
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
     // nobody changed.
