@@ -9,7 +9,8 @@
  *      `rl-smoke-forum-<runId>`; hub A binds it, hub B joins it — the forum
  *      gains a tag per hub and Require tags.
  *   3. unbind: B leaves with deleteForum (shared + not bot-made ⇒ the forum
- *      stays, B's tag stays), then A leaves.
+ *      stays, B's tag stays), then A leaves — the last hub out, so
+ *      (ROK-2296) the bot's webhook on the forum is deleted.
  * Every channel is found by the id the API returned or the one this test
  * made — never by position. Teardown deletes both forums and both bindings.
  */
@@ -118,7 +119,7 @@ async function expectWebhookDeleted(webhookId: string): Promise<void> {
     }, TIMEOUT_MS);
   } catch {
     fail(
-      `ROK-2296: unlink with deleteForum must delete the bot's webhook ${webhookId} (no WEBHOOK_DELETE audit entry)`,
+      `ROK-2296: the last unbind must delete the bot's webhook ${webhookId} (no WEBHOOK_DELETE audit entry)`,
       lastErr === null ? "no entry" : String(lastErr),
     );
   }
@@ -185,7 +186,13 @@ async function unbindPhase(
   if (afterB.binding !== null) fail("hub B: expected unbound", afterB);
   const a = await ctx.api.get<Status>(route(p.a));
   if (!a.binding || a.binding.shared) fail("hub A: expected bound, no longer shared", a);
+  // ROK-2296: the last hub out frees the bot's webhook on an unmanaged forum.
+  const probe = await ctx.api.get<TokenProbe>(
+    `/admin/test/hub-forum-discord/${String(p.a)}/webhook-token`,
+  );
+  if (!probe.webhookId) fail("hub A: expected the shared forum's webhook", probe);
   await ctx.api.delete(route(p.a));
+  await expectWebhookDeleted(probe.webhookId);
   const forum = await fetchForum(p.forumId);
   if (!forum || !tagNames(forum).includes(p.nameB)) {
     fail("an unmanaged forum (and B's tag) must survive unbind", describe(forum));
