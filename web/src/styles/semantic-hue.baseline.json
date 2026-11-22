@@ -33,7 +33,6 @@
   "components/events/lfg-summary-banner.tsx": 6,
   "components/events/mobile-event-card.tsx": 1,
   "components/events/shared/roster-section.tsx": 2,
-  "components/events/signup-confirmation-modal.tsx": 2,
   "components/events/signup-role-picker.tsx": 6,
   "components/features/game-time/GameTimePanel.tsx": 3,
   "components/features/game-time/GameTimeWidget.tsx": 2,
