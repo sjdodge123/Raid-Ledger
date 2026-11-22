@@ -12,15 +12,13 @@
  * embed-affecting change here runs the companion-bot smoke suite on the PR.
  */
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import {
-  DiscordEmbedFactory,
-  type EmbedContext,
-} from '../../discord-bot/services/discord-embed.factory';
+import { DiscordEmbedFactory } from '../../discord-bot/services/discord-embed.factory';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../../discord-bot/services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -38,28 +36,30 @@ import {
   releaseEmbedClaim,
 } from './scheduling-poll-post.helpers';
 import { resolveLineupVisibility } from '../lineup-notification-routing.helpers';
-import { pollStatusFromMatch } from './scheduling-poll-embed.helpers';
-import { findScheduleSlots } from './scheduling-query.helpers';
-import {
-  loadEmbedData,
-  loadLineupLifecycle,
-  loadLockedInTime,
-  type EmbedDataInput,
-} from './scheduling-poll-embed-data.helpers';
 import { SchedulingPollEmbedQueueService } from './scheduling-poll-embed.queue';
 import { LineupsGateway } from '../lineups.gateway';
-import type { SchedulingPollEmbedData } from '../../discord-bot/services/discord-embed-scheduling.types';
+import {
+  SchedulingPollForumCard,
+  pollStarterCard,
+} from './scheduling-poll-forum-card';
+import {
+  POLL_FORUM_STARTER_PORT,
+  type PollForumStarterPort,
+} from './poll-forum-starter.port';
+import type { ForumStarterCard } from '../../discord-bot/services/event-embed-message.editor';
 
 type Db = PostgresJsDatabase<typeof schema>;
-type MatchRow = typeof schema.communityLineupMatches.$inferSelect;
 
 @Injectable()
 export class SchedulingPollEmbedService {
   private readonly logger = new Logger(SchedulingPollEmbedService.name);
+  /** ROK-2295: one render path for the channel card and the forum starter. */
+  private readonly card: SchedulingPollForumCard;
+  private starterPort: PollForumStarterPort | undefined;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
-    private readonly embedFactory: DiscordEmbedFactory,
+    embedFactory: DiscordEmbedFactory,
     private readonly clientService: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
@@ -70,7 +70,11 @@ export class SchedulingPollEmbedService {
     /** ROK-1551: tells open poll pages to refetch. */
     @Inject(forwardRef(() => LineupsGateway))
     private readonly lineupsGateway: LineupsGateway,
-  ) {}
+    /** ROK-2295: resolves the forum module's poll-starter port lazily. */
+    private readonly moduleRef?: ModuleRef,
+  ) {
+    this.card = new SchedulingPollForumCard(db, embedFactory, settingsService);
+  }
 
   /**
    * A community-lineup match entered the scheduling phase (ROK-1473).
@@ -253,12 +257,8 @@ export class SchedulingPollEmbedService {
     gameId: number,
     channelId: string,
   ): Promise<string | null> {
-    const data = await this.buildEmbedData({ matchId, lineupId, gameId });
-    if (!data) return null;
-    const { embed } = this.embedFactory.buildSchedulingPollEmbed(
-      data,
-      await this.buildContext(),
-    );
+    const embed = await this.card.render({ matchId, lineupId, gameId });
+    if (!embed) return null;
     const msg = await this.clientService.sendEmbed(channelId, embed);
     return msg.id;
   }
@@ -271,6 +271,10 @@ export class SchedulingPollEmbedService {
    * lineups have none). ROK-1683: `fireUpdateEmbed` already nudged; this is
    * the trailing nudge, and the only one on the initial-post path.
    *
+   * ROK-2295: the poll's forum post (hub or non-hub) opens with the same
+   * embed, and a poll with a post often has NO channel card — so the starter
+   * edit runs before that early return, from the one render.
+   *
    * @param matchId - The poll's match id.
    * @throws Any render / `editEmbed` failure — the processor retries.
    */
@@ -282,13 +286,10 @@ export class SchedulingPollEmbedService {
       .limit(1);
     if (!match) return;
     this.emitScheduleChanged(match.lineupId, matchId);
+    const embed = await this.card.renderMatch(match);
+    if (!embed) return;
+    await this.syncForumStarter(matchId, pollStarterCard(embed));
     if (!match.embedMessageId || !match.embedChannelId) return;
-    const data = await this.loadSyncData(match);
-    if (!data) return;
-    const { embed } = this.embedFactory.buildSchedulingPollEmbed(
-      data,
-      await this.buildContext(),
-    );
     await this.clientService.editEmbed(
       match.embedChannelId,
       match.embedMessageId,
@@ -296,42 +297,33 @@ export class SchedulingPollEmbedService {
     );
   }
 
-  /**
-   * Lifecycle-aware render data for an existing card.
-   *
-   * ROK-1461: the match row carries the lifecycle the embed renders.
-   * ROK-1545 (review F2): the page reads the parent lineup's status +
-   * deadline, so the embed must too — ONE helper, the same inputs, one answer.
-   */
-  private async loadSyncData(
-    match: MatchRow,
-  ): Promise<SchedulingPollEmbedData | null> {
-    const [lineup, slots] = await Promise.all([
-      loadLineupLifecycle(this.db, match.lineupId),
-      findScheduleSlots(this.db, match.id),
-    ]);
-    const status = pollStatusFromMatch({
-      matchStatus: match.status,
-      lineupStatus: lineup?.status ?? null,
-      phaseDeadline: lineup?.phaseDeadline ?? null,
-      linkedEventId: match.linkedEventId,
-      // ROK-1607: a card whose every time has passed is not open, however
-      // much of the deadline is left.
-      slotTimes: slots.map((s) => s.proposedTime),
-    });
-    return this.buildEmbedData({
-      matchId: match.id,
-      lineupId: match.lineupId,
-      gameId: match.gameId,
-      status,
-      lockedInTime: await loadLockedInTime(
-        this.db,
-        match.linkedEventId,
-        status,
-      ),
-      deadline: lineup?.phaseDeadline?.toISOString() ?? null,
-      cancelReason: match.cancellationReason ?? null,
-    });
+  /** ROK-2295: best effort — a starter failure never fails the card sync. */
+  private async syncForumStarter(
+    matchId: number,
+    card: ForumStarterCard,
+  ): Promise<void> {
+    try {
+      await this.forumStarterPort()?.syncStarter(matchId, card);
+    } catch (err) {
+      this.logger.warn(
+        `Poll ${matchId} forum starter edit failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  /** The forum module's port; null when it is not bound (e.g. a slim app). */
+  private forumStarterPort(): PollForumStarterPort | null {
+    try {
+      this.starterPort ??= this.moduleRef?.get<PollForumStarterPort>(
+        POLL_FORUM_STARTER_PORT,
+        { strict: false },
+      );
+    } catch {
+      return null;
+    }
+    return this.starterPort ?? null;
   }
 
   /** Socket nudge for open poll pages; a socket failure never fails the sync. */
@@ -345,34 +337,6 @@ export class SchedulingPollEmbedService {
         }`,
       );
     }
-  }
-
-  /**
-   * Shared embed context from settings (ROK-1461, operator walk 2026-09-02).
-   *
-   * The poll used to pass `clientUrl` ALONE, so the chrome fell back to
-   * `DEFAULT_COMMUNITY_NAME` and the poll footer read `Raid Ledger · …` while
-   * the lineup card next to it read the configured community name. Mirrors
-   * `embed-sync.processor.ts::buildContext` — same branding source, so the two
-   * families cannot drift apart again.
-   *
-   * @returns Community name, web origin and timezone for the poll embed.
-   */
-  private async buildContext(): Promise<EmbedContext> {
-    const [branding, clientUrl, timezone] = await Promise.all([
-      this.settingsService.getBranding(),
-      this.settingsService.getClientUrl(),
-      this.settingsService.getDefaultTimezone(),
-    ]);
-    return { communityName: branding.communityName, clientUrl, timezone };
-  }
-
-  /** Build embed data from current DB state. */
-  private async buildEmbedData(
-    input: Omit<EmbedDataInput, 'clientUrl'>,
-  ): Promise<SchedulingPollEmbedData | null> {
-    const clientUrl = await this.settingsService.getClientUrl();
-    return loadEmbedData(this.db, { ...input, clientUrl });
   }
 
   /**
