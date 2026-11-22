@@ -92,6 +92,7 @@ let mockCharactersService: {
   findOne: jest.Mock;
 };
 let mockEmbedSyncQueue: { enqueue: jest.Mock };
+let mockSettingsService: { getTrustedClientUrl: jest.Mock };
 let mockEmojiService: {
   getClassEmojiComponent: jest.Mock;
   getRoleEmojiComponent: jest.Mock;
@@ -136,6 +137,9 @@ function createRescheduleMocks() {
     findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Arthas' }),
   };
   mockEmbedSyncQueue = { enqueue: jest.fn().mockResolvedValue(undefined) };
+  mockSettingsService = {
+    getTrustedClientUrl: jest.fn().mockResolvedValue(null),
+  };
   mockEmojiService = {
     getClassEmojiComponent: jest.fn().mockReturnValue(undefined),
     getRoleEmojiComponent: jest.fn().mockReturnValue(undefined),
@@ -158,7 +162,7 @@ function buildRescheduleProviders() {
     { provide: EventEmitter2, useValue: { emit: jest.fn() } },
     {
       provide: SettingsService,
-      useValue: { getTrustedClientUrl: jest.fn().mockResolvedValue(null) },
+      useValue: mockSettingsService,
     },
   ];
 }
@@ -484,6 +488,44 @@ function linkedConfirmMultiCharTest() {
   });
 }
 
+function linkedConfirmImportLinkTest() {
+  it('puts the import Link row under the re-confirm character list (ROK-2294)', async () => {
+    const eventWithGame = { ...mockEvent, gameId: 5, slotConfig: null };
+    mockDb.limit.mockResolvedValueOnce([eventWithGame]);
+    mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+    mockDb.limit.mockResolvedValueOnce([{ id: 5 }]);
+    mockDb.limit.mockResolvedValueOnce([{ id: 5, name: 'WoW' }]);
+    mockCharactersService.findAllForUser.mockResolvedValue({
+      data: [
+        { id: 'char-1', name: 'Arthas', isMain: true, class: 'Paladin' },
+        { id: 'char-2', name: 'Sylvanas', isMain: false, class: 'Hunter' },
+      ],
+    });
+    mockSettingsService.getTrustedClientUrl.mockResolvedValue(
+      'https://raid.example',
+    );
+    const interaction = makeButtonInteraction(
+      `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
+    );
+    await listener['handleButtonInteraction'](interaction);
+    const reply = interaction.editReply.mock.calls.at(-1)?.[0] as
+      { components?: Array<{ toJSON(): unknown }> } | undefined;
+    const rows = reply?.components?.map((row) => row.toJSON()) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 5,
+          label: "Don't see your character? Import it",
+          url: 'https://raid.example/profile/gaming/characters?game=5',
+        },
+      ],
+    });
+  });
+}
+
 function linkedConfirmMmoTests() {
   const linkedUser = { id: 5 };
 
@@ -539,6 +581,7 @@ function linkedConfirmTests() {
   linkedConfirmAutoSelectTest();
   linkedConfirmMultiCharTest();
   linkedConfirmMmoTests();
+  linkedConfirmImportLinkTest();
 }
 
 /**

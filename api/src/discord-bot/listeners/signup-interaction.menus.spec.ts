@@ -460,6 +460,77 @@ function charSelectMmoTests() {
   });
 }
 
+function rowsOf(interaction: { editReply: jest.Mock }): unknown[] {
+  const reply = interaction.editReply.mock.calls.at(-1)?.[0] as
+    { components?: Array<{ toJSON(): unknown }> } | undefined;
+  return reply?.components?.map((row) => row.toJSON()) ?? [];
+}
+
+const IMPORT_ROW_GAME_1 = {
+  type: 1,
+  components: [
+    {
+      type: 2,
+      style: 5,
+      label: "Don't see your character? Import it",
+      url: 'https://raid.example/profile/gaming/characters?game=1',
+    },
+  ],
+};
+
+function charSelectImportLinkTests() {
+  const mmoGame = { id: 1, hasRoles: true, hasSpecs: true };
+  const mmoSlots = { type: 'mmo', tank: 2, healer: 4, dps: 14 };
+
+  it('offers the import Link row under the role select for a zero-character MMO member (ROK-2294)', async () => {
+    const userId = 'user-zero-char-mmo';
+    const event = { id: 812, title: 'Raid', gameId: 1, slotConfig: mmoSlots };
+    setupLinkedUserAndEvent(mocks, userId, event);
+    setupGameRegistryQuery(mocks, mmoGame);
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
+      data: [],
+      meta: { total: 0 },
+    });
+    process.env.CLIENT_URL = 'https://raid.example';
+
+    const interaction = makeButtonInteraction(
+      `${SIGNUP_BUTTON_IDS.SIGNUP}:812`,
+      userId,
+    );
+    await mocks.listener.handleButtonInteraction(interaction);
+
+    expect(mocks.mockSignupsService.signup).not.toHaveBeenCalled();
+    const rows = rowsOf(interaction);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual(IMPORT_ROW_GAME_1);
+  });
+
+  it('puts the import Link row under a multi-character list (ROK-2294)', async () => {
+    const userId = 'user-multi-char-import';
+    const event = { id: 813, title: 'Raid', gameId: 1, slotConfig: mmoSlots };
+    setupLinkedUserAndEvent(mocks, userId, event);
+    setupGameRegistryQuery(mocks, mmoGame);
+    mocks.mockCharactersService.findAllForUser.mockResolvedValueOnce({
+      data: [
+        { id: 'c-1', name: 'Thrall', class: null, spec: null, isMain: true },
+        { id: 'c-2', name: 'Jaina', class: null, spec: null, isMain: false },
+      ],
+      meta: { total: 2 },
+    });
+    process.env.CLIENT_URL = 'https://raid.example';
+
+    const interaction = makeButtonInteraction(
+      `${SIGNUP_BUTTON_IDS.SIGNUP}:813`,
+      userId,
+    );
+    await mocks.listener.handleButtonInteraction(interaction);
+
+    const rows = rowsOf(interaction);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual(IMPORT_ROW_GAME_1);
+  });
+}
+
 function charSelectMenuTests() {
   it('should sign up with selected character from dropdown', async () => {
     const userId = 'user-charselect-menu-1';
@@ -607,6 +678,7 @@ describe('SignupInteractionListener — menus', () => {
     charSelectSingleTests();
     charSelectNudgeTests();
     charSelectMmoTests();
+    charSelectImportLinkTests();
   });
 
   describe('handleSelectMenuInteraction — character selection (ROK-138)', () => {
