@@ -18,12 +18,12 @@ import { eq, or } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { endMarkersInvolvingUser } from '../auth/impersonation/impersonation-markers.db';
 import { Logger } from '@nestjs/common';
-import { deleteUserScreenshotsBestEffort } from '../feedback/feedback-screenshot-user.helpers';
-import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
 import {
-  deleteUserLineups,
-  lockUserForWipe,
-} from './users-delete-lineups.helpers';
+  deleteUserScreenshotsBestEffort,
+  selectUserScreenshotPaths,
+} from '../feedback/feedback-screenshot-user.helpers';
+import { releaseValheimClaimsForDeletedUser } from './users-delete-valheim.helpers';
+import { deleteUserLineups } from './users-delete-lineups.helpers';
 import {
   WIPE_BEARER_SECRETS,
   type WipeTarget,
@@ -442,7 +442,7 @@ export async function deleteUserTransaction(
   reassignToUserId: number,
 ): Promise<void> {
   const shots = await db.transaction(async (tx) => {
-    const paths = await lockUserForWipe(tx, userId);
+    const paths = await selectUserScreenshotPaths(tx, userId);
     await wipeUserData(tx, userId, reassignToUserId);
     await releaseValheimClaimsForDeletedUser(tx, userId);
     await tx.delete(schema.users).where(eq(schema.users.id, userId));

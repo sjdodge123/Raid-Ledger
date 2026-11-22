@@ -8,17 +8,10 @@
 import { randomUUID } from 'crypto';
 import { inArray, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
-import {
-  truncateAllTables,
-  waitFor,
-} from '../common/testing/integration-helpers';
+import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { deleteUserTransaction } from './users-delete.helpers';
-import {
-  deleteUserLineups,
-  lockUserForWipe,
-} from './users-delete-lineups.helpers';
-import { lockLineupDiscussion } from '../guilds/forum/subject-discussion/lineup-discussion.queries';
+import { deleteUserLineups } from './users-delete-lineups.helpers';
 import { nonEmpty } from '../common/testing/narrow';
 import type { DbOrTx } from '../guilds/forum/event-discussion/event-discussion.queries';
 
@@ -197,76 +190,5 @@ describe('deleteUserLineups — discussion advisory locks', () => {
     expect(held).toEqual(
       [`lineup-discussion:${lineupId}`, `poll-discussion:${matchId}`].sort(),
     );
-  });
-});
-
-/** A promise plus the function that settles it. */
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((r) => {
-    resolve = r;
-  });
-  return { promise, resolve };
-}
-
-/** Sessions WAITING (not granted) on the lineup's discussion advisory lock. */
-async function lineupLockWaiters(lineupId: number): Promise<number> {
-  const rows = await testApp.db.execute<{ n: number }>(sql`
-    SELECT count(*)::int AS n FROM pg_locks
-    WHERE locktype = 'advisory' AND NOT granted AND objsubid = 2
-      AND objid = ${lineupId}
-      AND classid::bigint = (hashtext('lineup-discussion')::bigint & 4294967295)`);
-  return rows[0]?.n ?? 0;
-}
-
-/** Whether another session could lock the user row right now (NOWAIT). */
-async function userRowLockable(userId: number): Promise<boolean> {
-  try {
-    await testApp.db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT id FROM users WHERE id = ${userId} FOR UPDATE NOWAIT`,
-      );
-    });
-    return true;
-  } catch (err: unknown) {
-    if (err instanceof Error && 'code' in err && err.code === '55P03')
-      return false;
-    throw err;
-  }
-}
-
-describe('lockUserForWipe — lock order (Codex P2 deadlock)', () => {
-  it('takes the discussion advisory locks BEFORE it locks the user row', async () => {
-    const [targetId, guildId] = [
-      await seedUser('order-owner'),
-      await seedGuild(),
-    ];
-    const lineupId = await seedLineup(targetId, guildId);
-    const held = deferred();
-    const gate = deferred();
-    // A reconciler mid-sync: holds the lineup's discussion lock.
-    const reconciler = testApp.db.transaction(async (tx) => {
-      await lockLineupDiscussion(tx, lineupId);
-      held.resolve();
-      await gate.promise;
-    });
-    await held.promise;
-    const wipe = testApp.db.transaction((tx) => lockUserForWipe(tx, targetId));
-    let lockable: boolean;
-    try {
-      await waitFor(async () => {
-        expect(await lineupLockWaiters(lineupId)).toBe(1);
-      }, 10_000);
-      lockable = await userRowLockable(targetId);
-    } finally {
-      gate.resolve();
-      await reconciler;
-      await wipe;
-    }
-    // Wrong order = the wipe already holds the user row while it waits on the
-    // reconciler, whose thread INSERT then waits on that row → deadlock.
-    expect({ userRowLockedWhileWaitingOnDiscussionLock: !lockable }).toEqual({
-      userRowLockedWhileWaitingOnDiscussionLock: false,
-    });
   });
 });
