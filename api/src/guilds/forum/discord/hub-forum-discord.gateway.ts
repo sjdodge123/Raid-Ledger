@@ -223,15 +223,29 @@ export class HubForumDiscordGateway {
   async deleteForum(channelId: string): Promise<void> {
     try {
       const forum = await this.requireForum(channelId);
-      await this.deleteOwnWebhooks(forum);
+      await this.deleteHooksOn(forum);
       await forum.delete(REASON);
     } catch (err) {
       this.logger.warn(`Could not delete forum ${channelId}: ${describe(err)}`);
     }
   }
 
+  /**
+   * ROK-2296: the last hub left this channel — delete the bot's webhooks on
+   * it (nothing else posts through them). Best-effort; never throws.
+   */
+  async deleteOwnWebhooks(channelId: string): Promise<void> {
+    try {
+      await this.deleteHooksOn(await this.requireForum(channelId));
+    } catch (err) {
+      this.logger.warn(
+        `Could not clear webhooks on ${channelId}: ${describe(err)}`,
+      );
+    }
+  }
+
   /** ROK-2296: delete every webhook this bot owns on `forum`; never throws. */
-  private async deleteOwnWebhooks(forum: ForumChannel): Promise<void> {
+  private async deleteHooksOn(forum: ForumChannel): Promise<void> {
     const hooks = await forum.fetchWebhooks().catch((err: unknown) => {
       this.logger.warn(
         `Could not list webhooks on ${forum.id}: ${describe(err)}`,

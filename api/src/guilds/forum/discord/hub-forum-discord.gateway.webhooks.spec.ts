@@ -55,7 +55,7 @@ function setup(hooks: FakeHook[]) {
   const gw = new HubForumDiscordGateway(
     client as unknown as DiscordBotClientService,
   );
-  return { gw, forum, calls };
+  return { gw, forum, guild, calls };
 }
 
 describe('ROK-2296 deleteForum — the bot clears its own webhooks first', () => {
@@ -116,5 +116,32 @@ describe('ROK-2296 ensureWebhook — reuse before create', () => {
       name: 'Raid Ledger',
       reason: expect.any(String),
     });
+  });
+});
+
+describe('ROK-2296 deleteOwnWebhooks — last-unbind cleanup is best-effort', () => {
+  it('deletes the bot-owned webhooks and skips foreign ones', async () => {
+    const mine = hook('h-mine', BOT_ID);
+    const foreign = hook('h-foreign', 'someone-else');
+    const t = setup([mine, foreign]);
+    await t.gw.deleteOwnWebhooks('c1');
+    expect(mine.delete).toHaveBeenCalledTimes(1);
+    expect(foreign.delete).not.toHaveBeenCalled();
+    expect(t.forum.delete).not.toHaveBeenCalled();
+  });
+
+  it('resolves (never blocks the unbind) when the forum is unreachable', async () => {
+    const t = setup([]);
+    t.guild.channels.fetch.mockRejectedValueOnce(new Error('ECONNRESET'));
+    await expect(t.gw.deleteOwnWebhooks('c1')).resolves.toBeUndefined();
+  });
+
+  it('keeps going past a webhook Discord refuses to delete', async () => {
+    const broken = hook('h-broken', BOT_ID);
+    const next = hook('h-next', BOT_ID);
+    const t = setup([broken, next]);
+    broken.delete.mockRejectedValueOnce(new Error('50013 Missing Permissions'));
+    await expect(t.gw.deleteOwnWebhooks('c1')).resolves.toBeUndefined();
+    expect(next.delete).toHaveBeenCalledTimes(1);
   });
 });
