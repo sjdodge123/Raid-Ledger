@@ -16,10 +16,12 @@ Date: 2026-11-22. Base: `origin/main` @ `9de1e02c4`. Run on fleet slot 2 (6 vCPU
   +1.56M instantiations and +14.6 s of check time. That is half of the full program's check time
   and a third of its memory.
 - **Recommendation:** do not spend a story rewriting Drizzle or Zod typings for memory. If the
-  aim is lower typecheck or lint memory, split the program: app code and specs checked as separate
-  programs, or lint run per program. The estimated saving is a peak of about 2.9 GB per process
-  instead of 4.4 GB. Each type-level fix in the table below saves under 1 s of check time and an
-  unmeasured, probably small, amount of memory.
+  aim is lower typecheck or lint memory, the only candidate is a project-reference split: specs
+  check against the app's emitted declarations instead of re-checking app source. Its peak is
+  **unmeasured**. The app-only program peaks at 2.9 GB, but a spec program that imports app
+  source (two plain sequential `tsc` runs) still loads app + specs and peaks near the full 4.4 GB,
+  so that variant saves nothing. Each type-level fix in the table below saves under 1 s of check
+  time and an unmeasured, probably small, amount of memory.
 
 ## Method
 
@@ -137,7 +139,7 @@ These add a little to lib parse, nothing material.
 
 | Option | Estimated saving | Risk |
 |---|---|---|
-| **A. Separate programs for app and specs** (CI typecheck `tsconfig.build.json` + a `tsconfig.spec.json` that references the app through `composite`/project references, or two sequential `tsc` runs; lint run per program) | Peak per process about 2.9 GB instead of 4.4 GB (−1.5 GB, −34%). Wall time stays about the same when sequential and drops when parallel | Medium. Project references need `composite` + declaration emit for the app, which is a sizeable tsconfig change. The simpler "two sequential `tsc` runs" re-checks app code inside the spec program, so it saves **peak** memory only, not total time. Lint's `projectService` needs an explicit per-glob `project` so it doesn't fall back to the full program |
+| **A. Project-reference split** (CI typecheck `tsconfig.build.json` with `composite` + declaration emit; a `tsconfig.spec.json` that references it, so specs check against `.d.ts`; lint run per program) | Unmeasured. The app program peaks at 2.9 GB; the spec program's peak depends on how much cheaper the declarations are than app source. Two plain sequential `tsc` runs do **not** help: specs import app source, so the spec program still holds app + specs (≈4.4 GB) | Medium. `composite` + declaration emit for the app is a sizeable tsconfig change. Lint's `projectService` needs an explicit per-glob `project` so it doesn't fall back to the full program |
 | B. Drop `{ schema }` from `drizzle()` and the `typeof schema` generic (the relational API is used in only 7 non-spec files) | Under 1 s check (the 426 + 374 + 194 ms spans, paid once); memory unmeasured, estimated in the tens of MB | High churn: 1,230 files name the db type, and the 7 `db.query.*` callers must be rewritten to the select API. Not worth it for the saving |
 | C. Type the big WoW JSON imports (`boss-loot-data.json` 2.3 MB, `dungeon-quest-data.json` 296 KB) through a `.d.ts` or a `readFileSync` + Zod parse instead of `resolveJsonModule` literal inference | About 0.55 s check plus the literal types for 81k lines (likely the largest single memory item of the three type-level options; unmeasured) | Low to medium. Runtime loading changes and the data needs a schema. Specs that import them change too |
 | D. Annotate ioredis connections as `Redis` with an explicit type and avoid generic variance (`queue.module.ts:25`) | About 0.4 s, paid once | Low, but negligible gain |
@@ -146,8 +148,9 @@ These add a little to lib parse, nothing material.
 ## Suggested follow-up stories (not filed)
 
 1. **`perf: split the api typecheck into app and spec programs`** (option A). Start with a measurement
-   spike: `tsc -p api/tsconfig.build.json` plus a spec-only config, both with
-   `--extendedDiagnostics`, to confirm the per-process peak before changing CI or lint wiring.
+   spike: build the app with `composite` + declarations, then check a spec-only config that
+   references it, both with `--extendedDiagnostics`, to measure the spec program's peak before
+   changing CI or lint wiring (a spec config that imports app source would not show a saving).
 2. **`perf: load the WoW data JSON without literal type inference`** (option C). First measure
    `Memory used` with the two big JSON imports stubbed, to put a number on it.
 3. (Optional, low value) **`chore: dedupe @sentry/core`** so a single version is installed.
@@ -155,5 +158,5 @@ These add a little to lib parse, nothing material.
 ## Handover
 
 Done. All numbers above come from fleet slot 2. The raw trace stayed on the runner under
-`/tmp/rok-2288-trace` and was not committed. No code was changed. Option A's saving is an estimate
-from the app-only vs full-program delta, not a measured split.
+`/tmp/rok-2288-trace` and was not committed. No code was changed. Option A's saving is unmeasured (Codex P2, 2026-11-22: a sequential
+split that re-checks app source inside the spec program saves no peak memory).
