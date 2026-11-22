@@ -708,11 +708,20 @@
     position: relative;
 }
 
-/* Day view: a card keeps react-big-calendar's time-sized height and clips its
-   content inside, so it never grows over a later event and swallows its taps
-   (TECH-DEBT-BACKLOG L2736). */
+/* Day view: allow event content to expand beyond time-slot height */
 .calendar-view-day .rbc-time-view .rbc-event {
-    overflow: hidden;
+    overflow: visible;
+    height: auto !important;
+    min-height: 100px;
+}
+
+.calendar-view-day .rbc-time-view .rbc-event-content {
+    overflow: visible;
+    height: auto;
+}
+
+.calendar-view-day .day-event-block {
+    height: auto;
 }
 
 /* Week event block component */
@@ -894,11 +903,12 @@
     height: 100%;
     width: 100%;
     border-radius: 0.5rem;
-    overflow: hidden;
+    overflow: visible;
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     position: relative;
     z-index: 2;
+    min-height: 100px;
 }
 
 .day-event-block:hover {
@@ -1016,23 +1026,7 @@
     .day-event-content {
         min-width: auto;
         max-width: 100%;
-        /* Tight top inset so a 30-minute card (~22px) still shows its title row. */
-        padding: 0.25rem 0.75rem 0.5rem;
-    }
-
-    .day-event-title {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .day-event-description {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
-        line-clamp: 2;
-        overflow: hidden;
+        padding: 0.5rem 0.75rem;
     }
 
     .day-event-right {
