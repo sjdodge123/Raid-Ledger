@@ -8,6 +8,7 @@ import { NotificationService } from '../../notifications/notification.service';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot.constants';
 import { findFirstAvailableSlot } from '../../events/roster-slot.utils';
+import { activatedAtOnReactivation } from '../../events/signup-activated-at.helpers';
 import {
   DepartureGraceQueueService,
   DEPARTURE_GRACE_DELAY_MS,
@@ -104,7 +105,7 @@ export class DepartureGraceService {
   private async restoreSignup(signupId: number): Promise<void> {
     await this.db
       .update(schema.eventSignups)
-      .set({ status: 'signed_up' })
+      .set({ status: 'signed_up', activatedAt: activatedAtOnReactivation() })
       .where(eq(schema.eventSignups.id, signupId));
   }
 

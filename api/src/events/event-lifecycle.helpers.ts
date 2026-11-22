@@ -15,6 +15,7 @@ import type { EventVoicePayload } from '../notifications/notification-voice.help
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
+import { activatedAtOnReactivation } from './signup-activated-at.helpers';
 import {
   signalResetAborted,
   signalResetLanded,
@@ -184,7 +185,12 @@ async function writeConfirmationReset(
   }
   await db
     .update(schema.eventSignups)
-    .set({ confirmationStatus: 'pending', status: 'signed_up' })
+    .set({
+      confirmationStatus: 'pending',
+      status: 'signed_up',
+      // ROK-2293: a roached-out row brought back by the reschedule restarts.
+      activatedAt: activatedAtOnReactivation(),
+    })
     .where(and(...conditions));
 }
 

@@ -14,6 +14,7 @@ import { SignupsRosterService } from '../events/signups-roster.service';
 import { DepartureGraceQueueService } from '../discord-bot/queues/departure-grace.queue';
 import { RunningLateService } from '../events/running-late.service';
 import { z } from 'zod';
+import { activatedAtPatch } from '../events/signup-activated-at.helpers';
 import type { SetSignupStatusTestBody } from './demo-test.schemas';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -49,7 +50,7 @@ async function overrideSignupStatus(
 ): Promise<void> {
   await db
     .update(schema.eventSignups)
-    .set({ status })
+    .set({ status, ...activatedAtPatch(status) })
     .where(eq(schema.eventSignups.id, signupId));
 }
 

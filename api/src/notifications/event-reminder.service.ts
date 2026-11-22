@@ -23,6 +23,7 @@ import {
   buildReminderStrings,
 } from './event-reminder.helpers';
 import { claimReminderDedup } from './event-reminder-dedup.helpers';
+import { freshSignupKey } from './event-reminder-fresh-signup.helpers';
 import type { PlannedEphemeralVoice } from '../discord-bot/services/planned-ephemeral-voice.helpers';
 
 type CharsByUserMap = Map<
@@ -32,6 +33,8 @@ type CharsByUserMap = Map<
 
 interface ReminderFetchContext {
   signupsByEvent: Map<number, number[]>;
+  /** (event, user) keys whose signup became active within the grace period. */
+  freshSignups: ReadonlySet<string>;
   userMap: Map<number, { id: number; discordId: string | null }>;
   tzMap: Map<number, string>;
   charsByUser: CharsByUserMap;
@@ -152,6 +155,7 @@ export class EventReminderService {
       this.db,
       events.map((e) => e.id),
       hostIds,
+      now,
     );
     if (!ctx) return;
     for (const event of events) {
@@ -260,7 +264,10 @@ export class EventReminderService {
     eventCtx: Awaited<
       ReturnType<EventReminderService['buildEventReminderContext']>
     >,
-    fetchCtx: Pick<ReminderFetchContext, 'charsByUser' | 'tzMap'>,
+    fetchCtx: Pick<
+      ReminderFetchContext,
+      'charsByUser' | 'tzMap' | 'freshSignups'
+    >,
     windowType: ReminderWindowType,
     windowLabel: string,
     defaultTimezone: string,
@@ -280,6 +287,7 @@ export class EventReminderService {
       ),
       ...(timezone !== undefined ? { timezone } : {}),
       defaultTimezone,
+      freshSignup: fetchCtx.freshSignups.has(freshSignupKey(event.id, userId)),
     });
   }
 
@@ -303,8 +311,11 @@ export class EventReminderService {
     voiceChannelId?: string | null;
     plannedVoiceChannel?: PlannedEphemeralVoice | null;
     gameId?: number | null;
+    /** ROK-2293: signed up within the grace period — claim the window, no DM. */
+    freshSignup?: boolean;
   }): Promise<boolean> {
     if (!(await claimReminderDedup(this.db, input))) return false;
+    if (input.freshSignup) return false;
     const { messageText, titleTimeLabel } = buildReminderStrings(input);
     await this.notificationService.create({
       userId: input.userId,
