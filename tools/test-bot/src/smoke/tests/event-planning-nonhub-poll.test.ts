@@ -6,8 +6,8 @@
  *  2. the first vote — a slot suggested by a voter linked to the companion
  *     bot's Discord id (the suggest auto-votes) — creates `<title> — Poll`
  *     tagged ONLY `Poll`, its bot starter linking the poll page;
- *  3. that voter gets ONE ping line (`🗳 <@id> voted`); changing the vote
- *     adds no second line (anchor: the lock-in line lands after it);
+ *  3. that voter gets ONE ping line (`🗳 <@id> voted: <t:…:f>` — ROK-2295:
+ *     it lists their slots); changing the vote adds no second line (anchor: the lock-in line lands after it);
  *  4. the organiser votes (an open poll is locked in only by a voter), then
  *     lock-in posts `is happening!` + the event link;
  *  5. `close-planning-post-now` + `lock-sweep` lock and archive the post.
@@ -215,10 +215,17 @@ async function pingThenLockIn(
   const me = ctx.testBotDiscordId;
   await expectInPost(
     post,
-    `ROK-2272 S10: expected one ping line "<@${me}> voted"`,
-    (c, wh) => !wh && c.includes(`<@${me}>`) && c.includes("voted"),
+    `ROK-2295: expected one ping line "<@${me}> voted: <t:…>" listing slots`,
+    (c, wh) =>
+      !wh && c.includes(`<@${me}>`) && c.includes("voted") && c.includes("<t:"),
   );
   await changeVote(voter, poll, slotId);
+  await expectInPost(
+    post,
+    `ROK-2295: the "<@${me}> voted" line should be edited in place to "no times right now"`,
+    (c, wh) =>
+      !wh && c.includes(`<@${me}>`) && c.includes("voted: no times right now"),
+  );
   await organiserVotes(ctx, poll, slotId);
   const eventId = await lockIn(ctx, poll, slotId, made);
   const link = `/events/${String(eventId)}`;
