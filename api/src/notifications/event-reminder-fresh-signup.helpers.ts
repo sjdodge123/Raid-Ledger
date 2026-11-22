@@ -16,7 +16,11 @@ export function freshSignupKey(eventId: number, userId: number): string {
   return `${eventId}:${userId}`;
 }
 
-/** True when the signup became active less than the grace period before `now`. */
+/**
+ * True when the signup became active less than the grace period before `now`.
+ * Both are true instants: drizzle reads the zone-less UTC column back as UTC
+ * (`+0000`), and every writer stores UTC wall time (`Date` / `NOW_UTC`).
+ */
 export function isFreshSignup(activatedAt: Date, now: Date): boolean {
   return now.getTime() - activatedAt.getTime() < REMINDER_FRESH_SIGNUP_GRACE_MS;
 }

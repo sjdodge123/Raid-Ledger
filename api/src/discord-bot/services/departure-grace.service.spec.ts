@@ -352,8 +352,7 @@ describe('DepartureGraceService', () => {
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.set).toHaveBeenCalledWith({
-        status: 'signed_up',
-        activatedAt: expect.anything(), // ROK-2293 reactivation stamp
+        status: 'signed_up', // ROK-2293: system restore — no activatedAt key
       });
     });
 
@@ -442,8 +441,7 @@ describe('DepartureGraceService', () => {
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.set).toHaveBeenCalledWith({
-        status: 'signed_up',
-        activatedAt: expect.anything(), // ROK-2293 reactivation stamp
+        status: 'signed_up', // ROK-2293: system restore — no activatedAt key
       });
     });
 

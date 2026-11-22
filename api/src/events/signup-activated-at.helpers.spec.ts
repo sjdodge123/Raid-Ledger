@@ -11,13 +11,15 @@ import { buildUpdateSet } from '../discord-bot/listeners/reschedule-roster.handl
 const dialect = new PgDialect();
 const render = (x: unknown) =>
   dialect.sqlToQuery(x as Parameters<PgDialect['sqlToQuery']>[0]);
+/** NOW_UTC, not bare now() — session-zone independent (ROK-2293 review). */
+const STAMP = "(NOW() AT TIME ZONE 'UTC')";
 
 describe('activatedAtOnReactivation (ROK-2293)', () => {
   const q = render(activatedAtOnReactivation());
 
-  it('stamps now() only when the pre-update status is inactive', () => {
+  it('stamps the UTC wall clock only when the pre-update status is inactive', () => {
     expect(q.sql).toBe(
-      'CASE WHEN "event_signups"."status" in ($1, $2, $3) THEN now() ELSE "event_signups"."activated_at" END',
+      `CASE WHEN "event_signups"."status" in ($1, $2, $3) THEN ${STAMP} ELSE "event_signups"."activated_at" END`,
     );
     expect(q.params).toEqual(['roached_out', 'departed', 'declined']);
   });
@@ -28,7 +30,7 @@ describe('activatedAtPatch', () => {
     expect(isActiveSignupStatus(s)).toBe(true);
     const patch = activatedAtPatch(s);
     expect(patch.activatedAt && render(patch.activatedAt).sql).toContain(
-      'THEN now() ELSE',
+      `THEN ${STAMP} ELSE`,
     );
   });
 
@@ -51,6 +53,6 @@ describe('reactivation paths set activatedAt', () => {
 
   it('reschedule buildUpdateSet uses the conditional re-stamp', () => {
     const set = buildUpdateSet({ signupStatus: 'tentative' });
-    expect(render(set.activatedAt).sql).toContain('THEN now() ELSE');
+    expect(render(set.activatedAt).sql).toContain(`THEN ${STAMP} ELSE`);
   });
 });

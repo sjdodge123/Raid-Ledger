@@ -8,7 +8,6 @@ import { NotificationService } from '../../notifications/notification.service';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot.constants';
 import { findFirstAvailableSlot } from '../../events/roster-slot.utils';
-import { activatedAtOnReactivation } from '../../events/signup-activated-at.helpers';
 import {
   DepartureGraceQueueService,
   DEPARTURE_GRACE_DELAY_MS,
@@ -105,7 +104,8 @@ export class DepartureGraceService {
   private async restoreSignup(signupId: number): Promise<void> {
     await this.db
       .update(schema.eventSignups)
-      .set({ status: 'signed_up', activatedAt: activatedAtOnReactivation() })
+      // ROK-2293: a system restore keeps activated_at (no reminder-clock reset).
+      .set({ status: 'signed_up' })
       .where(eq(schema.eventSignups.id, signupId));
   }
 

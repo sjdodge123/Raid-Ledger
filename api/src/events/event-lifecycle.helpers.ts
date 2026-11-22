@@ -15,7 +15,6 @@ import type { EventVoicePayload } from '../notifications/notification-voice.help
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 import { toDiscordTimestamp } from '../discord-bot/utils/time-parser';
-import { activatedAtOnReactivation } from './signup-activated-at.helpers';
 import {
   signalResetAborted,
   signalResetLanded,
@@ -188,8 +187,8 @@ async function writeConfirmationReset(
     .set({
       confirmationStatus: 'pending',
       status: 'signed_up',
-      // ROK-2293: a roached-out row brought back by the reschedule restarts.
-      activatedAt: activatedAtOnReactivation(),
+      // ROK-2293: a system restore — activated_at is deliberately NOT
+      // re-stamped, so restored members still get the next reminder window.
     })
     .where(and(...conditions));
 }
