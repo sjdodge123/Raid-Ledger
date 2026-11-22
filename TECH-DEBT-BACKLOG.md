@@ -4541,3 +4541,14 @@ Existing entries are left in place; this records their status. Line numbers are 
 - resolved: inbound Discord message delete reported `'deleted'` even when `removeFromDiscord` removed nothing (tonight's review finding, `hub-forum-discord-inbound.ingest.ts` `onDelete`) — fixed in this batch: `2f244ac36` (now returns `'skipped'`; unit cases in `hub-forum-discord-inbound.ingest.spec.ts`)
 - resolved: no coverage that an RL-side delete of a Discord-linked thread keeps its original `deletedBy`/`deletedAs` when the gateway thread-delete arrives (tonight's review finding) — fixed in this batch: `c9c2f5c13` (integration case in `hub-forum-discord-inbound.integration.spec.ts`)
 - resolved: a transient read failure finishing after the user switched reading off could re-set `provider_error` (tonight's review finding, `calendar-read-failure.helpers.ts` `failureTarget`) — fixed in this batch: `0c97cdaa6` (transient branch also requires `read_enabled = true`; integration case in `calendar-read-sync-guards.integration.spec.ts`)
+### 2026-11-22 — overnight flake triage + contract-tests check (resolution notes, backlog L1–1500)
+
+Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md` and `CONTRACT-TESTS-GAP.md` (local only). Line refs are origin/main backlog lines.
+
+- L539, L1218, L1248 — FIXED-ALREADY: PR #1406 (`181c2025f`, TDB:1246) wired `packages/contract/vitest.config.ts` (`src/**/*.spec.ts`, excludes `dist/**`) into CI `unit-tests-contract` (`ci.yml:561`) and `validate-ci.sh --full`; main run 45013162699 shows 113 files / 2351 tests passed.
+- L1071, L1165 — FIXED-ALREADY: backup integration spec flake resolved by TDB:2705 (version-check boot timer).
+- L1199, L1258 — FIXED-ALREADY: lfg-board-parity ECONNRESET resolved by ROK-1529.
+- L170 — FIXED-ALREADY: commit e29e0e286 (ROK-1392).
+- L498 — FIXED-ALREADY: the runner now reports exec bits ok.
+- L337 — NOT REPRODUCED: `standalone-poll-reschedule-cycle.integration.spec.ts` 0/50 failures in isolation on fleet slot 2 (task 0fc4af789e93, incl. one 53s cold start). Close unless it recurs in CI.
+- L412 — NOT REPRODUCED: `availability.integration.spec.ts` 0/50 in isolation (task e159980f5f41); fits the cross-suite BullMQ/ioredis carrier that only shows in the full laptop suite — tracked by L183/L271/L287.
