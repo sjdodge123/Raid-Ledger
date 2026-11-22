@@ -10,6 +10,9 @@
  * `ForumStarterEditor`, which picks the author (hub webhook / bot), unarchives
  * an idle unlocked post, and reports `'gone'`. A locked post's 50083 is
  * swallowed here: the post is closed, so there is nothing left to keep live.
+ *
+ * ROK-2295 lane C: the same job then re-words the post's voted lines
+ * (`PollVoterLines`) — even when the starter edit throws.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
@@ -21,6 +24,7 @@ import { ForumStarterEditor } from './forum-starter-edit.port';
 import { findThreadLink, isUnsent } from './hub-forum-discord-links.queries';
 import { isArchivedError } from './hub-forum-discord-outbound.discord';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { PollVoterLines } from './poll-voter-lines.refresh';
 
 /**
  * The Discord thread id of the poll's live forum post, or null: the hub
@@ -49,12 +53,17 @@ export class PollForumStarterSync implements PollForumStarterPort {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly editor: ForumStarterEditor,
+    private readonly voterLines: PollVoterLines,
   ) {}
 
   async syncStarter(matchId: number, card: ForumStarterCard): Promise<void> {
     const threadId = await findPollPostThreadId(this.db, matchId);
     if (threadId === null) return;
-    await this.editStarter(matchId, threadId, card);
+    try {
+      await this.editStarter(matchId, threadId, card);
+    } finally {
+      await this.voterLines.refreshVoterLines(matchId, threadId);
+    }
   }
 
   /** One starter edit; a locked (archived) post is logged, never thrown. */

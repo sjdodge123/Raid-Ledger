@@ -9,6 +9,9 @@
  * send releases it. Lineups get no pings. A send that finds the Discord
  * post gone (10003 / 404 — deleted while the bot missed the inbound delete)
  * marks it deleted on either arm, so later votes stop claiming and failing.
+ *
+ * ROK-2295 lane C: the one line lists the voter's slots read at send time
+ * and its message id is stored (`PollVoterLines`), so later votes edit it.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -30,12 +33,13 @@ import {
   linkedDiscordId,
   VOTER_ONCE_TTL_SECONDS,
   voterOnceKey,
-  voterPingLine,
+  voterLine,
   voterScopeKey,
   type VoterPingOutcome,
   type VoterPingScope,
 } from './hub-forum-discord-poll-voter-pings';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
+import { PollVoterLines } from './poll-voter-lines.refresh';
 
 @Injectable()
 export class HubForumDiscordPollVoterPings {
@@ -47,6 +51,7 @@ export class HubForumDiscordPollVoterPings {
     private readonly subjects: EventPlanningSubjectPosts,
     private readonly gateway: HubForumDiscordOutboundGateway,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly lines: PollVoterLines,
   ) {}
 
   /**
@@ -69,7 +74,7 @@ export class HubForumDiscordPollVoterPings {
     if (isUnsent(post)) return 'pending';
     const scope = { hubThreadId: thread.id };
     const gone = () => markDeleted(this.db, post.id, new Date());
-    return this.ping(scope, post.discordThreadId, p.userId, gone);
+    return this.ping(scope, post.discordThreadId, p, gone);
   }
 
   /** Non-hub arm: the registry post (created by this vote when eligible). */
@@ -86,13 +91,13 @@ export class HubForumDiscordPollVoterPings {
     }
     const scope = { planningPostId: ref.postId };
     const gone = () => markPlanningPostDeleted(this.db, ref.postId, new Date());
-    return this.ping(scope, ref.discordThreadId, p.userId, gone);
+    return this.ping(scope, ref.discordThreadId, p, gone);
   }
 
   private async ping(
     scope: VoterPingScope,
     discordThreadId: string,
-    userId: number,
+    { matchId, userId }: PollVotedPayload,
     markGone: () => Promise<void>,
   ): Promise<VoterPingOutcome> {
     const discordId = await this.discordIdOf(userId);
@@ -103,8 +108,15 @@ export class HubForumDiscordPollVoterPings {
     const claimed = await this.redis.set(key, '1', 'EX', ttl, 'NX');
     if (claimed === null) return 'already';
     try {
-      const line = voterPingLine(discordId);
-      await this.gateway.mention(discordThreadId, line, [discordId]);
+      const slots = await this.lines.slotsOf(matchId, userId);
+      const line = voterLine(discordId, slots);
+      const ids = [discordId];
+      const messageId = await this.gateway.mention(discordThreadId, line, ids);
+      await this.lines.store(discordThreadId, userId, {
+        messageId,
+        discordId,
+        slots,
+      });
       return 'pinged';
     } catch (err) {
       await this.redis.del(key);

@@ -14,7 +14,7 @@ function setup() {
     archived: false,
     locked: false,
     isThread: () => true,
-    send: jest.fn(() => Promise.resolve()),
+    send: jest.fn(() => Promise.resolve({ id: 'sent-1' })),
     setArchived: jest.fn(() => Promise.resolve()),
     members: { remove: jest.fn(() => Promise.resolve()) },
   };
