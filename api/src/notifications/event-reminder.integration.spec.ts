@@ -74,9 +74,15 @@ async function createEvent(
   return event;
 }
 
-/** Sign up a user for an event. */
+/**
+ * Sign up a user for an event, activated an hour ago — past the ROK-2293
+ * fresh-signup grace, so these reminders are not suppressed as fresh.
+ */
 async function signUpUser(testApp: TestApp, eventId: number, userId: number) {
-  await testApp.db.insert(schema.eventSignups).values({ eventId, userId });
+  const activatedAt = new Date(Date.now() - 60 * 60_000);
+  await testApp.db
+    .insert(schema.eventSignups)
+    .values({ eventId, userId, activatedAt });
 }
 
 /** Seed one user per signup status on the event; returns userId → status. */

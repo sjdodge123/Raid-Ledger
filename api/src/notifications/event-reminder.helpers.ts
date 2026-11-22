@@ -9,10 +9,6 @@ import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
 import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
 import type { PlannedEphemeralVoice } from '../discord-bot/services/planned-ephemeral-voice.helpers';
-import {
-  collectFreshSignups,
-  type ReminderSignupRow,
-} from './event-reminder-fresh-signup.helpers';
 
 /** Character info for a user. */
 export interface UserCharacter {
@@ -32,19 +28,10 @@ export async function fetchSignupsByEvent(
   db: PostgresJsDatabase<typeof schema>,
   eventIds: number[],
 ): Promise<Map<number, number[]>> {
-  return groupSignupsByEvent(await fetchActiveSignupRows(db, eventIds));
-}
-
-/** Active signup rows (with `activatedAt`, ROK-2293) for the given events. */
-export async function fetchActiveSignupRows(
-  db: PostgresJsDatabase<typeof schema>,
-  eventIds: number[],
-): Promise<ReminderSignupRow[]> {
-  return db
+  const signups = await db
     .select({
       eventId: schema.eventSignups.eventId,
       userId: schema.eventSignups.userId,
-      activatedAt: schema.eventSignups.activatedAt,
     })
     .from(schema.eventSignups)
     .where(
@@ -53,11 +40,6 @@ export async function fetchActiveSignupRows(
         inArray(schema.eventSignups.status, [...ACTIVE_SIGNUP_STATUSES]),
       ),
     );
-}
-
-function groupSignupsByEvent(
-  signups: ReminderSignupRow[],
-): Map<number, number[]> {
   const map = new Map<number, number[]>();
   for (const signup of signups) {
     if (signup.userId === null) continue;
@@ -275,11 +257,8 @@ export async function loadReminderContext(
   db: PostgresJsDatabase<typeof schema>,
   eventIds: number[],
   hostIds: number[] = [],
-  now: Date = new Date(),
 ) {
-  const signupRows = await fetchActiveSignupRows(db, eventIds);
-  const signupsByEvent = groupSignupsByEvent(signupRows);
-  const freshSignups = collectFreshSignups(signupRows, now);
+  const signupsByEvent = await fetchSignupsByEvent(db, eventIds);
   const allUserIds = [
     ...new Set([...Array.from(signupsByEvent.values()).flat(), ...hostIds]),
   ];
@@ -290,5 +269,5 @@ export async function loadReminderContext(
     fetchCharactersByUser(db, allUserIds),
   ]);
   const tzMap = new Map(tzEntries.map((ut) => [ut.userId, ut.timezone]));
-  return { signupsByEvent, freshSignups, userMap, tzMap, charsByUser };
+  return { signupsByEvent, userMap, tzMap, charsByUser };
 }

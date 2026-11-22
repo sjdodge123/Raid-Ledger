@@ -1,38 +1,38 @@
 /** ROK-2293: fresh-signup rule for the reminder cron. */
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { REMINDER_FRESH_SIGNUP_GRACE_MS } from './event-reminder.constants';
 import {
-  collectFreshSignups,
-  freshSignupKey,
-  isFreshSignup,
+  activeSignupFreshSince,
+  freshSignupCutoff,
 } from './event-reminder-fresh-signup.helpers';
 
 const now = new Date('2026-11-21T12:00:00Z');
-const ago = (ms: number) => new Date(now.getTime() - ms);
 
-describe('isFreshSignup', () => {
-  it('is fresh just inside the 15-minute grace', () => {
+describe('freshSignupCutoff', () => {
+  it('is the 15-minute grace before the pass clock', () => {
     expect(REMINDER_FRESH_SIGNUP_GRACE_MS).toBe(15 * 60 * 1000);
-    expect(isFreshSignup(ago(REMINDER_FRESH_SIGNUP_GRACE_MS - 1000), now)).toBe(
-      true,
+    expect(freshSignupCutoff(now).toISOString()).toBe(
+      '2026-11-21T11:45:00.000Z',
     );
-  });
-
-  it('is not fresh at or past 15 minutes', () => {
-    expect(isFreshSignup(ago(REMINDER_FRESH_SIGNUP_GRACE_MS), now)).toBe(false);
-    expect(isFreshSignup(ago(60 * 60 * 1000), now)).toBe(false);
   });
 });
 
-describe('collectFreshSignups', () => {
-  it('keys only fresh rows that have a user', () => {
-    const fresh = collectFreshSignups(
-      [
-        { eventId: 1, userId: 10, activatedAt: ago(60_000) },
-        { eventId: 1, userId: 11, activatedAt: ago(20 * 60_000) },
-        { eventId: 2, userId: null, activatedAt: ago(60_000) },
-      ],
-      now,
+describe('activeSignupFreshSince', () => {
+  const query = new PgDialect().sqlToQuery(
+    activeSignupFreshSince({ eventId: 7, userId: 42 }, freshSignupCutoff(now)),
+  );
+
+  it("checks this user's active signup for this event", () => {
+    expect(query.sql).toMatch(/"event_signups"\."event_id" = \$\d/);
+    expect(query.sql).toMatch(/"event_signups"\."user_id" = \$\d/);
+    expect(query.sql).toMatch(/"event_signups"\."status" in \(\$\d, \$\d\)/);
+    expect(query.params.slice(0, 4)).toEqual([7, 42, 'signed_up', 'tentative']);
+  });
+
+  it('is fresh only when activated_at is after the cutoff, as UTC wall time', () => {
+    expect(query.sql).toMatch(
+      /"event_signups"\."activated_at" > \(\$\d::timestamptz AT TIME ZONE 'UTC'\)/,
     );
-    expect([...fresh]).toEqual([freshSignupKey(1, 10)]);
+    expect(query.params[4]).toBe('2026-11-21T11:45:00.000Z');
   });
 });

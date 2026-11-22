@@ -1,41 +1,39 @@
 /**
- * Fresh-signup detection for the reminder cron (ROK-2293). Pure, so the rule
- * is unit-tested without a database.
+ * Fresh-signup rule for the reminder cron (ROK-2293): a member whose signup
+ * became active less than REMINDER_FRESH_SIGNUP_GRACE_MS before the pass gets
+ * no DM for the window being dispatched (the window is still claimed).
+ *
+ * Decided inside the dedup claim's own statement, from the CURRENT signup —
+ * a cancel + re-signup between the pass's recipient load and the claim
+ * re-stamps `activated_at`, and a flag cached at load time would miss it.
  */
+import { eq, inArray, sql, type SQL } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+import { utcWallClock } from '../drizzle/timestamp-utils';
+import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
 import { REMINDER_FRESH_SIGNUP_GRACE_MS } from './event-reminder.constants';
 
-/** One active signup row as the reminder pass loads it. */
-export interface ReminderSignupRow {
-  eventId: number;
-  userId: number | null;
-  activatedAt: Date;
-}
-
-/** Set key for an (event, user) pair. */
-export function freshSignupKey(eventId: number, userId: number): string {
-  return `${eventId}:${userId}`;
+/** Signups activated after this instant are fresh for a pass running at `now`. */
+export function freshSignupCutoff(now: Date): Date {
+  return new Date(now.getTime() - REMINDER_FRESH_SIGNUP_GRACE_MS);
 }
 
 /**
- * True when the signup became active less than the grace period before `now`.
- * Both are true instants: drizzle reads the zone-less UTC column back as UTC
- * (`+0000`), and every writer stores UTC wall time (`Date` / `NOW_UTC`).
+ * SQL boolean: the user holds an active signup for the event that became
+ * active after `cutoff`. `activated_at` is a zone-less UTC column, so the
+ * cutoff is compared as the UTC wall clock. A host with no signup is never
+ * fresh.
  */
-export function isFreshSignup(activatedAt: Date, now: Date): boolean {
-  return now.getTime() - activatedAt.getTime() < REMINDER_FRESH_SIGNUP_GRACE_MS;
-}
-
-/** Keys of the (event, user) pairs whose signup is still inside the grace period. */
-export function collectFreshSignups(
-  rows: ReminderSignupRow[],
-  now: Date,
-): Set<string> {
-  const fresh = new Set<string>();
-  for (const row of rows) {
-    // Legacy mocks/rows without the column are treated as not fresh.
-    if (row.userId === null || !(row.activatedAt instanceof Date)) continue;
-    if (isFreshSignup(row.activatedAt, now))
-      fresh.add(freshSignupKey(row.eventId, row.userId));
-  }
-  return fresh;
+export function activeSignupFreshSince(
+  input: { eventId: number; userId: number },
+  cutoff: Date,
+): SQL<boolean> {
+  const s = schema.eventSignups;
+  return sql<boolean>`EXISTS (
+    SELECT 1 FROM ${s}
+    WHERE ${eq(s.eventId, input.eventId)}
+      AND ${eq(s.userId, input.userId)}
+      AND ${inArray(s.status, [...ACTIVE_SIGNUP_STATUSES])}
+      AND ${s.activatedAt} > ${utcWallClock(cutoff)}
+  )`;
 }

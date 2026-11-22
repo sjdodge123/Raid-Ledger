@@ -378,6 +378,44 @@ function describeHosts(get: () => Ctx) {
   });
 }
 
+function describeClaimTimeFreshness(get: () => Ctx) {
+  it('a re-stamp between the recipient load and the claim still skips the DM', async () => {
+    const { testApp, reminders } = get();
+    const member = await createUser(testApp, 'restamp-midpass');
+    const event = await createEvent(
+      testApp,
+      testApp.seed.adminUser.id,
+      'Restamp',
+      ONLY_24H_WINDOW,
+    );
+    await insertSignup(testApp, event.id, member.id, GRACE + 30 * MINUTE);
+    const now = new Date();
+    // The pass loads its recipients while the signup is long settled...
+    const [loaded] = nonEmpty(
+      await fetchCandidateEvents(testApp.db, now),
+      'candidates',
+    );
+    // ...then a cancel + re-signup re-stamps activated_at before the claim.
+    await backdateActivation(testApp, event.id, member.id, MINUTE);
+
+    const sent = await reminders.sendReminder({
+      eventId: event.id,
+      userId: member.id,
+      windowType: '24hour',
+      windowLabel: '24 Hours',
+      title: event.title,
+      startTime: loaded.duration[0],
+      minutesUntil: 60,
+      characterDisplay: null,
+      now,
+    });
+
+    expect(sent).toBe(false);
+    expect(await reminderDms(testApp, member.id)).toHaveLength(0);
+    expect(await claimedWindows(testApp, member.id)).toEqual(['24hour']);
+  });
+}
+
 function describeFreshSignupReminders() {
   let ctx: Ctx;
   const get = () => ctx;
@@ -401,6 +439,7 @@ function describeFreshSignupReminders() {
   describe('status flips', () => describeStatusFlips(get));
   describe('status reactivation', () => describeStatusReactivation(get));
   describe('hosts', () => describeHosts(get));
+  describe('claim-time freshness', () => describeClaimTimeFreshness(get));
 }
 describe('Event reminder fresh-signup skip (integration, ROK-2293)', () =>
   describeFreshSignupReminders());
