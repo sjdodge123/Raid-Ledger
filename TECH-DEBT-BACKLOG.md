@@ -4523,3 +4523,8 @@ Existing entries are left in place; this records their status. Line numbers are 
 - resolved: `listAllGuildMemberAvatars` uses gateway op-8 `guild.members.fetch()` (originally under "2026-11-21 — feat/rok-2284-signin-reminder-dm", origin/main L4493) — fixed in this batch: `55563efad`
 - resolved: sign-in reminder code-less DM failure retried every tick and sorts first (originally under "2026-11-21 — overnight (surfaced during ROK-2272 S8/S10 bughunt + ROK-2284 review)", origin/main L4489) — fixed in this batch: `577e06c88`
 - resolved: deleting a user's lineups leaves hub forum threads attached (originally under "2026-11-20 — feat/rok-2272-s7-subject-discussion", origin/main L4474) — fixed in this batch: `306bd5f43`
+
+### 2026-11-22 — fix/overnight-batch-2026-11-22 (surfaced during the batch's Opus review)
+
+- **low** `api/src/users/users-delete-lineups.helpers.ts` — deleting a user detaches their lineups'/polls' hub forum threads but never retires their non-hub planning posts (`event_planning_posts`, no FK) for those lineups and polls; the other user-delete path has the same gap, so not a regression. Suggested: retire those `event_planning_posts` rows in the same tx as the hub detach.
+- **med** `api/src/guilds/forum/discord/hub-forum-discord-signup-lines.ts` — no gone-post handling: a hub forum post deleted in Discord probably makes every signup line retry the send forever (same bug class as L4487, fixed for votes in 22b06f17b; send path not traced). Suggested: reuse the 10003/404 → mark-link-deleted handling from 22b06f17b.
