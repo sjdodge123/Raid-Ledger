@@ -77,10 +77,7 @@ async function rerenderCharacterList(
   deps: SignupInteractionDeps,
 ): Promise<void> {
   const { eventId } = target;
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
-  const ctx = linkedUser
-    ? await loadGameContext(eventId, linkedUser.id, deps)
-    : null;
+  const ctx = await loadBackContext(interaction, eventId, deps);
   if (ctx === 'not_found') {
     await interaction.editReply({
       content: 'Event not found.',
@@ -93,16 +90,24 @@ async function rerenderCharacterList(
     await interaction.editReply({ content, components: [], embeds: [] });
     return;
   }
-  const embed = await buildReplyEmbed(eventId, deps);
-  const status = target.suffix === 'tentative' ? 'tentative' : undefined;
   await showCharacterSelect(
     interaction,
     eventId,
     ctx.eventTitle,
     ctx.characters,
     deps,
-    status,
-    embed,
+    target.suffix === 'tentative' ? 'tentative' : undefined,
+    await buildReplyEmbed(eventId, deps),
     ctx.gameId,
   );
+}
+
+/** The linked user's game context for the Back target, or null if unlinked. */
+async function loadBackContext(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: SignupInteractionDeps,
+): Promise<Awaited<ReturnType<typeof loadGameContext>> | null> {
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+  return linkedUser ? loadGameContext(eventId, linkedUser.id, deps) : null;
 }

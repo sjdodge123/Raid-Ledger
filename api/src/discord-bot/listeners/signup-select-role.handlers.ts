@@ -5,6 +5,7 @@ import { findLinkedUser } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
 import { getConflictSuffix } from './signup-conflict-warning.helpers';
+import { resolveCharacterImportUrl } from '../utils/character-import-link.helpers';
 
 type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
 
@@ -272,36 +273,42 @@ async function confirmNoCharSignup(
   signupStatus?: 'tentative',
   assignedSlot?: string,
 ): Promise<void> {
-  const eventTitle = await fetchEventTitle(eventId, deps);
+  const event = await fetchEvent(eventId, deps);
+  // ROK-2294: the Tip uses the trusted client URL (ROK-1627), never raw env.
+  const importUrl = await resolveCharacterImportUrl(
+    deps.settingsService,
+    event?.gameId,
+  );
+  const eventTitle = event?.title ?? 'the event';
   const conflictSuffix = await getConflictSuffix(deps.db, userId, eventId);
   await interaction.editReply({
-    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
+    content: `${formatNoCharConfirmation(signupStatus, eventTitle, rolesLabel, importUrl)}${benchSuffix(assignedSlot)}${conflictSuffix}`,
     embeds: [],
     components: [],
   });
   void deps.updateEmbedSignupCount(eventId);
 }
 
-async function fetchEventTitle(
+async function fetchEvent(
   eventId: number,
   deps: SignupInteractionDeps,
-): Promise<string> {
+): Promise<typeof schema.events.$inferSelect | undefined> {
   const [event] = await deps.db
     .select()
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
-  return event?.title ?? 'the event';
+  return event;
 }
 
 function formatNoCharConfirmation(
   signupStatus: 'tentative' | undefined,
   eventTitle: string,
   rolesLabel: string,
+  importUrl: string | undefined,
 ): string {
-  const clientUrl = process.env.CLIENT_URL ?? '';
-  const nudge = clientUrl
-    ? `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`
+  const nudge = importUrl
+    ? `\nTip: Create a character at ${importUrl} to get assigned to a role next time.`
     : '';
   return signupStatus === 'tentative'
     ? `You're marked as **tentative** for **${eventTitle}** (${rolesLabel}).`
