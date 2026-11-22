@@ -29,6 +29,13 @@ export function isUnsent(link: Pick<ForumLink, 'discordMessageId'>): boolean {
   return link.discordMessageId.startsWith(UNSENT_PREFIX);
 }
 
+/** R3: only RL-origin, sent, still-present rows are pushed on edit. */
+export function isEditableLink(link: ForumLink): boolean {
+  return (
+    link.origin === 'raidledger' && !link.discordDeletedAt && !isUnsent(link)
+  );
+}
+
 /** Claim an outbound create; null when a link already exists (idempotent). */
 export async function claimLink(
   db: ForumDiscordDb,

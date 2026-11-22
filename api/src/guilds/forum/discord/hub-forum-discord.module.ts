@@ -58,6 +58,9 @@ import { HubForumDiscordSubjectListener } from './hub-forum-discord-subject.list
 import { HubForumDiscordPollVoterPings } from './hub-forum-discord-poll-voter-pings.service';
 import { ForumStarterEditor } from './forum-starter-edit.port';
 import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-embed-message.editor';
+import { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
+import { POLL_FORUM_STARTER_PORT } from '../../../lineups/scheduling/poll-forum-starter.port';
+import { PollForumStarterSync } from './poll-forum-starter.sync';
 
 /**
  * ROK-2208 — hub Forum ↔ Discord forum sync (Core). L2 ships the binding;
@@ -84,6 +87,10 @@ import { FORUM_STARTER_EDIT_PORT } from '../../../discord-bot/services/event-emb
     // ROK-2292 D4: the bot's embed editor resolves this token lazily.
     ForumStarterEditor,
     { provide: FORUM_STARTER_EDIT_PORT, useExisting: ForumStarterEditor },
+    // ROK-2295: poll posts open with (and keep) the live poll embed.
+    SchedulingPollForumCard,
+    PollForumStarterSync,
+    { provide: POLL_FORUM_STARTER_PORT, useExisting: PollForumStarterSync },
     HubForumDiscordOutboundService,
     HubForumDiscordOutboundListener,
     // ROK-2292 D8: create the event's forum post when it is announced.

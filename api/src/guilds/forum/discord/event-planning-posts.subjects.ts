@@ -9,6 +9,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
+import type { ForumStarterCard } from '../../../discord-bot/services/event-embed-message.editor';
+import { SchedulingPollForumCard } from '../../../lineups/scheduling/scheduling-poll-forum-card';
 import { getClientUrl } from '../../../settings/settings-bot.helpers';
 import { SettingsService } from '../../../settings/settings.service';
 import { findLineupForSync } from '../subject-discussion/lineup-discussion.queries';
@@ -52,6 +54,8 @@ export class EventPlanningSubjectPosts {
     @Inject(DrizzleAsyncProvider) private readonly db: ForumDiscordDb,
     private readonly settings: SettingsService,
     private readonly creator: EventPlanningPostCreator,
+    /** ROK-2295: a poll post opens with the live poll embed. */
+    private readonly pollCards: SchedulingPollForumCard,
   ) {}
 
   /** The poll's live post, created on first need; null when it gets none. */
@@ -63,6 +67,7 @@ export class EventPlanningSubjectPosts {
     if (live) return toPlanningPostRef(live);
     const poll = await findPollForSync(this.db, matchId);
     if (!poll || !pollEligible(poll, now)) return null;
+    const card = await this.pollCard(matchId);
     const made = await this.creator.create({
       kind: 'poll',
       subjectId: matchId,
@@ -73,6 +78,7 @@ export class EventPlanningSubjectPosts {
         matchId,
       }),
       closesAt: null,
+      ...(card ? { card } : {}),
     });
     // The poll may have ended while the create ran, unseen (no row yet).
     if (made?.created) await this.syncPoll(matchId, new Date());
@@ -206,6 +212,16 @@ export class EventPlanningSubjectPosts {
   ): Promise<void> {
     if (post.closesAt?.getTime() === closesAt?.getTime()) return;
     await setPlanningPostClosesAt(this.db, post.id, closesAt);
+  }
+
+  /** Best effort: a render failure falls back to the text body. */
+  private async pollCard(matchId: number): Promise<ForumStarterCard | null> {
+    try {
+      return await this.pollCards.build(matchId);
+    } catch (err) {
+      this.warn(`starter card of poll ${matchId}`, err);
+      return null;
+    }
   }
 
   private warn(what: string, err: unknown): void {
