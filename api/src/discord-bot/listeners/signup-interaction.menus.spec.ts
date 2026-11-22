@@ -279,7 +279,7 @@ function charSelectNudgeTests() {
   const mockGameWithRoles = { id: 1, hasRoles: true, hasSpecs: true };
   const mockGameWithoutRoles = { id: 2, hasRoles: false, hasSpecs: false };
 
-  it('should instant-signup with nudge when user has no characters (hasRoles game)', async () => {
+  it('should instant-signup with the import link button when user has no characters (hasRoles game)', async () => {
     const userId = 'user-charselect-none-roles';
     const event = { id: 802, title: 'Raid Night', gameId: 1 };
 
@@ -299,13 +299,26 @@ function charSelectNudgeTests() {
     await mocks.listener.handleButtonInteraction(interaction);
 
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(802, 42);
-    expect(interaction.editReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        content: expect.stringMatching(
-          /signed up.*Raid Night.*Tip.*character/s,
-        ),
-      }),
-    );
+    // ROK-2294: the old text Tip became a Link button to the characters panel.
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as {
+      content: string;
+      components?: Array<{ toJSON(): unknown }>;
+    };
+    expect(reply.content).toMatch(/signed up.*Raid Night/s);
+    expect(reply.content).not.toContain('Tip');
+    expect(reply.components?.map((row) => row.toJSON())).toEqual([
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 5,
+            label: "Don't see your character? Import it",
+            url: 'https://example.com/profile/gaming/characters?game=1',
+          },
+        ],
+      },
+    ]);
   });
 
   it('should instant-signup without nudge when game has no character support', async () => {
@@ -330,6 +343,9 @@ function charSelectNudgeTests() {
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(803, 42);
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
+    );
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.not.objectContaining({ components: expect.anything() }),
     );
   });
 

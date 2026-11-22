@@ -479,6 +479,10 @@ function nudgeVisibilityTests() {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.not.stringContaining('Tip') }),
     );
+    // ROK-2294: no trusted client URL -> no import link button either.
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.not.objectContaining({ components: expect.anything() }),
+    );
   });
 }
 
