@@ -162,6 +162,18 @@ export async function postPlanningClosingLine(
   return claimAndSend(deps, target, target.discordThreadId, line, gone);
 }
 
+/** Claim the once-key; `true` only for the first caller within the TTL. */
+async function claimOnce(deps: ClosingSendDeps, key: string): Promise<boolean> {
+  const set = await deps.redis.set(
+    key,
+    '1',
+    'EX',
+    CLOSING_ONCE_TTL_SECONDS,
+    'NX',
+  );
+  return set !== null;
+}
+
 /**
  * Only the caller that claims the once-key posts; a failed send releases
  * the key, logs one warning naming the target and the line, and reports
@@ -179,14 +191,7 @@ async function claimAndSend(
   const { text, onceKey } = line;
   if (!deps.gateway.isOnline()) return 'offline';
   const key = targetOnceKey(target, onceKey);
-  const claimed = await deps.redis.set(
-    key,
-    '1',
-    'EX',
-    CLOSING_ONCE_TTL_SECONDS,
-    'NX',
-  );
-  if (claimed === null) return 'already';
+  if (!(await claimOnce(deps, key))) return 'already';
   try {
     await deps.gateway.mention(discordThreadId, text, []);
     return 'posted';

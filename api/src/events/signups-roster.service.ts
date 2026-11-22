@@ -218,13 +218,14 @@ export class SignupsRosterService {
     return getRosterWithAssignments(eventId).then(async (roster) => {
       // ROK-1269: emit signup_reconfirmed per attendee whose pending status
       // got flipped to confirmed by this roster update. Done after tx commit.
-      await auditRosterReconfirms(
-        this.activityLog,
-        eventId,
-        reconfirmedUserIds,
-      );
+      await this.logReconfirms(eventId, reconfirmedUserIds);
       return roster;
     });
+  }
+
+  /** ROK-1269: best-effort audit of the attendees a roster update re-confirmed. */
+  private logReconfirms(eventId: number, userIds: number[]): Promise<void> {
+    return auditRosterReconfirms(this.activityLog, eventId, userIds);
   }
 
   /** ROK-1769: db + the ephemeral-voice switches for the voice-line gate. */
