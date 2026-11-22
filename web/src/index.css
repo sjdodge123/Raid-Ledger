@@ -1944,13 +1944,14 @@ body {
 }
 
 .btn-danger {
-    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+    /* 10% rest / 15% hover keep the label AA on surface + panel in both families (red-400 tint is lighter than the old red-500 one) */
+    background: color-mix(in srgb, var(--color-danger) 10%, transparent);
     color: var(--color-danger);
     border: 1px solid color-mix(in srgb, var(--color-danger) 20%, transparent);
 }
 
 .btn-danger:hover {
-    background: color-mix(in srgb, var(--color-danger) 25%, transparent);
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
 }
 
 .btn-warning {
