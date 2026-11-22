@@ -213,47 +213,51 @@ async function removeReply(
   link: ForumLink,
   replyId: number,
   gone: Gone,
-): Promise<void> {
+): Promise<boolean> {
   const done = await tx
     .update(replies)
     .set(gone)
     .where(and(eq(replies.id, replyId), isNull(replies.deletedAt)))
     .returning({ id: replies.id });
-  if (done.length === 0) return;
+  if (done.length === 0) return false;
   await tx
     .update(threads)
     .set({ replyCount: sql`greatest(${threads.replyCount} - 1, 0)` })
     .where(eq(threads.id, link.threadId));
+  return true;
 }
 
 /**
  * §5.3: a Discord-side delete soft-deletes the RL row (`deleted_by` null)
- * and records the Discord side as gone. Already-deleted rows are untouched.
+ * and records the Discord side as gone. Already-deleted rows are untouched,
+ * and an earlier `discord_deleted_at` (an outbound 404 stamp) is kept.
+ * Resolves true when an RL row was removed, false when it already was.
  */
 export async function removeFromDiscord(
   db: ForumDiscordDb,
   link: ForumLink,
   as: 'author' | 'moderator',
   now: Date,
-): Promise<void> {
+): Promise<boolean> {
   const gone: Gone = {
     deletedAt: now,
     deletedBy: null,
     deletedAs: as,
     updatedAt: now,
   };
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     await tx
       .update(links)
       .set({ discordDeletedAt: now })
-      .where(eq(links.id, link.id));
+      .where(and(eq(links.id, link.id), isNull(links.discordDeletedAt)));
     if (link.replyId !== null) {
-      await removeReply(tx, link, link.replyId, gone);
-      return;
+      return removeReply(tx, link, link.replyId, gone);
     }
-    await tx
+    const done = await tx
       .update(threads)
       .set({ ...gone, pinnedAt: null, pinnedBy: null })
-      .where(and(eq(threads.id, link.threadId), isNull(threads.deletedAt)));
+      .where(and(eq(threads.id, link.threadId), isNull(threads.deletedAt)))
+      .returning({ id: threads.id });
+    return done.length > 0;
   });
 }

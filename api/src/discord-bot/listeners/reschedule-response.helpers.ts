@@ -16,6 +16,7 @@ import { CharactersService } from '../../characters/characters.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { ActivityLogService } from '../../activity-log/activity-log.service';
+import { logBestEffort } from '../../activity-log/activity-log-best-effort';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 
 const STATE_LABELS: Record<string, string> = {
@@ -237,7 +238,7 @@ export async function safeEditReply(
  * both linked and unlinked (anonymous) ack paths.
  */
 export async function logDiscordAck(
-  deps: RescheduleDeps,
+  deps: { activityLog: Pick<ActivityLogService, 'log'> },
   eventId: number,
   wasPending: boolean,
   updateSet: Record<string, unknown>,
@@ -247,7 +248,8 @@ export async function logDiscordAck(
   const isLinked = 'userId' in actor;
   const metadata: Record<string, unknown> = { reason: 'discord-ack' };
   if (!isLinked) metadata.discordUserId = actor.discordUserId;
-  await deps.activityLog.log(
+  await logBestEffort(
+    deps.activityLog,
     'event',
     eventId,
     'signup_reconfirmed',

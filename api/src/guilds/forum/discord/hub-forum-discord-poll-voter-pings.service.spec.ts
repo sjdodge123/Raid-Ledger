@@ -8,7 +8,10 @@ import type Redis from 'ioredis';
 import { findLivePollThread } from '../subject-discussion/poll-discussion.queries';
 import { markPlanningPostDeleted } from './event-planning-posts.queries';
 import type { EventPlanningSubjectPosts } from './event-planning-posts.subjects';
-import { UNSENT_PREFIX } from './hub-forum-discord-links.queries';
+import {
+  markDeleted as markLinkDeletedFn,
+  UNSENT_PREFIX,
+} from './hub-forum-discord-links.queries';
 import type { HubForumDiscordOutboundGateway } from './hub-forum-discord-outbound.discord';
 import type { HubForumDiscordOutboundService } from './hub-forum-discord-outbound.service';
 import { voterOnceKey } from './hub-forum-discord-poll-voter-pings';
@@ -22,7 +25,13 @@ jest.mock('./event-planning-posts.queries', () => ({
   markPlanningPostDeleted: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('./hub-forum-discord-links.queries', () => ({
+  ...jest.requireActual('./hub-forum-discord-links.queries'),
+  markDeleted: jest.fn().mockResolvedValue(undefined),
+}));
+
 const findThread = jest.mocked(findLivePollThread);
+const markLinkDeleted = jest.mocked(markLinkDeletedFn);
 const markDeleted = jest.mocked(markPlanningPostDeleted);
 
 const DISCORD_ID = '123456789012345678';
@@ -64,6 +73,7 @@ function livePlanningRow(over: Record<string, unknown> = {}) {
 
 function hubLink(over: Record<string, unknown> = {}) {
   return {
+    id: 60,
     discordThreadId: 'hub-d-thread',
     discordMessageId: '111',
     discordDeletedAt: null,
@@ -251,15 +261,45 @@ describe('HubForumDiscordPollVoterPings — no-ping branches of ping()', () => {
     expect(await svc.hubVote(vote)).toBe('pinged');
   });
 
-  it('a send failure DELs the key and warns; a hub post is never marked deleted', async () => {
+  it('a non-gone send failure DELs the key and warns; nothing is marked deleted', async () => {
     const { svc, gateway, redis } = build();
     gateway.mention.mockRejectedValueOnce(new Error('rate limited'));
     expect(await svc.hubVote(vote)).toBe('send-failed');
     expect(redis.store.size).toBe(0);
     expect(markDeleted).not.toHaveBeenCalled();
+    expect(markLinkDeleted).not.toHaveBeenCalled();
     expect(Logger.prototype.warn).toHaveBeenCalledWith(
       expect.stringContaining('rate limited'),
     );
     expect(await svc.hubVote(vote)).toBe('pinged');
+  });
+});
+
+describe('HubForumDiscordPollVoterPings — a gone hub post (TECH-DEBT L4487)', () => {
+  it('marks the hub link deleted and releases the key; the next vote is closed-post', async () => {
+    const { svc, gateway, outbound, redis } = build();
+    gateway.mention.mockRejectedValueOnce(
+      new DiscordAPIError(
+        { code: 10003, message: 'Unknown Channel' },
+        10003,
+        404,
+        'POST',
+        '/x',
+        {},
+      ),
+    );
+    expect(await svc.hubVote(vote)).toBe('send-failed');
+    expect(markLinkDeleted).toHaveBeenCalledWith(
+      expect.anything(),
+      60,
+      expect.any(Date),
+    );
+    expect(markDeleted).not.toHaveBeenCalled();
+    expect(redis.store.size).toBe(0);
+    outbound.ensureEventPost.mockResolvedValue(
+      hubLink({ discordDeletedAt: new Date() }),
+    );
+    expect(await svc.hubVote(vote)).toBe('closed-post');
+    expect(gateway.mention).toHaveBeenCalledTimes(1);
   });
 });
