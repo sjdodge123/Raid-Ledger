@@ -236,3 +236,52 @@ describe('handleLinkedTentative — adversarial edge cases (ROK-775)', () => {
     });
   });
 });
+
+describe('handleLinkedTentative — zero-character MMO import link (ROK-2294)', () => {
+  it('puts the import Link row under the tentative role select', async () => {
+    const deps = createMockDeps();
+    const interaction = createMockButtonInteraction();
+    (deps.settingsService.getTrustedClientUrl as jest.Mock).mockResolvedValue(
+      'https://raid.example',
+    );
+    const chain = (rows: unknown[]) => ({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue(rows),
+        }),
+      }),
+    });
+    const event = {
+      id: 10,
+      title: 'Raid',
+      gameId: 1,
+      slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+    };
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce(chain([event]))
+      .mockReturnValueOnce(chain([{ id: 1, hasRoles: true }]));
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [],
+    });
+
+    await handleLinkedTentative(interaction, 10, MOCK_USER, deps);
+
+    expect(deps.signupsService.signup).not.toHaveBeenCalled();
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as
+      | { components?: Array<{ toJSON(): unknown }> }
+      | undefined;
+    const rows = reply?.components?.map((row) => row.toJSON()) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual({
+      type: 1,
+      components: [
+        {
+          type: 2,
+          style: 5,
+          label: "Don't see your character? Import it",
+          url: 'https://raid.example/profile/gaming/characters?game=1',
+        },
+      ],
+    });
+  });
+});

@@ -339,3 +339,47 @@ describe('handleCharacterSelectMenu — Back button (ROK-2228)', () => {
     ]);
   });
 });
+
+describe('handleCharacterSelectMenu — no import link after a pick (ROK-2294 Q4)', () => {
+  it('the role step after a character pick carries no Link button', async () => {
+    const deps = createMockDeps();
+    (deps.settingsService.getTrustedClientUrl as jest.Mock).mockResolvedValue(
+      'https://raid.example',
+    );
+    const interaction = {
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      values: ['mmo-char'],
+      user: { id: 'discord-mmo' },
+      editReply: jest.fn().mockResolvedValue(undefined),
+    } as unknown as StringSelectMenuInteraction;
+    const chain = (rows: unknown[]) => ({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue(rows),
+        }),
+      }),
+    });
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce(chain([{ id: 80, discordId: 'discord-mmo' }]))
+      .mockReturnValueOnce(
+        chain([{ id: 50, gameId: 1, slotConfig: { type: 'mmo' } }]),
+      );
+    (deps.charactersService.findOne as jest.Mock).mockResolvedValue({
+      id: 'mmo-char',
+      name: 'MMOChar',
+      role: 'tank' as const,
+      roleOverride: null,
+    });
+
+    await handleCharacterSelectMenu(interaction, 50, deps);
+
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as
+      | { components?: Array<{ toJSON(): { components: unknown[] } }> }
+      | undefined;
+    const buttons = (reply?.components ?? []).flatMap(
+      (row) => row.toJSON().components,
+    );
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons).not.toContainEqual(expect.objectContaining({ style: 5 }));
+  });
+});

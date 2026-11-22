@@ -178,3 +178,55 @@ describe('handleExistingSignup — row the Discord id may not manage (ROK-2097)'
     expect(deps.updateEmbedSignupCount).not.toHaveBeenCalled();
   });
 });
+
+const IMPORT_ROW_GAME_1 = {
+  type: 1,
+  components: [
+    {
+      type: 2,
+      style: 5,
+      label: "Don't see your character? Import it",
+      url: 'https://raid.example/profile/gaming/characters?game=1',
+    },
+  ],
+};
+
+describe('handleExistingSignup — zero-character MMO import link (ROK-2294)', () => {
+  it('puts the import Link row under the role select', async () => {
+    const deps = createMockDeps();
+    (deps.settingsService.getTrustedClientUrl as jest.Mock).mockResolvedValue(
+      'https://raid.example',
+    );
+    (deps.db.select as jest.Mock)
+      .mockReturnValueOnce(selectOnce([{ id: 42, discordId: DISCORD_ID }]))
+      .mockReturnValueOnce(
+        selectOnce([
+          {
+            id: EVENT_ID,
+            title: 'Raid',
+            slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+            gameId: 1,
+          },
+        ]),
+      )
+      .mockReturnValueOnce(selectOnce([{ id: 1, hasRoles: true }]));
+    (deps.charactersService.findAllForUser as jest.Mock).mockResolvedValue({
+      data: [],
+    });
+    const interaction = makeInteraction();
+
+    await handleExistingSignup(
+      interaction,
+      EVENT_ID,
+      makeExistingSignup('confirmed'),
+      deps,
+    );
+
+    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as
+      | { components?: Array<{ toJSON(): unknown }> }
+      | undefined;
+    const rows = reply?.components?.map((row) => row.toJSON()) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toEqual(IMPORT_ROW_GAME_1);
+  });
+});
