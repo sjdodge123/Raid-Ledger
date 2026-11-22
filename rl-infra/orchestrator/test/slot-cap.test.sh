@@ -79,10 +79,61 @@ test_default_cap_is_two() {
     unset RUNNER_SLOTS
 }
 
+test_borrow_never_picks_uncapped_row() {
+    CURRENT_TEST_NAME="C6: borrow::try never borrows a free slot above RUNNER_SLOTS"
+    _seed4_busy12 0
+    mkdir -p "$RL_STATE_DIR/lease-queue"
+    export RL_MEMINFO_PATH="$RL_STATE_DIR/meminfo"
+    printf 'MemTotal: 16000000 kB\nMemAvailable: 16000000 kB\n' > "$RL_MEMINFO_PATH"
+    export RUNNER_SLOTS=2
+    # shellcheck disable=SC1091
+    source "$BIN_DIR/_state.sh"; source "$BIN_DIR/_admission.sh"; source "$BIN_DIR/_borrow.sh"
+    local got rc=0; got=$(borrow::try 1 "task-cap" "") || rc=$?
+    assert_eq "$rc:$got" "1:" "no free slot within the cap (borrowed: '$got')"
+    assert_eq "$(jq -c '[.[] | select(.slot > 2) | .claimed]' "$RL_CLAIMS_FILE")" "[false,false]" \
+        "slots 3-4 (no runner) stay unclaimed"
+    # Positive control: raise the cap to 3 and the same fleet borrows slot 3.
+    RUNNER_SLOTS=3
+    rc=0; got=$(borrow::try 1 "task-cap" "") || rc=$?
+    assert_eq "$rc:$got" "0:3" "with RUNNER_SLOTS=3 slot 3 is borrowable"
+    unset RUNNER_SLOTS RL_MEMINFO_PATH
+}
+
+test_invalid_runner_slots_fails_loudly() {
+    CURRENT_TEST_NAME="C7: a non-numeric RUNNER_SLOTS makes status and claim fail loudly"
+    _seed4_busy12 0
+    local bin out rc
+    for bin in status claim; do
+        rc=0; out=$(RUNNER_SLOTS=two RL_AGENT_ID=bad-cap bash "$BIN_DIR/$bin" 2>&1 >/dev/null) || rc=$?
+        assert_eq "$rc" "2" "$bin exits 2 on RUNNER_SLOTS=two"
+        assert_eq "$(jq -r '.error' <<<"$out" 2>/dev/null)" "invalid_runner_slots" \
+            "$bin names the bad setting (stderr: $out)"
+    done
+    rc=0; RUNNER_SLOTS=0 bash "$BIN_DIR/status" >/dev/null 2>&1 || rc=$?
+    assert_eq "$rc" "2" "RUNNER_SLOTS=0 is rejected too"
+    assert_eq "$(jq -r '.[] | select(.slot==3) | .claimed' "$RL_CLAIMS_FILE")" "false" "nothing was claimed"
+}
+
+test_lease_advance_refuses_uncapped_slot() {
+    CURRENT_TEST_NAME="C8: lease-advance --slot above RUNNER_SLOTS is refused and grants nothing"
+    _seed4_busy12 0
+    mkdir -p "$RL_STATE_DIR/lease-queue"
+    jq -nc --arg t "$(date -u +%FT%TZ)" '[{agent_id:"waiter-3", branch:"feat-w", enqueued_at:$t, last_heartbeat:$t}]' \
+        > "$RL_STATE_DIR/lease-queue/3.json"
+    local out rc=0
+    out=$(RUNNER_SLOTS=2 bash "$BIN_DIR/lease-advance" --slot 3 2>&1) || rc=$?
+    assert_eq "$rc" "2" "lease-advance exits 2 for slot 3 with RUNNER_SLOTS=2"
+    assert_eq "$(jq -r '.error' <<<"$out" 2>/dev/null)" "slot_out_of_range" "error names the cap (got: $out)"
+    assert_eq "$(jq -r '.[] | select(.slot==3) | .claimed' "$RL_CLAIMS_FILE")" "false" "slot 3 not granted"
+}
+
 run_test "c1-claim-capped" test_claim_never_grants_uncapped_row
 run_test "c2-offered-hides" test_offered_claims_hides_free_uncapped_rows
 run_test "c3-offered-keeps-claimed" test_offered_claims_keeps_claimed_uncapped_row
 run_test "c4-status-wired" test_status_uses_offered_claims
 run_test "c5-default-two" test_default_cap_is_two
+run_test "c6-borrow-capped" test_borrow_never_picks_uncapped_row
+run_test "c7-invalid-runner-slots" test_invalid_runner_slots_fails_loudly
+run_test "c8-lease-advance-capped" test_lease_advance_refuses_uncapped_slot
 
 print_test_summary

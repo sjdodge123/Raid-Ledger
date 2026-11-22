@@ -71,6 +71,14 @@ RL_CLAIM_DURATION_SECONDS="${RL_CLAIM_DURATION_SECONDS:-86400}"
 # Default matches the docker-compose.yml default profile (2 runners). Override
 # via .env to 4 when the `extra-slots` compose profile is enabled.
 RUNNER_SLOTS="${RUNNER_SLOTS:-2}"
+# ROK-2289: RUNNER_SLOTS feeds `jq --argjson` and `seq` everywhere; a typo in
+# .env would make `status` error and `claim` treat every slot as busy with no
+# message. Fail loudly once, here, for every script that sources this file.
+if ! [[ "$RUNNER_SLOTS" =~ ^[1-9][0-9]*$ ]]; then
+    jq -nc --arg v "$RUNNER_SLOTS" '{ok:false, error:"invalid_runner_slots",
+        message:"RUNNER_SLOTS must be a positive integer (check /srv/rl-infra/.env)", value:$v}' >&2
+    exit 2
+fi
 mkdir -p "$RL_LOCK_DIR" "$RL_TASKS_DIR" "$RL_LEASE_QUEUE_DIR"
 
 # Portability shim: flock(1) lives in util-linux on the VM, but macOS test
