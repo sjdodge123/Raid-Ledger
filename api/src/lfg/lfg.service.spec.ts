@@ -163,19 +163,13 @@ function arrangeConflict(mockDb: MockDb, activeCount: number): void {
 }
 
 /** Game found, caller is a participant, target resolves to the route's game. */
-function arrangeConvert(
-  mockDb: MockDb,
-  converted: number,
-  target: 'event' | 'poll' = 'event',
-): void {
+function arrangeConvert(mockDb: MockDb, converted: number): void {
   mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
   mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // resolveConvertRole (live intent)
   mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
   mockDb.returning.mockResolvedValueOnce(
     Array.from({ length: converted }, (_, i) => ({ id: 100 + i })),
   );
-  // TDB:967 — the caller's signup-cleared row (event targets only): none.
-  if (target === 'event') mockDb.returning.mockResolvedValueOnce([]);
 }
 
 describe('LfgService lifecycle events', () => {
@@ -617,7 +611,7 @@ describe('LfgService lifecycle events', () => {
     });
 
     it('emits GROUP_CHANGED converted carrying the poll provenance key', async () => {
-      arrangeConvert(mockDb, 2, 'poll');
+      arrangeConvert(mockDb, 2);
 
       await service.convert(3, GAME_ID, { pollId: POLL_ID });
 
@@ -647,7 +641,6 @@ describe('LfgService lifecycle events', () => {
     it('answers a retry-only caller with zero and never runs convertGroup', async () => {
       mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
       mockDb.limit.mockResolvedValueOnce([]); // resolveConvertRole: no live intent
-      mockDb.limit.mockResolvedValueOnce([]); // ...no signup-cleared row (TDB:967)
       mockDb.limit.mockResolvedValueOnce([{ id: 11 }]); // ...but a converted row
       mockDb.limit.mockResolvedValueOnce([{ gameId: GAME_ID }]); // target's game
 
@@ -662,7 +655,6 @@ describe('LfgService lifecycle events', () => {
     it('403s a caller with neither a live nor a converted row in the group', async () => {
       mockDb.limit.mockResolvedValueOnce([game]); // requireVisibleGame
       mockDb.limit.mockResolvedValueOnce([]); // no live intent
-      mockDb.limit.mockResolvedValueOnce([]); // no signup-cleared row (TDB:967)
       mockDb.limit.mockResolvedValueOnce([]); // no converted row either
 
       await expect(

@@ -230,37 +230,6 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     );
   });
 
-  it('S-A5b: the creator whose signup cleared their intent can still convert the group into the event (TDB:967)', async () => {
-    const [a, b] = await members('alpha', 'bravo');
-    const game = await createGame(testApp, 'Convert After Create');
-    await raiseHand(a, game.id);
-    await raiseHand(b, game.id);
-    const created = await createEvent(a, { gameId: game.id });
-    expect(created.status).toBe(201);
-    const eventId = (created.body as { id: number }).id;
-    await settleCreatorListener(eventId, a.userId);
-    expect((await readIntent(testApp, a.userId, game.id))?.status).toBe(
-      'cleared',
-    );
-
-    const res = await testApp.request
-      .post(`/lfg/${game.id}/convert`)
-      .set('Authorization', `Bearer ${a.token}`)
-      .send({ eventId });
-
-    expect({ status: res.status, body: res.body as unknown }).toEqual({
-      status: 201,
-      body: { converted: 2 },
-    });
-    for (const m of [a, b]) {
-      const row = await readIntent(testApp, m.userId, game.id);
-      expect({ status: row?.status, to: row?.converted_to_event_id }).toEqual({
-        status: 'converted',
-        to: eventId,
-      });
-    }
-  });
-
   it('S-A6: an expired or deactivated member is neither converted nor signed up', async () => {
     const [a, b, d] = await members('alpha', 'bravo', 'delta');
     const game = await createGame(testApp, 'Stale Game');
