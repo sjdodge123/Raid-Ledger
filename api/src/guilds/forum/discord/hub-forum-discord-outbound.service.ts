@@ -256,7 +256,10 @@ export class HubForumDiscordOutboundService {
     };
     const { name, content } = await this.events.postView(record.thread, url);
     // ROK-2292 D6: a carded starter is never overwritten by the text body.
-    const carded = await hasForumStarterCard(this.db, ref.threadId);
+    // ROK-2295: a poll post opens with (and keeps) the live poll embed.
+    const carded =
+      this.events.isPollThread(record.thread) ||
+      (await hasForumStarterCard(this.db, ref.threadId));
     await this.attempt(link, async () => {
       const edited = carded
         ? 'ok'

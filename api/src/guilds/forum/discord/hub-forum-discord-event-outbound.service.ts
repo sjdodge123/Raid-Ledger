@@ -135,6 +135,11 @@ export class EventPostOutbound {
     return subjectOf(thread) !== null;
   }
 
+  /** ROK-2295: a poll thread's starter is the live poll embed (no text). */
+  isPollThread(thread: SubjectColumns): boolean {
+    return subjectOf(thread)?.kind === 'poll';
+  }
+
   /**
    * The post name + starter content of any thread. A poll / lineup thread
    * renders exactly as `send` created it (S8 review MAJOR-1: a reopen's
