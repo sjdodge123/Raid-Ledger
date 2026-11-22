@@ -19,7 +19,9 @@ describe('character-import-link helpers (ROK-2294)', () => {
   it('strips trailing slashes and appends the game id', async () => {
     await expect(
       resolveCharacterImportUrl(settings('https://raid.example.com//'), 7),
-    ).resolves.toBe('https://raid.example.com/profile/gaming/characters?game=7');
+    ).resolves.toBe(
+      'https://raid.example.com/profile/gaming/characters?game=7',
+    );
   });
 
   it('omits ?game= when the game is unknown', () => {

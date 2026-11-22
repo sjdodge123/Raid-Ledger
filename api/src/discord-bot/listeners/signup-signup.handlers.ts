@@ -1,7 +1,11 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import * as schema from '../../drizzle/schema';
 import { healPendingFromDiscord } from '../../events/signups-reconfirm.helpers';
-import { showCharacterSelect, showRoleSelect } from './signup-select-wrappers';
+import {
+  showCharacterSelect,
+  showRoleSelect,
+  showZeroCharacterRoleSelect,
+} from './signup-select-wrappers';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
@@ -130,15 +134,13 @@ async function offerSelectionUI(
       embed,
     );
   if (!ctx.isMMO) return false;
-  await showRoleSelect(
+  await showZeroCharacterRoleSelect(
     interaction,
     eventId,
     deps,
-    undefined,
-    undefined,
+    ctx.gameId,
     undefined,
     embed,
-    { gameId: ctx.gameId },
   );
   return true;
 }

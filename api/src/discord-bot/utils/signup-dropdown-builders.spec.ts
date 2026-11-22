@@ -149,7 +149,8 @@ describe('showRoleSelect — Back button (ROK-2228)', () => {
 });
 
 describe('character-import link button (ROK-2294)', () => {
-  const IMPORT_URL = 'https://raid.example.com/profile/gaming/characters?game=7';
+  const IMPORT_URL =
+    'https://raid.example.com/profile/gaming/characters?game=7';
   const IMPORT_BUTTON = {
     type: 2,
     style: 5,
@@ -214,7 +215,10 @@ describe('character-import link button (ROK-2294)', () => {
     const rows = rowsOf(interaction);
     expect(rows).toHaveLength(2);
     expect(rows[1]?.components).toEqual([
-      expect.objectContaining({ label: 'Back', custom_id: 'char_back:char_select:1' }),
+      expect.objectContaining({
+        label: 'Back',
+        custom_id: 'char_back:char_select:1',
+      }),
       IMPORT_BUTTON,
     ]);
   });

@@ -300,7 +300,7 @@ function charSelectNudgeTests() {
 
     expect(mocks.mockSignupsService.signup).toHaveBeenCalledWith(802, 42);
     // ROK-2294: the old text Tip became a Link button to the characters panel.
-    const reply = (interaction.editReply as jest.Mock).mock.calls.at(-1)?.[0] as {
+    const reply = interaction.editReply.mock.calls.at(-1)?.[0] as {
       content: string;
       components?: Array<{ toJSON(): unknown }>;
     };

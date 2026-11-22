@@ -1,7 +1,10 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { showCharacterSelect, showRoleSelect } from './signup-select-wrappers';
+import {
+  showCharacterSelect,
+  showZeroCharacterRoleSelect,
+} from './signup-select-wrappers';
 import {
   buildCharacterImportRow,
   resolveCharacterImportUrl,
@@ -128,15 +131,13 @@ async function handleNonCharPath(
   embed?: EmbedBuilder,
 ): Promise<boolean> {
   if (ctx.isMMO) {
-    await showRoleSelect(
+    await showZeroCharacterRoleSelect(
       interaction,
       eventId,
       deps,
-      undefined,
-      undefined,
+      event.gameId,
       undefined,
       embed,
-      { gameId: event.gameId },
     );
     return true;
   }

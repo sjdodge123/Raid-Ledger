@@ -1,7 +1,11 @@
 import type { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import { showCharacterSelect, showRoleSelect } from './signup-select-wrappers';
+import {
+  showCharacterSelect,
+  showRoleSelect,
+  showZeroCharacterRoleSelect,
+} from './signup-select-wrappers';
 import { fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { benchSuffix } from './signup-bench-feedback.helpers';
@@ -163,15 +167,13 @@ async function tryLinkedTentativeGameFlow(
   });
   if (charResult !== null) return charResult;
   if (!ctx.isMMO) return false;
-  await showRoleSelect(
+  await showZeroCharacterRoleSelect(
     interaction,
     eventId,
     deps,
-    undefined,
-    undefined,
+    event.gameId,
     'tentative',
     embed,
-    { gameId: event.gameId },
   );
   return true;
 }

@@ -17,7 +17,10 @@ import {
 import { resolveCharacterImportUrl } from '../utils/character-import-link.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 
-type WrapperDeps = Pick<SignupInteractionDeps, 'emojiService' | 'settingsService'>;
+type WrapperDeps = Pick<
+  SignupInteractionDeps,
+  'emojiService' | 'settingsService'
+>;
 
 /**
  * Opt-in for the import link on a role step: pass it only on a
@@ -46,6 +49,32 @@ export async function showCharacterSelect(
     embed,
     importUrl: await resolveCharacterImportUrl(deps.settingsService, gameId),
   });
+}
+
+/**
+ * Role select for a member with NO character (ROK-2294): same as
+ * showRoleSelect, plus the "Import it" link button.
+ */
+export async function showZeroCharacterRoleSelect(
+  interaction: ButtonInteraction,
+  eventId: number,
+  deps: WrapperDeps,
+  gameId: number | null,
+  signupStatus?: 'tentative',
+  embed?: EmbedBuilder,
+): Promise<void> {
+  await showRoleSelect(
+    interaction,
+    eventId,
+    deps,
+    undefined,
+    undefined,
+    signupStatus,
+    embed,
+    {
+      gameId,
+    },
+  );
 }
 
 /** Wrapper for shared role select dropdown. */
