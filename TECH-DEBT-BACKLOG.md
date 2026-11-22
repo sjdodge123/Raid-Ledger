@@ -4530,6 +4530,35 @@ Existing entries are left in place; this records their status. Line numbers are 
 - **med** `api/src/guilds/forum/discord/hub-forum-discord-signup-lines.ts` — no gone-post handling: a hub forum post deleted in Discord probably makes every signup line retry the send forever (same bug class as L4487, fixed for votes in 22b06f17b; send path not traced). Suggested: reuse the 10003/404 → mark-link-deleted handling from 22b06f17b.
 - **low** `api/src/users/users-delete-lineups.helpers.ts` (`deleteUserLineups`) — the detach of a deleted/wiped user's lineup + poll hub forum threads runs without the per-lineup/poll discussion advisory lock that `syncLineupDiscussion` / `syncPollDiscussion` hold, so a sync racing the delete can insert a new attached thread nothing detaches (Opus review MINOR-1). Tried overnight and reverted: taking those advisory locks inside the delete tx deadlocks against the sync, because `selectUserScreenshotPaths` locks the user row `FOR UPDATE` while the sync's thread INSERT waits on that row via the `authorId` FK (Codex P2); taking the locks first (before the user row) still leaves a race when a lineup or a scheduling-poll match is created between the id read and the row lock (Codex P2 + Opus MINOR, round 2). Reverted commits: 309b55556, defede3fc. Suggested: either revalidate the subject ids after the user-row lock and restart the tx when they changed, or lock the user's lineup rows `FOR UPDATE` before the user row so no new match/poll can be created mid-wipe — then re-run Codex.
 
+### 2026-11-22 — overnight sweep 5 resolution notes (backlog L1–1500)
+
+Line numbers are origin/main `TECH-DEBT-BACKLOG.md` lines at 740618c11. Evidence: tech-debt confirmation lane 5 (`planning-artifacts/story-notes/overnight-2026-11-22/TECHDEBT-CONFIRM-5.md`).
+
+- L175 — FIXED-ALREADY: binding-heal WARN fires once per process (`voice-state.listener.ts:85`).
+- L221 — FIXED-ALREADY: `ad-hoc-suppression.helpers.ts:357` `notifyWindowExtended` → `ad-hoc-event.service.ts:60` emits `SUPPRESSION_WINDOW_EVENTS.EXTENDED` (ROK-1696).
+- L251 — FIXED-ALREADY: `%s` printf survivors interpolated (`voice-attendance-flush.helpers.ts:233`); no `%s`/`%d` left in the cited files.
+- L259 — FIXED-ALREADY: `discord-channels-page.tsx:59` `resetUpdateError` → `updateBinding.reset()`.
+- L277 — FIXED-ALREADY: `demo-test-core.helpers.spec.ts` covers `getNotificationsForTest`.
+- L316 — FIXED-ALREADY: `use-coop-filter-state.ts:9,13` is a thin wrapper over `useSessionState`.
+- L360 — FIXED-ALREADY: signup-interaction and pug-invite listeners use `DiscordListenerBinding` (`signup-interaction.listener.ts:55,65`; `pug-invite.listener.ts:43,57`).
+- L394 — FIXED-ALREADY: `isMissingTableError` guard at `game-time-absence.helpers.ts:109`.
+- L422 — FIXED-ALREADY: `ci.yml` `code:` filter lists `api/package.json`, `web/package.json`, `packages/*/package.json`.
+- L490 — OBSOLETE: `buildAdHocSpawnPushContent` / `buildAdHocCompletedPushContent` no longer exist in `api/src`.
+- L562 — FIXED-ALREADY: `upsertFixtureUser` uses `onConflictDoUpdate` (#1374; lane 4's L1860 note).
+- L578 — FIXED-ALREADY: `orchestrateSchedulingOpen` (`lineup-notification-public-dispatch.helpers.ts:216-236`) only DMs; the card is the only channel surface.
+- L745 — FIXED-ALREADY: `demo-test-core.helpers.ts:165-195` logs busy queues/failing jobs and throws a diagnostic 409 (ROK-1511).
+- L922 — FIXED-ALREADY: `lineup-detail-page.tsx:207` `showPrompt` no longer checks `'pending'`.
+- L923 — FIXED-ALREADY: `lineup-notification.service.ts` is down to 204 counted lines.
+- L956 — FIXED-ALREADY: `replaceDeletedPost` restores the row on failure (`lfm-embed.service.ts:375-391`, TDB:954).
+- L958 — FIXED-ALREADY: no `CLIENT_URL` read left in `lfm-embed.helpers.ts`.
+- L984 — FIXED-ALREADY: `use-onboarding-fte.ts:68-72` `setQueryData` + invalidate of `['auth','me']`.
+- L1087 — FIXED-ALREADY: `listGuildTextChannels` matches `ChannelType.GuildText|GuildAnnouncement` (`discord-bot-client.guild.helpers.ts:154-168`, ROK-1518).
+- L1418 — FIXED-ALREADY: sentinel sha compatibility pair retired (`playwright-sentinel.ts:6`, TDB:1416).
+- L1445 — FIXED-ALREADY: poll-page reads run under `Promise.all` (`scheduling-poll-page.helpers.ts:111`); votes → terminal stays sequential on purpose (TDB:1443).
+- L1457 — FIXED-ALREADY: `validate-ci.sh:117` `E2E_SCOPE=none` skips Playwright; resolution memoized at `:2120`.
+- L1495 — FIXED-ALREADY: `bg-amber-500/20|/30` light overrides at `index.css:813,841-842`, pinned by `light-fill.guard.test.ts:106`.
+- L967 — still LIVE, parked for an operator ruling (overnight 2026-11-22): a cleared LFG intent can't tell "signed up for this event" from "withdrew", so widening `resolveConvertRole` lets a member who left convert a later group (review MAJOR + Codex P2s). Options: `cleared_reason`/`cleared_at` column (migration) or creator-only. Tried fix eacad11b0 reverted.
+- L957 — fixed in fix/overnight-batch-5-2026-11-22: `LfgGroupChangedPayload.pollId` / `eventId` narrowed to `?: number` (`lfg.constants.ts`); no emitter sent an explicit null (tsc clean).
 ### 2026-11-22 — overnight flake triage + contract-tests check (resolution notes, backlog L1–1500)
 
 Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md` and `CONTRACT-TESTS-GAP.md` (local only). Line refs are origin/main backlog lines.
