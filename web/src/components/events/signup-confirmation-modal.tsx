@@ -1,5 +1,6 @@
 import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { InlineCharacterForm } from '../characters/inline-character-form';
@@ -196,7 +197,7 @@ function SignupModalContent({ isLoadingCharacters, isError, error, characters, s
             <CharacterListSection characters={characters} selectedCharacterId={sel.selectedCharacterId}
                 onSelect={(id) => handleCharacterSelect(id, characters, preSelectedRole, sel.setSelectedCharacterId, sel.setSelectedRole, sel.setSelectedRoles)} />
             {characters.length > 0 && !sel.showCreateForm && gameId && (
-                <button onClick={() => sel.setShowCreateForm(true)} className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">+ Add another character</button>
+                <Button variant="ghost" size="sm" onClick={() => sel.setShowCreateForm(true)}>Don&apos;t see your character? Import it</Button>
             )}
             <SignupRolePickerSection characters={characters} sel={sel} hasRoles={hasRoles} handleToggleRole={handleToggleRole} />
             {characters.length > 0 && !sel.showCreateForm && (
