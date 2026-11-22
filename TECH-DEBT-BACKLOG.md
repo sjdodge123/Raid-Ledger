@@ -4586,3 +4586,7 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 - L498 — FIXED-ALREADY: the runner now reports exec bits ok.
 - L337 — NOT REPRODUCED: `standalone-poll-reschedule-cycle.integration.spec.ts` 0/50 failures in isolation on fleet slot 2 (task 0fc4af789e93, incl. one 53s cold start). Close unless it recurs in CI.
 - L412 — NOT REPRODUCED: `availability.integration.spec.ts` 0/50 in isolation (task e159980f5f41); fits the cross-suite BullMQ/ioredis carrier that only shows in the full laptop suite — tracked by L183/L271/L287.
+
+### 2026-11-22 — rok-2294-import-character-link (surfaced during ROK-2294 review)
+- **low** `web/src/components/auth/AuthGuard.tsx:38-46` — a first-time (not yet onboarded) non-admin who follows the Discord "Import it" link (`/profile/gaming/characters?game=<id>`) is sent to `/onboarding`, which never reads the saved auth redirect, so `?game=` is dropped. Pre-existing for every deep link. Suggested: `/onboarding` finishes by calling `consumeAuthRedirect()`.
+- **low** `api/src/discord-bot/listeners/signup-select-role.handlers.ts:218` — the anonymous "Create an account" link still builds from raw `process.env.CLIENT_URL` instead of `settingsService.getTrustedClientUrl()` (ROK-1627 rule: never ship a localhost link). Suggested: reuse the trusted-URL helper and omit the link when it is null.
