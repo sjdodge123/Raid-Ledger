@@ -184,7 +184,7 @@ export class HubForumDiscordSignupPings {
     const post = await this.postFor(ref, plan.lines.length > 0);
     if (typeof post === 'string') return post;
     await adoptScope(this.redis, eventId, keys, post.scope);
-    return writeUnlessGone(this.db, post.scope, async () => {
+    return writeUnlessGone(this.db, post, async () => {
       const id = post.discordThreadId;
       await this.post(keys, id, plan, members);
       const all = await this.remove(keys.pinged, id, plan.remove);
