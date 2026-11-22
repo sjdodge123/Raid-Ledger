@@ -5,6 +5,7 @@ import {
   PermissionFlagsBits,
   type ForumChannel,
   type Guild,
+  type Webhook,
 } from 'discord.js';
 import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import {
@@ -104,7 +105,12 @@ export class HubForumDiscordGateway {
     return toInfo(guild, forum);
   }
 
-  /** R9: the forum's one webhook — the stored one if live, else a new one. */
+  /**
+   * R9: the forum's one webhook — the stored one if live, else (ROK-2296) a
+   * "Raid Ledger" hook this bot already owns on the channel, else a new one.
+   * Reusing stops a fresh forum row from stacking duplicates toward the
+   * guild's 1000-webhook cap.
+   */
   async ensureWebhook(
     channelId: string,
     webhookId: string | null,
@@ -112,6 +118,10 @@ export class HubForumDiscordGateway {
     const forum = await this.requireForum(channelId);
     const hooks = await forum.fetchWebhooks();
     if (webhookId && hooks.has(webhookId)) return webhookId;
+    const own = hooks.find(
+      (h) => h.name === FORUM_WEBHOOK_NAME && this.ownsHook(h),
+    );
+    if (own) return own.id;
     const hook = await forum.createWebhook({
       name: FORUM_WEBHOOK_NAME,
       reason: REASON,
@@ -205,14 +215,43 @@ export class HubForumDiscordGateway {
     return toInfo(guild, renamed);
   }
 
-  /** Delete a bot-made forum on unlink. Best-effort. */
+  /**
+   * Delete a bot-made forum on unlink. Best-effort. ROK-2296: the bot's own
+   * webhooks go first — Discord keeps counting a deleted channel's webhooks
+   * toward the guild cap, so deleting the channel alone leaks them.
+   */
   async deleteForum(channelId: string): Promise<void> {
     try {
       const forum = await this.requireForum(channelId);
+      await this.deleteOwnWebhooks(forum);
       await forum.delete(REASON);
     } catch (err) {
       this.logger.warn(`Could not delete forum ${channelId}: ${describe(err)}`);
     }
+  }
+
+  /** ROK-2296: delete every webhook this bot owns on `forum`; never throws. */
+  private async deleteOwnWebhooks(forum: ForumChannel): Promise<void> {
+    const hooks = await forum.fetchWebhooks().catch((err: unknown) => {
+      this.logger.warn(
+        `Could not list webhooks on ${forum.id}: ${describe(err)}`,
+      );
+      return null;
+    });
+    for (const hook of hooks?.values() ?? []) {
+      if (!this.ownsHook(hook)) continue;
+      await hook.delete(REASON).catch((err: unknown) => {
+        this.logger.warn(
+          `Could not delete webhook ${hook.id}: ${describe(err)}`,
+        );
+      });
+    }
+  }
+
+  /** A webhook this bot created (a moderator's own hooks are never touched). */
+  private ownsHook(hook: Pick<Webhook, 'owner'>): boolean {
+    const botId = this.client.getBotUser()?.id;
+    return botId !== undefined && hook.owner?.id === botId;
   }
 
   private onlineGuild(): Guild | null {
