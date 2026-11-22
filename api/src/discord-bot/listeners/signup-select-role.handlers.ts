@@ -196,10 +196,13 @@ async function signupAnonymousWithRoles(
     preferredRoles: roleCtx.selectedRoles,
     status: signupStatus ?? undefined,
   });
+  // ROK-1627: never ship a raw-env (possibly localhost) link.
+  const clientUrl = await deps.settingsService.getTrustedClientUrl();
   await interaction.editReply({
     content: `${formatAnonymousRoleConfirmation(
       interaction.user.username,
       roleCtx.rolesLabel,
+      clientUrl,
       signupStatus,
     )}${benchSuffix(result.assignedSlot)}`,
     embeds: [],
@@ -211,11 +214,11 @@ async function signupAnonymousWithRoles(
 function formatAnonymousRoleConfirmation(
   username: string,
   rolesLabel: string,
+  clientUrl: string | null,
   status?: 'tentative',
 ): string {
   if (status === 'tentative')
     return `You're marked as **tentative** (${rolesLabel}).`;
-  const clientUrl = process.env.CLIENT_URL ?? '';
   const link = clientUrl
     ? `\n[Create an account](${clientUrl}) to manage characters and get reminders.`
     : '';
