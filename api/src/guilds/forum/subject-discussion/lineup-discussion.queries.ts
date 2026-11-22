@@ -99,18 +99,3 @@ export async function detachLineupThreads(
     })
     .where(and(eq(t.lineupId, lineupId), isNull(t.eventDetachedAt)));
 }
-
-/**
- * Take the per-lineup discussion advisory lock for the rest of `tx`. Every
- * writer of this lineup's hub thread (the reconciler, user deletion) holds it,
- * so a find-then-insert cannot interleave with a detach. Callers locking
- * several ids must lock in ascending order.
- */
-export async function lockLineupDiscussion(
-  tx: DbOrTx,
-  lineupId: number,
-): Promise<void> {
-  await tx.execute(
-    sql`SELECT pg_advisory_xact_lock(hashtext('lineup-discussion'), ${lineupId}::int)`,
-  );
-}

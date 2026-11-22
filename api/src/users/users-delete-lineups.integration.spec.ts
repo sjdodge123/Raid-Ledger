@@ -6,14 +6,12 @@
  * (`detachLineupThreads` / `detachPollThreads`). Other users' threads stay live.
  */
 import { randomUUID } from 'crypto';
-import { inArray, sql } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { deleteUserTransaction } from './users-delete.helpers';
-import { deleteUserLineups } from './users-delete-lineups.helpers';
 import { nonEmpty } from '../common/testing/narrow';
-import type { DbOrTx } from '../guilds/forum/event-discussion/event-discussion.queries';
 
 let testApp: TestApp;
 
@@ -87,10 +85,7 @@ async function seedMatch(lineupId: number): Promise<number> {
 
 type ThreadSubject = { lineupId: number } | { matchId: number };
 
-async function seedThread(
-  guildId: number,
-  subject: ThreadSubject,
-): Promise<number> {
+async function seedThread(guildId: number, subject: ThreadSubject) {
   const [t] = nonEmpty(
     await testApp.db
       .insert(schema.hubForumThreads)
@@ -101,13 +96,7 @@ async function seedThread(
   return t.id;
 }
 
-interface ThreadState {
-  id: number;
-  detachedAt: Date | null;
-  closesAt: Date | null;
-}
-
-async function threadStates(ids: number[]): Promise<Map<number, ThreadState>> {
+async function threadStates(ids: number[]) {
   const t = schema.hubForumThreads;
   const rows = await testApp.db
     .select({
@@ -157,38 +146,5 @@ describe('deleteUserTransaction — lineup hub threads', () => {
       detachedAt: null,
       closesAt: null,
     });
-  });
-});
-
-/** Advisory locks this session holds, as `<key>:<id>` (two-int form). */
-async function heldDiscussionLocks(tx: DbOrTx): Promise<string[]> {
-  const rows = await tx.execute<{ lock: string }>(sql`
-    SELECT k.key || ':' || l.objid AS lock
-    FROM pg_locks l
-    JOIN (VALUES ('lineup-discussion'), ('poll-discussion')) AS k(key)
-      ON l.classid::bigint = (hashtext(k.key)::bigint & 4294967295)
-    WHERE l.locktype = 'advisory' AND l.objsubid = 2
-      AND l.pid = pg_backend_pid()
-    ORDER BY lock`);
-  return rows.map((r) => r.lock);
-}
-
-describe('deleteUserLineups — discussion advisory locks', () => {
-  it('holds the lineup and poll discussion locks the reconcilers take', async () => {
-    const [targetId, guildId] = [
-      await seedUser('lock-owner'),
-      await seedGuild(),
-    ];
-    const lineupId = await seedLineup(targetId, guildId);
-    const matchId = await seedMatch(lineupId);
-
-    const held = await testApp.db.transaction(async (tx) => {
-      await deleteUserLineups(tx, targetId);
-      return heldDiscussionLocks(tx);
-    });
-
-    expect(held).toEqual(
-      [`lineup-discussion:${lineupId}`, `poll-discussion:${matchId}`].sort(),
-    );
   });
 });

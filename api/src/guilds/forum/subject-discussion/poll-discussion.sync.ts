@@ -6,7 +6,7 @@
  * close + detach when the poll turns private, loses its hub or is gone (R6),
  * detach-and-reinsert on a hub move. Never touches replies, pins or counts.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
 import type { Db } from '../hub-forum.queries';
 import type { DbOrTx } from '../event-discussion/event-discussion.queries';
@@ -15,7 +15,6 @@ import {
   detachPollThreads,
   findLivePollThread,
   findPollForSync,
-  lockPollDiscussion,
   type LivePollThread,
   type PollSyncRow,
 } from './poll-discussion.queries';
@@ -184,7 +183,9 @@ export async function syncPollDiscussion(
   now: Date = new Date(),
 ): Promise<SyncAction> {
   return db.transaction(async (tx) => {
-    await lockPollDiscussion(tx, matchId);
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext('poll-discussion'), ${matchId}::int)`,
+    );
     const poll = await findPollForSync(tx, matchId);
     const thread = await findLivePollThread(tx, matchId);
     const action = planPollSync(poll, thread, now);
