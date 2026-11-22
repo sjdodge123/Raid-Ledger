@@ -119,14 +119,16 @@ function failureFields(
 /**
  * Which rows a failure may write. Auth / scope outcomes apply to any row
  * not being disconnected. A transient outcome applies only to an `active`
- * row: if the write side moved it to `needs_reconnect` mid-fetch, its
- * `auth` code must not be overwritten by `provider_error`/`rate_limited`.
+ * row that still reads: if the write side moved it to `needs_reconnect`
+ * mid-fetch, its `auth` code must not be overwritten by
+ * `provider_error`/`rate_limited`, and a user who switched reading off
+ * mid-fetch must not get a read error back.
  */
 function failureTarget(decision: ReadFailureDecision, id: number) {
   const c = schema.calendarConnections;
   const transient = decision.code !== 'auth' && decision.code !== 'read_scopes';
   return transient
-    ? and(eq(c.id, id), eq(c.status, 'active'))
+    ? and(eq(c.id, id), eq(c.status, 'active'), eq(c.readEnabled, true))
     : and(eq(c.id, id), ne(c.status, 'disconnecting'));
 }
 

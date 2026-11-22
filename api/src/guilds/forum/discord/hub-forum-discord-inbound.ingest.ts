@@ -141,8 +141,8 @@ export class HubForumDiscordInboundIngest {
     if (!link || link.discordDeletedAt !== null) return 'skipped';
     if (!(await this.boundTo(parentId, link.guildId))) return 'skipped';
     const as = link.origin === 'discord' ? 'author' : 'moderator';
-    await inbound.removeFromDiscord(this.db, link, as, now);
-    return 'deleted';
+    const removed = await inbound.removeFromDiscord(this.db, link, as, now);
+    return removed ? 'deleted' : 'skipped';
   }
 
   /** Post renamed (Discord-origin → title) and/or pin flag flipped (R5). */

@@ -419,6 +419,29 @@ describe('F2 — a transient failure never overwrites a needs_reconnect', () => 
   });
 });
 
+describe('a transient failure never lands on a row whose reading was switched off', () => {
+  it('reading turned off mid-fetch: no provider_error, no next_sync_at', async () => {
+    const m = await member({ lastErrorCode: null, nextSyncAt: null });
+    const before = await row(m.connectionId);
+    await testApp.db
+      .update(c)
+      .set({ readEnabled: false })
+      .where(eq(c.id, m.connectionId));
+    await recordReadSyncFailure(
+      testApp.db,
+      before,
+      new TransientError('http_503'),
+      { finalAttempt: true },
+    );
+    const after = await row(m.connectionId);
+    expect([after.readEnabled, after.lastErrorCode, after.nextSyncAt]).toEqual([
+      false,
+      null,
+      null,
+    ]);
+  });
+});
+
 describe('Codex r7 — the cursor is re-checked under the commit lock', () => {
   it('an `unchanged` answer to a cursor the purge cleared re-reads in full', async () => {
     const m = await member();

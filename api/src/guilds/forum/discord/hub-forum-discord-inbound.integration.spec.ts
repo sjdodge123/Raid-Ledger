@@ -46,6 +46,7 @@ const freshId = (): string =>
 
 let ctx: PostsCtx;
 let adminToken: string;
+let adminId: number;
 let ingest: HubForumDiscordInboundIngest;
 let out: FakeOutbound;
 let pinGw: { pinnedPost: jest.SpyInstance; setPinned: jest.SpyInstance };
@@ -64,6 +65,7 @@ beforeAll(async () => {
       .returning(),
     'admin',
   );
+  adminId = u.id;
   adminToken = await signTestAccessToken(ctx.testApp, {
     sub: u.id,
     username: u.username,
@@ -286,6 +288,32 @@ describe('ROK-2208 inbound Discord → RL', () => {
     expect((await linkOf()).discordDeletedAt).toEqual(stampedAt);
     // The RL thread is now removed: a repeat delete event skips.
     expect(await ingest.onThreadDelete(thread)).toBe('skipped');
+  });
+
+  it('an RL-side moderator delete survives the gateway thread-delete; the link is stamped', async () => {
+    const { channelId } = await boundHub();
+    const { thread, rlThread } = await importPost(channelId);
+    const t = schema.hubForumThreads;
+    const removedAt = new Date(Date.now() - 60_000);
+    await ctx.testApp.db
+      .update(t)
+      .set({ deletedAt: removedAt, deletedBy: adminId, deletedAs: 'moderator' })
+      .where(eq(t.id, rlThread.id));
+    expect(await ingest.onThreadDelete(thread)).toBe('skipped');
+    expect(await threadRow(thread.id)).toMatchObject({
+      deletedAt: removedAt,
+      deletedBy: adminId,
+      deletedAs: 'moderator',
+    });
+    const l = schema.hubForumDiscordLinks;
+    const [link] = nonEmpty(
+      await ctx.testApp.db
+        .select({ at: l.discordDeletedAt })
+        .from(l)
+        .where(eq(l.discordMessageId, thread.id)),
+      'post link',
+    );
+    expect(link.at).not.toBeNull();
   });
 
   it('AC7/D5: our webhook, our bot and already-linked messages are echoes', async () => {
