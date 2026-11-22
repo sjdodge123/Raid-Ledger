@@ -91,7 +91,8 @@ export function canFor(
   opts: { now: Date; pinnable: boolean; readOnly?: boolean },
 ): HubForumCan {
   const live = row.deletedAt === null;
-  const line = row.kind === 'signup_line';
+  // Any system line (signup line, ROK-2297 copy header); threads have no kind.
+  const line = row.kind !== undefined && row.kind !== 'reply';
   const own =
     !line &&
     actor.canWrite &&

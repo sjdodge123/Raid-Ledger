@@ -39,7 +39,7 @@ export const HubForumCanSchema = z
 export type HubForumCan = z.infer<typeof HubForumCanSchema>;
 
 /** ROK-2208: where a row was written; absent on rows that never synced. */
-export const HubForumSourceSchema = z.enum(["raidledger", "discord"]);
+export const HubForumSourceSchema = z.enum(['raidledger', 'discord']);
 export type HubForumSource = z.infer<typeof HubForumSourceSchema>;
 
 /** ROK-2208: a Discord author with no linked RL account ("via Discord"). */
@@ -171,9 +171,9 @@ export type HubForumThreadQuery = z.infer<typeof HubForumThreadQuerySchema>;
  * thread ("Earlier chat from …").
  */
 export const HubForumReplyKindSchema = z.enum([
-  "reply",
-  "signup_line",
-  "copy_header",
+  'reply',
+  'signup_line',
+  'copy_header',
 ]);
 export type HubForumReplyKind = z.infer<typeof HubForumReplyKindSchema>;
 
