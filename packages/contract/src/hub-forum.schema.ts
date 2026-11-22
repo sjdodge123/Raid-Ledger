@@ -39,7 +39,7 @@ export const HubForumCanSchema = z
 export type HubForumCan = z.infer<typeof HubForumCanSchema>;
 
 /** ROK-2208: where a row was written; absent on rows that never synced. */
-export const HubForumSourceSchema = z.enum(['raidledger', 'discord']);
+export const HubForumSourceSchema = z.enum(["raidledger", "discord"]);
 export type HubForumSource = z.infer<typeof HubForumSourceSchema>;
 
 /** ROK-2208: a Discord author with no linked RL account ("via Discord"). */
@@ -165,8 +165,16 @@ export const HubForumThreadQuerySchema = z
   .strict();
 export type HubForumThreadQuery = z.infer<typeof HubForumThreadQuerySchema>;
 
-/** ROK-2274: a member reply, or a system signup line (absent = reply). */
-export const HubForumReplyKindSchema = z.enum(['reply', 'signup_line']);
+/**
+ * ROK-2274: a member reply, or a system signup line (absent = reply).
+ * ROK-2297: `copy_header` — the system line above chat copied in from another
+ * thread ("Earlier chat from …").
+ */
+export const HubForumReplyKindSchema = z.enum([
+  "reply",
+  "signup_line",
+  "copy_header",
+]);
 export type HubForumReplyKind = z.infer<typeof HubForumReplyKindSchema>;
 
 /** A flat reply, oldest first. */
