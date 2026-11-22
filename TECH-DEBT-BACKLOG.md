@@ -4589,4 +4589,3 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 ### 2026-11-22 — rok-2294-import-character-link (surfaced during ROK-2294 review)
 - **low** `web/src/components/auth/AuthGuard.tsx:38-46` — a first-time (not yet onboarded) non-admin who follows the Discord "Import it" link (`/profile/gaming/characters?game=<id>`) is sent to `/onboarding`, which never reads the saved auth redirect, so `?game=` is dropped. Pre-existing for every deep link. Suggested: `/onboarding` finishes by calling `consumeAuthRedirect()`.
-- **low** `api/src/discord-bot/listeners/signup-select-role.handlers.ts:218` — the anonymous "Create an account" link still builds from raw `process.env.CLIENT_URL` instead of `settingsService.getTrustedClientUrl()` (ROK-1627 rule: never ship a localhost link). Suggested: reuse the trusted-URL helper and omit the link when it is null.
