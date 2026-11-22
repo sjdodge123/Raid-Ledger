@@ -373,7 +373,7 @@ test.describe('Abort Lineup — member visibility', () => {
         const after = (await apiGet(adminToken, `/lineups/${lineupId}`)) as {
             status?: unknown;
         } | null;
-        expect(after?.status).not.toBe('archived');
         expect(after).not.toBeNull();
+        expect(after?.status).not.toBe('archived');
     });
 });

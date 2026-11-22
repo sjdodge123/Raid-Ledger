@@ -8,6 +8,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { MessageFlags } from 'discord.js';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { LFG_BLOCKED_REPLY } from '../commands/lfg.command.helpers';
+import type { LinkedRescheduleUser } from './reschedule-response.helpers';
 import { EventEmitter } from 'node:events';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
@@ -543,7 +544,7 @@ function linkedConfirmTests() {
 function blockedAccountTests() {
   const pressAs = async (
     action: string,
-    user: Record<string, unknown>,
+    user: LinkedRescheduleUser,
   ): Promise<ReturnType<typeof makeButtonInteraction>> => {
     mockDb.limit.mockResolvedValueOnce([mockEvent]);
     mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
