@@ -39,10 +39,8 @@ import {
   lockDeactivatedAt,
 } from '../plugins/wow-common/addon-import/external-id.owner-status';
 import { endSeriesMembershipsForUserBestEffort } from '../events/series-signups-lifecycle.helpers';
-import {
-  deleteUserScreenshotsBestEffort,
-  selectUserScreenshotPaths,
-} from '../feedback/feedback-screenshot-user.helpers';
+import { deleteUserScreenshotsBestEffort } from '../feedback/feedback-screenshot-user.helpers';
+import { lockUserForWipe } from './users-delete-lineups.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -260,7 +258,7 @@ async function applyBanDataChanges(
     // ROK-1313: no `user.deleting` here, so collect the feedback screenshot
     // paths before the rows go and delete the files once the wipe commits.
     const shots = await deps.db.transaction(async (tx) => {
-      const paths = await selectUserScreenshotPaths(tx, row.id);
+      const paths = await lockUserForWipe(tx, row.id);
       await wipeUserData(tx, row.id, input.actorId);
       return paths;
     });
