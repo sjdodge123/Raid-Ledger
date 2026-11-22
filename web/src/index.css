@@ -1944,13 +1944,13 @@ body {
 }
 
 .btn-danger {
-    background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+    color: var(--color-danger);
+    border: 1px solid color-mix(in srgb, var(--color-danger) 20%, transparent);
 }
 
 .btn-danger:hover {
-    background: rgba(239, 68, 68, 0.25);
+    background: color-mix(in srgb, var(--color-danger) 25%, transparent);
 }
 
 .btn-warning {
