@@ -238,7 +238,7 @@ describe('buildSchedulingPollEmbed — Game page link (ROK-2301 A2)', () => {
   });
 
   it('orders poll link, hub link, then game page', () => {
-    const hubLink = { url: HUB_URL, label: 'Hub' };
+    const hubLink = { url: HUB_URL, label: 'Hub' as const };
     expect(linkLine({ hubLink })).toBe(
       `[Vote now ${ARROW}](${POLL_URL}) ${SEP} ${HUB_LINK} ${SEP} ${GAME_LINK}`,
     );
