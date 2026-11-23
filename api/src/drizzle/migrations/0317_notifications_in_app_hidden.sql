@@ -10,11 +10,14 @@ ALTER TABLE "notifications" ADD COLUMN "in_app_hidden" boolean DEFAULT false NOT
 -- A type missing from the row resolves to its default bell ON, so it never
 -- matches. valheim_claim_suggestion is excluded: it was always a DM-only type.
 -- Other keys of an entry, other types and other rows are left untouched.
+-- AND does not fix evaluation order and jsonb_each raises on a non-object, so
+-- every jsonb_each argument and the per-entry rewrite are guarded by CASE.
 UPDATE "user_notification_preferences" AS p
 SET "channel_prefs" = (
   SELECT jsonb_object_agg(
     e.key,
     CASE
+      WHEN jsonb_typeof(e.value) <> 'object' THEN e.value
       WHEN e.key IN (
           'slot_vacated', 'event_reminder', 'new_event', 'subscribed_game',
           'achievement_unlocked', 'level_up', 'missed_event_nudge',
@@ -42,12 +45,14 @@ SET "channel_prefs" = (
       ELSE e.value
     END
   )
-  FROM jsonb_each(p."channel_prefs") AS e
+  FROM jsonb_each(CASE WHEN jsonb_typeof(p."channel_prefs") = 'object'
+    THEN p."channel_prefs" ELSE '{}'::jsonb END) AS e
 )
 WHERE jsonb_typeof(p."channel_prefs") = 'object'
   AND EXISTS (
     SELECT 1
-    FROM jsonb_each(p."channel_prefs") AS m
+    FROM jsonb_each(CASE WHEN jsonb_typeof(p."channel_prefs") = 'object'
+    THEN p."channel_prefs" ELSE '{}'::jsonb END) AS m
     WHERE m.key <> 'valheim_claim_suggestion'
       AND jsonb_typeof(m.value) = 'object'
       AND m.value -> 'inApp' = 'false'::jsonb

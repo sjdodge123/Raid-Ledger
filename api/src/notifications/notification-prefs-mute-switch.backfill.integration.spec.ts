@@ -119,6 +119,53 @@ async function stored(): Promise<Record<string, unknown>> {
   );
 }
 
+/** Malformed shapes no app path writes; jsonb_each raises on a non-object. */
+const MALFORMED: Record<string, unknown> = {
+  array: [],
+  string: 'x',
+  number: 5,
+  jsonNull: null,
+  emptyObject: {},
+  scalarEntry: { new_event: true },
+};
+
+async function seedMalformed(): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const [name, value] of Object.entries(MALFORMED)) {
+    const [u] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId: `bf-bad-${name}`, username: `bf-bad-${name}` })
+        .returning({ id: schema.users.id }),
+      'user',
+    );
+    out[name] = u.id;
+    await testApp.db.execute(
+      sql`INSERT INTO user_notification_preferences (user_id, channel_prefs)
+          VALUES (${u.id}, ${JSON.stringify(value)}::jsonb)`,
+    );
+  }
+  return out;
+}
+
+async function storedFor(
+  byName: Record<string, number>,
+): Promise<Record<string, unknown>> {
+  const rows = await testApp.db
+    .select({
+      userId: schema.userNotificationPreferences.userId,
+      prefs: schema.userNotificationPreferences.channelPrefs,
+    })
+    .from(schema.userNotificationPreferences)
+    .where(
+      inArray(schema.userNotificationPreferences.userId, Object.values(byName)),
+    );
+  const byUser = new Map<number, unknown>(rows.map((r) => [r.userId, r.prefs]));
+  return Object.fromEntries(
+    Object.entries(byName).map(([name, id]) => [name, byUser.get(id)]),
+  );
+}
+
 const expectedAfter = (): Record<string, Prefs> =>
   Object.fromEntries(Object.entries(CASES).map(([n, c]) => [n, c.after]));
 
@@ -154,5 +201,14 @@ describe('ROK-2290 0317 data step — mute switch carried to Discord', () => {
     await runBackfill();
     expect(await stored()).toEqual(once);
     expect(once).toEqual(expectedAfter());
+  });
+});
+
+describe('ROK-2290 0317 data step — malformed stored prefs', () => {
+  it('leaves non-object prefs and non-object entries untouched without raising', async () => {
+    const malformedIds = await seedMalformed();
+    await expect(runBackfill()).resolves.toBeUndefined();
+    expect(await storedFor(malformedIds)).toEqual(MALFORMED);
+    expect(await stored()).toEqual(expectedAfter());
   });
 });
