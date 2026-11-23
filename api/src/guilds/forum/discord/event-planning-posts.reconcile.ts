@@ -6,8 +6,9 @@
  * bounded pass. Codex P2-3: an event changed or deleted while its post's
  * Discord create was in flight is reconciled once, right after the insert.
  */
-import { and, asc, eq, gt, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, or } from 'drizzle-orm';
 import * as schema from '../../../drizzle/schema';
+import type { EventPlanningPostSelect } from '../../../drizzle/schema/event-planning-posts';
 import type { PlanningEventSource } from './event-planning-posts.queries';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
@@ -35,6 +36,31 @@ export async function liveUnlockedEventSubjects(
     .orderBy(asc(posts.id))
     .limit(limit);
   return rows.map((r) => r.subjectId);
+}
+
+/**
+ * ROK-2301: live poll posts for the reconnect rename, newest first. Live =
+ * not deleted, not locked, and still open (`closes_at` null or later than
+ * now, so a recently decided poll inside its grace hour counts).
+ */
+export async function liveOpenPollPosts(
+  db: ForumDiscordDb,
+  now: Date,
+  limit = RESYNC_CAP,
+): Promise<EventPlanningPostSelect[]> {
+  return db
+    .select()
+    .from(posts)
+    .where(
+      and(
+        eq(posts.subjectKind, 'poll'),
+        isNull(posts.discordDeletedAt),
+        isNull(posts.discordLockedAt),
+        or(isNull(posts.closesAt), gt(posts.closesAt, now)),
+      ),
+    )
+    .orderBy(desc(posts.id))
+    .limit(limit);
 }
 
 const time = (d: Date | null): number | null => d?.getTime() ?? null;

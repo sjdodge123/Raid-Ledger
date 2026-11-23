@@ -134,6 +134,7 @@ function makeDeps(testApp: TestApp, create: jest.Mock): PostEventFollowupDeps {
     settingsService: {
       getClientUrl: jest.fn().mockResolvedValue('https://app.test'),
     },
+    eventEmitter: { emit: jest.fn() },
     logger: new Logger('test'),
   };
 }

@@ -17,22 +17,23 @@ import { SettingsService } from '../../../settings/settings.service';
 import { findLineupForSync } from '../subject-discussion/lineup-discussion.queries';
 import { lineupWriteClosesAt } from '../subject-discussion/lineup-discussion.sync';
 import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
-import {
-  pollSubjectTitle,
-  pollWriteClosesAt,
-} from '../subject-discussion/poll-discussion.sync';
+import { pollWriteClosesAt } from '../subject-discussion/poll-discussion.sync';
 import {
   EventPlanningPostCreator,
   toPlanningPostRef,
   type EventPlanningPostRef,
 } from './event-planning-posts.create';
+import { EventPlanningPostsGateway } from './event-planning-posts.discord';
+import { isArchivedError } from './hub-forum-discord-outbound.discord';
 import {
   findLivePlanningPost,
   findOpenPlanningPollPosts,
   findVotingLineupsWithoutPlanningPost,
+  markPlanningPostDeleted,
   setPlanningPostClosesAt,
 } from './event-planning-posts.queries';
-import { syncEach } from './event-planning-posts.reconcile';
+import { liveOpenPollPosts, syncEach } from './event-planning-posts.reconcile';
+import type { PollSyncRow } from '../subject-discussion/poll-discussion.queries';
 import {
   lineupEligible,
   lineupOnPlanningPath,
@@ -40,7 +41,7 @@ import {
   pollEligible,
   pollOnPlanningPath,
 } from './event-planning-posts.subjects.rules';
-import { subjectPostTitle } from './hub-forum-discord-subject';
+import { pollPostTitle, subjectPostTitle } from './hub-forum-discord-subject';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const OPEN_POLL_BATCH = 50;
@@ -59,6 +60,8 @@ export class EventPlanningSubjectPosts {
     private readonly pollCards: SchedulingPollForumCard,
     /** Codex P2: the coalesced poll-card sync, re-run once a post exists. */
     private readonly embedSync: SchedulingPollEmbedQueueService,
+    /** ROK-2301: an existing poll post is renamed to its derived name. */
+    private readonly discord: EventPlanningPostsGateway,
   ) {}
 
   /** The poll's live post, created on first need; null when it gets none. */
@@ -74,7 +77,7 @@ export class EventPlanningSubjectPosts {
     const made = await this.creator.create({
       kind: 'poll',
       subjectId: matchId,
-      title: subjectPostTitle('poll', pollSubjectTitle(poll)),
+      title: pollPostTitle(poll),
       body: planningSubjectBody(await getClientUrl(this.settings), {
         kind: 'poll',
         lineupId: poll.lineupId,
@@ -158,13 +161,31 @@ export class EventPlanningSubjectPosts {
     );
   }
 
-  /** Re-derive an EXISTING poll post's `closes_at` (never creates). */
+  /**
+   * Re-derive an EXISTING poll post's `closes_at` and, ROK-2301, its name
+   * (never creates). Single-poll entry point for "resync this poll's post".
+   */
   async syncPoll(matchId: number, now: Date = new Date()): Promise<void> {
     const post = await findLivePlanningPost(this.db, 'poll', matchId);
     if (!post) return;
     const poll = await findPollForSync(this.db, matchId);
     if (!poll || !pollOnPlanningPath(poll)) return this.closeNow(post, now);
     await this.writeClosesAt(post, pollWriteClosesAt(poll, post.closesAt, now));
+    if (post.discordLockedAt === null) await this.retitlePoll(post, poll, now);
+  }
+
+  /**
+   * ROK-2301 reconnect catch-up: every live, open poll post (see
+   * `liveOpenPollPosts`) is re-synced, so an existing post takes its derived
+   * name. One failing poll is warned and the rest go on; returns how many.
+   */
+  async resyncLivePollPosts(now: Date = new Date()): Promise<number> {
+    const posts = await liveOpenPollPosts(this.db, now);
+    return syncEach(
+      posts.map((p) => p.subjectId),
+      (id) => this.syncPoll(id, now),
+      (id, err) => this.warn(`reconnect resync of poll ${id}`, err),
+    );
   }
 
   /** Re-derive an EXISTING lineup post's `closes_at` (never creates). */
@@ -220,6 +241,28 @@ export class EventPlanningSubjectPosts {
   ): Promise<void> {
     if (post.closesAt?.getTime() === closesAt?.getTime()) return;
     await setPlanningPostClosesAt(this.db, post.id, closesAt);
+  }
+
+  /**
+   * Rename through the planning gateway, which skips a matching name; a
+   * post deleted on Discord is marked gone. Offline: skipped (the reconnect
+   * catch-up replays it). An auto-archived post (50083) is skipped quietly,
+   * not unarchived (that would bump an idle post): a later pass renames it.
+   */
+  private async retitlePoll(
+    post: EventPlanningPostSelect,
+    poll: PollSyncRow,
+    now: Date,
+  ): Promise<void> {
+    if (!this.discord.isOnline()) return;
+    const name = pollPostTitle(poll);
+    try {
+      const res = await this.discord.renameThread(post.discordThreadId, name);
+      if (res === 'gone') await markPlanningPostDeleted(this.db, post.id, now);
+    } catch (err) {
+      if (!isArchivedError(err)) throw err;
+      this.logger.debug(`Rename of archived poll post ${post.id} skipped`);
+    }
   }
 
   /** Best effort: a render failure falls back to the text body. */

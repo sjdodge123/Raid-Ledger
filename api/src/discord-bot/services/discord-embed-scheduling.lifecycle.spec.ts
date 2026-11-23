@@ -8,8 +8,9 @@
  *
  * The spec (`planning-artifacts/specs/ROK-1461.md` §Files, AC1–AC3, AC6)
  * moves the family onto `createChannelEmbed`: the state lives in the author
- * line, the voter count leaves the footer, the title links `/games/:id`, and
- * the button becomes the last description line.
+ * line, the voter count leaves the footer, and the button becomes the last
+ * description line. ROK-2301: the title opens the POLL page and the game page
+ * moved onto that link line as `Game page ↗`.
  *
  * The `locked_in` author timestamp is the TOP-VOTED slot — the slot the embed
  * already renders first and the one lock-in selects. The fixture is built so
@@ -198,13 +199,61 @@ describe('buildSchedulingPollEmbed — locked-in slot is the SELECTED one', () =
   });
 });
 
-describe('buildSchedulingPollEmbed — title links the game (AC3)', () => {
+const GAME_URL = `${CLIENT_URL}/games/${GAME_ID}`;
+const GAME_LINK = `[Game page ${ARROW}](${GAME_URL})`;
+const HUB_URL = `${CLIENT_URL}/hubs/7`;
+const HUB_LINK = `[Hub ${ARROW}](${HUB_URL})`;
+
+/** The description's last line: the link line. */
+function linkLine(overrides: Partial<WidePollData> = {}): string {
+  return (json(overrides).description ?? '').trimEnd().split('\n').pop() ?? '';
+}
+
+describe('buildSchedulingPollEmbed — title opens the poll (ROK-2301 A1)', () => {
   it('asks the question in the title', () => {
     expect(json().title).toBe('When should we play Elden Ring?');
   });
 
-  it('links the title to the game detail page', () => {
-    expect(json().url).toBe(`${CLIENT_URL}/games/${GAME_ID}`);
+  it.each(CASES)('%s links the title to the poll page', (_status, row) => {
+    expect(json({ status: row.status }).url).toBe(POLL_URL);
+  });
+
+  it('never links the title to the game page', () => {
+    expect(json().url).not.toBe(GAME_URL);
+  });
+
+  it('sets no title URL without a poll URL', () => {
+    expect(json({ pollUrl: '' }).url).toBeUndefined();
+  });
+});
+
+describe('buildSchedulingPollEmbed — Game page link (ROK-2301 A2)', () => {
+  it.each([
+    ['open', `[Vote now ${ARROW}](${POLL_URL}) ${SEP} ${GAME_LINK}`],
+    ['locked_in', `[View poll ${ARROW}](${POLL_URL}) ${SEP} ${GAME_LINK}`],
+    ['closed', `[View poll ${ARROW}](${POLL_URL}) ${SEP} ${GAME_LINK}`],
+    ['cancelled', `[View poll ${ARROW}](${POLL_URL}) ${SEP} ${GAME_LINK}`],
+  ] as const)('%s link line carries the game page', (status, expected) => {
+    expect(linkLine({ status })).toBe(expected);
+  });
+
+  it('orders poll link, hub link, then game page', () => {
+    const hubLink = { url: HUB_URL, label: 'Hub' as const };
+    expect(linkLine({ hubLink })).toBe(
+      `[Vote now ${ARROW}](${POLL_URL}) ${SEP} ${HUB_LINK} ${SEP} ${GAME_LINK}`,
+    );
+  });
+
+  it('drops the game page link without a game id', () => {
+    const noGame = pollData();
+    delete noGame.gameId;
+    const desc =
+      createFactory().buildSchedulingPollEmbed(noGame, context).embed.toJSON()
+        .description ?? '';
+    expect(desc).not.toContain('Game page');
+    expect(desc.trimEnd().endsWith(`[Vote now ${ARROW}](${POLL_URL})`)).toBe(
+      true,
+    );
   });
 });
 
@@ -223,9 +272,11 @@ describe('buildSchedulingPollEmbed — body (AC2)', () => {
     ]);
   });
 
-  it('ends with the masked vote link', () => {
+  it('ends with the masked vote link, then the game page link', () => {
     const desc = (json().description ?? '').trimEnd();
-    expect(desc.endsWith(`[Vote now ${ARROW}](${POLL_URL})`)).toBe(true);
+    expect(
+      desc.endsWith(`[Vote now ${ARROW}](${POLL_URL}) ${SEP} ${GAME_LINK}`),
+    ).toBe(true);
   });
 
   it('keeps the cover art thumbnail', () => {

@@ -7,6 +7,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CORE_PLUGIN_ID } from '@raid-ledger/contract';
+import { POST_EVENT_FOLLOWUP_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import { LINEUP_LIFECYCLE_EVENTS } from '../../../lineups/lineup-events.constants';
 import { LINEUP_MATCH_EVENTS } from '../../../lineups/lineups-scheduling-hook.helpers';
@@ -57,6 +58,15 @@ export class PollDiscussionListener {
   @OnEvent(LINEUP_MATCH_EVENTS.POLL_CANCELLED, { async: true })
   onCancelled(payload: unknown): Promise<void> {
     return this.syncMatch('cancelled', payload);
+  }
+
+  /**
+   * ROK-2301: a follow-up prompt recorded this poll after its thread was
+   * born `<game> — Poll`; the refresh renames it `(after <event>)` once.
+   */
+  @OnEvent(POST_EVENT_FOLLOWUP_EVENTS.POLL_LINKED, { async: true })
+  onFollowupLinked(payload: unknown): Promise<void> {
+    return this.syncMatch('followup-linked', payload);
   }
 
   /** A lineup status edge (archive, revert…) — reconcile each of its polls. */
