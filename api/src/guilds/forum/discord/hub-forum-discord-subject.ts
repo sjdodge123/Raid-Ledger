@@ -6,6 +6,10 @@
 import { DISCORD_THREAD_NAME_MAX } from '../../../discord-bot/lfg-board/lfg-board.constants';
 import { cutAtBoundary } from './hub-forum-discord-content';
 import { eventPostTitle } from './hub-forum-discord-event-outbound';
+import {
+  pollTitleWithin,
+  type PollTitleFields,
+} from '../subject-discussion/poll-discussion.title';
 
 /** What a subject thread is about. */
 export type SubjectKind = 'event' | 'poll' | 'lineup';
@@ -64,4 +68,15 @@ export function subjectPostTitle(
     DISCORD_THREAD_NAME_MAX - tail.length,
   );
   return `${head.length > 0 ? head : fallback}${tail}`;
+}
+
+/**
+ * ROK-2301: a poll's Discord post name, ≤100: the follow-up form
+ * `<game> — Poll (after <event>)` when it applies, else
+ * `subjectPostTitle('poll', <subject>)`. Same rule as the RL thread title.
+ */
+export function pollPostTitle(poll: PollTitleFields): string {
+  return pollTitleWithin(poll, DISCORD_THREAD_NAME_MAX, (subject) =>
+    subjectPostTitle('poll', subject),
+  );
 }

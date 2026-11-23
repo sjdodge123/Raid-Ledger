@@ -6,6 +6,7 @@
  * `event_detached_at` / `write_closes_at` for the poll subject (R8).
  */
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import * as schema from '../../../drizzle/schema';
 import type { DbOrTx } from '../event-discussion/event-discussion.queries';
 
@@ -31,6 +32,13 @@ export interface PollSyncRow {
    * reading as `standalone-poll-auth.helpers.ts`).
    */
   linkedEventTitle: string | null;
+  /**
+   * ROK-2301: the title of the ended event whose "Schedule a follow-up?"
+   * prompt opened this poll (`post_event_followup_sent.match_id`). Null when
+   * there is no follow-up row, the event is gone, or its title is blank. The
+   * poll itself stays unlinked.
+   */
+  followupOfEventTitle: string | null;
   guildId: number | null;
   visibility: 'public' | 'private';
   creatorId: number;
@@ -50,6 +58,9 @@ export interface LivePollThread {
   writeClosesAt: Date | null;
 }
 
+/** The follow-up prompt's source event (`events` is joined for the link). */
+const followupEvent = alias(schema.events, 'poll_followup_event');
+
 /** The poll row, or null when the match (or its lineup) is gone. */
 export async function findPollForSync(
   db: DbOrTx,
@@ -57,6 +68,7 @@ export async function findPollForSync(
 ): Promise<PollSyncRow | null> {
   const m = schema.communityLineupMatches;
   const l = schema.communityLineups;
+  const followup = schema.postEventFollowupSent;
   const [row] = await db
     .select({
       matchId: m.id,
@@ -67,6 +79,7 @@ export async function findPollForSync(
       linkedEventId: m.linkedEventId,
       eventTitle: schema.events.title,
       eventFromPollId: schema.events.createdFromPollId,
+      followupTitle: followupEvent.title,
       guildId: l.guildId,
       visibility: l.visibility,
       creatorId: l.createdBy,
@@ -78,14 +91,18 @@ export async function findPollForSync(
     .innerJoin(l, eq(l.id, m.lineupId))
     .innerJoin(schema.games, eq(schema.games.id, m.gameId))
     .leftJoin(schema.events, eq(schema.events.id, m.linkedEventId))
+    .leftJoin(followup, eq(followup.matchId, m.id))
+    .leftJoin(followupEvent, eq(followupEvent.id, followup.eventId))
     .where(eq(m.id, matchId))
     .limit(1);
   if (!row) return null;
-  const { override, eventTitle, eventFromPollId, ...rest } = row;
+  const { override, eventTitle, eventFromPollId, followupTitle, ...rest } =
+    row;
   const produced = eventFromPollId === matchId;
   return {
     ...rest,
     linkedEventTitle: produced ? null : eventTitle,
+    followupOfEventTitle: followupTitle?.trim() ? followupTitle.trim() : null,
     standalone: override?.standalone === true,
   };
 }

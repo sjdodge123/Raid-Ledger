@@ -148,6 +148,7 @@ describe('planPollSync (decision table)', () => {
     phaseDeadline: null,
     linkedEventId: null,
     linkedEventTitle: null,
+    followupOfEventTitle: null,
   };
   it('inserts only for an open hub poll', () => {
     expect(planPollSync({ ...base, status: 'scheduling' }, null)).toBe(

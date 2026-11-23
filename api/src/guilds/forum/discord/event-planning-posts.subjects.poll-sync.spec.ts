@@ -25,9 +25,9 @@ jest.mock('./event-planning-posts.subjects.rules', () => ({
   pollEligible: jest.fn(() => true),
   planningSubjectBody: jest.fn(() => 'body'),
 }));
-jest.mock('../subject-discussion/poll-discussion.sync', () => ({
-  ...jest.requireActual<object>('../subject-discussion/poll-discussion.sync'),
-  pollSubjectTitle: jest.fn(() => 'WoW'),
+jest.mock('./hub-forum-discord-subject', () => ({
+  ...jest.requireActual<object>('./hub-forum-discord-subject'),
+  pollPostTitle: jest.fn(() => 'WoW — Poll'),
 }));
 jest.mock('../../../settings/settings-bot.helpers', () => ({
   getClientUrl: jest.fn(() => Promise.resolve('https://rl')),

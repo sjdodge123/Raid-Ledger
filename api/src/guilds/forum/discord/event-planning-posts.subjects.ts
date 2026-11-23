@@ -17,10 +17,7 @@ import { SettingsService } from '../../../settings/settings.service';
 import { findLineupForSync } from '../subject-discussion/lineup-discussion.queries';
 import { lineupWriteClosesAt } from '../subject-discussion/lineup-discussion.sync';
 import { findPollForSync } from '../subject-discussion/poll-discussion.queries';
-import {
-  pollSubjectTitle,
-  pollWriteClosesAt,
-} from '../subject-discussion/poll-discussion.sync';
+import { pollWriteClosesAt } from '../subject-discussion/poll-discussion.sync';
 import {
   EventPlanningPostCreator,
   toPlanningPostRef,
@@ -40,7 +37,7 @@ import {
   pollEligible,
   pollOnPlanningPath,
 } from './event-planning-posts.subjects.rules';
-import { subjectPostTitle } from './hub-forum-discord-subject';
+import { pollPostTitle, subjectPostTitle } from './hub-forum-discord-subject';
 import type { ForumDiscordDb } from './hub-forum-discord.queries';
 
 const OPEN_POLL_BATCH = 50;
@@ -74,7 +71,7 @@ export class EventPlanningSubjectPosts {
     const made = await this.creator.create({
       kind: 'poll',
       subjectId: matchId,
-      title: subjectPostTitle('poll', pollSubjectTitle(poll)),
+      title: pollPostTitle(poll),
       body: planningSubjectBody(await getClientUrl(this.settings), {
         kind: 'poll',
         lineupId: poll.lineupId,
