@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 export const MAX_LINES = 200;
 export const MAX_LINE_CHARS = 200;
 export const MAX_BYTES = 25 * 1024;
-const LINK_RE = /\]\(([^)\s]+\.md)\)/g;
+const LINK_RE = /\]\(([^)\s#]+\.md)(?:#[^)\s]*)?\)/g;
 
 /** Main-checkout slug: `/Users/x/Raid-Ledger` → `-Users-x-Raid-Ledger`. */
 export function slugFor(mainCheckout) {
@@ -38,7 +38,22 @@ function defaultDir(cwd) {
 }
 
 function localLinks(line) {
-  return [...line.matchAll(LINK_RE)].map((m) => m[1]).filter((l) => !/^[a-z]+:/i.test(l));
+  return [...line.matchAll(LINK_RE)]
+    .map((m) => m[1])
+    .filter((l) => !/^[a-z]+:/i.test(l))
+    .map(normaliseTarget);
+}
+
+/** `./a.md` and `a%20b.md` key the same as the directory scan's `a.md` / `a b.md`. */
+function normaliseTarget(target) {
+  let t = target;
+  try {
+    t = decodeURIComponent(t);
+  } catch {
+    // malformed %-escape: keep it verbatim; the existence check reports it.
+  }
+  while (t.startsWith('./')) t = t.slice(2);
+  return t;
 }
 
 function checkDuplicates(lines, fail) {

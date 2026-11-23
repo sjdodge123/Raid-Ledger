@@ -94,3 +94,22 @@ test('the CLI exits 1 on a FAIL and 0 with an OK line', () => {
 test('slugFor replaces every slash', () => {
   assert.equal(slugFor('/Users/x/Projects/Raid-Ledger'), '-Users-x-Projects-Raid-Ledger');
 });
+
+test('link targets are normalised: ./a.md, %20 and a #fragment index the same file', () => {
+  const index = '# Memory\n\n- [A](./a.md) — one\n- [B](b%20c.md#top) — two\n';
+  const r = withDir(index, { 'a.md': 'a', 'b c.md': 'b' }, checkMemoryIndex);
+  assert.deepEqual(r.fails, []);
+});
+
+test('./a.md and a.md on two lines are the same file, indexed twice', () => {
+  const r = withDir(`${CLEAN}- [A again](./a.md) — dup\n`, AB, checkMemoryIndex);
+  assert.ok(r.fails.some((f) => /a\.md is indexed twice \(lines 5 and 7\)/.test(f)), r.fails.join('\n'));
+});
+
+test('a link into a missing subfolder or outside the folder still fails as missing', () => {
+  const r = withDir(`${CLEAN}- [S](sub/x.md) — s\n- [O](../o.md) — o\n`, AB, checkMemoryIndex);
+  assert.deepEqual(r.fails, [
+    'FAIL: line 7 links sub/x.md, which does not exist',
+    'FAIL: line 8 links ../o.md, which does not exist',
+  ]);
+});
