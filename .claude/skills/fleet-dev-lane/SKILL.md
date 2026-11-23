@@ -46,9 +46,30 @@ type-scrutinised code you write and the most likely to drift when a shared type 
 
 Read/Write/Edit/Bash/Grep/Glob only. **Everything you cannot run yourself, you design and hand back.**
 Never attempt an `rl_*`, `gh`, or Linear call. On the laptop you may run ONLY:
-`tsc --noEmit`, eslint on the files you touched, and the single unit spec files you touched
-(`--maxWorkers=1`). **Never** integration specs, Playwright, coverage, or `validate-ci.sh` — those are
+`tsc --noEmit`, eslint on the files you touched, the single unit spec files you touched
+(`--maxWorkers=1`), and `scripts/lane-check.sh` (below). **Never** integration specs, Playwright, coverage, or `validate-ci.sh` — those are
 the fleet's, and the laptop's RAM is the operator's.
+
+## Prove it with `scripts/lane-check.sh` before you report (STRICT)
+
+**Implementer:** before you report, run `scripts/lane-check.sh` from the worktree root (`--plan` prints
+the plan only). It runs the touched workspaces' spec typecheck, the whole touched folders' jest/vitest,
+eslint on changed files and a smoke-string grep, serially, and prints one table. **Paste its summary
+table in your reply; a reply without it is not done.** A FAIL row is yours to fix or to explain.
+**One lane-check at a time per laptop** — if another lane is running one, wait for it to finish.
+**Reviewer:** check the implementer's reply carries the table; a missing table is a finding.
+
+Reply template (implementer):
+
+```
+<what changed, commits>
+
+| Step | Target | Result | Seconds |
+|------|--------|--------|---------|
+<pasted from lane-check.sh>
+
+<what is red / not done, report file>
+```
 
 ## Survive your own death — the 50-turn cap
 
