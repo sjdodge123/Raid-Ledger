@@ -67,7 +67,7 @@ It ends with one table (`Step | Target | Result | Seconds`) and `RESULT: PASS|FA
 
 **Replayed (2026-11-23)** against three misses: it FAILs ROK-2298's untouched `signup-not-found.helpers.spec.ts` (jest folder row), ROK-2301's `HubLink` fixture type error (api typecheck row) and ROK-2301's factory spec asserting the old link line (jest folder row). It did **not** flag the ROK-2301 smoke test: that one broke on a reordered line (`endsWith(...)`), not on a removed literal, which the string grep cannot see.
 
-**Memory:** 45–100 s per run; peak RSS 3.8–4.7 GB, set by the api `tsc` (it runs with an 8 GB heap cap). **One lane-check at a time per laptop** — the typecheck is serial by design; two lanes running it together approach 10 GB.
+**Memory:** 45–100 s per run; peak RSS 3.8–4.7 GB, set by the api `tsc` (it runs with an 8 GB heap cap). **One lane-check at a time per laptop, enforced by the script:** it takes a machine-wide lock (`$TMPDIR/rl-lane-check.lock`, override `LANE_CHECK_LOCK_DIR`) before any step, so a second lane's run prints `waiting for lane-check pid N` and starts when the first ends; it gives up with exit 75 after `LANE_CHECK_LOCK_WAIT` (900 s), and takes over a lock whose pid is dead. `--plan` skips the lock. Three unserialised runs would take ~14 GB of a 16 GB laptop. lane-check is the one whole-folder run a lane makes on the laptop; anything a lane runs by hand stays a single spec file at `--maxWorkers=1`.
 
 If `tools/test-bot` has no `node_modules`, the test-bot rows FAIL with `run (cd tools/test-bot && npm ci)` — that is setup, not a repo failure.
 
