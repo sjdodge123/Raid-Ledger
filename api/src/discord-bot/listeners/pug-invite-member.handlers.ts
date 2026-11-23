@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
@@ -44,10 +45,7 @@ export async function handleMemberInviteButton(
       `Error handling member invite for event ${eventId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 

@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import { eq, and } from 'drizzle-orm';
 import type { ButtonInteraction } from 'discord.js';
 import { ForbiddenException } from '@nestjs/common';
@@ -29,10 +30,7 @@ export async function handleJoinEventButton(
       `Error handling Join Event for invite ${inviteCode}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 

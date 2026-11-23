@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import { eq } from 'drizzle-orm';
 import type { StringSelectMenuInteraction } from 'discord.js';
 import * as schema from '../../drizzle/schema';
@@ -38,10 +39,7 @@ export async function handleMemberCharacterSelectMenu(
       `Error handling member char select for event ${eventIdStr}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 
@@ -60,10 +58,7 @@ export async function handleMemberRoleSelectMenu(
       `Error handling member role select for event ${eventIdStr}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 

@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
@@ -45,10 +46,7 @@ export async function handlePugButtonInteraction(
       `Error handling PUG button for slot ${pugSlotId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 

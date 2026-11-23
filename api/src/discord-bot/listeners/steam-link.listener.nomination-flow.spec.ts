@@ -13,7 +13,10 @@ import {
   STEAM_NOMINATE_BUTTON_IDS,
 } from '../discord-bot.constants';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
-import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  accountBlockedError,
+} from '../../users/discord-account-status.helpers';
 import { handleInterestButtonClick } from './steam-link.listener.interest-flow';
 import {
   handleNominateButtonClick,
@@ -117,6 +120,14 @@ describe('handleNominateButtonClick — auto-nominate guard order (ROK-1092)', (
 
     expect(deps.setAutoNominatePref).not.toHaveBeenCalled();
     expect(nominate).toHaveBeenCalled();
+  });
+});
+
+describe('translateNominateError — blocked account (ROK-2298)', () => {
+  it('returns the blocked reply, not the retry copy', () => {
+    expect(translateNominateError(accountBlockedError(), 'Some Game')).toBe(
+      ACCOUNT_BLOCKED_REPLY,
+    );
   });
 });
 

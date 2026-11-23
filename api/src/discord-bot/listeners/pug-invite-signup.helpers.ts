@@ -5,6 +5,7 @@ import type { PugInviteDeps } from './pug-invite.helpers';
 import type { CreateDiscordSignupDto } from '@raid-ledger/contract';
 import {
   ACCOUNT_BLOCKED_REPLY,
+  isAccountBlockedError,
   resolveDiscordAccount,
 } from '../../users/discord-account-status.helpers';
 
@@ -44,8 +45,9 @@ export async function createPugSignup(
   return createAnonymousPugSignup(deps, slot, discordUserId, role);
 }
 
-/** Reply copy for a signup that threw: the 409 reason, else generic copy. */
+/** Reply copy for a signup that threw: blocked, the 409 reason, else generic. */
 function signupFailureReply(err: unknown): string {
+  if (isAccountBlockedError(err)) return ACCOUNT_BLOCKED_REPLY;
   if (err instanceof HttpException && err.getStatus() === 409) {
     return err.message;
   }

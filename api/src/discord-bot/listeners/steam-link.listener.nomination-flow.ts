@@ -16,7 +16,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { VISIBILITY_FILTER } from '../../igdb/igdb-visibility.helpers';
 import { STEAM_NOMINATE_BUTTON_IDS } from '../discord-bot.constants';
-import { ACCOUNT_BLOCKED_REPLY } from '../../users/discord-account-status.helpers';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  isAccountBlockedError,
+} from '../../users/discord-account-status.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -122,6 +125,7 @@ export async function isGameNominatable(
  * DM copy prescribed by AC-6 and the button handler spec.
  */
 export function translateNominateError(err: unknown, gameName: string): string {
+  if (isAccountBlockedError(err)) return ACCOUNT_BLOCKED_REPLY;
   const msg = err instanceof Error ? err.message : String(err);
   if (/Lineup has reached/i.test(msg)) return msg;
   if (/not in building status/i.test(msg)) {

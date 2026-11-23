@@ -1,3 +1,4 @@
+import { interactionErrorReply } from './signup-interaction.helpers';
 import type {
   ButtonInteraction,
   StringSelectMenuInteraction,
@@ -42,10 +43,7 @@ export async function handlePugCharacterSelectMenu(
       `Error handling PUG char select for slot ${pugSlotId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 
@@ -64,10 +62,7 @@ export async function handlePugRoleSelectMenu(
       `Error handling PUG role select for slot ${pugSlotId}`,
       errorStack(error),
     );
-    await safeErrorReply(
-      interaction,
-      'Something went wrong. Please try again.',
-    );
+    await safeErrorReply(interaction, interactionErrorReply(error));
   }
 }
 

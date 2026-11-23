@@ -4,6 +4,10 @@
  */
 import { ConflictException } from '@nestjs/common';
 import { createPugSignup } from './pug-invite-signup.helpers';
+import {
+  ACCOUNT_BLOCKED_REPLY,
+  accountBlockedError,
+} from '../../users/discord-account-status.helpers';
 import type { PugInviteDeps } from './pug-invite.helpers';
 
 function createMockDeps(): PugInviteDeps {
@@ -147,6 +151,23 @@ describe('PUG signup — anonymous path', () => {
         'dps',
       ),
     ).resolves.toBe('Something went wrong. Please try again.');
+  });
+});
+
+describe('PUG signup — ban racing the click (ROK-2298)', () => {
+  it('returns the blocked reply when signupDiscord throws ACCOUNT_BLOCKED', async () => {
+    const deps = createMockDeps();
+    mockNoLinkedUser(deps);
+    (deps.signupsService.signupDiscord as jest.Mock).mockRejectedValueOnce(
+      accountBlockedError(),
+    );
+    await expect(
+      createPugSignup(
+        deps,
+        mockSlot as Parameters<typeof createPugSignup>[1],
+        'dps',
+      ),
+    ).resolves.toBe(ACCOUNT_BLOCKED_REPLY);
   });
 });
 
