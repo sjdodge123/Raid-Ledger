@@ -12,10 +12,16 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import * as Sentry from '@sentry/nestjs';
 import { eq } from 'drizzle-orm';
 import { DISCORD_BOT_EVENTS } from '../../../discord-bot/discord-bot.constants';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
+import { syncPollDiscussion } from '../subject-discussion/poll-discussion.sync';
+import {
+  catchUpPollTitles,
+  findLivePollThreads,
+} from './hub-forum-discord-poll-titles';
 import {
   HubForumDiscordInboundIngest,
   type InboundResult,
@@ -78,6 +84,31 @@ export class HubForumDiscordReconcileService {
     } catch (err) {
       this.logger.error(`Forum reconcile failed: ${describe(err)}`);
     }
+    try {
+      await this.catchUpPollTitles();
+    } catch (err) {
+      this.logger.warn(`Poll title catch-up failed: ${describe(err)}`);
+      Sentry.captureException(err, { tags: { hub_forum: 'poll-titles' } });
+    }
+  }
+
+  /**
+   * ROK-2301: every live poll's Raid Ledger thread and hub post take their
+   * derived name (`hub-forum-discord-poll-titles.ts`). Offline, only the
+   * Raid Ledger threads are synced. Returns how many polls completed.
+   */
+  async catchUpPollTitles(): Promise<number> {
+    const now = this.now();
+    const rows = await findLivePollThreads(this.db, now);
+    const online = this.gateway.isOnline();
+    return catchUpPollTitles(rows, {
+      syncThread: (matchId) => syncPollDiscussion(this.db, matchId, now),
+      redrive: online
+        ? (link) => this.outbound.retry(link, 'thread.updated')
+        : null,
+      onError: (matchId, err) =>
+        this.logger.warn(`Poll ${matchId} title catch-up: ${describe(err)}`),
+    });
   }
 
   /** Replay every active post of every bound forum. */

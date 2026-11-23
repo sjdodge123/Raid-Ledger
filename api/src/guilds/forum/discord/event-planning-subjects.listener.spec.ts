@@ -23,6 +23,7 @@ function setup() {
     syncPoll: jest.fn().mockResolvedValue(undefined),
     syncLineup: jest.fn().mockResolvedValue(undefined),
     ensureMissingLineupPosts: jest.fn().mockResolvedValue(0),
+    resyncLivePollPosts: jest.fn().mockResolvedValue(0),
   };
   const voterPings = { planningVote: jest.fn().mockResolvedValue('pinged') };
   const listener = new EventPlanningSubjectsListener(
