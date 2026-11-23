@@ -83,6 +83,8 @@ scripts/*
 # ROK-2309: background PR watcher the Lead runs instead of a watcher lane.
 !scripts/pr-watch.sh
 !scripts/pr-watch.spec.mjs
+!scripts/memory-index-check.mjs
+!scripts/memory-index-check.spec.mjs
 !scripts/rl-encrypt-setting.mjs
 !scripts/rl-reencrypt-settings.mjs
 !scripts/rl-reencrypt-settings.spec.mjs
