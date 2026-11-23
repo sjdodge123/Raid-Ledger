@@ -19,14 +19,16 @@
 # runs in parallel, jest/vitest run with --maxWorkers=$LANE_CHECK_WORKERS (2).
 # One run peaks at ~4.7 GB, so runs are serialised MACHINE-WIDE: a run takes
 # an atomic mkdir lock (pid inside) and waits for a live holder; a lock whose
-# pid is dead is stale and taken over. --plan never takes the lock.
+# pid is dead, or that has no pid file after LANE_CHECK_LOCK_GRACE seconds, is
+# stale and taken over under a second mkdir mutex. --plan never takes the lock.
 #
 # Usage: scripts/lane-check.sh [--plan]
 #   --plan   print the plan (JSON) and exit 0 without running anything.
 # Env:     LANE_CHECK_WORKERS (default 2), LANE_CHECK_BASE (default origin/main),
 #          LANE_CHECK_ONLY (comma list of phases: typecheck,tests,lint,smoke),
 #          LANE_CHECK_LOCK_DIR (default $TMPDIR/rl-lane-check.lock),
-#          LANE_CHECK_LOCK_WAIT (seconds, default 900), LANE_CHECK_LOCK_POLL (5).
+#          LANE_CHECK_LOCK_WAIT (seconds, default 900), LANE_CHECK_LOCK_POLL (5),
+#          LANE_CHECK_LOCK_GRACE (seconds a pid-less lock is left alone, 10).
 # Exit:    0 all PASS/SKIPPED · 1 a FAIL · 2 usage / git error ·
 #          75 another lane-check still held the lock after LANE_CHECK_LOCK_WAIT.
 set -uo pipefail
@@ -47,6 +49,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/lane-check.XXXXXX")"
 LOCK_DIR="${LANE_CHECK_LOCK_DIR:-${TMPDIR:-/tmp}/rl-lane-check.lock}"
 LOCK_WAIT="${LANE_CHECK_LOCK_WAIT:-900}"
 LOCK_POLL="${LANE_CHECK_LOCK_POLL:-5}"
+LOCK_GRACE="${LANE_CHECK_LOCK_GRACE:-10}"
 HAVE_LOCK=false
 cleanup() { rm -rf "$TMP"; if $HAVE_LOCK; then rm -rf "$LOCK_DIR"; fi; }
 trap cleanup EXIT
@@ -77,7 +80,31 @@ if $PLAN_ONLY; then
 fi
 
 # Machine-wide lock: mkdir is atomic, so exactly one run holds it. A holder
-# whose pid is gone (killed lane, crashed shell) is stale and is taken over.
+# whose pid is gone (killed lane, crashed shell), or a lock dir still without a
+# pid file after LOCK_GRACE seconds (killed between mkdir and the pid write),
+# is stale and is taken over.
+mtime_of() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
+older_than() { local m; m=$(mtime_of "$1") && [ -n "$m" ] && [ $(( $(date +%s) - m )) -ge "$2" ]; }
+# lock_stale PID — PID is what $LOCK_DIR/pid held ("" = no pid file).
+lock_stale() {
+  if [ -n "$1" ]; then ! ps -p "$1" >/dev/null 2>&1; else older_than "$LOCK_DIR" "$LOCK_GRACE"; fi
+}
+# take_over PID — only one waiter at a time (a second mkdir mutex) may remove a
+# stale lock, and only if it still holds the PID that waiter judged dead, so a
+# waiter can never remove a lock another waiter has just taken. A mutex left
+# by a killed run is cleared after 60 s. Returns 1 if another waiter has it.
+take_over() {
+  local seen="$1" mutex="$LOCK_DIR.takeover"
+  if ! mkdir "$mutex" 2>/dev/null; then
+    older_than "$mutex" 60 && rm -rf "$mutex"
+    return 1
+  fi
+  if [ -d "$LOCK_DIR" ] && [ "$(cat "$LOCK_DIR/pid" 2>/dev/null)" = "$seen" ] && lock_stale "$seen"; then
+    echo "lane-check: taking over a stale lock from ${seen:+dead pid $seen}${seen:-a run that died before writing its pid}"
+    mv "$LOCK_DIR" "$LOCK_DIR.stale.$$" 2>/dev/null && rm -rf "$LOCK_DIR.stale.$$"
+  fi
+  rmdir "$mutex" 2>/dev/null; return 0
+}
 acquire_lock() {
   local start pid said=false
   start=$(date +%s)
@@ -86,11 +113,7 @@ acquire_lock() {
       echo "$$" >"$LOCK_DIR/pid"; HAVE_LOCK=true; return 0
     fi
     pid=$(cat "$LOCK_DIR/pid" 2>/dev/null)
-    if [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; then
-      echo "lane-check: taking over a stale lock from dead pid $pid"
-      mv "$LOCK_DIR" "$LOCK_DIR.stale.$$" 2>/dev/null && rm -rf "$LOCK_DIR.stale.$$"
-      continue
-    fi
+    if lock_stale "$pid" && take_over "$pid"; then continue; fi
     if [ $(( $(date +%s) - start )) -ge "$LOCK_WAIT" ]; then
       echo "lane-check: gave up after ${LOCK_WAIT}s — lane-check pid ${pid:-?} still holds $LOCK_DIR (one run at a time per laptop)" >&2
       exit 75
@@ -102,26 +125,42 @@ acquire_lock() {
 acquire_lock
 
 node scripts/lane-check-plan.mjs --diff "$TMP/diff" --lines <"$TMP/files" >"$TMP/plan" || exit 2
+# The planner ends --lines with an `end` row. Without it the plan is empty for
+# the wrong reason, and an empty table must never read as PASS.
+if [ "$(tail -n 1 "$TMP/plan")" != "$(printf 'end\tplan')" ]; then
+  echo "lane-check: scripts/lane-check-plan.mjs printed no plan (no end row) — nothing was checked" >&2
+  echo "RESULT: FAIL"; exit 1
+fi
 
 # Read every row first: npx inside the loop would otherwise eat the plan's stdin.
 KINDS=(); TARGETS=()
 while IFS=$'\t' read -r kind target; do
-  [ -n "$kind" ] || continue
+  [ -n "$kind" ] && [ "$kind" != end ] || continue
   KINDS+=("$kind"); TARGETS+=("$target")
 done <"$TMP/plan"
 
 ROWS=(); FAILED=0; N=0
-row() { ROWS+=("$(printf '%-14s | %-48.48s | %-7s | %s' "$1" "$2" "$3" "$4")"); }
+# row STEP TARGET RESULT SECONDS [NOTE]
+row() { ROWS+=("$(printf '%-14s | %-48.48s | %-7s | %s%s' "$1" "$2" "$3" "$4" "${5:+  ($5)}")"); }
+# skip_note STEP LOG — why a passing step is really SKIPPED, if it is.
+skip_note() {
+  local marker
+  marker=$(grep -m1 '^LANE_CHECK_SKIP: ' "$2" 2>/dev/null) && { echo "${marker#LANE_CHECK_SKIP: }"; return; }
+  case "$1" in jest*|vitest*) grep -qE 'No test files found|No tests found' "$2" && echo "no tests" ;; esac
+}
 
 # run_step STEP TARGET CMD... — runs in a subshell, logs to a file, prints the
 # log tail on failure so the lane sees why without re-running.
 run_step() {
-  local step="$1" target="$2" start rc log
+  local step="$1" target="$2" start rc log note
   shift 2
   N=$((N + 1)); log="$TMP/step-$N.log"; start=$(date +%s)
   echo "==> $step $target"
   ( "$@" ) >"$log" 2>&1; rc=$?
-  if [ "$rc" -eq 0 ]; then row "$step" "$target" PASS "$(( $(date +%s) - start ))"
+  if [ "$rc" -eq 0 ]; then
+    note=$(skip_note "$step" "$log")
+    if [ -n "$note" ]; then row "$step" "$target" SKIPPED "$(( $(date +%s) - start ))" "$note"
+    else row "$step" "$target" PASS "$(( $(date +%s) - start ))"; fi
   else
     FAILED=1; row "$step" "$target" FAIL "$(( $(date +%s) - start ))"
     echo "---- $step $target FAILED (exit $rc), last 40 lines ----"; tail -n 40 "$log"
@@ -148,13 +187,26 @@ typecheck() {
 # Paths in the plan are repo-relative; the runners take workspace-relative ones.
 # A trailing / keeps api/src/a from also matching api/src/ab.
 jest_folder() { (cd api && npx jest --maxWorkers="$WORKERS" --passWithNoTests "${1#api/}/"); }
-vitest_folder() { (cd web && npx vitest run --maxWorkers="$WORKERS" "${1#web/}/"); }
+vitest_folder() { (cd web && npx vitest run --maxWorkers="$WORKERS" --passWithNoTests "${1#web/}/"); }
 # strip_ws PREFIX "a b c" — drop a leading PREFIX/ from each space-joined path.
 strip_ws() { printf '%s\n' $2 | sed "s#^$1/##"; }  # shellcheck disable=SC2086
 # shellcheck disable=SC2046 # one path per word, from the planner
 jest_related() { (cd api && npx jest --maxWorkers="$WORKERS" --passWithNoTests --findRelatedTests $(strip_ws api "$1")); }
 # shellcheck disable=SC2046
 vitest_related() { (cd web && npx vitest related --run --maxWorkers="$WORKERS" --passWithNoTests $(strip_ws web "$1")); }
+# api/web/smoke typecheck against packages/contract/dist: rebuild it first when
+# the branch changes the contract, or when it was never built.
+contract_build() { npm run build -w packages/contract; }
+needs_contract_build() {
+  local k t i
+  for k in "${KINDS[@]}"; do [ "$k" = contract-tests ] && return 0; done
+  [ -d packages/contract/dist ] && return 1
+  for i in "${!KINDS[@]}"; do
+    k="${KINDS[$i]}"; t="${TARGETS[$i]}"
+    [ "$k" = typecheck ] && [ "$t" != contract ] && return 0
+  done
+  return 1
+}
 contract_tests() { npm test -w @raid-ledger/contract -- --maxWorkers="$WORKERS"; }
 tool_tests() {
   if [ "$1" = "test-bot" ]; then tb_installed && npm test --prefix tools/test-bot
@@ -170,12 +222,20 @@ smoke_grep() {
   local hits
   hits=$(grep -rnIF -- "$1" scripts/smoke tools/test-bot/src/smoke 2>/dev/null)
   [ -z "$hits" ] && return 0
+  # Removed here but still rendered elsewhere: the smoke spec still holds.
+  if git grep -qF --untracked -- "$1" -- api/src web/src packages/contract/src \
+    ':!*.spec.*' ':!*.test.*' ':!*/__tests__/*' ':!*/test/*' ':!*/tests/*' 2>/dev/null; then
+    echo "LANE_CHECK_SKIP: still in source"; echo "$hits"; return 0
+  fi
   echo "A smoke spec still pins text this diff removed: \"$1\""; echo "$hits"; return 1
 }
 
 # Order: typechecks first (serial), then tests, then lint, then smoke strings.
 [ "${#KINDS[@]}" -gt 0 ] && for phase in typecheck tests lint smoke skipped; do
   [ -z "$ONLY" ] || [ "$phase" = skipped ] || [[ ",$ONLY," == *",$phase,"* ]] || continue
+  if [ "$phase" = typecheck ] && needs_contract_build; then
+    run_step contract-build packages/contract contract_build
+  fi
   for i in "${!KINDS[@]}"; do
     k="${KINDS[$i]}"; t="${TARGETS[$i]}"
     case "$phase:$k" in

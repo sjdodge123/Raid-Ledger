@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +17,10 @@ function write(root, rel, text) {
   writeFileSync(join(root, rel), text);
 }
 
-function fixtureRepo(smokeText) {
-  const root = mkdtempSync(join(tmpdir(), 'lane-check-e2e-'));
+// opts.prefix: temp dir name; opts.base / opts.lane: extra {path: text} files
+// in the base commit / the lane commit.
+function fixtureRepo(smokeText, opts = {}) {
+  const root = mkdtempSync(join(tmpdir(), opts.prefix ?? 'lane-check-e2e-'));
   const git = (...a) => execFileSync('git', a, { cwd: root, stdio: 'pipe' });
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'e2e@example.invalid');
@@ -27,10 +29,12 @@ function fixtureRepo(smokeText) {
   SCRIPTS.forEach((f) => copyFileSync(join(HERE, f), join(root, 'scripts', f)));
   write(root, 'api/src/x/reply.ts', "export const r = () => 'Signups are closed now';\n");
   write(root, 'tools/test-bot/src/smoke/tests/x.test.ts', smokeText);
+  Object.entries(opts.base ?? {}).forEach(([rel, text]) => write(root, rel, text));
   git('add', '-A'); git('commit', '-qm', 'base');
   git('checkout', '-qb', 'lane');
   write(root, 'api/src/x/reply.ts', "export const r = () => 'Sign-ups closed';\n");
-  git('commit', '-qam', 'change copy');
+  Object.entries(opts.lane ?? {}).forEach(([rel, text]) => write(root, rel, text));
+  git('add', '-A'); git('commit', '-qm', 'change copy');
   return root;
 }
 
@@ -143,4 +147,97 @@ test('--plan ignores a held lock', () => {
     assert.doesNotMatch(res.stdout + res.stderr, /waiting for lane-check|gave up/);
     assert.equal(readFileSync(join(lock, 'pid'), 'utf8').trim(), String(process.pid));
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(dirname(lock), { recursive: true, force: true }); }
+});
+
+// ROK-2310 review fixes. A fake npx/npm on PATH records each call and behaves
+// like jest/vitest on a folder with no test files: exit 1 unless
+// --passWithNoTests, which prints the "exiting with code 0" line.
+function fakeBin(root) {
+  const bin = join(root, '.fake-bin');
+  const body = `#!/bin/sh
+echo "$(basename "$0") $*" >>"${join(root, '.fake.log')}"
+case "$*" in *passWithNoTests*) echo "No test files found, exiting with code 0"; exit 0 ;; esac
+case "$*" in *vitest*|*jest*) echo "No test files found"; exit 1 ;; esac
+exit 0
+`;
+  ['npx', 'npm'].forEach((n) => { write(root, `.fake-bin/${n}`, body); chmodSync(join(bin, n), 0o755); });
+  return { PATH: `${bin}:${process.env.PATH}` };
+}
+const cleanup = (root) => rmSync(root, { recursive: true, force: true });
+
+test('a web folder with no test files is SKIPPED (no tests), not a FAIL', () => {
+  const root = fixtureRepo(PASSING_SMOKE, { lane: { 'web/src/plugins/discord/register.ts': 'export const x = 1;\n' } });
+  try {
+    const res = run(root, { ...fakeBin(root), LANE_CHECK_ONLY: 'tests' });
+    assert.equal(res.status, 0, res.stdout + res.stderr);
+    assert.match(res.stdout, /vitest\s+\| web\/src\/plugins\/discord\s+\| SKIPPED \| \d+ {2}\(no tests\)/);
+    assert.match(res.stdout, /jest\s+\| api\/src\/x\s+\| SKIPPED \| \d+ {2}\(no tests\)/);
+  } finally { cleanup(root); }
+});
+
+test('a contract change builds the contract before the api/web typechecks', () => {
+  const root = fixtureRepo(PASSING_SMOKE, { lane: { 'packages/contract/src/x.ts': 'export const x = 1;\n' } });
+  try {
+    const res = run(root, { ...fakeBin(root), LANE_CHECK_ONLY: 'typecheck' });
+    assert.equal(res.status, 0, res.stdout + res.stderr);
+    assert.match(res.stdout, /contract-build\s+\| packages\/contract\s+\| PASS/);
+    const calls = readFileSync(join(root, '.fake.log'), 'utf8').trim().split('\n');
+    assert.equal(calls[0], 'npm run build -w packages/contract', calls.join('\n'));
+    assert.ok(calls.slice(1).some((c) => c.includes('-p api/tsconfig.json')), calls.join('\n'));
+  } finally { cleanup(root); }
+});
+
+test('a repo path with a space still plans and fails the pinned smoke string', () => {
+  const root = fixtureRepo("expect(msg).toContain('Signups are closed now');\n", { prefix: 'lane check e2e ' });
+  try {
+    const res = run(root);
+    assert.equal(res.status, 1, res.stdout + res.stderr);
+    assert.match(res.stdout, /smoke-string\s+\| Signups are closed now\s+\| FAIL/);
+  } finally { cleanup(root); }
+});
+
+test('a planner that prints nothing is a loud FAIL, never an empty PASS', () => {
+  const root = fixtureRepo(PASSING_SMOKE);
+  try {
+    writeFileSync(join(root, 'scripts/lane-check-plan.mjs'), '// broken: prints nothing\n');
+    const res = run(root);
+    assert.equal(res.status, 1, res.stdout + res.stderr);
+    assert.match(res.stderr, /printed no plan/);
+    assert.doesNotMatch(res.stdout, /RESULT: PASS/);
+  } finally { cleanup(root); }
+});
+
+test('a removed string still rendered by other source is SKIPPED, not a FAIL', () => {
+  const root = fixtureRepo("expect(msg).toContain('Signups are closed now');\n",
+    { base: { 'web/src/y/banner.tsx': "export const b = 'Signups are closed now';\n" } });
+  try {
+    const res = run(root);
+    assert.equal(res.status, 0, res.stdout + res.stderr);
+    assert.match(res.stdout, /smoke-string\s+\| Signups are closed now\s+\| SKIPPED \| \d+ {2}\(still in source\)/);
+  } finally { cleanup(root); }
+});
+
+test('a lock dir with no pid file, older than the grace period, is taken over', () => {
+  const root = fixtureRepo(PASSING_SMOKE);
+  const lock = join(mkdtempSync(join(tmpdir(), 'lane-check-lock-')), 'lock');
+  mkdirSync(lock);
+  const old = new Date(Date.now() - 120_000);
+  utimesSync(lock, old, old);
+  try {
+    const res = run(root, { LANE_CHECK_LOCK_DIR: lock, LANE_CHECK_LOCK_WAIT: '2', LANE_CHECK_LOCK_POLL: '1' });
+    assert.equal(res.status, 0, res.stdout + res.stderr);
+    assert.match(res.stdout, /taking over a stale lock from a run that died before writing its pid/);
+    assert.equal(existsSync(lock), false, 'the taken-over lock is released on exit');
+  } finally { cleanup(root); rmSync(dirname(lock), { recursive: true, force: true }); }
+});
+
+test('a fresh pid-less lock (a run between mkdir and its pid write) is waited on', () => {
+  const root = fixtureRepo(PASSING_SMOKE);
+  const lock = join(mkdtempSync(join(tmpdir(), 'lane-check-lock-')), 'lock');
+  mkdirSync(lock);
+  try {
+    const res = run(root, { LANE_CHECK_LOCK_DIR: lock, LANE_CHECK_LOCK_WAIT: '1', LANE_CHECK_LOCK_POLL: '1', LANE_CHECK_LOCK_GRACE: '600' });
+    assert.equal(res.status, 75, res.stdout + res.stderr);
+    assert.ok(existsSync(lock), 'a fresh pid-less lock must not be taken over');
+  } finally { cleanup(root); rmSync(dirname(lock), { recursive: true, force: true }); }
 });
