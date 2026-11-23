@@ -56,7 +56,9 @@ the fleet's, and the laptop's RAM is the operator's.
 the plan only). It runs the touched workspaces' spec typecheck, the whole touched folders' jest/vitest,
 eslint on changed files and a smoke-string grep, serially, and prints one table. **Paste its summary
 table in your reply; a reply without it is not done.** A FAIL row is yours to fix or to explain.
-**One lane-check at a time per laptop** — if another lane is running one, wait for it to finish.
+**The script serialises itself across lanes** with a machine-wide lock: a second run prints
+`waiting for lane-check pid N` and starts when the first ends (exit 75 after 15 min). It is the one
+allowed whole-folder run; anything you run by hand stays a single spec file at `--maxWorkers=1`.
 **Reviewer:** check the implementer's reply carries the table; a missing table is a finding.
 
 Reply template (implementer):
