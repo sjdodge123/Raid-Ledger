@@ -4589,3 +4589,7 @@ Evidence: `planning-artifacts/story-notes/overnight-2026-11-22/FLAKE-TRIAGE-5.md
 
 ### 2026-11-22 — rok-2294-import-character-link (surfaced during ROK-2294 review)
 - **low** `web/src/components/auth/AuthGuard.tsx:38-46` — a first-time (not yet onboarded) non-admin who follows the Discord "Import it" link (`/profile/gaming/characters?game=<id>`) is sent to `/onboarding`, which never reads the saved auth redirect, so `?game=` is dropped. Pre-existing for every deep link. Suggested: `/onboarding` finishes by calling `consumeAuthRedirect()`.
+
+### 2026-11-23 — feat/rok-2290-mute-bell-keep-dm (surfaced during ROK-2290 lane 2b)
+- **[med]** `api/src/discord-bot/services/pug-invite.service.ts:168` — `sendMemberInviteDm` sends the member-invite Discord DM without checking the member's Discord channel switch for that notification type, so a member with Discord OFF for invites still gets the DM (also on the `emitMemberInvite` path, which creates with `skipDiscord`). Pre-existing: the function body on `origin/main` has the same shape (line 168, no preference read) and ROK-2290 only changed when the invite row is stored, not who the DM goes to. Surfaced while auditing pre-checks that treat "bell off" as "send nothing".
+  Suggested: read the member's `channelPrefs` for the invite type in `sendMemberInviteDm` (or its listener) and return early when the Discord switch is off.
