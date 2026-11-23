@@ -10,7 +10,7 @@ import {
   type CharacterBackTarget,
 } from '../utils/character-back-id';
 import {
-  findLinkedUser,
+  findActiveLinkedUser,
   isDiscordInteractionError,
   safeEditReply,
 } from './signup-interaction.helpers';
@@ -78,6 +78,7 @@ async function rerenderCharacterList(
 ): Promise<void> {
   const { eventId } = target;
   const ctx = await loadBackContext(interaction, eventId, deps);
+  if (ctx === false) return;
   if (ctx === 'not_found') {
     await interaction.editReply({
       content: 'Event not found.',
@@ -102,12 +103,16 @@ async function rerenderCharacterList(
   );
 }
 
-/** The linked user's game context for the Back target, or null if unlinked. */
+/**
+ * The linked user's game context for the Back target, null if unlinked, or
+ * false when the account is blocked (ROK-2298: already replied).
+ */
 async function loadBackContext(
   interaction: ButtonInteraction,
   eventId: number,
   deps: SignupInteractionDeps,
-): Promise<Awaited<ReturnType<typeof loadGameContext>> | null> {
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+): Promise<Awaited<ReturnType<typeof loadGameContext>> | null | false> {
+  const linkedUser = await findActiveLinkedUser(interaction, deps);
+  if (linkedUser === false) return false;
   return linkedUser ? loadGameContext(eventId, linkedUser.id, deps) : null;
 }

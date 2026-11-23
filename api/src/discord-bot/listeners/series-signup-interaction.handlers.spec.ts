@@ -15,10 +15,18 @@ import type { ParsedSeriesCustomId } from './series-signup-interaction.helpers';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import { findActiveMembership } from '../../events/series-signups.queries';
 
-jest.mock('./signup-interaction.helpers', () => ({
-  findLinkedUser: jest.fn(),
-  fetchEvent: jest.fn(),
-}));
+// ROK-2298: findActiveLinkedUser defaults to the mocked findLinkedUser, so
+// the active-user cases keep their setup; blocked cases override it.
+jest.mock('./signup-interaction.helpers', () => {
+  const findLinkedUser = jest.fn();
+  return {
+    fetchEvent: jest.fn(),
+    findLinkedUser,
+    findActiveLinkedUser: jest.fn((i: { user: { id: string } }) =>
+      findLinkedUser(i.user.id),
+    ),
+  };
+});
 jest.mock('../../events/series-signups.queries', () => ({
   findActiveMembership: jest.fn(),
 }));

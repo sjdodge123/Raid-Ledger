@@ -33,7 +33,7 @@ function selectChain(rows: unknown[]): unknown {
 /** linked user → event → game, then the characters for that game. */
 function seedCharacterList(deps: SignupInteractionDeps): void {
   (deps.db.select as jest.Mock)
-    .mockReturnValueOnce(selectChain([{ id: 42 }]))
+    .mockReturnValueOnce(selectChain([{ id: 42, discordId: 'discord-1' }]))
     .mockReturnValueOnce(
       selectChain([
         { id: 10, title: 'Raid Night', gameId: 3, slotConfig: { type: 'mmo' } },
@@ -142,7 +142,7 @@ describe('handleSignupCharacterBack (ROK-2228)', () => {
   it('says the event is gone when it no longer exists', async () => {
     const deps = createMockDeps();
     (deps.db.select as jest.Mock)
-      .mockReturnValueOnce(selectChain([{ id: 42 }]))
+      .mockReturnValueOnce(selectChain([{ id: 42, discordId: 'discord-1' }]))
       .mockReturnValueOnce(selectChain([]));
     const interaction = backInteraction('char_back:char_select:10');
 

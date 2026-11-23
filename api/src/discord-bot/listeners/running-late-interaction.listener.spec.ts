@@ -16,9 +16,18 @@ import {
 } from './running-late-interaction.handlers';
 
 // findLinkedUser is the linked-account lookup; mock the module so we control it.
-jest.mock('./signup-interaction.helpers', () => ({
-  findLinkedUser: jest.fn(),
-}));
+// ROK-2298: findActiveLinkedUser defaults to the mocked findLinkedUser, so
+// the active-user cases keep their setup; blocked cases override it.
+jest.mock('./signup-interaction.helpers', () => {
+  const findLinkedUser = jest.fn();
+  return {
+    ...jest.requireActual<object>('./signup-interaction.helpers'),
+    findLinkedUser,
+    findActiveLinkedUser: jest.fn((i: { user: { id: string } }) =>
+      findLinkedUser(i.user.id),
+    ),
+  };
+});
 import { findLinkedUser } from './signup-interaction.helpers';
 import { EventEmbedMessageEditor } from '../services/event-embed-message.editor';
 const mockFindLinkedUser = findLinkedUser as jest.Mock;

@@ -9,11 +9,19 @@ import {
 import type { SeriesInteractionDeps } from './series-signup-interaction.handlers';
 import { fetchEvent, findLinkedUser } from './signup-interaction.helpers';
 
-jest.mock('./signup-interaction.helpers', () => ({
-  ...jest.requireActual<object>('./signup-interaction.helpers'),
-  findLinkedUser: jest.fn(),
-  fetchEvent: jest.fn(),
-}));
+// ROK-2298: findActiveLinkedUser defaults to the mocked findLinkedUser, so
+// the active-user cases keep their setup; blocked cases override it.
+jest.mock('./signup-interaction.helpers', () => {
+  const findLinkedUser = jest.fn();
+  return {
+    ...jest.requireActual<object>('./signup-interaction.helpers'),
+    fetchEvent: jest.fn(),
+    findLinkedUser,
+    findActiveLinkedUser: jest.fn((i: { user: { id: string } }) =>
+      findLinkedUser(i.user.id),
+    ),
+  };
+});
 
 const mockedUser = findLinkedUser as jest.Mock;
 const mockedEvent = fetchEvent as jest.Mock;
