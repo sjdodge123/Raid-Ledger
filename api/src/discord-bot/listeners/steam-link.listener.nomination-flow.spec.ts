@@ -156,7 +156,9 @@ describe('Steam DM buttons refuse a blocked account (ROK-2298)', () => {
     '%s: blocked reply, no nominate / interest / pref write',
     async (action) => {
       const deps = makeDeps({
-        lineupsService: lineupsService as never,
+        lineupsService:
+          lineupsService as unknown as NominateButtonDeps['lineupsService'] &
+            object,
         findLinkedUser: jest.fn().mockResolvedValue(blockedUser),
       });
       const interaction = makeInteraction();
