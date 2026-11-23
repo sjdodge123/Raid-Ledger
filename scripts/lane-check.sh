@@ -17,12 +17,18 @@
 #
 # Serial on purpose: two or three lanes share a 16 GB laptop. Typecheck never
 # runs in parallel, jest/vitest run with --maxWorkers=$LANE_CHECK_WORKERS (2).
+# One run peaks at ~4.7 GB, so runs are serialised MACHINE-WIDE: a run takes
+# an atomic mkdir lock (pid inside) and waits for a live holder; a lock whose
+# pid is dead is stale and taken over. --plan never takes the lock.
 #
 # Usage: scripts/lane-check.sh [--plan]
 #   --plan   print the plan (JSON) and exit 0 without running anything.
 # Env:     LANE_CHECK_WORKERS (default 2), LANE_CHECK_BASE (default origin/main),
-#          LANE_CHECK_ONLY (comma list of phases: typecheck,tests,lint,smoke).
-# Exit:    0 all PASS/SKIPPED · 1 a FAIL · 2 usage / git error.
+#          LANE_CHECK_ONLY (comma list of phases: typecheck,tests,lint,smoke),
+#          LANE_CHECK_LOCK_DIR (default $TMPDIR/rl-lane-check.lock),
+#          LANE_CHECK_LOCK_WAIT (seconds, default 900), LANE_CHECK_LOCK_POLL (5).
+# Exit:    0 all PASS/SKIPPED · 1 a FAIL · 2 usage / git error ·
+#          75 another lane-check still held the lock after LANE_CHECK_LOCK_WAIT.
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "lane-check: not in a git repo" >&2; exit 2; }
@@ -32,13 +38,20 @@ ONLY="${LANE_CHECK_ONLY:-}"
 PLAN_ONLY=false
 case "${1:-}" in
   --plan) PLAN_ONLY=true ;;
-  -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
   "") ;;
   *) echo "lane-check: unknown argument $1" >&2; exit 2 ;;
 esac
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/lane-check.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT
+LOCK_DIR="${LANE_CHECK_LOCK_DIR:-${TMPDIR:-/tmp}/rl-lane-check.lock}"
+LOCK_WAIT="${LANE_CHECK_LOCK_WAIT:-900}"
+LOCK_POLL="${LANE_CHECK_LOCK_POLL:-5}"
+HAVE_LOCK=false
+cleanup() { rm -rf "$TMP"; if $HAVE_LOCK; then rm -rf "$LOCK_DIR"; fi; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 cd "$REPO_ROOT" || exit 2
 
 # Same collection as validate-ci.sh's _scoped_changed_files (mode-only
@@ -62,6 +75,32 @@ if $PLAN_ONLY; then
   node scripts/lane-check-plan.mjs --diff "$TMP/diff" <"$TMP/files"
   exit 0
 fi
+
+# Machine-wide lock: mkdir is atomic, so exactly one run holds it. A holder
+# whose pid is gone (killed lane, crashed shell) is stale and is taken over.
+acquire_lock() {
+  local start pid said=false
+  start=$(date +%s)
+  while :; do
+    if mkdir "$LOCK_DIR" 2>/dev/null; then
+      echo "$$" >"$LOCK_DIR/pid"; HAVE_LOCK=true; return 0
+    fi
+    pid=$(cat "$LOCK_DIR/pid" 2>/dev/null)
+    if [ -n "$pid" ] && ! ps -p "$pid" >/dev/null 2>&1; then
+      echo "lane-check: taking over a stale lock from dead pid $pid"
+      mv "$LOCK_DIR" "$LOCK_DIR.stale.$$" 2>/dev/null && rm -rf "$LOCK_DIR.stale.$$"
+      continue
+    fi
+    if [ $(( $(date +%s) - start )) -ge "$LOCK_WAIT" ]; then
+      echo "lane-check: gave up after ${LOCK_WAIT}s — lane-check pid ${pid:-?} still holds $LOCK_DIR (one run at a time per laptop)" >&2
+      exit 75
+    fi
+    $said || { echo "waiting for lane-check pid ${pid:-?}"; said=true; }
+    sleep "$LOCK_POLL"
+  done
+}
+acquire_lock
+
 node scripts/lane-check-plan.mjs --diff "$TMP/diff" --lines <"$TMP/files" >"$TMP/plan" || exit 2
 
 # Read every row first: npx inside the loop would otherwise eat the plan's stdin.
